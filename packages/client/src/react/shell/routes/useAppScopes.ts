@@ -1,10 +1,10 @@
 // Which scopes an inline app mounts over (issue #599).
 //
-// A member holds a role in their own vault and in every audience vault the
-// household added them to. `GET /_vault/scopes?app=<id>` answers that set for
-// the CALLING MEMBER (roles come from `member_roles`, never from the device),
-// already filtered to mounted vaults and already reconciled — the gateway
-// installs the app into an audience the member joined but never opened.
+// An owner owns their own vault and every audience vault the household added
+// them to (#726: ownership, not a role). `GET /_vault/scopes?app=<id>`
+// answers that set for the CALLING OWNER, already filtered to mounted vaults
+// and already reconciled — the gateway installs the app into an audience the
+// owner joined but never opened.
 //
 // Two deliberate limits live here rather than in the route host:
 //
@@ -44,26 +44,12 @@ export const MAX_MOUNTED_SCOPES = 4;
 export interface ResolvedAppScope {
   scope: InlineScope;
   identity: ReplicaIdentity;
+  borrowedEdgeId?: string;
 }
 
-/**
- * The whole mount: the scopes, and where this member's shares go by default
- * (issue #711 item H).
- *
- * The destination sits BESIDE the scopes rather than on one of them, because
- * it is a pointer the member owns — a choice of destination — not a property
- * of a vault. It is passed through as the gateway stored it, including when it
- * names a vault that is not mounted here: an app renders that as its share
- * action disabled with the reason inline, never as a silent no-op.
- */
+/** The whole mount: every scope this app is installed in and open over. */
 export interface ResolvedAppScopes {
   scopes: ResolvedAppScope[];
-  shareTargetVaultId?: string;
-}
-
-/** Mirrors the gateway's `canWrite` — admin is write's superset. */
-function roleCanWrite(role: string): boolean {
-  return role === "admin" || role === "write";
 }
 
 function toResolved(entry: AppScopeEntry, gatewayId: string): ResolvedAppScope {
@@ -78,13 +64,15 @@ function toResolved(entry: AppScopeEntry, gatewayId: string): ResolvedAppScope {
       ...(entry.personal === undefined ? {} : { personal: entry.personal }),
       ...(entry.color ? { color: entry.color } : {}),
       ...(entry.icon ? { icon: entry.icon } : {}),
-      // The P7 grant roster (issue #712), carried through exactly as
-      // answered: absent stays absent rather than becoming `[]`, so an app
-      // can tell "nobody else" from "this gateway does not say".
-      ...(entry.audience === undefined ? {} : { audience: entry.audience }),
-      canWrite: roleCanWrite(entry.role),
+      // Ownership-sourced (#726): supplied by the gateway, never derived
+      // client-side from a role.
+      canWrite: entry.canWrite,
+      // Carried through verbatim (#726 P6) — a lent scope's reach state is an
+      // app-visible fact, not something the shell summarizes away.
+      ...(entry.borrowed ? { borrowed: entry.borrowed } : {}),
     },
     identity: { gatewayId, vaultId: entry.vaultId },
+    ...(entry.borrowed ? { borrowedEdgeId: entry.borrowed.edgeId } : {}),
   };
 }
 
@@ -96,8 +84,7 @@ async function ambientScope(): Promise<ResolvedAppScopes> {
     scopes: [
       {
         // The solo mount IS the member's own library — `personal: true`, so
-        // nothing in it is marked as somewhere else, and there is no share
-        // destination to offer when there is only one place to be.
+        // nothing in it is marked as somewhere else.
         scope: {
           id: identity.vaultId,
           label: "Library",
@@ -132,7 +119,7 @@ export async function resolveAppScopes(
   // available. `undefined` means the gateway did not answer the question and is
   // taken at face value.
   const mountable = (entries ?? []).filter(
-    (entry) => entry.installed !== false
+    (entry) => entry.installed !== false && entry.borrowed?.mounted !== false
   );
   if (mountable.length === 0) return ambientScope();
   const base = await auth();
@@ -141,12 +128,7 @@ export async function resolveAppScopes(
     vaultId: mountable[0]!.vaultId,
   }).gatewayId;
   const resolved = mountable.map((entry) => toResolved(entry, gatewayId));
-  return {
-    scopes: resolved.slice(0, MAX_MOUNTED_SCOPES),
-    ...(plane?.defaultShareTargetVaultId === undefined
-      ? {}
-      : { shareTargetVaultId: plane.defaultShareTargetVaultId }),
-  };
+  return { scopes: resolved.slice(0, MAX_MOUNTED_SCOPES) };
 }
 
 /** A stable identity for one scope SET — the mount key's new axis. */

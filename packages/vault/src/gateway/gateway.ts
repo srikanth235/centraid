@@ -87,7 +87,7 @@ import { demoStatus, purgeDemoRows } from "./demo.js";
 import type { DemoPurgeResult } from "./demo.js";
 import { revokeGrantCascade, sweepLifecycle } from "./duties.js";
 import type { RevocationResult, SweepResult } from "./duties.js";
-import { actingMemberDetail, writeReceipt } from "./evidence.js";
+import { actingOwnerDetail, writeReceipt } from "./evidence.js";
 import {
   assertInvocationIdentity,
   insertInvocation,
@@ -968,7 +968,30 @@ export class Gateway {
 
   /** Typed-command invocation: the only write path (rule R04). */
   invoke(cred: Credential, rawRequest: InvokeRequest): InvokeOutcome {
-    const identity = this.identify(cred);
+    return this.invokeCore(this.identify(cred), rawRequest);
+  }
+
+  /**
+   * Invoke as an ALREADY-RESOLVED identity, skipping credential
+   * authentication (issue #726 P5). The one caller today is the origin half
+   * of a live lend edge: the gateway's peer-lend route has already proved
+   * the caller over the peer transport and checked the edge is live and
+   * write-capable, so there is no credential left to authenticate — only an
+   * identity to run. From here on this is an ORDINARY invocation: the same
+   * consent chain, the same Tier-3/4 parking, the same hash-chained
+   * receipts and journal as any local action. There is no second write path.
+   */
+  invokeAsIdentity(
+    identity: Identity,
+    rawRequest: InvokeRequest
+  ): InvokeOutcome {
+    return this.invokeCore(identity, rawRequest);
+  }
+
+  private invokeCore(
+    identity: Identity,
+    rawRequest: InvokeRequest
+  ): InvokeOutcome {
     // Purposes are off the critical path (issue #306 decision 4): a caller
     // that names none rides the default; the journal records what applied.
     const request = {
@@ -1032,11 +1055,11 @@ export class Gateway {
         purpose: request.purpose,
         decision: "deny",
         // A refusal is attributed too (issue #599 decisions 7–8): "the
-        // assistant, acting for Sid, was refused" is the row a household
+        // assistant, acting for Sid, was refused" is the row an owner
         // needs to read, not "some agent was refused".
         detail: {
           failing: consent.failing,
-          ...actingMemberDetail(identity, request),
+          ...actingOwnerDetail(identity, request),
         },
       });
       return { status: "denied", receiptId, reason: consent.failing };

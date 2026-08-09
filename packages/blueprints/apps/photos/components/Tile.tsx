@@ -10,9 +10,9 @@
 //
 //   Selection  top, trailing, 6px in. The only control on the tile.
 //   Vault      a 2px rule on the LEADING edge in the vault's hue, plus the
-//              vault initial at rungs M and L. Fires on `kind`, never on a
-//              name (tile-state.ts) — any vault but the personal one, Sharing
-//              included. The member's own photographs are the unmarked default.
+//              vault initial at rungs M and L. Fires on the record, never on
+//              a name (tile-state.ts) — any vault but the personal one. The
+//              member's own photographs are the unmarked default.
 //   Kind       bottom, trailing, from rung S up. A duration or `live`.
 //   State      bottom, inline. ONE line of mono on the page colour. Never a
 //              fill, never a red dot, never a vanishing tile.
@@ -27,14 +27,15 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 
+import { scopeAttr } from "../../_shared/scope-kit.ts";
 import { assetKey } from "../asset-key.ts";
 import { cls } from "../format.ts";
 import { CheckIcon } from "../icons.tsx";
 import { mountMedia } from "../media.ts";
-import { scopeAttr } from "../scopes.ts";
 import {
   initialMediaState,
   kindLabel,
+  peerStateLine,
   showsKindSlot,
   showsVaultInitial,
   stateLine,
@@ -109,7 +110,14 @@ export function Tile({
     initialMediaState(asset)
   );
   const media = state ?? seen;
-  const line = stateLine(media) ?? note ?? null;
+  // A borrowed scope's "nothing to paint here" is never "on the gateway" —
+  // that gateway is someone else's, and the honest line names them
+  // (#726 P4/P6). Every other state (bytes/failed/pending, and an owned
+  // audience's `gateway` state) keeps its existing, final wording.
+  const line =
+    media === "gateway" && vaultMark?.borrowed
+      ? peerStateLine(vaultMark.label)
+      : (stateLine(media) ?? note ?? null);
   const kind = showsKindSlot(rung) ? kindLabel(asset) : null;
   const key = assetKey(asset);
   const name = asset.title ?? asset.kind ?? "Photograph";

@@ -36,7 +36,7 @@ describe("household audience placement", () => {
       audience,
       itemType: "core.collection",
       itemId: collectionId,
-      sharedByMember: "member-priya",
+      sharedBy: "member-priya",
     });
 
     expect(
@@ -130,7 +130,7 @@ describe("household audience placement", () => {
       audience,
       itemType: "core.collection",
       itemId: collectionId,
-      sharedByMember: "member-priya",
+      sharedBy: "member-priya",
     });
 
     expect(
@@ -167,7 +167,7 @@ describe("household audience placement", () => {
       audience,
       itemType: "locker.item",
       itemId,
-      sharedByMember: "member-priya",
+      sharedBy: "member-priya",
     });
     const row = audience.vault
       .prepare(
@@ -245,7 +245,7 @@ describe("household audience placement", () => {
       audience,
       itemType: "tally.group",
       itemId: groupId,
-      sharedByMember: "gateway-member-priya",
+      sharedBy: "gateway-member-priya",
     });
 
     expect(

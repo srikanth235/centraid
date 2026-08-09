@@ -39,7 +39,10 @@ import type { RuntimeLogger } from "@centraid/app-engine";
 import {
   DEVICE_IDENTITY_HEADER,
   DEVICE_PROOF_HEADER as TUNNEL_DEVICE_PROOF_HEADER,
+  inspectEndpointTicket,
   loadEndpointSecret,
+  PEER_ENDPOINT_HEADER,
+  PEER_PROOF_HEADER,
   startGatewayEndpoint,
   TUNNEL_FORWARDED_HEADER,
 } from "@centraid/tunnel";
@@ -58,7 +61,10 @@ import {
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
 import { PairingTicketStore } from "../serve/pairing-store.js";
+import { startPeerDial } from "../serve/peer-dial.js";
+import type { PeerDial } from "../serve/peer-edge-give-client.js";
 import type { DeviceAccess } from "../serve/vault-context.js";
+import { VaultLinksStore } from "../serve/vault-links-store.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
@@ -82,6 +88,20 @@ const COMPANION_MODULES = new Set([
   "agenda",
   "people",
 ]);
+
+/**
+ * Relay hints from a dial ticket. Hints are ADDRESS data that travels with a
+ * route assertion; a failure to read them is an empty list, never a throw —
+ * a gateway with no relay hint is reachable directly.
+ */
+function relayHintsOf(ticket: string): string[] {
+  try {
+    const hint = inspectEndpointTicket(ticket).relayHint;
+    return hint ? [hint] : [];
+  } catch {
+    return [];
+  }
+}
 
 function companionGrantProfile(value: unknown): string[] | undefined | null {
   if (value === undefined) return undefined;
@@ -118,6 +138,22 @@ export interface DaemonDevicePlane {
     enrollments: EnrollmentStore;
     tickets: PairingTicketStore;
   };
+  /**
+   * Everything the `/centraid/_peer/*` route layer needs (issue #726 P3).
+   * Deliberately NOT auto-registered: the plane's handler must be mounted
+   * with the peer proof this process minted, and nothing else may read it.
+   */
+  peerPlane: {
+    links: VaultLinksStore;
+    /** Per-boot proof the peer forwarder stamps; the route layer verifies it. */
+    proof: string;
+    /** This gateway's current dial route, for the ceremony's mutual half. */
+    localRoute: () => { endpointId?: string; relayHints: string[] };
+    /** Outbound peer-plane dialing (#726 P3), the real iroh transport. */
+    dial: PeerDial;
+  };
+  /** Release the peer dial's iroh endpoint on shutdown. */
+  closePeerDial: () => Promise<void>;
 }
 
 export function makeDaemonDevicePlane(input: {
@@ -156,6 +192,25 @@ export function makeDaemonDevicePlane(input: {
   const tickets = PairingTicketStore.open(
     input.gatewayDatabase ?? layout.gatewayDbFile
   );
+  /*
+   * Persistent iroh identity (issue #289 phase 3). Loaded here, synchronously
+   * — NOT inside `startEndpoint` where it used to live — because the peer
+   * DIAL capability built from it (below) must exist as soon as this
+   * function returns: `serve()`/`buildGateway()` read `peerPlane.dial`
+   * before `startEndpoint()` ever runs (it needs the HTTP server's own URL,
+   * so it necessarily starts after `serve()`). A corrupt key still aborts
+   * boot exactly as before, just before the HTTP listener starts instead of
+   * after.
+   */
+  const endpointSecretKey = loadEndpointSecret({
+    persistence: {
+      load: () => keyStore.load("endpoint-key.bin"),
+      store: (secret) =>
+        keyStore.store("endpoint-key.bin", Buffer.from(secret)),
+    },
+    onCorrupt: "refuse",
+    label: "gateway endpoint key",
+  });
   const knownEndpointIds = new Set(
     enrollments.listFresh().map((row) => row.endpointId)
   );
@@ -174,14 +229,76 @@ export function makeDaemonDevicePlane(input: {
   const controlSecret =
     input.controlSecret ?? crypto.randomBytes(32).toString("hex");
   let liveEndpointId: string | undefined;
+  let liveRelayHints: string[] = [];
   // An enrollment is the ONLY admission (issue #603 retired the admit-anyone
   // founding window): a gateway founds itself locally, so no unknown
   // EndpointId ever needs to reach it before it holds a ticket-issued row.
   const authorizeEndpoint = (endpointId: string): boolean =>
     enrollments.isEnrolled(endpointId);
 
+  /*
+   * The PEER lane (issue #726 P3, trap 2). Its own proof and its own headers,
+   * and pointedly NOT `enrollments.isEnrolled`, which answers "is this one of
+   * my owner's devices". A linked gateway must never be able to make that
+   * question answer yes. The LINK table is deliberately the shared one (D3:
+   * locality is routing, not semantics) — this lane reads only the rows that
+   * carry a route, which is precisely the rows that describe a vault
+   * elsewhere.
+   *
+   * Admission is coarse by necessity and narrow by consequence: a peer whose
+   * endpoint keypair rotated arrives unrecognised, so the gate is "does this
+   * gateway have anyone to hear from at all" — a live link or a live ceremony.
+   * With neither, the plane accepts nothing. With either, the only routes an
+   * unrecognised caller can reach are the ticket redemption (needs the
+   * one-time secret) and the route assertion (needs the peer vault's private
+   * key); everything else is `not_found` in the route layer.
+   */
+  const links = VaultLinksStore.open(
+    input.gatewayDatabase ?? layout.gatewayDbFile
+  );
+  const peerProof = crypto.randomBytes(32).toString("hex");
+  /*
+   * Outbound peer-plane dialing (#726 P3 — "no production peer dial"). The
+   * SAME persistent identity that accepts peer connections (via the native
+   * relay, or `startGatewayEndpoint` below when it is unavailable) dials
+   * out under here — see `peer-dial.ts` for why that identity match is load
+   * bearing, not incidental. Built eagerly (binding itself is lazy) so it is
+   * available to `redeemLinkTicket`/`pushRouteAssertion` callers and to
+   * `buildGateway`'s `peerPlane.dial` from the moment this function returns.
+   */
+  const peerDial = startPeerDial({
+    secretKey: endpointSecretKey,
+    ...(input.relays ? { relays: input.relays } : {}),
+  });
+  const authorizePeerEndpoint = (endpointId: string): boolean =>
+    links.isLinked(endpointId) ||
+    links.hasAnyLink() ||
+    links.tickets.hasPending();
+  /**
+   * What the peer forwarder stamps. Disjoint from the device names above.
+   * Deliberately does NOT name a vault: `peerForEndpoint` is an endpoint-only,
+   * LIMIT-1 lookup, and an endpoint identifies a machine, not a vault (#726
+   * P3) — a peer can hold links to several of the owner's vaults, so picking
+   * one here would be exactly the ambiguity that lookup was built to avoid.
+   * The route layer resolves the actual (endpoint, vault) pair itself, per
+   * request, from `endpointId` — see `identify()` in `routes/peer-plane.ts`.
+   */
+  const peerForwardedHeaders = (
+    endpointId: string
+  ): Record<string, string> => ({
+    [PEER_ENDPOINT_HEADER]: endpointId,
+    [PEER_PROOF_HEADER]: peerProof,
+    // A peer is a forwarded caller like any other: never host custody.
+    [TUNNEL_FORWARDED_HEADER]: "1",
+  });
+
   const deviceAccess: DeviceAccess = {
     deviceKeyFor: (req: IncomingMessage): string | undefined => {
+      // Trap 2, last line (issue #726 P3). A request that arrived on the peer
+      // lane can never resolve a DEVICE key — not through a forged header, not
+      // through the loopback fallback below, not through a future forwarder
+      // that stamps both. A link's reach is the peer plane or nothing.
+      if (req.headers[PEER_ENDPOINT_HEADER] !== undefined) return undefined;
       const device = req.headers[DEVICE_HEADER];
       const proof = req.headers[DEVICE_PROOF_HEADER];
       if (
@@ -257,23 +374,23 @@ export function makeDaemonDevicePlane(input: {
         ownerPartyId: granted.boot.ownerPartyId,
         name: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
         ...(request.platform ? { platform: request.platform } : {}),
-        // Vocabulary boundary: the gateway's ROLE (admin/write/read) collapses
-        // to the vault's capability mirror (`consent_device.trust`, full/readonly),
-        // which only asks "may this device act". Admin's extra powers — minting
-        // tickets, revoking peers — are gateway-plane concerns the vault has no
-        // opinion about, so `admin` and `write` both land on `full`.
-        trust: enrollment.role === "read" ? "readonly" : "full",
+        // Vocabulary boundary: gateway-plane authority is ownership (#726),
+        // and the vault's capability mirror (`consent_device.trust`) only
+        // asks "may this device act". An enrolled device acts for the vault's
+        // owner, so it lands on `full`; device attenuation is grant_profile,
+        // orthogonal to trust.
+        trust: "full",
       });
     }
     logger.info(
-      `device plane: enrolled ${endpointId.slice(0, 10)}… as member ${primary.memberLabel} into ` +
+      `device plane: enrolled ${endpointId.slice(0, 10)}… as owner ${primary.ownerLabel} into ` +
         `vault${enrolled.length === 1 ? "" : "s"} ${enrolled.map((row) => row.vaultId).join(", ")}`
     );
     return {
       ok: true,
       enrollmentId: primary.enrollmentId,
-      memberId: primary.memberId,
-      memberLabel: primary.memberLabel,
+      ownerId: primary.ownerId,
+      ownerLabel: primary.ownerLabel,
       gatewayId: liveEndpointId,
       gatewayName: os.hostname().replace(/\.local$/u, ""),
       vaultId: primary.vaultId,
@@ -283,7 +400,6 @@ export function makeDaemonDevicePlane(input: {
         enrollmentId: row.enrollmentId,
         vaultId: row.vaultId,
         vaultName: registry.get(row.vaultId)?.name,
-        role: row.role === "revoked" ? undefined : row.role,
       })),
       version: GATEWAY_VERSION,
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
@@ -301,6 +417,13 @@ export function makeDaemonDevicePlane(input: {
         ...(allowed ? { headers: forwardedIdentityHeaders(endpointId) } : {}),
       };
     },
+    authorizePeer: (endpointId) => {
+      const allowed = authorizePeerEndpoint(endpointId);
+      return {
+        allowed,
+        ...(allowed ? { headers: peerForwardedHeaders(endpointId) } : {}),
+      };
+    },
     pair: pairDevice,
   };
 
@@ -308,27 +431,18 @@ export function makeDaemonDevicePlane(input: {
     baseUrl: string;
     token: string;
   }): Promise<GatewayEndpointHandle | undefined> => {
-    // Custody corruption is not a transport outage. Resolve it before the
-    // best-effort network start so a short/refused identity key aborts boot
-    // with the loader's actionable repair message instead of silently serving
-    // a gateway whose paired devices can never reach it.
-    const secretKey = loadEndpointSecret({
-      persistence: {
-        load: () => keyStore.load("endpoint-key.bin"),
-        store: (secret) =>
-          keyStore.store("endpoint-key.bin", Buffer.from(secret)),
-      },
-      onCorrupt: "refuse",
-      label: "gateway endpoint key",
-    });
+    // Custody corruption is not a transport outage; `endpointSecretKey`
+    // above already resolved (or refused) it before this point.
     let handle: GatewayEndpointHandle;
     try {
       handle = await startGatewayEndpoint({
-        secretKey,
+        secretKey: endpointSecretKey,
         upstream: () => upstream,
         authorize: authorizeEndpoint,
         pair: pairDevice,
         requestHeaders: forwardedIdentityHeaders,
+        authorizePeer: authorizePeerEndpoint,
+        peerRequestHeaders: peerForwardedHeaders,
         nativeControl: { secret: controlSecret },
         ...(input.relays ? { relays: input.relays } : {}),
       });
@@ -341,6 +455,7 @@ export function makeDaemonDevicePlane(input: {
       return undefined;
     }
     liveEndpointId = handle.endpointId;
+    liveRelayHints = relayHintsOf(handle.ticket());
     return {
       endpointId: handle.endpointId,
       ticket: () => handle.ticket(),
@@ -357,5 +472,15 @@ export function makeDaemonDevicePlane(input: {
     startEndpoint,
     dataPlaneControl,
     pairing: { enrollments, tickets },
+    peerPlane: {
+      links,
+      proof: peerProof,
+      localRoute: () => ({
+        ...(liveEndpointId === undefined ? {} : { endpointId: liveEndpointId }),
+        relayHints: liveRelayHints,
+      }),
+      dial: peerDial,
+    },
+    closePeerDial: () => peerDial.close(),
   };
 }

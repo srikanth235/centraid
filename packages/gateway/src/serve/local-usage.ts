@@ -47,6 +47,11 @@ import path from "node:path";
  *   cache        — runner scratch and reusable backup code bundles. Derived;
  *                  safe to wipe.
  *   templates    — `templatesCacheDir`: the pulled template cache.
+ *   borrowed     — `<dataDir>/borrowed/`: rows and bytes LENT TO this machine
+ *                  by other people (#726 P4 D4). It is not this owner's data
+ *                  and it is not backed up, but it is this owner's DISK — so
+ *                  it gets a line of its own rather than hiding inside a
+ *                  total. Held for others, visible to whoever pays for it.
  */
 export type LocalComponentId =
   | "ledger"
@@ -56,7 +61,8 @@ export type LocalComponentId =
   | "code"
   | "logs"
   | "cache"
-  | "templates";
+  | "templates"
+  | "borrowed";
 
 export interface LocalComponentUsage {
   component: LocalComponentId;

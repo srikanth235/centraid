@@ -377,7 +377,6 @@ describe("the band's sixth slot carries what the five left behind", () => {
 
   it("carries the shelves off the band, in the strip's order, plus Storage", () => {
     expect(MORE_DESTINATIONS.map((d) => d.label)).toStrictEqual([
-      "Sharing",
       "Favorites",
       "Places",
       "Duplicates",

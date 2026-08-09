@@ -31,13 +31,13 @@ function device(optedIn = true, transcript = false): CentraidGatewayDevice {
   return {
     deviceId: "enrollment-1",
     endpointId: "http:laptop",
-    memberId: "mem-1",
-    memberLabel: "You",
+    ownerId: "own-1",
+    ownerLabel: "You",
     label: "Laptop",
     transport: "iroh",
     vaultId: "vault-1",
     current: true,
-    role: "write",
+    revoked: false,
     rememberDevice: true,
     compute: {
       contributeWhileCharging: optedIn,

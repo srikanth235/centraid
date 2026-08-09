@@ -140,7 +140,6 @@ const PhotoStateView = lazyScreen(
 const PlacesMap = lazyScreen(() => import("./src/apps/photos/PlacesMap"));
 const PlacesView = lazyScreen(() => import("./src/apps/photos/PlacesView"));
 const PlaceDetail = lazyScreen(() => import("./src/apps/photos/PlaceDetail"));
-const SharingShelf = lazyScreen(() => import("./src/apps/photos/SharingShelf"));
 const TallyHome = lazyScreen(() => import("./src/apps/tally/TallyHome"));
 const TasksHome = lazyScreen(() => import("./src/apps/tasks/TasksHome"));
 const AppDetailScreen = lazyScreen(() => import("./src/screens/AppDetail"));
@@ -155,6 +154,7 @@ const PhoneStorageScreen = lazyScreen(
 );
 const ScanScreen = lazyScreen(() => import("./src/screens/Scan"));
 const SettingsScreen = lazyScreen(() => import("./src/screens/Settings"));
+const SharingScreen = lazyScreen(() => import("./src/screens/Sharing"));
 
 // Held until the profile prefs say onboarding vs app — see the comment on the
 // `onboarded === null` gate in App() for why fonts are deliberately *not* part
@@ -217,7 +217,6 @@ function PhotosNavigator(): React.JSX.Element {
       />
       <PhotosStack.Screen name="PhotosLibrary" component={PhotosLibrary} />
       <PhotosStack.Screen name="PhotosSearch" component={PhotosSearch} />
-      <PhotosStack.Screen name="SharingShelf" component={SharingShelf} />
       <PhotosStack.Screen name="PlacesView" component={PlacesView} />
       <PhotosStack.Screen name="PlacesMap" component={PlacesMap} />
       <PhotosStack.Screen name="PlaceDetail" component={PlaceDetail} />
@@ -275,6 +274,7 @@ function SettingsNavigator(): React.JSX.Element {
     >
       <SettingsStack.Screen name="Settings" component={SettingsScreen} />
       <SettingsStack.Screen name="Approvals" component={ApprovalsScreen} />
+      <SettingsStack.Screen name="Sharing" component={SharingScreen} />
       <SettingsStack.Screen
         name="PhoneStorage"
         component={PhoneStorageScreen}

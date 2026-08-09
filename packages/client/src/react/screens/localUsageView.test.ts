@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import type { LocalUsageReportDTO } from "../../gateway-client-local-storage.js";
+import type {
+  LocalComponentId,
+  LocalUsageReportDTO,
+} from "../../gateway-client-local-storage.js";
 import {
   budgetSummary,
   footprintScale,
   footprintSlices,
   formatBytes,
   parseBytes,
+  presentationFor,
 } from "./localUsageView.js";
 
 // The Storage page's presentation derivation (issue #544). Every assertion
@@ -15,6 +19,12 @@ import {
 
 const GB = 1024 ** 3;
 const MB = 1024 ** 2;
+
+/** A component id the wire sent that this build's `LocalComponentId` union
+ *  does not name — what a newer gateway can do, since the union is a
+ *  compile-time-only guarantee over what is really just a JSON string. */
+const unknown = (id: string): LocalComponentId =>
+  id as unknown as LocalComponentId;
 
 function report(over: Partial<LocalUsageReportDTO> = {}): LocalUsageReportDTO {
   return {
@@ -103,6 +113,33 @@ describe(footprintSlices, () => {
     expect(slices).toStrictEqual([]);
   });
 
+  it("renders `borrowed` as its own named component, never folded into the total silently", () => {
+    const slices = footprintSlices(
+      report({
+        components: [{ component: "borrowed", bytes: GB, files: 12 }],
+      })
+    );
+    const borrowed = slices.find((s) => s.component === "borrowed");
+    expect(borrowed?.label).toBe("Held for others");
+    expect(borrowed?.bytes).toBe(GB);
+  });
+
+  it("degrades an id this build does not recognize to an honest generic label instead of throwing — issue #726 finding 4", () => {
+    const slices = footprintSlices(
+      report({
+        components: [
+          { component: unknown("not-yet-invented"), bytes: GB, files: 1 },
+        ],
+      })
+    );
+    const found = slices.find(
+      (s) => s.component === unknown("not-yet-invented")
+    );
+    expect(found).toBeDefined();
+    expect(found?.label).toBe("not-yet-invented");
+    expect(found?.bytes).toBe(GB);
+  });
+
   it("keeps a component on its own hue regardless of rank", () => {
     const big = footprintSlices(report());
     const flipped = footprintSlices(
@@ -117,6 +154,22 @@ describe(footprintSlices, () => {
     ): string | undefined => slices.find((s) => s.component === id)?.color;
     expect(hue(flipped, "logs")).toBe(hue(big, "logs"));
     expect(flipped[0]!.component).toBe("logs");
+  });
+});
+
+describe(presentationFor, () => {
+  it("answers the fixed presentation for a known id", () => {
+    expect(presentationFor("borrowed")).toMatchObject({
+      label: "Held for others",
+    });
+  });
+
+  it("never throws for an id outside the known vocabulary — degrades to the raw id as its own label", () => {
+    expect(() => presentationFor("future-component")).not.toThrow();
+    expect(presentationFor("future-component")).toMatchObject({
+      label: "future-component",
+      color: "var(--c-slate)",
+    });
   });
 });
 

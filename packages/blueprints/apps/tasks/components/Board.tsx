@@ -1,3 +1,5 @@
+import type { ScopeSearchReach } from "../../_shared/search-scaffold.ts";
+import { scopeReachFacts } from "../../_shared/search-scaffold.ts";
 import { fmtDay } from "../format.ts";
 import { I } from "../icons.ts";
 import type {
@@ -62,6 +64,7 @@ export function Board({
   projects,
   projectSections,
   footer,
+  reach,
   onShowMore,
   onEmptyAction,
   onOpenDetail,
@@ -83,6 +86,10 @@ export function Board({
   projects: Project[];
   projectSections: Section[];
   footer: { windowSize: number } | null;
+  /** Per-scope reach for this board's fan-out (issue #726 D10/D11,
+   *  `scope-fanout.ts`'s `readBoard`) — undefined/empty for a single-scope
+   *  mount, which has no fan-out to report on. */
+  reach?: readonly ScopeSearchReach[];
   onShowMore: () => void;
   onEmptyAction: () => void;
   onOpenDetail: (id: string) => void;
@@ -95,9 +102,27 @@ export function Board({
   ) => Promise<boolean>;
   onReorder: (task: Task, before: Task) => Promise<boolean>;
 }) {
+  const reachFacts = reach ? scopeReachFacts(reach) : [];
   return (
     <div className={styles.column}>
       {showCapture ? <Capture {...captureProps} /> : null}
+
+      {/* A scope that could not be asked, named BESIDE whatever other
+          scopes' tasks are still on screen — never a reason to blank the
+          board (issue #726 D10/D11). */}
+      {reachFacts.length > 0 ? (
+        <div className={styles.partial}>
+          <p className={styles.partialTitle}>Not every scope answered</p>
+          <dl className={styles.facts}>
+            {reachFacts.map((fact) => (
+              <div key={fact.label} className={styles.fact}>
+                <dt className={styles.factLabel}>{fact.label}</dt>
+                <dd className={styles.factValue}>{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ) : null}
 
       {pendingAdds.length > 0 && view !== "logbook" ? (
         <div className={styles.section}>

@@ -10,7 +10,7 @@
 //   1. ITS SELECTION IS ITS OWN SET, not the timeline's. That is why this
 //      screen passes NO `selection` to `PhotosScreen`: the five-target
 //      selection bar belongs to the library's selection, and letting the
-//      picker drive it would put Trash and Copy-to-Sharing under a choice that
+//      picker drive it would put Trash and Copy-to-⟨vault⟩ under a choice that
 //      means "add these to an album". The picked set lives here and dies here.
 //   2. ADDING MOVES AND COPIES NOTHING. An album REFERS to a photograph where
 //      it already lives. The sentence is the web picker's own

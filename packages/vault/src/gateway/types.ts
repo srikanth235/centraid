@@ -27,14 +27,15 @@ export type Credential =
        */
       scopeClamp?: readonly ExecutionScopeSpec[];
       /**
-       * The L2 member this agent turn acts ON BEHALF OF (issue #599 decision
-       * 7). The host resolves the member's role in THIS vault and passes the
-       * one bit the vault can enforce: an agent working for a `read`-role
-       * member must fail a write exactly where that member would. Absent =
-       * no on-behalf-of member is known (a scheduler-fired automation with no
-       * request scope), which caps nothing and changes nothing.
+       * The L2 owner this agent turn acts ON BEHALF OF (issue #599 decision
+       * 7; #726). The host resolves whether that owner owns THIS vault and
+       * passes the one bit the vault can enforce: an agent working for an
+       * owner who does not own this vault must fail a write exactly where
+       * that owner would. Absent = no on-behalf-of owner is known (a
+       * scheduler-fired automation with no request scope), which caps
+       * nothing and changes nothing.
        */
-      onBehalfOfMember?: { memberId: string; mayAct: boolean };
+      onBehalfOfOwner?: { ownerId: string; mayAct: boolean };
     }
   | { kind: "device"; deviceId: string; deviceKey: string };
 
@@ -62,11 +63,12 @@ export interface Identity {
   /** Authenticated per-execution attenuation, never caller-supplied data. */
   scopeClamp?: readonly ExecutionScopeSpec[];
   /**
-   * The on-behalf-of member cap for an agent turn (issue #599 decision 7),
-   * carried from the credential. Independent of `mayAct` (device trust) on
-   * purpose: the two failures have different causes and journal differently.
+   * The on-behalf-of owner cap for an agent turn (issue #599 decision 7;
+   * #726), carried from the credential. Independent of `mayAct` (device
+   * trust) on purpose: the two failures have different causes and journal
+   * differently.
    */
-  onBehalfOfMember?: { memberId: string; mayAct: boolean };
+  onBehalfOfOwner?: { ownerId: string; mayAct: boolean };
 }
 
 /** One predicate of a row filter (ODRL-constraint shaped, compiled to SQL). */
@@ -155,13 +157,13 @@ export interface InvokeRequest {
   /** Host-authenticated device binding for a browser-replica intent. */
   intentDeviceId?: string;
   /**
-   * The L2 member this write is attributable to (issue #599 decision 8) —
-   * the household principal the calling device is bound to, resolved by the
+   * The L2 owner this write is attributable to (issue #599 decision 8;
+   * #726) — the principal the calling device is bound to, resolved by the
    * host from the binding and never supplied by a caller. Recorded on the
    * invocation's journal receipt beside the agent/app that carried it, so
    * attribution survives a rename: the id is the key, the label is display.
    */
-  actingMemberId?: string;
+  actingOwnerId?: string;
   /**
    * The demo register (issue #290 phase 1): rows this invocation writes are
    * scenario-seed data — provenance stamps `seed.demo` instead of the

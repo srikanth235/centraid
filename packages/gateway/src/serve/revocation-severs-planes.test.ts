@@ -88,15 +88,14 @@ describe("revocation-severs-planes scenarios", () => {
     const vaultId = handle.vaults.defaultVaultId();
     const owner = enrollments.enroll({
       endpointId: "owner-endpoint",
-      vaultId,
+      vaultIds: [vaultId],
       label: "Owner",
-      role: "admin",
     });
     const member = enrollments.enroll({
       endpointId: memberClient.endpointId,
-      vaultId,
-      label: "Member",
-      role: "write",
+      vaultIds: [vaultId],
+      label: "Second device",
+      ownerId: owner.ownerId,
     });
     const tokenHash = hashControlToken("member-control-cookie");
     sessions.establish({

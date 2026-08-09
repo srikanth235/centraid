@@ -48,9 +48,19 @@ export interface SearchScaffoldProps {
    *  only control. */
   onRetry?: () => void;
   onOpenGroup?: (openTarget: string, row: SearchGroupRow) => void;
+  /**
+   * Per-scope reach for a multi-scope search (issue #726 D10/D11,
+   * `scopeReachFacts`) — a scope that could not be asked, named BESIDE the
+   * results the other scopes still have, never in place of them. Rendered
+   * whenever `status` is `ready` (with or without hits) and this is
+   * non-empty; absent/empty draws nothing, the single-scope-app default.
+   */
+  reachFacts?: readonly { label: string; value: string }[];
   /** The caller's own primary results (photo grid, expense list, ...). */
   children?: ReactNode;
 }
+
+const EMPTY_REACH_FACTS: readonly { label: string; value: string }[] = [];
 
 const EMPTY_GROUPS: readonly SearchGroupRow[] = [];
 
@@ -66,6 +76,7 @@ export function SearchScaffold({
   onClear,
   onRetry,
   onOpenGroup,
+  reachFacts = EMPTY_REACH_FACTS,
   children,
 }: SearchScaffoldProps) {
   const asked = Boolean(query);
@@ -78,6 +89,12 @@ export function SearchScaffold({
   const hasGroups = groups.length > 0;
   const none = asked && status === "ready" && count === 0 && !hasGroups;
   const showResults = asked && status === "ready" && (count > 0 || hasGroups);
+  // A PARTIAL reach still counts as `ready` (issue #726 D10/D11) — some
+  // scope's results are on screen, they are just not every mounted scope's.
+  // Drawn under EITHER the miss or the results panel, never instead of one:
+  // the point of naming a short scope is that it sits BESIDE what still
+  // answered, not that it replaces the honest count above it.
+  const showPartialReach = asked && status === "ready" && reachFacts.length > 0;
 
   return (
     <>
@@ -140,6 +157,20 @@ export function SearchScaffold({
           <button type="button" className="kit-btn" onClick={onClear}>
             {copy.miss.clear}
           </button>
+        </div>
+      ) : null}
+
+      {showPartialReach ? (
+        <div className={styles.partial}>
+          <p className={styles.partialTitle}>Not every scope answered</p>
+          <dl className={styles.facts}>
+            {reachFacts.map((fact) => (
+              <div key={fact.label} className={styles.fact}>
+                <dt className={styles.factLabel}>{fact.label}</dt>
+                <dd className={styles.factValue}>{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       ) : null}
 

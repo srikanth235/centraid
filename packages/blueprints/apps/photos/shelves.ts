@@ -1,5 +1,6 @@
-// The eight shelves, the compact band's destinations, and the three questions
-// every surface asks about a shelf (v4 handoff §5, §3.1, §16).
+// The seven shelves, the compact band's destinations, and the three questions
+// every surface asks about a shelf (v4 handoff §5, §3.1, §16; the Sharing
+// place was retired by issue #726 — a share's place is the recipient's vault).
 //
 // A SHELF IS THE SAME TIMELINE UNDER A FILTER — same tile, same grouping, same
 // tile-size control, same selection. That is why a shelf is a value here and
@@ -14,18 +15,17 @@
 import type { SelectionShelfKind } from "./components/SelectionBar.tsx";
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
 
-// The four shelves that had no built-in id before v4. Same one-slot trick as
-// the existing built-ins: the prefix can never collide with a collection id,
+// The shelves that had no built-in id before v4. Same one-slot trick as the
+// existing built-ins: the prefix can never collide with a collection id,
 // which is an opaque token and never carries a colon.
-export const SHARING = "built-in:sharing";
 export const PLACES = "built-in:places";
 export const PEOPLE = "built-in:people";
 /** Search is a shelf (§9), reached from the band and the frame — not a field
  *  in a header the app draws for itself. */
 export const SEARCH = "built-in:search";
 /**
- * Storage (§12) — what the bytes cost and where they are. It is NOT a ninth
- * tab: §5 says eight, and §15 puts Storage in the compact band's More sheet
+ * Storage (§12) — what the bytes cost and where they are. It is NOT another
+ * strip tab: §5 fixes the strip, and §15 puts Storage in the compact band's More sheet
  * beside Import. It has a route segment like Search does, so it is a
  * destination the app can reach and describe rather than a panel bolted onto
  * another shelf.
@@ -64,7 +64,6 @@ export interface Shelf {
  *  band and the frame reach, not a ninth tab. */
 export const SHELVES: readonly Shelf[] = [
   { id: null, label: "Library", segment: "" },
-  { id: SHARING, label: "Sharing", segment: "sharing" },
   { id: FAVORITES, label: "Favorites", segment: "favorites" },
   { id: ALBUMS, label: "Albums", segment: "albums" },
   { id: PLACES, label: "Places", segment: "places" },
@@ -95,7 +94,7 @@ export const BAND_DESTINATIONS: readonly { id: string; label: string }[] = [
 /**
  * The compact band's sixth slot — the app's OWN overflow sheet (§15). It
  * carries exactly what the five destinations left behind, in the strip's own
- * order: Sharing, Favorites, Places, Duplicates, Trash, then Storage. Import
+ * order: Favorites, Places, Duplicates, Trash, then Storage. Import
  * is not here — it is the app bar's filled action on every shelf that can
  * take one, and a second way in would be a second control for one verb.
  */
@@ -175,8 +174,7 @@ export function showsTileSize(id: ShelfId): boolean {
 /**
  * May `Select` be entered here? Every timeline shelf, Trash included (§6):
  * the bar's fifth action becomes **Restore** there (components/SelectionBar.tsx
- * derives the swap from the shelf, the same way it derives Sharing's
- * **Remove from Sharing** third action) rather than Trash losing selection
+ * derives the swap from the shelf) rather than Trash losing selection
  * altogether. Trash used to be excluded here for exactly the reason the bar
  * now handles — widening this predicate is what turns it back on.
  */
@@ -185,13 +183,11 @@ export function allowsSelection(id: ShelfId): boolean {
 }
 
 /**
- * Which of the selection bar's two shelf swaps applies (§6): Trash's fifth
- * action becomes Restore, Sharing's third becomes Remove from Sharing. Every
- * other shelf — including album detail, whose id is a collection id and
- * matches neither — carries the base order untouched (`normal`).
+ * Which of the selection bar's shelf swaps applies (§6): Trash's fifth action
+ * becomes Restore. Every other shelf — including album detail, whose id is a
+ * collection id and matches nothing — carries the base order untouched
+ * (`normal`).
  */
 export function shelfKindFor(id: ShelfId): SelectionShelfKind {
-  if (id === TRASH) return "trash";
-  if (id === SHARING) return "sharing";
-  return "normal";
+  return id === TRASH ? "trash" : "normal";
 }

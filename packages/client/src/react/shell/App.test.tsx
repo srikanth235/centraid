@@ -22,7 +22,7 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
   getUserPrefs: () => Promise.resolve({}),
-  // The sidebar identity row + every scope picker read the member's scope
+  // The sidebar identity row + every scope picker read the owner's scope
   // registry (#599). `undefined` is the "gateway has no scopes plane" answer,
   // which falls through to listVaults.
   listAppScopes: apiMocks.listAppScopes,
@@ -343,7 +343,7 @@ describe("App suite", () => {
       expect(el.querySelector('[aria-label="Show sidebar"]')).not.toBeNull();
       expect(el.querySelector(".scrim")).toBeNull();
       // Navigating with the stem hidden leaves it hidden — the preference is
-      // the member's, not the router's.
+      // the owner's, not the router's.
       await act(async () => {
         el.querySelector<HTMLButtonElement>('[aria-label="Back"]')?.click();
       });

@@ -1,22 +1,14 @@
 // The two filter menus in the Photos toolbar row, as values (v4 handoff §3,
-// §H, CHANGELOG H). No JSX here on purpose: the strip, the toolbar row, the
-// tile marker and the share destination all need the same answers, and a menu
-// component is the wrong place to keep them.
+// §H, CHANGELOG H). No JSX here on purpose: the strip, the toolbar row and
+// the tile marker all need the same answers, and a menu component is the
+// wrong place to keep them.
 //
-// THE VAULT FILTER READS THE RECORD, NEVER A NAME. Two facts, and they are
-// different KINDS of fact:
-//
-//   * "is this shared?" is `personal === false` — the member's own
-//     photographs are the unmarked default (§4.4). That is a property of the
-//     vault, written at founding and untouched by renaming.
-//   * WHERE a share goes is a POINTER the member owns (`shareTargetId()` in
-//     scopes.ts), because a member may want to share into several vaults. It
-//     is not a property of any vault, so no scope row carries it, and nothing
-//     here goes looking for "the sharing vault".
-//
-// What the member READS is still `scope.label`, which the shell owns and the
-// owner may rename. Deriving either fact from a label would break the moment
-// they do.
+// THE VAULT FILTER READS THE RECORD, NEVER A NAME. "Is this shared?" is
+// `personal === false` — the member's own photographs are the unmarked
+// default (§4.4). That is a property of the vault, written at founding and
+// untouched by renaming. What the member READS is still `scope.label`, which
+// the shell owns and the owner may rename; deriving the fact from a label
+// would break the moment they do.
 import type { InlineScope } from "../inline-types.ts";
 import type { Asset } from "./types.ts";
 
@@ -69,36 +61,19 @@ export function isSharedScope(scope: InlineScope | undefined): boolean {
   return scope?.personal === false;
 }
 
-/**
- * Where a share lands: the member's POINTER, resolved against what is mounted
- * here. Undefined when nothing is pointed at, and equally undefined when the
- * pointer names a place this device cannot reach — the caller distinguishes
- * the two and says which, rather than doing nothing (sharing.ts).
- */
-export function shareDestination(
-  scopes: readonly InlineScope[],
-  targetId: string | undefined
-): InlineScope | undefined {
-  if (targetId === undefined) return undefined;
-  return scopes.find((scope) => scope.id === targetId);
-}
-
-/** Sort order for the filter: the member's own scope, then wherever their
- *  shares go, then every other audience they belong to, each in the order the
- *  shell listed them (§H). */
-function scopeRank(scope: InlineScope, targetId: string | undefined): number {
-  if (scope.personal !== false) return 0;
-  return scope.id === targetId ? 1 : 2;
+/** Sort order for the filter: the member's own scope, then every other place
+ *  they can see, each in the order the shell listed them (§H). */
+function scopeRank(scope: InlineScope): number {
+  return scope.personal === false ? 1 : 0;
 }
 
 export function orderedScopes(
-  scopes: readonly InlineScope[],
-  targetId?: string
+  scopes: readonly InlineScope[]
 ): readonly InlineScope[] {
   return [...scopes]
     .map((scope, index) => ({ scope, index }))
     .sort((a, b) => {
-      const rank = scopeRank(a.scope, targetId) - scopeRank(b.scope, targetId);
+      const rank = scopeRank(a.scope) - scopeRank(b.scope);
       return rank === 0 ? a.index - b.index : rank;
     })
     .map((entry) => entry.scope);

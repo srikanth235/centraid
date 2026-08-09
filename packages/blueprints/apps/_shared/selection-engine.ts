@@ -2,10 +2,10 @@
 //
 // While a selection is live the band is REPLACED by this bar — proto:4953's
 // `appBandOn: …&&!sel` is exactly that rule — and the bar carries five 56px
-// targets in one fixed order. The order and the two shelf swaps (Trash →
-// Restore, Sharing → Remove from Sharing) live here, in a module free of
-// `react-native`, for the same reason `photos-band.ts` does: they are rules,
-// they must be assertable without a renderer, and the web's own selection bar
+// targets in one fixed order. The order and the Trash shelf's swap (Trash →
+// Restore) live here, in a module free of `react-native`, for the same reason
+// `photos-band.ts` does: they are rules, they must be assertable without a
+// renderer, and the web's own selection bar
 // (`packages/blueprints/apps/photos/components/SelectionBar.tsx`,
 // `buildSelectionActions`) states them in one place too. Two surfaces, one
 // table, so the fifth target cannot mean `Trash` on the phone and `Download`
@@ -13,12 +13,10 @@
 // here too: a batch is one member act, but one bad item must not strand every
 // later item in that act.
 //
-// SHARING ON THE PHONE. The third target's shelf swap is modelled here even
-// though no Sharing shelf exists on the phone yet (see `photos-band.ts` for
-// why the More sheet carries no Sharing row): the swap is the rule, and a
-// rule that is only written down once the surface ships is a rule that ships
-// wrong. `shelf: "sharing"` is unreachable from a mobile screen today and
-// every mobile caller passes "normal" or "trash".
+// THE THIRD TARGET IS *COPY TO ⟨VAULT⟩* (issue #726). The caller supplies the
+// caption because only the caller knows the destination — another mounted
+// writable scope, named by its own label; there is no Sharing place and no
+// default share-target pointer to derive one from.
 
 /** The five, by id, in the handoff's fixed order. */
 export type SelectionActionId =
@@ -29,7 +27,7 @@ export type SelectionActionId =
   | "trash";
 
 /** Which swap applies to the fixed five (§6). */
-export type SelectionShelfKind = "trash" | "sharing" | "normal";
+export type SelectionShelfKind = "trash" | "normal";
 
 /** The phone's selection targets. Above the 44 floor: this is the primary bar
  *  while a selection is live, exactly as the viewer's bar is (§7.1, §6). */
@@ -67,10 +65,14 @@ export type SelectionHandler =
 export interface BuildSelectionActionsInput {
   count: number;
   shelf: SelectionShelfKind;
+  /** The third target's caption — `Copy to ⟨destination label⟩`, or the
+   *  caller's resting caption when no single destination exists. Supplied,
+   *  never derived here: the destination is the caller's to resolve. */
+  copyLabel: string;
   /** Non-null when the scope the selection sits in refuses writes (§6):
    *  Favorite, Add to album and Trash/Restore disable with this sentence.
-   *  Copy to Sharing and Download do not — copying into the member's OWN
-   *  vault, and downloading, are never writes on someone else's library. */
+   *  *Copy to ⟨vault⟩* and Download do not — copying into a vault the member
+   *  owns, and downloading, are never writes on someone else's library. */
   readOnlyReason: string | null;
   favorite: SelectionHandler;
   addToAlbum: SelectionHandler;
@@ -90,7 +92,7 @@ function handlerOf(handler: SelectionHandler): {
 }
 
 /**
- * The five, in the fixed order, with the shelf swaps applied and every
+ * The five, in the fixed order, with the Trash shelf's swap applied and every
  * disabled target's handler replaced by a no-op.
  *
  * THE INERT HANDLER IS THE POINT (§6, proto `act:off?()=>{}:…`). A `disabled`
@@ -102,6 +104,7 @@ function handlerOf(handler: SelectionHandler): {
 export function buildSelectionActions({
   count,
   shelf,
+  copyLabel,
   readOnlyReason,
   favorite,
   addToAlbum,
@@ -111,7 +114,6 @@ export function buildSelectionActions({
 }: BuildSelectionActionsInput): SelectionAction[] {
   const empty = count === 0;
   const isTrashShelf = shelf === "trash";
-  const isSharingShelf = shelf === "sharing";
   const specs: SelectionAction[] = [
     {
       id: "favorite",
@@ -127,8 +129,8 @@ export function buildSelectionActions({
     },
     {
       id: "share",
-      label: isSharingShelf ? "Remove from Sharing" : "Copy to Sharing",
-      icon: isSharingShelf ? "removeFrom" : "share",
+      label: copyLabel,
+      icon: "share",
       ...handlerOf(share),
     },
     {
@@ -146,7 +148,7 @@ export function buildSelectionActions({
     },
   ];
   // The read-only sentence applies to the three targets that WRITE into the
-  // scope being read. Download and Copy to Sharing are deliberately exempt.
+  // scope being read. Download and *Copy to ⟨vault⟩* are deliberately exempt.
   const netOff = readOnlyReason !== null;
   const writesHere = new Set<SelectionActionId>([
     "favorite",

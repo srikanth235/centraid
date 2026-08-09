@@ -30,9 +30,6 @@ type ReactNative = typeof import("react-native");
 type SafeAreaContext = typeof import("react-native-safe-area-context");
 type ThemeModule = typeof import("../../kit/theme");
 type IconModule = typeof import("../../kit/components/Icon");
-type UseReplicaQueryModule = typeof import("../../kit/hooks/useReplicaQuery");
-type TimelineSourceModule = typeof import("./timeline-source");
-type ShareTargetModule = typeof import("../../kit/share/use-share-target");
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -48,33 +45,6 @@ const mocks = vi.hoisted(() => ({
     textFaint: "#mock-text-faint",
     textSoft: "#mock-text-soft",
   },
-  // Two favorited, undeleted assets; one deleted (trashed); two sharing a
-  // phash (a real duplicate cluster) and a third phash with only one member
-  // (not a cluster) — chosen so favorites/trash/duplicates meta all read a
-  // number that is NOT simply "how many assets exist".
-  assets: [
-    { id: "a1", favorite: true, deleted: false, phash: "hash-x" },
-    // The one row that sits in the share target — so Sharing's meta reads a
-    // number that is NOT the library size and NOT the favourite count.
-    {
-      id: "a2",
-      favorite: true,
-      deleted: false,
-      phash: "hash-x",
-      sourceVaultId: "v-share",
-    },
-    // Trashed, and ALSO in the share target: the shelf is a filter over the
-    // live timeline, so this must not be counted.
-    {
-      id: "a3",
-      favorite: false,
-      deleted: true,
-      phash: "hash-y",
-      scopeIds: ["v-share"],
-    },
-    { id: "a4", favorite: false, deleted: false, phash: undefined },
-  ],
-  places: [{ place_id: "p1" }, { place_id: "p2" }, { place_id: "p3" }],
 }));
 
 vi.mock(import("react-native"), async () => {
@@ -147,36 +117,6 @@ vi.mock(import("../../kit/components/Icon"), async () => {
     default: () => ReactModule.createElement("i"),
   } as unknown as Partial<IconModule>;
 });
-
-vi.mock(
-  import("../../kit/hooks/useReplicaQuery"),
-  () =>
-    ({
-      useReplicaQuery: () => ({ rows: mocks.places }),
-    }) as unknown as Partial<UseReplicaQueryModule>
-);
-
-vi.mock(
-  import("../../kit/share/use-share-target"),
-  () =>
-    ({
-      useShareTarget: () => ({
-        hydrated: true,
-        target: { vaultId: "v-share", label: "Household" },
-        candidates: [{ vaultId: "v-share", label: "Household" }],
-        reason: null,
-        choose: () => undefined,
-      }),
-    }) as unknown as Partial<ShareTargetModule>
-);
-
-vi.mock(
-  import("./timeline-source"),
-  () =>
-    ({
-      usePhotoTimeline: () => ({ assets: mocks.assets }),
-    }) as unknown as Partial<TimelineSourceModule>
-);
 
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;

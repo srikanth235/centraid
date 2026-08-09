@@ -16,9 +16,9 @@
 // line's undo slot — see that file's head for why.
 import { useState } from "react";
 
+import { canWriteScope, mountedScopes } from "../../_shared/scope-kit.ts";
 import { assetBytes } from "../format.ts";
 import { fmtBytes } from "../kit.ts";
-import { canWriteScope, mountedScopes } from "../scopes.ts";
 import { runEmptyTrash } from "../trash-actions.ts";
 import type { Asset } from "../types.ts";
 import { EMPTY_TRASH_COPY, TRASH_NOTE } from "../view-copy.ts";

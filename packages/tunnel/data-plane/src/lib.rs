@@ -8,6 +8,14 @@ pub mod ticket;
 pub const TUNNEL_ALPN: &[u8] = b"centraid/tunnel/1";
 pub const PAIR_ALPN: &[u8] = b"centraid/pair/1";
 pub const GW_PAIR_ALPN: &[u8] = b"centraid/gw-pair/1";
+/// Gateway↔gateway peer plane (issue #726 P3). Byte-mirrored in
+/// `packages/tunnel/src/protocol.ts::PEER_LINK_ALPN`; `alpn-parity.test.ts`
+/// reads THIS line and pins the two, because a drift between them fails
+/// nowhere but at ALPN negotiation on a real network.
+pub const PEER_LINK_ALPN: &[u8] = b"centraid/gw-link/1";
+/// The only path prefix a linked peer may address. Mirrored in
+/// `protocol.ts::PEER_PLANE_PREFIX`; see `iroh_relay::peer_target_allowed`.
+pub const PEER_PLANE_PREFIX: &str = "/centraid/_peer/";
 pub const MAX_HEADER_FRAME_BYTES: usize = 256 * 1024;
 pub const MAX_REQUEST_BODY_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_OPEN_RANGE_BYTES: u64 = 4 * 1024 * 1024;

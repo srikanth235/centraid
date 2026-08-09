@@ -13,6 +13,12 @@ import searchQuery from "./queries/search.ts";
 const tasksInlineApp: InlineAppModule = {
   appId: "tasks",
   changeTables: CHANGE_TABLES,
+  // Mount over every scope this member can see (issue #726 D11 task 3): the
+  // board is the merge of their own open tasks and each audience they
+  // belong to, through the shared scope kit (see `scope-declaration.ts` and
+  // `app-root.tsx`'s `refresh`) — the same door Photos' timeline already
+  // walks (issue #599).
+  multiScope: true,
   // The query defaults are typed against the ambient `HandlerArgs`; the inline
   // contract types `ctx` as `unknown`, so bridge the two here (the shell builds
   // a compatible ctx at run time — inlineQueryCtx.ts).

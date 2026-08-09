@@ -219,6 +219,17 @@ export interface BackupServiceOptions {
     bytesUploaded: number;
     durationMs: number;
   }) => void;
+  /**
+   * Per-vault owner (issue #726 P1) — paired with `authorizedOwnerId` to
+   * skip a vault owned by someone OTHER than the person this host's backup
+   * configuration is authorized for. Hosting a vault confers no right to
+   * ship its bytes to YOUR configured destination without its owner's own
+   * say-so. Either omitted ⇒ no filter (single-owner gateways, the common
+   * case, are unaffected).
+   */
+  ownerOf?: (vaultId: string) => string | undefined;
+  /** The owner id this host's backup configuration is authorized for (#726 P1). */
+  authorizedOwnerId?: () => string | undefined;
 }
 
 /**
@@ -338,6 +349,10 @@ export class BackupService {
     | ((info: { bytesUploaded: number; durationMs: number }) => void)
     | undefined;
   private readonly shouldDeferPosture: () => boolean;
+  private readonly ownerOf:
+    | ((vaultId: string) => string | undefined)
+    | undefined;
+  private readonly authorizedOwnerId: (() => string | undefined) | undefined;
   private keyring: Keyring | undefined;
   private timer: NodeJS.Timeout | undefined;
   private walTimer: NodeJS.Timeout | undefined;
@@ -393,6 +408,8 @@ export class BackupService {
       new RecoveryKitStateStore(this.gatewayDatabase, this.now);
     this.onDrainAccounted = opts.onDrainAccounted;
     this.shouldDeferPosture = opts.shouldDeferPosture ?? (() => false);
+    this.ownerOf = opts.ownerOf;
+    this.authorizedOwnerId = opts.authorizedOwnerId;
 
     this.health.registerProbe("backups", async () => this.probe());
   }
@@ -714,6 +731,24 @@ export class BackupService {
     if (!plane) {
       this.logger.warn(`backup: unknown vault "${vaultId}" — skipped`);
       return;
+    }
+    // Hosting a vault confers no right to ship its bytes to THIS host's
+    // configured destination without its own owner's say-so (#726 P1). Skip
+    // + report, never silent — same shape as the fenced/destination-changed
+    // skips just below.
+    if (this.ownerOf && this.authorizedOwnerId) {
+      const owner = this.ownerOf(vaultId);
+      const authorized = this.authorizedOwnerId();
+      if (
+        owner !== undefined &&
+        authorized !== undefined &&
+        owner !== authorized
+      ) {
+        this.logger.warn(
+          `backup: vault ${vaultId} is owned by a different person than this machine's backup configuration is authorized for — skipped (#726)`
+        );
+        return;
+      }
     }
     const state = await loadBackupState(
       this.gatewayDatabase,

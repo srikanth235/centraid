@@ -2,19 +2,30 @@ import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import {
+  answerPendingEdge,
+  approveGatewayLink,
+  closeGatewayEdge,
   createGatewayDeviceTicket,
+  getBorrowBudget,
   getGatewayDeviceWorkStatus,
+  getReceiveSetting,
+  listBorrowedScopes,
   listGatewayDevices,
-  listGatewayMembers,
-  removeGatewayMember,
+  listGatewayEdges,
+  listGatewayLinks,
+  listGatewayOwners,
+  listPendingEdges,
+  proposeGatewayLink,
   renameGatewayDevice,
   revokeGatewayDevice,
+  setBorrowBudget,
   setGatewayDeviceCompute,
+  setReceiveSetting,
 } from "../../../gateway-client.js";
 import HouseholdScreen from "../../screens/HouseholdScreen.js";
 import { useShellActions } from "../actions.js";
 import PageScroll from "../PageScroll.js";
-import { useMemberScopes } from "../useMemberScopes.js";
+import { useOwnerScopes } from "../useOwnerScopes.js";
 import VaultModal, {
   DEFAULT_VAULT_ICON,
   randomVaultColor,
@@ -22,14 +33,14 @@ import VaultModal, {
 import { addVault } from "./vaultModals.js";
 import { startVisibilityTicker } from "./visibility-ticker.js";
 
-// React-owned Household route (issue #599, Decision 14). The roster half is the
-// device/member surface that used to hang off the Gateway page; the vaults half
-// reads the member's scope registry, which is also what every "which vault?"
-// picker resolves against — one source, so the page and the pickers can never
-// disagree about what this member can reach.
+// React-owned Household route (issue #599, Decision 14; ownership #726). The
+// roster half is the device/owner surface that used to hang off the Gateway
+// page; the vaults half reads the owner's scope registry, which is also what
+// every "which vault?" picker resolves against — one source, so the page and
+// the pickers can never disagree about what this owner can reach.
 export default function HouseholdRoute(): JSX.Element {
   const { navigate, showToast } = useShellActions();
-  const scopes = useMemberScopes();
+  const scopes = useOwnerScopes();
   const [now, setNow] = useState(() => Date.now());
   // "New vault" moved here with the rest of the vault vocabulary — it used to
   // hang off a gateway header row in the retired switcher. `addVault`
@@ -82,11 +93,30 @@ export default function HouseholdRoute(): JSX.Element {
             replica.purgeCurrentReplicaDevice()
           )
         }
-        loadMembers={listGatewayMembers}
-        onRemoveMember={removeGatewayMember}
+        loadOwners={listGatewayOwners}
         onCreateDeviceTicket={createGatewayDeviceTicket}
         onUpdateDeviceCompute={setGatewayDeviceCompute}
         loadDeviceWorkStatus={getGatewayDeviceWorkStatus}
+        sharing={{
+          now,
+          ownVaultIds: scopes.scopes.map((scope) => scope.id),
+          loadBorrowed: listBorrowedScopes,
+          loadLinks: listGatewayLinks,
+          onProposeLink: proposeGatewayLink,
+          onApproveLink: approveGatewayLink,
+          loadReceiveSetting: getReceiveSetting,
+          onSetReceiveSetting: setReceiveSetting,
+          loadEdges: listGatewayEdges,
+          loadPending: listPendingEdges,
+          onAnswerPending: answerPendingEdge,
+          // The owner-facing revoke route (#726 P6 gap 1) — one door, the
+          // gateway disambiguates the origin ("Stop lending") from the
+          // audience ("Stop borrowing") by which side's row the caller owns.
+          onStopLending: closeGatewayEdge,
+          onStopBorrowing: closeGatewayEdge,
+          loadBorrowBudget: getBorrowBudget,
+          onSetBorrowBudget: setBorrowBudget,
+        }}
       />
     </PageScroll>
   );

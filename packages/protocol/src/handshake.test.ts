@@ -14,8 +14,9 @@ import {
 describe("handshake scenarios", () => {
   test("version constants: product string + protocol ints", () => {
     expect(GATEWAY_VERSION).toBe("0.1.0");
-    expect(GATEWAY_PROTOCOL_VERSION).toBe(2);
-    expect(GATEWAY_MIN_PROTOCOL_VERSION).toBe(2);
+    // v3 (#726 P0): ownership replaces roles — hard floor, no COMPAT shims.
+    expect(GATEWAY_PROTOCOL_VERSION).toBe(3);
+    expect(GATEWAY_MIN_PROTOCOL_VERSION).toBe(3);
   });
 
   test("protocolsCompatible enforces mutual support window", () => {

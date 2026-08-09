@@ -27,6 +27,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { GATEWAY_PROTOCOL_VERSION } from "@centraid/protocol";
+
 import { GW_PAIR_ALPN } from "./gateway-endpoint.js";
 import {
   alpnBytes,
@@ -140,18 +142,24 @@ const VECTORS: Array<{ name: string; note: string; value: unknown }> = [
   },
   {
     name: "gatewayPairResponse",
-    note: "centraid/gw-pair/1 redemption response (all fields); the invitation binds a member and may grant several vaults.",
+    note: "centraid/gw-pair/1 redemption response (all fields); the invitation binds an owner and may land several vaults (#726).",
     value: {
       ok: true,
       gatewayId: "gw_9c8d",
       gatewayName: "home",
-      memberId: "mbr_priya",
-      memberLabel: "Priya",
+      ownerId: "own_priya",
+      ownerLabel: "Priya",
       vaultId: "vlt_42",
       vaultName: "personal",
       vaultIds: ["vlt_42", "vlt_family"],
       version: "0.1.0",
-      protocolVersion: 2,
+      // Stated against the shared constant, not a literal (issue #726
+      // Finding 8): this vector is the golden fixture's SOURCE OF TRUTH, so a
+      // stale literal here would keep signing off on a floor no build still
+      // serves. `GATEWAY_PROTOCOL_VERSION` is 3 today (unchanged byte output
+      // against the committed `fixtures/wire-golden.json`); regenerate with
+      // `UPDATE_GOLDEN=1` only for an intentional vector change.
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
     },
   },
 ];

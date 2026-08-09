@@ -126,7 +126,7 @@ function mount(
     files.map((file) => ({
       vaultId: file.vaultId,
       label: file.vaultId,
-      role: "admin" as const,
+      canWrite: true as const,
       databaseName: file.databaseName,
     }))
   );

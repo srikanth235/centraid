@@ -5,11 +5,11 @@ import type { LocalUsageReportDTO } from "../../gateway-client-local-storage.js"
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import {
-  COMPONENT_PRESENTATION,
   budgetSummary,
   footprintScale,
   footprintSlices,
   formatBytes,
+  presentationFor,
 } from "./localUsageView.js";
 
 import a11y from "../styles/a11y.module.css";
@@ -34,6 +34,14 @@ export interface LocalFootprintCardProps {
   /** Full re-walk — an explicit owner action, never a poll. */
   onRescan: () => void;
   rescanning: boolean;
+  /**
+   * vaultId → owning person's label (issue #726 P1) — joined client-side from
+   * the owner roster, since the local-usage report only carries what the
+   * gateway can measure honestly (bytes), not who owns what. Empty when the
+   * caller has no owner surface to join against; the vault lines then show
+   * just the vault name, as before.
+   */
+  ownerLabels?: ReadonlyMap<string, string>;
 }
 
 function OccupancyRail({
@@ -97,54 +105,76 @@ function OccupancyRail({
 
 function VaultBreakdown({
   report,
+  ownerLabels,
 }: {
   report: LocalUsageReportDTO;
+  /** vaultId → owning person's label — what hosting this vault costs THEM
+   *  (issue #726 P1). Absent entries render the vault name alone. */
+  ownerLabels: ReadonlyMap<string, string>;
 }): JSX.Element | null {
   if (report.vaults.length === 0) return null;
   return (
     <details className={styles.byVault} data-testid="footprint-by-vault">
       <summary>By vault</summary>
       <div className={styles.byVaultBody}>
-        {report.vaults.map((vault) => (
-          <div key={vault.vaultId} className={styles.vaultRow}>
-            <div className={styles.vaultHead}>
-              <span className={styles.vaultName}>
-                {vault.name ?? vault.vaultId.slice(0, 8)}
-              </span>
-              <span className={styles.figure}>{formatBytes(vault.bytes)}</span>
+        {report.vaults.map((vault) => {
+          const owner = ownerLabels.get(vault.vaultId);
+          return (
+            <div key={vault.vaultId} className={styles.vaultRow}>
+              <div className={styles.vaultHead}>
+                <span className={styles.vaultName}>
+                  {vault.name ?? vault.vaultId.slice(0, 8)}
+                  {owner ? (
+                    <span className={styles.vaultOwner}> ({owner})</span>
+                  ) : null}
+                </span>
+                <span className={styles.figure}>
+                  {formatBytes(vault.bytes)}
+                </span>
+              </div>
+              <div className={styles.vaultParts}>
+                {vault.components
+                  .filter((c) => c.bytes > 0)
+                  .sort((a, b) => b.bytes - a.bytes)
+                  .map((component) => {
+                    // `presentationFor`, never a direct `COMPONENT_PRESENTATION`
+                    // index: a per-vault component id is the same unchecked wire
+                    // value `footprintSlices` guards against (issue #726 finding
+                    // 4) — this row must degrade the same way, not throw.
+                    const presentation = presentationFor(component.component);
+                    return (
+                      <span
+                        key={component.component}
+                        className={styles.vaultPart}
+                      >
+                        <i
+                          className={styles.chip}
+                          style={{ background: presentation.color }}
+                        />
+                        {presentation.label}
+                        <b className={styles.figure}>
+                          {formatBytes(component.bytes)}
+                        </b>
+                      </span>
+                    );
+                  })}
+              </div>
             </div>
-            <div className={styles.vaultParts}>
-              {vault.components
-                .filter((c) => c.bytes > 0)
-                .sort((a, b) => b.bytes - a.bytes)
-                .map((component) => (
-                  <span key={component.component} className={styles.vaultPart}>
-                    <i
-                      className={styles.chip}
-                      style={{
-                        background:
-                          COMPONENT_PRESENTATION[component.component].color,
-                      }}
-                    />
-                    {COMPONENT_PRESENTATION[component.component].label}
-                    <b className={styles.figure}>
-                      {formatBytes(component.bytes)}
-                    </b>
-                  </span>
-                ))}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </details>
   );
 }
+
+const NO_OWNER_LABELS: ReadonlyMap<string, string> = new Map();
 
 export default function LocalFootprintCard({
   report,
   loadError,
   onRescan,
   rescanning,
+  ownerLabels = NO_OWNER_LABELS,
 }: LocalFootprintCardProps): JSX.Element {
   const [expanded, setExpanded] = useState<string | null>(null);
   const slices = useMemo(
@@ -239,7 +269,7 @@ export default function LocalFootprintCard({
               })}
             </div>
 
-            <VaultBreakdown report={report} />
+            <VaultBreakdown report={report} ownerLabels={ownerLabels} />
 
             {report.disk ? (
               <div className={styles.diskLine}>

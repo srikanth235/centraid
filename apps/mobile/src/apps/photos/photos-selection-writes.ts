@@ -220,14 +220,13 @@ export function batchAddToAlbum(
 }
 
 /**
- * COPY TO SHARING, for a selection (issue #712, A5).
+ * COPY TO ⟨VAULT⟩, for a selection (issue #726, P0).
  *
- * `NO_SHARE_DESTINATION_REASON` used to live here — a constant whose whole job
- * was to explain that the phone had no Sharing surface. It ships now, so the
- * constant is gone rather than left beside a working path: the refusal
- * sentences that survive are the two in `kit/share/share-target.ts`, which the
- * web states word for word, and they are reached through `useShareTarget` at
- * the call site where the pointer is actually resolved.
+ * The destination arrives explicitly from the call site — one of the OTHER
+ * mounted writable vaults, chosen at the moment of copying
+ * (`use-copy-to-vault.ts`). There is no stored share-target pointer to
+ * resolve any more, and no Photos "Sharing" place for the copy to land in:
+ * the place is simply the vault the member named.
  *
  * A PLACEMENT, NOT A COPY. `kind: "add"` puts the SAME photograph in a second
  * place; minting a second asset would give the member two records to keep in
@@ -239,23 +238,23 @@ export function batchAddToAlbum(
  * `native_placement_outbox` and drains on reconnect — so a `queued` outcome is
  * reported as queued, never as an error.
  */
-export interface SharingPlacementOutcome {
+export interface VaultCopyOutcome {
   placed: number;
   queued: number;
   /** Placements the gateway refused, with its own reason for the first. */
   refused: string[];
 }
 
-export async function batchCopyToSharing(
-  // The PLACEMENT session, not the per-vault write session: a share crosses
+export async function batchCopyToVault(
+  // The PLACEMENT session, not the per-vault write session: this copy crosses
   // vaults, which is the one thing `MobileReplicaSession` deliberately cannot
   // express.
   session: MultiVaultReplicaSession,
   targets: readonly VaultAsset[],
   targetVaultId: string,
   fallbackSourceVaultId?: string
-): Promise<SharingPlacementOutcome> {
-  const outcome: SharingPlacementOutcome = {
+): Promise<VaultCopyOutcome> {
+  const outcome: VaultCopyOutcome = {
     placed: 0,
     queued: 0,
     refused: [],
@@ -278,7 +277,7 @@ export async function batchCopyToSharing(
       outcome.refused.push(
         result.reason instanceof Error
           ? result.reason.message
-          : "the share failed before the gateway answered"
+          : "the copy failed before the gateway answered"
       );
       continue;
     }
@@ -286,15 +285,15 @@ export async function batchCopyToSharing(
     if (!record) continue;
     if (record.status === "executed") outcome.placed += 1;
     else if (record.status === "denied" || record.status === "failed")
-      outcome.refused.push(record.reason ?? "the gateway refused the share");
+      outcome.refused.push(record.reason ?? "the gateway refused the copy");
     else outcome.queued += 1;
   }
   return outcome;
 }
 
 /** The one line the status line shows after a copy. Determinate counts only. */
-export function sharingOutcomeMessage(
-  outcome: SharingPlacementOutcome,
+export function copyOutcomeMessage(
+  outcome: VaultCopyOutcome,
   targetLabel: string
 ): string {
   const parts: string[] = [];
@@ -306,7 +305,7 @@ export function sharingOutcomeMessage(
     parts.push(`${outcome.refused.length} refused: ${outcome.refused[0]}`);
   return parts.length > 0
     ? parts.join(" · ")
-    : "Nothing to copy — these photographs are already in Sharing.";
+    : `Nothing to copy — these photographs are already in ${targetLabel}.`;
 }
 
 /**

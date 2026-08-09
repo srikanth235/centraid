@@ -58,7 +58,7 @@ describe("enrichment service config", () => {
     expect(readEnrichServiceConfig({})).toBeNull();
   });
 
-  test("a URL that could send a member's photographs off the host is refused", () => {
+  test("a URL that could send an owner's photographs off the host is refused", () => {
     for (const url of [
       "http://models.example.com:9000",
       "http://10.0.0.4:9000",

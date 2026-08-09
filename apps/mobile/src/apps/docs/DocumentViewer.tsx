@@ -298,8 +298,7 @@ export default function DocumentViewer({
         options={scopes
           .filter(
             (scope) =>
-              scope.role !== "read" &&
-              !document.scopeIds?.includes(scope.vaultId)
+              scope.canWrite && !document.scopeIds?.includes(scope.vaultId)
           )
           .map((scope) => ({
             id: scope.vaultId,

@@ -14,7 +14,8 @@
  * caller identity onto `AUTHED_DEVICE_HEADER`; a request without one has no
  * roster authority.
  *
- * A caller sees only vaults its endpoint identity is enrolled in.
+ * A caller sees only vaults its owner owns — and since a vault has exactly
+ * one owner (#726), every device it can see is its own owner's.
  *
  * The revoke cascade mirrors device-admin.ts exactly: revoke the enrollment
  * row(s), then close the Rust-owned iroh transport once an EndpointId no
@@ -31,22 +32,15 @@ import type { RouteHandler } from "../serve/build-gateway.js";
 import type {
   DeviceComputeCapabilities,
   DeviceComputeProfile,
-  DeviceRole,
   EnrollmentStore,
   DeviceEnrollment,
 } from "../serve/enrollment-store.js";
 import type { PairingTicketStore } from "../serve/pairing-store.js";
-import {
-  encodePairingTicket,
-  DEFAULT_TICKET_TTL_MS,
-} from "../serve/pairing-store.js";
-import { parseGrants, resolveInvitation } from "./device-invitations.js";
+import { handleTicketMint } from "./device-ticket-mint.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
 const DEVICES_PATH = "/centraid/_gateway/devices";
 const DEVICES_TICKET_PATH = `${DEVICES_PATH}/ticket`;
-/** The canonical vault-addressing header (mirrors the client's `VAULT_HEADER`). */
-const VAULT_HEADER = "x-centraid-vault";
 
 /**
  * One paired device on the wire (mirrors the client's `CentraidGatewayDevice`
@@ -56,9 +50,9 @@ const VAULT_HEADER = "x-centraid-vault";
 interface DeviceDTO {
   deviceId: string;
   endpointId: string;
-  /** The person this device acts as (#599 L2) — roster grouping keys on it. */
-  memberId: string;
-  memberLabel: string;
+  /** The person this device acts as — roster grouping keys on it. */
+  ownerId: string;
+  ownerLabel: string;
   label: string;
   platform?: string;
   transport: "iroh";
@@ -67,7 +61,8 @@ interface DeviceDTO {
   addedAt?: string;
   lastUsedAt?: string;
   current?: boolean;
-  role: DeviceRole;
+  /** Device tombstone — never a role (#726). */
+  revoked: boolean;
   rememberDevice: boolean;
   grantProfile?: string[];
   compute?: DeviceComputeProfile;
@@ -85,6 +80,13 @@ export interface DevicesRouteDeps {
   tickets: PairingTicketStore;
   /** Resolves a vault id to its owner-facing name; undefined when unknown. */
   vaultName: (vaultId: string) => string | undefined;
+  /**
+   * *Add someone* (#726 P1): create + mount a fresh vault for a newly minted
+   * person (the registry mints its identity keypair at creation). Wired to
+   * `VaultRegistry.create`. Undefined ⇒ `forPerson` requests are refused
+   * (never silently downgraded to a self-pair).
+   */
+  mintVaultForPerson?: (name: string) => { vaultId: string };
   /**
    * The gateway's iroh EndpointTicket (identity pin + relay hint) for a minted
    * ticket's `gw` field, read lazily at mint time; undefined before the daemon
@@ -155,142 +157,19 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       return sendJson(res, 200, { devices });
     }
 
-    // POST /centraid/_gateway/devices/ticket — mint a one-time pairing ticket
-    // (the inverse of revoke; the wire twin of `cli/device-admin.ts`'s `pair`).
-    // Matched BEFORE the DELETE `/:id` branch so `ticket` isn't read as an id.
+    // POST /centraid/_gateway/devices/ticket — mint a one-time pairing ticket,
+    // including the *Add someone* `forPerson` mint lane (#726 P1). Matched
+    // BEFORE the DELETE `/:id` branch so `ticket` isn't read as an id. Split
+    // into `device-ticket-mint.ts` to keep this file under the size cap.
     if (url.pathname === DEVICES_TICKET_PATH) {
-      if (method !== "POST") {
-        return sendJson(res, 405, { error: "method_not_allowed" });
-      }
-      let body: Record<string, unknown>;
-      try {
-        body = await readJson(req);
-      } catch {
-        return sendJson(res, 400, { error: "invalid_body" });
-      }
-      // Target vault: explicit `body.vaultId`, else the addressed-vault header
-      // the shell/web control session stamps on every request.
-      const headerVault = req.headers[VAULT_HEADER];
-      const requested =
-        typeof body.vaultId === "string"
-          ? body.vaultId
-          : typeof headerVault === "string"
-            ? headerVault
-            : undefined;
-      const hostCustody = deps.canMintPairingTicket?.(req) === true;
-      if (!callerKey && !hostCustody) {
-        return sendJson(res, 403, {
-          error: "device_identity_required",
-          message:
-            "pairing tickets require an enrolled admin device or direct host custody",
-        });
-      }
-      const hostVaults = hostCustody ? (deps.vaultIds?.() ?? []) : [];
-      // No named target → the registry default (the personal vault), but only when the
-      // caller may actually address it; otherwise fall back to what it holds.
-      const preferred = deps.defaultVaultId?.();
-      const target =
-        requested === undefined
-          ? ((preferred !== undefined &&
-            (allowedVaults.has(preferred) || hostVaults.includes(preferred))
-              ? preferred
-              : undefined) ??
-            [...allowedVaults][0] ??
-            hostVaults[0])
-          : [...allowedVaults, ...hostVaults].find(
-              (vaultId) =>
-                vaultId === requested || deps.vaultName(vaultId) === requested
-            );
-      if (target === undefined) {
-        return sendJson(res, 400, { error: "vault_required" });
-      }
-      // Scope + existence guard (no existence leak — a device caller outside
-      // the vault, or an unknown vault, both 404 the same way).
-      if (
-        (!isAllowed(target) && !hostVaults.includes(target)) ||
-        deps.vaultName(target) === undefined
-      ) {
-        return sendJson(res, 404, { error: "not_found" });
-      }
-      // `admin` is grantable here, not just `write`/`read`: granting admin is
-      // the only way a vault gets a second owner (or replaces a lost one).
-      //
-      // The default stays `write`: a ticket LEAVES this machine, and whatever
-      // redeems it lands at the roles baked into it. Defaulting to admin would
-      // let a casually paired phone mint further tickets and revoke this device.
-      const role = body.role ?? "write";
-      if (role !== "admin" && role !== "write" && role !== "read") {
-        return sendJson(res, 400, { error: "invalid_role" });
-      }
-      const requestedGrants = parseGrants(body.grants);
-      if (requestedGrants === null) {
-        return sendJson(res, 400, {
-          error: "invalid_grants",
-          message: "grants must be a list of {vaultId, role}",
-        });
-      }
-      const invitation = resolveInvitation({
-        enrollments: deps.enrollments,
-        vaultName: deps.vaultName,
+      return handleTicketMint(
+        req,
+        res,
+        deps,
         callerKey,
-        hostCustody,
-        hostVaults,
-        target,
-        role,
-        body,
-        grants: requestedGrants,
-      });
-      if ("error" in invitation) {
-        return sendJson(res, invitation.status, {
-          error: invitation.error,
-          message: invitation.message,
-        });
-      }
-      const ttlMs =
-        typeof body.ttlMinutes === "number" && body.ttlMinutes > 0
-          ? body.ttlMinutes * 60_000
-          : DEFAULT_TICKET_TTL_MS;
-      // `gw` is required in `PairingTicketPayload`; a ticket without the iroh
-      // endpoint pin can't be redeemed, so refuse rather than mint a dud.
-      const gw = deps.endpointTicket?.();
-      if (gw === undefined) {
-        return sendJson(res, 409, {
-          error: "no_iroh_endpoint",
-          message:
-            "gateway has no iroh endpoint identity yet — start the daemon so it mints its endpoint",
-        });
-      }
-      const minted = deps.tickets.mint(
-        { memberId: invitation.memberId, grants: invitation.grants },
-        ttlMs
+        allowedVaults,
+        isAllowed
       );
-      const primary = invitation.grants[0] ?? { vaultId: target, role };
-      const token = encodePairingTicket({
-        v: 1,
-        kind: "centraid-gw-pair",
-        gw,
-        t: minted.ticketId,
-        s: minted.secret,
-        vaultName: deps.vaultName(primary.vaultId) ?? primary.vaultId,
-        exp: minted.expiresAt,
-      });
-      return sendJson(res, 200, {
-        ok: true,
-        ticket: token,
-        memberId: invitation.memberId,
-        memberLabel: invitation.memberLabel,
-        grants: invitation.grants.map((grant) => ({
-          vaultId: grant.vaultId,
-          vaultName: deps.vaultName(grant.vaultId),
-          role: grant.role,
-        })),
-        // The first grant is also reported flat so single-vault callers (the
-        // `pair` CLI, the desktop panel) need no shape change to keep working.
-        vaultId: primary.vaultId,
-        vaultName: deps.vaultName(primary.vaultId),
-        expiresAt: new Date(minted.expiresAt).toISOString(),
-        role: primary.role,
-      });
     }
 
     if (callerKey === undefined) {
@@ -343,12 +222,6 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       if (!target || !isAllowed(target.vaultId)) {
         return sendJson(res, 404, { error: "not_found" });
       }
-      if (
-        callerKey !== target.endpointId &&
-        deps.enrollments.get(callerKey, target.vaultId)?.role !== "admin"
-      ) {
-        return sendJson(res, 403, { error: "not_admin" });
-      }
       let body: Record<string, unknown>;
       try {
         body = await readJson(req);
@@ -369,7 +242,9 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     if (!enrollmentId) return false;
 
     // Refuse to touch — or even acknowledge — an enrollment outside the
-    // caller's allowed vaults (don't leak another vault's device existence).
+    // caller's allowed vaults. Ownership makes the visibility check the whole
+    // authorization: every device inside an allowed vault belongs to the
+    // vault's one owner, who is the caller's owner.
     const target = deps.enrollments
       .list()
       .find((row) => row.enrollmentId === enrollmentId);
@@ -377,23 +252,9 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       return sendJson(res, 404, { error: "not_found" });
     }
 
-    // A device may unpair itself; revoking a peer requires admin role in this
-    // exact vault. This stops a compromised `write` device revoking an admin.
-    if (
-      target &&
-      callerKey !== target.endpointId &&
-      deps.enrollments.get(callerKey, target.vaultId)?.role !== "admin"
-    ) {
-      return sendJson(res, 403, {
-        error: "not_admin",
-        message: "only an admin device can revoke another device",
-      });
-    }
-
-    // The ≥1-admin invariant is authored on MEMBERS now, so revoking a device
-    // only endangers it when this is the last live device of the vault's last
-    // admin member — the case where recovery needs filesystem access.
-    if (target && lastAdminDeviceFor(deps, target)) {
+    // Revoking the owner's last live device strands the vault behind
+    // filesystem-only recovery, so it demands a typed confirmation.
+    if (target && lastDeviceOfOwner(deps, target)) {
       let body: Record<string, unknown>;
       try {
         body = await readJson(req);
@@ -401,12 +262,12 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
         body = {};
       }
       const vaultName = deps.vaultName(target.vaultId) ?? target.vaultId;
-      if (body.confirmLastAdmin !== vaultName) {
+      if (body.confirmLastDevice !== vaultName) {
         return sendJson(res, 409, {
-          error: "last_admin_confirmation_required",
+          error: "last_device_confirmation_required",
           message:
-            `this is the last admin enrollment; type ${JSON.stringify(vaultName)} in ` +
-            "confirmLastAdmin. Losing it requires filesystem access and the gateway CLI to recover.",
+            `this is the owner's last device for ${JSON.stringify(vaultName)}; type that name in ` +
+            "confirmLastDevice. Losing it requires filesystem access and the gateway CLI to recover.",
         });
       }
     }
@@ -447,19 +308,18 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
   };
 }
 
-/** Is this the last live device of the last admin MEMBER of its vault? */
-function lastAdminDeviceFor(
+/** Is this the last live device of the OWNER of its vault? */
+function lastDeviceOfOwner(
   deps: DevicesRouteDeps,
   row: DeviceEnrollment
 ): boolean {
-  const admins = deps.enrollments.members.adminsOf(row.vaultId);
-  if (admins.length !== 1 || admins[0] !== row.memberId) return false;
+  if (deps.enrollments.owners.ownerOf(row.vaultId) !== row.ownerId)
+    return false;
   const live = new Set(
     deps.enrollments
       .list()
       .filter(
-        (candidate) =>
-          candidate.memberId === row.memberId && candidate.role !== "revoked"
+        (candidate) => candidate.ownerId === row.ownerId && !candidate.revoked
       )
       .map((candidate) => candidate.endpointId)
   );
@@ -475,8 +335,8 @@ function toDto(
   return {
     deviceId: row.enrollmentId,
     endpointId: row.endpointId,
-    memberId: row.memberId,
-    memberLabel: row.memberLabel,
+    ownerId: row.ownerId,
+    ownerLabel: row.ownerLabel,
     label: row.label,
     ...(row.platform === undefined ? {} : { platform: row.platform }),
     transport: "iroh",
@@ -484,7 +344,7 @@ function toDto(
     ...(vaultName === undefined ? {} : { vaultName }),
     addedAt: row.addedAt,
     current: row.endpointId === callerKey,
-    role: row.role,
+    revoked: row.revoked,
     rememberDevice: row.rememberDevice,
     ...(row.grantProfile === undefined
       ? {}

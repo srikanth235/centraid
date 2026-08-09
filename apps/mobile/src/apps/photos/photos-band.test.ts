@@ -41,10 +41,11 @@ describe("the claimed band (handoff §3.1, CHANGELOG §F)", () => {
   });
 
   test("the More sheet carries only what Collections does not", () => {
-    // ONE row. Every shelf this table used to list — Sharing, Favorites,
-    // Places, Duplicates, Trash — is a named section of Collections now, with
-    // its own live count, on screen. A row here as well would be a second,
-    // hidden door to each, and a second place to keep its label honest.
+    // ONE row. Every shelf this table used to list — Favorites, Places,
+    // Duplicates, Trash — is a named section of Collections now, with its own
+    // live count, on screen (and Sharing stopped existing with issue #726). A
+    // row here as well would be a second, hidden door to each, and a second
+    // place to keep its label honest.
     //
     // Backup survives because it is NOT a shelf: it is a cross-stack link to a
     // frame screen about whether this device's bytes have left it, and that

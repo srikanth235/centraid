@@ -20,12 +20,62 @@ use tokio::sync::{Mutex, mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{
-    GW_PAIR_ALPN, MAX_REQUEST_BODY_BYTES, PAIR_ALPN, TUNNEL_ALPN,
+    GW_PAIR_ALPN, MAX_REQUEST_BODY_BYTES, PAIR_ALPN, PEER_LINK_ALPN, PEER_PLANE_PREFIX,
+    TUNNEL_ALPN,
     iroh_wire::{
         Authorization, RELAY_PROOF_HEADER, TunnelRequestHeader, TunnelResponseHeader,
         WireHeaderValue, read_header, request_headers, response_headers, write_header,
     },
 };
+
+/// Which lane a connection arrived on. The lanes share framing and forwarding
+/// and NOTHING else: separate admission decisions, separate injected identity
+/// headers, and — for `Peer` — a hard path confinement (issue #726 P3).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Plane {
+    Device,
+    Peer,
+}
+
+impl Plane {
+    /// Control-plane route that decides admission for this lane. The device
+    /// route answers device-pairing enrollment; the peer route answers "is
+    /// this endpoint a known, non-revoked LINK". Never interchange them.
+    fn authorize_path(self) -> &'static str {
+        match self {
+            Plane::Device => "/centraid/_gateway/tunnel/authorize",
+            Plane::Peer => "/centraid/_gateway/tunnel/peer-authorize",
+        }
+    }
+}
+
+/// TRAP 1 (issue #726 P3). `header.target` is peer-supplied and is pasted onto
+/// `upstream_url` in `serve_stream`, so without this a link addresses the whole
+/// local gateway surface — `/centraid/_gateway/*` included. Loosening this
+/// function is a privilege escalation, not a relaxation.
+///
+/// Byte-identical to `protocol.ts::isPeerPlaneTarget`:
+///   - must EXTEND the prefix (a bare prefix names no resource);
+///   - the path (before `?`/`#`) carries no `%`, no `\`, and no byte <= 0x20,
+///     so no normalisation step is needed to reason about it;
+///   - no `.` / `..` segment.
+fn peer_target_allowed(target: &str) -> bool {
+    if target.len() <= PEER_PLANE_PREFIX.len() || !target.starts_with(PEER_PLANE_PREFIX) {
+        return false;
+    }
+    let path = target
+        .split(['?', '#'])
+        .next()
+        .expect("split always yields a first element");
+    if path
+        .bytes()
+        .any(|byte| byte == b'%' || byte == b'\\' || byte <= 0x20)
+    {
+        return false;
+    }
+    path.split('/')
+        .all(|segment| segment != "." && segment != "..")
+}
 
 #[derive(Debug, Clone)]
 pub struct IrohRelayConfig {
@@ -90,10 +140,12 @@ async fn authorize(
     client: &Client,
     config: &IrohRelayConfig,
     endpoint_id: &str,
+    plane: Plane,
 ) -> Result<Authorization> {
     let url = format!(
-        "{}/centraid/_gateway/tunnel/authorize",
-        config.control_url.trim_end_matches('/')
+        "{}{}",
+        config.control_url.trim_end_matches('/'),
+        plane.authorize_path()
     );
     // Iroh endpoint IDs are lowercase hex, so they are already URL-query safe.
     let mut request = client
@@ -112,10 +164,41 @@ async fn authorize(
     response.json().await.context("decode tunnel authorization")
 }
 
+/// One JSON body frame + status, for refusals the caller must read as a STATE
+/// rather than as a transport failure. A reset stream would reach the peer's
+/// protocol code as an exception; a state reaches it as an answer.
+async fn write_json_state(
+    send: &mut iroh::endpoint::SendStream,
+    status: u16,
+    body: &[u8],
+) -> Result<()> {
+    write_header(
+        send,
+        &TunnelResponseHeader {
+            status,
+            headers: HashMap::from([
+                (
+                    "content-type".to_owned(),
+                    WireHeaderValue::One("application/json".to_owned()),
+                ),
+                (
+                    "content-length".to_owned(),
+                    WireHeaderValue::One(body.len().to_string()),
+                ),
+            ]),
+        },
+    )
+    .await?;
+    send.write_all(body).await?;
+    send.finish()?;
+    Ok(())
+}
+
 async fn serve_stream(
     client: Client,
     config: Arc<IrohRelayConfig>,
     endpoint_id: String,
+    plane: Plane,
     mut send: iroh::endpoint::SendStream,
     mut recv: iroh::endpoint::RecvStream,
 ) -> Result<()> {
@@ -123,8 +206,19 @@ async fn serve_stream(
     if !header.target.starts_with('/') || header.target.starts_with("//") {
         bail!("bad tunnel target");
     }
-    let auth = authorize(&client, &config, &endpoint_id).await?;
+    // Trap 1: confinement is decided before admission and before any gateway
+    // state is consulted, so an off-plane probe cannot be told apart from a
+    // missing route.
+    if plane == Plane::Peer && !peer_target_allowed(&header.target) {
+        return write_json_state(&mut send, 404, br#"{"state":"not_found"}"#).await;
+    }
+    let auth = authorize(&client, &config, &endpoint_id, plane).await?;
     if !auth.allowed {
+        if plane == Plane::Peer {
+            // Topology hiding: an unknown or revoked link learns only that
+            // there is nothing here for it.
+            return write_json_state(&mut send, 404, br#"{"state":"not_found"}"#).await;
+        }
         bail!("tunnel endpoint is not authorized");
     }
     let upstream_url = auth.upstream_url.as_deref().unwrap_or(&config.upstream_url);
@@ -225,6 +319,7 @@ async fn serve_connection(
     config: Arc<IrohRelayConfig>,
     live_connections: LiveConnections,
     connection_id: u64,
+    plane: Plane,
     connection: Connection,
 ) {
     let endpoint_id = connection.remote_id().to_string();
@@ -235,9 +330,11 @@ async fn serve_connection(
         .get(&endpoint_id)
         .copied()
         .unwrap_or_default();
-    match authorize(&client, &config, &endpoint_id).await {
+    match authorize(&client, &config, &endpoint_id, plane).await {
         Ok(Authorization { allowed: true, .. }) => {}
         _ => {
+            // Both planes close identically; the peer plane's reason word is
+            // deliberately the same nothing an unknown link would be told.
             connection.close(401_u32.into(), b"unauthorized");
             return;
         }
@@ -263,8 +360,8 @@ async fn serve_connection(
         let config = Arc::clone(&config);
         let endpoint_id = endpoint_id.clone();
         tokio::spawn(async move {
-            if let Err(error) = serve_stream(client, config, endpoint_id, send, recv).await {
-                tracing::warn!(%error, "native tunnel stream failed");
+            if let Err(error) = serve_stream(client, config, endpoint_id, plane, send, recv).await {
+                tracing::warn!(%error, ?plane, "native tunnel stream failed");
             }
         });
     }
@@ -341,6 +438,9 @@ async fn accept_loop(
     } else {
         GW_PAIR_ALPN
     };
+    // Only a GATEWAY has links. The desktop phone tunnel forwards under the
+    // host's own bearer and has no link store, so it never speaks the plane.
+    let peer_enabled = !config.desktop_pairing;
     while let Some(incoming) = endpoint.accept().await {
         let mut accepting = match incoming.accept() {
             Ok(accepting) => accepting,
@@ -350,7 +450,13 @@ async fn accept_loop(
             }
         };
         let alpn = match accepting.alpn().await {
-            Ok(alpn) if alpn == TUNNEL_ALPN || alpn == pair_alpn => alpn,
+            Ok(alpn)
+                if alpn == TUNNEL_ALPN
+                    || alpn == pair_alpn
+                    || (peer_enabled && alpn == PEER_LINK_ALPN) =>
+            {
+                alpn
+            }
             _ => continue,
         };
         let connection = match accepting.await {
@@ -367,11 +473,18 @@ async fn accept_loop(
                 connection,
             ));
         } else {
+            // The ALPN, not anything the caller says, picks the lane.
+            let plane = if alpn == PEER_LINK_ALPN {
+                Plane::Peer
+            } else {
+                Plane::Device
+            };
             tokio::spawn(serve_connection(
                 client.clone(),
                 Arc::clone(&config),
                 Arc::clone(&live_connections),
                 next_connection_id.fetch_add(1, Ordering::Relaxed),
+                plane,
                 connection,
             ));
         }
@@ -392,7 +505,15 @@ pub async fn start(config: IrohRelayConfig) -> Result<IrohRelayHandle> {
     };
     let endpoint = Endpoint::builder(presets::N0)
         .secret_key(secret)
-        .alpns(vec![TUNNEL_ALPN.to_vec(), pair_alpn.to_vec()])
+        .alpns(if config.desktop_pairing {
+            vec![TUNNEL_ALPN.to_vec(), pair_alpn.to_vec()]
+        } else {
+            vec![
+                TUNNEL_ALPN.to_vec(),
+                pair_alpn.to_vec(),
+                PEER_LINK_ALPN.to_vec(),
+            ]
+        })
         .relay_mode(relay_mode)
         .bind()
         .await
@@ -423,4 +544,65 @@ pub async fn serve(config: IrohRelayConfig) -> Result<()> {
     let handle = start(config).await?;
     handle.wait().await;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Trap 1 (issue #726 P3). Each rejected case below is a way to reach the
+    /// owner surface through a peer link; each accepted case is a real peer
+    /// route. `protocol.ts`'s `isPeerPlaneTarget` answers identically — a
+    /// divergence would mean one language admits what the other refuses.
+    #[test]
+    fn peer_targets_are_confined_to_the_peer_plane() {
+        for allowed in [
+            "/centraid/_peer/link/redeem",
+            "/centraid/_peer/blobs/a1b2c3?range=0-1023",
+            "/centraid/_peer/route/assert",
+            "/centraid/_peer/x#frag",
+        ] {
+            assert!(peer_target_allowed(allowed), "should allow {allowed}");
+        }
+        for refused in [
+            "/centraid/_gateway/tunnel/authorize",
+            "/centraid/_vault/blobs",
+            "/centraid/_peer",
+            "/centraid/_peer/",
+            "/centraid/_peerish/x",
+            "/centraid/_peer/../_gateway/devices",
+            "/centraid/_peer/./../_gateway",
+            "/centraid/_peer/%2e%2e/_gateway",
+            "/centraid/_peer/a%2f..%2fb",
+            "/centraid/_peer/a\\..\\b",
+            "/centraid/_peer/a b",
+            "//centraid/_peer/x",
+            "",
+        ] {
+            assert!(!peer_target_allowed(refused), "should refuse {refused:?}");
+        }
+    }
+
+    /// The lanes must not share an admission decision: device enrollment and
+    /// link membership are different questions with different answers.
+    #[test]
+    fn planes_authorize_on_separate_control_routes() {
+        assert_eq!(
+            Plane::Device.authorize_path(),
+            "/centraid/_gateway/tunnel/authorize"
+        );
+        assert_eq!(
+            Plane::Peer.authorize_path(),
+            "/centraid/_gateway/tunnel/peer-authorize"
+        );
+        assert_ne!(Plane::Device.authorize_path(), Plane::Peer.authorize_path());
+    }
+
+    /// The ALPN string is a wire constant; `alpn-parity.test.ts` pins it to the
+    /// TypeScript twin, and this pins it against an accidental edit here.
+    #[test]
+    fn peer_alpn_is_the_published_string() {
+        assert_eq!(PEER_LINK_ALPN, b"centraid/gw-link/1");
+        assert_eq!(PEER_PLANE_PREFIX, "/centraid/_peer/");
+    }
 }

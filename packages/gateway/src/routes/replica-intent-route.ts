@@ -2,24 +2,26 @@ import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
-  currentReplicaLogState,
   readReplicaIntentOutcome,
   recordReplicaIntentOutcome,
 } from "@centraid/vault";
 import type { ReplicaIntentOutcome } from "@centraid/vault";
 
-import { canWrite } from "../serve/enrollment-store.js";
 import { runWithReplicaIntent } from "../serve/replica-intent-context.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
-import { replicaOutcomeWire } from "./replica-projection.js";
 import {
-  buildReplicaShapes,
-  REPLICA_SYNTHETIC_PRIMARY_KEY,
-  REPLICA_PROTOCOL_VERSION,
-  replicaWireRowId,
-} from "./replica-shape.js";
+  currentConflict,
+  expectedPayloadHash,
+  hasCanonicalCommit,
+  parseBaseVersions,
+} from "./replica-intent-shape.js";
+import type { ReplicaIntentBaseVersion } from "./replica-intent-shape.js";
+import { replicaOutcomeWire } from "./replica-projection.js";
+import { REPLICA_PROTOCOL_VERSION } from "./replica-shape.js";
 import type { ReplicaShapeAccess } from "./replica-shape.js";
 import { readJson, sendJson } from "./route-helpers.js";
+
+export type { ReplicaIntentBaseVersion } from "./replica-intent-shape.js";
 
 export interface ReplicaIntentDispatchInput {
   intentId: string;
@@ -27,21 +29,6 @@ export interface ReplicaIntentDispatchInput {
   action: string;
   input: unknown;
   baseVersions?: ReplicaIntentBaseVersion[];
-}
-
-export interface ReplicaIntentBaseVersion {
-  shapeId?: string;
-  entity: string;
-  rowId: string;
-  version: number;
-}
-
-export interface ReplicaIntentConflict {
-  shapeId?: string;
-  entity: string;
-  rowId: string;
-  expectedVersion: number;
-  actualVersion: number;
 }
 
 export type ReplicaIntentDispatchOutcome =
@@ -61,181 +48,11 @@ export type ReplicaIntentDispatcher = (
 
 export interface ReplicaIntentRouteContext {
   plane: VaultPlane;
-  access: ReplicaShapeAccess & { deviceId: string; memberId?: string };
+  access: ReplicaShapeAccess & { deviceId: string; ownerId?: string };
   dispatch: ReplicaIntentDispatcher;
 }
 
-type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
 const NO_TRANSIENT_OUTPUT = Symbol("no transient replica output");
-
-function canonicalJson(value: JsonValue): string {
-  if (
-    value === null ||
-    typeof value === "boolean" ||
-    typeof value === "string"
-  ) {
-    return JSON.stringify(value);
-  }
-  if (typeof value === "number") {
-    if (!Number.isFinite(value))
-      throw new Error("intent input is not JSON-safe");
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  return `{${Object.entries(value)
-    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-    .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
-    .join(",")}}`;
-}
-
-function expectedPayloadHash(
-  appId: string,
-  action: string,
-  input: unknown,
-  baseVersions: readonly ReplicaIntentBaseVersion[]
-): string {
-  const canonical = canonicalJson({
-    action,
-    appId,
-    input,
-    ...(baseVersions.length > 0 ? { baseVersions } : {}),
-  } as unknown as JsonValue);
-  return crypto.createHash("sha256").update(canonical).digest("hex");
-}
-
-function parseBaseVersions(value: unknown): ReplicaIntentBaseVersion[] {
-  if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > 100)
-    throw new Error("baseVersions must be an array of at most 100 rows");
-  const parsed = value.map((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item))
-      throw new Error("baseVersions contains an invalid row");
-    const row = item as Record<string, unknown>;
-    if (
-      typeof row.entity !== "string" ||
-      row.entity.length === 0 ||
-      typeof row.rowId !== "string" ||
-      row.rowId.length === 0 ||
-      !Number.isSafeInteger(row.version) ||
-      Number(row.version) < 0
-    ) {
-      throw new Error("baseVersions contains an invalid row");
-    }
-    if (row.shapeId !== undefined && typeof row.shapeId !== "string")
-      throw new Error("baseVersions contains an invalid shape id");
-    return {
-      ...(row.shapeId === undefined ? {} : { shapeId: row.shapeId }),
-      entity: row.entity,
-      rowId: row.rowId,
-      version: Number(row.version),
-    };
-  });
-  return parsed.sort((left, right) =>
-    `${left.entity}\u0000${left.rowId}\u0000${left.shapeId ?? ""}`.localeCompare(
-      `${right.entity}\u0000${right.rowId}\u0000${right.shapeId ?? ""}`
-    )
-  );
-}
-
-function currentConflict(
-  plane: VaultPlane,
-  access: ReplicaShapeAccess,
-  baseVersions: readonly ReplicaIntentBaseVersion[]
-): ReplicaIntentConflict | undefined {
-  if (baseVersions.length === 0) return undefined;
-  const epoch = currentReplicaLogState(plane.db.vault).epoch;
-  // Opaque shape identities are HMACs of the canonical primary key. Resolve
-  // them only through the server's consent-derived shape and the change log;
-  // treating the wire token as a raw row id would make an offline edit appear
-  // conflict-free whenever the row had changed since the device's snapshot.
-  const shapes = buildReplicaShapes(plane.db.vault, access);
-  const shapesById = new Map(shapes.map((shape) => [shape.shapeId, shape]));
-  for (const base of baseVersions) {
-    let canonicalRowId = base.rowId;
-    let resolvedShapeId = base.shapeId;
-    const candidateShapes = base.shapeId
-      ? [shapesById.get(base.shapeId)].filter((shape) => shape !== undefined)
-      : shapes.filter((shape) => shape.entityMap.has(base.entity));
-    const opaqueShapes = candidateShapes.filter(
-      (shape) =>
-        shape.entityMap.get(base.entity)?.primaryKey ===
-        REPLICA_SYNTHETIC_PRIMARY_KEY
-    );
-    if (opaqueShapes.length > 0) {
-      const candidates =
-        base.version > 0
-          ? (plane.db.vault
-              .prepare(
-                `SELECT row_id FROM replica_change
-                  WHERE epoch = ? AND entity = ? AND seq = ?`
-              )
-              .all(epoch, base.entity, base.version) as { row_id: string }[])
-          : (plane.db.vault
-              .prepare(
-                `SELECT DISTINCT row_id FROM replica_change
-                  WHERE epoch = ? AND entity = ?`
-              )
-              .all(epoch, base.entity) as { row_id: string }[]);
-      let resolved = false;
-      for (const shape of opaqueShapes) {
-        const match = candidates.find(
-          (candidate) =>
-            replicaWireRowId(shape, base.entity, candidate.row_id) ===
-            base.rowId
-        );
-        if (match) {
-          canonicalRowId = match.row_id;
-          resolvedShapeId = shape.shapeId;
-          resolved = true;
-          break;
-        }
-      }
-      if (!resolved && candidates.length > 0) {
-        const entityMax = plane.db.vault
-          .prepare(
-            `SELECT MAX(seq) AS seq FROM replica_change
-              WHERE epoch = ? AND entity = ?`
-          )
-          .get(epoch, base.entity) as { seq: number | null };
-        return {
-          ...(resolvedShapeId === undefined
-            ? {}
-            : { shapeId: resolvedShapeId }),
-          entity: base.entity,
-          rowId: base.rowId,
-          expectedVersion: base.version,
-          actualVersion: entityMax.seq ?? 0,
-        };
-      }
-      // A version-zero row with no matching current-epoch change is a valid
-      // unchanged snapshot row. There is no canonical version to compare.
-      if (!resolved) continue;
-    }
-    const row = plane.db.vault
-      .prepare(
-        `SELECT MAX(seq) AS seq FROM replica_change
-          WHERE epoch = ? AND entity = ? AND row_id = ?`
-      )
-      .get(epoch, base.entity, canonicalRowId) as { seq: number | null };
-    const actualVersion = row.seq ?? 0;
-    if (actualVersion !== base.version) {
-      return {
-        ...(resolvedShapeId === undefined ? {} : { shapeId: resolvedShapeId }),
-        entity: base.entity,
-        rowId: base.rowId,
-        expectedVersion: base.version,
-        actualVersion,
-      };
-    }
-  }
-  return undefined;
-}
 
 function sameIdentity(
   outcome: ReplicaIntentOutcome,
@@ -285,25 +102,6 @@ function concealIdentityConflict(res: ServerResponse, intentId: string): true {
     accepted: true,
     outcome: { intentId, status: "in-flight" },
   });
-}
-
-/** Durable proof that an intent crossed the canonical commit boundary. */
-function hasCanonicalCommit(
-  plane: VaultPlane,
-  intentId: string,
-  finalization: "any" | "pending"
-): boolean {
-  return Boolean(
-    plane.db.vault
-      .prepare(
-        `SELECT 1
-           FROM replica_invocation_commit
-          WHERE intent_id = ?
-            ${finalization === "pending" ? "AND journal_finalized_at IS NULL" : ""}
-          LIMIT 1`
-      )
-      .get(intentId)
-  );
 }
 
 /** Authenticated, durable, device-scoped offline intent admission. */
@@ -388,10 +186,10 @@ export async function handleReplicaIntent(
     if (replicaOutcomeWire(existing)) return sendOutcome(res, existing);
   }
 
-  // `canWrite` is the one predicate for "may this role mutate" — admin is
-  // write's superset, so a hand-rolled `!== 'write'` here silently denied
-  // every admin device, including the founding one.
-  const deniedReason = canWrite(context.access.role)
+  // `access.canWrite` is the one predicate for "may this caller mutate" —
+  // ownership-sourced (#726), and kept flowing so later read-only lent
+  // scopes are denied here rather than deeper in the vault plane.
+  const deniedReason = context.access.canWrite
     ? undefined
     : "read-only devices cannot submit actions";
   if (deniedReason) {
@@ -413,9 +211,9 @@ export async function handleReplicaIntent(
   // device receives the current sequence it must refresh before retrying.
   // Once a canonical invocation marker exists, deterministic replay takes
   // precedence over a later unrelated edit.
-  if (!hasCanonicalCommit(context.plane, intentId, "any")) {
+  if (!hasCanonicalCommit(context.plane.db.vault, intentId, "any")) {
     const conflict = currentConflict(
-      context.plane,
+      context.plane.db.vault,
       context.access,
       baseVersions
     );
@@ -451,7 +249,7 @@ export async function handleReplicaIntent(
   // execution. Its arbitrary handler return was deliberately not persisted,
   // so only a dispatch with no pre-existing marker may surface live output.
   const canonicalCommitExistedBeforeDispatch = hasCanonicalCommit(
-    context.plane,
+    context.plane.db.vault,
     intentId,
     "any"
   );
@@ -462,11 +260,11 @@ export async function handleReplicaIntent(
         intentId,
         appId,
         deviceId: identity.deviceId,
-        // L4 attribution (#599): the acting member travels with the intent so
+        // L4 attribution (#599): the acting owner travels with the intent so
         // a replayed offline write names the person, not only the hardware.
-        ...(context.access.memberId === undefined
+        ...(context.access.ownerId === undefined
           ? {}
-          : { memberId: context.access.memberId }),
+          : { ownerId: context.access.ownerId }),
       },
       () =>
         context.dispatch({
@@ -501,7 +299,7 @@ export async function handleReplicaIntent(
   // however, proves only that one invocation committed; it must not overwrite
   // a genuine denial/failure returned by a later invocation in the same action.
   const canonicalFinalizationPending = hasCanonicalCommit(
-    context.plane,
+    context.plane.db.vault,
     intentId,
     "pending"
   );

@@ -8,7 +8,7 @@
 // storage noun for a scope: what a member reads for a vault is `scope.label`,
 // which the shell owns and the owner may rename.
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
-import { PEOPLE, PLACES, SEARCH, SHARING, STORAGE } from "./shelves.ts";
+import { PEOPLE, PLACES, SEARCH, STORAGE } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
 
 // The two strings native also renders live in an import-free leaf
@@ -25,7 +25,6 @@ export interface ShelfCopy {
 }
 
 const SHELF_COPY: Readonly<Record<string, ShelfCopy>> = {
-  [SHARING]: { title: "Sharing", unit: "photographs" },
   [FAVORITES]: { title: "Favorites", unit: "photographs" },
   [ALBUMS]: { title: "Albums", unit: "albums" },
   [PLACES]: { title: "Places", unit: "places" },
@@ -59,8 +58,6 @@ export function shelfCopy(id: ShelfId): ShelfCopy {
  *  because the member has not imported anything yet says something different
  *  from one that is empty because nothing matched. */
 const EMPTY_COPY: Readonly<Record<string, string>> = {
-  [SHARING]:
-    "Nothing is in Sharing yet. A photograph is shared because it sits here, and it stops being shared the moment it leaves.",
   [FAVORITES]: "No favorites yet — tap the heart on any photograph.",
   [ALBUMS]:
     "No albums yet. An album refers to a photograph where it lives; it never moves or copies anything.",

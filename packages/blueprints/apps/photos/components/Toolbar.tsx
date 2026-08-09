@@ -12,9 +12,9 @@
 // renders in its own region — this component is not asked to draw it.
 //
 // The vault filter reads the RECORD, never a name (filters.ts): the order is
-// the member's own scope, then wherever their shares go (a pointer they own,
-// passed in), then the rest — while what the member READS is `scope.label`,
-// which the shell owns and the owner may rename.
+// the member's own scope, then the rest as the shell listed them — while what
+// the member READS is `scope.label`, which the shell owns and the owner may
+// rename.
 import type { InlineScope } from "../../inline-types.ts";
 import type { KindFilter } from "../filters.ts";
 import { KIND_LABELS, KINDS, orderedScopes, scopeIsOn } from "../filters.ts";
@@ -28,9 +28,6 @@ export interface ToolbarProps {
   scopes: readonly InlineScope[];
   /** Which vaults are in the merged timeline; empty means every one. */
   vaultsOn: ReadonlySet<string>;
-  /** Where this member's shares go — an id, so it orders the chips without
-   *  anything here matching a name (§H). Absent when none is pointed at. */
-  shareTargetId?: string;
   onToggleVault: (scopeId: string) => void;
   kind: KindFilter;
   onSelectKind: (kind: KindFilter) => void;
@@ -70,9 +67,9 @@ export function ToolbarView(props: ToolbarProps) {
       {showVaults ? (
         <fieldset className={styles.vaults}>
           <legend className="kit-sr-only">Shown from</legend>
-          {/* Own scope first, then wherever this member's shares go, then
-              every other audience — the pointer, never a name (§H). */}
-          {orderedScopes(scopes, props.shareTargetId).map((scope) => (
+          {/* Own scope first, then every other audience, in the shell's own
+              order — the record, never a name (§H). */}
+          {orderedScopes(scopes).map((scope) => (
             <button
               key={scope.id}
               type="button"

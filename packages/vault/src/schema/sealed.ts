@@ -270,7 +270,13 @@ export function sealKeyFileFor(vaultDir: string): string {
   return path.join(dataRoot, "keys", `${path.basename(resolved)}.sealkey`);
 }
 
-function keyStoreForFile(file: string, keyStore?: KeyStore): KeyStore {
+/**
+ * Resolve (or construct) the KeyStore that owns `file`'s directory. Shared
+ * with `vault-identity.ts` (issue #726 P1): the identity seed lives in the
+ * SAME directory as the seal key, so the same envelope/custody resolution
+ * applies unchanged.
+ */
+export function keyStoreForFile(file: string, keyStore?: KeyStore): KeyStore {
   const expectedDir = path.dirname(path.resolve(file));
   if (keyStore && keyStore.dir !== expectedDir) {
     throw new Error(

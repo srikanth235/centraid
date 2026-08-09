@@ -12,10 +12,12 @@
 //     frame's head on that surface (out of this file's reach — see the
 //     integration note below).
 //
-// `buildSelectionActions` is the one place the fixed order and the two shelf
-// swaps (Trash → Restore, Sharing → Remove from Sharing) live, as a pure
-// function of shelf + read-only state — both view components and the tests
-// read the same table, so the order can't drift between them.
+// `buildSelectionActions` is the one place the fixed order and the Trash
+// shelf's swap (Trash → Restore) live, as a pure function of shelf +
+// read-only state — both view components and the tests read the same table,
+// so the order can't drift between them. The third target is *Copy to
+// ⟨vault⟩* (issue #726): the destination is another mounted writable scope
+// (sharing.ts's `copyDestinations`), not a Sharing place or a pointer.
 //
 // INTEGRATION NOTE (not this file's to fix): `SelectionBarView` is rendered
 // into the app's `#selectionBar` overlay region (Chrome.tsx), not literally
@@ -26,31 +28,29 @@
 // exposes optional getters for both so wiring them up later is additive.
 // `SelectionBottomBar` is written and tested but not yet mounted anywhere —
 // the phone band is Chrome.tsx's to claim.
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { FC } from "react";
 
+import { ownScopeId } from "../../_shared/scope-kit.ts";
 import { buildSelectionActions as buildSharedSelectionActions } from "../../_shared/selection-engine.ts";
 import type { SelectionShelfKind } from "../../_shared/selection-engine.ts";
+import { ShareSheet } from "../../_shared/ShareSheet.tsx";
 import type { InlineScope } from "../../inline-types.ts";
-import { shareDestination } from "../filters.ts";
 import {
   SelectAlbumIcon,
   SelectDownloadIcon,
   SelectFavoriteIcon,
-  SelectRemoveFromIcon,
   SelectRestoreIcon,
   SelectShareIcon,
   SelectTrashIcon,
 } from "../icons.tsx";
 import { armConfirm } from "../kit.ts";
-import { writeTarget } from "../outcomes.ts";
+import { notice, writeTarget } from "../outcomes.ts";
 import {
   runBatchAddToAlbum,
-  runBatchCopyToSharing,
   runBatchDelete,
   runBatchDownload,
   runBatchFavorite,
-  runBatchRemoveFromSharing,
   runBatchRestore,
 } from "../selection-actions.ts";
 import type { Album, Asset } from "../types.ts";
@@ -90,19 +90,21 @@ export interface SelectionActionSpec {
 export interface BuildSelectionActionsInput {
   count: number;
   shelfKind: SelectionShelfKind;
+  /** The third target's caption — `Copy to ⟨label⟩`, or the resting caption
+   *  while no single destination exists (sharing.ts's `copyActionLabel`). */
+  copyLabel: string;
   /** Non-null in a read-only vault (§6): Favorite, Add to album and
-   *  Trash/Restore disable with this reason; Copy to Sharing/Remove from
-   *  Sharing and Download do not — copying into the member's own Sharing
-   *  vault, and downloading, are never writes on someone else's library. */
+   *  Trash/Restore disable with this reason; *Copy to ⟨vault⟩* and Download
+   *  do not — copying into a vault the member owns, and downloading, are
+   *  never writes on someone else's library. */
   readOnlyReason: string | null;
   /**
-   * Why *Copy to Sharing* cannot fire — the member's share destination is not
-   * mounted here, or none has ever been chosen (§H). Null when it can. The
-   * control DISABLES with this sentence on it rather than being tappable and
-   * doing nothing; `Remove from Sharing` never consults it, because leaving a
-   * place needs no destination.
+   * Why *Copy to ⟨vault⟩* cannot fire — no other writable scope is mounted
+   * here, or several are and this control cannot yet ask which (issue #726).
+   * Null when exactly one destination exists. The control DISABLES with this
+   * sentence on it rather than being tappable and doing nothing.
    */
-  shareBlockedReason: string | null;
+  copyBlockedReason: string | null;
   onFavorite: () => void;
   onAddToAlbum: () => void;
   onShare: () => void;
@@ -111,15 +113,16 @@ export interface BuildSelectionActionsInput {
 }
 
 /**
- * The five actions, in the handoff's fixed order, with the two shelf swaps
- * applied (§6). Pure — no DOM, no React — so the order, the swaps and the
+ * The five actions, in the handoff's fixed order, with the Trash shelf's swap
+ * applied (§6). Pure — no DOM, no React — so the order, the swap and the
  * disabled/reason state are all directly testable without rendering anything.
  */
 export function buildSelectionActions({
   count,
   shelfKind,
+  copyLabel,
   readOnlyReason,
-  shareBlockedReason,
+  copyBlockedReason: copyBlocked,
   onFavorite,
   onAddToAlbum,
   onShare,
@@ -130,18 +133,17 @@ export function buildSelectionActions({
     album: SelectAlbumIcon,
     download: SelectDownloadIcon,
     heart: SelectFavoriteIcon,
-    removeFrom: SelectRemoveFromIcon,
     restore: SelectRestoreIcon,
     share: SelectShareIcon,
     trash: SelectTrashIcon,
   };
-  const share =
-    shelfKind !== "sharing" && shareBlockedReason
-      ? { unavailableReason: shareBlockedReason }
-      : { run: onShare };
+  const share = copyBlocked
+    ? { unavailableReason: copyBlocked }
+    : { run: onShare };
   return buildSharedSelectionActions({
     count,
     shelf: shelfKind,
+    copyLabel,
     readOnlyReason,
     favorite: { run: onFavorite },
     addToAlbum: { run: onAddToAlbum },
@@ -199,34 +201,15 @@ function ActionButton({
   );
 }
 
-/**
- * Why the batch *Copy to Sharing* cannot fire, as one sentence for the
- * disabled control (§H). Two different truths, and a member can act on the
- * difference: nothing has ever been chosen as a destination, versus the one
- * they chose is not open on this device.
- */
-function shareBlockedReasonFor(
-  target: InlineScope | undefined,
-  targetId: string | undefined
-): string | null {
-  if (target)
-    return target.canWrite ? null : `${target.label} is read-only for you.`;
-  return targetId === undefined
-    ? "There is nowhere to share to on this device yet."
-    : "Where your shares go isn't open on this device.";
-}
-
 export interface SelectionBarViewProps {
   selectedIds: Set<string>;
   /** The currently loaded rows — Download resolves each key's `content_uri`
    *  from here, and Select all/none walks the same list. */
   visible: readonly Asset[];
   albums: Album[];
-  /** Every mounted scope (issue #599). */
+  /** Every mounted scope (issue #599) — the share sheet's destination list is
+   *  every OTHER writable one plus every linked person (issue #726 P6). */
   scopes: readonly InlineScope[];
-  /** The member's share destination — a POINTER they own, resolved against
-   *  `scopes` here; never "the vault named Sharing" (§H, filters.ts). */
-  shareTargetId: string | undefined;
   shelfKind: SelectionShelfKind;
   readOnlyReason: string | null;
   menuOpen: boolean;
@@ -247,7 +230,6 @@ export function SelectionBarView({
   visible,
   albums: albumList,
   scopes,
-  shareTargetId,
   shelfKind,
   readOnlyReason,
   menuOpen,
@@ -262,7 +244,8 @@ export function SelectionBarView({
 }: SelectionBarViewProps) {
   const count = selectedIds.size;
   const countRef = useRef<HTMLSpanElement>(null);
-  const sharingTarget = shareDestination(scopes, shareTargetId);
+  const [shareOpen, setShareOpen] = useState(false);
+  const ownId = ownScopeId(scopes);
 
   // countRef is passed as a REF, and the batch helpers dereference it only
   // inside their own event-time bodies; nothing reads `.current` during this
@@ -271,30 +254,19 @@ export function SelectionBarView({
   const actions = buildSelectionActions({
     count,
     shelfKind,
+    // The sheet decides what "nowhere to share" means once it has actually
+    // asked for the destination list (own vaults sync, linked people async);
+    // the control itself never disables on a synchronous guess (#726 P6).
+    copyLabel: "Share",
     readOnlyReason,
-    shareBlockedReason: shareBlockedReasonFor(sharingTarget, shareTargetId),
+    copyBlockedReason: null,
     onFavorite: () =>
       void runBatchFavorite([...selectedIds], countRef, {
         refresh,
         setBarBusy,
       }),
     onAddToAlbum: onToggleMenu,
-    onShare: () => {
-      if (shelfKind === "sharing") {
-        void runBatchRemoveFromSharing([...selectedIds], countRef, {
-          refresh,
-          setBarBusy,
-          exitSelectMode: onExit,
-        });
-      } else if (sharingTarget) {
-        void runBatchCopyToSharing(
-          [...selectedIds],
-          sharingTarget.id,
-          countRef,
-          { refresh, setBarBusy, exitSelectMode: onExit }
-        );
-      }
-    },
+    onShare: () => setShareOpen(true),
     onDownload: () =>
       void runBatchDownload([...selectedIds], visible, countRef, {
         setBarBusy,
@@ -314,6 +286,22 @@ export function SelectionBarView({
 
   return (
     <>
+      <ShareSheet
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        sourceScopeId={ownId}
+        scopes={scopes}
+        verbs={["give"]}
+        itemType="media.media_asset"
+        itemIds={[...selectedIds]}
+        onDone={(outcome) => {
+          notice(outcome.message);
+          if (outcome.ok) {
+            onExit();
+            void refresh();
+          }
+        }}
+      />
       <span className={styles.count} ref={countRef}>
         {count}
       </span>
@@ -390,9 +378,8 @@ export function SelectionBarView({
 export interface SelectionBottomBarProps {
   selectedIds: Set<string>;
   visible: readonly Asset[];
+  /** Every mounted scope — see `SelectionBarViewProps`. */
   scopes: readonly InlineScope[];
-  /** The member's share destination — see `SelectionBarViewProps`. */
-  shareTargetId: string | undefined;
   shelfKind: SelectionShelfKind;
   readOnlyReason: string | null;
   refresh: () => Promise<void>;
@@ -413,7 +400,6 @@ export function SelectionBottomBar({
   selectedIds,
   visible,
   scopes,
-  shareTargetId,
   shelfKind,
   readOnlyReason,
   refresh,
@@ -422,12 +408,14 @@ export function SelectionBottomBar({
   onAddToAlbum,
 }: SelectionBottomBarProps) {
   const count = selectedIds.size;
-  const sharingTarget = shareDestination(scopes, shareTargetId);
+  const [shareOpen, setShareOpen] = useState(false);
+  const ownId = ownScopeId(scopes);
   const actions = buildSelectionActions({
     count,
     shelfKind,
+    copyLabel: "Share",
     readOnlyReason,
-    shareBlockedReason: shareBlockedReasonFor(sharingTarget, shareTargetId),
+    copyBlockedReason: null,
     onFavorite: () =>
       void runBatchFavorite(
         [...selectedIds],
@@ -435,30 +423,7 @@ export function SelectionBottomBar({
         { refresh, setBarBusy }
       ),
     onAddToAlbum,
-    onShare: () => {
-      if (shelfKind === "sharing") {
-        void runBatchRemoveFromSharing(
-          [...selectedIds],
-          { current: null },
-          {
-            refresh,
-            setBarBusy,
-            exitSelectMode: onExit,
-          }
-        );
-      } else if (sharingTarget) {
-        void runBatchCopyToSharing(
-          [...selectedIds],
-          sharingTarget.id,
-          { current: null },
-          {
-            refresh,
-            setBarBusy,
-            exitSelectMode: onExit,
-          }
-        );
-      }
-    },
+    onShare: () => setShareOpen(true),
     onDownload: () =>
       void runBatchDownload(
         [...selectedIds],
@@ -485,6 +450,22 @@ export function SelectionBottomBar({
 
   return (
     <>
+      <ShareSheet
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        sourceScopeId={ownId}
+        scopes={scopes}
+        verbs={["give"]}
+        itemType="media.media_asset"
+        itemIds={[...selectedIds]}
+        onDone={(outcome) => {
+          notice(outcome.message);
+          if (outcome.ok) {
+            onExit();
+            void refresh();
+          }
+        }}
+      />
       <div
         className={styles.bottomBar}
         role="toolbar"

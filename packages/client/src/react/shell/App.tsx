@@ -106,7 +106,7 @@ import { useNotificationsCounts } from "./useBlockingCount.js";
 import { useBuilderEnabled } from "./useBuilderEnabled.js";
 import { useCompactLayout } from "./useCompactLayout.js";
 import { useGatewayStatus } from "./useGatewayRuntime.js";
-import { useMemberScopes } from "./useMemberScopes.js";
+import { useOwnerScopes } from "./useOwnerScopes.js";
 import { usePins } from "./usePins.js";
 import { resetInstalledAppsCache, useShellApps } from "./useShellApps.js";
 import { useStarred } from "./useStarred.js";
@@ -257,7 +257,7 @@ export default function App(): JSX.Element {
   // hidden there. The Search CONTROL is never hidden: it is the guarantee, and
   // the shortcut is the extra (#707, per-surface behaviour).
   const hasCommandKey = useMemo(() => !isWebHost(), []);
-  const memberScopes = useMemberScopes();
+  const ownerScopes = useOwnerScopes();
   const notificationsCounts = useNotificationsCounts();
   const blockingCount = notificationsCounts.decisionCount;
   const updateStatus = useUpdateStatus();
@@ -801,7 +801,7 @@ export default function App(): JSX.Element {
   // asked.
   const openVaultSwitcher = useCallback(
     (anchor: DOMRect): void => {
-      const activeGatewayId = memberScopes.gatewayId ?? "";
+      const activeGatewayId = ownerScopes.gatewayId ?? "";
       setGatewaySwitcherOpen(true);
       // Paint instantly from whatever a prior open cached, then probe every
       // registered gateway concurrently and patch rows in place as each
@@ -809,11 +809,10 @@ export default function App(): JSX.Element {
       openGatewaySwitcher({
         anchor,
         activeGatewayId,
-        scopes: memberScopes.scopes.map((scope) => ({
+        scopes: ownerScopes.scopes.map((scope) => ({
           id: scope.id,
           label: scope.label,
-          role: scope.role,
-          isActive: scope.id === memberScopes.active?.id,
+          isActive: scope.id === ownerScopes.active?.id,
         })),
         rows: getCachedGatewayRows(activeGatewayId),
         onSelectVault: (gatewayId, vaultId) => {
@@ -837,7 +836,7 @@ export default function App(): JSX.Element {
         updateGatewaySwitcherRows
       );
     },
-    [memberScopes]
+    [ownerScopes]
   );
 
   // ⌘⇧G reaches the same one switcher through its own trigger, so the keyboard
@@ -862,28 +861,28 @@ export default function App(): JSX.Element {
     };
   }, [openVaultSwitcher]);
 
-  /** The gateway in the member's own words — the bar's meta line on Home. */
-  const gatewayLabel = memberScopes.loading
+  /** The gateway in the owner's own words — the bar's meta line on Home. */
+  const gatewayLabel = ownerScopes.loading
     ? "—"
-    : (memberScopes.gatewayKind === "local"
+    : (ownerScopes.gatewayKind === "local"
         ? "This Mac"
-        : memberScopes.gatewayLabel) || "This Mac";
+        : ownerScopes.gatewayLabel) || "This Mac";
   // The assistant's conversation ledger. It was the sidebar's Recents zone
   // until #707; the stem holds the launcher and nothing else, so the ledger
   // moved into the assistant surface as app content and this is where its data
-  // is shaped. Rows carry their vault only when it is NOT the member's own — a
+  // is shaped. Rows carry their vault only when it is NOT the owner's own — a
   // conversation belongs to one vault for life (#599), and saying so on every
   // row would drown the useful case.
   const assistantLedger = useMemo<AssistantConversationEntry[]>(() => {
     const scopeById = conversationScopes();
-    const ownScopeId = memberScopes.primary?.id;
+    const ownScopeId = ownerScopes.primary?.id;
     return assistantConversations.conversations
       .filter((c) => !pendingConversationDeletes.has(c.id))
       .map((c) => {
         const scopeId = scopeById[c.id];
         const label =
           scopeId && scopeId !== ownScopeId
-            ? memberScopes.scopes.find((s) => s.id === scopeId)?.label
+            ? ownerScopes.scopes.find((s) => s.id === scopeId)?.label
             : undefined;
         return {
           id: c.id,
@@ -896,8 +895,8 @@ export default function App(): JSX.Element {
       });
   }, [
     assistantConversations,
-    memberScopes.primary?.id,
-    memberScopes.scopes,
+    ownerScopes.primary?.id,
+    ownerScopes.scopes,
     pendingConversationDeletes,
   ]);
 
@@ -951,13 +950,13 @@ export default function App(): JSX.Element {
   );
 
   // The foot's account menu. Settings, Pair device, What's new and Log out are
-  // each a handful-of-times act, so they live behind the member's own name
+  // each a handful-of-times act, so they live behind the owner's own name
   // rather than each taking a standing row — the arrangement the sidebar had
   // before #707. The menu matches the row's width and opens upward, so it reads
   // as the band opening rather than a popover floating inside it.
   const stemAccount = useMemo(
     () => ({
-      // Empty while the member still carries the placeholder label.
+      // Empty while the owner still carries the placeholder label.
       name: account?.name?.trim() || "You",
       ...(account?.avatarColor ? { color: account.avatarColor } : {}),
       onMenu: (anchor: DOMRect): void => {
@@ -1008,14 +1007,14 @@ export default function App(): JSX.Element {
           onActivate: openVaultSwitcher,
           open: gatewaySwitcherOpen,
           anchorRef: setSwitcherButton,
-          vault: memberScopes.active?.label ?? "Your vault",
+          vault: ownerScopes.active?.label ?? "Your vault",
           // The vault's own mark and hue, so two vaults are told apart in the
           // one place that names which of them you are in.
-          ...(memberScopes.active?.icon
-            ? { icon: memberScopes.active.icon }
+          ...(ownerScopes.active?.icon
+            ? { icon: ownerScopes.active.icon }
             : {}),
-          ...(memberScopes.active?.color
-            ? { color: memberScopes.active.color }
+          ...(ownerScopes.active?.color
+            ? { color: ownerScopes.active.color }
             : {}),
         }}
         activePage={activePageFor(nav.route)}
@@ -1069,7 +1068,7 @@ export default function App(): JSX.Element {
       // The whole scope, not three fields: react-compiler infers the object
       // here (three optional reads of one object) and refuses to preserve a
       // memo whose declared deps are narrower than what it inferred.
-      memberScopes.active,
+      ownerScopes.active,
       openVaultSwitcher,
       setSwitcherButton,
       assistantLedger,

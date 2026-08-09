@@ -227,7 +227,7 @@ function storageStatus(plane: StoragePlane) {
   // the request path. `computedAt: null` travels as null and MUST reach the
   // client as null: it is the difference between "nothing is freeable" and
   // "nobody has looked yet", and a client that renders zeroes for the second
-  // tells a member their library is safe on the strength of an unrun sweep.
+  // tells an owner their library is safe on the strength of an unrun sweep.
   const rollup = custodyRollup(plane.db.vault);
   return {
     vaultId: plane.boot.vaultId,

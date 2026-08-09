@@ -1,5 +1,7 @@
 # Issue #676 — nightly iOS mobile E2E recovery
 
+<!-- governance: allow-receipt-per-issue merge imports origin/main's already-receipted #726 change set -->
+
 ## Checklist
 
 The linked tracking issue currently has no Markdown checkbox checklist (verified
@@ -127,6 +129,10 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
 
 ## Decisions
 
+- governance: allow-receipt-per-issue — this merge commit imports the already
+  receipted `origin/main` #726 sharing/ownership change set; the merge-specific
+  iOS harness resolution remains documented below, while the imported files are
+  covered by `receipts/issue-726-vault-as-share-unit.md`.
 - Retain the current Photos/replica journey set while reusing PR #683's
   producer/matrix workflow shape instead of copying its older six-cell list
   wholesale. The current suite therefore has a dedicated Photos cell.

@@ -325,6 +325,13 @@ CREATE TABLE IF NOT EXISTS core_link_anchor (
 // first_orphaned_at`, not owner-facing life data. One share record per
 // projected row — a re-share by a second member keeps the FIRST placement.
 //
+// `shared_by_member` is the HISTORICAL v1 column name. The member-principal
+// layer is gone in issue #726, but the base rung is immutable because existing
+// vaults already carry `user_version = 1`. SHARE_ORIGIN_ATTRIBUTION_DDL below
+// performs the forward rename to `shared_by`; the stored value needs no rewrite
+// because it was always an attribution (an owner id or `peer:<vaultId>`), not a
+// foreign-keyed member principal.
+//
 // Ships in its own DDL constant so the step stays re-runnable (IF NOT EXISTS),
 // matching LINK_ANCHOR_DDL's style.
 export const SHARE_ORIGIN_DDL = `
@@ -338,4 +345,9 @@ CREATE TABLE IF NOT EXISTS core_share_origin (
   PRIMARY KEY (item_type, item_id)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_share_origin_vault ON core_share_origin(origin_vault_id);
+`;
+
+/** Forward upgrade for issue #726: preserve every v1 placement attribution. */
+export const SHARE_ORIGIN_ATTRIBUTION_DDL = `
+ALTER TABLE core_share_origin RENAME COLUMN shared_by_member TO shared_by;
 `;

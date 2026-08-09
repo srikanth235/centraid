@@ -137,10 +137,10 @@ describe("locker is structurally excluded from placement (A7)", () => {
 describe("Tally consumes the placement engine with zero engine edits (A6)", () => {
   const ENGINE_FILES = [
     path.join(APPS_DIR, "_shared", "placement-registry.ts"),
-    path.join(APPS_DIR, "_shared", "AudiencePlacement.tsx"),
+    path.join(APPS_DIR, "_shared", "ShareSheet.tsx"),
     path.resolve(
       PACKAGE_ROOT,
-      "../../apps/mobile/src/kit/components/AudiencePlacementSheet.tsx"
+      "../../apps/mobile/src/kit/share/ShareSheet.tsx"
     ),
   ];
 
@@ -173,7 +173,8 @@ describe("Tally consumes the placement engine with zero engine edits (A6)", () =
       path.join(APPS_DIR, "tally", "components", "GroupManager.tsx"),
       "utf8"
     );
-    expect(web).toContain('<AudiencePlacement itemType="tally.group"');
+    expect(web).toContain('itemType="tally.group"');
+    expect(web).toContain("ShareSheet");
     const native = readFileSync(
       path.resolve(
         PACKAGE_ROOT,
@@ -182,7 +183,7 @@ describe("Tally consumes the placement engine with zero engine edits (A6)", () =
       "utf8"
     );
     expect(native).toContain('itemType="tally.group"');
-    expect(native).toContain("AudiencePlacementSheet");
+    expect(native).toContain("ShareSheet");
   });
 
   it("record-only Tally reaches placement without touching custody", () => {

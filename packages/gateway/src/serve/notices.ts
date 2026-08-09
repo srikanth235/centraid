@@ -115,14 +115,14 @@ export function humanizeAutomationRef(ref: string): string {
  * `device` — the tier that stops a gateway-lane (model-turn) enricher —
  * since a `gateway`-tier vault only refuses the automations it hasn't
  * enabled, which is not a policy refusal. As an ordinary skip that refusal
- * was silent (#647 D6), so a member who asked for faces got nothing and no
+ * was silent (#647 D6), so an owner who asked for faces got nothing and no
  * explanation. It is a skip, so it is not a failure and never wakes a
  * device (`severity` is deliberately below `high`, which is the only level
- * `NoticeStore.put` wakes on) — but it IS a standing state the member is
+ * `NoticeStore.put` wakes on) — but it IS a standing state the owner is
  * owed an account of, with the control that changes it named.
  *
  * Keyed by DOMAIN, not by automation: seven enrichers refusing for the same
- * reason is one fact about the member's photographs, not seven cards.
+ * reason is one fact about the owner's photographs, not seven cards.
  */
 export function enrichRefusalNotice(input: {
   domain: string;
@@ -135,7 +135,7 @@ export function enrichRefusalNotice(input: {
         ? "Document enrichment"
         : `Enrichment for ${input.domain}`;
   // Each headline states the tier in force AND what it costs, because "off"
-  // and "on your devices" are both legitimate settings a member may have
+  // and "on your devices" are both legitimate settings an owner may have
   // chosen on purpose — the card explains, it does not nag.
   const headline =
     input.tier === "off"
@@ -165,7 +165,7 @@ export function enrichRefusalNotice(input: {
  * Whether a refusal card should be (re)written. A refusal recurs on every
  * enrichment tick for as long as the tier stands, and `NoticeStore.put` clears
  * `read_at` on every write — so re-putting an unchanged refusal would make a
- * card the member has already read pop back up forever. The card is written
+ * card the owner has already read pop back up forever. The card is written
  * once per (domain, tier) and then left alone until the tier moves.
  */
 export function shouldWriteEnrichRefusalNotice(

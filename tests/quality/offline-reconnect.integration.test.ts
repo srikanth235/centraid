@@ -114,7 +114,7 @@ describe("R2 product offline/reconnect transport", () => {
       void handleReplicaIntent(req, res, {
         plane,
         access: {
-          role: "write",
+          canWrite: true,
           rememberDevice: true,
           deviceId: String(req.headers["x-device-id"]),
           appId: "planner",

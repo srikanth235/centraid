@@ -6,14 +6,14 @@ import type {
   GatewayDeviceTicket,
   GatewayDeviceTicketInput,
   GatewayDeviceWorkDepth,
-  GatewayMember,
+  GatewayOwner,
 } from "../../gateway-client.js";
 import { startVisibilityTicker } from "../shell/routes/visibility-ticker.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
-import { groupDevicesByMember, vaultsFromGroups } from "./device-groups.js";
+import { groupDevicesByOwner } from "./device-groups.js";
 import type { GroupedDevice } from "./device-groups.js";
-import DeviceMemberGroup from "./DeviceMemberGroup.js";
+import DeviceOwnerGroup from "./DeviceOwnerGroup.js";
 import DevicePairPanel from "./DevicePairPanel.js";
 
 import controlsCss from "../styles/controls.module.css";
@@ -22,18 +22,22 @@ import styles from "./DevicesCard.module.css";
 import gwStyles from "./GatewayScreen.module.css";
 
 // Gateway → Overview → People & devices: the owner surface over the daemon's
-// member roster + `EnrollmentStore` (issues #392, #599).
+// owner roster + `EnrollmentStore` (issues #392, #726).
 //
-// It is people-first because authority is: a role is authored on a PERSON and
-// devices inherit it, so "Priya's phone is admin but her laptop is read-only"
-// isn't a state this card can even display. Each group is one person, their
-// access in ownership words, and the hardware acting as them.
+// It is people-first because a device is always somebody's: "Priya's laptop
+// is revoked but her phone is live" is a state this card can display, but
+// "someone else's device" is not, because a vault has exactly one owner and
+// a device caller sees only its own owner's roster row. So the one group
+// this card ever renders is the caller's own.
 //
-// The two removal verbs are deliberately different affordances:
-//   Revoke device  (per row)    — "this phone was stolen". The person keeps
-//                                 their access and their other devices.
-//   Remove <person> (per group) — "she moved out". One atomic act that drops
-//                                 their roles and every device they own.
+// "Revoke device" ("this phone was stolen") is the only removal verb this
+// card offers — removing the PERSON is a host-custody act on this machine
+// (`owners-routes.ts`), never reachable from a device-token client.
+//
+// "Add someone" (#726 P1) mints a NEW person a vault of their own, hosted on
+// this machine, then shows the SAME ticket QR panel "Pair a device" already
+// renders — the two buttons open the same `DevicePairPanel`, one self-paired
+// and one `forPerson`, rather than two implementations of a ticket screen.
 //
 // Revoking no longer deletes the row; it tombstones it, so a past write still
 // resolves to the device that made it. Tombstones live in a collapsed
@@ -46,7 +50,7 @@ export interface DevicesCardProps {
   loadDevices: () => Promise<CentraidGatewayDevice[]>;
   onRevokeDevice: (
     deviceId: string,
-    options?: { confirmLastAdmin?: string }
+    options?: { confirmLastDevice?: string }
   ) => Promise<{ removed: boolean }>;
   onRenameDevice?: (
     deviceId: string,
@@ -55,15 +59,10 @@ export interface DevicesCardProps {
   /** Eager local cleanup after this renderer successfully revokes itself. */
   onCurrentDeviceRevoked?: () => Promise<void>;
   /**
-   * The household roster. Optional so a gateway with no member surface (or a
-   * test) still renders — the groups then come from the devices alone.
+   * The caller's own owner row. Optional so a gateway with no owner surface
+   * (or a test) still renders — the group then comes from the devices alone.
    */
-  loadMembers?: () => Promise<GatewayMember[]>;
-  /** Remove a PERSON. Absent = the card offers only per-device revocation. */
-  onRemoveMember?: (
-    memberId: string,
-    options?: { confirmLastAdmin?: string }
-  ) => Promise<{ removed: boolean }>;
+  loadOwners?: () => Promise<GatewayOwner[]>;
   /**
    * Mint a one-time pairing ticket (`POST _gateway/devices/ticket`). Optional
    * so a host that can't mint (or a test) simply hides "Pair a device".
@@ -76,13 +75,6 @@ export interface DevicesCardProps {
     contributeWhileCharging: boolean
   ) => Promise<CentraidGatewayDevice>;
   loadWorkStatus?: () => Promise<GatewayDeviceWorkDepth[]>;
-  /**
-   * Whether the viewer owns any vault here. A read-only member saw live
-   * `Revoke device` / `Remove <person>` buttons whose clicks the gateway
-   * refused with no feedback (onboarding run B11); the roster now renders
-   * read-only rows for them instead.
-   */
-  canAdminister?: boolean;
 }
 
 /** Poll cadence — same order of magnitude as the Backups card. */
@@ -94,18 +86,17 @@ export default function DevicesCard({
   onRevokeDevice,
   onRenameDevice,
   onCurrentDeviceRevoked,
-  loadMembers,
-  onRemoveMember,
+  loadOwners,
   onCreateTicket,
   onUpdateCompute,
   loadWorkStatus,
-  canAdminister = true,
 }: DevicesCardProps): JSX.Element {
   const [devices, setDevices] = useState<CentraidGatewayDevice[] | null>(null);
-  const [members, setMembers] = useState<GatewayMember[]>([]);
+  const [owners, setOwners] = useState<GatewayOwner[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [workDepth, setWorkDepth] = useState<GatewayDeviceWorkDepth[]>([]);
   const [pairing, setPairing] = useState(false);
+  const [addingPerson, setAddingPerson] = useState(false);
   const mountedRef = useRef(true);
 
   const refresh = useCallback((): void => {
@@ -119,9 +110,9 @@ export default function DevicesCard({
         if (!mountedRef.current) return;
         setLoadError(error instanceof Error ? error.message : String(error));
       });
-    void loadMembers?.()
+    void loadOwners?.()
       .then((list) => {
-        if (mountedRef.current) setMembers(list);
+        if (mountedRef.current) setOwners(list);
       })
       // A roster the gateway won't serve is not fatal: the devices still name
       // their people, so the card degrades to device-derived groups.
@@ -132,7 +123,7 @@ export default function DevicesCard({
       })
       // Poll failures are transient; retain the last successful work badge.
       .catch(() => undefined);
-  }, [loadDevices, loadMembers, loadWorkStatus]);
+  }, [loadDevices, loadOwners, loadWorkStatus]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -146,17 +137,23 @@ export default function DevicesCard({
   }, [refresh]);
 
   const revoke = useCallback(
-    async (device: GroupedDevice, confirmLastAdmin?: string): Promise<void> => {
+    async (
+      device: GroupedDevice,
+      confirmLastDevice?: string
+    ): Promise<void> => {
       // "Revoke device" means the hardware, so every enrollment it holds goes
       // — one per vault it reached. Chained rather than `Promise.all`: the
-      // gateway refuses the enrollment that would strand a vault's last owner,
-      // and that refusal has to surface before the rest are dropped.
+      // gateway refuses the enrollment that would strand the owner's last
+      // device for a vault, and that refusal has to surface before the rest
+      // are dropped.
       await device.enrollmentIds.reduce(
         (chain, enrollmentId) =>
           chain.then(async () => {
             await onRevokeDevice(
               enrollmentId,
-              confirmLastAdmin === undefined ? undefined : { confirmLastAdmin }
+              confirmLastDevice === undefined
+                ? undefined
+                : { confirmLastDevice }
             );
           }),
         Promise.resolve()
@@ -191,27 +188,6 @@ export default function DevicesCard({
     [onRenameDevice]
   );
 
-  const removeMember = useCallback(
-    async (memberId: string, confirmLastAdmin?: string): Promise<void> => {
-      if (!onRemoveMember) return;
-      await onRemoveMember(
-        memberId,
-        confirmLastAdmin === undefined ? undefined : { confirmLastAdmin }
-      );
-      if (mountedRef.current) {
-        setMembers((prev) =>
-          prev.filter((member) => member.memberId !== memberId)
-        );
-        setDevices(
-          (prev) =>
-            prev?.filter((device) => device.memberId !== memberId) ?? prev
-        );
-      }
-      refresh();
-    },
-    [onRemoveMember, refresh]
-  );
-
   const updateCompute = useCallback(
     async (device: GroupedDevice, enabled: boolean): Promise<void> => {
       if (!onUpdateCompute) return;
@@ -228,11 +204,9 @@ export default function DevicesCard({
   );
 
   const groups = useMemo(
-    () => groupDevicesByMember(devices ?? [], members),
-    [devices, members]
+    () => groupDevicesByOwner(devices ?? [], owners),
+    [devices, owners]
   );
-  const vaults = useMemo(() => vaultsFromGroups(groups), [groups]);
-  const selfMemberId = groups.find((group) => group.isSelf)?.memberId;
 
   const people = groups.length;
   // Count hardware, not enrollment rows: a browser paired into two vaults is
@@ -263,7 +237,7 @@ export default function DevicesCard({
               {queued} queued · {leased} leased
             </span>
           ) : null}
-          {onCreateTicket && canAdminister && !pairing ? (
+          {onCreateTicket && !pairing && !addingPerson ? (
             <button
               type="button"
               className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
@@ -273,11 +247,21 @@ export default function DevicesCard({
               <span>Pair a device</span>
             </button>
           ) : null}
+          {onCreateTicket && !pairing && !addingPerson ? (
+            <button
+              type="button"
+              className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+              onClick={() => setAddingPerson(true)}
+            >
+              <Icon name="UserPlus" size={13} />
+              <span>Add someone</span>
+            </button>
+          ) : null}
         </div>
       </div>
 
       <div className={styles.body}>
-        {onCreateTicket && canAdminister && pairing ? (
+        {onCreateTicket && pairing ? (
           <DevicePairPanel
             now={now}
             onCreateTicket={onCreateTicket}
@@ -285,11 +269,17 @@ export default function DevicesCard({
               setPairing(false);
               refresh();
             }}
-            members={members}
-            {...(selfMemberId === undefined
-              ? {}
-              : { currentMemberId: selfMemberId })}
-            vaults={vaults}
+          />
+        ) : null}
+        {onCreateTicket && addingPerson ? (
+          <DevicePairPanel
+            now={now}
+            forPerson
+            onCreateTicket={onCreateTicket}
+            onClose={() => {
+              setAddingPerson(false);
+              refresh();
+            }}
           />
         ) : null}
         {loadError ? (
@@ -306,25 +296,18 @@ export default function DevicesCard({
           ) : (
             <div className={styles.groups}>
               {groups.map((group) => (
-                <DeviceMemberGroup
-                  key={group.memberId}
+                <DeviceOwnerGroup
+                  key={group.ownerId}
                   label={group.label}
-                  roles={group.roles}
+                  vaults={group.vaults}
                   devices={group.devices}
                   revoked={group.revoked}
                   isSelf={group.isSelf}
                   now={now}
                   onRevokeDevice={revoke}
-                  canAdminister={canAdminister}
                   {...(onRenameDevice ? { onRenameDevice: rename } : {})}
                   {...(onUpdateCompute
                     ? { onUpdateCompute: updateCompute }
-                    : {})}
-                  {...(onRemoveMember
-                    ? {
-                        onRemoveMember: (confirmLastAdmin?: string) =>
-                          removeMember(group.memberId, confirmLastAdmin),
-                      }
                     : {})}
                 />
               ))}

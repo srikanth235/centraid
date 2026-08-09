@@ -5,7 +5,7 @@
 // (`CENTRAID_ENRICH_URL`), one wire contract to stay honest about "not
 // configured" versus "the model does not see anything here."
 //
-// SINGLE ITEM, LOW LATENCY. A capture is a paste-and-go gesture — the member
+// SINGLE ITEM, LOW LATENCY. A capture is a paste-and-go gesture — the owner
 // is waiting on this HTTP call, so it goes straight to `enrichBatch` with
 // exactly one item rather than joining the background sweep's queue. The
 // sweep and this route share the wire contract and the reading-order rule;

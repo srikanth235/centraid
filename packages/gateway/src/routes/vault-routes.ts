@@ -44,8 +44,8 @@
  *
  * Vault create/delete left this surface (#289): they are ADMIN acts on the
  * gateway host (`centraid-gateway vault create|delete` over SSH). The vault
- * list is filtered to the calling device's enrollments — a family member
- * sees their vault and no evidence of others. Deny-by-default is
+ * list is filtered to the calling device's enrollments — an owner sees
+ * their vaults and no evidence of others. Deny-by-default is
  * structural: until a POST …/grants lands, an enrolled app's every vault
  * call is a receipted deny — per vault.
  */
@@ -148,6 +148,14 @@ export interface VaultRouteOptions {
   recoveryKit?: RecoveryKitStateStore;
   /** Device relation used for owner checks and erase cascade. */
   enrollments?: EnrollmentStore;
+  /**
+   * Direct host-custody request (authenticated bearer, never iroh-forwarded).
+   * It can SEE this vault (it can read the disk), so it gets a typed
+   * `owner_only` refusal naming the actual owner — never `not_found`
+   * topology hiding, which is for callers who cannot otherwise tell
+   * (#726 P1).
+   */
+  isHostCustody?: (req: IncomingMessage) => boolean;
   /** Gateway state transaction owner for erase. */
   gatewayDatabase?: GatewayDatabase;
   /** Crypto-erase custody seam. */
@@ -228,10 +236,26 @@ export function makeVaultRouteHandler(
           deviceKey && options.enrollments
             ? options.enrollments.get(deviceKey, plane.boot.vaultId)
             : undefined;
-        if (enrollment?.role !== "admin") {
+        if (!enrollment || enrollment.revoked) {
+          // Host custody can SEE this vault (it can read the disk), so it
+          // gets an honest `owner_only` naming who owns it instead of a
+          // generic refusal — hosting a vault confers none of the acts on
+          // this list for a vault the host does not own (#726 P1).
+          if (options.isHostCustody?.(req) === true) {
+            const ownerId = options.enrollments?.owners.ownerOf(
+              plane.boot.vaultId
+            );
+            const ownerLabel = ownerId
+              ? options.enrollments?.owners.get(ownerId)?.label
+              : undefined;
+            return sendJson(res, 403, {
+              error: "owner_only",
+              message: `only ${ownerLabel ?? "this vault's owner"} can erase this vault`,
+            });
+          }
           return sendJson(res, 403, {
-            error: "admin_required",
-            message: "only an admin device can erase this vault",
+            error: "owner_required",
+            message: "only the vault owner's device can erase this vault",
           });
         }
         if (!options.gatewayDatabase || !options.keys || !options.recoveryKit) {
@@ -264,13 +288,13 @@ export function makeVaultRouteHandler(
                ON CONFLICT(vault_id) DO NOTHING`
             )
             .run(vaultId, new Date().toISOString());
-          // Authority for an erased vault is the `member_roles` row (#599);
-          // dropping it makes every device of every member lose its route
-          // here while their other vaults are untouched. Web sessions and
-          // replica checkpoints are vault-keyed, so they go explicitly.
+          // Authority for an erased vault is the `vault_owners` row (#726);
+          // dropping it makes every device of its owner lose its route here
+          // while their other vaults are untouched. Web sessions and replica
+          // checkpoints are vault-keyed, so they go explicitly.
           options
             .gatewayDatabase!.db.prepare(
-              "DELETE FROM member_roles WHERE vault_id = ?"
+              "DELETE FROM vault_owners WHERE vault_id = ?"
             )
             .run(vaultId);
           options
@@ -289,7 +313,7 @@ export function makeVaultRouteHandler(
               `DELETE FROM tickets
                 WHERE EXISTS (
                   SELECT 1 FROM json_each(tickets.grants_json)
-                   WHERE json_extract(json_each.value, '$.vaultId') = ?
+                   WHERE json_each.value = ?
                 )`
             )
             .run(vaultId);
@@ -307,6 +331,10 @@ export function makeVaultRouteHandler(
         options.afterEraseStateCommitted?.(vaultId);
         vaults.delete(vaultId);
         options.keys.destroy(`${vaultId}.sealkey`);
+        // The identity keypair shares the DEK's custody and lifecycle
+        // (#726 P1) — an erase crypto-erases both, never leaving the
+        // signing seed behind after the DEK is gone.
+        options.keys.destroy(`${vaultId}.identity`);
         options.gatewayDatabase.transaction(() => {
           options
             .gatewayDatabase!.db.prepare(
@@ -596,8 +624,8 @@ export function makeVaultRouteHandler(
       }
 
       // The owner's enrichment policy (issue #299 §2, renamed by #712 C5):
-      // `device` — the member's own phone/laptop plus deterministic gateway
-      // work — is the prior default; `gateway` — the member's own gateway
+      // `device` — the owner's own phone/laptop plus deterministic gateway
+      // work — is the prior default; `gateway` — the owner's own gateway
       // may additionally do whatever it is already wired to, including a
       // model turn to a third-party provider — is a deliberate per-domain
       // opt-in, now the seeded default for fresh vaults; `off` silences a
@@ -1102,7 +1130,7 @@ export function makeVaultRouteHandler(
       }
 
       // The cross-referencing shell surface (issue #272): the picker is an
-      // admin-role search/browse, and link writes ride the owner-device
+      // owner-device search/browse, and link writes ride the owner-device
       // credential — the pick itself is the consent, scoped to one row.
       // Canonical domain entity types (`schema.table`) — the ontology model,
       // surfaced by the automation editor's @-tagging so the owner can reference
@@ -1143,7 +1171,7 @@ export function makeVaultRouteHandler(
       }
 
       // The Vault Atlas Browse tab (issue #441 Part B, B3): a vault-aware
-      // table editor. Reads are admin-role census over the ontology; writes
+      // table editor. Reads are owner-device census over the ontology; writes
       // ride the journalled command pipeline (atlas.* commands) with the
       // owner-device credential so every edit is a receipted operator act and
       // ships in the replica change log. All under `/atlas/browse/...`.
@@ -1474,10 +1502,10 @@ async function handleVaultsRoute(
         deviceKey && currentVaultId && options.enrollments
           ? options.enrollments.get(deviceKey, currentVaultId)
           : undefined;
-      if (current?.role !== "admin" || !options.enrollments) {
+      if (!current || current.revoked || !options.enrollments) {
         return sendJson(res, 403, {
-          error: "admin_required",
-          message: "only an admin device can create another vault",
+          error: "owner_required",
+          message: "only an enrolled owner's device can create another vault",
         });
       }
       const body = await readJson(req);
@@ -1493,12 +1521,13 @@ async function handleVaultsRoute(
           : undefined
       );
       try {
+        // The creating owner claims the fresh vault — `vault_owners` is the
+        // whole authority record (#726).
         options.enrollments.enroll({
           endpointId: current.endpointId,
-          vaultId: created.vaultId,
+          vaultIds: [created.vaultId],
           label: current.label,
           ...(current.platform ? { platform: current.platform } : {}),
-          role: "admin",
           rememberDevice: current.rememberDevice,
         });
       } catch (error) {

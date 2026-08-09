@@ -38,6 +38,8 @@ import {
   uuidv7,
   VaultSchemaAheadError,
   applyVaultFootprint,
+  signWithVaultIdentity,
+  vaultIdentityPublicKey,
 } from "@centraid/vault";
 import type {
   BlobStoreSettings,
@@ -591,11 +593,33 @@ export class VaultRegistry {
   }
 
   /**
+   * The vault's own signing identity (issue #726 P1) — its public key, base64.
+   * `undefined` for an unknown vault; every MOUNTED vault has one (minted at
+   * creation, or lazily on first load for a vault that predates this).
+   */
+  vaultIdentity(vaultId: string): { publicKey: string } | undefined {
+    const plane = this.get(vaultId);
+    if (!plane) return undefined;
+    return {
+      publicKey: vaultIdentityPublicKey(plane.db.identitySeed).toString(
+        "base64"
+      ),
+    };
+  }
+
+  /** Sign `bytes` with the vault's own identity — `undefined` for an unknown vault. */
+  signAsVault(vaultId: string, bytes: Buffer): Buffer | undefined {
+    const plane = this.get(vaultId);
+    if (!plane) return undefined;
+    return signWithVaultIdentity(plane.db.identitySeed, bytes);
+  }
+
+  /**
    * Every mounted vault the CLIENT sees — DEFAULT VAULT FIRST, then the rest
    * oldest-first (issue #665).
    *
    * This is the single choke point every client-facing vault listing goes
-   * through (`GET /_vault/vaults` via `vault-routes.ts`, and the member scopes
+   * through (`GET /_vault/vaults` via `vault-routes.ts`, and the owner scopes
    * plane `GET /_vault/scopes` via `build-gateway.ts`'s `listVaults` dep), so
    * the two can never disagree about which vault heads the list.
    *

@@ -35,6 +35,11 @@ import {
   sealKeyFileFor,
 } from "./schema/sealed.js";
 import {
+  ephemeralVaultIdentitySeed,
+  identityKeyFileFor,
+  loadOrCreateVaultIdentitySeed,
+} from "./schema/vault-identity.js";
+import {
   applyVaultFootprint,
   assertVaultFootprint,
 } from "./vault-footprint.js";
@@ -52,6 +57,13 @@ export interface VaultDb {
    * ciphertext only. In-memory vaults get an ephemeral key.
    */
   sealKey: Buffer;
+  /**
+   * The vault's own Ed25519 signing seed (issue #726 P1) — same custody as
+   * `sealKey`, minted at creation, loaded (or lazily minted) on every later
+   * open. In-memory vaults get an ephemeral seed. Derive the public key with
+   * `vaultIdentityPublicKey`; sign with `signWithVaultIdentity`.
+   */
+  identitySeed: Buffer;
   /** Host-selected custody store that owns the on-disk seal-key envelope. */
   keyStore?: KeyStore;
   /**
@@ -156,6 +168,8 @@ export interface OpenVaultOptions {
   keyStore?: KeyStore;
   /** Override the seal key (custody managed by the caller). */
   sealKey?: Buffer;
+  /** Override the identity seed (tests — a fixed keypair to assert against). */
+  identitySeed?: Buffer;
   /** Override the local blob tier (tests inject a MemoryBlobStore). */
   blobStore?: LocalBlobStore;
   /**
@@ -383,6 +397,16 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     (dir === undefined
       ? ephemeralSealKey()
       : resolveSealKey(vault, sealKeyFileFor(dir), options.keyStore));
+  // The vault's own signing identity (issue #726 P1) — minted alongside the
+  // DEK, same custody, no fingerprint gate (see `vault-identity.ts`).
+  const identitySeed =
+    options.identitySeed ??
+    (dir === undefined
+      ? ephemeralVaultIdentitySeed()
+      : loadOrCreateVaultIdentitySeed(
+          identityKeyFileFor(dir),
+          options.keyStore
+        ));
   const blobContentKeys = new BlobContentKeyRegistry(vault, sealKey);
 
   // One remote per settings snapshot — rebuilt only when the bag changes.
@@ -521,6 +545,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     journal,
     dir: dir ?? ":memory:",
     sealKey,
+    identitySeed,
     ...(options.keyStore ? { keyStore: options.keyStore } : {}),
     blobs: new BlobCustody(local, remoteTier, blobCache, (sha) =>
       desiredStoreForSha(vault, sha)

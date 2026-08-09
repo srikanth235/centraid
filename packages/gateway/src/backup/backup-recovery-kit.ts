@@ -18,6 +18,9 @@ function targets(
     vaultId,
     label: target.label,
     sealKey: requiredSealKey(keyStore, vaultId).toString("base64"),
+    // The identity seed rides beside the DEK (issue #726 P1) — same custody,
+    // so `recover()` can restore both from one kit.
+    identitySeed: requiredIdentitySeed(keyStore, vaultId).toString("base64"),
   }));
 }
 
@@ -28,6 +31,15 @@ function requiredSealKey(keyStore: KeyStore, vaultId: string): Buffer {
       `recovery kit: vault "${vaultId}" has no sealing key in custody`
     );
   return key;
+}
+
+function requiredIdentitySeed(keyStore: KeyStore, vaultId: string): Buffer {
+  const seed = keyStore.export(`${vaultId}.identity`);
+  if (!seed)
+    throw new Error(
+      `recovery kit: vault "${vaultId}" has no identity seed in custody`
+    );
+  return seed;
 }
 
 /** Build the in-memory plaintext document immediately before password wrapping. */

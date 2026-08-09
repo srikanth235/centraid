@@ -39,7 +39,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import ShareTargetPicker from "../../kit/share/ShareTargetPicker";
+import ShareSheet from "../../kit/share/ShareSheet";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
@@ -64,7 +64,7 @@ import PhotosScreen from "./PhotosScreen";
 import PhotoTile from "./PhotoTile";
 import type { PhotoAsset } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
-import { useCopyToSharing } from "./use-copy-to-sharing";
+import { useCopyToVault } from "./use-copy-to-vault";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 /** The shelf's copy when there is nothing to review. The web's own sentence
@@ -96,9 +96,9 @@ export default function DuplicatesShelf({
   };
   const selected = vaultAssets(shown, selection);
   // One handler for the third selection target, shared by every Photos shelf
-  // (`use-copy-to-sharing.ts`) so the picker moment and the refusal grammar
+  // (`use-copy-to-vault.ts`) so the picker moment and the refusal grammar
   // cannot drift between them.
-  const sharing = useCopyToSharing(
+  const copyToVault = useCopyToVault(
     () => selected,
     () => setSelection(new Set())
   );
@@ -121,6 +121,7 @@ export default function DuplicatesShelf({
   const selectionBar = {
     count: selection.size,
     shelf: "normal" as const,
+    copyLabel: copyToVault.copyLabel,
     readOnlyReason: writeBlockedReason,
     favorite: writeBlockedReason
       ? { unavailableReason: writeBlockedReason }
@@ -133,10 +134,10 @@ export default function DuplicatesShelf({
     addToAlbum: {
       unavailableReason: "Add to album from the library, where the albums are.",
     },
-    // The real thing since issue #712 A5: a live control that places
-    // `media.media_asset` into the member's share target — or, when they
-    // have not chosen one yet, asks at the moment of intent (A3).
-    share: sharing.handler,
+    // Share (issue #726 P6): opens the unified give/lend sheet — the
+    // destination list holds both the member's own other vaults and every
+    // linked person, never a sole-destination shortcut.
+    share: copyToVault.handler,
     download: { unavailableReason: NO_DOWNLOAD_REASON },
     // The shelf's own verb (proto:4437 — "selecting a copy marks it for
     // trash"). Same confirm the rest of Photos asks for, so the two ways to
@@ -221,11 +222,10 @@ export default function DuplicatesShelf({
           />
         ))}
       </ScrollView>
-      <ShareTargetPicker
-        visible={sharing.picking}
-        candidates={sharing.candidates}
-        onChoose={(vaultId) => sharing.choose(vaultId)}
-        onClose={() => sharing.dismiss()}
+      <ShareSheet
+        visible={copyToVault.picking}
+        onClose={() => copyToVault.dismiss()}
+        {...copyToVault.sheetProps}
       />
     </PhotosScreen>
   );

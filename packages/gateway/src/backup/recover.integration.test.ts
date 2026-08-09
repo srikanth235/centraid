@@ -291,9 +291,8 @@ describe("backup/recover", () => {
     const enrollments = EnrollmentStore.open(gatewayDatabase);
     enrollments.enroll({
       endpointId: "owner-device",
-      vaultId,
+      vaultIds: [vaultId],
       label: "Owner laptop",
-      role: "admin",
     });
     const recoveryKit = new RecoveryKitStateStore(gatewayDatabase);
     await recoveryKit.begin("recover-integration-kit");

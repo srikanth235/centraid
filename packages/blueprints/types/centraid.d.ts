@@ -250,9 +250,20 @@ interface CentraidScope {
   color?: string;
   icon?: string;
   canWrite: boolean;
-  /** Everyone who holds a role here — the P7 grant roster (issue #712).
-   *  Absent, never `[]`, on a host that does not answer the question. */
-  audience?: readonly { memberId: string; name: string; role: string }[];
+  /** Present only for a scope LENT to this member by someone else (#726 P4/P6)
+   *  — absent for an owned vault. Mirrors `InlineScopeBorrowed`. */
+  borrowed?: CentraidScopeBorrowed;
+}
+
+/** The lend-specific facts a borrowed scope carries (#726 P4 item 6). */
+interface CentraidScopeBorrowed {
+  edgeId: string;
+  originVaultId: string;
+  holderLabel: string;
+  itemType: string;
+  reachState: "offered" | "established" | "parked";
+  reason: string | null;
+  mounted: boolean;
 }
 
 /** One scope's answer in a `readAll` fan-out. Errors are data, never throws. */
@@ -275,14 +286,6 @@ interface CentraidClient {
    * it fresh rather than caching a snapshot.
    */
   scopes?: CentraidScope[];
-  /**
-   * Where this member's shares land by default (issue #711 item H) — a
-   * POINTER they own, so it sits beside the scope list rather than on one of
-   * its rows. May name a vault that is not in `scopes` at all (deleted, or
-   * one this member holds no role in), which an app renders as its share
-   * action disabled with the reason inline, never as a silent no-op.
-   */
-  shareTargetVaultId?: string;
   read: <T = Record<string, unknown>>(opts: {
     query: string;
     input?: Record<string, unknown>;
@@ -330,6 +333,49 @@ interface CentraidClient {
     accessReceiptId?: string;
     reason?: string;
   }>;
+  /**
+   * Open a LIVE window over a scope (#726 P4/P6) — a LEND, as opposed to
+   * `place()`'s GIVE (a fixed-item copy). Revocable by the origin at any
+   * time; wording for that act is "stop lending", never "take back".
+   */
+  lend?: (opts: {
+    linkToken: string;
+    itemType:
+      | "core.collection"
+      | "core.content_item"
+      | "core.document"
+      | "locker.item"
+      | "media.media_asset"
+      | "tally.group";
+    scopes: Array<{
+      schema: string;
+      table?: string;
+      rowFilter?: Array<{ column: string; op: string; value?: unknown }>;
+      fieldMask?: string[];
+    }>;
+    sourceVaultId: string;
+    targetVaultId: string;
+  }) => Promise<{
+    status: string;
+    accessReceiptId?: string;
+    reason?: string;
+    /** Present only when the gateway computed it for this live edge (#726 P4
+     *  D10, `lend-search-reach.ts`'s `ScopeSearchReach`) — one entry per lent
+     *  scope; `masksSearchableColumns: true` means search over that scope
+     *  will not reach everything the physical table has. Mirrors
+     *  `apps/_shared/share-kit.ts`'s `LendSearchReach`. */
+    searchReach?: Array<{
+      schema: string;
+      table: string;
+      masksSearchableColumns: boolean;
+    }>;
+  }>;
+  /** The household's cross-vault links (#726 P6) — candidate share
+   *  destinations beyond the member's own mounted scopes, co-hosted and
+   *  remote alike (D3: locality is routing, not semantics). */
+  links?: () => Promise<
+    Array<{ linkId: string; vaultId: string; approved: boolean }>
+  >;
   describe?: () => Promise<unknown>;
   /** Subscribe to the change feed; returns the unsubscribe. */
   onChange: (cb: (detail: CentraidChangeDetail) => void) => () => void;

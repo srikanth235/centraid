@@ -29,6 +29,7 @@
 // tick both and send a batch to the wrong one (issue #599).
 import type { ReactNode } from "react";
 
+import { canWriteScope, mountedScopes } from "../_shared/scope-kit.ts";
 import {
   pruneSelection,
   toggleAllSelection,
@@ -46,7 +47,6 @@ import {
 import { $ } from "./dom.ts";
 import { observeWidth } from "./kit.ts";
 import { writeTarget } from "./outcomes.ts";
-import { canWriteScope, mountedScopes, shareTargetId } from "./scopes.ts";
 import { runBatchAddToAlbum } from "./selection-actions.ts";
 import type { Album, Asset } from "./types.ts";
 
@@ -100,10 +100,9 @@ export function createSelection({
    *  the frame's app bar, whose `Select` becomes `Done`. */
   repaint: () => void;
   /**
-   * Which of the bar's two shelf swaps applies (§6: Trash → Restore, Sharing
-   * → Remove from Sharing) — optional so this stays wireable without a
-   * breaking change. Left off, every shelf reads as "normal" and the bar
-   * keeps the base Trash/Copy-to-Sharing wording.
+   * Which of the bar's shelf swaps applies (§6: Trash → Restore) — optional
+   * so this stays wireable without a breaking change. Left off, every shelf
+   * reads as "normal" and the bar keeps the base Trash wording.
    */
   getShelfKind?: () => SelectionShelfKind;
   /** Is this the phone (§6, §15)? Gates which of the two arrangements
@@ -181,15 +180,14 @@ export function createSelection({
   /**
    * Non-null the moment any selected row sits in a scope the member cannot
    * write to (§6): Favorite, Add to album and Trash/Restore disable with this
-   * reason, stated inline rather than only in a tooltip. Copy to
-   * Sharing/Remove from Sharing and Download are never disabled by it — both
-   * are legitimate from a read-only audience (copying into the member's OWN
-   * Sharing vault is not a write on the audience; downloading isn't a write
-   * at all).
+   * reason, stated inline rather than only in a tooltip. *Copy to ⟨vault⟩*
+   * and Download are never disabled by it — both are legitimate from a
+   * read-only audience (copying into a vault the member owns is not a write
+   * on the audience; downloading isn't a write at all).
    *
    * Two sentences, both load-bearing (v4 handoff §6, prototype `selRefusal`):
    * the first names what's off and why (the grant, not a guess); the second
-   * heads off the obvious follow-up question — "then why do Copy to Sharing
+   * heads off the obvious follow-up question — "then why do the copy action
    * and Download still work?" — before the member has to ask it.
    */
   function readOnlyReason(): string | null {
@@ -201,8 +199,8 @@ export function createSelection({
       const label = scope?.label ?? "This library";
       return (
         `Favorite, Add to album and Trash are unavailable: this is ${label} ` +
-        "and your grant is read and download only. Copying into your own " +
-        `Sharing is not a write on ${label}.`
+        "and your grant is read and download only. Copying into a place of " +
+        `your own is not a write on ${label}.`
       );
     }
     return null;
@@ -242,7 +240,6 @@ export function createSelection({
             selectedIds={keys}
             visible={getVisible()}
             scopes={mountedScopes()}
-            shareTargetId={shareTargetId()}
             shelfKind={shelfKind()}
             readOnlyReason={readOnlyReason()}
             refresh={refresh}
@@ -262,7 +259,6 @@ export function createSelection({
           visible={getVisible()}
           albums={getAlbums()}
           scopes={mountedScopes()}
-          shareTargetId={shareTargetId()}
           shelfKind={shelfKind()}
           readOnlyReason={readOnlyReason()}
           menuOpen={menuOpen}

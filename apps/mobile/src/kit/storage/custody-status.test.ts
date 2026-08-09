@@ -12,7 +12,7 @@ import type {
   CustodyTotals,
 } from "./custody-status";
 
-// Mocked the way `kit/share/audience.test.ts` mocks it, so the HTTP shape is
+// Mocked the way `lib/daily-brief.test.ts` mocks it, so the HTTP shape is
 // exercised without a real gateway — and without pulling react-native in.
 const { apiHeaders, fetchJson } = vi.hoisted(() => ({
   apiHeaders: vi.fn<typeof Gateway.apiHeaders>(() => ({})),

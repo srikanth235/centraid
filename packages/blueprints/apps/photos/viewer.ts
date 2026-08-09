@@ -348,7 +348,7 @@ export const VIEWER_ACTIONS = [
   "favorite",
   "edit",
   "info",
-  "sharing",
+  "copy",
   "download",
   "slideshow",
 ] as const;
@@ -363,7 +363,7 @@ export type ViewerActionId = (typeof VIEWER_ACTIONS)[number];
  * the phone hides behind a sheet.
  */
 export const PHONE_ACTIONS = [
-  "sharing",
+  "copy",
   "favorite",
   "info",
   "edit",
@@ -371,15 +371,20 @@ export const PHONE_ACTIONS = [
 ] as const;
 export type PhoneActionId = (typeof PHONE_ACTIONS)[number];
 
-/** Every label a viewer action can carry. Final copy; `Copy to Sharing` is a
- *  DESTINATION, never the verb `Share` with an invisible effect (§H). */
+/**
+ * Every label a viewer action can carry. Final copy; the copy action names a
+ * DESTINATION, never the verb `Share` with an invisible effect (§H). The
+ * entry here is its RESTING caption — Lightbox.tsx overrides it per
+ * destination with sharing.ts's `copyActionLabel` (`Copy to ⟨label⟩`)
+ * whenever exactly one other writable scope is mounted (issue #726).
+ */
 export const ACTION_LABELS: Readonly<
   Record<ViewerActionId | PhoneActionId, string>
 > = {
   favorite: "Favorite",
   edit: "Edit",
   info: "Info",
-  sharing: "Copy to Sharing",
+  copy: "Copy to another place",
   download: "Download",
   slideshow: "Slideshow",
   trash: "Trash",

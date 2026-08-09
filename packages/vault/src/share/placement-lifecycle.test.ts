@@ -45,7 +45,7 @@ describe("placement-lifecycle suite", () => {
         audience,
         itemType: "media.media_asset",
         itemId: photo.assetId,
-        sharedByMember: "member-priya",
+        sharedBy: "member-priya",
       })
     ).toThrow("injected mid-share failure");
     audience.vault.prepare = realPrepare;
@@ -132,7 +132,7 @@ describe("placement-lifecycle suite", () => {
       audience,
       itemType: "media.media_asset",
       itemId: photo.assetId,
-      sharedByMember: "member-priya",
+      sharedBy: "member-priya",
     });
     const originalIno = statSync(casPath(origin, photo.sha256)).ino;
 
@@ -200,7 +200,7 @@ describe("placement-lifecycle suite", () => {
         audience,
         itemType: "media.media_asset",
         itemId: photo.assetId,
-        sharedByMember: "member-sid",
+        sharedBy: "member-sid",
       });
 
     share();
@@ -217,7 +217,7 @@ describe("placement-lifecycle suite", () => {
     expect(audience.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
     expect(
       readShareOrigin(audience.vault, "media.media_asset", again.itemId)
-        ?.sharedByMember
+        ?.sharedBy
     ).toBe("member-sid");
   });
 
@@ -253,7 +253,7 @@ describe("placement-lifecycle suite", () => {
       audience,
       itemType: "media.media_asset",
       itemId: photo.assetId,
-      sharedByMember: "member-priya",
+      sharedBy: "member-priya",
     });
 
     // The owner trashes the photo out of their OWN library: rows gone, so the
@@ -306,7 +306,7 @@ describe("placement-lifecycle suite", () => {
         audience,
         itemType: "media.media_asset",
         itemId: "missing",
-        sharedByMember: "member-priya",
+        sharedBy: "member-priya",
       })
     ).toThrow(/is not in the origin vault/u);
     expect(audience.blobs.local.listSync()).toStrictEqual([]);
@@ -323,7 +323,7 @@ describe("placement-lifecycle suite", () => {
         audience: origin,
         itemType: "media.media_asset",
         itemId: photo.assetId,
-        sharedByMember: "member-priya",
+        sharedBy: "member-priya",
       })
     ).toThrow(/into itself/u);
   });

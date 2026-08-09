@@ -1,3 +1,4 @@
+import { scopeAttr } from "../_shared/scope-kit.ts";
 import { safeMediaUrl, VAULT_BLOB_PATH } from "../_shared/untrusted.ts";
 // Tile media: the once-per-mount fill (thumb image or placeholder) plus the
 // mount guard that makes it safe to call from a React callback ref on every
@@ -9,7 +10,6 @@ import {
   observeNextScreen,
   stopNextScreenObservation,
 } from "./media-observer.ts";
-import { scopeAttr } from "./scopes.ts";
 import type { Asset } from "./types.ts";
 
 export function isRenderableUri(uri: unknown): boolean {

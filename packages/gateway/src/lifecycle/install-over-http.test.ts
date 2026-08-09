@@ -203,7 +203,7 @@ describe("install-over-http scenarios", () => {
     }[];
     // Every APP-kind row reads installed on a mounted vault (#708). The flag
     // survives because it is still the gateway's own answer, and an audience
-    // vault this member was added to but which has not mounted yet can still
+    // vault this owner reaches but which has not mounted yet can still
     // say false — but on the vault you are looking at, it is always true.
     const appRows = rows.filter((t) => (t.kind ?? "app") !== "automation");
     expect(appRows.length).toBeGreaterThan(0);

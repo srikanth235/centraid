@@ -285,7 +285,7 @@ describe("vault-registry scenarios", () => {
       intentId: "offline-write-1",
       appId: "photos",
       deviceId: "sid-phone",
-      memberId: "member-sid",
+      ownerId: "owner-sid",
     };
     const bridge = runWithVaultContext({ vaultId: work.vaultId }, () =>
       runWithReplicaIntent(intent, () => registry.bridgeFor("photos"))
@@ -348,9 +348,8 @@ describe("vault-registry scenarios", () => {
     const firstVaultId = registry.defaultVaultId();
     enrollments.enroll({
       endpointId: "owner-device",
-      vaultId: firstVaultId,
+      vaultIds: [firstVaultId],
       label: "Owner device",
-      role: "admin",
     });
     const handler = makeVaultRouteHandler(registry, { enrollments });
     const server = http.createServer((req, res) => {
@@ -395,7 +394,13 @@ describe("vault-registry scenarios", () => {
     });
     expect(created.status).toBe(201);
     const family = (await created.json()) as { vaultId: string; name: string };
-    expect(enrollments.get("owner-device", family.vaultId)?.role).toBe("admin");
+    // The creating owner claims the fresh vault (#726).
+    expect(enrollments.get("owner-device", family.vaultId)?.revoked).toBe(
+      false
+    );
+    expect(enrollments.owners.ownerOf(family.vaultId)).toBe(
+      enrollments.ownerFor("owner-device")?.ownerId
+    );
     const listed = (await (await fetch(`${base}/vaults`)).json()) as {
       vaults: unknown[];
     };

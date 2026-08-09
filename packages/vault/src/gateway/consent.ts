@@ -257,17 +257,18 @@ export function evaluateConsent(
   if ((verb === "act" || verb === "reveal") && !identity.mayAct) {
     return { decision: "deny", failing: "device is readonly", grantId: null };
   }
-  // The on-behalf-of cap (issue #599 decision 7): an agent turn is hard-capped
-  // at the role of the member it acts for, so Sid's assistant fails exactly
-  // where Sid would. Checked BEFORE grants, because no grant of the enrolled
-  // agent's own can exceed the human it is working for.
+  // The on-behalf-of cap (issue #599 decision 7; #726): an agent turn is
+  // hard-capped at the authority of the owner it acts for, so Sid's
+  // assistant fails exactly where Sid would. Checked BEFORE grants, because
+  // no grant of the enrolled agent's own can exceed the human it is working
+  // for.
   if (
     (verb === "act" || verb === "reveal") &&
-    identity.onBehalfOfMember?.mayAct === false
+    identity.onBehalfOfOwner?.mayAct === false
   ) {
     return {
       decision: "deny",
-      failing: `acting member ${identity.onBehalfOfMember.memberId} holds read-only in this vault`,
+      failing: `acting owner ${identity.onBehalfOfOwner.ownerId} does not own this vault`,
       grantId: null,
     };
   }

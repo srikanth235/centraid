@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
-import { AudiencePlacement } from "../../_shared/AudiencePlacement.tsx";
+import { mountedScopes } from "../../_shared/scope-kit.ts";
+import { ShareSheet } from "../../_shared/ShareSheet.tsx";
 import type { Friend, GroupMeta, Member } from "../types.ts";
 import { ArmedButton, KitAvatar } from "./Shared.tsx";
 
@@ -27,6 +28,11 @@ export function GroupManager({
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(group.name);
+  // Share (issue #726 P6): opens the unified give sheet. Tally has no
+  // scope declaration (no `mintedIdFamilies` — a group isn't a live
+  // entity family this app lends), so only "give" is offered.
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareStatus, setShareStatus] = useState("");
   const available = useMemo(() => {
     const present = new Set(members.map((member) => member.party_id));
     return friends.filter((friend) => !present.has(friend.party_id));
@@ -127,7 +133,29 @@ export function GroupManager({
         Members on an expense cannot be removed. A group can be deleted only
         after all of its expenses leave the trash grace window.
       </p>
-      <AudiencePlacement itemType="tally.group" itemId={group.group_id} />
+      <button
+        type="button"
+        className="kit-btn"
+        onClick={() => setShareOpen(true)}
+      >
+        Share group
+      </button>
+      <ShareSheet
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        sourceScopeId={mountedScopes()[0]?.id ?? ""}
+        scopes={mountedScopes()}
+        verbs={["give"]}
+        itemType="tally.group"
+        itemIds={[group.group_id]}
+        appLabel="Tally"
+        onDone={(outcome) => setShareStatus(outcome.message)}
+      />
+      {shareStatus ? (
+        <output className={styles.hint} aria-live="polite">
+          {shareStatus}
+        </output>
+      ) : null}
       <div className={styles.danger}>
         <ArmedButton
           className="kit-btn danger"

@@ -14,6 +14,7 @@ import { buildGateway } from "./build-gateway.ts";
 import type { BuiltGateway } from "./build-gateway.ts";
 import { GatewayDatabase } from "./gateway-db.js";
 import { configureApiKey, stageItem } from "./outbox-executor-test-kit.js";
+import { OwnerStore } from "./owner-store.js";
 import type { VaultPlane } from "./vault-plane.js";
 
 // `buildGateway()` is the host-agnostic core: it constructs the whole
@@ -471,7 +472,7 @@ describe("build-gateway scenarios", () => {
 
   test("an inhabited gateway whose vaults were all erased is NOT re-founded (#603)", async () => {
     // Erasing every vault leaves the filesystem registry fresh but keeps the
-    // `members` rows in gateway.db. Restarting the daemon in that state must
+    // `owners` rows in gateway.db. Restarting the daemon in that state must
     // wait for restore — auto-founding a new Shared + Personal over it would
     // silently bury restore-after-erase.
     for (const vault of gateway.vaults.list()) {
@@ -483,30 +484,80 @@ describe("build-gateway scenarios", () => {
     expect(gateway.vaults.list()).toStrictEqual([]);
   });
 
-  test("the host that founded the vaults is enrolled admin on BOTH (#603)", async () => {
+  test("the host that founded the vaults OWNS both (#603, #726)", async () => {
     const founded = gateway.vaults.list().map((v) => v.vaultId);
     expect(founded).toHaveLength(2);
     // Release the gateway's handle before reading gateway.db from outside it.
     await gateway.stop();
     const database = GatewayDatabase.open(dataDir);
     try {
-      const roles = database.db
-        .prepare("SELECT vault_id, role FROM member_roles ORDER BY vault_id")
-        .all() as Array<{ vault_id: string; role: string }>;
-      expect(roles.map((row) => row.vault_id).sort()).toStrictEqual(
+      const rows = database.db
+        .prepare(
+          "SELECT vault_id, owner_id FROM vault_owners ORDER BY vault_id"
+        )
+        .all() as Array<{ vault_id: string; owner_id: string }>;
+      expect(rows.map((row) => row.vault_id).sort()).toStrictEqual(
         [...founded].sort()
       );
-      expect(roles.every((row) => row.role === "admin")).toBe(true);
-      // ONE member owns both — a fresh install has no "Unassigned" binding.
-      const members = database.db
-        .prepare("SELECT COUNT(*) AS n FROM members")
+      // ONE owner owns both — a fresh install has no "Unassigned" binding.
+      expect(new Set(rows.map((row) => row.owner_id)).size).toBe(1);
+      const owners = database.db
+        .prepare("SELECT COUNT(*) AS n FROM owners")
         .get() as {
         n: number;
       };
-      expect(members.n).toBe(1);
+      expect(owners.n).toBe(1);
     } finally {
       database.close();
     }
+  });
+
+  // Exit evidence #4 (#726 P1): founding still auto-creates Shared+Personal
+  // owned by the founding owner (covered above), AND a fresh boot after the
+  // household-migration sweep mints no extra vaults.
+  test("household migration mints a vault for every ownerless owner, once (#726 P1)", async () => {
+    const foundedCount = gateway.vaults.list().length;
+    expect(foundedCount).toBe(2);
+    // Release the gateway's exclusive lock before touching gateway.db directly.
+    await gateway.stop();
+
+    // A person record with no vault — the shape P0's admin-fallback migration
+    // or the bare host-custody `POST /owners` lane can leave behind.
+    let strandedOwnerId: string;
+    {
+      const database = GatewayDatabase.open(dataDir);
+      try {
+        strandedOwnerId =
+          OwnerStore.open(database).create("Widowed Account").ownerId;
+      } finally {
+        database.close();
+      }
+    }
+
+    // Reboot: the migration sweep runs once, at boot, for every ownerless
+    // owner — this one gets "<label>'s vault" minted on THIS machine.
+    gateway = await buildGateway({ paths: pathsUnder(dataDir) });
+    const afterMigration = gateway.vaults.list();
+    expect(afterMigration).toHaveLength(foundedCount + 1);
+    expect(afterMigration.map((v) => v.name)).toContain(
+      "Widowed Account's vault"
+    );
+    await gateway.stop();
+    {
+      const database = GatewayDatabase.open(dataDir);
+      try {
+        expect(
+          OwnerStore.open(database).vaultsOwnedBy(strandedOwnerId)
+        ).toHaveLength(1);
+      } finally {
+        database.close();
+      }
+    }
+
+    // A second boot after migration mints NOTHING extra — the guard is
+    // "does this owner own a vault yet", re-evaluated, not a one-shot flag.
+    gateway = await buildGateway({ paths: pathsUnder(dataDir) });
+    expect(gateway.vaults.list()).toHaveLength(foundedCount + 1);
   });
 
   test("network filesystem detection warns without refusing and disables orphan deletion", async () => {

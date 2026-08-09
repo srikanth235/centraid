@@ -17,7 +17,7 @@
 //   1. An OPEN `enrich_request` naming this asset, tagged `capability='faces'`.
 //   2. An OPEN vault-wide `enrich_request` (`target_id IS NULL`, same tag) —
 //      the "detect faces across my library" ask. THAT ROW is what licenses the
-//      library scan, the scan stops when the row is drained, and a member who
+//      library scan, the scan stops when the row is drained, and an owner who
 //      never asked has no such row, so this pass reads no photograph of theirs
 //      and makes no request to the service.
 //   3. A target this capability has ALREADY derived under an older model
@@ -28,7 +28,7 @@
 //      photograph that was not already processed with permission.
 //
 // DERIVATIVES, NEVER ORIGINALS (issue #721 mandate, unchanged). The bytes sent
-// are the asset's `preview` (or `thumb`) derivative. The member's
+// are the asset's `preview` (or `thumb`) derivative. The owner's
 // full-resolution photograph is never sent anywhere.
 //
 // BOXES COME BACK IN ORIGINAL PIXELS; THE LEDGER STORES FRACTIONS. The item
@@ -39,12 +39,12 @@
 // what every surface drawing a crop needs and the only form that survives a new
 // derivative rung. An asset whose `width`/`height` are unknown is therefore
 // SKIPPED rather than stored in pixels: a pixel box in a fraction-shaped column
-// renders a face marker over empty canvas, which tells a member the model saw
+// renders a face marker over empty canvas, which tells an owner the model saw
 // something it did not.
 //
 // AN ANSWERED REGION IS NEVER TOUCHED. Re-deriving an asset (a newer model, a
 // repeated ask) replaces its PROPOSED regions and nothing else. `confirmed`,
-// `rejected` and `dismissed` rows are the member's own answers; a sweep that
+// `rejected` and `dismissed` rows are the owner's own answers; a sweep that
 // could undo them would make the review queue unfinishable, which is the defect
 // issue #712 removed from the schema and this file must not reintroduce from
 // above. Region ids are derived from `(asset, model, box)`, so the same model
@@ -132,7 +132,7 @@ export const FACES_SWEEP_SPEC: CapabilitySweepSpec<"faces"> = {
 
     // Model supersession, INSIDE the already-consented set. A stamp exists
     // only where this capability already ran with permission, so re-deriving
-    // one reaches no photograph a member did not already hand over.
+    // one reaches no photograph an owner did not already hand over.
     const supersededBudget = Math.max(0, input.limit - targets.length);
     if (supersededBudget > 0) {
       for (const stale of supersededTargets(db.vault, {
@@ -237,7 +237,7 @@ export const FACES_SWEEP_SPEC: CapabilitySweepSpec<"faces"> = {
 
     // Replace the PROPOSED regions of an earlier model, and only those. The
     // `review_state = 'proposed'` filter is the invariant this file exists to
-    // hold: an answered region belongs to the member.
+    // hold: an answered region belongs to the owner.
     const stale = (
       db.vault
         .prepare(

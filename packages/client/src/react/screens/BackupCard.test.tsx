@@ -537,7 +537,7 @@ describe("screens/BackupCard", () => {
       expect(restoreBtn.title).toBe("");
     });
 
-    it("renders the paired-device list with a role chip and last-seen in the mono register", async () => {
+    it("renders the paired-device list with the scope and last-seen in the mono register", async () => {
       const status: BackupStatusDTO = {
         configured: true,
         vaults: [
@@ -558,14 +558,14 @@ describe("screens/BackupCard", () => {
           {
             deviceId: "d1",
             endpointId: "ep1",
-            memberId: "m1",
-            memberLabel: "Ravi",
+            ownerId: "o1",
+            ownerLabel: "Ravi",
             label: "Ravi’s Mac",
             transport: "iroh",
             vaultId: "v1",
             vaultName: "Main",
             lastUsedAt: "2026-07-11T10:00:00.000Z",
-            role: "admin",
+            revoked: false,
             rememberDevice: true,
             current: true,
           },
@@ -582,7 +582,6 @@ describe("screens/BackupCard", () => {
         await Promise.resolve();
       });
       expect(el.textContent).toContain("Ravi’s Mac");
-      expect(el.textContent).toContain("Owner");
       expect(el.textContent).toContain("Main");
     });
   });

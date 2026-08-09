@@ -1,13 +1,15 @@
 /*
- * Gateway device enrollments (issues #555, #599).
+ * Gateway device enrollments (issues #555, #599, #726).
  *
- * Since #599 a `devices` row is a pure BINDING of a proved iroh EndpointId to
- * governance: allow-repo-hygiene file-size-limit (#608) cohesive enrollment aggregate owns atomic member, device, grant, checkpoint, and rename invariants
- * a member (`member-store.ts`), and authority is authored on `(member, vault)`
- * in `member_roles`. A `DeviceEnrollment` is therefore a DERIVED view — one
- * per (device, vault) the device's member holds a role in — not a stored row.
- * That keeps "what may this device do in this vault" answerable in one lookup
- * while leaving exactly one place where the fact is authored.
+ * governance: allow-repo-hygiene file-size-limit (#608) cohesive enrollment aggregate owns atomic owner, device, ownership, checkpoint, and rename invariants
+ *
+ * A `devices` row is a pure BINDING of a proved iroh EndpointId to an owner
+ * (`owner-store.ts`), and authority is ownership: a vault has exactly one
+ * owner (`vault_owners`), and a device reaches exactly the vaults its owner
+ * owns. A `DeviceEnrollment` is therefore a DERIVED view — one per
+ * (device, vault) the device's owner owns — not a stored row. That keeps
+ * "may this device act in this vault" answerable in one lookup while leaving
+ * exactly one place where the fact is authored.
  *
  * Rows live in `gateway.db`; deleting a device cascades its durable web
  * sessions and replica checkpoints.
@@ -17,57 +19,28 @@ import crypto from "node:crypto";
 import path from "node:path";
 
 import { GatewayDatabase } from "./gateway-db.js";
-import { MemberStore } from "./member-store.js";
-import type { Member, MemberGrant } from "./member-store.js";
+import { OwnerStore } from "./owner-store.js";
+import type { Owner } from "./owner-store.js";
+import { VaultOwnedError } from "./vault-owned-error.js";
 
-/*
- * ROLE is the authority a MEMBER is granted in a vault — what they may DO.
- * Keep it distinct from trust/identity, which is whether a device is WHO it
- * claims (its proved iroh EndpointId). Both used to be called "trust"; see
- * `docs/glossary.md` for the vocabulary and the forbidden synonyms.
- *
- *   admin — everything `write` may do, plus mint invitations, grant roles,
- *           revoke devices, remove members. The founding member lands here.
- *   write — read the vault and change it. The default for every grant.
- *   read  — read/query only; any mutation is refused at the gate.
- *
- * `revoked` is NOT a role. It is a tombstone state a DEVICE is put into,
- * never granted, never offered in a picker — hence its absence from
- * `GrantableRole`, which is exactly the set a ticket grant may carry.
- */
-export type DeviceRole = "admin" | "write" | "read" | "revoked";
-export type GrantableRole = "admin" | "write" | "read";
-
-/** The one predicate for "may this role mutate" — admin is write's superset. */
-export function canWrite(role: DeviceRole): boolean {
-  return role === "admin" || role === "write";
-}
-
-const ROLE_RANK: Record<GrantableRole, number> = {
-  read: 1,
-  write: 2,
-  admin: 3,
-};
-
-/** True when `candidate` grants no more authority than `ceiling`. */
-export function roleWithin(
-  candidate: GrantableRole,
-  ceiling: GrantableRole
-): boolean {
-  return ROLE_RANK[candidate] <= ROLE_RANK[ceiling];
-}
+export { VaultOwnedError } from "./vault-owned-error.js";
 
 export interface DeviceEnrollment {
   enrollmentId: string;
   endpointId: string;
-  /** The principal this device acts as — the key attribution and roles use. */
-  memberId: string;
-  /** Display label of that member; never a key. */
-  memberLabel: string;
+  /** The principal this device acts as — the key attribution uses. */
+  ownerId: string;
+  /** Display label of that owner; never a key. */
+  ownerLabel: string;
   vaultId: string;
   label: string;
   platform?: string;
-  role: DeviceRole;
+  /**
+   * The device-level tombstone — "this phone was stolen". Never a role: the
+   * owner keeps their vaults on paper and this binding none of them in
+   * practice.
+   */
+  revoked: boolean;
   rememberDevice: boolean;
   grantProfile?: string[];
   compute?: DeviceComputeProfile;
@@ -105,24 +78,25 @@ export interface EnrollInput {
   platform?: string;
   rememberDevice?: boolean;
   grantProfile?: string[];
-  /** Bind to this existing member. */
-  memberId?: string;
-  /** …or create a member with this label first (founding / invite lanes). */
-  memberLabel?: string;
-  /** Authority to author on that member as part of this enrollment. */
-  grants?: readonly MemberGrant[];
-  /** Single-grant convenience for the host-custody `devices add` lane. */
-  vaultId?: string;
-  role?: GrantableRole;
+  /** Bind to this existing owner. */
+  ownerId?: string;
+  /** …or create an owner with this label first (founding / host lanes). */
+  ownerLabel?: string;
+  /**
+   * Vaults this enrollment lands the owner in, in the CALLER's order (the
+   * first is the redeeming device's landing vault — scenario B12). An
+   * unowned vault is claimed for the owner; a vault owned by someone ELSE
+   * refuses the whole enrollment. Omitted → the owner's existing vaults.
+   */
+  vaultIds?: readonly string[];
 }
 
 interface EnrollmentRow {
   enrollment_id: string;
   endpoint_id: string;
-  member_id: string;
-  member_label: string;
+  owner_id: string;
+  owner_label: string;
   vault_id: string;
-  role: GrantableRole;
   label: string;
   platform: string | null;
   remember_device: number;
@@ -134,14 +108,14 @@ interface EnrollmentRow {
 }
 
 const ENROLLMENT_VIEW_SQL = `
-  SELECT d.enrollment_id, d.endpoint_id, d.member_id, m.label AS member_label,
-         r.vault_id, r.role, d.label, d.platform, d.remember_device,
+  SELECT d.enrollment_id, d.endpoint_id, d.owner_id, o.label AS owner_label,
+         v.vault_id, d.label, d.platform, d.remember_device,
          d.grant_profile_json, d.compute_json, c.checkpoint_json, d.revoked, d.added_at
     FROM devices d
-    JOIN members m ON m.member_id = d.member_id
-    JOIN member_roles r ON r.member_id = d.member_id
+    JOIN owners o ON o.owner_id = d.owner_id
+    JOIN vault_owners v ON v.owner_id = d.owner_id
     LEFT JOIN device_checkpoints c
-      ON c.endpoint_id = d.endpoint_id AND c.vault_id = r.vault_id`;
+      ON c.endpoint_id = d.endpoint_id AND c.vault_id = v.vault_id`;
 
 function databaseFor(source: string | GatewayDatabase): GatewayDatabase {
   if (source instanceof GatewayDatabase) return source;
@@ -166,14 +140,12 @@ function toEnrollment(row: EnrollmentRow): DeviceEnrollment {
   return {
     enrollmentId: row.enrollment_id,
     endpointId: row.endpoint_id,
-    memberId: row.member_id,
-    memberLabel: row.member_label,
+    ownerId: row.owner_id,
+    ownerLabel: row.owner_label,
     vaultId: row.vault_id,
     label: row.label,
     ...(row.platform === null ? {} : { platform: row.platform }),
-    // The tombstone wins over the member's authored role: a stolen phone
-    // keeps its owner's grants on paper and none of them in practice.
-    role: row.revoked === 1 ? "revoked" : row.role,
+    revoked: row.revoked === 1,
     rememberDevice: row.remember_device === 1,
     ...(Array.isArray(grantProfile) ? { grantProfile } : {}),
     ...(compute ? { compute } : {}),
@@ -184,11 +156,11 @@ function toEnrollment(row: EnrollmentRow): DeviceEnrollment {
 
 export class EnrollmentStore {
   readonly gatewayDatabase: GatewayDatabase;
-  readonly members: MemberStore;
+  readonly owners: OwnerStore;
 
   private constructor(gatewayDatabase: GatewayDatabase) {
     this.gatewayDatabase = gatewayDatabase;
-    this.members = MemberStore.open(gatewayDatabase);
+    this.owners = OwnerStore.open(gatewayDatabase);
   }
 
   static open(
@@ -202,7 +174,7 @@ export class EnrollmentStore {
     return (
       this.gatewayDatabase.db
         .prepare(
-          `${ENROLLMENT_VIEW_SQL} ORDER BY d.added_at, d.enrollment_id, r.vault_id`
+          `${ENROLLMENT_VIEW_SQL} ORDER BY d.added_at, d.enrollment_id, v.vault_id`
         )
         .all() as unknown as EnrollmentRow[]
     ).map(toEnrollment);
@@ -216,24 +188,24 @@ export class EnrollmentStore {
     return this.list().filter((row) => row.vaultId === vaultId);
   }
 
-  /** The principal a proved EndpointId acts as, tombstone included. */
-  memberFor(endpointId: string): Member | undefined {
+  /** The principal a proved EndpointId acts as, tombstone excluded. */
+  ownerFor(endpointId: string): Owner | undefined {
     const row = this.gatewayDatabase.db
       .prepare(
-        "SELECT member_id FROM devices WHERE endpoint_id = ? AND revoked = 0"
+        "SELECT owner_id FROM devices WHERE endpoint_id = ? AND revoked = 0"
       )
-      .get(endpointId) as { member_id: string } | undefined;
-    return row ? this.members.get(row.member_id) : undefined;
+      .get(endpointId) as { owner_id: string } | undefined;
+    return row ? this.owners.get(row.owner_id) : undefined;
   }
 
   vaultsFor(endpointId: string): string[] {
     return (
       this.gatewayDatabase.db
         .prepare(
-          `SELECT r.vault_id FROM devices d
-             JOIN member_roles r ON r.member_id = d.member_id
+          `SELECT v.vault_id FROM devices d
+             JOIN vault_owners v ON v.owner_id = d.owner_id
             WHERE d.endpoint_id = ? AND d.revoked = 0
-            ORDER BY r.vault_id`
+            ORDER BY v.vault_id`
         )
         .all(endpointId) as Array<{ vault_id: string }>
     ).map((row) => row.vault_id);
@@ -248,26 +220,29 @@ export class EnrollmentStore {
       const enrolled = this.enrollWithinTransaction(input);
       const first = enrolled[0];
       if (!first)
-        throw new Error("enrollment must grant at least one vault role");
+        throw new Error("enrollment must reach at least one owned vault");
       return first;
     });
   }
 
   /**
-   * Shared by ticket redemption so the burn, the member's grants, and the
+   * Shared by ticket redemption so the burn, the ownership rows, and the
    * device binding all commit as ONE transaction — a partial redemption
    * leaves zero enrollment rather than a half-paired device.
    */
   enrollWithinTransaction(input: EnrollInput): DeviceEnrollment[] {
-    const grants = resolveGrants(input);
-    const memberId = this.resolveMemberWithinTransaction(input);
+    const ownerId = this.resolveOwnerWithinTransaction(input);
     const label = this.uniqueDeviceLabel(input.label, input.endpointId);
-    for (const grant of grants) {
-      this.members.setGrantWithinTransaction(
-        memberId,
-        grant.vaultId,
-        grant.role
-      );
+    const requested = input.vaultIds ?? [];
+    for (const vaultId of requested) {
+      const current = this.owners.ownerOf(vaultId);
+      if (current === undefined) {
+        // An unowned vault is claimed for this owner — founding, `vault
+        // create`, and the stopped-daemon host lane all land here.
+        this.owners.setOwner(vaultId, ownerId);
+      } else if (current !== ownerId) {
+        throw new VaultOwnedError(vaultId);
+      }
     }
     const existing = this.gatewayDatabase.db
       .prepare(
@@ -292,12 +267,12 @@ export class EnrollmentStore {
       this.gatewayDatabase.db
         .prepare(
           `UPDATE devices
-              SET member_id = ?, label = ?, platform = ?, remember_device = ?,
+              SET owner_id = ?, label = ?, platform = ?, remember_device = ?,
                   grant_profile_json = ?, revoked = 0
             WHERE endpoint_id = ?`
         )
         .run(
-          memberId,
+          ownerId,
           label,
           platform,
           input.rememberDevice === true ? 1 : 0,
@@ -308,14 +283,14 @@ export class EnrollmentStore {
       this.gatewayDatabase.db
         .prepare(
           `INSERT INTO devices (
-            enrollment_id, endpoint_id, member_id, label, platform,
+            enrollment_id, endpoint_id, owner_id, label, platform,
             remember_device, grant_profile_json, revoked, added_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`
         )
         .run(
           crypto.randomUUID(),
           input.endpointId,
-          memberId,
+          ownerId,
           label,
           input.platform ?? null,
           input.rememberDevice === true ? 1 : 0,
@@ -324,15 +299,13 @@ export class EnrollmentStore {
         );
     }
     const vaultIds = new Set(
-      grants.length > 0
-        ? grants.map((grant) => grant.vaultId)
-        : this.members.grants(memberId).map((grant) => grant.vaultId)
+      requested.length > 0 ? requested : this.owners.vaultsOwnedBy(ownerId)
     );
-    // Row order is the CALLER's grant order, not the registry's: the redeeming
-    // device lands in `enrolled[0]`, so the ticket's primary vault must stay
-    // first (scenario B12 — `pair --vault Personal`).
+    // Row order is the CALLER's vault order, not the registry's: the
+    // redeeming device lands in `enrolled[0]`, so the ticket's primary vault
+    // must stay first (scenario B12 — `pair --vault Personal`).
     const rank = new Map(
-      grants.map((grant, index) => [grant.vaultId, index] as const)
+      requested.map((vaultId, index) => [vaultId, index] as const)
     );
     return this.list()
       .filter(
@@ -347,9 +320,9 @@ export class EnrollmentStore {
   }
 
   /**
-   * Household rows must remain distinguishable even when two clients submit
-   * the same generated default. The gateway is the only participant with the
-   * complete live roster, so resolve collisions atomically at enrollment.
+   * Rows must remain distinguishable even when two clients submit the same
+   * generated default. The gateway is the only participant with the complete
+   * live roster, so resolve collisions atomically at enrollment.
    */
   private uniqueDeviceLabel(requested: string, endpointId: string): string {
     const used = new Set(
@@ -374,7 +347,7 @@ export class EnrollmentStore {
   get(endpointId: string, vaultId: string): DeviceEnrollment | undefined {
     const row = this.gatewayDatabase.db
       .prepare(
-        `${ENROLLMENT_VIEW_SQL} WHERE d.endpoint_id = ? AND r.vault_id = ?`
+        `${ENROLLMENT_VIEW_SQL} WHERE d.endpoint_id = ? AND v.vault_id = ?`
       )
       .get(endpointId, vaultId) as EnrollmentRow | undefined;
     return row ? toEnrollment(row) : undefined;
@@ -431,31 +404,6 @@ export class EnrollmentStore {
     return this.resetCheckpoint(endpointId, vaultId, cursor);
   }
 
-  /**
-   * Author a role for the member this device belongs to, or — for the
-   * `revoked` pseudo-role — tombstone the binding. The two land on different
-   * layers by design (#599 Decision 6) and this is the seam that says so.
-   */
-  setRole(
-    endpointId: string,
-    vaultId: string,
-    role: DeviceRole
-  ): DeviceEnrollment {
-    return this.gatewayDatabase.transaction(() => {
-      const current = this.get(endpointId, vaultId);
-      if (!current) throw new Error("device is not enrolled for this vault");
-      if (role === "revoked") {
-        this.tombstoneWithinTransaction(endpointId);
-        const revoked = this.get(endpointId, vaultId);
-        if (!revoked)
-          throw new Error("device binding vanished during revocation");
-        return revoked;
-      }
-      this.members.setGrantWithinTransaction(current.memberId, vaultId, role);
-      return this.require(endpointId, vaultId);
-    });
-  }
-
   setCompute(
     enrollmentId: string,
     input: Omit<DeviceComputeProfile, "updatedAt">
@@ -475,14 +423,14 @@ export class EnrollmentStore {
 
   /**
    * Revoke a DEVICE: tombstone the binding and drop its replica checkpoints.
-   * The member and their other devices are untouched — removing a person is
-   * `MemberStore.remove`, a different verb on a different layer.
+   * The owner and their other devices are untouched — removing a person is
+   * `OwnerStore.remove`, a different verb on a different layer.
    */
   revoke(idOrEndpointId: string): DeviceEnrollment[] {
     return this.gatewayDatabase.transaction(() => {
       const removed = this.list().filter(
         (row) =>
-          row.role !== "revoked" &&
+          !row.revoked &&
           (row.enrollmentId === idOrEndpointId ||
             row.endpointId === idOrEndpointId)
       );
@@ -510,10 +458,11 @@ export class EnrollmentStore {
     return row;
   }
 
-  /** Remove a person and every binding they own — the L2 revocation verb. */
-  removeMember(memberId: string): DeviceEnrollment[] {
-    const removed = this.list().filter((row) => row.memberId === memberId);
-    this.members.remove(memberId);
+  /** Remove a person and every binding they own — the L2 revocation verb.
+   *  Refused (`OwnerRemovalError`) while they still own vaults. */
+  removeOwner(ownerId: string): DeviceEnrollment[] {
+    const removed = this.list().filter((row) => row.ownerId === ownerId);
+    this.owners.remove(ownerId);
     return removed;
   }
 
@@ -523,7 +472,7 @@ export class EnrollmentStore {
       this.gatewayDatabase.db
         .prepare("DELETE FROM device_checkpoints WHERE vault_id = ?")
         .run(vaultId);
-      this.members.removeVault(vaultId);
+      this.owners.removeVault(vaultId);
       return removed;
     });
   }
@@ -543,40 +492,32 @@ export class EnrollmentStore {
       .run(endpointId);
   }
 
-  private resolveMemberWithinTransaction(input: EnrollInput): string {
-    if (input.memberId !== undefined) {
-      const member = this.members.get(input.memberId);
-      if (!member) throw new Error(`no member matches "${input.memberId}"`);
-      return member.memberId;
+  private resolveOwnerWithinTransaction(input: EnrollInput): string {
+    if (input.ownerId !== undefined) {
+      const owner = this.owners.get(input.ownerId);
+      if (!owner) throw new Error(`no owner matches "${input.ownerId}"`);
+      return owner.ownerId;
     }
-    if (input.memberLabel !== undefined) {
-      return this.members.createWithinTransaction(input.memberLabel).memberId;
+    if (input.ownerLabel !== undefined) {
+      return this.owners.createWithinTransaction(input.ownerLabel).ownerId;
     }
     const bound = this.gatewayDatabase.db
-      .prepare("SELECT member_id FROM devices WHERE endpoint_id = ?")
-      .get(input.endpointId) as { member_id: string } | undefined;
-    if (bound) return bound.member_id;
-    // The host-custody lane (`devices add`, loopback host enrollment) names no
-    // person, so the device becomes its own low-trust member — the honest
-    // answer for a communal box, and never an "Unassigned" bucket (#599 D4).
-    return this.members.createWithinTransaction(input.label).memberId;
+      .prepare("SELECT owner_id FROM devices WHERE endpoint_id = ?")
+      .get(input.endpointId) as { owner_id: string } | undefined;
+    if (bound) return bound.owner_id;
+    // The host-custody lane (`devices add`, loopback host enrollment) names
+    // no person, so the device becomes its own owner — the honest answer for
+    // a communal box, and never an "Unassigned" bucket.
+    return this.owners.createWithinTransaction(input.label).ownerId;
   }
 
   private require(endpointId: string, vaultId: string): DeviceEnrollment {
     const enrollment = this.get(endpointId, vaultId);
-    if (!enrollment || enrollment.role === "revoked") {
+    if (!enrollment || enrollment.revoked) {
       throw new Error("device is not enrolled for this vault");
     }
     return enrollment;
   }
-}
-
-function resolveGrants(input: EnrollInput): MemberGrant[] {
-  if (input.grants !== undefined) return [...input.grants];
-  if (input.vaultId !== undefined) {
-    return [{ vaultId: input.vaultId, role: input.role ?? "write" }];
-  }
-  return [];
 }
 
 function checkpointNow(

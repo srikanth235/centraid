@@ -25,7 +25,6 @@ import {
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
 import {
-  completeOnboardingCommands,
   pasteAndConnectPairingTicketCommands,
   relaunchDevClientCommands,
   waitForHomeReadyCommands,
@@ -395,10 +394,6 @@ export async function runFlow(slug, fn) {
           "--data-dir",
           dataDir,
           ...(port ? ["--port", port] : []),
-          "--new-member",
-          `Mobile E2E ${state.runId}`,
-          "--role",
-          "write",
           "--ttl-minutes",
           "30",
           "--json",
@@ -425,9 +420,7 @@ export async function runFlow(slug, fn) {
           ...(gatewayToken ? { authorization: `Bearer ${gatewayToken}` } : {}),
         },
         body: JSON.stringify({
-          role: "write",
           ttlMinutes: 15,
-          newMemberLabel: `Mobile E2E ${state.runId}`,
         }),
       }
     );
@@ -466,9 +459,15 @@ ${relaunchDevClientCommands(state.platform)}${waitForHomeReadyCommands(FIRST_LAU
       ctx.note(`reused the paired nightly profile for ${gatewayUrl}`);
       return;
     }
+    // #603 removed the local/manual-URL bypass: every fresh client must redeem
+    // a real one-time pairing ticket. #634 made the profile step conditional:
+    // an owner who already has a name goes straight to Done, while one still
+    // carrying the placeholder label is asked for a profile. The gateway URL
+    // is used only by the host-side harness to mint that ticket; the phone
+    // reaches the gateway through the ticket's iroh endpoint.
     // A cold iOS simulator can lose the first iroh redemption after the
-    // onboarding UI has rendered. Each retry mints a fresh one-time ticket and
-    // clears app state, so a failed redemption cannot poison the next attempt.
+    // onboarding UI has rendered. Each retry mints a fresh ticket and clears
+    // app state, so a failed redemption cannot poison the next attempt.
     const maxPairingAttempts = process.env.MAESTRO_PLATFORM === "ios" ? 2 : 1;
     const pairAttempt = async (attempt) => {
       try {
@@ -486,13 +485,36 @@ ${relaunchDevClientCommands(state.platform)}${waitForOnboardingConnectCommands(F
           }
         );
 
-        // Keep the ticket out of retained diagnostics while proving both
-        // legitimate identity paths and waiting for the shell capability wall
-        // to settle before downstream journeys start.
+        // Ownership (#726) killed the pre-named-invite mint: a ticket can no
+        // longer carry a chosen label, so a fresh gateway lands the
+        // placeholder owner in the profile form. A later flow reusing the
+        // paired process can skip straight to Done; both are real paths.
         await ctx.run(
           `appId: ${state.appId}
 ---
-${completeOnboardingCommands(HOME_READY_MARKER)}`,
+- runFlow:
+    when:
+      visible: "Who's using this phone[?]"
+    commands:
+      - tapOn: "Your name"
+# e2e-lint-allow: unasserted-input — React Native TextInput values are not
+# reliably Maestro-matchable; the personalized done heading below proves the
+# submitted profile name end to end.
+      - inputText: "Nightly"
+      - hideKeyboard
+      - tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "You're all set, [^.]+[.]"
+    timeout: 60000
+# iOS can acknowledge an accessibility tap before the RN Pressable is ready.
+# The button's press animation changes the hierarchy even if navigation was
+# ignored, so retry only while the source control remains visible. The Home
+# marker below remains mandatory and prevents a vacuous pass.
+${retryableTapCommands("Enter Centraid")}
+- extendedWaitUntil:
+    visible: "${HOME_READY_MARKER}"
+    timeout: 30000
+`,
           "complete-onboarding"
         );
         ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);

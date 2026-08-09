@@ -95,7 +95,7 @@ export function makeEnrichSearchRouteHandler(
       // The one genuine failure: a configured service that ran and refused
       // the query (crashed, produced garbage). That is an operator fault the
       // surface must be able to report, so it does NOT masquerade as
-      // `unavailable` — a member who set this up deserves to know it broke.
+      // `unavailable` — an owner who set this up deserves to know it broke.
       return sendError(res, error);
     }
   };

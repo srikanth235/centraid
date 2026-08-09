@@ -1,0 +1,39 @@
+/* The give/lend toggle + destination list (#726 P6). Layout only — colour
+   and shape come from kit.css's `.kit-modal`/`.kit-seg`/`.kit-popover-item`. */
+
+.toggle {
+  margin: 10px 0 12px;
+}
+
+.note {
+  margin: 0 0 10px;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+.destList {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 4px;
+  font: var(--t-small);
+}
+
+.destItem {
+  padding: 4px;
+}
+
+.warn {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, var(--danger) 35%, var(--line));
+  border-radius: var(--r-md);
+  background: color-mix(in oklab, var(--danger) 8%, transparent);
+  font: var(--t-small);
+}
+
+.error {
+  margin: 8px 0 0;
+  font: var(--t-small);
+  color: var(--danger);
+}

@@ -67,9 +67,9 @@ interface TileCommon {
   onOpen: (key: string) => void;
   /**
    * The mounted vault a tile is shown FROM (issue #599, §H). The tile's vault
-   * marker is derived from this scope's `kind` — any vault but the personal
-   * one, Sharing included — so a member with one vault sees an unmarked grid
-   * and nothing about the timeline changes for them.
+   * marker is derived from this scope's record — any vault but the personal
+   * one — so a member with one vault sees an unmarked grid and nothing about
+   * the timeline changes for them.
    */
   vaultOf: (scopeId: string | null | undefined) => InlineScope | undefined;
 }

@@ -28,7 +28,7 @@ export interface DueReminder {
 
 export interface PendingInvitation {
   ticketId: string;
-  memberLabel: string;
+  ownerLabel: string;
   createdAt: string;
   expiresAt: number;
 }
@@ -200,9 +200,9 @@ export function computeDueReminders(
       key: `invite:${invite.ticketId}`,
       kind: "invite",
       id: invite.ticketId,
-      title: invite.memberLabel
-        ? `Invite for ${invite.memberLabel}`
-        : "Household invitation",
+      title: invite.ownerLabel
+        ? `Invite for ${invite.ownerLabel}`
+        : "Pairing invitation",
       at: invite.createdAt,
       minutesBefore: 0,
     });

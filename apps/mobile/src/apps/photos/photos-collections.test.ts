@@ -131,9 +131,9 @@ describe("buildCollectionSections — Videos (issue #721 B3)", () => {
     expect(videos.tiles.map((tile) => tile.id)).toStrictEqual(["v1"]);
   });
 
-  it("sits between Favorites and Sharing — a standing filter, not member filing", () => {
+  it("sits between Favorites and Duplicates — a standing filter, not member filing", () => {
     const keys = [...COLLECTION_SECTION_KEYS];
     expect(keys.indexOf("videos")).toBe(keys.indexOf("favorites") + 1);
-    expect(keys.indexOf("sharing")).toBe(keys.indexOf("videos") + 1);
+    expect(keys.indexOf("duplicates")).toBe(keys.indexOf("videos") + 1);
   });
 });

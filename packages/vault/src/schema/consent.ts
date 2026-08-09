@@ -67,23 +67,6 @@ CREATE TABLE consent_grant_scope (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_grant_scope_grant ON consent_grant_scope(grant_id);
 
-CREATE TABLE consent_share (
-  share_id            TEXT PRIMARY KEY,
-  owner_party_id      TEXT NOT NULL REFERENCES core_party(party_id),
-  audience            TEXT NOT NULL CHECK (audience IN ('party','circle','public_link')),
-  recipient_party_id  TEXT REFERENCES core_party(party_id),
-  recipient_circle_id TEXT REFERENCES social_circle(circle_id),
-  target_type         TEXT NOT NULL,
-  target_id           TEXT NOT NULL,
-  mode                TEXT NOT NULL CHECK (mode IN ('view','comment','edit')),
-  created_at          TEXT NOT NULL,
-  expires_at          TEXT,
-  revoked_at          TEXT
-) STRICT;
-CREATE INDEX IF NOT EXISTS idx_share_owner_party ON consent_share(owner_party_id);
-CREATE INDEX IF NOT EXISTS idx_share_recipient_party ON consent_share(recipient_party_id);
-CREATE INDEX IF NOT EXISTS idx_share_recipient_circle ON consent_share(recipient_circle_id);
-
 CREATE TABLE consent_policy (
   policy_id        TEXT PRIMARY KEY,
   kind             TEXT NOT NULL CHECK (kind IN ('retention','residency','purpose','minimization')),

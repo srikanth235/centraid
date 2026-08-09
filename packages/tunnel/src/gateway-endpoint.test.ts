@@ -162,13 +162,11 @@ describe("gateway endpoint", () => {
       vaults: [
         {
           enrollmentId: "enrollment-family",
-          role: "write",
           vaultId: "v-family",
           vaultName: "Family",
         },
         {
           enrollmentId: "enrollment-shared",
-          role: "read",
           vaultId: "v-shared",
           vaultName: "Shared",
         },
@@ -198,13 +196,11 @@ describe("gateway endpoint", () => {
       vaults: [
         {
           enrollmentId: "enrollment-family",
-          role: "write",
           vaultId: "v-family",
           vaultName: "Family",
         },
         {
           enrollmentId: "enrollment-shared",
-          role: "read",
           vaultId: "v-shared",
           vaultName: "Shared",
         },

@@ -18,8 +18,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type * as TypeImport_rdfcd1 from "node:http";
 
-import type { DeviceRole } from "./enrollment-store.js";
-
 export interface VaultRequestContext {
   /** The vault this request (or background fire) is addressed to. */
   vaultId: string;
@@ -31,20 +29,19 @@ export interface VaultRequestContext {
    */
   deviceKey?: string;
   /**
-   * The member (L2 principal) the calling device is bound to — the acting
-   * human for authorization and journal attribution (issue #599). Resolved
-   * once per request from the binding, so it is correct across renames: the
-   * id is the key, the label is only display.
+   * The owner the calling device is bound to — the acting human for
+   * authorization and journal attribution. Resolved once per request from
+   * the binding, so it is correct across renames: the id is the key, the
+   * label is only display.
    */
-  memberId?: string;
+  ownerId?: string;
   /**
-   * That member's authored role in THIS vault (issue #599 decision 3) —
-   * `member_roles`, inherited by the device, tombstoned to `revoked` when the
-   * binding is dead. Resolved beside `memberId` so an agent turn can be capped
-   * at the human it acts for (decision 7) without re-reading gateway.db from
-   * inside the vault plane.
+   * Whether that owner OWNS this vault (#726) — the one write predicate.
+   * Resolved beside `ownerId` from `vault_owners` so an agent turn can be
+   * capped at the human it acts for without re-reading gateway.db from
+   * inside the vault plane. False for a tombstoned binding.
    */
-  memberRole?: DeviceRole;
+  ownsVault?: boolean;
   /** App-id allow-list for a constrained Companion device. */
   grantProfile?: readonly string[];
 }

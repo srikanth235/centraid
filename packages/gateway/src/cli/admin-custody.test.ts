@@ -135,16 +135,7 @@ describe("admin-custody suite", () => {
     const { dataDir, vaultId } = await daemonDataDir("Family");
     const output = await capture(() =>
       commandDevices(
-        [
-          "add",
-          "--data-dir",
-          dataDir,
-          "ep-laptop",
-          "--vault",
-          "Family",
-          "--role",
-          "admin",
-        ],
+        ["add", "--data-dir", dataDir, "ep-laptop", "--vault", "Family"],
         fail
       )
     );
@@ -158,16 +149,7 @@ describe("admin-custody suite", () => {
     const { dataDir, vaultId, layout } = await daemonDataDir("Family");
     await capture(() =>
       commandDevices(
-        [
-          "add",
-          "--data-dir",
-          dataDir,
-          "ep-owner",
-          "--vault",
-          "Family",
-          "--role",
-          "admin",
-        ],
+        ["add", "--data-dir", dataDir, "ep-owner", "--vault", "Family"],
         fail
       )
     );
@@ -235,16 +217,7 @@ describe("admin-custody suite", () => {
     const { dataDir, layout } = await daemonDataDir("Family");
     await capture(() =>
       commandDevices(
-        [
-          "add",
-          "--data-dir",
-          dataDir,
-          "ep-laptop",
-          "--vault",
-          "Family",
-          "--role",
-          "admin",
-        ],
+        ["add", "--data-dir", dataDir, "ep-laptop", "--vault", "Family"],
         fail
       )
     );
