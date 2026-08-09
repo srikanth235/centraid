@@ -35,7 +35,7 @@ await runFlow("mobile-volume-proof", async (ctx) => {
       - stopApp
       - launchApp:
           clearState: false
-${indentMaestroCommands(relaunchDevClientCommands(ctx.state.platform), 6)}${indentMaestroCommands(waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS), 6)}
+${indentMaestroCommands(relaunchDevClientCommands(ctx.state.platform), 6)}${indentMaestroCommands(waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS, ctx.state.platform), 6)}
       - extendedWaitUntil:
           visible:
             text: "${HOME_READY_MARKER}"

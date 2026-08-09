@@ -19,7 +19,7 @@ await runFlow("photos-permissions", async (ctx) => {
     clearState: false
     permissions:
       all: deny
-${relaunchDevClientCommands(ctx.state.platform)}${waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS)}
+${relaunchDevClientCommands(ctx.state.platform)}${waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS, ctx.state.platform)}
 - openLink: "centraid://photos"
 ${DISMISS_OPEN_LINK_CONFIRMATION}- waitForAnimationToEnd:
     timeout: 1000

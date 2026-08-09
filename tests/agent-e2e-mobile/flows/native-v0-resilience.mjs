@@ -121,7 +121,7 @@ ${DISMISS_OPEN_LINK_CONFIRMATION}- waitForAnimationToEnd:
     clearState: false
     permissions:
       all: allow
-${relaunchDevClientCommands(ctx.state.platform)}${waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS)}${openCommands}
+${relaunchDevClientCommands(ctx.state.platform)}${waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS, ctx.state.platform)}${openCommands}
 - extendedWaitUntil:
     visible: "${surface.marker}"
     timeout: 20000

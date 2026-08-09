@@ -100,6 +100,10 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   `volume-proof`, `cold-start`, `scroll-frames`, or `photos`) through
   `ios_suite`. The scheduled lane still runs the complete committed set, so
   diagnosis does not spend a serialized budget on unrelated green flows.
+- The iOS Expo relaunch helper now treats a transient `simctl openurl` timeout
+  as recoverable, waits for the launcher to settle, and taps its cached Metro
+  server card during the bounded Home/onboarding polls —
+  `tests/agent-e2e-mobile/lib/first-run.mjs` and its call sites.
 
 ### Implementation coverage
 
@@ -167,6 +171,11 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   launches ended in Expo's development-client launcher or a Home-ready timeout.
   The uploaded evidence is retained under the run's artifacts; this patch
   addresses each observed state rather than broadening assertions.
+- Remote targeted matrix diagnostic: [Actions run 31300836677](https://github.com/srikanth235/centraid/actions/runs/31300836677)
+  passed the native producer and isolated setup, then reproduced an iOS 26
+  `simctl openurl` timeout on the second native surface while the Expo launcher
+  visibly retained `http://127.0.0.1:8081`; the cached-card fallback above is
+  the focused follow-up.
 - Static verification of this follow-up: `bun run format:check`,
   `bun run lint:e2e-flows`, `bun run check:ui-receipt`,
   `bun run --cwd apps/mobile typecheck`, and `git diff --check` (PASS;

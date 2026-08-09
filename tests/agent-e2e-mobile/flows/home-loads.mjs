@@ -19,7 +19,7 @@ await runFlow("home-loads", async (ctx) => {
 ---
 - launchApp:
     clearState: true
-${relaunchDevClientCommands(ctx.state.platform)}${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}- assertVisible: "Scan the QR code"
+${relaunchDevClientCommands(ctx.state.platform)}${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS, ctx.state.platform)}- assertVisible: "Scan the QR code"
 - assertVisible: "Can't scan? Paste a code instead"
 ${openPastePathCommands()}- assertVisible: "PAIRING CODE"
 - assertVisible:

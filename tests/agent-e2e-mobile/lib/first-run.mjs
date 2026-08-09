@@ -73,23 +73,31 @@ export const DISMISS_DEV_CLIENT_OVERLAYS =
  * XCTest can report the URL command complete before iOS presents its Open
  * confirmation, leaving the confirmation above a healthy Home screen.
  */
-export function waitForHomeReadyCommands(timeoutMs) {
+export function waitForHomeReadyCommands(timeoutMs, platform = "ios") {
   const pollMs = 5_000;
   const times = Math.max(1, Math.ceil(timeoutMs / pollMs));
+  const recentServerTapInside =
+    platform === "ios"
+      ? `${indentMaestroCommands(IOS_METRO_RECENT_SERVER_TAP.trim(), 6)}\n`
+      : "";
   const dismissInside = DISMISS_DEV_CLIENT_OVERLAYS.split("\n")
     .filter((line) => line.length > 0)
     .map((line) => `      ${line}`)
     .join("\n");
-  return `${DISMISS_DEV_CLIENT_OVERLAYS}- repeat:
+  return `${DISMISS_DEV_CLIENT_OVERLAYS}${
+    platform === "ios" ? IOS_METRO_RECENT_SERVER_TAP : ""
+  }- repeat:
     times: ${times}
     while:
       notVisible:
         text: "Home ready"
     commands:
-${dismissInside}
+${recentServerTapInside}${dismissInside}
       - waitForAnimationToEnd:
           timeout: ${pollMs}
-${DISMISS_DEV_CLIENT_OVERLAYS}- extendedWaitUntil:
+${DISMISS_DEV_CLIENT_OVERLAYS}${
+    platform === "ios" ? IOS_METRO_RECENT_SERVER_TAP : ""
+  }- extendedWaitUntil:
     visible:
       text: "Home ready"
     timeout: ${pollMs}
@@ -117,6 +125,18 @@ export const PHOTOS_HOME_ENTRY = "Bring in photographs|Open Photos.*";
 // this, the simulator remains on the development-client launcher indefinitely.
 const IOS_METRO_DEV_CLIENT_LINK =
   "dev.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081";
+// Expo's launcher keeps the last Metro server as a tappable card. On iOS 26
+// `simctl openurl` can time out while the just-launched dev client restores
+// that card; tapping the visible card is the equivalent recovery path (#676).
+const IOS_METRO_RECENT_SERVER = ".*127.0.0.1:8081.*";
+const IOS_METRO_RECENT_SERVER_TAP = `- runFlow:
+    when:
+      visible: "${IOS_METRO_RECENT_SERVER}"
+    commands:
+      - tapOn:
+          text: "${IOS_METRO_RECENT_SERVER}"
+          retryTapIfNoChange: true
+`;
 
 /**
  * Reconnect a cleared iOS Expo development client to the already-running Metro
@@ -124,7 +144,12 @@ const IOS_METRO_DEV_CLIENT_LINK =
  */
 export function relaunchDevClientCommands(platform) {
   if (platform !== "ios") return "";
-  return `- openLink: "${IOS_METRO_DEV_CLIENT_LINK}"
+  return `- openLink:
+    link: "${IOS_METRO_DEV_CLIENT_LINK}"
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 3000
+${IOS_METRO_RECENT_SERVER_TAP}
 - waitForAnimationToEnd:
     timeout: 1000
 `;
@@ -134,23 +159,31 @@ export function relaunchDevClientCommands(platform) {
  * Poll for onboarding while dismissing native/Expo overlays between polls.
  * This keeps transient OS dialogs from consuming the whole launch budget.
  */
-export function waitForOnboardingConnectCommands(timeoutMs) {
+export function waitForOnboardingConnectCommands(timeoutMs, platform = "ios") {
   const pollMs = 5_000;
   const times = Math.max(1, Math.ceil(timeoutMs / pollMs));
+  const recentServerTapInside =
+    platform === "ios"
+      ? `${indentMaestroCommands(IOS_METRO_RECENT_SERVER_TAP.trim(), 6)}\n`
+      : "";
   const dismissInside = DISMISS_DEV_CLIENT_OVERLAYS.split("\n")
     .filter((line) => line.length > 0)
     .map((line) => `      ${line}`)
     .join("\n");
-  return `${DISMISS_DEV_CLIENT_OVERLAYS}- repeat:
+  return `${DISMISS_DEV_CLIENT_OVERLAYS}${
+    platform === "ios" ? IOS_METRO_RECENT_SERVER_TAP : ""
+  }- repeat:
     times: ${times}
     while:
       notVisible:
         text: "Connect your gateway."
     commands:
-${dismissInside}
+${recentServerTapInside}${dismissInside}
       - waitForAnimationToEnd:
           timeout: ${pollMs}
-${DISMISS_SYSTEM_ANR}- extendedWaitUntil:
+${DISMISS_SYSTEM_ANR}${
+    platform === "ios" ? IOS_METRO_RECENT_SERVER_TAP : ""
+  }- extendedWaitUntil:
     visible:
       text: "Connect your gateway."
     timeout: ${pollMs}

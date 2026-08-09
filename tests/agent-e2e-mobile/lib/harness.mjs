@@ -459,7 +459,7 @@ export async function runFlow(slug, fn) {
 ---
 - launchApp:
     clearState: false
-${relaunchDevClientCommands(state.platform)}${waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS)}
+${relaunchDevClientCommands(state.platform)}${waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS, state.platform)}
 `,
         "reuse-paired-gateway"
       );
@@ -478,7 +478,7 @@ ${relaunchDevClientCommands(state.platform)}${waitForHomeReadyCommands(FIRST_LAU
 ---
 - launchApp:
     clearState: true
-${relaunchDevClientCommands(state.platform)}${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}${pasteAndConnectPairingTicketCommands(HOME_READY_MARKER)}`,
+${relaunchDevClientCommands(state.platform)}${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS, state.platform)}${pasteAndConnectPairingTicketCommands(HOME_READY_MARKER)}`,
           "configure-gateway",
           {
             maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
