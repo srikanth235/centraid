@@ -299,6 +299,11 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   12-minute chunk timeout. The iOS recovery now omits that Android-only probe,
   waits longer after the Metro-card handoff, and exposes a `native-notes`
   diagnostic lane for focused verification.
+- Remote focused verification: [Actions run 31325616874](https://github.com/srikanth235/centraid/actions/runs/31325616874)
+  passed the iOS producer and isolated setup, completed fresh pairing/profile
+  onboarding, opened the Notes cover with `Search notes`, and passed the
+  process-restart `Home ready` check. The focused lane completed green in
+  21m49s without replaying the other native covers.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).
