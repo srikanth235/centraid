@@ -5,7 +5,10 @@ import {
   recordQualityResult,
   rigDriftBudget,
 } from "../../agent-e2e-shared/harness.mjs";
-import { DISMISS_OPEN_LINK_CONFIRMATION } from "../lib/first-run.mjs";
+import {
+  DISMISS_OPEN_LINK_CONFIRMATION,
+  retryableTapCommands,
+} from "../lib/first-run.mjs";
 import { readFrameEvidence } from "../lib/frame-report.mjs";
 import { runFlow } from "../lib/harness.mjs";
 
@@ -168,6 +171,10 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
 - openLink: "centraid://photos"
 ${DISMISS_OPEN_LINK_CONFIRMATION}- waitForAnimationToEnd:
     timeout: 1000
+- extendedWaitUntil:
+    visible: "Collections"
+    timeout: 30000
+${retryableTapCommands("Library")}
 - extendedWaitUntil:
     visible: "${PHOTOS_MARKER}"
     timeout: 120000

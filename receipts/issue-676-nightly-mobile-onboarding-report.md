@@ -50,9 +50,9 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   `tests/agent-e2e-mobile/lib/first-run.mjs`, `flows/native-v0-resilience.mjs`,
   and `flows/scroll-frames.mjs`.
 - The Photos permission journey accepts the iOS native link-confirmation sheet
-  before asserting the refusal state, and reused paired journeys re-inject the
-  Metro URL before waiting for Home — `flows/photos-permissions.mjs` and
-  `tests/agent-e2e-mobile/lib/harness.mjs`.
+  before asserting the refusal state, and all post-launch Home waits now poll
+  through delayed Expo/iOS overlays — `flows/photos-permissions.mjs`,
+  `lib/first-run.mjs`, and `tests/agent-e2e-mobile/lib/harness.mjs`.
 - The scroll-frame rig seeds deterministic Photos and People scenarios before
   pairing so its grid and directory probes cannot silently run against the
   empty CI gateway — `flows/scroll-frames.mjs`,
@@ -62,14 +62,16 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   generic 12-minute Maestro chunk budget — `flows/cold-start.mjs` and
   `tests/agent-e2e-mobile/lib/harness.mjs`.
 - The native matrix accepts the empty-vault Photos takeover marker as well as
-  the populated search marker; the frame probe grants simulator permissions
-  before opening its seeded grid; and the rapid volume batch retries once after
-  an iOS app-stop driver hiccup — `flows/native-v0-resilience.mjs`,
-  `flows/scroll-frames.mjs`, and `flows/volume-proof.mjs`.
+  the populated search marker; the native Photos cover uses the stable Home
+  entry on a fresh iOS process; the frame probe grants simulator permissions
+  and switches from Collections to Library before measuring its seeded grid;
+  and every rapid volume relaunch reconnects Metro before asserting Home —
+  `flows/native-v0-resilience.mjs`, `flows/scroll-frames.mjs`,
+  `flows/volume-proof.mjs`, and `lib/first-run.mjs`.
 - The Photos suite now freshly pairs the seeded replica for the library journey,
-  stops and reconnects the iOS app before reused journeys, and waits for seeded
-  Photos rows before measuring or drilling into the library. The permission flow
-  also reconnects the cleared Expo client before asserting Home —
+  grants simulator photo permission before drilling into the seeded library,
+  waits for seeded Photos rows, and reuses that paired state with a polled
+  Metro/Home recovery —
   `run-photos-suite.mjs`, `lib/harness.mjs`,
   `flows/photos-permissions.mjs`, `flows/photos-library.mjs`, and
   `flows/scroll-frames.mjs`.
@@ -84,6 +86,7 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   `tests/agent-e2e-mobile/flows/photos-viewer.mjs`, and
   `tests/agent-e2e-mobile/flows/scroll-frames.mjs`, and
   `tests/agent-e2e-mobile/flows/volume-proof.mjs`,
+  `tests/agent-e2e-mobile/lib/first-run.mjs`,
   `tests/agent-e2e-mobile/lib/harness.mjs`, and
   `tests/agent-e2e-mobile/run-photos-suite.mjs`.
 
@@ -140,10 +143,20 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   launches could remain on the Expo launcher or SpringBoard, and the scroll
   probe could open the empty Photos takeover; the suite patch above addresses
   those lifecycle and seed-order causes.
+- Remote diagnostic: [Actions run 31292436695](https://github.com/srikanth235/centraid/actions/runs/31292436695)
+  kept setup green but failed the serialized iOS journeys before this latest
+  recovery: native Photos rendered blank after its deep link, the frame probe
+  stayed on Collections, the denied-permission flow stayed on SpringBoard, the
+  library flow was blocked by the iOS Photo Library sheet, and repeated/reused
+  launches ended in Expo's development-client launcher or a Home-ready timeout.
+  The uploaded evidence is retained under the run's artifacts; this patch
+  addresses each observed state rather than broadening assertions.
 - Static verification of this follow-up: `bun run format:check`,
   `bun run lint:e2e-flows`, `bun run check:ui-receipt`,
   `bun run --cwd apps/mobile typecheck`, and `git diff --check` (PASS;
   2026-08-09).
+- After restoring the literal volume assertion used by the matrix contract,
+  `bun run test:matrix` and `bun run test:report:smoke` also pass (2026-08-09).
 
 ```sh
 bun run format:check

@@ -67,6 +67,44 @@ export const DISMISS_DEV_CLIENT_OVERLAYS =
   `${DISMISS_SYSTEM_ANR}${DISMISS_OPEN_LINK_CONFIRMATION}` +
   `${DISMISS_FIRST_USE_CONTINUE}${DISMISS_EXPO_DEV_MENU}`;
 
+/**
+ * Poll for the paired shell while dismissing overlays that can arrive after
+ * an iOS dev-client deep link. A one-shot conditional is not enough here:
+ * XCTest can report the URL command complete before iOS presents its Open
+ * confirmation, leaving the confirmation above a healthy Home screen.
+ */
+export function waitForHomeReadyCommands(timeoutMs) {
+  const pollMs = 5_000;
+  const times = Math.max(1, Math.ceil(timeoutMs / pollMs));
+  const dismissInside = DISMISS_DEV_CLIENT_OVERLAYS.split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => `      ${line}`)
+    .join("\n");
+  return `${DISMISS_DEV_CLIENT_OVERLAYS}- repeat:
+    times: ${times}
+    while:
+      notVisible:
+        text: "Home ready"
+    commands:
+${dismissInside}
+      - waitForAnimationToEnd:
+          timeout: ${pollMs}
+${DISMISS_DEV_CLIENT_OVERLAYS}- extendedWaitUntil:
+    visible:
+      text: "Home ready"
+    timeout: ${pollMs}
+`;
+}
+
+/** Indent a generated Maestro command block for use inside `repeat`. */
+export function indentMaestroCommands(commands, spaces) {
+  const prefix = " ".repeat(spaces);
+  return commands
+    .split("\n")
+    .map((line) => (line.length > 0 ? `${prefix}${line}` : line))
+    .join("\n");
+}
+
 // The empty-vault Home page calls this first move "Bring in photographs";
 // populated replicas publish the launcher accessibility name "Open Photos, …".
 // Keep both in the journey contract while the shell transitions between those

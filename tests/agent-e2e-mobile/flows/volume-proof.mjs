@@ -4,7 +4,16 @@ import {
   qualityRegressionBudget,
   recordQualityResult,
 } from "../../agent-e2e-shared/harness.mjs";
-import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
+import {
+  indentMaestroCommands,
+  relaunchDevClientCommands,
+  waitForHomeReadyCommands,
+} from "../lib/first-run.mjs";
+import {
+  FIRST_LAUNCH_TIMEOUT_MS,
+  HOME_READY_MARKER,
+  runFlow,
+} from "../lib/harness.mjs";
 
 const OWNER = "tests/agent-e2e-mobile/flows/volume-proof.mjs";
 const ITERATIONS = 20;
@@ -24,11 +33,13 @@ await runFlow("mobile-volume-proof", async (ctx) => {
     times: ${ITERATIONS}
     commands:
       - stopApp
-      - launchApp
+      - launchApp:
+          clearState: false
+${indentMaestroCommands(relaunchDevClientCommands(ctx.state.platform), 6)}${indentMaestroCommands(waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS), 6)}
       - extendedWaitUntil:
           visible:
             text: "${HOME_READY_MARKER}"
-          timeout: 30000
+          timeout: 1000
 `;
   try {
     await ctx.run(volumeYaml, "mobile-volume");

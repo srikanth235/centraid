@@ -14,6 +14,13 @@ await runFlow("photos-library", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Home ready"
+    timeout: 30000
 ${retryableTapCommands(PHOTOS_HOME_ENTRY)}
 - extendedWaitUntil:
     visible: "Collections"

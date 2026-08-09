@@ -26,9 +26,9 @@ import {
 } from "../../agent-e2e-shared/harness.mjs";
 import {
   completeOnboardingCommands,
-  DISMISS_DEV_CLIENT_OVERLAYS,
   pasteAndConnectPairingTicketCommands,
   relaunchDevClientCommands,
+  waitForHomeReadyCommands,
   waitForOnboardingConnectCommands,
 } from "./first-run.mjs";
 import {
@@ -457,12 +457,9 @@ export async function runFlow(slug, fn) {
       await ctx.run(
         `appId: ${state.appId}
 ---
-- stopApp
 - launchApp:
     clearState: false
-${relaunchDevClientCommands(state.platform)}${DISMISS_DEV_CLIENT_OVERLAYS}- extendedWaitUntil:
-    visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+${relaunchDevClientCommands(state.platform)}${waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS)}
 `,
         "reuse-paired-gateway"
       );

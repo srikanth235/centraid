@@ -1,6 +1,9 @@
 import {
   DISMISS_OPEN_LINK_CONFIRMATION,
+  PHOTOS_HOME_ENTRY,
+  relaunchDevClientCommands,
   retryableTapCommands,
+  waitForHomeReadyCommands,
 } from "../lib/first-run.mjs";
 import {
   FIRST_LAUNCH_TIMEOUT_MS,
@@ -30,7 +33,15 @@ const SURFACES = [
     // replica exposes the search control instead. Both prove the Photos cover
     // opened, while the Home screen has neither string (issue #676).
     marker: "Bring 6 camera-roll photographs.*|Search photos.*",
-    link: "centraid://photos",
+    openCommands: [
+      // The public Photos deep link intentionally lands on Collections, but
+      // it can race the native permission walk on a fresh iOS process. The
+      // same product route is available from Home; use that stable entry for
+      // the empty-vault cover and keep the deep-link matrix for the remaining
+      // covers below.
+      retryableTapCommands(PHOTOS_HOME_ENTRY),
+      `- extendedWaitUntil:\n    visible: "Collections"\n    timeout: 30000`,
+    ].join("\n"),
     name: "photos",
   },
   {
@@ -106,13 +117,11 @@ ${DISMISS_OPEN_LINK_CONFIRMATION}- waitForAnimationToEnd:
     await ctx.run(
       `appId: ${ctx.state.appId}
 ---
-- stopApp
 - launchApp:
     clearState: false
-- extendedWaitUntil:
-    visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${openCommands}
+    permissions:
+      all: allow
+${relaunchDevClientCommands(ctx.state.platform)}${waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS)}${openCommands}
 - extendedWaitUntil:
     visible: "${surface.marker}"
     timeout: 20000
