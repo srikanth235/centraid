@@ -26,7 +26,10 @@ const SURFACES = [
   // "Search photos and moments" as its accessible name and renders
   // "Search photos & moments" — a bare "Search photos" matches neither.
   {
-    marker: "Search photos.*",
+    // An empty replica starts with the camera-roll takeover card; a populated
+    // replica exposes the search control instead. Both prove the Photos cover
+    // opened, while the Home screen has neither string (issue #676).
+    marker: "Bring 6 camera-roll photographs|Search photos.*",
     link: "centraid://photos",
     name: "photos",
   },

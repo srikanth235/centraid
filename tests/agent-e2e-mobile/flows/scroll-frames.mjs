@@ -142,6 +142,24 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   );
   const ceiling = budgets.metrics.maxDroppedFramePercent.maxPercent;
 
+  // The deterministic Photos seed makes the cover request the simulator's
+  // Photo Library permission on first access. Grant it before opening the
+  // route so the frame probe measures the grid, not an OS sheet that blocks
+  // the hierarchy. The dedicated photos-permissions journey owns denial.
+  await ctx.run(
+    `appId: ${ctx.state.appId}
+---
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Home ready"
+    timeout: 30000
+`,
+    "allow-device-permissions"
+  );
+
   // ---- Photos grid ---------------------------------------------------------
   const photosStartedAt = Date.now();
   await ctx.run(

@@ -18,8 +18,7 @@ await runFlow("mobile-volume-proof", async (ctx) => {
   // on Home; every relaunch below then measures a warm, paired launch.
   await ctx.configureGateway();
   const started = performance.now();
-  await ctx.run(
-    `appId: ${ctx.state.appId}
+  const volumeYaml = `appId: ${ctx.state.appId}
 ---
 - repeat:
     times: ${ITERATIONS}
@@ -30,9 +29,17 @@ await runFlow("mobile-volume-proof", async (ctx) => {
           visible:
             text: "${HOME_READY_MARKER}"
           timeout: 30000
-`,
-    "mobile-volume"
-  );
+`;
+  try {
+    await ctx.run(volumeYaml, "mobile-volume");
+  } catch (error) {
+    // iOS XCTest can report the app stopped during a rapid relaunch batch even
+    // though the next launch is healthy. Retry once so a driver hiccup does
+    // not erase the volume sample; a real product crash fails again here.
+    if (ctx.state.platform !== "ios") throw error;
+    ctx.note("iOS volume batch hit a transient app-stop; retrying once");
+    await ctx.run(volumeYaml, "mobile-volume-retry");
+  }
   const durationMs = performance.now() - started;
   const budget = await qualityRegressionBudget(REPO_ROOT, "scale", OWNER);
   const passed = budget == null || durationMs < budget;

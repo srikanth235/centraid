@@ -61,6 +61,11 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   the observed transient XCTest hierarchy wedge, rather than consuming the
   generic 12-minute Maestro chunk budget — `flows/cold-start.mjs` and
   `tests/agent-e2e-mobile/lib/harness.mjs`.
+- The native matrix accepts the empty-vault Photos takeover marker as well as
+  the populated search marker; the frame probe grants simulator permissions
+  before opening its seeded grid; and the rapid volume batch retries once after
+  an iOS app-stop driver hiccup — `flows/native-v0-resilience.mjs`,
+  `flows/scroll-frames.mjs`, and `flows/volume-proof.mjs`.
 - The affected journey sources are
   `tests/agent-e2e-mobile/flows/cold-start.mjs`,
   `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`,
@@ -70,7 +75,8 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   `tests/agent-e2e-mobile/flows/photos-search.mjs`,
   `tests/agent-e2e-mobile/flows/photos-select-write.mjs`,
   `tests/agent-e2e-mobile/flows/photos-viewer.mjs`, and
-  `tests/agent-e2e-mobile/flows/scroll-frames.mjs`.
+  `tests/agent-e2e-mobile/flows/scroll-frames.mjs`, and
+  `tests/agent-e2e-mobile/flows/volume-proof.mjs`.
 
 ### Implementation coverage
 
@@ -114,6 +120,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
 - Static verification of the current-main journey updates: `bun run format:check`,
   `bun run lint:e2e-flows`, and `bun run --cwd apps/mobile typecheck` (PASS;
   2026-08-09).
+- Remote diagnostic: [Actions run 31285427600](https://github.com/srikanth235/centraid/actions/runs/31285427600)
+  reached the serialized journey step with all setup checks green, then hit the
+  90-minute backstop. Uploaded evidence isolated the empty Photos marker,
+  simulator Photo Library prompt, and transient volume app-stop addressed by
+  this follow-up.
+- Static verification of this follow-up: `bun run format:check`,
+  `bun run lint:e2e-flows`, and `git diff --check` (PASS; 2026-08-09).
 
 ```sh
 bun run format:check
