@@ -156,6 +156,10 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   confirmation immediately after arming its custom-scheme probe, reusing the
   shared confirmation helper instead of letting the alert mask the
   `perf-frame-sampling` marker — `tests/agent-e2e-mobile/flows/scroll-frames.mjs`.
+- The scroll flow gives the lazy Photos full-screen cover the same 45-second
+  destination budget as the native-cover matrix, so a completed launcher tap
+  is not mistaken for a loaded grid while React is still leaving its blank
+  fallback — `tests/agent-e2e-mobile/flows/scroll-frames.mjs`.
 
 ### Implementation coverage
 
@@ -343,6 +347,12 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   [artifact](https://github.com/srikanth235/centraid/actions/runs/31332177873/artifacts/9043570725)
   shows the app was healthy beneath the alert; the sampler arm now reuses the
   shared `^Open$` dismissal before asserting `perf-frame-sampling`.
+- Focused rerun [Actions run 31333688363](https://github.com/srikanth235/centraid/actions/runs/31333688363)
+  exercised the new native-confirmation dismissal path, then exposed a
+  separate lazy-cover timing race: `Open Photos.*` completed, but the screenshot
+  in [artifact 9044114079](https://github.com/srikanth235/centraid/actions/runs/31333688363/artifacts/9044114079)
+  remained on the blank fallback and `Collections` timed out at 30 seconds.
+  The scroll flow now uses the native matrix's 45-second destination budget.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).

@@ -175,10 +175,13 @@ ${waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS, ctx.state.platform)}`,
     `appId: ${ctx.state.appId}
 ---
 ${openAppFromAllAppsCommands("Photos")}
+# Photos is a lazy full-screen cover. The launcher tap can complete while the
+# destination is still on React's blank fallback; use the same bounded budget
+# as the native-cover matrix and wait on its destination marker.
 - extendedWaitUntil:
     visible:
       text: "Collections"
-    timeout: 30000
+    timeout: 45000
 ${retryableTapCommands("Library")}
 - extendedWaitUntil:
     visible:
