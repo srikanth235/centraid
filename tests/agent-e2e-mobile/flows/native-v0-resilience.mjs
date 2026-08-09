@@ -38,7 +38,10 @@ const SURFACES = [
       // the Photos cover. Search the same visible launcher sheet used by the
       // other covers so the selector cannot accidentally enter that takeover.
       openAppFromAllAppsCommands("Photos"),
-      `- extendedWaitUntil:\n    visible: "Collections"\n    timeout: 30000`,
+      // Photos is a lazy full-screen cover. The PR #683 Settings fix showed
+      // that the source tap can complete while the destination is still on
+      // React's blank fallback; wait on the destination, not the closed row.
+      `- extendedWaitUntil:\n    visible: "Collections"\n    timeout: 45000`,
     ].join("\n"),
     name: "photos",
   },

@@ -128,6 +128,11 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   until the native Modal interaction settles. This keeps a lazy cover such as
   People from losing its root-stack transition while the iOS launcher sheet is
   dismissing.
+- The native Photos cover now gets the same bounded lazy-destination wait used
+  by PR #683's Settings recovery: the launcher row is tapped once, then the
+  flow waits up to 45 seconds for `Collections` rather than treating React's
+  blank lazy-import fallback as a bad source-row tap —
+  `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 
 ### Implementation coverage
 
@@ -250,6 +255,11 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   Tasks. It failed on a transient cached-Metro-card tap while the final
   screenshot already showed Home; that recovery tap is now optional while the
   `Home ready` assertion remains mandatory.
+- Remote targeted follow-up: [Actions run 31317613589](https://github.com/srikanth235/centraid/actions/runs/31317613589)
+  passed producer/setup and the fresh profile contract, then reached the
+  Photos launcher row. The row tap completed, but the iOS screenshot remained
+  on the blank Expo/React lazy-cover fallback and `Collections` timed out at
+  30 seconds; the Photos destination budget is now bounded at 45 seconds.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).
