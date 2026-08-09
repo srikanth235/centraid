@@ -144,6 +144,14 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   contract (`<vault> on <gateway>. Switch vault`) instead of the pre-#726
   `Open vault menu` label, while retaining the durable `APPEARANCE` destination
   marker — `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
+- iOS launch recovery no longer probes for Android's system-ANR label while
+  Expo is replacing its development-client hierarchy, and the cached Metro
+  card gets a longer settle window. The native flow also accepts
+  `MAESTRO_NATIVE_SURFACE=notes`, exposed as the manual `native-notes` lane,
+  so a failed cover can be rerun without replaying already-green covers —
+  `tests/agent-e2e-mobile/lib/first-run.mjs`,
+  `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`, and
+  `.github/workflows/e2e.yml`.
 
 ### Implementation coverage
 
@@ -284,6 +292,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   removed `Open vault menu` label; the failure screenshot remained on Home with
   the vault header visible. The selector now matches the stable `Switch vault`
   suffix.
+- Remote targeted follow-up: [Actions run 31323313154](https://github.com/srikanth235/centraid/actions/runs/31323313154)
+  passed producer/setup and all covers through People, then failed in Notes
+  during the first post-relaunch overlay probe with
+  `kAXErrorInvalidUIElement`; Maestro's XCUITest bridge hung until the bounded
+  12-minute chunk timeout. The iOS recovery now omits that Android-only probe,
+  waits longer after the Metro-card handoff, and exposes a `native-notes`
+  diagnostic lane for focused verification.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).

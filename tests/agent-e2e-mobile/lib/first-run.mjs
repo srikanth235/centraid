@@ -68,6 +68,20 @@ export const DISMISS_DEV_CLIENT_OVERLAYS =
   `${DISMISS_FIRST_USE_CONTINUE}${DISMISS_EXPO_DEV_MENU}`;
 
 /**
+ * Android can put an app-not-responding sheet above the dev client. iOS has
+ * no equivalent recovery sheet in this journey; probing for the Android
+ * label there adds an XCTest hierarchy request exactly while Expo is
+ * replacing its launcher tree, which can surface kAXErrorInvalidUIElement.
+ */
+function dismissDevClientOverlays(platform) {
+  const systemAnr = platform === "android" ? DISMISS_SYSTEM_ANR : "";
+  return (
+    `${systemAnr}${DISMISS_OPEN_LINK_CONFIRMATION}` +
+    `${DISMISS_FIRST_USE_CONTINUE}${DISMISS_EXPO_DEV_MENU}`
+  );
+}
+
+/**
  * Poll for the paired shell while dismissing overlays that can arrive after
  * an iOS dev-client deep link. A one-shot conditional is not enough here:
  * XCTest can report the URL command complete before iOS presents its Open
@@ -75,16 +89,18 @@ export const DISMISS_DEV_CLIENT_OVERLAYS =
  */
 export function waitForHomeReadyCommands(timeoutMs, platform = "ios") {
   const pollMs = 5_000;
+  const dismissOverlays = dismissDevClientOverlays(platform);
   const times = Math.max(1, Math.ceil(timeoutMs / pollMs));
   const recentServerTapInside =
     platform === "ios"
       ? `${indentMaestroCommands(IOS_METRO_RECENT_SERVER_TAP.trim(), 6)}\n`
       : "";
-  const dismissInside = DISMISS_DEV_CLIENT_OVERLAYS.split("\n")
+  const dismissInside = dismissOverlays
+    .split("\n")
     .filter((line) => line.length > 0)
     .map((line) => `      ${line}`)
     .join("\n");
-  return `${DISMISS_DEV_CLIENT_OVERLAYS}${
+  return `${dismissOverlays}${
     platform === "ios" ? IOS_METRO_RECENT_SERVER_TAP : ""
   }- repeat:
     times: ${times}
@@ -95,7 +111,7 @@ export function waitForHomeReadyCommands(timeoutMs, platform = "ios") {
 ${recentServerTapInside}${dismissInside}
       - waitForAnimationToEnd:
           timeout: ${pollMs}
-${DISMISS_DEV_CLIENT_OVERLAYS}${
+${dismissOverlays}${
     platform === "ios" ? IOS_METRO_RECENT_SERVER_TAP : ""
   }- extendedWaitUntil:
     visible:
@@ -152,7 +168,7 @@ export function relaunchDevClientCommands(platform) {
     timeout: 1000
 ${IOS_METRO_RECENT_SERVER_TAP}
 - waitForAnimationToEnd:
-    timeout: 1000
+    timeout: 3000
 `;
 }
 
@@ -162,16 +178,18 @@ ${IOS_METRO_RECENT_SERVER_TAP}
  */
 export function waitForOnboardingConnectCommands(timeoutMs, platform = "ios") {
   const pollMs = 5_000;
+  const dismissOverlays = dismissDevClientOverlays(platform);
   const times = Math.max(1, Math.ceil(timeoutMs / pollMs));
   const recentServerTapInside =
     platform === "ios"
       ? `${indentMaestroCommands(IOS_METRO_RECENT_SERVER_TAP.trim(), 6)}\n`
       : "";
-  const dismissInside = DISMISS_DEV_CLIENT_OVERLAYS.split("\n")
+  const dismissInside = dismissOverlays
+    .split("\n")
     .filter((line) => line.length > 0)
     .map((line) => `      ${line}`)
     .join("\n");
-  return `${DISMISS_DEV_CLIENT_OVERLAYS}${
+  return `${dismissOverlays}${
     platform === "ios" ? IOS_METRO_RECENT_SERVER_TAP : ""
   }- repeat:
     times: ${times}
@@ -182,7 +200,7 @@ export function waitForOnboardingConnectCommands(timeoutMs, platform = "ios") {
 ${recentServerTapInside}${dismissInside}
       - waitForAnimationToEnd:
           timeout: ${pollMs}
-${DISMISS_SYSTEM_ANR}${
+${dismissOverlays}${
     platform === "ios" ? IOS_METRO_RECENT_SERVER_TAP : ""
   }- extendedWaitUntil:
     visible:

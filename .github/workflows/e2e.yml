@@ -30,7 +30,7 @@ on:
       # The scheduled lane keeps the default `all` value; manual diagnosis
       # should not spend the matrix budget re-running unrelated green flows.
       ios_suite:
-        description: "For mobile: run one iOS suite (all | home-loads | template-gate | native-v0-resilience | volume-proof | cold-start | scroll-frames | photos)"
+        description: "For mobile: run one iOS suite (all | home-loads | template-gate | native-v0-resilience | native-notes | volume-proof | cold-start | scroll-frames | photos)"
         required: false
         default: "all"
         type: choice
@@ -39,6 +39,7 @@ on:
           - home-loads
           - template-gate
           - native-v0-resilience
+          - native-notes
           - volume-proof
           - cold-start
           - scroll-frames
@@ -325,6 +326,9 @@ jobs:
           case "${{ matrix.suite }}" in
             photos)
               node tests/agent-e2e-mobile/run-photos-suite.mjs
+              ;;
+            native-notes)
+              MAESTRO_NATIVE_SURFACE=notes node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs
               ;;
             *)
               node "tests/agent-e2e-mobile/flows/${{ matrix.suite }}.mjs"

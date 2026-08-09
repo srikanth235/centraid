@@ -116,11 +116,21 @@ const SURFACES = [
   },
 ];
 
+const requestedSurface = process.env.MAESTRO_NATIVE_SURFACE;
+const surfacesToVisit = requestedSurface
+  ? SURFACES.filter((surface) => surface.name === requestedSurface)
+  : SURFACES;
+if (requestedSurface && surfacesToVisit.length === 0) {
+  throw new Error(
+    `Unknown MAESTRO_NATIVE_SURFACE ${JSON.stringify(requestedSurface)}`
+  );
+}
+
 await runFlow("native-v0-resilience", async (ctx) => {
   await ctx.configureGateway();
 
   const visitNext = async (index) => {
-    const surface = SURFACES[index];
+    const surface = surfacesToVisit[index];
     if (surface === undefined) return;
     const openCommands = surface.openCommands;
     await ctx.run(
@@ -157,11 +167,10 @@ ${relaunchDevClientCommands(ctx.state.platform)}${waitForHomeReadyCommands(FIRST
     "after-force-kill"
   );
   ctx.note(
-    "All eight native blueprint covers and Settings survived navigation and a process restart; complete the documented network matrix on this device."
+    `${surfacesToVisit.length === SURFACES.length ? "All eight native blueprint covers and Settings" : `${surfacesToVisit.map((surface) => surface.name).join(", ")} cover`} survived navigation and a process restart; complete the documented network matrix on this device.`
   );
   return {
     pass: true,
-    notes:
-      "all eight native blueprint covers, Settings, and process-restart smoke passed",
+    notes: `${surfacesToVisit.length === SURFACES.length ? "all eight native blueprint covers, Settings" : `${surfacesToVisit.map((surface) => surface.name).join(", ")} cover`} and process-restart smoke passed`,
   };
 });
