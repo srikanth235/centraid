@@ -130,6 +130,7 @@ const IOS_METRO_RECENT_SERVER_TAP = `- runFlow:
       - tapOn:
           text: "${IOS_METRO_RECENT_SERVER}"
           retryTapIfNoChange: true
+          optional: true
 `;
 
 /**

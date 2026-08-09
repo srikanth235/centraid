@@ -111,6 +111,10 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   as recoverable, waits for the launcher to settle, and taps its cached Metro
   server card during the bounded Home/onboarding polls —
   `tests/agent-e2e-mobile/lib/first-run.mjs` and its call sites.
+- The cached Metro-card tap is explicitly best effort; the real contract remains
+  the subsequent mandatory `Home ready` assertion, so a stale iOS hierarchy or
+  an already-restored Home screen cannot create a false failure —
+  `tests/agent-e2e-mobile/lib/first-run.mjs`.
 - The same relaunch helper explicitly foregrounds the app after the optional
   deep link; iOS can report `simctl openurl` complete while SpringBoard remains
   foreground, leaving the cached Metro card unreachable —
@@ -241,6 +245,11 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   Agenda, and Tasks covers. It then showed the filtered People row closing the
   launcher while the app remained on Home; the queued Modal-dismissal
   transition above is the focused fix for that late lazy-cover race.
+- Remote targeted follow-up: [Actions run 31316023613](https://github.com/srikanth235/centraid/actions/runs/31316023613)
+  passed producer/setup and opened Photos, Docs, and Agenda before reaching
+  Tasks. It failed on a transient cached-Metro-card tap while the final
+  screenshot already showed Home; that recovery tap is now optional while the
+  `Home ready` assertion remains mandatory.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).
