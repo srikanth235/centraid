@@ -677,7 +677,7 @@ describe("vault-routes", () => {
     const { base, plane } = await setup();
     // Start both domains at `device` (a fresh vault's bootstrap default is
     // `gateway` since issue #712 C5 — lower them explicitly so the PUT below
-    // has a real change to make, same as a member who narrowed the tier
+    // has a real change to make, same as an owner who narrowed the tier
     // once already).
     const patch: Partial<Record<"photos" | "docs", "device">> = {
       photos: "device",

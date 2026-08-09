@@ -4,9 +4,9 @@
 // account was founded with. The tile marker is derived from the vault
 // record's `personal` marker, never from its name — so this is the one place
 // that reads the mounted scopes and hands Photos a map it can look a vault up
-// in. Where a share GOES is not here at all: the phone asks the member with a
-// placement sheet (`AudiencePlacementSheet`), so there is no pointer to
-// resolve on this surface.
+// in. Where a share GOES is not here at all: the phone asks the member with
+// the unified give/lend sheet (`kit/share/ShareSheet.tsx`, issue #726 P6),
+// so there is no pointer to resolve on this surface.
 
 import { useMemo } from "react";
 

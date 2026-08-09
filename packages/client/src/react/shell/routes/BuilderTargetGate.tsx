@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { JSX } from "react";
 
-import type { MemberScope } from "../memberScope.js";
+import type { OwnerScope } from "../ownerScope.js";
 import ScopePicker from "./ScopePicker.js";
 
 import buttonCss from "../../ui/Button.module.css";
@@ -11,14 +11,14 @@ import styles from "./ScopePicker.module.css";
 // Decision 14).
 //
 // The builder creates its app the moment it mounts, so there is no point in the
-// running builder at which a member could still choose. The choice therefore
+// running builder at which an owner could still choose. The choice therefore
 // happens BEFORE the builder mounts, on this one-question gate. With a single
 // writable vault there is nothing to ask, so the caller skips the gate entirely
 // and the flow is byte-for-byte what it was before the picker existed.
 
 export interface BuilderTargetGateProps {
-  scopes: MemberScope[];
-  /** Preselected: the member's own vault, never the last one used. */
+  scopes: OwnerScope[];
+  /** Preselected: the owner's own vault, never the last one used. */
   defaultScopeId: string | undefined;
   onConfirm: (scopeId: string) => void;
   onCancel: () => void;

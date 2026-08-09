@@ -69,7 +69,12 @@
 //     records what was wanted; enrichers drain this queue before the backlog.
 //     `reason` widened with `manual` (issue #352 phase 3/4): an owner-driven
 //     "detect faces now" gesture from an app is neither a search miss nor a
-//     passive on-view — it is an explicit ask.
+//     passive on-view — it is an explicit ask. Widened again with `projected`
+//     (issue #726): a row that arrived over a share edge is re-registered by
+//     the audience's own ingest door (share/projection-ingest.ts), and that
+//     signal is neither an owner ask nor a member gesture — it is the vault
+//     saying "this item is new HERE". Naming it is what keeps `manual` an
+//     owner's word.
 //   - `media_asset_phash.cluster_id` (issue #352 phase 3/4): a rebuildable
 //     near-duplicate-cluster projection over the Tier-0 phash sidecar — the
 //     standing sweep (gateway/duties.ts via enrich/clusters.ts) groups LIVE
@@ -282,7 +287,11 @@ CREATE TABLE IF NOT EXISTS enrich_request (
   request_id          TEXT PRIMARY KEY,
   target_type         TEXT NOT NULL,
   target_id           TEXT,
-  reason              TEXT NOT NULL CHECK (reason IN ('search-miss','on-view','manual')),
+  -- 'projected' is minted by the vault itself (share/projection-ingest.ts) and
+  -- never by a caller: the owner command's enum stays the three human reasons.
+  -- It always carries required_capability NULL, so such a row is not leaseable
+  -- to a paired device and the device lane's reason vocabulary is unchanged.
+  reason              TEXT NOT NULL CHECK (reason IN ('search-miss','on-view','manual','projected')),
   detail              TEXT,
   -- NULL capability = the existing gateway/automation queue. A named
   -- capability makes the request eligible for an opted-in device lease.

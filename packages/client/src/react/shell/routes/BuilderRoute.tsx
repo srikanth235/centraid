@@ -7,7 +7,7 @@ import type {
 } from "../../../app-shell-context.js";
 import { useShellActions } from "../actions.js";
 import type { ShellNav } from "../ShellApp.js";
-import { useMemberScopes } from "../useMemberScopes.js";
+import { useOwnerScopes } from "../useOwnerScopes.js";
 import BuilderShell from "./builder/BuilderShell.js";
 import BuilderTargetGate from "./BuilderTargetGate.js";
 
@@ -47,7 +47,7 @@ export default function BuilderRoute({
   // Where a NEW app lands (issue #599, Decision 14). The builder creates its
   // app on mount, so the target is chosen on a gate BEFORE the builder mounts —
   // and only when there is genuinely a choice to make.
-  const memberScopes = useMemberScopes();
+  const ownerScopes = useOwnerScopes();
   const [chosenScope, setChosenScope] = useState<string | undefined>(undefined);
 
   const onAddToHome = (input: {
@@ -117,13 +117,13 @@ export default function BuilderRoute({
   // an existing one already knows where it lives.
   const isNewBuild =
     !automation && !route.appContext && Boolean(route.initialPrompt);
-  const writableScopes = memberScopes.scopes.filter((s) => s.canWrite);
-  const targetScopeId = chosenScope ?? memberScopes.primary?.id;
+  const writableScopes = ownerScopes.scopes.filter((s) => s.canWrite);
+  const targetScopeId = chosenScope ?? ownerScopes.primary?.id;
   if (isNewBuild && !chosenScope && writableScopes.length > 1) {
     return (
       <BuilderTargetGate
-        scopes={memberScopes.scopes}
-        defaultScopeId={memberScopes.primary?.id}
+        scopes={ownerScopes.scopes}
+        defaultScopeId={ownerScopes.primary?.id}
         onConfirm={setChosenScope}
         onCancel={() => nav.replace({ kind: "home" })}
       />

@@ -23,7 +23,7 @@
 // because a 2048 px raster carries the detail a vision model wants; thumb as
 // the fallback because a tiny vector beats no vector. An asset with NEITHER
 // rung is SKIPPED, not force-read from its original: the preview backstop will
-// land one on a later sweep and this pass will find it then. The member's
+// land one on a later sweep and this pass will find it then. The owner's
 // full-resolution photograph is never sent anywhere.
 
 import { encodeVector, uuidv7 } from "@centraid/vault";
@@ -63,7 +63,7 @@ export const EMBEDDING_SWEEP_SPEC: CapabilitySweepSpec<"embed-image"> = {
   variant: "embedding",
 
   selectBacklog: (db, input): CapabilitySweepBacklog => {
-    // Member asks first (issue #299 phase 5: "enrichers drain this queue
+    // Owner asks first (issue #299 phase 5: "enrichers drain this queue
     // before the backlog").
     const requests = selectOpenRequests(db, {
       targetType: TARGET_TYPE,

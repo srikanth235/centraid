@@ -1,7 +1,7 @@
 /*
  * Shared harness for the client↔gateway SEAM contract tests (#656 Layer 1B):
- * the storage, backup, atlas, members, capture, conversation-history and
- * app-editing wire surfaces that had no test file at all.
+ * the storage, backup, atlas, owners, devices, capture, conversation-history
+ * and app-editing wire surfaces that had no test file at all.
  *
  * Same shape as `gateway-client-contract-fixtures.ts` — stub `window.CentraidApi`
  * and `fetch` first, import the client modules after — but with a *recording*
@@ -197,25 +197,50 @@ const ROUTES: Record<string, Responder> = {
   "DELETE /centraid/_vault/demo": () => json({ purged: 3, blocked: [] }),
   "DELETE /centraid/_vault/demo/daily": () => json({ purged: 1, blocked: [] }),
 
-  // ── household roster (#599 L2) ──
-  "GET /centraid/_gateway/members": () =>
+  // ── owner surface (#726) ──
+  "GET /centraid/_gateway/owners": () =>
     json({
-      members: [
+      owners: [
         {
-          memberId: "m-1",
+          ownerId: "o-1",
           label: "Ada",
           createdAt: "2026-07-25T00:00:00.000Z",
-          roles: [],
+          vaults: [],
           deviceCount: 2,
         },
       ],
     }),
-  "POST /centraid/_gateway/members": (request) =>
-    json({ member: { memberId: "m-2", ...JSON.parse(String(request.body)) } }),
-  "PATCH /centraid/_gateway/members/m-1": (request) =>
-    json({ member: { memberId: "m-1", ...JSON.parse(String(request.body)) } }),
-  "DELETE /centraid/_gateway/members/m-1": () =>
-    json({ removed: true, memberId: "m-1", devices: 2 }),
+  "PATCH /centraid/_gateway/owners/o-1": (request) =>
+    json({ owner: { ownerId: "o-1", ...JSON.parse(String(request.body)) } }),
+
+  // ── pairing-ticket mint, self-pair + "Add someone" (#726, #726 P1) ──
+  "POST /centraid/_gateway/devices/ticket": (request) => {
+    const body = JSON.parse(String(request.body)) as {
+      forPerson?: { label: string; vaultName?: string };
+    };
+    if (body.forPerson) {
+      return json({
+        ok: true,
+        ticket: "CENTRAID-TICKET-PERSON",
+        ownerId: "o-new",
+        ownerLabel: body.forPerson.label,
+        vaults: [{ vaultId: "v-new", vaultName: body.forPerson.vaultName }],
+        vaultId: "v-new",
+        vaultName: body.forPerson.vaultName,
+        expiresAt: "2026-07-25T01:00:00.000Z",
+      });
+    }
+    return json({
+      ok: true,
+      ticket: "CENTRAID-TICKET-SELF",
+      ownerId: "o-1",
+      ownerLabel: "Ada",
+      vaults: [{ vaultId: "vault-1", vaultName: "Personal" }],
+      vaultId: "vault-1",
+      vaultName: "Personal",
+      expiresAt: "2026-07-25T01:00:00.000Z",
+    });
+  },
 
   // ── capture ──
   "POST /centraid/_gateway/capture/ocr": () =>
@@ -306,7 +331,8 @@ vi.stubGlobal("fetch", fetchMock);
 export const storage = await import("./gateway-client-storage.js");
 export const backup = await import("./gateway-client-backup.js");
 export const atlas = await import("./gateway-client-atlas.js");
-export const members = await import("./gateway-client-members.js");
+export const owners = await import("./gateway-client-owners.js");
+export const devices = await import("./gateway-client-devices.js");
 export const capture = await import("./gateway-client-capture.js");
 export const history = await import("./gateway-client-conversation-history.js");
 export const editing = await import("./gateway-client-editing.js");

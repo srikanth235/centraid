@@ -148,7 +148,6 @@ export interface IrohPairingResponse {
     vaultId: string;
     enrollmentId?: string;
     vaultName?: string;
-    role?: "admin" | "write" | "read";
   }>;
   version?: string;
 }

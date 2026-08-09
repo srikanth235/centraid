@@ -31,7 +31,8 @@ export function prepareReplicaWrite(
     entity: string,
     requested?: string,
     purpose?: string
-  ) => string
+  ) => string,
+  includeAllCatalog = false
 ): PreparedReplicaWrite {
   const normalized = (optimistic ?? []).map((mutation) => {
     const { purpose, shapeId, ...rest } = mutation;
@@ -59,7 +60,7 @@ export function prepareReplicaWrite(
   return {
     optimistic: normalized,
     dependencies: catalog
-      .filter((shape) => shape.appId === appId)
+      .filter((shape) => includeAllCatalog || shape.appId === appId)
       .flatMap((shape) =>
         shape.entities.map((entity) => ({
           shapeId: shape.shapeId,

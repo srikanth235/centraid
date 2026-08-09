@@ -1,9 +1,12 @@
 // A4 — the placement registry (issue #712).
 //
 // Three blueprint apps each hand-copied the same union of "what can be
-// placed into an audience vault": `AudiencePlacement.tsx` (web), its mobile
-// twin `AudiencePlacementSheet.tsx`, and Photos' own bespoke `sharing.ts`
-// wiring for `media.media_asset`. A fourth copy (`core.content_item`, for
+// placed into an audience vault": the web `AudiencePlacement.tsx` (retired
+// #726 P6, replaced by the give/lend `ShareSheet.tsx` every web app now
+// shares), its mobile twin `AudiencePlacementSheet.tsx` (retired the same
+// way, replaced by `apps/mobile/src/kit/share/ShareSheet.tsx`), and Photos'
+// own copy-to-vault wiring (`apps/photos/sharing.ts`) for
+// `media.media_asset`. A fourth copy (`core.content_item`, for
 // Notes attachments) never existed anywhere, so an app wanting to share a
 // note body had nothing to import. This module is the ONE place that answers
 // "what is placeable, and which app owns it" — every placement control reads

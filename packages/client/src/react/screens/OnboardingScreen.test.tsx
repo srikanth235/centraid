@@ -16,8 +16,8 @@ import type {
 vi.mock(import("../../gateway-client.js"), () => ({
   listVaults: () => listVaultsMock(),
   listGatewayDevices: () => listGatewayDevicesMock(),
-  renameGatewayMember: (memberId: string, label: string) =>
-    renameGatewayMemberMock(memberId, label),
+  renameGatewayOwner: (ownerId: string, label: string) =>
+    renameGatewayOwnerMock(ownerId, label),
   vaultImportStage: (
     input: Parameters<typeof TypeImport_bmsl46.vaultImportStage>[0]
   ) => vaultImportStageMock(input),
@@ -26,8 +26,8 @@ vi.mock(import("../../gateway-client.js"), () => ({
 const listVaultsMock = vi.fn<typeof TypeImport_bmsl46.listVaults>();
 const listGatewayDevicesMock =
   vi.fn<typeof TypeImport_bmsl46.listGatewayDevices>();
-const renameGatewayMemberMock =
-  vi.fn<typeof TypeImport_bmsl46.renameGatewayMember>();
+const renameGatewayOwnerMock =
+  vi.fn<typeof TypeImport_bmsl46.renameGatewayOwner>();
 const vaultImportStageMock = vi.fn<typeof TypeImport_bmsl46.vaultImportStage>();
 const getSettings = vi.fn<(...args: unknown[]) => unknown>();
 const setActiveGateway = vi.fn<(...args: unknown[]) => unknown>();
@@ -37,17 +37,17 @@ const redeemGatewayPairing = vi.fn<(...args: unknown[]) => unknown>();
 const onCompleteMock = () =>
   vi.fn<(input: OnboardingCompleteInput) => Promise<void>>();
 
-/** A roster row for the device making the request, acting as `memberLabel`. */
-function selfDevice(memberLabel: string): unknown {
+/** A roster row for the device making the request, acting as `ownerLabel`. */
+function selfDevice(ownerLabel: string): unknown {
   return {
     deviceId: "enr_1",
     endpointId: "ep_1",
-    memberId: "mem_1",
-    memberLabel,
+    ownerId: "own_1",
+    ownerLabel,
     label: "Web browser",
     transport: "iroh",
     vaultId: "personal",
-    role: "admin",
+    revoked: false,
     rememberDevice: false,
     current: true,
   };
@@ -201,8 +201,8 @@ describe("OnboardingScreen scenarios", () => {
       expect(onComplete).toHaveBeenCalledWith(
         expect.objectContaining({ displayName: "", path: "fresh" })
       );
-      // No memberId: nothing was asked, so nothing should be renamed.
-      expect(onComplete.mock.calls[0]?.[0].memberId).toBeUndefined();
+      // No ownerId: nothing was asked, so nothing should be renamed.
+      expect(onComplete.mock.calls[0]?.[0].ownerId).toBeUndefined();
     });
 
     // A gateway with no device plane answers 404, so the roster reads as
@@ -222,7 +222,7 @@ describe("OnboardingScreen scenarios", () => {
         expect.objectContaining({ displayName: "Ada" })
       );
       // Nobody to rename — the roster is the thing we could not read.
-      expect(onComplete.mock.calls[0]?.[0].memberId).toBeUndefined();
+      expect(onComplete.mock.calls[0]?.[0].ownerId).toBeUndefined();
     });
 
     it("selects a swatch on click", async () => {
@@ -260,7 +260,7 @@ describe("OnboardingScreen scenarios", () => {
         avatarColor: expect.any(String),
         displayName: "Grace",
         gatewayId: "local",
-        memberId: "mem_1",
+        ownerId: "own_1",
         ownerVault: true,
         path: "fresh",
         vaultId: "personal",
@@ -307,7 +307,7 @@ describe("OnboardingScreen scenarios", () => {
         avatarColor: IDENTITY_COLORS[2],
         displayName: "Grace",
         gatewayId: "local",
-        memberId: "mem_1",
+        ownerId: "own_1",
         ownerVault: true,
         path: "fresh",
         vaultId: "personal",
@@ -376,7 +376,7 @@ describe("OnboardingScreen scenarios", () => {
         avatarColor: expect.any(String),
         displayName: "Ada",
         gatewayId: "gw1",
-        memberId: "mem_1",
+        ownerId: "own_1",
         path: "ticket",
         vaultId: "v1",
       });
@@ -409,7 +409,7 @@ describe("OnboardingScreen scenarios", () => {
         avatarColor: expect.any(String),
         displayName: "Grace",
         gatewayId: "local",
-        memberId: "mem_1",
+        ownerId: "own_1",
         ownerVault: false,
         path: "fresh",
         vaultId: "shared",

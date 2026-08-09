@@ -22,8 +22,9 @@
 //    nothing in another — or, worse, means something else, since ids collide
 //    across scopes by design. Album MEMBERSHIP is therefore computed against
 //    own-scope assets only.
-//  * The TIMELINE is merged, deduped and horizon-bounded (merge.ts), then
-//    filtered by `vaultsOn` and by the kind filter.
+//  * The TIMELINE is merged, deduped and horizon-bounded
+//    (apps/_shared/scope-merge.ts), then filtered by `vaultsOn` and by the
+//    kind filter.
 
 import {
   useCallback,
@@ -34,6 +35,11 @@ import {
 } from "react";
 import type { FC, ReactElement, ReactNode } from "react";
 
+import {
+  mountedScopes,
+  ownScopeId,
+  photoWriteTarget,
+} from "../_shared/scope-kit.ts";
 import type { WriteTarget } from "../_shared/write-target.ts";
 import type { InlineScope, InlineAppProps } from "../inline-types.ts";
 import {
@@ -59,7 +65,6 @@ import { PeopleShelf } from "./components/People.tsx";
 import { PermissionScreen } from "./components/Permission.tsx";
 import { PlacesShelf, placeSections } from "./components/Places.tsx";
 import { SearchShelf } from "./components/SearchShelf.tsx";
-import { SharingBody, sharingFacts } from "./components/Sharing.tsx";
 import { ShelfStrip } from "./components/ShelfStrip.tsx";
 import { StorageView, storageFacts } from "./components/Storage.tsx";
 import { MEMORIES_MAX_RUNG, TimelineBody } from "./components/Timeline.tsx";
@@ -86,12 +91,6 @@ import { buildMemories, enrichAlbums } from "./memories.ts";
 import { notice, setStatusSink, setWriteTargetResolver } from "./outcomes.ts";
 import { createPeople } from "./people.ts";
 import { createPicker } from "./picker.tsx";
-import {
-  mountedScopes,
-  ownScopeId,
-  photoWriteTarget,
-  shareTargetId,
-} from "./scopes.ts";
 import { searchGroups } from "./search-groups.ts";
 import { createSearch } from "./search.ts";
 import type { SearchStatus } from "./search.ts";
@@ -104,7 +103,6 @@ import {
   personShelf,
   PLACES,
   SEARCH,
-  SHARING,
   shelfFromSegment,
   shelfKindFor,
   showsTileSize,
@@ -252,6 +250,10 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
     let searchResults: Asset[] | null = null;
     /** Which of §9's four states the search shelf is in (search.ts). */
     let searchStatus: SearchStatus = "resting";
+    /** Per-scope reach for the current answer (issue #726 D10/D11) — one
+     *  `{label, value}` fact per mounted scope that did not answer, named
+     *  BESIDE whatever other scopes' hits are still on screen. */
+    let searchReachFacts: readonly { label: string; value: string }[] = [];
     /** Is the band's own overflow sheet open (§3.1)? */
     let moreOpen = false;
     /** The kind filter (v4 §16 — session, not the member record). */
@@ -382,9 +384,9 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       readFailed = Boolean(own.error);
       renderOfflineBanner();
       const view = store.merged();
-      // `MergedAsset` and `Asset` describe the same query row from two sides —
-      // see the same cast's note in library-store.ts.
-      const merged = view.assets as unknown as Asset[];
+      // `MergedRow<MergeableAsset>` and `Asset` describe the same query row
+      // from two sides — see the same cast's note in library-store.ts.
+      const merged = view.rows as unknown as Asset[];
       const own_ = ownId();
       const vaultsOn = prefs.read().vaultsOn;
       ownAssets = merged.filter((asset) => (asset.scope_id ?? "") === own_);
@@ -525,19 +527,12 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
 
     function albumAssets(): Asset[] {
       if (!shelf) return assets;
-      // Favorites, Sharing and tags are per-asset facts that travel with the
-      // row, so they read the merged (filtered) list. Album membership is an
-      // ID match against an own-scope collection, so it reads own-scope assets
-      // only — see the header note on colliding ids.
+      // Favorites and tags are per-asset facts that travel with the row, so
+      // they read the merged (filtered) list. Album membership is an ID match
+      // against an own-scope collection, so it reads own-scope assets only —
+      // see the header note on colliding ids.
       if (shelf === FAVORITES) return assets.filter((a) => a.favorite);
       if (shelf === TRASH) return trash;
-      if (shelf === SHARING) {
-        // Sharing is a PLACE a photograph is in, not a permission attached
-        // to it (§H): what is "in Sharing" is what sits anywhere but the
-        // member's own scope.
-        const own = ownId();
-        return assets.filter((a) => (a.scope_id ?? "") !== own);
-      }
       if (typeof shelf === "string" && shelf.startsWith("tag:")) {
         const label = shelf.slice(4);
         return assets.filter((a) => a.tags?.some((t) => t.label === label));
@@ -908,9 +903,6 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       toolbarRoot.render(
         <ToolbarView
           scopes={scopesNow()}
-          {...(shareTargetId() === undefined
-            ? {}
-            : { shareTargetId: shareTargetId() })}
           vaultsOn={prefs.read().vaultsOn}
           onToggleVault={toggleVault}
           kind={kind}
@@ -988,7 +980,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         // rule the timeline follows below, expressed through the same gate.
         // The consent gate draws its own explanation of an empty shelf, so
         // the generic empty block is suppressed while it is showing — the
-        // same treatment Sharing's own empty view gets, above.
+        // same treatment Search, Duplicates and Storage get.
         applyEmptyState(
           gateProps
             ? NO_EMPTY_STATE
@@ -1022,14 +1014,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       }
 
       const shown = visibleAssets();
-      // Sharing answers its own empty view (components/Sharing.tsx), the way
-      // Search, Duplicates and Storage do: the generic block would say
-      // "Nothing is in Sharing yet" and nothing else, and the member who has
-      // never shared anything is precisely the one who needs the model
-      // explained. It goes down through the same one door (§14).
-      applyEmptyState(
-        shelf === SHARING ? NO_EMPTY_STATE : emptyFor(shown.length)
-      );
+      applyEmptyState(emptyFor(shown.length));
 
       // BEFORE THE FIRST READ LANDS THE GRID IS A SHAPE, NOT A VERDICT (§14).
       // `shown` is `[]` while the read is in flight, and the app used to hand
@@ -1054,7 +1039,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
 
       mainRoot.render(
         timeline(shown, {
-          memories: timelineHead(shown),
+          memories: timelineHead(),
           truncated: libraryTruncated,
           handleShowMore: async (e) => {
             e.currentTarget.disabled = true;
@@ -1071,20 +1056,16 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
      *  1. The import panels, when the last run had a dedupe or a restore to
      *     explain. They are read after the fact and they are about what the
      *     member just did, so they lead — and they ride ANY shelf, because an
-     *     import made from Sharing lands somewhere the member is looking at.
-     *  2. The shelf's own head: Sharing's body (§H), Trash's note (§5, proto
-     *     4445) or the memories strip (§4.6). These three are mutually
-     *     exclusive by shelf, so they share the slot rather than asking
-     *     Timeline.tsx for three.
+     *     import lands somewhere the member is looking at.
+     *  2. The shelf's own head: Trash's note (§5, proto 4445) or the memories
+     *     strip (§4.6). These are mutually exclusive by shelf, so they share
+     *     the slot rather than asking Timeline.tsx for two.
      *
      * Memories are the Library shelf's alone, and only at rungs XS-M: at L the
      * cards and the first row of tiles are the same size and the head stops
      * reading as a head.
      */
-    function timelineHead(shown: Asset[]): ReactNode {
-      // Named for the jsx-handler-names rule, exactly as `timeline()` does —
-      // re-pointing it here keeps selection.tsx the one owner of the mode.
-      const handleEnterSelect = selection.enter;
+    function timelineHead(): ReactNode {
       const panels = lastImport ? (
         <ImportPanels
           result={lastImport}
@@ -1100,22 +1081,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         !selection.isActive() &&
         prefs.read().tileSize <= MEMORIES_MAX_RUNG;
       const shelfHead =
-        shelf === SHARING ? (
-          <SharingBody
-            facts={sharingFacts({
-              shared: shown,
-              ownCount: ownAssets.length,
-              scopes: scopesNow(),
-              ownScopeId: ownId(),
-              ...(shareTargetId() === undefined
-                ? {}
-                : { shareTargetId: shareTargetId() }),
-              truncated: libraryTruncated,
-            })}
-            onOpenLibrary={() => navigateTo(null)}
-            onSelect={handleEnterSelect}
-          />
-        ) : shelf === TRASH ? (
+        shelf === TRASH ? (
           <EmptyTrash trash={trash} refresh={refresh} />
         ) : showMemories ? (
           <MemoriesStrip memories={memories()} />
@@ -1340,6 +1306,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
           onClear={clearSearch}
           onRetry={runSearch}
           onOpenGroup={navigateTo}
+          reachFacts={searchReachFacts}
         >
           {timeline(hits, {
             truncated: false,
@@ -1359,6 +1326,9 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         searchStatus = status;
       },
       renderGrid: renderMain,
+      setReachFacts: (facts) => {
+        searchReachFacts = facts;
+      },
     });
     const debouncedLocalRender = debounce(() => {
       renderMain();
@@ -1381,6 +1351,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         searchQuery = "";
         searchResults = null;
       }
+      searchReachFacts = [];
       renderMain();
       contributeAppBar();
     }

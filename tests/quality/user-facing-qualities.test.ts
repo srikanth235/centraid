@@ -891,7 +891,7 @@ describe("issue #679 user-facing quality gates", () => {
       new Set(ROUTE_SECURITY_REGISTRY.map((route) => route.prefix)).size
     ).toBe(ROUTE_SECURITY_REGISTRY.length);
     for (const route of ROUTE_SECURITY_REGISTRY) {
-      expect(route.auth).toMatch(/^(?:public|device|member|admin)$/u);
+      expect(route.auth).toMatch(/^(?:public|device|owner|admin)$/u);
       expect(route.vaultScope).toMatch(/^(?:none|active|path)$/u);
       expect(route.auth !== "public" || Boolean(route.reason)).toBe(true);
     }

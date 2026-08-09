@@ -42,7 +42,7 @@ import type { ConsentAllow } from "./consent.js";
 import { evaluateConditions, judgmentVeto } from "./contract.js";
 import type { CommandRow } from "./contract.js";
 import {
-  actingMemberDetail,
+  actingOwnerDetail,
   writeCheck,
   writeExplanation,
   writeReceipt,
@@ -810,7 +810,7 @@ export function runContractAndExecute(
       receiptDetail: {
         ...(request.intentId ? {} : { output: durableOutput }),
         // L4 attribution (issue #599 decision 8) — WHO, not just what.
-        ...actingMemberDetail(identity, request),
+        ...actingOwnerDetail(identity, request),
         writes: writes.map((write) => ({ ...write })),
         // The salience marker (issue #306 decision 2): what the review feed
         // surfaces first, now that risk no longer gates execution.

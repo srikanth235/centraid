@@ -70,20 +70,14 @@ export interface DeviceEnrichmentLease {
 }
 
 /**
- * The roles the owner may grant when minting a ticket — the wire twin of the
- * gateway's `GrantableRole` and of `centraid-gateway pair --role`. `revoked`
- * is a state a device is put INTO, never a role handed out, so it is not here.
+ * One vault a device (or a freshly minted ticket) reaches — the wire twin of
+ * the gateway's `DeviceDTO`/ticket `vaults[]` (#726). Ownership replaces
+ * roles: a device reaches exactly the vaults its owner owns, so there is
+ * nothing per-vault left to grant beyond the vault itself.
  */
-export type GatewayDeviceRole = "admin" | "write" | "read";
-
-/**
- * One (vault, role) pair — the unit authority is authored in since #599.
- * Roles hang off the MEMBER; a device only inherits its member's grants.
- */
-export interface GatewayVaultGrant {
+export interface GatewayDeviceVault {
   vaultId: string;
   vaultName?: string;
-  role: GatewayDeviceRole;
 }
 
 /** One paired device (mirrors the gateway route's `DeviceDTO`). */
@@ -92,10 +86,10 @@ export interface CentraidGatewayDevice {
   deviceId: string;
   /** The device's key (iroh EndpointId, or a synthetic `http:<uuid>`). */
   endpointId: string;
-  /** The person this device acts as (#599 L2). The roster groups on it. */
-  memberId: string;
+  /** The person this device acts as (#726). The roster groups on it. */
+  ownerId: string;
   /** That person's display label, denormalized so a roster needs one call. */
-  memberLabel: string;
+  ownerLabel: string;
   label: string;
   platform?: string;
   transport: "iroh";
@@ -105,13 +99,9 @@ export interface CentraidGatewayDevice {
   lastUsedAt?: string;
   /** True for the device making the request (never set for the admin caller). */
   current?: boolean;
-  /**
-   * Server-enforced device role used to clamp replica shapes and intents.
-   * `admin` is `write` plus pairing/revocation authority — the founding device
-   * always holds it, so a roster type without it could not describe the one
-   * device every gateway has. `revoked` is a tombstone, never a granted role.
-   */
-  role: GatewayDeviceRole | "revoked";
+  /** Device tombstone — never a role (#726): the owner and their access are
+   *  untouched, this binding just no longer answers for it. */
+  revoked: boolean;
   /** Whether this device consented to durable OPFS/IndexedDB state. */
   rememberDevice: boolean;
   /** Server-enforced app allow-list for a constrained Companion device. */
@@ -151,30 +141,37 @@ export interface GatewayDeviceTicket {
   /** The pasteable one-line token for the client's "Add gateway" dialog. */
   ticket: string;
   /** The person the redeeming device will act as. */
-  memberId: string;
-  memberLabel: string;
-  /** Every (vault, role) the ticket carries. The first is echoed flat below. */
-  grants: GatewayVaultGrant[];
+  ownerId: string;
+  ownerLabel: string;
+  /** Every vault the ticket carries. The first is echoed flat below. */
+  vaults: GatewayDeviceVault[];
   vaultId: string;
   vaultName?: string;
   /** Ticket expiry, ISO-8601. */
   expiresAt: string;
-  /** The tier the redeeming device will be enrolled at. Echoed by the gateway. */
-  role: GatewayDeviceRole;
 }
 
-/** What the panel sends to mint — a person plus what they may reach. */
+/**
+ * What the panel sends to mint. Ownership admits no cross-person grant
+ * (#726): a ticket always lands on the CALLER's own owner, so there is
+ * nothing here to name a person or a role with — only which of the caller's
+ * own vaults to carry, or none to carry every vault they own.
+ *
+ * `forPerson` is the one exception (#726 P1 "Add someone"): it mints a NEW
+ * owner and a vault of their own, then binds the ticket to THAT pair instead
+ * of the caller's. Mutually exclusive with `vaultId`/`vaultIds` — those name
+ * a subset of the caller's own vaults, which has no meaning once the ticket
+ * is landing somebody else's brand-new one.
+ */
 export interface GatewayDeviceTicketInput {
+  /** Landing vault when `vaultIds` is omitted; also the fallback target. */
   vaultId?: string;
+  /** Explicit vault subset, target-first. Omitted = every vault the caller
+   *  owns, target-first. */
+  vaultIds?: string[];
+  /** Mint a vault for a NEW person instead of self-pairing. */
+  forPerson?: { label: string; vaultName?: string };
   ttlMinutes?: number;
-  label?: string;
-  role?: GatewayDeviceRole;
-  /** An EXISTING person: member id (or exact label, for CLI parity). */
-  memberId?: string;
-  /** A NEW person, created by this mint. Never combine with `memberId`. */
-  newMemberLabel?: string;
-  /** Per-vault roles. Omitted with no member = self-pair at your own roles. */
-  grants?: { vaultId: string; role: GatewayDeviceRole }[];
 }
 
 /**
@@ -182,12 +179,13 @@ export interface GatewayDeviceTicketInput {
  * `centraid-gateway pair`). The gateway scopes it to the caller's plane and
  * defaults the target vault to the active `x-centraid-vault` when none is given.
  *
- * Naming NO member is a SELF-PAIR — the ticket lands on the caller's own
- * member at the roles they already hold (#599 Decision 5), which is why a
- * bare `{ttlMinutes}` call is safe. Naming another person (`memberId`, or
- * `newMemberLabel` to create one) is an invite, and requires the caller hold
- * `admin` in every granted vault: the ticket leaves this machine, so the
- * grants travel with it.
+ * Every ticket a device caller may mint is either a SELF-PAIR (#726) — it
+ * lands on the caller's own owner, reaching exactly the vaults that owner
+ * already owns, which is why a bare `{ttlMinutes}` call is safe and
+ * sufficient — or an *Add someone* mint (`forPerson`, #726 P1), which lands
+ * on a freshly created owner and vault instead. Access is ownership, so
+ * there is no third shape: a ticket can never land another EXISTING person
+ * in the caller's vaults.
  */
 export async function createGatewayDeviceTicket(
   input?: GatewayDeviceTicketInput
@@ -206,16 +204,17 @@ export async function createGatewayDeviceTicket(
 
 /**
  * Revoke one paired DEVICE — "this phone was stolen". The person and their
- * other devices are untouched (removing a person is `removeGatewayMember`).
- * Idempotent — `removed:false` when already gone.
+ * other devices are untouched (removing a person is a host-custody act,
+ * `owners-routes.ts` — unreachable from this device-token client). Idempotent
+ * — `removed:false` when already gone.
  *
- * The row survives as a tombstone at role `revoked`, so prior attribution
- * still resolves. Revoking the last live device of a vault's last owner 409s
- * until `confirmLastAdmin` echoes that vault's name back.
+ * The row survives as a tombstone (`revoked: true`), so prior attribution
+ * still resolves. Revoking the owner's last live device for a vault 409s
+ * until `confirmLastDevice` echoes that vault's name back.
  */
 export async function revokeGatewayDevice(
   deviceId: string,
-  options?: { confirmLastAdmin?: string }
+  options?: { confirmLastDevice?: string }
 ): Promise<{ removed: boolean }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(
@@ -225,8 +224,8 @@ export async function revokeGatewayDevice(
       method: "DELETE",
       headers: authHeaders(token, "application/json"),
       body: JSON.stringify(
-        options?.confirmLastAdmin
-          ? { confirmLastAdmin: options.confirmLastAdmin }
+        options?.confirmLastDevice
+          ? { confirmLastDevice: options.confirmLastDevice }
           : {}
       ),
     }

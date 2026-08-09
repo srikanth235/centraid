@@ -94,6 +94,9 @@ function validateTarget(value: unknown, index: number): RecoveryKitTarget {
     ...(typeof value["sealKey"] === "string"
       ? { sealKey: value["sealKey"] }
       : {}),
+    ...(typeof value["identitySeed"] === "string"
+      ? { identitySeed: value["identitySeed"] }
+      : {}),
   };
 }
 
@@ -184,6 +187,11 @@ export function recoveryKitFingerprint(document: RecoveryKitDocument): string {
         sealkeyHash: target.sealKey
           ? createHash("sha256")
               .update(Buffer.from(target.sealKey, "base64"))
+              .digest("hex")
+          : null,
+        identitySeedHash: target.identitySeed
+          ? createHash("sha256")
+              .update(Buffer.from(target.identitySeed, "base64"))
               .digest("hex")
           : null,
       })),

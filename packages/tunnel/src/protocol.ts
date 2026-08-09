@@ -1,7 +1,7 @@
 /*
  * Wire protocol for the centraid tunnel (issue #263).
  *
- * Two ALPNs ride one iroh endpoint:
+ * Three ALPNs ride one iroh endpoint:
  *
  *   `centraid/tunnel/1` — HTTP forwarding. One QUIC bi-stream per HTTP
  *     request. Each direction is a header frame followed by raw body bytes
@@ -12,6 +12,13 @@
  *     PairRequest frame (then FIN), the desktop answers a PairResponse
  *     frame (then FIN).
  *
+ *   `centraid/gw-link/1` — the gateway↔GATEWAY peer plane (#726 P3).
+ *     Same framing, confined to `/centraid/_peer/*`, with its own admission
+ *     decision and its own identity headers. A CLIENT never speaks it: it is
+ *     deliberately absent from fixtures/wire-golden.json, because the Swift
+ *     and Kotlin conformance suites read that fixture as their to-do list and
+ *     a phone has no links.
+ *
  * A header frame is a u32 big-endian byte length followed by that many
  * bytes of UTF-8 JSON. This file is the reference for the Swift/Kotlin
  * implementations in apps/mobile/modules/centraid-tunnel.
@@ -19,6 +26,15 @@
 
 export const TUNNEL_ALPN = "centraid/tunnel/1";
 export const PAIR_ALPN = "centraid/pair/1";
+/**
+ * Gateway↔gateway peer plane (issue #726 P3). A LINK is not a pairing: the
+ * caller is another gateway acting for its own vault, never a device acting
+ * for this gateway's owner. Byte-mirrored in
+ * `data-plane/src/lib.rs::PEER_LINK_ALPN`; the two are pinned against each
+ * other by `alpn-parity.test.ts` because a drift only surfaces at ALPN
+ * negotiation, in production, on the wire.
+ */
+export const PEER_LINK_ALPN = "centraid/gw-link/1";
 /** Ask the tunnel to defer auth to a gateway-scoped browser app session cookie. */
 export const TUNNEL_AUTH_MODE_HEADER = "x-centraid-tunnel-auth-mode";
 export const TUNNEL_AUTH_WEB_SESSION = "web-session";
@@ -43,6 +59,50 @@ export const DEVICE_PROOF_HEADER = "x-centraid-device-proof";
  * minting a founding ticket.
  */
 export const TUNNEL_FORWARDED_HEADER = "x-centraid-tunnel-forwarded";
+
+/*
+ * The peer plane (issue #726 P3 decision 6).
+ *
+ * A linked peer gateway reaches EXACTLY the routes under this prefix and
+ * nothing else. The forwarded `target` is peer-supplied and is concatenated
+ * onto the local upstream URL by every forwarder, so without this guard a
+ * link would address the whole owner surface — `/centraid/_gateway/*`
+ * included. The confinement is enforced twice on purpose: once in the Rust
+ * relay (`data-plane/src/iroh_relay.rs::peer_target_allowed`, the production
+ * path) and once here (the pure-JS endpoint), so loosening either one alone
+ * does not open the door.
+ */
+export const PEER_PLANE_PREFIX = "/centraid/_peer/";
+
+/** EndpointId the peer's QUIC handshake proved. Stamped only by a forwarder. */
+export const PEER_ENDPOINT_HEADER = "x-centraid-peer-endpoint";
+/** In-process proof that the two headers above came from the forwarder. */
+export const PEER_PROOF_HEADER = "x-centraid-peer-proof";
+
+/**
+ * Is `target` confined to the peer plane?
+ *
+ * Constraints, mirrored byte-for-byte in Rust:
+ *  - must extend `PEER_PLANE_PREFIX` (a bare prefix addresses no resource);
+ *  - the path (everything before `?`/`#`) carries no percent escape, no
+ *    backslash, and no byte at or below 0x20 — the peer plane's own routes
+ *    never need them, and admitting them would mean re-implementing URL
+ *    normalisation identically in two languages to stay safe;
+ *  - no `.` or `..` segment, so the concatenated upstream URL cannot climb
+ *    out of the plane.
+ */
+export function isPeerPlaneTarget(target: unknown): target is string {
+  if (typeof target !== "string") return false;
+  if (target.length <= PEER_PLANE_PREFIX.length) return false;
+  if (!target.startsWith(PEER_PLANE_PREFIX)) return false;
+  const path = target.split(/[?#]/u)[0] ?? "";
+  for (const byte of Buffer.from(path, "utf8")) {
+    if (byte === 0x25 || byte === 0x5c || byte <= 0x20) return false;
+  }
+  return path
+    .split("/")
+    .every((segment) => segment !== "." && segment !== "..");
+}
 
 /** QUIC close code for a tunnel connection from an endpoint not in the allowlist. */
 export const CLOSE_UNAUTHORIZED = 401n;

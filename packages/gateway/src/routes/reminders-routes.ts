@@ -69,12 +69,10 @@ export function makeRemindersRouteHandler(
       }
       const pendingInvitations = devicePairing
         ? devicePairing.tickets.listActive().map((ticket) => {
-            const member = devicePairing.enrollments.members.get(
-              ticket.memberId
-            );
+            const owner = devicePairing.enrollments.owners.get(ticket.ownerId);
             return {
               ticketId: ticket.ticketId,
-              memberLabel: member?.label ?? ticket.memberId,
+              ownerLabel: owner?.label ?? ticket.ownerId,
               createdAt: ticket.createdAt,
               expiresAt: ticket.expiresAt,
             };

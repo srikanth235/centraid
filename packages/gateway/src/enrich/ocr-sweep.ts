@@ -27,7 +27,7 @@
 // service are the asset's preview/thumb rung, exactly as `embedding-sweep`
 // reads them: preview first for the detail a text-recognition model wants,
 // thumb as the fallback, and an asset with neither rung is SKIPPED rather
-// than read from its original. A member's full-resolution photograph is
+// than read from its original. An owner's full-resolution photograph is
 // never uploaded anywhere by this pass.
 //
 // WHY THE COMMAND PIPELINE, NOT A RAW INSERT. `core.set_extracted_text`
@@ -142,7 +142,7 @@ export function createOcrSweepSpec(
     variant: "text",
 
     selectBacklog: (db: VaultDb, input): CapabilitySweepBacklog => {
-      // Member asks first (issue #299 phase 5), same shared half every spec
+      // Owner asks first (issue #299 phase 5), same shared half every spec
       // uses.
       const requests = selectOpenRequests(db, {
         targetType: TARGET_TYPE,

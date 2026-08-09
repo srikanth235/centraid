@@ -1,6 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#406) consent selection, temporal membership, and opaque row identity form one security boundary
 // Server-derived replica shapes (issue #406): existing app consent scopes
-// intersected with the ambient device role. There is no replica field
+// intersected with the acting owner's write authority. There is no replica field
 // in app manifests; this module projects the grants already enforced by the
 // vault gateway into a row/column-minimized offline shape.
 
@@ -19,8 +19,8 @@ import {
 } from "@centraid/vault";
 import type { FilterClause, ConsentAllow, ReplicaRow } from "@centraid/vault";
 
-import { canWrite } from "../serve/enrollment-store.js";
-import type { GrantableRole } from "../serve/enrollment-store.js";
+import { readGrantees, readLentGrantee } from "./replica-grantees.js";
+import type { LentGranteeAccess } from "./replica-grantees.js";
 import { preparedStatement } from "./sql-statement-cache.js";
 
 export const REPLICA_PROTOCOL_VERSION = 1 as const;
@@ -28,10 +28,22 @@ export const REPLICA_MAX_VALUE_BYTES = 64 * 1024;
 export const REPLICA_SYNTHETIC_PRIMARY_KEY = "__centraid_row_id";
 
 export interface ReplicaShapeAccess {
-  role: GrantableRole;
+  /** Ownership-sourced write authority (#726): the device's owner owns the
+   *  vault. Kept as a flowing field — later phases put read-only lent scopes
+   *  through this same seam. */
+  canWrite: boolean;
   rememberDevice: boolean;
   /** Trusted web-app session header or an explicit shell selection. */
   appId?: string;
+  /**
+   * The vault-as-grantee plane (#726 P4). A live edge mints a real consent
+   * grant at the origin whose grantee is the AUDIENCE VAULT's party row, so
+   * `activeGrants` selects it by `grantee_party_id` exactly as it selects an
+   * app by `app_id` — a third kind of row in a table that already exists, not
+   * a parallel permission model. Mutually exclusive with `appId`; when set,
+   * app grants are not consulted at all.
+   */
+  grantee?: LentGranteeAccess;
 }
 
 export interface ReplicaEntitySchemaWire {
@@ -47,13 +59,6 @@ export interface ReplicaShapeWire {
   appId: string;
   purpose: string;
   entities: ReplicaEntitySchemaWire[];
-}
-
-interface ReplicaGrantee {
-  app_id: string;
-  app_name: string;
-  signing_key: string | null;
-  purpose: string;
 }
 
 interface ScopeAlternative {
@@ -129,29 +134,6 @@ function tableColumns(db: DatabaseSync, physical: string): TableColumn[] {
 
 function quoteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
-}
-
-function readGrantees(
-  db: DatabaseSync,
-  now: string,
-  appId?: string
-): ReplicaGrantee[] {
-  const restriction = appId ? ` AND (a.name = ? OR a.app_id = ?)` : "";
-  return db
-    .prepare(
-      `SELECT DISTINCT a.app_id, a.name AS app_name, a.signing_key,
-              c.notation AS purpose
-         FROM consent_app a
-         JOIN consent_access_grant g ON g.app_id = a.app_id
-         JOIN core_concept c ON c.concept_id = g.purpose_concept_id
-         JOIN consent_grant_scope s ON s.grant_id = g.grant_id
-        WHERE a.status = 'active'
-          AND g.status = 'active' AND g.revoked_at IS NULL
-          AND (g.expires_at IS NULL OR g.expires_at > ?)
-          AND s.verbs IN ('read', 'read+act')${restriction}
-        ORDER BY a.name, c.notation`
-    )
-    .all(now, ...(appId ? [appId, appId] : [])) as unknown as ReplicaGrantee[];
 }
 
 function alternativeFor(
@@ -376,7 +358,9 @@ export function buildReplicaShapes(
   access: ReplicaShapeAccess,
   now = new Date().toISOString()
 ): ReplicaServerShape[] {
-  const grantees = readGrantees(db, now, access.appId);
+  const grantees = access.grantee
+    ? readLentGrantee(db, now, access.grantee)
+    : readGrantees(db, now, access.appId);
   const shapes: ReplicaServerShape[] = [];
   const nowMs = Date.parse(now);
   const replicaEpoch = currentReplicaLogState(db).epoch;
@@ -392,13 +376,26 @@ export function buildReplicaShapes(
       try {
         const decision = evaluateConsent(
           db,
-          {
-            kind: "app",
-            callerId: grantee.app_id,
-            provAgentKind: "app",
-            partyId: null,
-            mayAct: canWrite(access.role),
-          },
+          access.grantee
+            ? {
+                // A read-only lent edge structurally denies act/reveal
+                // (`mayAct: false`) the same way a readonly device does; a
+                // read+act edge carries the SAME predicate `access.canWrite`
+                // an app's identity already flows through below (#726 P5) —
+                // no parallel gate, one flowing field.
+                kind: "agent",
+                callerId: access.grantee.partyId,
+                provAgentKind: "ai_agent",
+                partyId: access.grantee.partyId,
+                mayAct: access.canWrite,
+              }
+            : {
+                kind: "app",
+                callerId: grantee.app_id,
+                provAgentKind: "app",
+                partyId: null,
+                mayAct: access.canWrite,
+              },
           ref.schema,
           ref.table,
           "read",
@@ -463,7 +460,7 @@ export function buildReplicaShapes(
       protocolVersion: REPLICA_PROTOCOL_VERSION,
       appId,
       purpose,
-      role: access.role,
+      canWrite: access.canWrite,
       maxValueBytes: REPLICA_MAX_VALUE_BYTES,
       entities: entities.map((entity) => ({
         entity: entity.entity,

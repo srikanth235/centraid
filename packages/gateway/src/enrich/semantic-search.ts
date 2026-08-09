@@ -98,7 +98,7 @@ export interface PhotoSearchOptions {
  * failure. Derived data enriches, it never gates.
  *
  * A service that RAN and refused the query is the one genuine failure and it
- * THROWS, so the route can answer 500: a member who configured this deserves
+ * THROWS, so the route can answer 500: an owner who configured this deserves
  * to know it broke rather than to be told it was never switched on.
  */
 export async function searchPhotosByText(

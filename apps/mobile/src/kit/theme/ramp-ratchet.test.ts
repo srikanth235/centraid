@@ -56,7 +56,6 @@ const ALLOWED: Record<string, number> = {
   "apps/photos/PhotosMoreSheet.tsx": 1,
   "apps/tally/TallyHome.styles.ts": 4,
   "apps/tasks/TasksHome.tsx": 4,
-  "kit/components/AudiencePlacementSheet.tsx": 2,
   "kit/perf/FrameProbe.tsx": 1,
   "kit/replica/ReplicaStateCard.tsx": 3,
   "kit/replica/ReplicaStatusBar.tsx": 13,

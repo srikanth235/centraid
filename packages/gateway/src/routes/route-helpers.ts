@@ -16,6 +16,7 @@ import type { RunnerKind } from "@centraid/app-engine";
 import {
   DEVICE_IDENTITY_HEADER,
   DEVICE_PROOF_HEADER,
+  PEER_ENDPOINT_HEADER,
   TUNNEL_FORWARDED_HEADER,
 } from "@centraid/tunnel";
 
@@ -48,6 +49,7 @@ export function isDirectHostRequest(req: IncomingMessage): boolean {
     isLoopbackRequest(req) &&
     req.headers[DEVICE_IDENTITY_HEADER] === undefined &&
     req.headers[DEVICE_PROOF_HEADER] === undefined &&
+    req.headers[PEER_ENDPOINT_HEADER] === undefined &&
     req.headers[TUNNEL_FORWARDED_HEADER] === undefined
   );
 }

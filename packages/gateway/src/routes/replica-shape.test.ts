@@ -79,7 +79,7 @@ describe("replica-shape suite", () => {
       .run(new Date().toISOString(), new Date().toISOString());
 
     const [shape] = buildReplicaShapes(vault.db.vault, {
-      role: "write",
+      canWrite: true,
       rememberDevice: true,
       appId: "passwords",
     });
@@ -113,7 +113,7 @@ describe("replica-shape suite", () => {
     });
 
     const shape = buildReplicaShapes(vault.db.vault, {
-      role: "write",
+      canWrite: true,
       rememberDevice: true,
       appId: "tasks",
     })[0]!;
@@ -164,7 +164,7 @@ describe("replica-shape suite", () => {
       .run();
 
     const shape = buildReplicaShapes(vault.db.vault, {
-      role: "write",
+      canWrite: true,
       rememberDevice: true,
       appId: "credential-auditor",
     })[0]!;
@@ -231,7 +231,7 @@ describe("replica-shape suite", () => {
 
     for (const appId of ["credential-filter", "credential-mask"]) {
       const shape = buildReplicaShapes(vault.db.vault, {
-        role: "write",
+        canWrite: true,
         rememberDevice: true,
         appId,
       })[0]!;
@@ -289,7 +289,7 @@ describe("replica-shape suite", () => {
     );
 
     const shapes = buildReplicaShapes(vault.db.vault, {
-      role: "write",
+      canWrite: true,
       rememberDevice: true,
       appId: "planner",
     });
@@ -385,7 +385,7 @@ describe("replica-shape suite", () => {
     ]);
 
     const shape = buildReplicaShapes(vault.db.vault, {
-      role: "write",
+      canWrite: true,
       rememberDevice: true,
       appId: "planner",
     })[0]!;
@@ -434,7 +434,7 @@ describe("replica-shape suite", () => {
     });
     const onlineRows = plainSqliteRows(online.rows);
     const shape = buildReplicaShapes(vault.db.vault, {
-      role: "write",
+      canWrite: true,
       rememberDevice: true,
       appId: "planner",
     })[0]!;
@@ -468,7 +468,7 @@ describe("replica-shape suite", () => {
       )
       .run(vault.boot.ownerPartyId);
     const access = {
-      role: "write" as const,
+      canWrite: true,
       rememberDevice: true,
       appId: "planner",
     };
@@ -545,7 +545,7 @@ describe("replica-shape suite", () => {
       )
       .run(vault.boot.ownerPartyId);
     const access = {
-      role: "write" as const,
+      canWrite: true,
       rememberDevice: true,
       appId: "planner",
     };
@@ -611,7 +611,7 @@ describe("replica-shape suite", () => {
 
     const projected = projectReplicaPage(
       vault.db.vault,
-      { role: "write", rememberDevice: true, appId: "planner" },
+      { canWrite: true, rememberDevice: true, appId: "planner" },
       since
     );
     expect(projected.rebootstrapReason).toBeUndefined();
@@ -642,7 +642,7 @@ describe("replica-shape suite", () => {
       )
       .run(vault.boot.ownerPartyId, "x".repeat(70_000));
     const access = {
-      role: "write" as const,
+      canWrite: true,
       rememberDevice: true,
       appId: "planner",
     };
@@ -741,7 +741,7 @@ describe("replica-shape suite", () => {
       .run(vault.boot.ownerPartyId);
 
     const shape = buildReplicaShapes(vault.db.vault, {
-      role: "write",
+      canWrite: true,
       rememberDevice: true,
       appId: "tally",
     })[0]!;
@@ -785,7 +785,7 @@ describe("replica-shape suite", () => {
       .run();
     const projected = projectReplicaPage(
       vault.db.vault,
-      { role: "write", rememberDevice: true, appId: "planner" },
+      { canWrite: true, rememberDevice: true, appId: "planner" },
       since
     );
     expect(projected.rebootstrapReason).toBeUndefined();
@@ -819,7 +819,7 @@ describe("replica-shape suite", () => {
 
     const projected = projectReplicaPage(
       vault.db.vault,
-      { role: "write", rememberDevice: true, appId: "planner" },
+      { canWrite: true, rememberDevice: true, appId: "planner" },
       since
     );
     const visibleShape = projected.shapes.find(
@@ -874,7 +874,7 @@ describe("replica-shape suite", () => {
     });
 
     const shape = buildReplicaShapes(vault.db.vault, {
-      role: "write",
+      canWrite: true,
       rememberDevice: true,
       appId: "photos",
     })[0]!;
@@ -944,7 +944,7 @@ describe("replica-shape suite", () => {
 
     const shapes = replicaShapesWire(
       buildReplicaShapes(vault.db.vault, {
-        role: "write",
+        canWrite: true,
         rememberDevice: true,
       })
     );

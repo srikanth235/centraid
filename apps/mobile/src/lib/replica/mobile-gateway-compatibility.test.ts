@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
+} from "@centraid/protocol";
+
+import {
   MOBILE_APP_UPDATE_MESSAGE,
   MOBILE_COMPATIBILITY_WALL_COPY,
   MOBILE_GATEWAY_UPDATE_MESSAGE,
@@ -54,35 +59,38 @@ describe("mobile gateway compatibility", () => {
       multiVaultReplica: true,
       crossVaultPlacements: true,
     };
+    // Stated against the shared constants, not against literals: the floor
+    // moves on breaking releases, and a literal here would assert that a
+    // current gateway needs updating the next time it does.
     expect(
       judgeMobileGatewayCompatibility({
         version: "0.1.0",
-        protocolVersion: 2,
-        minSupportedProtocol: 2,
+        protocolVersion: GATEWAY_PROTOCOL_VERSION,
+        minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
         capabilities,
       })
     ).toBe("supported");
     expect(
       judgeMobileGatewayCompatibility({
         version: "old-gateway",
-        protocolVersion: 1,
-        minSupportedProtocol: 1,
+        protocolVersion: GATEWAY_MIN_PROTOCOL_VERSION - 1,
+        minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION - 1,
         capabilities,
       })
     ).toBe("update-gateway");
     expect(
       judgeMobileGatewayCompatibility({
         version: "future-gateway",
-        protocolVersion: 3,
-        minSupportedProtocol: 3,
+        protocolVersion: GATEWAY_PROTOCOL_VERSION + 1,
+        minSupportedProtocol: GATEWAY_PROTOCOL_VERSION + 1,
         capabilities,
       })
     ).toBe("update-app");
     expect(
       judgeMobileGatewayCompatibility({
         version: "capability-old",
-        protocolVersion: 2,
-        minSupportedProtocol: 2,
+        protocolVersion: GATEWAY_PROTOCOL_VERSION,
+        minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
         capabilities: base,
       })
     ).toBe("update-gateway");

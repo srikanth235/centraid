@@ -4,6 +4,7 @@ import {
   ReplicaClosedError,
   ReplicaProtocolError,
   ReplicaRebootstrapRequiredError,
+  ReplicaSearchRefusedError,
 } from "./errors.js";
 import type { RebootstrapReason } from "./errors.js";
 import { replicaDatabaseName } from "./key.js";
@@ -258,6 +259,8 @@ function defaultWorkerFactory(): ReplicaWorkerLike {
 }
 
 function deserializeError(error: SerializedReplicaError): Error {
+  if (error.code === "REPLICA_SEARCH_REFUSED")
+    return new ReplicaSearchRefusedError(error.reason ?? error.message);
   if (error.code === "ONLINE_ONLY")
     return new OnlineOnlyError(error.reason ?? error.message);
   if (error.code === "REPLICA_REBOOTSTRAP_REQUIRED") {

@@ -173,8 +173,8 @@ export async function runBatchAddToAlbum(
  * favorites now", not "flip whatever each one happens to be".
  *
  * Deliberately does not exit selection mode: unlike Trash/Restore/Add to
- * album/Sharing, favoriting leaves every tile exactly where it was, so a
- * member very often follows it with a second action on the same selection.
+ * album/Copy to ⟨vault⟩, favoriting leaves every tile exactly where it was, so
+ * a member very often follows it with a second action on the same selection.
  */
 export async function runBatchFavorite(
   keys: string[],
@@ -262,108 +262,9 @@ export async function runBatchDownload(
   notice(parts.join(" · ") || "Nothing to download");
 }
 
-/**
- * Copy the selection into Sharing (§6, §H). "Share" became a destination, not
- * a permission: a photograph starts existing in the Sharing vault as well,
- * and nothing about the original is touched.
- *
- * NOT YET BACKED ON THE GATEWAY. `copy-into-scope` names the shape this write
- * needs — one asset, one destination scope — but no `media` action by that
- * name is registered in app.json/packages/gateway/packages/vault yet, and
- * wiring one is outside this change (it owns SelectionBar.tsx and this file,
- * not the gateway or the vault schema). Until it lands, `act()` narrates
- * whatever the gateway says about an action it does not recognise — exactly
- * like any other unsupported command — rather than this file pretending the
- * copy already happens.
- */
-export async function runBatchCopyToSharing(
-  keys: string[],
-  targetScopeId: string,
-  progressRef: { readonly current: HTMLElement | null },
-  { refresh, setBarBusy, exitSelectMode }: BatchCallbacks
-): Promise<void> {
-  setBarBusy(true);
-  let ok = 0;
-  let failed = 0;
-  let lastBad: VaultOutcome | undefined = undefined;
-  const results = await runSelectionBatch(keys, async (key, i) => {
-    if (progressRef.current)
-      progressRef.current.textContent = `Copying ${i + 1} of ${keys.length}…`;
-    const { assetId, scopeId } = parseAssetKey(key);
-    return act(
-      "copy-into-scope",
-      {
-        asset_id: assetId,
-        source_scope: scopeId || null,
-        target_scope_id: targetScopeId,
-      },
-      targetScopeId
-    );
-  });
-  for (const result of results) {
-    if (result.status === "rejected") {
-      failed += 1;
-      continue;
-    }
-    const outcome = result.value;
-    if (outcome?.status === "executed") ok += 1;
-    else {
-      failed += 1;
-      lastBad = outcome;
-    }
-  }
-  setBarBusy(false);
-  exitSelectMode();
-  await refresh();
-  const parts: string[] = [];
-  if (ok > 0) parts.push(`Copied ${ok} to Sharing`);
-  if (failed > 0) parts.push(`${failed} could not be copied`);
-  notice(parts.join(" · ") || "Nothing to copy");
-  if (lastBad) narrate(lastBad);
-}
-
-/**
- * Remove the selection from Sharing (§6, §H) — the Sharing shelf's swap for
- * the third action. The key's own scope IS the Sharing scope here (a
- * selection made from the Sharing shelf is shown from it), so this needs no
- * destination the way `runBatchCopyToSharing` does.
- *
- * Same NOT YET BACKED note as `runBatchCopyToSharing`: `remove-from-scope` is
- * not a registered gateway action yet.
- */
-export async function runBatchRemoveFromSharing(
-  keys: string[],
-  progressRef: { readonly current: HTMLElement | null },
-  { refresh, setBarBusy, exitSelectMode }: BatchCallbacks
-): Promise<void> {
-  setBarBusy(true);
-  let ok = 0;
-  let failed = 0;
-  let lastBad: VaultOutcome | undefined = undefined;
-  const results = await runSelectionBatch(keys, async (key, i) => {
-    if (progressRef.current)
-      progressRef.current.textContent = `Removing ${i + 1} of ${keys.length}…`;
-    const { assetId } = parseAssetKey(key);
-    return act("remove-from-scope", { asset_id: assetId }, scopeOfKey(key));
-  });
-  for (const result of results) {
-    if (result.status === "rejected") {
-      failed += 1;
-      continue;
-    }
-    const outcome = result.value;
-    if (outcome?.status === "executed") ok += 1;
-    else {
-      failed += 1;
-      lastBad = outcome;
-    }
-  }
-  setBarBusy(false);
-  exitSelectMode();
-  await refresh();
-  const parts: string[] = [];
-  if (ok > 0) parts.push(`Removed ${ok} from Sharing`);
-  if (failed > 0) parts.push(`${failed} could not be removed`);
-  notice(parts.join(" · ") || "Nothing to remove");
-  if (lastBad) narrate(lastBad);
-}
+// `runBatchCopyToVault` (the old `copy-into-scope` command path) is gone
+// (#726 P6) — it was never backed on the gateway (no such action was ever
+// registered; every call silently narrated "not recognised"). The selection
+// bar's Share control now opens `_shared/ShareSheet.tsx`, which gives through
+// the SAME landed `/edges` door Lightbox's single-asset share already used
+// successfully (`window.centraid.place`) — a real fix, not a relabeling.

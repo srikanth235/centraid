@@ -27,7 +27,8 @@ export interface Asset {
   asset_id: string;
   /**
    * Which mounted scope this row is shown FROM (issue #599) — stamped by the
-   * merge (merge.ts), absent on a single-scope surface. Two things depend on
+   * merge (apps/_shared/scope-merge.ts), absent on a single-scope surface.
+   * Two things depend on
    * it: every blob reference painted for this asset carries it as `data-scope`
    * (content ids are per-scope and collide across scopes by design, so an
    * unscoped reference renders the WRONG image), and every write about this

@@ -116,19 +116,6 @@ vi.mock(
 );
 
 vi.mock(
-  import("../../kit/share/use-share-target"),
-  () =>
-    ({
-      useShareTarget: () => ({
-        candidates: [],
-        choose: vi.fn<() => void>(),
-        hydrated: true,
-        reason: null,
-      }),
-    }) as never
-);
-
-vi.mock(
   import("../../kit/theme"),
   () =>
     ({

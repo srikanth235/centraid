@@ -250,6 +250,10 @@
   font-weight: 600;
   color: var(--text);
 }
+.vaultOwner {
+  font-weight: 400;
+  color: var(--text-faint);
+}
 .vaultParts {
   display: flex;
   flex-wrap: wrap;

@@ -10,7 +10,7 @@
 // on an already-walked table, not a new table or adapter — the canonical walk
 // carries it, and it must, because it is the only record that the owner
 // answered a face proposal (a rejection stopped being a row deletion). A
-// restore that dropped it would hand the member back a review queue they had
+// restore that dropped it would hand the owner back a review queue they had
 // already worked through.
 // Schema/export audit #721: the schema fingerprint moved on comment-only edits
 // to schema/enrich.ts (the model-versioning convention is documented in its
@@ -21,7 +21,7 @@
 // Schema/export audit #724: `enrich_derivation` is a NEW TABLE — the
 // provenance stamp naming which capability, under which model, produced a
 // target's variant. It is carried by the canonical table walk like every other
-// row, and it must be, because a restore that dropped it would hand the member
+// row, and it must be, because a restore that dropped it would hand the owner
 // back a library whose derived rows have no producer: the next sweep could not
 // tell an up-to-date caption from one an obsolete model wrote, so it would
 // either re-derive the whole library or trust stale output forever. It needs
@@ -37,11 +37,45 @@
 // because without it the next sweep cannot tell derived output that is current
 // from output an obsolete model wrote. The cluster projection is rebuildable
 // and could in principle be dropped — it is carried anyway because a restore
-// that silently re-derived it would present the member with a People shelf
+// that silently re-derived it would present the owner with a People shelf
 // whose unnamed groups had shuffled, and because `media.forget_person`'s
 // recovery test asserts on the artifact directly: a table outside the walk
 // cannot be proven empty by inspecting an export. Neither needs an adapter
 // (machine bookkeeping, not something a human reads) and neither carries bytes.
+
+// Schema/export audit #726 P0: `consent.share` is a DROPPED TABLE — the
+// rejected filtering-model share vestige (its one writer was the lifecycle
+// sweep's expiry lapse; the real share ledger arrives later as its own table).
+// It leaves `listVaultEntities` with the DDL, so the canonical walk no longer
+// carries it and a restore artifact simply has no such collection. Nothing to
+// migrate on export: no adapter ever read it and it carried no content bytes.
+
+// Schema/export audit #726 P1: `schema/vault-identity.ts` is a NEW FILE that
+// declares no table, column, or adapter — it is key custody, and the vault's
+// Ed25519 identity seed deliberately stays OUT of the portable bundle, exactly
+// as the DEK does. The two artifacts answer different questions. The recovery
+// kit says "this same vault, on another machine", so it carries the seed and a
+// restored vault keeps proving it is itself to every peer linked to it. A
+// portable bundle says "this data, somewhere else": what it restores is a new
+// vault that mints its own identity. Carrying the seed here would put a
+// signing key into the one artifact designed to be read by other software.
+//
+// Schema/export audit #726 P2: `enrich_request.reason` gained `projected` — a
+// widened CHECK on an already-walked column, not a new table or adapter. The
+// canonical walk carries such rows unchanged, and it must: the row is the only
+// record that content arriving over a share edge was queued for the audience's
+// own enrichment rather than inheriting the origin's derived state. Such rows
+// carry `required_capability = NULL`, so no export or lease reads them as work
+// a paired device could claim.
+//
+// Schema/export audit #726 Finding 6: `core_share_origin.shared_by_member`
+// is RENAMED to `shared_by` — the household L2 member-principal layer the old
+// name implied is gone, and the column now holds an owner id (a co-hosted
+// edge) or a `peer:<vaultId>` string (a remote give), never a member id. A
+// same-table column rename changes no row shape and adds no table or
+// adapter, so the canonical walk carries `core_share_origin` unchanged; a
+// restored bundle's provenance rows read exactly as they did before the
+// rename, just honestly named.
 
 import { createHash } from "node:crypto";
 

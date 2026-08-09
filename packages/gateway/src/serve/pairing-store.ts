@@ -1,10 +1,10 @@
 /*
- * One-time gateway enrollment tickets (issues #555, #603).
+ * One-time gateway enrollment tickets (issues #555, #603, #726).
  *
- * A ticket is an INVITATION: it names the member a joining device binds to
- * and the exact grants that member must hold. Redemption is a conditional
- * DELETE, so concurrency is decided by the affected row rather than an
- * in-process mutex.
+ * A ticket is an INVITATION: it names the owner a joining device binds to
+ * and the exact vault-id list the device lands in (no roles — access is
+ * ownership). Redemption is a conditional DELETE, so concurrency is decided
+ * by the affected row rather than an in-process mutex.
  */
 
 import crypto from "node:crypto";
@@ -12,7 +12,6 @@ import path from "node:path";
 
 import type { DeviceEnrollment, EnrollmentStore } from "./enrollment-store.js";
 import { GatewayDatabase } from "./gateway-db.js";
-import type { MemberGrant } from "./member-store.js";
 
 export {
   encodePairingTicket,
@@ -24,41 +23,35 @@ export const DEFAULT_TICKET_TTL_MS = 15 * 60 * 1000;
 interface TicketRow {
   ticket_id: string;
   secret_hash: string;
-  member_id: string;
+  owner_id: string;
   grants_json: string;
   created_at: string;
   expires_at: number;
 }
 
 const TICKET_COLUMNS =
-  "ticket_id, secret_hash, member_id, grants_json, created_at, expires_at";
+  "ticket_id, secret_hash, owner_id, grants_json, created_at, expires_at";
 
-/** An invitation: which member joins, and the exact authority they hold. */
+/** An invitation: which owner joins, and the vaults the device lands in. */
 export interface TicketInvitation {
-  memberId: string;
-  grants: MemberGrant[];
+  ownerId: string;
+  vaultIds: string[];
 }
 
-function parseGrants(raw: string): MemberGrant[] {
+function parseVaultIds(raw: string): string[] {
   const parsed: unknown = JSON.parse(raw);
-  if (!Array.isArray(parsed)) throw new Error("ticket grants are not a list");
+  if (!Array.isArray(parsed)) throw new Error("ticket vaults are not a list");
   return parsed.map((entry) => {
-    const grant = entry as { vaultId?: unknown; role?: unknown };
-    if (
-      typeof grant.vaultId !== "string" ||
-      (grant.role !== "admin" &&
-        grant.role !== "write" &&
-        grant.role !== "read")
-    ) {
-      throw new Error("ticket grant must be {vaultId, role}");
+    if (typeof entry !== "string" || entry.length === 0) {
+      throw new Error("ticket vault entry must be a vault id");
     }
-    return { vaultId: grant.vaultId, role: grant.role };
+    return entry;
   });
 }
 
-/** Every stored ticket carries a member and grants — the DDL CHECK says so. */
+/** Every stored ticket carries an owner and vaults — the mint guard says so. */
 function invitationOf(row: TicketRow): TicketInvitation {
-  return { memberId: row.member_id, grants: parseGrants(row.grants_json) };
+  return { ownerId: row.owner_id, vaultIds: parseVaultIds(row.grants_json) };
 }
 
 function hashSecret(secret: string): string {
@@ -82,19 +75,19 @@ export class PairingTicketStore {
   }
 
   /**
-   * Mint an INVITATION (#599 Decision 5). The member and the full grant list
-   * are decided here, server-side, and burned into the ticket; the joining
-   * device can name neither. Authorization for WHO may mint WHAT lives in
+   * Mint an INVITATION. The owner and the full vault list are decided here,
+   * server-side, and burned into the ticket; the joining device can name
+   * neither. Authorization for WHO may mint WHAT lives in
    * `routes/devices-routes.ts` — this store only records the decision.
    */
   mint(
     invitation: TicketInvitation,
     ttlMs = DEFAULT_TICKET_TTL_MS
   ): { ticketId: string; secret: string; expiresAt: number } {
-    if (invitation.grants.length === 0) {
-      throw new Error("an invitation must carry at least one vault grant");
+    if (invitation.vaultIds.length === 0) {
+      throw new Error("an invitation must carry at least one vault");
     }
-    return this.insert(ttlMs, invitation.memberId, invitation.grants);
+    return this.insert(ttlMs, invitation.ownerId, invitation.vaultIds);
   }
 
   redeem(ticketId: string, secret: string): TicketInvitation | undefined {
@@ -103,9 +96,9 @@ export class PairingTicketStore {
   }
 
   /**
-   * One scan, every grant, ONE transaction: the burn, the member's roles, and
-   * the device binding commit together or not at all. A failure anywhere —
-   * including the injected `beforeEnroll` seam — rolls the ticket back and
+   * One scan, every vault, ONE transaction: the burn, the ownership rows,
+   * and the device binding commit together or not at all. A failure anywhere
+   * — including the injected `beforeEnroll` seam — rolls the ticket back and
    * leaves zero enrollment, never a half-paired device (#599 AC).
    */
   redeemAndEnroll(
@@ -131,8 +124,8 @@ export class PairingTicketStore {
       beforeEnroll?.();
       return enrollments.enrollWithinTransaction({
         endpointId: input.endpointId,
-        memberId: invitation.memberId,
-        grants: invitation.grants,
+        ownerId: invitation.ownerId,
+        vaultIds: invitation.vaultIds,
         label: input.label,
         ...(input.platform === undefined ? {} : { platform: input.platform }),
         ...(input.rememberDevice === undefined
@@ -147,8 +140,8 @@ export class PairingTicketStore {
 
   listActive(): Array<{
     ticketId: string;
-    memberId: string;
-    grants: MemberGrant[];
+    ownerId: string;
+    vaultIds: string[];
     createdAt: string;
     expiresAt: number;
   }> {
@@ -170,8 +163,8 @@ export class PairingTicketStore {
 
   private insert(
     ttlMs: number,
-    memberId: string,
-    grants: readonly MemberGrant[]
+    ownerId: string,
+    vaultIds: readonly string[]
   ): { ticketId: string; secret: string; expiresAt: number } {
     const ticketId = crypto.randomUUID();
     const secret = crypto.randomBytes(32).toString("base64url");
@@ -179,14 +172,14 @@ export class PairingTicketStore {
     this.gatewayDatabase.db
       .prepare(
         `INSERT INTO tickets (
-          ticket_id, secret_hash, member_id, grants_json, created_at, expires_at
+          ticket_id, secret_hash, owner_id, grants_json, created_at, expires_at
         ) VALUES (?, ?, ?, ?, ?, ?)`
       )
       .run(
         ticketId,
         hashSecret(secret),
-        memberId,
-        JSON.stringify(grants),
+        ownerId,
+        JSON.stringify(vaultIds),
         new Date().toISOString(),
         expiresAt
       );

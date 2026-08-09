@@ -210,18 +210,18 @@ describe("push-wake-routes", () => {
     const clock = useFakeClock();
     const { plane, enrollments, database, vaults } = await wakeFixture();
     const deviceId = "wake-phone";
-    enrollments.enroll({
+    const wake = enrollments.enroll({
       endpointId: deviceId,
       label: "Wake phone",
-      memberLabel: "Priya",
-      grants: [{ vaultId: plane.boot.vaultId, role: "write" }],
+      ownerLabel: "Priya",
+      vaultIds: [plane.boot.vaultId],
     });
-    // Revoked peer still registered for push must never receive a wake.
+    // Revoked sibling still registered for push must never receive a wake.
     enrollments.enroll({
       endpointId: "revoked-phone",
       label: "Revoked phone",
-      memberLabel: "Sam",
-      grants: [{ vaultId: plane.boot.vaultId, role: "write" }],
+      ownerId: wake.ownerId,
+      vaultIds: [plane.boot.vaultId],
     });
     enrollments.revoke("revoked-phone");
     insertRegistration(database, deviceId, "ExponentPushToken[wake-me]", "ios");
@@ -294,8 +294,8 @@ describe("push-wake-routes", () => {
     enrollments.enroll({
       endpointId: "silent-phone",
       label: "Silent",
-      memberLabel: "Priya",
-      grants: [{ vaultId: plane.boot.vaultId, role: "write" }],
+      ownerLabel: "Priya",
+      vaultIds: [plane.boot.vaultId],
     });
     const send = vi.fn<typeof fetch>(async () => {
       throw new Error("expo unreachable");
@@ -330,8 +330,8 @@ describe("push-wake-routes", () => {
     enrollments.enroll({
       endpointId: deviceId,
       label: "Timer phone",
-      memberLabel: "Priya",
-      grants: [{ vaultId: plane.boot.vaultId, role: "write" }],
+      ownerLabel: "Priya",
+      vaultIds: [plane.boot.vaultId],
     });
     insertRegistration(
       database,
@@ -379,8 +379,8 @@ describe("push-wake-routes", () => {
     enrollments.enroll({
       endpointId: "closed-phone",
       label: "Closed",
-      memberLabel: "Priya",
-      grants: [{ vaultId: plane.boot.vaultId, role: "write" }],
+      ownerLabel: "Priya",
+      vaultIds: [plane.boot.vaultId],
     });
     const send = vi.fn<typeof fetch>(
       async () => new Response("{}", { status: 200 })
@@ -406,8 +406,8 @@ describe("push-wake-routes", () => {
     enrollments.enroll({
       endpointId: "race-phone",
       label: "Race",
-      memberLabel: "Priya",
-      grants: [{ vaultId: plane.boot.vaultId, role: "write" }],
+      ownerLabel: "Priya",
+      vaultIds: [plane.boot.vaultId],
     });
     insertRegistration(
       database,
@@ -453,8 +453,8 @@ async function registrationServer(webPush?: WebPushSender): Promise<{
   enrollments.enroll({
     endpointId: "phone-1",
     label: "Phone",
-    memberLabel: "Priya",
-    grants: [{ vaultId: "vault-personal", role: "write" }],
+    ownerLabel: "Priya",
+    vaultIds: ["vault-personal"],
   });
   const handler = makePushRegistrationRouteHandler(database, webPush);
   const server = http.createServer((req, res) => {

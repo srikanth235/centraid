@@ -127,10 +127,10 @@ function makeStats(over: Partial<AtlasCensusPayload> = {}): AtlasCensusPayload {
         bytes: 40_000,
         tables: [
           {
-            logical: "consent.share",
-            physical: "consent_share",
-            table: "share",
-            label: "Share",
+            logical: "consent.device",
+            physical: "consent_device",
+            table: "device",
+            label: "Device",
             rows: 12,
             bytes: 40_000,
             pages: 2,
@@ -282,7 +282,7 @@ describe("screens/AtlasScreen", () => {
       await click(toggle);
       const table = el.querySelector('[data-testid="atlas-machinery-table"]');
       expect(table).toBeTruthy();
-      expect(table?.textContent).toContain("Share"); // the consent machinery kind
+      expect(table?.textContent).toContain("Device"); // the consent machinery kind
     });
 
     it("a kind-card click opens Browse preselected to that kind (openBrowse seam)", async () => {

@@ -109,27 +109,14 @@ const {
   showsTileSize: (id: string | null) => boolean;
 };
 
-const {
-  filterByKind,
-  isSharedScope,
-  orderedScopes,
-  scopeIsOn,
-  shareDestination,
-  writeScopeFor,
-} = (await import(app("filters.ts"))) as {
-  filterByKind: (list: Asset[], kind: string) => Asset[];
-  isSharedScope: (scope: Scope | undefined) => boolean;
-  orderedScopes: (
-    scopes: readonly Scope[],
-    targetId?: string
-  ) => readonly Scope[];
-  scopeIsOn: (on: ReadonlySet<string>, id: string | null) => boolean;
-  shareDestination: (
-    scopes: readonly Scope[],
-    targetId: string | undefined
-  ) => Scope | undefined;
-  writeScopeFor: (on: ReadonlySet<string>) => string | null;
-};
+const { filterByKind, isSharedScope, orderedScopes, scopeIsOn, writeScopeFor } =
+  (await import(app("filters.ts"))) as {
+    filterByKind: (list: Asset[], kind: string) => Asset[];
+    isSharedScope: (scope: Scope | undefined) => boolean;
+    orderedScopes: (scopes: readonly Scope[]) => readonly Scope[];
+    scopeIsOn: (on: ReadonlySet<string>, id: string | null) => boolean;
+    writeScopeFor: (on: ReadonlySet<string>) => string | null;
+  };
 
 const scope = (id: string, label: string, personal?: boolean): Scope => ({
   id,
@@ -158,10 +145,9 @@ const strip = (props: StripProps): string =>
   renderToStaticMarkup(createElement(ShelfStrip, props));
 
 describe("the shelf strip", () => {
-  it("draws the eight shelves in the handoff's order", () => {
+  it("draws the seven shelves in order — no Sharing place (#726)", () => {
     expect(SHELVES.map((s) => s.label)).toStrictEqual([
       "Library",
-      "Sharing",
       "Favorites",
       "Albums",
       "Places",
@@ -176,7 +162,7 @@ describe("the shelf strip", () => {
     expect([...html.matchAll(/data-current="true"/gu)]).toHaveLength(1);
     expect([...html.matchAll(/aria-selected="true"/gu)]).toHaveLength(1);
     expect(html).toContain('role="tablist"');
-    expect([...html.matchAll(/role="tab"/gu)]).toHaveLength(8);
+    expect([...html.matchAll(/role="tab"/gu)]).toHaveLength(7);
   });
 
   it("lights the Library tab at the app's root", () => {
@@ -334,39 +320,13 @@ describe("the vault filter reads the record, never a name", () => {
     expect(isSharedScope(undefined)).toBe(false);
   });
 
-  it("takes the share destination from the POINTER, never from a name", () => {
-    // The pointer names "shr" — which the owner may call anything.
-    expect(shareDestination(TWO, "shr")?.id).toBe("shr");
-    const renamed = [scope("own", "Home", true), scope("shr", "Cove", false)];
-    expect(shareDestination(renamed, "shr")?.id).toBe("shr");
-    // A vault that merely CALLS itself Sharing is not the destination…
-    const impostor = [scope("own", "Home", true), scope("x", "Sharing", false)];
-    expect(shareDestination(impostor, "shr")).toBeUndefined();
-    // …and with no pointer at all there is no destination to guess at.
-    expect(shareDestination(TWO, undefined)).toBeUndefined();
-  });
-
-  it("orders the filter: own, then where shares go, then every other audience", () => {
-    const listed = orderedScopes(
-      [
-        scope("h", "Kitchen", false),
-        scope("s", "Sharing", false),
-        scope("o", "Home", true),
-      ],
-      "s"
-    );
-    expect(listed.map((s) => s.id)).toStrictEqual(["o", "s", "h"]);
-    // Re-aim the pointer and the order follows it — nothing is pinned by name.
-    expect(
-      orderedScopes(
-        [
-          scope("h", "Kitchen", false),
-          scope("s", "Sharing", false),
-          scope("o", "Home", true),
-        ],
-        "h"
-      ).map((s) => s.id)
-    ).toStrictEqual(["o", "h", "s"]);
+  it("orders the filter: own first, then the rest in the shell's own order", () => {
+    const listed = orderedScopes([
+      scope("h", "Kitchen", false),
+      scope("s", "Cove", false),
+      scope("o", "Home", true),
+    ]);
+    expect(listed.map((s) => s.id)).toStrictEqual(["o", "h", "s"]);
   });
 
   it("reads an untouched filter as every vault, not none", () => {

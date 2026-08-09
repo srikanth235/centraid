@@ -36,6 +36,7 @@
 // (`scope.personal`, viewer.ts's `scopeMeaning`), never from its name.
 import { useEffect, useRef, useState } from "react";
 
+import { mountedScopes } from "../../_shared/scope-kit.ts";
 import { buildActivity } from "../activity.ts";
 import { renderFaces } from "../faces.ts";
 import { assetBytes, custodyMeta, toLocalInputValue } from "../format.ts";
@@ -46,7 +47,6 @@ import { fmtBytes } from "../kit.ts";
 // selection — including the album/tag/place ones, whose collection ids are
 // only meaningful inside that same scope.
 import { act, narrate } from "../outcomes.ts";
-import { mountedScopes } from "../scopes.ts";
 import type { Album, Asset, Place } from "../types.ts";
 import {
   DEFAULT_GATEWAY_NAME,

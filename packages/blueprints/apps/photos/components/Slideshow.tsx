@@ -19,6 +19,7 @@
 // not otherwise make. Open a video from the grid or the viewer to play it.
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { scopeAttr } from "../../_shared/scope-kit.ts";
 import { displayText, safeMediaUrl } from "../../_shared/untrusted.ts";
 import { isVideoAsset } from "../format.ts";
 import {
@@ -29,7 +30,6 @@ import {
   PlayIcon,
 } from "../icons.tsx";
 import { isRenderableUri } from "../media.ts";
-import { scopeAttr } from "../scopes.ts";
 import type { Asset } from "../types.ts";
 import { assetRatio, SLIDESHOW_STATUS } from "../viewer.ts";
 

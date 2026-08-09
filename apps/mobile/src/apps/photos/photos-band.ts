@@ -63,9 +63,9 @@ export const TARGET_MIN = 44;
 export const PHOTOS_BAND_DESTINATIONS: readonly BandDestination[] = [
   { key: "library", label: "Library", icon: "image" },
   // Collections, not Albums. The destination behind it holds every shelf
-  // Photos has — albums, people, places, favorites, sharing, duplicates,
-  // trash — so "Albums" named one section of it and hid the rest behind the
-  // More sheet. See `PhotosCollectionsView.tsx`.
+  // Photos has — albums, people, places, favorites, duplicates, trash — so
+  // "Albums" named one section of it and hid the rest behind the More sheet.
+  // See `PhotosCollectionsView.tsx`.
   { key: "collections", label: "Collections", icon: "Layers" },
   { key: "search", label: "Search", icon: "search" },
   { key: "more", label: "More", icon: "more-vertical" },
@@ -102,10 +102,11 @@ export interface MoreRow {
  * It used to carry six — Sharing, Favorites, Places, Duplicates, Trash and
  * Backup — because the band could hold five destinations and Photos has more
  * shelves than that. Collections (`PhotosCollectionsView.tsx`) is now the
- * landing surface and carries every one of those shelves as a named section
- * with a live count, on screen, without a sheet in the way. Keeping the rows
- * here as well would mean two doors to each shelf, of which one is hidden —
- * and two places to keep their labels and counts honest.
+ * landing surface and carries every shelf that still exists as a named
+ * section with a live count, on screen, without a sheet in the way (Sharing
+ * stopped existing with issue #726). Keeping the rows here as well would mean
+ * two doors to each shelf, of which one is hidden — and two places to keep
+ * their labels and counts honest.
  *
  * So the sheet keeps exactly what Collections does not carry:
  *

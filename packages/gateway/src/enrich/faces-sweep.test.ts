@@ -1,8 +1,8 @@
 // The faces spec (issue #724 W5) on the shared capability sweep — behaviour,
-// not mechanism. The claims under test are the ones a member would recognise:
+// not mechanism. The claims under test are the ones an owner would recognise:
 // nothing is looked at without being asked for, boxes land where the face is,
 // a repeated pass changes nothing, a newer model replaces its own proposals,
-// and an answer the member gave is never taken back.
+// and an answer the owner gave is never taken back.
 //
 // Every case runs against the FAKE ENRICHMENT SERVICE over a real socket, for
 // the same reason `capability-sweep.test.ts` does: the enrichment service is a
@@ -347,7 +347,7 @@ describe("the faces sweep", () => {
     }
   });
 
-  test("a newer model replaces its predecessor's proposals — and NEVER an answer the member gave", async () => {
+  test("a newer model replaces its predecessor's proposals — and NEVER an answer the owner gave", async () => {
     const fx = fixture();
     const assetId = fx.addAsset(0);
     queueAssetAsk(fx, assetId);
@@ -358,7 +358,7 @@ describe("the faces sweep", () => {
       await old.close();
     }
 
-    // The member answers both: one confirmed as Ana, one rejected outright.
+    // The owner answers both: one confirmed as Ana, one rejected outright.
     const ana = (
       fx.gw.invoke(fx.owner, {
         command: "core.add_party",

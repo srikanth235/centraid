@@ -8,12 +8,12 @@
 - A running gateway the flow can install/delete against over plain HTTP. Base + token come from env:
   - `MAESTRO_GATEWAY_URL` (default `http://127.0.0.1:18789`)
   - `MAESTRO_GATEWAY_TOKEN` (omit when the dev gateway runs token-less)
-- **The phone must reach the same gateway.** The flow clears app state, mints a run-unique write-role member ticket from `MAESTRO_GATEWAY_URL`, and redeems it through the real ticket-only onboarding UI before installing. Nightly CI supplies a loopback-only, tokenless real gateway host for host-side setup; the phone uses the paired iroh tunnel.
+- **The phone must reach the same gateway.** The flow clears app state, mints a pairing ticket from `MAESTRO_GATEWAY_URL`, and redeems it through the real ticket-only onboarding UI before installing. Nightly CI supplies a loopback-only, tokenless real gateway host for host-side setup; the phone uses the paired iroh tunnel.
 - Optional: `MAESTRO_TEMPLATES=notes,tasks` to gate a subset (useful on iOS, where long flows hit driver disconnects — see README caveats; prefer Android for the full sweep).
 
 **Steps (per template):**
 
-1. Clear state, redeem a fresh gateway ticket, and prove the valid identity exit: a named roster member goes directly to the personalized Done screen; an unnamed member completes the profile form first.
+1. Clear state, redeem a fresh gateway ticket, and prove the valid identity exit: an already-named owner goes directly to the personalized Done screen; an owner still carrying the placeholder label completes the profile form first.
 2. Up front: `POST /centraid/_apps/_install` with `{templateId}` for every gated UI template. Install, not clone: since #434 a bundled blueprint app is registered IN PLACE — a consent row plus grants, copying no code — and `_clone` now rejects bundled ids outright. The route is idempotent and reports `alreadyInstalled`, so no publish step is needed.
 3. Relaunch the app (fresh launch lands on Home; Home re-fetches the app list on focus), scroll until the app's tile is visible, tap it. The tile is matched by its accessibility label — `Open <name>` — not by the tile title: the card is a Pressable with an `accessibilityLabel`, which on iOS collapses its children so the title `<Text>` is not its own node.
 4. Wait up to 30s for the app's header/title to render **inside the WebView** — the marker is the template's own `<h1>` (or `<title>`) scraped from `packages/blueprints/apps/<id>/index.html`, with the registered app name accepted as an alternative. The native AppHeader alone doesn't count: it renders even when the web document fails.

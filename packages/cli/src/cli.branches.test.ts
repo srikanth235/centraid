@@ -5,6 +5,11 @@
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 
+import {
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
+} from "@centraid/protocol";
+
 import { main } from "./cli.ts";
 
 describe("cli.branches", () => {
@@ -114,8 +119,8 @@ describe("cli.branches", () => {
         return jsonResponse(401, { error: "unauthorized" });
       return jsonResponse(200, {
         version: "0.1.0",
-        protocolVersion: 2,
-        minSupportedProtocol: 2,
+        protocolVersion: GATEWAY_PROTOCOL_VERSION,
+        minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
       });
     });
     vi.stubGlobal("fetch", fetchImpl);
@@ -162,8 +167,12 @@ describe("cli.branches", () => {
       vi.fn(async () =>
         jsonResponse(200, {
           version: "9.0.0",
-          protocolVersion: 99,
-          minSupportedProtocol: 99,
+          // Deliberately a future gateway this build must refuse — stated
+          // against the shared constant so it stays ahead no matter where
+          // the floor moves, rather than a literal that could someday BE
+          // the floor.
+          protocolVersion: GATEWAY_PROTOCOL_VERSION + 1,
+          minSupportedProtocol: GATEWAY_PROTOCOL_VERSION + 1,
         })
       )
     );

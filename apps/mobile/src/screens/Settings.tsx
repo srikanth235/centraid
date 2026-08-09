@@ -44,7 +44,6 @@ import AppearanceSection from "./settings/AppearanceSection";
 import AppLockSection from "./settings/AppLockSection";
 import BandSection from "./settings/BandSection";
 import SettingsSection from "./settings/SettingsSection";
-import ShareTargetSection from "./settings/ShareTargetSection";
 import VaultSection from "./settings/VaultSection";
 import YouSection from "./settings/YouSection";
 
@@ -370,6 +369,18 @@ export default function SettingsScreen({
           </Pressable>
         </SettingsSection>
 
+        <SettingsSection label="Sharing">
+          <Pressable
+            onPress={() => navigation.navigate("Sharing")}
+            style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
+            accessibilityLabel="Sharing"
+          >
+            <Icon name="Share" size={18} color={colors.textSoft} />
+            <Text style={styles.rowLabel}>People, links and shared vaults</Text>
+            <Icon name="ChevronRight" size={16} color={colors.textFaint} />
+          </Pressable>
+        </SettingsSection>
+
         <SettingsSection label="Storage">
           <Pressable
             onPress={() => navigation.navigate("PhoneStorage")}
@@ -398,8 +409,6 @@ export default function SettingsScreen({
             <Icon name="ChevronRight" size={16} color={colors.textFaint} />
           </Pressable>
         </SettingsSection>
-
-        <ShareTargetSection />
 
         <SettingsSection label="Advanced (developer)">
           <Pressable

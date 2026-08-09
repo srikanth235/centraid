@@ -707,7 +707,7 @@
 .deviceListHead,
 .deviceListRow {
   display: grid;
-  grid-template-columns: 1.6fr 0.9fr 1fr 0.8fr 0.9fr;
+  grid-template-columns: 1.6fr 1fr 0.8fr 0.9fr;
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
@@ -747,11 +747,6 @@
   border: 0.5px solid var(--line);
   border-radius: 999px;
   padding: 1px 6px;
-}
-.deviceListRole {
-  font-family: var(--font-mono);
-  font-size: var(--t-control-size);
-  color: var(--text-soft);
 }
 .deviceListScope {
   overflow: hidden;

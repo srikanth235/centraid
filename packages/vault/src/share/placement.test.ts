@@ -41,7 +41,7 @@ describe("placement suite", () => {
       audience,
       itemType: "media.media_asset",
       itemId: photo.assetId,
-      sharedByMember: "member-priya",
+      sharedBy: "member-priya",
       now: () => 1_700_000_000_000,
     });
 
@@ -89,7 +89,7 @@ describe("placement suite", () => {
       itemId: result.itemId,
       originVaultId: "vault-priya",
       originItemId: photo.assetId,
-      sharedByMember: "member-priya",
+      sharedBy: "member-priya",
       sharedAt: 1_700_000_000_000,
     });
 
@@ -123,7 +123,7 @@ describe("placement suite", () => {
       audience,
       itemType: "media.media_asset",
       itemId: photo.assetId,
-      sharedByMember: "member-priya",
+      sharedBy: "member-priya",
     });
 
     expect(result.itemId).toBe(photo.assetId);
@@ -152,7 +152,7 @@ describe("placement suite", () => {
       audience,
       itemType: "media.media_asset",
       itemId: photo.assetId,
-      sharedByMember: "member-priya",
+      sharedBy: "member-priya",
     });
 
     expect(result.blobs.map((b) => b.mode)).toStrictEqual(["linked", "linked"]);
@@ -180,7 +180,7 @@ describe("placement suite", () => {
       audience,
       itemType: "media.media_asset",
       itemId: photo.assetId,
-      sharedByMember: "member-priya",
+      sharedBy: "member-priya",
     });
 
     expect(result.blobs.map((b) => b.mode)).toStrictEqual(["copied", "copied"]);
@@ -225,7 +225,7 @@ describe("placement suite", () => {
         audience,
         itemType: "media.media_asset",
         itemId: photo.assetId,
-        sharedByMember: member,
+        sharedBy: member,
         now: () => at,
       });
 
@@ -271,7 +271,7 @@ describe("placement suite", () => {
       "media.media_asset",
       first.itemId
     )!;
-    expect(provenance.sharedByMember).toBe("member-priya");
+    expect(provenance.sharedBy).toBe("member-priya");
     expect(provenance.sharedAt).toBe(1_000);
     // Re-sharing never re-places bytes it already has.
     expect(bySid.blobs.map((b) => b.mode)).toStrictEqual([
@@ -300,7 +300,7 @@ describe("placement suite", () => {
       audience,
       itemType: "core.document",
       itemId: documentId,
-      sharedByMember: "member-priya",
+      sharedBy: "member-priya",
     });
     expect(
       plainSqliteRow(

@@ -47,6 +47,7 @@ function render(props: {
   status: SearchStatus;
   count: number;
   groups?: readonly SearchGroupRow[];
+  reachFacts?: readonly { label: string; value: string }[];
 }): string {
   return renderToStaticMarkup(
     createElement(
@@ -84,7 +85,9 @@ describe("SearchScaffold's four states", () => {
 
   it("echoes the query and the caller's honest miss body on a real miss", () => {
     const html = render({ query: "zzz", status: "ready", count: 0 });
-    expect(html).toContain('Nothing matches "zzz"');
+    // renderToStaticMarkup HTML-escapes quotes in text nodes too, not just
+    // attributes — assert against what actually lands in the markup.
+    expect(html).toContain("Nothing matches &quot;zzz&quot;");
     expect(html).toContain("Nothing matched.");
     expect(html).not.toContain("the caller's own results");
   });
@@ -100,7 +103,8 @@ describe("SearchScaffold's four states", () => {
     const html = render({ query: "x", status: "ready", count: 3 });
     expect(html).toContain(">3<");
     expect(html).toContain("results · searched the live library");
-    expect(html).toContain("the caller's own results");
+    // Same escaping note as above — the apostrophe lands as `&#x27;`.
+    expect(html).toContain("the caller&#x27;s own results");
   });
 
   it("a query with zero primary hits but a real group hit is still results, not a miss", () => {
@@ -117,6 +121,50 @@ describe("SearchScaffold's four states", () => {
     expect(html).not.toContain("Nothing matches");
     expect(html).toContain("Thing");
     expect(html).toContain("Open →");
+  });
+
+  it("names an unreached scope BESIDE otherwise-good results — issue #726 D10/D11, never a swap for the results", () => {
+    const html = render({
+      query: "x",
+      status: "ready",
+      count: 3,
+      reachFacts: [{ label: "lent", value: "peer offline" }],
+    });
+    expect(html).toContain("Not every scope answered");
+    expect(html).toContain("lent");
+    expect(html).toContain("peer offline");
+    // The results are STILL there — a partial reach never collapses `ready`
+    // into the miss/unreachable panels.
+    expect(html).toContain("own results"); // the caller's own children
+    expect(html).toContain("results · searched the live library");
+  });
+
+  it("names an unreached scope beside a genuine miss too — zero own hits is not the same claim as 'nothing was asked'", () => {
+    const html = render({
+      query: "zzz",
+      status: "ready",
+      count: 0,
+      reachFacts: [{ label: "lent", value: "peer offline" }],
+    });
+    expect(html).toContain("Nothing matches");
+    expect(html).toContain("zzz");
+    expect(html).toContain("Not every scope answered");
+    expect(html).toContain("peer offline");
+  });
+
+  it("draws no partial-reach panel when every scope answered (the default, empty `reachFacts`)", () => {
+    const html = render({ query: "x", status: "ready", count: 3 });
+    expect(html).not.toContain("Not every scope answered");
+  });
+
+  it("draws no partial-reach panel while `unreachable` owns the panel instead — never both", () => {
+    const html = render({
+      query: "x",
+      status: "unreachable",
+      count: 0,
+      reachFacts: [{ label: "lent", value: "peer offline" }],
+    });
+    expect(html).not.toContain("Not every scope answered");
   });
 
   it("caps nothing itself — it renders exactly the rows it is given", () => {

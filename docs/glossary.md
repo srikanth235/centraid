@@ -48,14 +48,14 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **replica** | Consent-scoped, read-mostly device copy; intents for offline writes; gateway is sole canonical writer. | `packages/vault` replica schema; `packages/client/src/replica/` |
 | **pairing** | One-time ticket ceremony that enrolls a device key to one or more vaults over the tunnel; each vault remains an independent binding. | `packages/gateway` pairing/enrollment stores; `packages/tunnel` |
 | **pair ticket** | The **only** ticket kind (#603). Always means _join an existing gateway_. Minted by an owner, one-time, burns on redeem. | `pairing-ticket-codec.ts`; `centraid-gateway pair` |
-| **auto-found** | What a gateway does to **itself** when constructed over a **fresh data dir**: creates `Shared` first, then marked-default `Personal`, and enrols the host device as `admin` on both — silently, with no ceremony, ticket, kit, or screen. An existing data dir is never modified. | `buildGateway()` in `serve/build-gateway.ts`; `VaultRegistry.isFresh()` |
+| **auto-found** | What a gateway does to **itself** when constructed over a **fresh data dir**: creates `Shared` first, then marked-default `Personal`, enrolls the host device's owner, and records that owner in `vault_owners` for both — silently, with no ceremony, ticket, kit, or screen. Founding is simply the first **mint** (#726 D2). An existing data dir is never modified. | `buildGateway()` in `serve/build-gateway.ts`; `VaultRegistry.isFresh()` |
 | **Shared / Personal** | The **names** of the two auto-founded vaults, not types. Shared is the household vault; Personal is the owner's default vault, renamed to their display name once the desktop profile step completes (headless keeps `Personal`). | `build-gateway.ts`; rename in `packages/client/src/react/boot.tsx` |
-| **member** | A human principal on the gateway — the L2 layer of the auth model (#599). Stable `member_id` + editable label in `gateway.db`; devices bind to a member and inherit its roles. Never a `core_party` row: people-as-_data_ and people-as-_principals_ are separate concepts, and a party row never confers authority. See [Members and roles](#members-and-roles-gateway-599). | `members` / `member_roles` in `gateway-db.ts` |
-| **role** | The authority a **member** holds in a vault — what they may **do**: `admin` / `write` / `read`, authored per `(member, vault)`; devices inherit. UI labels: Owner / Member / Viewer. See [Members and roles](#members-and-roles-gateway-599). | `DeviceRole` / `GrantableRole` / `canWrite()` in `enrollment-store.ts` |
+| **owner** | The one person a vault belongs to — exactly one, forever, across migrations (#726, superseding #599's member/role model). Stable `owner_id` + editable label in `gateway.db`; devices bind to an owner, never to a role. Never a `core_party` row: people-as-_data_ and people-as-_principals_ are separate concepts, and a party row never confers authority. See [Owners](#owners-gateway-726). | `owners` / `vault_owners` in `gateway-db.ts` |
+| **host** | The gateway whose disk and process a vault currently sits on. Hosting is a location, not an authority: the host can read a hosted vault's plaintext and signs unattended on its behalf, but cannot erase it, form or revoke its links, enroll a device to it, or back it up — those require being its **owner** (#726 D2). See [Owners](#owners-gateway-726). | `owner_id` on `vault_owners`; no schema column names a host |
 | **tunnel / relay** | Iroh QUIC device path; browsers are relay-only (no UDP). | `packages/tunnel`, `packages/tunnel/data-plane` |
 | **CAS / custody** | Content-addressed blob store; local-only vs remote-primary lifecycle. | `packages/vault` blob; backup package |
 | **skill** | Agent grounding unit (`SKILL.md`) loaded by the agent runtime. | `packages/gateway/src/skills` |
-| **enrichment service** | The one HTTP seam between the gateway and every model that derives something from a member's bytes (embeddings, OCR, faces, transcripts) — loopback-only, configured via `CENTRAID_ENRICH_URL`. Apps never call it directly; they enqueue `enrich_request` rows or read the vault tables a sweep populated. | `packages/gateway/src/enrich/service-client.ts`; `packages/gateway/src/enrich/capability-sweep.ts` |
+| **enrichment service** | The one HTTP seam between the gateway and every model that derives something from an owner's bytes (embeddings, OCR, faces, transcripts) — loopback-only, configured via `CENTRAID_ENRICH_URL`. Apps never call it directly; they enqueue `enrich_request` rows or read the vault tables a sweep populated. | `packages/gateway/src/enrich/service-client.ts`; `packages/gateway/src/enrich/capability-sweep.ts` |
 | **design tokens** | Shared colors, type, spacing, icons across desktop/web/mobile. | `packages/design` |
 | **receipt** | (1) Vault write receipt id from consent pipeline; (2) repo `receipts/issue-N-*.md` for issue work. | context-dependent |
 | **prefs** | Device-level gateway preferences in `gateway.db` — runner, theme, etc. Not the vault owner identity. | `GatewayDatabase.prefRows()` / `setPref()` |
@@ -78,34 +78,75 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **byte-bearing / record-only** | The two blueprint classes. Record-only apps (tasks, agenda, people, tally) are rows the replica covers fully offline; byte-bearing apps (photos, docs; notes/locker via attachments) need the custody triple, backup engine, and pin/download engine. |
 | **custody triple** | `local-only` (device only — the danger state, tile line `on this device only`), `backed-up` (device + gateway), `remote-only` (gateway only, tile line `on the gateway`). Canonical shape: `apps/mobile/src/apps/photos/timeline-model.ts`. Web's `TileMediaState` is the paint pipeline, not a custody model. |
 | **origin act** | A frame-owned capture capability apps register into — camera, scanner, share-sheet-in, notifications, autofill. One door per capability, never per-app re-implementations. |
-| **north star** | The incumbent product a blueprint deliberately mimics (Photos → Google Photos, Notes → Apple Notes, Docs → Google Drive, Tally → Splitwise, …) so switching costs a member nothing. Table in [blueprint-seats.md](blueprint-seats.md). |
+| **north star** | The incumbent product a blueprint deliberately mimics (Photos → Google Photos, Notes → Apple Notes, Docs → Google Drive, Tally → Splitwise, …) so switching costs an owner nothing. Table in [blueprint-seats.md](blueprint-seats.md). |
 
-## Members and roles (gateway, #599)
+## Owners (gateway, #726)
 
-The auth model has five layers (issue #599): **L0 custody** (the gateway box, landlord bearer, an exported backup recovery kit), **L1 authentication** (devices proving iroh EndpointIds — the only cryptographically provable layer), **L2 principals** (members and agents), **L3 authorization** (`(member, vault) → role`), **L4 attribution** (the journal records the acting member — and the agent when one acted — whenever a principal is known; scheduler-fired automations carry none). Keep the axes in separate words:
+Supersedes the five-layer **member/role** model settled in [#599](https://github.com/srikanth235/centraid/issues/599) (2026-07-27). That history is not rewritten — see [decisions.md](decisions.md#599--household-members-sharing-and-the-no-credential-invariant) for what #599 actually shipped, and the [#726 entry](decisions.md) below it for what replaced it on 2026-08-08. This section is the live model.
 
-- **trust / identity** — is this device _who it claims_? Answered by its proved iroh EndpointId. Nothing to do with authority.
-- **member** — _who is acting_? The human behind the device. Devices are pure bindings `(endpoint_id, member_id)`.
-- **role** — what may this member _do in this vault_? Authored per `(member, vault)`, revocable; every device the member enrolls inherits it. There is **no per-device role** and no attenuation — a communal device (kitchen iPad) enrolls as its own low-trust member.
+Authorization collapses to **two questions, neither a role**:
 
-| Role | Value | UI label | May do |
-| --- | --- | --- | --- |
-| admin | `admin` | Owner | Everything `write` may, **plus** invite people, grant roles, revoke devices, remove members. Creating a vault makes you its owner. |
-| write | `write` | Member | Read the vault and change it. **The default for every grant**, CLI and UI. |
-| read | `read` | Viewer | Read/query only; mutations refused at the gate. |
+1. **Whose device is this?** Enrollment binds a proved iroh EndpointId to an **owner** — the human. Devices are pure bindings `(endpoint_id, owner_id)`.
+2. **Does that owner own this vault?** A vault has **exactly one owner**, recorded in `vault_owners(vault_id PRIMARY KEY, owner_id)` — the primary key IS the invariant, not check code. There is no partial authority over a vault, because there is no such thing as being partly its owner.
 
-`revoked` is **not a role** — it is a tombstone state a device binding is put into. It is never granted, never offered in a picker, and deliberately absent from `GrantableRole`.
+The five layers still apply, corrected at L3:
+
+- **L0 custody** — the gateway box, landlord bearer, an exported backup recovery kit.
+- **L1 authentication** — devices proving iroh EndpointIds — the only cryptographically provable layer.
+- **L2 principals** — owners and agents.
+- **L3 authorization** — was `(member, vault) → role`; now `vault_owners(vault_id, owner_id)`. Ownership, not a lattice.
+- **L4 attribution** — the journal records the acting owner (and the agent when one acted) whenever a principal is known; scheduler-fired automations carry none.
+
+**D2 vocabulary (binding):**
+
+- **owner** — the one person a vault belongs to. Exactly one, forever, across migrations.
+- **host** — the gateway whose disk and process a vault currently sits on. Hosting is a location, not an authority.
+- **gateway owner** — the person whose machine it is. One per gateway — the only asymmetry in this model.
+- **mint** — to create a vault and assign its owner. Authority ends at creation, like a mint's authority over a spent coin; ownership is the new owner's from that moment and never returns. Auto-founding is simply the first mint, run automatically (#603); the _Add someone_ mint ceremony for further owners ships in #726 P1.
+
+**Minting is not owning, and neither is hosting** — what the gateway owner can and cannot do to a vault minted on their machine:
+
+| Can | Cannot |
+| --- | --- |
+| Stop hosting it | Erase it |
+| See that it exists and what it costs in disk | Form, accept, or revoke its links |
+| Run the process that serves it, and sign unattended on its behalf | Enroll a device to it, or act as its owner to any app, agent, or peer |
+| Back up _their own_ vaults | Include a vault they don't own in their backup |
+
+Enforced structurally by the `owner_id` relation — no role to escalate, no "minted by" column granting anything. Full posture, including the half that is easy to soften — hosting confers no authority over the relationship, but it does confer the ability to act — is in [SECURITY.md](../SECURITY.md).
+
+**Forbidden words: guest, tenant, hosted vault.** The first two smuggle back a hierarchy this model deleted — a vault minted on someone else's machine is a full sovereign vault, not a lesser one. "Hosted vault" collides with `Hosted`, which already names the storage-provider custody copy.
+
+Two things people expect to be roles are not:
+
+- **Device attenuation** — `grant_profile_json` on the device row, a capability mask, orthogonal to ownership, untouched by #726.
+- **Writability, as blueprints see it** — `scope.canWrite` keeps its exact shape; a vault you own is writable. (Until #726 P4 lend edges land, every mounted scope is owned, so `canWrite` is always true for an owned scope — the field still flows through the existing seam rather than being hardcoded at leaf consumers.)
 
 Invariants:
 
-- **No vault types.** Every vault is a vault with a membership list; "personal" and "shared" are descriptions of that list, never a `type` column or a conversion flow.
-- **Narrower vaults over finer roles.** Finer-grained permission wants (per-item visibility, a fourth role tier) are answered with another vault, not with row-level ACLs — the fence against Model B drift (#599).
-- **Minting splits by target.** Any member may **self-pair** a new device at their own roles from an already-enrolled device; only a vault's **owners** mint invitations for other people. A ticket is an invitation `(member, [(vault, role)…])` — server-authoritative, one scan, atomic across all grants; the joining device can never name its own member or roles.
-- **Two revocation verbs.** _Revoke a device_ leaves the member and their other devices intact; _remove a member_ is one atomic operation that kills all their bindings.
-- **Auto-founding** creates the owner's member with no prompt (#603): a fresh data dir gets **Shared** + **Personal**, and the host's own device identity is enrolled as `admin` on both in one transaction. Every vault keeps ≥1 owner, and removing the last owner requires explicit confirmation (`--confirm-last-admin` / `confirmLastAdmin`).
-- **Sharing is placement, not filtering.** Data crosses vaults only by projection into an audience vault ("Share to <audience>"), recorded in `core_share_origin`. No one can ever query your vault; what others see is only what was placed where they are.
+- **No vault types.** Every vault has one owner; "personal" and "shared" are descriptions, never a `type` column or a conversion flow.
+- **Narrower vaults over finer authority.** Finer-grained permission wants (per-item visibility, a role tier) are answered with another vault, not with row-level ACLs — the fence against Model B drift (#599), still standing.
+- **Minting splits by target.** Any owner may **self-pair** a new device into the vaults they already own from an already-enrolled device. Inviting _another person_ into your own vaults is **deleted**, not weakened: `resolveInvitation` refuses with `owner_vaults_only` — a person gets a vault of their own, and that mint flow ships in #726 P1.
+- **Two removal verbs, at different layers.** _Revoke a device_ (`EnrollmentStore.revoke`) tombstones one binding and leaves the owner and their other devices intact. _Remove an owner_ (`OwnerStore.remove`) is refused while they still own any vault — the ownership analogue of the old last-admin guard, structural instead of counted.
+- **Auto-founding** enrolls the founding owner with no prompt (#603): a fresh data dir gets **Shared** + **Personal**, both recorded in `vault_owners` for that owner in one transaction. `Shared` remains an ORDINARY vault — nothing on its record says "sharing".
+- **Sharing is placement, not filtering.** Unchanged: data crosses vaults only by projection into an audience vault ("Share to <audience>"), recorded in `core_share_origin`. No one can ever query your vault; what others see is only what was placed where they are.
 
-One deliberate mapping: the vault's `consent_device.trust` (`full`/`readonly`) is a **capability mirror**, not the role. `admin` and `write` both collapse to `full` there, because minting and revoking are gateway-plane concerns the vault has no opinion about.
+One deliberate mapping, simplified by #726: the vault's `consent_device.trust` (`full`/`readonly`) is a **capability mirror**, not ownership. Ownership is binary — an owner owns a vault or does not, no partial grade — so every enrolled device lands `full`; device attenuation is the separate `grant_profile_json` mask, orthogonal to `trust`.
+
+## Sharing: edges, links, and the peer plane (gateway, #726 P2–P3)
+
+The vocabulary for how one item set crosses from an origin vault to an audience vault, and how two owners' gateways reach each other to make that crossing work when the vaults are not co-hosted.
+
+| Term | Meaning | Code |
+| --- | --- | --- |
+| **edge** | A row in `share_edges`: one crossing of an item set from an origin vault to an audience vault. Two independent axes: `mode` is **give** (`snapshot` — a one-time copy, shipped) vs **lend** (`live` — a continuously synced view; the schema accepts it, the route still refuses it typed `not_yet_supported` until a later phase); `kind` is `add` (the item also stays at the origin) vs `move` (the origin's copy is deleted, and only within one owner's own vaults). Three photographs moved together are ONE edge, not three. | `packages/gateway/src/serve/gateway-schema.ts`; `routes/edges-routes.ts` |
+| **closure** | The origin-side, read-only serialization of everything one item set depends on — pooled content items, derivatives, and a blob manifest, deduped once across the set — packaged as a `WireClosure`: plain JSON, no Buffers/Dates/class instances, so a tunnel can sit under it without either half changing. Cross-vault foreign keys are absent from the read, never merely nulled at the far end. | `packages/vault/src/share/closure.ts`, `read-closure.ts` |
+| **projection** | The audience-side half: writing a closure into the audience vault inside one `BEGIN IMMEDIATE`, sha-deduping through `core_content_item.sha256 UNIQUE` and recording `core_share_origin` lineage. **Projection is ingest** (D11): a projected row runs through the identical post-arrival door an authored row takes (place re-linking, enrichment enqueue), keyed by vault entity type and never by app id, so vault core cannot branch on which app owns the row. | `packages/vault/src/share/project-closure.ts`, `projection-ingest.ts` |
+| **link** | A mutual, approved relationship between two vaults that authorizes edges to cross between them — the one thing `judgeEdgeCrossing` consults for a cross-owner edge. One table, `vault_links`, covers both localities: two vaults on one machine (each owner's device approves its own side) and two vaults on different gateways (minting the link ticket is one side's act, redeeming it is the other's, so a redeemed link lands approved on both sides at once). Same-owner edges need no link row at all — owning both vaults IS the authorization. | `packages/gateway/src/serve/vault-links-store.ts`, `vault-link-row.ts`, `link-crossing.ts` |
+| **route** | The cached `{endpointId, relayHints, assertedAt, signature}` on one side of a link — how to dial that side's _current_ gateway. Replaceable cache, never identity: every durable reference (grants, edges, receipts, the link itself) binds `vault_id`, never an EndpointId. A route is re-asserted, signed by the vault's own P1 identity key, whenever the endpoint keypair rotates or the vault moves hosts. | `route_a_json`/`route_b_json` on `vault_links`; `serve/peer-route-assertion.ts` |
+| **peer** | The gateway on the other end of a cross-machine link, reached over its own `/centraid/_peer/*` control-plane tier — authenticated by the proved link (endpoint + vault signature), never by device pairing. A peer reaches only edge negotiation, closure fetch, ranged blob pull, and route assertion; no owner-tier surface is reachable from this lane. See [SECURITY.md](../SECURITY.md#the-peer-plane-726-p3). | `packages/gateway/src/routes/peer-plane.ts`; ALPN `centraid/gw-link/1` in `packages/tunnel/src/protocol.ts` |
+
+`share_edges` succeeds `placement_intents` outright (dropped, not migrated — both were pre-1.0), and `vault_links` is the merge of what were briefly two separate tables (a same-machine one from P2, a remote one from P3) into one, on the standing rule that locality is routing, not semantics: sharing to a vault means the same thing whether that vault sits on this machine or across the world, so there is exactly one answerer for "may an edge cross to vault X." See [decisions.md](decisions.md#726--vault-per-person-edges-and-the-peer-plane-p1-p3) for the full account of that merge.
 
 ## Forbidden / discouraged synonyms (broader)
 
@@ -117,20 +158,21 @@ One deliberate mapping: the vault's `consent_device.trust` (`full`/`readonly`) i
 | "template app" after install | **app** (blueprint is the shipped source) |
 | "plugin" for declared handlers | **handler** / **query** / **action** |
 | "identity.sqlite" / multi-user gateway identity | vault owner _is_ the user (#280) |
-| `owner` as a **device** role | **`admin`** — the owner is the human; a device is never the owner |
-| `full` as a device role | **`write`** — "full" is a lie once `admin` sits above it |
-| "trust" / "trust tier" for what a device may do | **role** — trust is proved identity, role is granted authority |
+| "role" for what a device may do | **ownership** (does the acting owner own this vault) plus **device attenuation** (`grant_profile_json`) — #726 deleted the role lattice; trust remains proved identity only |
+| "share target" / "default share target" for where a placement lands | **audience vault** — #726 P0 deleted the default share-target pointer (`share-target.ts`, `defaultShareTargetVaultId`, mobile `frame.shareTarget`) outright; the destination is a picker over the caller's own mounted, writable scopes, never a remembered default |
+| "placement_intents" for the sharing table | **`share_edges`** — #726 P2 dropped `placement_intents` outright (no column migration; both were pre-1.0) in favor of one edge per item SET, with its own `mode` (give/lend) and `kind` (add/move) |
 | "space" / "spaces" in user-facing copy | **vault** / **vaults** — one word, everywhere the owner can read it. The sidebar switcher ([`gatewaySwitcher.ts`](../packages/client/src/react/shell/gatewaySwitcher.ts), eyebrow "Vaults", aria-label "Vaults") lists **vaults only** — flattened across every registered gateway (#665) — changes the active/default vault pointer (switching gateway too when the vault is hosted elsewhere), and is always present so Add vault remains reachable. The stem's identity head is the switcher's only anchor and reads "&lt;vault&gt; on &lt;gateway&gt;. Switch vault." ([`Stem.tsx`](../packages/client/src/react/shell/Stem.tsx), ⌘⇧G in [`App.tsx`](../packages/client/src/react/shell/App.tsx); the standalone `IdentityHead.tsx` was folded into the stem in #708); Settings → **Vault** ([`SettingsVaultScreen.tsx`](../packages/client/src/react/screens/SettingsVaultScreen.tsx)); Household → **Vaults** ([`HouseholdScreen.tsx`](../packages/client/src/react/screens/HouseholdScreen.tsx)); mobile switcher → **Vaults** ([`VaultsSwitcher.tsx`](../apps/mobile/src/screens/home/VaultsSwitcher.tsx)). Code identifiers were renamed to match on 2026-07-31 (#665): `Vault*` components, `vault`/`vaults` props, the `vault` settings-page id, `data-vault-id`, and the mobile `vaults.*` storage keys. |
 | **gateway** as an end-user _management_ noun | there isn't one (#665). **Every noun the owner manages is a vault**; a gateway is plumbing. Each surface has exactly one job: the switcher **switches** vaults (no overflow menus, no management affordances); a vault's own Settings → **Vault** page manages that vault, including **Disconnect** under "On this device" — offered only when the active vault sits on a _remote_ connection, since the primordial `local` gateway is this machine; and host plumbing (Test connection / Rename / Remove) lives in the **Connections** section of Gateway → Components ([`SettingsDiagnosticsScreen.tsx`](../packages/client/src/react/screens/SettingsDiagnosticsScreen.tsx)), the one surface where a machine is legitimately the subject and the word "gateway" may appear. There is deliberately **no** Settings → Gateways page. |
 | "remove the gateway" in _disconnect_ copy | **disconnect the vault** — the primitive (`removeGateway`) is connection-wide, so the confirm NAMES every sibling vault that goes with it and promises the vaults survive on their host ([`disconnectConfirmCopy`](../packages/client/src/react/shell/gatewayRegistry.ts)). Per-vault forget does not exist; it would be a server-side grant revocation. |
-| "user" / "account" for a household principal | **member** — there are no accounts, passwords, or sessions; a member is a principal on the enrollment plane (#599) |
+| "user" / "account" for a household principal | **owner** — there are no accounts, passwords, or sessions; an owner is a principal on the enrollment plane (#726, superseding #599's "member") |
+| "member" for a vault's principal | **owner** — #726 deleted `members`/`member_roles`; the table is `owners`, and the noun changed because the model did: one owner per vault, not a shared role lattice |
 | "token" for the pairing artifact | **ticket** — one-time, burns on redemption (#555 removed bearer redemption) |
 | "founding ticket" / "founding ceremony" / "recovery-kit ceremony" / "uninitialized gateway" | **auto-found** — #603 deleted the founding plane entirely. A gateway is never zero-vault, and "ticket" now means the **pair ticket**, unqualified |
 | "found a vault" as something a **user** does | the user **creates** a vault (an admin act on a running gateway); only the **gateway** founds — itself, once, on a fresh data dir |
 | "Approvals" or "Inbox" for the unified owner surface | **Notifications** (#665) — "Inbox" reads as mail, and this stream is news plus things needing action. Use **decision** when referring specifically to an item waiting on the owner, and **notice** for a durable non-decision update. |
 | `com.centraid.*` identifiers | **`dev.centraid.*`** ([identifiers.md](identifiers.md)) |
-| "confirm / reject" as the pair of things a member does to a **proposal** | **answer** — one verb with three members: `confirm`, `reject`, `dismiss` ("reviewed, deliberately left unnamed"). A pair could not finish a review queue: a member with no way to say "I looked and I am not naming this" only ever has Skip, and a skipped proposal returns for ever. See [`media.answer_face_proposal`](../packages/vault/src/commands/enrich.ts) and the shared queue model [`triage-session.ts`](../packages/blueprints/apps/_shared/triage-session.ts) (#712, #725). |
-| **deleting** a rejected proposal row | a rejection is a **state** (`review_state`), never a `DELETE` — a deleted row remembers nothing, so the enricher's next run proposes the same thing again and the member answers it for ever. Suppression is one `WHERE review_state = 'proposed'` in [`enrich-publishers.ts`](../packages/vault/src/ingest/enrich-publishers.ts) (#712). |
+| "confirm / reject" as the pair of things an owner does to a **proposal** | **answer** — one verb with three members: `confirm`, `reject`, `dismiss` ("reviewed, deliberately left unnamed"). A pair could not finish a review queue: an owner with no way to say "I looked and I am not naming this" only ever has Skip, and a skipped proposal returns for ever. See [`media.answer_face_proposal`](../packages/vault/src/commands/enrich.ts) and the shared queue model [`triage-session.ts`](../packages/blueprints/apps/_shared/triage-session.ts) (#712, #725). |
+| **deleting** a rejected proposal row | a rejection is a **state** (`review_state`), never a `DELETE` — a deleted row remembers nothing, so the enricher's next run proposes the same thing again and the owner answers it for ever. Suppression is one `WHERE review_state = 'proposed'` in [`enrich-publishers.ts`](../packages/vault/src/ingest/enrich-publishers.ts) (#712). |
 
 ## Inconsistencies (known dual vocabulary)
 

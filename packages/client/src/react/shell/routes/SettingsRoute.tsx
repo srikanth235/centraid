@@ -308,7 +308,7 @@ export default function SettingsRoute({
     await saveSelfProfile({
       avatarColor: input.avatarColor,
       gatewayId: selfProfile.data.gatewayId,
-      memberId: selfProfile.data.memberId,
+      ownerId: selfProfile.data.ownerId,
       name: input.name,
     });
   };

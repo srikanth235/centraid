@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 import {
   deriveSearchStatus,
   groupSearchHits,
+  perScopeReach,
+  scopeReachFacts,
   searchOpenLabel,
   searchStatusLine,
 } from "./search-scaffold.ts";
@@ -137,5 +139,110 @@ describe(searchStatusLine, () => {
 describe(searchOpenLabel, () => {
   it("announces the row's own title", () => {
     expect(searchOpenLabel({ title: "Ana" })).toBe("Open Ana");
+  });
+});
+
+describe(perScopeReach, () => {
+  // [law:per-scope-reach] #726 P4 item 7 (D11): reach is named per scope,
+  // never collapsed into one boolean before a caller can render which scope
+  // is short.
+  it("names each scope's own state instead of one shared boolean", () => {
+    expect(
+      perScopeReach([
+        { scope: "photos-own", ok: true },
+        { scope: "photos-lent", ok: false, error: { message: "peer offline" } },
+      ])
+    ).toStrictEqual([
+      { scope: "photos-own", state: "reached" },
+      { scope: "photos-lent", state: "unreached", detail: "peer offline" },
+    ]);
+  });
+
+  it("omits detail for an unreached scope with no error message", () => {
+    expect(perScopeReach([{ scope: "photos-lent", ok: false }])).toStrictEqual([
+      { scope: "photos-lent", state: "unreached" },
+    ]);
+  });
+
+  // [law:mask-refuses-not-no-matches] #726 P4 D10: a scope whose field mask
+  // excludes an indexed column REFUSES — it never pretends a narrower index
+  // was the whole one, and refused beats unreached when a caller knows both.
+  it("marks a scope REFUSED when it is named in refusedScopes, even if it also answered ok", () => {
+    const reach = perScopeReach(
+      [{ scope: "photos-lent", ok: true }],
+      new Map([["photos-lent", "field mask excludes core.content_item.title"]])
+    );
+    expect(reach).toStrictEqual([
+      {
+        scope: "photos-lent",
+        state: "refused",
+        detail: "field mask excludes core.content_item.title",
+      },
+    ]);
+  });
+
+  it("prefers the refusal reason over an unreached scope's transport error", () => {
+    const reach = perScopeReach(
+      [{ scope: "photos-lent", ok: false, error: { message: "timeout" } }],
+      new Map([["photos-lent", "field mask excludes core.content_item.title"]])
+    );
+    expect(reach[0]!.state).toBe("refused");
+    expect(reach[0]!.detail).toBe(
+      "field mask excludes core.content_item.title"
+    );
+  });
+
+  it("propagates a replica mask refusal directly from readAll", () => {
+    expect(
+      perScopeReach([
+        {
+          scope: "photos-lent",
+          ok: false,
+          error: {
+            code: "REPLICA_SEARCH_REFUSED",
+            message:
+              "Search refused in this scope: title is withheld by the lend mask",
+          },
+        },
+      ])
+    ).toStrictEqual([
+      {
+        scope: "photos-lent",
+        state: "refused",
+        detail:
+          "Search refused in this scope: title is withheld by the lend mask",
+      },
+    ]);
+  });
+});
+
+describe(scopeReachFacts, () => {
+  it("lists only the short scopes, each with a value naming why", () => {
+    expect(
+      scopeReachFacts([
+        { scope: "photos-own", state: "reached" },
+        { scope: "photos-lent", state: "unreached", detail: "peer offline" },
+        {
+          scope: "photos-shared",
+          state: "refused",
+          detail: "field mask excludes title",
+        },
+      ])
+    ).toStrictEqual([
+      { label: "photos-lent", value: "peer offline" },
+      { label: "photos-shared", value: "field mask excludes title" },
+    ]);
+  });
+
+  it("falls back to a generic value when no detail was given", () => {
+    expect(
+      scopeReachFacts([{ scope: "photos-lent", state: "unreached" }])
+    ).toStrictEqual([{ label: "photos-lent", value: "could not be reached" }]);
+  });
+
+  it("is empty when every scope reached", () => {
+    expect(
+      scopeReachFacts([{ scope: "photos-own", state: "reached" }])
+    ).toStrictEqual([]);
   });
 });

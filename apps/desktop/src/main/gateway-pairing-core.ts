@@ -78,7 +78,6 @@ export interface PairedVault {
   vaultId: string;
   enrollmentId?: string;
   vaultName?: string;
-  role?: "admin" | "write" | "read";
 }
 
 export type RedeemGatewayPairingResult =

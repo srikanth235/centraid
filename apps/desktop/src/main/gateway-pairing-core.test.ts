@@ -115,13 +115,11 @@ describe(foldIrohPairResponse, () => {
       vaults: [
         {
           enrollmentId: "enrollment-v1",
-          role: "write",
           vaultId: "v1",
           vaultName: "Personal",
         },
         {
           enrollmentId: "enrollment-v2",
-          role: "read",
           vaultId: "v2",
           vaultName: "Family",
         },
@@ -137,13 +135,11 @@ describe(foldIrohPairResponse, () => {
       vaults: [
         {
           enrollmentId: "enrollment-v1",
-          role: "write",
           vaultId: "v1",
           vaultName: "Personal",
         },
         {
           enrollmentId: "enrollment-v2",
-          role: "read",
           vaultId: "v2",
           vaultName: "Family",
         },

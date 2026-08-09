@@ -1,7 +1,7 @@
 import { buildVaultRows } from "./gatewayRegistry.js";
 import type {
   GatewayRow,
-  MemberVaultScope,
+  OwnerVaultScope,
   SwitcherVaultRow,
 } from "./gatewayRegistry.js";
 import { iconSvg } from "./iconSvg.js";
@@ -34,8 +34,8 @@ import styles from "./gatewaySwitcher.module.css";
 
 export interface GatewaySwitcherOpts {
   anchor: DOMRect;
-  /** The active gateway's member scopes — the only vaults whose ROLE is known. */
-  scopes: ReadonlyArray<MemberVaultScope>;
+  /** The active gateway's owner scopes — the only vaults whose OWNERSHIP is known. */
+  scopes: ReadonlyArray<OwnerVaultScope>;
   activeGatewayId: string;
   rows: GatewayRow[];
   /** Pick a vault. `gatewayId` may differ from the active one, in which case

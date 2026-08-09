@@ -1,9 +1,12 @@
 /*
- * Invitation minting on `POST /centraid/_gateway/devices/ticket` (issue #599).
+ * Invitation minting on `POST /centraid/_gateway/devices/ticket` (issues
+ * #599, #726).
  *
- * Minting splits by TARGET, not by role: self-pair is open to any member at
- * their own roles, inviting another person is an ownership act, and one
- * ticket may carry several vaults at distinct roles.
+ * Minting splits by TARGET: self-pair is open to any enrolled owner and
+ * lands a new device in the vaults they already own; inviting another person
+ * is refused (`owner_vaults_only`) until the P1 mint ceremony gives that
+ * person a vault of their own. Host custody may mint for an existing owner
+ * — the local recovery path.
  */
 
 import { describe, afterEach, expect, test } from "vitest";
@@ -18,21 +21,15 @@ import {
 describe("devices-routes-invitations scenarios", () => {
   afterEach(cleanupHarnesses);
 
-  test("minting splits by target: self-pair is open, inviting is an ownership act", async () => {
-    const f = await harness();
-    f.enrollments.enroll({
-      endpointId: "owner-key",
-      vaultId: "vault-a",
-      label: "Owner",
-      role: "admin",
-      memberLabel: "Priya",
+  test("minting splits by target: self-pair is open, another person is refused", async () => {
+    const f = await harness({
+      vaultName: (id) => ({ "vault-a": "Personal", "vault-b": "Work" })[id],
     });
-    const writer = f.enrollments.enroll({
-      endpointId: "full-key",
-      vaultId: "vault-a",
-      label: "Member",
-      role: "write",
-      memberLabel: "Sid",
+    const owner = f.enrollments.enroll({
+      endpointId: "owner-key",
+      vaultIds: ["vault-a", "vault-b"],
+      label: "Owner",
+      ownerLabel: "Priya",
     });
     const body = JSON.stringify({ vaultId: "vault-a" });
     const anonymous = await fetch(
@@ -44,43 +41,31 @@ describe("devices-routes-invitations scenarios", () => {
     );
     expect(anonymous.status).toBe(403);
 
-    // Self-pair: a `write` member pairs their OWN new phone with no owner
-    // involvement — "ask your spouse for a QR" fails the family test.
+    // Self-pair: an owner pairs their OWN new phone with no second party —
+    // "ask your spouse for a QR" fails the family test.
     const selfPair = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: "POST",
-      headers: deviceHeaders("full-key"),
+      headers: deviceHeaders("owner-key"),
       body,
     });
     expect(selfPair.status).toBe(200);
     await expect(selfPair.json()).resolves.toMatchObject({
-      memberId: writer.memberId,
-      role: "write",
+      ownerId: owner.ownerId,
+      ownerLabel: "Priya",
+      vaultId: "vault-a",
     });
 
-    // …but never above their own role.
-    const escalated = await fetch(
-      `${f.base}/centraid/_gateway/devices/ticket`,
-      {
-        method: "POST",
-        headers: deviceHeaders("full-key"),
-        body: JSON.stringify({
-          grants: [{ vaultId: "vault-a", role: "admin" }],
-        }),
-      }
-    );
-    expect(escalated.status).toBe(403);
-    await expect(escalated.json()).resolves.toMatchObject({
-      error: "role_above_own",
-    });
-
-    // …and never for another person.
+    // Inviting another person is refused: access is ownership, so a ticket
+    // cannot land someone in YOUR vaults — P1 mints them their own.
     const denied = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: "POST",
-      headers: deviceHeaders("full-key"),
-      body: JSON.stringify({ vaultId: "vault-a", newMemberLabel: "Kid" }),
+      headers: deviceHeaders("owner-key"),
+      body: JSON.stringify({ vaultId: "vault-a", newOwnerLabel: "Kid" }),
     });
     expect(denied.status).toBe(403);
-    await expect(denied.json()).resolves.toMatchObject({ error: "not_admin" });
+    await expect(denied.json()).resolves.toMatchObject({
+      error: "owner_vaults_only",
+    });
 
     const minted = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: "POST",
@@ -93,114 +78,84 @@ describe("devices-routes-invitations scenarios", () => {
     expect(parsed).toBeDefined();
     if (!parsed) throw new Error("ticket did not parse");
     expect(parsed.gw).toBe("endpoint-ticket");
-    // Self-pair bakes the member's CURRENT roles, so the owner's second device
-    // lands at admin without anyone having to name a role.
+    // Self-pair bakes the owner's CURRENT vaults, target first, so the second
+    // device lands in the named vault and still reaches the rest.
     expect(f.tickets.redeem(parsed.t, parsed.s)).toMatchObject({
-      grants: [{ vaultId: "vault-a", role: "admin" }],
+      ownerId: owner.ownerId,
+      vaultIds: ["vault-a", "vault-b"],
     });
   });
 
-  test("an owner may delegate owner role — a second admin device is grantable", async () => {
-    const f = await harness();
-    f.enrollments.enroll({
-      endpointId: "owner-key",
-      vaultId: "vault-a",
-      label: "Owner",
-      role: "admin",
-    });
-
-    const minted = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
-      method: "POST",
-      headers: deviceHeaders("owner-key"),
-      body: JSON.stringify({ vaultId: "vault-a", role: "admin" }),
-    });
-    expect(minted.status).toBe(200);
-    const payload = (await minted.json()) as { ticket: string; role: string };
-    expect(payload.role).toBe("admin");
-    const parsed = parsePairingTicket(payload.ticket);
-    if (!parsed) throw new Error("ticket did not parse");
-    expect(f.tickets.redeem(parsed.t, parsed.s)).toMatchObject({
-      grants: [{ vaultId: "vault-a", role: "admin" }],
-    });
-
-    const nonsense = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
-      method: "POST",
-      headers: deviceHeaders("owner-key"),
-      body: JSON.stringify({ vaultId: "vault-a", role: "superuser" }),
-    });
-    expect(nonsense.status).toBe(400);
-    await expect(nonsense.json()).resolves.toMatchObject({
-      error: "invalid_role",
-    });
-  });
-
-  test("an owner invites a new person into two vaults with one ticket", async () => {
+  test("a named non-primary target becomes the ticket's landing vault", async () => {
     const f = await harness({
-      vaultName: (id) => ({ "vault-a": "Personal", "vault-b": "Family" })[id],
+      vaultName: (id) => ({ "vault-a": "Personal", "vault-b": "Work" })[id],
     });
     const owner = f.enrollments.enroll({
       endpointId: "owner-key",
-      vaultId: "vault-a",
+      vaultIds: ["vault-a", "vault-b"],
       label: "Owner",
-      role: "admin",
-      memberLabel: "Priya",
+      ownerLabel: "Priya",
     });
-    f.enrollments.members.setGrant(owner.memberId, "vault-b", "admin");
 
     const minted = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: "POST",
       headers: deviceHeaders("owner-key"),
-      body: JSON.stringify({
-        newMemberLabel: "Kid",
-        grants: [
-          { vaultId: "vault-b", role: "write" },
-          { vaultId: "vault-a", role: "read" },
-        ],
-      }),
+      body: JSON.stringify({ vaultId: "vault-b" }),
     });
     expect(minted.status).toBe(200);
-    const payload = (await minted.json()) as {
-      ticket: string;
-      memberId: string;
-      memberLabel: string;
-    };
-    expect(payload.memberLabel).toBe("Kid");
-
-    // One scan enrols the joining device into BOTH vaults, at the distinct
-    // roles the invitation named, bound to the invited member.
+    const payload = (await minted.json()) as { ticket: string };
     const parsed = parsePairingTicket(payload.ticket);
     if (!parsed) throw new Error("ticket did not parse");
-    const enrolled = f.tickets.redeemAndEnroll(
-      parsed.t,
-      parsed.s,
-      f.enrollments,
-      {
-        endpointId: "kid-phone",
-        label: "Kid phone",
-      }
-    );
-    expect(
-      enrolled?.map((row) => ({ vaultId: row.vaultId, role: row.role }))
-      // Order is the INVITATION's, not the registry's: the redeeming device
-      // lands in `enrolled[0]`, so the first grant named stays first.
-    ).toStrictEqual([
-      { vaultId: "vault-b", role: "write" },
-      { vaultId: "vault-a", role: "read" },
-    ]);
-    expect(enrolled?.every((row) => row.memberId === payload.memberId)).toBe(
-      true
-    );
+    // Target-first ordering (scenario B12): grants[0] decides where the
+    // redeeming device lands.
+    expect(f.tickets.redeem(parsed.t, parsed.s)).toMatchObject({
+      ownerId: owner.ownerId,
+      vaultIds: ["vault-b", "vault-a"],
+    });
+  });
 
-    // A vault the owner does not administer cannot be granted away.
+  test("an explicit vaultIds list is bounded by what the owner owns", async () => {
+    const f = await harness({
+      vaultName: (id) =>
+        ({ "vault-a": "Personal", "vault-c": "Elsewhere" })[id],
+    });
+    f.enrollments.enroll({
+      endpointId: "owner-key",
+      vaultIds: ["vault-a"],
+      label: "Owner",
+      ownerLabel: "Priya",
+    });
+    f.enrollments.enroll({
+      endpointId: "other-key",
+      vaultIds: ["vault-c"],
+      label: "Other",
+      ownerLabel: "Sid",
+    });
+
+    // A vault someone else owns is indistinguishable from one that does not
+    // exist — `not_found`, never `forbidden` (topology hiding, re-aimed).
     const outside = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: "POST",
       headers: deviceHeaders("owner-key"),
-      body: JSON.stringify({
-        memberId: payload.memberId,
-        grants: [{ vaultId: "vault-c", role: "read" }],
-      }),
+      body: JSON.stringify({ vaultIds: ["vault-c"] }),
     });
     expect(outside.status).toBe(404);
+    await expect(outside.json()).resolves.toMatchObject({
+      error: "not_found",
+    });
+
+    const malformed = await fetch(
+      `${f.base}/centraid/_gateway/devices/ticket`,
+      {
+        method: "POST",
+        headers: deviceHeaders("owner-key"),
+        body: JSON.stringify({ vaultIds: [42] }),
+      }
+    );
+    expect(malformed.status).toBe(400);
+    await expect(malformed.json()).resolves.toMatchObject({
+      error: "invalid_vault_ids",
+    });
   });
 
   test("minting a ticket with no resolvable vault answers vault_required", async () => {
@@ -209,9 +164,8 @@ describe("devices-routes-invitations scenarios", () => {
     // explicit target — nothing to scope the ticket to.
     f.enrollments.enroll({
       endpointId: "owner-key",
-      vaultId: "vault-b",
+      vaultIds: ["vault-b"],
       label: "Owner",
-      role: "admin",
     });
     const anonymousVault = await fetch(
       `${f.base}/centraid/_gateway/devices/ticket`,
@@ -226,9 +180,8 @@ describe("devices-routes-invitations scenarios", () => {
     const noVaults = await harness();
     noVaults.enrollments.enroll({
       endpointId: "lonely-key",
-      vaultId: "vault-a",
+      vaultIds: ["vault-a"],
       label: "Owner",
-      role: "admin",
     });
     const unknownTarget = await fetch(
       `${noVaults.base}/centraid/_gateway/devices/ticket`,
@@ -248,9 +201,8 @@ describe("devices-routes-invitations scenarios", () => {
     const f = await harness({ endpointTicket: () => undefined });
     f.enrollments.enroll({
       endpointId: "owner-key",
-      vaultId: "vault-a",
+      vaultIds: ["vault-a"],
       label: "Owner",
-      role: "admin",
     });
     const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: "POST",
@@ -275,22 +227,13 @@ describe("devices-routes-invitations scenarios", () => {
     });
     f.enrollments.enroll({
       endpointId: "owner-key",
-      vaultId: "vault-a",
+      vaultIds: ["vault-a", "vault-personal"],
       label: "Owner",
-      role: "admin",
-    });
-    f.enrollments.enroll({
-      endpointId: "owner-key",
-      vaultId: "vault-personal",
-      label: "Owner",
-      role: "admin",
     });
     const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: "POST",
       headers: deviceHeaders("owner-key"),
-      // An INVITE (not a self-pair, which grants everything the caller holds),
-      // so the single grant lands on whichever vault the fallback picks.
-      body: JSON.stringify({ newMemberLabel: "Rhea" }),
+      body: JSON.stringify({}),
     });
     expect(response.status).toBe(200);
     // Not `vault-a` (the shared vault), which sorts first among the caller's
@@ -305,14 +248,13 @@ describe("devices-routes-invitations scenarios", () => {
     const f = await harness({ defaultVaultId: () => "vault-someone-else" });
     f.enrollments.enroll({
       endpointId: "owner-key",
-      vaultId: "vault-a",
+      vaultIds: ["vault-a"],
       label: "Owner",
-      role: "admin",
     });
     const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: "POST",
       headers: deviceHeaders("owner-key"),
-      body: JSON.stringify({ newMemberLabel: "Rhea" }),
+      body: JSON.stringify({}),
     });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -320,17 +262,16 @@ describe("devices-routes-invitations scenarios", () => {
     });
   });
 
-  test("host custody defaults to the existing owner unless a new member is explicit", async () => {
+  test("host custody mints for the vault's existing owner; a new person is refused", async () => {
     const f = await harness({
       canMintPairingTicket: () => true,
       vaultIds: () => ["vault-a"],
     });
     const owner = f.enrollments.enroll({
       endpointId: "owner-key",
-      vaultId: "vault-a",
+      vaultIds: ["vault-a"],
       label: "Owner laptop",
-      role: "admin",
-      memberLabel: "Priya",
+      ownerLabel: "Priya",
     });
     const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: "POST",
@@ -339,9 +280,24 @@ describe("devices-routes-invitations scenarios", () => {
     });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      memberId: owner.memberId,
-      memberLabel: "Priya",
-      grants: [{ vaultId: "vault-a", role: "admin" }],
+      ownerId: owner.ownerId,
+      ownerLabel: "Priya",
+      vaults: [{ vaultId: "vault-a", vaultName: "Personal" }],
+    });
+
+    // Even L0 cannot invite a NEW person into someone's vaults — the P1 mint
+    // ceremony is the only door for a new owner.
+    const newPerson = await fetch(
+      `${f.base}/centraid/_gateway/devices/ticket`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ newOwnerLabel: "Kid" }),
+      }
+    );
+    expect(newPerson.status).toBe(403);
+    await expect(newPerson.json()).resolves.toMatchObject({
+      error: "owner_vaults_only",
     });
   });
 });

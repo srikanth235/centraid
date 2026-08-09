@@ -120,10 +120,28 @@ export {
   makeMultiplexReplicaRouteHandler,
   MULTIPLEX_REPLICA_CHANGES_PATH,
 } from "./routes/multiplex-replica-routes.js";
+export { makeEdgesRouteHandler, EDGES_PATH } from "./routes/edges-routes.js";
 export {
-  makePlacementRouteHandler,
-  PLACEMENTS_PATH,
-} from "./routes/placement-routes.js";
+  makeVaultLinksRouteHandler,
+  LINKS_PATH,
+} from "./routes/vault-links-routes.js";
+// The gateway↔gateway lane (#726 P3 decision 6). A host mounts this with the
+// peer proof its own forwarder minted; nothing else may read that proof.
+export {
+  makePeerPlaneHandler,
+  PEER_LINK_HELLO_PATH,
+  PEER_LINK_REDEEM_PATH,
+  PEER_ROUTE_ASSERT_PATH,
+  type PeerPlaneDeps,
+} from "./routes/peer-plane.js";
+// One table, one answerer for "may an edge cross to vault X" — same rows for
+// a vault on this machine and a vault across the world (D3).
+export { VaultLinksStore } from "./serve/vault-links-store.js";
+export type {
+  LinkedPeer,
+  LinkRoute,
+  VaultLink,
+} from "./serve/vault-link-row.js";
 export {
   makePushRegistrationRouteHandler,
   PUSH_REGISTRATIONS_PATH,
@@ -163,6 +181,6 @@ export {
 export { landlordBearerForDataDir } from "./cli/landlord-auth.js";
 // Host-only capability gate (issue #568 items A/B). Embedders wire this into
 // `serve({isHostCustody})` so the host-only lanes — pairing-ticket mint,
-// member administration, share, scopes — refuse anything a forwarder
-// delivered to loopback.
+// owner administration, scopes — refuse anything a forwarder delivered to
+// loopback.
 export { isDirectHostRequest } from "./routes/route-helpers.js";

@@ -67,6 +67,10 @@ import PhotosMoreSheet from "./PhotosMoreSheet";
 export interface PhotosSelectionProps {
   count: number;
   shelf: SelectionShelfKind;
+  /** The third target's caption — `Copy to ⟨destination⟩`, resolved by the
+   *  screen's own `useCopyToVault` (issue #726: the destination is the
+   *  caller's to resolve, never derived by the engine). */
+  copyLabel: string;
   /** Non-null when the scope refuses writes — stated inline, never hidden. */
   readOnlyReason: string | null;
   favorite: SelectionHandler;
@@ -198,6 +202,7 @@ function SelectionBottomBar({
   const actions = buildSelectionActions({
     count: selection.count,
     shelf: selection.shelf,
+    copyLabel: selection.copyLabel,
     readOnlyReason: selection.readOnlyReason,
     favorite: selection.favorite,
     addToAlbum: selection.addToAlbum,

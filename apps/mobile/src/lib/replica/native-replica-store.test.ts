@@ -7,7 +7,7 @@ import { NativeReplicaStore } from "./native-replica-store";
 import { NodeSqliteDriver } from "./node-sqlite-driver";
 import { SqliteIntentStore } from "./sqlite-intent-store";
 
-function snapshot(): ReplicaSnapshot {
+function snapshot(hasUnavailableFields = true): ReplicaSnapshot {
   return {
     protocolVersion: 1,
     vaultId: "vault-a",
@@ -29,7 +29,7 @@ function snapshot(): ReplicaSnapshot {
               "deleted_at",
               "created_at",
             ],
-            hasUnavailableFields: true,
+            ...(hasUnavailableFields ? { hasUnavailableFields: true } : {}),
           },
         ],
       },
@@ -98,7 +98,7 @@ describe(NativeReplicaStore, () => {
   test("searches eager FTS metadata", async () => {
     const store = NativeReplicaStore.create(new NodeSqliteDriver(), "vault-a");
     try {
-      await store.bootstrap(snapshot());
+      await store.bootstrap(snapshot(false));
       const result = await store.searchWire({
         shapeId: "shape-photos",
         entity: "core.content_item",

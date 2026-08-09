@@ -1,17 +1,10 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
-import {
-  createGatewayDeviceTicket,
-  listGatewayMembers,
-} from "../../../gateway-client.js";
+import { createGatewayDeviceTicket } from "../../../gateway-client.js";
 import DevicePairPanel from "../../screens/DevicePairPanel.js";
-import type { PairVault } from "../../screens/DevicePairTarget.js";
 import { cx } from "../../ui/cx.js";
 import { iconSvg } from "../iconSvg.js";
-import { useAsyncData } from "../useAsyncData.js";
-import { useMemberScopes } from "../useMemberScopes.js";
-import { loadSelfProfile } from "./profileData.js";
 
 import controlsCss from "../../styles/controls.module.css";
 import vaultModalStyles from "./VaultModal.module.css";
@@ -34,20 +27,13 @@ export interface PairDeviceModalProps {
  * host answers "pairing is managed by the gateway or desktop client"); this is
  * the ticket flow that actually enrolls a phone against this gateway.
  *
- * Landing state is self-pair, which is what makes "add my own phone" cost
- * nothing: the gateway derives the access from the enrollment you already
- * hold, so no member is named and no name is asked for again.
+ * Landing state — the only state, since #726 — is self-pair, which is what
+ * makes "add my own phone" cost nothing: the gateway derives the access from
+ * the enrollment you already hold, so there is nothing here to pick.
  */
 export default function PairDeviceModal({
   onClose,
 }: PairDeviceModalProps): JSX.Element {
-  const scopes = useMemberScopes();
-  const membersState = useAsyncData(listGatewayMembers, []);
-  const members = membersState.status === "ready" ? membersState.data : [];
-  // Who "For myself" is, so the caller's own row never also appears as a peer.
-  const selfState = useAsyncData(loadSelfProfile, []);
-  const selfMemberId =
-    selfState.status === "ready" ? selfState.data?.memberId : undefined;
   const [now, setNow] = useState(() => Date.now());
 
   // The panel humanizes its ticket's remaining life, so it needs a clock.
@@ -65,13 +51,6 @@ export default function PairDeviceModal({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
-
-  // The scope registry is the same source every "which vault?" picker reads,
-  // so the grant rows here can never disagree with what this member can reach.
-  const vaults: PairVault[] = scopes.scopes.map((scope) => ({
-    vaultId: scope.id,
-    vaultName: scope.label,
-  }));
 
   return (
     <div className={vaultModalStyles.profOverlay}>
@@ -110,9 +89,6 @@ export default function PairDeviceModal({
             now={now}
             onCreateTicket={createGatewayDeviceTicket}
             onClose={onClose}
-            members={members}
-            {...(selfMemberId ? { currentMemberId: selfMemberId } : {})}
-            vaults={vaults}
           />
         </div>
       </dialog>

@@ -12,13 +12,13 @@
 // THE QUEUE IS THE DATABASE (issue #721 E2, unchanged). No in-memory work
 // list, no cursor across ticks, no "resume from where we crashed" bookkeeping,
 // because each is state that can disagree with the vault. A pass asks two
-// questions, both answered by SQL over durable rows: the member's own OPEN
+// questions, both answered by SQL over durable rows: the owner's own OPEN
 // REQUESTS first (`enrich_request`), then the BACKFILL of targets this model
 // has not produced yet. A killed gateway resumes by asking the same two
 // questions; what it half-did is simply still open.
 //
 // DERIVATIVES, NEVER ORIGINALS. `buildItem` reads a target's preview/thumb (or
-// other derived) bytes. A spec that reaches for a member's full-resolution
+// other derived) bytes. A spec that reaches for an owner's full-resolution
 // original to feed a model is a bug in that spec, and the comment in each spec
 // says so — the guarantee is worth restating everywhere it can be broken.
 //
@@ -32,7 +32,7 @@
 // `enrich_derivation` stamp and the `drained_at` marks. Two failure modes are
 // unrecoverable if they are ever separated: a stamp without its value tells
 // the next sweep the work is done when nothing was produced, and a drain
-// without its value silently answers a member's ask with nothing — a drained
+// without its value silently answers an owner's ask with nothing — a drained
 // request is invisible to the claim query, so no later pass repairs it.
 // Holding that invariant centrally means a new spec cannot get it wrong.
 
@@ -105,7 +105,7 @@ export interface CapabilitySweepSpec<C extends EnrichCapability> {
   ) => CapabilitySweepBacklog;
   /**
    * The wire item for one target, or `null` when its bytes are not there yet
-   * (no derivative rung) — a skip, never a read of the member's original.
+   * (no derivative rung) — a skip, never a read of the owner's original.
    */
   buildItem: (
     db: VaultDb,
@@ -341,7 +341,7 @@ function markDrained(
 }
 
 /**
- * The shared half of every spec's `selectBacklog`: the member's OPEN requests
+ * The shared half of every spec's `selectBacklog`: the owner's OPEN requests
  * for this capability, split into per-target asks and standing domain-wide
  * ones. A row under a LIVE device lease is left alone — that device claimed
  * the work and the gateway is not its competitor.

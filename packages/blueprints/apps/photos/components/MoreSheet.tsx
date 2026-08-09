@@ -1,8 +1,8 @@
 // The compact band's SIXTH SLOT (v4 handoff §3.1, §15) — the app's own
 // overflow sheet, which is what `InlineBandClaim.onMore` is for.
 //
-// The band is capped at five destinations plus More, and Photos has eight
-// shelves. More is where the other three live, plus Storage: Sharing,
+// The band is capped at five destinations plus More, and Photos has seven
+// shelves. More is where the ones off the band live, plus Storage:
 // Favorites, Places, Duplicates, Trash, Storage (shelves.ts
 // `MORE_DESTINATIONS`). Import is deliberately absent — it is the app bar's
 // filled action on every shelf that can take one, and a second way in would be

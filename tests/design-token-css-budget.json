@@ -102,7 +102,7 @@
     "rawFontSize": 1
   },
   "packages/client/src/react/screens/DevicePairPanel.module.css": {
-    "rawFontSize": 4,
+    "rawFontSize": 2,
     "rawRadius": 3
   },
   "packages/client/src/react/screens/DevicesCard.module.css": {

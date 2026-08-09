@@ -3,16 +3,17 @@ import type { JSX } from "react";
 
 import type { CentraidGatewayDevice } from "../../gateway-client-devices.js";
 import { formatDuration } from "../shell/routes/gatewayData.js";
-import { roleLabel } from "./device-roles.js";
 
 import styles from "./BackupCard.module.css";
 
-// The brief's device list (issue #708 A2): every device with a role chip,
-// size, scope, and last-seen — last-seen in the mono/tabular register. This
-// reuses the paired-device roster (`gateway-client-devices.ts`, the same
-// data DevicesCard shows) rather than inventing a new device concept: "what
-// would I lose" is answered by the offsite copy (the health metrics above),
-// this list is "what else already has a copy."
+// The brief's device list (issue #708 A2): every device with its size, scope,
+// and last-seen — last-seen in the mono/tabular register. This reuses the
+// paired-device roster (`gateway-client-devices.ts`, the same data
+// DevicesCard shows) rather than inventing a new device concept: "what would
+// I lose" is answered by the offsite copy (the health metrics above), this
+// list is "what else already has a copy." A role column used to sit here;
+// ownership (#726) leaves nothing per-device left to distinguish — every
+// listed device already reaches everything its owner owns.
 //
 // SEAM: the device-pairing wire (`CentraidGatewayDevice`) carries no
 // per-device storage footprint and no declared replica shape/scope — those
@@ -43,7 +44,6 @@ function DeviceListRow({
           <span className={styles.deviceListCurrent}>this device</span>
         ) : null}
       </span>
-      <span className={styles.deviceListRole}>{roleLabel(device.role)}</span>
       <span className={styles.deviceListScope} title={device.vaultId}>
         {device.vaultName ?? device.vaultId}
       </span>
@@ -105,7 +105,6 @@ export default function BackupDeviceList({
         <div className={styles.deviceListTable}>
           <div className={styles.deviceListHead} aria-hidden="true">
             <span>Device</span>
-            <span>Role</span>
             <span>Scope</span>
             <span>Size</span>
             <span>Last seen</span>

@@ -29,7 +29,7 @@ describe("local-orphan-sweep suite", () => {
       audience,
       itemType: "media.media_asset",
       itemId: photo.assetId,
-      sharedByMember: "member-priya",
+      sharedBy: "member-priya",
     });
     unshareFromVault({
       audience,
@@ -116,7 +116,7 @@ describe("local-orphan-sweep suite", () => {
       audience,
       itemType: "media.media_asset",
       itemId: photo.assetId,
-      sharedByMember: "member-priya",
+      sharedBy: "member-priya",
     });
     const sharedIno = statSync(casPath(audience, photo.sha256)).ino;
 

@@ -49,7 +49,7 @@ The browser outbox migration is additive: it never drops the pending-intent stor
 
 ### Pair-ticket multi-vault redemption
 
-A pair ticket is one-time onboarding envelope, not a gateway-wide grant. Its server-side invitation contains an ordered list of explicit `(vault, role)` grants. Redemption creates the corresponding vault-scoped enrollments in one transaction and returns the first grant as the initial active vault. Newer responses additionally carry `vaultIds` and `vaults[]` with per-vault enrollment metadata; readers must default an absent list to the primary vault.
+A pair ticket is one-time onboarding envelope, not a gateway-wide grant. Its server-side invitation contains an ordered list of vault ids the owner already owns — no `role` field; access is ownership, not a grant per vault (#726 P0). Redemption creates the corresponding vault-scoped enrollments in one transaction and returns the first vault as the initial active vault. Newer responses additionally carry `vaultIds` and `vaults[]` with per-vault enrollment metadata; readers must default an absent list to the primary vault.
 
 Clients may present one scan/paste flow, but they must retain the resulting vault bindings independently. Revoking or forgetting one vault must not remove the other bindings, replicas, cursors, or outboxes. The gateway remains only the transport/control front door; authorization is evaluated per vault.
 
@@ -103,7 +103,17 @@ Product skew (desktop 0.6 talking to gateway labeled 0.4) is **allowed** when pr
 
 Constants live in `@centraid/protocol` (`GATEWAY_VERSION`, `GATEWAY_PROTOCOL_VERSION`, `GATEWAY_MIN_PROTOCOL_VERSION`).
 
+`GATEWAY_PROTOCOL_VERSION` and `GATEWAY_MIN_PROTOCOL_VERSION` both moved to `3` for the member→owner wire rename (#726 P0 — ownership replaces roles) — a hard floor bump, no COMPAT window; an old client sees the update wall. See [decisions.md](decisions.md).
+
 `COMPAT(name)` cleanup floors should cite **protocol** (or capability name), not product semver, when possible.
+
+### A second, independent handshake: the peer plane (issue #726 P3)
+
+Two owners' gateways speaking directly over a link (see [ARCHITECTURE.md](../ARCHITECTURE.md#vault-ownership-and-sharing-726) and [SECURITY.md](../SECURITY.md#the-peer-plane-726-p3)) are not the gateway↔client relationship the numbers above govern, so they get their own version pair rather than reusing `GATEWAY_PROTOCOL_VERSION`: `PEER_PROTOCOL_VERSION` / `PEER_MIN_PROTOCOL_VERSION` in `packages/protocol/src/version.ts`, currently `1` / `1`. The two pairs are deliberately uncoupled — two linked gateways upgrade their peer protocol on their own owners' schedules, independent of whatever protocol version each speaks to its own clients.
+
+`judgePeerHandshake` (`packages/protocol/src/peer.ts`) implements the same C1 two-contract shape as the client handshake, applied to a peer instead: parse always succeeds, then the mutual version window is judged, then either the link forms or the peer sees exactly one typed refusal (`protocol_refused`) — never a parse error, never a silent downgrade. It is a hard floor with no COMPAT shim, consistent with the rest of #726's no-fallback posture. One detail worth naming because it is easy to get backwards: the peer-plane link **ceremony** judges this version window _before_ a presented link ticket is looked up or touched at all, so a peer running an incompatible protocol cannot burn a real ticket by attempting redemption and failing the handshake.
+
+Everything on `/centraid/_peer/*` is gateway↔GATEWAY. No client, phone, or browser ever speaks it, and `packages/tunnel/fixtures/wire-golden.json` — the Swift/Kotlin client conformance fixture — was deliberately left unchanged when the peer plane landed: a phone has no links, so adding the peer ALPN there would falsely tell mobile it owes an implementation.
 
 ## Pre-1.0 schema stance (F1)
 
@@ -154,7 +164,7 @@ The `/centraid/_tool/centraid_*` shim these replaced was deleted outright — v0
 
 Mobile judges the normal gateway handshake before mounting a replica. The mutual protocol window and the required `multiVaultReplica` / `crossVaultPlacements` capabilities are evaluated once in `mobile-gateway-compatibility-core.ts`; incompatibility produces exactly one “update gateway” or “update app” wall. Feature code does not retry older route shapes or silently fall back to an online-only client.
 
-Household placement uses the gateway control plane because one request names an origin and an audience vault. `gatewayPlacements` is the durable, link-token-idempotent client outbox ingress; `gatewayShare`, `gatewayShareRemove`, and `gatewayShareReceipts` are the explicit share/unshare/audit gestures. The gateway resolves both vault handles and member roles before entering either single-vault context.
+Household placement uses the gateway control plane because one request names an origin and an audience vault. `gatewayPlacements` is the durable, link-token-idempotent client outbox ingress — the only route left on this plane since #726 P0 deleted the dead `/share` routes (`gatewayShare`, `gatewayShareRemove`, `gatewayShareReceipts` had no client caller; placement's own `share_access_receipts` recording stays). The gateway resolves both vault handles and confirms ownership — not a role — before entering either single-vault context.
 
 `briefToday` is a read-only feature-plane projection. The caller supplies an explicit local-day `[from,to)` range, date, and IANA time zone; the response is bounded events, due tasks, the day's photo count, and the owner's Tally net position. Notification schedulers may wake Home but must not copy those titles or balances into a push payload.
 

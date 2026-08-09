@@ -6,9 +6,9 @@
 // up every polymorphic pointer at it BY HAND. That hand-maintenance was
 // provably uneven: `core_link`/`core_tag`/`core_collection_entry` were swept
 // generically, `knowledge_annotation`/`core_attachment` only for notes, and
-// `consent_share`/`enrich_embedding`/`sync_external_entity` never at all
-// (orphan shares stay "live", orphan vectors resurface deleted content in
-// search, stale sync-map rows make re-import silently skip a purged entity).
+// `enrich_embedding`/`sync_external_entity` never at all (orphan vectors
+// resurface deleted content in search, stale sync-map rows make re-import
+// silently skip a purged entity).
 //
 // This registry enumerates the SET, once. `cleanupPolyRefs` walks it, so the
 // purge sweep is complete BY CONSTRUCTION and the next mechanism is one entry
@@ -27,10 +27,8 @@ import type { DatabaseSync } from "node:sqlite";
  *     (a link onto a purged row ends, it does not dangle; issue #272).
  *   - `delete`: classification/curation/derived data that says nothing once
  *     the row is gone — remove it (issue #274).
- *   - `revoke`: a standing consent grant — stamp `revoked_at = now` on
- *     un-revoked rows (a share of nothing must stop reading live).
  */
-export type PolyRefPolicy = "end-date" | "delete" | "revoke";
+export type PolyRefPolicy = "end-date" | "delete";
 
 export interface PolyRefPair {
   /** Column holding the logical entity name, e.g. `target_type`. */
@@ -142,12 +140,6 @@ export const POLY_REF_REGISTRY: readonly PolyRefEntry[] = [
     policy: "delete",
     note: "Judgment call beyond the A1 brief (see below): a demo marker has no meaning once its entity is gone, like a tag. gateway/demo.ts already drops it on its OWN purge path; the general sweep does too now, so a demo row purged via the normal lifecycle (owner trashes a demo photo) leaves no stale marker and demoStatus stays honest.",
   },
-  {
-    table: "consent_share",
-    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
-    policy: "revoke",
-    note: "Never cleaned before (issue #441 A1): only expires_at lapsed a share, so a share of a purged row kept looking live — a consent-surface correctness bug.",
-  },
 ];
 
 /**
@@ -198,14 +190,13 @@ export const POLY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
- * End-date / delete / revoke every polymorphic reference pointing at a
- * just-purged canonical row. `entityType` is the LOGICAL name stored in the
- * type columns (`core.content_item`, `media.media_asset`, `knowledge.note`…);
- * `now` is the sweep's ISO timestamp. Operates on vault.db only — journal.db
- * pointers are excluded above and never touched.
+ * End-date / delete every polymorphic reference pointing at a just-purged
+ * canonical row. `entityType` is the LOGICAL name stored in the type columns
+ * (`core.content_item`, `media.media_asset`, `knowledge.note`…); `now` is the
+ * sweep's ISO timestamp. Operates on vault.db only — journal.db pointers are
+ * excluded above and never touched.
  *
- * Idempotent: a second call finds no open links, no un-revoked shares, and
- * nothing left to delete.
+ * Idempotent: a second call finds no open links and nothing left to delete.
  */
 export function cleanupPolyRefs(
   vault: DatabaseSync,
@@ -223,17 +214,11 @@ export function cleanupPolyRefs(
       vault
         .prepare(`DELETE FROM "${entry.table}" WHERE (${match})${extra}`)
         .run(...matchParams);
-    } else if (entry.policy === "end-date") {
+    } else {
+      // end-date
       vault
         .prepare(
           `UPDATE "${entry.table}" SET valid_to = ? WHERE valid_to IS NULL AND (${match})`
-        )
-        .run(now, ...matchParams);
-    } else {
-      // revoke
-      vault
-        .prepare(
-          `UPDATE "${entry.table}" SET revoked_at = ? WHERE revoked_at IS NULL AND (${match})`
         )
         .run(now, ...matchParams);
     }

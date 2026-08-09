@@ -16,6 +16,8 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { buildSelectionActions } from "@centraid/blueprints/apps/_shared/selection-engine";
+
 // @vitest-environment jsdom
 import PhotosScreen from "./PhotosScreen";
 
@@ -282,6 +284,7 @@ describe("a live selection replaces the band", () => {
   const selection = (readOnlyReason: string | null) => ({
     count: 2,
     shelf: "normal" as const,
+    copyLabel: "Copy to Family",
     readOnlyReason,
     favorite: { run: vi.fn<() => void>() },
     addToAlbum: { run: vi.fn<() => void>() },
@@ -291,19 +294,18 @@ describe("a live selection replaces the band", () => {
   });
 
   it("swaps the band for five named targets", () => {
+    const props = selection(null);
     render(
-      <PhotosScreen current="library" selection={selection(null)}>
+      <PhotosScreen current="library" selection={props}>
         {null}
       </PhotosScreen>
     );
-    for (const label of [
-      "Favorite",
-      "Add to album",
-      "Copy to Sharing",
-      "Download",
-      "Trash",
-    ])
-      expect(control(label)).toBeTruthy();
+    // The five labels are the engine's own (`buildSelectionActions`) — read
+    // from the same table `SelectionBottomBar` renders, so a label renamed
+    // there (e.g. the share target's, issue #726) cannot strand this test.
+    const labels = buildSelectionActions(props).map((action) => action.label);
+    expect(labels).toHaveLength(5);
+    for (const label of labels) expect(control(label)).toBeTruthy();
     // Exactly one bar at the foot: the band is gone while selecting.
     expect(control("Home")).toBeNull();
     expect(control("Library")).toBeNull();

@@ -204,13 +204,13 @@ describe(MultiVaultReplicaReader, () => {
         {
           vaultId: "personal",
           label: "Personal",
-          role: "read",
+          canWrite: false,
           databaseName: personal,
         },
         {
           vaultId: "shared",
           label: "Family",
-          role: "write",
+          canWrite: true,
           databaseName: shared,
         },
       ]
@@ -242,13 +242,13 @@ describe(MultiVaultReplicaReader, () => {
         {
           vaultId: "personal",
           label: "Personal",
-          role: "admin",
+          canWrite: true,
           databaseName: personal,
         },
         {
           vaultId: "shared",
           label: "Family",
-          role: "read",
+          canWrite: false,
           databaseName: shared,
         },
       ]
@@ -299,13 +299,13 @@ describe(MultiVaultReplicaReader, () => {
         {
           vaultId: "personal",
           label: "Personal",
-          role: "admin",
+          canWrite: true,
           databaseName: personal,
         },
         {
           vaultId: "shared",
           label: "Family",
-          role: "read",
+          canWrite: false,
           databaseName: shared,
         },
       ]
@@ -336,13 +336,13 @@ describe(MultiVaultReplicaReader, () => {
         {
           vaultId: "personal",
           label: "Personal",
-          role: "write",
+          canWrite: true,
           databaseName: personal,
         },
         {
           vaultId: "shared",
           label: "Family",
-          role: "write",
+          canWrite: true,
           databaseName: shared,
         },
       ]
@@ -387,13 +387,13 @@ describe(MultiVaultReplicaReader, () => {
         {
           vaultId: "ready",
           label: "Ready",
-          role: "write",
+          canWrite: true,
           databaseName: ready,
         },
         {
           vaultId: "empty",
           label: "Empty",
-          role: "read",
+          canWrite: false,
           databaseName: empty,
         },
       ]
@@ -412,10 +412,10 @@ describe(MultiVaultReplicaReader, () => {
   test("holds the 50k-item ten-year cold-read and local-search budgets", async () => {
     const root = tempDirSync("centraid-household-");
     const fixtureScopes = [
-      { vaultId: "personal", label: "Personal", role: "admin" as const },
-      { vaultId: "family", label: "Family", role: "write" as const },
-      { vaultId: "school", label: "School", role: "read" as const },
-      { vaultId: "club", label: "Club", role: "read" as const },
+      { vaultId: "personal", label: "Personal", canWrite: true as const },
+      { vaultId: "family", label: "Family", canWrite: true as const },
+      { vaultId: "school", label: "School", canWrite: false as const },
+      { vaultId: "club", label: "Club", canWrite: false as const },
     ].map((scope) => ({
       ...scope,
       databaseName: path.join(root, `${scope.vaultId}.db`),

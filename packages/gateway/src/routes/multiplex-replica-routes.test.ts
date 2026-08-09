@@ -82,7 +82,6 @@ async function fixture(): Promise<{
   enrollments: EnrollmentStore;
   handler: ReturnType<typeof makeMultiplexReplicaRouteHandler>;
   deviceId: string;
-  memberId: string;
 }> {
   const root = await tempDir(`multiplex-${crypto.randomUUID()}-`);
   const personal = openVaultPlane({
@@ -99,14 +98,11 @@ async function fixture(): Promise<{
   });
   const enrollments = EnrollmentStore.open(path.join(root, "gateway.db"));
   const deviceId = "offline-phone";
-  const enrollment = enrollments.enroll({
+  enrollments.enroll({
     endpointId: deviceId,
     label: "Offline phone",
-    memberLabel: "Priya",
-    grants: [
-      { vaultId: personal.boot.vaultId, role: "write" },
-      { vaultId: family.boot.vaultId, role: "read" },
-    ],
+    ownerLabel: "Priya",
+    vaultIds: [personal.boot.vaultId, family.boot.vaultId],
   });
   const planes = new Map([
     [personal.boot.vaultId, personal],
@@ -128,7 +124,6 @@ async function fixture(): Promise<{
       heartbeatMs: 5,
     }),
     deviceId,
-    memberId: enrollment.memberId,
   };
 }
 
@@ -159,7 +154,9 @@ describe("multiplex replica route", () => {
       ...familyState.watermark,
       schemaEpoch: familyState.schemaEpoch,
     });
-    f.enrollments.members.clearGrant(f.memberId, f.family.boot.vaultId);
+    // Ownership of the family vault ends while the phone is offline — the
+    // ownership analogue of the old grant removal.
+    f.enrollments.owners.removeVault(f.family.boot.vaultId);
     const req = request(streamPath([f.personal, f.family]), f.deviceId);
     const res = new MockResponse();
     res.onWrite = (chunk) => {
@@ -208,7 +205,9 @@ describe("multiplex replica route", () => {
       ...familyState.watermark,
       schemaEpoch: familyState.schemaEpoch,
     });
-    f.enrollments.members.clearGrant(f.memberId, f.family.boot.vaultId);
+    // Ownership of the family vault ends while the phone is offline — the
+    // ownership analogue of the old grant removal.
+    f.enrollments.owners.removeVault(f.family.boot.vaultId);
     const req = request(streamPath([f.personal, f.family]), f.deviceId);
     const res = new MockResponse();
     res.write = () => {

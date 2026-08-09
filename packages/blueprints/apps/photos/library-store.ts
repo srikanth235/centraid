@@ -17,9 +17,15 @@
 //     as units (src/photos-library-store.test.ts) rather than as a mounted app.
 //
 // The merge itself — ordering, cross-scope dedupe, the shared safe horizon —
-// lives in merge.ts and is deliberately not re-derived here.
-import { mergeScopePages } from "./merge.ts";
-import type { MergeAsset, MergeResult } from "./merge.ts";
+// lives in apps/_shared/scope-merge.ts (issue #726 D11) and is deliberately
+// not re-derived here.
+import { mergeScopePages } from "../_shared/scope-merge.ts";
+import type { MergeResult, ScopePage } from "../_shared/scope-merge.ts";
+import {
+  photoDedupeIdentity,
+  photosScopeDeclaration,
+} from "./scope-declaration.ts";
+import type { MergeableAsset } from "./scope-declaration.ts";
 import type {
   Album,
   Asset,
@@ -146,7 +152,7 @@ export interface LibraryStore {
   /** Route one change-feed burst to the smallest refetch that answers it. */
   handleChange: (detail: LibraryChangeDetail | undefined) => void;
   /** The merged timeline across scopes (memoized until the next read lands). */
-  merged: () => MergeResult;
+  merged: () => MergeResult<MergeableAsset>;
   /** One scope's accumulated library, empty when it has never answered. */
   scope: (scopeId: string) => ScopeLibrary;
   /** The member's own scope's library — albums, places and trash come from here. */
@@ -168,7 +174,7 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
   // later one's answer, and disposal bumps every generation at once.
   const generation = new Map<string, number>();
   let disposed = false;
-  let mergedCache: MergeResult | null = null;
+  let mergedCache: MergeResult<MergeableAsset> | null = null;
 
   const bump = (scopeId: string): number => {
     const next = (generation.get(scopeId) ?? 0) + 1;
@@ -230,23 +236,31 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
     if (applied) settle();
   }
 
-  const merged = (): MergeResult => {
+  const merged = (): MergeResult<MergeableAsset> => {
     if (mergedCache) return mergedCache;
-    const pages = deps.scopeIds().map((scopeId) => {
-      const library = scopeOf(scopeId);
-      return {
-        scopeId,
-        // `Asset` and `MergeAsset` describe the SAME query row from two sides:
-        // the merge names the three columns it orders and dedupes on and takes
-        // the rest as `unknown`, while `Asset` names the columns the UI paints.
-        // Neither is a subtype of the other, so the bridge is a cast — with the
-        // asset rows themselves untouched in either direction.
-        assets: library.assets as unknown as readonly MergeAsset[],
-        tail: library.tail,
-        truncated: library.truncated,
-      };
+    const pages: ScopePage<MergeableAsset>[] = deps
+      .scopeIds()
+      .map((scopeId) => {
+        const library = scopeOf(scopeId);
+        return {
+          scopeId,
+          // `Asset` and `MergeableAsset` describe the SAME query row from two
+          // sides: the merge names the columns it orders and dedupes on and
+          // takes the rest as `unknown`, while `Asset` names the columns the
+          // UI paints. Neither is a subtype of the other, so the bridge is a
+          // cast — with the asset rows themselves untouched in either
+          // direction.
+          rows: library.assets as unknown as readonly MergeableAsset[],
+          tail: library.tail,
+          truncated: library.truncated,
+        };
+      });
+    mergedCache = mergeScopePages(pages, {
+      ownScopeId: deps.ownScopeId(),
+      sortKey: photosScopeDeclaration.mergeKey,
+      direction: "desc",
+      dedupeIdentity: photoDedupeIdentity,
     });
-    mergedCache = mergeScopePages(pages, { ownScopeId: deps.ownScopeId() });
     return mergedCache;
   };
 

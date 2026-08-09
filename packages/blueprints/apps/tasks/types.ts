@@ -5,6 +5,7 @@
 // `search` queries return (open + logbook, with nested children, attachments,
 // tags and resolved cross-references); the presentation `AppState`/`BoardData`
 // bags app.tsx mutates in place (never reassigned) and logic.ts closes over.
+import type { ScopeSearchReach } from "../_shared/search-scaffold.ts";
 import type { Attachment, Reference } from "./kit.ts";
 
 /** VTODO lifecycle status (schedule.task). */
@@ -54,6 +55,11 @@ export interface TaskTag {
  */
 export interface Task {
   task_id: string;
+  /** Which mounted scope this row is shown FROM (issue #726 D11), stamped by
+   *  the cross-scope merge (apps/_shared/scope-merge.ts) — absent on a
+   *  single-scope surface or a row app-root.tsx never ran through the merge
+   *  (the logbook, still own-scope-only). */
+  scope_id?: string | null;
   status: TaskStatus;
   title: string;
   description?: string | null;
@@ -167,6 +173,10 @@ export interface AppState {
   searchSnippets: Map<string, string> | null;
   boardWindow: number;
   boardTruncated: boolean;
+  /** Per-scope reach for the last board fan-out (issue #726 D10/D11,
+   *  `scope-fanout.ts`'s `readBoard`) — empty for a single-scope mount or
+   *  once every mounted scope answered. */
+  boardReach: ScopeSearchReach[];
   detailId: string | null;
   narrow: boolean;
   pendingIds: Set<string>;

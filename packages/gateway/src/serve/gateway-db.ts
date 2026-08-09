@@ -13,6 +13,12 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { SQLInputValue } from "node:sqlite";
 
+import {
+  installGatewaySchema,
+  migrateLegacyMembers,
+  migrateSupersededLinks,
+} from "./gateway-schema.js";
+
 export const GATEWAY_DB_FILE = "gateway.db";
 
 export type GatewayDbLockMode = "exclusive" | "read-only" | "shared";
@@ -76,6 +82,8 @@ export class GatewayDatabase {
       db.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 0;");
       if (lockMode !== "read-only") {
         db.exec("PRAGMA journal_mode = DELETE;");
+        migrateLegacyMembers(db);
+        migrateSupersededLinks(db);
         installGatewaySchema(db);
         chmodSync(file, 0o600);
       }
@@ -178,202 +186,6 @@ function acquireExclusiveLifetimeLock(db: DatabaseSync, file: string): void {
     if (isBusy(error)) throw new GatewayLockError(file);
     throw error;
   }
-}
-
-function installGatewaySchema(db: DatabaseSync): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS gateway_meta (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    ) STRICT;
-    CREATE TABLE IF NOT EXISTS prefs (
-      key TEXT PRIMARY KEY,
-      value_json TEXT NOT NULL
-    ) STRICT;
-    /*
-     * L2 — principals (issue #599). A member is a human on this household
-     * gateway: a stable id the whole system keys on, plus an editable label.
-     * People-as-principals live here; people-as-data live in the vault's
-     * 'core_party'. There is deliberately no pointer between them.
-     */
-    CREATE TABLE IF NOT EXISTS members (
-      member_id TEXT PRIMARY KEY,
-      label TEXT NOT NULL,
-      created_at INTEGER NOT NULL
-    ) STRICT;
-    /*
-     * L3 — authorization. Authority is authored HERE and nowhere else: the
-     * effective role of a device in a vault is its member's row in this
-     * table, and an absent row means no access at all. Every vault keeps at
-     * least one 'admin' member (the founding invariant, read as ownership).
-     */
-    CREATE TABLE IF NOT EXISTS member_roles (
-      member_id TEXT NOT NULL REFERENCES members(member_id) ON DELETE CASCADE,
-      vault_id TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('admin', 'write', 'read')),
-      PRIMARY KEY (member_id, vault_id)
-    ) STRICT;
-    /*
-     * L1 — authentication. A device row is a pure BINDING of a proved iroh
-     * EndpointId to a member; it carries no authored authority (no role
-     * column, no per-vault fan-out). 'revoked' is the device-level tombstone
-     * — "this phone was stolen" — and leaves the member untouched.
-     */
-    CREATE TABLE IF NOT EXISTS devices (
-      enrollment_id TEXT PRIMARY KEY,
-      endpoint_id TEXT NOT NULL UNIQUE,
-      member_id TEXT NOT NULL REFERENCES members(member_id) ON DELETE CASCADE,
-      label TEXT NOT NULL,
-      platform TEXT,
-      remember_device INTEGER NOT NULL CHECK (remember_device IN (0, 1)),
-      grant_profile_json TEXT,
-      compute_json TEXT,
-      revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)),
-      added_at TEXT NOT NULL
-    ) STRICT;
-    /*
-     * Replica checkpoints are the one genuinely per-(device, vault) fact, so
-     * they keep their own table now that 'devices' no longer fans out.
-     */
-    CREATE TABLE IF NOT EXISTS device_checkpoints (
-      endpoint_id TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
-      vault_id TEXT NOT NULL,
-      checkpoint_json TEXT NOT NULL,
-      PRIMARY KEY (endpoint_id, vault_id)
-    ) STRICT;
-    CREATE TABLE IF NOT EXISTS web_sessions (
-      token_hash TEXT PRIMARY KEY,
-      vault_id TEXT NOT NULL,
-      device_key TEXT REFERENCES devices(endpoint_id) ON DELETE CASCADE,
-      shell_origin TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      expires_at INTEGER NOT NULL,
-      last_used_at INTEGER NOT NULL
-    ) STRICT;
-    /*
-     * The expiry sweep is the only full-table predicate on web_sessions and it
-     * runs on a timer, not per request (issue #659 G3). Without this index the
-     * sweep's DELETE scans every live session row.
-     */
-    CREATE INDEX IF NOT EXISTS web_sessions_expires_idx
-      ON web_sessions(expires_at);
-    /*
-     * A ticket is an INVITATION: which member the joining device binds to,
-     * and the full grant list that member must hold once it redeems. One
-     * scan, many vaults, atomically. There is only one kind of ticket since
-     * #603 retired the founding ceremony — a gateway founds itself.
-     */
-    CREATE TABLE IF NOT EXISTS tickets (
-      ticket_id TEXT PRIMARY KEY,
-      secret_hash TEXT NOT NULL,
-      member_id TEXT NOT NULL REFERENCES members(member_id) ON DELETE CASCADE,
-      grants_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      expires_at INTEGER NOT NULL
-    ) STRICT;
-    CREATE TABLE IF NOT EXISTS erase_intents (
-      vault_id TEXT PRIMARY KEY,
-      created_at TEXT NOT NULL
-    ) STRICT;
-    CREATE TABLE IF NOT EXISTS recovery_kit (
-      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-      confirmed_at INTEGER,
-      kit_fingerprint TEXT,
-      kit_confirmed INTEGER NOT NULL DEFAULT 0 CHECK (kit_confirmed IN (0, 1))
-    ) STRICT;
-    CREATE TABLE IF NOT EXISTS backup_targets (
-      target_id TEXT PRIMARY KEY,
-      vault_id TEXT NOT NULL,
-      config_json TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    ) STRICT;
-    CREATE TABLE IF NOT EXISTS cas_reconciliations (
-      vault_id TEXT PRIMARY KEY,
-      state_json TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    ) STRICT;
-    CREATE TABLE IF NOT EXISTS storage_connections (
-      id TEXT PRIMARY KEY,
-      kind TEXT NOT NULL CHECK (kind = 'provider'),
-      name TEXT NOT NULL,
-      base_url TEXT NOT NULL,
-      sealed_credentials TEXT NOT NULL,
-      target_id TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    ) STRICT;
-    CREATE TABLE IF NOT EXISTS storage_limits (
-      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-      total_limit_bytes INTEGER,
-      warn_at_percent REAL NOT NULL,
-      journal_limit_bytes INTEGER
-    ) STRICT;
-    /*
-     * Cross-vault placement is a recoverable two-step workflow, not a
-     * distributed SQLite transaction. The target projection always commits
-     * before a move removes its source; replay resumes from these two states.
-     */
-    CREATE TABLE IF NOT EXISTS placement_intents (
-      link_token TEXT PRIMARY KEY,
-      device_id TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
-      member_id TEXT NOT NULL REFERENCES members(member_id) ON DELETE CASCADE,
-      kind TEXT NOT NULL CHECK (kind IN ('add', 'move')),
-      item_type TEXT NOT NULL,
-      item_id TEXT NOT NULL,
-      source_vault_id TEXT NOT NULL,
-      target_vault_id TEXT NOT NULL,
-      target_item_id TEXT,
-      target_state TEXT NOT NULL CHECK (target_state IN ('queued', 'executed')),
-      source_state TEXT NOT NULL CHECK (source_state IN ('not-needed', 'queued', 'executed')),
-      status TEXT NOT NULL CHECK (status IN ('queued', 'in-flight', 'executed', 'parked', 'denied', 'failed')),
-      reason TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    ) STRICT;
-    CREATE INDEX IF NOT EXISTS placement_intents_device_status
-      ON placement_intents(device_id, status, updated_at);
-    /*
-     * Durable household access audit. Member ids are deliberately not foreign
-     * keys: removing a member must revoke authority without erasing the fact
-     * that access was granted or removed. link_token makes offline placement
-     * replay exactly-once at this control-plane boundary.
-     */
-    CREATE TABLE IF NOT EXISTS share_access_receipts (
-      receipt_id TEXT PRIMARY KEY,
-      link_token TEXT UNIQUE,
-      member_id TEXT,
-      action TEXT NOT NULL CHECK (action IN ('share', 'unshare')),
-      item_type TEXT NOT NULL,
-      origin_vault_id TEXT,
-      origin_item_id TEXT,
-      audience_vault_id TEXT NOT NULL,
-      audience_item_id TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    ) STRICT;
-    CREATE INDEX IF NOT EXISTS share_access_receipts_audience_idx
-      ON share_access_receipts(audience_vault_id, created_at);
-    CREATE TABLE IF NOT EXISTS push_registrations (
-      device_id TEXT PRIMARY KEY REFERENCES devices(endpoint_id) ON DELETE CASCADE,
-      expo_token TEXT NOT NULL UNIQUE,
-      platform TEXT NOT NULL CHECK (platform IN ('ios', 'android')),
-      updated_at TEXT NOT NULL
-    ) STRICT;
-    CREATE TABLE IF NOT EXISTS web_push_vapid (
-      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-      public_key TEXT NOT NULL,
-      private_key TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    ) STRICT;
-    CREATE TABLE IF NOT EXISTS web_push_registrations (
-      endpoint TEXT PRIMARY KEY,
-      device_id TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
-      p256dh TEXT NOT NULL,
-      auth TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    ) STRICT;
-    CREATE INDEX IF NOT EXISTS web_push_registrations_device_idx
-      ON web_push_registrations(device_id);
-  `);
 }
 
 function isBusy(error: unknown): boolean {

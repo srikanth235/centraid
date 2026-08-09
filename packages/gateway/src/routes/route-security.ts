@@ -1,4 +1,4 @@
-export type RouteAuthTier = "public" | "device" | "member" | "admin";
+export type RouteAuthTier = "public" | "device" | "owner" | "admin";
 export type RouteVaultScope = "none" | "active" | "path";
 
 export interface RouteSecurityRegistration {
@@ -63,6 +63,7 @@ export const ROUTE_SECURITY_REGISTRY: readonly RouteSecurityRegistration[] = [
     `
     /centraid/_gateway/devices|devices-routes.ts
     /centraid/_gateway/device-work|device-work-routes.ts
+    /centraid/_gateway/links|vault-links-routes.ts
     /centraid/_vault/blobs|blob-routes.ts
     /centraid/_vault/replica|replica-routes.ts
     /centraid/_vault/changes|replica-routes.ts
@@ -72,7 +73,7 @@ export const ROUTE_SECURITY_REGISTRY: readonly RouteSecurityRegistration[] = [
     "admin",
     "path",
     `
-    /centraid/_gateway/members|members-routes.ts
+    /centraid/_gateway/owners|owners-routes.ts
   `
   ),
   ...defineRouteGroup(
@@ -113,7 +114,7 @@ export const ROUTE_SECURITY_REGISTRY: readonly RouteSecurityRegistration[] = [
   `
   ),
   ...defineRouteGroup(
-    "member",
+    "owner",
     "active",
     `
     /centraid/_vault/assistant|assistant-routes.ts

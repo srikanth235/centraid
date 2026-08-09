@@ -46,7 +46,6 @@
 //   construction" shelf this file's own argument above rejects — so, like
 //   Selfies, they stay out rather than ship dishonest.
 
-import { sharedAssets } from "./photos-sharing";
 import type { PhotoAsset } from "./timeline-model";
 
 /** Closed union so the view's router can switch exhaustively — a section
@@ -58,12 +57,11 @@ export type CollectionSectionKey =
   | "places"
   | "favorites"
   | "videos"
-  | "sharing"
   | "duplicates"
   | "trash";
 
 /** The fixed, argued order (see the file header) as a value rather than only
- *  a type — `buildCollectionSections` always returns exactly these nine
+ *  a type — `buildCollectionSections` always returns exactly these eight
  *  sections ("AN EMPTY SECTION STILL RENDERS", above), so this is the whole
  *  set Collapse All needs to fold every shelf at once. It lives here, next to
  *  the union it enumerates, rather than in `PhotosHome.tsx` (issue #712: the
@@ -78,7 +76,6 @@ export const COLLECTION_SECTION_KEYS: readonly CollectionSectionKey[] = [
   "places",
   "favorites",
   "videos",
-  "sharing",
   "duplicates",
   "trash",
 ];
@@ -158,10 +155,6 @@ export interface CollectionFacts {
    *  (`timeline-model#onThisDay`), ungrouped — this file groups them by the
    *  year they belong to, which is what a member is actually being offered. */
   memories: readonly PhotoAsset[];
-  /** The chosen share target, or `undefined` when none has been chosen —
-   *  which is NOT the same as "nothing is shared", and the empty copy below
-   *  says so rather than reporting a zero this device cannot know. */
-  shareTargetId?: string;
 }
 
 function tileFor(
@@ -264,9 +257,9 @@ function memoriesByYear(
  * changes on its own and is therefore the only one worth looking at without
  * being asked for; then the member's own filing (Albums, People, Places);
  * then the standing shelves — filters over the same library rather than
- * things the member named (Favorites, Videos); then Sharing; then the two
- * that are housekeeping rather than browsing (Duplicates, Trash), last
- * because a library is for looking at, not for tidying.
+ * things the member named (Favorites, Videos); then the two that are
+ * housekeeping rather than browsing (Duplicates, Trash), last because a
+ * library is for looking at, not for tidying.
  */
 export function buildCollectionSections(
   facts: CollectionFacts
@@ -293,9 +286,6 @@ export function buildCollectionSections(
   const videos = live.filter((asset) => asset.kind === "video");
   const trashed = facts.assets.filter((asset) => asset.deleted);
   const clusters = duplicateClusters(facts.assets);
-  const shared = facts.shareTargetId
-    ? sharedAssets(facts.assets, facts.shareTargetId)
-    : [];
 
   return [
     {
@@ -386,22 +376,6 @@ export function buildCollectionSections(
         originalUri: asset.originalUri,
       })),
       empty: "Videos you capture or import collect here.",
-    },
-    {
-      key: "sharing",
-      title: "Shared",
-      // No count without a target: a `0` would read as "nothing of yours is
-      // shared", which a device that has not been told where shares go cannot
-      // honestly claim.
-      ...(facts.shareTargetId ? { count: shared.length } : {}),
-      tiles: shared.slice(0, RAIL_LIMIT).map((asset) => ({
-        id: asset.id,
-        uri: asset.uri,
-        originalUri: asset.originalUri,
-      })),
-      empty: facts.shareTargetId
-        ? "Photographs you copy to the shared vault appear here. The original stays where it is."
-        : "Choose a vault to share into, and the photographs you copy there appear here.",
     },
     {
       key: "duplicates",

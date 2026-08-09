@@ -97,7 +97,7 @@ describe("pairing-ticket-host-custody scenarios", () => {
     expect(minted.status).toBe(200);
     await expect(minted.json()).resolves.toMatchObject({
       ok: true,
-      role: "write",
+      ownerLabel: "You",
     });
   });
 
@@ -126,17 +126,27 @@ describe("pairing-ticket-host-custody scenarios", () => {
     });
   });
 
-  test("host custody may mint an admin ticket for a second admin device", async () => {
+  test("host custody re-mints for the same owner once one exists", async () => {
+    const first = (await (
+      await fetch(`${base}${TICKET_PATH}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      })
+    ).json()) as { ownerId: string };
+
     const minted = await fetch(`${base}${TICKET_PATH}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ role: "admin" }),
+      body: JSON.stringify({}),
     });
 
     expect(minted.status).toBe(200);
+    // The second mint targets the SAME person — access is ownership, and a
+    // machine's host lane never invents a second owner for an owned vault.
     await expect(minted.json()).resolves.toMatchObject({
       ok: true,
-      role: "admin",
+      ownerId: first.ownerId,
     });
   });
 });

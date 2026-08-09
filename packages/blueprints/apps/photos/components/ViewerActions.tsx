@@ -5,7 +5,7 @@
 // the same names and the same marks; what differs is which five/six are in
 // reach and where the row sits. So the caller describes each action ONCE, as
 // data, and this file lays it out — rather than two components drifting apart
-// on what `Copy to Sharing` is called.
+// on what *Copy to ⟨vault⟩* is called.
 //
 // LABELS ARE A FUNCTION OF WIDTH, NOT OF SURFACE (viewer.ts's
 // LABEL_BREAKPOINT). Below 840px OF BAR the actions go icon-only with the
@@ -27,6 +27,9 @@ import styles from "./Lightbox.module.css";
 export interface ViewerActionSpec {
   id: ViewerActionId | PhoneActionId;
   icon: FC<{ size?: number; filled?: boolean }>;
+  /** Overrides `ACTION_LABELS` where the caption is per-destination — the
+   *  copy action's `Copy to ⟨label⟩` (sharing.ts `copyActionLabel`). */
+  label?: string;
   /** Set where the mark itself carries state — the favourite heart fills. */
   filled?: boolean;
   onRun?: () => void;
@@ -45,7 +48,7 @@ export interface ViewerActionSpec {
 
 /** The accessible name, which is the label whether or not it is drawn. */
 function nameOf(spec: ViewerActionSpec): string {
-  return ACTION_LABELS[spec.id];
+  return spec.label ?? ACTION_LABELS[spec.id];
 }
 
 function Mark({ spec }: { spec: ViewerActionSpec }): ReactElement {

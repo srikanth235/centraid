@@ -153,13 +153,13 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("pre-release vaults use one composed schema rung", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(1);
+  test("fresh vaults apply the composed base and forward share-attribution rename", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(2);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(1);
+    expect(version.user_version).toBe(2);
     for (const table of [
       "locker_auth_credential",
       "core_entity_revision",
@@ -184,6 +184,46 @@ describe("schema/migrate", () => {
         .get()
     ).toBeUndefined();
     db.close();
+  });
+
+  test("v1 share provenance upgrades shared_by_member without losing rows", () => {
+    const dir = tempDirSync();
+    const seeded = openVaultDb({ dir });
+    seeded.vault.exec(
+      `ALTER TABLE core_share_origin RENAME COLUMN shared_by TO shared_by_member;
+       PRAGMA user_version = 1;`
+    );
+    expect(columnNames(seeded.vault, "core_share_origin")).toContain(
+      "shared_by_member"
+    );
+    seeded.vault
+      .prepare(
+        `INSERT INTO core_share_origin
+         (item_type, item_id, origin_vault_id, origin_item_id,
+          shared_by_member, shared_at)
+       VALUES ('core.collection', 'collection-1', 'vault-origin',
+               'collection-origin', 'peer:vault-origin', 42)`
+      )
+      .run();
+    seeded.close();
+
+    const upgraded = openVaultDb({ dir });
+
+    expect(columnNames(upgraded.vault, "core_share_origin")).not.toContain(
+      "shared_by_member"
+    );
+    expect(columnNames(upgraded.vault, "core_share_origin")).toContain(
+      "shared_by"
+    );
+    expect(
+      upgraded.vault
+        .prepare(
+          `SELECT shared_by, shared_at FROM core_share_origin
+           WHERE item_type = 'core.collection' AND item_id = 'collection-1'`
+        )
+        .get()
+    ).toMatchObject({ shared_by: "peer:vault-origin", shared_at: 42 });
+    upgraded.close();
   });
 
   test("the composed rung includes Locker authentication columns", () => {

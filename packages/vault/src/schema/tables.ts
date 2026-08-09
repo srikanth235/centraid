@@ -52,7 +52,6 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "grant_scope",
     "scope_tombstone",
     "scope_request",
-    "share",
     "policy",
     "device",
     "export_job",

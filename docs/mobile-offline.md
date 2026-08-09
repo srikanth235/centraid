@@ -4,7 +4,7 @@ Centraid's native Photos and Docs surfaces are vault-free views: they read one d
 
 ## Mounted read plane
 
-The phone keeps one replica SQLite file per vault and mounts at most four into one read-only op-sqlite connection with `ATTACH DATABASE`. Each result carries its source vault, source label, and whether the current member may write there. Content rows with the same SHA are displayed once with all source badges. Search runs the same bounded FTS query in every attached database, then merges ranked results locally.
+The phone keeps one replica SQLite file per vault and mounts at most four into one read-only op-sqlite connection with `ATTACH DATABASE`. Each result carries its source vault, source label, and whether the current owner may write there. Content rows with the same SHA are displayed once with all source badges. Search runs the same bounded FTS query in every attached database, then merges ranked results locally.
 
 SHA dedupe never separates authority from identity. The canonical row retains one source vault and that source's item id as a pair; a writable source wins when the same bytes also exist in a read-only source. Other sources are badges, not candidate write targets. Favorite/star/archive/trash/move affordances use that canonical role and degrade together when it is read-only; Add may still copy a readable item into another writable target.
 
@@ -52,7 +52,7 @@ The Expo background task maps to BGTaskScheduler on iOS and WorkManager on Andro
 
 The focused write target is ordered before the other cached scopes before the four-scope cap is applied. Upload rows persist that target vault, and headless reconciliation keeps the corresponding mounted sessions alive through canonical follow-up replay; transferred bytes therefore cannot settle without their app mutation merely because the app was backgrounded.
 
-The gateway push relay is wake-only. Its payload contains no vault id, item id, title, content, cursor, or member data. Push delivery can make a background pull happen earlier, but loss or throttling cannot lose data. iOS background push is therefore treated as an optimization, in line with Expo's delivery guidance.
+The gateway push relay is wake-only. Its payload contains no vault id, item id, title, content, cursor, or owner data. Push delivery can make a background pull happen earlier, but loss or throttling cannot lose data. iOS background push is therefore treated as an optimization, in line with Expo's delivery guidance.
 
 ## Thumbnail packs and budgets
 

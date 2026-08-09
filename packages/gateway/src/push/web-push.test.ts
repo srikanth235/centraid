@@ -36,14 +36,19 @@ describe("self-hosted Web Push identity", () => {
     const database = GatewayDatabase.open(await tempDir("web-push-send-"));
     opened.push(database);
     const enrollments = EnrollmentStore.open(database);
-    for (const endpointId of ["device-1", "device-2"]) {
-      enrollments.enroll({
-        endpointId,
-        label: endpointId,
-        memberLabel: endpointId,
-        grants: [{ vaultId: "vault-1", role: "write" }],
-      });
-    }
+    // Both devices belong to the vault's one owner (#726).
+    const first = enrollments.enroll({
+      endpointId: "device-1",
+      label: "device-1",
+      ownerLabel: "Priya",
+      vaultIds: ["vault-1"],
+    });
+    enrollments.enroll({
+      endpointId: "device-2",
+      label: "device-2",
+      ownerId: first.ownerId,
+      vaultIds: ["vault-1"],
+    });
     for (const [endpoint, deviceId] of [
       ["https://push.example/current", "device-1"],
       ["https://push.example/expired", "device-1"],

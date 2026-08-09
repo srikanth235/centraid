@@ -54,13 +54,11 @@ describe("web-host", () => {
         vaults: [
           {
             enrollmentId: "enrollment-1",
-            role: "write",
             vaultId: "vault-1",
             vaultName: "Personal",
           },
           {
             enrollmentId: "enrollment-2",
-            role: "read",
             vaultId: "vault-2",
             vaultName: "Family",
           },

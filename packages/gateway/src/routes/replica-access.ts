@@ -11,8 +11,8 @@ import type { ReplicaShapeAccess } from "./replica-shape.js";
 export interface ReplicaRequestAccess extends ReplicaShapeAccess {
   deviceId: string;
   deviceKey?: string;
-  /** The acting member behind the device (issue #599 L2/L4). */
-  memberId?: string;
+  /** The acting owner behind the device (issue #599 L2/L4, #726). */
+  ownerId?: string;
   enrollment?: DeviceEnrollment;
 }
 
@@ -58,7 +58,7 @@ export function resolveReplicaAccess(
     };
   }
   const enrollment = enrollments?.get(deviceKey, vaultId);
-  if (!enrollment || enrollment.role === "revoked") {
+  if (!enrollment || enrollment.revoked) {
     return {
       ok: false,
       status: 403,
@@ -71,11 +71,13 @@ export function resolveReplicaAccess(
   return {
     ok: true,
     access: {
-      role: enrollment.role,
+      // The derived enrollment view only yields vaults the device's owner
+      // owns, so an un-revoked enrollment IS write authority (#726).
+      canWrite: !enrollment.revoked,
       rememberDevice: enrollment.rememberDevice,
       deviceId: deviceKey,
       deviceKey,
-      memberId: enrollment.memberId,
+      ownerId: enrollment.ownerId,
       enrollment,
       ...(appId ? { appId } : {}),
     },

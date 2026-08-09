@@ -411,6 +411,24 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       );
     }
     keyStore.import(`${target.vaultId}.sealkey`, sealKey);
+    // The identity keypair rides beside the DEK (issue #726 P1) — restore it
+    // too, so the recovered vault signs as the SAME vault it was before the
+    // move (proof: it verifies against the public key recorded pre-move).
+    if (
+      typeof target.identitySeed !== "string" ||
+      target.identitySeed.length === 0
+    ) {
+      throw new Error(
+        `recover: the recovery-kit target for vault "${target.vaultId}" has no identity seed`
+      );
+    }
+    const identitySeed = Buffer.from(target.identitySeed, "base64");
+    if (identitySeed.length !== 32) {
+      throw new Error(
+        `recover: the recovery-kit target for vault "${target.vaultId}" has an invalid identity seed`
+      );
+    }
+    keyStore.import(`${target.vaultId}.identity`, identitySeed);
 
     // ── adopting ───────────────────────────────────────────────────────
     emit("adopting");

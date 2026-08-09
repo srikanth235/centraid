@@ -291,7 +291,6 @@ export type CentraidRedeemGatewayPairingResult =
         vaultId: string;
         enrollmentId?: string;
         vaultName?: string;
-        role?: "admin" | "write" | "read";
       }>;
     }
   | {

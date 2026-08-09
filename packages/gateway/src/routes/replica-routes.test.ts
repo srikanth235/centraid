@@ -65,7 +65,7 @@ describe("replica-routes", () => {
     const fixtureDevice = "fixture-device";
     enrollments.enroll({
       endpointId: fixtureDevice,
-      vaultId: plane.boot.vaultId,
+      vaultIds: [plane.boot.vaultId],
       label: "Fixture device",
       rememberDevice: true,
     });
@@ -172,9 +172,11 @@ describe("replica-routes", () => {
   test("bootstrap at N, filtered pull, checkpoint, and the single resumable SSE tail agree", async () => {
     const { plane, enrollments, handler } = await fixture();
     const deviceKey = "device-1";
+    // Another device of the vault's one owner (#726) — never a second owner.
     enrollments.enroll({
       endpointId: deviceKey,
-      vaultId: plane.boot.vaultId,
+      ownerId: enrollments.owners.ownerOf(plane.boot.vaultId)!,
+      vaultIds: [plane.boot.vaultId],
       label: "Offline browser",
       rememberDevice: true,
     });
@@ -313,9 +315,11 @@ describe("replica-routes", () => {
   test("windowed bootstrap pages through every row, shapes only on page 1, then converges", async () => {
     const { plane, enrollments, handler } = await fixture();
     const deviceKey = "device-window";
+    // Another device of the vault's one owner (#726) — never a second owner.
     enrollments.enroll({
       endpointId: deviceKey,
-      vaultId: plane.boot.vaultId,
+      ownerId: enrollments.owners.ownerOf(plane.boot.vaultId)!,
+      vaultIds: [plane.boot.vaultId],
       label: "Offline browser",
       rememberDevice: true,
     });
@@ -642,9 +646,11 @@ describe("replica-routes", () => {
   test("reconciles only explicitly pending, device-scoped outcomes through the snapshot cursor", async () => {
     const { plane, enrollments, handler } = await fixture();
     const deviceKey = "device-outcomes";
+    // Another device of the vault's one owner (#726) — never a second owner.
     enrollments.enroll({
       endpointId: deviceKey,
-      vaultId: plane.boot.vaultId,
+      ownerId: enrollments.owners.ownerOf(plane.boot.vaultId)!,
+      vaultIds: [plane.boot.vaultId],
       label: "Offline browser",
       rememberDevice: true,
     });

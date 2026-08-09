@@ -54,23 +54,14 @@ export interface VaultListEntry {
 
 /**
  * One SCOPE an app may be mounted over, from `GET /_vault/scopes?app=<id>`
- * (issue #599). A scope is a vault the CALLING MEMBER holds a role in — their
- * own plus every audience they belong to — so this is the household-aware
- * successor to `listVaults`, which answers per DEVICE enrollment and carries
- * neither the member's role nor whether the app is installed there.
+ * (issue #599). A scope is a vault the CALLING OWNER owns (#726) — so this is
+ * the ownership-aware successor to `listVaults`, which answers per DEVICE
+ * enrollment and carries neither `canWrite` nor whether the app is installed
+ * there.
  *
- * Order is the gateway's: oldest vault first, which puts the member's own
+ * Order is the gateway's: oldest vault first, which puts the owner's own
  * (primary) scope first. `installed` is present only when `app` was named.
  */
-/** One person who can see a scope, and the role they hold there — the P7
- *  grant roster (issue #712), mirrored from the gateway route's
- *  `AudienceMember` (`scopes-routes.ts`). */
-export interface AppScopeAudienceMember {
-  memberId: string;
-  name: string;
-  role: string;
-}
-
 export interface AppScopeEntry {
   vaultId: string;
   label: string;
@@ -84,24 +75,31 @@ export interface AppScopeEntry {
   personal?: boolean;
   color?: string;
   icon?: string;
-  /** The calling member's role in this scope. `read` cannot write. */
-  role: string;
+  /** Ownership-sourced writability (#726): a vault you own is writable.
+   *  Supplied by the gateway, never derived client-side from a role. */
+  canWrite: boolean;
   installed?: boolean;
-  /** Everyone holding a role in this scope (issue #712, P7) — absent on a
-   *  gateway that answers no roster, never a lie in place of one. */
-  audience?: readonly AppScopeAudienceMember[];
+  /** Present only for a scope LENT to this owner (#726 P4 item 6) — mirrors
+   *  the gateway's `ScopeBorrowedInfo` verbatim. Absent for an owned vault. */
+  borrowed?: AppScopeBorrowed;
+}
+
+/** The lend-specific facts one borrowed scope row carries (#726 P4 item 6). */
+export interface AppScopeBorrowed {
+  edgeId: string;
+  originVaultId: string;
+  holderLabel: string;
+  itemType: string;
+  reachState: "offered" | "established" | "parked";
+  reason: string | null;
+  mounted: boolean;
 }
 
 /**
- * The whole scopes answer: the rows, plus where this member's shares go by
- * default (issue #711 item H). The destination is a POINTER the member owns,
- * not a property of any vault — so it sits beside the rows, and may name a
- * vault that is not among them (deleted, or one they hold no role in), which
- * a caller renders as the action disabled with the reason inline.
+ * The whole scopes answer: the rows this app is mounted over (issue #599).
  */
 export interface AppScopePlane {
   scopes: AppScopeEntry[];
-  defaultShareTargetVaultId?: string;
 }
 
 /**
@@ -128,13 +126,24 @@ export async function readAppScopePlane(
 }
 
 /**
- * Just the rows, for callers that do not care where shares go (the shell's
- * own scope registry). `undefined` has the same meaning as above.
+ * Just the rows (the shell's own scope registry). `undefined` has the same
+ * meaning as above.
  */
 export async function listAppScopes(
   appId?: string
 ): Promise<AppScopeEntry[] | undefined> {
   return (await readAppScopePlane(appId))?.scopes;
+}
+
+/**
+ * Just the LENT rows (#726 P4 item 6/P6) — every scope on this gateway that
+ * is reaching the caller from someone else's vault, `[]` when the gateway
+ * has no scopes plane. The "Shared with me" grouping's one data source, so
+ * it never has to re-derive "borrowed" from `personal`/`canWrite` itself.
+ */
+export async function listBorrowedScopes(): Promise<AppScopeEntry[]> {
+  const scopes = await listAppScopes();
+  return (scopes ?? []).filter((entry) => entry.borrowed !== undefined);
 }
 
 /** One scope of a grant or a manifest request: schema-wide or one table. */

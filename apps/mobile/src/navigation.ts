@@ -57,9 +57,6 @@ export type PhotosStackParamList = {
   PhotoLightbox: { assetId: string };
   PhotosLibrary: undefined;
   PhotosSearch: undefined;
-  // The Sharing shelf (issue #712 A5): the photographs whose rows live in the
-  // member's share-target vault. Reached from the More sheet's FIRST row.
-  SharingShelf: undefined;
   // Places' shelf (cards first, proto:4197): `PlacesView` is where the More
   // sheet's "Places" row lands; `PlacesMap` is the full-screen map it opens
   // on demand from the shelf head's Map control, and `PlaceDetail` is what a
@@ -128,6 +125,9 @@ export type AgendaStackParamList = {
 export type SettingsStackParamList = {
   Settings: undefined;
   Approvals: undefined;
+  // Sharing (issue #726 P6): the People panel — shares in/out, link
+  // propose/approve, the D9 ask surface and receive setting.
+  Sharing: undefined;
   PhoneStorage: undefined;
   // Backup health (issue #712 B2) — a FRAME screen, beside Phone storage. It
   // used to live in the Photos stack, which was always a compromise: the policy

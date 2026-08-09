@@ -3,35 +3,32 @@ import type { JSX } from "react";
 import { tileFinish } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
-import {
-  canAdministerHousehold,
-  roleBadge,
-  roleSentence,
-} from "../shell/memberScope.js";
-import type { MemberScope } from "../shell/memberScope.js";
+import type { OwnerScope } from "../shell/ownerScope.js";
 import Icon from "../ui/Icon.js";
 import DevicesCard from "./DevicesCard.js";
 import type { DevicesCardProps } from "./DevicesCard.js";
+import SharingCard from "./SharingCard.js";
+import type { SharingCardProps } from "./SharingCard.js";
 
 import styles from "./HouseholdScreen.module.css";
 
-// Household (issue #599) — one page for the people side of this installation.
-// It shows every vault at once, together with the people who hold roles in
-// them and the hardware acting on those people's behalf.
+// Household (issue #599, ownership #726) — one page for the people side of
+// this installation. It shows every vault this owner owns, together with
+// the hardware acting on their behalf.
 //
 // Two sections, in the order the questions get asked:
 //
 //   People & devices — the roster card, moved here from the Gateway page. It
 //     was never a runtime-health question; Gateway now answers only "is the
 //     gateway up" (heartbeat, components, logs, alerts).
-//   Vaults — every vault this member holds a role in, their access in ownership
-//     words, and the settings surfaces that already exist for it.
+//   Vaults — every vault this owner owns, and the settings surfaces that
+//     already exist for it.
 
 export interface HouseholdScreenProps {
   /** Live clock (route ticks it) — drives the devices card's humanized ages. */
   now: number;
-  /** Vaults the calling member holds a role in, own vault first. */
-  vaults: MemberScope[];
+  /** Vaults the calling owner owns, own vault first. */
+  vaults: OwnerScope[];
   /** The shell's default/active scope pointer — badges one card "Default". */
   defaultScopeId: string;
   /** True until the scope registry's first fetch settles. */
@@ -51,11 +48,13 @@ export interface HouseholdScreenProps {
   onRevokeDevice?: DevicesCardProps["onRevokeDevice"];
   onRenameDevice?: DevicesCardProps["onRenameDevice"];
   onCurrentDeviceRevoked?: DevicesCardProps["onCurrentDeviceRevoked"];
-  loadMembers?: DevicesCardProps["loadMembers"];
-  onRemoveMember?: DevicesCardProps["onRemoveMember"];
+  loadOwners?: DevicesCardProps["loadOwners"];
   onCreateDeviceTicket?: DevicesCardProps["onCreateTicket"];
   onUpdateDeviceCompute?: DevicesCardProps["onUpdateCompute"];
   loadDeviceWorkStatus?: DevicesCardProps["loadWorkStatus"];
+  /** Sharing-card wiring (#726 P6). Optional so a gateway with no edge/link
+   *  plane (or a test) renders the page without it. */
+  sharing?: SharingCardProps;
 }
 
 function VaultCard({
@@ -64,7 +63,7 @@ function VaultCard({
   onOpenStorage,
   onOpenVaultSettings,
 }: {
-  vault: MemberScope;
+  vault: OwnerScope;
   isDefault: boolean;
   onOpenStorage: () => void;
   onOpenVaultSettings?: () => void;
@@ -92,14 +91,13 @@ function VaultCard({
           <span className={styles.vaultName} title={vault.label}>
             {vault.label}
           </span>
-          <span className={styles.vaultRole}>{roleSentence(vault.role)}</span>
+          <span className={styles.vaultRole}>You own this vault.</span>
         </span>
-        <span
-          className={styles.badge}
-          data-default={isDefault ? "true" : undefined}
-        >
-          {isDefault ? "Default" : roleBadge(vault.role)}
-        </span>
+        {isDefault ? (
+          <span className={styles.badge} data-default="true">
+            Default
+          </span>
+        ) : null}
       </div>
       <div className={styles.vaultLinks}>
         <button
@@ -130,9 +128,6 @@ export default function HouseholdScreen(
 ): JSX.Element {
   const { vaults, defaultScopeId } = props;
   const vaultCount = vaults.length;
-  // Same source of truth as the "Viewer · <vault>" copy below: the scope
-  // registry. A member who owns no vault gets read-only roster rows (B11).
-  const canAdminister = canAdministerHousehold(vaults);
   return (
     <div className={styles.page}>
       <div className={styles.head}>
@@ -155,7 +150,6 @@ export default function HouseholdScreen(
         {props.loadDevices && props.onRevokeDevice ? (
           <DevicesCard
             now={props.now}
-            canAdminister={canAdminister}
             loadDevices={props.loadDevices}
             onRevokeDevice={props.onRevokeDevice}
             {...(props.onRenameDevice
@@ -164,10 +158,7 @@ export default function HouseholdScreen(
             {...(props.onCurrentDeviceRevoked
               ? { onCurrentDeviceRevoked: props.onCurrentDeviceRevoked }
               : {})}
-            {...(props.loadMembers ? { loadMembers: props.loadMembers } : {})}
-            {...(props.onRemoveMember
-              ? { onRemoveMember: props.onRemoveMember }
-              : {})}
+            {...(props.loadOwners ? { loadOwners: props.loadOwners } : {})}
             {...(props.onCreateDeviceTicket
               ? { onCreateTicket: props.onCreateDeviceTicket }
               : {})}
@@ -184,6 +175,12 @@ export default function HouseholdScreen(
           </div>
         )}
       </div>
+
+      {props.sharing ? (
+        <div className={styles.section}>
+          <SharingCard {...props.sharing} />
+        </div>
+      ) : null}
 
       <div className={styles.section}>
         <div className={styles.sectionHead}>

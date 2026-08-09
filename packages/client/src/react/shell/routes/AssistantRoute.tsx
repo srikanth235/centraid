@@ -44,7 +44,7 @@ import { createFrameBatch } from "../frameBatch.js";
 import type { FrameBatch } from "../frameBatch.js";
 import { openPrompt } from "../prompt.js";
 import { useCompactLayout } from "../useCompactLayout.js";
-import { useMemberScopes } from "../useMemberScopes.js";
+import { useOwnerScopes } from "../useOwnerScopes.js";
 import { catchUpAfterDrop } from "./assistantCatchUp.js";
 import AssistantConversations from "./AssistantConversations.js";
 import type { AssistantConversationEntry } from "./AssistantConversations.js";
@@ -177,12 +177,12 @@ export default function AssistantRoute({
   // first message; from then on the recorded scope is authoritative and every
   // request the thread makes repeats it, so a conversation reads exactly ONE
   // vault for its whole life. `undefined` — an older thread, or a gateway with
-  // no member layer — falls back to the internal default scope.
-  const memberScopes = useMemberScopes();
+  // no owner scope registry — falls back to the internal default scope.
+  const ownerScopes = useOwnerScopes();
   const [pickedScope, setPickedScope] = useState<string | undefined>(undefined);
   const activeScopeId = conversationId
     ? conversationScope(conversationId)
-    : (pickedScope ?? memberScopes.primary?.id);
+    : (pickedScope ?? ownerScopes.primary?.id);
   // Render-visible mirror of `m.current.currentId !== null` — the slash-command
   // list gates Export/Rename on it, and render may not read the model ref.
   const [hasThread, setHasThread] = useState(Boolean(conversationId));
@@ -1392,10 +1392,10 @@ export default function AssistantRoute({
       {/* Which vault this conversation reads (issue #599). A picker while the
           conversation is still hypothetical; a plain statement once it exists,
           because the vault is part of the thread's identity from then on. */}
-      {memberScopes.scopes.length > 0 ? (
+      {ownerScopes.scopes.length > 0 ? (
         <div className={scopeBarCss.bar}>
           <ScopePicker
-            scopes={memberScopes.scopes}
+            scopes={ownerScopes.scopes}
             value={activeScopeId}
             onChange={setPickedScope}
             label={conversationId ? "Reading" : "New conversation in"}

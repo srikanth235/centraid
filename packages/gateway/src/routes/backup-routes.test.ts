@@ -50,11 +50,31 @@ const OWNER_HEADERS = {
   [AUTHED_DEVICE_HEADER]: OWNER_ENDPOINT,
 };
 
+const OWNER_ID = "owner-1";
 const ownerEnrollments = {
   get: (endpointId: string, vaultId: string) =>
     endpointId === OWNER_ENDPOINT && vaultId === "v1"
       ? { endpointId, vaultId, role: "admin" }
       : undefined,
+  ownerFor: (endpointId: string) =>
+    endpointId === OWNER_ENDPOINT
+      ? {
+          ownerId: OWNER_ID,
+          label: "Owner",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        }
+      : undefined,
+  owners: {
+    ownerOf: (vaultId: string) => (vaultId === "v1" ? OWNER_ID : undefined),
+    get: (ownerId: string) =>
+      ownerId === OWNER_ID
+        ? {
+            ownerId: OWNER_ID,
+            label: "Owner",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          }
+        : undefined,
+  },
 } as unknown as EnrollmentStore;
 
 function startHandlerServer(handler: RouteHandler): Promise<string> {

@@ -113,9 +113,9 @@ export function foldCustodyStatus(
  * same fail-closed rule `readTransferQueue` follows for the local ledger.
  *
  * A one-shot gateway HTTP read outside the replica, the pattern
- * `kit/share/audience.ts` and `kit/transfer/transfer-queue.ts` already use: the
- * rollup is a gateway-wide projection, not a per-vault app entity, so there is
- * nothing on the replica plane to subscribe to.
+ * `kit/transfer/transfer-queue.ts` already uses: the rollup is a gateway-wide
+ * projection, not a per-vault app entity, so there is nothing on the replica
+ * plane to subscribe to.
  */
 export async function readCustodyStatus(
   gatewayBase: string

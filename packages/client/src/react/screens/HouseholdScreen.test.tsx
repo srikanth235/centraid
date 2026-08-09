@@ -1,15 +1,33 @@
+/* oxlint-disable import/first -- vi.hoisted must precede the subject import it primes */
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { MemberScope } from "../shell/memberScope.js";
+// The renderer guarantees the preload bridge before any script runs, and the
+// gateway client registers its gateway-change listener at module load. This
+// screen now reaches that client through the sharing card, so the bridge has
+// to exist before the import graph is evaluated, not in a beforeEach.
+vi.hoisted(() => {
+  (window as unknown as { CentraidApi: unknown }).CentraidApi = {
+    getGatewayAuth: async () => ({
+      baseUrl: "https://gateway.test",
+      token: "tok",
+      vaultId: "v1",
+    }),
+    onGatewayChanged: () => () => undefined,
+    onVaultChanged: () => () => undefined,
+  };
+});
+
+import type { OwnerScope } from "../shell/ownerScope.js";
 import HouseholdScreen from "./HouseholdScreen.js";
 import type { HouseholdScreenProps } from "./HouseholdScreen.js";
 
 // Household is the page that had to exist once the vault switcher was retired
-// (#599, Decision 14): a member is no longer "in" one vault, so something must
-// show all of them at once — beside the people who hold roles in them.
+// (#599, Decision 14): an owner is no longer "in" one vault, so something must
+// show all of them at once. Ownership (#726) means every listed vault is
+// owned outright — there is no role tier left to badge.
 
 const NOW = Date.UTC(2026, 6, 13, 12, 0, 0);
 
@@ -24,11 +42,10 @@ describe("HouseholdScreen suite", () => {
     vi.clearAllMocks();
   });
 
-  function scope(over: Partial<MemberScope> = {}): MemberScope {
+  function scope(over: Partial<OwnerScope> = {}): OwnerScope {
     return {
       id: "v1",
       label: "Personal",
-      role: "admin",
       canWrite: true,
       ...over,
     };
@@ -69,12 +86,12 @@ describe("HouseholdScreen suite", () => {
       );
     });
 
-    it("names each vault and states the access in ownership words, never role jargon", async () => {
+    it("names each vault and states ownership plainly, never role jargon", async () => {
       const el = await mount({
         vaults: [
           scope(),
-          scope({ id: "v2", label: "Family", role: "read", canWrite: false }),
-          scope({ id: "v3", label: "Shed project", role: "write" }),
+          scope({ id: "v2", label: "Family" }),
+          scope({ id: "v3", label: "Shed project" }),
         ],
         defaultScopeId: "v1",
       });
@@ -82,11 +99,10 @@ describe("HouseholdScreen suite", () => {
       expect(text).toContain("Family");
       expect(text).toContain("Shed project");
       expect(text).toContain("3 vaults you can reach");
-      // The badge on a non-default vault is the ownership word, not the wire role.
-      expect(text).toContain("Viewer");
-      expect(text).toContain("Member");
+      expect(text).toContain("You own this vault.");
       expect(text).not.toMatch(/\badmin\b/u);
-      // "Vault" is the one user-facing word; "vault" is retired from UI copy.
+      expect(text).not.toMatch(/\b(?:Owner|Member|Viewer)\b/u);
+      // "Vault" is the one user-facing word; "space" is retired from UI copy.
       expect(text).not.toMatch(/\bspaces?\b/iu);
     });
 
@@ -94,7 +110,7 @@ describe("HouseholdScreen suite", () => {
       const onOpenVaultSettings =
         vi.fn<NonNullable<HouseholdScreenProps["onOpenVaultSettings"]>>();
       const el = await mount({
-        vaults: [scope(), scope({ id: "v2", label: "Family", role: "write" })],
+        vaults: [scope(), scope({ id: "v2", label: "Family" })],
         defaultScopeId: "v1",
         onOpenVaultSettings,
       });

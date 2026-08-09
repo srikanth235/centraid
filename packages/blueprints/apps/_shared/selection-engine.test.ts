@@ -20,6 +20,7 @@ function input(
   return {
     count: 2,
     shelf: "normal",
+    copyLabel: "Copy to Family",
     readOnlyReason: null,
     favorite: { run: noop },
     addToAlbum: { run: noop },
@@ -52,11 +53,15 @@ describe("the five", () => {
     expect(trash?.destructive).toBe(false);
   });
 
-  it("swaps the third target on the Sharing shelf", () => {
+  it("captions the third target with the caller's destination label (#726)", () => {
+    // The engine never derives the destination — the caller resolves it (the
+    // sole other writable scope) and hands the caption in.
     const base = buildSelectionActions(input())[2];
-    const sharing = buildSelectionActions(input({ shelf: "sharing" }))[2];
-    expect(base?.label).toBe("Copy to Sharing");
-    expect(sharing?.label).toBe("Remove from Sharing");
+    expect(base?.label).toBe("Copy to Family");
+    const renamed = buildSelectionActions(
+      input({ copyLabel: "Copy to Beach pics" })
+    )[2];
+    expect(renamed?.label).toBe("Copy to Beach pics");
   });
 });
 

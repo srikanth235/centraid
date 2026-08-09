@@ -9,6 +9,7 @@ import {
   OnlineOnlyError,
   ReplicaProtocolError,
   ReplicaRebootstrapRequiredError,
+  ReplicaSearchRefusedError,
 } from "./errors.js";
 import { NodeSqliteDriver } from "./node-sqlite-test-driver.js";
 import { SqliteReplicaStore } from "./sqlite-store.js";
@@ -332,6 +333,32 @@ describe("store-core", () => {
           title: "Moonlit campsite in Ladakh",
         });
         expect(result.rows[0]?.values._snippet).toContain("⟦Moonlit⟧");
+      } finally {
+        store.close();
+      }
+    });
+
+    test("a field-masked entity refuses search instead of reporting no matches", () => {
+      const store = makeStore();
+      try {
+        const full = searchableSnapshot();
+        store.bootstrap({
+          ...full,
+          shapes: full.shapes.map((shape) => ({
+            ...shape,
+            entities: shape.entities.map((entity) => ({
+              ...entity,
+              hasUnavailableFields: true,
+            })),
+          })),
+        });
+        expect(() =>
+          store.search({
+            shapeId: "shape-photos",
+            entity: "core.content_item",
+            query: "moon",
+          })
+        ).toThrow(ReplicaSearchRefusedError);
       } finally {
         store.close();
       }

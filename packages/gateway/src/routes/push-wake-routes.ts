@@ -264,7 +264,7 @@ export class PushWakeRelay {
     const deviceIds = new Set(
       this.enrollments
         .listByVault(vaultId)
-        .filter((row) => row.role !== "revoked")
+        .filter((row) => !row.revoked)
         .map((row) => row.endpointId)
     );
     if (deviceIds.size === 0) return;
