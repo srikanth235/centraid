@@ -224,6 +224,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   required-name error. The uploaded screenshot and timeline drove the stable
   profile-input ID, native event mirroring, and one bounded re-entry after that
   specific error.
+- Remote targeted follow-up: [Actions run 31312504515](https://github.com/srikanth235/centraid/actions/runs/31312504515)
+  passed producer/setup and the new profile contract (`You're all set, Nightly`),
+  and the Photos launcher search row became visible. The filtered row was below
+  iOS's still-open keyboard, so its repeated taps never dispatched the row's
+  `onOpen`; the screenshot showed the Home scrim plus keyboard and the flow
+  timed out on `Collections`. The helper now submits the search field to blur
+  it without closing the Modal, then uses one bounded row tap.
 - Static verification of this follow-up: `bun run format:check`,
   `bun run lint:e2e-flows`, `bun run check:ui-receipt`,
   `bun run --cwd apps/mobile typecheck`, and `git diff --check` (PASS;

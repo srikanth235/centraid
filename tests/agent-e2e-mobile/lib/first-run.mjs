@@ -234,13 +234,19 @@ export function openAppFromAllAppsCommands(appName) {
     retryTapIfNoChange: true`,
     `- inputText: "${appName}"`,
     // Maestro's iOS hideKeyboard taps the transparent Modal scrim here and
-    // closes the sheet. The filtered row is above the keyboard, so select it
-    // while the search field remains focused.
+    // closes the sheet. Submit the search field instead: its return key blurs
+    // the native input while preserving the Modal, so the filtered row is
+    // actually tappable when the keyboard covers the lower part of the sheet.
+    `- pressKey: Enter`,
+    `- waitForAnimationToEnd:
+    timeout: 1000`,
     `- extendedWaitUntil:
     visible:
       text: "Open ${appName}.*"
     timeout: 15000`,
-    retryableTapCommands(`Open ${appName}.*`),
+    `- tapOn:
+    text: "Open ${appName}.*"
+    retryTapIfNoChange: true`,
   ].join("\n");
 }
 

@@ -33,6 +33,7 @@
 
 import React, { useMemo, useState } from "react";
 import {
+  Keyboard,
   Modal,
   Pressable,
   ScrollView,
@@ -155,6 +156,7 @@ export default function AllAppsSheet({
             autoCorrect={false}
             autoCapitalize="none"
             returnKeyType="search"
+            onSubmitEditing={() => Keyboard.dismiss()}
           />
         </View>
         <ScrollView
