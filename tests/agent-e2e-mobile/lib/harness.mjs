@@ -27,6 +27,7 @@ import {
 import {
   pasteAndConnectPairingTicketCommands,
   relaunchDevClientCommands,
+  retryableTapCommands,
   waitForHomeReadyCommands,
   waitForOnboardingConnectCommands,
 } from "./first-run.mjs";

@@ -36,7 +36,8 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   iOS Metro deep-link/native-confirmation/development-overlay recovery, paste-path,
   pairing-recovery, Android system-ANR dismissal, and capability-wall retry
   YAML; `tests/agent-e2e-mobile/lib/harness.mjs` uses it with a fresh one-time
-  ticket for each bounded iOS pairing attempt.
+  ticket for each bounded iOS pairing attempt, including the retryable profile
+  completion tap used after the #726 owner-ticket contract change.
 - `tests/agent-e2e-mobile/flows/home-loads.mjs` verifies the scan-first
   hierarchy, retries a lost fresh-launch control channel on iOS, and copies
   `scan-first-onboarding.png` to
@@ -182,6 +183,10 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   `simctl openurl` timeout on the second native surface while the Expo launcher
   visibly retained `http://127.0.0.1:8081`; the cached-card fallback above is
   the focused follow-up.
+- Remote targeted follow-up: [Actions run 31304277261](https://github.com/srikanth235/centraid/actions/runs/31304277261)
+  passed the producer and all isolated setup, then reached the bounded iOS
+  fresh-ticket retry. Its evidence found a missing `retryableTapCommands`
+  import in the post-#726 profile completion path; the import is restored here.
 - Static verification of this follow-up: `bun run format:check`,
   `bun run lint:e2e-flows`, `bun run check:ui-receipt`,
   `bun run --cwd apps/mobile typecheck`, and `git diff --check` (PASS;
