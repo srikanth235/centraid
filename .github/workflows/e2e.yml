@@ -25,6 +25,21 @@ on:
           - pairing
           - report
           - mutation
+      # #676 — target only the iOS journey under investigation. The scheduled
+      # lane keeps the default `all` value; manual diagnosis should not spend
+      # the 90-minute serialized budget re-running unrelated green flows.
+      mobile-flow:
+        description: "Optional iOS mobile flow (all | native | volume | cold-start | scroll | photos)"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - native
+          - volume
+          - cold-start
+          - scroll
+          - photos
 
 # #496 C3 — overlapping schedule + dispatch must not double-run macOS.
 concurrency:
@@ -376,16 +391,40 @@ jobs:
         run: |
           set +e
           ec=0
-          node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/template-gate.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
-          # #659 R3c — per-launch cold start (volume-proof times 20 launches as
-          # one sum, which is unreadable as an experience) and the Photos
-          # scroll-settle proxy.
-          node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
-          node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
+          mobile_flow="${{ github.event.inputs['mobile-flow'] || 'all' }}"
+          case "$mobile_flow" in
+            all)
+              node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
+              node tests/agent-e2e-mobile/flows/template-gate.mjs || ec=$?
+              node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
+              node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
+              # #659 R3c — per-launch cold start (volume-proof times 20 launches as
+              # one sum, which is unreadable as an experience) and the Photos
+              # scroll-settle proxy.
+              node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
+              node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
+              node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
+              ;;
+            native)
+              node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
+              ;;
+            volume)
+              node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
+              ;;
+            cold-start)
+              node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
+              ;;
+            scroll)
+              node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
+              ;;
+            photos)
+              node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
+              ;;
+            *)
+              echo "::error::unsupported mobile-flow '$mobile_flow'"
+              ec=2
+              ;;
+          esac
           exit "$ec"
       - name: Remove sensitive pairing diagnostics
         if: always()

@@ -89,6 +89,11 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   `tests/agent-e2e-mobile/lib/first-run.mjs`,
   `tests/agent-e2e-mobile/lib/harness.mjs`, and
   `tests/agent-e2e-mobile/run-photos-suite.mjs`.
+- Manual `e2e.yml` dispatches can target the affected iOS journey (`native`,
+  `volume`, `cold-start`, `scroll`, or `photos`) through `mobile-flow`; the
+  scheduled lane still runs the complete committed set. This keeps diagnosis
+  evidence-focused instead of spending the 90-minute serialized budget on
+  unrelated green flows.
 
 ### Implementation coverage
 
@@ -114,6 +119,9 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
 - Retain the current serial workflow and current Photos/replica journey set
   instead of copying PR #683's older six-cell matrix wholesale. This keeps the
   newer evidence surface intact at the cost of a longer single iOS job.
+- Add a manual flow selector to the serial job so a known failing journey can
+  be isolated on the same macOS/Xcode/Maestro stack without weakening the
+  scheduled full-lane contract.
 - Keep the issue checklist statement explicit because issue #676 is a tracking
   issue without checkbox items; implementation coverage is written as evidence
   rather than a fabricated local checklist.
@@ -157,6 +165,9 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   2026-08-09).
 - After restoring the literal volume assertion used by the matrix contract,
   `bun run test:matrix` and `bun run test:report:smoke` also pass (2026-08-09).
+- The targeted dispatch selector is statically covered by workflow parsing and
+  the existing mobile flow/report contracts; targeted remote runs are used for
+  failing iOS journeys rather than repeating unrelated passing flows.
 
 ```sh
 bun run format:check

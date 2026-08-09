@@ -60,6 +60,8 @@ MAESTRO_PLATFORM=ios     node tests/agent-e2e-mobile/flows/home-loads.mjs
   target  : android emulator-5554        # or: ios <UDID>
 ```
 
+For a manual iOS investigation, dispatch the `e2e` workflow with `suite: mobile` and select one `mobile-flow` (`native`, `volume`, `cold-start`, `scroll`, or `photos`). The scheduled workflow keeps `all` and still runs the complete committed set; the selector only avoids spending the 90-minute serialized budget on unrelated green journeys during diagnosis.
+
 Per-run artifacts land under `runs/<slug>-<runId>/`:
 
 ```
