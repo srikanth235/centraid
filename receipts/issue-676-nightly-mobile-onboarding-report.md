@@ -28,7 +28,9 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   scan-first controls and pairing field, and mirrors native input events through
   `codeRef`/blur/remount recovery before submitting a ticket. Empty submission
   now reports `Paste a pairing ticket first.` and the scanner's Cancel control
-  has an explicit accessibility label and role.
+  has an explicit accessibility label and role. The profile field now follows
+  the same uncontrolled native-value contract, with a stable test ID and event
+  mirroring so a cold iOS retry cannot submit an empty React-side name.
 - `apps/mobile/App.tsx` keeps the compatibility wall inactive until onboarding
   is complete and exposes `replica-compatibility-retry` for bounded capability
   retries.
@@ -215,6 +217,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   transparent scrim before the filtered row could be selected; the debug
   screenshot and command timeline drove removal of that step and the duplicate
   title tap from the launcher helper.
+- Remote targeted follow-up: [Actions run 31310928894](https://github.com/srikanth235/centraid/actions/runs/31310928894)
+  passed the producer and isolated setup, but the fresh-ticket iOS retry failed
+  before the native cover matrix: Maestro's profile input action completed while
+  the controlled `Your name` value remained empty, and Continue showed the
+  required-name error. The uploaded screenshot and timeline drove the stable
+  profile-input ID, native event mirroring, and one bounded re-entry after that
+  specific error.
 - Static verification of this follow-up: `bun run format:check`,
   `bun run lint:e2e-flows`, `bun run check:ui-receipt`,
   `bun run --cwd apps/mobile typecheck`, and `git diff --check` (PASS;

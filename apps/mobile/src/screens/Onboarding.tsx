@@ -428,11 +428,16 @@ function ProfileStep({
   onSave: (name: string, color: string) => void;
 }): React.JSX.Element {
   const [name, setName] = useState("");
+  // Keep the profile field's native value authoritative at submit time. On a
+  // cold iOS development client, Maestro can update the native TextInput while
+  // React misses the controlled onChangeText event; the visible field then
+  // looks filled while `name` remains empty and Continue reports a false error.
+  const nameRef = useRef("");
   const [color, setColor] = useState<string>(BRAND);
   const [error, setError] = useState<string>();
 
   const save = (): void => {
-    const trimmed = name.trim();
+    const trimmed = nameRef.current.trim();
     if (!trimmed) {
       setError("Enter a name so the people you share with know who you are.");
       return;
@@ -456,15 +461,30 @@ function ProfileStep({
           <Text style={styles.avatarInitial}>{initialsOf(name)}</Text>
         </View>
         <TextInput
-          value={name}
-          onChangeText={setName}
+          testID="onboarding-profile-name"
+          defaultValue=""
+          onChangeText={(text) => {
+            nameRef.current = text;
+            setName(text);
+          }}
+          onChange={(event) => {
+            nameRef.current = event.nativeEvent.text;
+            setName(event.nativeEvent.text);
+          }}
+          onEndEditing={(event) => {
+            nameRef.current = event.nativeEvent.text;
+            setName(event.nativeEvent.text);
+          }}
           placeholder="Your name"
           placeholderTextColor={C.textGhost}
           style={[styles.input, styles.identityInput]}
           autoCapitalize="words"
           autoCorrect={false}
           returnKeyType="done"
-          onSubmitEditing={save}
+          onSubmitEditing={(event) => {
+            nameRef.current = event.nativeEvent.text;
+            save();
+          }}
           maxLength={60}
         />
       </View>

@@ -354,6 +354,43 @@ ${remountBody}
 }
 
 /**
+ * Complete the new-owner profile with the native field contract. The stable
+ * test ID avoids a 25-second iOS hierarchy search against the placeholder, and
+ * the bounded second pass handles the same native-event wedge as pairing if
+ * Continue observes an empty React-side value.
+ */
+export function completeProfileCommands() {
+  return `- tapOn:
+    id: "onboarding-profile-name"
+    retryTapIfNoChange: true
+# e2e-lint-allow: unasserted-input — the personalized Done heading proves the
+# profile submission end to end.
+- inputText: "Nightly"
+- hideKeyboard
+- tapOn:
+    text: "^Continue$"
+    retryTapIfNoChange: true
+- waitForAnimationToEnd:
+    timeout: 1000
+- runFlow:
+    when:
+      visible: "Enter a name so the people you share with know who you are[.]"
+    commands:
+      - tapOn:
+          id: "onboarding-profile-name"
+          retryTapIfNoChange: true
+      - eraseText: 60
+# e2e-lint-allow: unasserted-input — the retry is only entered after the
+# required-name error proves the first native event was lost.
+      - inputText: "Nightly"
+      - hideKeyboard
+      - tapOn:
+          text: "^Continue$"
+          retryTapIfNoChange: true
+`;
+}
+
+/**
  * Finish the profile/Done steps, then give the shell capability probe time to
  * reach Home. Retry is sparse because the in-product probe itself takes about
  * 18 seconds; remounting on every wall flicker starves that probe forever.
@@ -367,12 +404,7 @@ export function completeOnboardingCommands(homeReadyMarker) {
     when:
       visible: "Who.?s using.*"
     commands:
-      - tapOn: "Your name"
-# e2e-lint-allow: unasserted-input — the personalized Done heading proves the
-# profile submission end to end.
-      - inputText: "Nightly"
-      - hideKeyboard
-      - tapOn: "Continue"
+${indentMaestroCommands(completeProfileCommands(), 6)}
 - runFlow:
     when:
       visible: "Enter Centraid"
