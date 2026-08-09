@@ -5,6 +5,7 @@ import {
   recordQualityResult,
   rigDriftBudget,
 } from "../../agent-e2e-shared/harness.mjs";
+import { DISMISS_OPEN_LINK_CONFIRMATION } from "../lib/first-run.mjs";
 import { readFrameEvidence } from "../lib/frame-report.mjs";
 import { runFlow } from "../lib/harness.mjs";
 
@@ -55,8 +56,8 @@ import { runFlow } from "../lib/harness.mjs";
  *
  * | Surface | Year-3         | Seeded here |
  * | ------- | -------------- | ----------- |
- * | Photos  | 90,000 assets  | whatever the CI gateway fixture seeded — NOT year-3 |
- * | People  | 5,000 contacts | whatever the CI gateway fixture seeded — NOT year-3 |
+ * | Photos  | 90,000 assets  | deterministic Photos demo scenario — NOT year-3 |
+ * | People  | 5,000 contacts | deterministic People demo scenario — NOT year-3 |
  *
  * The seeded totals are not observable from the device, so this flow does not
  * guess them. What it CAN observe it reports: `people-directory-row-<index>` is
@@ -125,6 +126,12 @@ ${settle}
 }
 
 await runFlow("mobile-scroll-frames", async (ctx) => {
+  // The CI gateway starts empty. Seed both surfaces before pairing so the
+  // frame probe measures a real grid and directory instead of a blank cover;
+  // the deterministic scenarios are still deliberately far below year-3
+  // volume and the evidence calls that out.
+  await ctx.ensureDemo("photos");
+  await ctx.ensureDemo("people");
   await ctx.configureGateway();
 
   const budgets = JSON.parse(
@@ -140,7 +147,9 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-- tapOn: "Photos"
+- openLink: "centraid://photos"
+${DISMISS_OPEN_LINK_CONFIRMATION}- waitForAnimationToEnd:
+    timeout: 1000
 `,
     "open-photos"
   );
@@ -155,7 +164,9 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-- tapOn: "People"
+- openLink: "centraid://apps/people"
+${DISMISS_OPEN_LINK_CONFIRMATION}- waitForAnimationToEnd:
+    timeout: 1000
 `,
     "open-people"
   );

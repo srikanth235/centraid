@@ -33,6 +33,10 @@ import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
 const OWNER = "tests/agent-e2e-mobile/flows/cold-start.mjs";
 const LAUNCHES = 8;
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
+// A single iOS XCTest hierarchy can occasionally wedge after the app has
+// already rendered Home (kAXErrorInvalidUIElement). Do not spend the whole
+// 12-minute generic Maestro budget on one sample; retry that sample once.
+const COLD_START_CHUNK_TIMEOUT_MS = 90_000;
 
 function percentile(sorted, fraction) {
   const index = Math.min(
@@ -56,9 +60,7 @@ await runFlow("mobile-cold-start", async (ctx) => {
   const launchMs = [];
   const measureNext = async (index) => {
     if (index >= LAUNCHES) return;
-    const started = performance.now();
-    await ctx.run(
-      `appId: ${ctx.state.appId}
+    const launchYaml = `appId: ${ctx.state.appId}
 ---
 - stopApp
 - launchApp
@@ -66,10 +68,25 @@ await runFlow("mobile-cold-start", async (ctx) => {
     visible:
       text: "${HOME_READY_MARKER}"
     timeout: 30000
-`,
-      `cold-start-${index + 1}`
-    );
-    launchMs.push(performance.now() - started);
+`;
+    const runAttempt = async (attempt) => {
+      const started = performance.now();
+      try {
+        await ctx.run(
+          launchYaml,
+          `cold-start-${index + 1}${attempt === 0 ? "" : "-retry"}`,
+          { timeoutMs: COLD_START_CHUNK_TIMEOUT_MS }
+        );
+        return performance.now() - started;
+      } catch (error) {
+        if (ctx.state.platform !== "ios" || attempt > 0) throw error;
+        ctx.note(
+          `iOS cold-start sample ${index + 1} hit a transient XCTest driver error; retrying once`
+        );
+        return runAttempt(attempt + 1);
+      }
+    };
+    launchMs.push(await runAttempt(0));
     return measureNext(index + 1);
   };
   await measureNext(0);

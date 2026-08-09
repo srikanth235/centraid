@@ -1,4 +1,7 @@
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import {
+  DISMISS_OPEN_LINK_CONFIRMATION,
+  retryableTapCommands,
+} from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("photos-permissions", async (ctx) => {
@@ -18,6 +21,8 @@ await runFlow("photos-permissions", async (ctx) => {
     visible: "Home ready"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - openLink: "centraid://photos"
+${DISMISS_OPEN_LINK_CONFIRMATION}- waitForAnimationToEnd:
+    timeout: 1000
 - extendedWaitUntil:
     visible: "Collections"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}

@@ -43,6 +43,34 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
 - `tests/agent-e2e-mobile/README.md`, `tests/agent-e2e-mobile/AGENTS.md`, and
   `tests/onboarding-scenarios.md` document the automatic clear-state recovery
   and retain the manual deep-link fallback for ad-hoc simulator runs.
+- The post-Photos Home contract accepts both the current empty-vault
+  `Bring in photographs` move and the populated `Open Photos, …` launcher
+  label, while the native and frame journeys use the public Photos/People deep
+  links when the day-one page has no corresponding tile —
+  `tests/agent-e2e-mobile/lib/first-run.mjs`, `flows/native-v0-resilience.mjs`,
+  and `flows/scroll-frames.mjs`.
+- The Photos permission journey accepts the iOS native link-confirmation sheet
+  before asserting the refusal state, and reused paired journeys re-inject the
+  Metro URL before waiting for Home — `flows/photos-permissions.mjs` and
+  `tests/agent-e2e-mobile/lib/harness.mjs`.
+- The scroll-frame rig seeds deterministic Photos and People scenarios before
+  pairing so its grid and directory probes cannot silently run against the
+  empty CI gateway — `flows/scroll-frames.mjs`,
+  `tests/quality-rig-budgets.json`, and `tests/experience-budgets/mobile.json`.
+- Per-launch cold-start chunks have a 90-second local cap and one iOS retry for
+  the observed transient XCTest hierarchy wedge, rather than consuming the
+  generic 12-minute Maestro chunk budget — `flows/cold-start.mjs` and
+  `tests/agent-e2e-mobile/lib/harness.mjs`.
+- The affected journey sources are
+  `tests/agent-e2e-mobile/flows/cold-start.mjs`,
+  `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`,
+  `tests/agent-e2e-mobile/flows/native-v0-resilience.md`,
+  `tests/agent-e2e-mobile/flows/photos-library.mjs`,
+  `tests/agent-e2e-mobile/flows/photos-permissions.mjs`,
+  `tests/agent-e2e-mobile/flows/photos-search.mjs`,
+  `tests/agent-e2e-mobile/flows/photos-select-write.mjs`,
+  `tests/agent-e2e-mobile/flows/photos-viewer.mjs`, and
+  `tests/agent-e2e-mobile/flows/scroll-frames.mjs`.
 
 ### Implementation coverage
 
@@ -83,6 +111,9 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
 - `bun run test:accessibility`
 - Local iOS verification: `MAESTRO_PLATFORM=ios node tests/agent-e2e-mobile/flows/home-loads.mjs` (PASS; 2026-08-08).
 - Remote diagnostic: [Actions run 31272778141](https://github.com/srikanth235/centraid/actions/runs/31272778141) reproduced the clear-state Expo development-client launcher failure that this follow-up fixes.
+- Static verification of the current-main journey updates: `bun run format:check`,
+  `bun run lint:e2e-flows`, and `bun run --cwd apps/mobile typecheck` (PASS;
+  2026-08-09).
 
 ```sh
 bun run format:check
@@ -102,7 +133,7 @@ bun run test:accessibility
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-08-08 | codex | 019fe264-a26e-7b13-bc59-366fb7760e9f |
+| 2026-08-09 | codex | 019fe264-a26e-7b13-bc59-366fb7760e9f |
 
 ## Audit
 

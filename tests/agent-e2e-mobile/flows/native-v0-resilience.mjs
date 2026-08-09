@@ -1,4 +1,7 @@
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import {
+  DISMISS_OPEN_LINK_CONFIRMATION,
+  retryableTapCommands,
+} from "../lib/first-run.mjs";
 import {
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
@@ -7,14 +10,16 @@ import {
 
 // The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
 // "There is no bottom-tab navigator"). All eight blueprint apps are full-screen
-// covers opened from Home's launcher tiles; Settings is opened from the vault
-// drawer. Each destination is asserted on copy unique to the screen it opens,
-// never on the tile label that remains visible on Home (issue #483, enforced
-// by scripts/lint-e2e-flows.mjs).
+// covers; Settings is opened from the vault drawer. Each destination is
+// asserted on copy unique to the screen it opens, never on a launcher label
+// that may remain visible on Home (issue #483, enforced by
+// scripts/lint-e2e-flows.mjs).
 // Covers dismiss with a native swipe-down gesture that Maestro cannot drive
 // reliably, so each surface is entered from a fresh launch of the app rather
 // than by navigating back — React Navigation state is not persisted, so every
-// launch lands on Home.
+// launch lands on Home. The empty-vault Home is intentionally a day-one page
+// and only exposes the Photos/Docs first moves, so the complete native matrix
+// uses the app's public deep links for the remaining covers.
 const SURFACES = [
   // Maestro anchors a text selector to the WHOLE node text, so the marker has
   // to cover all of it: the Photos search field publishes
@@ -22,38 +27,38 @@ const SURFACES = [
   // "Search photos & moments" — a bare "Search photos" matches neither.
   {
     marker: "Search photos.*",
-    open: "Open Photos.*",
+    link: "centraid://photos",
     name: "photos",
   },
   {
     marker: "Add document or folder",
-    open: "Open Docs.*",
+    link: "centraid://docs",
     name: "docs",
   },
-  { marker: "Create event", open: "Open Agenda.*", name: "agenda" },
+  { marker: "Create event", link: "centraid://agenda", name: "agenda" },
   {
     marker: "New task title",
-    open: "Open Tasks.*",
+    link: "centraid://apps/tasks",
     name: "tasks",
   },
   {
     marker: "Person name",
-    open: "Open People.*",
+    link: "centraid://apps/people",
     name: "people",
   },
   {
     marker: "Search notes",
-    open: "Open Notes.*",
+    link: "centraid://apps/notes",
     name: "notes",
   },
   {
     marker: "Fixed-point multi-currency ledger, available offline",
-    open: "Open Tally.*",
+    link: "centraid://apps/tally",
     name: "tally",
   },
   {
     marker: "Secrets stay online-only",
-    open: "Open Locker.*",
+    link: "centraid://locker",
     name: "locker",
   },
   // Settings is opened from the Vault drawer, not the dock. The dock sits at
@@ -91,7 +96,10 @@ await runFlow("native-v0-resilience", async (ctx) => {
     const surface = SURFACES[index];
     if (surface === undefined) return;
     const openCommands =
-      surface.openCommands ?? retryableTapCommands(surface.open);
+      surface.openCommands ??
+      `- openLink: "${surface.link}"
+${DISMISS_OPEN_LINK_CONFIRMATION}- waitForAnimationToEnd:
+    timeout: 1000`;
     await ctx.run(
       `appId: ${ctx.state.appId}
 ---
@@ -109,7 +117,9 @@ ${openCommands}
 `,
       surface.name
     );
-    ctx.note(`${surface.name}: opened from Home, "${surface.marker}" rendered`);
+    ctx.note(
+      `${surface.name}: destination opened, "${surface.marker}" rendered`
+    );
     return visitNext(index + 1);
   };
   await visitNext(0);

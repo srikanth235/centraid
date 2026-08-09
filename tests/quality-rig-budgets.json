@@ -157,7 +157,7 @@
     },
     "tests/agent-e2e-mobile/flows/scroll-frames.mjs": {
       "lane": "scale",
-      "volume": "8 flings each on the Photos grid and the People directory, holding whatever the CI gateway fixture seeded (year-3 is 90,000 photo assets / 5,000 contacts). The flow publishes `people rows observed` — a real lower bound it can see — rather than guessing the seeded total.",
+      "volume": "8 flings each on the Photos grid and the People directory, using the deterministic Photos and People demo scenarios (year-3 is 90,000 photo assets / 5,000 contacts). The flow publishes `people rows observed` — a real lower bound it can see — rather than guessing the seeded total.",
       "_noBudgetMs": "Not a duration rig. It measures dropped-frame PERCENT via apps/mobile's rAF sampler (arm with centraid://perf-frames, read testID perf-frame-report); the ceiling lives in tests/experience-budgets/mobile.json and the drift series is the worst dropped-frame percentage across the two surfaces. NOTE the denominator is per-device — targetHz is recorded beside every percentage — and the sampler sees the JS thread only."
     }
   }

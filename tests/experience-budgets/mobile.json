@@ -10,7 +10,7 @@
     },
     "maxDroppedFramePercent": {
       "status": "unmeasured",
-      "volume": "Photos grid and People directory holding whatever the CI gateway fixture seeded — NOT the declared year-3 90,000 assets / 5,000 contacts. The flow publishes `people rows observed`, a real lower bound it can see, rather than guessing the seeded total.",
+      "volume": "Photos grid and People directory holding the deterministic Photos and People demo scenarios — NOT the declared year-3 90,000 assets / 5,000 contacts. The flow publishes `people rows observed`, a real lower bound it can see, rather than guessing the seeded total.",
       "probe": "tests/agent-e2e-mobile/flows/scroll-frames.mjs — arms apps/mobile's sampler with openLink centraid://perf-frames?ms=6000, confirms testID perf-frame-sampling, flings 8x, then reads testID perf-frame-report and parses `dropped=<number>%`. Contract pinned by apps/mobile/src/lib/perf/frame-sampler.test.ts.",
       "maxPercent": 50,
       "_intendedMaxPercent": 5,

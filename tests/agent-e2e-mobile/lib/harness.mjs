@@ -259,7 +259,7 @@ export async function setup({ runId } = {}) {
 // both an iOS sim and an Android emulator are booted.
 async function runMaestroChunk(
   yaml,
-  { state, label, maestroEnv = {}, sensitive = false }
+  { state, label, maestroEnv = {}, sensitive = false, timeoutMs }
 ) {
   const flowFile = path.join(state.flowsDir, `${label}.yaml`);
   const debugDir = path.join(state.runDir, "maestro-debug", label);
@@ -287,7 +287,7 @@ async function runMaestroChunk(
       {
         cwd: state.screenshotsDir,
         env: { ...process.env, ...maestroEnv },
-        timeoutMs: MAESTRO_CHUNK_TIMEOUT_MS,
+        timeoutMs: timeoutMs ?? MAESTRO_CHUNK_TIMEOUT_MS,
       }
     );
   } finally {
@@ -459,7 +459,7 @@ export async function runFlow(slug, fn) {
 ---
 - launchApp:
     clearState: false
-${DISMISS_DEV_CLIENT_OVERLAYS}- extendedWaitUntil:
+${relaunchDevClientCommands(state.platform)}${DISMISS_DEV_CLIENT_OVERLAYS}- extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 `,

@@ -67,6 +67,12 @@ export const DISMISS_DEV_CLIENT_OVERLAYS =
   `${DISMISS_SYSTEM_ANR}${DISMISS_OPEN_LINK_CONFIRMATION}` +
   `${DISMISS_FIRST_USE_CONTINUE}${DISMISS_EXPO_DEV_MENU}`;
 
+// The empty-vault Home page calls this first move "Bring in photographs";
+// populated replicas publish the launcher accessibility name "Open Photos, …".
+// Keep both in the journey contract while the shell transitions between those
+// two honest Home states.
+export const PHOTOS_HOME_ENTRY = "Bring in photographs|Open Photos.*";
+
 // `launchApp: { clearState: true }` also clears the Expo development client's
 // cached Metro URL on iOS. Re-inject the URL through the app's development
 // client route before waiting for the React Native onboarding hierarchy; without
