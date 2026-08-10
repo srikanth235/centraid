@@ -143,23 +143,44 @@ describe("schema/migrate", () => {
 
   test("migrations are idempotent via user_version", () => {
     const db = openVaultDb();
-    // openVaultDb already migrated; a second migrate run must be a no-op —
-    // exercised by reopening the same in-memory handle path being impossible,
-    // so assert user_version advanced exactly once per rung.
+    // openVaultDb already migrated; user_version must land exactly on the
+    // single baseline rung, and re-running migrate() against an
+    // already-migrated handle must be a no-op (proven directly below).
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
     expect(version.user_version).toBe(VAULT_MIGRATIONS.length);
+
+    const before = (
+      db.vault
+        .prepare(
+          `SELECT type, name, tbl_name, sql FROM sqlite_schema ORDER BY type, name, tbl_name`
+        )
+        .all() as unknown[]
+    ).length;
+    expect(() => migrate(db.vault, VAULT_MIGRATIONS)).not.toThrow();
+    const afterReplay = db.vault.prepare("PRAGMA user_version").get() as {
+      user_version: number;
+    };
+    expect(afterReplay.user_version).toBe(VAULT_MIGRATIONS.length);
+    const after = (
+      db.vault
+        .prepare(
+          `SELECT type, name, tbl_name, sql FROM sqlite_schema ORDER BY type, name, tbl_name`
+        )
+        .all() as unknown[]
+    ).length;
+    expect(after).toBe(before);
     db.close();
   });
 
-  test("fresh vaults apply the composed base and both forward sharing rungs", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(3);
+  test("fresh vaults apply the single composed baseline rung", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(1);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(3);
+    expect(version.user_version).toBe(1);
     for (const table of [
       "locker_auth_credential",
       "core_entity_revision",
@@ -185,64 +206,6 @@ describe("schema/migrate", () => {
         .get()
     ).toBeUndefined();
     db.close();
-  });
-
-  test("v1 share provenance upgrades shared_by_member without losing rows", () => {
-    const dir = tempDirSync();
-    const seeded = openVaultDb({ dir });
-    seeded.vault.exec(
-      `PRAGMA foreign_keys = OFF;
-       DROP TABLE share_commons_member_state;
-       DROP TABLE share_commons_op;
-       DROP TABLE share_commons_replay;
-       DROP TABLE share_commons_receipt;
-       DROP TABLE share_commons_cursor;
-       DROP TABLE share_commons_verified;
-       DROP TABLE share_commons_lineage;
-       DROP TABLE share_commons_retained;
-       DROP TABLE share_commons_intent;
-       DROP TABLE share_commons_invitation;
-       DROP TABLE share_circle_grant;
-       DROP TABLE share_party_vault_binding;
-       DROP TRIGGER trg_replica_social_circle_member_ai;
-       DROP TRIGGER trg_replica_social_circle_member_au;
-       DROP TRIGGER trg_replica_social_circle_member_ad;
-       ALTER TABLE social_circle_member DROP COLUMN capability;
-       ALTER TABLE core_share_origin RENAME COLUMN shared_by TO shared_by_member;
-       PRAGMA foreign_keys = ON;
-       PRAGMA user_version = 1;`
-    );
-    expect(columnNames(seeded.vault, "core_share_origin")).toContain(
-      "shared_by_member"
-    );
-    seeded.vault
-      .prepare(
-        `INSERT INTO core_share_origin
-         (item_type, item_id, origin_vault_id, origin_item_id,
-          shared_by_member, shared_at)
-       VALUES ('core.collection', 'collection-1', 'vault-origin',
-               'collection-origin', 'peer:vault-origin', 42)`
-      )
-      .run();
-    seeded.close();
-
-    const upgraded = openVaultDb({ dir });
-
-    expect(columnNames(upgraded.vault, "core_share_origin")).not.toContain(
-      "shared_by_member"
-    );
-    expect(columnNames(upgraded.vault, "core_share_origin")).toContain(
-      "shared_by"
-    );
-    expect(
-      upgraded.vault
-        .prepare(
-          `SELECT shared_by, shared_at FROM core_share_origin
-           WHERE item_type = 'core.collection' AND item_id = 'collection-1'`
-        )
-        .get()
-    ).toMatchObject({ shared_by: "peer:vault-origin", shared_at: 42 });
-    upgraded.close();
   });
 
   test("the composed rung includes Locker authentication columns", () => {

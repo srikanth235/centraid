@@ -1,9 +1,19 @@
-// The forward-only schema ladder for vault.db and journal.db. Pre-release v0
-// began with one composed base rung: all owner tables are composed in dependency
-// order. Once a schema has been used outside a fresh database its rung is
-// immutable; issue #726 therefore adds a real forward rename as rung two and
-// issue #731 adds the circle-backed Commons control plane as rung three.
-// Tracked via PRAGMA user_version; migrate() applies each rung transactionally.
+// The schema ladder for vault.db and journal.db. Pre-release v0 has no
+// backward compatibility (see docs/decisions.md): there is exactly one
+// baseline rung, composed of every owner table's DDL in dependency order,
+// including what issue #726's forward rename and issue #731's Commons
+// control plane used to ship as separate rungs — a database written by an
+// older shape is erased and re-created, never migrated in place, so there is
+// nothing left for a second rung to upgrade. `migrate()` still applies rungs
+// transactionally and stamps `PRAGMA user_version`, because that version
+// number is load-bearing beyond this file: it is the downgrade guard
+// (`VaultSchemaAheadError`, thrown when a file's version exceeds what this
+// build's ladder knows how to reach) and it is the "schema version this
+// build understands" reported by the gateway's backup/recovery provenance
+// (`packages/gateway/src/backup/backup-service.ts`,
+// `packages/gateway/src/backup/recover-internals.ts` read
+// `VAULT_MIGRATIONS.length`). The ladder mechanism earns its keep even at
+// one rung; the next post-release migration is a second array element away.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -58,6 +68,13 @@ export const ONTOLOGY_VERSION = "1.4";
 
 // Composition order is dependency order:
 //   - CORE first (everything references the spine), anchors ride with it;
+//   - SHARE_ORIGIN_DDL then its forward rename (shared_by_member -> shared_by,
+//     ex-issue #726 rung two) run back to back: SQLite's ALTER TABLE RENAME
+//     COLUMN rewrites the stored sqlite_schema `sql` text in place, so a fresh
+//     database ends up with a `core_share_origin` whose column has always
+//     been `shared_by` — composing the two here (rather than hand-editing the
+//     CREATE TABLE to skip the rename) keeps this file mechanism-only and
+//     leaves the DDL modules untouched;
 //   - the consent plane (apps, grants, install memory, the seed registry,
 //     the ext-band registry) before anything that enrolls or scopes;
 //   - the agent plane's model tables;
@@ -72,12 +89,18 @@ export const ONTOLOGY_VERSION = "1.4";
 //     shape, and the backfill is a no-op on a fresh file;
 //   - BLOB_DDL dead last: it re-creates the document's FTS sync with the
 //     derivative-aware body expression (extracted text feeds the owning
-//     document's row), overriding the generated triggers by name.
+//     document's row), overriding the generated triggers by name;
+//   - the Commons control plane (ex-issue #731 rung three) and, composed with
+//     it, the local-only resilience/instrumentation tables that hang off it:
+//     steward-contact state, this device's own link evidence, and recovery
+//     lineage. `SHARE_COMMONS_DDL` alters `social_circle_member` (added by
+//     SOCIAL_DDL above) so it must run after the domains.
 export const VAULT_MIGRATIONS: readonly string[] = [
   [
     CORE_DDL,
     LINK_ANCHOR_DDL,
     SHARE_ORIGIN_DDL,
+    SHARE_ORIGIN_ATTRIBUTION_DDL,
     CONSENT_DDL,
     CONSENT_INSTALL_MEMORY_DDL,
     SEED_DDL,
@@ -111,14 +134,9 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     // Notifications is a rebuildable projection; its pre-release rename is
     // part of the composed base rather than a compatibility rung.
     RENAME_INBOX_NOTICE_DDL,
+    SHARE_COMMONS_DDL,
+    COMMONS_RESILIENCE_DDL,
   ].join("\n"),
-  SHARE_ORIGIN_ATTRIBUTION_DDL,
-  // The Commons control plane and, composed into the same rung, the local-only
-  // resilience/instrumentation tables that hang off it (#731): steward-contact
-  // state, this device's own link evidence, and recovery lineage. They are part
-  // of the same baseline, not a compatibility rung — an older local file is
-  // recreated, never migrated, in pre-release v0.
-  [SHARE_COMMONS_DDL, COMMONS_RESILIENCE_DDL].join("\n"),
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

@@ -548,6 +548,17 @@ packages/gateway/src/serve/peer-commons-b6.test.ts,
 packages/gateway/src/serve/peer-commons-docs-b6.test.ts and
 packages/gateway/src/serve/peer-commons-tally-b6.test.ts.
 
+**Vault schema ladder collapsed.** packages/vault/src/schema/migrate.ts composes one baseline
+rung instead of three, absorbing this issue's commons and resilience DDL; a fresh vault's
+`sqlite_schema` is byte-identical before and after, with only `PRAGMA user_version` moving from
+3 to 1. The rung mechanism itself is retained deliberately, unlike the gateway's: `migrateVault`
+still applies DDL transactionally, `VAULT_MIGRATIONS.length` is consumed outside the package as
+the backup/restore compat gate (packages/gateway/src/backup/backup-service.ts and
+recover-internals.ts), and `VaultSchemaAheadError` still guards a backup written by a newer
+build being opened by an older one. packages/vault/src/schema/migrate.test.ts now tests the
+single baseline and idempotent re-application, and drops the in-place v1 upgrade case that the
+v0 posture retired.
+
 Known limit, recorded deliberately: `based_on_sequence` is not part of the signed member-intent
 bytes, so it protects a member from their own stale composition rather than defending against a
 hostile one. Binding it cryptographically is a follow-up.
