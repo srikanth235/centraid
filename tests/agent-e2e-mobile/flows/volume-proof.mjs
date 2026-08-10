@@ -17,6 +17,8 @@ import {
 
 const OWNER = "tests/agent-e2e-mobile/flows/volume-proof.mjs";
 const ITERATIONS = 20;
+const BATCH_SIZE = 5;
+const BATCHES = Math.ceil(ITERATIONS / BATCH_SIZE);
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 
 await runFlow("mobile-volume-proof", async (ctx) => {
@@ -33,10 +35,10 @@ await runFlow("mobile-volume-proof", async (ctx) => {
   const warmRelaunchCommands = relaunchDevClientCommands(ctx.state.platform, {
     useDeepLink: false,
   });
-  const volumeYaml = `appId: ${ctx.state.appId}
+  const volumeYaml = (iterations) => `appId: ${ctx.state.appId}
 ---
 - repeat:
-    times: ${ITERATIONS}
+    times: ${iterations}
     commands:
       - stopApp
       - launchApp:
@@ -47,16 +49,34 @@ ${indentMaestroCommands(warmRelaunchCommands, 6)}${indentMaestroCommands(waitFor
             text: "${HOME_READY_MARKER}"
           timeout: 1000
 `;
-  try {
-    await ctx.run(volumeYaml, "mobile-volume");
-  } catch (error) {
-    // iOS XCTest can report the app stopped during a rapid relaunch batch even
-    // though the next launch is healthy. Retry once so a driver hiccup does
-    // not erase the volume sample; a real product crash fails again here.
-    if (ctx.state.platform !== "ios") throw error;
-    ctx.note("iOS volume batch hit a transient app-stop; retrying once");
-    await ctx.run(volumeYaml, "mobile-volume-retry");
-  }
+  // Keep the total proof at 20 launches, but give XCTest a fresh flow process
+  // every five. A single 20-repeat flow accumulated stale iOS driver state
+  // after 16 successful cycles in run 31353793751; its whole-flow retry then
+  // started Expo at "Downloading 100%" instead of recovering Home. Batching
+  // bounds that driver lifetime without weakening the per-launch Home check.
+  const runBatch = async (batch) => {
+    if (batch >= BATCHES) return;
+    const iterations = Math.min(BATCH_SIZE, ITERATIONS - batch * BATCH_SIZE);
+    const name = `mobile-volume-${batch + 1}`;
+    const batchYaml = volumeYaml(iterations);
+    try {
+      await ctx.run(batchYaml, name);
+    } catch (error) {
+      // iOS XCTest can report the app stopped during a rapid relaunch batch
+      // even though the next launch is healthy. Retry only this small batch so
+      // a driver hiccup does not erase the volume sample; a real product crash
+      // fails again here.
+      if (ctx.state.platform !== "ios") throw error;
+      ctx.note(
+        `iOS volume batch ${batch + 1}/${BATCHES} hit a transient app-stop; retrying once`
+      );
+      await ctx.run(batchYaml, `${name}-retry`);
+    }
+    // The simulator is one serial device; recurse instead of running batches
+    // concurrently (and avoid hiding that ordering behind a lint suppression).
+    await runBatch(batch + 1);
+  };
+  await runBatch(0);
   const durationMs = performance.now() - started;
   const budget = await qualityRegressionBudget(REPO_ROOT, "scale", OWNER);
   const passed = budget == null || durationMs < budget;

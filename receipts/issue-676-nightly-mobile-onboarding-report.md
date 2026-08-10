@@ -131,6 +131,12 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   measured Home relaunch while still covering the splash-to-Metro transition —
   `tests/agent-e2e-mobile/flows/volume-proof.mjs` and
   `tests/agent-e2e-mobile/lib/first-run.mjs`.
+- The volume proof keeps its 20-launch contract but runs four five-launch
+  Maestro batches. Run 31353793751 reached 16 cycles before XCTest stopped the
+  app, and its whole-batch retry remained on Expo's `Downloading 100%...` card;
+  fresh short batches bound that driver-state accumulation and keep retries
+  local to the affected five-launch sample —
+  `tests/agent-e2e-mobile/flows/volume-proof.mjs`.
 - The native cover matrix and permission/frame journeys avoid the flaky
   post-relaunch product URL handoff by opening Photos/Docs from Home and the
   remaining bundled covers through the searchable All-apps sheet —
