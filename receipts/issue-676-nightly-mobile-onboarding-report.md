@@ -510,6 +510,11 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   [debug artifact](https://github.com/srikanth235/centraid/actions/runs/31357390040/artifacts/9052073881)
   and [evidence artifact](https://github.com/srikanth235/centraid/actions/runs/31357390040/artifacts/9052073309)
   document the passing run.
+- Focused Tasks verification: [Actions run 31358497229](https://github.com/srikanth235/centraid/actions/runs/31358497229)
+  passed the iOS producer and the isolated `native-tasks` cell on commit
+  `68134d83`. The successful destination/restart proof is retained in the
+  [debug artifact](https://github.com/srikanth235/centraid/actions/runs/31358497229/artifacts/9052512679)
+  and [evidence artifact](https://github.com/srikanth235/centraid/actions/runs/31358497229/artifacts/9052512087).
 - The matrix workflow parses as YAML and the existing mobile flow/report
   contracts pass; targeted remote dispatches are used for failing iOS cells
   rather than repeating unrelated passing flows.
