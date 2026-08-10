@@ -10,6 +10,8 @@ import {
   runFlow,
 } from "../lib/harness.mjs";
 
+const TASKS_DESTINATION = "Inbox, projects and offline repeat rules";
+
 // The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
 // "There is no bottom-tab navigator"). All eight blueprint apps are full-screen
 // covers; Settings is opened from the vault drawer. Each destination is
@@ -61,8 +63,14 @@ const SURFACES = [
     name: "agenda",
   },
   {
-    marker: "New task title",
-    openCommands: openAppFromAllAppsCommands("Tasks"),
+    // iOS 26 has acknowledged the Tasks launcher row while leaving Home on
+    // screen (the old tile path hit this in run 30838452759 and the current
+    // searchable path reproduced it in run 31351935538). The subtitle is a
+    // stable native-cover marker even when XCTest omits the TextInput's
+    // accessibility label; the helper retries only while Home's launcher
+    // source is still visible.
+    marker: TASKS_DESTINATION,
+    openCommands: openAppFromAllAppsCommands("Tasks", TASKS_DESTINATION),
     name: "tasks",
   },
   {

@@ -143,6 +143,12 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   time the sheet becomes visible. A reused Home screen could otherwise retain
   `Photos` from the first cover launch and turn the next `People` search into
   `PhotosPeople`, leaving the native-cover journey on an empty result state.
+- The Tasks native-cover leg now uses its stable subtitle as the iOS destination
+  marker and reopens the searchable launcher at most twice only when that
+  marker is absent and the Home launcher source is still visible. This carries
+  forward the earlier Tasks transition recovery without re-tapping a source
+  underneath a successful full-screen cover — `tests/agent-e2e-mobile/lib/first-run.mjs`
+  and `flows/native-v0-resilience.mjs`.
 - The native Photos cover now gets the same bounded lazy-destination wait used
   by PR #683's Settings recovery: the launcher row is tapped once, then the
   flow waits up to 45 seconds for `Collections` rather than treating React's

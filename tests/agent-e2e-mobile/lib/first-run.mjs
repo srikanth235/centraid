@@ -251,8 +251,8 @@ ${conditionalRetry}`;
  * app back to Home after a development-client relaunch. Searching first also
  * avoids relying on the sheet's scroll position as the catalog grows.
  */
-export function openAppFromAllAppsCommands(appName) {
-  return [
+export function openAppFromAllAppsCommands(appName, destination) {
+  const openCommands = [
     // The bottom-band button and the sheet title share an accessibility label.
     // Target the button's test ID so a recovery tap can never hit the
     // non-interactive title after the sheet opens. The iOS native Modal can
@@ -293,6 +293,35 @@ export function openAppFromAllAppsCommands(appName) {
     text: "Open ${appName}.*"
     retryTapIfNoChange: true`,
   ].join("\n");
+  if (!destination) return openCommands;
+
+  // iOS can acknowledge the row press after the Modal has closed without
+  // committing the lazy root-stack transition. Keep this recovery
+  // destination-aware: only reopen the launcher while the destination is
+  // absent AND the Home source is still visible. A successful cover is never
+  // tapped a second time underneath its native presentation.
+  return `${openCommands}
+- waitForAnimationToEnd:
+    timeout: 3000
+- extendedWaitUntil:
+    visible:
+      text: "${destination}"
+    timeout: 5000
+    optional: true
+- repeat:
+    times: 2
+    while:
+      notVisible:
+        text: "${destination}"
+    commands:
+      - runFlow:
+          when:
+            visible:
+              id: "home-all-apps"
+          commands:
+${indentMaestroCommands(openCommands, 12)}
+      - waitForAnimationToEnd:
+          timeout: 3000`;
 }
 
 /**
