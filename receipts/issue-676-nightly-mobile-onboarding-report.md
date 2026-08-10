@@ -504,6 +504,12 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   2026-08-09).
 - After restoring the literal volume assertion used by the matrix contract,
   `bun run test:matrix` and `bun run test:report:smoke` also pass (2026-08-09).
+- Targeted volume verification: [Actions run 31357390040](https://github.com/srikanth235/centraid/actions/runs/31357390040)
+  passed the iOS producer and the complete four-batch volume proof on commit
+  `f068121c`. The flow completed all 20 warm Home relaunches; its retained
+  [debug artifact](https://github.com/srikanth235/centraid/actions/runs/31357390040/artifacts/9052073881)
+  and [evidence artifact](https://github.com/srikanth235/centraid/actions/runs/31357390040/artifacts/9052073309)
+  document the passing run.
 - The matrix workflow parses as YAML and the existing mobile flow/report
   contracts pass; targeted remote dispatches are used for failing iOS cells
   rather than repeating unrelated passing flows.
