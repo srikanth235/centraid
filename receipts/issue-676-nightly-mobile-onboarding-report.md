@@ -108,7 +108,8 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   and points to the producer/matrix workflow ownership.
 - The iOS lane now builds the native app once and runs isolated macOS matrix
   cells; manual `e2e.yml` dispatches can target one cell (`native-v0-resilience`,
-  `volume-proof`, `cold-start`, `scroll-frames`, or `photos`) through
+  `native-tasks`, `volume-proof`, `cold-start`, `scroll-frames`, or `photos`)
+  through
   `ios_suite`. The scheduled lane still runs the complete committed set, so
   diagnosis does not spend a serialized budget on unrelated green flows.
 - The iOS Expo relaunch helper now treats a transient `simctl openurl` timeout
