@@ -148,10 +148,10 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   recovery tap from landing on the Modal's non-interactive title —
   `apps/mobile/src/screens/home/HomeBand.tsx` and
   `tests/agent-e2e-mobile/lib/first-run.mjs`.
-- The Settings leg now follows current `main`'s vault-sharing accessibility
-  contract (`<vault> on <gateway>. Switch vault`) instead of the pre-#726
-  `Open vault menu` label, while retaining the durable `APPEARANCE` destination
-  marker — `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
+- The Settings leg now follows current `main`'s vault-sharing UI: the
+  `Pair another desktop` row in the `Vaults` switcher routes to Settings;
+  retaining the durable `APPEARANCE` destination marker avoids coupling the
+  test to gateway/vault names — `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 - iOS launch recovery no longer probes for Android's system-ANR label while
   Expo is replacing its development-client hierarchy, and the cached Metro
   card gets a longer settle window. The native flow also accepts
@@ -452,6 +452,18 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   fixture case: the screenshot in [debug artifact 9047390815](https://github.com/srikanth235/centraid/actions/runs/31344864713/artifacts/9047390815)
   showed `Add your first person.` with `Open People, 0 people`, so the row-zero
   arrival assertion was replaced by PR #683's stable subtitle marker.
+- Focused verification [Actions run 31346855693](https://github.com/srikanth235/centraid/actions/runs/31346855693)
+  passed the producer and the complete `scroll-frames` journey in 24m48s,
+  including the Photos frame report, Home return, clean People search, and
+  zero-row-safe People cover assertion. The full iOS matrix is running next
+  from the same commit with unrelated nightly jobs skipped.
+- Full iOS matrix [Actions run 31348190901](https://github.com/srikanth235/centraid/actions/runs/31348190901)
+  passed the producer, `home-loads`, `template-gate`, and `cold-start`; the
+  first remaining failure was `native-v0-resilience` at the stale `GO TO`
+  drawer marker. Its [debug artifact](https://github.com/srikanth235/centraid/actions/runs/31348190901/artifacts/9048682668)
+  shows current main's `Vaults` sheet and `Pair another desktop` row, so the
+  Settings leg is being migrated to the current-main surface and only that
+  lane will be rerun.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).

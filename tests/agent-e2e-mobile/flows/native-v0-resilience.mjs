@@ -85,33 +85,24 @@ const SURFACES = [
     openCommands: openAppFromAllAppsCommands("Locker"),
     name: "locker",
   },
-  // Settings is opened from the Vault drawer, not the dock. The dock sits at
-  // the very bottom of the screen, exactly where the dev build's LogBox toast
-  // ("Open debugger to view warnings.") parks itself — it reappears whenever
-  // Home's data load emits a warning, so a dock tap right after launch lands on
-  // the toast, reports COMPLETED, and navigates nowhere. The drawer handle is
-  // top-right and never covered. Its Settings row publishes ", Settings"
-  // (icon + label in one accessibility element), which the dock's plain
-  // "Settings" does not match.
+  // Settings is opened from the vault switcher sheet, not the dock. The dock
+  // sits at the very bottom of the screen, exactly where the dev build's LogBox
+  // toast ("Open debugger to view warnings.") parks itself — it reappears
+  // whenever Home's data load emits a warning, so a dock tap right after launch
+  // lands on the toast, reports COMPLETED, and navigates nowhere. Current main's
+  // vault-sharing UI uses a bottom-sheet `Vaults` switcher; its durable
+  // `Pair another desktop` row routes to Settings and is available regardless
+  // of the active vault names.
   //
   // "Desktop link" is three scroll pages down inside Settings; "APPEARANCE" is
   // the first section heading it publishes and nothing else in the app renders
   // it, so it proves arrival without a scroll.
-  // The vault identity control changed with the #726 vault-sharing merge: its
-  // accessible name is now `<vault> on <gateway>. Switch vault`. Match the
-  // stable suffix rather than a gateway/vault value that varies per CI run.
+  // The old `GO TO` drawer and its `Switch vault` header are gone on current
+  // main. Match the sheet row rather than gateway/vault values that vary per CI
+  // run; the final `APPEARANCE` assertion still proves Settings arrival.
   {
     marker: "APPEARANCE",
-    openCommands: [
-      retryableTapCommands(".*Switch vault"),
-      // Wait for the drawer to finish opening before touching its rows.
-      '- extendedWaitUntil:\n    visible: "GO TO"\n    timeout: 15000',
-      // The row's accessible name is ", Settings" (icon + label collapsed into
-      // one element), but Maestro will not match a selector that starts with
-      // the comma — `.*Settings` is what actually resolves, and with the modal
-      // drawer open the dock underneath is not reachable anyway.
-      retryableTapCommands(".*Settings", "GO TO"),
-    ].join("\n"),
+    openCommands: retryableTapCommands("Pair another desktop"),
     name: "settings",
   },
 ];
