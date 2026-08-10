@@ -343,6 +343,13 @@ export class Gateway {
         const decisionLength = decisionChanges.length;
         const commonsLength = commonsGrantIds.length;
         const commonsIntentLength = commonsIntentGrantIds.length;
+        const markersBefore = new Set(
+          (
+            this.db.vault
+              .prepare("SELECT invocation_id FROM replica_invocation_commit")
+              .all() as { invocation_id: string }[]
+          ).map((row) => row.invocation_id)
+        );
         this.db.vault.exec(`SAVEPOINT ${savepoint}`);
         this.db.journal.exec(`SAVEPOINT ${savepoint}`);
         try {
@@ -351,9 +358,24 @@ export class Gateway {
           this.db.journal.exec(`RELEASE ${savepoint}`);
           return { ok: true, value };
         } catch (error) {
-          this.db.vault.exec(`ROLLBACK TO ${savepoint}`);
+          // A command can cross the canonical vault commit and then fail
+          // while finalizing journal evidence. Preserve that marker and its
+          // domain writes so the next retry repairs the journal exactly once;
+          // only work that never crossed the boundary rolls back to the
+          // per-run vault savepoint. The finalization helper has already
+          // rolled back its own incomplete evidence prefix; the outer journal
+          // savepoint is retained only when replay needs its invocation row.
+          const committedAfterStart = (
+            this.db.vault
+              .prepare("SELECT invocation_id FROM replica_invocation_commit")
+              .all() as { invocation_id: string }[]
+          ).some((row) => !markersBefore.has(row.invocation_id));
+          const shouldRollback = !committedAfterStart;
+          if (shouldRollback) {
+            this.db.vault.exec(`ROLLBACK TO ${savepoint}`);
+            this.db.journal.exec(`ROLLBACK TO ${savepoint}`);
+          }
           this.db.vault.exec(`RELEASE ${savepoint}`);
-          this.db.journal.exec(`ROLLBACK TO ${savepoint}`);
           this.db.journal.exec(`RELEASE ${savepoint}`);
           invocationIds.length = invocationLength;
           decisionChanges.length = decisionLength;

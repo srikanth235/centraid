@@ -3794,7 +3794,15 @@ export async function buildGateway(
             );
           }
         }
-        const diff = await sched.reconcile(rows);
+        // Disabled bundled recognition recipes remain durable app rows so
+        // Automations can show their owner-controlled toggles, but they must
+        // not occupy scheduler registrations or bootstrap data cursors until
+        // enabled. Ordinary disabled automations stay in `rows` so their
+        // cursor retention semantics remain unchanged.
+        const schedulerRows = rows.filter(
+          (row) => !recognitionTemplateIds.has(row.ownerApp) || row.enabled
+        );
+        const diff = await sched.reconcile(schedulerRows);
         if (diff.added.length || diff.updated.length || diff.removed.length) {
           logger.info(
             `scheduler reconcile (vault ${vaultId}) — ` +

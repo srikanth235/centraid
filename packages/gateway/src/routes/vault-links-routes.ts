@@ -239,13 +239,12 @@ async function handleRedeemTicket(
   }
   const localRoute = deps.peer.localRoute();
   const localOwnerPartyId = deps.ownerPartyFor?.(vaultId);
-  if (!localOwnerPartyId) return sendJson(res, 404, { error: "not_found" });
   const result = await redeemLinkTicket({
     ticket: parsed,
     links: deps.store,
     request: deps.peer.dial.request,
     localVault: { vaultId, publicKey },
-    localOwnerPartyId,
+    ...(localOwnerPartyId === undefined ? {} : { localOwnerPartyId }),
     localRoute: {
       endpointId: localRoute.endpointId ?? "",
       relayHints: localRoute.relayHints,
