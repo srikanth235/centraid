@@ -27,6 +27,12 @@ await runFlow("mobile-volume-proof", async (ctx) => {
   // on Home; every relaunch below then measures a warm, paired launch.
   await ctx.configureGateway();
   const started = performance.now();
+  // The outer launchApp keeps the paired dev client's Metro route warm. Do not
+  // reissue the custom-scheme handoff for every iteration: iOS 26 can time out
+  // simctl openurl even when the cached server card is healthy.
+  const warmRelaunchCommands = relaunchDevClientCommands(ctx.state.platform, {
+    useDeepLink: false,
+  });
   const volumeYaml = `appId: ${ctx.state.appId}
 ---
 - repeat:
@@ -35,7 +41,7 @@ await runFlow("mobile-volume-proof", async (ctx) => {
       - stopApp
       - launchApp:
           clearState: false
-${indentMaestroCommands(relaunchDevClientCommands(ctx.state.platform), 6)}${indentMaestroCommands(waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS, ctx.state.platform), 6)}
+${indentMaestroCommands(warmRelaunchCommands, 6)}${indentMaestroCommands(waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS, ctx.state.platform), 6)}
       - extendedWaitUntil:
           visible:
             text: "${HOME_READY_MARKER}"

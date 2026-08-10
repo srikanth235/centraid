@@ -77,8 +77,8 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   the populated search marker; the native Photos cover uses the actual All-apps
   launcher row on a fresh iOS process; the frame probe grants simulator
   permissions and switches from Collections to Library before measuring its
-  seeded grid; and every rapid volume relaunch reconnects Metro before
-  asserting Home — `flows/native-v0-resilience.mjs`,
+  seeded grid; and every rapid warm volume relaunch uses the cached Metro card
+  before asserting Home — `flows/native-v0-resilience.mjs`,
   `flows/scroll-frames.mjs`, `flows/volume-proof.mjs`, and `lib/first-run.mjs`.
 - The Photos suite now freshly pairs the seeded replica for the library journey,
   grants simulator photo permission before drilling into the seeded library,
@@ -122,6 +122,12 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
 - The same relaunch helper explicitly foregrounds the app after the optional
   deep link; iOS can report `simctl openurl` complete while SpringBoard remains
   foreground, leaving the cached Metro card unreachable —
+  `tests/agent-e2e-mobile/lib/first-run.mjs`.
+- The rapid volume batch now skips the repeated custom-scheme handoff on warm
+  launches. Its outer `launchApp` preserves the paired Metro route, and the
+  helper taps the cached server card instead; this avoids an iOS 26
+  `simctl openurl` timeout that was unrelated to the measured Home relaunch —
+  `tests/agent-e2e-mobile/flows/volume-proof.mjs` and
   `tests/agent-e2e-mobile/lib/first-run.mjs`.
 - The native cover matrix and permission/frame journeys avoid the flaky
   post-relaunch product URL handoff by opening Photos/Docs from Home and the

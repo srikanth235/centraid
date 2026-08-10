@@ -150,14 +150,21 @@ const IOS_METRO_RECENT_SERVER_TAP = `- runFlow:
 `;
 
 /**
- * Reconnect a cleared iOS Expo development client to the already-running Metro
- * server. Android's dev client does not use this iOS URL route.
+ * Reconnect an iOS Expo development client to the already-running Metro server.
+ * Android's dev client does not use this iOS URL route. Warm callers can set
+ * `useDeepLink: false` when their outer launch already preserves the cached
+ * Metro route.
  */
-export function relaunchDevClientCommands(platform) {
+export function relaunchDevClientCommands(
+  platform,
+  { useDeepLink = true } = {}
+) {
   if (platform !== "ios") return "";
   // `simctl openurl` can return after the dev client hands control back to
-  // SpringBoard; launch again so the cached Metro card is reachable.
-  return `- openLink:
+  // SpringBoard; launch again so the cached Metro card is reachable. Warm
+  // relaunch batches can skip this handoff and use the card directly.
+  const deepLinkRecovery = useDeepLink
+    ? `- openLink:
     link: "${IOS_METRO_DEV_CLIENT_LINK}"
     optional: true
 - waitForAnimationToEnd:
@@ -166,7 +173,9 @@ export function relaunchDevClientCommands(platform) {
     clearState: false
 - waitForAnimationToEnd:
     timeout: 1000
-${IOS_METRO_RECENT_SERVER_TAP}
+`
+    : "";
+  return `${deepLinkRecovery}${IOS_METRO_RECENT_SERVER_TAP}
 - waitForAnimationToEnd:
     timeout: 3000
 `;
