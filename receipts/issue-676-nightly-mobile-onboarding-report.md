@@ -65,6 +65,10 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   pairing so its grid and directory probes cannot silently run against the
   empty CI gateway — `flows/scroll-frames.mjs`,
   `tests/quality-rig-budgets.json`, and `tests/experience-budgets/mobile.json`.
+- The People frame leg restores PR #683's honest empty-directory contract: it
+  waits for the always-rendered People cover subtitle, then records positional
+  rows only as a lower bound (including zero) instead of treating a missing
+  replica row as a broken arrival marker — `flows/scroll-frames.mjs`.
 - Per-launch cold-start chunks have a 90-second local cap and one iOS retry for
   the observed transient XCTest hierarchy wedge, rather than consuming the
   generic 12-minute Maestro chunk budget — `flows/cold-start.mjs` and
@@ -442,6 +446,12 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   showed the search field still contained `Photos`, so the generated `People`
   input became `PhotosPeople`. The sheet now resets that query on each open;
   the focused lane will verify this state-specific fix before the full matrix.
+- Focused rerun [Actions run 31344864713](https://github.com/srikanth235/centraid/actions/runs/31344864713)
+  verified the launcher query reset: People opened from a clean `People` search
+  and the route reached its real cover. It then exposed the known empty-iOS
+  fixture case: the screenshot in [debug artifact 9047390815](https://github.com/srikanth235/centraid/actions/runs/31344864713/artifacts/9047390815)
+  showed `Add your first person.` with `Open People, 0 people`, so the row-zero
+  arrival assertion was replaced by PR #683's stable subtitle marker.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).

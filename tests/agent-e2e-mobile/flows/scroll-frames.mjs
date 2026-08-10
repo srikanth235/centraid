@@ -65,12 +65,13 @@ import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
  * | People  | 5,000 contacts | deterministic People demo scenario — NOT year-3 |
  *
  * The seeded totals are not observable from the device, so this flow does not
- * guess them. What it CAN observe it reports: `people-directory-row-<index>` is
- * positional, so the highest index appearing in any hierarchy during the fling
- * is a real lower bound on the rows scrolled past, published as
- * `people rows observed`. A fling over a directory that turns out to hold 12
- * rows says nothing about a 5,000-row one, and that lower bound is what lets a
- * reader tell the two apart instead of inferring it from seed code.
+ * guess them. What it CAN observe it reports: the highest positional row index
+ * appearing in any hierarchy during the fling is a real lower bound on the rows
+ * scrolled past, published as `people rows observed`. A fling over a directory
+ * that turns out to hold 12 rows says nothing about a 5,000-row one, and that
+ * lower bound is what lets a reader tell the two apart instead of inferring it
+ * from seed code. The arrival marker is the People cover subtitle because an
+ * empty seeded directory has no row to match.
  */
 const OWNER = "tests/agent-e2e-mobile/flows/scroll-frames.mjs";
 const FLINGS = 8;
@@ -81,10 +82,10 @@ const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 // destination now, so its old copy is not a valid readiness signal for this
 // grid; the marker must prove the timeline itself mounted.
 const PHOTOS_MARKER = "photos-library-grid";
-// People's list handle (apps/mobile/src/apps/people/PeopleHome.tsx). Positional
-// row ids exist whatever the fixture seeded, and `people-directory-row-0` is
-// People-specific so it cannot pass on another screen.
-const PEOPLE_ROW_ZERO = "people-directory-row-0";
+// The People cover subtitle (apps/mobile/src/apps/people/PeopleHome.tsx). The
+// CI gateway may seed an empty directory, so a positional row id is not a
+// valid arrival marker; the observed-row metric remains an honest lower bound.
+const PEOPLE_MARKER = "Normalized contacts and duplicate-safe merges";
 
 /** Arm the sampler, fling the surface under test, and read the report back. */
 function flingYaml(appId, marker, markerKind, surface) {
@@ -225,7 +226,7 @@ ${openAppFromAllAppsCommands("People")}
     "open-people"
   );
   await ctx.run(
-    flingYaml(ctx.state.appId, PEOPLE_ROW_ZERO, "id", "people"),
+    flingYaml(ctx.state.appId, PEOPLE_MARKER, "text", "people"),
     "fling-people"
   );
   const people = await readFrameEvidence(ctx.state.runDir, peopleStartedAt);
