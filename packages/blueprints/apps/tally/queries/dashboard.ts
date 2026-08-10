@@ -13,8 +13,9 @@
  * access state.
  */
 
-import { tallyGroupNet } from "@centraid/blueprints";
 import { BRAND, identityColor, identityInitials } from "@centraid/design";
+
+import { tallyGroupNet } from "../../../src/tally-balance.ts";
 
 /** A resolved person (owner or friend) the ledgers decorate rows with. */
 export interface ServerPerson {

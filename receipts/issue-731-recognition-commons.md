@@ -390,6 +390,7 @@ bun run --cwd packages/vault test src/schema/fk-index.test.ts src/schema/poly-re
 - `bun run test:qualities` passed standalone (4 files / 23 tests). The Commons convergence property passed 3/3 with every generated run retained and is registered in the existing matrix/law gates; no new quality gate was introduced.
 - `bun run format`, `bun run lint`, `bun run knip`, `bun run format:check`, `bun run lint:schema-export`, `git diff --check`, matrix/law lint, accessibility, UI receipt, governance, and mobile native-state checks passed.
 - `bun run check:push` is **not claimed complete**. At the user's direction it was stopped after 37 gates passed; `test:qualities` had failed only in the concurrent runner after its standalone pass, and the final `test:affected` process had not returned. `bun run check:full` was skipped at the same explicit direction.
+- CI follow-up fixes were verified with `bun run lint:types`, `bun run lint`, the gateway dependency-closure build, focused gateway/client tests, and the web waterfall: the cold shell measured 17 requests / 518,568 B and passed its existing 17-request / 520,000-byte budget.
 
 ### Acceptance evidence
 

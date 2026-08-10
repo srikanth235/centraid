@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
-import { parseCommonsInvite } from "@centraid/blueprints/apps/_shared/commons-invite";
-
 import { formatBytes } from "../../format.js";
 import {
   mintGatewayLinkTicket,
@@ -29,6 +27,33 @@ import styles from "./SharingCard.module.css";
 
 function shortId(id: string): string {
   return id.length > 10 ? `${id.slice(0, 8)}…` : id;
+}
+
+interface CommonsInviteClaim {
+  stewardVaultId: string;
+  claimToken: string;
+}
+
+/** Keep the shell's redeem field self-contained: importing the shared blueprint
+ * codec here would pull the app-only commons-invite chunk onto the cold shell
+ * path. This deliberately mirrors the blueprint codec's v1 wire checks. */
+function parseCommonsInvite(value: string): CommonsInviteClaim | null {
+  try {
+    const invite = new URL(value.trim());
+    const stewardVaultId = invite.searchParams.get("stewardVaultId") ?? "";
+    const claimToken = invite.searchParams.get("claimToken") ?? "";
+    if (
+      invite.protocol !== "centraid:" ||
+      invite.host !== "commons-invite" ||
+      invite.searchParams.get("v") !== "1" ||
+      !stewardVaultId ||
+      !claimToken
+    )
+      return null;
+    return { stewardVaultId, claimToken };
+  } catch {
+    return null;
+  }
 }
 
 function vaultLabel(vaultId: string, links: readonly GatewayLink[]): string {

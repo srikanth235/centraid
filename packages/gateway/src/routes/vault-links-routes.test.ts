@@ -100,7 +100,9 @@ describe("vault-links-routes", () => {
     };
     expect(proposedBody.link.approved).toBe(false);
     expect(
-      [proposedBody.link.partyIdA, proposedBody.link.partyIdB].toSorted()
+      [proposedBody.link.partyIdA, proposedBody.link.partyIdB].toSorted(
+        (a, b) => (a ?? "").localeCompare(b ?? "")
+      )
     ).toStrictEqual(["party-daughter", "party-father"]);
 
     // Father already sees it as proposed.
