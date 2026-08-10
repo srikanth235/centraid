@@ -154,60 +154,6 @@ describe("resolveAppScopes", () => {
     const resolvedScopes = await resolveAppScopes("photos");
     expect(resolvedScopes.scopes[0]!.scope.personal).toBeUndefined();
   });
-
-  it("mounts a borrowed scope through its edge-scoped replica transport", async () => {
-    readAppScopePlane.mockResolvedValue(
-      plane([
-        entry("vault-own", "Library", true),
-        {
-          ...entry("borrowed:edge-1", "Ada", true),
-          borrowed: {
-            edgeId: "edge-1",
-            originVaultId: "vault-ada",
-            holderLabel: "Ada",
-            itemType: "core.collection",
-            reachState: "established",
-            reason: null,
-            mounted: true,
-          },
-        },
-      ])
-    );
-
-    const { scopes } = await resolveAppScopes("tasks");
-    expect(scopes[1]).toMatchObject({
-      identity: { vaultId: "borrowed:edge-1" },
-      borrowedEdgeId: "edge-1",
-      scope: {
-        id: "borrowed:edge-1",
-        canWrite: true,
-        borrowed: { originVaultId: "vault-ada" },
-      },
-    });
-  });
-
-  it("does not mount a borrowed scope denied a replica slot", async () => {
-    readAppScopePlane.mockResolvedValue(
-      plane([
-        entry("vault-own", "Library", true),
-        {
-          ...entry("borrowed:edge-1", "Ada", false),
-          borrowed: {
-            edgeId: "edge-1",
-            originVaultId: "vault-ada",
-            holderLabel: "Ada",
-            itemType: "core.collection",
-            reachState: "parked",
-            reason: "mount budget",
-            mounted: false,
-          },
-        },
-      ])
-    );
-    await expect(resolveAppScopes("tasks")).resolves.toMatchObject({
-      scopes: [{ identity: { vaultId: "vault-own" } }],
-    });
-  });
 });
 
 describe("scopeSetKey", () => {

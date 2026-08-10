@@ -6,7 +6,7 @@ Settled **2026-08-07** (issue #724). The one seam between the gateway and every 
 
 Before this issue the gateway reached models through a different mechanism per capability — a spawned embedder program (`CENTRAID_EMBEDDER_PATH`), a spawned Tesseract OCR process (`CENTRAID_TESSERACT_PATH`), and a desktop-only on-device ASR adapter (`CENTRAID_DEVICE_ASR_URL`) reachable only from Electron's main process. Each had its own configuration, its own timeout, its own failure vocabulary, and its own answer to "is this switched on here?". All three are gone. Every model-derived capability now goes through one client, [`packages/gateway/src/enrich/service-client.ts`](../packages/gateway/src/enrich/service-client.ts), talking to one HTTP service the owner points at with `CENTRAID_ENRICH_URL`.
 
-Apps never call the service directly. An app's job is to enqueue an `enrich_request` row (consent-scoped, per [docs/photos-derived-ledger.md](photos-derived-ledger.md)) or read the vault tables a sweep already populated — the same "queue is the database" posture issue #721 E2 shipped, now shared by every capability.
+Apps never call the service directly. Recognition runs as bundled deterministic automations (`photo-ocr`, `transcript`, `embed-image`, `embed-text`, and `faces`). Their handlers acquire bounded vault attachments through `ctx.fetch`; the gateway's reserved `centraid://enrichment/<capability>` executor adapts that governed call to this frozen service wire. Apps enqueue `enrich_request` rows where explicit consent is required and read the vault projections the automations populate.
 
 ## The wire contract
 
@@ -44,28 +44,29 @@ Client-enforced ceilings, regardless of what the service would allow: 16 items p
 
 ## Honest unavailability
 
-Nothing in `service-client.ts` throws because a service is absent, asleep, out of date, or missing the capability asked for — those are the ordinary states of a gateway whose owner has not switched enrichment on. Every such case comes back as `{status: "unavailable", reason}`, never an exception, so a background sweep or a search route can say "not available here" without rendering a failure. Only a caller bug (an empty or oversized batch) throws.
+Nothing in `service-client.ts` throws because a service is absent, asleep, out of date, or missing the capability asked for — those are ordinary host states. Every such case comes back as `{status: "unavailable", reason}`, never an exception, so a deterministic automation or search route can record “not available here” without fabricating success. Only a caller bug (an empty or oversized batch) throws.
 
 ## Provenance and backfill
 
-Every derived row gets a stamp in `enrich_derivation` ([`packages/vault/src/schema/enrich.ts`](../packages/vault/src/schema/enrich.ts)), `UNIQUE(target_type, target_id, variant)`, recording the capability, the `"<name>@<version>"` model that produced it, and an optional small JSON payload. [`packages/vault/src/enrich/derivation.ts`](../packages/vault/src/enrich/derivation.ts) owns two operations: `stampDerivation` (upsert the stamp — re-running the same derivation replaces it, since a target has one producer at a time) and `supersededTargets` (the backfill selector: targets stamped under an older version of the model running now, decided by `isSupersededBy` in JS because a lexicographic string comparison would put `clip@10` before `clip@2`). A stamp from a different model family, or one that fails to parse, is deliberately **not** superseded — it belongs to an index this model does not own.
+Every derived row gets a stamp in `enrich_derivation` ([`packages/vault/src/schema/enrich.ts`](../packages/vault/src/schema/enrich.ts)), `UNIQUE(target_type, target_id, variant)`, recording the capability, the `"<name>@<version>"` model that produced it, and an optional small JSON payload. [`packages/vault/src/enrich/derivation.ts`](../packages/vault/src/enrich/derivation.ts) owns `stampDerivation`; template cursor state owns catch-up and re-derive selection. On first enable, the cursor seeds from compatible existing stamps so an already-enriched library does no duplicate work. Changing the template's pinned model or prompt revision re-arms only rows whose stamp is behind. A stamp from a different model family, or one that fails to parse, is not silently claimed by the new model.
 
 OCR stamps carry the normalized region payload (`{regions: [{text, confidence, box}]}`) exactly as the service answered, so a later region-level feature (drawing a box, re-ordering text) needs no re-inference — the stamp already has it.
 
-## The generic sweep
+## Automations schedule; the service executes
 
-[`packages/gateway/src/enrich/capability-sweep.ts`](../packages/gateway/src/enrich/capability-sweep.ts) is the one bounded pass shared by every capability. A `CapabilitySweepSpec` supplies the three things that differ per capability — which rows are behind (`selectBacklog`), what bytes to send (`buildItem`), and where the answer lands (`apply`) — and the sweep owns everything that is hard and must not drift: the consent gate (checked **before** the service is even probed, so an `off`/`device` domain tier produces no request and no traffic), the batch cap, per-item failure isolation, and the stamp+drain transaction. The derivation stamp and the `enrich_request.drained_at` mark commit together with the derived value in one transaction — a stamp without its value would tell the next sweep the work is done when nothing was produced; a drain without its value would silently answer a member's ask with nothing, invisible to any later repair pass.
+There is no gateway-private capability sweep. The automation engine owns scheduling, bounded fires, the conversation ledger, policy skips, retries, Test run, and synchronous invoke-and-await. Each recognition template processes at most 16 items per fire, stages typed vault operations rather than writing tables directly, advances a cursor watermark, and re-arms while bounded work remains. `enrich_policy` is checked in `runFire` before the handler can issue either a service call or an agent turn.
 
-| Capability | Spec | Policy domain | Consent posture | Where results land | Model id (reference service) |
-| --- | --- | --- | --- | --- | --- |
-| `embed-image` | [`embedding-sweep.ts`](../packages/gateway/src/enrich/embedding-sweep.ts) | photos | ambient backfill at the domain's `gateway` tier | `enrich_embedding` | `clip-vit-b-32@1` |
-| `ocr` | [`ocr-sweep.ts`](../packages/gateway/src/enrich/ocr-sweep.ts) | photos | ambient backfill at the domain's `gateway` tier | `core_content_derivative` (`variant='text'`) via `core.set_extracted_text` | `pp-ocrv4@1` |
-| `faces` | [`faces-sweep.ts`](../packages/gateway/src/enrich/faces-sweep.ts) | photos | consent-gated: only drains `enrich_request` rows tagged `capability='faces'` (per-asset or a standing vault-wide ask); a stamp from an older model is the one exception, since it is proof of past consent for that photograph | `media_face_region` (`review_state='proposed'`) + `enrich_embedding` | `yunet-sface@1` |
-| `transcript` | [`transcript-sweep.ts`](../packages/gateway/src/enrich/transcript-sweep.ts) | docs | ambient backfill at the domain's `gateway` tier | `core_content_derivative` (`variant='transcript'`) via `core.set_extracted_text` | `whisper-proxy@1` (proxy; see below) |
+| Template | Policy domain | Trigger / consent posture | Where results land | Model id (reference service) |
+| --- | --- | --- | --- | --- |
+| `embed-image` | photos | bounded data/cron cursor | `enrich_embedding` | `clip-vit-b-32@1` |
+| `embed-text` | docs | bounded data/cron cursor | `enrich_embedding` | service-advertised pinned id |
+| `photo-ocr` | photos | bounded data/cron cursor; capture may invoke-and-await | `core_content_derivative` (`variant='text'`) via `core.set_extracted_text` | `pp-ocrv4@1` |
+| `faces` | photos | open `enrich_request(capability='faces')` or prior consent stamp only; never an ambient library scan | `media_face_region` (`review_state='proposed'`) + `enrich_embedding` | `yunet-sface@1` |
+| `transcript` | docs | bounded data/cron cursor | `core_content_derivative` (`variant='transcript'`) via `core.set_extracted_text` | `whisper-proxy@1` (proxy; see below) |
 
-OCR and transcript both land through the `core.set_extracted_text` command rather than a raw insert, so FTS refresh triggers, receipts, and the write postcondition all apply the same way every other content-derivative writer gets them. Both specs write **honest empty**: a photograph with no legible text, or a recording the service could not transcribe, still gets its derivation stamp (so the backfill does not loop over it forever) but no text derivative — an empty string is refused by `core.set_extracted_text`'s own schema, and a placeholder would make "nothing found" indistinguishable from "derivation failed".
+OCR and transcript land through `core.set_extracted_text`, so FTS refresh, receipts, and write postconditions apply. Both record **honest empty** without inventing placeholder text. OCR confidence is optional end to end: a specialist result may include it, while an agent result may omit it; absence is preserved.
 
-Faces is the one capability with its own consent tag, separate from the domain-tier gate every other capability answers to alone — a face asserts an identity, which the pixels-only capabilities (OCR, embeddings) do not. See [Faces](#faces) below.
+Only `photo-ocr` declares an agent variant. That branch replaces the deterministic `ctx.fetch` step with `ctx.agent`, requires a pinned runner model and provider-egress consent, coerces the answer to the same canonical region/text shape, drops invalid boxes at the vault command boundary, books ordinary agent usage, and stamps only the model identity ACP confirmed. Embeddings and faces deliberately have no agent variant because their indexes require one fixed model family.
 
 ## Lane split: device lease vs. the enrichment service
 
@@ -73,7 +74,7 @@ The on-device lease lane (a phone or other device volunteering idle compute) is 
 
 ## Derivatives, never originals (with one exception)
 
-Every photo-domain spec reads a target's `preview` or `thumb` derivative, never the member's full-resolution original — a preview already carries the detail a vision model needs. `transcript-sweep.ts` is the one deliberate exception: a recording's "preview" would be missing words, not just fewer pixels, so it reads `core_content_item`'s **original** bytes, bounded by a 200MB skip ceiling (a recording over that size is skipped rather than read whole into memory and posted to a local service).
+Every photo-domain template reads a target's `preview` or `thumb` derivative, never the member's full-resolution original — a preview already carries the detail a vision model needs. `transcript` is the deliberate exception: a recording's "preview" would be missing words, not just fewer pixels, so it reads original bytes under its bounded attachment ceiling and honestly skips an oversized recording.
 
 ## Faces
 
@@ -107,14 +108,15 @@ Model choices and their licences are recorded in [`tools/enrichment-service/LICE
 All three deleted mechanisms had zero released users (this repo carries no release tags), so each is a plain deletion, not a deprecation:
 
 - **`CENTRAID_EMBEDDER_PATH` / `CENTRAID_EMBEDDER_MODEL`** (spawned embedder process) — replaced by the enrichment service's `embed-image` capability. Point `CENTRAID_ENRICH_URL` at a running service.
-- **`CENTRAID_TESSERACT_PATH`** (spawned Tesseract OCR) — replaced by the service's `ocr` capability. The capture route's live single-shot OCR ask ([`packages/gateway/src/capture/capture-ocr.ts`](../packages/gateway/src/capture/capture-ocr.ts)) now calls the service; its 503-when-unconfigured contract is unchanged, only its source.
+- **`CENTRAID_TESSERACT_PATH`** (spawned Tesseract OCR) — replaced by the `photo-ocr` automation's service-backed deterministic step. The capture route invokes that automation synchronously through invoke-and-await; its 503-when-unconfigured contract now also leaves an honest failed automation turn.
 - **`CENTRAID_DEVICE_ASR_URL` / `_TOKEN` / `_MODEL`** (desktop on-device ASR adapter) — desktop now advertises `transcript: false` permanently. If you were running whisper.cpp against the old adapter, point the enrichment service's `ENRICH_SERVICE_TRANSCRIPT_URL` at your whisper-compatible endpoint instead; the service proxies to it.
 
 ## Related
 
 - [`packages/gateway/src/enrich/service-client.ts`](../packages/gateway/src/enrich/service-client.ts) — the wire client, config, and caps.
-- [`packages/gateway/src/enrich/capability-sweep.ts`](../packages/gateway/src/enrich/capability-sweep.ts) — the generic sweep every capability rides.
-- [`packages/vault/src/enrich/derivation.ts`](../packages/vault/src/enrich/derivation.ts) — the provenance stamp and supersession query.
+- [`packages/gateway/src/enrich/automation-executor.ts`](../packages/gateway/src/enrich/automation-executor.ts) — the host-owned reserved-fetch adapter used by deterministic automation handlers.
+- [`packages/blueprints/automations`](../packages/blueprints/automations) — recognition templates and their cursor/consent orchestration.
+- [`packages/vault/src/enrich/derivation.ts`](../packages/vault/src/enrich/derivation.ts) — the provenance stamp.
 - [`packages/vault/src/enrich/face-clusters.ts`](../packages/vault/src/enrich/face-clusters.ts) — party-anchored matching and stranger grouping.
 - [`packages/vault/src/commands/media.ts`](../packages/vault/src/commands/media.ts) — `media.forget_person`.
 - [`tools/enrichment-service`](../tools/enrichment-service) — the reference implementation, its README, and `LICENSES.md`.

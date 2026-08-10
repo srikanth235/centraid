@@ -22,7 +22,13 @@ export default async function groupHandler({ input, ctx }: HandlerArgs) {
         ledger: [],
       };
     const net = groupNet(data, groupId);
-    const members = (data.membersByGroup.get(groupId) ?? []).map((pid) => {
+    const currentMemberIds = data.membersByGroup.get(groupId) ?? [];
+    const currentMembers = new Set(currentMemberIds);
+    const participantIds = [
+      ...currentMemberIds,
+      ...[...net.keys()].filter((partyId) => !currentMembers.has(partyId)),
+    ];
+    const members = participantIds.map((pid) => {
       const p = personOf(data, pid);
       return {
         party_id: pid,
@@ -31,6 +37,7 @@ export default async function groupHandler({ input, ctx }: HandlerArgs) {
         initials: p.initials,
         is_me: p.is_me,
         net_minor: net.get(pid) || 0,
+        ...(currentMembers.has(pid) ? {} : { departed: true }),
       };
     });
     const ledger = data.expenses

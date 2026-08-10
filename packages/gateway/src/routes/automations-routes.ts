@@ -14,6 +14,7 @@
 //   GET  /centraid/_automations                       list → {rows, errors}
 //   GET  /centraid/_automations/read?ref=             one automation → {row}
 //   POST /centraid/_automations/turn-now?ref=         fire now → {turnId}
+//   POST /centraid/_automations/invoke-and-await?ref= run payload → outcome
 //   GET  /centraid/_automations/turns?ref=&limit=     turn feed → {turns}
 //   GET  /centraid/_automations/turn?turnId=          one turn → {turn}
 //   POST /centraid/_automations/turn?ref=             interactive turn → TurnStreamEvent SSE
@@ -51,6 +52,7 @@ import {
 } from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
 
+import { isSystemRecognitionRef } from "../enrich/system-recognition.js";
 import { journalConversationStore } from "../journal-stores.js";
 import type { WorktreeStore } from "../worktree-store/index.js";
 import {
@@ -89,6 +91,12 @@ export interface AutomationsRouteOptions {
    * stub it. The turnId is minted by the route and passed in.
    */
   runAutomation: (input: { automationRef: string; turnId: string }) => void;
+  /** The same fire path, awaited for capture and the Test run affordance. */
+  invokeAndAwait?: (input: {
+    automationRef: string;
+    turnId: string;
+    payload?: unknown;
+  }) => Promise<unknown>;
   /**
    * Subscribe to a turn's live native events. Wired to the gateway event bus.
    * Returns an unsubscribe. Omitted in hosts that
@@ -137,6 +145,8 @@ interface AutomationTurnJson extends Turn {
   automationName?: string;
   /** Active runner binding on the stable automation conversation. */
   adapterKind?: string;
+  /** Built-in recognition runs stay in their own history lane. */
+  systemLane?: "recognition";
 }
 
 /**
@@ -188,6 +198,9 @@ function turnToAutomationTurn(
     ...(automationRef === undefined ? {} : { automationId: automationRef }),
     ...(conversationTitle ? { automationName: conversationTitle } : {}),
     ...(adapterKind ? { adapterKind } : {}),
+    ...(isSystemRecognitionRef(automationRef)
+      ? { systemLane: "recognition" as const }
+      : {}),
   };
 }
 
@@ -337,7 +350,16 @@ export function makeAutomationsRouteHandler(
         .replace(/^\/+/u, "");
 
       if (sub === "" && method === "GET") {
-        return sendJson(res, 200, await automation.list(codeAppsDir()));
+        const listed = await automation.list(codeAppsDir());
+        return sendJson(res, 200, {
+          ...listed,
+          rows: listed.rows.map((row) => ({
+            ...row,
+            ...(isSystemRecognitionRef(row.ref)
+              ? { systemLane: "recognition" as const }
+              : {}),
+          })),
+        });
       }
 
       if (sub === "read" && method === "GET") {
@@ -346,7 +368,12 @@ export function makeAutomationsRouteHandler(
         const row = await automation
           .readAppOwned(codeAppsDir(), ref.appId, ref.automationId)
           .catch(() => undefined);
-        return sendJson(res, 200, { row: row ?? null });
+        return sendJson(res, 200, {
+          row:
+            row && isSystemRecognitionRef(row.ref)
+              ? { ...row, systemLane: "recognition" as const }
+              : (row ?? null),
+        });
       }
 
       // The compiler's output made legible: the instructions-first editor
@@ -386,6 +413,25 @@ export function makeAutomationsRouteHandler(
         const turnId = `${ref}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
         opts.runAutomation({ automationRef: ref, turnId });
         return sendJson(res, 202, { turnId });
+      }
+
+      if (sub === "invoke-and-await" && method === "POST") {
+        const ref = url.searchParams.get("ref") ?? "";
+        if (!automation.parseRef(ref) || !opts.invokeAndAwait) {
+          return sendJson(res, 400, {
+            error: "bad_request",
+            message:
+              "invoke-and-await needs a valid ?ref= and an enabled fire path",
+          });
+        }
+        const turnId = `${ref}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
+        const payload = await readJson(req);
+        const result = await opts.invokeAndAwait({
+          automationRef: ref,
+          turnId,
+          payload,
+        });
+        return sendJson(res, 200, { turnId, result });
       }
 
       if (sub === "turns" && method === "GET") {

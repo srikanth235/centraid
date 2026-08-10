@@ -166,7 +166,9 @@ export function buildOverviewData(
   let paused = 0;
   let drafts = 0;
   let attention = 0;
-  for (const r of rows) {
+  const memberRows = rows.filter((row) => row.systemLane === undefined);
+  const memberRuns = runs.filter((entry) => entry.run.systemLane === undefined);
+  for (const r of memberRows) {
     const lastEntry = lastByRef.get(r.ref);
     if (r.enabled) active += 1;
     else if (lastEntry) paused += 1;
@@ -178,7 +180,7 @@ export function buildOverviewData(
   // not "paused", they've simply never run.
   const subParts = [`${active} active`, `${paused} paused`];
   if (drafts > 0) subParts.push(`${drafts} drafts`);
-  if (runs.length > 0) subParts.push(`${runs.length} recent runs`);
+  if (memberRuns.length > 0) subParts.push(`${memberRuns.length} recent runs`);
 
   return {
     health: { active, attention, drafts, paused },
@@ -239,6 +241,7 @@ export function buildOverviewData(
             : relativeRunLabel(nextRun)
           : null,
         ref: r.ref,
+        ...(r.systemLane ? { systemLane: r.systemLane } : {}),
         statusKind,
         statusLabel,
         triggerIcon: hasWebhook && !hasCron ? "Webhook" : "Clock",
@@ -259,12 +262,13 @@ export function buildOverviewData(
         ok: run.ok,
         runId: run.turnId,
         startedAt: run.startedAt,
+        ...(run.systemLane ? { systemLane: run.systemLane } : {}),
         summary: run.ok ? (run.summary ?? "—") : (run.error ?? "Failed"),
         whenLabel: relativeTime(new Date(run.startedAt).toISOString()),
       };
     }),
     subtitle:
-      rows.length > 0
+      memberRows.length > 0
         ? subParts.join("  ·  ")
         : "Conversations that run on their own.",
   };

@@ -52,8 +52,8 @@ const mocks = vi.hoisted(() => ({
     textFaint: "#mock-text-faint",
   },
   postStatus: vi.fn<(message: string) => void>(),
-  // `enrich.policy`'s photos row — `device` so the gate's on-device answer is
-  // offered by default; individual tests override this array's contents.
+  // `enrich.policy`'s photos row — `device`, which this build must refuse
+  // because it has no device-side faces producer.
   policies: [{ domain: "photos", tier: "device" }] as Array<{
     domain: string;
     tier: string;
@@ -267,6 +267,7 @@ vi.mock(import("../../kit/components/ConsentGate"), async () => {
       domain: string;
       onRunOnDevice: () => void;
       onDecline: () => void;
+      onDevice: { available: boolean; reason?: string };
       answered?: string | null;
       busy?: boolean;
     }) =>
@@ -275,9 +276,14 @@ vi.mock(import("../../kit/components/ConsentGate"), async () => {
         { "data-domain": props.domain, "data-testid": "consent-gate" },
         ReactModule.createElement(
           "button",
-          { onClick: props.onRunOnDevice, type: "button" },
+          {
+            disabled: !props.onDevice.available,
+            onClick: props.onRunOnDevice,
+            type: "button",
+          },
           "Run on this device"
         ),
+        props.onDevice.reason,
         ReactModule.createElement(
           "button",
           { onClick: props.onDecline, type: "button" },
@@ -413,19 +419,18 @@ describe("the people roster's consent gate (issue 712 C2)", () => {
     ).toBeFalsy();
   });
 
-  it("issues the enrichment request only from the explicit on-device answer", () => {
+  it("does not offer a device run when this build has no device faces producer", () => {
     renderView();
     expect(mocks.session.write).not.toHaveBeenCalled();
     const run = Array.from(container!.querySelectorAll("button")).find(
       (button) => button.textContent === "Run on this device"
     );
-    act(() => run!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    expect(mocks.session.write).toHaveBeenCalledExactlyOnceWith(
-      "photos",
-      expect.objectContaining({
-        action: "request-enrichment",
-        input: { entity_type: "media.media_asset" },
-      })
+    expect(run).toBeTruthy();
+    expect((run as HTMLButtonElement).disabled).toBe(true);
+    expect(container!.textContent).toContain(
+      "this build has no device-side face detector"
     );
+    act(() => run!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(mocks.session.write).not.toHaveBeenCalled();
   });
 });

@@ -3,9 +3,8 @@ import type { JSX, ReactNode } from "react";
 
 import { cronNextRuns, describeCron } from "../../../../cron.js";
 import {
+  invokeAutomationAndAwait,
   listAutomationTurns,
-  readAutomationTurn,
-  runAutomationNow,
 } from "../../../../gateway-client.js";
 import { cx } from "../../../ui/cx.js";
 import { iconSvg } from "../../iconSvg.js";
@@ -250,25 +249,13 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
     };
   }, [appId, key]);
 
-  // Fire the automation once now and poll the ledger for the finished record,
-  // then refresh the list (builder.ts `runAutomationOnce`, minus the chat
-  // message-model side effects the shell owns).
+  // Test Run is an awaited fire: the control settles on the handler outcome,
+  // then refreshes the authoritative run list.
   const runOnce = async (): Promise<void> => {
     if (!appId || busy) return;
     setBusy(true);
     try {
-      const { turnId } = await runAutomationNow({ automationId: appId });
-      const deadline = Date.now() + 6 * 60 * 1000;
-      const waitForCompletion = async (): Promise<void> => {
-        const rec = await readAutomationTurn({ turnId });
-        if (rec && rec.endedAt !== undefined) return;
-        if (Date.now() >= deadline) return;
-        await new Promise((resolve) => {
-          setTimeout(resolve, 1500);
-        });
-        return waitForCompletion();
-      };
-      await waitForCompletion();
+      await invokeAutomationAndAwait({ automationId: appId });
     } catch {
       // Surfaced through the refreshed run list below.
     } finally {

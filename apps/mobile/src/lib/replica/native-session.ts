@@ -1,6 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit (#419) the native session is one cohesive coordinator wiring store, intent outbox, windowed bootstrap, SSE feed, and AppState drain across a single lifecycle
 import {
-  borrowedReplicaFetcher,
   DEFAULT_REPLICA_PURPOSE,
   fetchReplicaChanges,
   fetchReplicaIntentOutcomes,
@@ -140,8 +139,6 @@ export interface CreateNativeReplicaSessionOptions {
     phase: "first-page" | "backfill" | "complete";
     pages: number;
   }) => void;
-  borrowedEdgeId?: string;
-  pollIntervalMs?: number;
 }
 
 /**
@@ -182,9 +179,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
   readonly #onBootstrapProgress:
     | CreateNativeReplicaSessionOptions["onBootstrapProgress"]
     | undefined;
-  readonly #borrowed: boolean;
-  readonly #pollIntervalMs: number | undefined;
-  #pollTimer: ReturnType<typeof setInterval> | undefined;
   #previewReady:
     | { resolve: () => void; reject: (error: unknown) => void }
     | undefined;
@@ -214,8 +208,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
       | "bootstrapWindow"
       | "progressiveBootstrap"
       | "onBootstrapProgress"
-      | "borrowedEdgeId"
-      | "pollIntervalMs"
     > & { idFactory: ReplicaIdFactory }
   ) {
     this.#coordinator = coordinator;
@@ -237,8 +229,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#bootstrapWindow = options.bootstrapWindow;
     this.#progressiveBootstrap = options.progressiveBootstrap ?? false;
     this.#onBootstrapProgress = options.onBootstrapProgress;
-    this.#borrowed = Boolean(options.borrowedEdgeId);
-    this.#pollIntervalMs = options.pollIntervalMs;
   }
 
   get coordinator(): ReplicaCoordinator {
@@ -282,13 +272,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
       );
     }
     void this.flushIntents();
-    if (this.#pollIntervalMs) {
-      this.#pollTimer = setInterval(
-        () => void this.pullNow().catch(() => undefined),
-        this.#pollIntervalMs
-      );
-      (this.#pollTimer as unknown as { unref?: () => void }).unref?.();
-    }
     return this;
   }
 
@@ -332,7 +315,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       input.optimistic,
       this.#catalog,
       this.resolveShapeId.bind(this),
-      this.#borrowed
+      false
     );
     const intent = await this.#coordinator.enqueue({
       intentId: this.#intentIds.forWrite(
@@ -374,7 +357,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return this.#coordinator.subscribeInvalidations((invalidations) => {
       const appShapes = new Set(
         this.#catalog
-          .filter((shape) => this.#borrowed || shape.appId === appId)
+          .filter((shape) => shape.appId === appId)
           .map((shape) => shape.shapeId)
       );
       const relevant = invalidations.filter(
@@ -515,8 +498,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     if (this.#closed) return;
     this.#closed = true;
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
-    if (this.#pollTimer) clearInterval(this.#pollTimer);
-    this.#pollTimer = undefined;
     this.#retryTimer = undefined;
     this.#appStateSub?.remove();
     this.#appStateSub = undefined;
@@ -532,8 +513,6 @@ export class NativeReplicaSession implements MobileReplicaSession {
     if (this.#closed) return;
     this.#closed = true;
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
-    if (this.#pollTimer) clearInterval(this.#pollTimer);
-    this.#pollTimer = undefined;
     this.#retryTimer = undefined;
     this.#appStateSub?.remove();
     this.#appStateSub = undefined;
@@ -751,7 +730,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       purpose ?? (requested ? undefined : DEFAULT_REPLICA_PURPOSE);
     const candidates = this.#catalog.filter(
       (shape) =>
-        (this.#borrowed || shape.appId === appId) &&
+        shape.appId === appId &&
         (resolvedPurpose === undefined || shape.purpose === resolvedPurpose) &&
         shape.entities.some((item) => item.entity === entity)
     );
@@ -790,9 +769,7 @@ export async function createNativeReplicaSession(
   if (!options.gatewayAuth.vaultId) {
     throw new ReplicaProtocolError("An addressed vault is required");
   }
-  const fetcher = options.borrowedEdgeId
-    ? borrowedReplicaFetcher(options.borrowedEdgeId, options.fetcher)
-    : options.fetcher;
+  const fetcher = options.fetcher;
   const store = NativeReplicaStore.create(
     options.driver,
     options.gatewayAuth.vaultId
@@ -836,9 +813,6 @@ export async function createNativeReplicaSession(
   session = new NativeReplicaSession(coordinator, intentStore, {
     ...options,
     fetcher,
-    ...(options.borrowedEdgeId && options.pollIntervalMs === undefined
-      ? { pollIntervalMs: 30_000 }
-      : {}),
     idFactory,
   });
   await session.start();

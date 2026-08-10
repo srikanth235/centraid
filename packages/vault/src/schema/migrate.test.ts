@@ -153,19 +153,20 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("fresh vaults apply the composed base and forward share-attribution rename", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(2);
+  test("fresh vaults apply the composed base and both forward sharing rungs", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(3);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(2);
+    expect(version.user_version).toBe(3);
     for (const table of [
       "locker_auth_credential",
       "core_entity_revision",
       "tally_expense_receipt",
       "social_contact_channel",
       "notifications_notice",
+      "share_circle_grant",
     ]) {
       expect(
         db.vault
@@ -190,7 +191,24 @@ describe("schema/migrate", () => {
     const dir = tempDirSync();
     const seeded = openVaultDb({ dir });
     seeded.vault.exec(
-      `ALTER TABLE core_share_origin RENAME COLUMN shared_by TO shared_by_member;
+      `PRAGMA foreign_keys = OFF;
+       DROP TABLE share_commons_member_state;
+       DROP TABLE share_commons_op;
+       DROP TABLE share_commons_replay;
+       DROP TABLE share_commons_receipt;
+       DROP TABLE share_commons_cursor;
+       DROP TABLE share_commons_lineage;
+       DROP TABLE share_commons_retained;
+       DROP TABLE share_commons_intent;
+       DROP TABLE share_commons_invitation;
+       DROP TABLE share_circle_grant;
+       DROP TABLE share_party_vault_binding;
+       DROP TRIGGER trg_replica_social_circle_member_ai;
+       DROP TRIGGER trg_replica_social_circle_member_au;
+       DROP TRIGGER trg_replica_social_circle_member_ad;
+       ALTER TABLE social_circle_member DROP COLUMN capability;
+       ALTER TABLE core_share_origin RENAME COLUMN shared_by TO shared_by_member;
+       PRAGMA foreign_keys = ON;
        PRAGMA user_version = 1;`
     );
     expect(columnNames(seeded.vault, "core_share_origin")).toContain(

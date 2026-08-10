@@ -22,6 +22,8 @@ export interface Friend extends Person {
 /** A group member (group view / modal member list) — a person plus their net. */
 export interface Member extends Person {
   net_minor?: number;
+  /** Durable ledger participant who is no longer in the group's circle. */
+  departed?: boolean;
 }
 
 /** A group card on the dashboard / sidebar (net folded to the owner's stance). */
@@ -116,6 +118,11 @@ export interface LedgerRow {
   };
   pending?: boolean;
   parked?: boolean;
+  /** Durable Commons command state backing this optimistic row. */
+  intentStatus?: "pending" | "parked" | "denied";
+  commonsIntentId?: string;
+  pendingReason?: string;
+  stewardLabel?: string;
 }
 
 /** One interleaved activity entry (expense or settlement). */

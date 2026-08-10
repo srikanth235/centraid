@@ -933,7 +933,7 @@ describe("replica-intent-route suite", () => {
       {
         plane: vault,
         access: {
-          // A read-only caller (a lent scope in later phases) is denied as a
+          // A read-only caller (for example, a commons reader) is denied as a
           // durable outcome, never a revocation-shaped 403.
           canWrite: false,
           rememberDevice: true,

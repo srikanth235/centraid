@@ -59,6 +59,12 @@ export function ExpenseRow({
   // label sits — and no detail popover (there is no receipt or server row to
   // show yet; the doorbell refresh swaps in the real one).
   const pending = Boolean(row.pending);
+  const pendingLabel =
+    row.intentStatus === "denied"
+      ? "denied"
+      : row.parked
+        ? "waiting"
+        : "pending";
   return (
     <button
       type="button"
@@ -77,11 +83,14 @@ export function ExpenseRow({
         <span className={styles.exsub}>
           {sub}
           {row.receipt ? " · receipt" : ""}
+          {row.pendingReason ? ` · ${displayText(row.pendingReason)}` : ""}
         </span>
       </span>
       <span className={styles.exright}>
         {pending ? (
-          <span className="kit-pending-chip">pending</span>
+          <span className="kit-pending-chip" title={row.pendingReason}>
+            {pendingLabel}
+          </span>
         ) : (
           <span className={styles.exlabel}>{rLabel}</span>
         )}

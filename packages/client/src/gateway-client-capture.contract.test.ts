@@ -45,6 +45,21 @@ describe("capture assist seam", () => {
     ).toBe("application/octet-stream");
   });
 
+  it("law: OCR confidence stays absent when the recognizer did not report it", async () => {
+    respond("POST /centraid/_gateway/capture/ocr", () =>
+      json({
+        extraction: { text: "hi", engine: "enrichment-service" },
+      })
+    );
+
+    await expect(
+      capture.recognizeCaptureImage(receipt())
+    ).resolves.toStrictEqual({
+      text: "hi",
+      engine: "enrichment-service",
+    });
+  });
+
   it("law: an absent OCR engine degrades to undefined, never to a thrown capture", async () => {
     respond(
       "POST /centraid/_gateway/capture/ocr",

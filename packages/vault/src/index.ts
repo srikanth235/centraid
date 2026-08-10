@@ -107,6 +107,82 @@ export {
   type ProjectionIngestHook,
   type ProjectionIngestContext,
 } from "./share/projection-ingest.js";
+export {
+  isCommonsCommandActable,
+  declareCommonsCommands,
+  commonsCommandsFor,
+} from "./share/actable.js";
+export {
+  createCommonsGrant,
+  ensureCommonsParty,
+  readCommonsGrant,
+  commonsClosure,
+  commonsClosureSizeBytes,
+  compactCommonsOperations,
+  acknowledgeCommonsSeatCursor,
+  assertCommonsWithinMax,
+  compileCommons,
+  appendCommonsOperation,
+  appendCommonsOperationInTransaction,
+  commonsGrantForCommand,
+  authorizeCommonsCommand,
+  executeCommonsCommand,
+  queueCommonsIntent,
+  settleCommonsIntent,
+  retainCommonsItem,
+  removeCommonsFromSeat,
+  transferCommonsSteward,
+  commonsCurrentSize,
+  type CommonsCapability,
+  type CommonsDeparturePolicy,
+  type CommonsMemberInput,
+  type CommonsGrantRecord,
+  type CompiledCommonsSeat,
+  type CommonsCommandDecision,
+  type ExecuteCommonsCommandInput,
+  type ExecuteCommonsCommandResult,
+} from "./share/commons.js";
+export {
+  listCommonsGrants,
+  findCommonsGrantForContainer,
+  ensureCommonsGrant,
+  upsertCommonsMember,
+  refuseCommonsMember,
+  removeCommonsMember,
+  revokeCommonsGrant,
+  commonsSeats,
+  recompileCommonsGrants,
+  scrubCommonsSeat,
+  type CommonsMemberRecord,
+  type CommonsGrantView,
+} from "./share/commons-lifecycle.js";
+export {
+  readCommonsCursor,
+  advanceCommonsCursor,
+  type CommonsCursor,
+} from "./share/commons-cursor.js";
+export {
+  commonsIntentBytes,
+  signCommonsIntent,
+  verifyCommonsIntent,
+  type CommonsMemberSignature,
+} from "./share/commons-signature.js";
+export {
+  exportCommonsBootstrap,
+  exportCommonsSyncFrame,
+  applyCommonsBootstrap,
+  applyCommonsTombstone,
+  queueCommonsInvitation,
+  createCommonsClaimInvitation,
+  claimCommonsInvitation,
+  listCommonsInvitations,
+  answerCommonsInvitation,
+  placeCommonsBootstrapBlobs,
+  type CommonsBootstrap,
+  type CommonsTombstone,
+  type CommonsSyncFrame,
+  type CommonsInvitationRecord,
+} from "./share/commons-bootstrap.js";
 // The LOCAL orphan reclaim (#599 d11): each vault unlinks only its own CAS
 // directory entries, so hardlinked bytes survive until the last vault lets go.
 export {
@@ -613,10 +689,7 @@ export {
 export {
   stampDerivation,
   stampedModel,
-  supersededTargets,
   type DerivationStamp,
-  type SupersededQuery,
-  type SupersededTarget,
 } from "./enrich/derivation.js";
 export {
   DEFAULT_ENRICHMENT_LEASE_TTL_MS,
@@ -738,6 +811,7 @@ export {
 } from "./gateway/portable-export.js";
 export type { ViewDefinition, ViewJoin, ViewResult } from "./gateway/views.js";
 export {
+  backupVault,
   checkpointVault,
   sha256File,
   type BackupResult,

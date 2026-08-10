@@ -64,6 +64,41 @@ describe(buildOverviewData, () => {
     expect(data.health.attention).toBe(0);
   });
 
+  it("excludes recognition recipes from member health and preserves their lane", () => {
+    const data = buildOverviewData(
+      [
+        row(),
+        row({
+          id: "photo-ocr",
+          ref: "photo-ocr/photo-ocr",
+          systemLane: "recognition",
+        }),
+      ],
+      [
+        entry(),
+        entry({
+          automationId: "photo-ocr/photo-ocr",
+          turnId: "ocr-run",
+          systemLane: "recognition",
+        }),
+      ]
+    );
+
+    expect(data.health).toStrictEqual({
+      active: 1,
+      attention: 0,
+      drafts: 0,
+      paused: 0,
+    });
+    expect(data.subtitle).toContain("1 recent runs");
+    expect(data.rows.find((item) => item.id === "photo-ocr")?.systemLane).toBe(
+      "recognition"
+    );
+    expect(data.runs.find((item) => item.runId === "ocr-run")?.systemLane).toBe(
+      "recognition"
+    );
+  });
+
   it("flags attention when the last run failed", () => {
     const data = buildOverviewData(
       [row()],

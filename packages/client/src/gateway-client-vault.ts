@@ -79,20 +79,6 @@ export interface AppScopeEntry {
    *  Supplied by the gateway, never derived client-side from a role. */
   canWrite: boolean;
   installed?: boolean;
-  /** Present only for a scope LENT to this owner (#726 P4 item 6) — mirrors
-   *  the gateway's `ScopeBorrowedInfo` verbatim. Absent for an owned vault. */
-  borrowed?: AppScopeBorrowed;
-}
-
-/** The lend-specific facts one borrowed scope row carries (#726 P4 item 6). */
-export interface AppScopeBorrowed {
-  edgeId: string;
-  originVaultId: string;
-  holderLabel: string;
-  itemType: string;
-  reachState: "offered" | "established" | "parked";
-  reason: string | null;
-  mounted: boolean;
 }
 
 /**
@@ -133,17 +119,6 @@ export async function listAppScopes(
   appId?: string
 ): Promise<AppScopeEntry[] | undefined> {
   return (await readAppScopePlane(appId))?.scopes;
-}
-
-/**
- * Just the LENT rows (#726 P4 item 6/P6) — every scope on this gateway that
- * is reaching the caller from someone else's vault, `[]` when the gateway
- * has no scopes plane. The "Shared with me" grouping's one data source, so
- * it never has to re-derive "borrowed" from `personal`/`canWrite` itself.
- */
-export async function listBorrowedScopes(): Promise<AppScopeEntry[]> {
-  const scopes = await listAppScopes();
-  return (scopes ?? []).filter((entry) => entry.borrowed !== undefined);
 }
 
 /** One scope of a grant or a manifest request: schema-wide or one table. */

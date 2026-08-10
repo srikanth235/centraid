@@ -18,20 +18,15 @@ export interface GatewayLink {
    *  `vaultA`. */
   labelA: string | null;
   labelB: string | null;
+  /** Party identities exchanged by the approved link ceremony. */
+  partyIdA?: string | null;
+  partyIdB?: string | null;
   approvedByA: boolean;
   approvedByB: boolean;
   approved: boolean;
   remoteVaultId: string | null;
   revoked: boolean;
   createdAt: string;
-}
-
-/** The caller's own borrow-budget setting for one link (#726 P6 gap 2). */
-export interface BorrowBudget {
-  linkId: string;
-  vaultId: string;
-  budgetBytes: number;
-  isDefault: boolean;
 }
 
 async function getJson<T>(baseUrl: string, path: string): Promise<T> {
@@ -91,39 +86,6 @@ export async function setReceiveSetting(
     throw new Error(`set receive setting failed (${response.status})`);
   const out = (await response.json()) as { setting: ReceiveSetting };
   return out.setting;
-}
-
-/** The caller's OWN per-link borrow budget (#726 P6 gap 2) — never the
- *  peer's, same one-side discipline as the receive setting above. */
-export async function getBorrowBudget(
-  baseUrl: string,
-  linkId: string
-): Promise<BorrowBudget> {
-  return getJson<BorrowBudget>(
-    baseUrl,
-    `${LINKS_PATH}/${encodeURIComponent(linkId)}/borrow-budget`
-  );
-}
-
-export async function setBorrowBudget(
-  baseUrl: string,
-  linkId: string,
-  budgetBytes: number
-): Promise<BorrowBudget> {
-  const response = await fetch(
-    new URL(
-      `${LINKS_PATH}/${encodeURIComponent(linkId)}/borrow-budget`,
-      baseUrl
-    ),
-    {
-      method: "PUT",
-      headers: { ...authHeader(), "content-type": "application/json" },
-      body: JSON.stringify({ budgetBytes }),
-    }
-  );
-  if (!response.ok)
-    throw new Error(`set borrow budget failed (${response.status})`);
-  return (await response.json()) as BorrowBudget;
 }
 
 /** A minted, pasteable/scannable ticket for a vault the caller owns

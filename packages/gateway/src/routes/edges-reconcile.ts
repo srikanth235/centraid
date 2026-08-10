@@ -25,7 +25,7 @@ import type { GatewayDatabase } from "../serve/gateway-db.js";
 import { recordShareAccessReceipt } from "../serve/share-access-receipts.js";
 
 export type EdgeKind = "add" | "move";
-export type EdgeMode = "snapshot" | "live";
+export type EdgeMode = "snapshot";
 export type EdgeStatus =
   | "queued"
   | "in-flight"
@@ -46,7 +46,7 @@ export interface EdgeRow {
   scope_json: string | null;
   origin_vault_id: string;
   audience_vault_id: string;
-  verbs: "read" | "read+act";
+  verbs: "read";
   target_item_ids_json: string | null;
   target_state: "queued" | "executed";
   source_state: "not-needed" | "queued" | "executed";

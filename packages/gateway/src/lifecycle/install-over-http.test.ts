@@ -14,6 +14,7 @@ import path from "node:path";
 
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
+import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import type { GatewayPaths } from "../paths.ts";
@@ -131,6 +132,179 @@ describe("install-over-http scenarios", () => {
       0
     );
     expect(scopeCount).toBeGreaterThan(0);
+  });
+
+  test("capture OCR enters the installed recipe and records service absence as a failed turn", async () => {
+    const ref = "photo-ocr/photo-ocr";
+    const enabled = await fetch(
+      `${handle.url}/centraid/_automations/set-enabled?ref=${encodeURIComponent(ref)}`,
+      {
+        method: "POST",
+        headers: jsonAuth(),
+        body: JSON.stringify({ enabled: true, publish: true }),
+      }
+    );
+    expect(enabled.status).toBe(200);
+
+    const capture = await fetch(`${handle.url}/centraid/_gateway/capture/ocr`, {
+      method: "POST",
+      headers: { ...auth(), "Content-Type": "image/jpeg" },
+      body: Buffer.from("not-a-real-image-the-service-is-absent"),
+    });
+    expect(capture.status).toBe(503);
+
+    const history = await fetch(
+      `${handle.url}/centraid/_automations/turns?ref=${encodeURIComponent(ref)}&limit=5`,
+      { headers: auth() }
+    );
+    expect(history.status).toBe(200);
+    const body = (await history.json()) as {
+      turns: Array<{ ok: boolean | null; error?: string }>;
+    };
+    expect(body.turns[0]).toMatchObject({ ok: false });
+    expect(body.turns[0]?.error).toContain("capture OCR unavailable");
+  });
+
+  test("mount manages stable recognition recipes without overwriting owner controls", async () => {
+    const response = await fetch(`${handle.url}/centraid/_automations`, {
+      headers: auth(),
+    });
+    expect(response.status).toBe(200);
+    const { rows } = (await response.json()) as {
+      rows: Array<{
+        ref: string;
+        enabled: boolean;
+        systemLane?: string;
+      }>;
+    };
+    for (const ref of [
+      "photo-ocr/photo-ocr",
+      "transcript/transcript",
+      "embed-image/embed-image",
+      "embed-text/embed-text",
+      "faces/faces",
+    ]) {
+      expect(rows.find((row) => row.ref === ref)).toMatchObject({
+        enabled: false,
+        systemLane: "recognition",
+      });
+    }
+
+    const versions = await fetch(
+      `${handle.url}/centraid/_apps/photo-ocr/git-versions`,
+      { headers: auth() }
+    );
+    expect(versions.status).toBe(200);
+    const body = (await versions.json()) as { versions: unknown[] };
+    expect(body.versions).toHaveLength(1);
+
+    await forEachSequentially(
+      [
+        {
+          path: "/centraid/_automations/compile?ref=photo-ocr%2Fphoto-ocr",
+          method: "POST",
+          body: {},
+        },
+        {
+          path: "/centraid/_automations/revise?ref=photo-ocr%2Fphoto-ocr",
+          method: "POST",
+          body: { message: "replace the shipped implementation" },
+        },
+        {
+          path: "/centraid/_automations/update?ref=photo-ocr%2Fphoto-ocr",
+          method: "POST",
+          body: { prompt: "replace the shipped instructions", publish: true },
+        },
+        {
+          path: "/centraid/_automations?ref=photo-ocr%2Fphoto-ocr&publish=true",
+          method: "DELETE",
+        },
+        {
+          path: "/centraid/_apps/photo-ocr",
+          method: "DELETE",
+        },
+        {
+          path: "/centraid/_apps/photo-ocr/meta",
+          method: "POST",
+          body: { name: "Shadow OCR", publish: true },
+        },
+      ],
+      async (mutation) => {
+        const blocked = await fetch(`${handle.url}${mutation.path}`, {
+          method: mutation.method,
+          headers: jsonAuth(),
+          ...(mutation.body === undefined
+            ? {}
+            : { body: JSON.stringify(mutation.body) }),
+        });
+        expect(blocked.status, mutation.path).toBe(403);
+        await expect(blocked.json()).resolves.toMatchObject({
+          error: "system_recipe_read_only",
+        });
+      }
+    );
+
+    const enabled = await fetch(
+      `${handle.url}/centraid/_automations/set-enabled?ref=photo-ocr%2Fphoto-ocr`,
+      {
+        method: "POST",
+        headers: jsonAuth(),
+        body: JSON.stringify({ enabled: true, publish: true }),
+      }
+    );
+    expect(enabled.status).toBe(200);
+    const configured = await fetch(
+      `${handle.url}/centraid/_automations/update?ref=photo-ocr%2Fphoto-ocr`,
+      {
+        method: "POST",
+        headers: jsonAuth(),
+        body: JSON.stringify({
+          model: "openai/gpt-4o-mini",
+          enrichVariant: "agent",
+          publish: true,
+        }),
+      }
+    );
+    expect(configured.status).toBe(200);
+    const configuredVersions = (await (
+      await fetch(`${handle.url}/centraid/_apps/photo-ocr/git-versions`, {
+        headers: auth(),
+      })
+    ).json()) as { versions: unknown[] };
+
+    await handle.close();
+    handle = await serve({ paths: pathsUnder(dataDir) });
+    const afterRestart = await fetch(
+      `${handle.url}/centraid/_apps/photo-ocr/git-versions`,
+      { headers: auth() }
+    );
+    const restartedBody = (await afterRestart.json()) as {
+      versions: unknown[];
+    };
+    expect(restartedBody.versions).toHaveLength(
+      configuredVersions.versions.length
+    );
+    const restartedRows = (await (
+      await fetch(`${handle.url}/centraid/_automations`, { headers: auth() })
+    ).json()) as {
+      rows: Array<{
+        ref: string;
+        enabled: boolean;
+        manifest: {
+          requires: { model?: string };
+          enrich?: { agentVariant?: { selected?: string } };
+        };
+      }>;
+    };
+    expect(
+      restartedRows.rows.find((row) => row.ref === "photo-ocr/photo-ocr")
+    ).toMatchObject({
+      enabled: true,
+      manifest: {
+        requires: { model: "openai/gpt-4o-mini" },
+        enrich: { agentVariant: { selected: "agent" } },
+      },
+    });
   });
 
   test("a mounted vault can seed its bundled apps — the demo plane reaches the shipped tree", async () => {

@@ -168,6 +168,11 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
     });
   if (path.startsWith("/centraid/_automations/turn-now"))
     return json({ turnId: "turn-1" });
+  if (path.startsWith("/centraid/_automations/invoke-and-await"))
+    return json({
+      turnId: "turn-awaited",
+      result: { turnId: "turn-awaited", outcome: { ok: true } },
+    });
   if (path.startsWith("/centraid/_automations/turns"))
     return json({
       turns: [{ turnId: "turn-1", startedAt: 1, endedAt: 2, ok: true }],

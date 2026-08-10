@@ -76,7 +76,6 @@ describe("enrich-search-routes", () => {
       dir,
       logger: silentLogger,
       ownerName: "Priya",
-      enrich: null,
     });
     cleanups.push(() => plane.stop());
 

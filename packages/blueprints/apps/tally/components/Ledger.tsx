@@ -29,7 +29,10 @@ function BalChip({ m, currency }: { m: Member; currency: string }) {
         color={m.color}
         initials={m.initials}
       />
-      <span>{text}</span>
+      <span>
+        {text}
+        {m.departed ? " · Departed" : ""}
+      </span>
     </span>
   );
 }

@@ -194,17 +194,11 @@ function appMatches(
   );
 }
 
-/**
- * Which grantee axis a consent row belongs to (#726 P4). A lent edge is
- * granted to a PARTY, so an app-id comparison would silently never fire and a
- * mask edit would never reach the audience as a shape change.
- */
 function grantMatches(
   db: DatabaseSync,
   access: ReplicaShapeAccess,
   row: Record<string, unknown> | undefined
 ): boolean {
-  if (access.grantee) return row?.grantee_party_id === access.grantee.partyId;
   return appMatches(db, access, row?.app_id);
 }
 
@@ -229,18 +223,6 @@ function shapeControlChange(
 ): boolean {
   const before = oldValues(change);
   if (change.entity === "core.concept") {
-    if (access.grantee) {
-      return (
-        preparedStatement(
-          db,
-          `SELECT 1 AS matched FROM consent_access_grant g
-            WHERE g.purpose_concept_id = ? AND g.grantee_party_id = ?
-              AND g.status = 'active' AND g.revoked_at IS NULL
-              AND (g.expires_at IS NULL OR g.expires_at > ?)
-            LIMIT 1`
-        ).get(change.rowId, access.grantee.partyId, now) !== undefined
-      );
-    }
     const restriction = access.appId ? ` AND (a.app_id = ? OR a.name = ?)` : "";
     return (
       preparedStatement(
@@ -268,8 +250,6 @@ function shapeControlChange(
     );
   }
   if (change.entity === "consent.app") {
-    // An app row cannot widen or narrow a vault grantee's shape.
-    if (access.grantee) return false;
     const after = currentRow(db, "consent_app", "app_id", change.rowId);
     return [before, after].some(
       (row) =>
@@ -304,7 +284,6 @@ function shapeControlChange(
     }
     return false;
   }
-  if (access.grantee) return false;
   let keyAppId: unknown;
   try {
     const key = JSON.parse(change.rowId) as unknown;

@@ -90,15 +90,6 @@ export const COMPONENT_PRESENTATION: Readonly<
     color: "var(--c-slate)",
     blurb: "Storage-connection records and the recovery-kit flag.",
   },
-  // The P4 storage line (#726 D4): what hosting other people's data costs
-  // THIS disk, named rather than folded into a total that reads as if it
-  // were all the owner's own.
-  borrowed: {
-    label: "Held for others",
-    color: "var(--c-rose)",
-    blurb:
-      "Rows and files other people have lent access to through this machine — not yours, not backed up, but on your disk.",
-  },
 });
 
 const COMPONENT_ORDER = Object.keys(
@@ -112,9 +103,8 @@ const COMPONENT_ORDER = Object.keys(
  * can report a component id shipped after this client was built, and
  * `readJson`'s cast does not validate against the union. Indexing
  * `COMPONENT_PRESENTATION` directly with such an id reads `undefined` and
- * throws on the next `.label`/`.color` access — the exact crash issue #726's
- * audit found on `"borrowed"` before this id existed here. Falling back to
- * the raw id as its own label keeps the real byte count on screen (never
+ * throws on the next `.label`/`.color` access. Falling back to the raw id as
+ * its own label keeps the real byte count on screen (never
  * dropped, never a thrown card) without inventing a name for something this
  * build cannot describe.
  */

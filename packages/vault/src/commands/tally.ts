@@ -89,7 +89,9 @@ function addCircleMember(
   const memberId = ctx.newId();
   ctx.db
     .prepare(
-      "INSERT INTO social_circle_member (member_id, circle_id, party_id, added_at) VALUES (?, ?, ?, ?)"
+      `INSERT INTO social_circle_member
+         (member_id, circle_id, party_id, added_at, capability)
+       VALUES (?, ?, ?, ?, 'read+write')`
     )
     .run(memberId, circleId, partyId, ctx.now);
   ctx.wrote("social.circle_member", memberId);

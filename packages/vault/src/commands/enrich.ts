@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#731) the typed enrichment command pack keeps OCR, transcript, embedding, face, and provenance validation in one derivative-write boundary.
 // The enrichment command pack (issue #299): the typed verbs the spine's
 // non-staged writes ride. Staged output (captions, tags, faces, albums,
 // filing) lands through `sync.stage_rows` + the enrich publishers; these
@@ -18,6 +19,8 @@
 //   - `enrich.request_enrichment` / `enrich.upsert_embedding`: the
 //     on-demand queue and the additive vector index (issue #299 phase 5).
 
+import { stampDerivation } from "../enrich/derivation.js";
+import { rebuildFaceClusters } from "../enrich/face-clusters.js";
 import { encodeVector } from "../enrich/similarity.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -36,6 +39,28 @@ const SET_EXTRACTED_TEXT: CommandDefinition = {
       content_id: { type: "string", minLength: 1 },
       text: { type: "string", minLength: 1 },
       variant: { type: "string", enum: ["text", "transcript"] },
+      capability: { type: "string", minLength: 1 },
+      model: { type: "string", minLength: 1 },
+      prompt_rev: { type: "string", minLength: 1 },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      regions: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["text"],
+          additionalProperties: false,
+          properties: {
+            text: { type: "string" },
+            box: {
+              type: "array",
+              minItems: 4,
+              maxItems: 4,
+              items: { type: "integer", minimum: 0 },
+            },
+            confidence: { type: "number", minimum: 0, maximum: 1 },
+          },
+        },
+      },
     },
   },
   outputSchema: {
@@ -75,13 +100,41 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
     content_id: string;
     text: string;
     variant?: "text" | "transcript";
+    capability?: string;
+    model?: string;
+    prompt_rev?: string;
+    confidence?: number;
+    regions?: Array<{
+      text: string;
+      box?: [number, number, number, number];
+      confidence?: number;
+    }>;
   };
-  return writeExtractedText(
+  const result = writeExtractedText(
     ctx,
     input.content_id,
     input.text,
     input.variant ?? "text"
   );
+  if (input.model && input.capability) {
+    stampDerivation(ctx.db, {
+      targetType: "core.content_item",
+      targetId: input.content_id,
+      variant: input.variant ?? "text",
+      capability: input.capability,
+      model: input.model,
+      payload: {
+        ...(input.prompt_rev ? { prompt_rev: input.prompt_rev } : {}),
+        ...(input.confidence === undefined
+          ? {}
+          : { confidence: input.confidence }),
+        ...(input.regions === undefined ? {} : { regions: input.regions }),
+      },
+      now: ctx.now,
+    });
+    ctx.wrote("enrich.derivation", input.content_id);
+  }
+  return result;
 }
 
 /** Shared canonical derivative writer for reviewed local OCR and enrichers. */
@@ -457,6 +510,7 @@ const UPSERT_EMBEDDING: CommandDefinition = {
         maxItems: MAX_EMBEDDING_DIM,
         items: { type: "number" },
       },
+      capability: { type: "string", enum: ["embed-image", "embed-text"] },
     },
   },
   outputSchema: {
@@ -483,6 +537,7 @@ const UPSERT_EMBEDDING: CommandDefinition = {
       entity_id: string;
       model: string;
       vector: number[];
+      capability?: "embed-image" | "embed-text";
     };
     const existing = ctx.db
       .prepare(
@@ -516,6 +571,17 @@ const UPSERT_EMBEDDING: CommandDefinition = {
         );
     }
     ctx.wrote("enrich.embedding", embeddingId);
+    if (input.capability) {
+      stampDerivation(ctx.db, {
+        targetType: input.entity_type,
+        targetId: input.entity_id,
+        variant: "embedding",
+        capability: input.capability,
+        model: input.model,
+        now: ctx.now,
+      });
+      ctx.wrote("enrich.derivation", input.entity_id);
+    }
     return { embedding_id: embeddingId, dim: input.vector.length };
   },
 };
@@ -564,6 +630,184 @@ const MARK_REQUESTS_DRAINED: CommandDefinition = {
   },
 };
 
+const REBUILD_FACE_CLUSTERS: CommandDefinition = {
+  name: "enrich.rebuild_face_clusters",
+  ownerSchema: "enrich",
+  inputSchema: { type: "object", additionalProperties: false, properties: {} },
+  outputSchema: {
+    type: "object",
+    required: ["matched", "clusters", "clustered", "updated"],
+    properties: {
+      matched: { type: "integer" },
+      clusters: { type: "integer" },
+      clustered: { type: "integer" },
+      updated: { type: "integer" },
+    },
+  },
+  preconditions: [],
+  postconditions: [],
+  idempotency: "retry-safe",
+  risk: "medium",
+  handler: (ctx) => {
+    const before = ctx.db
+      .prepare("SELECT region_id FROM media_face_cluster")
+      .all() as unknown as { region_id: string }[];
+    const result = rebuildFaceClusters(ctx.db, { now: ctx.now });
+    if (result.updated > 0) {
+      const after = ctx.db
+        .prepare("SELECT region_id FROM media_face_cluster")
+        .all() as unknown as { region_id: string }[];
+      for (const regionId of new Set(
+        [...before, ...after].map((row) => row.region_id)
+      )) {
+        ctx.wrote("media.face_cluster", regionId);
+      }
+    }
+    return {
+      matched: result.matched,
+      clusters: result.clusters,
+      clustered: result.clustered,
+      updated: result.updated,
+    };
+  },
+};
+
+const UPSERT_FACES: CommandDefinition = {
+  name: "enrich.upsert_faces",
+  ownerSchema: "enrich",
+  inputSchema: {
+    type: "object",
+    required: ["asset_id", "model", "faces"],
+    additionalProperties: false,
+    properties: {
+      asset_id: { type: "string", minLength: 1 },
+      model: { type: "string", minLength: 1 },
+      faces: {
+        type: "array",
+        maxItems: 100,
+        items: {
+          type: "object",
+          required: ["box", "confidence", "embedding"],
+          additionalProperties: false,
+          properties: {
+            box: {
+              type: "array",
+              minItems: 4,
+              maxItems: 4,
+              items: { type: "integer", minimum: 0 },
+            },
+            confidence: { type: "number", minimum: 0, maximum: 1 },
+            embedding: {
+              type: "array",
+              minItems: 1,
+              maxItems: MAX_EMBEDDING_DIM,
+              items: { type: "number" },
+            },
+          },
+        },
+      },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["regions"],
+    properties: { regions: { type: "integer" } },
+  },
+  preconditions: [
+    {
+      name: "asset_live",
+      sql: "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id AND deleted_at IS NULL",
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  postconditions: [],
+  idempotency: "retry-safe",
+  risk: "medium",
+  handler: (ctx) => {
+    const input = ctx.input as {
+      asset_id: string;
+      model: string;
+      faces: {
+        box: [number, number, number, number];
+        confidence: number;
+        embedding: number[];
+      }[];
+    };
+    const asset = ctx.db
+      .prepare("SELECT width, height FROM media_media_asset WHERE asset_id = ?")
+      .get(input.asset_id) as { width: number | null; height: number | null };
+    for (const face of input.faces) {
+      const [x, y, width, height] = face.box;
+      if (
+        width <= 0 ||
+        height <= 0 ||
+        (asset.width !== null && x + width > asset.width) ||
+        (asset.height !== null && y + height > asset.height)
+      )
+        throw new Error("face box lies outside the asset");
+      if (face.embedding.some((value) => !Number.isFinite(value)))
+        throw new Error("face embedding contains a non-finite value");
+    }
+    const proposed = ctx.db
+      .prepare(
+        "SELECT region_id FROM media_face_region WHERE asset_id = ? AND review_state = 'proposed'"
+      )
+      .all(input.asset_id) as unknown as { region_id: string }[];
+    for (const row of proposed) {
+      ctx.db
+        .prepare(
+          "DELETE FROM enrich_embedding WHERE target_type = 'media.face_region' AND target_id = ?"
+        )
+        .run(row.region_id);
+      ctx.db
+        .prepare("DELETE FROM media_face_region WHERE region_id = ?")
+        .run(row.region_id);
+      ctx.wrote("media.face_region", row.region_id);
+    }
+    for (const face of input.faces) {
+      const regionId = ctx.newId();
+      ctx.db
+        .prepare(
+          "INSERT INTO media_face_region (region_id, asset_id, bbox_json, confidence) VALUES (?, ?, ?, ?)"
+        )
+        .run(
+          regionId,
+          input.asset_id,
+          JSON.stringify(face.box),
+          face.confidence
+        );
+      const embeddingId = ctx.newId();
+      ctx.db
+        .prepare(
+          "INSERT INTO enrich_embedding (embedding_id, target_type, target_id, model, dim, vector, created_at) VALUES (?, 'media.face_region', ?, ?, ?, ?, ?)"
+        )
+        .run(
+          embeddingId,
+          regionId,
+          input.model,
+          face.embedding.length,
+          encodeVector(face.embedding),
+          ctx.now
+        );
+      ctx.wrote("media.face_region", regionId);
+      ctx.wrote("enrich.embedding", embeddingId);
+    }
+    stampDerivation(ctx.db, {
+      targetType: "media.media_asset",
+      targetId: input.asset_id,
+      variant: "faces",
+      capability: "faces",
+      model: input.model,
+      payload: { count: input.faces.length },
+      now: ctx.now,
+    });
+    ctx.wrote("enrich.derivation", input.asset_id);
+    return { regions: input.faces.length };
+  },
+};
+
 /** The vault owner's party — apps and device callers act as the owner. */
 function ownerPartyId(ctx: HandlerCtx): string {
   const owner = ctx.db
@@ -580,4 +824,6 @@ export function registerEnrichCommands(gateway: Gateway): void {
   gateway.registerCommand(REQUEST_ENRICHMENT);
   gateway.registerCommand(UPSERT_EMBEDDING);
   gateway.registerCommand(MARK_REQUESTS_DRAINED);
+  gateway.registerCommand(UPSERT_FACES);
+  gateway.registerCommand(REBUILD_FACE_CLUSTERS);
 }

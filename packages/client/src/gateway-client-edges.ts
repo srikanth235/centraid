@@ -1,9 +1,8 @@
 /*
- * Renderer-side client for the gateway's edge surface (#726 P2/P4 —
+ * Renderer-side client for snapshot edges and circle-backed commons (#731 —
  * `packages/gateway/src/routes/edges-routes.ts` and `edge-answer-routes.ts`).
- * An edge is either a snapshot (`mode: "snapshot"`, a GIVE — a copy, fixed
- * item set) or a live window (`mode: "live"`, a LEND — a standing scope, no
- * fixed items). Both ride the same `POST /centraid/_gateway/edges` door.
+ * An edge is a one-shot copy of a fixed item set. Ongoing co-owned sharing
+ * uses the commons route below.
  *
  *   GET  /centraid/_gateway/edges              — this DEVICE's own edges
  *   POST /centraid/_gateway/edges               {mode, kind, itemType, ...}
@@ -13,7 +12,7 @@
  *
  * This is the People panel's data source, independent of any one blueprint
  * app mount — a share is a fact about the household, not about Photos or
- * Tasks. `centraid-inline.ts`'s `place()`/`lend()` cover the SAME wire door
+ * Tasks. `centraid-inline.ts`'s `place()` covers the SAME wire door
  * from inside an app; this module exists because the People panel runs at
  * shell level, outside any app's `window.centraid`.
  */
@@ -27,8 +26,9 @@ import {
 } from "./gateway-client-core.js";
 
 const EDGES_PATH = "/centraid/_gateway/edges";
+const COMMONS_PATH = "/centraid/_gateway/commons";
 
-export type EdgeMode = "snapshot" | "live";
+export type EdgeMode = "snapshot";
 export type EdgeKind = "add" | "move";
 export type EdgeStatus =
   | "queued"
@@ -40,22 +40,13 @@ export type EdgeStatus =
   | "completed"
   | "failed";
 
-export interface LendScopeInput {
-  schema: string;
-  table?: string;
-  rowFilter?: Array<{ column: string; op: string; value?: unknown }>;
-  fieldMask?: string[];
-}
-
-/** One edge this device created, as the gateway's `share_edges` row answers
- *  it — a GIVE (mode `snapshot`) or a LEND (mode `live`) alike. */
+/** One snapshot edge this device created, as `share_edges` answers it. */
 export interface GatewayEdge {
   edgeId: string;
   kind: EdgeKind;
   mode: EdgeMode;
   itemType: string;
   itemIds?: string[];
-  scopes?: LendScopeInput[];
   originVaultId: string;
   audienceVaultId: string;
   verbs: string;
@@ -66,8 +57,7 @@ export interface GatewayEdge {
   updatedAt: string;
 }
 
-/** Every edge this DEVICE created (give or lend, any status) — the origin
- *  half of "who am I sharing with, and how". */
+/** Every snapshot edge this device created. */
 export async function listGatewayEdges(): Promise<GatewayEdge[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, EDGES_PATH, {
@@ -105,31 +95,93 @@ export async function giveEdge(input: {
   return readJson<GatewayEdge>(res, "give");
 }
 
-/** Lend (open a live window over) a scope to another vault. Revocable at any
- *  time by the origin ("stop lending" — never "take back": what has already
- *  been read cannot be un-seen). */
-export async function lendEdge(input: {
+export async function createCommons(input: {
   originVaultId: string;
-  audienceVaultId: string;
-  itemType: string;
-  scopes: LendScopeInput[];
-}): Promise<GatewayEdge> {
+  containerType: string;
+  containerId: string;
+  members: {
+    partyId?: string;
+    vaultId?: string;
+    capability: "read" | "read+write";
+  }[];
+  circleId?: string;
+  circleName?: string;
+}): Promise<Record<string, unknown>> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, EDGES_PATH, {
+  const res = await doFetch(baseUrl, COMMONS_PATH, {
     method: "POST",
     headers: authHeaders(token, "application/json"),
-    body: JSON.stringify({
-      edgeId: crypto.randomUUID(),
-      originVaultId: input.originVaultId,
-      audienceVaultId: input.audienceVaultId,
-      mode: "live",
-      kind: "add",
-      itemType: input.itemType,
-      scopes: input.scopes,
-      verbs: "read",
-    }),
+    body: JSON.stringify(input),
   });
-  return readJson<GatewayEdge>(res, "lend");
+  return readJson<Record<string, unknown>>(res, "share commons");
+}
+
+/** One ongoing Commons offer awaiting receiver consent. Domain rows are not
+ * projected until the receiver explicitly accepts it. */
+export interface CommonsInvitation {
+  invitationId: string;
+  grantId: string;
+  stewardVaultId: string;
+  memberVaultId: string;
+  currentSizeBytes: number;
+  status: "pending" | "accepted" | "refused";
+  createdAt: string;
+  answeredAt?: string;
+}
+
+export async function listCommonsInvitations(
+  actorVaultId: string
+): Promise<CommonsInvitation[]> {
+  const { baseUrl, token } = await auth();
+  const query = new URLSearchParams({ actorVaultId });
+  const res = await doFetch(
+    baseUrl,
+    `${COMMONS_PATH}/invitations?${query.toString()}`,
+    { method: "GET", headers: authHeaders(token) }
+  );
+  const out = await readJson<{ invitations: CommonsInvitation[] }>(
+    res,
+    "list commons invitations"
+  );
+  return out.invitations ?? [];
+}
+
+/** Redeem a one-time, user-carried claim into this owner's chosen vault. The
+ * raw token is sent once and is never retained by the client. */
+export async function claimCommonsInvitation(
+  actorVaultId: string,
+  stewardVaultId: string,
+  claimToken: string
+): Promise<{ claimed: boolean }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `${COMMONS_PATH}/invitations/claim`, {
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
+    body: JSON.stringify({ actorVaultId, stewardVaultId, claimToken }),
+  });
+  return readJson(res, "redeem commons invitation");
+}
+
+export async function answerCommonsInvitation(
+  invitationId: string,
+  actorVaultId: string,
+  answer: "accept" | "refuse"
+): Promise<CommonsInvitation> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(
+    baseUrl,
+    `${COMMONS_PATH}/invitations/${enc(invitationId)}/answer`,
+    {
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify({ actorVaultId, answer }),
+    }
+  );
+  const out = await readJson<{ invitation: CommonsInvitation }>(
+    res,
+    "answer commons invitation"
+  );
+  return out.invitation;
 }
 
 /** One give parked by the audience's D9 `ask` receive setting — nothing was
@@ -177,13 +229,8 @@ export async function answerPendingEdge(
 }
 
 /**
- * Close an edge by id — `DELETE /centraid/_gateway/edges/:edgeId` (#726 P6
- * gap 1). The gateway disambiguates the caller's side: the ORIGIN owner
- * reaches `closeLiveEdge` ("Stop lending" — never "take back": what the
- * audience already read cannot be un-seen, only the window can close), the
- * AUDIENCE owner reaches `dropBorrowedEdge` ("Stop borrowing" — the audience's
- * own local decision, needing no peer contact to take effect). One door, one
- * function; the caller only ever supplies the edge id.
+ * Ask the gateway whether an edge can be closed. Completed give copies answer
+ * with the receiver-owned refusal; commons revocation uses its grant surface.
  */
 export async function closeGatewayEdge(
   edgeId: string

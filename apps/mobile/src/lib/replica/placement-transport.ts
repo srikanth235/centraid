@@ -101,74 +101,176 @@ export async function postPlacement(
   return toPlacementRecord(body as EdgeWire, input);
 }
 
-/** A live-edge scope declaration — the same shape `consent_grant_scope`
- *  stores (`edges-routes.ts`'s `LendScope`). */
-export interface LendScopeInput {
-  schema: string;
-  table?: string;
-  rowFilter?: Array<{ column: string; op: string; value?: unknown }>;
-  fieldMask?: string[];
-}
-
-export interface LendIntent {
-  linkToken: string;
-  itemType: string;
-  scopes: readonly LendScopeInput[];
+export interface CommonsIntent {
+  containerType: string;
+  containerId: string;
   sourceVaultId: string;
-  targetVaultId: string;
+  members: readonly {
+    /** Required when the destination is a linked, unmounted peer. */
+    partyId?: string;
+    /** Absent while this is an invitation waiting for the person to join. */
+    vaultId?: string;
+    capability: "read" | "read+write";
+  }[];
+  circleId?: string;
 }
 
-export interface LendRecord {
-  linkToken: string;
-  status: PlacementRecord["status"];
-  reason?: string;
+export interface CommonsRecord {
+  grantId: string;
+  circleId: string;
+  state: "active" | "invited";
+  currentSizeBytes: number;
+  maxSizeBytes?: number | null;
+  claims: Array<{ partyId: string; claimToken: string }>;
 }
 
-/**
- * Open a live edge — a LEND, as opposed to `postPlacement`'s GIVE. Unlike
- * `place()`, lending is NOT queued through the durable placement outbox: a
- * live window is a real-time round trip with the origin's peer plane, not a
- * fixed set of bytes to replay later, so a caller offline gets an honest
- * failure instead of a silent queue entry (mirrors the web inline client's
- * `lend()` — "Lending needs a gateway connection").
- */
-export async function postLend(
+export interface CommonsInvitation {
+  invitationId: string;
+  grantId: string;
+  stewardVaultId: string;
+  memberVaultId: string;
+  currentSizeBytes: number;
+  status: "pending" | "accepted" | "refused";
+  createdAt: string;
+  answeredAt?: string;
+}
+
+export interface CommonsResident {
+  grantId: string;
+  itemType: string;
+  itemId: string;
+  originItemId: string;
+}
+
+export async function listCommonsResidents(
   baseUrl: string,
-  input: LendIntent
-): Promise<LendRecord> {
-  const response = await fetch(new URL(ROUTES.gatewayEdges, baseUrl), {
+  actorVaultId: string
+): Promise<CommonsResident[]> {
+  const query = new URLSearchParams({ actorVaultId });
+  const response = await fetch(
+    new URL(`${ROUTES.gatewayCommons}/resident?${query.toString()}`, baseUrl),
+    { headers: authHeader() }
+  );
+  if (!response.ok)
+    throw new Error(`list resident commons items failed (${response.status})`);
+  const out = (await response.json()) as { items?: CommonsResident[] };
+  return out.items ?? [];
+}
+
+export async function retainCommonsItem(
+  baseUrl: string,
+  input: { actorVaultId: string; itemType: string; itemId: string }
+): Promise<{ retained: boolean; grantIds: string[] }> {
+  const response = await fetch(
+    new URL(`${ROUTES.gatewayCommons}/retain`, baseUrl),
+    {
+      method: "POST",
+      headers: { ...authHeader(), "content-type": "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+  if (!response.ok)
+    throw new Error(`save commons item failed (${response.status})`);
+  return (await response.json()) as {
+    retained: boolean;
+    grantIds: string[];
+  };
+}
+
+export async function listCommonsInvitations(
+  baseUrl: string,
+  actorVaultId: string
+): Promise<CommonsInvitation[]> {
+  const query = new URLSearchParams({ actorVaultId });
+  const response = await fetch(
+    new URL(
+      `${ROUTES.gatewayCommons}/invitations?${query.toString()}`,
+      baseUrl
+    ),
+    { headers: authHeader() }
+  );
+  if (!response.ok)
+    throw new Error(`list commons invitations failed (${response.status})`);
+  const out = (await response.json()) as {
+    invitations: CommonsInvitation[];
+  };
+  return out.invitations ?? [];
+}
+
+/** Redeem an ephemeral one-time invite into the authenticated receiver's
+ * selected vault. The caller discards claimToken immediately after this call. */
+export async function claimCommonsInvitation(
+  baseUrl: string,
+  actorVaultId: string,
+  stewardVaultId: string,
+  claimToken: string
+): Promise<{ claimed: boolean }> {
+  const response = await fetch(
+    new URL(`${ROUTES.gatewayCommons}/invitations/claim`, baseUrl),
+    {
+      method: "POST",
+      headers: { ...authHeader(), "content-type": "application/json" },
+      body: JSON.stringify({ actorVaultId, stewardVaultId, claimToken }),
+    }
+  );
+  if (!response.ok)
+    throw new Error(`redeem commons invitation failed (${response.status})`);
+  return (await response.json()) as { claimed: boolean };
+}
+
+export async function answerCommonsInvitation(
+  baseUrl: string,
+  invitationId: string,
+  actorVaultId: string,
+  answer: "accept" | "refuse"
+): Promise<CommonsInvitation> {
+  const response = await fetch(
+    new URL(
+      `${ROUTES.gatewayCommons}/invitations/${encodeURIComponent(invitationId)}/answer`,
+      baseUrl
+    ),
+    {
+      method: "POST",
+      headers: { ...authHeader(), "content-type": "application/json" },
+      body: JSON.stringify({ actorVaultId, answer }),
+    }
+  );
+  if (!response.ok)
+    throw new Error(`answer commons invitation failed (${response.status})`);
+  const out = (await response.json()) as { invitation: CommonsInvitation };
+  return out.invitation;
+}
+
+/** Compile a shared container into each joined member's vault. */
+export async function postCommons(
+  baseUrl: string,
+  input: CommonsIntent
+): Promise<CommonsRecord> {
+  const response = await fetch(new URL("/centraid/_gateway/commons", baseUrl), {
     method: "POST",
     headers: {
       ...authHeader(),
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      edgeId: input.linkToken,
       originVaultId: input.sourceVaultId,
-      audienceVaultId: input.targetVaultId,
-      mode: "live",
-      kind: "add",
-      itemType: input.itemType,
-      scopes: input.scopes,
-      verbs: "read",
+      containerType: input.containerType,
+      containerId: input.containerId,
+      members: input.members,
+      ...(input.circleId ? { circleId: input.circleId } : {}),
     }),
   });
-  const body = (await response.json()) as EdgeWire | { message?: string };
+  const body = (await response.json()) as CommonsRecord | { message?: string };
   if (response.status >= 500) {
-    throw new Error(`Lend gateway unavailable (${response.status})`);
+    throw new Error(`Sharing gateway unavailable (${response.status})`);
   }
   if (!response.ok) {
     throw new PlacementSubmissionError(
       "message" in body && body.message
         ? body.message
-        : `Lend failed (${response.status})`,
+        : `Share failed (${response.status})`,
       response.status === 401 || response.status === 403 ? "denied" : "failed"
     );
   }
-  const edge = body as EdgeWire;
-  return {
-    linkToken: input.linkToken,
-    status: toPlacementStatus(edge.status),
-    ...(edge.reason ? { reason: edge.reason } : {}),
-  };
+  return body as CommonsRecord;
 }

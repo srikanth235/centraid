@@ -24,12 +24,12 @@ const PACKAGE_ROOT = path.dirname(
   require.resolve("@centraid/blueprints/package.json")
 );
 
-// The four photos-domain enrichers (photo-captioner, screenshot-extractor,
-// face-proposer, trip-albums) were deleted in issue #712: that work is
-// becoming the Photos app's own rather than four gateway-lane automations
-// taking a model turn over a member's photographs. Their behaviour suites
-// went with them.
 const ENRICHERS = [
+  "photo-ocr",
+  "transcript",
+  "embed-image",
+  "embed-text",
+  "faces",
   "doc-text-extractor",
   "doc-filer",
   "doc-entity-linker",
@@ -57,7 +57,13 @@ async function loadHandler(
 /** A recording stub ctx: canned reads/agent turns, captured invokes. */
 function stubCtx(options: {
   reads: Record<string, Record<string, unknown>[]>;
+  read?: (request: Record<string, unknown>) => Record<string, unknown>[];
   input?: unknown;
+  fetch?: (call: { url: string; method: string; body?: string }) => Promise<{
+    status: number;
+    headers: Record<string, string>;
+    text: string;
+  }>;
   agent?: (call: {
     prompt: string;
     json?: unknown;
@@ -74,8 +80,11 @@ function stubCtx(options: {
   const ctx = {
     now: "2099-01-01T00:00:00.000Z",
     vault: {
-      read: async (request: { entity: string }) => ({
-        rows: options.reads[request.entity] ?? [],
+      read: async (request: Record<string, unknown>) => ({
+        rows:
+          options.read?.(request) ??
+          options.reads[String(request.entity)] ??
+          [],
         receiptId: "r",
       }),
       invoke: async (request: {
@@ -103,6 +112,8 @@ function stubCtx(options: {
       delete: async (k: string) => void state.delete(k),
     },
     runs: { last: async () => undefined, list: async () => [] },
+    fetch:
+      options.fetch ?? (async () => ({ status: 200, headers: {}, text: "{}" })),
     input: options.input as never,
   };
   const log = {
@@ -124,9 +135,21 @@ describe("enricher template hygiene", () => {
       expect(manifest.vault).toBeDefined();
       const wantKind = CONDITION_ENRICHERS.has(id) ? "condition" : "data";
       expect(manifest.triggers.some((t) => t.kind === wantKind)).toBe(true);
-      expect(manifest.connector).toBeUndefined(); // enrichers use ctx.agent — connectors forbid it
+      expect(manifest.connector).toBeUndefined();
     }
   );
+
+  it.each([
+    ["photo-ocr", true],
+    ["embed-image", false],
+    ["embed-text", false],
+    ["faces", false],
+  ] as const)("%s declares its agent variant honestly", (id, expected) => {
+    const manifest = parseManifest(
+      readFileSync(path.join(automationDir(id), "automation.json"), "utf8")
+    );
+    expect(manifest.enrich?.agentVariant !== undefined).toBe(expected);
+  });
 
   it.each(ENRICHERS.map((id) => [id] as const))(
     "%s: handler passes the determinism lint",
@@ -138,6 +161,348 @@ describe("enricher template hygiene", () => {
       expect(lintHandlerSource(source)).toStrictEqual([]);
     }
   );
+});
+
+describe("photo-ocr capture behavior", () => {
+  it("uses the deterministic fetch rail and returns reading-order text", async () => {
+    const handler = await loadHandler("photo-ocr");
+    const calls: Array<{ url: string; method: string; body?: string }> = [];
+    const harness = stubCtx({
+      reads: {},
+      input: {
+        capture: { bytes: "cmVjZWlwdA==", mediaType: "image/jpeg" },
+      },
+      fetch: async (call) => {
+        calls.push(call);
+        return {
+          status: 200,
+          headers: { "content-type": "application/json" },
+          text: JSON.stringify({
+            status: "ok",
+            model: "fake-ocr@1",
+            results: [
+              {
+                id: "capture",
+                regions: [
+                  { text: "42", box: [20, 10, 2, 2], confidence: 0.6 },
+                  { text: "Total", box: [0, 0, 8, 2], confidence: 0.8 },
+                ],
+              },
+            ],
+          }),
+        };
+      },
+    });
+
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      output: { text: string; confidence?: number; model: string };
+    };
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      url: "centraid://enrichment/ocr",
+      method: "POST",
+    });
+    expect(JSON.parse(calls[0]!.body ?? "{}")).toStrictEqual({
+      items: [
+        {
+          id: "capture",
+          bytes: "cmVjZWlwdA==",
+          mediaType: "image/jpeg",
+        },
+      ],
+    });
+    expect(result.output).toStrictEqual({
+      text: "Total\n42",
+      confidence: 0.7,
+      engine: "enrichment-service",
+      model: "fake-ocr@1",
+    });
+    expect(harness.invokes).toHaveLength(0);
+  });
+
+  it("throws on capture service absence so the automation ledger records failure", async () => {
+    const handler = await loadHandler("photo-ocr");
+    const harness = stubCtx({
+      reads: {},
+      input: {
+        capture: { bytes: "cmVjZWlwdA==", mediaType: "image/jpeg" },
+      },
+      fetch: async () => ({
+        status: 200,
+        headers: { "content-type": "application/json" },
+        text: JSON.stringify({
+          status: "unavailable",
+          reason: "not configured",
+        }),
+      }),
+    });
+
+    await expect(
+      handler({ ctx: harness.ctx, log: harness.log })
+    ).rejects.toThrow("capture OCR unavailable: not configured");
+  });
+});
+
+describe("recognition automation spine", () => {
+  const asset = {
+    asset_id: "a1",
+    content_id: "c1",
+    kind: "photo",
+    width: 100,
+    height: 80,
+  };
+
+  it("writes deterministic OCR through the validated text command and re-arms a full batch", async () => {
+    const handler = await loadHandler("photo-ocr");
+    const assets = Array.from({ length: 16 }, (_, index) => ({
+      ...asset,
+      asset_id: `a${String(index + 1).padStart(2, "0")}`,
+      content_id: `c${index + 1}`,
+    }));
+    const harness = stubCtx({
+      reads: {},
+      read: (request) => {
+        if (request.entity === "media.media_asset") {
+          return (request.orderBy as { dir?: string })?.dir === "desc"
+            ? [assets.at(-1)!]
+            : assets;
+        }
+        return [];
+      },
+      fetch: async (call) => ({
+        status: 200,
+        headers: {},
+        text:
+          call.method === "GET"
+            ? JSON.stringify({ status: "ok", model: "ocr@1" })
+            : JSON.stringify({
+                status: "ok",
+                model: "ocr@1",
+                results: [{ regions: [{ text: "Total", box: [1, 2, 3, 4] }] }],
+              }),
+      }),
+    });
+
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      output: { rearm: boolean };
+    };
+    expect(harness.invokes).toHaveLength(16);
+    expect(harness.invokes[0]).toMatchObject({
+      command: "core.set_extracted_text",
+      input: {
+        text: "Total",
+        capability: "ocr",
+        model: "ocr@1",
+        regions: [{ text: "Total", box: [1, 2, 3, 4] }],
+      },
+    });
+    expect(result.output.rearm).toBe(true);
+    expect(harness.state.get("cursor")).toBe("a16");
+  });
+
+  it("seeds OCR from an existing current-model stamp without a billed/service derivation", async () => {
+    const handler = await loadHandler("photo-ocr");
+    let posts = 0;
+    const harness = stubCtx({
+      reads: {},
+      read: (request) => {
+        if (request.entity === "media.media_asset") {
+          return (request.orderBy as { dir?: string })?.dir === "desc"
+            ? [asset]
+            : [];
+        }
+        if (request.entity === "enrich.derivation")
+          return [{ model: "ocr@1", target_id: "c1" }];
+        return [];
+      },
+      fetch: async (call) => {
+        if (call.method === "POST") posts += 1;
+        return {
+          status: 200,
+          headers: {},
+          text: JSON.stringify({ status: "ok", model: "ocr@1" }),
+        };
+      },
+    });
+    await handler({ ctx: harness.ctx, log: harness.log });
+    expect(harness.state.get("cursor")).toBe("a1");
+    expect(posts).toBe(0);
+    expect(harness.invokes).toHaveLength(0);
+  });
+
+  it("coerces agent OCR text without grounding, strips invalid boxes, and stamps only ACP identity", async () => {
+    const handler = await loadHandler("photo-ocr");
+    const harness = stubCtx({
+      reads: {},
+      input: { variant: "agent", agentModel: "owner/pin" },
+      read: (request) =>
+        request.entity === "media.media_asset" ? [asset] : [],
+      agent: () => ({
+        __centraidModel: "acp-confirmed@7",
+        regions: [
+          { text: "Unboxed" },
+          { text: "Outside", box: [99, 79, 4, 4] },
+          { text: "Typed strictly", box: ["1", 2, 3, 4] },
+        ],
+      }),
+    });
+    await handler({ ctx: harness.ctx, log: harness.log });
+    expect(harness.invokes[0]).toMatchObject({
+      command: "core.set_extracted_text",
+      input: {
+        text: "Unboxed\nOutside\nTyped strictly",
+        model: "acp-confirmed@7",
+        prompt_rev: "ocr-v1",
+        regions: [
+          { text: "Unboxed" },
+          { text: "Outside" },
+          { text: "Typed strictly" },
+        ],
+      },
+    });
+    expect(harness.invokes[0]?.input).not.toHaveProperty("confidence");
+  });
+
+  it("transcribes original audio and both embedding recipes use their typed vector command", async () => {
+    const transcript = await loadHandler("transcript");
+    const transcriptHarness = stubCtx({
+      reads: {},
+      read: (request) =>
+        request.entity === "media.media_asset"
+          ? [{ ...asset, kind: "audio" }]
+          : [],
+      fetch: async (call) => ({
+        status: 200,
+        headers: {},
+        text:
+          call.method === "GET"
+            ? JSON.stringify({ status: "ok", model: "whisper@1" })
+            : JSON.stringify({
+                status: "ok",
+                model: "whisper@1",
+                results: [{ text: "hello" }],
+              }),
+      }),
+    });
+    await transcript({
+      ctx: transcriptHarness.ctx,
+      log: transcriptHarness.log,
+    });
+    expect(transcriptHarness.invokes[0]).toMatchObject({
+      command: "core.set_extracted_text",
+      input: { variant: "transcript", model: "whisper@1" },
+    });
+
+    await Promise.all(
+      (
+        [
+          ["embed-image", asset],
+          [
+            "embed-text",
+            { derivative_id: "d1", content_id: "c1", variant: "text" },
+          ],
+        ] as const
+      ).map(async ([id, row]) => {
+        const embed = await loadHandler(id);
+        const harness = stubCtx({
+          reads: {},
+          read: (request) =>
+            request.entity ===
+            (id === "embed-image"
+              ? "media.media_asset"
+              : "core.content_derivative")
+              ? [row]
+              : [],
+          fetch: async (call) => ({
+            status: 200,
+            headers: {},
+            text:
+              call.method === "GET"
+                ? JSON.stringify({ status: "ok", model: `${id}@1` })
+                : JSON.stringify({
+                    status: "ok",
+                    model: `${id}@1`,
+                    results: [{ vector: [0.1, 0.2] }],
+                  }),
+          }),
+        });
+        await embed({ ctx: harness.ctx, log: harness.log });
+        expect(harness.invokes[0]?.command).toBe("enrich.upsert_embedding");
+        expect(harness.invokes[0]?.input).toMatchObject({
+          model: `${id}@1`,
+          vector: [0.1, 0.2],
+        });
+      })
+    );
+  });
+
+  it("faces accepts capability-scoped per-item consent and prior stamps on a model bump", async () => {
+    const handler = await loadHandler("faces");
+    const harness = stubCtx({
+      reads: {},
+      read: (request) => {
+        if (request.entity === "enrich.request")
+          return [{ request_id: "r1", target_id: "a1", capability: "faces" }];
+        if (request.entity === "media.media_asset") return [asset];
+        if (request.entity === "enrich.derivation")
+          return [{ target_id: "a1", model: "faces@old", variant: "faces" }];
+        return [];
+      },
+      fetch: async (call) => ({
+        status: 200,
+        headers: {},
+        text:
+          call.method === "GET"
+            ? JSON.stringify({ status: "ok", model: "faces@2" })
+            : JSON.stringify({
+                status: "ok",
+                model: "faces@2",
+                results: [{ faces: [] }],
+              }),
+      }),
+    });
+    harness.state.set("model", "faces@old");
+    await handler({ ctx: harness.ctx, log: harness.log });
+    expect(harness.invokes.map((entry) => entry.command)).toStrictEqual([
+      "enrich.upsert_faces",
+      "enrich.mark_requests_drained",
+      "enrich.rebuild_face_clusters",
+    ]);
+  });
+
+  it("faces drains a target-less request as a bounded vault-wide consent walk", async () => {
+    const handler = await loadHandler("faces");
+    const harness = stubCtx({
+      reads: {},
+      read: (request) => {
+        if (request.entity === "enrich.request")
+          return [
+            { request_id: "vault-wide", target_id: null, capability: "faces" },
+          ];
+        if (request.entity === "media.media_asset") return [asset];
+        return [];
+      },
+      fetch: async (call) => ({
+        status: 200,
+        headers: {},
+        text:
+          call.method === "GET"
+            ? JSON.stringify({ status: "ok", model: "faces@2" })
+            : JSON.stringify({
+                status: "ok",
+                model: "faces@2",
+                results: [{ faces: [] }],
+              }),
+      }),
+    });
+    await handler({ ctx: harness.ctx, log: harness.log });
+    expect(harness.invokes).toContainEqual({
+      command: "enrich.mark_requests_drained",
+      input: { request_ids: ["vault-wide"] },
+    });
+    expect(harness.state.get("requestCursor:vault-wide")).toBe("a1");
+  });
 });
 
 describe("doc-text-extractor behavior", () => {

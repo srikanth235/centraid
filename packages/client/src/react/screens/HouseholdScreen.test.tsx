@@ -4,6 +4,8 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { encodeCommonsInvite } from "@centraid/blueprints/apps/_shared/commons-invite";
+
 // The renderer guarantees the preload bridge before any script runs, and the
 // gateway client registers its gateway-change listener at module load. This
 // screen now reaches that client through the sharing card, so the bridge has
@@ -75,6 +77,123 @@ describe("HouseholdScreen suite", () => {
   }
 
   describe(HouseholdScreen, () => {
+    it("shows receiver Commons offers with size and explicit Accept/Refuse", async () => {
+      const onAnswerCommonsInvitation = vi.fn<
+        (
+          invitationId: string,
+          memberVaultId: string,
+          answer: "accept" | "refuse"
+        ) => Promise<unknown>
+      >(async () => ({}));
+      const el = await mount({
+        sharing: {
+          now: NOW,
+          ownVaultIds: ["v1"],
+          loadLinks: async () => [],
+          onProposeLink: async () => {
+            throw new Error("not used");
+          },
+          onApproveLink: async () => {
+            throw new Error("not used");
+          },
+          loadReceiveSetting: async () => "ask",
+          onSetReceiveSetting: async (_id, setting) => setting,
+          loadEdges: async () => [],
+          loadPending: async () => [],
+          onAnswerPending: async () => ({}),
+          loadCommonsInvitations: async () => [
+            {
+              invitationId: "invite-1",
+              grantId: "grant-1",
+              stewardVaultId: "other-vault",
+              memberVaultId: "v1",
+              currentSizeBytes: 4096,
+              status: "pending",
+              createdAt: "2026-08-10T00:00:00.000Z",
+            },
+          ],
+          onClaimCommonsInvitation: async () => ({}),
+          onAnswerCommonsInvitation,
+        },
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(el.textContent).toContain("Shared spaces offered to you");
+      expect(el.textContent).toContain("4.0 KB now");
+      const accept = [...el.querySelectorAll("button")].find(
+        (button) => button.textContent === "Accept"
+      );
+      const refuse = [...el.querySelectorAll("button")].find(
+        (button) => button.textContent === "Refuse"
+      );
+      expect(accept).toBeDefined();
+      expect(refuse).toBeDefined();
+      await act(async () => accept?.click());
+      expect(onAnswerCommonsInvitation).toHaveBeenCalledWith(
+        "invite-1",
+        "v1",
+        "accept"
+      );
+    });
+
+    it("redeems a pasted one-time Commons invite into the selected vault", async () => {
+      const onClaimCommonsInvitation = vi.fn<
+        (
+          actorVaultId: string,
+          stewardVaultId: string,
+          claimToken: string
+        ) => Promise<unknown>
+      >(async () => ({}));
+      const el = await mount({
+        sharing: {
+          now: NOW,
+          ownVaultIds: ["v1"],
+          loadLinks: async () => [],
+          onProposeLink: async () => {
+            throw new Error("not used");
+          },
+          onApproveLink: async () => {
+            throw new Error("not used");
+          },
+          loadReceiveSetting: async () => "ask",
+          onSetReceiveSetting: async (_id, setting) => setting,
+          loadEdges: async () => [],
+          loadPending: async () => [],
+          onAnswerPending: async () => ({}),
+          loadCommonsInvitations: async () => [],
+          onClaimCommonsInvitation,
+          onAnswerCommonsInvitation: async () => ({}),
+        },
+      });
+      const input = el.querySelector(
+        'input[aria-label="Shared-space invitation"]'
+      ) as HTMLInputElement;
+      const code = encodeCommonsInvite({
+        stewardVaultId: "vault-steward",
+        claimToken: "one-time-secret",
+      });
+      await act(async () => {
+        const setter = Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value"
+        )?.set;
+        setter?.call(input, code);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      const redeem = [...el.querySelectorAll("button")].find(
+        (button) => button.textContent === "Redeem"
+      );
+      await act(async () => redeem?.click());
+
+      expect(onClaimCommonsInvitation).toHaveBeenCalledWith(
+        "v1",
+        "vault-steward",
+        "one-time-secret"
+      );
+      expect(input.value).toBe("");
+    });
+
     it("leads with people and devices, then the vaults they can reach", async () => {
       const el = await mount();
       const text = el.textContent ?? "";

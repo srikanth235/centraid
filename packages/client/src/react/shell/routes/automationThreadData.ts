@@ -311,6 +311,20 @@ export async function loadAutomationThreadData(input: {
       ),
       header,
       plan: buildPlanStatus(compiles, executions.length > 0),
+      ...(row.manifest.enrich?.agentVariant
+        ? {
+            recognition: {
+              capability: row.manifest.enrich.capability,
+              selected: row.manifest.enrich.agentVariant.selected,
+              deterministicLabel: "Deterministic service",
+              agent: {
+                model: row.manifest.requires.model ?? null,
+                latency: row.manifest.enrich.agentVariant.latency,
+                consequence: row.manifest.enrich.agentVariant.consequence,
+              },
+            },
+          }
+        : {}),
       runs: threadTurns
         .slice()
         .sort((a, b) => b.startedAt - a.startedAt)

@@ -49,6 +49,10 @@ import {
 import { useTheme } from "../../kit/theme";
 import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
 import { optimisticValues } from "../../lib/replica/optimistic";
+import {
+  listCommonsResidents,
+  retainCommonsItem,
+} from "../../lib/replica/placement-transport";
 import type { PhotosScreenProps } from "../../navigation";
 import { InCloudOriginalError } from "./device-media";
 import { buildDismissGesture } from "./lightbox-gestures";
@@ -200,6 +204,34 @@ export default function PhotoLightbox({
   const currentScope = scopes.find(
     (scope) => scope.vaultId === current?.sourceVaultId
   );
+  const [residentAssetId, setResidentAssetId] = useState<string>();
+  const commonsResident = Boolean(
+    current?.assetId && residentAssetId === current.assetId
+  );
+  useEffect(() => {
+    let active = true;
+    const actorVaultId = current?.sourceVaultId;
+    const itemId = current?.assetId;
+    if (!gatewayBase || !actorVaultId || !itemId) return;
+    void listCommonsResidents(gatewayBase, actorVaultId)
+      .then((items) => {
+        if (active)
+          setResidentAssetId(
+            items.some(
+              (item) =>
+                item.itemType === "media.media_asset" && item.itemId === itemId
+            )
+              ? itemId
+              : undefined
+          );
+      })
+      .catch(() => {
+        if (active) setResidentAssetId(undefined);
+      });
+    return () => {
+      active = false;
+    };
+  }, [current?.assetId, current?.sourceVaultId, gatewayBase]);
   const openInfo = useCallback(() => setInfoOpen(true), []);
   const dismiss = buildDismissGesture(navigation.goBack, openInfo);
   // Hoisted so paging does not hand the list a fresh renderer — and therefore a
@@ -309,6 +341,23 @@ export default function PhotoLightbox({
           : "Placement complete — the photo is now available in both vaults."
         : "Placement queued — it will resume when the gateway is reachable."
     );
+  };
+
+  const saveToMyVault = async (): Promise<void> => {
+    const actorVaultId = current?.sourceVaultId;
+    if (!gatewayBase || !current?.assetId || !actorVaultId || !commonsResident)
+      return;
+    try {
+      await retainCommonsItem(gatewayBase, {
+        actorVaultId,
+        itemType: "media.media_asset",
+        itemId: current.assetId,
+      });
+      setResidentAssetId(undefined);
+      postStatus("Saved to my vault. This copy survives if the share ends.");
+    } catch (error) {
+      surfaceWriteFailure(error, "Photo not saved to your vault");
+    }
   };
 
   /**
@@ -706,6 +755,9 @@ export default function PhotoLightbox({
                 onEdit={() => setEditing(true)}
                 onInfo={openInfo}
                 onPlacement={setPlacementKind}
+                {...(commonsResident
+                  ? { onSaveToMyVault: () => void saveToMyVault() }
+                  : {})}
                 onWrite={write}
               />
             </View>

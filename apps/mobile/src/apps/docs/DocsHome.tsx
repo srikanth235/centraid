@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#731) Docs home owns the folder-follow/share/Save surface and its local query state; splitting the acceptance-critical actions would duplicate the resident/Commons invariants.
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import * as Haptics from "expo-haptics";
@@ -19,8 +20,13 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import ShareSheet from "../../kit/share/ShareSheet";
 import { useTheme } from "../../kit/theme";
 import { optimisticRowId } from "../../lib/replica/optimistic";
+import {
+  listCommonsResidents,
+  retainCommonsItem,
+} from "../../lib/replica/placement-transport";
 import { backupDocument } from "../../lib/upload/media-producer";
 import type { DocsScreenProps } from "../../navigation";
 import { countLocalOnly, DOCS_CUSTODY_SHELF_SUFFIX } from "./docs-custody";
@@ -68,6 +74,7 @@ export default function DocsHome({
   const [folderName, setFolderName] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [selectedItem, setSelectedItem] = useState<DriveItem>();
+  const [shareOpen, setShareOpen] = useState(false);
   const refreshLibrary = async (): Promise<void> => {
     setRefreshing(true);
     try {
@@ -207,6 +214,50 @@ export default function DocsHome({
   const parent = folderId
     ? drive.folders.find((folder) => folder.id === folderId)
     : undefined;
+  const parentActorVaultId = parent?.sourceVaultId ?? vaultId;
+  const parentItemId = parent?.rawId ?? parent?.id;
+  const [residentFolderId, setResidentFolderId] = useState<string>();
+  const commonsFolder = Boolean(
+    parentItemId && residentFolderId === parentItemId
+  );
+  useEffect(() => {
+    let active = true;
+    if (!gatewayBase || !parentActorVaultId || !parentItemId) return;
+    void listCommonsResidents(gatewayBase, parentActorVaultId)
+      .then((residentItems) => {
+        if (active)
+          setResidentFolderId(
+            residentItems.some(
+              (item) =>
+                item.itemType === "docs.folder" && item.itemId === parentItemId
+            )
+              ? parentItemId
+              : undefined
+          );
+      })
+      .catch(() => {
+        if (active) setResidentFolderId(undefined);
+      });
+    return () => {
+      active = false;
+    };
+  }, [gatewayBase, parentActorVaultId, parentItemId]);
+
+  const saveFolderToMyVault = async (): Promise<void> => {
+    if (!gatewayBase || !parentActorVaultId || !parentItemId || !commonsFolder)
+      return;
+    try {
+      await retainCommonsItem(gatewayBase, {
+        actorVaultId: parentActorVaultId,
+        itemType: "docs.folder",
+        itemId: parentItemId,
+      });
+      setResidentFolderId(undefined);
+      postStatus("Saved to my vault. This copy survives if the share ends.");
+    } catch (error) {
+      surfaceWriteFailure(error, "Folder not saved to your vault");
+    }
+  };
 
   const pick = async (): Promise<void> => {
     setAddOpen(false);
@@ -341,12 +392,31 @@ export default function DocsHome({
             Private document library
           </Text>
         </View>
-        <Pressable
-          accessibilityLabel="Add document or folder"
-          onPress={() => setAddOpen(true)}
-        >
-          <Icon name="plus" size={24} color={colors.accent} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          {parent ? (
+            <Pressable
+              accessibilityLabel={
+                commonsFolder ? "Save to my vault" : "Share folder"
+              }
+              accessibilityRole="button"
+              onPress={() =>
+                commonsFolder ? void saveFolderToMyVault() : setShareOpen(true)
+              }
+              style={styles.shareFolder}
+            >
+              <Icon name="share" size={17} color={colors.accent} />
+              <Text style={[styles.shareFolderText, { color: colors.accent }]}>
+                {commonsFolder ? "Save to my vault" : "Share folder"}
+              </Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityLabel="Add document or folder"
+            onPress={() => setAddOpen(true)}
+          >
+            <Icon name="plus" size={24} color={colors.accent} />
+          </Pressable>
+        </View>
       </View>
       <ReplicaStatusBar />
 
@@ -604,6 +674,16 @@ export default function DocsHome({
           navigation.navigate("Settings", { screen: "Approvals" })
         }
         onChanged={refreshLibrary}
+      />
+      <ShareSheet
+        visible={shareOpen}
+        onClose={() => setShareOpen(false)}
+        sourceVaultId={parent?.sourceVaultId ?? vaultId ?? ""}
+        noun={parent?.name ?? "Folder"}
+        itemType="docs.folder"
+        itemIds={parent ? [parent.rawId ?? parent.id] : []}
+        appLabel="Docs"
+        onDone={(outcome) => postStatus(outcome.message)}
       />
     </TopSafeArea>
   );

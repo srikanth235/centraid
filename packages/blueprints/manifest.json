@@ -1225,6 +1225,7 @@
         "components/ExpenseUndo.tsx",
         "components/FriendModal.tsx",
         "components/GroupManager.module.css",
+        "components/GroupManager.test.tsx",
         "components/GroupManager.tsx",
         "components/GroupModal.module.css",
         "components/GroupModal.tsx",
@@ -1241,11 +1242,13 @@
         "format.ts",
         "icons.ts",
         "index.html",
+        "logic-commons.test.ts",
         "logic.ts",
         "package.json",
         "queries/activity.ts",
         "queries/dashboard.ts",
         "queries/friend.ts",
+        "queries/group-departed.test.ts",
         "queries/group.ts",
         "queries/history.ts",
         "queries/search.ts",
@@ -1759,6 +1762,101 @@
         "app.json",
         "automations/slack-pull/automation.json",
         "automations/slack-pull/handler.js"
+      ]
+    },
+    {
+      "id": "photo-ocr",
+      "name": "Photo OCR",
+      "desc": "Makes text in photographs searchable through deterministic OCR, with an optional billed agent variant.",
+      "colorKey": "amber",
+      "iconKey": "Search",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🔎",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When photographs arrive",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/photo-ocr/automation.json",
+        "automations/photo-ocr/handler.js"
+      ]
+    },
+    {
+      "id": "transcript",
+      "name": "Transcription",
+      "desc": "Makes speech in audio and video searchable through the configured deterministic transcription service.",
+      "colorKey": "purple",
+      "iconKey": "Music",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🎙️",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When audio or video arrives",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/transcript/automation.json",
+        "automations/transcript/handler.js"
+      ]
+    },
+    {
+      "id": "embed-image",
+      "name": "Image embeddings",
+      "desc": "Builds deterministic visual embeddings from bounded preview derivatives for semantic search.",
+      "colorKey": "indigo",
+      "iconKey": "Image",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🖼️",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When photographs arrive",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/embed-image/automation.json",
+        "automations/embed-image/handler.js"
+      ]
+    },
+    {
+      "id": "embed-text",
+      "name": "Text embeddings",
+      "desc": "Builds deterministic embeddings for extracted text and transcripts so semantic search stays model-versioned.",
+      "colorKey": "teal",
+      "iconKey": "Book",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🔤",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When extracted text arrives",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/embed-text/automation.json",
+        "automations/embed-text/handler.js"
+      ]
+    },
+    {
+      "id": "faces",
+      "name": "Face recognition",
+      "desc": "Detects face regions from photograph previews and stages them in the reviewable face queue.",
+      "colorKey": "rose",
+      "iconKey": "Users",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🙂",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When photographs arrive",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/faces/automation.json",
+        "automations/faces/handler.js"
       ]
     },
     {

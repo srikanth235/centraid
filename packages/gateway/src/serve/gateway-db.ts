@@ -16,6 +16,7 @@ import type { SQLInputValue } from "node:sqlite";
 import {
   installGatewaySchema,
   migrateLegacyMembers,
+  migrateRetiredLending,
   migrateSupersededLinks,
 } from "./gateway-schema.js";
 
@@ -84,6 +85,7 @@ export class GatewayDatabase {
         db.exec("PRAGMA journal_mode = DELETE;");
         migrateLegacyMembers(db);
         migrateSupersededLinks(db);
+        migrateRetiredLending(db);
         installGatewaySchema(db);
         chmodSync(file, 0o600);
       }

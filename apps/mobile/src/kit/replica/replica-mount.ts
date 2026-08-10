@@ -15,10 +15,7 @@ import type {
 } from "@centraid/client/replica/native";
 
 import { authHeader, resolveGatewayBase } from "../../lib/gateway";
-import type {
-  MountedReplicaScope,
-  MountedScopeBorrowed,
-} from "../../lib/replica/multi-vault-reader";
+import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
 import { nativeReplicaDigest } from "../../lib/replica/native-hash";
 import { MAX_MOUNTED_NATIVE_SCOPES } from "../../lib/replica/offline-budgets";
 import { nativeReplicaDatabasePath } from "../../lib/replica/op-sqlite-driver";
@@ -57,10 +54,6 @@ interface ScopeWire {
    * fallback below, genuinely does not know.
    */
   personal?: boolean;
-  /** Present only for a LENT scope (#726 P4/P6) — mirrors
-   *  `MountedScopeBorrowed`. Carried through to `MountedReplicaScope`
-   *  verbatim by the object spread below; nothing here reads it. */
-  borrowed?: MountedScopeBorrowed;
 }
 
 export function fetcher(vaultId?: string): ReplicaFetcher {
@@ -198,12 +191,8 @@ export async function mountedScopes(
   }
   const active = identity.auth.vaultId!;
   const ordered = [
-    ...(scopes ?? []).filter(
-      (scope) => scope.vaultId === active && scope.borrowed?.mounted !== false
-    ),
-    ...(scopes ?? []).filter(
-      (scope) => scope.vaultId !== active && scope.borrowed?.mounted !== false
-    ),
+    ...(scopes ?? []).filter((scope) => scope.vaultId === active),
+    ...(scopes ?? []).filter((scope) => scope.vaultId !== active),
   ];
   if (!ordered.some((scope) => scope.vaultId === active)) {
     ordered.unshift({ vaultId: active, label: "Current", canWrite: true });

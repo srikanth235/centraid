@@ -61,21 +61,13 @@ async function loadScopes(): Promise<OwnerScope[]> {
     fromPlane = undefined;
   }
   if (fromPlane) {
-    // A LENT scope (#726 P4 item 6) now rides the same `/_vault/scopes`
-    // answer, `borrowed`-tagged. `OwnerScope`'s own contract is "a vault this
-    // owner OWNS" — Household's Vaults grid says "You own this vault." on
-    // every card, so a borrowed row must never reach it here; it surfaces
-    // instead through the sharing card's own "Shared with me" section
-    // (seat-correct chrome, #726 P6).
-    return fromPlane
-      .filter((entry) => !entry.borrowed)
-      .map((entry) => ({
-        id: entry.vaultId,
-        label: entry.label,
-        ...(entry.color ? { color: entry.color } : {}),
-        ...(entry.icon ? { icon: entry.icon } : {}),
-        canWrite: entry.canWrite,
-      }));
+    return fromPlane.map((entry) => ({
+      id: entry.vaultId,
+      label: entry.label,
+      ...(entry.color ? { color: entry.color } : {}),
+      ...(entry.icon ? { icon: entry.icon } : {}),
+      canWrite: entry.canWrite,
+    }));
   }
   let legacy: Awaited<ReturnType<typeof listVaults>>;
   try {

@@ -76,6 +76,18 @@
 // adapter, so the canonical walk carries `core_share_origin` unchanged; a
 // restored bundle's provenance rows read exactly as they did before the
 // rename, just honestly named.
+//
+// Schema/export audit #731: the eleven `share.*` Commons tables are NEW and
+// registered in `VAULT_TABLES`. They carry the party↔vault binding, durable
+// circle grant, per-grant acceptance state, ordered operations, compact
+// receipts/replay decisions, logical per-member cursor, projection lineage,
+// pending command overlay, and pending peer invitation/receiver-retain marker.
+// All eleven
+// are control truth or recovery mechanics: dropping any one on export would
+// either orphan shared rows, replay/refuse a settled write incorrectly, or
+// apply/lose an invitation without the receiver's consent. They need no
+// human-readable adapter and contain no content bytes; referenced CAS bytes
+// remain covered by the existing canonical content walk and manifest.
 
 import { createHash } from "node:crypto";
 

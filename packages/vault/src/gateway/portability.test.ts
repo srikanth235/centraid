@@ -8,6 +8,12 @@ import { registerScheduleCommands } from "../commands/schedule.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { sha256Hex, uuidv7 } from "../ids.js";
+import { advanceCommonsCursor } from "../share/commons-cursor.js";
+import {
+  appendCommonsOperation,
+  createCommonsGrant,
+  queueCommonsIntent,
+} from "../share/commons.js";
 import type { Gateway } from "./gateway.js";
 import { createGateway } from "./gateway.js";
 import { canonicalJson, importVaultExport } from "./portability.js";
@@ -142,6 +148,132 @@ describe("portability", () => {
     // and the reimport lost nothing. This is the losslessness proof.
     const second = gw2.exportVault(owner);
     expect(second.artifact.verifyHash).toBe(first.artifact.verifyHash);
+    restored.close();
+  });
+
+  test("portable restore retains every Commons truth and mechanics table", () => {
+    const now = "2026-08-10T00:00:00.000Z";
+    const grant = createCommonsGrant({
+      origin: db.vault,
+      ownerPartyId: boot.ownerPartyId,
+      ownerVaultId: boot.vaultId,
+      ownerVault: db,
+      containerType: "core.document",
+      containerId: uuidv7(),
+      members: [],
+      now,
+    });
+    appendCommonsOperation({
+      steward: db.vault,
+      grantId: grant.grantId,
+      actorPartyId: boot.ownerPartyId,
+      kind: "command",
+      command: "core.rename_document",
+      input: { document_id: grant.containerId },
+      outcome: "refused",
+      reason: "portable proof",
+      now,
+    });
+    db.vault
+      .prepare(
+        `INSERT INTO share_commons_replay
+           (grant_id, signing_vault_id, signature_nonce, sequence, outcome, reason)
+         VALUES (?, 'portable-member-vault', 'portable-nonce', 1,
+                 'refused', 'portable replay proof')`
+      )
+      .run(grant.grantId);
+    db.vault
+      .prepare(
+        `INSERT INTO share_commons_receipt
+           (grant_id, sequence, kind, actor_party_id, outcome, reason, created_at)
+         VALUES (?, 1, 'command', ?, 'refused',
+                 'portable receipt proof', ?)`
+      )
+      .run(grant.grantId, boot.ownerPartyId, now);
+    advanceCommonsCursor({
+      db: db.vault,
+      grantId: grant.grantId,
+      memberVaultId: boot.vaultId,
+      sequence: 1,
+      now,
+    });
+    db.vault
+      .prepare(
+        `INSERT INTO share_commons_lineage
+           (grant_id, item_type, item_id, origin_item_id)
+         VALUES (?, 'core.document', ?, ?)`
+      )
+      .run(grant.grantId, grant.containerId, grant.containerId);
+    db.vault
+      .prepare(
+        `INSERT INTO share_commons_retained
+           (grant_id, item_type, item_id, retained_at)
+         VALUES (?, 'core.document', 'retained-portable-item', ?)`
+      )
+      .run(grant.grantId, now);
+    queueCommonsIntent({
+      seat: db.vault,
+      intentId: "portable-intent",
+      grantId: grant.grantId,
+      actorPartyId: boot.ownerPartyId,
+      command: "core.rename_document",
+      commandInput: { document_id: grant.containerId },
+      stewardLabel: "Priya",
+      now,
+    });
+    db.vault
+      .prepare(
+        `INSERT INTO share_commons_invitation
+           (invitation_id, grant_id, steward_vault_id, member_vault_id,
+            member_party_id, capability, container_type, container_id,
+            container_label, current_size_bytes, max_size_bytes,
+            status, created_at, answered_at)
+         VALUES ('portable-invite', ?, ?, 'remote-vault', ?, 'read',
+                 'core.document', ?, 'Portable invite', 42, NULL,
+                 'pending', ?, NULL)`
+      )
+      .run(
+        grant.grantId,
+        boot.vaultId,
+        boot.ownerPartyId,
+        grant.containerId,
+        now
+      );
+
+    const { artifact } = gw.exportVault(owner);
+    const commonsEntities = [
+      "share.party_vault_binding",
+      "share.circle_grant",
+      "share.commons_member_state",
+      "share.commons_op",
+      "share.commons_replay",
+      "share.commons_receipt",
+      "share.commons_cursor",
+      "share.commons_lineage",
+      "share.commons_retained",
+      "share.commons_intent",
+      "share.commons_invitation",
+    ];
+    for (const entity of commonsEntities)
+      expect(artifact.tables[entity]?.length, entity).toBeGreaterThan(0);
+
+    const restored = openVaultDb();
+    importVaultExport(restored, artifact);
+    for (const entity of commonsEntities) {
+      const physical = entity.replace(".", "_");
+      expect(
+        restored.vault.prepare(`SELECT COUNT(*) AS n FROM "${physical}"`).get(),
+        entity
+      ).toMatchObject({ n: expect.any(Number) });
+      expect(
+        (
+          restored.vault
+            .prepare(`SELECT COUNT(*) AS n FROM "${physical}"`)
+            .get() as { n: number }
+        ).n,
+        entity
+      ).toBeGreaterThan(0);
+    }
     restored.close();
   });
 

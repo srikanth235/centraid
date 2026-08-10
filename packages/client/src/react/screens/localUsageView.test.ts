@@ -113,17 +113,6 @@ describe(footprintSlices, () => {
     expect(slices).toStrictEqual([]);
   });
 
-  it("renders `borrowed` as its own named component, never folded into the total silently", () => {
-    const slices = footprintSlices(
-      report({
-        components: [{ component: "borrowed", bytes: GB, files: 12 }],
-      })
-    );
-    const borrowed = slices.find((s) => s.component === "borrowed");
-    expect(borrowed?.label).toBe("Held for others");
-    expect(borrowed?.bytes).toBe(GB);
-  });
-
   it("degrades an id this build does not recognize to an honest generic label instead of throwing — issue #726 finding 4", () => {
     const slices = footprintSlices(
       report({
@@ -159,8 +148,8 @@ describe(footprintSlices, () => {
 
 describe(presentationFor, () => {
   it("answers the fixed presentation for a known id", () => {
-    expect(presentationFor("borrowed")).toMatchObject({
-      label: "Held for others",
+    expect(presentationFor("logs")).toMatchObject({
+      label: "Logs",
     });
   });
 

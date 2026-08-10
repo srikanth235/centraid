@@ -144,9 +144,7 @@ export default function DuplicateReview({
     addToAlbum: {
       unavailableReason: "Add to album from the library, where the albums are.",
     },
-    // Share (issue #726 P6): opens the unified give/lend sheet — the
-    // destination list holds both the member's own other vaults and every
-    // linked person, never a sole-destination shortcut.
+    // Share uses the same ceremony-free commons destination list everywhere.
     share: copyToVault.handler,
     download: { unavailableReason: NO_DOWNLOAD_REASON },
     // The shelf's whole verb. Same confirm the head's control asks for, so

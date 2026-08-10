@@ -159,8 +159,8 @@ function InlineAppMount({
   const primary = scopes[0]!;
   const primaryIdentity = primary.identity;
   const primaryLease = useMemo(
-    () => acquireReplicaShellSession(primaryIdentity, primary.borrowedEdgeId),
-    [primary.borrowedEdgeId, primaryIdentity]
+    () => acquireReplicaShellSession(primaryIdentity),
+    [primaryIdentity]
   );
   const descriptor = use(descriptorPromise).default;
   const lease = use(primaryLease);
@@ -199,7 +199,7 @@ function InlineAppMount({
     let alive = true;
     const leases: ReplicaScopeLease[] = [];
     for (const entry of scopes.slice(1)) {
-      void acquireReplicaShellSession(entry.identity, entry.borrowedEdgeId)
+      void acquireReplicaShellSession(entry.identity)
         .then((secondary) => {
           if (!alive) {
             secondary.release();

@@ -31,6 +31,7 @@ import { VaultLinksStore } from "./vault-links-store.js";
 
 interface Side {
   vaultId: string;
+  partyId: string;
   seed: Buffer;
   publicKey: string;
   endpointId: string;
@@ -43,6 +44,7 @@ function makeSide(name: string): Side {
   const seed = crypto.randomBytes(32);
   return {
     vaultId: `vlt_${name}`,
+    partyId: `party_${name}`,
     seed,
     publicKey: vaultIdentityPublicKey(seed).toString("base64"),
     endpointId: `ep-${name}`,
@@ -61,6 +63,8 @@ function transportTo(side: Side, callerEndpointId: string): PeerRequest {
     peerProof: side.proof,
     vaultPublicKey: (vaultId) =>
       vaultId === side.vaultId ? side.publicKey : undefined,
+    ownerPartyFor: (vaultId) =>
+      vaultId === side.vaultId ? side.partyId : undefined,
     localRoute: () => ({ endpointId: side.endpointId, relayHints: [] }),
     localLabel: () => side.label,
   });
@@ -113,6 +117,7 @@ async function link(shower: Side, scanner: Side) {
     links: scanner.links,
     request: transportTo(shower, scanner.endpointId),
     localVault: { vaultId: scanner.vaultId, publicKey: scanner.publicKey },
+    localOwnerPartyId: scanner.partyId,
     localRoute: { endpointId: scanner.endpointId, relayHints: [] },
     localLabel: scanner.label,
   });
@@ -130,6 +135,8 @@ describe("link ceremony end to end", () => {
       localVaultId: bob.vaultId,
       peerVaultId: alice.vaultId,
       peerPublicKey: alice.publicKey,
+      localPartyId: bob.partyId,
+      peerPartyId: alice.partyId,
       route: { endpointId: alice.endpointId },
       peerLabel: "alice",
       myLabel: "bob",
@@ -139,6 +146,8 @@ describe("link ceremony end to end", () => {
       localVaultId: alice.vaultId,
       peerVaultId: bob.vaultId,
       peerPublicKey: bob.publicKey,
+      localPartyId: alice.partyId,
+      peerPartyId: bob.partyId,
       route: { endpointId: bob.endpointId },
       peerLabel: "bob",
       myLabel: "alice",

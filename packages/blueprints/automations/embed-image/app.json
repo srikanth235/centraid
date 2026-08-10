@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "embed-image",
+  "name": "Image embeddings",
+  "kind": "automation",
+  "description": "Builds the seat-local image similarity index through deterministic automation runs.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

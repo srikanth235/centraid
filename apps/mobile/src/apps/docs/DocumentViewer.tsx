@@ -2,7 +2,7 @@ import { File, Paths } from "expo-file-system";
 import { Image } from "expo-image";
 import * as Sharing from "expo-sharing";
 import { VideoView, useVideoPlayer } from "expo-video";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 
@@ -23,6 +23,10 @@ import {
   optimisticRowId,
   optimisticValues,
 } from "../../lib/replica/optimistic";
+import {
+  listCommonsResidents,
+  retainCommonsItem,
+} from "../../lib/replica/placement-transport";
 import type { DocsScreenProps } from "../../navigation";
 import { custodySentence } from "./docs-custody";
 import type { NativeDocument } from "./docs-model";
@@ -75,6 +79,38 @@ export default function DocumentViewer({
   const document = drive.documents.find(
     (item) => item.id === route.params.documentId
   );
+  const ownVault = scopes.find(
+    (scope) => scope.personal === true && scope.canWrite
+  );
+  const [residentDocumentId, setResidentDocumentId] = useState<string>();
+  const currentDocumentId = document?.rawId ?? document?.id;
+  const commonsResident = Boolean(
+    currentDocumentId && residentDocumentId === currentDocumentId
+  );
+  useEffect(() => {
+    let active = true;
+    const actorVaultId = document?.sourceVaultId;
+    const itemId = document?.rawId ?? document?.id;
+    if (!gatewayBase || !actorVaultId || !itemId) return;
+    void listCommonsResidents(gatewayBase, actorVaultId)
+      .then((items) => {
+        if (active)
+          setResidentDocumentId(
+            items.some(
+              (item) =>
+                item.itemType === "core.document" && item.itemId === itemId
+            )
+              ? itemId
+              : undefined
+          );
+      })
+      .catch(() => {
+        if (active) setResidentDocumentId(undefined);
+      });
+    return () => {
+      active = false;
+    };
+  }, [document?.id, document?.rawId, document?.sourceVaultId, gatewayBase]);
   const url =
     document && gatewayBase
       ? `${gatewayBase}/centraid/_gateway/blobs/${encodeURIComponent(
@@ -157,8 +193,11 @@ export default function DocumentViewer({
       surfaceWriteFailure(error, "Action failed");
     }
   };
-  const place = async (targetVaultId: string): Promise<void> => {
-    const kind = placementKind;
+  const place = async (
+    targetVaultId: string,
+    requestedKind = placementKind
+  ): Promise<void> => {
+    const kind = requestedKind;
     setPlacementKind(undefined);
     if (!kind || !document?.sourceVaultId || !session) return;
     const result = await session.place({
@@ -171,9 +210,27 @@ export default function DocumentViewer({
     postStatus(
       result.reason ??
         (result.status === "executed"
-          ? "Document placed in the selected vault."
+          ? kind === "add" && targetVaultId === ownVault?.vaultId
+            ? "Saved to my vault. This copy stays if the share ends."
+            : "Document placed in the selected vault."
           : "Document placement queued — it will resume when the gateway is reachable.")
     );
+  };
+  const saveToMyVault = async (): Promise<void> => {
+    const actorVaultId = document?.sourceVaultId;
+    const itemId = document?.rawId ?? document?.id;
+    if (!gatewayBase || !actorVaultId || !itemId || !commonsResident) return;
+    try {
+      await retainCommonsItem(gatewayBase, {
+        actorVaultId,
+        itemType: "core.document",
+        itemId,
+      });
+      setResidentDocumentId(undefined);
+      postStatus("Saved to my vault. This copy survives if the share ends.");
+    } catch (error) {
+      surfaceWriteFailure(error, "Document not saved to your vault");
+    }
   };
   const share = async (): Promise<void> => {
     if (!document || !url) return;
@@ -241,13 +298,23 @@ export default function DocumentViewer({
           {document.scopeLabels?.join(" · ") ?? "Vault"} · {document.mediaType}{" "}
           · {custodySentence(document.custody)}
         </Text>
-        <Pressable
-          accessibilityLabel="Add document to another vault"
-          accessibilityRole="button"
-          onPress={() => setPlacementKind("add")}
-        >
-          <Icon name="copy" size={20} color={colors.accent} />
-        </Pressable>
+        {commonsResident ? (
+          <Pressable
+            accessibilityLabel="Save to my vault"
+            accessibilityRole="button"
+            onPress={() => void saveToMyVault()}
+          >
+            <Text style={{ color: colors.accent }}>Save to my vault</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            accessibilityLabel="Add document to another vault"
+            accessibilityRole="button"
+            onPress={() => setPlacementKind("add")}
+          >
+            <Icon name="copy" size={20} color={colors.accent} />
+          </Pressable>
+        )}
         <Pressable
           accessibilityLabel="Move document to another vault"
           accessibilityRole="button"

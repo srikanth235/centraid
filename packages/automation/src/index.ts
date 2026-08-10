@@ -178,6 +178,8 @@ export {
   type HandlerOutcome,
   type AgentCall,
   type AgentDispatcher,
+  type DeterministicFetch,
+  type DeterministicFetchCall,
   type DispatchContext,
   type ConnectionAuth,
 } from "./handler/runner.js";

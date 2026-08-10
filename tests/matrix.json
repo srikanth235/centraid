@@ -1660,6 +1660,11 @@
     }
   ],
   "laws": {
+    "commons-steward-ordered-convergence": {
+      "statement": "Each Commons grant has one independent monotonic steward sequence; cursor-gapped members converge to the same domain state, and capability downgrades govern commands from their exact stream position onward.",
+      "owner": "packages/vault/src/share/commons-convergence-properties.test.ts",
+      "flow": "commons-convergence-properties"
+    },
     "placement-registry-parity": {
       "statement": "Every placeable blueprint entity is enumerated once and Locker is structurally excluded.",
       "owner": "packages/blueprints/src/placement-registry.test.ts",
@@ -2098,6 +2103,15 @@
       "tier": "unit",
       "owner": "packages/vault/src/gateway/json-schema-properties.test.ts",
       "minimumTests": 7
+    },
+    {
+      "id": "commons-convergence-properties",
+      "name": "Commons sequencing and cursor-gapped convergence properties",
+      "surface": "vault-core",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/vault/src/share/commons-convergence-properties.test.ts",
+      "minimumTests": 3
     },
     {
       "id": "backup-crypto-properties",

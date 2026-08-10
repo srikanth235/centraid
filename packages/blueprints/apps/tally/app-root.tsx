@@ -184,6 +184,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     // The sidebar snapshot and the active detail view are independent reads —
     // run them together (issue #404); a final bump reconciles the tree.
     await Promise.all([refreshDashboard(), loadView()]);
+    await logicRef.current?.refreshCommonsExpenses();
     bump();
   }, [refreshDashboard, loadView]);
 
@@ -250,7 +251,6 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   useEffect(() => {
     const stopDoorbell = onDataChange(CHANGE_TABLES, async () => {
       await refreshAll();
-      stateRef.current.pendingExpenses = [];
       bump();
     });
     const stopFocus = onFocusRefresh(() => void refreshAll());

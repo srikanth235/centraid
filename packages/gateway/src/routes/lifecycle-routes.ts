@@ -398,6 +398,11 @@ async function handleMeta(
       error: "bad_request",
       message: "meta needs an app id",
     });
+  if (opts.isSystemManagedApp?.(appId))
+    return sendJson(res, 403, {
+      error: "system_recipe_read_only",
+      message: `${appId} is a release-managed recognition recipe; its app metadata cannot be edited.`,
+    });
   const body = await readJson(req);
   const name = typeof body.name === "string" ? body.name : undefined;
   const description =

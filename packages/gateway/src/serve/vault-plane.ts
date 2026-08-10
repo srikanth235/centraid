@@ -144,14 +144,7 @@ import type {
   WalShipperOptions,
 } from "@centraid/vault";
 
-import { runCapabilitySweep } from "../enrich/capability-sweep.js";
-import { EMBEDDING_SWEEP_SPEC } from "../enrich/embedding-sweep.js";
-import { FACES_SWEEP_SPEC } from "../enrich/faces-sweep.js";
-import { createOcrSweepSpec } from "../enrich/ocr-sweep.js";
-import { readEnrichServiceConfig } from "../enrich/service-client.js";
-import type { EnrichServiceConfig } from "../enrich/service-client.js";
 import { loadSqliteVec } from "../enrich/sqlite-vec.js";
-import { createTranscriptSweepSpec } from "../enrich/transcript-sweep.js";
 import { GroupCommitQueue } from "./group-commit-queue.js";
 import { decideJournalArchive } from "./journal-limit.js";
 import { NoticeStore } from "./notices.js";
@@ -276,19 +269,14 @@ export interface VaultPlaneOptions {
    * Omitted for hosts/tests without one: the backstop simply doesn't run.
    */
   previewCodec?: PreviewCodec;
-  /**
-   * The host's enrichment service (issue #724 W1), or `null` for "this host
-   * has none" — which is the shipped default until an operator sets
-   * `CENTRAID_ENRICH_URL` to a loopback endpoint. Resolved from the
-   * environment when omitted. With no service the derivation sweeps never run
-   * and semantic search answers `unavailable`; nothing else changes.
-   */
-  enrich?: EnrichServiceConfig | null;
   /** Post-journal-commit data-trigger hint; the host supplies vault scoping. */
   onProvenanceCommitted?: (
     vaultId: string,
     entityTypes?: readonly string[]
   ) => void;
+  onCommonsCommandSequenced?: (vaultId: string, grantId: string) => void;
+  /** Prompt the existing bounded Commons sweep after a member queues work. */
+  onCommonsIntentQueued?: (vaultId: string, grantId: string) => void;
   /** Notifications projection changed; `wake` requests the existing content-free relay. */
   onNotificationsChanged?: (vaultId: string, wake: boolean) => void;
   /** SQLite durability selected by the gateway hardware profile. */
@@ -575,21 +563,6 @@ export class VaultPlane {
     VaultPlaneOptions["walShipper"]
   >;
   private readonly shouldDeferBackgroundWork: () => boolean;
-  /** The host's enrichment service (issue #724 W1), or null when unconfigured. */
-  private readonly enrich: EnrichServiceConfig | null;
-  /**
-   * True while a detached embedding pass is in flight. A pass waits on a model
-   * over HTTP, so a slow service must not have the hourly clock stacking
-   * passes on top of it — a skipped tick simply finds the same open rows next
-   * hour, because the queue is the database.
-   */
-  private embeddingSweepRunning = false;
-  /** The same in-flight guard for the faces pass (issue #724 W5). */
-  private facesSweepRunning = false;
-  /** The same in-flight guard for the photo OCR pass (issue #724 W4). */
-  private ocrSweepRunning = false;
-  /** The same in-flight guard for the transcript pass (issue #724 W6). */
-  private transcriptSweepRunning = false;
   /** Resource-actuals hooks (#528 Phase C) — accounting only, never gates. */
   private readonly onSweepPass:
     | ((info: { durationMs: number }) => void)
@@ -671,10 +644,6 @@ export class VaultPlane {
       options.shouldDeferBackgroundWork ?? (() => false);
     this.onSweepPass = options.onSweepPass;
     this.onReplicationPass = options.onReplicationPass;
-    // Host configuration, read once: a plane that resolved the environment per
-    // sweep could serve two different endpoints across one process's life.
-    this.enrich =
-      options.enrich === undefined ? readEnrichServiceConfig() : options.enrich;
     this.journalLimitBytes = options.journalLimitBytes ?? (() => null);
     this.vaultLimitBytes = options.vaultLimitBytes ?? (() => null);
     this.dir = options.dir;
@@ -749,6 +718,18 @@ export class VaultPlane {
         ? {
             onDecisionChanged: (created: boolean) =>
               this.ringNotificationsChanged(created),
+          }
+        : {}),
+      ...(options.onCommonsCommandSequenced
+        ? {
+            onCommonsCommandSequenced: (grantId: string) =>
+              options.onCommonsCommandSequenced?.(this.boot.vaultId, grantId),
+          }
+        : {}),
+      ...(options.onCommonsIntentQueued
+        ? {
+            onCommonsIntentQueued: (grantId: string) =>
+              options.onCommonsIntentQueued?.(this.boot.vaultId, grantId),
           }
         : {}),
     });
@@ -2735,26 +2716,6 @@ export class VaultPlane {
       } else {
         this.runBlobSweep();
       }
-      // Photo embedding index (issue #721 E2), detached for the same reason
-      // the blob sweep is: it spawns a child process per photograph, and no
-      // amount of model latency may hold up the lifecycle duties above.
-      // Ordered AFTER the blob sweep on purpose — that pass is what generates
-      // the thumb/preview derivatives this one feeds the service, so a fresh
-      // import gets its rungs first and is indexed on the following tick.
-      this.runEmbeddingSweep();
-      // Face detection (issue #724 W5), detached for the same reasons and on
-      // the same clock. Unlike the embedding pass it is CONSENT-GATED: with no
-      // open `faces` request on the queue it selects nothing, so on a vault
-      // whose owner never asked, this call costs one probe and stops. See
-      // `enrich/faces-sweep.ts`'s header for why there is no ambient backfill.
-      this.runFacesSweep();
-      // Photo OCR (issue #724 W4) and audio/video transcripts (issue #724
-      // W6), detached for the same reasons and on the same clock. Ambient
-      // backfill like embedding (unlike faces): the policy tier itself is
-      // the consent for reading text a photo already shows in plain sight —
-      // see `enrich/ocr-sweep.ts`'s header for why that is not true of faces.
-      this.runOcrSweep();
-      this.runTranscriptSweep();
       // Journal segment archival (issue #367 §E2): slow-cadence — at most
       // once per day per plane; the 90-day window makes it a no-op on young
       // vaults, and the segments it writes join the blob CAS, so the sweep
@@ -2923,164 +2884,6 @@ export class VaultPlane {
     } finally {
       this.onSweepPass?.({ durationMs: Date.now() - sweepStartedAt });
     }
-  }
-
-  /**
-   * The photo embedding half of `runSweep` (issue #721 E2), detached. Holds no
-   * state between passes beyond the in-flight guard: what a killed pass left
-   * undone is still an open `enrich_request` row or an asset with no embedding
-   * for the current model, so the next pass simply finds it again.
-   */
-  private runEmbeddingSweep(): void {
-    if (!this.enrich || this.embeddingSweepRunning) return;
-    this.embeddingSweepRunning = true;
-    void runCapabilitySweep(this.db, EMBEDDING_SWEEP_SPEC, {
-      config: this.enrich,
-      onFailure: (assetId, reason) => {
-        this.logger.warn(
-          `vault plane: embedding failed for asset ${assetId}: ${reason}`
-        );
-      },
-    })
-      .then((result) => {
-        if (result.derived + result.drained + result.failed > 0) {
-          this.logger.info(
-            `vault plane: photo embeddings model=${result.model} ` +
-              `scanned=${result.scanned} derived=${result.derived} ` +
-              `drained=${result.drained} skipped=${result.skipped} ` +
-              `failed=${result.failed}`
-          );
-        }
-      })
-      .catch((error: unknown) => {
-        this.logger.warn(
-          `vault plane: photo embedding sweep failed: ${error instanceof Error ? error.message : String(error)}`
-        );
-      })
-      .finally(() => {
-        this.embeddingSweepRunning = false;
-      });
-  }
-
-  /**
-   * The face-detection half of `runSweep` (issue #724 W5), detached. Holds no
-   * state between passes beyond the in-flight guard, for the same reason the
-   * embedding pass does not: what a killed pass left undone is still an open,
-   * consent-tagged `enrich_request` row, and the next pass finds it again.
-   */
-  private runFacesSweep(): void {
-    if (!this.enrich || this.facesSweepRunning) return;
-    this.facesSweepRunning = true;
-    void runCapabilitySweep(this.db, FACES_SWEEP_SPEC, {
-      config: this.enrich,
-      onFailure: (assetId, reason) => {
-        this.logger.warn(
-          `vault plane: face detection failed for asset ${assetId}: ${reason}`
-        );
-      },
-    })
-      .then((result) => {
-        if (result.derived + result.drained + result.failed > 0) {
-          this.logger.info(
-            `vault plane: faces model=${result.model} ` +
-              `scanned=${result.scanned} derived=${result.derived} ` +
-              `drained=${result.drained} skipped=${result.skipped} ` +
-              `failed=${result.failed}`
-          );
-        }
-      })
-      .catch((error: unknown) => {
-        this.logger.warn(
-          `vault plane: faces sweep failed: ${error instanceof Error ? error.message : String(error)}`
-        );
-      })
-      .finally(() => {
-        this.facesSweepRunning = false;
-      });
-  }
-
-  /**
-   * The photo OCR half of `runSweep` (issue #724 W4), detached for the same
-   * reason the embedding pass is. A factory, not a plain spec, because
-   * `apply` writes through the real `core.set_extracted_text` command — see
-   * `enrich/ocr-sweep.ts`'s header for why that needs this plane's `Gateway`
-   * and owner credential rather than the bare `VaultDb` every other spec is
-   * handed.
-   */
-  private runOcrSweep(): void {
-    if (!this.enrich || this.ocrSweepRunning) return;
-    this.ocrSweepRunning = true;
-    void runCapabilitySweep(
-      this.db,
-      createOcrSweepSpec(this.gateway, this.ownerCredential),
-      {
-        config: this.enrich,
-        onFailure: (contentId, reason) => {
-          this.logger.warn(
-            `vault plane: OCR failed for content item ${contentId}: ${reason}`
-          );
-        },
-      }
-    )
-      .then((result) => {
-        if (result.derived + result.drained + result.failed > 0) {
-          this.logger.info(
-            `vault plane: OCR model=${result.model} ` +
-              `scanned=${result.scanned} derived=${result.derived} ` +
-              `drained=${result.drained} skipped=${result.skipped} ` +
-              `failed=${result.failed}`
-          );
-        }
-      })
-      .catch((error: unknown) => {
-        this.logger.warn(
-          `vault plane: OCR sweep failed: ${error instanceof Error ? error.message : String(error)}`
-        );
-      })
-      .finally(() => {
-        this.ocrSweepRunning = false;
-      });
-  }
-
-  /**
-   * The transcript half of `runSweep` (issue #724 W6), detached for the same
-   * reason the embedding pass is. See `enrich/transcript-sweep.ts`'s header
-   * for why `policyDomain: "docs"` and why this is the one spec that reads
-   * ORIGINAL bytes rather than a derivative.
-   */
-  private runTranscriptSweep(): void {
-    if (!this.enrich || this.transcriptSweepRunning) return;
-    this.transcriptSweepRunning = true;
-    void runCapabilitySweep(
-      this.db,
-      createTranscriptSweepSpec(this.gateway, this.ownerCredential),
-      {
-        config: this.enrich,
-        onFailure: (contentId, reason) => {
-          this.logger.warn(
-            `vault plane: transcript failed for content item ${contentId}: ${reason}`
-          );
-        },
-      }
-    )
-      .then((result) => {
-        if (result.derived + result.drained + result.failed > 0) {
-          this.logger.info(
-            `vault plane: transcript model=${result.model} ` +
-              `scanned=${result.scanned} derived=${result.derived} ` +
-              `drained=${result.drained} skipped=${result.skipped} ` +
-              `failed=${result.failed}`
-          );
-        }
-      })
-      .catch((error: unknown) => {
-        this.logger.warn(
-          `vault plane: transcript sweep failed: ${error instanceof Error ? error.message : String(error)}`
-        );
-      })
-      .finally(() => {
-        this.transcriptSweepRunning = false;
-      });
   }
 
   /**

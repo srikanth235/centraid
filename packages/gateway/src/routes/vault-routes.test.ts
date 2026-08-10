@@ -668,8 +668,8 @@ describe("vault-routes", () => {
     expect(requestBody).toContain("original-raw-placeholder");
   });
 
-  // The owner's tier control (Settings → Enrichment) writes through this
-  // route and no other. Two things must hold: the write reaches the mirror the
+  // The owner-only tier writer uses this route. Two things must hold: the
+  // write reaches the mirror the
   // runtime gate reads, and the standing "enrichment isn't running" card that
   // described the OLD tier is retired — a card left asserting a setting the
   // owner has just changed is a second silent lie.

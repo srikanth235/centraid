@@ -34,6 +34,7 @@ import { runHandler } from "../handler/runner.js";
 import type {
   AgentDispatcher,
   ConnectionAuth,
+  DeterministicFetch,
   HandlerOutcome,
 } from "../handler/runner.js";
 import { parseRef } from "../manifest/ref.js";
@@ -219,8 +220,20 @@ export interface RunFireOptions {
   resolveEnrichPolicy?: (
     domain: EnrichDomain
   ) => Promise<EnrichTier | undefined> | EnrichTier | undefined;
+  /** Reserved loopback executor used by deterministic recognition templates. */
+  deterministicFetch?: DeterministicFetch;
   /** Injected-fetch transient backoff schedule (ms) — tests shrink it. */
   fetchRetryDelaysMs?: readonly number[];
+  /**
+   * Host-owned next-tick queue for bounded handlers that report remaining
+   * backlog. The callback must enqueue a fresh ordinary fire; it must not
+   * recurse on this stack. Each pass therefore gets its own run id, policy
+   * check, ledger turn, and batch bound.
+   */
+  rearm?: (input: {
+    automationRef: string;
+    completedRunId: string;
+  }) => void | Promise<void>;
 }
 
 export interface RunRecord {
@@ -329,6 +342,33 @@ export async function runFire(
       },
     };
   };
+
+  // Recognition selection is recipe state, not a one-off fire option. Inject
+  // it into every invocation so cron/data/manual fires cannot diverge, and do
+  // not let a caller smuggle the billed lane through an arbitrary payload.
+  const configuredAgentVariant = row.manifest.enrich?.agentVariant;
+  const handlerInput = configuredAgentVariant
+    ? {
+        ...(opts.input !== null &&
+        typeof opts.input === "object" &&
+        !Array.isArray(opts.input)
+          ? (opts.input as Record<string, unknown>)
+          : {}),
+        variant: configuredAgentVariant.selected,
+        ...(configuredAgentVariant.selected === "agent" &&
+        row.manifest.requires.model
+          ? { agentModel: row.manifest.requires.model }
+          : {}),
+      }
+    : opts.input;
+  if (
+    configuredAgentVariant?.selected === "agent" &&
+    !row.manifest.requires.model
+  ) {
+    return skipRun(
+      `${opts.automationRef}: agent variant requires an explicit pinned model and provider-egress consent`
+    );
+  }
 
   // ENRICHMENT TIER GATE — the privacy choke point.
   //
@@ -497,6 +537,26 @@ export async function runFire(
   }
 
   let outcome: HandlerOutcome;
+  // The host exposes one reserved deterministic executor, but the manifest
+  // declaration is its authority boundary. A normal automation receives no
+  // seam at all, and an enricher may address only its declared capability.
+  const governedDeterministicFetch =
+    enrich && opts.deterministicFetch
+      ? (
+          call: Parameters<DeterministicFetch>[0],
+          ctx: Parameters<DeterministicFetch>[1]
+        ) => {
+          const expected = `centraid://enrichment/${enrich.capability}`;
+          if (call.url !== expected) {
+            return Promise.reject(
+              new Error(
+                `deterministic enrichment capability mismatch: ${enrich.capability} cannot call ${call.url}`
+              )
+            );
+          }
+          return opts.deterministicFetch!(call, ctx);
+        }
+      : undefined;
   try {
     outcome = await runHandler({
       automationId: opts.automationRef,
@@ -511,12 +571,15 @@ export async function runFire(
       ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
       ...(effectiveModel ? { model: effectiveModel } : {}),
       ...(vaultBridge ? { vault: vaultBridge } : {}),
+      ...(governedDeterministicFetch
+        ? { deterministicFetch: governedDeterministicFetch }
+        : {}),
       ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
       triggerKind: opts.triggerKind ?? "scheduled",
       triggerOrigin: opts.triggerOrigin ?? "cron",
       ...(opts.note ? { note: opts.note } : {}),
       ...(opts.failoverNotice ? { failoverNotice: opts.failoverNotice } : {}),
-      ...(opts.input === undefined ? {} : { input: opts.input }),
+      ...(handlerInput === undefined ? {} : { input: handlerInput }),
       ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
       ...(row.manifest.outputSchema
         ? { outputSchema: row.manifest.outputSchema }
@@ -602,6 +665,9 @@ export async function runFire(
               ...(opts.resolveEnrichPolicy
                 ? { resolveEnrichPolicy: opts.resolveEnrichPolicy }
                 : {}),
+              ...(opts.deterministicFetch
+                ? { deterministicFetch: opts.deterministicFetch }
+                : {}),
               ...(opts.resolveNestedRuntime
                 ? { resolveNestedRuntime: opts.resolveNestedRuntime }
                 : {}),
@@ -649,6 +715,25 @@ export async function runFire(
     toolBatches: outcome.toolBatches,
     agentCalls: outcome.agentCalls,
   };
+  const output =
+    outcome.output !== null &&
+    typeof outcome.output === "object" &&
+    !Array.isArray(outcome.output)
+      ? (outcome.output as Record<string, unknown>)
+      : undefined;
+  if (outcome.ok && output?.rearm === true && opts.rearm) {
+    try {
+      await opts.rearm({
+        automationRef: opts.automationRef,
+        completedRunId: runId,
+      });
+    } catch (error) {
+      onLog(
+        "error",
+        `${opts.automationRef}: could not re-arm bounded backlog after ${runId}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
   return { outcome, record };
 }
 

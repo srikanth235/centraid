@@ -57,6 +57,7 @@ export type {
   TemplateMeta,
   TemplateSource,
 } from "./types.js";
+export { tallyGroupNet, type TallyBalanceData } from "./tally-balance.js";
 
 const DIST_DIR = import.meta.dirname;
 const PACKAGE_ROOT = path.resolve(DIST_DIR, "..");

@@ -10,7 +10,15 @@ vi.mock(import("../gateway") as Promise<unknown>, () => ({
 import { ROUTES } from "@centraid/protocol";
 
 import type { PlacementIntent } from "./multi-vault-reader";
-import { postPlacement, PlacementSubmissionError } from "./placement-transport";
+import {
+  answerCommonsInvitation,
+  claimCommonsInvitation,
+  listCommonsResidents,
+  listCommonsInvitations,
+  postPlacement,
+  PlacementSubmissionError,
+  retainCommonsItem,
+} from "./placement-transport";
 
 const BASE_URL = "http://gateway.local";
 
@@ -132,5 +140,144 @@ describe(postPlacement, () => {
     await expect(postPlacement(BASE_URL, INTENT)).rejects.toThrow(
       "Placement gateway unavailable (500)"
     );
+  });
+});
+
+describe("Commons invitations", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("lists receiver-owned offers with their current byte size", async () => {
+    let capturedUrl = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL) => {
+        capturedUrl = url.toString();
+        return jsonResponse(200, {
+          invitations: [
+            {
+              invitationId: "invite-1",
+              grantId: "grant-1",
+              stewardVaultId: "vault-a",
+              memberVaultId: "vault-b",
+              currentSizeBytes: 4096,
+              status: "pending",
+              createdAt: "2026-08-10T00:00:00.000Z",
+            },
+          ],
+        });
+      })
+    );
+
+    await expect(
+      listCommonsInvitations(BASE_URL, "vault-b")
+    ).resolves.toMatchObject([
+      { invitationId: "invite-1", currentSizeBytes: 4096 },
+    ]);
+    expect(capturedUrl).toBe(
+      new URL(
+        `${ROUTES.gatewayCommons}/invitations?actorVaultId=vault-b`,
+        BASE_URL
+      ).toString()
+    );
+  });
+
+  test("answers with an explicit accept or refuse decision", async () => {
+    let capturedBody: unknown;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: URL, init?: RequestInit) => {
+        capturedBody = JSON.parse(String(init?.body));
+        return jsonResponse(200, {
+          invitation: {
+            invitationId: "invite-1",
+            status: "accepted",
+          },
+        });
+      })
+    );
+
+    await answerCommonsInvitation(BASE_URL, "invite-1", "vault-b", "accept");
+    expect(capturedBody).toStrictEqual({
+      actorVaultId: "vault-b",
+      answer: "accept",
+    });
+  });
+
+  test("redeems the decoded claim into the selected receiver vault", async () => {
+    let capturedUrl = "";
+    let capturedBody: unknown;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL, init?: RequestInit) => {
+        capturedUrl = url.toString();
+        capturedBody = JSON.parse(String(init?.body));
+        return jsonResponse(200, { claimed: true });
+      })
+    );
+
+    await expect(
+      claimCommonsInvitation(
+        BASE_URL,
+        "vault-receiver",
+        "vault-steward",
+        "one-time-secret"
+      )
+    ).resolves.toStrictEqual({ claimed: true });
+    expect(capturedUrl).toBe(
+      new URL(`${ROUTES.gatewayCommons}/invitations/claim`, BASE_URL).toString()
+    );
+    expect(capturedBody).toStrictEqual({
+      actorVaultId: "vault-receiver",
+      stewardVaultId: "vault-steward",
+      claimToken: "one-time-secret",
+    });
+  });
+});
+
+describe("Save resident Commons item", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("detects exact resident lineage and sends only its actor/item identity", async () => {
+    const bodies: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL, init?: RequestInit) => {
+        if (url.pathname.endsWith("/resident"))
+          return jsonResponse(200, {
+            items: [
+              {
+                grantId: "grant-1",
+                itemType: "core.document",
+                itemId: "doc-1",
+                originItemId: "origin-doc",
+              },
+            ],
+          });
+        bodies.push(JSON.parse(String(init?.body)));
+        return jsonResponse(200, { retained: true, grantIds: ["grant-1"] });
+      })
+    );
+
+    await expect(
+      listCommonsResidents(BASE_URL, "vault-b")
+    ).resolves.toMatchObject([{ itemType: "core.document", itemId: "doc-1" }]);
+    await expect(
+      retainCommonsItem(BASE_URL, {
+        actorVaultId: "vault-b",
+        itemType: "core.document",
+        itemId: "doc-1",
+      })
+    ).resolves.toMatchObject({ retained: true });
+    expect(bodies).toStrictEqual([
+      {
+        actorVaultId: "vault-b",
+        itemType: "core.document",
+        itemId: "doc-1",
+      },
+    ]);
   });
 });

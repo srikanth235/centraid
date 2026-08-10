@@ -138,6 +138,8 @@ export async function updateAutomation(input: {
   runner?: string | null;
   /** `null` clears the manifest pin and restores the selected runner's default. */
   model?: string | null;
+  /** Persisted recognition path used by both scheduled and manual fires. */
+  enrichVariant?: "deterministic" | "agent";
 }): Promise<{
   row: CentraidAutomationRow | null;
   webhook?: { id: string; secret: string; url: string };
@@ -164,6 +166,9 @@ export async function updateAutomation(input: {
           : { connector: input.connector }),
         ...(input.runner === undefined ? {} : { runner: input.runner }),
         ...(input.model === undefined ? {} : { model: input.model }),
+        ...(input.enrichVariant === undefined
+          ? {}
+          : { enrichVariant: input.enrichVariant }),
         sessionId,
         publish: true,
       }),

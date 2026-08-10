@@ -118,6 +118,51 @@ describe("automations-routes suite", () => {
     expect(fired).toHaveLength(0);
   });
 
+  test("POST invoke-and-await passes the payload through one awaited fire", async () => {
+    const invoked: Array<{
+      automationRef: string;
+      turnId: string;
+      payload?: unknown;
+    }> = [];
+    handler = makeAutomationsRouteHandler({
+      store: new WorktreeStore({ root: path.join(dir, "code") }),
+      journalDbFile: path.join(dir, "journal.db"),
+      analytics,
+      insights,
+      runAutomation: (input) => fired.push(input),
+      invokeAndAwait: async (input) => {
+        invoked.push(input);
+        return { turnId: input.turnId, outcome: { ok: true } };
+      },
+    });
+
+    const r = await call(
+      "POST",
+      "/centraid/_automations/invoke-and-await?ref=photo-ocr/photo-ocr",
+      { capture: { bytes: "cmVjZWlwdA==", mediaType: "image/jpeg" } }
+    );
+
+    expect(r.status).toBe(200);
+    const body = r.body as {
+      turnId: string;
+      result: { turnId: string; outcome: { ok: boolean } };
+    };
+    expect(body.turnId).toMatch(/^photo-ocr\/photo-ocr:\d+:[0-9a-f]{8}$/u);
+    expect(body.result).toStrictEqual({
+      turnId: body.turnId,
+      outcome: { ok: true },
+    });
+    expect(invoked).toStrictEqual([
+      {
+        automationRef: "photo-ocr/photo-ocr",
+        turnId: body.turnId,
+        payload: {
+          capture: { bytes: "cmVjZWlwdA==", mediaType: "image/jpeg" },
+        },
+      },
+    ]);
+  });
+
   test("POST turn validates its ref and is capability-guarded when no executor is wired", async () => {
     const missingRef = await call("POST", "/centraid/_automations/turn", {
       message: "What changed?",
@@ -214,6 +259,45 @@ describe("automations-routes suite", () => {
     );
     expect(r.status).toBe(200);
     expect(r.body).toStrictEqual({ turn: null });
+  });
+
+  test("recognition turns carry a distinct system history lane", async () => {
+    const store = new ConversationStore(
+      makeJournalDbProvider(path.join(dir, "journal.db"))
+    );
+    const ref = "photo-ocr/photo-ocr";
+    const conversationId = store.ensureAutomationConversation(
+      ref,
+      "photo-ocr",
+      "Photo OCR"
+    );
+    store.insertTurn({
+      turnId: `${ref}:100:aaaaaaaa`,
+      conversationId,
+      triggerKind: "manual",
+      triggerOrigin: "manual",
+      startedAt: 100,
+    });
+    store.finishTurn({
+      turnId: `${ref}:100:aaaaaaaa`,
+      endedAt: 110,
+      ok: true,
+    });
+
+    const r = await call(
+      "GET",
+      `/centraid/_automations/turns?ref=${encodeURIComponent(ref)}`
+    );
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({
+      turns: [
+        {
+          automationId: ref,
+          automationName: "Photo OCR",
+          systemLane: "recognition",
+        },
+      ],
+    });
   });
 
   test("turn/items returns native item fields and legacy run/node routes are gone", async () => {

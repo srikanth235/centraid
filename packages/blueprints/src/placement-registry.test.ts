@@ -200,3 +200,163 @@ describe("Tally consumes the placement engine with zero engine edits (A6)", () =
     }
   });
 });
+
+describe("Docs shares its actual folder container", () => {
+  it("web and native pass docs.folder plus the selected folder id", () => {
+    const web = readFileSync(
+      path.join(APPS_DIR, "docs", "app-root.tsx"),
+      "utf8"
+    );
+    expect(web).toContain('itemType="docs.folder"');
+    expect(web).toContain("shareFolder.folder_id");
+    const native = readFileSync(
+      path.resolve(
+        PACKAGE_ROOT,
+        "../../apps/mobile/src/apps/docs/DocsHome.tsx"
+      ),
+      "utf8"
+    );
+    expect(native).toContain('itemType="docs.folder"');
+    expect(native).toContain("parent.rawId ?? parent.id");
+  });
+});
+
+describe("native Photos selection reaches Commons with explicit items", () => {
+  it("passes media asset ids and has no retired giveMany override", () => {
+    const source = readFileSync(
+      path.resolve(
+        PACKAGE_ROOT,
+        "../../apps/mobile/src/apps/photos/use-copy-to-vault.ts"
+      ),
+      "utf8"
+    );
+    expect(source).toContain('itemType: "media.media_asset"');
+    expect(source).toContain("itemIds: targets.map((asset) => asset.assetId)");
+    expect(source).not.toContain("giveMany");
+  });
+
+  it("does not originate an album Commons declaration, but can retain a received album", () => {
+    const nativeAlbum = readFileSync(
+      path.resolve(
+        PACKAGE_ROOT,
+        "../../apps/mobile/src/apps/photos/AlbumDetail.tsx"
+      ),
+      "utf8"
+    );
+    expect(nativeAlbum).not.toContain('itemType="core.collection"');
+    expect(nativeAlbum).not.toContain("Share album with household");
+    expect(nativeAlbum).toContain('itemType: "core.collection"');
+    expect(nativeAlbum).toContain("Save to my vault");
+    expect(nativeAlbum).toContain("copyToVault.sheetProps");
+
+    const webAlbumOrigin = sourceFiles(path.join(APPS_DIR, "photos")).filter(
+      (file) =>
+        /itemType\s*=\s*["']core\.collection["']/u.test(
+          readFileSync(file, "utf8")
+        )
+    );
+    expect(webAlbumOrigin).toStrictEqual([]);
+  });
+});
+
+describe("unjoined Commons invitations have a complete sender/receiver handoff", () => {
+  it("web and native consume returned claims and expose deliberate copy/share actions", () => {
+    const web = readFileSync(
+      path.join(APPS_DIR, "_shared", "ShareSheet.tsx"),
+      "utf8"
+    );
+    const native = readFileSync(
+      path.resolve(
+        PACKAGE_ROOT,
+        "../../apps/mobile/src/kit/share/ShareSheet.tsx"
+      ),
+      "utf8"
+    );
+    expect(web).toContain("result.claims");
+    expect(web).toContain("Copy invite");
+    expect(web).toContain("Share invite");
+    expect(native).toContain("result.claims");
+    expect(native).toContain("Clipboard.setStringAsync");
+    expect(native).toContain("Share.share");
+  });
+
+  it("web and native receiver surfaces parse, redeem, and immediately clear the raw code", () => {
+    const web = readFileSync(
+      path.resolve(PACKAGE_ROOT, "../client/src/react/screens/SharingCard.tsx"),
+      "utf8"
+    );
+    const native = readFileSync(
+      path.resolve(PACKAGE_ROOT, "../../apps/mobile/src/screens/Sharing.tsx"),
+      "utf8"
+    );
+    for (const source of [web, native]) {
+      expect(source).toContain("parseCommonsInvite");
+      expect(source).toContain('setCommonsInviteCode("")');
+    }
+    expect(web).toContain("onClaimCommonsInvitation");
+    expect(native).toContain("claimCommonsInvitation");
+  });
+});
+
+describe("named-circle reuse stays exact", () => {
+  it("web and native detach circleId on every individual roster/capability edit", () => {
+    const web = readFileSync(
+      path.join(APPS_DIR, "_shared", "ShareSheet.tsx"),
+      "utf8"
+    );
+    const native = readFileSync(
+      path.resolve(
+        PACKAGE_ROOT,
+        "../../apps/mobile/src/kit/share/ShareSheet.tsx"
+      ),
+      "utf8"
+    );
+    for (const source of [web, native]) {
+      expect(source).toContain("manualShareSelection");
+      expect(source).toContain("setSelectedCircleId(next.circleId)");
+      expect(source).toContain("Named group ·");
+    }
+  });
+});
+
+describe("Save to my vault is gated by exact Commons residency", () => {
+  it("web and native detect lineage, retain it, and never infer from personal scope", () => {
+    const files = [
+      path.join(APPS_DIR, "photos", "components", "Lightbox.tsx"),
+      path.join(APPS_DIR, "docs", "components", "Details.tsx"),
+      path.join(APPS_DIR, "docs", "app-root.tsx"),
+      path.resolve(
+        PACKAGE_ROOT,
+        "../../apps/mobile/src/apps/photos/PhotoLightbox.tsx"
+      ),
+      path.resolve(
+        PACKAGE_ROOT,
+        "../../apps/mobile/src/apps/docs/DocumentViewer.tsx"
+      ),
+      path.resolve(
+        PACKAGE_ROOT,
+        "../../apps/mobile/src/apps/photos/AlbumDetail.tsx"
+      ),
+      path.resolve(
+        PACKAGE_ROOT,
+        "../../apps/mobile/src/apps/docs/DocsHome.tsx"
+      ),
+    ];
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      expect(source, file).toMatch(
+        /(?:commonsResidents|listCommonsResidents)/u
+      );
+      expect(source, file).toContain("retainCommonsItem");
+      expect(source, file).not.toContain("personal === false");
+    }
+    const exactGestureSources = [
+      ...files,
+      path.resolve(
+        PACKAGE_ROOT,
+        "../../apps/mobile/src/apps/photos/PhotoLightboxToolbar.tsx"
+      ),
+    ].map((file) => readFileSync(file, "utf8"));
+    expect(exactGestureSources.join("\n")).toContain("Save to my vault");
+  });
+});

@@ -45,6 +45,7 @@ interface PhotoLightboxToolbarProps {
   asset: PhotoAsset;
   onInfo: () => void;
   onPlacement: (kind: "add" | "move") => void;
+  onSaveToMyVault?: () => void;
   /** Opens the editor, which is a MODE of the viewer rather than a route
    *  (§7.4). Optional only so a caller that has no editor to open cannot fire
    *  this target into nothing — never because editing is a desktop feature. */
@@ -61,6 +62,7 @@ export function PhotoLightboxToolbar({
   asset,
   onInfo,
   onPlacement,
+  onSaveToMyVault,
   onEdit,
   onWrite,
 }: PhotoLightboxToolbarProps): React.JSX.Element {
@@ -73,7 +75,7 @@ export function PhotoLightboxToolbar({
   // not pretend to offer one.
   const editable = asset.kind === "photo" || asset.kind === "scan";
   const enabled: Record<ViewerActionId, boolean> = {
-    copy: Boolean(asset.assetId && asset.scopeIds?.length),
+    copy: Boolean(onSaveToMyVault ?? (asset.assetId && asset.scopeIds?.length)),
     edit: writable && editable && onEdit !== undefined,
     favorite: writable,
     info: true,
@@ -81,9 +83,10 @@ export function PhotoLightboxToolbar({
   };
   // A read-only vault does not hide a control; it shows why it cannot fire.
   const reason: Partial<Record<ViewerActionId, string>> = {
-    copy: asset.scopeIds?.length
-      ? undefined
-      : "No other vault to copy this into",
+    copy:
+      onSaveToMyVault || asset.scopeIds?.length
+        ? undefined
+        : "No other vault to copy this into",
     edit: writable
       ? editable
         ? undefined
@@ -93,7 +96,7 @@ export function PhotoLightboxToolbar({
     trash: writable ? undefined : READ_ONLY_VAULT_REASON,
   };
   const run: Record<ViewerActionId, () => void> = {
-    copy: () => onPlacement("add"),
+    copy: () => (onSaveToMyVault ? onSaveToMyVault() : onPlacement("add")),
     edit: () => onEdit?.(),
     favorite: () => {
       void Haptics.selectionAsync();
@@ -143,6 +146,10 @@ export function PhotoLightboxToolbar({
               const on = enabled[id];
               const why = reason[id];
               const selected = id === "favorite" ? asset.favorite : undefined;
+              const label =
+                id === "copy" && onSaveToMyVault
+                  ? "Save to my vault"
+                  : action.label;
               return (
                 <ViewerChromeTarget
                   colors={colors}
@@ -156,7 +163,7 @@ export function PhotoLightboxToolbar({
                   hint={why}
                   icon={action.icon}
                   key={id}
-                  label={action.label}
+                  label={label}
                   // Defense in depth (matches the web selection bar's
                   // `buildSelectionActions`, §6, §18): `disabled` is what stops
                   // a tap or an assistive-tech activation; this guard is what

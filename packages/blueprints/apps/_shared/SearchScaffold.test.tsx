@@ -128,10 +128,10 @@ describe("SearchScaffold's four states", () => {
       query: "x",
       status: "ready",
       count: 3,
-      reachFacts: [{ label: "lent", value: "peer offline" }],
+      reachFacts: [{ label: "commons", value: "peer offline" }],
     });
     expect(html).toContain("Not every scope answered");
-    expect(html).toContain("lent");
+    expect(html).toContain("commons");
     expect(html).toContain("peer offline");
     // The results are STILL there — a partial reach never collapses `ready`
     // into the miss/unreachable panels.
@@ -144,7 +144,7 @@ describe("SearchScaffold's four states", () => {
       query: "zzz",
       status: "ready",
       count: 0,
-      reachFacts: [{ label: "lent", value: "peer offline" }],
+      reachFacts: [{ label: "commons", value: "peer offline" }],
     });
     expect(html).toContain("Nothing matches");
     expect(html).toContain("zzz");
@@ -162,7 +162,7 @@ describe("SearchScaffold's four states", () => {
       query: "x",
       status: "unreachable",
       count: 0,
-      reachFacts: [{ label: "lent", value: "peer offline" }],
+      reachFacts: [{ label: "commons", value: "peer offline" }],
     });
     expect(html).not.toContain("Not every scope answered");
   });

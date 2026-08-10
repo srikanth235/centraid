@@ -1,13 +1,13 @@
 {
-  "approvedDeviation": "#726 classification fingerprints re-pinned after the route authority vocabulary and sealed schema attribution changed; no budget or gate was widened.",
+  "approvedDeviation": "#731 re-pins governed fingerprints after adding real enricher manifest fields and an additive Commons convergence quality flow; no budget or existing gate was weakened.",
   "matrixGovernanceFingerprint": "8a83d43679ec6c4dc88d0ac13fe5b76e938b24f0301595e67db8b063aaa4545a",
   "fingerprints": {
     "packages/agent-runtime/src/backends/acp/vault-mcp-server.ts": "e3db462d8e9ea69238ef35b240d45239afd5354530adb5c286f8e98945ce29bb",
-    "packages/automation/src/manifest/manifest.ts": "78dffb03838e8c84f93a092d6cce473f2a3b58238ad0cc619c4d92ebf98a456d",
+    "packages/automation/src/manifest/manifest.ts": "b65ceca212056e371a7790de37730b37912f29eff9290b6c61bb3ff5f79b9e2e",
     "packages/gateway/src/routes/route-security.ts": "93778aed244883158313facdd8e847b7918852e418e8676011b459f9132859ca",
     "packages/gateway/src/serve/health-registry.ts": "3c910652729684b84809cd486888151a86139205d07e146a44c2450154081430",
     "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
     "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
-    "tests/matrix.json": "c77d3c83364914a4c8f6ef0744343ef726fba5ff02149fe4639ff0af4302147c"
+    "tests/matrix.json": "e06ae08fae9e4b325a8f1f3cd81a1a298aba948ace168d3e2f986a80e0eeab94"
   }
 }

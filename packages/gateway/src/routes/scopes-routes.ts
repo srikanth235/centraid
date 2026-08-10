@@ -29,39 +29,14 @@
  *
  * `canWrite` keeps its exact client/blueprint shape with a new source: a
  * vault you own is writable. It stays a per-row wire field — not a constant
- * clients derive — because later phases put lent (read-only) scopes in this
- * same list.
+ * clients derive — because capability remains an explicit contract field.
  *
  * `installed` is reported only when the request names an app (`?app=<id>`);
  * with no app named the field is omitted entirely, because "not asked" and
  * "not installed" are different answers.
  *
- * BORROWED SCOPES (#726 P4 item 6). A live edge lent TO one of the caller's
- * OWN vaults now appears here too, `canWrite: false`, alongside the owned
- * rows — the audience's own devices reach it through the SAME replica-scope
- * plane, no second mechanism. Each carries a `borrowed` sub-object naming
- * who it is from and how it is reaching (`reachState`/`reason`, mirroring
- * `borrowed_edges.state`/`.reason`); it is never silently dropped from the
- * list, even a `parked` one — a scope you cannot currently reach is still a
- * scope you know about.
- *
- * MOUNT POLICY. A native device caps how many scopes it mounts as replica
- * shapes at once (`MAX_MOUNTED_NATIVE_SCOPES`); this gateway — not the
- * client — now decides who gets a slot, so two clients never disagree about
- * it and a client with no opinion of its own still gets an honest answer:
- *   - an OWNED vault always wins a slot. It is never denied one — the
- *     policy exists to ration what is scarce among things the caller does
- *     not already have a durable claim to.
- *   - a BORROWED scope competes for whatever is left, MOST RECENTLY ACTIVE
- *     FIRST (`borrowed_edges.updated_at` — every successful sync bumps it,
- *     D8), because a share nobody has actually looked at recently is the
- *     worst use of a slot someone else could use.
- *   - a borrowed scope that loses the race still appears in the list with
- *     `borrowed.mounted: false` — a STATE, never a silent absence. A future
- *     surface can render "too many shares" honestly instead of the scope
- *     just not being there.
- * An owned row carries no `mounted` field at all: mounted is not a
- * question for a scope the policy never denies.
+ * Commons rows are ordinary rows in each member's own vault. They therefore
+ * need no synthetic scope or special mount policy here.
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -70,24 +45,9 @@ import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
-import type { BorrowedEdgeSummary } from "../serve/lend-audience.js";
 import { sendJson } from "./route-helpers.js";
 
 export const SCOPES_PATH = "/centraid/_vault/scopes";
-
-/**
- * The native mount cap this route's policy rations (#726 P4 item 6). Mirrors
- * `apps/mobile/src/lib/replica/offline-budgets.ts`'s `MAX_MOUNTED_NATIVE_SCOPES`
- * and the web `useAppScopes.ts`'s `MAX_MOUNTED_SCOPES` — both currently 4.
- * Kept as its OWN constant rather than imported: this route cannot depend on
- * a client package. The three copies are pinned to agree by
- * `scopes-routes.test.ts`'s "mount cap constants" suite, which source-scans
- * the other two files the same way `packages/tunnel/src/alpn-parity.test.ts`
- * pins the Rust relay's ALPN constants — a cross-package import from this
- * gateway route would invert the dependency direction, but a TEST reading
- * the other files' text has no such constraint.
- */
-export const MAX_MOUNTED_NATIVE_SCOPES = 4;
 
 /** The registry facts one scope row is rendered from (structurally `VaultInfo`). */
 export interface ScopeVault {
@@ -99,31 +59,7 @@ export interface ScopeVault {
   icon?: string;
 }
 
-/** How a mounted borrowed scope is currently reaching this gateway — mirrors
- *  `borrowed_edges.state`, minus 'dropped' (a dropped edge is not a scope). */
-export type BorrowedReachState = "offered" | "established" | "parked";
-
-/** The lend-specific facts a BORROWED scope row carries, absent for an
- *  owned vault (#726 P4 item 6). */
-export interface ScopeBorrowedInfo {
-  edgeId: string;
-  /** The lender's vault; `ScopeRow.vaultId` is the edge-scoped replica id. */
-  originVaultId: string;
-  /** Who it is lent BY — the origin vault's label at link time. */
-  holderLabel: string;
-  itemType: string;
-  reachState: BorrowedReachState;
-  /** Set only when `reachState` is 'parked' — says WHY (budget vs. unreachable). */
-  reason: string | null;
-  /**
-   * Whether the gateway's mount policy gave this scope one of the device's
-   * limited native replica slots. `false` is a STATE the row still carries —
-   * a scope that lost the race is a surfaced fact, never a silent absence.
-   */
-  mounted: boolean;
-}
-
-/** One vault (or lent scope) the caller may work in. */
+/** One vault the caller may work in. */
 export interface ScopeRow {
   vaultId: string;
   /** The vault's own name — display only, never a key. */
@@ -137,15 +73,10 @@ export interface ScopeRow {
   personal: boolean;
   color?: string;
   icon?: string;
-  /** Ownership-sourced writability (#726): a vault you own is writable. A
-   *  borrowed scope is writable only when its edge carries `read+act`
-   *  (#726 P5) — a plain read edge lends, it never delegates. */
+  /** Ownership-sourced writability: a vault you own is writable. */
   canWrite: boolean;
   /** Present only when the request named an app. */
   installed?: boolean;
-  /** Present only for a LENT scope — absent for an owned vault, which the
-   *  mount policy never denies a slot (#726 P4 item 6). */
-  borrowed?: ScopeBorrowedInfo;
 }
 
 /** The whole answer: the caller's scopes. */
@@ -167,62 +98,12 @@ export interface ScopesRouteDeps {
   ensureAppInstalled?: (vaultId: string, appId: string) => Promise<boolean>;
   /** Direct host-custody request (authenticated bearer, never iroh-forwarded). */
   isHostCustody?: (req: IncomingMessage) => boolean;
-  /**
-   * Live (non-dropped) edges lent TO any of these vaults (#726 P4 item 6).
-   * Absent on a build with no lend plane wired — the listing then carries
-   * owned scopes only, exactly as it did before this phase.
-   */
-  borrowedScopes?: (
-    audienceVaultIds: readonly string[]
-  ) => readonly BorrowedEdgeSummary[];
 }
 
 function callerDeviceKey(req: IncomingMessage): string | undefined {
   const raw = req.headers[AUTHED_DEVICE_HEADER];
   const value = Array.isArray(raw) ? raw[0] : raw;
   return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-/**
- * The mount policy (#726 P4 item 6): which EDGE ids win one of the slots
- * left over after every owned vault takes one (owned is never denied).
- * Ranked most-recently-active first (`updatedAt` — every successful sync
- * bumps it, D8): a share nobody has actually touched recently is the worst
- * use of a slot someone else could use.
- */
-function mountedEdgeIds(
-  ownedCount: number,
-  borrowed: readonly BorrowedEdgeSummary[]
-): ReadonlySet<string> {
-  const remaining = Math.max(0, MAX_MOUNTED_NATIVE_SCOPES - ownedCount);
-  const ranked = [...borrowed].sort((a, b) =>
-    b.updatedAt.localeCompare(a.updatedAt)
-  );
-  return new Set(ranked.slice(0, remaining).map((edge) => edge.edgeId));
-}
-
-function borrowedRow(edge: BorrowedEdgeSummary, mounted: boolean): ScopeRow {
-  return {
-    // One origin may lend several independent shapes. The device persistence
-    // key is therefore the edge, never the origin vault id.
-    vaultId: `borrowed:${edge.edgeId}`,
-    label: edge.holderLabel,
-    personal: false,
-    // A read edge never delegates write; a read+act edge does (#726 P5) —
-    // the same `verbs` the origin minted the grant with, mirrored here.
-    canWrite: edge.verbs === "read+act",
-    borrowed: {
-      edgeId: edge.edgeId,
-      originVaultId: edge.originVaultId,
-      holderLabel: edge.holderLabel,
-      itemType: edge.itemType,
-      // The SQL that produced `edge` already excludes 'dropped'; the cast
-      // documents that guarantee rather than re-deriving it here.
-      reachState: edge.state as BorrowedReachState,
-      reason: edge.reason,
-      mounted,
-    },
-  };
 }
 
 export function makeScopesRouteHandler(deps: ScopesRouteDeps): RouteHandler {
@@ -324,19 +205,7 @@ export function makeScopesRouteHandler(deps: ScopesRouteDeps): RouteHandler {
         : {}),
     }));
 
-    // Borrowed scopes (#726 P4 item 6): live edges lent TO any vault this
-    // caller can see. Host custody's `visible` is every mounted vault, so it
-    // sees every borrowed edge reaching this gateway — the same "above
-    // ownership, not inside it" posture the vault listing already has.
-    const borrowedEdges =
-      deps.borrowedScopes?.(visible.map((vault) => vault.vaultId)) ?? [];
-    const mounted = mountedEdgeIds(ownedScopes.length, borrowedEdges);
-    const borrowedRows = borrowedEdges.map((edge) =>
-      borrowedRow(edge, mounted.has(edge.edgeId))
-    );
-
-    const scopes: ScopeRow[] = [...ownedScopes, ...borrowedRows];
-    const body: ScopesBody = { scopes };
+    const body: ScopesBody = { scopes: ownedScopes };
     return sendJson(res, 200, body);
   };
 }

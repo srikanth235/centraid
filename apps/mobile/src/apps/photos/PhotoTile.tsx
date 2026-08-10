@@ -176,7 +176,7 @@ function PhotoTileImpl({
 
       {/* …or the MARK: bytes are here and nowhere else. A chip rather than the
           text shadow the kind slot uses, because a stroke glyph has no shadow
-          to lend it — and the handoff marks over photographs the same way
+          to support it — and the handoff marks over photographs the same way
           (proto:4021-4023's `libMark`: page colour, 2px radius, 3pt gutter).
           Bottom-LEADING, the one free corner: selection is top-trailing and
           the kind line is bottom-trailing. */}

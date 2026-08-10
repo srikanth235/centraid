@@ -59,6 +59,8 @@ export interface ShareVaultRef {
   blobs: { local: LocalBlobStore };
   /** Per-vault DEK used only to re-seal a shared Locker item for its audience. */
   sealKey?: Buffer;
+  /** Optional vault signing seed used to authenticate commons member intents. */
+  identitySeed?: Buffer;
 }
 
 export interface ShareToVaultInput {

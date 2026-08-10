@@ -151,6 +151,23 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
   // are current.
   enrich: ["embedding", "request", "policy", "derivation"],
   outbox: ["item", "grant"],
+  // Commons control truth and local mechanics (#731). These must stay in the
+  // canonical walk: a portable restore without the grant/roster bindings,
+  // ordered op log, cursors, intent overlay, or pending invitations would
+  // silently turn shared content into an unrelated local copy.
+  share: [
+    "party_vault_binding",
+    "circle_grant",
+    "commons_member_state",
+    "commons_op",
+    "commons_replay",
+    "commons_receipt",
+    "commons_cursor",
+    "commons_lineage",
+    "commons_retained",
+    "commons_intent",
+    "commons_invitation",
+  ],
   notifications: ["notice"],
   // Read-only custody projections, both rebuilt on the standing sweep:
   // `custody_state` (issue #352) is local-vs-replicated state per content item;

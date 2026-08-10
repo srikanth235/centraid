@@ -16,7 +16,8 @@ export interface AgentCaptureCandidate {
 
 export interface CaptureOcrExtraction {
   text: string;
-  confidence: number;
+  /** Absent when the selected recognizer cannot ground an honest score. */
+  confidence?: number;
   engine: "enrichment-service";
 }
 

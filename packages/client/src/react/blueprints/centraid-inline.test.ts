@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#731) one inline host contract suite covers share/claim/resident transports and the replica-backed bridge; splitting it would hide cross-surface identity assertions.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
@@ -122,6 +123,370 @@ describe(installInlineCentraid, () => {
     ]);
     expect(outcome.status).toBe("executed");
     expect(outcome.invocationId).toBe("intent-xyz");
+  });
+
+  it("exposes vault-resident Commons intents as a durable app overlay", async () => {
+    const session = fakeSession();
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "tally",
+      queries: noQueries,
+      target,
+      scopes: [
+        {
+          scope: { id: "member-vault", label: "Asha", canWrite: true },
+          session,
+        },
+      ],
+    });
+    doFetch.mockResolvedValue(new Response("{}"));
+    readJson.mockResolvedValue({
+      intents: [
+        {
+          intentId: "intent-1",
+          grantId: "grant-1",
+          actorPartyId: "party-member",
+          command: "tally.add-expense",
+          inputJson: JSON.stringify({
+            group_id: "group-1",
+            description: "Dinner",
+          }),
+          status: "parked",
+          reason: null,
+          stewardLabel: "Priya's device",
+          createdAt: "2026-08-10T00:00:00.000Z",
+          settledAt: null,
+        },
+      ],
+    });
+
+    const intents = await (
+      target.centraid as InlineCentraidClient
+    ).commonsIntents();
+
+    expect(doFetch).toHaveBeenCalledWith(
+      "https://gw.test",
+      "/centraid/_gateway/commons/intents?actorVaultId=member-vault",
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: "Bearer tok" }),
+      })
+    );
+    expect(intents).toStrictEqual([
+      {
+        intentId: "intent-1",
+        grantId: "grant-1",
+        actorPartyId: "party-member",
+        command: "tally.add-expense",
+        input: { group_id: "group-1", description: "Dinner" },
+        status: "parked",
+        reason: "Waiting for Priya's device.",
+        stewardLabel: "Priya's device",
+        createdAt: "2026-08-10T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("carries the linked peer party identity into Commons creation", async () => {
+    const session = fakeSession();
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "tally",
+      queries: noQueries,
+      target,
+      scopes: [
+        {
+          scope: { id: "owner-vault", label: "Priya", canWrite: true },
+          session,
+        },
+      ],
+    });
+    doFetch.mockResolvedValue(new Response("{}"));
+    readJson.mockResolvedValue({ grant: { grantId: "grant-1" } });
+
+    await (target.centraid as InlineCentraidClient).share({
+      sourceVaultId: "owner-vault",
+      containerType: "tally.group",
+      containerId: "group-1",
+      members: [
+        {
+          partyId: "party-peer",
+          vaultId: "remote-vault",
+          capability: "read+write",
+        },
+      ],
+    });
+
+    expect(doFetch).toHaveBeenCalledWith(
+      "https://gw.test",
+      "/centraid/_gateway/commons",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          originVaultId: "owner-vault",
+          containerType: "tally.group",
+          containerId: "group-1",
+          members: [
+            {
+              partyId: "party-peer",
+              vaultId: "remote-vault",
+              capability: "read+write",
+            },
+          ],
+        }),
+      })
+    );
+  });
+
+  it("lists People identities and preserves an invited person without a vault", async () => {
+    const session = fakeSession({
+      read: vi.fn<Session["read"]>(async (_appId, request) => ({
+        rows:
+          request.entity === "core.party"
+            ? [
+                {
+                  rowId: "owner",
+                  values: { party_id: "owner", display_name: "Priya" },
+                  oversizedFields: [],
+                  hasUnavailableFields: false,
+                },
+                {
+                  rowId: "asha",
+                  values: { party_id: "asha", display_name: "Asha" },
+                  oversizedFields: [],
+                  hasUnavailableFields: false,
+                },
+              ]
+            : [
+                {
+                  rowId: "vault",
+                  values: { owner_party_id: "owner" },
+                  oversizedFields: [],
+                  hasUnavailableFields: false,
+                },
+              ],
+        cursor: { epoch: "e", seq: 1 },
+        dependency: { shapeId: "people", entity: request.entity },
+      })),
+    });
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "docs",
+      session,
+      queries: noQueries,
+      target,
+    });
+    doFetch.mockResolvedValue(new Response("{}"));
+    readJson.mockResolvedValue({ links: [] });
+
+    await expect(
+      (target.centraid as InlineCentraidClient).shareTargets()
+    ).resolves.toStrictEqual([{ partyId: "asha", label: "Asha" }]);
+  });
+
+  it("lists only deliberate Tally-backed named circles with their roster", async () => {
+    const session = fakeSession({
+      read: vi.fn<Session["read"]>(async (appId, request) => {
+        const values =
+          appId === "people" && request.entity === "core.party"
+            ? [
+                { party_id: "owner", display_name: "Priya" },
+                { party_id: "asha", display_name: "Asha" },
+                { party_id: "ben", display_name: "Ben" },
+              ]
+            : appId === "people" && request.entity === "core.vault"
+              ? [{ owner_party_id: "owner" }]
+              : request.entity === "social.circle"
+                ? [
+                    {
+                      circle_id: "trip",
+                      name: "Goa trip",
+                      owner_party_id: "owner",
+                    },
+                    {
+                      circle_id: "implicit",
+                      name: "Shared photo",
+                      owner_party_id: "owner",
+                    },
+                    {
+                      circle_id: "foreign",
+                      name: "Asha's group",
+                      owner_party_id: "asha",
+                    },
+                    {
+                      circle_id: "incomplete",
+                      name: "Old group",
+                      owner_party_id: "owner",
+                    },
+                  ]
+                : request.entity === "social.circle_member"
+                  ? [
+                      {
+                        member_id: "m0",
+                        circle_id: "trip",
+                        party_id: "owner",
+                        capability: "read+write",
+                      },
+                      {
+                        member_id: "m1",
+                        circle_id: "trip",
+                        party_id: "asha",
+                        capability: "read",
+                      },
+                      {
+                        member_id: "m2",
+                        circle_id: "trip",
+                        party_id: "ben",
+                        capability: "read+write",
+                      },
+                      {
+                        member_id: "m3",
+                        circle_id: "incomplete",
+                        party_id: "missing-directory-party",
+                        capability: "read",
+                      },
+                    ]
+                  : request.entity === "tally.group"
+                    ? [
+                        { group_id: "g1", circle_id: "trip" },
+                        { group_id: "g2", circle_id: "foreign" },
+                        { group_id: "g3", circle_id: "incomplete" },
+                      ]
+                    : [];
+        return {
+          rows: values.map((row, index) => ({
+            rowId: String(index),
+            values: row,
+            oversizedFields: [],
+            hasUnavailableFields: false,
+          })),
+          cursor: { epoch: "e", seq: 1 },
+          dependency: { shapeId: appId, entity: request.entity },
+        };
+      }),
+    });
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "docs",
+      session,
+      queries: noQueries,
+      target,
+    });
+    doFetch.mockResolvedValue(new Response("{}"));
+    readJson.mockResolvedValue({ links: [] });
+
+    await expect(
+      (target.centraid as InlineCentraidClient).shareCircles()
+    ).resolves.toStrictEqual([
+      {
+        circleId: "trip",
+        label: "Goa trip",
+        members: [
+          { partyId: "asha", capability: "read" },
+          { partyId: "ben", capability: "read+write" },
+        ],
+      },
+    ]);
+  });
+
+  it("sends a party-only invitation without inventing a vault", async () => {
+    const session = fakeSession();
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "docs",
+      session,
+      queries: noQueries,
+      target,
+      scopes: [
+        {
+          scope: { id: "owner-vault", label: "Priya", canWrite: true },
+          session,
+        },
+      ],
+    });
+    doFetch.mockResolvedValue(new Response("{}"));
+    readJson.mockResolvedValue({ grant: { grantId: "grant-1" } });
+
+    await (target.centraid as InlineCentraidClient).share({
+      sourceVaultId: "owner-vault",
+      containerType: "core.document",
+      containerId: "doc-1",
+      members: [{ partyId: "asha", capability: "read" }],
+      circleId: "trip-circle",
+    });
+
+    expect(doFetch).toHaveBeenCalledWith(
+      "https://gw.test",
+      "/centraid/_gateway/commons",
+      expect.objectContaining({
+        body: JSON.stringify({
+          originVaultId: "owner-vault",
+          containerType: "core.document",
+          containerId: "doc-1",
+          members: [{ partyId: "asha", capability: "read" }],
+          circleId: "trip-circle",
+        }),
+      })
+    );
+  });
+
+  it("detects and retains an exact receiver-resident Commons row", async () => {
+    const session = fakeSession();
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "docs",
+      session,
+      queries: noQueries,
+      target,
+      scopes: [
+        {
+          scope: { id: "member-vault", label: "Mine", canWrite: true },
+          session,
+        },
+      ],
+    });
+    doFetch.mockResolvedValue(new Response("{}"));
+    readJson
+      .mockResolvedValueOnce({
+        items: [
+          {
+            grantId: "grant-1",
+            itemType: "core.document",
+            itemId: "doc-1",
+            originItemId: "origin-doc",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ retained: true, grantIds: ["grant-1"] });
+
+    const residentClient = target.centraid as InlineCentraidClient;
+    await expect(
+      residentClient.commonsResidents("member-vault")
+    ).resolves.toMatchObject([{ itemType: "core.document", itemId: "doc-1" }]);
+    await expect(
+      residentClient.retainCommonsItem({
+        actorVaultId: "member-vault",
+        itemType: "core.document",
+        itemId: "doc-1",
+      })
+    ).resolves.toMatchObject({ retained: true });
+    expect(doFetch).toHaveBeenNthCalledWith(
+      1,
+      "https://gw.test",
+      "/centraid/_gateway/commons/resident?actorVaultId=member-vault",
+      expect.any(Object)
+    );
+    expect(doFetch).toHaveBeenNthCalledWith(
+      2,
+      "https://gw.test",
+      "/centraid/_gateway/commons/retain",
+      expect.objectContaining({
+        body: JSON.stringify({
+          actorVaultId: "member-vault",
+          itemType: "core.document",
+          itemId: "doc-1",
+        }),
+      })
+    );
   });
 
   it("runs the local query module for a read", async () => {

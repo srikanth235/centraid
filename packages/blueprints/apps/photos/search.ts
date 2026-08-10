@@ -15,7 +15,7 @@
 // PER-SCOPE REACH (issue #726 D10/D11): a scope that failed to answer is a
 // NAMED STATE (`reachFacts`), never a reason to blank a scope that DID
 // answer. Own results (or any other reached scope's) still render when a
-// borrowed scope could not be asked — the whole search only collapses to
+// another mounted scope could not be asked — the whole search only collapses to
 // `unreachable` when NOTHING reached, which is the one case with nothing
 // honest left to show.
 import { mountedScopes, ownScopeId } from "../_shared/scope-kit.ts";

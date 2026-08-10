@@ -15,6 +15,8 @@ import {
 } from "react";
 import type { KeyboardEvent, ReactElement, ReactNode } from "react";
 
+import { mountedScopes } from "../_shared/scope-kit.ts";
+import { ShareSheet } from "../_shared/ShareSheet.tsx";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { BulkBar } from "./components/BulkBar.tsx";
@@ -115,7 +117,7 @@ interface Core {
   applySearch: () => void;
 }
 
-export function Root({ rootRef }: InlineAppProps): ReactElement {
+export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const [narrow, setNarrow] = useState(false);
   const [ready, setReady] = useState(false);
@@ -124,6 +126,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const [consent, setConsent] = useState<{ message: string } | null>(null);
   const [dropVisible, setDropVisible] = useState(false);
   const [dropTarget, setDropTarget] = useState("");
+  const [shareFolder, setShareFolder] = useState<Folder | null>(null);
+  const [residentFolderIds, setResidentFolderIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   const rootElRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -407,6 +413,57 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     return () => cancelAnimationFrame(id);
   }, []);
 
+  useEffect(() => {
+    if (!ready || !window.centraid.commonsResidents) return;
+    const actorVaultId = mountedScopes()[0]?.id;
+    if (!actorVaultId) return;
+    let active = true;
+    void window.centraid
+      .commonsResidents(actorVaultId)
+      .then((items) => {
+        if (active)
+          setResidentFolderIds(
+            new Set(
+              items.flatMap((item) =>
+                item.itemType === "docs.folder" ? [item.itemId] : []
+              )
+            )
+          );
+      })
+      .catch(() => {
+        if (active) setResidentFolderIds(new Set());
+      });
+    return () => {
+      active = false;
+    };
+  }, [ready]);
+
+  const saveFolderToMyVault = async (folder: Folder): Promise<void> => {
+    const actorVaultId = mountedScopes()[0]?.id;
+    if (!actorVaultId || !window.centraid.retainCommonsItem) return;
+    try {
+      await window.centraid.retainCommonsItem({
+        actorVaultId,
+        itemType: "docs.folder",
+        itemId: folder.folder_id,
+      });
+      setResidentFolderIds((current) => {
+        const next = new Set(current);
+        next.delete(folder.folder_id);
+        return next;
+      });
+      frame.setStatus(
+        "Saved to my vault. This copy survives if the share ends."
+      );
+    } catch (error) {
+      frame.setStatus(
+        error instanceof Error
+          ? `Folder was not saved: ${error.message}`
+          : "Folder was not saved to your vault."
+      );
+    }
+  };
+
   // ---- chrome wiring: doorbell, focus, width, keys, drag/drop ----
   useEffect(() => {
     const stopDoorbell = onDataChange(CHANGE_TABLES, () => void core.refresh());
@@ -627,6 +684,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     state.driveTruncated &&
     !state.search.trim() &&
     state.nav.kind !== "starred";
+  const scopes = mountedScopes();
 
   // ---- slots ----
 
@@ -647,6 +705,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       creatingFolder={state.creatingFolder}
       trashCount={counts.trash}
       onSelectNav={selectNav}
+      onShareFolder={setShareFolder}
+      residentFolderIds={residentFolderIds}
+      onSaveFolder={saveFolderToMyVault}
       onStartRename={handleStartRenameFolder}
       onDeleteFolder={handleDeleteFolder}
       onRenameCommit={handleRenameFolder}
@@ -805,6 +866,16 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           onSave={handleEditDocument}
         />
       ) : null}
+      <ShareSheet
+        open={shareFolder !== null}
+        onClose={() => setShareFolder(null)}
+        sourceScopeId={scopes[0]?.id ?? ""}
+        scopes={scopes}
+        itemType="docs.folder"
+        itemIds={shareFolder ? [shareFolder.folder_id] : []}
+        appLabel="Docs"
+        onDone={(outcome) => frame.setStatus(outcome.message)}
+      />
     </>
   );
 

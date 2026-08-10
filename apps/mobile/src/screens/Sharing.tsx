@@ -1,63 +1,37 @@
-// Settings → Sharing (issue #726 P6) — the People panel: per-person shares
-// in and out, link propose/approve, the D9 receive setting, and the D9 ask
-// surface for a parked incoming edge. Same idiom as PhoneStorage.tsx: a
-// back-chevron header over a scrolling column of bordered cards.
-//
-// WORDING IS LOAD-BEARING (D7). Stopping a lend reads "Stop lending" — NEVER
-// "take back": what the audience already read cannot be un-seen, only the
-// window can close. A give is warned irrevocable in the share sheet itself,
-// at share time — this screen only narrates what already happened.
-//
-// HONEST STATES, not failures: a parked ask waits, never errors; a borrowed
-// scope's reachState renders as a state (offered/established/parked), never
-// collapses to "shared" or vanishes when unreachable.
 import React, { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
+import { parseCommonsInvite } from "@centraid/blueprints/apps/_shared/commons-invite";
+import { formatBytes } from "@centraid/design";
+
 import Icon from "../kit/components/Icon";
-import { Text } from "../kit/components/NativeText";
+import { Text, TextInput } from "../kit/components/NativeText";
 import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import { density, radii, t, useTheme } from "../kit/theme";
 import {
   answerPendingEdge,
-  closeEdge,
   listEdges,
   listPendingEdges,
 } from "../lib/replica/edges-transport";
 import type { GatewayEdge, PendingEdge } from "../lib/replica/edges-transport";
 import { approveLink, listLinks } from "../lib/replica/links-transport";
 import type { GatewayLink } from "../lib/replica/links-transport";
+import {
+  answerCommonsInvitation,
+  claimCommonsInvitation,
+  listCommonsInvitations,
+} from "../lib/replica/placement-transport";
+import type { CommonsInvitation } from "../lib/replica/placement-transport";
 import type { SettingsScreenProps } from "../navigation";
 import SharingLinkRow, { LinkTicketPanel } from "./SharingLinkRow";
 
-/** The link's own record of who `vaultId` is (#726 P6 gap 3) — `labelA`/
- *  `labelB` name `vaultA`/`vaultB` symmetrically, regardless of which side is
- *  "mine". `null` when a link genuinely never recorded one. */
-function labelFromLinks(
-  vaultId: string,
-  links: readonly GatewayLink[]
-): string | null {
-  for (const linkRow of links) {
-    if (linkRow.vaultA === vaultId) return linkRow.labelA;
-    if (linkRow.vaultB === vaultId) return linkRow.labelB;
+function vaultLabel(vaultId: string, links: readonly GatewayLink[]): string {
+  for (const link of links) {
+    if (link.vaultA === vaultId) return link.labelA ?? "Linked person";
+    if (link.vaultB === vaultId) return link.labelB ?? "Linked person";
   }
-  return null;
-}
-
-/** Best label for a raw vault id: the link's own record, else a borrowed
- *  row's holder label, else an HONEST "unknown" — never a raw id standing in
- *  for a name (#726 P6 gap 3). */
-function vaultLabel(
-  vaultId: string,
-  borrowed: readonly { vaultId: string; label: string }[],
-  links: readonly GatewayLink[]
-): string {
-  return (
-    labelFromLinks(vaultId, links) ??
-    borrowed.find((entry) => entry.vaultId === vaultId)?.label ??
-    "Unknown vault"
-  );
+  return "Linked person";
 }
 
 export default function SharingScreen({
@@ -68,44 +42,42 @@ export default function SharingScreen({
   const [links, setLinks] = useState<GatewayLink[]>([]);
   const [edges, setEdges] = useState<GatewayEdge[]>([]);
   const [pending, setPending] = useState<PendingEdge[]>([]);
-  const [errorMessage, setErrorMessage] = useState<string | undefined>();
-  const [busyId, setBusyId] = useState<string | undefined>();
+  const [commonsInvitations, setCommonsInvitations] = useState<
+    CommonsInvitation[]
+  >([]);
+  const [errorMessage, setErrorMessage] = useState<string>();
+  const [busyId, setBusyId] = useState<string>();
+  const [commonsInviteCode, setCommonsInviteCode] = useState("");
 
-  const refresh = useCallback(() => {
-    const base = replica.gatewayBase;
-    if (!base) return;
-    Promise.all([listLinks(base), listEdges(base), listPendingEdges(base)])
-      .then(([l, e, p]) => {
-        setLinks(l);
-        setEdges(e);
-        setPending(p);
+  const refresh = useCallback((): void => {
+    if (!replica.gatewayBase || !replica.vaultId) return;
+    void Promise.all([
+      listLinks(replica.gatewayBase),
+      listEdges(replica.gatewayBase),
+      listPendingEdges(replica.gatewayBase),
+      listCommonsInvitations(replica.gatewayBase, replica.vaultId),
+    ])
+      .then(([nextLinks, nextEdges, nextPending, nextCommonsInvitations]) => {
+        setLinks(nextLinks);
+        setEdges(nextEdges);
+        setPending(nextPending);
+        setCommonsInvitations(nextCommonsInvitations);
         setErrorMessage(undefined);
       })
       .catch((error: unknown) =>
         setErrorMessage(error instanceof Error ? error.message : String(error))
       );
-  }, [replica.gatewayBase]);
+  }, [replica.gatewayBase, replica.vaultId]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  useEffect(refresh, [refresh]);
 
-  // Borrowed scopes double as a fallback label source for a linked vault
-  // whose link row genuinely has none (an older link, #726 P6 gap 3 — the
-  // gateway now names both sides of a same-machine link at propose time).
-  const borrowedLabels = (replica.scopes ?? [])
-    .filter((scope) => scope.borrowed)
-    .map((scope) => ({ vaultId: scope.vaultId, label: scope.label }));
-
-  const answer = async (
-    edgeId: string,
-    decision: "accept" | "refuse"
+  const act = async (
+    id: string,
+    action: () => Promise<unknown>
   ): Promise<void> => {
-    const base = replica.gatewayBase;
-    if (!base) return;
-    setBusyId(edgeId);
+    setBusyId(id);
     try {
-      await answerPendingEdge(base, edgeId, decision);
+      await action();
       refresh();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -113,40 +85,7 @@ export default function SharingScreen({
       setBusyId(undefined);
     }
   };
-
-  // The owner-facing revoke route (#726 P6 gap 1) — one door for both
-  // directions: "Stop lending" at the origin, "Stop borrowing" at the
-  // audience. The gateway disambiguates by which side's row this owner owns.
-  const closeShare = async (edgeId: string): Promise<void> => {
-    const base = replica.gatewayBase;
-    if (!base) return;
-    setBusyId(edgeId);
-    try {
-      await closeEdge(base, edgeId);
-      refresh();
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusyId(undefined);
-    }
-  };
-
-  const approve = async (linkId: string): Promise<void> => {
-    const base = replica.gatewayBase;
-    if (!base) return;
-    setBusyId(linkId);
-    try {
-      await approveLink(base, linkId);
-      refresh();
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusyId(undefined);
-    }
-  };
-
-  const borrowed = (replica.scopes ?? []).filter((scope) => scope.borrowed);
-  const liveOut = edges.filter((edge) => edge.mode === "live");
+  const snapshots = edges.filter((edge) => edge.mode === "snapshot");
 
   return (
     <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
@@ -159,10 +98,11 @@ export default function SharingScreen({
           <Icon name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <View style={styles.headerCopy}>
-          <Text style={[t("title"), { color: colors.text }]}>Sharing</Text>
+          <Text style={[t("title"), { color: colors.text }]}>
+            People &amp; circles
+          </Text>
           <Text style={[t("small"), { color: colors.textSoft }]}>
-            {links.length} {links.length === 1 ? "link" : "links"} ·{" "}
-            {borrowed.length} shared with you
+            {links.length} {links.length === 1 ? "person" : "people"}
           </Text>
         </View>
       </View>
@@ -173,7 +113,7 @@ export default function SharingScreen({
           </Text>
         ) : null}
 
-        {pending.length > 0 ? (
+        {pending.length ? (
           <Section title="Waiting for your decision" colors={colors}>
             {pending.map((row) => (
               <View
@@ -184,50 +124,109 @@ export default function SharingScreen({
                 ]}
               >
                 <Text style={[t("body"), { color: colors.text }]}>
-                  {vaultLabel(row.peerVaultId, borrowedLabels, links)} wants to
-                  share {row.itemCount} {row.itemType}
+                  {vaultLabel(row.peerVaultId, links)} shared {row.itemCount}{" "}
+                  {row.itemType}
                 </Text>
                 <Text style={[t("small"), { color: colors.textSoft }]}>
-                  Parked — nothing has been written yet.
+                  Nothing is written until you accept.
                 </Text>
                 <View style={styles.rowActions}>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={busyId === row.edgeId}
-                    onPress={() => void answer(row.edgeId, "accept")}
-                    style={[styles.pill, { borderColor: colors.line }]}
-                  >
-                    <Text style={[t("control"), { color: colors.accent }]}>
-                      Accept
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={busyId === row.edgeId}
-                    onPress={() => void answer(row.edgeId, "refuse")}
-                    style={[styles.pill, { borderColor: colors.line }]}
-                  >
-                    <Text style={[t("control"), { color: colors.textSoft }]}>
-                      Refuse
-                    </Text>
-                  </Pressable>
+                  {(["accept", "refuse"] as const).map((decision) => (
+                    <Pressable
+                      key={decision}
+                      accessibilityRole="button"
+                      disabled={busyId === row.edgeId}
+                      onPress={() =>
+                        replica.gatewayBase &&
+                        void act(row.edgeId, () =>
+                          answerPendingEdge(
+                            replica.gatewayBase!,
+                            row.edgeId,
+                            decision
+                          )
+                        )
+                      }
+                      style={[styles.pill, { borderColor: colors.line }]}
+                    >
+                      <Text
+                        style={[
+                          t("control"),
+                          {
+                            color:
+                              decision === "accept"
+                                ? colors.accent
+                                : colors.textSoft,
+                          },
+                        ]}
+                      >
+                        {decision === "accept" ? "Accept" : "Refuse"}
+                      </Text>
+                    </Pressable>
+                  ))}
                 </View>
               </View>
             ))}
           </Section>
         ) : null}
 
-        <Section title="Shared with me" colors={colors}>
-          {borrowed.length === 0 ? (
-            <Text style={[t("small"), { color: colors.textSoft }]}>
-              Nobody is lending you anything yet.
-            </Text>
-          ) : (
-            borrowed.map((scope) => {
-              const info = scope.borrowed!;
-              return (
+        <Section title="Redeem a shared-space invite" colors={colors}>
+          <Text style={[t("small"), { color: colors.textSoft }]}>
+            Create your vault first. If the sharer is remote, connect with them,
+            then paste the one-time invitation here.
+          </Text>
+          <TextInput
+            accessibilityLabel="Shared-space invitation"
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="centraid://commons-invite…"
+            placeholderTextColor={colors.textFaint}
+            value={commonsInviteCode}
+            onChangeText={setCommonsInviteCode}
+            style={[
+              styles.inviteInput,
+              {
+                backgroundColor: colors.bgElev,
+                borderColor: colors.line,
+                color: colors.text,
+              },
+            ]}
+          />
+          <Pressable
+            accessibilityRole="button"
+            disabled={!commonsInviteCode.trim() || !replica.vaultId}
+            onPress={() => {
+              const claim = parseCommonsInvite(commonsInviteCode);
+              if (!claim) {
+                setErrorMessage("That shared-space invitation is invalid.");
+                return;
+              }
+              const actorVaultId = replica.vaultId;
+              if (!replica.gatewayBase || !actorVaultId) return;
+              // Discard the raw one-time secret as soon as it is handed to the
+              // authenticated claim request; never log or persist it.
+              setCommonsInviteCode("");
+              void act("commons:claim", () =>
+                claimCommonsInvitation(
+                  replica.gatewayBase!,
+                  actorVaultId,
+                  claim.stewardVaultId,
+                  claim.claimToken
+                )
+              );
+            }}
+            style={[styles.pill, { borderColor: colors.line }]}
+          >
+            <Text style={[t("control"), { color: colors.accent }]}>Redeem</Text>
+          </Pressable>
+        </Section>
+
+        {commonsInvitations.some((row) => row.status === "pending") ? (
+          <Section title="Shared spaces offered to you" colors={colors}>
+            {commonsInvitations
+              .filter((row) => row.status === "pending")
+              .map((row) => (
                 <View
-                  key={info.edgeId}
+                  key={row.invitationId}
                   style={[
                     styles.card,
                     {
@@ -236,58 +235,60 @@ export default function SharingScreen({
                     },
                   ]}
                 >
-                  <View style={styles.rowBetween}>
-                    <Text style={[t("body"), { color: colors.text }]}>
-                      {info.holderLabel}
-                    </Text>
-                    <Text
-                      style={[
-                        t("control"),
-                        {
-                          color:
-                            info.reachState === "established"
-                              ? colors.success
-                              : info.reachState === "parked"
-                                ? colors.danger
-                                : colors.textSoft,
-                        },
-                      ]}
-                    >
-                      {info.reachState}
-                    </Text>
-                  </View>
-                  <Text style={[t("small"), { color: colors.textSoft }]}>
-                    {info.itemType}
+                  <Text style={[t("body"), { color: colors.text }]}>
+                    Ongoing shared space from {row.stewardVaultId}
                   </Text>
-                  {info.reachState === "parked" && info.reason ? (
-                    <Text style={[t("small"), { color: colors.textSoft }]}>
-                      At {info.holderLabel}’s vault — {info.reason}
-                    </Text>
-                  ) : null}
-                  <Pressable
-                    accessibilityLabel="Stop borrowing"
-                    accessibilityRole="button"
-                    disabled={busyId === info.edgeId}
-                    onPress={() => void closeShare(info.edgeId)}
-                    style={[styles.pill, { borderColor: colors.line }]}
-                  >
-                    <Text style={[t("control"), { color: colors.accent }]}>
-                      Stop borrowing
-                    </Text>
-                  </Pressable>
+                  <Text style={[t("small"), { color: colors.textSoft }]}>
+                    {formatBytes(row.currentSizeBytes)} now · nothing is written
+                    until you accept.
+                  </Text>
+                  <View style={styles.rowActions}>
+                    {(["accept", "refuse"] as const).map((answer) => {
+                      const busyKey = `commons:${row.invitationId}`;
+                      return (
+                        <Pressable
+                          key={answer}
+                          accessibilityRole="button"
+                          disabled={busyId === busyKey}
+                          onPress={() =>
+                            replica.gatewayBase &&
+                            replica.vaultId &&
+                            void act(busyKey, () =>
+                              answerCommonsInvitation(
+                                replica.gatewayBase!,
+                                row.invitationId,
+                                replica.vaultId!,
+                                answer
+                              )
+                            )
+                          }
+                          style={[styles.pill, { borderColor: colors.line }]}
+                        >
+                          <Text
+                            style={[
+                              t("control"),
+                              {
+                                color:
+                                  answer === "accept"
+                                    ? colors.accent
+                                    : colors.textSoft,
+                              },
+                            ]}
+                          >
+                            {answer === "accept" ? "Accept" : "Refuse"}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                 </View>
-              );
-            })
-          )}
-        </Section>
+              ))}
+          </Section>
+        ) : null}
 
-        <Section title="What you’re lending" colors={colors}>
-          {liveOut.length === 0 ? (
-            <Text style={[t("small"), { color: colors.textSoft }]}>
-              You aren’t lending any scope right now.
-            </Text>
-          ) : (
-            liveOut.map((edge) => (
+        <Section title="Recent direct copies" colors={colors}>
+          {snapshots.length ? (
+            snapshots.map((edge) => (
               <View
                 key={edge.edgeId}
                 style={[
@@ -297,7 +298,7 @@ export default function SharingScreen({
               >
                 <View style={styles.rowBetween}>
                   <Text style={[t("body"), { color: colors.text }]}>
-                    {vaultLabel(edge.audienceVaultId, borrowedLabels, links)}
+                    {vaultLabel(edge.audienceVaultId, links)}
                   </Text>
                   <Text style={[t("control"), { color: colors.textSoft }]}>
                     {edge.status}
@@ -306,19 +307,12 @@ export default function SharingScreen({
                 <Text style={[t("small"), { color: colors.textSoft }]}>
                   {edge.itemType}
                 </Text>
-                <Pressable
-                  accessibilityLabel="Stop lending"
-                  accessibilityRole="button"
-                  disabled={busyId === edge.edgeId}
-                  onPress={() => void closeShare(edge.edgeId)}
-                  style={[styles.pill, { borderColor: colors.line }]}
-                >
-                  <Text style={[t("control"), { color: colors.accent }]}>
-                    Stop lending
-                  </Text>
-                </Pressable>
               </View>
             ))
+          ) : (
+            <Text style={[t("small"), { color: colors.textSoft }]}>
+              No direct copies yet.
+            </Text>
           )}
         </Section>
 
@@ -331,12 +325,8 @@ export default function SharingScreen({
           />
         </Section>
 
-        <Section title="Links" colors={colors}>
-          {links.length === 0 ? (
-            <Text style={[t("small"), { color: colors.textSoft }]}>
-              No links yet.
-            </Text>
-          ) : (
+        <Section title="People" colors={colors}>
+          {links.length ? (
             links.map((link) => (
               <SharingLinkRow
                 key={link.linkId}
@@ -344,14 +334,19 @@ export default function SharingScreen({
                 busy={busyId === link.linkId}
                 colors={colors}
                 gatewayBase={replica.gatewayBase}
-                label={vaultLabel(
-                  link.remoteVaultId ?? link.vaultB,
-                  borrowedLabels,
-                  links
-                )}
-                onApprove={() => void approve(link.linkId)}
+                label={vaultLabel(link.remoteVaultId ?? link.vaultB, links)}
+                onApprove={() =>
+                  replica.gatewayBase &&
+                  void act(link.linkId, () =>
+                    approveLink(replica.gatewayBase!, link.linkId)
+                  )
+                }
               />
             ))
+          ) : (
+            <Text style={[t("small"), { color: colors.textSoft }]}>
+              No people linked yet.
+            </Text>
           )}
         </Section>
       </ScrollView>
@@ -390,6 +385,12 @@ const styles = StyleSheet.create({
   },
   header: { alignItems: "center", flexDirection: "row", gap: 12, padding: 18 },
   headerCopy: { flex: 1 },
+  inviteInput: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
   pill: {
     alignSelf: "flex-start",
     borderRadius: radii.md,

@@ -44,7 +44,6 @@ export const MAX_MOUNTED_SCOPES = 4;
 export interface ResolvedAppScope {
   scope: InlineScope;
   identity: ReplicaIdentity;
-  borrowedEdgeId?: string;
 }
 
 /** The whole mount: every scope this app is installed in and open over. */
@@ -67,12 +66,8 @@ function toResolved(entry: AppScopeEntry, gatewayId: string): ResolvedAppScope {
       // Ownership-sourced (#726): supplied by the gateway, never derived
       // client-side from a role.
       canWrite: entry.canWrite,
-      // Carried through verbatim (#726 P6) — a lent scope's reach state is an
-      // app-visible fact, not something the shell summarizes away.
-      ...(entry.borrowed ? { borrowed: entry.borrowed } : {}),
     },
     identity: { gatewayId, vaultId: entry.vaultId },
-    ...(entry.borrowed ? { borrowedEdgeId: entry.borrowed.edgeId } : {}),
   };
 }
 
@@ -119,7 +114,7 @@ export async function resolveAppScopes(
   // available. `undefined` means the gateway did not answer the question and is
   // taken at face value.
   const mountable = (entries ?? []).filter(
-    (entry) => entry.installed !== false && entry.borrowed?.mounted !== false
+    (entry) => entry.installed !== false
   );
   if (mountable.length === 0) return ambientScope();
   const base = await auth();

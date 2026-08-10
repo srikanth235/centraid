@@ -1106,6 +1106,7 @@ export default function AutomationThreadScreen({
   onOpenCompiler,
   onOpenRun,
   onRunNow,
+  onSetRecognitionVariant,
   onToggleEnabled,
   onDecideConsent,
   onAskAboutRuns,
@@ -1121,6 +1122,10 @@ export default function AutomationThreadScreen({
   >("loading");
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
+  const [recognitionVariant, setRecognitionVariant] = useState<
+    "deterministic" | "agent"
+  >("deterministic");
+  const [recognitionSaving, setRecognitionSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [traces, setTraces] = useState<Record<string, AsstMsgDTO[]>>({});
   const [loadingTraces, setLoadingTraces] = useState<ReadonlySet<string>>(
@@ -1152,7 +1157,10 @@ export default function AutomationThreadScreen({
   const reload = useCallback(
     (): Promise<void> =>
       loadData()
-        .then((d) => setState(d ?? "missing"))
+        .then((d) => {
+          if (d?.recognition) setRecognitionVariant(d.recognition.selected);
+          setState(d ?? "missing");
+        })
         .catch(() => setState("error")),
     [loadData]
   );
@@ -1342,6 +1350,18 @@ export default function AutomationThreadScreen({
   const doRegenerate = (): void => {
     setRegenBusy(true);
     void onRotateWebhook().finally(() => setRegenBusy(false));
+  };
+  const doSetRecognitionVariant = async (
+    next: "deterministic" | "agent"
+  ): Promise<void> => {
+    if (!onSetRecognitionVariant) {
+      setRecognitionVariant(next);
+      return;
+    }
+    setRecognitionSaving(true);
+    const saved = await onSetRecognitionVariant(next);
+    if (saved) setRecognitionVariant(next);
+    setRecognitionSaving(false);
   };
   const doDecide = (
     kind: ConsentKind,
@@ -1543,6 +1563,83 @@ export default function AutomationThreadScreen({
       </div>
 
       <PlanBanner plan={d.plan} onOpenCompiler={onOpenCompiler} />
+
+      {d.recognition ? (
+        <section
+          className={styles.recognitionChoice}
+          aria-label="Recognition method"
+        >
+          <div className={styles.recognitionChoiceHead}>
+            <div>
+              <div className={styles.recognitionChoiceTitle}>
+                Recognition method
+              </div>
+              <div className={styles.recognitionChoiceCapability}>
+                {d.recognition.capability}
+              </div>
+            </div>
+            <select
+              aria-label="Recognition method"
+              value={recognitionVariant}
+              disabled={recognitionSaving}
+              onChange={(event) => {
+                const next =
+                  event.target.value === "agent" ? "agent" : "deterministic";
+                void doSetRecognitionVariant(next);
+              }}
+            >
+              <option value="deterministic">
+                {d.recognition.deterministicLabel}
+              </option>
+              <option value="agent" disabled={!d.recognition.agent.model}>
+                Agent
+                {d.recognition.agent.model ? "" : " — choose a model first"}
+              </option>
+            </select>
+          </div>
+          {recognitionVariant === "agent" ? (
+            <div className={styles.recognitionChoiceDetail}>
+              <label>
+                Pinned model
+                <select
+                  aria-label="Pinned agent model"
+                  value={d.recognition.agent.model ?? ""}
+                  disabled
+                >
+                  <option value={d.recognition.agent.model ?? ""}>
+                    {d.recognition.agent.model ?? "Choose in Compiler"}
+                  </option>
+                </select>
+              </label>
+              <p>{d.recognition.agent.latency}</p>
+              <p>{d.recognition.agent.consequence}</p>
+              <p>Provider egress still requires explicit consent.</p>
+            </div>
+          ) : (
+            <div className={styles.recognitionChoiceDetail}>
+              <p>
+                Uses the configured deterministic service. No provider model is
+                called and no billed agent step runs.
+              </p>
+              <p>Agent option: {d.recognition.agent.latency}</p>
+              <p>{d.recognition.agent.consequence}</p>
+              <p>
+                Agent runs require a pinned model and explicit provider-egress
+                consent.
+              </p>
+            </div>
+          )}
+          {d.recognition.agent.model ? null : (
+            <button
+              type="button"
+              className={styles.recognitionCompilerLink}
+              onClick={onOpenCompiler}
+            >
+              Choose an agent model in Compiler
+            </button>
+          )}
+        </section>
+      ) : null}
 
       {hasPending ? (
         <div className={styles.consentStrip}>

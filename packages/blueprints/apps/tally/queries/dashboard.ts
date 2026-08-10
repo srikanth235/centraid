@@ -13,6 +13,7 @@
  * access state.
  */
 
+import { tallyGroupNet } from "@centraid/blueprints";
 import { BRAND, identityColor, identityInitials } from "@centraid/design";
 
 /** A resolved person (owner or friend) the ledgers decorate rows with. */
@@ -189,8 +190,37 @@ export async function loadTally(
 
   const friends = (friendsRes.rows ?? []) as unknown as FriendRow[];
   const friendPartyIds = friends.map((f) => f.party_id);
+  // Circle membership is current state, while the ledger is durable history.
+  // A member who has left the circle must therefore remain nameable anywhere
+  // an expense or settlement still refers to them. Query every ledger party,
+  // not only today's friend/member roster, so group() can label that durable
+  // participant honestly instead of collapsing them to "Someone".
+  const activeExpenseIds = new Set(
+    ((expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]).map(
+      (expense) => expense.expense_id
+    )
+  );
+  const ledgerPartyIds = [
+    ...((membersRes.rows ?? []) as unknown as Array<{ party_id: string }>).map(
+      (member) => member.party_id
+    ),
+    ...((expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]).map(
+      (expense) => expense.paid_by
+    ),
+    ...(
+      (splitsRes.rows ?? []) as unknown as Array<{
+        expense_id: string;
+        party_id: string;
+      }>
+    )
+      .filter((split) => activeExpenseIds.has(split.expense_id))
+      .map((split) => split.party_id),
+    ...((settlesRes.rows ?? []) as unknown as SettlementRow[]).flatMap(
+      (settlement) => [settlement.from_party, settlement.to_party]
+    ),
+  ];
   const partyIds = [
-    ...new Set([me, ...friendPartyIds].filter(Boolean)),
+    ...new Set([me, ...friendPartyIds, ...ledgerPartyIds].filter(Boolean)),
   ] as string[];
   const partiesRes =
     partyIds.length > 0
@@ -224,6 +254,17 @@ export async function loadTally(
       party_id: f.party_id,
       name,
       color: colorByParty.get(f.party_id) || identityColor(f.party_id),
+      initials: identityInitials(name),
+      is_me: false,
+    });
+  }
+  for (const partyId of partyIds) {
+    if (people.has(partyId)) continue;
+    const name = nameById.get(partyId) || "Someone";
+    people.set(partyId, {
+      party_id: partyId,
+      name,
+      color: identityColor(partyId),
       initials: identityInitials(name),
       is_me: false,
     });
@@ -411,22 +452,7 @@ export function pairwise(data: TallyData): Map<string, number> {
 }
 
 /** Net per member within a group, in minor units. Positive = gets money back. */
-export function groupNet(data: TallyData, gid: string): Map<string, number> {
-  const net = new Map<string, number>();
-  for (const pid of data.membersByGroup.get(gid) ?? []) net.set(pid, 0);
-  for (const e of data.expenses) {
-    if (e.group_id !== gid) continue;
-    net.set(e.paid_by, (net.get(e.paid_by) || 0) + e.amount_minor);
-    for (const [pid, share] of Object.entries(e.splits))
-      net.set(pid, (net.get(pid) || 0) - share);
-  }
-  for (const s of data.settlements) {
-    if (s.group_id !== gid) continue;
-    net.set(s.from_party, (net.get(s.from_party) || 0) + s.amount_minor);
-    net.set(s.to_party, (net.get(s.to_party) || 0) - s.amount_minor);
-  }
-  return net;
-}
+export const groupNet = tallyGroupNet;
 
 /** A ledger row: the expense decorated with the owner's lent/borrowed stance. */
 export function ledgerRow(data: TallyData, e: ExpenseWithReceipt) {

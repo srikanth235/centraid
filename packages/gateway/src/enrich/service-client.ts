@@ -193,31 +193,14 @@ export type EnrichBox = [number, number, number, number];
 
 export interface EnrichOcrRegion {
   text: string;
-  /** 0..1. A service that cannot score its own output must say so per region. */
-  confidence: number;
+  /** 0..1 when the producer can score it; absence is preserved. */
+  confidence?: number;
   box: EnrichBox;
 }
 
 export interface EnrichOcrResult {
   id: string;
   regions: EnrichOcrRegion[];
-}
-
-/**
- * Sort a COPY of a service's OCR regions into reading order — top-to-bottom
- * by `box[1]` (y), then left-to-right by `box[0]` (x) — and join their text
- * with newlines. Never mutates `regions`. Shared by every consumer of the
- * `ocr` capability (the background sweep, `enrich/ocr-sweep.ts`, and the
- * capture route's live single-shot ask, `capture/capture-ocr.ts`) so reading
- * order is one rule, not two copies that can drift.
- */
-export function ocrReadingOrderText(
-  regions: readonly EnrichOcrRegion[]
-): string {
-  return [...regions]
-    .sort((a, b) => a.box[1] - b.box[1] || a.box[0] - b.box[0])
-    .map((region) => region.text)
-    .join("\n");
 }
 
 export interface EnrichFace {
@@ -479,7 +462,9 @@ const READERS: { [C in EnrichCapability]: ResultReader<C> } = {
           throw new Error("region text is not a string");
         return {
           text,
-          confidence: confidenceOf(entry["confidence"]),
+          ...(entry["confidence"] === undefined
+            ? {}
+            : { confidence: confidenceOf(entry["confidence"]) }),
           box: boxOf(entry["box"], item),
         };
       }),

@@ -1,7 +1,8 @@
 // The forward-only schema ladder for vault.db and journal.db. Pre-release v0
 // began with one composed base rung: all owner tables are composed in dependency
 // order. Once a schema has been used outside a fresh database its rung is
-// immutable; issue #726 therefore adds a real forward rename as rung two.
+// immutable; issue #726 therefore adds a real forward rename as rung two and
+// issue #731 adds the circle-backed Commons control plane as rung three.
 // Tracked via PRAGMA user_version; migrate() applies each rung transactionally.
 
 import type { DatabaseSync } from "node:sqlite";
@@ -43,6 +44,7 @@ import { RENAME_INBOX_NOTICE_DDL } from "./notifications.js";
 import { OUTBOX_DDL } from "./outbox.js";
 import { REPLICA_DDL } from "./replica.js";
 import { SEED_DDL } from "./seed.js";
+import { SHARE_COMMONS_DDL } from "./share-commons.js";
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from "./sync.js";
 import { TIME_ORGANIZE_DDL } from "./time-organize.js";
 
@@ -110,6 +112,7 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     RENAME_INBOX_NOTICE_DDL,
   ].join("\n"),
   SHARE_ORIGIN_ATTRIBUTION_DDL,
+  SHARE_COMMONS_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

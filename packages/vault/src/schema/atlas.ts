@@ -52,6 +52,7 @@ export const MACHINERY_BANDS: readonly string[] = [
   "outbox",
   "notifications",
   "blob",
+  "share",
 ];
 
 /** Human labels per pack — the serif vocabulary the census sentence uses. */
@@ -75,6 +76,7 @@ export const ATLAS_PACK_LABELS: Readonly<Record<string, string>> = {
   outbox: "Outbox",
   notifications: "Notifications",
   blob: "Blobs",
+  share: "Sharing",
 };
 
 /**

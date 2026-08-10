@@ -34,7 +34,7 @@ export function CaptureScanPanel({
   const [file, setFile] = useState<File>();
   const [extraction, setExtraction] = useState<{
     text: string;
-    confidence: number;
+    confidence?: number;
     engine: string;
   }>();
   const [receipt, setReceipt] = useState<ReceiptDraft>();
@@ -108,7 +108,7 @@ export function CaptureScanPanel({
       const result = await recognizeCaptureImage(next);
       if (!result)
         throw new Error(
-          "Gateway OCR is not configured. This PWA fallback needs a local Tesseract-compatible executable."
+          "Gateway OCR is not configured. Start the local recognition service and try again."
         );
       setExtraction(result);
       setReceipt(parseReceiptText(result.text));
@@ -251,8 +251,10 @@ export function CaptureScanPanel({
       {extraction ? (
         <>
           <p className={styles.hint}>
-            {extraction.engine} · {Math.round(extraction.confidence * 100)}%
-            extraction confidence
+            {extraction.engine}
+            {extraction.confidence === undefined
+              ? " · confidence not reported"
+              : ` · ${Math.round(extraction.confidence * 100)}% extraction confidence`}
           </p>
           <div className={styles.kinds} aria-label="Scan destination">
             {(["tally", "docs", "photos", "locker"] as const).map((id) => (

@@ -1,0 +1,31 @@
+{
+  "name": "Transcript",
+  "version": "0.1.0",
+  "description": "Transcribes audio/video preview derivatives in bounded cursor batches.",
+  "enabled": false,
+  "prompt": "Transcribe new audio and video preview derivatives in bounded batches and make the transcript searchable.",
+  "triggers": [
+    {
+      "kind": "data",
+      "entities": ["media.media_asset"],
+      "every": "*/5 * * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads media previews and stamps, and writes validated transcript derivatives.",
+    "scopes": [
+      { "schema": "media", "verbs": "read" },
+      { "schema": "core", "verbs": "read+act" },
+      { "schema": "enrich", "verbs": "read" }
+    ]
+  },
+  "enrich": {
+    "domain": "photos",
+    "capability": "transcript",
+    "lane": "gateway"
+  },
+  "history": { "keep": { "count": 100 } },
+  "generated": { "by": "centraid-template", "at": "2026-08-10T00:00:00.000Z" }
+}

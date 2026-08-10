@@ -27,11 +27,6 @@ import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
-import {
-  budgetFor,
-  isValidBudgetBytes,
-  setBudget,
-} from "../serve/lend-budget-settings.js";
 import type { PeerDial } from "../serve/peer-edge-give-client.js";
 import {
   encodeLinkTicket,
@@ -44,7 +39,10 @@ import {
   setReceiveSetting,
 } from "../serve/peer-receive-settings.js";
 import type { VaultLink } from "../serve/vault-link-row.js";
-import { isLinkApproved } from "../serve/vault-link-row.js";
+import {
+  isLinkApproved,
+  partyIdForLinkedVault,
+} from "../serve/vault-link-row.js";
 import type { VaultLinksStore } from "../serve/vault-links-store.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
@@ -64,6 +62,7 @@ export interface VaultLinksRouteDeps {
    *  a test double with no registry; a link proposed without it is labeled
    *  `null`, same as before this gap closed. */
   vaultName?: (vaultId: string) => string | undefined;
+  ownerPartyFor?: (vaultId: string) => string | undefined;
   /**
    * The remote ceremony's transport (audit #726 finding 1). Absent means
    * this build cannot dial out at all — `ticket` and `redeem` both answer a
@@ -96,6 +95,8 @@ function linkDto(link: VaultLink): Record<string, unknown> {
     // printing the id itself.
     labelA: link.labelA,
     labelB: link.labelB,
+    partyIdA: partyIdForLinkedVault(link, link.vaultA) ?? null,
+    partyIdB: partyIdForLinkedVault(link, link.vaultB) ?? null,
     approvedByA: link.approvedByA,
     approvedByB: link.approvedByB,
     approved: isLinkApproved(link),
@@ -237,11 +238,14 @@ async function handleRedeemTicket(
     });
   }
   const localRoute = deps.peer.localRoute();
+  const localOwnerPartyId = deps.ownerPartyFor?.(vaultId);
+  if (!localOwnerPartyId) return sendJson(res, 404, { error: "not_found" });
   const result = await redeemLinkTicket({
     ticket: parsed,
     links: deps.store,
     request: deps.peer.dial.request,
     localVault: { vaultId, publicKey },
+    localOwnerPartyId,
     localRoute: {
       endpointId: localRoute.endpointId ?? "",
       relayHints: localRoute.relayHints,
@@ -343,6 +347,12 @@ export function makeVaultLinksRouteHandler(
         fromPublicKey,
         toVaultId: otherVaultId,
         toPublicKey,
+        ...(deps.ownerPartyFor?.(vaultId)
+          ? { fromPartyId: deps.ownerPartyFor(vaultId) }
+          : {}),
+        ...(deps.ownerPartyFor?.(otherVaultId)
+          ? { toPartyId: deps.ownerPartyFor(otherVaultId) }
+          : {}),
         ...(deps.vaultName?.(vaultId)
           ? { fromLabel: deps.vaultName(vaultId) }
           : {}),
@@ -404,40 +414,6 @@ export function makeVaultLinksRouteHandler(
         linkId,
         vaultId: callerSide,
         setting: body.setting,
-      });
-    }
-    if (rest[1] === "borrow-budget") {
-      // #726 P6 gap 2: a vault sets ONLY its own storage budget for what it
-      // holds BORROWED over this link — same (link, vault)-own-side
-      // discipline as receive-setting, one knob down instead of one knob
-      // over.
-      if (method === "GET") {
-        return sendJson(res, 200, {
-          linkId,
-          vaultId: callerSide,
-          ...budgetFor(deps.gatewayDatabase, linkId, callerSide),
-        });
-      }
-      if (method !== "PUT" && method !== "PATCH")
-        return sendJson(res, 405, { error: "method_not_allowed" });
-      let body: Record<string, unknown>;
-      try {
-        body = await readJson(req);
-      } catch {
-        return sendJson(res, 400, { error: "invalid_body" });
-      }
-      if (!isValidBudgetBytes(body.budgetBytes)) {
-        return sendJson(res, 400, {
-          error: "invalid_budget_bytes",
-          message: "budgetBytes must be a non-negative integer",
-        });
-      }
-      setBudget(deps.gatewayDatabase, linkId, callerSide, body.budgetBytes);
-      return sendJson(res, 200, {
-        linkId,
-        vaultId: callerSide,
-        budgetBytes: body.budgetBytes,
-        isDefault: false,
       });
     }
     return false;

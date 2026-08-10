@@ -131,6 +131,10 @@ test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands 
       fullPage: true,
     });
     await page.screenshot({
+      path: path.join(evidenceDir, "issue-731-recognition-commons.png"),
+      fullPage: true,
+    });
+    await page.screenshot({
       path: path.join(evidenceDir, "issue-696-chat-harness.png"),
       fullPage: true,
     });
