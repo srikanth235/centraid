@@ -197,6 +197,7 @@ describe("B6 Commons peer plane", () => {
     });
     const tallyWire = exportCommonsBootstrap({
       steward: origin.vault.vault,
+      identitySeed: origin.vault.identitySeed,
       stewardVaultId: origin.vaultId,
       grantId: tallyGrant.grantId,
       memberVaultId: member.vaultId,

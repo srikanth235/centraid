@@ -408,6 +408,10 @@ describe("commons lifecycle and logical cursors", () => {
     const grant = createCommonsGrant({
       origin: origin.vault,
       ownerPartyId: originBoot.ownerPartyId,
+      // The steward's own vault binding is what a member verifies the signed
+      // checkpoint against (#731).
+      ownerVaultId: "vault-priya",
+      ownerVault: origin,
       containerType: "media.media_asset",
       containerId: photo.assetId,
       members: [
@@ -448,6 +452,7 @@ describe("commons lifecycle and logical cursors", () => {
     });
     const wire = exportCommonsBootstrap({
       steward: origin.vault,
+      identitySeed: origin.identitySeed,
       stewardVaultId: "vault-priya",
       grantId: grant.grantId,
       memberVaultId: "vault-family",
@@ -485,6 +490,7 @@ describe("commons lifecycle and logical cursors", () => {
     });
     const frame = exportCommonsSyncFrame({
       steward: origin.vault,
+      identitySeed: origin.identitySeed,
       stewardVaultId: "vault-priya",
       grantId: grant.grantId,
       memberVaultId: "vault-family",
@@ -526,6 +532,7 @@ describe("commons lifecycle and logical cursors", () => {
     });
     const wire = exportCommonsBootstrap({
       steward: origin.vault,
+      identitySeed: origin.identitySeed,
       stewardVaultId: "vault-priya",
       grantId: grant.grantId,
       memberVaultId: "vault-family",
@@ -734,6 +741,7 @@ describe("commons lifecycle and logical cursors", () => {
 
     const frame = exportCommonsSyncFrame({
       steward: origin.vault,
+      identitySeed: origin.identitySeed,
       stewardVaultId: "vault-priya",
       grantId: grant.grantId,
       memberVaultId: "vault-family",
@@ -836,6 +844,7 @@ describe("commons lifecycle and logical cursors", () => {
       seat: audience,
       wire: exportCommonsBootstrap({
         steward: origin.vault,
+        identitySeed: origin.identitySeed,
         stewardVaultId: "vault-priya",
         grantId: grant.grantId,
         memberVaultId: "vault-family",
@@ -862,6 +871,7 @@ describe("commons lifecycle and logical cursors", () => {
     });
     const frame = exportCommonsSyncFrame({
       steward: origin.vault,
+      identitySeed: origin.identitySeed,
       stewardVaultId: "vault-priya",
       grantId: grant.grantId,
       memberVaultId: "vault-family",

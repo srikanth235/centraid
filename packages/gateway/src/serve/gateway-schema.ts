@@ -1,8 +1,13 @@
 /*
- * `gateway.db`'s DDL and its one legacy migration, extracted out of
- * `gateway-db.ts` to keep that file under the 500-line cap (mirrors the P1
- * precedent of `device-ticket-mint.ts`). Both functions are pure over a
- * `DatabaseSync` handle — no lock/lease concerns belong here.
+ * `gateway.db`'s DDL, extracted out of `gateway-db.ts` to keep that file
+ * under the 500-line cap (mirrors the P1 precedent of
+ * `device-ticket-mint.ts`). Pre-1.0, this repo carries NO backward
+ * compatibility for `gateway.db`: there are no legacy-generation migrations
+ * here, on principle. `installGatewaySchema` is the single source of truth
+ * for the current shape; a `gateway.db` written by an older generation is
+ * expected to be erased and re-onboarded, not migrated in place. The
+ * function below is pure over a `DatabaseSync` handle — no lock/lease
+ * concerns belong here.
  */
 
 import type { DatabaseSync } from "node:sqlite";
@@ -264,9 +269,9 @@ export function installGatewaySchema(db: DatabaseSync): void {
      * D9 (#726 P3 decision 9): each side's own accept|ask|refuse preference
      * for gives ARRIVING at its vault over a link. Keyed by (link_id,
      * vault_id) rather than added as vault_links columns, so setting it never
-     * touches the ceremony/route columns' schema or their migration probe. No
-     * row for a pair means 'accept' — the default that makes an approved link
-     * behave exactly as P2 already did, before D9 existed.
+     * touches the ceremony/route columns' schema. No row for a pair means
+     * 'accept' — the default that makes an approved link behave exactly as
+     * P2 already did, before D9 existed.
      */
     CREATE TABLE IF NOT EXISTS link_receive_settings (
       link_id TEXT NOT NULL,
@@ -354,122 +359,5 @@ export function installGatewaySchema(db: DatabaseSync): void {
     ) STRICT;
     CREATE INDEX IF NOT EXISTS web_push_registrations_device_idx
       ON web_push_registrations(device_id);
-  `);
-}
-
-/*
- * Pre-1.0 link-table merge (issue #726 P3): two phases landed two link
- * tables — `vault_links` for pairs on this machine and `peer_links` for pairs
- * across machines — and D3 permits exactly one answerer for "may an edge
- * cross to vault X". Both shapes are unreleased, so they are DROPPED rather
- * than dual-written; `installGatewaySchema` then creates the unified
- * `vault_links`. Idempotent by construction: the probe finds neither the
- * superseded table nor the superseded column shape on a merged database.
- */
-export function migrateSupersededLinks(db: DatabaseSync): void {
-  const hasTable = (name: string): boolean =>
-    db
-      .prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?")
-      .get(name) !== undefined;
-  const merged =
-    !hasTable("vault_links") ||
-    (
-      db.prepare("PRAGMA table_info(vault_links)").all() as Array<{
-        name: string;
-      }>
-    ).some((column) => column.name === "public_key_a");
-  if (merged && !hasTable("peer_links")) return;
-  db.exec(`
-    BEGIN IMMEDIATE;
-    DROP TABLE IF EXISTS peer_links;
-    ${merged ? "" : "DROP TABLE IF EXISTS vault_links;"}
-    COMMIT;
-  `);
-}
-
-/** Pre-1.0 retirement for issue #731. The live-edge stores contain no
- * portable owner data: they were lease caches and transport bookkeeping.
- * Drop them instead of retaining a dormant second sharing model. An older
- * `share_edges` shape is also recreated so its CHECK constraint cannot admit
- * `mode = 'live'` after the route has stopped accepting it.
- *
- * `share_access_receipts` is untouched by this migration: its shape carries
- * no `mode` and never referenced the lend tables (no FK — owner ids are
- * deliberately not foreign keys, see the table's own comment), so it needs
- * no recreation. It records that access was GRANTED or removed, which must
- * survive the lend plane's retirement exactly as it survives an owner's
- * removal — dropping it here would erase give history the retirement never
- * asked to erase. */
-export function migrateRetiredLending(db: DatabaseSync): void {
-  const shareEdgesSql = (
-    db
-      .prepare(
-        "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'share_edges'"
-      )
-      .get() as { sql?: string } | undefined
-  )?.sql;
-  const recreateEdges = shareEdgesSql?.includes("'live'") === true;
-  db.exec(`
-    BEGIN IMMEDIATE;
-    DROP TABLE IF EXISTS peer_pending_lend_closes;
-    DROP TABLE IF EXISTS lent_edges;
-    DROP TABLE IF EXISTS borrowed_edges;
-    DROP TABLE IF EXISTS link_borrow_budgets;
-    ${recreateEdges ? "DROP TABLE share_edges;" : ""}
-    COMMIT;
-  `);
-}
-
-/*
- * Pre-1.0 legacy migration (issue #726 P0): a gateway.db written under the
- * #599 household model carries `members`/`member_roles`. Rename the tables
- * and columns to the ownership vocabulary, seed `vault_owners` with each
- * vault's earliest-created admin (fallback: earliest member holding any
- * role), and drop the role lattice. Idempotent by construction: the probe
- * finds no `members` table on a migrated or fresh database.
- */
-export function migrateLegacyMembers(db: DatabaseSync): void {
-  const legacy = db
-    .prepare(
-      "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'members'"
-    )
-    .get();
-  if (!legacy) return;
-  db.exec(`
-    BEGIN IMMEDIATE;
-    ALTER TABLE members RENAME TO owners;
-    ALTER TABLE owners RENAME COLUMN member_id TO owner_id;
-    ALTER TABLE devices RENAME COLUMN member_id TO owner_id;
-    ALTER TABLE tickets RENAME COLUMN member_id TO owner_id;
-    CREATE TABLE IF NOT EXISTS vault_owners (
-      vault_id TEXT PRIMARY KEY,
-      owner_id TEXT NOT NULL REFERENCES owners(owner_id) ON DELETE CASCADE
-    ) STRICT;
-    INSERT OR IGNORE INTO vault_owners (vault_id, owner_id)
-      SELECT vault_id, owner_id FROM (
-        SELECT mr.vault_id AS vault_id, mr.member_id AS owner_id,
-               ROW_NUMBER() OVER (
-                 PARTITION BY mr.vault_id
-                 ORDER BY (mr.role = 'admin') DESC, o.created_at, o.owner_id
-               ) AS pick
-          FROM member_roles mr
-          JOIN owners o ON o.owner_id = mr.member_id
-      ) WHERE pick = 1;
-    DROP TABLE member_roles;
-    -- Legacy tickets carry role-bearing grants that can no longer be
-    -- honoured; they are 15-minute invitations, so dropping them is cheaper
-    -- and safer than rewriting their grant shape.
-    DELETE FROM tickets;
-    -- #726 P2 replaced both tables' column shapes (single item → an item
-    -- SET, one receipt per edge rather than per item); pre-1.0, this audit
-    -- trail carries no migration promise, same call already made for
-    -- tickets above. installGatewaySchema recreates both fresh below.
-    DROP TABLE IF EXISTS placement_intents;
-    DROP TABLE IF EXISTS share_access_receipts;
-    -- The default share-target pointer died with the /share plane (#726).
-    DELETE FROM prefs
-      WHERE key = 'share.defaultTargetVaultId'
-         OR key GLOB 'member.*.share.defaultTargetVaultId';
-    COMMIT;
   `);
 }

@@ -113,6 +113,7 @@ describe("B6 Tally Commons across a real peer", () => {
     // current-size invitation is explicitly accepted.
     const initialWire = exportCommonsBootstrap({
       steward: origin.vault.vault,
+      identitySeed: origin.vault.identitySeed,
       stewardVaultId: origin.vaultId,
       grantId: grant.grantId,
       memberVaultId: remote.vaultId,

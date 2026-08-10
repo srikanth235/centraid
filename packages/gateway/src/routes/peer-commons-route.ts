@@ -12,6 +12,7 @@ import {
   exportCommonsBootstrap,
   exportCommonsSyncFrame,
   queueCommonsInvitation,
+  readCommonsChainHead,
   readCommonsGrant,
   refuseCommonsMember,
   upsertCommonsMember,
@@ -147,6 +148,7 @@ export function handlePeerCommonsBootstrap(
     }
     const frame = exportCommonsSyncFrame({
       steward: steward.vault,
+      identitySeed: steward.identitySeed,
       stewardVaultId: linked.stewardVaultId,
       grantId,
       memberVaultId: linked.memberVaultId,
@@ -182,6 +184,10 @@ export function handlePeerCommonsBootstrap(
         state: "current",
         grantId,
         currentSequence,
+        // The no-op still carries the chain head (#731): a steward that forked
+        // at a sequence the member already verified would otherwise hide
+        // behind "you are caught up".
+        headHash: readCommonsChainHead(steward.vault, grantId).hash,
       });
     return sendJson(res, 200, frame);
   } catch {
@@ -214,6 +220,7 @@ export function handlePeerCommonsBlob(
   try {
     const wire = exportCommonsBootstrap({
       steward: steward.vault,
+      identitySeed: steward.identitySeed,
       stewardVaultId: linked.stewardVaultId,
       grantId,
       memberVaultId: linked.memberVaultId,

@@ -197,6 +197,7 @@ describe("schema/migrate", () => {
        DROP TABLE share_commons_replay;
        DROP TABLE share_commons_receipt;
        DROP TABLE share_commons_cursor;
+       DROP TABLE share_commons_verified;
        DROP TABLE share_commons_lineage;
        DROP TABLE share_commons_retained;
        DROP TABLE share_commons_intent;

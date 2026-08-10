@@ -115,6 +115,7 @@ describe("B6 Docs folder Commons across a real peer", () => {
     compileOrigin();
     const readerWire = exportCommonsBootstrap({
       steward: origin.vault.vault,
+      identitySeed: origin.vault.identitySeed,
       stewardVaultId: origin.vaultId,
       grantId: grant.grantId,
       memberVaultId: reader.vaultId,
@@ -326,6 +327,7 @@ describe("B6 Docs folder Commons across a real peer", () => {
     compileOrigin(reinvite.grantId);
     const reinviteWire = exportCommonsBootstrap({
       steward: origin.vault.vault,
+      identitySeed: origin.vault.identitySeed,
       stewardVaultId: origin.vaultId,
       grantId: reinvite.grantId,
       memberVaultId: writer.vaultId,

@@ -162,6 +162,21 @@ export {
   type CommonsCursor,
 } from "./share/commons-cursor.js";
 export {
+  CommonsHistoryError,
+  isCommonsHistoryError,
+  commonsGenesisHash,
+  commonsOpHash,
+  commonsOpChainFields,
+  commonsStateDigest,
+  readCommonsChainHead,
+  readCommonsVerified,
+  verifyCommonsCheckpoint,
+  type CommonsCheckpointAttestation,
+  type CommonsHistoryFaultTag,
+  type CommonsOpChainFields,
+  type CommonsVerifiedPoint,
+} from "./share/commons-chain.js";
+export {
   commonsIntentBytes,
   signCommonsIntent,
   verifyCommonsIntent,

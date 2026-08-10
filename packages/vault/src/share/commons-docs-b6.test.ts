@@ -170,6 +170,7 @@ describe("B6 Docs folder Commons on one machine", () => {
     });
     const readerWire = exportCommonsBootstrap({
       steward: origin.db.vault,
+      identitySeed: origin.db.identitySeed,
       stewardVaultId: origin.vaultId,
       grantId: grant.grantId,
       memberVaultId: reader.vaultId,
@@ -242,6 +243,7 @@ describe("B6 Docs folder Commons on one machine", () => {
     });
     const writerWire = exportCommonsBootstrap({
       steward: origin.db.vault,
+      identitySeed: origin.db.identitySeed,
       stewardVaultId: origin.vaultId,
       grantId: grant.grantId,
       memberVaultId: writer.vaultId,
@@ -357,6 +359,7 @@ describe("B6 Docs folder Commons on one machine", () => {
     ).toMatchObject({ retained: true, grantIds: [grant.grantId] });
     const laterBootstrap = exportCommonsBootstrap({
       steward: origin.db.vault,
+      identitySeed: origin.db.identitySeed,
       stewardVaultId: origin.vaultId,
       grantId: grant.grantId,
       memberVaultId: writer.vaultId,

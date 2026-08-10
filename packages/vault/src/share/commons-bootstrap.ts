@@ -11,6 +11,15 @@ import { uuidv7 } from "../ids.js";
 import { placeBlob } from "./blobs.js";
 import { CLOSURE_FORMAT_VERSION } from "./closure.js";
 import type { WireClosure } from "./closure.js";
+import type { CommonsCheckpointAttestation } from "./commons-chain.js";
+import {
+  assertCommonsStateDigest,
+  chainColumns,
+  readCommonsCheckpointAttestation,
+  recordCommonsVerified,
+  signCommonsCheckpoint,
+  verifyCommonsFrameHistory,
+} from "./commons-chain.js";
 import {
   commonsClosure,
   readCommonsGrant,
@@ -26,6 +35,13 @@ export interface CommonsBootstrap {
   snapshotSequence: number;
   currentSequence: number;
   closure: WireClosure;
+  /**
+   * The steward's signature over (op_hash, state_digest, sequence) for the
+   * snapshot in this frame. There is ONE wire version and it is chained: a
+   * frame without a verifiable checkpoint, or a tail op without its hashes, is
+   * a fault the member parks on — never a shape to be tolerated.
+   */
+  checkpoint: CommonsCheckpointAttestation;
   control: {
     grant: Record<string, unknown>;
     circle: Record<string, unknown>;
@@ -369,6 +385,8 @@ export function exportCommonsBootstrap(input: {
   stewardVaultId: string;
   grantId: string;
   memberVaultId: string;
+  /** The steward signs every snapshot it ships, rebuilt or stored. */
+  identitySeed: Buffer;
 }): CommonsBootstrap {
   const grant = readCommonsGrant(input.steward, input.grantId);
   if (grant.revokedAt) throw new Error("commons grant is revoked");
@@ -427,6 +445,10 @@ export function exportCommonsBootstrap(input: {
     )
     .all(grant.grantId) as Record<string, unknown>[];
   const stored = rawGrant["checkpoint_json"];
+  const attested = readCommonsCheckpointAttestation(
+    input.steward,
+    grant.grantId
+  );
   let snapshotSequence = Number(rawGrant["checkpoint_sequence"] ?? 0);
   let closure =
     typeof stored === "string"
@@ -438,20 +460,34 @@ export function exportCommonsBootstrap(input: {
         WHERE grant_id = ? AND sequence > ? ORDER BY sequence`
     )
     .all(grant.grantId, snapshotSequence) as Record<string, unknown>[];
-  // An executed domain command makes the old checkpoint's rows stale. Build
-  // a new complete snapshot in this background/peer-sync path; refused and
+  // An executed domain command makes the old checkpoint's rows stale, and so
+  // does a checkpoint the steward cannot attest to. Both rebuild a complete
+  // snapshot at the head in this background/peer-sync path; refused and
   // control-only tail entries remain cheap deterministic tail application.
-  if (
+  const staleSnapshot =
+    attested?.sequence !== snapshotSequence ||
     tail.some(
       (row) =>
         row["outcome"] === "executed" &&
         (row["kind"] === "command" || row["kind"] === "delete")
-    )
-  ) {
+    );
+  if (staleSnapshot) {
     closure = commonsClosure(input.steward, input.stewardVaultId, grant);
     snapshotSequence = grant.lastSequence;
     tail = [];
   }
+  // The attestation covers the snapshot actually shipped — the stored one
+  // when the stored checkpoint travels, a fresh signature when it was rebuilt.
+  const checkpoint = staleSnapshot
+    ? signCommonsCheckpoint({
+        db: input.steward,
+        identitySeed: input.identitySeed,
+        signerVaultId: input.stewardVaultId,
+        grantId: grant.grantId,
+        sequence: snapshotSequence,
+        closure,
+      })
+    : attested;
   return {
     grantId: grant.grantId,
     stewardVaultId: input.stewardVaultId,
@@ -459,6 +495,7 @@ export function exportCommonsBootstrap(input: {
     snapshotSequence,
     currentSequence: grant.lastSequence,
     closure,
+    checkpoint,
     control: {
       grant: rawGrant,
       circle: rawCircle,
@@ -480,6 +517,7 @@ export function exportCommonsSyncFrame(input: {
   stewardVaultId: string;
   grantId: string;
   memberVaultId: string;
+  identitySeed: Buffer;
 }): CommonsSyncFrame {
   const grant = readCommonsGrant(input.steward, input.grantId);
   const bound = input.steward
@@ -607,8 +645,8 @@ function projectControl(db: DatabaseSync, wire: CommonsBootstrap): void {
        (grant_id, circle_id, container_type, container_id, plane,
         departure_policy, implicit_circle, steward_party_id, created_at,
         revoked_at, last_sequence, checkpoint_sequence, checkpoint_json,
-        max_size_bytes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        chain_head_sequence, chain_head_hash, max_size_bytes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(grant_id) DO UPDATE SET
        circle_id = excluded.circle_id,
        container_type = excluded.container_type,
@@ -620,6 +658,8 @@ function projectControl(db: DatabaseSync, wire: CommonsBootstrap): void {
        last_sequence = excluded.last_sequence,
        checkpoint_sequence = excluded.checkpoint_sequence,
        checkpoint_json = excluded.checkpoint_json,
+       chain_head_sequence = excluded.chain_head_sequence,
+       chain_head_hash = excluded.chain_head_hash,
        max_size_bytes = excluded.max_size_bytes`
   ).run(
     sql(grant["grant_id"]),
@@ -635,6 +675,8 @@ function projectControl(db: DatabaseSync, wire: CommonsBootstrap): void {
     wire.currentSequence,
     wire.snapshotSequence,
     JSON.stringify(wire.closure),
+    sql(grant["chain_head_sequence"]),
+    sql(grant["chain_head_hash"]),
     sql(grant["max_size_bytes"])
   );
   db.prepare("DELETE FROM share_commons_member_state WHERE grant_id = ?").run(
@@ -696,8 +738,8 @@ function projectTail(db: DatabaseSync, wire: CommonsBootstrap): void {
     `INSERT INTO share_commons_op
        (grant_id, sequence, op_id, kind, actor_party_id, command, input_json,
         member_signature, signing_vault_id, signature_nonce, outcome, reason,
-        created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at, prev_hash, op_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(grant_id, sequence) DO NOTHING`
   );
   for (const row of wire.tail)
@@ -714,7 +756,8 @@ function projectTail(db: DatabaseSync, wire: CommonsBootstrap): void {
       sql(row["signature_nonce"]),
       sql(row["outcome"]),
       sql(row["reason"]),
-      sql(row["created_at"])
+      sql(row["created_at"]),
+      ...chainColumns(row)
     );
 }
 
@@ -757,6 +800,19 @@ export function applyCommonsBootstrap(input: {
         input.wire.closure.formatVersion
       )}`
     );
+  // Same fail-closed shape for history (issue #731): a tampered op, a forked
+  // chain, or a steward whose log rewound below what this seat already proved
+  // parks BEFORE the scrub. The replica stays exactly as it was.
+  const history = verifyCommonsFrameHistory({
+    seat: seatDb,
+    grantId: input.wire.grantId,
+    stewardVaultId: input.wire.stewardVaultId,
+    currentSequence: input.wire.currentSequence,
+    snapshotSequence: input.wire.snapshotSequence,
+    tail: input.wire.tail,
+    checkpoint: input.wire.checkpoint,
+    bindings: input.wire.control.bindings,
+  });
   // Scrub + re-project + control + tail + lineage + cursor are ONE atomic unit:
   // a crash between the scrub and the re-projection must never leave the commons
   // deleted on disk. Nest under a savepoint when a caller already owns the seat
@@ -824,6 +880,21 @@ export function applyCommonsBootstrap(input: {
         input.wire.currentSequence,
         input.now
       );
+    // The digest is recomputed over what this seat STORED, inside the same
+    // transaction: a mismatch rolls the whole apply back, so a bad snapshot
+    // never survives as a half-projected replica.
+    assertCommonsStateDigest({
+      seat: seatDb,
+      grantId: input.wire.grantId,
+      expected: history.stateDigest,
+    });
+    recordCommonsVerified({
+      db: seatDb,
+      grantId: input.wire.grantId,
+      sequence: history.verified.sequence,
+      opHash: history.verified.opHash,
+      now: input.now,
+    });
     seatDb.exec(nested ? "RELEASE apply_commons_bootstrap" : "COMMIT");
   } catch (error) {
     seatDb.exec(nested ? "ROLLBACK TO apply_commons_bootstrap" : "ROLLBACK");

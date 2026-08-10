@@ -62,7 +62,7 @@ Deterministic apply rules:
 - the domain mutation and cursor advance settle atomically at the member vault;
 - derivative rows are absent from the closure and stream, so each member's local recognition pipeline remains authoritative.
 
-Wire readers remain C1-additive: new signature, checkpoint, size, pending-state, and offset fields must be optional to older parsers until a coordinated protocol floor requires them. An implementation that cannot enforce the commons command/signature contract must present the single update wall; it must not fall back to snapshot sharing or an unsigned write path.
+Commons is pre-release (v0) and carries **no** wire compatibility surface: there is exactly one frame and command shape, every chain, digest, signature, and offset field is required, and a peer presenting anything else is a hard fault that parks the grant's sync with a named state. No optional-when-absent parsing, no version negotiation, no legacy-generation migration — a replica in an older shape is re-bootstrapped, not migrated. An implementation that cannot enforce the commons command/signature contract must present the single update wall; it must not fall back to snapshot sharing or an unsigned write path.
 
 ### Pair-ticket multi-vault redemption
 

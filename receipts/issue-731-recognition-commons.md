@@ -449,6 +449,56 @@ commands 323, gateway commons+migration+routes 31, automation enricher 49, bluep
 tally + app-engine + client surfaces. Full `check:push`/`check:full` and CI remain the
 authoritative gate.
 
+## Verifiable history and resilience follow-up (post-review)
+
+**Verifiable history.** Every `share_commons_op` now carries `prev_hash`/`op_hash` over a
+canonical serialization, with the chain head kept on the grant row so compaction can never
+lose it, and each checkpoint carries an Ed25519-signed digest of the shipped closure that the
+member re-computes against its own replica after apply. A tampered op, a forked or gapped
+tail, a hash conflict at an already-verified sequence (the steward restored from backup), or
+a digest mismatch now parks the grant with a named `history-diverged` / `digest-mismatch`
+fault, rolls back, and leaves the replica intact — silent divergence became a loud, testable
+fault. Implementation in packages/vault/src/share/commons-chain.ts with columns in
+packages/vault/src/schema/share-commons.ts; op insertion collapsed into one chained writer in
+packages/vault/src/share/commons.ts; verification and the no-op head-hash response in
+packages/vault/src/share/commons-bootstrap.ts,
+packages/gateway/src/routes/peer-commons-route.ts and
+packages/gateway/src/serve/peer-commons-client.ts. Regression suites:
+packages/vault/src/share/commons-chain.test.ts and
+packages/gateway/src/serve/peer-commons-hardening.test.ts; existing commons suites
+(packages/vault/src/share/commons-convergence-properties.test.ts,
+commons-docs-b6.test.ts, commons-hardening.test.ts, commons-lifecycle.test.ts,
+commons-retain-closure.test.ts, commons-tally-b6.test.ts,
+packages/gateway/src/serve/peer-commons-b6.test.ts, peer-commons-docs-b6.test.ts,
+peer-commons-tally-b6.test.ts) updated for the steward identity seed, and
+packages/vault/src/schema/migrate.test.ts for the new table.
+
+**Deterministic simulation.** packages/vault/src/share/commons-sim.ts,
+packages/vault/src/share/commons-sim-world.ts and
+packages/vault/src/share/commons-sim.test.ts drive real on-disk vault seats with overlapping
+multi-grant membership through seeded random schedules of member intents, pulls, steward
+writes, deletes, membership and capability changes, compaction, crash-restart, stale restore
+and steward transfer, then force quiescence and assert the golden invariants (replica ≡
+steward projection, acknowledged writes present and refused ones absent, no cursor beyond the
+grant sequence, no resurrection or cross-grant leakage, and any non-converged member parked
+under a named state). Roughly 5000 randomized actions across 48 seeds found no commons defect.
+
+**v0 compatibility deletion.** Commons carries no wire-compat surface: one frame shape, chain
+and digest fields required, skew is a hard fault (docs/protocol.md). The gateway's three
+legacy-generation migrations were deleted from packages/gateway/src/serve/gateway-schema.ts
+and packages/gateway/src/serve/gateway-db.ts, with their fixture tests removed from
+packages/gateway/src/serve/gateway-db.test.ts and
+packages/gateway/src/serve/gateway-db-retired-lending.test.ts deleted; a fresh database's
+`sqlite_schema` dump is byte-identical before and after the removal. The ownerless-owner boot
+loop in packages/gateway/src/serve/build-gateway.ts is retained — it backs the live
+`POST /owners` lane rather than an old schema generation — with its migration framing removed
+from the comment. Posture recorded in docs/decisions.md and CHANGELOG.md; the follow-on
+simplification is planned in docs/plans/commons-fixed-window-sync.md.
+
+Still in flight (not in this change set): steward-absence detection with replica-export
+recovery, sync/parked-intent dogfood instrumentation, and intent based-on-sequence with
+parked-intent expiry/cancel.
+
 ## Verification
 
 - Recognition focused suites: automation 71 tests, agent-runtime 23 tests, gateway 35 tests, client 59 tests, blueprints 13 tests, and mobile 18 tests passed during the final Part A audit; package typechecks passed.

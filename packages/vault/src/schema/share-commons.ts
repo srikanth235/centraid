@@ -33,6 +33,16 @@ CREATE TABLE share_circle_grant (
   last_sequence     INTEGER NOT NULL DEFAULT 0 CHECK (last_sequence >= 0),
   checkpoint_sequence INTEGER NOT NULL DEFAULT 0 CHECK (checkpoint_sequence >= 0),
   checkpoint_json   TEXT CHECK (checkpoint_json IS NULL OR json_valid(checkpoint_json)),
+  -- The chain head survives compaction: it lives here, not on the last
+  -- surviving op, so pruning the verbose tail never loses the chain.
+  chain_head_sequence INTEGER NOT NULL DEFAULT 0 CHECK (chain_head_sequence >= 0),
+  chain_head_hash   TEXT NOT NULL,
+  -- The steward's signature over (op_hash, state_digest, sequence) for the
+  -- checkpoint in checkpoint_json.
+  checkpoint_op_hash TEXT,
+  checkpoint_state_digest TEXT,
+  checkpoint_signature TEXT,
+  checkpoint_signer_vault_id TEXT,
   max_size_bytes    INTEGER CHECK (max_size_bytes IS NULL OR max_size_bytes >= 0),
   UNIQUE (circle_id, container_type, container_id)
 ) STRICT;
@@ -67,6 +77,10 @@ CREATE TABLE share_commons_op (
   outcome         TEXT NOT NULL CHECK (outcome IN ('executed','refused')),
   reason          TEXT,
   created_at      TEXT NOT NULL,
+  -- Verifiable history: every op commits to its predecessor's hash, so a
+  -- rewound or forked steward log cannot pass as a continuation.
+  prev_hash       TEXT NOT NULL,
+  op_hash         TEXT NOT NULL,
   PRIMARY KEY (grant_id, sequence)
 ) STRICT;
 CREATE UNIQUE INDEX share_commons_op_signature_replay
@@ -105,6 +119,15 @@ CREATE TABLE share_commons_cursor (
   sequence        INTEGER NOT NULL DEFAULT 0 CHECK (sequence >= 0),
   updated_at      TEXT NOT NULL,
   PRIMARY KEY (grant_id, member_vault_id)
+) STRICT;
+
+-- What a member seat has PROVEN about its steward's history. Compaction may
+-- drop the verbose ops behind it; the proven point must outlive them.
+CREATE TABLE share_commons_verified (
+  grant_id   TEXT PRIMARY KEY,
+  sequence   INTEGER NOT NULL CHECK (sequence >= 0),
+  op_hash    TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 ) STRICT;
 
 CREATE TABLE share_commons_lineage (

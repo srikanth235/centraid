@@ -13,12 +13,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { SQLInputValue } from "node:sqlite";
 
-import {
-  installGatewaySchema,
-  migrateLegacyMembers,
-  migrateRetiredLending,
-  migrateSupersededLinks,
-} from "./gateway-schema.js";
+import { installGatewaySchema } from "./gateway-schema.js";
 
 export const GATEWAY_DB_FILE = "gateway.db";
 
@@ -83,9 +78,6 @@ export class GatewayDatabase {
       db.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 0;");
       if (lockMode !== "read-only") {
         db.exec("PRAGMA journal_mode = DELETE;");
-        migrateLegacyMembers(db);
-        migrateSupersededLinks(db);
-        migrateRetiredLending(db);
         installGatewaySchema(db);
         chmodSync(file, 0o600);
       }

@@ -354,6 +354,7 @@ describe("B6 Tally Commons flagship", () => {
     bob = { ...bob, db: restoredDb };
     const catchup = exportCommonsBootstrap({
       steward: priya.db.vault,
+      identitySeed: priya.db.identitySeed,
       stewardVaultId: priya.vaultId,
       grantId: grant.grantId,
       memberVaultId: bob.vaultId,

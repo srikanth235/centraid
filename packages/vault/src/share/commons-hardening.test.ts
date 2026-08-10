@@ -278,6 +278,7 @@ describe("commons hardening", () => {
     ).toMatchObject({ n: 1 });
     const wire = exportCommonsBootstrap({
       steward: origin.vault,
+      identitySeed: origin.identitySeed,
       stewardVaultId: "vault-priya",
       grantId: grant.grantId,
       memberVaultId: "vault-family",
@@ -349,6 +350,7 @@ describe("commons hardening", () => {
     });
     const wire = exportCommonsBootstrap({
       steward: origin.vault,
+      identitySeed: origin.identitySeed,
       stewardVaultId: "vault-priya",
       grantId: grant.grantId,
       memberVaultId: "vault-family",

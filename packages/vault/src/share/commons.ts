@@ -21,6 +21,13 @@ import type {
   ProjectedItem,
 } from "./closure.js";
 import { isShareableItemType } from "./closure.js";
+import type { CommonsOpChainFields } from "./commons-chain.js";
+import {
+  attestCommonsCheckpointState,
+  chainColumns,
+  commonsGenesisHash,
+  insertChainedCommonsOp,
+} from "./commons-chain.js";
 import type { CommonsMemberSignature } from "./commons-signature.js";
 import { verifyCommonsIntent } from "./commons-signature.js";
 import type { ShareVaultRef } from "./placement.js";
@@ -282,8 +289,8 @@ export function createCommonsGrant(
         `INSERT INTO share_circle_grant
            (grant_id, circle_id, container_type, container_id, plane,
             departure_policy, implicit_circle, steward_party_id, created_at,
-            max_size_bytes)
-         VALUES (?, ?, ?, ?, 'commons', ?, ?, ?, ?, ?)`
+            chain_head_sequence, chain_head_hash, max_size_bytes)
+         VALUES (?, ?, ?, ?, 'commons', ?, ?, ?, ?, 0, ?, ?)`
       )
       .run(
         grantId,
@@ -297,6 +304,7 @@ export function createCommonsGrant(
         implicit ? 1 : 0,
         input.ownerPartyId,
         input.now,
+        commonsGenesisHash(grantId),
         input.maxSizeBytes ?? null
       );
     const memberState = input.origin.prepare(
@@ -648,8 +656,8 @@ function projectRoster(
          (grant_id, circle_id, container_type, container_id, plane,
           departure_policy, implicit_circle, steward_party_id, created_at,
           revoked_at, last_sequence, checkpoint_sequence, checkpoint_json,
-          max_size_bytes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          chain_head_sequence, chain_head_hash, max_size_bytes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(grant_id) DO UPDATE SET
          circle_id = excluded.circle_id,
          container_type = excluded.container_type,
@@ -663,6 +671,8 @@ function projectRoster(
          last_sequence = excluded.last_sequence,
          checkpoint_sequence = excluded.checkpoint_sequence,
          checkpoint_json = excluded.checkpoint_json,
+         chain_head_sequence = excluded.chain_head_sequence,
+         chain_head_hash = excluded.chain_head_hash,
          max_size_bytes = excluded.max_size_bytes`
     )
     .run(
@@ -679,6 +689,8 @@ function projectRoster(
       sqlValue(sourceGrant["last_sequence"]),
       sqlValue(sourceGrant["checkpoint_sequence"]),
       sqlValue(sourceGrant["checkpoint_json"]),
+      sqlValue(sourceGrant["chain_head_sequence"]),
+      sqlValue(sourceGrant["chain_head_hash"]),
       sqlValue(sourceGrant["max_size_bytes"])
     );
   audience
@@ -786,8 +798,8 @@ function projectRoster(
     `INSERT INTO share_commons_op
        (grant_id, sequence, op_id, kind, actor_party_id, command, input_json,
         member_signature, signing_vault_id, signature_nonce, outcome, reason,
-        created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at, prev_hash, op_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(grant_id, sequence) DO UPDATE SET
        op_id = excluded.op_id, kind = excluded.kind,
        actor_party_id = excluded.actor_party_id, command = excluded.command,
@@ -796,7 +808,8 @@ function projectRoster(
        signing_vault_id = excluded.signing_vault_id,
        signature_nonce = excluded.signature_nonce,
        outcome = excluded.outcome, reason = excluded.reason,
-       created_at = excluded.created_at`
+       created_at = excluded.created_at, prev_hash = excluded.prev_hash,
+       op_hash = excluded.op_hash`
   );
   for (const operation of operations)
     insertOperation.run(
@@ -812,7 +825,8 @@ function projectRoster(
       sqlValue(operation["signature_nonce"]),
       sqlValue(operation["outcome"]),
       sqlValue(operation["reason"]),
-      sqlValue(operation["created_at"])
+      sqlValue(operation["created_at"]),
+      ...chainColumns(operation)
     );
   audience
     .prepare(
@@ -1038,6 +1052,13 @@ export function compileCommons(
         WHERE grant_id = ?`
     )
     .run(JSON.stringify(closure), grant.grantId);
+  attestCommonsCheckpointState({
+    steward: input.steward,
+    stewardVaultId: input.stewardVaultId,
+    grantId: grant.grantId,
+    sequence: grant.lastSequence,
+    closure,
+  });
   compactCommonsOperations(input.steward.vault, grant.grantId);
   return results;
 }
@@ -1064,39 +1085,38 @@ export interface AppendCommonsOpInput {
   now: string;
 }
 
+/** Every append goes through the hash chain (issue #731): the op's fields and
+ * its predecessor's hash decide its own, so no writer can slip an unchained
+ * row into the log. */
+function chainFields(
+  input: AppendCommonsOpInput,
+  sequence: number
+): CommonsOpChainFields {
+  return {
+    grantId: input.grantId,
+    sequence,
+    opId: uuidv7(),
+    kind: input.kind,
+    actorPartyId: input.actorPartyId,
+    command: input.command ?? null,
+    inputJson: input.input === undefined ? null : JSON.stringify(input.input),
+    memberSignature: input.memberSignature
+      ? JSON.stringify(input.memberSignature)
+      : null,
+    signingVaultId: input.memberSignature?.memberVaultId ?? null,
+    signatureNonce: input.memberSignature?.nonce ?? null,
+    outcome: input.outcome,
+    reason: input.reason ?? null,
+    createdAt: input.now,
+  };
+}
+
 export function appendCommonsOperation(input: AppendCommonsOpInput): number {
   input.steward.exec("BEGIN IMMEDIATE");
   try {
     const grant = readCommonsGrant(input.steward, input.grantId);
     const sequence = grant.lastSequence + 1;
-    input.steward
-      .prepare(
-        `INSERT INTO share_commons_op
-           (grant_id, sequence, op_id, kind, actor_party_id, command,
-            input_json, member_signature, signing_vault_id, signature_nonce,
-            outcome, reason, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        input.grantId,
-        sequence,
-        uuidv7(),
-        input.kind,
-        input.actorPartyId,
-        input.command ?? null,
-        input.input === undefined ? null : JSON.stringify(input.input),
-        input.memberSignature ? JSON.stringify(input.memberSignature) : null,
-        input.memberSignature?.memberVaultId ?? null,
-        input.memberSignature?.nonce ?? null,
-        input.outcome,
-        input.reason ?? null,
-        input.now
-      );
-    input.steward
-      .prepare(
-        "UPDATE share_circle_grant SET last_sequence = ? WHERE grant_id = ?"
-      )
-      .run(sequence, input.grantId);
+    insertChainedCommonsOp(input.steward, chainFields(input, sequence));
     input.steward.exec("COMMIT");
     return sequence;
   } catch (error) {
@@ -1115,34 +1135,7 @@ export function appendCommonsOperationInTransaction(
     );
   const grant = readCommonsGrant(input.steward, input.grantId);
   const sequence = grant.lastSequence + 1;
-  input.steward
-    .prepare(
-      `INSERT INTO share_commons_op
-         (grant_id, sequence, op_id, kind, actor_party_id, command,
-          input_json, member_signature, signing_vault_id, signature_nonce,
-          outcome, reason, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      input.grantId,
-      sequence,
-      uuidv7(),
-      input.kind,
-      input.actorPartyId,
-      input.command ?? null,
-      input.input === undefined ? null : JSON.stringify(input.input),
-      input.memberSignature ? JSON.stringify(input.memberSignature) : null,
-      input.memberSignature?.memberVaultId ?? null,
-      input.memberSignature?.nonce ?? null,
-      input.outcome,
-      input.reason ?? null,
-      input.now
-    );
-  input.steward
-    .prepare(
-      "UPDATE share_circle_grant SET last_sequence = ? WHERE grant_id = ?"
-    )
-    .run(sequence, input.grantId);
+  insertChainedCommonsOp(input.steward, chainFields(input, sequence));
   return sequence;
 }
 
@@ -1158,34 +1151,7 @@ export function mutateCommonsControl(
     const grant = readCommonsGrant(input.steward, input.grantId);
     const sequence = grant.lastSequence + 1;
     input.apply(input.steward, grant);
-    input.steward
-      .prepare(
-        `INSERT INTO share_commons_op
-           (grant_id, sequence, op_id, kind, actor_party_id, command,
-            input_json, member_signature, signing_vault_id, signature_nonce,
-            outcome, reason, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        input.grantId,
-        sequence,
-        uuidv7(),
-        input.kind,
-        input.actorPartyId,
-        input.command ?? null,
-        input.input === undefined ? null : JSON.stringify(input.input),
-        input.memberSignature ? JSON.stringify(input.memberSignature) : null,
-        input.memberSignature?.memberVaultId ?? null,
-        input.memberSignature?.nonce ?? null,
-        input.outcome,
-        input.reason ?? null,
-        input.now
-      );
-    input.steward
-      .prepare(
-        "UPDATE share_circle_grant SET last_sequence = ? WHERE grant_id = ?"
-      )
-      .run(sequence, input.grantId);
+    insertChainedCommonsOp(input.steward, chainFields(input, sequence));
     input.steward.exec("COMMIT");
     return sequence;
   } catch (error) {

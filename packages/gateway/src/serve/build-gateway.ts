@@ -1651,14 +1651,12 @@ export async function buildGateway(
   }
 
   /*
-   * Household migration (#726 P1): every owner who owns NO vault gets
-   * "<label>'s vault" minted on THIS machine, once. Naturally idempotent —
-   * an owner who already owns a vault (including one just minted above, or
-   * one this loop minted on a prior boot) is skipped, so a fresh boot after
-   * migration mints nothing extra. Covers ownerless rows left by P0's
-   * admin-fallback migration and by the host-custody `POST /owners` lane
-   * (which creates the person but not a vault). Devices stay enrolled to
-   * their owner; content stays exactly where it is.
+   * Every owner owns at least one vault (#726 P1). The host-custody
+   * `POST /owners` lane creates the person but not a vault, so boot mints
+   * "<label>'s vault" on THIS machine for anyone still ownerless. Naturally
+   * idempotent — an owner who already owns a vault (including one just
+   * minted above, or one this loop minted on a prior boot) is skipped.
+   * Devices stay enrolled to their owner; content stays where it is.
    */
   for (const owner of enrollmentStore.owners.list()) {
     if (enrollmentStore.owners.vaultsOwnedBy(owner.ownerId).length > 0)

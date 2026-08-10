@@ -421,6 +421,7 @@ describe("commons ordered-convergence property", () => {
 
             const wire = exportCommonsBootstrap({
               steward: fixture.origin.vault,
+              identitySeed: fixture.origin.identitySeed,
               stewardVaultId: "vault-priya",
               grantId: fixture.grantId,
               memberVaultId: "vault-family",

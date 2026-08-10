@@ -6,11 +6,14 @@ import {
   applyCommonsBootstrap,
   applyCommonsTombstone,
   commonsClosureSizeBytes,
+  isCommonsHistoryError,
   queueCommonsInvitation,
   readCommonsCursor,
+  readCommonsVerified,
 } from "@centraid/vault";
 import type {
   CommonsBootstrap,
+  CommonsHistoryFaultTag,
   CommonsInvitationRecord,
   CommonsMemberSignature,
   CommonsTombstone,
@@ -55,6 +58,10 @@ export async function pullPeerCommons(input: {
 }): Promise<
   | { state: "current"; sequence: number }
   | { state: "noop"; sequence: number }
+  // A named history fault, distinct from a transport failure: the steward's
+  // log diverged from what this seat verified, so the sweep must REPORT it
+  // rather than retry-loop. The replica is untouched.
+  | { state: "parked"; fault: CommonsHistoryFaultTag }
   | { state: "unavailable" }
 > {
   try {
@@ -119,6 +126,7 @@ export async function pullPeerCommons(input: {
       wire?: CommonsBootstrap;
       tombstone?: CommonsTombstone;
       currentSequence?: number;
+      headHash?: string;
     };
     if (
       response.status === 200 &&
@@ -135,8 +143,17 @@ export async function pullPeerCommons(input: {
       response.status === 200 &&
       body.state === "current" &&
       typeof body.currentSequence === "number"
-    )
+    ) {
+      // "Caught up" is only true if the steward's head is the head we verified
+      // (#731). A fork at an already-verified sequence hides here otherwise.
+      const verified = readCommonsVerified(input.seat.vault, input.grantId);
+      if (
+        verified?.sequence === body.currentSequence &&
+        verified.opHash !== body.headHash
+      )
+        return { state: "parked", fault: "history-diverged" };
       return { state: "noop", sequence: body.currentSequence };
+    }
     if (response.status !== 200 || body.state !== "bootstrap" || !body.wire)
       return { state: "unavailable" };
     for (const blob of body.wire.closure.blobs) {
@@ -188,7 +205,9 @@ export async function pullPeerCommons(input: {
       now: input.now ?? new Date().toISOString(),
     });
     return { state: "current", sequence: body.wire.currentSequence };
-  } catch {
+  } catch (error) {
+    if (isCommonsHistoryError(error))
+      return { state: "parked", fault: error.fault };
     return { state: "unavailable" };
   }
 }

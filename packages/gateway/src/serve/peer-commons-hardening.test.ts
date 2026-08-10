@@ -6,6 +6,8 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  appendCommonsOperation,
+  commonsGenesisHash,
   commonsSeats,
   compileCommons,
   createCommonsGrant,
@@ -195,6 +197,106 @@ describe("commons peer-plane hardening", () => {
       now,
     });
     expect(second.state).toBe("noop");
+    expect(
+      member.vault.vault
+        .prepare(
+          "SELECT COUNT(*) AS n FROM media_media_asset WHERE asset_id = ?"
+        )
+        .get(photo.assetId)
+    ).toMatchObject({ n: 1 });
+  });
+
+  test("a steward whose history rewound parks the pull with a named fault instead of scrubbing the seat", async () => {
+    const origin = makeSide("rewind-steward");
+    const member = makeSide("rewind-member");
+    await link(origin, member);
+    const now = new Date().toISOString();
+    const photo = seedPhoto(origin, "rewind");
+    const grant = createCommonsGrant({
+      origin: origin.vault.vault,
+      ownerPartyId: origin.ownerPartyId,
+      ownerVaultId: origin.vaultId,
+      ownerVault: origin.vault,
+      containerType: "media.media_asset",
+      containerId: photo.assetId,
+      members: [
+        {
+          partyId: member.ownerPartyId,
+          capability: "read+write",
+          vaultId: member.vaultId,
+          vaultPublicKey: member.publicKey,
+        },
+      ],
+      now,
+    });
+    compileCommons({
+      steward: origin.vault,
+      stewardVaultId: origin.vaultId,
+      grantId: grant.grantId,
+      seats: commonsSeats({
+        steward: origin.vault.vault,
+        grantId: grant.grantId,
+        stewardVaultId: origin.vaultId,
+        vaultFor: () => undefined,
+      }),
+      now,
+    });
+    const appended = appendCommonsOperation({
+      steward: origin.vault.vault,
+      grantId: grant.grantId,
+      actorPartyId: member.ownerPartyId,
+      kind: "member_joined",
+      input: { partyId: member.ownerPartyId },
+      outcome: "executed",
+      now,
+    });
+    const pull = () =>
+      pullPeerCommons({
+        dial: dialFrom(member, origin),
+        route: routeFrom(member, origin),
+        stewardVaultId: origin.vaultId,
+        memberVaultId: member.vaultId,
+        grantId: grant.grantId,
+        seat: member.vault,
+        now,
+      });
+    await expect(pull()).resolves.toMatchObject({ state: "current" });
+
+    // Restore-from-backup at the steward: the op the member already verified
+    // is replaced by a different one at the same sequence.
+    origin.vault.vault
+      .prepare(
+        "DELETE FROM share_commons_op WHERE grant_id = ? AND sequence = ?"
+      )
+      .run(grant.grantId, appended);
+    origin.vault.vault
+      .prepare(
+        `UPDATE share_circle_grant
+            SET last_sequence = ?, chain_head_sequence = ?, chain_head_hash = ?
+          WHERE grant_id = ?`
+      )
+      .run(
+        appended - 1,
+        appended - 1,
+        commonsGenesisHash(grant.grantId),
+        grant.grantId
+      );
+    appendCommonsOperation({
+      steward: origin.vault.vault,
+      grantId: grant.grantId,
+      actorPartyId: origin.ownerPartyId,
+      kind: "member_joined",
+      input: { partyId: origin.ownerPartyId },
+      outcome: "executed",
+      now,
+    });
+
+    // The sweep learns WHICH fault this is, so it reports rather than retries,
+    // and the member's replica is left exactly as it was.
+    await expect(pull()).resolves.toStrictEqual({
+      state: "parked",
+      fault: "history-diverged",
+    });
     expect(
       member.vault.vault
         .prepare(

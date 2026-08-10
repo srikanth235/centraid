@@ -99,6 +99,7 @@ describe("Commons whole-container retain", () => {
       seat: audience,
       wire: exportCommonsBootstrap({
         steward: origin.vault,
+        identitySeed: origin.identitySeed,
         stewardVaultId: "vault-priya",
         grantId: grant.grantId,
         memberVaultId: "vault-family",
@@ -118,6 +119,7 @@ describe("Commons whole-container retain", () => {
     });
     const frame = exportCommonsSyncFrame({
       steward: origin.vault,
+      identitySeed: origin.identitySeed,
       stewardVaultId: "vault-priya",
       grantId: grant.grantId,
       memberVaultId: "vault-family",
@@ -203,6 +205,7 @@ describe("Commons whole-container retain", () => {
       seat: audience,
       wire: exportCommonsBootstrap({
         steward: origin.vault,
+        identitySeed: origin.identitySeed,
         stewardVaultId: "vault-priya",
         grantId: grant.grantId,
         memberVaultId: "vault-family",
@@ -217,6 +220,7 @@ describe("Commons whole-container retain", () => {
     });
     const frame = exportCommonsSyncFrame({
       steward: origin.vault,
+      identitySeed: origin.identitySeed,
       stewardVaultId: "vault-priya",
       grantId: grant.grantId,
       memberVaultId: "vault-family",
