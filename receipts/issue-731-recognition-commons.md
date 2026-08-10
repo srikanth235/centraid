@@ -392,6 +392,7 @@ bun run --cwd packages/vault test src/schema/fk-index.test.ts src/schema/poly-re
 - `bun run check:push` is **not claimed complete**. At the user's direction it was stopped after 37 gates passed; `test:qualities` had failed only in the concurrent runner after its standalone pass, and the final `test:affected` process had not returned. `bun run check:full` was skipped at the same explicit direction.
 - CI follow-up fixes were verified with `bun run lint:types`, `bun run lint`, the gateway dependency-closure build, focused gateway/client tests, and the web waterfall: the cold shell measured 17 requests / 518,568 B and passed its existing 17-request / 520,000-byte budget.
 - CI verify follow-up was rechecked with the four previously failing gateway suites together (4 files / 28 tests), Vault and Gateway typechecks, `bun run format`, and the gateway dependency-closure build; all passed, including journal-finalization replay, remote ticket redemption, recognition scheduler startup, and WAL sibling durability.
+- The final CI coverage run exposed and closed a Commons batch-boundary regression: byte-budget rejection and Commons-op append failures now roll back their domain rows and invocation markers, while journal-finalization failures retain only the canonical replay marker. `commons-invoke`, `commons`, and `gateway.contract` passed together (3 files / 43 tests).
 
 ### Acceptance evidence
 

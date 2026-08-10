@@ -246,6 +246,25 @@ export type InvocationBatchResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: unknown };
 
+/** A Commons op/reconciliation failure is still inside the pre-commit
+ * gateway batch and must roll back the command marker and domain rows. */
+const commonsOperationErrors = new WeakSet<object>();
+function markCommonsOperationError(source: unknown): Error {
+  const error = new Error(
+    source instanceof Error ? source.message : String(source)
+  );
+  error.name = "CommonsOperationError";
+  commonsOperationErrors.add(error);
+  return error;
+}
+function isCommonsOperationError(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    commonsOperationErrors.has(value)
+  );
+}
+
 export class Gateway {
   /** Registered commands: handler + sealed-class declarations (issue #293). */
   private readonly commands = new Map<string, RegisteredCommand>();
@@ -370,7 +389,15 @@ export class Gateway {
               .prepare("SELECT invocation_id FROM replica_invocation_commit")
               .all() as { invocation_id: string }[]
           ).some((row) => !markersBefore.has(row.invocation_id));
-          const shouldRollback = !committedAfterStart;
+          // Commons byte-budget rejection is a pre-commit policy failure:
+          // the command may already have recorded its ordinary invocation
+          // marker, but none of the domain/op rows may escape the batch.
+          // Preserve markers only for failures after the canonical command
+          // crossed the durable boundary (journal-finalization/replay).
+          const shouldRollback =
+            error instanceof CommonsMaxSizeError ||
+            isCommonsOperationError(error) ||
+            !committedAfterStart;
           if (shouldRollback) {
             this.db.vault.exec(`ROLLBACK TO ${savepoint}`);
             this.db.journal.exec(`ROLLBACK TO ${savepoint}`);
@@ -1186,27 +1213,36 @@ export class Gateway {
     const append = this.db.vault.isTransaction
       ? appendCommonsOperationInTransaction
       : appendCommonsOperation;
-    append({
-      steward: this.db.vault,
-      grantId: grant.grantId,
-      actorPartyId,
-      kind: rawRequest.command.includes("delete") ? "delete" : "command",
-      command: rawRequest.command,
-      input: rawRequest.input,
-      outcome: executed ? "executed" : "refused",
-      ...(executed || !outcome.reason ? {} : { reason: outcome.reason }),
-      now: nowIso(),
-    });
-    const reconciledGrantIds = executed
-      ? sequenceCommonsCircleCommandInTransaction({
+    try {
+      append({
+        steward: this.db.vault,
+        grantId: grant.grantId,
+        actorPartyId,
+        kind: rawRequest.command.includes("delete") ? "delete" : "command",
+        command: rawRequest.command,
+        input: rawRequest.input,
+        outcome: executed ? "executed" : "refused",
+        ...(executed || !outcome.reason ? {} : { reason: outcome.reason }),
+        now: nowIso(),
+      });
+    } catch (error) {
+      throw markCommonsOperationError(error);
+    }
+    let reconciledGrantIds: string[] = [];
+    if (executed) {
+      try {
+        reconciledGrantIds = sequenceCommonsCircleCommandInTransaction({
           steward: this.db.vault,
           primaryGrantId: grant.grantId,
           actorPartyId,
           command: rawRequest.command,
           commandInput: rawRequest.input,
           now: nowIso(),
-        })
-      : [];
+        });
+      } catch (error) {
+        throw markCommonsOperationError(error);
+      }
+    }
     if (executed)
       for (const reconciledGrantId of reconciledGrantIds)
         assertCommonsWithinMax(
