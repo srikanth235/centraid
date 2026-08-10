@@ -91,6 +91,7 @@ export function createPeerPlaneSweep(
               vaults: options.commonsVaults(),
               links: options.links,
               ...(dial ? { dial } : {}),
+              ...(options.logger ? { logger: options.logger } : {}),
               limit: rowLimit,
             })
           : Promise.resolve({ progressed: 0 }),

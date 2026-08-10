@@ -44,14 +44,19 @@ export function Ledger({
   onOpenDetail,
   onAddExpense,
   onDismissDenied,
+  onCancelIntent,
 }: {
   view: "group" | "friend";
   viewData: ViewData | null;
   currency: string;
   onOpenDetail: (row: LedgerRow) => void;
   onAddExpense: () => void;
-  /** Settle a denied durable Commons intent out of the overlay (issue #731 m6). */
+  /** Settle a denied/expired/cancelled durable Commons intent out of the
+   *  overlay (issue #731 m6, extended by goal 2). */
   onDismissDenied?: (row: LedgerRow) => void;
+  /** Cancel a still-open (pending/parked) durable Commons intent (issue #731
+   *  goal 2). */
+  onCancelIntent?: (row: LedgerRow) => void;
 }) {
   if (!viewData) return <ExplistSkeleton rows={5} />;
 
@@ -87,6 +92,7 @@ export function Ledger({
               currency={currency}
               onOpen={onOpenDetail}
               onDismiss={onDismissDenied}
+              onCancel={onCancelIntent}
             />
           ))}
         </div>

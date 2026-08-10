@@ -28,6 +28,14 @@ import {
   PEER_COMMONS_INVITE_PATH,
   PEER_COMMONS_REFUSE_PATH,
 } from "../routes/peer-commons-route.js";
+import {
+  recordCommonsDeviceReach,
+  recordCommonsPull,
+} from "./commons-observability.js";
+import type {
+  CommonsPullOutcome,
+  CommonsStewardStatus,
+} from "./commons-observability.js";
 import type { PeerDial, PeerDialRoute } from "./peer-edge-give-client.js";
 
 const CHUNK_BYTES = 1024 * 1024;
@@ -43,7 +51,7 @@ function query(input: {
   return new URLSearchParams(input);
 }
 
-export async function pullPeerCommons(input: {
+export interface PullPeerCommonsInput {
   dial: PeerDial;
   route: PeerDialRoute;
   stewardVaultId: string;
@@ -55,21 +63,62 @@ export async function pullPeerCommons(input: {
   /** The metadata footprint the owner reviewed before accepting. */
   expectedSizeBytes?: number;
   now?: string;
-}): Promise<
-  | { state: "current"; sequence: number }
+}
+
+type PullAttempt =
+  | {
+      state: "current";
+      sequence: number;
+      /** Which shape the member had to accept — the fixed-window-sync signal. */
+      kind: "tail" | "snapshot" | "tombstone";
+    }
   | { state: "noop"; sequence: number }
   // A named history fault, distinct from a transport failure: the steward's
   // log diverged from what this seat verified, so the sweep must REPORT it
   // rather than retry-loop. The replica is untouched.
   | { state: "parked"; fault: CommonsHistoryFaultTag }
+  | { state: "unavailable" };
+
+export type PullPeerCommonsResult = (
+  | { state: "current"; sequence: number }
+  | { state: "noop"; sequence: number }
+  | { state: "parked"; fault: CommonsHistoryFaultTag }
   | { state: "unavailable" }
-> {
+) & {
+  /**
+   * The escalating steward-absence status this seat now holds for the grant
+   * (#731). It rides on EVERY outcome, including `unavailable`, because the
+   * whole point is that a member with a dead steward can render "Alice's
+   * device hasn't been reachable for 9 days" instead of nothing.
+   */
+  steward: CommonsStewardStatus;
+};
+
+/**
+ * One pull attempt, unaware of instrumentation. Every dial that RESOLVES —
+ * whatever it answered — records this device's own link evidence, so a
+ * genuinely offline device can never be mistaken for a dead steward.
+ */
+async function attemptPullPeerCommons(
+  input: PullPeerCommonsInput,
+  now: string
+): Promise<PullAttempt> {
+  const reached = async (target: {
+    method: "GET" | "POST";
+    target: string;
+  }): ReturnType<PeerDial["request"]> => {
+    const response = await input.dial.request({
+      endpointTicket: endpoint(input.dial, input.route),
+      ...target,
+    });
+    recordCommonsDeviceReach(input.seat.vault, now);
+    return response;
+  };
   try {
     if (input.acceptInvitation && input.expectedSizeBytes !== undefined) {
       const inspectParams = query(input);
       inspectParams.set("inspect", "1");
-      const inspection = await input.dial.request({
-        endpointTicket: endpoint(input.dial, input.route),
+      const inspection = await reached({
         method: "GET",
         target: `${PEER_COMMONS_BOOTSTRAP_PATH_PREFIX}${encodeURIComponent(
           input.grantId
@@ -114,8 +163,7 @@ export async function pullPeerCommons(input: {
       input.memberVaultId
     );
     if (cursor) params.set("afterSequence", String(cursor.sequence));
-    const response = await input.dial.request({
-      endpointTicket: endpoint(input.dial, input.route),
+    const response = await reached({
       method: "GET",
       target: `${PEER_COMMONS_BOOTSTRAP_PATH_PREFIX}${encodeURIComponent(
         input.grantId
@@ -134,7 +182,11 @@ export async function pullPeerCommons(input: {
       body.tombstone
     ) {
       applyCommonsTombstone({ seat: input.seat, tombstone: body.tombstone });
-      return { state: "current", sequence: body.tombstone.currentSequence };
+      return {
+        state: "current",
+        sequence: body.tombstone.currentSequence,
+        kind: "tombstone",
+      };
     }
     // Already-current no-op: the steward acked our cursor and has nothing new.
     // Skip the destructive scrub+re-project entirely and report a non-progress
@@ -168,8 +220,7 @@ export async function pullPeerCommons(input: {
         chunkQuery.set("offset", String(offset));
         chunkQuery.set("length", String(CHUNK_BYTES));
         // oxlint-disable-next-line no-await-in-loop -- each ranged request starts at the offset established by the preceding chunk
-        const chunkResponse = await input.dial.request({
-          endpointTicket: endpoint(input.dial, input.route),
+        const chunkResponse = await reached({
           method: "GET",
           target: `${PEER_COMMONS_BLOB_PATH}?${chunkQuery}`,
         });
@@ -199,17 +250,62 @@ export async function pullPeerCommons(input: {
         return { state: "unavailable" };
       input.seat.blobs.local.putSync(blob.sha256, bytes);
     }
-    applyCommonsBootstrap({
-      seat: input.seat,
-      wire: body.wire,
-      now: input.now ?? new Date().toISOString(),
-    });
-    return { state: "current", sequence: body.wire.currentSequence };
+    applyCommonsBootstrap({ seat: input.seat, wire: body.wire, now });
+    return {
+      state: "current",
+      sequence: body.wire.currentSequence,
+      // A frame whose snapshot already sits past what this seat had applied
+      // forced a full re-baseline; anything else was appliable as a tail. That
+      // split is the fixed-window-sync plan's laggard signal.
+      kind:
+        (cursor?.sequence ?? 0) >= body.wire.snapshotSequence
+          ? "tail"
+          : "snapshot",
+    };
   } catch (error) {
     if (isCommonsHistoryError(error))
       return { state: "parked", fault: error.fault };
     return { state: "unavailable" };
   }
+}
+
+function outcomeOf(attempt: PullAttempt): CommonsPullOutcome {
+  if (attempt.state === "current") return attempt.kind;
+  if (attempt.state === "noop") return "noop";
+  if (attempt.state === "parked") return "parked";
+  return "unreachable";
+}
+
+/**
+ * Pull this member seat forward, and fold the attempt into the durable
+ * steward-contact record so the result can say WHY nothing moved. The status
+ * is derived from elapsed silence plus this device's own link evidence, so an
+ * unreachable steward and an unreachable device are never the same answer.
+ */
+export async function pullPeerCommons(
+  input: PullPeerCommonsInput
+): Promise<PullPeerCommonsResult> {
+  const now = input.now ?? new Date().toISOString();
+  const attempt = await attemptPullPeerCommons(input, now);
+  const steward = recordCommonsPull({
+    db: input.seat.vault,
+    grantId: input.grantId,
+    memberVaultId: input.memberVaultId,
+    stewardVaultId: input.stewardVaultId,
+    outcome: outcomeOf(attempt),
+    ...(attempt.state === "parked" ? { fault: attempt.fault } : {}),
+    ...(attempt.state === "unavailable"
+      ? { error: "steward unreachable" }
+      : {}),
+    now,
+  });
+  if (attempt.state === "current")
+    return { state: "current", sequence: attempt.sequence, steward };
+  if (attempt.state === "noop")
+    return { state: "noop", sequence: attempt.sequence, steward };
+  if (attempt.state === "parked")
+    return { state: "parked", fault: attempt.fault, steward };
+  return { state: "unavailable", steward };
 }
 
 export async function sendPeerCommonsCommand(input: {
@@ -222,6 +318,12 @@ export async function sendPeerCommonsCommand(input: {
   command: string;
   commandInput: Record<string, unknown>;
   memberSignature: CommonsMemberSignature;
+  /** The grant sequence the member had projected locally when it composed
+   * this command (issue #731 goal 1). Required on the wire in v0 — a remote
+   * intent must be classified on the same basis as a local one, so there is
+   * no defaulting/compat branch for an omitted value; see
+   * `handlePeerCommonsCommand` for the receiving side's hard refusal. */
+  basedOnSequence: number;
   intentId: string;
 }): Promise<
   | { state: "executed"; sequence: number }
@@ -241,6 +343,7 @@ export async function sendPeerCommonsCommand(input: {
         command: input.command,
         input: input.commandInput,
         memberSignature: input.memberSignature,
+        basedOnSequence: input.basedOnSequence,
         intentId: input.intentId,
       },
     });

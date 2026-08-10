@@ -418,13 +418,20 @@ export function createLogic({
     }
     const durable: LedgerRow[] = [];
     for (const intent of intents) {
+      // `LedgerRow["intentStatus"]` has no "executed" member — an executed
+      // intent never becomes a row — so the wire status is narrowed once
+      // here and the "executed" case is checked on `intent` itself below.
+      const status = intent.status as LedgerRow["intentStatus"];
+      // A settled-but-not-executed intent the member already dismissed
+      // stays gone across refreshes (issue #731 m6, extended by goal 2) —
+      // pending/parked rows are never in this set, so they keep
+      // re-appearing exactly as before.
+      const dismissibleSettled =
+        status === "denied" || status === "expired" || status === "cancelled";
       if (
         intent.command !== "tally.add_expense" ||
         intent.status === "executed" ||
-        // A denied intent the member already dismissed stays gone across
-        // refreshes (issue #731 m6) — pending/parked rows are never in this
-        // set, so they keep re-appearing exactly as before.
-        (intent.status === "denied" &&
+        (dismissibleSettled &&
           state.dismissedCommonsIntentIds.has(intent.intentId))
       )
         continue;
@@ -464,7 +471,7 @@ export function createLogic({
         `commons-${intent.intentId}`
       );
       row.commonsIntentId = intent.intentId;
-      row.intentStatus = intent.status;
+      row.intentStatus = status;
       row.parked = true;
       row.pendingReason = intent.reason;
       row.stewardLabel = intent.stewardLabel;
@@ -474,8 +481,9 @@ export function createLogic({
   }
 
   /**
-   * Settle a `denied` durable Commons intent out of the ledger overlay for
-   * good (issue #731 m6) — a no-op for anything else, so a pending/parked
+   * Settle a settled-but-not-executed (`denied`/`expired`/`cancelled`)
+   * durable Commons intent out of the ledger overlay for good (issue #731
+   * m6, extended by goal 2) — a no-op for anything else, so a pending/parked
    * row (still genuinely in flight) can never be dismissed away. Removes it
    * from `state.pendingExpenses` immediately (no round trip to wait on) and
    * remembers the id so the next `refreshCommonsExpenses` doesn't resurrect it.
@@ -484,11 +492,47 @@ export function createLogic({
     const row = state.pendingExpenses.find(
       (r) => r.commonsIntentId === intentId
     );
-    if (!row || row.intentStatus !== "denied") return;
+    if (
+      !row ||
+      (row.intentStatus !== "denied" &&
+        row.intentStatus !== "expired" &&
+        row.intentStatus !== "cancelled")
+    )
+      return;
     state.dismissedCommonsIntentIds.add(intentId);
     state.pendingExpenses = state.pendingExpenses.filter(
       (r) => r.commonsIntentId !== intentId
     );
+    render();
+  }
+
+  /**
+   * Cancel a durable Commons intent that has not executed yet (issue #731
+   * goal 2) — meaningful only while it is still `pending`/`parked`; a no-op
+   * otherwise. A genuine race with the steward (or the peer sweep retrying a
+   * parked intent) is possible, so this never assumes the cancel won: it
+   * re-syncs from `commonsIntents()` afterward and lets the row show
+   * whatever actually settled — `cancelled`, or the steward's real answer if
+   * the race was lost.
+   */
+  async function cancelCommonsIntent(intentId: string) {
+    const row = state.pendingExpenses.find(
+      (r) => r.commonsIntentId === intentId
+    );
+    if (
+      !row ||
+      (row.intentStatus !== "pending" && row.intentStatus !== "parked")
+    )
+      return;
+    const cancel = window.centraid.cancelCommonsIntent;
+    if (!cancel) return;
+    try {
+      await cancel({ intentId });
+    } catch {
+      // A transport failure leaves the row exactly as it was; the refresh
+      // below (or the member's next action) reconciles it either way.
+    }
+    await refreshCommonsExpenses();
     render();
   }
 
@@ -913,6 +957,7 @@ export function createLogic({
     read,
     refreshCommonsExpenses,
     dismissCommonsIntent,
+    cancelCommonsIntent,
     applyDenied,
     directory,
     personOf,

@@ -4,6 +4,7 @@ import {
   commonsSeats,
   compileCommons,
   executeCommonsCommand,
+  expireParkedCommonsIntents,
   readCommonsGrant,
   settleCommonsIntent,
   signCommonsIntent,
@@ -14,12 +15,44 @@ import type {
   VaultDb,
 } from "@centraid/vault";
 
+import type { CommonsStewardStatus } from "./commons-observability.js";
 import {
   pullPeerCommons,
   sendPeerCommonsCommand,
 } from "./peer-commons-client.js";
 import type { PeerDial } from "./peer-edge-give-client.js";
 import type { VaultLinksStore } from "./vault-links-store.js";
+
+/** Presences worth a log line — a closed episode or a healthy laptop-closed
+ *  gap is not, an escalating or parked one is (#731). */
+const NOTEWORTHY_PRESENCE = new Set([
+  "degraded",
+  "absent",
+  "link-down",
+  "parked",
+]);
+
+/**
+ * Surface a degraded/absent/link-down/parked steward instead of dropping
+ * `pullPeerCommons`'s status on the floor — `recordCommonsPull` already
+ * persisted it durably (diagnostics + the recovery route read it back), this
+ * is only the sweep's own log line so it shows up in the tail without an
+ * operator having to query vault.db.
+ */
+function logStewardConcern(
+  logger: { warn: (message: string) => void } | undefined,
+  memberVaultId: string,
+  status: CommonsStewardStatus
+): void {
+  if (!logger || !NOTEWORTHY_PRESENCE.has(status.presence)) return;
+  const detail =
+    status.presence === "parked"
+      ? `fault ${status.fault ?? "unknown"}`
+      : `silent ${status.silentForMs ?? 0}ms, ${status.consecutiveFailures} consecutive failures`;
+  logger.warn(
+    `commons steward ${status.presence} for grant ${status.grantId} (member ${memberVaultId}${status.stewardVaultId ? `, steward ${status.stewardVaultId}` : ""}) — ${detail}`
+  );
+}
 
 export interface MountedCommonsVault {
   vaultId: string;
@@ -36,6 +69,7 @@ interface PendingIntent {
   actor_party_id: string;
   command: string;
   input_json: string;
+  based_on_sequence: number;
 }
 
 function stewardVaultId(db: VaultDb, grantId: string): string | undefined {
@@ -55,6 +89,8 @@ export async function sweepPeerCommons(input: {
   dial?: PeerDial;
   limit: number;
   now?: string;
+  /** Same shape `PeerPlaneSweepOptions.logger` carries (#731). */
+  logger?: { warn: (message: string) => void };
 }): Promise<{ progressed: number }> {
   let progressed = 0;
   const mountedById = new Map(
@@ -62,9 +98,19 @@ export async function sweepPeerCommons(input: {
   );
   for (const local of input.vaults) {
     if (progressed >= input.limit) break;
+    // Bounded parked-intent life (issue #731 goal 2): expire before this
+    // seat's own retry pass, so a request that has waited past its review
+    // window stops being retried and instead surfaces as terminal. Cheap
+    // (one indexed UPDATE) and idempotent — the sweep is this overlay's only
+    // periodic tick, so this is its natural home rather than a new timer.
+    expireParkedCommonsIntents({
+      seat: local.db.vault,
+      now: input.now ?? new Date().toISOString(),
+    });
     const intents = local.db.vault
       .prepare(
-        `SELECT intent_id, grant_id, actor_party_id, command, input_json
+        `SELECT intent_id, grant_id, actor_party_id, command, input_json,
+                based_on_sequence
            FROM share_commons_intent
           WHERE status IN ('pending','parked')
           ORDER BY created_at, intent_id LIMIT ?`
@@ -108,6 +154,7 @@ export async function sweepPeerCommons(input: {
             memberVaultId: local.vaultId,
             nonce: intent.intent_id,
           }),
+          basedOnSequence: intent.based_on_sequence,
           intentId: intent.intent_id,
           now,
         });
@@ -184,6 +231,7 @@ export async function sweepPeerCommons(input: {
         command: intent.command,
         commandInput,
         memberSignature: signature,
+        basedOnSequence: intent.based_on_sequence,
         intentId: intent.intent_id,
       });
       const now = input.now ?? new Date().toISOString();
@@ -195,7 +243,7 @@ export async function sweepPeerCommons(input: {
           now,
         });
         // oxlint-disable-next-line no-await-in-loop -- catch-up must follow this intent's steward commit before the next intent is attempted
-        await pullPeerCommons({
+        const catchUp = await pullPeerCommons({
           dial: input.dial,
           route: link.route,
           stewardVaultId: stewardId,
@@ -204,6 +252,7 @@ export async function sweepPeerCommons(input: {
           seat: local.db,
           now,
         });
+        logStewardConcern(input.logger, local.vaultId, catchUp.steward);
         progressed += 1;
       } else if (answer.state === "refused") {
         settleCommonsIntent({
@@ -246,6 +295,7 @@ export async function sweepPeerCommons(input: {
         seat: local.db,
         now: input.now,
       });
+      logStewardConcern(input.logger, local.vaultId, result.steward);
       if (result.state === "current") progressed += 1;
     }
   }

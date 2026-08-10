@@ -259,7 +259,13 @@ interface CentraidCommonsIntent {
   actorPartyId: string;
   command: string;
   input: Record<string, unknown>;
-  status: "pending" | "parked" | "executed" | "denied";
+  status:
+    | "pending"
+    | "parked"
+    | "executed"
+    | "denied"
+    | "expired"
+    | "cancelled";
   reason?: string;
   stewardLabel?: string;
   createdAt: string;
@@ -318,6 +324,11 @@ interface CentraidClient {
     scope?: string;
     signal?: AbortSignal;
   }) => Promise<CentraidCommonsIntent[]>;
+  /** Cancel a Commons intent that has not executed yet; a steward that has already executed it wins. */
+  cancelCommonsIntent?: (opts: {
+    intentId: string;
+    scope?: string;
+  }) => Promise<{ status: string; cancelled: boolean }>;
   /** Place an entity into another mounted audience vault. */
   place?: (opts: {
     linkToken: string;

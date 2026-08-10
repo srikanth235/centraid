@@ -176,6 +176,10 @@ import { makeBackupRouteHandler } from "../routes/backup-routes.js";
 import { makeBlobRouteHandler } from "../routes/blob-routes.js";
 import { makeCaptureRouteHandler } from "../routes/capture-routes.js";
 import {
+  COMMONS_RECOVERY_PATH,
+  makeCommonsRecoveryRouteHandler,
+} from "../routes/commons-recovery-routes.js";
+import {
   COMMONS_PATH,
   makeCommonsRouteHandler,
 } from "../routes/commons-routes.js";
@@ -244,6 +248,7 @@ import type { AssistOAuthConfig } from "./assist-oauth.js";
 import { pollProviderEventSource } from "./automation-event-sources.js";
 import { createBlobSweepHealthProbe } from "./blob-sweep-health.js";
 import { createBrokerHealthProbe } from "./broker-health.js";
+import { commonsObservabilitySection } from "./commons-observability.js";
 import { companionRequestAllowed } from "./companion-access.js";
 import { ConnectionBroker } from "./connection-broker.js";
 import type { DataPlaneHttpOptions } from "./data-plane-handoff.js";
@@ -4217,6 +4222,15 @@ export async function buildGateway(
         paths,
         backup: options.backup,
         deviceAccessEnabled: Boolean(options.deviceAccess),
+        // Steward-absence + local Commons sync instrumentation (#731):
+        // reachability, absence episodes, pull outcomes, op-log size, and
+        // member lag per grant — read-only, no network egress. See
+        // docs/logs.md.
+        ...commonsObservabilitySection({
+          vaults: vaultRegistry
+            .planesList()
+            .map((plane) => ({ vaultId: plane.boot.vaultId, db: plane.db })),
+        }),
       },
     });
 
@@ -4862,6 +4876,13 @@ export async function buildGateway(
       });
     },
   });
+  // Owner-tier steward-absence recovery (#731): same enrollment-derived
+  // owner check and vault resolution as `commonsHandler` above — this is a
+  // sibling door onto the same Commons plane, not a new auth story.
+  const commonsRecoveryHandler = makeCommonsRecoveryRouteHandler({
+    enrollments: enrollmentStore,
+    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+  });
   // The D9 answer route (#726 P3 decision 9) — a same-machine owner-tier
   // surface, mounted like any other route, distinct from the peer plane.
   const edgeAnswerHandler = makeEdgeAnswerRouteHandler({
@@ -5068,6 +5089,11 @@ export async function buildGateway(
       (url.pathname === COMMONS_PATH ||
         url.pathname.startsWith(`${COMMONS_PATH}/`)) &&
       (await commonsHandler(req, res))
+    )
+      return true;
+    if (
+      url.pathname === COMMONS_RECOVERY_PATH &&
+      (await commonsRecoveryHandler(req, res))
     )
       return true;
     // The D9 answer surface (#726 P3 decision 9): `/centraid/_gateway/edges/pending`

@@ -94,6 +94,7 @@ If both measurements confirm laggards beyond 256 ops are rare and short-lived in
 | Date | Step | PR/commit | Notes |
 | --- | --- | --- | --- |
 | 2026-08-10 | Decision document written | — | No implementation yet; awaiting dogfood instrumentation data before treating K=256 as final. |
+| 2026-08-10 | Both go/no-go measurements instrumented and wired into the gateway | #731 | `commonsObservabilityForVault` (`packages/gateway/src/serve/commons-observability.ts`) computes `opLog` (row count, last/checkpoint sequence, rows beyond checkpoint — measurement 1) and `memberLag` (max/p50 ops behind, count beyond the K=256 window — measurement 2) per grant. Read them at `GET /centraid/_gateway/diagnostics` (`config.commons`) or `GET /centraid/_gateway/commons/recovery`; see [docs/logs.md](../logs.md#commons-sync-observability-731). Still no dogfood data collected — this is the instrumentation the execution outline's step 5 needs, not the measurement itself. |
 
 ## Rejected alternatives
 

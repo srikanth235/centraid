@@ -129,6 +129,11 @@ export {
   executeCommonsCommand,
   queueCommonsIntent,
   settleCommonsIntent,
+  cancelCommonsIntent,
+  expireParkedCommonsIntents,
+  readCommonsIntentBasedOnSequence,
+  COMMONS_INTENT_PARK_HORIZON_MS,
+  STALE_CONTEXT_REASON_PREFIX,
   retainCommonsItem,
   removeCommonsFromSeat,
   transferCommonsSteward,
@@ -139,6 +144,7 @@ export {
   type CommonsGrantRecord,
   type CompiledCommonsSeat,
   type CommonsCommandDecision,
+  type CommonsIntentStatus,
   type ExecuteCommonsCommandInput,
   type ExecuteCommonsCommandResult,
 } from "./share/commons.js";
@@ -198,6 +204,16 @@ export {
   type CommonsSyncFrame,
   type CommonsInvitationRecord,
 } from "./share/commons-bootstrap.js";
+// Replica-export recovery: a member re-founds a group whose steward is gone
+// (#731). Deliberate ceremony — see the module header.
+export {
+  recoverCommonsFromReplica,
+  readCommonsRecoveryLineage,
+  type CommonsRecoveryLineage,
+  type CommonsRecoveryRefusal,
+  type CommonsRecoveryResult,
+  type RecoverCommonsFromReplicaInput,
+} from "./share/commons-recovery.js";
 // The LOCAL orphan reclaim (#599 d11): each vault unlinks only its own CAS
 // directory entries, so hardlinked bytes survive until the last vault lets go.
 export {

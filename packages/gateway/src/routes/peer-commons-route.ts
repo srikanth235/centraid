@@ -275,6 +275,15 @@ export async function handlePeerCommonsCommand(
   const gateway = deps.gatewayFor(stewardVaultId);
   const credential = deps.credentialFor(stewardVaultId);
   const link = peer.linkForPair(stewardVaultId, memberVaultId);
+  // The grant sequence the member had projected locally when it composed this
+  // command (issue #731 goal 1). It is member-supplied, untrusted input like
+  // every other field on this wire body — it never rode inside the signed
+  // intent bytes `memberSignature` covers — so it is an honesty/classification
+  // signal for the stale-context check only, and must never widen what
+  // `executeCommonsCommand` authorizes. v0 requires it explicitly on the
+  // wire: a payload missing (or malforming) it is refused outright, with no
+  // defaulting and no compat branch for pre-#731 senders.
+  const basedOnSequence = body.basedOnSequence;
   if (
     !link ||
     !steward ||
@@ -286,7 +295,10 @@ export async function handlePeerCommonsCommand(
     !body.input ||
     typeof body.input !== "object" ||
     !memberSignature ||
-    memberSignature.memberVaultId !== memberVaultId
+    memberSignature.memberVaultId !== memberVaultId ||
+    typeof basedOnSequence !== "number" ||
+    !Number.isInteger(basedOnSequence) ||
+    basedOnSequence < 0
   )
     return notFound(res);
   // Bind the acted-as party to the PROVEN peer vault, exactly as the refuse
@@ -324,6 +336,7 @@ export async function handlePeerCommonsCommand(
     command,
     commandInput: body.input as Record<string, unknown>,
     memberSignature,
+    basedOnSequence,
     seats: commonsSeats({
       steward: steward.vault,
       grantId,

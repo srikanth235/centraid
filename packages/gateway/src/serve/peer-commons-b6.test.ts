@@ -12,6 +12,7 @@ import {
   createCommonsGrant,
   exportCommonsBootstrap,
   listCommonsInvitations,
+  readCommonsGrant,
   registerTallyCommands,
   revokeCommonsGrant,
   signCommonsIntent,
@@ -281,6 +282,8 @@ describe("B6 Commons peer plane", () => {
         memberVaultId: member.vaultId,
         nonce: intentId,
       }),
+      basedOnSequence: readCommonsGrant(member.vault.vault, tallyGrant.grantId)
+        .lastSequence,
       intentId,
     });
     expect(result).toMatchObject({ state: "executed" });

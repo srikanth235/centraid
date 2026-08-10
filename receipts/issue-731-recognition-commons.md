@@ -495,9 +495,62 @@ loop in packages/gateway/src/serve/build-gateway.ts is retained — it backs the
 from the comment. Posture recorded in docs/decisions.md and CHANGELOG.md; the follow-on
 simplification is planned in docs/plans/commons-fixed-window-sync.md.
 
-Still in flight (not in this change set): steward-absence detection with replica-export
-recovery, sync/parked-intent dogfood instrumentation, and intent based-on-sequence with
-parked-intent expiry/cancel.
+**Steward absence, recovery, and instrumentation.** A member now records every pull attempt
+against the steward and derives an escalating presence from elapsed silence — reachable,
+degraded (24h), absent (7d) — gated on independent evidence that the local device reached
+anything at all, so a closed laptop or a flight reports `link-down` instead of falsely
+accusing the steward, and a grant parked on a divergence fault reports `parked` (the steward
+answered). A member holding a complete replica can re-found the group: recovery mints a new
+circle it stewards, seeds a fresh genesis chain at sequence 0 from its own projected closure,
+marks the old grant superseded without deleting anything, records lineage, and refuses both
+when the local seat is already the steward and when its replica is parked on a divergence
+fault — never re-found from state that could not be verified. Every other seat lands
+`invited` and must accept normally; no consent is fabricated. Local-only instrumentation
+records steward reachability and absence episodes, pull outcome counts, parked-intent dwell,
+and the op-log size and member-lag distribution that docs/plans/commons-fixed-window-sync.md
+names as its go/no-go. Implementation in packages/vault/src/share/commons-recovery.ts,
+packages/vault/src/schema/commons-resilience.ts,
+packages/gateway/src/serve/commons-observability.ts,
+packages/gateway/src/routes/commons-recovery-routes.ts, with mounting in
+packages/gateway/src/serve/build-gateway.ts, steward-status logging in
+packages/gateway/src/serve/peer-commons-sweep.ts and
+packages/gateway/src/serve/peer-plane-sweep.ts, and the status carried on every pull result in
+packages/gateway/src/serve/peer-commons-client.ts. Tests:
+packages/vault/src/share/commons-recovery.test.ts,
+packages/gateway/src/serve/commons-observability.test.ts,
+packages/gateway/src/routes/commons-recovery-routes.test.ts,
+packages/gateway/src/serve/peer-commons-sweep.test.ts. Surfaces documented in docs/logs.md.
+
+**Stale-context intents and parked-intent lifecycle.** An intent records the grant sequence its
+author had applied when it was composed (`based_on_sequence`, computed inside
+`queueCommonsIntent` from the seat's own projection, never caller-supplied), and the steward
+refuses it as stale only when an intervening op shares a concrete reference with it — the same
+entity id, excluding the container id every op trivially shares, or a roster event naming a
+party the command references. Two unrelated expenses that merely share a payer do not collide.
+A parked intent now expires after a bounded horizon rather than executing against a world that
+moved on, and a member can cancel one that has not executed, losing gracefully to a steward
+that already did. Expired and cancelled settle like denied and are dismissible from the
+overlay. `based_on_sequence` crosses the peer relay as a required field, refused when absent,
+and is explicitly documented at its read site as unsigned classification input that must never
+widen an authorization decision. Implementation in packages/vault/src/share/commons.ts and
+packages/vault/src/schema/share-commons.ts, exported through packages/vault/src/index.ts,
+plumbed through packages/gateway/src/routes/commons-routes.ts,
+packages/gateway/src/routes/peer-commons-route.ts and the sweep, with the cancel entry point in
+packages/client/src/react/blueprints/centraid-inline.ts and
+packages/blueprints/types/centraid.d.ts. Overlay states in
+packages/blueprints/apps/tally/logic.ts, types.ts, app-root.tsx, components/Ledger.tsx and
+components/ExpenseRow.tsx. Tests: packages/vault/src/share/commons-stale-lifecycle.test.ts,
+packages/vault/src/share/commons-intent-lifecycle.test.ts,
+packages/vault/src/share/commons-intent.test-fixtures.ts and
+packages/gateway/src/routes/commons-routes-intents.test.ts, with relay coverage in
+packages/gateway/src/serve/peer-commons-hardening.test.ts and call sites updated in
+packages/gateway/src/serve/peer-commons-b6.test.ts,
+packages/gateway/src/serve/peer-commons-docs-b6.test.ts and
+packages/gateway/src/serve/peer-commons-tally-b6.test.ts.
+
+Known limit, recorded deliberately: `based_on_sequence` is not part of the signed member-intent
+bytes, so it protects a member from their own stale composition rather than defending against a
+hostile one. Binding it cryptographically is a follow-up.
 
 ## Verification
 

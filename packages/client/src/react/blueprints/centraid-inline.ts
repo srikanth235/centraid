@@ -91,14 +91,23 @@ export type InlineScopeRead<T> =
   | { scope: string; ok: true; data: T }
   | { scope: string; ok: false; error: { code?: string; message: string } };
 
-/** Durable member-side overlay for a command waiting on its Commons steward. */
+/** Durable member-side overlay for a command waiting on its Commons steward.
+ * `expired` (a parked intent that outlived its review window) and
+ * `cancelled` (a member-initiated cancel) are settled states like `denied`
+ * (issue #731 goal 2). */
 export interface InlineCommonsIntent {
   intentId: string;
   grantId: string;
   actorPartyId: string;
   command: string;
   input: Record<string, unknown>;
-  status: "pending" | "parked" | "executed" | "denied";
+  status:
+    | "pending"
+    | "parked"
+    | "executed"
+    | "denied"
+    | "expired"
+    | "cancelled";
   reason?: string;
   stewardLabel?: string;
   createdAt: string;
@@ -163,6 +172,16 @@ export interface InlineCentraidClient {
     scope?: string;
     signal?: AbortSignal;
   }) => Promise<InlineCommonsIntent[]>;
+  /** Cancel a durable Commons intent that has not executed yet (issue #731
+   * goal 2). Idempotent and safe to race with the steward — the vault-side
+   * guard only ever moves a still-open (`pending`/`parked`) intent to
+   * `cancelled`; an intent the steward already settled comes back
+   * unchanged, so the caller reads the real outcome off the result rather
+   * than assuming the cancel won. */
+  cancelCommonsIntent: (opts: {
+    intentId: string;
+    scope?: string;
+  }) => Promise<{ status: string; cancelled: boolean }>;
   place: (opts: {
     linkToken: string;
     kind: "add" | "move";
@@ -678,6 +697,22 @@ export function createInlineCentraidClient(
           ...(intent.settledAt ? { settledAt: intent.settledAt } : {}),
         };
       });
+    },
+
+    async cancelCommonsIntent(opts) {
+      const binding = bindingFor(opts.scope);
+      if (!binding.scope.id) return { status: "pending", cancelled: false };
+      const { baseUrl, token } = await auth();
+      const response = await doFetch(
+        baseUrl,
+        `${ROUTES.gatewayCommons}/intents/${encodeURIComponent(opts.intentId)}/cancel`,
+        {
+          method: "POST",
+          headers: authHeaders(token, "application/json"),
+          body: JSON.stringify({ actorVaultId: binding.scope.id }),
+        }
+      );
+      return readJson(response, "cancel commons intent");
     },
 
     async place(opts) {

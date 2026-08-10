@@ -118,8 +118,14 @@ export interface LedgerRow {
   };
   pending?: boolean;
   parked?: boolean;
-  /** Durable Commons command state backing this optimistic row. */
-  intentStatus?: "pending" | "parked" | "denied";
+  /** Durable Commons command state backing this optimistic row. `expired`
+   *  (a parked intent that outlived its review window) and `cancelled` (a
+   *  member-initiated cancel) are settled states like `denied` (issue #731
+   *  goal 2) — the ambient `centraid.d.ts` `CentraidCommonsIntent.status`
+   *  has not been widened to include them yet (out of this change's
+   *  ownership; see the PR notes), so `refreshCommonsExpenses` assigns into
+   *  this wider field with an explicit cast rather than narrowing here. */
+  intentStatus?: "pending" | "parked" | "denied" | "expired" | "cancelled";
   commonsIntentId?: string;
   pendingReason?: string;
   stewardLabel?: string;

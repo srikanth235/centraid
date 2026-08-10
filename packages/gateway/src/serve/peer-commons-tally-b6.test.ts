@@ -15,6 +15,7 @@ import {
   exportCommonsBootstrap,
   listCommonsInvitations,
   openVaultDb,
+  readCommonsGrant,
   registerTallyCommands,
   removeCommonsMember,
   signCommonsIntent,
@@ -201,6 +202,8 @@ describe("B6 Tally Commons across a real peer", () => {
         command,
         commandInput: input,
         memberSignature: signed(remote, command, input, intentId),
+        basedOnSequence: readCommonsGrant(remote.vault.vault, grant.grantId)
+          .lastSequence,
         intentId,
       });
     const syncRemote = async () => {

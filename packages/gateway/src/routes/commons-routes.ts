@@ -6,6 +6,7 @@ import type { IncomingMessage } from "node:http";
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import {
   answerCommonsInvitation,
+  cancelCommonsIntent,
   commonsSeats,
   commonsCurrentSize,
   compileCommons,
@@ -17,6 +18,7 @@ import {
   listCommonsInvitations,
   listCommonsGrants,
   readCommonsGrant,
+  readCommonsIntentBasedOnSequence,
   recompileCommonsGrants,
   refuseCommonsMember,
   removeCommonsMember,
@@ -301,6 +303,29 @@ export function makeCommonsRouteHandler(deps: CommonsRouteDeps): RouteHandler {
             seat: actor.vault,
             itemType: body.itemType,
             itemId: body.itemId,
+            now: new Date().toISOString(),
+          })
+        );
+      }
+      if (
+        parts[0] === "intents" &&
+        parts[1] &&
+        parts[2] === "cancel" &&
+        req.method === "POST"
+      ) {
+        const actorVaultId =
+          typeof body.actorVaultId === "string" ? body.actorVaultId : "";
+        if (deps.enrollments.owners.ownerOf(actorVaultId) !== owner.ownerId)
+          throw new Error("actor vault is not owned by this caller");
+        const actor = deps.vaultFor(actorVaultId);
+        if (!actor) throw new Error("actor vault is not mounted");
+        const intentId = decodeURIComponent(parts[1]);
+        return sendJson(
+          res,
+          200,
+          cancelCommonsIntent({
+            seat: actor.vault,
+            intentId,
             now: new Date().toISOString(),
           })
         );
@@ -697,6 +722,14 @@ export function makeCommonsRouteHandler(deps: CommonsRouteDeps): RouteHandler {
                 nonce: intentId,
               });
         const now = new Date().toISOString();
+        // The baseline `queueCommonsIntent` recorded above from the actor's
+        // OWN seat, read back rather than re-derived, so authorization sees
+        // exactly the sequence the actor's mental model was composed against
+        // (issue #731 goal 1) — never a caller-supplied or re-guessed value.
+        const basedOnSequence = readCommonsIntentBasedOnSequence(
+          actor.vault,
+          intentId
+        );
         const result = executeCommonsCommand({
           steward,
           gateway,
@@ -713,6 +746,7 @@ export function makeCommonsRouteHandler(deps: CommonsRouteDeps): RouteHandler {
             vaultFor: deps.vaultFor,
           }),
           ...(memberSignature ? { memberSignature } : {}),
+          ...(basedOnSequence === undefined ? {} : { basedOnSequence }),
           intentId,
           invocationId: intentId,
           now,

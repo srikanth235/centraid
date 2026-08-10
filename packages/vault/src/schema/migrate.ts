@@ -10,6 +10,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { AGENT_DDL } from "./agent.js";
 import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
 import { BLOB_DDL } from "./blob.js";
+import { COMMONS_RESILIENCE_DDL } from "./commons-resilience.js";
 import { CONSENT_DDL, CONSENT_INSTALL_MEMORY_DDL } from "./consent.js";
 import {
   CORE_DDL,
@@ -112,7 +113,12 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     RENAME_INBOX_NOTICE_DDL,
   ].join("\n"),
   SHARE_ORIGIN_ATTRIBUTION_DDL,
-  SHARE_COMMONS_DDL,
+  // The Commons control plane and, composed into the same rung, the local-only
+  // resilience/instrumentation tables that hang off it (#731): steward-contact
+  // state, this device's own link evidence, and recovery lineage. They are part
+  // of the same baseline, not a compatibility rung — an older local file is
+  // recreated, never migrated, in pre-release v0.
+  [SHARE_COMMONS_DDL, COMMONS_RESILIENCE_DDL].join("\n"),
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

@@ -209,6 +209,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     deleteExpense: handleDeleteExpense,
     deleteGroup: handleDeleteGroup,
     dismissCommonsIntent: handleDismissDeniedIntent,
+    cancelCommonsIntent: handleCancelCommonsIntent,
     addGroupMember: handleAddGroupMember,
     openAddExpense: handleOpenAddExpense,
     openAddFriend: handleOpenAddFriend,
@@ -475,6 +476,10 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
           onDismissDenied={(row) =>
             row.commonsIntentId &&
             handleDismissDeniedIntent(row.commonsIntentId)
+          }
+          onCancelIntent={(row) =>
+            row.commonsIntentId &&
+            handleCancelCommonsIntent(row.commonsIntentId)
           }
         />
       </>

@@ -9,6 +9,7 @@ import {
   executeCommonsCommand,
   exportCommonsBootstrap,
   listCommonsInvitations,
+  readCommonsGrant,
   registerDocumentCommands,
   retainCommonsItem,
   revokeCommonsGrant,
@@ -392,6 +393,7 @@ async function sendWriter(
       memberVaultId: writer.vaultId,
       nonce: intentId,
     }),
+    basedOnSequence: readCommonsGrant(writer.vault.vault, grantId).lastSequence,
     intentId,
   });
 }

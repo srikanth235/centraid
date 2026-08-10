@@ -154,7 +154,14 @@ CREATE TABLE share_commons_intent (
   actor_party_id  TEXT NOT NULL,
   command         TEXT NOT NULL,
   input_json      TEXT NOT NULL CHECK (json_valid(input_json)),
-  status          TEXT NOT NULL CHECK (status IN ('pending','parked','denied','executed')),
+  -- The grant sequence this member had projected locally when the command
+  -- was composed (issue #731 stale-context protection). Computed and stored
+  -- by queueCommonsIntent itself from the seat's own projected
+  -- share_circle_grant.last_sequence -- never caller-supplied, so it cannot
+  -- be a legacy-shape optional: every intent row states its own baseline.
+  based_on_sequence INTEGER NOT NULL,
+  status          TEXT NOT NULL CHECK (status IN
+    ('pending','parked','denied','executed','expired','cancelled')),
   reason          TEXT,
   steward_label   TEXT,
   created_at      TEXT NOT NULL,

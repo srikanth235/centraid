@@ -11,9 +11,15 @@ import {
   commonsSeats,
   compileCommons,
   createCommonsGrant,
+  executeCommonsCommand,
+  readCommonsGrant,
+  registerTallyCommands,
   signCommonsIntent,
+  STALE_CONTEXT_REASON_PREFIX,
 } from "@centraid/vault";
 
+import { PEER_COMMONS_COMMAND_PATH } from "../routes/peer-commons-route.js";
+import { addKnownParty } from "./commons-b6.test-fixtures.js";
 import {
   pullPeerCommons,
   sendPeerCommonsCommand,
@@ -83,6 +89,9 @@ describe("commons peer-plane hardening", () => {
         memberVaultId: member.vaultId,
         nonce: "forge-nonce",
       }),
+      // Member has never locally compiled this grant (never joined a seat
+      // above); 0 is the honest baseline for an unobserved history.
+      basedOnSequence: 0,
       intentId: "forge-nonce",
     });
     // The route refuses to resolve the caller as the steward: nothing executes,
@@ -116,6 +125,7 @@ describe("commons peer-plane hardening", () => {
         memberVaultId: member.vaultId,
         nonce: "honest-nonce",
       }),
+      basedOnSequence: 0,
       intentId: "honest-nonce",
     });
     expect(honest).toMatchObject({
@@ -293,9 +303,12 @@ describe("commons peer-plane hardening", () => {
 
     // The sweep learns WHICH fault this is, so it reports rather than retries,
     // and the member's replica is left exactly as it was.
-    await expect(pull()).resolves.toStrictEqual({
+    // (#731) every pull result also carries the seat's steward-absence status;
+    // a named fault parks the seat rather than aging it into "absent".
+    await expect(pull()).resolves.toMatchObject({
       state: "parked",
       fault: "history-diverged",
+      steward: { presence: "parked", fault: "history-diverged" },
     });
     expect(
       member.vault.vault
@@ -304,5 +317,253 @@ describe("commons peer-plane hardening", () => {
         )
         .get(photo.assetId)
     ).toMatchObject({ n: 1 });
+  });
+
+  test("a remote member's stale-context is classified using the wire-carried based_on_sequence", async () => {
+    const origin = makeSide("relay-based-on-sequence-steward");
+    const member = makeSide("relay-based-on-sequence-member");
+    await link(origin, member);
+    const now = new Date().toISOString();
+    addKnownParty(origin, member, now);
+    registerTallyCommands(origin.gateway);
+    const created = origin.gateway.invoke(origin.ownerCredential, {
+      command: "tally.create_group",
+      input: {
+        name: "Relay household",
+        icon: "📡",
+        member_ids: [member.ownerPartyId],
+      },
+    });
+    expect(created.status).toBe("executed");
+    const groupId = (created as { output: { group_id: string } }).output
+      .group_id;
+    const grant = createCommonsGrant({
+      origin: origin.vault.vault,
+      ownerPartyId: origin.ownerPartyId,
+      ownerVaultId: origin.vaultId,
+      ownerVault: origin.vault,
+      containerType: "tally.group",
+      containerId: groupId,
+      members: [
+        {
+          partyId: member.ownerPartyId,
+          capability: "read+write",
+          vaultId: member.vaultId,
+          vaultPublicKey: member.publicKey,
+        },
+      ],
+      now,
+    });
+    const seats = () =>
+      commonsSeats({
+        steward: origin.vault.vault,
+        grantId: grant.grantId,
+        stewardVaultId: origin.vaultId,
+        vaultFor: () => undefined,
+      });
+    const splits = [
+      { party_id: origin.ownerPartyId, share_minor: 450 },
+      { party_id: member.ownerPartyId, share_minor: 450 },
+    ];
+    expect(
+      executeCommonsCommand({
+        steward: origin.vault,
+        gateway: origin.gateway,
+        credential: origin.ownerCredential,
+        stewardVaultId: origin.vaultId,
+        grantId: grant.grantId,
+        actorPartyId: origin.ownerPartyId,
+        command: "tally.add_expense",
+        commandInput: {
+          group_id: groupId,
+          description: "Ferry",
+          amount_minor: 900,
+          paid_by: origin.ownerPartyId,
+          category: "travel",
+          splits,
+        },
+        intentId: "relay-add",
+        invocationId: "relay-add",
+        seats: seats(),
+        now,
+      }).decision.accepted
+    ).toBe(true);
+    const expenseId = (
+      origin.vault.vault
+        .prepare(
+          "SELECT expense_id FROM tally_expense WHERE group_id = ? AND description = 'Ferry'"
+        )
+        .get(groupId) as { expense_id: string }
+    ).expense_id;
+    // A steward-side edit is the intervening op a never-synced remote member
+    // missed.
+    expect(
+      executeCommonsCommand({
+        steward: origin.vault,
+        gateway: origin.gateway,
+        credential: origin.ownerCredential,
+        stewardVaultId: origin.vaultId,
+        grantId: grant.grantId,
+        actorPartyId: origin.ownerPartyId,
+        command: "tally.edit_expense",
+        commandInput: {
+          expense_id: expenseId,
+          description: "Ferry (updated)",
+          amount_minor: 900,
+          paid_by: origin.ownerPartyId,
+          category: "travel",
+          splits,
+        },
+        intentId: "relay-edit",
+        invocationId: "relay-edit",
+        seats: seats(),
+        now,
+      }).decision.accepted
+    ).toBe(true);
+
+    const sendMember = (
+      description: string,
+      basedOnSequence: number,
+      intentId: string
+    ) => {
+      const commandInput = {
+        expense_id: expenseId,
+        description,
+        amount_minor: 900,
+        paid_by: member.ownerPartyId,
+        category: "travel",
+        splits,
+      };
+      return sendPeerCommonsCommand({
+        dial: dialFrom(member, origin),
+        route: routeFrom(member, origin),
+        stewardVaultId: origin.vaultId,
+        memberVaultId: member.vaultId,
+        grantId: grant.grantId,
+        actorPartyId: member.ownerPartyId,
+        command: "tally.edit_expense",
+        commandInput,
+        memberSignature: signCommonsIntent(member.vault.identitySeed, {
+          grantId: grant.grantId,
+          actorPartyId: member.ownerPartyId,
+          command: "tally.edit_expense",
+          commandInput,
+          memberVaultId: member.vaultId,
+          nonce: intentId,
+        }),
+        basedOnSequence,
+        intentId,
+      });
+    };
+
+    // The member composed this edit before observing the steward's edit
+    // above (basedOnSequence: 0, the seat's unobserved-history baseline).
+    // If the receiving route failed to carry the wire's basedOnSequence into
+    // `executeCommonsCommand`, this would simply execute.
+    const stale = await sendMember(
+      "Ferry (member, stale)",
+      0,
+      "relay-stale-edit"
+    );
+    expect(stale.state).toBe("refused");
+    expect(stale.state === "refused" ? stale.reason : undefined).toStrictEqual(
+      expect.stringContaining(STALE_CONTEXT_REASON_PREFIX)
+    );
+    expect(
+      origin.vault.vault
+        .prepare("SELECT description FROM tally_expense WHERE expense_id = ?")
+        .get(expenseId)
+    ).toMatchObject({ description: "Ferry (updated)" });
+
+    // The SAME member, now naming the current head as its baseline, is not
+    // flagged — proving the prior refusal was the staleness, not a blanket
+    // block on member writes to this expense.
+    const fresh = await sendMember(
+      "Ferry (member, fresh)",
+      readCommonsGrant(origin.vault.vault, grant.grantId).lastSequence,
+      "relay-fresh-edit"
+    );
+    expect(fresh.state).toBe("executed");
+    expect(
+      origin.vault.vault
+        .prepare("SELECT description FROM tally_expense WHERE expense_id = ?")
+        .get(expenseId)
+    ).toMatchObject({ description: "Ferry (member, fresh)" });
+  });
+
+  test("a wire payload missing based_on_sequence is a hard refusal, not a default", async () => {
+    const origin = makeSide("relay-missing-based-on-sequence-steward");
+    const member = makeSide("relay-missing-based-on-sequence-member");
+    await link(origin, member);
+    const now = new Date().toISOString();
+    const photo = seedPhoto(origin, "missing-based-on-sequence");
+    const grant = createCommonsGrant({
+      origin: origin.vault.vault,
+      ownerPartyId: origin.ownerPartyId,
+      ownerVaultId: origin.vaultId,
+      ownerVault: origin.vault,
+      containerType: "media.media_asset",
+      containerId: photo.assetId,
+      members: [
+        {
+          partyId: member.ownerPartyId,
+          capability: "read+write",
+          vaultId: member.vaultId,
+          vaultPublicKey: member.publicKey,
+        },
+      ],
+      now,
+    });
+    compileCommons({
+      steward: origin.vault,
+      stewardVaultId: origin.vaultId,
+      grantId: grant.grantId,
+      seats: commonsSeats({
+        steward: origin.vault.vault,
+        grantId: grant.grantId,
+        stewardVaultId: origin.vaultId,
+        vaultFor: () => undefined,
+      }),
+      now,
+    });
+    const commandInput = { asset_id: photo.assetId, title: "no baseline" };
+    const dial = dialFrom(member, origin);
+    const route = routeFrom(member, origin);
+    const bodyWithoutBasedOnSequence = {
+      stewardVaultId: origin.vaultId,
+      memberVaultId: member.vaultId,
+      grantId: grant.grantId,
+      actorPartyId: member.ownerPartyId,
+      command: "media.update_asset",
+      input: commandInput,
+      memberSignature: signCommonsIntent(member.vault.identitySeed, {
+        grantId: grant.grantId,
+        actorPartyId: member.ownerPartyId,
+        command: "media.update_asset",
+        commandInput,
+        memberVaultId: member.vaultId,
+        nonce: "missing-based-on-sequence",
+      }),
+      intentId: "missing-based-on-sequence",
+      // basedOnSequence deliberately omitted: v0 requires it explicitly.
+    };
+    const response = await dial.request({
+      endpointTicket: dial.endpointTicketFor(
+        route.endpointId,
+        route.relayHints
+      ),
+      method: "POST",
+      target: PEER_COMMONS_COMMAND_PATH,
+      body: bodyWithoutBasedOnSequence,
+    });
+    expect(response.status).toBe(404);
+    expect(response.json).toMatchObject({ state: "not_found" });
+    expect(
+      origin.vault.vault
+        .prepare(
+          "SELECT COUNT(*) AS n FROM share_commons_op WHERE grant_id = ?"
+        )
+        .get(grant.grantId)
+    ).toMatchObject({ n: 0 });
   });
 });

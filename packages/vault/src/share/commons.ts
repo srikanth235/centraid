@@ -1332,6 +1332,167 @@ function docsFolderContains(input: {
   return Boolean(row);
 }
 
+/** Prefix on a refusal reason produced by `staleContextConflict` (issue #731
+ * goal 1) — a distinct, honest classification a caller can pattern-match the
+ * way `executeCommonsCommand`'s fork guard already does for "not the current
+ * steward", instead of lumping every refusal into one bucket. */
+export const STALE_CONTEXT_REASON_PREFIX = "stale-context:";
+
+/** Keys whose string value names a specific row this command reasons about.
+ * Deliberately excludes nothing structurally — the container's own id key
+ * (e.g. `group_id` for a `tally.group` grant) is filtered by VALUE below
+ * instead, since every op in a grant's log already shares that same id and
+ * matching on it would flag virtually every pair of commands in an active
+ * commons (issue #731 goal 1: "do not refuse on any intervening op"). */
+const STALE_CONTEXT_ROW_KEYS = new Set([
+  "expense_id",
+  "document_id",
+  "folder_id",
+  "parent_folder_id",
+  "collection_id",
+  "asset_id",
+  "media_asset_id",
+  "content_id",
+  "content_item_id",
+  "item_id",
+  "locker_item_id",
+]);
+
+/** Keys whose string value names a party this command depends on directly —
+ * a payer, a split participant, a settlement counterpart, or (on a roster
+ * control op) the member being added/removed/recapabilitied. */
+const STALE_CONTEXT_PARTY_KEYS = new Set([
+  "party_id",
+  "partyId",
+  "paid_by",
+  "from_party",
+  "to_party",
+]);
+
+/** Control-plane op kinds that name a party being added, removed, or
+ * recapabilitied. `member_joined` is deliberately excluded: it records a
+ * vault linking to a membership that was already current, not a roster
+ * change, so it never conflicts with anything. */
+const STALE_CONTEXT_ROSTER_KINDS = new Set([
+  "member_added",
+  "member_removed",
+  "member_refused",
+  "capability_changed",
+]);
+
+function collectStaleContextIds(
+  value: unknown,
+  containerId: string,
+  rows: Set<string>,
+  parties: Set<string>
+): void {
+  if (Array.isArray(value)) {
+    for (const entry of value)
+      collectStaleContextIds(entry, containerId, rows, parties);
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>))
+    if (typeof entry === "string" && entry !== containerId) {
+      if (STALE_CONTEXT_ROW_KEYS.has(key)) rows.add(entry);
+      else if (STALE_CONTEXT_PARTY_KEYS.has(key)) parties.add(entry);
+    } else if (entry && typeof entry === "object")
+      collectStaleContextIds(entry, containerId, rows, parties);
+}
+
+/** Every row/party a command's input concretely names, keyed off a fixed
+ * allowlist reused for both the command being authorized and each
+ * historical op's stored input — the SAME extraction on both sides is what
+ * makes the overlap test in `staleContextConflict` meaningful. The
+ * container's own id is never a signal (see `STALE_CONTEXT_ROW_KEYS`). */
+function staleContextTargets(
+  containerId: string,
+  value: unknown
+): { rows: Set<string>; parties: Set<string> } {
+  const rows = new Set<string>();
+  const parties = new Set<string>();
+  collectStaleContextIds(value, containerId, rows, parties);
+  return { rows, parties };
+}
+
+/** Stale-context conflict scoping (issue #731 goal 1). A member composes a
+ * command against the grant sequence they last observed locally
+ * (`basedOnSequence`, recorded by `queueCommonsIntent` from the seat's own
+ * projected `share_circle_grant.last_sequence`). By the time it reaches the
+ * steward the group may have moved on; validation elsewhere already checks
+ * whether the command is STILL valid, but says nothing about whether the
+ * member's mental model has silently diverged from the protocol's.
+ *
+ * We deliberately do NOT refuse merely because *something* executed in
+ * between — an active commons moves constantly, and that would refuse
+ * almost every command (the explicit anti-goal). We refuse only when an
+ * intervening EXECUTED op plausibly interacts with what this command names:
+ * the same row id (matched by value, excluding the container's own id — see
+ * `STALE_CONTEXT_ROW_KEYS`), or a roster/capability change to a party this
+ * command references directly. Two commands that merely share a container,
+ * or that happen to name the same friend as a payer in unrelated expenses,
+ * are NOT a conflict.
+ *
+ * Ops old enough to have left the verbose log behind compaction survive only
+ * as a coarse receipt (kind + outcome, no input — see `compactCommonsOperations`).
+ * A compacted ROSTER change is treated as a conflict conservatively, since the
+ * partyId it touched is no longer recoverable and silently ignoring it would
+ * defeat the point; a compacted ordinary command is NOT, since flagging every
+ * compacted command would defeat the scoping above. In practice this gap is
+ * narrow: compaction only discards ops once every current member's cursor has
+ * already passed them, so a member composing from a synced state never lands
+ * here — only an intent parked long enough to fall behind the retention floor
+ * can, and GOAL 2's expiry (`expireParkedCommonsIntents`) settles those first. */
+function staleContextConflict(input: {
+  steward: DatabaseSync;
+  grant: CommonsGrantRecord;
+  commandInput: unknown;
+  basedOnSequence: number;
+}): string | undefined {
+  const { steward, grant, basedOnSequence } = input;
+  if (basedOnSequence >= grant.lastSequence) return undefined;
+  const target = staleContextTargets(grant.containerId, input.commandInput);
+  if (target.rows.size === 0 && target.parties.size === 0) return undefined;
+  const live = steward
+    .prepare(
+      `SELECT kind, command, input_json FROM share_commons_op
+        WHERE grant_id = ? AND sequence > ? AND sequence <= ?
+          AND outcome = 'executed' ORDER BY sequence`
+    )
+    .all(grant.grantId, basedOnSequence, grant.lastSequence) as {
+    kind: string;
+    command: string | null;
+    input_json: string | null;
+  }[];
+  for (const op of live) {
+    const opInput = op.input_json ? JSON.parse(op.input_json) : undefined;
+    if (STALE_CONTEXT_ROSTER_KINDS.has(op.kind)) {
+      const opTarget = staleContextTargets(grant.containerId, opInput);
+      for (const partyId of opTarget.parties)
+        if (target.parties.has(partyId))
+          return `${STALE_CONTEXT_REASON_PREFIX} a member this command references changed after it was composed — please review`;
+      continue;
+    }
+    if (op.kind !== "command" && op.kind !== "delete") continue;
+    const opTarget = staleContextTargets(grant.containerId, opInput);
+    for (const rowId of opTarget.rows)
+      if (target.rows.has(rowId))
+        return `${STALE_CONTEXT_REASON_PREFIX} ${op.command ?? "another command"} changed something this command depends on after it was composed — please review`;
+  }
+  const compactedRoster = steward
+    .prepare(
+      `SELECT 1 AS n FROM share_commons_receipt
+        WHERE grant_id = ? AND sequence > ? AND sequence <= ?
+          AND outcome = 'executed'
+          AND kind IN ('member_added','member_removed','member_refused','capability_changed')
+        LIMIT 1`
+    )
+    .get(grant.grantId, basedOnSequence, grant.lastSequence);
+  if (compactedRoster)
+    return `${STALE_CONTEXT_REASON_PREFIX} the group's membership changed after this was composed and the detail needed to confirm it is unrelated is no longer available — please review`;
+  return undefined;
+}
+
 function commandRefuses(input: {
   steward: DatabaseSync;
   grant: CommonsGrantRecord;
@@ -1339,6 +1500,7 @@ function commandRefuses(input: {
   command: string;
   commandInput: unknown;
   memberSignature?: CommonsMemberSignature;
+  basedOnSequence?: number;
 }): string | undefined {
   const member = input.steward
     .prepare(
@@ -1440,6 +1602,15 @@ function commandRefuses(input: {
     )
       return "this member command has an invalid vault signature";
   }
+  if (input.basedOnSequence !== undefined) {
+    const stale = staleContextConflict({
+      steward: input.steward,
+      grant: input.grant,
+      commandInput: input.commandInput,
+      basedOnSequence: input.basedOnSequence,
+    });
+    if (stale) return stale;
+  }
   return undefined;
 }
 
@@ -1532,6 +1703,11 @@ export function authorizeCommonsCommand(input: {
   command: string;
   commandInput: unknown;
   memberSignature?: CommonsMemberSignature;
+  /** The grant sequence the actor had projected locally when this command
+   * was composed (issue #731 goal 1). Optional so every existing caller that
+   * predates this field keeps validating exactly as before — the stale-
+   * context check only ever runs when a caller actually supplies it. */
+  basedOnSequence?: number;
   now: string;
 }): CommonsCommandDecision {
   const prior = priorSignedDecision({
@@ -1554,6 +1730,9 @@ export function authorizeCommonsCommand(input: {
     ...(input.memberSignature
       ? { memberSignature: input.memberSignature }
       : {}),
+    ...(input.basedOnSequence === undefined
+      ? {}
+      : { basedOnSequence: input.basedOnSequence }),
   });
   const sequence = appendCommonsOperation({
     steward: input.steward,
@@ -1587,6 +1766,9 @@ export interface ExecuteCommonsCommandInput {
   commandInput: Record<string, unknown>;
   seats: readonly CommonsMemberInput[];
   memberSignature?: CommonsMemberSignature;
+  /** The grant sequence the actor had projected locally when this command
+   * was composed (issue #731 goal 1). Optional — see `authorizeCommonsCommand`. */
+  basedOnSequence?: number;
   invocationId?: string;
   intentId?: string;
   now: string;
@@ -1724,6 +1906,9 @@ export function executeCommonsCommand(
     ...(input.memberSignature
       ? { memberSignature: input.memberSignature }
       : {}),
+    ...(input.basedOnSequence === undefined
+      ? {}
+      : { basedOnSequence: input.basedOnSequence }),
   });
   if (structuralReason) {
     const sequence = appendCommonsOperation({
@@ -1849,6 +2034,26 @@ export function executeCommonsCommand(
   return { decision: { accepted: true, sequence }, outcome, seats };
 }
 
+/** Every state `share_commons_intent.status` can hold. `expired`/`cancelled`
+ * are settled states like `denied` (issue #731 goal 2): once reached, an
+ * intent is done re-appearing as pending/parked. */
+export type CommonsIntentStatus =
+  | "pending"
+  | "parked"
+  | "denied"
+  | "executed"
+  | "expired"
+  | "cancelled";
+
+/** How long a parked intent waits on an unreachable steward before it
+ * settles as `expired` instead of staying "pending" forever (issue #731
+ * goal 2). Two weeks is generous for a genuinely offline steward — a trip
+ * plus slack — while still bounding how far a member's mental model of the
+ * group can drift before the protocol stops silently trusting it; a member
+ * who still wants the write after this window composes it again against
+ * current state, which re-anchors `basedOnSequence` for goal 1's check. */
+export const COMMONS_INTENT_PARK_HORIZON_MS = 14 * 24 * 60 * 60 * 1000;
+
 export function queueCommonsIntent(input: {
   seat: DatabaseSync;
   intentId?: string;
@@ -1859,13 +2064,32 @@ export function queueCommonsIntent(input: {
   stewardLabel?: string;
   now: string;
 }): string {
+  // Opportunistic maintenance: every new submission is a natural moment to
+  // settle this seat's own long-parked intents first, so they stop crowding
+  // the overlay even without a dedicated background sweep (issue #731
+  // goal 2 — see `expireParkedCommonsIntents` for the full horizon and the
+  // gateway-side sweep this still needs to make expiry prompt on read too).
+  expireParkedCommonsIntents({ seat: input.seat, now: input.now });
   const intentId = input.intentId ?? uuidv7();
+  // The grant sequence this seat had projected as of right now — live and
+  // authoritative for the steward's own seat, or exactly what the last
+  // successful pull/compile (`projectRoster`) left behind for a member seat.
+  // Either way this IS "the sequence the member had applied when the intent
+  // was formed" (issue #731 goal 1): no caller has to supply it, and it can
+  // never be missing or stale-by-construction the way a caller-supplied
+  // value could be. A seat with no local grant row yet has no baseline to
+  // compare against; 0 is the conservative, honest answer for an unobserved
+  // history — anything that has since happened looks stale, as it should.
+  const localGrant = input.seat
+    .prepare(`SELECT last_sequence FROM share_circle_grant WHERE grant_id = ?`)
+    .get(input.grantId) as { last_sequence: number } | undefined;
+  const basedOnSequence = localGrant?.last_sequence ?? 0;
   input.seat
     .prepare(
       `INSERT INTO share_commons_intent
-         (intent_id, grant_id, actor_party_id, command, input_json, status,
-          reason, steward_label, created_at, settled_at)
-       VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?, ?, NULL)
+         (intent_id, grant_id, actor_party_id, command, input_json,
+          based_on_sequence, status, reason, steward_label, created_at, settled_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?, NULL)
        ON CONFLICT(intent_id) DO NOTHING`
     )
     .run(
@@ -1874,10 +2098,27 @@ export function queueCommonsIntent(input: {
       input.actorPartyId,
       input.command,
       JSON.stringify(input.commandInput),
+      basedOnSequence,
       input.stewardLabel ?? null,
       input.now
     );
   return intentId;
+}
+
+/** Read back the baseline `queueCommonsIntent` recorded for one intent, so a
+ * caller that only holds the intentId (a gateway route relaying a member's
+ * command to its steward, or the peer sweep's retry loop) can forward it as
+ * `ExecuteCommonsCommandInput.basedOnSequence` without re-deriving it. */
+export function readCommonsIntentBasedOnSequence(
+  seat: DatabaseSync,
+  intentId: string
+): number | undefined {
+  const row = seat
+    .prepare(
+      `SELECT based_on_sequence FROM share_commons_intent WHERE intent_id = ?`
+    )
+    .get(intentId) as { based_on_sequence: number } | undefined;
+  return row?.based_on_sequence;
 }
 
 export function settleCommonsIntent(input: {
@@ -1893,6 +2134,66 @@ export function settleCommonsIntent(input: {
           SET status = ?, reason = ?, settled_at = ? WHERE intent_id = ?`
     )
     .run(input.status, input.reason ?? null, input.now, input.intentId);
+}
+
+/** Bounded life for a parked intent (issue #731 goal 2). Settles every
+ * `parked` intent on this seat whose `created_at` is older than the horizon
+ * to `expired`, so it stops re-appearing as an in-flight write and the peer
+ * sweep's `WHERE status IN ('pending','parked')` retry query naturally
+ * leaves it alone. Idempotent — re-running finds nothing left to settle.
+ * Returns the number of intents expired. */
+export function expireParkedCommonsIntents(input: {
+  seat: DatabaseSync;
+  now: string;
+  horizonMs?: number;
+}): number {
+  const cutoff = new Date(
+    Date.parse(input.now) - (input.horizonMs ?? COMMONS_INTENT_PARK_HORIZON_MS)
+  ).toISOString();
+  return Number(
+    input.seat
+      .prepare(
+        `UPDATE share_commons_intent
+            SET status = 'expired',
+                reason = COALESCE(reason, 'this request parked past its review window and expired; resubmit to try again'),
+                settled_at = ?
+          WHERE status = 'parked' AND created_at <= ?`
+      )
+      .run(input.now, cutoff).changes
+  );
+}
+
+/** Member-initiated cancel for an intent that has not yet executed (issue
+ * #731 goal 2). A genuine race is possible — the peer sweep may execute a
+ * parked intent at the steward between the member's decision to cancel and
+ * this call landing locally. The WHERE clause IS the guard, not a prior
+ * read: cancelling only ever moves a still-open row (`pending`/`parked`) to
+ * `cancelled`. An already-terminal row (executed, denied, expired, or a
+ * previous cancel) is left untouched, and `settleCommonsIntent`'s later,
+ * unconditional update — the steward's real answer, when it arrives — always
+ * wins over a merely-local cancel, so a lost race resolves to the true
+ * outcome rather than a stale "cancelled". The caller reads the row's actual
+ * status back so it can tell "cancelled" from "lost the race" in one call. */
+export function cancelCommonsIntent(input: {
+  seat: DatabaseSync;
+  intentId: string;
+  now: string;
+}): { status: CommonsIntentStatus; cancelled: boolean } {
+  input.seat
+    .prepare(
+      `UPDATE share_commons_intent
+          SET status = 'cancelled',
+              reason = 'cancelled by the member before it executed',
+              settled_at = ?
+        WHERE intent_id = ? AND status IN ('pending','parked')`
+    )
+    .run(input.now, input.intentId);
+  const row = input.seat
+    .prepare(`SELECT status FROM share_commons_intent WHERE intent_id = ?`)
+    .get(input.intentId) as { status: CommonsIntentStatus } | undefined;
+  if (!row)
+    throw new Error(`commons intent ${input.intentId} is not available`);
+  return { status: row.status, cancelled: row.status === "cancelled" };
 }
 
 /** Receiver-owned "Save to my vault": promote the complete resident grant
