@@ -1180,12 +1180,45 @@ export class ConversationStore {
     return rows.map(turnFromRaw);
   }
 
-  /** Every currently executing automation turn across the vault, newest-first. */
-  listInFlightAutomationTurns(limit = 50): Turn[] {
-    const { stmts } = this.ensureReady();
-    return (
-      stmts.listInFlightAutomationTurns.all(limit) as unknown as RawTurn[]
-    ).map(turnFromRaw);
+  /**
+   * Every currently executing automation turn across the vault, newest-first.
+   * `excludeAutomationRefs`/`onlyAutomationRefs` filter by handle in SQL,
+   * before `LIMIT` (issue #731 M2): a flood of in-flight runs on one handle
+   * (e.g. the recognition system lane) must not crowd everything else out of
+   * the window, and a lane scoped to just that handle must not be diluted by
+   * unrelated in-flight runs either. At most one of the two should be set;
+   * `excludeAutomationRefs` wins if both are.
+   */
+  listInFlightAutomationTurns(
+    limit = 50,
+    opts: {
+      excludeAutomationRefs?: readonly string[];
+      onlyAutomationRefs?: readonly string[];
+    } = {}
+  ): Turn[] {
+    const { db, stmts } = this.ensureReady();
+    const exclude = opts.excludeAutomationRefs;
+    const only = opts.onlyAutomationRefs;
+    if ((!exclude || exclude.length === 0) && (!only || only.length === 0)) {
+      return (
+        stmts.listInFlightAutomationTurns.all(limit) as unknown as RawTurn[]
+      ).map(turnFromRaw);
+    }
+    const refs = exclude && exclude.length > 0 ? exclude : (only ?? []);
+    const op = exclude && exclude.length > 0 ? "NOT IN" : "IN";
+    const placeholders = refs.map(() => "?").join(", ");
+    const nullClause = op === "NOT IN" ? "c.automation_id IS NULL OR " : "";
+    const rows = db
+      .prepare(
+        `
+        SELECT t.* FROM turns t JOIN conversations c ON t.conversation_id = c.id
+        WHERE c.kind = 'automation' AND t.ended_at IS NULL
+          AND (${nullClause}c.automation_id ${op} (${placeholders}))
+        ORDER BY t.started_at DESC LIMIT ?
+      `
+      )
+      .all(...refs, limit) as unknown as RawTurn[];
+    return rows.map(turnFromRaw);
   }
 
   setTurnPinned(turnId: string, pinned: boolean): void {

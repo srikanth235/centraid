@@ -710,6 +710,250 @@ describe("recognition automation spine", () => {
   });
 });
 
+describe("recognition automation: honest failure vs honest skip (issue #731)", () => {
+  const photoAsset = {
+    asset_id: "a1",
+    content_id: "c1",
+    kind: "photo",
+    width: 100,
+    height: 80,
+  };
+  const audioAsset = { asset_id: "a1", content_id: "c1", kind: "audio" };
+
+  it("photo-ocr throws when the OCR service goes unavailable mid-batch — the cursor never advances", async () => {
+    const handler = await loadHandler("photo-ocr");
+    const harness = stubCtx({
+      reads: {},
+      read: (request) =>
+        request.entity === "media.media_asset" ? [photoAsset] : [],
+      fetch: async (call) => ({
+        status: 200,
+        headers: {},
+        text:
+          call.method === "GET"
+            ? JSON.stringify({ status: "ok", model: "ocr@1" })
+            : JSON.stringify({
+                status: "unavailable",
+                reason: "backend down",
+              }),
+      }),
+    });
+    // An already-established cursor (not the first fire) — so a subsequent
+    // outage is the only thing under test, not the one-time seed.
+    harness.state.set("selection", "deterministic:ocr@1:service");
+    harness.state.set("cursor", "a0");
+    await expect(
+      handler({ ctx: harness.ctx, log: harness.log })
+    ).rejects.toThrow(/OCR service unavailable/u);
+    expect(harness.state.get("cursor")).toBe("a0");
+    expect(harness.invokes).toHaveLength(0);
+  });
+
+  it("photo-ocr honors an honest empty OCR result as a skip — the cursor still advances", async () => {
+    const handler = await loadHandler("photo-ocr");
+    const harness = stubCtx({
+      reads: {},
+      read: (request) =>
+        request.entity === "media.media_asset" ? [photoAsset] : [],
+      fetch: async (call) => ({
+        status: 200,
+        headers: {},
+        text:
+          call.method === "GET"
+            ? JSON.stringify({ status: "ok", model: "ocr@1" })
+            : JSON.stringify({
+                status: "ok",
+                model: "ocr@1",
+                results: [{ regions: [] }],
+              }),
+      }),
+    });
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      output: { derived: number; skipped: number };
+    };
+    expect(result.output).toMatchObject({ derived: 0, skipped: 1 });
+    expect(harness.state.get("cursor")).toBe("a1");
+    expect(harness.invokes).toHaveLength(0);
+  });
+
+  it("embed-image throws when the embedding service goes unavailable mid-batch — the cursor never advances", async () => {
+    const handler = await loadHandler("embed-image");
+    const harness = stubCtx({
+      reads: {},
+      read: (request) =>
+        request.entity === "media.media_asset" ? [photoAsset] : [],
+      fetch: async (call) => ({
+        status: 200,
+        headers: {},
+        text:
+          call.method === "GET"
+            ? JSON.stringify({ status: "ok", model: "embed-image@1" })
+            : JSON.stringify({
+                status: "unavailable",
+                reason: "backend down",
+              }),
+      }),
+    });
+    harness.state.set("model", "embed-image@1");
+    harness.state.set("cursor", "a0");
+    await expect(
+      handler({ ctx: harness.ctx, log: harness.log })
+    ).rejects.toThrow(/image embedding service unavailable/u);
+    expect(harness.state.get("cursor")).toBe("a0");
+    expect(harness.invokes).toHaveLength(0);
+  });
+
+  it("embed-text throws when the embedding service goes unavailable mid-batch — the cursor never advances", async () => {
+    const handler = await loadHandler("embed-text");
+    const item = { derivative_id: "d1", content_id: "c1", variant: "text" };
+    const harness = stubCtx({
+      reads: {},
+      read: (request) =>
+        request.entity === "core.content_derivative" ? [item] : [],
+      fetch: async (call) => ({
+        status: 200,
+        headers: {},
+        text:
+          call.method === "GET"
+            ? JSON.stringify({ status: "ok", model: "embed-text@1" })
+            : JSON.stringify({
+                status: "unavailable",
+                reason: "backend down",
+              }),
+      }),
+    });
+    harness.state.set("model", "embed-text@1");
+    harness.state.set("cursor", "d0");
+    await expect(
+      handler({ ctx: harness.ctx, log: harness.log })
+    ).rejects.toThrow(/text embedding service unavailable/u);
+    expect(harness.state.get("cursor")).toBe("d0");
+    expect(harness.invokes).toHaveLength(0);
+  });
+
+  it("transcript throws when the transcript service goes unavailable mid-batch — the cursor never advances", async () => {
+    const handler = await loadHandler("transcript");
+    const harness = stubCtx({
+      reads: {},
+      read: (request) =>
+        request.entity === "media.media_asset" ? [audioAsset] : [],
+      fetch: async (call) => ({
+        status: 200,
+        headers: {},
+        text:
+          call.method === "GET"
+            ? JSON.stringify({ status: "ok", model: "whisper@1" })
+            : JSON.stringify({
+                status: "unavailable",
+                reason: "backend down",
+              }),
+      }),
+    });
+    harness.state.set("model", "whisper@1");
+    harness.state.set("cursor", "a0");
+    await expect(
+      handler({ ctx: harness.ctx, log: harness.log })
+    ).rejects.toThrow(/transcript service unavailable/u);
+    expect(harness.state.get("cursor")).toBe("a0");
+    expect(harness.invokes).toHaveLength(0);
+  });
+
+  it("transcript honors an honest empty transcript as a skip — the cursor still advances", async () => {
+    const handler = await loadHandler("transcript");
+    const harness = stubCtx({
+      reads: {},
+      read: (request) =>
+        request.entity === "media.media_asset" ? [audioAsset] : [],
+      fetch: async (call) => ({
+        status: 200,
+        headers: {},
+        text:
+          call.method === "GET"
+            ? JSON.stringify({ status: "ok", model: "whisper@1" })
+            : JSON.stringify({
+                status: "ok",
+                model: "whisper@1",
+                results: [{ text: "   " }],
+              }),
+      }),
+    });
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      output: { derived: number; skipped: number };
+    };
+    expect(result.output).toMatchObject({ derived: 0, skipped: 1 });
+    expect(harness.state.get("cursor")).toBe("a1");
+    expect(harness.invokes).toHaveLength(0);
+  });
+
+  it("embed-text re-embeds a source rewritten under the SAME model — a model-only stamp match would miss it", async () => {
+    const handler = await loadHandler("embed-text");
+    // The source derivative was rewritten (issue #731's writeExtractedText
+    // fix hands a rewrite a fresh derivative_id): the current row is "d2",
+    // but the embedding stamp still names the pre-rewrite source "d1".
+    const item = { derivative_id: "d2", content_id: "c1", variant: "text" };
+    const harness = stubCtx({
+      reads: {},
+      read: (request) => {
+        if (request.entity === "core.content_derivative") return [item];
+        if (request.entity === "enrich.derivation")
+          return [
+            {
+              target_id: "c1",
+              model: "embed-text@1",
+              payload_json: JSON.stringify({ source_version: "d1" }),
+            },
+          ];
+        return [];
+      },
+      fetch: async (call) => ({
+        status: 200,
+        headers: {},
+        text:
+          call.method === "GET"
+            ? JSON.stringify({ status: "ok", model: "embed-text@1" })
+            : JSON.stringify({
+                status: "ok",
+                model: "embed-text@1",
+                results: [{ vector: [0.3, 0.4] }],
+              }),
+      }),
+    });
+    await handler({ ctx: harness.ctx, log: harness.log });
+    expect(harness.invokes).toHaveLength(1);
+    expect(harness.invokes[0]).toMatchObject({
+      command: "enrich.upsert_embedding",
+      input: { model: "embed-text@1", source_version: "d2" },
+    });
+  });
+
+  it("embed-text skips when the stamped source_version already matches the current derivative", async () => {
+    const handler = await loadHandler("embed-text");
+    const item = { derivative_id: "d2", content_id: "c1", variant: "text" };
+    const harness = stubCtx({
+      reads: {},
+      read: (request) => {
+        if (request.entity === "core.content_derivative") return [item];
+        if (request.entity === "enrich.derivation")
+          return [
+            {
+              target_id: "c1",
+              model: "embed-text@1",
+              payload_json: JSON.stringify({ source_version: "d2" }),
+            },
+          ];
+        return [];
+      },
+      fetch: async () => ({
+        status: 200,
+        headers: {},
+        text: JSON.stringify({ status: "ok", model: "embed-text@1" }),
+      }),
+    });
+    await handler({ ctx: harness.ctx, log: harness.log });
+    expect(harness.invokes).toHaveLength(0);
+  });
+});
+
 describe("doc-text-extractor behavior", () => {
   it("OCRs a scan (no text variant) through core.set_extracted_text", async () => {
     const handler = await loadHandler("doc-text-extractor");

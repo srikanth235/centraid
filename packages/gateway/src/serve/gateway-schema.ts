@@ -391,7 +391,15 @@ export function migrateSupersededLinks(db: DatabaseSync): void {
  * portable owner data: they were lease caches and transport bookkeeping.
  * Drop them instead of retaining a dormant second sharing model. An older
  * `share_edges` shape is also recreated so its CHECK constraint cannot admit
- * `mode = 'live'` after the route has stopped accepting it. */
+ * `mode = 'live'` after the route has stopped accepting it.
+ *
+ * `share_access_receipts` is untouched by this migration: its shape carries
+ * no `mode` and never referenced the lend tables (no FK — owner ids are
+ * deliberately not foreign keys, see the table's own comment), so it needs
+ * no recreation. It records that access was GRANTED or removed, which must
+ * survive the lend plane's retirement exactly as it survives an owner's
+ * removal — dropping it here would erase give history the retirement never
+ * asked to erase. */
 export function migrateRetiredLending(db: DatabaseSync): void {
   const shareEdgesSql = (
     db
@@ -407,7 +415,7 @@ export function migrateRetiredLending(db: DatabaseSync): void {
     DROP TABLE IF EXISTS lent_edges;
     DROP TABLE IF EXISTS borrowed_edges;
     DROP TABLE IF EXISTS link_borrow_budgets;
-    ${recreateEdges ? "DROP TABLE IF EXISTS share_access_receipts; DROP TABLE share_edges;" : ""}
+    ${recreateEdges ? "DROP TABLE share_edges;" : ""}
     COMMIT;
   `);
 }

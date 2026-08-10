@@ -153,6 +153,18 @@ export function GroupManager({
         itemType="tally.group"
         itemIds={[group.group_id]}
         appLabel="Tally"
+        // A tally.group container is bound to its OWN named circle
+        // server-side (issue #731 M3) — the commons layer checks any share
+        // of it against that circle's exact stored roster + capabilities,
+        // no matter what the sheet submits. `GroupMeta.name` is read
+        // straight off that circle's `social.circle.name` (dashboard.ts:
+        // "a group decorates a social.circle — the circle carries the
+        // name"), so it doubles as the circle's `ShareCircle.label` and
+        // lets the sheet auto-reuse the right circle instead of opening on
+        // a blank manual pick that defaults every new selection to
+        // `read+write` and refuses the moment that drifts from a
+        // pre-#731-migration `read` roster.
+        preferredCircleLabel={group.name}
         onDone={(outcome) => setShareStatus(outcome.message)}
       />
       {shareStatus ? (

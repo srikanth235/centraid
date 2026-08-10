@@ -267,7 +267,11 @@ export function unshareFromVault(
   if (!readShareOrigin(audience, input.itemType, input.itemId)) {
     return { removed: false, orphanedShas: [] };
   }
-  audience.exec("BEGIN IMMEDIATE");
+  // Nest under a savepoint when a caller (e.g. the commons scrub+re-project
+  // apply, commons.ts) already owns the audience transaction, so the whole
+  // sequence is one atomic unit and this removal never double-opens BEGIN.
+  const nested = audience.isTransaction;
+  audience.exec(nested ? "SAVEPOINT unshare_from_vault" : "BEGIN IMMEDIATE");
   let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   let shas: string[];
   try {
@@ -284,9 +288,10 @@ export function unshareFromVault(
       .run(input.itemType, input.itemId);
     shas = removal.shas;
     endReplicaCommit(audience, replicaCommit);
-    audience.exec("COMMIT");
+    audience.exec(nested ? "RELEASE unshare_from_vault" : "COMMIT");
   } catch (error) {
-    audience.exec("ROLLBACK");
+    audience.exec(nested ? "ROLLBACK TO unshare_from_vault" : "ROLLBACK");
+    if (nested) audience.exec("RELEASE unshare_from_vault");
     throw error;
   }
   // Which of those addresses the vault no longer claims — read from the live

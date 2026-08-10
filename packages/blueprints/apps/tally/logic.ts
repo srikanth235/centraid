@@ -420,7 +420,12 @@ export function createLogic({
     for (const intent of intents) {
       if (
         intent.command !== "tally.add_expense" ||
-        intent.status === "executed"
+        intent.status === "executed" ||
+        // A denied intent the member already dismissed stays gone across
+        // refreshes (issue #731 m6) — pending/parked rows are never in this
+        // set, so they keep re-appearing exactly as before.
+        (intent.status === "denied" &&
+          state.dismissedCommonsIntentIds.has(intent.intentId))
       )
         continue;
       const raw = intent.input;
@@ -466,6 +471,25 @@ export function createLogic({
       durable.push(row);
     }
     state.pendingExpenses = durable;
+  }
+
+  /**
+   * Settle a `denied` durable Commons intent out of the ledger overlay for
+   * good (issue #731 m6) — a no-op for anything else, so a pending/parked
+   * row (still genuinely in flight) can never be dismissed away. Removes it
+   * from `state.pendingExpenses` immediately (no round trip to wait on) and
+   * remembers the id so the next `refreshCommonsExpenses` doesn't resurrect it.
+   */
+  function dismissCommonsIntent(intentId: string) {
+    const row = state.pendingExpenses.find(
+      (r) => r.commonsIntentId === intentId
+    );
+    if (!row || row.intentStatus !== "denied") return;
+    state.dismissedCommonsIntentIds.add(intentId);
+    state.pendingExpenses = state.pendingExpenses.filter(
+      (r) => r.commonsIntentId !== intentId
+    );
+    render();
   }
 
   async function saveExpense() {
@@ -888,6 +912,7 @@ export function createLogic({
     act,
     read,
     refreshCommonsExpenses,
+    dismissCommonsIntent,
     applyDenied,
     directory,
     personOf,

@@ -717,7 +717,6 @@ export {
 } from "./enrich/policy.js";
 export {
   compareModelIds,
-  isSupersededBy,
   makeModelId,
   parseModelId,
   type ModelId,

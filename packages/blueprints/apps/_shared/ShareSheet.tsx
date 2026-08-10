@@ -33,6 +33,21 @@ export interface ShareSheetProps {
   itemIds?: readonly string[];
   appLabel?: string;
   onDone: (outcome: { verb: ShareVerb; ok: boolean; message: string }) => void;
+  /**
+   * The label of a named circle (`ShareCircle.label`) to preselect the
+   * moment circles finish loading — for a container that reuses its OWN
+   * named circle (a Tally group sharing itself, issue #731 M3). A container
+   * like that is bound to that circle's exact stored roster + capabilities
+   * server-side regardless of what this sheet submits, so leaving the
+   * picker on "choose people individually" (every new pick defaulting to
+   * `read+write`) refuses with the commons layer's exact-roster message the
+   * moment a submitted capability drifts from what's stored — often just
+   * from a pre-#731 migration backfill that landed at `read`. Preselecting
+   * the matching circle sources each person's capability from its OWN
+   * stored roster (`selectionsForCircle`), so the default path submits
+   * exactly what the commons layer already expects.
+   */
+  preferredCircleLabel?: string;
 }
 
 export function ShareSheet(props: ShareSheetProps) {
@@ -67,7 +82,21 @@ export function ShareSheet(props: ShareSheetProps) {
         if (!active) return;
         setDestinations(rows);
         setCircles(namedCircles);
-        setSelections({});
+        // Auto-reuse the item's own named circle when there is one (see
+        // `preferredCircleLabel` above) — sourcing selections from the
+        // circle's stored roster, not a blank slate defaulting new picks to
+        // `read+write`.
+        const preferredCircle = props.preferredCircleLabel
+          ? namedCircles.find(
+              (circle) => circle.label === props.preferredCircleLabel
+            )
+          : undefined;
+        if (preferredCircle) {
+          setSelectedCircleId(preferredCircle.circleId);
+          setSelections(selectionsForCircle(rows, preferredCircle));
+        } else {
+          setSelections({});
+        }
       } catch (error) {
         if (!active) return;
         setDestinations([]);
@@ -79,7 +108,12 @@ export function ShareSheet(props: ShareSheetProps) {
     return () => {
       active = false;
     };
-  }, [props.open, props.scopes, props.sourceScopeId]);
+  }, [
+    props.open,
+    props.scopes,
+    props.sourceScopeId,
+    props.preferredCircleLabel,
+  ]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -92,6 +126,11 @@ export function ShareSheet(props: ShareSheetProps) {
 
   if (!props.open) return null;
   const blocked = destinations ? shareBlockedReason(destinations) : null;
+  const preferredCircle = props.preferredCircleLabel
+    ? circles.find((circle) => circle.label === props.preferredCircleLabel)
+    : undefined;
+  const isPreferredCircleSelected =
+    Boolean(preferredCircle) && selectedCircleId === preferredCircle?.circleId;
   const selected = (destinations ?? []).flatMap((destination) => {
     const capability = selections[destination.id];
     return capability ? [{ destination, capability }] : [];
@@ -214,6 +253,12 @@ export function ShareSheet(props: ShareSheetProps) {
                   ))}
                 </select>
               </label>
+            ) : null}
+            {isPreferredCircleSelected ? (
+              <p className={styles.preselected}>
+                Sharing with {preferredCircle?.label}&apos;s existing members,
+                each kept at their current access.
+              </p>
             ) : null}
             <fieldset className={styles.destList} aria-label="People">
               {destinations.map((destination) => {

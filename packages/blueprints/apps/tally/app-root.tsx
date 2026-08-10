@@ -81,6 +81,7 @@ function makeState(): AppState {
     expenseUndo: null,
     modalMembers: [],
     pendingExpenses: [],
+    dismissedCommonsIntentIds: new Set(),
   };
 }
 
@@ -207,6 +208,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     closeSettle: handleCloseSettle,
     deleteExpense: handleDeleteExpense,
     deleteGroup: handleDeleteGroup,
+    dismissCommonsIntent: handleDismissDeniedIntent,
     addGroupMember: handleAddGroupMember,
     openAddExpense: handleOpenAddExpense,
     openAddFriend: handleOpenAddFriend,
@@ -470,6 +472,10 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
           currency={dash.currency}
           onOpenDetail={handleOpenDetail}
           onAddExpense={handleOpenAddExpense}
+          onDismissDenied={(row) =>
+            row.commonsIntentId &&
+            handleDismissDeniedIntent(row.commonsIntentId)
+          }
         />
       </>
     );

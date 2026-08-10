@@ -42,7 +42,7 @@ import { VaultLinksStore } from "./vault-links-store.js";
 
 export interface Side {
   vaultId: string;
-  /** The vault's REAL P1 identity key — what a lease signature verifies against. */
+  /** The vault's REAL P1 identity key — what an edge/link signature verifies against. */
   publicKey: string;
   /** `VaultRegistry.signAsVault`, for a fixture with no registry. */
   signAsVault: (vaultId: string, bytes: Buffer) => Buffer | undefined;

@@ -20,11 +20,21 @@ export function ExpenseRow({
   currency,
   groupSuffix = false,
   onOpen,
+  onDismiss,
 }: {
   row: LedgerRow;
   currency: string;
   groupSuffix?: boolean;
   onOpen: (row: LedgerRow) => void;
+  /**
+   * Settle a `denied` durable Commons intent out of the overlay for good
+   * (issue #731 m6) — `refreshCommonsExpenses` otherwise keeps re-showing it
+   * on every refresh forever, since a denial (unlike an executed write)
+   * never ages out of `commonsIntents()` on its own. Omitted for
+   * `pending`/`parked` rows and every settled, non-optimistic row — only a
+   * `denied` row is ever dismissible.
+   */
+  onDismiss?: (row: LedgerRow) => void;
 }) {
   const c = cat(row.category);
   const d = new Date((row.spent_on || todayKey()) + "T12:00:00");
@@ -59,18 +69,10 @@ export function ExpenseRow({
   // label sits — and no detail popover (there is no receipt or server row to
   // show yet; the doorbell refresh swaps in the real one).
   const pending = Boolean(row.pending);
-  const pendingLabel =
-    row.intentStatus === "denied"
-      ? "denied"
-      : row.parked
-        ? "waiting"
-        : "pending";
-  return (
-    <button
-      type="button"
-      className={pending ? `${styles.exrow} kit-pending` : styles.exrow}
-      onClick={pending ? undefined : () => onOpen(row)}
-    >
+  const denied = row.intentStatus === "denied";
+  const pendingLabel = denied ? "denied" : row.parked ? "waiting" : "pending";
+  const inner = (
+    <>
       <span className={styles.exdate}>
         <span className={styles.mo}>{MS[d.getMonth()]}</span>
         <span className={styles.dy}>{String(d.getDate())}</span>
@@ -95,7 +97,33 @@ export function ExpenseRow({
           <span className={styles.exlabel}>{rLabel}</span>
         )}
         <span className={`${styles.examt} ${TONE[cls]}`}>{amt}</span>
+        {denied && onDismiss ? (
+          <button
+            type="button"
+            className={styles.dismiss}
+            onClick={(event) => {
+              // The row itself is a plain (non-button) wrapper while pending —
+              // stopPropagation is cheap insurance if that ever changes.
+              event.stopPropagation();
+              onDismiss(row);
+            }}
+          >
+            Dismiss
+          </button>
+        ) : null}
       </span>
+    </>
+  );
+
+  // A pending/parked/denied row has no detail popover to open (there is no
+  // receipt or server row yet), so it is never itself a button — a denied
+  // row's Dismiss control is real interactive content, and a <button> may
+  // not nest another <button>.
+  return pending ? (
+    <div className={`${styles.exrow} kit-pending`}>{inner}</div>
+  ) : (
+    <button type="button" className={styles.exrow} onClick={() => onOpen(row)}>
+      {inner}
     </button>
   );
 }

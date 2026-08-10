@@ -52,7 +52,10 @@ import {
 } from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
 
-import { isSystemRecognitionRef } from "../enrich/system-recognition.js";
+import {
+  isSystemRecognitionRef,
+  SYSTEM_RECOGNITION_REFS,
+} from "../enrich/system-recognition.js";
 import { journalConversationStore } from "../journal-stores.js";
 import type { WorktreeStore } from "../worktree-store/index.js";
 import {
@@ -439,21 +442,58 @@ export function makeAutomationsRouteHandler(
         const limit = Number(url.searchParams.get("limit"));
         const boundedLimit =
           Number.isFinite(limit) && limit > 0 ? Math.min(limit, 250) : 50;
+        // `systemLane` splits the combined feed at the fetch, not after
+        // (issue #731 M2). Before this, the unscoped `turns` query filled
+        // its one `boundedLimit` window with whatever ran most recently —
+        // so a large photo import (which fires the recognition automations
+        // once per photo) could fill the entire window with recognition
+        // runs and leave a member's own "Recent activity" empty. "member"
+        // and "recognition" are each fetched as their own SQL-filtered,
+        // independently-bounded query; omitting the param keeps the old
+        // combined behavior for other callers.
+        const systemLaneParam = url.searchParams.get("systemLane");
+        const laneFilter: "member" | "recognition" | undefined =
+          systemLaneParam === "member" || systemLaneParam === "recognition"
+            ? systemLaneParam
+            : undefined;
         if (!existsSync(opts.journalDbFile))
           return sendJson(res, 200, { turns: [] });
         const rows = ref
           ? turnsStore.listAutomationTurns(ref, { limit: boundedLimit })
           : (() => {
-              const finished = opts.analytics
-                .listSummaries({ limit: boundedLimit })
+              const finishedSummaries =
+                laneFilter === "recognition"
+                  ? SYSTEM_RECOGNITION_REFS.flatMap((recRef) =>
+                      opts.analytics.listSummaries({
+                        automationRef: recRef,
+                        limit: boundedLimit,
+                      })
+                    )
+                      .sort((a, b) => b.startedAt - a.startedAt)
+                      .slice(0, boundedLimit)
+                  : opts.analytics.listSummaries({
+                      limit: boundedLimit,
+                      ...(laneFilter === "member"
+                        ? { excludeAutomationRefs: SYSTEM_RECOGNITION_REFS }
+                        : {}),
+                    });
+              const finished = finishedSummaries
                 .filter((summary) => summary.kind === "automation")
                 .map((summary) => turnsStore.getTurn(summary.runId))
                 .filter((turn): turn is Turn => turn !== undefined);
               const seen = new Set(finished.map((turn) => turn.turnId));
+              const inFlight =
+                laneFilter === "member"
+                  ? turnsStore.listInFlightAutomationTurns(boundedLimit, {
+                      excludeAutomationRefs: SYSTEM_RECOGNITION_REFS,
+                    })
+                  : laneFilter === "recognition"
+                    ? turnsStore.listInFlightAutomationTurns(boundedLimit, {
+                        onlyAutomationRefs: SYSTEM_RECOGNITION_REFS,
+                      })
+                    : turnsStore.listInFlightAutomationTurns(boundedLimit);
               return [
-                ...turnsStore
-                  .listInFlightAutomationTurns(boundedLimit)
-                  .filter((turn) => !seen.has(turn.turnId)),
+                ...inFlight.filter((turn) => !seen.has(turn.turnId)),
                 ...finished,
               ]
                 .sort((a, b) => b.startedAt - a.startedAt)

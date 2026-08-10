@@ -936,7 +936,6 @@ export {
   answerCommonsInvitation,
   listPendingEdges,
   answerPendingEdge,
-  closeGatewayEdge,
   type GatewayEdge,
   type EdgeMode,
   type EdgeKind,

@@ -95,6 +95,12 @@ const SET_EXTRACTED_TEXT: CommandDefinition = {
   handler: setExtractedText,
 };
 
+type ExtractedTextRegion = {
+  text: string;
+  box?: [number, number, number, number];
+  confidence?: number;
+};
+
 function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     content_id: string;
@@ -104,11 +110,7 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
     model?: string;
     prompt_rev?: string;
     confidence?: number;
-    regions?: Array<{
-      text: string;
-      box?: [number, number, number, number];
-      confidence?: number;
-    }>;
+    regions?: ExtractedTextRegion[];
   };
   const result = writeExtractedText(
     ctx,
@@ -117,6 +119,10 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
     input.variant ?? "text"
   );
   if (input.model && input.capability) {
+    const regions =
+      input.regions === undefined
+        ? undefined
+        : dropOutOfBoundsRegions(ctx, input.content_id, input.regions);
     stampDerivation(ctx.db, {
       targetType: "core.content_item",
       targetId: input.content_id,
@@ -128,7 +134,7 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
         ...(input.confidence === undefined
           ? {}
           : { confidence: input.confidence }),
-        ...(input.regions === undefined ? {} : { regions: input.regions }),
+        ...(regions === undefined ? {} : { regions }),
       },
       now: ctx.now,
     });
@@ -137,7 +143,59 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
   return result;
 }
 
-/** Shared canonical derivative writer for reviewed local OCR and enrichers. */
+/**
+ * OCR boxes are declared against ONE asset's pixel dimensions, but until now
+ * nothing gateway-side checked them — the bundled `photo-ocr` handler's
+ * `canonicalRegions` drops an out-of-bounds box before it ever calls this
+ * command, but that check lives in a read-only bundled file, not at the
+ * write boundary. `enrich.upsert_faces` already rejects a face box outside
+ * its asset; this mirrors that so validation lives at the one gateway-side
+ * staged write, not scattered across every caller (issue #731). Unlike a
+ * face — which IS its box — a text region's box is an annotation on top of
+ * real text, so an out-of-bounds box is dropped rather than failing the
+ * whole write: the text survives, and an absent box (like an absent
+ * confidence) is never invented as `[0,0,0,0]`.
+ */
+function dropOutOfBoundsRegions(
+  ctx: HandlerCtx,
+  contentId: string,
+  regions: ExtractedTextRegion[]
+): ExtractedTextRegion[] {
+  const asset = ctx.db
+    .prepare("SELECT width, height FROM media_media_asset WHERE content_id = ?")
+    .get(contentId) as
+    | { width: number | null; height: number | null }
+    | undefined;
+  const width = asset?.width ?? null;
+  const height = asset?.height ?? null;
+  if (width === null && height === null) return regions;
+  return regions.map((region) => {
+    if (!region.box) return region;
+    const [x, y, w, h] = region.box;
+    const inBounds =
+      (width === null || x + w <= width) &&
+      (height === null || y + h <= height);
+    if (inBounds) return region;
+    const { box: _box, ...rest } = region;
+    return rest;
+  });
+}
+
+/**
+ * Shared canonical derivative writer for reviewed local OCR and enrichers.
+ *
+ * A REWRITE (an OCR/transcript model bump correcting the same content_id's
+ * text) gets a FRESH `derivative_id` rather than an in-place UPDATE.
+ * `embed-text`'s bounded cursor walks `derivative_id > cursor`: an in-place
+ * update would leave the row's id behind an already-advanced cursor, so the
+ * rewritten text would never re-enter the embedding sweep and semantic
+ * search would keep serving vectors of the stale text forever (issue #731).
+ * A fresh, strictly-later id (derivative ids are UUIDv7, so lexicographic
+ * order is creation order) re-enters that sweep exactly once. The row's
+ * logical identity is `(content_id, variant)`, enforced by the table's own
+ * UNIQUE constraint — nothing outside this module keys off `derivative_id`
+ * surviving a rewrite (it is a bare primary key, never a foreign key).
+ */
 export function writeExtractedText(
   ctx: HandlerCtx,
   contentId: string,
@@ -152,21 +210,17 @@ export function writeExtractedText(
   const byteSize = Buffer.byteLength(text, "utf8");
   if (existing) {
     ctx.db
-      .prepare(
-        `UPDATE core_content_derivative SET text_content = ?, byte_size = ? WHERE derivative_id = ?`
-      )
-      .run(text, byteSize, existing.derivative_id);
-    ctx.wrote("core.content_derivative", existing.derivative_id);
-  } else {
-    const derivativeId = ctx.newId();
-    ctx.db
-      .prepare(
-        `INSERT INTO core_content_derivative (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
-         VALUES (?, ?, ?, NULL, 'text/plain', ?, ?, ?)`
-      )
-      .run(derivativeId, contentId, variant, byteSize, text, ctx.now);
-    ctx.wrote("core.content_derivative", derivativeId);
+      .prepare(`DELETE FROM core_content_derivative WHERE derivative_id = ?`)
+      .run(existing.derivative_id);
   }
+  const derivativeId = ctx.newId();
+  ctx.db
+    .prepare(
+      `INSERT INTO core_content_derivative (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
+       VALUES (?, ?, ?, NULL, 'text/plain', ?, ?, ?)`
+    )
+    .run(derivativeId, contentId, variant, byteSize, text, ctx.now);
+  ctx.wrote("core.content_derivative", derivativeId);
   ctx.cite({
     claim: `${variant} (${byteSize} bytes) now feeds the content search index`,
     entityType: "core.content_item",
@@ -511,6 +565,14 @@ const UPSERT_EMBEDDING: CommandDefinition = {
         items: { type: "number" },
       },
       capability: { type: "string", enum: ["embed-image", "embed-text"] },
+      // Which version of the SOURCE the vector was computed from — e.g.
+      // `embed-text`'s source `core_content_derivative.derivative_id`. Lets a
+      // caller distinguish "this target's embedding is current" from "the
+      // model is current but the source was rewritten since" (issue #731):
+      // model-only staleness checks miss a same-model text rewrite.
+      // Optional because `embed-image` has no comparable versioned source —
+      // its target IS the asset it reads bytes from.
+      source_version: { type: "string", minLength: 1 },
     },
   },
   outputSchema: {
@@ -538,6 +600,7 @@ const UPSERT_EMBEDDING: CommandDefinition = {
       model: string;
       vector: number[];
       capability?: "embed-image" | "embed-text";
+      source_version?: string;
     };
     const existing = ctx.db
       .prepare(
@@ -578,6 +641,9 @@ const UPSERT_EMBEDDING: CommandDefinition = {
         variant: "embedding",
         capability: input.capability,
         model: input.model,
+        ...(input.source_version === undefined
+          ? {}
+          : { payload: { source_version: input.source_version } }),
         now: ctx.now,
       });
       ctx.wrote("enrich.derivation", input.entity_id);

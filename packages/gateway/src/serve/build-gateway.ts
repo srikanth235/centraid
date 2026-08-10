@@ -187,7 +187,6 @@ import { makeDeviceWorkRouteHandler } from "../routes/device-work-routes.js";
 import { makeDevicesRouteHandler } from "../routes/devices-routes.js";
 import { makeDiagnosticsRouteHandler } from "../routes/diagnostics-routes.js";
 import { makeEdgeAnswerRouteHandler } from "../routes/edge-answer-routes.js";
-import { makeEdgeCloseRouteHandler } from "../routes/edges-close-routes.js";
 import { EDGES_PATH, makeEdgesRouteHandler } from "../routes/edges-routes.js";
 import {
   SEMANTIC_SEARCH_PATH,
@@ -4874,12 +4873,6 @@ export async function buildGateway(
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
     ...(options.peerPlane?.dial ? { peerDial: options.peerPlane.dial } : {}),
   });
-  // One route closes an unfinished snapshot edge. A completed copy is the
-  // receiver's data and is not sender-revocable.
-  const edgeCloseHandler = makeEdgeCloseRouteHandler({
-    gatewayDatabase,
-    enrollments: enrollmentStore,
-  });
   /*
    * The peer plane (#726 P3 decision 6). Mounted OUTSIDE the prefix registry
    * on purpose: every route in there resolves a proved DEVICE first, and a
@@ -5085,14 +5078,6 @@ export async function buildGateway(
     if (
       url.pathname.startsWith(`${EDGES_PATH}/`) &&
       (await edgeAnswerHandler(req, res))
-    )
-      return true;
-    // The owner-facing revoke route (#726 P6 gap 1) — `DELETE
-    // /centraid/_gateway/edges/:edgeId`, a sibling sub-path `edgeAnswerHandler`
-    // itself never matches (it only answers `pending` and `:edgeId/answer`).
-    if (
-      url.pathname.startsWith(`${EDGES_PATH}/`) &&
-      (await edgeCloseHandler(req, res))
     )
       return true;
     if (

@@ -287,6 +287,14 @@ export interface AppState {
   expenseUndo: ExpenseUndo | null;
   modalMembers: Member[];
   pendingExpenses: LedgerRow[];
+  /** Denied durable Commons intents the member has cleared from the ledger
+   *  overlay (issue #731 m6) — `refreshCommonsExpenses` re-derives
+   *  `pendingExpenses` from `commonsIntents()` on every refresh, and a
+   *  denial (unlike an executed write) never ages out of that feed on its
+   *  own, so a dismissal has to be remembered client-side or it would
+   *  reappear on the next refresh. Presentation state only, like the rest of
+   *  `AppState` — a dismissal does not survive a reload. */
+  dismissedCommonsIntentIds: Set<string>;
 }
 
 /** The nav patch setNav folds into `state` (a view switch). */

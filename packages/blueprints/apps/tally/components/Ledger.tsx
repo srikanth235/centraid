@@ -43,12 +43,15 @@ export function Ledger({
   currency,
   onOpenDetail,
   onAddExpense,
+  onDismissDenied,
 }: {
   view: "group" | "friend";
   viewData: ViewData | null;
   currency: string;
   onOpenDetail: (row: LedgerRow) => void;
   onAddExpense: () => void;
+  /** Settle a denied durable Commons intent out of the overlay (issue #731 m6). */
+  onDismissDenied?: (row: LedgerRow) => void;
 }) {
   if (!viewData) return <ExplistSkeleton rows={5} />;
 
@@ -83,6 +86,7 @@ export function Ledger({
               row={row}
               currency={currency}
               onOpen={onOpenDetail}
+              onDismiss={onDismissDenied}
             />
           ))}
         </div>

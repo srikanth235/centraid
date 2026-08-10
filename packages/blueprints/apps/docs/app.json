@@ -12,6 +12,8 @@
     "scopes": [
       { "schema": "core", "table": "document", "verbs": "read" },
       { "schema": "core", "table": "content_item", "verbs": "read" },
+      { "schema": "social", "table": "circle", "verbs": "read" },
+      { "schema": "social", "table": "circle_member", "verbs": "read" },
       { "schema": "core", "table": "link", "verbs": "read" },
       { "schema": "core", "table": "tag", "verbs": "read" },
       { "schema": "core", "table": "concept", "verbs": "read" },

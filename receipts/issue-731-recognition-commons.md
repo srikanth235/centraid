@@ -379,6 +379,76 @@ Both:
 - Non-steward member commands are vault-signed and nonce-protected. A steward may visibly delay or censor pending work but cannot forge a member operation without detection.
 - The #726 live-lending implementation is retained only in Git history and migration cleanup. It is not a dormant third plane.
 
+## Review follow-up fixes (PR #735)
+
+A multi-agent review of the PR surfaced defects that the green suite did not
+catch; these were fixed on top of the original train.
+
+- **Commons steward-write forgery (blocking).** The peer command route
+  (`peer-commons-route.ts`) authenticated the link but never bound the
+  caller-supplied `actorPartyId` to the proven peer, and `commandRefuses` skips
+  signature/replay checks when `actorPartyId === stewardPartyId` — so any linked
+  member, including a `read`-only one, could forge steward-attributed writes
+  (content, deletes, `tally.add/remove_group_member`). The route now resolves the
+  caller's real party from the proven link and rejects any mismatch; a peer caller
+  can never act as the steward party. A fork guard also refuses a command whose
+  addressed vault is no longer the grant's steward (post-transfer misrouting).
+- **Commons churn / cost.** The bootstrap route always returned a full frame and
+  the client always re-scrubbed and re-projected (deleting seat-local OCR/embeddings/
+  FTS and re-enqueuing enrichment) roughly every 5 s. It now short-circuits when the
+  member is already current, so a caught-up member's pull is a no-op.
+- **Commons version-skew, atomicity, regression, undeclared commands, nonce reuse,
+  and DoS bounds.** `applyCommonsBootstrap` validates the closure format before the
+  destructive scrub (parks instead of destroying the replica), wraps scrub+project in
+  one transaction, refuses to apply a frame behind the local cursor, refuses commands
+  targeting a commons container with no actable declaration, refuses a nonce reused for
+  a differing command, applies a default 4 GiB closure ceiling, and no longer lets a
+  never-synced member stall op-log compaction forever.
+- **Recognition silent data loss.** The `photo-ocr`, `embed-image`, `embed-text`, and
+  `transcript` handlers advanced the cursor past assets the enrichment service failed
+  to process (coercing an outage into a false "nothing found" skip). They now fail the
+  run on a non-`ok` service status like `faces` does, leaving the cursor untouched; a
+  re-extracted source derivative is re-embedded; and OCR region bounds are enforced at
+  the vault command, not only in the handler.
+- **Destructive lend-retirement migration.** `migrateRetiredLending` dropped
+  `share_access_receipts` (the give access-audit trail) along with `share_edges`; the
+  drop is removed and a fixture test proves give receipts survive the migration.
+- **Surfaces.** Automation run history splits the member and recognition lanes at the
+  fetch (a bulk import no longer empties "Recent activity"); sharing an existing Tally
+  group preselects its stored roster/capabilities (no exact-roster refusal); `docs`/
+  `photos` gain the `social.circle` read grants so members can read the roster offline;
+  settled denied Tally intents can be dismissed from the overlay.
+- **Docs / hygiene.** CHANGELOG, the stale enrichment-sweep and lend-lease references
+  in AGENTS.md / client-keying.md / SECURITY.md, the LWW commons posture in
+  decisions.md, and the dead `closeGatewayEdge`/`DELETE /edges` pair were corrected.
+
+Files the follow-up round touched beyond the sections above: CHANGELOG.md,
+docs/client-keying.md, packages/app-engine/src/conversation/store.ts and
+packages/app-engine/src/insights/analytics-store.ts (lane exclusion applied in SQL
+before `LIMIT`), packages/blueprints/apps/docs/app.json and
+packages/blueprints/apps/photos/app.json (social.circle read grants),
+packages/blueprints/apps/tally/components/ExpenseRow.module.css (dismiss control),
+packages/client/src/gateway-client-automations.ts (per-lane turns fetch), and the
+new regression suites packages/vault/src/share/commons-hardening.test.ts,
+packages/gateway/src/serve/peer-commons-hardening.test.ts,
+packages/vault/src/enrich/enrich.test.ts,
+packages/gateway/src/serve/gateway-db-retired-lending.test.ts (migration fixture,
+split out of gateway-db.test.ts for the 625-line cap), and
+packages/gateway/src/routes/automations-routes-lanes.test.ts (lane flood isolation,
+split out of automations-routes.test.ts for the same cap).
+
+Deferred as follow-ups (feature-sized, argued in the review): steward-loss
+discovery/push for peer members, multi-master reconciliation, multi-invite handoff
+consolidation, full native Tally pending-overlay parity, and a full "who is in this
+share" roster UI.
+
+Verification of the fixes: `packages/{vault,gateway,client,app-engine,blueprints,
+automation}` typecheck; `bun run lint` (`--deny-warnings`) and `bun run format:check`
+clean; focused suites green in the integrated tree — vault share+enrich 135, vault
+commands 323, gateway commons+migration+routes 31, automation enricher 49, blueprints
+tally + app-engine + client surfaces. Full `check:push`/`check:full` and CI remain the
+authoritative gate.
+
 ## Verification
 
 - Recognition focused suites: automation 71 tests, agent-runtime 23 tests, gateway 35 tests, client 59 tests, blueprints 13 tests, and mobile 18 tests passed during the final Part A audit; package typechecks passed.
@@ -459,3 +529,5 @@ PASS — a fresh-context auditor found implementation and focused/property/B6 ev
 | date | harness | session |
 | --- | --- | --- |
 | 2026-08-10 | codex | 019fe9c2-5a1a-7bf2-9bff-d8f8f1f8e452 |
+| 2026-08-10 | claude-code | 73f30113-f436-4200-9a10-3791c2d00318 |
+| 2026-08-10 | claude-code | 20824345-d493-4797-8e55-66d20c2278c5 |

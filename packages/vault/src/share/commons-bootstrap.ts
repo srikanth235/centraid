@@ -6,8 +6,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 
+import { VaultShareError } from "../errors.js";
 import { uuidv7 } from "../ids.js";
 import { placeBlob } from "./blobs.js";
+import { CLOSURE_FORMAT_VERSION } from "./closure.js";
 import type { WireClosure } from "./closure.js";
 import {
   commonsClosure,
@@ -721,76 +723,113 @@ export function applyCommonsBootstrap(input: {
   wire: CommonsBootstrap;
   now: string;
 }): void {
-  const localVaultId = input.seat.vault
+  const seatDb = input.seat.vault;
+  const localVaultId = seatDb
     .prepare("SELECT vault_id FROM core_vault LIMIT 1")
     .get() as { vault_id: string } | undefined;
   if (localVaultId?.vault_id !== input.wire.memberVaultId)
     throw new Error("commons bootstrap targets another vault");
-  const retained = input.seat.vault
+  // Never move a seat backward (issue #731). A delayed or stale frame whose
+  // head is behind what this seat already holds must not regress its state, so
+  // drop it before touching anything.
+  const cursor = seatDb
+    .prepare(
+      `SELECT sequence FROM share_commons_cursor
+        WHERE grant_id = ? AND member_vault_id = ?`
+    )
+    .get(input.wire.grantId, input.wire.memberVaultId) as
+    | { sequence: number }
+    | undefined;
+  if (cursor && input.wire.currentSequence < cursor.sequence) return;
+  const retained = seatDb
     .prepare(
       "SELECT 1 AS n FROM share_commons_retained WHERE grant_id = ? LIMIT 1"
     )
     .get(input.wire.grantId);
-  removeCommonsFromSeat({
-    seat: input.seat,
-    grantId: input.wire.grantId,
-    preserveControlState: true,
-  });
-  const projection = retained
-    ? { items: [] }
-    : projectShareClosure(input.seat.vault, input.wire.closure, {
-        sharedBy: `commons:${input.wire.grantId}`,
-        now: () => Date.parse(input.now),
-      });
-  projectControl(input.seat.vault, input.wire);
-  input.seat.vault
-    .prepare(
-      `INSERT INTO core_share_origin
-         (item_type, item_id, origin_vault_id, origin_item_id,
-          shared_by, shared_at)
-       VALUES ('social.circle', ?, ?, ?, ?, ?)
-       ON CONFLICT(item_type, item_id) DO UPDATE SET
-         origin_vault_id = excluded.origin_vault_id,
-         origin_item_id = excluded.origin_item_id,
-         shared_by = excluded.shared_by,
-         shared_at = excluded.shared_at`
-    )
-    .run(
-      sql(input.wire.control.circle["circle_id"]),
-      input.wire.stewardVaultId,
-      sql(input.wire.control.circle["circle_id"]),
-      `commons:${input.wire.grantId}`,
-      Date.parse(input.now)
+  // Fail closed BEFORE the destructive scrub (issue #731). A closure from a
+  // format this build cannot project must PARK — leave the prior replica intact
+  // and let the caller surface unavailable — never scrub first and then throw,
+  // which would strand the member empty and re-fail every sweep. Retained seats
+  // project no closure, so this only guards the projecting path.
+  if (!retained && input.wire.closure.formatVersion !== CLOSURE_FORMAT_VERSION)
+    throw new VaultShareError(
+      `unsupported share closure format ${String(
+        input.wire.closure.formatVersion
+      )}`
     );
-  projectTail(input.seat.vault, input.wire);
-  const lineage = input.seat.vault.prepare(
-    `INSERT INTO share_commons_lineage
-       (grant_id, item_type, item_id, origin_item_id)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(grant_id, item_type, item_id) DO NOTHING`
-  );
-  for (const item of projection.items)
-    lineage.run(
-      input.wire.grantId,
-      item.itemType,
-      item.itemId,
-      item.originItemId
-    );
-  input.seat.vault
-    .prepare(
-      `INSERT INTO share_commons_cursor
-         (grant_id, member_vault_id, sequence, updated_at)
+  // Scrub + re-project + control + tail + lineage + cursor are ONE atomic unit:
+  // a crash between the scrub and the re-projection must never leave the commons
+  // deleted on disk. Nest under a savepoint when a caller already owns the seat
+  // transaction so we never double-open BEGIN.
+  const nested = seatDb.isTransaction;
+  seatDb.exec(nested ? "SAVEPOINT apply_commons_bootstrap" : "BEGIN IMMEDIATE");
+  try {
+    removeCommonsFromSeat({
+      seat: input.seat,
+      grantId: input.wire.grantId,
+      preserveControlState: true,
+    });
+    const projection = retained
+      ? { items: [] }
+      : projectShareClosure(seatDb, input.wire.closure, {
+          sharedBy: `commons:${input.wire.grantId}`,
+          now: () => Date.parse(input.now),
+        });
+    projectControl(seatDb, input.wire);
+    seatDb
+      .prepare(
+        `INSERT INTO core_share_origin
+           (item_type, item_id, origin_vault_id, origin_item_id,
+            shared_by, shared_at)
+         VALUES ('social.circle', ?, ?, ?, ?, ?)
+         ON CONFLICT(item_type, item_id) DO UPDATE SET
+           origin_vault_id = excluded.origin_vault_id,
+           origin_item_id = excluded.origin_item_id,
+           shared_by = excluded.shared_by,
+           shared_at = excluded.shared_at`
+      )
+      .run(
+        sql(input.wire.control.circle["circle_id"]),
+        input.wire.stewardVaultId,
+        sql(input.wire.control.circle["circle_id"]),
+        `commons:${input.wire.grantId}`,
+        Date.parse(input.now)
+      );
+    projectTail(seatDb, input.wire);
+    const lineage = seatDb.prepare(
+      `INSERT INTO share_commons_lineage
+         (grant_id, item_type, item_id, origin_item_id)
        VALUES (?, ?, ?, ?)
-       ON CONFLICT(grant_id, member_vault_id) DO UPDATE SET
-         sequence = MAX(sequence, excluded.sequence),
-         updated_at = excluded.updated_at`
-    )
-    .run(
-      input.wire.grantId,
-      input.wire.memberVaultId,
-      input.wire.currentSequence,
-      input.now
+       ON CONFLICT(grant_id, item_type, item_id) DO NOTHING`
     );
+    for (const item of projection.items)
+      lineage.run(
+        input.wire.grantId,
+        item.itemType,
+        item.itemId,
+        item.originItemId
+      );
+    seatDb
+      .prepare(
+        `INSERT INTO share_commons_cursor
+           (grant_id, member_vault_id, sequence, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(grant_id, member_vault_id) DO UPDATE SET
+           sequence = MAX(sequence, excluded.sequence),
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        input.wire.grantId,
+        input.wire.memberVaultId,
+        input.wire.currentSequence,
+        input.now
+      );
+    seatDb.exec(nested ? "RELEASE apply_commons_bootstrap" : "COMMIT");
+  } catch (error) {
+    seatDb.exec(nested ? "ROLLBACK TO apply_commons_bootstrap" : "ROLLBACK");
+    if (nested) seatDb.exec("RELEASE apply_commons_bootstrap");
+    throw error;
+  }
 }
 
 /** Same-machine test/transport helper: place the snapshot's bytes by sha. */

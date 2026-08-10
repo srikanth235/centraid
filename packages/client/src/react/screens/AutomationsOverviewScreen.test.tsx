@@ -233,6 +233,37 @@ describe("AutomationsOverviewScreen suite", () => {
       ).toHaveLength(2);
     });
 
+    // Issue #731 M2: this screen only ever renders the `runs` it's handed —
+    // the flood-safety fix lives one layer down, in `automationsData.ts`'s
+    // per-lane fetch. This guards the OTHER half: even a huge recognition
+    // flood in the data must not make the screen's own `systemLane`
+    // filtering (line ~452) bury the member lane's "Recent activity" rows.
+    it("keeps the member recent-activity feed populated even when the recognition lane floods it", async () => {
+      const data = makeData();
+      const flood = Array.from({ length: 100 }, (_, i) => ({
+        ...data.runs[0]!,
+        automationId: "photo-ocr/photo-ocr",
+        runId: `recognition-run-${i}`,
+        name: "Photo OCR",
+        systemLane: "recognition" as const,
+      }));
+      const el = await mount(
+        makeProps({
+          loadData: vi
+            .fn<AutomationsOverviewBridgeProps["loadData"]>()
+            .mockResolvedValue({
+              ...data,
+              runs: [...flood, ...data.runs],
+            }),
+        })
+      );
+
+      expect(
+        el.querySelector(".activitySection")?.querySelectorAll(".activityRow")
+      ).toHaveLength(2);
+      expect(el.textContent).toContain("Recent activity");
+    });
+
     it("opens an automation and a run via callbacks", async () => {
       const props = makeProps();
       const el = await mount(props);

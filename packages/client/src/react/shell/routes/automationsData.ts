@@ -21,10 +21,8 @@ import {
   cronRunLabel,
   resolveCronTimezone,
 } from "../../../cron.js";
-import {
-  listAutomationTurns,
-  listAutomations,
-} from "../../../gateway-client.js";
+import { listAutomationTurnsByLane } from "../../../gateway-client-automations.js";
+import { listAutomations } from "../../../gateway-client.js";
 import type {
   AuOverviewData,
   AuStatusKind,
@@ -103,7 +101,7 @@ export async function collectAutomationRuns(): Promise<{
   rows: CentraidAutomationRow[];
   entries: AutomationFeedEntry[];
 }> {
-  // The two calls fail DIFFERENTLY on purpose.
+  // The calls fail DIFFERENTLY on purpose.
   //
   // The automation list is load-bearing: the overview cannot render without
   // it, and an empty list is indistinguishable from "you have no automations".
@@ -118,12 +116,27 @@ export async function collectAutomationRuns(): Promise<{
   //
   // Callers for whom automations are themselves decoration (Home, Starred)
   // catch the throw at their own call site and degrade the whole block.
-  const [autos, runs] = await Promise.all([
+  //
+  // The run feed itself is TWO independently-windowed fetches, not one
+  // (issue #731 M2). A single `listAutomationTurns({ limit: 100 })` call —
+  // no lane filter — used to hand back whichever 100 turns ran most
+  // recently; a large photo import fires the recognition automations once
+  // per photo, so it could fill the entire 100-row window with recognition
+  // runs and leave a member's own "Recent activity" empty. Fetching the
+  // member lane and the collapsed recognition lane as separate
+  // `systemLane`-scoped requests (`listAutomationTurnsByLane`,
+  // `gateway-client-automations.ts`) means each gets its own 100-row window
+  // regardless of how busy the other lane is.
+  const [autos, memberRuns, recognitionRuns] = await Promise.all([
     listAutomations(),
-    listAutomationTurns({ limit: 100 }).catch(
+    listAutomationTurnsByLane({ limit: 100, systemLane: "member" }).catch(
+      () => [] as CentraidAutomationTurnRecord[]
+    ),
+    listAutomationTurnsByLane({ limit: 100, systemLane: "recognition" }).catch(
       () => [] as CentraidAutomationTurnRecord[]
     ),
   ]);
+  const runs = [...memberRuns, ...recognitionRuns];
   const nameByRef = new Map(autos.map((a) => [a.ref, a.name]));
   return {
     rows: autos,

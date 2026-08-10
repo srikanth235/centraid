@@ -59,6 +59,18 @@
   font: var(--t-small);
 }
 
+/* Signposts that the item's own named circle was auto-reused (#731 M3) —
+   its exact stored roster + capabilities, not a fresh manual pick. */
+.preselected {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in oklab, var(--success) 35%, var(--line));
+  border-radius: var(--r-md);
+  background: color-mix(in oklab, var(--success) 8%, transparent);
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
 .error {
   margin: 8px 0 0;
   font: var(--t-small);

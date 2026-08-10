@@ -227,18 +227,3 @@ export async function answerPendingEdge(
   });
   return readJson(res, "answer pending edge");
 }
-
-/**
- * Ask the gateway whether an edge can be closed. Completed give copies answer
- * with the receiver-owned refusal; commons revocation uses its grant surface.
- */
-export async function closeGatewayEdge(
-  edgeId: string
-): Promise<Record<string, unknown>> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `${EDGES_PATH}/${enc(edgeId)}`, {
-    method: "DELETE",
-    headers: authHeaders(token),
-  });
-  return readJson(res, "close edge");
-}

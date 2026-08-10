@@ -166,6 +166,23 @@ export function handlePeerCommonsBootstrap(
       });
       compactCommonsOperations(steward.vault, grantId);
     }
+    // A fully caught-up member (its ack equals the grant's head) needs no data:
+    // shipping a full bootstrap frame here would make the client scrub and
+    // re-project the whole commons — deleting its seat-local OCR/embeddings/FTS
+    // and re-enqueuing enrichment — and count as sweep progress, pinning the
+    // active cadence. Answer an explicit no-op instead (the ack + compaction
+    // above already ran). Tombstones are never short-circuited: a removed
+    // member still needs the scrub they carry.
+    if (
+      frame.state === "bootstrap" &&
+      acknowledged !== undefined &&
+      acknowledged === currentSequence
+    )
+      return sendJson(res, 200, {
+        state: "current",
+        grantId,
+        currentSequence,
+      });
     return sendJson(res, 200, frame);
   } catch {
     return notFound(res);
@@ -250,8 +267,9 @@ export async function handlePeerCommonsCommand(
   const steward = deps.vaultFor(stewardVaultId);
   const gateway = deps.gatewayFor(stewardVaultId);
   const credential = deps.credentialFor(stewardVaultId);
+  const link = peer.linkForPair(stewardVaultId, memberVaultId);
   if (
-    !peer.linkForPair(stewardVaultId, memberVaultId) ||
+    !link ||
     !steward ||
     !gateway ||
     !credential ||
@@ -264,6 +282,30 @@ export async function handlePeerCommonsCommand(
     memberSignature.memberVaultId !== memberVaultId
   )
     return notFound(res);
+  // Bind the acted-as party to the PROVEN peer vault, exactly as the refuse
+  // route does. `body.actorPartyId` is caller-supplied; a linked member — even
+  // a read-only one — must never be able to claim to be the steward and forge
+  // steward-attributed writes past capability/signature/replay (those all skip
+  // when actorPartyId === stewardPartyId). Resolve the caller's real party from
+  // the link's pinned key + circle membership and require the request to match.
+  try {
+    const grant = readCommonsGrant(steward.vault, grantId);
+    const boundParty = steward.vault
+      .prepare(
+        `SELECT b.party_id FROM share_party_vault_binding b
+         JOIN social_circle_member m
+           ON m.circle_id = ? AND m.party_id = b.party_id
+         WHERE b.vault_id = ? AND b.revoked_at IS NULL
+           AND b.vault_public_key = ? LIMIT 1`
+      )
+      .get(grant.circleId, memberVaultId, link.peerPublicKey) as
+      | { party_id: string }
+      | undefined;
+    if (!boundParty || boundParty.party_id !== actorPartyId)
+      return notFound(res);
+  } catch {
+    return notFound(res);
+  }
   const now = new Date().toISOString();
   const result = executeCommonsCommand({
     steward,

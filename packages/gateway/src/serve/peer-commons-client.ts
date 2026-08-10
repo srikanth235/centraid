@@ -52,7 +52,11 @@ export async function pullPeerCommons(input: {
   /** The metadata footprint the owner reviewed before accepting. */
   expectedSizeBytes?: number;
   now?: string;
-}): Promise<{ state: "current"; sequence: number } | { state: "unavailable" }> {
+}): Promise<
+  | { state: "current"; sequence: number }
+  | { state: "noop"; sequence: number }
+  | { state: "unavailable" }
+> {
   try {
     if (input.acceptInvitation && input.expectedSizeBytes !== undefined) {
       const inspectParams = query(input);
@@ -114,6 +118,7 @@ export async function pullPeerCommons(input: {
       state?: string;
       wire?: CommonsBootstrap;
       tombstone?: CommonsTombstone;
+      currentSequence?: number;
     };
     if (
       response.status === 200 &&
@@ -123,6 +128,15 @@ export async function pullPeerCommons(input: {
       applyCommonsTombstone({ seat: input.seat, tombstone: body.tombstone });
       return { state: "current", sequence: body.tombstone.currentSequence };
     }
+    // Already-current no-op: the steward acked our cursor and has nothing new.
+    // Skip the destructive scrub+re-project entirely and report a non-progress
+    // state so the sweep does not treat a caught-up pull as work done.
+    if (
+      response.status === 200 &&
+      body.state === "current" &&
+      typeof body.currentSequence === "number"
+    )
+      return { state: "noop", sequence: body.currentSequence };
     if (response.status !== 200 || body.state !== "bootstrap" || !body.wire)
       return { state: "unavailable" };
     for (const blob of body.wire.closure.blobs) {
