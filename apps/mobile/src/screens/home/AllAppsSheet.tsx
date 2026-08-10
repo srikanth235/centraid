@@ -104,6 +104,12 @@ export default function AllAppsSheet({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
+  const handleClose = (): void => {
+    // The native Modal stays mounted between launches on iOS. Clear the
+    // session at its single close boundary so the next open starts fresh.
+    setQuery("");
+    onClose();
+  };
   const pinnedSet = useMemo(() => new Set(pinnedIds), [pinnedIds]);
   const placePins = usePlacePins();
   const trimmed = query.trim();
@@ -124,12 +130,12 @@ export default function AllAppsSheet({
       transparent
       visible={visible}
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <Pressable
         accessibilityLabel="Close all apps and places"
         style={styles.scrim}
-        onPress={onClose}
+        onPress={handleClose}
       />
       <View
         style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}
@@ -139,7 +145,7 @@ export default function AllAppsSheet({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close"
-            onPress={onClose}
+            onPress={handleClose}
             style={styles.closeButton}
           >
             <Icon name="X" size={16} color={colors.text} />
@@ -180,7 +186,7 @@ export default function AllAppsSheet({
               styles={styles}
               pinned={pinnedSet.has(item.meta.id)}
               onOpen={() => {
-                onClose();
+                handleClose();
                 // The row lives inside a native Modal. Dispatching a lazy
                 // cover in the same press event can be swallowed on iOS while
                 // the Modal is dismissing; queue the destination after that
@@ -203,7 +209,7 @@ export default function AllAppsSheet({
               styles={styles}
               pinned={isPlacePinned(placePins, place.id)}
               onOpen={() => {
-                onClose();
+                handleClose();
                 InteractionManager.runAfterInteractions(() =>
                   onOpenPlace(place.id)
                 );

@@ -128,6 +128,10 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   until the native Modal interaction settles. This keeps a lazy cover such as
   People from losing its root-stack transition while the iOS launcher sheet is
   dismissing.
+- `apps/mobile/src/screens/home/AllAppsSheet.tsx` clears its search query every
+  time the sheet becomes visible. A reused Home screen could otherwise retain
+  `Photos` from the first cover launch and turn the next `People` search into
+  `PhotosPeople`, leaving the native-cover journey on an empty result state.
 - The native Photos cover now gets the same bounded lazy-destination wait used
   by PR #683's Settings recovery: the launcher row is tapped once, then the
   flow waits up to 45 seconds for `Collections` rather than treating React's
@@ -431,6 +435,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   while the probe only existed in the pushed-screen wrapper. The probe is now
   also rendered by `PhotosHome`; no unrelated iOS lane will be rerun until
   this focused cell passes.
+- Focused rerun [Actions run 31343341337](https://github.com/srikanth235/centraid/actions/runs/31343341337)
+  passed the Photos Library marker, arm target, eight flings, copied frame
+  report, and explicit Photos-to-Home exit. It then failed while reopening the
+  All-apps sheet for People: the [debug artifact](https://github.com/srikanth235/centraid/actions/runs/31343341337/artifacts/9046830314)
+  showed the search field still contained `Photos`, so the generated `People`
+  input became `PhotosPeople`. The sheet now resets that query on each open;
+  the focused lane will verify this state-specific fix before the full matrix.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).
@@ -466,7 +477,7 @@ bun run test:accessibility
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-08-09 | codex | 019fe264-a26e-7b13-bc59-366fb7760e9f |
+| 2026-08-10 | codex | 019fe264-a26e-7b13-bc59-366fb7760e9f |
 
 ## Audit
 
