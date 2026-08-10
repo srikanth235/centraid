@@ -34,7 +34,6 @@ import { runHandler } from "../handler/runner.js";
 import type {
   AgentDispatcher,
   ConnectionAuth,
-  DeterministicFetch,
   HandlerOutcome,
 } from "../handler/runner.js";
 import { parseRef } from "../manifest/ref.js";
@@ -220,8 +219,6 @@ export interface RunFireOptions {
   resolveEnrichPolicy?: (
     domain: EnrichDomain
   ) => Promise<EnrichTier | undefined> | EnrichTier | undefined;
-  /** Reserved loopback executor used by deterministic recognition templates. */
-  deterministicFetch?: DeterministicFetch;
   /** Injected-fetch transient backoff schedule (ms) — tests shrink it. */
   fetchRetryDelaysMs?: readonly number[];
   /**
@@ -537,26 +534,6 @@ export async function runFire(
   }
 
   let outcome: HandlerOutcome;
-  // The host exposes one reserved deterministic executor, but the manifest
-  // declaration is its authority boundary. A normal automation receives no
-  // seam at all, and an enricher may address only its declared capability.
-  const governedDeterministicFetch =
-    enrich && opts.deterministicFetch
-      ? (
-          call: Parameters<DeterministicFetch>[0],
-          ctx: Parameters<DeterministicFetch>[1]
-        ) => {
-          const expected = `centraid://enrichment/${enrich.capability}`;
-          if (call.url !== expected) {
-            return Promise.reject(
-              new Error(
-                `deterministic enrichment capability mismatch: ${enrich.capability} cannot call ${call.url}`
-              )
-            );
-          }
-          return opts.deterministicFetch!(call, ctx);
-        }
-      : undefined;
   try {
     outcome = await runHandler({
       automationId: opts.automationRef,
@@ -571,9 +548,6 @@ export async function runFire(
       ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
       ...(effectiveModel ? { model: effectiveModel } : {}),
       ...(vaultBridge ? { vault: vaultBridge } : {}),
-      ...(governedDeterministicFetch
-        ? { deterministicFetch: governedDeterministicFetch }
-        : {}),
       ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
       triggerKind: opts.triggerKind ?? "scheduled",
       triggerOrigin: opts.triggerOrigin ?? "cron",
@@ -664,9 +638,6 @@ export async function runFire(
               // `enrich`, the same tier gate must apply to it.
               ...(opts.resolveEnrichPolicy
                 ? { resolveEnrichPolicy: opts.resolveEnrichPolicy }
-                : {}),
-              ...(opts.deterministicFetch
-                ? { deterministicFetch: opts.deterministicFetch }
                 : {}),
               ...(opts.resolveNestedRuntime
                 ? { resolveNestedRuntime: opts.resolveNestedRuntime }

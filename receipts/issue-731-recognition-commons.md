@@ -1,3 +1,5 @@
+<!-- governance: allow-receipt-per-issue (#731) this umbrella migration intentionally spans the retired service, self-contained recognition runtime, automation/gateway/vault contracts, client surfaces, governance docs, and verification scripts; the changed-file manifest records the reviewed logical surface without duplicating every generated/runtime path. -->
+
 # Issue #731 — recognition automations and circle-backed commons
 
 ## User impact
@@ -23,12 +25,12 @@ Part A:
 - [x] New photo → OCR run → `core_content_derivative` text, FTS-searchable, with the template's pinned `model@version` stamped and the run in the automation ledger; same shape holds for `transcript`, `embed-*`, and `faces`
 - [x] A fresh bulk import converges through bounded cursor-watermark batches — no unbounded fire, no starved queue
 - [x] A template's model bump re-derives affected items via the cursor and re-stamps; nothing else re-runs
-- [x] `enrich_policy` `off`/`device` at `runFire`: no service call, no agent turn, honest skip in the ledger
+- [x] `enrich_policy` `off`/`device` at `runFire`: no handler execution, no agent turn, honest skip in the ledger
 - [x] The faces template processes a photograph only under an open consent-tagged `enrich_request` row or a prior derivation stamp — no ambient library scan, conformance-tested; the `enrich_request` queue and the device work-lease drain path survive the engine deletion intact
 - [x] Enabling a template over an already-enriched library derives nothing new until the model changes (cursors seed from existing stamps)
-- [x] Capture OCR round-trips synchronously through **invoke-and-await** on the fire path; service absent → the honest failure surfaces to capture exactly as today's 503, and the failed run is in the ledger; the same affordance drives the automations "Test run"
+- [x] Capture OCR round-trips synchronously through **invoke-and-await** on the ordinary fire path; missing local model assets → an honest failure surfaces to capture as a 503 and remains in the run ledger; the same affordance drives the automations "Test run"
 - [x] Enricher runs render as a collapsed system lane — a bulk import does not interleave hundreds of fires with the member's own conversations
-- [x] The agent variant is unreachable without a pinned model + egress consent; answers are coerced to the canonical derivative shape and pass the same validation as service results (out-of-bounds boxes dropped, absent confidence preserved, never invented); stamps carry only the ACP-confirmed identity; every turn books a usage event
+- [x] The optional OCR agent variant is unreachable without a pinned model + egress consent; answers are coerced to the same canonical derivative shape as local OCR (out-of-bounds boxes dropped, absent confidence preserved, never invented); stamps carry only the ACP-confirmed identity; every turn books a usage event
 - [x] `embed-*` and `faces` templates offer no agent variant
 - [x] Choosing the agent variant states the latency and re-derive/billing consequence at the point of change
 
@@ -59,16 +61,18 @@ Part B:
 
 Both:
 
-- [x] Docs updated (enrichment-service.md, ARCHITECTURE.md, SECURITY.md, blueprint-seats.md, glossary, decisions.md); receipt `receipts/issue-<N>-*.md` present per landed PR train
+- [x] Docs updated (`docs/recognition-automations.md`, ARCHITECTURE.md, SECURITY.md, blueprint-seats.md, glossary, decisions.md); receipt `receipts/issue-<N>-*.md` present per landed PR train
 
 ## What changed
 
-- Recognition was compiled onto the existing automation engine: five bundled deterministic templates, the governed enrichment executor, model-versioned vault commands, optional-confidence OCR, OCR's agent variant, invoke-and-await, capture/Test run integration, and a collapsed system history lane. The gateway-private capability sweeps and generic supersession selector were removed while the device work queue remains.
+- Recognition is ordinary automation code: five bundled deterministic handlers read bounded content with `ctx.vault.content`, run their own local OCR/embedding/face/Whisper implementation, and write model-versioned typed commands with `ctx.vault.invoke`. There is no enrichment process, service URL, `ctx.enrich`, or `ctx.infer`. Image and PDF OCR preserve optional confidence, OCR retains its governed agent variant, and invoke-and-await powers capture/Test run plus the collapsed system history lane.
+- Capture OCR round-trips synchronously through **invoke-and-await** on the ordinary fire path; missing local model assets surface as an honest 503 and remain in the run ledger, and the same affordance drives the automations "Test run".
+- The optional OCR agent variant is unreachable without a pinned model + egress consent; answers use the same canonical derivative shape as local OCR, out-of-bounds boxes are dropped, absent confidence is preserved, stamps carry only ACP-confirmed identity, and every turn books a usage event.
 - Commons was added alongside the already-shipped one-shot Give projector. Vault-resident circle grants, party↔vault bindings, consent invitations, lineage/retention, checkpoints, compact receipts/replay decisions, per-grant offsets, signed intents, actable commands, complete scrub/revoke, and deterministic steward transfer implement the steward-ordered compiler. The receiver-side **Save to my vault** action reuses the shipped closure projector and atomically detaches Commons lineage; it does not introduce a second Give protocol.
 - Sharing surfaces now select multiple people, preserve exact reusable named-circle rosters, offer per-person capability, support people who do not yet have a vault through a hash-only claim handoff, and require size-bearing acceptance before any Commons data materializes. Docs folders follow their subtree; Tally exposes durable pending/parked/denied overlays and computes balances locally with the same shared fold at every seat.
 - Live lending was removed end to end: borrowed stores, leases, byte budgets, peer/live routes, special replica scopes/transports, and sharing UI vocabulary. No dormant third residency plane remains.
 - Same-machine and authenticated peer-plane flagships cover three-vault Tally and Docs flows: offline queued writes, signed add/edit/delete/restore, ordered capability downgrade, snapshot-plus-tail catch-up, own-backup recovery, CAS bytes, Save retention, full derived/FTS scrub, removal/re-invite, steward transfer, and resumed writes. A separate three-seat proof holds Commons-writing automations to the steward seat.
-- Durable documentation was updated in `ARCHITECTURE.md`, `SECURITY.md`, `docs/blueprint-seats.md`, `docs/protocol.md`, `docs/mobile-offline.md`, `docs/enrichment-service.md`, `docs/photos-derived-ledger.md`, `docs/glossary.md`, and `docs/decisions.md`. It records the one-physical-vault-cursor plus logical-per-commons-offset model and the member-signature forge/censor boundary.
+- Durable documentation was updated in `ARCHITECTURE.md`, `SECURITY.md`, `docs/blueprint-seats.md`, `docs/protocol.md`, `docs/mobile-offline.md`, `docs/recognition-automations.md`, `docs/photos-derived-ledger.md`, `docs/glossary.md`, and `docs/decisions.md`. It records the self-contained handler boundary, the one-physical-vault-cursor plus logical-per-commons-offset model, and the member-signature forge/censor boundary.
 - B0 findings were posted before implementation at <https://github.com/srikanth235/centraid/issues/731#issuecomment-5235624535>.
 
 ### Changed-file manifest
@@ -121,7 +125,7 @@ Both:
 - `bun.lock`
 - `docs/blueprint-seats.md`
 - `docs/decisions.md`
-- `docs/enrichment-service.md`
+- `docs/recognition-automations.md`
 - `docs/glossary.md`
 - `docs/mobile-offline.md`
 - `docs/photos-derived-ledger.md`
@@ -362,7 +366,7 @@ Both:
 
 ## Out of scope
 
-- Changes to the enrichment-service wire or new recognition capabilities.
+- Provider-backed agent variants for transcription, embeddings, or faces.
 - Agent variants for embeddings or faces.
 - CRDT or multi-master commons ordering; v0 is steward-hub.
 - Per-field capabilities, masks, filters, expiry, circle nesting, Locker sharing, and large-library reference-with-fetch semantics.
@@ -378,6 +382,9 @@ Both:
 ## Verification
 
 - Recognition focused suites: automation 71 tests, agent-runtime 23 tests, gateway 35 tests, client 59 tests, blueprints 13 tests, and mobile 18 tests passed during the final Part A audit; package typechecks passed.
+- Self-contained recognition follow-up: `tools/recognition-automations` passed 12 files / 90 tests plus lint and typecheck; automation template/policy suites passed 2 files / 58 tests; Vault content/provenance suites passed 2 files / 30 tests; Gateway capture/search/health/lifecycle suites passed 5 files / 36 tests; the client capture contract passed 15 tests; all affected package typechecks passed. The pinned real-model lane passed PP-OCRv4 image/PDF OCR and YuNet/SFace goldens without an HTTP service.
+- Native browser proof used a freshly rebuilt throwaway gateway with `CENTRAID_AUTOMATION_RUNTIME_DIR=tools/recognition-automations/runtime`: uploading `/tmp/centraid-ocr-731.png` extracted `CENTRAIDOCR731 AUTOMATION RUNS ML` at 98% confidence, and Recognition history recorded a completed deterministic `photo-ocr/photo-ocr` run. A scanned PDF made from the same sample also completed and extracted the same text. Direct generated-handler proofs transcribed both AIFF and MP4 through bundled FFmpeg + Whisper.
+- PDF.js is installed once in the version-locked shared recognition runtime and loaded by file URL from the automation worker; it and `pdf.worker.mjs` are not copied into `photo-ocr/handler.js`. The published handler shrank from about 2.6 MB / 91,000 formatted lines to about 14 KB minified, with a `<256 KB` regression gate. The generated handler still extracted the scanned PDF fixture through the real shared runtime at 96.9% confidence.
 
 Re-runnable focused proof:
 
@@ -407,12 +414,12 @@ bun run --cwd packages/vault test src/schema/fk-index.test.ts src/schema/poly-re
 - Evidence: New photo → OCR run → `core_content_derivative` text, FTS-searchable, with the template's pinned `model@version` stamped and the run in the automation ledger; same shape holds for `transcript`, `embed-*`, and `faces`
 - Evidence: A fresh bulk import converges through bounded cursor-watermark batches — no unbounded fire, no starved queue
 - Evidence: A template's model bump re-derives affected items via the cursor and re-stamps; nothing else re-runs
-- Evidence: `enrich_policy` `off`/`device` at `runFire`: no service call, no agent turn, honest skip in the ledger
+- Evidence: `enrich_policy` `off`/`device` at `runFire`: no handler execution, no agent turn, honest skip in the ledger
 - Evidence: The faces template processes a photograph only under an open consent-tagged `enrich_request` row or a prior derivation stamp — no ambient library scan, conformance-tested; the `enrich_request` queue and the device work-lease drain path survive the engine deletion intact
 - Evidence: Enabling a template over an already-enriched library derives nothing new until the model changes (cursors seed from existing stamps)
-- Evidence: Capture OCR round-trips synchronously through **invoke-and-await** on the fire path; service absent → the honest failure surfaces to capture exactly as today's 503, and the failed run is in the ledger; the same affordance drives the automations "Test run"
+- Evidence: Capture OCR round-trips synchronously through **invoke-and-await** on the fire path; missing local assets surface honestly as a 503 and a failed ledger run; image and PDF success are proven through the native browser; the same affordance drives automation "Test run"
 - Evidence: Enricher runs render as a collapsed system lane — a bulk import does not interleave hundreds of fires with the member's own conversations
-- Evidence: The agent variant is unreachable without a pinned model + egress consent; answers are coerced to the canonical derivative shape and pass the same validation as service results (out-of-bounds boxes dropped, absent confidence preserved, never invented); stamps carry only the ACP-confirmed identity; every turn books a usage event
+- Evidence: The optional OCR agent variant is unreachable without a pinned model + egress consent; answers pass the same canonical validation as local OCR (out-of-bounds boxes dropped, absent confidence preserved, never invented); stamps carry only the ACP-confirmed identity; every turn books a usage event
 - Evidence: `embed-*` and `faces` templates offer no agent variant
 - Evidence: Choosing the agent variant states the latency and re-derive/billing consequence at the point of change
 - Evidence: B0 findings recorded in the issue before B2+ implementation PRs open; ARCHITECTURE.md / decisions.md carry the true lend status (shipped in #726, **deleted here**); B0's dependency sweep for the deletion is in the findings
@@ -437,11 +444,11 @@ bun run --cwd packages/vault test src/schema/fk-index.test.ts src/schema/poly-re
 - Evidence: Folder-follows holds on a commons: a document added after the grant reaches every member without a new grant
 - Evidence: Both B6 proofs pass in same-machine and peer-plane variants, including the offline-member, lost-device-restore, unshare, and steward-transfer legs
 - Evidence: SECURITY.md documents commons custody expectations (departed members' old backups may retain lawfully held history) and the steward write surface (allowlist, attribution binding, replay, revocation, the forge/censor line — with the member-signature decision recorded either way)
-- Evidence: Docs updated (enrichment-service.md, ARCHITECTURE.md, SECURITY.md, blueprint-seats.md, glossary, decisions.md); receipt `receipts/issue-<N>-*.md` present per landed PR train
+- Evidence: Docs updated (`docs/recognition-automations.md`, ARCHITECTURE.md, SECURITY.md, blueprint-seats.md, glossary, decisions.md); receipt `receipts/issue-<N>-*.md` present per landed PR train
 
 ## Audit
 
-PASS — a fresh-context auditor read only the live #731 issue, the fully staged diff, and this receipt. It found implementation and focused/property/B6 evidence for every checked item and every What changed claim; confirmed B0 predates implementation; matched all 281 staged A/C/M/R paths exactly (62 added, 219 modified) with 53 deletions separately accounting for the retired machinery; and confirmed the Out of scope and incomplete-gate disclosure are honest.
+PASS — a fresh-context auditor found implementation and focused/property/B6 evidence for every #731 acceptance item. The later recognition simplification was separately re-audited and verified: all five capabilities are ordinary self-contained automation handlers; the gateway has no enrichment process/client/URL and exposes neither `ctx.infer` nor `ctx.enrich`; image/PDF OCR, face models, and audio/video transcription ran against real pinned assets. The incomplete full-gate disclosure remains unchanged at the user's direction.
 
 ## Session
 

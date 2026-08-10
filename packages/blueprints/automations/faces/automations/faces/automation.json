@@ -12,6 +12,7 @@
     "purpose": "dpv:ServiceProvision",
     "why": "Reads open face-consent requests and photograph previews, then writes validated face regions and drains only satisfied requests.",
     "scopes": [
+      { "schema": "core", "verbs": "read+act" },
       { "schema": "enrich", "verbs": "read+act" },
       { "schema": "media", "verbs": "read+act" }
     ]

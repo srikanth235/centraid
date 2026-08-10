@@ -714,8 +714,8 @@ interface CentraidApi {
       ocr: boolean;
       embedding: boolean;
       // Permanently false (issue #724 W6): desktop's on-device file-ASR
-      // adapter is deleted — transcription runs on the gateway's
-      // enrichment service now, never on a member's device. The key stays
+      // adapter is deleted — transcription belongs to its self-contained
+      // recognition automation, never to a device compute lease. The key stays
       // in this wire shape (`DeviceComputeCapabilities` in
       // `gateway-client-devices.ts` mirrors it) rather than being dropped.
       transcript: boolean;

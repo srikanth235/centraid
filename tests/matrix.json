@@ -626,7 +626,7 @@
     "apps/mobile": "mobile",
     "apps/oauth-worker": "oauth-worker",
     "apps/web": "web",
-    "tools/enrichment-service": "gateway"
+    "tools/recognition-automations": "gateway"
   },
   "notes": {
     "web.concurrency": "Partial\u2192stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic. Tracked under #656.",
@@ -1717,12 +1717,12 @@
     },
     "enrichment-model-lock": {
       "statement": "Every live-model file and native runtime dependency is immutable by version/digest and its permissive licence is recorded in LICENSES.md.",
-      "owner": "tools/enrichment-service/src/models-lock.test.ts",
+      "owner": "tools/recognition-automations/src/models-lock.test.ts",
       "flow": "enrichment-service-contract"
     },
     "enrichment-live": {
       "statement": "Pinned real weights satisfy the advertised capability/model handshake and the committed OCR, embedding, and face-geometry goldens.",
-      "owner": "tools/enrichment-service/src/model-goldens.live.test.ts",
+      "owner": "tools/recognition-automations/src/model-goldens.live.test.ts",
       "flow": "enrichment-service-contract"
     },
     "backup-round-trip": {
@@ -2016,7 +2016,7 @@
     },
     {
       "id": "blueprint-enrichment-law",
-      "name": "Only the gateway owns the enrichment-service client",
+      "name": "Recognition handlers are self-contained and use no deleted inference road",
       "surface": "blueprints",
       "dimension": "contracts",
       "tier": "contract",
@@ -2033,12 +2033,12 @@
       "minimumTests": 3
     },
     {
-      "id": "enrichment-service-contract",
-      "name": "Enrichment service handshake, validation, and bounded requests",
-      "surface": "gateway",
+      "id": "recognition-handler-contract",
+      "name": "Recognition handlers own bounded model execution and typed vault I/O",
+      "surface": "automations",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "tools/enrichment-service/src/server.test.ts",
+      "owner": "packages/automation/src/manifest/enricher-templates.test.ts",
       "minimumTests": 8
     },
     {

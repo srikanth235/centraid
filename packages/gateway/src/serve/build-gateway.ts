@@ -128,8 +128,6 @@ import { openStorageConnectionStore } from "../backup/storage-connections.js";
 import { makeStorageCredentialsResolver } from "../backup/storage-credentials.js";
 import { StorageUsagePoller } from "../backup/storage-usage.js";
 import { makeCaptureOcrRecognizer } from "../capture/capture-ocr.js";
-import { makeAutomationEnrichmentExecutor } from "../enrich/automation-executor.js";
-import { readEnrichServiceConfig } from "../enrich/service-client.js";
 import {
   isSystemRecognitionRef,
   SYSTEM_RECOGNITION_TEMPLATE_IDS,
@@ -2329,9 +2327,6 @@ export async function buildGateway(
         // and skips the run with the reason stated.
         resolveEnrichPolicy: (domain) =>
           readEnrichPolicyTier(vaultRegistry.current().db.vault, domain),
-        deterministicFetch: makeAutomationEnrichmentExecutor(
-          readEnrichServiceConfig()
-        ),
         rearm: ({ automationRef: ref, completedRunId }) => {
           const vaultId = ws.vaultId;
           const task = new Promise<void>((resolve, reject) => {
@@ -3089,6 +3084,10 @@ export async function buildGateway(
       deregister: async () => undefined,
       reconcile: () => undefined,
       ext,
+      // The generated recognition bundles contain vendored ML/PDF runtime
+      // code. Their human-owned sources are linted in the blueprint suite;
+      // this release-only lifecycle needs the matching validation profile.
+      isSystemManagedApp: (appId) => recognitionTemplateIds.has(appId),
     };
     const ensureSystemRecognitionRecipe = async (
       template: (typeof systemRecognitionTemplates)[number],
@@ -4483,7 +4482,15 @@ export async function buildGateway(
     // owns.
     forRoutePrefixes(
       SEMANTIC_SEARCH_PATH,
-      makeEnrichSearchRouteHandler(vaultRegistry)
+      makeEnrichSearchRouteHandler(vaultRegistry, {
+        embedQuery: (query) =>
+          fireAutomation("embed-text/embed-text", {
+            triggerKind: "manual",
+            triggerOrigin: "manual",
+            input: { query },
+            propagateError: true,
+          }),
+      })
     ),
     // Blob custody (issue #296): staged uploads in, consent-checked +
     // Range-capable bytes out. Mounted BEFORE the generic `_vault`

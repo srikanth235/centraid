@@ -76,7 +76,7 @@ For Pi-class always-on hosts, prefer f2fs/btrfs or a USB SSD and mount the data 
 
 Mobile companion: `bun run dev:mobile` (Expo dev build), then pair it from desktop Household → Devices with a one-time ticket or QR.
 
-Optional model capabilities: run the reference enrichment service (`tools/enrichment-service`, after `bun run setup`) and point the gateway at its loopback URL with `CENTRAID_ENRICH_URL`. If transcript support is needed, configure the service's `ENRICH_SERVICE_TRANSCRIPT_URL` to an OpenAI-compatible whisper endpoint; the gateway has no desktop-local ASR adapter.
+Optional model capabilities are self-contained in their recognition automation handlers. Install the local runtime dependencies and model assets with `bun run --cwd tools/recognition-automations setup`; handlers load those assets directly (or from `CENTRAID_AUTOMATION_RUNTIME_DIR`) and use `ctx.vault.content` / `ctx.vault.invoke` for vault I/O. No enrichment service or gateway inference primitive is configured. The transcript recipe decodes bounded audio/video locally and runs its bundled Whisper model through the same automation path.
 
 The PWA connects with only a pairing ticket over relay-only Iroh/WASM, so a gateway URL is not required. A standalone gateway can also serve the PWA as a same-host web origin; remote gateway connections remain ticket-only Iroh. Generated apps receive separate, single-app sessions and cannot call shell/admin routes.
 

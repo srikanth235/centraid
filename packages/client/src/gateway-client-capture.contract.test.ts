@@ -1,7 +1,7 @@
 // Client↔gateway seam laws for quick capture — the module had no test file
 // (#656 Layer 1B). Two laws carry the design: capture bytes stream as the
-// request body under the file's own media type (no multipart re-encode, so a
-// large photo is never buffered into a form), and an ABSENT assist engine
+// request body under the file's own media type (no multipart re-encode, so
+// visual content is never buffered into a form), and an ABSENT OCR automation
 // (HTTP 503) degrades to `undefined` rather than failing the capture — the
 // reviewed bytes still stage. Shared harness in gateway-client-seam-fixtures.ts.
 
@@ -27,10 +27,10 @@ describe("capture assist seam", () => {
   it("law: OCR posts the file as the raw body under its own media type", async () => {
     const file = receipt();
 
-    await expect(capture.recognizeCaptureImage(file)).resolves.toStrictEqual({
+    await expect(capture.recognizeCaptureContent(file)).resolves.toStrictEqual({
       text: "hi",
       confidence: 0.9,
-      engine: "enrichment-service",
+      engine: "automation",
     });
     const request = sent("POST /centraid/_gateway/capture/ocr");
     expect(request.body).toBe(file);
@@ -38,25 +38,35 @@ describe("capture assist seam", () => {
   });
 
   it("law: a typeless file still declares a body type the gateway can route", async () => {
-    await capture.recognizeCaptureImage(receipt("scan", ""));
+    await capture.recognizeCaptureContent(receipt("scan", ""));
 
     expect(
       sent("POST /centraid/_gateway/capture/ocr").headers.get("content-type")
     ).toBe("application/octet-stream");
   });
 
+  it("law: a PDF keeps its media type for the same OCR automation", async () => {
+    const file = receipt("scan.pdf", "application/pdf");
+
+    await capture.recognizeCaptureContent(file);
+
+    const request = sent("POST /centraid/_gateway/capture/ocr");
+    expect(request.body).toBe(file);
+    expect(request.headers.get("content-type")).toBe("application/pdf");
+  });
+
   it("law: OCR confidence stays absent when the recognizer did not report it", async () => {
     respond("POST /centraid/_gateway/capture/ocr", () =>
       json({
-        extraction: { text: "hi", engine: "enrichment-service" },
+        extraction: { text: "hi", engine: "automation" },
       })
     );
 
     await expect(
-      capture.recognizeCaptureImage(receipt())
+      capture.recognizeCaptureContent(receipt())
     ).resolves.toStrictEqual({
       text: "hi",
-      engine: "enrichment-service",
+      engine: "automation",
     });
   });
 
@@ -67,7 +77,7 @@ describe("capture assist seam", () => {
     );
 
     await expect(
-      capture.recognizeCaptureImage(receipt())
+      capture.recognizeCaptureContent(receipt())
     ).resolves.toBeUndefined();
   });
 
@@ -78,7 +88,7 @@ describe("capture assist seam", () => {
     );
 
     await expect(
-      capture.recognizeCaptureImage(receipt())
+      capture.recognizeCaptureContent(receipt())
     ).rejects.toMatchObject({
       code: "gateway_error",
     });

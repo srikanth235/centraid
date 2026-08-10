@@ -2371,9 +2371,10 @@ export class VaultPlane {
         ...(onBehalfOfOwner ? { onBehalfOfOwner } : {}),
       };
       if (call.op === "content") {
-        // The enricher's byte primitive (issue #299 §2): thumb/preview/text
-        // only — the gateway refuses originals structurally, and every
-        // fetch is receipted as the multimodal-egress consent event.
+        // The recognizer byte primitive (issue #299 §2): visual originals are
+        // structurally refused; bounded AV originals are the one exception
+        // because ASR has no derivative rung to read. Every fetch is still a
+        // receipted consent event.
         return asVaultCallResultAsync(() =>
           this.gateway.contentForAgent(
             cred,

@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { deflateSync } from "node:zlib";
 
 import { describe, expect, it } from "vitest";
 
@@ -22,6 +23,9 @@ import { parseManifest } from "./manifest.js";
 const require = createRequire(import.meta.url);
 const PACKAGE_ROOT = path.dirname(
   require.resolve("@centraid/blueprints/package.json")
+);
+const requireFromBlueprints = createRequire(
+  path.join(PACKAGE_ROOT, "package.json")
 );
 
 const ENRICHERS = [
@@ -39,6 +43,57 @@ const ENRICHERS = [
 /** The reminder's whole logic IS its condition trigger. */
 const CONDITION_ENRICHERS = new Set(["renewal-reminders"]);
 
+/** A valid one-page born-digital PDF for the generated handler's pdf.js path. */
+function searchablePdf(text: string): Buffer {
+  const stream = deflateSync(
+    Buffer.from(`BT /F1 12 Tf 72 720 Td (${text}) Tj ET`)
+  );
+  const objects = [
+    Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
+    Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+    Buffer.from(
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+        "/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>"
+    ),
+    Buffer.concat([
+      Buffer.from(
+        `<< /Length ${stream.length} /Filter /FlateDecode >>\nstream\n`
+      ),
+      stream,
+      Buffer.from("\nendstream"),
+    ]),
+    Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+  ];
+  const chunks = [Buffer.from("%PDF-1.7\n%\xE2\xE3\xCF\xD3\n", "latin1")];
+  const offsets = [0];
+  let size = chunks[0]!.length;
+  for (const [index, object] of objects.entries()) {
+    offsets.push(size);
+    const bytes = Buffer.concat([
+      Buffer.from(`${index + 1} 0 obj\n`),
+      object,
+      Buffer.from("\nendobj\n"),
+    ]);
+    chunks.push(bytes);
+    size += bytes.length;
+  }
+  const xrefAt = size;
+  const xref = offsets
+    .map((offset, index) =>
+      index === 0
+        ? "0000000000 65535 f \n"
+        : `${String(offset).padStart(10, "0")} 00000 n \n`
+    )
+    .join("");
+  chunks.push(
+    Buffer.from(
+      `xref\n0 ${offsets.length}\n${xref}trailer\n<< /Size ${offsets.length} /Root 1 0 R >>\n` +
+        `startxref\n${xrefAt}\n%%EOF\n`
+    )
+  );
+  return Buffer.concat(chunks);
+}
+
 function automationDir(id: string): string {
   return path.join(PACKAGE_ROOT, "automations", id, "automations", id);
 }
@@ -50,8 +105,50 @@ async function loadHandler(
     pathToFileURL(path.join(automationDir(id), "handler.js")).href
   )) as {
     default: (args: unknown) => Promise<unknown>;
+    setPhotoOcrRuntimeForTests?: (runtime: unknown) => void;
+    setEmbedImageRuntimeForTests?: (runtime: unknown) => void;
+    setEmbedTextRuntimeForTests?: (runtime: unknown) => void;
+    setFacesRuntimeForTests?: (runtime: unknown) => void;
+    setTranscriptRuntimeForTests?: (runtime: unknown) => void;
   };
+  mod.setPhotoOcrRuntimeForTests?.({
+    weightsPresent: () => true,
+    recognize: async () => ({
+      id: "test",
+      regions: [{ text: "Total", box: [1, 2, 3, 4] }],
+    }),
+  });
+  const embedding = {
+    weightsPresent: () => true,
+    infer: async () => ({ id: "test", vector: [0.1, 0.2] }),
+  };
+  mod.setEmbedImageRuntimeForTests?.(embedding);
+  mod.setEmbedTextRuntimeForTests?.(embedding);
+  mod.setFacesRuntimeForTests?.({
+    weightsPresent: () => true,
+    infer: async () => ({ id: "test", faces: [] }),
+  });
+  mod.setTranscriptRuntimeForTests?.({
+    weightsPresent: () => true,
+    transcribe: async () => ({ id: "test", text: "spoken fixture" }),
+  });
   return mod.default;
+}
+
+async function loadPhotoOcrModule() {
+  return (await import(
+    pathToFileURL(path.join(automationDir("photo-ocr"), "handler.js")).href
+  )) as {
+    default: (args: unknown) => Promise<unknown>;
+    setPhotoOcrRuntimeForTests: (runtime: unknown) => void;
+  };
+}
+
+async function loadWorkspacePdfJs() {
+  const resolved = requireFromBlueprints.resolve(
+    "pdfjs-dist/legacy/build/pdf.mjs"
+  );
+  return import(pathToFileURL(resolved).href);
 }
 
 /** A recording stub ctx: canned reads/agent turns, captured invokes. */
@@ -68,6 +165,12 @@ function stubCtx(options: {
     prompt: string;
     json?: unknown;
     content?: { contentId: string; variant: string }[];
+  }) => unknown;
+  content?: (request: {
+    contentId?: string;
+    variant?: string;
+    maxBytes?: number;
+    purpose?: string;
   }) => unknown;
 }) {
   const invokes: { command: string; input: Record<string, unknown> }[] = [];
@@ -94,6 +197,28 @@ function stubCtx(options: {
         invokes.push({ command: request.command, input: request.input });
         return { status: "executed", output: { batch_id: "b1" } };
       },
+      content: async (request: {
+        contentId?: string;
+        variant?: string;
+        maxBytes?: number;
+        purpose?: string;
+      }) =>
+        options.content?.(request) ??
+        (request.variant === "text" || request.variant === "transcript"
+          ? {
+              status: "ok",
+              kind: "text",
+              mediaType: "text/plain",
+              text: "fixture text",
+              truncated: false,
+            }
+          : {
+              status: "ok",
+              kind: "bytes",
+              mediaType: "image/jpeg",
+              byteSize: 7,
+              base64: "Zml4dHVyZQ==",
+            }),
     },
     agent: async (call: {
       prompt: string;
@@ -139,6 +264,15 @@ describe("enricher template hygiene", () => {
     }
   );
 
+  it("faces declares the core content rail used for preview reads", () => {
+    const manifest = parseManifest(
+      readFileSync(path.join(automationDir("faces"), "automation.json"), "utf8")
+    );
+    expect(manifest.vault?.scopes).toStrictEqual(
+      expect.arrayContaining([{ schema: "core", verbs: "read+act" }])
+    );
+  });
+
   it.each([
     ["photo-ocr", true],
     ["embed-image", false],
@@ -155,92 +289,117 @@ describe("enricher template hygiene", () => {
     "%s: handler passes the determinism lint",
     (id) => {
       const source = readFileSync(
-        path.join(automationDir(id), "handler.js"),
+        [
+          "photo-ocr",
+          "embed-image",
+          "embed-text",
+          "faces",
+          "transcript",
+        ].includes(id)
+          ? path.join(
+              PACKAGE_ROOT,
+              "..",
+              "..",
+              "tools",
+              "recognition-automations",
+              "automation-handlers",
+              `${id}.js`
+            )
+          : path.join(automationDir(id), "handler.js"),
         "utf8"
       );
       expect(lintHandlerSource(source)).toStrictEqual([]);
     }
   );
+
+  it("keeps the shared PDF.js runtime out of the published OCR handler", () => {
+    const handler = readFileSync(
+      path.join(automationDir("photo-ocr"), "handler.js")
+    );
+    expect(handler.byteLength).toBeLessThan(256_000);
+  });
 });
 
 describe("photo-ocr capture behavior", () => {
-  it("uses the deterministic fetch rail and returns reading-order text", async () => {
-    const handler = await loadHandler("photo-ocr");
-    const calls: Array<{ url: string; method: string; body?: string }> = [];
+  it("runs bundled OCR code and returns reading-order text", async () => {
+    const module = await loadPhotoOcrModule();
+    module.setPhotoOcrRuntimeForTests({
+      weightsPresent: () => true,
+      recognize: async () => ({
+        id: "capture",
+        regions: [
+          { text: "42", box: [20, 10, 2, 2], confidence: 0.6 },
+          { text: "Total", box: [0, 0, 8, 2], confidence: 0.8 },
+        ],
+      }),
+    });
     const harness = stubCtx({
       reads: {},
       input: {
         capture: { bytes: "cmVjZWlwdA==", mediaType: "image/jpeg" },
       },
-      fetch: async (call) => {
-        calls.push(call);
-        return {
-          status: 200,
-          headers: { "content-type": "application/json" },
-          text: JSON.stringify({
-            status: "ok",
-            model: "fake-ocr@1",
-            results: [
-              {
-                id: "capture",
-                regions: [
-                  { text: "42", box: [20, 10, 2, 2], confidence: 0.6 },
-                  { text: "Total", box: [0, 0, 8, 2], confidence: 0.8 },
-                ],
-              },
-            ],
-          }),
-        };
-      },
     });
 
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+    const result = (await module.default({
+      ctx: harness.ctx,
+      log: harness.log,
+    })) as {
       output: { text: string; confidence?: number; model: string };
     };
 
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({
-      url: "centraid://enrichment/ocr",
-      method: "POST",
-    });
-    expect(JSON.parse(calls[0]!.body ?? "{}")).toStrictEqual({
-      items: [
-        {
-          id: "capture",
-          bytes: "cmVjZWlwdA==",
-          mediaType: "image/jpeg",
-        },
-      ],
-    });
     expect(result.output).toStrictEqual({
       text: "Total\n42",
       confidence: 0.7,
-      engine: "enrichment-service",
-      model: "fake-ocr@1",
+      engine: "automation",
+      model: "pp-ocrv4@1",
     });
     expect(harness.invokes).toHaveLength(0);
   });
 
-  it("throws on capture service absence so the automation ledger records failure", async () => {
-    const handler = await loadHandler("photo-ocr");
+  it("throws when local model assets are absent so the automation ledger records failure", async () => {
+    const module = await loadPhotoOcrModule();
+    module.setPhotoOcrRuntimeForTests({ weightsPresent: () => false });
     const harness = stubCtx({
       reads: {},
       input: {
         capture: { bytes: "cmVjZWlwdA==", mediaType: "image/jpeg" },
       },
-      fetch: async () => ({
-        status: 200,
-        headers: { "content-type": "application/json" },
-        text: JSON.stringify({
-          status: "unavailable",
-          reason: "not configured",
-        }),
-      }),
     });
 
     await expect(
-      handler({ ctx: harness.ctx, log: harness.log })
-    ).rejects.toThrow("capture OCR unavailable: not configured");
+      module.default({ ctx: harness.ctx, log: harness.log })
+    ).rejects.toThrow("install the bundled automation model assets");
+  });
+
+  it("extracts a born-digital PDF inside the generated automation handler", async () => {
+    const module = await loadPhotoOcrModule();
+    module.setPhotoOcrRuntimeForTests({
+      weightsPresent: () => true,
+      loadPdfJs: loadWorkspacePdfJs,
+      recognize: async () => {
+        throw new Error("born-digital PDF text must not call image OCR");
+      },
+    });
+    const pdf = searchablePdf("Centraid PDF automation");
+    const harness = stubCtx({
+      reads: {},
+      input: {
+        capture: {
+          bytes: pdf.toString("base64"),
+          mediaType: "application/pdf",
+        },
+      },
+    });
+
+    await expect(
+      module.default({ ctx: harness.ctx, log: harness.log })
+    ).resolves.toMatchObject({
+      output: {
+        text: "Centraid PDF automation",
+        engine: "automation",
+        model: "pp-ocrv4@1",
+      },
+    });
   });
 });
 
@@ -275,10 +434,10 @@ describe("recognition automation spine", () => {
         headers: {},
         text:
           call.method === "GET"
-            ? JSON.stringify({ status: "ok", model: "ocr@1" })
+            ? JSON.stringify({ status: "ok", model: "pp-ocrv4@1" })
             : JSON.stringify({
                 status: "ok",
-                model: "ocr@1",
+                model: "pp-ocrv4@1",
                 results: [{ regions: [{ text: "Total", box: [1, 2, 3, 4] }] }],
               }),
       }),
@@ -293,7 +452,7 @@ describe("recognition automation spine", () => {
       input: {
         text: "Total",
         capability: "ocr",
-        model: "ocr@1",
+        model: "pp-ocrv4@1",
         regions: [{ text: "Total", box: [1, 2, 3, 4] }],
       },
     });
@@ -313,7 +472,7 @@ describe("recognition automation spine", () => {
             : [];
         }
         if (request.entity === "enrich.derivation")
-          return [{ model: "ocr@1", target_id: "c1" }];
+          return [{ model: "pp-ocrv4@1", target_id: "c1" }];
         return [];
       },
       fetch: async (call) => {
@@ -321,7 +480,7 @@ describe("recognition automation spine", () => {
         return {
           status: 200,
           headers: {},
-          text: JSON.stringify({ status: "ok", model: "ocr@1" }),
+          text: JSON.stringify({ status: "ok", model: "pp-ocrv4@1" }),
         };
       },
     });
@@ -364,36 +523,82 @@ describe("recognition automation spine", () => {
     expect(harness.invokes[0]?.input).not.toHaveProperty("confidence");
   });
 
-  it("transcribes original audio and both embedding recipes use their typed vector command", async () => {
+  it("transcribes bounded audio/video originals through the typed transcript command", async () => {
     const transcript = await loadHandler("transcript");
+    const contentCalls: Array<{
+      contentId?: string;
+      variant?: string;
+      maxBytes?: number;
+      purpose?: string;
+    }> = [];
+    const assets = [
+      { ...asset, asset_id: "a1", content_id: "c1", kind: "audio" },
+      { ...asset, asset_id: "a2", content_id: "c2", kind: "video" },
+    ];
     const transcriptHarness = stubCtx({
       reads: {},
-      read: (request) =>
-        request.entity === "media.media_asset"
-          ? [{ ...asset, kind: "audio" }]
-          : [],
-      fetch: async (call) => ({
-        status: 200,
-        headers: {},
-        text:
-          call.method === "GET"
-            ? JSON.stringify({ status: "ok", model: "whisper@1" })
-            : JSON.stringify({
-                status: "ok",
-                model: "whisper@1",
-                results: [{ text: "hello" }],
-              }),
-      }),
+      read: (request) => (request.entity === "media.media_asset" ? assets : []),
+      content: (request) => {
+        contentCalls.push(request);
+        return {
+          status: "ok",
+          kind: "bytes",
+          mediaType: request.contentId === "c1" ? "audio/wav" : "video/mp4",
+          byteSize: 7,
+          base64: "Zml4dHVyZQ==",
+        };
+      },
     });
-    await transcript({
-      ctx: transcriptHarness.ctx,
-      log: transcriptHarness.log,
+    await expect(
+      transcript({ ctx: transcriptHarness.ctx, log: transcriptHarness.log })
+    ).resolves.toMatchObject({
+      output: {
+        derived: 2,
+        skipped: 0,
+        model: "whisper-tiny.en-q8@1",
+        rearm: true,
+      },
     });
-    expect(transcriptHarness.invokes[0]).toMatchObject({
-      command: "core.set_extracted_text",
-      input: { variant: "transcript", model: "whisper@1" },
-    });
+    expect(transcriptHarness.invokes).toStrictEqual([
+      {
+        command: "core.set_extracted_text",
+        input: {
+          content_id: "c1",
+          text: "spoken fixture",
+          variant: "transcript",
+          capability: "transcript",
+          model: "whisper-tiny.en-q8@1",
+        },
+      },
+      {
+        command: "core.set_extracted_text",
+        input: {
+          content_id: "c2",
+          text: "spoken fixture",
+          variant: "transcript",
+          capability: "transcript",
+          model: "whisper-tiny.en-q8@1",
+        },
+      },
+    ]);
+    expect(transcriptHarness.state.get("cursor")).toBe("a2");
+    expect(contentCalls).toStrictEqual([
+      {
+        contentId: "c1",
+        variant: "original",
+        maxBytes: 64 * 1024 * 1024,
+        purpose: "dpv:ServiceProvision",
+      },
+      {
+        contentId: "c2",
+        variant: "original",
+        maxBytes: 64 * 1024 * 1024,
+        purpose: "dpv:ServiceProvision",
+      },
+    ]);
+  });
 
+  it("both embedding recipes use their typed vector command", async () => {
     await Promise.all(
       (
         [
@@ -430,7 +635,7 @@ describe("recognition automation spine", () => {
         await embed({ ctx: harness.ctx, log: harness.log });
         expect(harness.invokes[0]?.command).toBe("enrich.upsert_embedding");
         expect(harness.invokes[0]?.input).toMatchObject({
-          model: `${id}@1`,
+          model: "clip-vit-b-32@1",
           vector: [0.1, 0.2],
         });
       })
@@ -454,10 +659,10 @@ describe("recognition automation spine", () => {
         headers: {},
         text:
           call.method === "GET"
-            ? JSON.stringify({ status: "ok", model: "faces@2" })
+            ? JSON.stringify({ status: "ok", model: "yunet-sface@1" })
             : JSON.stringify({
                 status: "ok",
-                model: "faces@2",
+                model: "yunet-sface@1",
                 results: [{ faces: [] }],
               }),
       }),
@@ -488,10 +693,10 @@ describe("recognition automation spine", () => {
         headers: {},
         text:
           call.method === "GET"
-            ? JSON.stringify({ status: "ok", model: "faces@2" })
+            ? JSON.stringify({ status: "ok", model: "yunet-sface@1" })
             : JSON.stringify({
                 status: "ok",
-                model: "faces@2",
+                model: "yunet-sface@1",
                 results: [{ faces: [] }],
               }),
       }),

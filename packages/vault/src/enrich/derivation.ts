@@ -27,7 +27,7 @@ export interface DerivationStamp {
   targetId: string;
   /** What was produced — `caption`, `text`, `faces`, `transcript`, … */
   variant: string;
-  /** The enrichment-service capability that ran. */
+  /** The recognition capability that ran. */
   capability: string;
   /** `"<name>@<version>"` — the key a later upgrade queries against. */
   model: string;

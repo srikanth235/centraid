@@ -1,9 +1,9 @@
 {
   "name": "Transcript",
   "version": "0.1.0",
-  "description": "Transcribes audio/video preview derivatives in bounded cursor batches.",
+  "description": "Transcribes bounded audio/video originals with a bundled local Whisper model.",
   "enabled": false,
-  "prompt": "Transcribe new audio and video preview derivatives in bounded batches and make the transcript searchable.",
+  "prompt": "Transcribe new audio and video in bounded batches with local model assets and make the transcript searchable.",
   "triggers": [
     {
       "kind": "data",
@@ -14,7 +14,7 @@
   "requires": {},
   "vault": {
     "purpose": "dpv:ServiceProvision",
-    "why": "Reads media previews and stamps, and writes validated transcript derivatives.",
+    "why": "Reads size-bounded audio/video originals and stamps, and writes validated transcript derivatives.",
     "scopes": [
       { "schema": "media", "verbs": "read" },
       { "schema": "core", "verbs": "read+act" },

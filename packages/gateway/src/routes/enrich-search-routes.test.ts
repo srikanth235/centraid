@@ -13,8 +13,6 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { encodeVector, nowIso, uuidv7 } from "@centraid/vault";
 
-import { startFakeEnrichService } from "../enrich/fake-enrich-service.test-fixtures.js";
-import type { EnrichServiceConfig } from "../enrich/service-client.js";
 import { companionRequestAllowed } from "../serve/companion-access.js";
 import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
@@ -37,15 +35,14 @@ const PIXELS = [
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
 ];
 
-/** A service whose text encoder answers `[1, 0]`: the first photograph wins. */
-async function searchService(
-  text: () => unknown = () => ({ vector: [1, 0] })
-): Promise<EnrichServiceConfig> {
-  const service = await startFakeEnrichService({
-    capabilities: { "embed-image": {}, "embed-text": { result: text } },
-  });
-  cleanups.push(() => service.close());
-  return service.config;
+/** An embed-text automation whose encoder answers `[1, 0]`. */
+function searchAutomation(text: () => unknown = () => ({ vector: [1, 0] })) {
+  return async () => {
+    const result = text() as Record<string, unknown>;
+    return typeof result.error === "string"
+      ? { outcome: { ok: false, error: result.error } }
+      : { outcome: { ok: true, output: { model: MODEL, ...result } } };
+  };
 }
 
 interface SearchResponse {
@@ -64,7 +61,9 @@ describe("enrich-search-routes", () => {
     );
   });
 
-  async function fixture(enrich: EnrichServiceConfig | null): Promise<{
+  async function fixture(
+    embedQuery?: ReturnType<typeof searchAutomation>
+  ): Promise<{
     url: string;
     plane: VaultPlane;
     assetIds: string[];
@@ -115,7 +114,7 @@ describe("enrich-search-routes", () => {
 
     const handler = makeEnrichSearchRouteHandler(
       { current: () => plane },
-      { enrich }
+      embedQuery ? { embedQuery } : {}
     );
     const server = http.createServer((req, res) => {
       void handler(req, res).then((handled) => {
@@ -149,18 +148,18 @@ describe("enrich-search-routes", () => {
       body: JSON.stringify(body),
     });
 
-  test("an unconfigured gateway answers 200 unavailable, never an error", async () => {
-    const { url } = await fixture(null);
+  test("a gateway without an embed-text automation answers unavailable", async () => {
+    const { url } = await fixture();
     const res = await search(url, { query: "a dog on a beach" });
     expect(res.status).toBe(200);
     const body = (await res.json()) as SearchResponse;
     expect(body.status).toBe("unavailable");
-    expect(body.reason).toContain("CENTRAID_ENRICH_URL");
+    expect(body.reason).toContain("embed-text automation");
     expect(body.hits).toBeUndefined();
   });
 
   test("hits come back in the contracted shape, ordered by score", async () => {
-    const { url, assetIds } = await fixture(await searchService());
+    const { url, assetIds } = await fixture(searchAutomation());
     const res = await search(url, { query: "a dog on a beach" });
     expect(res.status).toBe(200);
     const body = (await res.json()) as SearchResponse;
@@ -178,7 +177,7 @@ describe("enrich-search-routes", () => {
   });
 
   test("limit narrows the result set", async () => {
-    const { url, assetIds } = await fixture(await searchService());
+    const { url, assetIds } = await fixture(searchAutomation());
     const body = (await (
       await search(url, { query: "a dog on a beach", limit: 1 })
     ).json()) as SearchResponse;
@@ -186,7 +185,7 @@ describe("enrich-search-routes", () => {
   });
 
   test("a missing or oversized query is a 400, not an empty result", async () => {
-    const { url } = await fixture(await searchService());
+    const { url } = await fixture(searchAutomation());
     expect((await search(url, {})).status).toBe(400);
     expect((await search(url, { query: "   " })).status).toBe(400);
     expect((await search(url, { query: "x".repeat(513) })).status).toBe(400);
@@ -196,13 +195,13 @@ describe("enrich-search-routes", () => {
   });
 
   test("only POST reaches the search", async () => {
-    const { url } = await fixture(await searchService());
+    const { url } = await fixture(searchAutomation());
     expect((await fetch(url)).status).toBe(405);
   });
 
   test("a configured service that fails is a 500, not a silent unavailable", async () => {
     const { url } = await fixture(
-      await searchService(() => ({ error: "the model crashed" }))
+      searchAutomation(() => ({ error: "the model crashed" }))
     );
     const res = await search(url, { query: "a dog on a beach" });
     expect(res.status).toBe(500);

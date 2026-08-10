@@ -71,8 +71,8 @@ export function createCentraidApi(bridge: PreloadBridge) {
     onDeepLink: (cb: (url: string) => void) => deepLinkBuffer.subscribe(cb),
     // Desktop file-ASR (device-transcription.ts, the on-device probe this
     // used to make) is gone (issue #724 W6) — transcription now runs on the
-    // gateway's enrichment service, never on a member's desktop, so this is
-    // a pure synchronous snapshot again.
+    // self-contained recognition automation, never a device compute lease, so
+    // this is a pure synchronous snapshot again.
     getHostCapabilities: async () => hostCapabilities(),
 
     // Settings

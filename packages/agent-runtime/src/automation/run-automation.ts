@@ -149,8 +149,6 @@ export interface RunAutomationOptions {
    * when this is absent or cannot answer. See `enrich-gate.ts`.
    */
   resolveEnrichPolicy?: automation.RunFireOptions["resolveEnrichPolicy"];
-  /** Host-owned deterministic recognition executor. */
-  deterministicFetch?: automation.DeterministicFetch;
   /** Resolve each onFailure target's own automation pin. */
   resolveNestedRuntime?: (automationRef: string) => Promise<{
     runnerKind?: RunnerKind;
@@ -302,9 +300,6 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
           : {}),
         ...(opts.resolveEnrichPolicy
           ? { resolveEnrichPolicy: opts.resolveEnrichPolicy }
-          : {}),
-        ...(opts.deterministicFetch
-          ? { deterministicFetch: opts.deterministicFetch }
           : {}),
         ...(opts.resolveNestedRuntime
           ? { resolveNestedRuntime: opts.resolveNestedRuntime }

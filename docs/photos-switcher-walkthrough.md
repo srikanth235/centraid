@@ -27,7 +27,7 @@ Photos' north star is **iOS Photos** ([docs/blueprint-seats.md](blueprint-seats.
 
 6. **Search by what is _in_ the picture (semantic and text-in-photo).**
    - Type "beach sunset"; scored matches appear as a "Photos that look like…" hit group and join the grid. Type a word that appears as text inside a photograph (a sign, a receipt) and it can match too.
-   - **Status: SHIPPED when a service is configured (E1/E2/E3 from #721; OCR from #724 W4)** — the derived ledger, the gateway sweep, the semantic-search route, and the mobile hit group are all live, now running on issue #724's enrichment service (`CENTRAID_ENRICH_URL`) rather than the earlier spawned-embedder design. Photo OCR ([docs/enrichment-service.md](enrichment-service.md)) lands extracted text into the same FTS plane captions already use, so a receipt or sign's text becomes searchable once OCR has run over it. Without a configured service the gateway answers honestly `unavailable` and the semantic hit group is simply absent — search never degrades elsewhere. Offline semantic ranking over replicated vectors remains open; device-side model inference is dead by decision (E6 — see [docs/photos-derived-ledger.md](photos-derived-ledger.md)).
+   - **Status: SHIPPED when local model assets are installed (E1/E2/E3 from #721; OCR from #724 W4)** — the derived ledger, recognition automations, semantic-search route, and mobile hit group are live. Each bundled handler runs its model directly and reads/writes through `ctx.vault`; there is no service to configure. Photo OCR ([docs/recognition-automations.md](recognition-automations.md)) accepts images and PDFs and lands extracted text into the same FTS plane captions already use, so a receipt or sign's text becomes searchable once OCR has run. Without local embedding assets the gateway answers honestly `unavailable` and the semantic hit group is simply absent — search never degrades elsewhere. Offline semantic ranking over replicated vectors remains open; device-side model inference is dead by decision (E6 — see [docs/photos-derived-ledger.md](photos-derived-ledger.md)).
 
 7. **Share one photograph.**
    - Copy to a shared vault; custody marks stay honest per seat.
@@ -72,4 +72,4 @@ Photos' north star is **iOS Photos** ([docs/blueprint-seats.md](blueprint-seats.
 - [docs/blueprint-seats.md](blueprint-seats.md) — seats, custody, and the north-star rule (Photos' north star is iOS Photos).
 - [docs/photos-dogfood.md](photos-dogfood.md) — the ritual that walks this script against a real library.
 - [docs/photos-derived-ledger.md](photos-derived-ledger.md) — the E1/E2/E3 substrate behind steps 6 and 11.
-- [docs/enrichment-service.md](enrichment-service.md) — the enrichment service configured for step 6 and step 11.
+- [docs/recognition-automations.md](recognition-automations.md) — local recognition handlers and assets used by step 6 and step 11.

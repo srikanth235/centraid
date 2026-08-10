@@ -55,9 +55,8 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **tunnel / relay** | Iroh QUIC device path; browsers are relay-only (no UDP). | `packages/tunnel`, `packages/tunnel/data-plane` |
 | **CAS / custody** | Content-addressed blob store; local-only vs remote-primary lifecycle. | `packages/vault` blob; backup package |
 | **skill** | Agent grounding unit (`SKILL.md`) loaded by the agent runtime. | `packages/gateway/src/skills` |
-| **enrichment service** | Loopback-only ML executor for embeddings, OCR, faces, and transcripts, configured via `CENTRAID_ENRICH_URL`. It executes frozen model batches; automation owns scheduling, policy, cursors, and ledger history. | `packages/gateway/src/enrich/service-client.ts`; `packages/gateway/src/enrich/automation-executor.ts` |
-| **enricher template** | Bundled deterministic automation that turns eligible vault content into model-versioned derivatives through typed vault commands. | `packages/blueprints/automations/{photo-ocr,transcript,embed-image,embed-text,faces}` |
-| **deterministic step** | A recognition template's governed `ctx.fetch` call to the host-owned enrichment executor: same input + pinned specialist model gives the same canonical result without provider egress. | `packages/gateway/src/enrich/automation-executor.ts` |
+| **recognition automation** | Bundled handler that owns its ML implementation, reads bytes/text with `ctx.vault.content`, and writes model-versioned derivatives with `ctx.vault.invoke`. Model assets may live in the local automation runtime; there is no separate enrichment service or generic inference context. | `packages/blueprints/automations/{photo-ocr,transcript,embed-image,embed-text,faces}` |
+| **deterministic step** | The self-contained, non-agent branch of a recognition automation: same input + pinned local specialist model gives the same canonical result without provider egress. | `tools/recognition-automations/automation-handlers`; generated handlers under `packages/blueprints/automations` |
 | **agent variant** | An optional alternate step in the same template using `ctx.agent`, the pinned-runner and provider-egress-consent rails. Only OCR declares one; it is not a provider kind or second engine. | `packages/automation/src/manifest/manifest.ts`; `packages/agent-runtime/src/automation/run-automation.ts` |
 | **design tokens** | Shared colors, type, spacing, icons across desktop/web/mobile. | `packages/design` |
 | **receipt** | (1) Vault write receipt id from consent pipeline; (2) repo `receipts/issue-N-*.md` for issue work. | context-dependent |
@@ -160,7 +159,7 @@ The vocabulary for how one item set crosses from an origin vault to an audience 
 
 | Avoid | Prefer |
 | --- | --- |
-| "ML layer" / "sidecar" for the enrichment service | **enrichment service** — one seam, one config, one wire contract |
+| "enrichment service" / "ML sidecar" | **recognition automation** — the handler itself owns model execution |
 | "database" for the personal ontology | **vault** (`vault.db` is the file) |
 | "server" for the product backend | **gateway** |
 | "template app" after install | **app** (blueprint is the shipped source) |

@@ -1,15 +1,14 @@
 // The capture route's OCR adapter. Capture is deliberately not a second
 // recognition implementation: it invokes and awaits the stable Photo OCR
-// automation, whose deterministic `ctx.fetch` call is the only gateway path
-// onto the enrichment service. The route keeps its honest 503 refusal shape;
-// unavailable policy/service/model state arrives as a failed/skipped outcome.
+// automation. Its generated handler owns model loading and inference; the
+// route keeps its honest 503 refusal shape when policy or model assets refuse.
 
 import { SYSTEM_CAPTURE_OCR_REF } from "../enrich/system-recognition.js";
 
 export interface OcrExtraction {
   text: string;
   confidence?: number;
-  engine: "enrichment-service";
+  engine: "automation";
 }
 
 export interface CaptureAutomationOutcome {
@@ -42,7 +41,7 @@ function extractionFrom(output: unknown): OcrExtraction {
   return {
     text: row.text,
     ...(typeof confidence === "number" ? { confidence } : {}),
-    engine: "enrichment-service",
+    engine: "automation",
   };
 }
 

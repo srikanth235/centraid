@@ -41,6 +41,29 @@ describe(createEnrichmentHealthProbe, () => {
     expect(result.detail).toContain("0 of 1 enricher enabled");
   });
 
+  it("tracks the self-contained recognition recipes as ordinary enrichers", async () => {
+    const probe = createEnrichmentHealthProbe({
+      vaults: () => [
+        {
+          vaultId: "v1",
+          listAutomations: async () => [
+            row("photo-ocr", true),
+            row("transcript", false),
+            row("embed-image", false),
+            row("embed-text", false),
+            row("faces", true),
+          ],
+          recentRuns: () => [],
+        },
+      ],
+    });
+
+    await expect(probe()).resolves.toStrictEqual({
+      status: "ok",
+      detail: "2 of 5 enrichers enabled",
+    });
+  });
+
   it("reports ok for an enabled enricher that has never fired yet (honest unknown, not a failure)", async () => {
     const probe = createEnrichmentHealthProbe({
       vaults: () => [

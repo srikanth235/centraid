@@ -1,0 +1,14 @@
+{
+  "name": "centraid-recognition-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deliberately NOT a Bun workspace package (issue #724 W8). The parent tools/recognition-automations directory is a workspace package so oxlint/typecheck/vitest/knip gates apply to its recognition-handler build source, while this nested runtime directory holds optional native ML/media dependencies and local model assets. `bun run --cwd tools/recognition-automations setup` installs here and downloads model weights next to the dependencies. Bundled handlers resolve them lazily, so root dependency resolution never installs native packages for code that does not use recognition.",
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "1.1.0",
+    "@huggingface/transformers": "3.7.5",
+    "@napi-rs/canvas": "1.0.2",
+    "onnxruntime-node": "1.27.0",
+    "pdfjs-dist": "6.1.200",
+    "sharp": "0.35.3"
+  }
+}

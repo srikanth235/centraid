@@ -7,8 +7,8 @@
 //
 // TRANSCRIPTION IS NOT HERE ANY MORE (issue #724). Handing a recording to the
 // desktop's file-ASR adapter was this file's third adapter; transcription is
-// model work, and model work moved to the gateway's one enrichment service so
-// that every derived row can name the versioned model that produced it. A
+// owned by its self-contained recognition automation so every derived row can
+// name the versioned local model that produced it. A
 // browser lane keeps only the rungs that are format conversion, where which
 // implementation ran does not change the answer.
 

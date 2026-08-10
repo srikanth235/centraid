@@ -53,7 +53,6 @@ import {
   handleRunsMessage,
   handleStateMessage,
   handleVaultMessage,
-  resolveContentAttachments,
 } from "./ctx.js";
 import type { AuditState } from "./ctx.js";
 
@@ -116,19 +115,6 @@ export type AgentDispatcher = (
   ctx: DispatchContext
 ) => Promise<unknown>;
 
-export interface DeterministicFetchCall {
-  readonly url: string;
-  readonly method: string;
-  readonly headers?: Readonly<Record<string, string>>;
-  readonly body?: string;
-  readonly attachments: readonly AgentAttachment[];
-}
-
-export type DeterministicFetch = (
-  call: DeterministicFetchCall,
-  ctx: DispatchContext
-) => Promise<{ status: number; headers: Record<string, string>; text: string }>;
-
 export interface DispatchContext {
   readonly runId: string;
   readonly automationId: string;
@@ -174,8 +160,6 @@ export interface RunHandlerOptions {
    * fails closed with `VAULT_UNAVAILABLE`.
    */
   vault?: VaultBridge;
-  /** Host-owned executor for reserved `centraid://enrichment/*` fetches. */
-  deterministicFetch?: DeterministicFetch;
   /**
    * Live turn-stream sink. Receives `turn.start` / `item.start` /
    * `item.end` / `turn.end` as the turn unfolds, alongside `onLog`. Wired by
@@ -1082,14 +1066,12 @@ export async function runHandler(
         // the recorded spec keeps its placeholders; substitution happens
         // here, past the worker boundary, and the response rides back to
         // the handler without ever being journaled.
-        const deterministic = msg.spec.url.startsWith("centraid://enrichment/");
-        if (!opts.connector && !(deterministic && opts.deterministicFetch)) {
+        if (!opts.connector) {
           send({
             type: "fetch-reply",
             id: msg.id,
             ok: false,
-            error:
-              "ctx.fetch is connector-only except for the host-owned centraid://enrichment executor",
+            error: "ctx.fetch is connector-only",
           });
           return;
         }
@@ -1097,23 +1079,7 @@ export async function runHandler(
           level: "info",
           msg: `fetch ${msg.spec.method ?? "GET"} ${msg.spec.url}`,
         });
-        const request = deterministic
-          ? resolveContentAttachments(opts.vault, msg.spec.content ?? []).then(
-              (attachments) =>
-                opts.deterministicFetch!(
-                  {
-                    url: msg.spec.url,
-                    method: msg.spec.method ?? "POST",
-                    ...(msg.spec.headers ? { headers: msg.spec.headers } : {}),
-                    ...(msg.spec.body === undefined
-                      ? {}
-                      : { body: msg.spec.body }),
-                    attachments,
-                  },
-                  dispatchCtx
-                )
-            )
-          : executeFetch(msg.spec);
+        const request = executeFetch(msg.spec);
         void request
           .then((result) => {
             send({ type: "fetch-reply", id: msg.id, ok: true, result });

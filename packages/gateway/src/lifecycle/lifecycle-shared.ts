@@ -210,7 +210,9 @@ export async function publishAndReconcile(
     ephemeralSession?: boolean;
   }
 ): Promise<void> {
-  const validationError = await validateManifestAt(input.appDir);
+  const validationError = await validateManifestAt(input.appDir, {
+    releaseManagedModelBundle: opts.isSystemManagedApp?.(input.appId) === true,
+  });
   if (validationError)
     throw new AppScaffoldError("invalid_manifest", validationError);
   // Apply the staged app's declared ext tables to the vault as part of the

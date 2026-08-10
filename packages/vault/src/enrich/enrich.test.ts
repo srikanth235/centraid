@@ -3,7 +3,8 @@
 // derived data lands as ontology rows through the staging spine, attribution
 // is injected server-side and owner assertions are terminal, the owner's
 // auto-publish trust is what lets captions land without a review click, and
-// the agent content primitive only ever spells derivatives.
+// the agent content primitive keeps visual originals unreachable while
+// allowing bounded audio/video sources for self-contained ASR.
 
 import { DatabaseSync } from "node:sqlite";
 
@@ -798,7 +799,7 @@ describe("enrich", () => {
   });
 
   describe("agent content access (the #296 §7 seam)", () => {
-    test("text and thumb variants serve size-bounded; originals are structurally unreachable; every fetch receipts", async () => {
+    test("text/thumb and bounded AV originals serve; visual originals stay unreachable; every fetch receipts", async () => {
       const original = gw.stageBlob(owner, {
         bytes: PNG_BYTES,
         filename: "photo.png",
@@ -824,13 +825,38 @@ describe("enrich", () => {
       );
       expect(thumb.mediaType).toBe("image/jpeg");
 
-      // Originals are not a spelling this surface has.
+      // The spelling exists for ASR, but a visual source is still structurally
+      // unreachable so EXIF/GPS-bearing bytes never cross this rail.
       await expect(
         gw.contentForAgent(agent, {
           contentId: asset.content_id,
           variant: "original",
         })
-      ).rejects.toThrow(/derivatives egress, never originals/u);
+      ).resolves.toMatchObject({ status: "no-variant" });
+
+      const audioBytes = Buffer.from("bounded-audio-fixture");
+      const stagedAudio = gw.stageBlob(owner, {
+        bytes: audioBytes,
+        filename: "voice.wav",
+        mediaType: "audio/wav",
+      });
+      const audio = output<{ content_id: string }>(
+        invoke(owner, "media.add_asset", {
+          staged_sha: stagedAudio.sha256,
+          kind: "audio",
+        })
+      );
+      const originalAudio = await gw.contentForAgent(agent, {
+        contentId: audio.content_id,
+        variant: "original",
+        maxBytes: audioBytes.length,
+      });
+      expect(originalAudio.status).toBe("ok");
+      assert(originalAudio.status === "ok" && originalAudio.kind === "bytes");
+      expect(Buffer.from(originalAudio.base64, "base64")).toStrictEqual(
+        audioBytes
+      );
+      expect(originalAudio.mediaType).toBe("audio/wav");
 
       // The text variant reads the derivative row.
       invoke(agent, "core.set_extracted_text", {

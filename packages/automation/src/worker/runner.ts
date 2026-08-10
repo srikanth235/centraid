@@ -34,8 +34,6 @@ type ParentMessage =
 
 /**
  * A `ctx.fetch` request. Connector calls may carry secret placeholders;
- * deterministic enricher calls may attach vault content for the host-owned
- * loopback executor. Bytes never cross into the handler worker.
  * may carry `{{secret:locker:<item_id>:<column>}}` placeholders — the PARENT
  * resolves them after the message leaves this worker, so plaintext secrets
  * never enter handler memory and cannot be logged from here.
@@ -295,8 +293,7 @@ const ctx = {
    * Governed transport. Connector strings may reference
    * declared secrets as `{{secret:locker:<item_id>:<column>}}` — the host
    * substitutes and performs the request; the secret never enters this
-   * worker. Recognition templates may call the reserved
-   * `centraid://enrichment/*` executor with vault content attachments.
+   * worker.
    */
   fetch(spec: FetchSpec): Promise<{
     status: number;

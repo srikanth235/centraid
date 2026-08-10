@@ -390,9 +390,9 @@ test("2.6e — Photos opens into the app view and yields the #724 UI evidence", 
   // Memories rails, the camera-roll import offer) and have no e2e harness of
   // their own; Photos-open is the shared surface every one of them feeds, so
   // it is the honest frame for this change set too. The gateway-side half of
-  // #724 — the enrichment service seam, OCR and faces sweeps — has no pixels
-  // by construction: it answers honestly unavailable until an owner configures
-  // a service, which is exactly what this frame shows.
+  // #724 — recognition automation, OCR and faces flows — has no pixels
+  // by construction: it answers honestly unavailable until local model assets
+  // are installed, which is exactly what this frame shows.
   gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);

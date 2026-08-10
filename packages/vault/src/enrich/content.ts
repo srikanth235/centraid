@@ -1,10 +1,9 @@
 // Agent content access (issue #299 §2, resolving the #296 §7 seam): the
-// size-bounded, variant-only byte primitive enrichers and the assistant read
-// through. The structural rule lives here, not in policy: **derivatives
-// egress, never originals.** A vision enricher reads the `preview` (or
-// `thumb`) variant — GPS-stripped by the spool pipeline, a fraction of the
-// original's bytes; a text enricher reads the inline `text` variant. There
-// is deliberately no spelling of "give me the original" on this surface.
+// size-bounded byte primitive enrichers and the assistant read through.
+// Visual inputs remain derivative-only: a vision enricher reads `preview` or
+// `thumb`, never the GPS-bearing source. Audio/video has no meaningful preview
+// rung for ASR, so `original` is accepted only when the claimed media type is
+// audio/* or video/* and remains consent-checked, receipted, and byte-capped.
 //
 // Consent is the caller's problem (the gateway method evaluates the read and
 // receipts it); this module only resolves and bounds.
@@ -12,8 +11,9 @@
 import { resolveServableBlob } from "../blob/read.js";
 import type { VaultDb } from "../db.js";
 
-/** Variants an agent may read. `original` is intentionally absent. */
+/** Variants an agent may read. `original` is AV-only in the resolver below. */
 export const AGENT_CONTENT_VARIANTS = [
+  "original",
   "thumb",
   "preview",
   "poster",
@@ -25,6 +25,8 @@ export type AgentContentVariant = (typeof AGENT_CONTENT_VARIANTS)[number];
 /** Default / hard ceilings for one fetch (decoded bytes, text chars). */
 export const AGENT_CONTENT_DEFAULT_MAX_BYTES = 1024 * 1024;
 export const AGENT_CONTENT_HARD_MAX_BYTES = 4 * 1024 * 1024;
+/** AV inference needs the encoded source but is still bounded per ctx call. */
+export const AGENT_CONTENT_ORIGINAL_HARD_MAX_BYTES = 64 * 1024 * 1024;
 export const AGENT_CONTENT_MAX_TEXT_CHARS = 262_144;
 
 export type AgentContentOutcome =
@@ -84,15 +86,29 @@ export async function resolveAgentContent(
       truncated,
     };
   }
+  const original = variant === "original";
   const cap = Math.min(
     maxBytes ?? AGENT_CONTENT_DEFAULT_MAX_BYTES,
-    AGENT_CONTENT_HARD_MAX_BYTES
+    original
+      ? AGENT_CONTENT_ORIGINAL_HARD_MAX_BYTES
+      : AGENT_CONTENT_HARD_MAX_BYTES
   );
-  const outcome = resolveServableBlob(db.vault, contentId, variant);
+  const outcome = resolveServableBlob(
+    db.vault,
+    contentId,
+    original ? undefined : variant
+  );
   if (outcome.status !== "ok") {
     return outcome.status === "no-variant" || outcome.status === "not-blob"
       ? { status: "no-variant" }
       : { status: "not-found" };
+  }
+  if (
+    original &&
+    !outcome.blob.mediaType.startsWith("audio/") &&
+    !outcome.blob.mediaType.startsWith("video/")
+  ) {
+    return { status: "no-variant" };
   }
   if (outcome.blob.byteSize > cap) {
     return {

@@ -24,11 +24,7 @@ import type { Manifest } from "../manifest/manifest.js";
 import { decideEnrichmentGate } from "./enrich-gate.js";
 import type { EnrichLane, EnrichTier } from "./enrich-gate.js";
 import { runFire } from "./fire.js";
-import type {
-  DispatchSurface,
-  OpenDispatchArgs,
-  RunFireOptions,
-} from "./fire.js";
+import type { DispatchSurface, OpenDispatchArgs } from "./fire.js";
 
 function enricherManifest(lane: EnrichLane): Manifest {
   return {
@@ -85,7 +81,6 @@ describe("enrichment tier gate", () => {
     lane: EnrichLane;
     resolveEnrichPolicy?: () => EnrichTier | undefined | Promise<never>;
     handler?: string;
-    deterministicFetch?: RunFireOptions["deterministicFetch"];
   }) {
     await writeAutomation(
       appsDir,
@@ -100,9 +95,6 @@ describe("enrichment tier gate", () => {
         journalDbFile,
         ...(options.resolveEnrichPolicy
           ? { resolveEnrichPolicy: options.resolveEnrichPolicy }
-          : {}),
-        ...(options.deterministicFetch
-          ? { deterministicFetch: options.deterministicFetch }
           : {}),
       },
       { openDispatch: countingDispatch(opened) }
@@ -240,25 +232,19 @@ describe("enrichment tier gate", () => {
   });
 
   it.each(["off", "device"] as const)(
-    "recognition gateway recipes make zero service calls at the %s tier",
+    "recognition gateway recipes do not start their handler at the %s tier",
     async (tier) => {
-      let serviceCalls = 0;
       const { outcome, opened } = await fire({
         lane: "gateway",
         resolveEnrichPolicy: () => tier,
-        handler: `export default async ({ ctx }) => ({ output: await ctx.fetch({ url: 'centraid://enrichment/faces', method: 'GET' }) });`,
-        deterministicFetch: async () => {
-          serviceCalls += 1;
-          return { status: 200, headers: {}, text: "{}" };
-        },
+        handler: `export default async () => ({ output: { ran: true } });`,
       });
       expect(outcome.skipped).toBe(true);
       expect(opened).toStrictEqual([]);
-      expect(serviceCalls).toBe(0);
     }
   );
 
-  it("does not expose the reserved service executor to a non-enricher", async () => {
+  it("keeps ctx.fetch connector-only for a non-enricher", async () => {
     await writeAutomation(
       appsDir,
       {
@@ -271,39 +257,18 @@ describe("enrichment tier gate", () => {
         history: { keep: { count: 100 } },
         generated: { by: "test", at: "2026-08-05" },
       },
-      `export default async ({ ctx }) => ({ output: await ctx.fetch({ url: 'centraid://enrichment/ocr', method: 'GET' }) });`
+      `export default async ({ ctx }) => ({ output: await ctx.fetch({ url: 'https://example.test', method: 'GET' }) });`
     );
-    let serviceCalls = 0;
     const { outcome } = await runFire(
       {
         automationRef: "photos/face-finder",
         appsDir,
         journalDbFile,
-        deterministicFetch: async () => {
-          serviceCalls += 1;
-          return { status: 200, headers: {}, text: "{}" };
-        },
       },
       { openDispatch: countingDispatch([]) }
     );
     expect(outcome.ok).toBe(false);
-    expect(serviceCalls).toBe(0);
-  });
-
-  it("refuses an enricher that addresses another capability", async () => {
-    let serviceCalls = 0;
-    const { outcome } = await fire({
-      lane: "gateway",
-      resolveEnrichPolicy: () => "gateway",
-      handler: `export default async ({ ctx }) => ({ output: await ctx.fetch({ url: 'centraid://enrichment/ocr', method: 'GET' }) });`,
-      deterministicFetch: async () => {
-        serviceCalls += 1;
-        return { status: 200, headers: {}, text: "{}" };
-      },
-    });
-    expect(outcome.ok).toBe(false);
-    expect(outcome.error).toContain("capability mismatch");
-    expect(serviceCalls).toBe(0);
+    expect(outcome.error).toContain("ctx.fetch is connector-only");
   });
 });
 

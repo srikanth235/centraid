@@ -2087,7 +2087,7 @@ export class Gateway {
     ) {
       throw new GatewayError(
         "consent",
-        `variant "${request.variant}" is not agent-readable — derivatives egress, never originals (issue #299): ${AGENT_CONTENT_VARIANTS.join(", ")}`
+        `variant "${request.variant}" is not agent-readable: ${AGENT_CONTENT_VARIANTS.join(", ")}`
       );
     }
     const consent = evaluateConsent(

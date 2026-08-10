@@ -56,19 +56,19 @@ describe("capture classify route", () => {
     expect(response.status).toBe(503);
   });
 
-  it("accepts only bounded image bytes for the enrichment-service OCR backstop", async () => {
+  it("accepts only bounded image/PDF bytes for the OCR automation", async () => {
     const recognizeOcr = vi.fn<
       (
         input: Buffer,
         mediaType: string
       ) => Promise<{
         confidence: number;
-        engine: "enrichment-service";
+        engine: "automation";
         text: string;
       }>
     >(async (input) => ({
       confidence: 0.9,
-      engine: "enrichment-service",
+      engine: "automation",
       text: input.toString("utf8"),
     }));
     const handler = makeCaptureRouteHandler({
@@ -89,6 +89,14 @@ describe("capture classify route", () => {
       Buffer.from("receipt"),
       "image/jpeg"
     );
+    const pdf = Buffer.from("%PDF-1.7\nfixture\n%%EOF");
+    await expect(
+      requestRaw(handler, CAPTURE_OCR_PATH, pdf, "application/pdf")
+    ).resolves.toMatchObject({
+      status: 200,
+      body: { extraction: { text: pdf.toString("utf8") } },
+    });
+    expect(recognizeOcr).toHaveBeenLastCalledWith(pdf, "application/pdf");
     await expect(
       requestRaw(
         handler,
@@ -107,7 +115,7 @@ describe("capture classify route", () => {
           output: {
             text: "hello\nworld",
             confidence: 0.7,
-            engine: "enrichment-service",
+            engine: "automation",
           },
         },
       }));
@@ -127,7 +135,7 @@ describe("capture classify route", () => {
           extraction: {
             text: "hello\nworld",
             confidence: 0.7,
-            engine: "enrichment-service",
+            engine: "automation",
           },
         },
       });
