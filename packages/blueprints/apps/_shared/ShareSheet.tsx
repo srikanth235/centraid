@@ -36,13 +36,12 @@ export interface ShareSheetProps {
   /**
    * The label of a named circle (`ShareCircle.label`) to preselect the
    * moment circles finish loading — for a container that reuses its OWN
-   * named circle (a Tally group sharing itself, issue #731 M3). A container
+   * named circle, i.e. a group sharing itself (issue #731 M3). A container
    * like that is bound to that circle's exact stored roster + capabilities
    * server-side regardless of what this sheet submits, so leaving the
    * picker on "choose people individually" (every new pick defaulting to
    * `read+write`) refuses with the commons layer's exact-roster message the
-   * moment a submitted capability drifts from what's stored — often just
-   * from a pre-#731 migration backfill that landed at `read`. Preselecting
+   * moment a submitted capability drifts from what's stored. Preselecting
    * the matching circle sources each person's capability from its OWN
    * stored roster (`selectionsForCircle`), so the default path submits
    * exactly what the commons layer already expects.

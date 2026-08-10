@@ -1,12 +1,12 @@
 // Generated recognition automation. Source: tools/recognition-automations/automation-handlers.
 import { existsSync as c } from "node:fs";
 import V from "node:path";
-import _ from "node:path";
-var S = _.resolve(import.meta.dirname, ".."),
+import H from "node:path";
+var S = H.resolve(import.meta.dirname, ".."),
   A = process.env.CENTRAID_AUTOMATION_RUNTIME_DIR
-    ? _.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR)
-    : _.join(S, "runtime"),
-  D = _.join(A, "models");
+    ? H.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR)
+    : H.join(S, "runtime"),
+  D = H.join(A, "models");
 import { existsSync as z } from "node:fs";
 import { createRequire as b } from "node:module";
 import k from "node:path";
@@ -25,11 +25,11 @@ class U extends Error {
 }
 function O($, B = A) {
   if (!z(k.join(B, "node_modules"))) throw new U($);
-  let Y = b(k.join(B, "package.json"));
+  let Q = b(k.join(B, "package.json"));
   try {
-    return Y.resolve($);
-  } catch (Q) {
-    throw new U($, Q);
+    return Q.resolve($);
+  } catch (v) {
+    throw new U($, v);
   }
 }
 async function C() {
@@ -43,12 +43,12 @@ async function R($) {
   let B = G.get($);
   if (B) return B;
   if (!z($)) throw new U($);
-  let Y = C().then((Q) => Q.InferenceSession.create($));
-  G.set($, Y);
+  let Q = C().then((v) => v.InferenceSession.create($));
+  G.set($, Q);
   try {
-    return await Y;
-  } catch (Q) {
-    throw (G.delete($), Q);
+    return await Q;
+  } catch (v) {
+    throw (G.delete($), v);
   }
 }
 import { pathToFileURL as g } from "node:url";
@@ -59,34 +59,30 @@ async function p() {
   return ((w = (await import(g($).href)).default), w);
 }
 async function u($, B) {
-  let Q = (await p())(Buffer.from($)),
-    { data: K, info: q } = await Q.resize({
-      width: B,
-      height: B,
-      fit: "cover",
-      position: "centre",
-    })
+  let v = (await p())(Buffer.from($)),
+    { data: J, info: Y } = await v
+      .resize({ width: B, height: B, fit: "cover", position: "centre" })
       .removeAlpha()
       .raw()
       .toBuffer({ resolveWithObject: !0 });
   return {
-    data: new Uint8Array(K.buffer, K.byteOffset, K.byteLength),
-    width: q.width,
-    height: q.height,
+    data: new Uint8Array(J.buffer, J.byteOffset, J.byteLength),
+    width: Y.width,
+    height: Y.height,
   };
 }
 var m = [0.48145466, 0.4578275, 0.40821073],
   l = [0.26862954, 0.26130258, 0.27577711];
 function y($) {
-  let { width: B, height: Y, data: Q } = $,
-    K = B * Y,
-    q = new Float32Array(K * 3);
-  for (let W = 0; W < K; W++)
-    for (let J = 0; J < 3; J++) {
-      let X = (Q[W * 3 + J] ?? 0) / 255;
-      q[J * K + W] = (X - m[J]) / l[J];
+  let { width: B, height: Q, data: v } = $,
+    J = B * Q,
+    Y = new Float32Array(J * 3);
+  for (let W = 0; W < J; W++)
+    for (let q = 0; q < 3; q++) {
+      let X = (v[W * 3 + q] ?? 0) / 255;
+      Y[q * J + W] = (X - m[q]) / l[q];
     }
-  return q;
+  return Y;
 }
 var T = "clip-vit-b-32@1",
   M = V.join(D, "clip"),
@@ -98,41 +94,41 @@ var T = "clip-vit-b-32@1",
 function N($ = D) {
   let B = V.join($, "clip");
   return ["visual.onnx", "textual.onnx", "vocab.json", "merges.txt"].every(
-    (Y) => c(V.join(B, Y))
+    (Q) => c(V.join(B, Q))
   );
 }
 function h($) {
   let B = 0;
-  for (let Q of $) B += Q * Q;
-  let Y = Math.sqrt(B);
-  if (Y === 0) return Array.from($);
-  return Array.from($, (Q) => Q / Y);
+  for (let v of $) B += v * v;
+  let Q = Math.sqrt(B);
+  if (Q === 0) return Array.from($);
+  return Array.from($, (v) => v / Q);
 }
 function d($, B) {
-  let Y = B[0],
-    Q = Y ? $[Y] : void 0;
-  if (!Q || !(Q.data instanceof Float32Array))
+  let Q = B[0],
+    v = Q ? $[Q] : void 0;
+  if (!v || !(v.data instanceof Float32Array))
     throw Error("embed: expected a float32 tensor as the model's first output");
-  return Q.data;
+  return v.data;
 }
 async function P($) {
   try {
     let B = Buffer.from($.bytes, "base64"),
-      Y = await u(B, L),
-      Q = y(Y),
-      K = await C(),
-      q = await R(s),
-      J = {
-        [q.inputNames[0] ?? "pixel_values"]: new K.Tensor("float32", Q, [
+      Q = await u(B, L),
+      v = y(Q),
+      J = await C(),
+      Y = await R(s),
+      q = {
+        [Y.inputNames[0] ?? "pixel_values"]: new J.Tensor("float32", v, [
           1,
           3,
           L,
           L,
         ]),
       },
-      X = await q.run(J),
-      v = h(d(X, q.outputNames));
-    return { id: $.id, vector: v };
+      X = await Y.run(q),
+      K = h(d(X, Y.outputNames));
+    return { id: $.id, vector: K };
   } catch (B) {
     return { id: $.id, error: B instanceof Error ? B.message : String(B) };
   }
@@ -147,8 +143,8 @@ function D0($) {
 function n() {
   return I() ? T : null;
 }
-async function o($, B) {
-  let Q = (
+async function r($, B) {
+  let v = (
     await $.vault.read({
       entity: "media.media_asset",
       where: [
@@ -160,34 +156,34 @@ async function o($, B) {
       purpose: Z,
     })
   ).rows?.[0];
-  if (!Q) return "";
+  if (!v) return "";
   return (
     await $.vault.read({
       entity: "enrich.derivation",
       where: [
-        { column: "target_id", op: "eq", value: Q.asset_id },
+        { column: "target_id", op: "eq", value: v.asset_id },
         { column: "variant", op: "eq", value: "embedding" },
       ],
       limit: 1,
       purpose: Z,
     })
   ).rows?.[0]?.model === B
-    ? Q.asset_id
+    ? v.asset_id
     : "";
 }
-async function r({ ctx: $, log: B }) {
-  let Y = n();
-  if (!Y)
+async function o({ ctx: $, log: B }) {
+  let Q = n();
+  if (!Q)
     return { summary: "image embedding skipped — model assets unavailable" };
-  let Q = await $.state.get("model");
-  if (Q !== Y)
-    (await $.state.set("cursor", Q === void 0 ? await o($, Y) : ""),
-      await $.state.set("model", Y));
-  let K = (await $.state.get("cursor")) ?? "",
-    q = await $.vault.read({
+  let v = await $.state.get("model");
+  if (v !== Q)
+    (await $.state.set("cursor", v === void 0 ? await r($, Q) : ""),
+      await $.state.set("model", Q));
+  let J = (await $.state.get("cursor")) ?? "",
+    Y = await $.vault.read({
       entity: "media.media_asset",
       where: [
-        { column: "asset_id", op: "gt", value: K },
+        { column: "asset_id", op: "gt", value: J },
         { column: "deleted_at", op: "is-null" },
       ],
       orderBy: { column: "asset_id", dir: "asc" },
@@ -195,10 +191,10 @@ async function r({ ctx: $, log: B }) {
       purpose: Z,
     }),
     W = 0,
-    J = 0;
-  for (let v of q.rows ?? []) {
-    if (v.kind !== "photo" && v.kind !== "scan") {
-      J += 1;
+    q = 0;
+  for (let K of Y.rows ?? []) {
+    if (K.kind !== "photo" && K.kind !== "scan") {
+      q += 1;
       continue;
     }
     if (
@@ -206,54 +202,57 @@ async function r({ ctx: $, log: B }) {
         await $.vault.read({
           entity: "enrich.derivation",
           where: [
-            { column: "target_id", op: "eq", value: v.asset_id },
+            { column: "target_id", op: "eq", value: K.asset_id },
             { column: "variant", op: "eq", value: "embedding" },
           ],
           limit: 1,
           purpose: Z,
         })
-      ).rows?.[0]?.model === Y
+      ).rows?.[0]?.model === Q
     ) {
-      J += 1;
+      q += 1;
       continue;
     }
     let j = await $.vault.content({
-        contentId: v.content_id,
-        variant: "preview",
-        maxBytes: 4194304,
-        purpose: Z,
-      }),
-      H =
-        j?.status === "ok" && j.kind === "bytes"
-          ? await E({ id: v.asset_id, mediaType: j.mediaType, bytes: j.base64 })
-          : null;
-    if (!H || H.error || !Array.isArray(H.vector)) {
-      ((J += 1), B.info(`asset ${v.asset_id}: no image vector`));
+      contentId: K.content_id,
+      variant: "preview",
+      maxBytes: 4194304,
+      purpose: Z,
+    });
+    if (j?.status !== "ok" || j.kind !== "bytes")
+      throw Error(`asset ${K.asset_id}: preview is unavailable`);
+    let _ = await E({
+      id: K.asset_id,
+      mediaType: j.mediaType,
+      bytes: j.base64,
+    });
+    if (!_ || _.error || !Array.isArray(_.vector)) {
+      ((q += 1), B.info(`asset ${K.asset_id}: no image vector`));
       continue;
     }
     (await $.vault.invoke({
       command: "enrich.upsert_embedding",
       input: {
         entity_type: "media.media_asset",
-        entity_id: v.asset_id,
-        model: Y,
-        vector: H.vector,
+        entity_id: K.asset_id,
+        model: Q,
+        vector: _.vector,
         capability: "embed-image",
       },
       purpose: Z,
     }),
       (W += 1));
   }
-  let X = q.rows?.at(-1)?.asset_id;
+  let X = Y.rows?.at(-1)?.asset_id;
   if (X) await $.state.set("cursor", X);
   return {
-    summary: `embedded ${W} images; skipped ${J}; bounded batch ${q.rows?.length ?? 0}/${f}`,
+    summary: `embedded ${W} images; skipped ${q}; bounded batch ${Y.rows?.length ?? 0}/${f}`,
     output: {
       derived: W,
-      skipped: J,
-      model: Y,
-      rearm: (q.rows?.length ?? 0) === f,
+      skipped: q,
+      model: Q,
+      rearm: (Y.rows?.length ?? 0) === f,
     },
   };
 }
-export { D0 as setEmbedImageRuntimeForTests, r as default };
+export { D0 as setEmbedImageRuntimeForTests, o as default };

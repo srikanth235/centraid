@@ -97,10 +97,11 @@ export default async function handler({ ctx, log }) {
       maxBytes: 1024 * 1024,
       purpose: PURPOSE,
     });
-    const result =
-      content?.status === "ok" && content.kind === "text"
-        ? await infer({ id: item.content_id, text: content.text })
-        : null;
+    if (content?.status !== "ok" || content.kind !== "text")
+      throw new Error(
+        `content ${item.content_id}: ${item.variant} text is unavailable`
+      );
+    const result = await infer({ id: item.content_id, text: content.text });
     if (!result || result.error || !Array.isArray(result.vector)) {
       skipped += 1;
       log.info(`content ${item.content_id}: no text vector`);

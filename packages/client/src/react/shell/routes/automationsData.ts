@@ -21,8 +21,10 @@ import {
   cronRunLabel,
   resolveCronTimezone,
 } from "../../../cron.js";
-import { listAutomationTurnsByLane } from "../../../gateway-client-automations.js";
-import { listAutomations } from "../../../gateway-client.js";
+import {
+  listAutomations,
+  listAutomationTurnsByLane,
+} from "../../../gateway-client.js";
 import type {
   AuOverviewData,
   AuStatusKind,

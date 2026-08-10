@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { listAutomationTurnsByLane } from "../../../gateway-client-automations.js";
-import { listAutomations } from "../../../gateway-client.js";
+import {
+  listAutomations,
+  listAutomationTurnsByLane,
+} from "../../../gateway-client.js";
 import {
   buildOverviewData,
   collectAutomationRuns,
@@ -10,14 +12,12 @@ import {
 } from "./automationsData.js";
 import type { AutomationFeedEntry } from "./automationsData.js";
 
-// buildOverviewData is pure; stub the gateway modules so importing them
+// buildOverviewData is pure; stub the gateway barrel so importing it
 // doesn't run gateway-client-core's load-time window.CentraidApi side-effect.
 // `vi.mock` is hoisted above these imports by vitest, so the stub is in
 // place first.
 vi.mock(import("../../../gateway-client.js"), () => ({
   listAutomations: vi.fn<typeof listAutomations>(),
-}));
-vi.mock(import("../../../gateway-client-automations.js"), () => ({
   listAutomationTurnsByLane: vi.fn<typeof listAutomationTurnsByLane>(),
 }));
 

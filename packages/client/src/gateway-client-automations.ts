@@ -12,9 +12,12 @@
  * independently-bounded query, so the two callers in `automationsData.ts`
  * each get their own window.
  *
- * Split into its own module (rather than added to the barrel) per the
- * convention `gateway-client-connections.ts` documents — new automation
- * calls don't need to grow `gateway-client.ts` further.
+ * Split into its own module per the convention
+ * `gateway-client-connections.ts` documents — new automation calls don't
+ * need to grow `gateway-client.ts` further — and re-exported from the
+ * barrel like every sibling, so callers import it from `gateway-client.js`
+ * and a suite that mocks the barrel never loads this module's real
+ * `gateway-client-core.js` import chain.
  */
 
 import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";

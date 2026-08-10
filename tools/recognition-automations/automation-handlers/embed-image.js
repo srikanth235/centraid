@@ -93,14 +93,13 @@ export default async function handler({ ctx, log }) {
       maxBytes: 4 * 1024 * 1024,
       purpose: PURPOSE,
     });
-    const result =
-      content?.status === "ok" && content.kind === "bytes"
-        ? await infer({
-            id: asset.asset_id,
-            mediaType: content.mediaType,
-            bytes: content.base64,
-          })
-        : null;
+    if (content?.status !== "ok" || content.kind !== "bytes")
+      throw new Error(`asset ${asset.asset_id}: preview is unavailable`);
+    const result = await infer({
+      id: asset.asset_id,
+      mediaType: content.mediaType,
+      bytes: content.base64,
+    });
     if (!result || result.error || !Array.isArray(result.vector)) {
       skipped += 1;
       log.info(`asset ${asset.asset_id}: no image vector`);

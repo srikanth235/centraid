@@ -1,18 +1,18 @@
 // Generated recognition automation. Source: tools/recognition-automations/automation-handlers.
-import { spawnSync as P } from "node:child_process";
-import { existsSync as R } from "node:fs";
+import { spawnSync as R } from "node:child_process";
+import { existsSync as f } from "node:fs";
 import C from "node:path";
 import j from "node:path";
 import { pathToFileURL as _ } from "node:url";
-var E = j.resolve(import.meta.dirname, ".."),
-  B = process.env.CENTRAID_AUTOMATION_RUNTIME_DIR
+var S = j.resolve(import.meta.dirname, ".."),
+  k = process.env.CENTRAID_AUTOMATION_RUNTIME_DIR
     ? j.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR)
-    : j.join(E, "runtime"),
-  q = j.join(B, "models");
-import { existsSync as S } from "node:fs";
-import { createRequire as g } from "node:module";
+    : j.join(S, "runtime"),
+  q = j.join(k, "models");
+import { existsSync as g } from "node:fs";
+import { createRequire as P } from "node:module";
 import M from "node:path";
-class k extends Error {
+class B extends Error {
   constructor(z, G) {
     super(
       `Automation model runtime dependency "${z}" is not installed. ` +
@@ -23,20 +23,20 @@ class k extends Error {
     this.name = "RuntimeNotInstalledError";
   }
 }
-function w(z, G = B) {
-  if (!S(M.join(G, "node_modules"))) throw new k(z);
-  let J = g(M.join(G, "package.json"));
+function w(z, G = k) {
+  if (!g(M.join(G, "node_modules"))) throw new B(z);
+  let J = P(M.join(G, "package.json"));
   try {
     return J.resolve(z);
   } catch (K) {
-    throw new k(z, K);
+    throw new B(z, K);
   }
 }
 var I = "whisper-tiny.en-q8@1",
   T = C.join(q, "transcript"),
-  O = 600,
-  f = O * 16000 * Float32Array.BYTES_PER_ELEMENT,
-  b = [
+  y = 600,
+  b = y * 16000 * Float32Array.BYTES_PER_ELEMENT,
+  x = [
     "added_tokens.json",
     "config.json",
     "generation_config.json",
@@ -50,19 +50,19 @@ var I = "whisper-tiny.en-q8@1",
     "onnx/encoder_model_quantized.onnx",
     "onnx/decoder_model_merged_quantized.onnx",
   ],
-  W,
-  x = u,
-  h = (z, G, J) => P(z, G, J),
-  m = c;
+  H,
+  h = d,
+  m = (z, G, J) => R(z, G, J),
+  p = n;
 function F(z = q) {
   let G = C.join(z, "transcript");
-  return b.every((J) => R(C.join(G, J)));
+  return x.every((J) => f(C.join(G, J)));
 }
-function p(z) {
+function u(z) {
   if (!z.startsWith("audio/") && !z.startsWith("video/"))
     throw Error(`transcript: unsupported media type ${z}`);
 }
-async function u() {
+async function d() {
   let z = w("@ffmpeg-installer/ffmpeg"),
     G = await import(_(z).href),
     J = G.default?.path ?? G.path;
@@ -70,9 +70,9 @@ async function u() {
     throw Error("transcript: the bundled FFmpeg executable is unavailable");
   return J;
 }
-async function d(z) {
-  let G = await x(),
-    J = h(
+async function l(z) {
+  let G = await h(),
+    J = m(
       G,
       [
         "-nostdin",
@@ -82,7 +82,7 @@ async function d(z) {
         "-i",
         "pipe:0",
         "-t",
-        String(O),
+        String(y),
         "-vn",
         "-ac",
         "1",
@@ -92,7 +92,7 @@ async function d(z) {
         "f32le",
         "pipe:1",
       ],
-      { input: z, maxBuffer: f + 1048576 }
+      { input: z, maxBuffer: b + 1048576 }
     );
   if (J.status !== 0) {
     let K = J.stderr?.toString("utf8").trim();
@@ -107,16 +107,16 @@ async function d(z) {
     J.stdout.byteLength / Float32Array.BYTES_PER_ELEMENT
   );
 }
-async function l() {
-  if (W) return W;
-  W = m();
+async function c() {
+  if (H) return H;
+  H = p();
   try {
-    return await W;
+    return await H;
   } catch (z) {
-    throw ((W = void 0), z);
+    throw ((H = void 0), z);
   }
 }
-async function c() {
+async function n() {
   let z = w("@huggingface/transformers"),
     G = await import(_(z).href);
   return (
@@ -130,7 +130,7 @@ async function c() {
     })
   );
 }
-function n(z) {
+function o(z) {
   let G = Array.isArray(z)
     ? z
         .map((J) => (typeof J.text === "string" ? J.text.trim() : ""))
@@ -139,28 +139,28 @@ function n(z) {
     : z.text;
   return typeof G === "string" ? G.trim() : "";
 }
-async function A(z) {
+async function L(z) {
   try {
-    p(z.mediaType);
-    let G = await d(Buffer.from(z.bytes, "base64")),
+    u(z.mediaType);
+    let G = await l(Buffer.from(z.bytes, "base64")),
       K = await (
-        await l()
+        await c()
       )(G, { chunk_length_s: 30, stride_length_s: 5, return_timestamps: !1 });
-    return { id: z.id, text: n(K) };
+    return { id: z.id, text: o(K) };
   } catch (G) {
     return { id: z.id, error: G instanceof Error ? G.message : String(G) };
   }
 }
-var L = 2,
+var N = 2,
   Z = "dpv:ServiceProvision",
-  o = 67108864,
-  y = A,
-  D = F;
+  O = 67108864,
+  D = L,
+  E = F;
 function Xz(z) {
-  ((y = z?.transcribe ?? A), (D = z?.weightsPresent ?? F));
+  ((D = z?.transcribe ?? L), (E = z?.weightsPresent ?? F));
 }
 function i() {
-  return D() ? I : null;
+  return E() ? I : null;
 }
 async function a(z, G) {
   let K = (
@@ -200,16 +200,16 @@ async function s({ ctx: z, log: G }) {
   if (K !== J)
     (await z.state.set("cursor", K === void 0 ? await a(z, J) : ""),
       await z.state.set("model", J));
-  let N = (await z.state.get("cursor")) ?? "",
+  let A = (await z.state.get("cursor")) ?? "",
     Y = await z.vault.read({
       entity: "media.media_asset",
       where: [
-        { column: "asset_id", op: "gt", value: N },
+        { column: "asset_id", op: "gt", value: A },
         { column: "kind", op: "in", value: ["audio", "video"] },
         { column: "deleted_at", op: "is-null" },
       ],
       orderBy: { column: "asset_id", dir: "asc" },
-      limit: L,
+      limit: N,
       purpose: Z,
     }),
     X = 0,
@@ -231,25 +231,29 @@ async function s({ ctx: z, log: G }) {
       $ += 1;
       continue;
     }
-    let H = await z.vault.content({
+    let Q = await z.vault.content({
       contentId: V.content_id,
       variant: "original",
-      maxBytes: o,
+      maxBytes: O,
       purpose: Z,
     });
-    if (H?.status !== "ok" || H.kind !== "bytes") {
+    if (Q?.status === "too-large") {
       (($ += 1),
-        G.info(`asset ${V.asset_id}: bounded original is unavailable`));
+        G.info(
+          `asset ${V.asset_id}: original exceeds the ${O}-byte transcription ceiling`
+        ));
       continue;
     }
-    let Q = await y({
+    if (Q?.status !== "ok" || Q.kind !== "bytes")
+      throw Error(`asset ${V.asset_id}: bounded original is unavailable`);
+    let W = await D({
       id: V.content_id,
-      bytes: H.base64,
-      mediaType: H.mediaType,
+      bytes: Q.base64,
+      mediaType: Q.mediaType,
     });
-    if (!Q || Q.error)
-      throw Error(Q?.error ?? `asset ${V.asset_id}: ASR returned no result`);
-    let v = typeof Q.text === "string" ? Q.text.trim() : "";
+    if (!W || W.error)
+      throw Error(W?.error ?? `asset ${V.asset_id}: ASR returned no result`);
+    let v = typeof W.text === "string" ? W.text.trim() : "";
     if (!v) {
       (($ += 1), G.info(`asset ${V.asset_id}: no speech detected`));
       continue;
@@ -270,12 +274,12 @@ async function s({ ctx: z, log: G }) {
   let U = Y.rows?.at(-1)?.asset_id;
   if (U) await z.state.set("cursor", U);
   return {
-    summary: `transcribed ${X}; skipped ${$}; bounded batch ${Y.rows?.length ?? 0}/${L}`,
+    summary: `transcribed ${X}; skipped ${$}; bounded batch ${Y.rows?.length ?? 0}/${N}`,
     output: {
       derived: X,
       skipped: $,
       model: J,
-      rearm: (Y.rows?.length ?? 0) === L,
+      rearm: (Y.rows?.length ?? 0) === N,
     },
   };
 }

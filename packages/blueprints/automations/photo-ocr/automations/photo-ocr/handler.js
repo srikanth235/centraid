@@ -565,7 +565,8 @@ async function lK(K, Q) {
     maxBytes: 4194304,
     purpose: E,
   });
-  if ($?.status !== "ok" || $.kind !== "bytes") return [];
+  if ($?.status !== "ok" || $.kind !== "bytes")
+    throw Error(`asset ${Q.asset_id}: preview is unavailable`);
   let Z = await o({
     id: Q.content_id,
     bytes: $.base64,

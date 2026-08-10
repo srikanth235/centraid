@@ -249,7 +249,8 @@ async function deterministicRegions(ctx, asset) {
     maxBytes: 4 * 1024 * 1024,
     purpose: PURPOSE,
   });
-  if (content?.status !== "ok" || content.kind !== "bytes") return [];
+  if (content?.status !== "ok" || content.kind !== "bytes")
+    throw new Error(`asset ${asset.asset_id}: preview is unavailable`);
   const result = await recognizeOne({
     id: asset.content_id,
     bytes: content.base64,
