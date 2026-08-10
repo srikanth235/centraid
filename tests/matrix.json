@@ -1700,8 +1700,8 @@
       "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
       "flow": "blueprint-search-law"
     },
-    "enrichment-single-client": {
-      "statement": "Only the gateway owns the enrichment-service client; apps and automations cannot reach it directly.",
+    "recognition-self-contained": {
+      "statement": "Blueprint apps, automations, and mobile code use host-owned model seams and never resurrect provider SDKs or deleted inference roads.",
       "owner": "packages/blueprints/src/no-inference-client.test.ts",
       "flow": "blueprint-enrichment-law"
     },
@@ -2033,7 +2033,7 @@
       "minimumTests": 3
     },
     {
-      "id": "recognition-handler-contract",
+      "id": "enrichment-service-contract",
       "name": "Recognition handlers own bounded model execution and typed vault I/O",
       "surface": "automations",
       "dimension": "contracts",

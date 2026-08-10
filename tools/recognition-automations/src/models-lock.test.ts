@@ -40,7 +40,7 @@ describe("[law:enrichment-model-lock]", () => {
       "@huggingface/transformers": "3.7.5",
       "@napi-rs/canvas": "1.0.2",
       "onnxruntime-node": "1.27.0",
-      "pdfjs-dist": "6.1.200",
+      "pdfjs-dist": "6.2.108",
       sharp: "0.35.3",
     });
   });

@@ -251,7 +251,7 @@ export const MUTATION_SEEDS = [
   },
   {
     id: "tools/recognition-automations",
-    label: "enrichment-service",
+    label: "recognition-automations",
     cwd: "tools/recognition-automations",
     config: "stryker.config.mjs",
     report: "artifacts/mutation/recognition-automations-report.json",
