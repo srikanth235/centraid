@@ -32,8 +32,8 @@
     "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
-    "@agentclientprotocol/claude-agent-acp": "0.63.0",
-    "@agentclientprotocol/codex-acp": "1.1.7",
+    "@agentclientprotocol/claude-agent-acp": "0.65.0",
+    "@agentclientprotocol/codex-acp": "1.1.13",
     "@centraid/app-engine": "workspace:*",
     "@centraid/automation": "workspace:*"
   },
