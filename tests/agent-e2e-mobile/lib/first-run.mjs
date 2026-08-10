@@ -157,7 +157,7 @@ const IOS_METRO_RECENT_SERVER_TAP = `- runFlow:
  */
 export function relaunchDevClientCommands(
   platform,
-  { useDeepLink = true } = {}
+  { useDeepLink = true, stopBeforeLaunch = false } = {}
 ) {
   if (platform !== "ios") return "";
   // `simctl openurl` can return after the dev client hands control back to
@@ -165,8 +165,9 @@ export function relaunchDevClientCommands(
   // relaunch batches skip the scheme handoff, but still foreground the app
   // once more: Maestro can report the outer launch complete while Expo is
   // still restoring its native shell.
+  const stopBeforeLaunchCommand = stopBeforeLaunch ? "- stopApp\n" : "";
   const launchRecovery = useDeepLink
-    ? `- openLink:
+    ? `${stopBeforeLaunchCommand}- openLink:
     link: "${IOS_METRO_DEV_CLIENT_LINK}"
     optional: true
 - waitForAnimationToEnd:
@@ -176,7 +177,7 @@ export function relaunchDevClientCommands(
 - waitForAnimationToEnd:
     timeout: 1000
 `
-    : `- launchApp:
+    : `${stopBeforeLaunchCommand}- launchApp:
     clearState: false
 - waitForAnimationToEnd:
     timeout: 1000

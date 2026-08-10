@@ -139,7 +139,7 @@ await runFlow("native-v0-resilience", async (ctx) => {
     clearState: false
     permissions:
       all: allow
-${relaunchDevClientCommands(ctx.state.platform)}${waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS, ctx.state.platform)}${openCommands}
+${relaunchDevClientCommands(ctx.state.platform, { useDeepLink: false, stopBeforeLaunch: true })}${waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS, ctx.state.platform)}${openCommands}
 - extendedWaitUntil:
     visible: "${surface.marker}"
     timeout: 20000

@@ -156,6 +156,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   forward the earlier Tasks transition recovery without re-tapping a source
   underneath a successful full-screen cover — `tests/agent-e2e-mobile/lib/first-run.mjs`
   and `flows/native-v0-resilience.mjs`.
+- Warm native-cover legs now stop the previous full-screen cover and relaunch
+  through the cached Metro route instead of issuing another iOS custom-scheme
+  handoff. Focused run 31355721118 showed that even an optional `openLink`
+  could fail with `NSPOSIXErrorDomain` code 60 before the Tasks flow began;
+  the clean pairing path retains the deep link, while subsequent cover
+  launches use the cached route — `tests/agent-e2e-mobile/lib/first-run.mjs`
+  and `flows/native-v0-resilience.mjs`.
 - The native Photos cover now gets the same bounded lazy-destination wait used
   by PR #683's Settings recovery: the launcher row is tapped once, then the
   flow waits up to 45 seconds for `Collections` rather than treating React's
