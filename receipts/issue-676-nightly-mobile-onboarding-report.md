@@ -125,8 +125,9 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   `tests/agent-e2e-mobile/lib/first-run.mjs`.
 - The rapid volume batch now skips the repeated custom-scheme handoff on warm
   launches. Its outer `launchApp` preserves the paired Metro route, and the
-  helper taps the cached server card instead; this avoids an iOS 26
-  `simctl openurl` timeout that was unrelated to the measured Home relaunch —
+  helper foregrounds the app once more and taps the cached server card instead;
+  this avoids an iOS 26 `simctl openurl` timeout that was unrelated to the
+  measured Home relaunch while still covering the splash-to-Metro transition —
   `tests/agent-e2e-mobile/flows/volume-proof.mjs` and
   `tests/agent-e2e-mobile/lib/first-run.mjs`.
 - The native cover matrix and permission/frame journeys avoid the flaky

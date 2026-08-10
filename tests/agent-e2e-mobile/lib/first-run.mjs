@@ -162,8 +162,10 @@ export function relaunchDevClientCommands(
   if (platform !== "ios") return "";
   // `simctl openurl` can return after the dev client hands control back to
   // SpringBoard; launch again so the cached Metro card is reachable. Warm
-  // relaunch batches can skip this handoff and use the card directly.
-  const deepLinkRecovery = useDeepLink
+  // relaunch batches skip the scheme handoff, but still foreground the app
+  // once more: Maestro can report the outer launch complete while Expo is
+  // still restoring its native shell.
+  const launchRecovery = useDeepLink
     ? `- openLink:
     link: "${IOS_METRO_DEV_CLIENT_LINK}"
     optional: true
@@ -174,8 +176,12 @@ export function relaunchDevClientCommands(
 - waitForAnimationToEnd:
     timeout: 1000
 `
-    : "";
-  return `${deepLinkRecovery}${IOS_METRO_RECENT_SERVER_TAP}
+    : `- launchApp:
+    clearState: false
+- waitForAnimationToEnd:
+    timeout: 1000
+`;
+  return `${launchRecovery}${IOS_METRO_RECENT_SERVER_TAP}
 - waitForAnimationToEnd:
     timeout: 3000
 `;
