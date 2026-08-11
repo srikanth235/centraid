@@ -1,22 +1,18 @@
 /*
  * Issue #567 Phase-0 evidence: emit one bounded capability record for every
- * registered runner. Missing CLIs are honest `available:false` rows rather
+ * registered harness. Missing CLIs are honest `available:false` rows rather
  * than omissions, so the dump always proves full registry coverage.
  */
 
-import type { RunnerKind } from "@centraid/app-engine";
+import type { HarnessKind } from "@centraid/app-engine";
 
 import { probeAcpCapabilities } from "../src/backends/acp/probe-capabilities.js";
 import { probeCliAvailability } from "../src/preflight.js";
-import {
-  acpConfigFor,
-  getRunnerBackend,
-  RUNNER_BACKENDS,
-} from "../src/registry.js";
+import { acpConfigFor, getHarness, HARNESSES } from "../src/registry.js";
 
-const runnerKinds = Object.keys(RUNNER_BACKENDS) as RunnerKind[];
+const harnessKinds = Object.keys(HARNESSES) as HarnessKind[];
 
-const envKey = (kind: RunnerKind): string =>
+const envKey = (kind: HarnessKind): string =>
   `CENTRAID_${kind.replaceAll("-", "_").toUpperCase()}_BIN`;
 
 /**
@@ -27,20 +23,20 @@ const envKey = (kind: RunnerKind): string =>
  */
 const MAX_CONCURRENT_PROBES = 3;
 
-type Row = Record<string, unknown> & { kind: RunnerKind };
+type Row = Record<string, unknown> & { kind: HarnessKind };
 
-async function probeOne(kind: RunnerKind): Promise<Row> {
+async function probeOne(kind: HarnessKind): Promise<Row> {
   const configured = process.env[envKey(kind)];
   const availability = await probeCliAvailability(kind, configured);
   if (!availability.available) {
     return {
       kind,
-      label: getRunnerBackend(kind).label,
+      label: getHarness(kind).label,
       available: false,
       reachable: false,
       reason: configured
         ? `${configured} did not pass the version preflight`
-        : "runner binary is not installed or configured on this host",
+        : "harness binary is not installed or configured on this host",
     };
   }
   const capabilities = await probeAcpCapabilities(
@@ -51,7 +47,7 @@ async function probeOne(kind: RunnerKind): Promise<Row> {
   );
   return {
     kind,
-    label: getRunnerBackend(kind).label,
+    label: getHarness(kind).label,
     available: true,
     ...(availability.version ? { version: availability.version } : {}),
     ...capabilities,
@@ -62,12 +58,12 @@ const rows: Row[] = [];
 let next = 0;
 await Promise.all(
   Array.from(
-    { length: Math.min(MAX_CONCURRENT_PROBES, runnerKinds.length) },
+    { length: Math.min(MAX_CONCURRENT_PROBES, harnessKinds.length) },
     () => {
       const probeNext = async (): Promise<void> => {
         const index = next++;
-        if (index >= runnerKinds.length) return;
-        rows[index] = await probeOne(runnerKinds[index]!);
+        if (index >= harnessKinds.length) return;
+        rows[index] = await probeOne(harnessKinds[index]!);
         return probeNext();
       };
       return probeNext();
@@ -76,4 +72,4 @@ await Promise.all(
 );
 
 for (const row of rows) process.stdout.write(`${JSON.stringify(row)}\n`);
-if (rows.length !== runnerKinds.length) process.exitCode = 1;
+if (rows.length !== harnessKinds.length) process.exitCode = 1;

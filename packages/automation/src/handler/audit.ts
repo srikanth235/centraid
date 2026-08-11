@@ -157,14 +157,14 @@ export interface OpenRunNodeArgs {
   /** The turn this item belongs to. */
   runId: string;
   ordinal: number;
-  /** Stable runner-native correlation key for overlapping tool calls. */
+  /** Stable harness-native correlation key for overlapping tool calls. */
   callId?: string;
   batchId?: number;
   kind: ItemKind;
   /** Tool name or `'agent'`. */
   name?: string;
   args?: unknown;
-  /** Lossless runner event envelope, when one exists. */
+  /** Lossless harness event envelope, when one exists. */
   rawJson?: string;
   started: number;
 }
@@ -215,7 +215,7 @@ export function openRunNode(args: OpenRunNodeArgs): string {
 
 /**
  * Map a chat `usage` event (issue #158, Phase 2) onto the token/model fields
- * `closeRunNode` persists. Returns `{}` when no usage was observed (a runner
+ * `closeRunNode` persists. Returns `{}` when no usage was observed (a harness
  * still on the collect-on-exit path).
  */
 export function usageCloseFields(
@@ -255,7 +255,7 @@ export interface CloseRunNodeArgs {
   callId?: string;
   ok: boolean;
   result?: unknown;
-  /** Lossless runner completion envelope, when one exists. */
+  /** Lossless harness completion envelope, when one exists. */
   rawJson?: string;
   error?: string;
   /** Child turn id for an item that spawned a sub-agent. Dormant — no current producer. */

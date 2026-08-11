@@ -91,12 +91,12 @@ describe("run-automation suite", () => {
   });
 
   describe(runAutomation, () => {
-    it("forwards fire options and injects openDispatch that captures runner kind", async () => {
+    it("forwards fire options and injects openDispatch that captures harness kind", async () => {
       const result = await runAutomation({
         automationRef: "app/digest",
         appsDir: "/apps",
         journalDbFile: "/j.db",
-        runner: "claude-code",
+        harness: "claude-code",
         model: "m1",
         runId: "run-1",
         triggerKind: "scheduled",
@@ -126,7 +126,7 @@ describe("run-automation suite", () => {
         expect.objectContaining({
           workdir: "/w",
           runId: "run-1",
-          runner: "claude-code",
+          harness: "claude-code",
           model: "from-manifest",
         })
       );
@@ -139,11 +139,11 @@ describe("run-automation suite", () => {
         onLog: () => undefined,
       });
       expect(startLiveDispatch).toHaveBeenLastCalledWith(
-        expect.objectContaining({ model: "m1", runner: "claude-code" })
+        expect.objectContaining({ model: "m1", harness: "claude-code" })
       );
     });
 
-    it("defaults runner to codex when omitted", async () => {
+    it("defaults harness to codex when omitted", async () => {
       await runAutomation({
         automationRef: "app/a",
         appsDir: "/apps",
@@ -157,13 +157,13 @@ describe("run-automation suite", () => {
         onLog: () => undefined,
       });
       expect(startLiveDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ runner: "codex" })
+        expect.objectContaining({ harness: "codex" })
       );
     });
 
     it("re-enters a failed automation on the next ladder rung as a new ledger turn", async () => {
       const failure =
-        'centraid-agent-failure:{"runner":"codex","failureClass":"quota","message":"limit"}';
+        'centraid-agent-failure:{"harness":"codex","failureClass":"quota","message":"limit"}';
       runFire
         .mockResolvedValueOnce(
           fireResult({ ok: false, runId: "run-fire", error: failure })
@@ -182,18 +182,18 @@ describe("run-automation suite", () => {
         appsDir: "/apps",
         journalDbFile: "/j.db",
         runId: "run-fire",
-        runner: "codex",
-        runnerLadder: ["codex", "claude-code"],
+        harness: "codex",
+        harnessLadder: ["codex", "claude-code"],
         onFailover,
       });
 
       expect(result.outcome.ok).toBe(true);
       expect(runFire).toHaveBeenCalledTimes(2);
       expect(runFire.mock.calls.map((call) => call[0])).toStrictEqual([
-        expect.objectContaining({ runId: "run-fire", runnerKind: "codex" }),
+        expect.objectContaining({ runId: "run-fire", harnessKind: "codex" }),
         expect.objectContaining({
           runId: "run-fire:failover:1:claude-code",
-          runnerKind: "claude-code",
+          harnessKind: "claude-code",
           note:
             "codex failed at the automation fire boundary (quota). " +
             "Continuing with claude-code; provider-specific model and effort pins were cleared.",
@@ -209,7 +209,7 @@ describe("run-automation suite", () => {
 
     it("keeps the caller trigger note alongside the failover notice", async () => {
       const failure =
-        'centraid-agent-failure:{"runner":"codex","failureClass":"quota","message":"limit"}';
+        'centraid-agent-failure:{"harness":"codex","failureClass":"quota","message":"limit"}';
       runFire
         .mockResolvedValueOnce(
           fireResult({ ok: false, runId: "run-fire", error: failure })
@@ -227,8 +227,8 @@ describe("run-automation suite", () => {
         appsDir: "/apps",
         journalDbFile: "/j.db",
         runId: "run-fire",
-        runner: "codex",
-        runnerLadder: ["codex", "claude-code"],
+        harness: "codex",
+        harnessLadder: ["codex", "claude-code"],
         note: "Catching up 3 missed cron ticks.",
       });
 
@@ -256,10 +256,10 @@ describe("run-automation suite", () => {
         appsDir: "/apps",
         journalDbFile: "/j.db",
         runId: "run-fire",
-        runner: "codex",
-        runnerLadder: ["codex", "claude-code"],
-        runnerHealthContext: "vault-1",
-        runnerHealth: {
+        harness: "codex",
+        harnessLadder: ["codex", "claude-code"],
+        harnessHealthContext: "vault-1",
+        harnessHealth: {
           canAttempt: (_context, kind) =>
             kind === "codex"
               ? { allowed: false, failureClass: "quota", breakerUntil: 5_000 }
@@ -277,7 +277,7 @@ describe("run-automation suite", () => {
       expect(runFire).toHaveBeenCalledOnce();
       expect(runFire.mock.calls[0]![0]).toMatchObject({
         runId: "run-fire:failover:1:claude-code",
-        runnerKind: "claude-code",
+        harnessKind: "claude-code",
       });
       expect(onFailover).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -294,9 +294,9 @@ describe("run-automation suite", () => {
           automationRef: "app/digest",
           appsDir: "/apps",
           journalDbFile: "/j.db",
-          runner: "codex",
-          runnerHealthContext: "vault-1",
-          runnerHealth: {
+          harness: "codex",
+          harnessHealthContext: "vault-1",
+          harnessHealth: {
             canAttempt: () => ({ allowed: false, failureClass: "auth" }),
             reportFailure: () => undefined,
             reportOk: () => undefined,
@@ -304,17 +304,17 @@ describe("run-automation suite", () => {
             list: () => [],
           },
         })
-      ).rejects.toThrow("no runner available");
+      ).rejects.toThrow("no harness available");
       expect(runFire).not.toHaveBeenCalled();
     });
 
-    it("marks a manifest-pinned runner as ladder-derived consent, not a direct grant", async () => {
+    it("marks a manifest-pinned harness as ladder-derived consent, not a direct grant", async () => {
       await runAutomation({
         automationRef: "app/digest",
         appsDir: "/apps",
         journalDbFile: "/j.db",
-        runner: "gemini",
-        runnerSelectionSource: "manifest",
+        harness: "gemini",
+        harnessSelectionSource: "manifest",
       });
       const deps = runFire.mock.calls[0]![1];
       deps.openDispatch({
@@ -324,7 +324,7 @@ describe("run-automation suite", () => {
         onLog: () => undefined,
       });
       expect(startLiveDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ runner: "gemini", consentSource: "ladder" })
+        expect.objectContaining({ harness: "gemini", consentSource: "ladder" })
       );
     });
   });

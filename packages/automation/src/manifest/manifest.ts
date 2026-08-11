@@ -50,7 +50,7 @@ export interface ManifestRequires {
    * the executing gateway decides whether the key is registered and otherwise
    * falls back to the automations subsystem preference.
    */
-  readonly runner?: string;
+  readonly harness?: string;
   /**
    * Model the `ctx.agent` calls should route through. Format: `provider/model-id`
    * (`"anthropic/claude-3-5-sonnet"`, `"openai/gpt-4o"`). Must not target the
@@ -59,7 +59,7 @@ export interface ManifestRequires {
    */
   readonly model?: string;
   /**
-   * ACP semantic `thought_level` pin. Open string by design: each runner
+   * ACP semantic `thought_level` pin. Open string by design: each harness
    * advertises its own values and the runtime never translates across rungs.
    */
   readonly thoughtLevel?: string;
@@ -150,7 +150,7 @@ export interface ManifestVaultScope {
 
 /**
  * The automation's requested vault access (duaility §12). Fires authenticate
- * as an enrolled `agent.agent`; this block is a *request* the owner approves
+ * as an enrolled `consent.agent`; this block is a *request* the owner approves
  * into a grant on the agent's party — never a grant by itself. Until
  * approval every `ctx.vault` call is a receipted deny.
  */
@@ -963,16 +963,16 @@ function validateRequires(raw: unknown): ManifestRequires {
   }
   const req = (raw ?? {}) as Record<string, unknown>;
   const mcps = optionalStringArray(req.mcps, "requires.mcps");
-  let runner: string | undefined;
-  if (req.runner !== undefined) {
-    if (typeof req.runner !== "string" || req.runner.length === 0) {
+  let harness: string | undefined;
+  if (req.harness !== undefined) {
+    if (typeof req.harness !== "string" || req.harness.length === 0) {
       throw new ManifestError(
         "invalid_field",
-        "manifest.requires.runner must be a non-empty string",
-        "requires.runner"
+        "manifest.requires.harness must be a non-empty string",
+        "requires.harness"
       );
     }
-    runner = req.runner;
+    harness = req.harness;
   }
   let model: string | undefined;
   if (req.model !== undefined) {
@@ -1023,7 +1023,8 @@ function validateRequires(raw: unknown): ManifestRequires {
   }
   const requires: ManifestRequires = {};
   if (mcps) (requires as { mcps: readonly string[] }).mcps = mcps;
-  if (runner !== undefined) (requires as { runner: string }).runner = runner;
+  if (harness !== undefined)
+    (requires as { harness: string }).harness = harness;
   if (model !== undefined) (requires as { model: string }).model = model;
   if (thoughtLevel !== undefined)
     (requires as { thoughtLevel: string }).thoughtLevel = thoughtLevel;

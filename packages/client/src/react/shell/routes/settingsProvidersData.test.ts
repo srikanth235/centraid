@@ -1,7 +1,7 @@
 /*
  * The providers console maps the gateway's LIST-shaped agents snapshot into
  * cards. The behaviour that matters: it renders whatever the gateway lists —
- * including runner kinds this build predates — rather than intersecting it
+ * including harness kinds this build predates — rather than intersecting it
  * with a local table of kinds it knows (docs/protocol.md C1a, parse-always).
  */
 
@@ -10,8 +10,8 @@ import { describe, beforeEach, expect, it, vi } from "vitest";
 import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import {
   loadProviders,
-  resolveReportedRunnerKind,
-  setSubsystemRunnerLadder,
+  resolveReportedHarnessKind,
+  setSubsystemHarnessLadder,
 } from "./settingsProvidersData.js";
 
 const { getAgentsStatus, getUserPrefs, saveUserPrefs } = vi.hoisted(() => ({
@@ -78,9 +78,9 @@ describe("settingsProvidersData suite", () => {
 
   // The gateway omits `capabilities` entirely until the probe succeeds — and
   // also when it throws. Reading that silence as "not ready" made a cold
-  // gateway label every installed runner "setup or sign-in needed", including
+  // gateway label every installed harness "setup or sign-in needed", including
   // ones that were signed in and working.
-  it("separates an unprobed runner from one that actually needs sign-in", async () => {
+  it("separates an unprobed harness from one that actually needs sign-in", async () => {
     getAgentsStatus.mockResolvedValue({
       agents: [
         entry({ kind: "codex" }),
@@ -137,7 +137,7 @@ describe("settingsProvidersData suite", () => {
     ]);
   });
 
-  it("renders a runner kind this build has never heard of", async () => {
+  it("renders a harness kind this build has never heard of", async () => {
     getAgentsStatus.mockResolvedValue({
       agents: [
         entry({ kind: "some-future-agent", label: "Some Future Agent" }),
@@ -154,16 +154,16 @@ describe("settingsProvidersData suite", () => {
     expect(card?.accent).toBeTruthy();
   });
 
-  it("falls stale picker preferences back to a runner reported by the gateway", async () => {
+  it("falls stale picker preferences back to a harness reported by the gateway", async () => {
     getAgentsStatus.mockResolvedValue({ agents: [entry()] });
     getUserPrefs.mockResolvedValue({
-      "agent.runner.kind": "future-runner",
-      "runner.assistant": "removed-runner",
+      "agent.harness.kind": "future-harness",
+      "harness.assistant": "removed-harness",
     });
     const dto = await loadProviders();
-    expect(resolveReportedRunnerKind(dto, "removed-runner", "assistant")).toBe(
-      "codex"
-    );
+    expect(
+      resolveReportedHarnessKind(dto, "removed-harness", "assistant")
+    ).toBe("codex");
   });
 
   it("reads saved models for every listed kind, including unknown ones", async () => {
@@ -179,7 +179,7 @@ describe("settingsProvidersData suite", () => {
       "model.some-future-agent.builder": "future-2",
     });
     const dto = await loadProviders();
-    // A local kinds table would have stranded the new runner's saved picks.
+    // A local kinds table would have stranded the new harness's saved picks.
     expect(dto.savedModelByKind["some-future-agent"]).toBe("future-1");
     expect(dto.subsystemModelByKind["some-future-agent"]?.builder).toBe(
       "future-2"
@@ -229,25 +229,25 @@ describe("settingsProvidersData suite", () => {
 
   it("keeps a subsystem pin naming a kind this build does not know", async () => {
     getAgentsStatus.mockResolvedValue({ agents: [entry()] });
-    getUserPrefs.mockResolvedValue({ "runner.builder": "some-future-agent" });
+    getUserPrefs.mockResolvedValue({ "harness.builder": "some-future-agent" });
     const dto = await loadProviders();
-    expect(dto.subsystemRunnerByKey.builder).toBe("some-future-agent");
+    expect(dto.subsystemHarnessByKey.builder).toBe("some-future-agent");
   });
 
   it("reads and writes ordered subsystem failover membership", async () => {
     getAgentsStatus.mockResolvedValue({ agents: [entry()] });
     getUserPrefs.mockResolvedValue({
-      "runner.ladder.builder": ["claude-code", "gemini", "claude-code"],
+      "harness.ladder.builder": ["claude-code", "gemini", "claude-code"],
     });
     const dto = await loadProviders();
-    expect(dto.subsystemRunnerLadders.builder).toStrictEqual([
+    expect(dto.subsystemHarnessLadders.builder).toStrictEqual([
       "claude-code",
       "gemini",
     ]);
 
-    setSubsystemRunnerLadder("builder", ["gemini", "claude-code"]);
+    setSubsystemHarnessLadder("builder", ["gemini", "claude-code"]);
     expect(saveUserPrefs).toHaveBeenCalledWith({
-      "runner.ladder.builder": ["gemini", "claude-code"],
+      "harness.ladder.builder": ["gemini", "claude-code"],
     });
   });
 

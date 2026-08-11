@@ -26,7 +26,7 @@ describe("backend.model-usage suite", () => {
     await expect(fs.readFile(configMarker, "utf8")).resolves.toBe(
       "model=fake-opus-9-1"
     );
-    // A successful pin is silent — no "runner picks its own model" notice.
+    // A successful pin is silent — no "harness picks its own model" notice.
     expect(notices(events)).not.toContain("model_unsupported");
     expect(notices(events)).not.toContain("model_not_offered");
   });

@@ -24,7 +24,7 @@ import { cx } from "../ui/cx.js";
 import { Icon } from "../ui/index.js";
 import Message from "./AssistantMessage.js";
 import type { MessageCallbacks } from "./AssistantMessage.js";
-import { EffortPicker, ModelPicker, RunnerPicker } from "./AssistantScreen.js";
+import { EffortPicker, ModelPicker, HarnessPicker } from "./AssistantScreen.js";
 import ChatComposer from "./ChatComposer.js";
 
 import au from "../styles/automation.module.css";
@@ -85,8 +85,8 @@ export interface AutomationThreadDataEx extends AutomationThreadData {
     } | null;
   };
   runTokens?: Record<string, number>;
-  /** Capability-backed attended runner controls for the Q&A conversation. */
-  runnerConfig?: AsstModelPickerDTO;
+  /** Capability-backed attended harness controls for the Q&A conversation. */
+  harnessConfig?: AsstModelPickerDTO;
 }
 
 export interface AutomationThreadScreenProps extends Omit<
@@ -856,15 +856,15 @@ function Composer({
   picker,
   context,
   onUploadAttachment,
-  onSetRunner,
-  onRunnerSwitch,
+  onSetHarness,
+  onHarnessSwitch,
 }: {
   busy: boolean;
   onSend: (
     text: string,
     options: {
       attachments?: BuilderAttachmentRef[];
-      runnerKind?: string;
+      harnessKind?: string;
       model?: string;
       thinking?: string;
     }
@@ -874,8 +874,8 @@ function Composer({
   picker?: AsstModelPickerDTO;
   context?: { used: number; size: number };
   onUploadAttachment?: (file: File) => Promise<BuilderAttachmentRef>;
-  onSetRunner?: (runnerKind: string) => Promise<AsstModelPickerDTO>;
-  onRunnerSwitch?: () => void;
+  onSetHarness?: (harnessKind: string) => Promise<AsstModelPickerDTO>;
+  onHarnessSwitch?: () => void;
 }): JSX.Element {
   const [draft, setDraft] = useState("");
   const [pickerOverride, setPickerOverride] = useState<
@@ -902,8 +902,8 @@ function Composer({
     if (pending.some((attachment) => attachment.state === "uploading")) return;
     onSend(trimmed, {
       ...(ready.length ? { attachments: ready } : {}),
-      ...(activePicker?.selectedRunnerKind
-        ? { runnerKind: activePicker.selectedRunnerKind }
+      ...(activePicker?.selectedHarnessKind
+        ? { harnessKind: activePicker.selectedHarnessKind }
         : {}),
       ...(activePicker?.selectedModelId
         ? { model: activePicker.selectedModelId }
@@ -948,18 +948,18 @@ function Composer({
       );
     }
   };
-  const selectRunner = (runnerKind: string): void => {
-    const setRunner = onSetRunner;
-    if (!setRunner) return;
+  const selectHarness = (harnessKind: string): void => {
+    const setHarness = onSetHarness;
+    if (!setHarness) return;
     setPickerLoaded(false);
     void (async () => {
       try {
-        const next = await setRunner(runnerKind);
+        const next = await setHarness(harnessKind);
         const changed =
-          next.selectedRunnerKind === runnerKind &&
-          activePicker?.selectedRunnerKind !== next.selectedRunnerKind;
+          next.selectedHarnessKind === harnessKind &&
+          activePicker?.selectedHarnessKind !== next.selectedHarnessKind;
         setPickerOverride(next);
-        if (changed) onRunnerSwitch?.();
+        if (changed) onHarnessSwitch?.();
         if (!next.supportsAttachments) setPending([]);
       } finally {
         setPickerLoaded(true);
@@ -1042,11 +1042,11 @@ function Composer({
         model={
           activePicker ? (
             <>
-              <RunnerPicker
+              <HarnessPicker
                 picker={activePicker}
                 loaded={pickerLoaded}
                 busy={busy}
-                onSelect={selectRunner}
+                onSelect={selectHarness}
               />
               <ModelPicker
                 picker={activePicker}
@@ -1112,7 +1112,7 @@ export default function AutomationThreadScreen({
   onAskAboutRuns,
   onUploadAttachment,
   loadAttachmentImage,
-  onSetRunner,
+  onSetHarness,
   onCopyWebhook,
   onRotateWebhook,
   onDelete,
@@ -1379,7 +1379,7 @@ export default function AutomationThreadScreen({
     text: string,
     options: {
       attachments?: BuilderAttachmentRef[];
-      runnerKind?: string;
+      harnessKind?: string;
       model?: string;
       thinking?: string;
     }
@@ -1750,11 +1750,11 @@ export default function AutomationThreadScreen({
           onSend={doSend}
           onStop={() => streamControllersRef.current.get("composer")?.abort()}
           onOpenCompiler={onOpenCompiler}
-          picker={d.runnerConfig}
+          picker={d.harnessConfig}
           context={composerContext}
           onUploadAttachment={onUploadAttachment}
-          onSetRunner={onSetRunner}
-          onRunnerSwitch={() => setComposerContext(undefined)}
+          onSetHarness={onSetHarness}
+          onHarnessSwitch={() => setComposerContext(undefined)}
         />
       ) : null}
     </div>

@@ -105,7 +105,7 @@ export async function startTurnVaultTools(args: {
       level: "info",
       code: "vault_tools_stdio",
       message:
-        "This runner doesn’t support HTTP MCP — vault tools are bridged over stdio MCP instead.",
+        "This harness doesn’t support HTTP MCP — vault tools are bridged over stdio MCP instead.",
     });
     return { mcpServers: [stdio], handle, transport: "stdio" };
   } catch (error) {

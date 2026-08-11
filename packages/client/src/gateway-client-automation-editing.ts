@@ -77,7 +77,7 @@ export async function createAutomation(input: {
   /** Published connector declaration (pull/send automations). */
   connector?: CentraidConnectorSpec;
   apps?: string[];
-  runner?: string;
+  harness?: string;
   model?: string;
   historyKeep?: { count: number } | { days: number } | "all" | "errors";
   onFailure?: string;
@@ -135,8 +135,8 @@ export async function updateAutomation(input: {
   connections?: CentraidConnectionBinding[];
   connector?: CentraidConnectorSpec | null;
   /** `null` clears the manifest pin and restores the subsystem default. */
-  runner?: string | null;
-  /** `null` clears the manifest pin and restores the selected runner's default. */
+  harness?: string | null;
+  /** `null` clears the manifest pin and restores the selected harness's default. */
   model?: string | null;
   /** Persisted recognition path used by both scheduled and manual fires. */
   enrichVariant?: "deterministic" | "agent";
@@ -164,7 +164,7 @@ export async function updateAutomation(input: {
         ...(input.connector === undefined
           ? {}
           : { connector: input.connector }),
-        ...(input.runner === undefined ? {} : { runner: input.runner }),
+        ...(input.harness === undefined ? {} : { harness: input.harness }),
         ...(input.model === undefined ? {} : { model: input.model }),
         ...(input.enrichVariant === undefined
           ? {}

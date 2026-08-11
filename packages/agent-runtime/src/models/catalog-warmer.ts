@@ -1,10 +1,10 @@
 /*
  * Catalog warmer — the single owner of host-capability enumeration.
  *
- * The model surface for every runner is enumerated through one shared
+ * The model surface for every harness is enumerated through one shared
  * `CatalogWarmer` instance, on two triggers:
  *
- *  - **Boot**: the gateway warms every detected runner in the background so
+ *  - **Boot**: the gateway warms every detected harness in the background so
  *    the catalog is fresh before anyone opens the picker.
  *  - **Refresh / cold read**: the status routes kick a warm fire-and-forget;
  *    the client polls the surface's `SurfaceStatus` until it leaves `loading`.
@@ -17,7 +17,7 @@
  * gateway's prefs loader).
  *
  * A finished warm is also RECORDED (`hasWarmed`), whatever it produced. That
- * record is what lets a runner with genuinely no self-reported models settle:
+ * record is what lets a harness with genuinely no self-reported models settle:
  * without it, the cold-read rule ("empty cache → kick a warm") re-kicked on
  * every poll, so `isWarming` was never false at read time and `deriveStatus`
  * could never leave `loading` — opencode and grok spun forever instead of
@@ -26,14 +26,14 @@
  * (The tool surface this warmer once also tracked went away with the
  * `ctx.tool` rail — issue #484.)
  *
- * Reads stay in `./catalog.ts` (`readRunnerModels`); this module only writes.
+ * Reads stay in `./catalog.ts` (`readHarnessModels`); this module only writes.
  * `deriveStatus` turns (cached length, isWarming) into the tri-state the UI
  * renders.
  */
 
 import type {
-  RunnerKind,
-  RunnerModel,
+  HarnessKind,
+  HarnessModel,
   SurfaceStatus,
 } from "@centraid/app-engine";
 
@@ -41,13 +41,13 @@ import { writeCatalogEntry, hashModelIds } from "./catalog.js";
 
 export type { SurfaceStatus } from "@centraid/app-engine";
 
-/** The host-capability surfaces the catalog tracks per runner. */
+/** The host-capability surfaces the catalog tracks per harness. */
 export type CatalogSurface = "models";
 
 export interface CatalogWarmerOptions {
   catalogPath: string;
   /** Live model self-report for a kind. Best-effort; should resolve `[]` on failure. */
-  enumerateModels: (kind: RunnerKind) => Promise<RunnerModel[]>;
+  enumerateModels: (kind: HarnessKind) => Promise<HarnessModel[]>;
 }
 
 export class CatalogWarmer {
@@ -56,12 +56,12 @@ export class CatalogWarmer {
 
   constructor(private readonly opts: CatalogWarmerOptions) {}
 
-  private key(kind: RunnerKind, surface: CatalogSurface): string {
+  private key(kind: HarnessKind, surface: CatalogSurface): string {
     return `${kind}:${surface}`;
   }
 
   /** Is a warm for this (kind, surface) currently running? */
-  isWarming(kind: RunnerKind, surface: CatalogSurface): boolean {
+  isWarming(kind: HarnessKind, surface: CatalogSurface): boolean {
     return this.inflight.has(this.key(kind, surface));
   }
 
@@ -71,7 +71,7 @@ export class CatalogWarmer {
    * question has been ASKED, so a still-empty cache is an answer rather than
    * a reason to ask again.
    */
-  hasWarmed(kind: RunnerKind, surface: CatalogSurface): boolean {
+  hasWarmed(kind: HarnessKind, surface: CatalogSurface): boolean {
     return this.warmed.has(this.key(kind, surface));
   }
 
@@ -79,7 +79,7 @@ export class CatalogWarmer {
    * Start (or join) a warm for (kind, surface). Resolves when it finishes.
    * Concurrent calls for the same key share one enumeration.
    */
-  warm(kind: RunnerKind, surface: CatalogSurface): Promise<void> {
+  warm(kind: HarnessKind, surface: CatalogSurface): Promise<void> {
     const k = this.key(kind, surface);
     const existing = this.inflight.get(k);
     if (existing) return existing;
@@ -91,8 +91,11 @@ export class CatalogWarmer {
     return run;
   }
 
-  private async run(kind: RunnerKind, _surface: CatalogSurface): Promise<void> {
-    let models: RunnerModel[] = [];
+  private async run(
+    kind: HarnessKind,
+    _surface: CatalogSurface
+  ): Promise<void> {
+    let models: HarnessModel[] = [];
     try {
       models = await this.opts.enumerateModels(kind);
     } catch {

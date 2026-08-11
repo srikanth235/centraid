@@ -204,7 +204,7 @@ test("12.4 — the Agents (providers) settings page renders", async () => {
     ).toHaveText("Agents");
     // Realigned: the exclusive "active agent" switch no longer exists. Per
     // SettingsProvidersScreen.tsx:103-113 the exclusive radio was retired by
-    // per-subsystem runners and became the *default* lane of the Routing
+    // per-subsystem harnesses and became the *default* lane of the Routing
     // table — so the page's primary control is now the "Default agent" select
     // (SettingsProvidersScreen.tsx:268).
     await expect(

@@ -18,7 +18,7 @@ export interface InsightsPreparedStatements {
   appsTouched: StatementSync;
   daily: StatementSync;
   bySource: StatementSync;
-  byRunner: StatementSync;
+  byHarness: StatementSync;
   byModel: StatementSync;
   byEffort: StatementSync;
   recent: StatementSync;
@@ -90,7 +90,7 @@ export function prepareInsightsStatements(
         GROUP BY kind, automation_ref
         ORDER BY cost DESC, tokens DESC
       `),
-    byRunner: db.prepare(`
+    byHarness: db.prepare(`
         SELECT
           COALESCE(provider, 'unknown') AS provider,
           COUNT(*) AS runs,

@@ -234,7 +234,7 @@ if (gotSingleInstanceLock) {
     // fires a one-time best-effort fetch into its cache. The desktop main
     // process no longer touches `@centraid/blueprints`.
     // Coding-agent detection moved to the gateway (`GET /centraid/_agents/status`):
-    // it's colocated with the runner and probes its own host on demand, so the
+    // it is colocated with the harness and probes its own host on demand, so the
     // desktop no longer runs a first-launch credential probe.
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {

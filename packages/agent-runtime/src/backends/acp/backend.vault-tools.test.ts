@@ -78,7 +78,7 @@ describe("backend.vault-tools", () => {
     expect(probe.callIsError).toBe(false);
     expect(probe.callText).toBe(JSON.stringify({ rows: [{ one: 1 }] }));
 
-    // The call reached the turn's own runner.
+    // The call reached the turn's own harness.
     expect(ctx.calls).toStrictEqual([{ sql: "SELECT 1" }]);
 
     // …and the transcript rendered it.

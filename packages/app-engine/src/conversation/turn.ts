@@ -15,20 +15,20 @@ import type { Dispatcher } from "../handlers/dispatcher.js";
 import type { TurnStreamEvent } from "./runner.js";
 
 /**
- * Every runner kind the runtime knows how to drive — the single
+ * Every harness kind the runtime knows how to drive — the single
  * source of truth. Since issue #479 they all share one transport, the
  * generic ACP (Agent Client Protocol) harness: `gemini`, `qwen`,
  * `opencode`, `grok` and `kimi` speak ACP natively, while `codex` and
  * `claude-code` reach it through their first-party adapters. `acp` is
  * the escape hatch for any other ACP-speaking CLI, configured entirely
- * through `RunnerPrefs` (`binPath` + `extraArgs` supply the binary and
+ * through `HarnessPrefs` (`binPath` + `extraArgs` supply the binary and
  * its ACP flag).
  *
- * agent-runtime owns a `RunnerBackend` registry keyed on these values;
- * add a kind here and register its backend there — nothing switches on
+ * agent-runtime owns a `HarnessSpec` registry keyed on these values;
+ * add a kind here and register its harness there — nothing switches on
  * a hardcoded per-kind literal anymore.
  */
-export const RUNNER_KINDS = [
+export const HARNESS_KINDS = [
   "codex",
   "claude-code",
   "gemini",
@@ -48,25 +48,25 @@ export const RUNNER_KINDS = [
   "acp",
 ] as const;
 
-export type RunnerKind = (typeof RUNNER_KINDS)[number];
+export type HarnessKind = (typeof HARNESS_KINDS)[number];
 
-/** Validation guard for persisted/wire strings that claim to be a runner kind. */
-export function isRunnerKind(value: unknown): value is RunnerKind {
+/** Validation guard for persisted/wire strings that claim to be a harness kind. */
+export function isHarnessKind(value: unknown): value is HarnessKind {
   return (
     typeof value === "string" &&
-    (RUNNER_KINDS as readonly string[]).includes(value)
+    (HARNESS_KINDS as readonly string[]).includes(value)
   );
 }
 
 /**
  * Per-user settings for the coding agent. Persisted by the desktop's
- * UserStore (gateway DB, `user_prefs`) under the `agent.runner.*` keys.
+ * UserStore (gateway DB, `user_prefs`) under the `agent.harness.*` keys.
  * The host loads + passes these into `makeConversationRunner` (for chat) or
  * directly into `runTurn` (for builder).
  */
-export interface RunnerPrefs {
+export interface HarnessPrefs {
   /** Which CLI/SDK to invoke. Required when the desktop is in local-runtime mode. */
-  kind: RunnerKind;
+  kind: HarnessKind;
   /** Override the binary location; defaults to PATH lookup. */
   binPath?: string;
   /** Extra args passed verbatim to the CLI invocation. */
@@ -182,7 +182,7 @@ export interface TurnAttachment {
  *
  * ACP reports session totals, not per-prompt deltas. Hosts persist this
  * snapshot beside the opaque session id and feed it back only when the same
- * runner resumes that session, so the backend can book each turn exactly
+ * harness resumes that session, so the backend can book each turn exactly
  * once even after a process restart.
  */
 export interface AdapterUsageSnapshot {
@@ -214,7 +214,7 @@ export interface TurnInput {
   /** Backend-specific append point: codex `developerInstructions` / claude `systemPrompt.append`. */
   extraSystemPrompt: string;
   model?: string;
-  /** Per-turn category-keyed pins; higher precedence than RunnerPrefs defaults. */
+  /** Per-turn category-keyed pins; higher precedence than HarnessPrefs defaults. */
   configPins?: Readonly<Record<string, string>>;
   /**
    * How ACP `session/request_permission` calls are answered. `deny` is a
@@ -230,11 +230,11 @@ export interface TurnInput {
   hydrationContext?: string;
   /** Historical files from the retained hydration turns. */
   hydrationAttachments?: TurnAttachment[];
-  /** Full-ledger handoff reserved for an expired same-runner resume handle. */
+  /** Full-ledger handoff reserved for an expired same-harness resume handle. */
   recoveryHydrationContext?: string;
   /** Full-ledger historical files for expired-session recovery. */
   recoveryHydrationAttachments?: TurnAttachment[];
-  /** A runner change has already established that hydration is required. */
+  /** A harness change has already established that hydration is required. */
   forceHydration?: boolean;
   /**
    * Extra absolute workspace roots for ACP agents that advertise
@@ -261,14 +261,14 @@ export interface TurnInput {
 }
 
 export interface TurnConfig {
-  prefs: RunnerPrefs;
+  prefs: HarnessPrefs;
 }
 
 export interface TurnResult {
   /** Codex thread id (when `prefs.kind === 'codex'`) or Claude session id. */
   sessionId?: string;
-  /** Echoes the runner kind that produced `sessionId`. */
-  adapterKind: RunnerPrefs["kind"];
+  /** Echoes the harness kind that produced `sessionId`. */
+  harnessKind: HarnessPrefs["kind"];
   /** Cumulative usage to persist beside `sessionId` for the next delta. */
   usageSnapshot?: AdapterUsageSnapshot;
   /** True when this fresh session consumed the canonical ledger handoff. */

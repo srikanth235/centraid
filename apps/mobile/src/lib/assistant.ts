@@ -46,7 +46,7 @@ export interface AssistantAttachment {
 }
 
 export interface AssistantConfig {
-  runners: Array<{
+  harnesses: Array<{
     kind: string;
     label: string;
     available: boolean;
@@ -59,7 +59,7 @@ export interface AssistantConfig {
     sessionReady: boolean;
     hint?: string;
   }>;
-  runnerKind: string;
+  harnessKind: string;
   models: Array<{ id: string; name: string }>;
   selectedModel: string;
   efforts: Array<{ id: string; name: string }>;
@@ -101,11 +101,11 @@ export async function loadAssistantConfig(
     ),
   ]);
   const prefs = prefResult.prefs ?? {};
-  const runnerKind =
-    prefString(prefs, "runner.assistant") ||
-    prefString(prefs, "agent.runner.kind") ||
+  const harnessKind =
+    prefString(prefs, "harness.assistant") ||
+    prefString(prefs, "agent.harness.kind") ||
     "codex";
-  const runners = (status.agents ?? []).map((agent) => {
+  const harnesses = (status.agents ?? []).map((agent) => {
     const models = agent.capabilities?.modelConfigurable
       ? (agent.models ?? []).map((model) => ({
           id: model.id,
@@ -156,11 +156,11 @@ export async function loadAssistantConfig(
         : {}),
     };
   });
-  const selected = runners.find((entry) => entry.kind === runnerKind) ??
-    runners.find((entry) => entry.available) ??
-    runners[0] ?? {
-      kind: runnerKind,
-      label: runnerKind,
+  const selected = harnesses.find((entry) => entry.kind === harnessKind) ??
+    harnesses.find((entry) => entry.available) ??
+    harnesses[0] ?? {
+      kind: harnessKind,
+      label: harnessKind,
       available: false,
       models: [],
       selectedModel: "",
@@ -169,11 +169,11 @@ export async function loadAssistantConfig(
       supportsAttachments: false,
       supportsContext: false,
       sessionReady: false,
-      hint: `${runnerKind} did not complete its session preflight.`,
+      hint: `${harnessKind} did not complete its session preflight.`,
     };
   return {
-    runners,
-    runnerKind: selected.kind,
+    harnesses,
+    harnessKind: selected.kind,
     models: selected.models,
     selectedModel: selected.selectedModel,
     efforts: selected.efforts,
@@ -221,15 +221,15 @@ export async function pickAndUploadAssistantAttachment(): Promise<
 }
 
 export async function saveAssistantSelection(
-  runnerKind: string,
+  harnessKind: string,
   kind: "model" | "effort",
   value: string
 ): Promise<void> {
   const base = await requireGatewayBase();
   const key =
     kind === "model"
-      ? `model.${runnerKind}.assistant`
-      : `config.${runnerKind}.assistant.thought_level`;
+      ? `model.${harnessKind}.assistant`
+      : `config.${harnessKind}.assistant.thought_level`;
   await fetchJson(`${base}/_centraid-user/prefs`, {
     method: "PUT",
     headers: apiHeaders({ "content-type": "application/json" }),
@@ -240,7 +240,7 @@ export async function saveAssistantSelection(
 export async function openAssistantConversation(): Promise<{
   conversationId: string;
   bubbles: AssistantHistoryBubble[];
-  runnerKind?: string;
+  harnessKind?: string;
 }> {
   const base = await requireGatewayBase();
   const listed = await fetchJson<{
@@ -256,7 +256,7 @@ export async function openAssistantConversation(): Promise<{
     conversationId = created.id;
   }
   const transcript = await fetchJson<{
-    adapterKind?: string | null;
+    harnessKind?: string | null;
     messages?: Array<{
       idx: number;
       payload?: { kind?: string; text?: string; error?: boolean };
@@ -281,7 +281,7 @@ export async function openAssistantConversation(): Promise<{
   return {
     conversationId,
     bubbles,
-    ...(transcript.adapterKind ? { runnerKind: transcript.adapterKind } : {}),
+    ...(transcript.harnessKind ? { harnessKind: transcript.harnessKind } : {}),
   };
 }
 
@@ -291,7 +291,7 @@ export async function streamAssistantTurn(
     message: string;
     model?: string;
     effort?: string;
-    runnerKind?: string;
+    harnessKind?: string;
     attachments?: AssistantAttachment[];
     /** One approved provider, or every provider approved so far this turn (#567). */
     providerConsent?: string | string[];
@@ -316,7 +316,7 @@ export async function streamAssistantTurn(
       idempotencyKey: input.idempotencyKey,
       ...(input.model ? { model: input.model } : {}),
       ...(input.effort ? { thinking: input.effort } : {}),
-      ...(input.runnerKind ? { runnerKind: input.runnerKind } : {}),
+      ...(input.harnessKind ? { harnessKind: input.harnessKind } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       ...(input.providerConsent?.length
         ? { providerConsent: input.providerConsent }

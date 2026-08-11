@@ -44,7 +44,7 @@ describe("ConversationStore — conversations", () => {
       })
     ).toBe(true);
     expect(store.getConversation(conv.id)).toMatchObject({
-      adapterKind: "codex",
+      harnessKind: "codex",
       adapterSessionId: "session-1",
       adapterUsageSnapshot: {
         inputTokens: 120,
@@ -94,11 +94,11 @@ describe("ConversationStore — conversations", () => {
     expect(codex).toBe(claude);
     expect(store.getConversation(codex)).toMatchObject({
       automationId: "app/digest",
-      adapterKind: "codex",
+      harnessKind: "codex",
     });
     // Ensuring a new target does not claim it before a turn succeeds; the
     // ledger's post-turn adapter update is the binding commit point.
-    expect(store.getConversation(claude)?.adapterKind).toBe("codex");
+    expect(store.getConversation(claude)?.harnessKind).toBe("codex");
     store.close();
   });
 

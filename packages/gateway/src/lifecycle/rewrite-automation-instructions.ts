@@ -13,7 +13,7 @@ import path from "node:path";
 
 import { resolveItemCost } from "@centraid/app-engine";
 import type {
-  RunnerPrefs,
+  HarnessPrefs,
   RunTurnFn,
   TurnStreamEvent,
 } from "@centraid/app-engine";
@@ -104,7 +104,7 @@ export interface RewriteAutomationInstructionsOptions {
   journalDbFile: string;
   runnerSessionDir: string;
   runTurn: RunTurnFn;
-  runnerPrefs: RunnerPrefs;
+  harnessPrefs: HarnessPrefs;
   model?: string;
   /** Existing lifecycle manifest-update/publish seam. */
   persistPrompt: (prompt: string) => Promise<void>;
@@ -123,7 +123,7 @@ export async function rewriteAutomationInstructions(
     opts.row.ref,
     opts.row.ownerApp,
     opts.row.name,
-    opts.runnerPrefs.kind
+    opts.harnessPrefs.kind
   );
   const revisionTurnId =
     opts.revisionTurnId ?? `${opts.row.ref}:revise:${randomUUID().slice(0, 8)}`;
@@ -183,7 +183,7 @@ export async function rewriteAutomationInstructions(
         abortSignal: new AbortController().signal,
         onEvent,
       },
-      { prefs: opts.runnerPrefs }
+      { prefs: opts.harnessPrefs }
     );
     if (error) throw new Error(error);
     const prompt = cleanRewrittenInstructions(text);

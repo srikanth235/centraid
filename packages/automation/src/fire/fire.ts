@@ -9,12 +9,12 @@
  * `runHandler`). That spine used to live in
  * `agent-runtime/run-automation.ts`; the only thing it genuinely needed from
  * agent-runtime was the `ctx.agent` dispatch surface (a bounded model turn
- * through the runner registry). So the spine moves down and the dispatch
+ * through the harness registry). So the spine moves down and the dispatch
  * surface is injected via `openDispatch` — the same dependency inversion the
  * `Host` / `ConversationRunner` seams already use.
  *
  * agent-runtime's `runAutomation` is now a thin wrapper that builds the
- * `openDispatch` closure (capturing the runner kind) and calls `runFire`. A
+ * `openDispatch` closure (capturing the harness kind) and calls `runFire`. A
  * future host can inject its own dispatch surface instead of reimplementing
  * the spine. A fire whose handler never calls `ctx.agent` starts zero child
  * processes and zero HTTP servers.
@@ -84,7 +84,7 @@ export interface OpenDispatchArgs {
   automationRef: string;
   runId: string;
   /** Harness fixed to this automation conversation. */
-  runnerKind?: string;
+  harnessKind?: string;
   /**
    * Manifest `requires.model` — the capability tier `ctx.agent` should route
    * to (issue #166). The host's `agentDispatcher` picks the matching provider
@@ -100,7 +100,7 @@ export interface OpenDispatchArgs {
 export type OpenDispatch = (args: OpenDispatchArgs) => Promise<DispatchSurface>;
 
 export interface NestedAutomationRuntime {
-  runnerKind?: string;
+  harnessKind?: string;
   model?: string;
   configPins?: Readonly<Record<string, string>>;
 }
@@ -134,7 +134,7 @@ export interface RunFireOptions {
   /**
    * Host-injected `ctx.vault` executor factory, keyed by the automation's
    * app id: each fire gets a bridge bound to *that* app's enrolled
-   * `agent.agent` credential (duaility §12), so a cross-app `onFailure`
+   * `consent.agent` credential (duaility §12), so a cross-app `onFailure`
    * cascade acts as its own agent, never the parent's. The package stays
    * vault-free — the gateway builds this off its vault plane. Absent (or
    * returning undefined) → `ctx.vault` fails closed with `VAULT_UNAVAILABLE`.
@@ -148,12 +148,12 @@ export interface RunFireOptions {
   /** Optional logger. */
   onLog?: (level: "info" | "warn" | "error", msg: string) => void;
   /** Harness that owns the durable automation conversation. */
-  runnerKind?: string;
+  harnessKind?: string;
   /** Host-resolved model fallback used for dispatch and honest cost estimation. */
   model?: string;
   /**
    * False for a failover rung: provider-specific manifest pins belong only
-   * to the primary runner and must not cross the fire boundary.
+   * to the primary harness and must not cross the fire boundary.
    */
   allowManifestProviderPins?: boolean;
   /** Host-resolved semantic ACP configuration pins. */
@@ -194,7 +194,7 @@ export interface RunFireOptions {
   failureDepth?: number;
   /**
    * Suppress this attempt's onFailure cascade. The agent-runtime router uses
-   * this only while advancing a pre-consented runner ladder at the next fire
+   * this only while advancing a pre-consented harness ladder at the next fire
    * boundary; the final attempt still owns the ordinary onFailure cascade.
    */
   deferOnFailure?: boolean | ((outcome: HandlerOutcome) => boolean);
@@ -293,12 +293,12 @@ export async function runFire(
   const failureDepth = opts.failureDepth ?? 0;
   const vaultBridge = await opts.vaultFor?.(parsed.appId, opts.automationRef);
   // Establish the final phase-3 identity before the host acquires the durable
-  // turn lock: one automation conversation, regardless of runner rung.
+  // turn lock: one automation conversation, regardless of harness rung.
   runsStore.ensureAutomationConversation(
     opts.automationRef,
     parsed.appId,
     row.name,
-    opts.runnerKind
+    opts.harnessKind
   );
 
   const skipRun = (
@@ -419,7 +419,7 @@ export async function runFire(
     workdir: row.dir,
     automationRef: opts.automationRef,
     runId,
-    ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
+    ...(opts.harnessKind ? { harnessKind: opts.harnessKind } : {}),
     ...(effectiveModel ? { model: effectiveModel } : {}),
     ...(opts.configPins ? { configPins: opts.configPins } : {}),
     onLog,
@@ -545,7 +545,7 @@ export async function runFire(
       agentDispatcher,
       runsStore,
       ...(dispatch.finalizeTurn ? { finalizeTurn: dispatch.finalizeTurn } : {}),
-      ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
+      ...(opts.harnessKind ? { harnessKind: opts.harnessKind } : {}),
       ...(effectiveModel ? { model: effectiveModel } : {}),
       ...(vaultBridge ? { vault: vaultBridge } : {}),
       ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
@@ -625,8 +625,10 @@ export async function runFire(
               journalDbFile: opts.journalDbFile,
               ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
               ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
-              ...((nestedRuntime?.runnerKind ?? opts.runnerKind)
-                ? { runnerKind: nestedRuntime?.runnerKind ?? opts.runnerKind }
+              ...((nestedRuntime?.harnessKind ?? opts.harnessKind)
+                ? {
+                    harnessKind: nestedRuntime?.harnessKind ?? opts.harnessKind,
+                  }
                 : {}),
               ...((nestedRuntime?.model ?? opts.model)
                 ? { model: nestedRuntime?.model ?? opts.model }

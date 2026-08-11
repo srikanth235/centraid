@@ -51,7 +51,7 @@ vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
       },
       daily: [],
       bySource: [],
-      byRunner: [],
+      byHarness: [],
       byModel: [],
       byEffort: [],
       recent: [],

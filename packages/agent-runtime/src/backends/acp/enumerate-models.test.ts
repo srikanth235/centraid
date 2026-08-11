@@ -29,7 +29,7 @@ function fakeConfig(
 // ---- happy path -----------------------------------------------------------
 
 describe("enumerate-models", () => {
-  test("maps the agent’s advertised model options to RunnerModel[]", async () => {
+  test("maps the agent’s advertised model options to HarnessModel[]", async () => {
     const models = await enumerateAcpModels(fakeConfig(["--mode=normal"]));
     // The fake advertises a `model` select with a default + one more, exactly
     // the shape both real adapters emit.

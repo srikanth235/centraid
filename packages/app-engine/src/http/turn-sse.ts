@@ -153,7 +153,7 @@ export interface DriveTurnOptions {
   extraSystemPrompt: string;
   runner: ConversationRunner;
   conversationStore?: ConversationHistoryStore | undefined;
-  /** Central scratch dir for runner-owned `<conversationId>.jsonl` files. */
+  /** Central scratch dir for harness-owned `<conversationId>.jsonl` files. */
   conversationRunnerSessionDir: string;
   conversationLocks: Map<string, Promise<void>>;
   /** Leading SSE comment, e.g. `chat <appId> session <id>`. */
@@ -162,11 +162,11 @@ export interface DriveTurnOptions {
   register?: "ask" | "build" | undefined;
   model?: string | undefined;
   thinking?: string | undefined;
-  runnerKind?: TypeImport_nu6ai6.RunnerKind | undefined;
+  harnessKind?: TypeImport_nu6ai6.HarnessKind | undefined;
   /** One provider, or the whole set the client has accumulated (issue #567). */
   providerConsent?:
-    | TypeImport_nu6ai6.RunnerKind
-    | readonly TypeImport_nu6ai6.RunnerKind[]
+    | TypeImport_nu6ai6.HarnessKind
+    | readonly TypeImport_nu6ai6.HarnessKind[]
     | undefined;
   additionalDirectories?: string[];
   idempotencyKey?: string | undefined;
@@ -182,7 +182,7 @@ export interface DriveTurnOptions {
    *  (issue #420). */
   retryOf?: string | undefined;
   prevAdapterSessionId?: string | undefined;
-  prevAdapterKind?: string | undefined;
+  prevHarnessKind?: string | undefined;
   prevAdapterUsageSnapshot?: TypeImport_nu6ai6.AdapterUsageSnapshot | undefined;
   /** CAS refs recorded on the turn's `message_in` item. */
   attachmentRefs?: TurnAttachmentRef[];
@@ -417,8 +417,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
   req.on("close", onClientClose);
   req.on("error", onClientClose);
 
-  // Runner-owned scratch file in the central scratch dir. Make sure the
-  // parent dir exists before any runner writes to it.
+  // Harness-owned scratch file in the central scratch dir. Make sure the
+  // parent dir exists before any harness writes to it.
   const sessionFile = path.join(
     opts.conversationRunnerSessionDir,
     `${conversationId}.jsonl`
@@ -488,9 +488,9 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           appId,
           conversationId
         );
-        const targetRunnerKind =
-          opts.runnerKind ?? (await runner.resolveRunnerKind?.());
-        // The runner's failover ladder can land on a provider this route never
+        const targetHarnessKind =
+          opts.harnessKind ?? (await runner.resolveHarnessKind?.());
+        // The harness failover ladder can land on a provider this route never
         // targeted, and every provider has its OWN binding and its OWN hydration
         // watermark. So resume + hydration are resolved PER RUNG, on demand,
         // through `resumeForKind` — one planned-once-per-kind memo. Resolving it
@@ -518,7 +518,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           resumeStates.set(key, state);
           return state;
         };
-        const resume = resumeStateFor(targetRunnerKind);
+        const resume = resumeStateFor(targetHarnessKind);
         const plans = new Map<string, TurnResumePlan>();
         const planFor = (kind: string): TurnResumePlan => {
           const cached = plans.get(kind);
@@ -604,7 +604,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           extraSystemPrompt: opts.extraSystemPrompt,
           abortSignal: abortController.signal,
           onEvent,
-          ...(targetRunnerKind ? { runnerKind: targetRunnerKind } : {}),
+          ...(targetHarnessKind ? { harnessKind: targetHarnessKind } : {}),
           ...(opts.model ? { model: opts.model } : {}),
           ...(opts.thinking ? { thinking: opts.thinking } : {}),
           ...(opts.providerConsent && opts.providerConsent.length > 0
@@ -620,8 +620,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           ...(opts.idempotencyKey
             ? { idempotencyKey: opts.idempotencyKey }
             : {}),
-          ...(conversationMeta?.adapterKind
-            ? { activeAdapterKind: conversationMeta.adapterKind }
+          ...(conversationMeta?.harnessKind
+            ? { activeHarnessKind: conversationMeta.harnessKind }
             : {}),
           ...(resume?.sessionId
             ? {
@@ -632,9 +632,9 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
               ? { prevAdapterSessionId: opts.prevAdapterSessionId }
               : {}),
           ...(resume?.kind
-            ? { prevAdapterKind: resume.kind }
-            : opts.prevAdapterKind
-              ? { prevAdapterKind: opts.prevAdapterKind }
+            ? { prevHarnessKind: resume.kind }
+            : opts.prevHarnessKind
+              ? { prevHarnessKind: opts.prevHarnessKind }
               : {}),
           ...(resume?.usageSnapshot
             ? { prevAdapterUsageSnapshot: resume.usageSnapshot }
@@ -646,7 +646,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         let runResult:
           | {
               adapterSessionId?: string;
-              adapterKind?: string;
+              harnessKind?: string;
               adapterUsageSnapshot?: TypeImport_nu6ai6.AdapterUsageSnapshot;
               hydrated?: boolean;
               hydrationKind?: "handoff" | "recovery";
@@ -665,15 +665,15 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           req.off("error", onClientClose);
           if (conversationStore && !acc.consentRequired) {
             // Retire a binding the adapter had to abandon (D9). `hydrationKind:
-            // 'recovery'` means the resume handle we handed this runner was
+            // 'recovery'` means the resume handle we handed this harness was
             // rejected and it self-healed onto a fresh session. Left `active`,
             // that dead handle would be re-offered on every subsequent turn,
             // paying a failed resume + a full-ledger recovery fold each time.
             if (
               runResult?.hydrationKind === "recovery" &&
-              runResult.adapterKind
+              runResult.harnessKind
             ) {
-              const dead = plans.get(runResult.adapterKind);
+              const dead = plans.get(runResult.harnessKind);
               if (
                 dead?.bindingId &&
                 dead.sessionId !== runResult.adapterSessionId
@@ -821,10 +821,10 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
                 ...(runResult?.hydrationTokens === undefined
                   ? {}
                   : { hydrationTokens: runResult.hydrationTokens }),
-                ...(acc.errorMessage === undefined && runResult?.adapterKind
+                ...(acc.errorMessage === undefined && runResult?.harnessKind
                   ? {
                       adapter: {
-                        kind: runResult.adapterKind,
+                        kind: runResult.harnessKind,
                         ...(runResult.adapterSessionId
                           ? { sessionId: runResult.adapterSessionId }
                           : {}),
@@ -835,10 +835,10 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
                       },
                     }
                   : {}),
-                ...(acc.errorMessage !== undefined && runResult?.adapterKind
+                ...(acc.errorMessage !== undefined && runResult?.harnessKind
                   ? {
                       failedAdapter: {
-                        kind: runResult.adapterKind,
+                        kind: runResult.harnessKind,
                         ...(runResult.adapterSessionId
                           ? { sessionId: runResult.adapterSessionId }
                           : {}),

@@ -10,7 +10,7 @@
  *      turn by `@centraid/vault`'s buildAssistantContext (spliced in here).
  *
  * Provider-agnostic on purpose: nothing in here names a model or vendor —
- * the same text rides whichever runner backend the user configured.
+ * the same text rides whichever harness backend the user configured.
  */
 
 const REGISTER = `You are the owner's vault assistant. The vault is their personal data store — people, notes, documents, events, money, health, tasks — and you answer questions over it. You are talking to the one person whose data this is.

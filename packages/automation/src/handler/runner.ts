@@ -151,12 +151,12 @@ export interface RunHandlerOptions {
     ok: boolean
   ) => void;
   /** Fixed harness owner for this automation conversation. */
-  runnerKind?: string;
+  harnessKind?: string;
   /** Effective model when a usage event omits its model id. */
   model?: string;
   /**
    * Host-injected `ctx.vault` executor, bound to this automation's enrolled
-   * `agent.agent` credential (duaility §12). Absent → every `ctx.vault` call
+   * `consent.agent` credential (duaility §12). Absent → every `ctx.vault` call
    * fails closed with `VAULT_UNAVAILABLE`.
    */
   vault?: VaultBridge;
@@ -717,7 +717,7 @@ export async function runHandler(
   };
 
   // Every fire appends to the automation's stable canonical conversation.
-  // Harness sessions are per-runner resume bindings beneath this identity,
+  // Harness sessions are per-harness resume bindings beneath this identity,
   // so A → B → A never forks execution history.
   const slash = audit.automationId.indexOf("/");
   const appId = slash > 0 ? audit.automationId.slice(0, slash) : undefined;
@@ -725,7 +725,7 @@ export async function runHandler(
     audit.automationId,
     appId,
     opts.automationName,
-    opts.runnerKind
+    opts.harnessKind
   );
   const startedAt = opts.now === undefined ? Date.now() : Date.parse(opts.now);
   if (!Number.isFinite(startedAt))

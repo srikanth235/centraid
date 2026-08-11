@@ -30,7 +30,7 @@ export type TurnStreamEvent =
       errorText?: string;
       diffs?: Array<{ path?: string; oldText?: string; newText?: string }>;
       locations?: Array<{ path: string; line?: number }>;
-      /** `hash` is the CAS sha256 when the runner reported one — the chip shows
+      /** `hash` is the CAS sha256 when the harness reported one — the chip shows
        *  it, matching the reloaded transcript's artifact chips (#567). */
       artifacts?: Array<{
         dataBase64: string;
@@ -70,7 +70,7 @@ export type TurnStreamEvent =
       reason: "direct" | "ladder";
       message: string;
     }
-  /** Non-fatal, human-readable notice (issue #420) — e.g. a runner that can't
+  /** Non-fatal, human-readable notice (issue #420) — e.g. a harness that can't
    *  read PDF attachments. Rendered in the transcript live AND persisted with
    *  the turn, so a reload replays it (#567). */
   | { type: "notice"; level: "warn" | "info"; code?: string; message: string }

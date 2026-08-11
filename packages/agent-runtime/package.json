@@ -2,7 +2,7 @@
   "name": "@centraid/agent-runtime",
   "version": "0.1.0",
   "private": false,
-  "description": "Unified local agent runtime for centraid: drives one turn over the Agent Client Protocol for every runner kind, launching first-party ACP adapters for CLIs that lack an ACP mode. Used by both the per-app data chat and the builder. Ships a tiny `centraid` CLI bin agents shell out to.",
+  "description": "Unified local agent runtime for centraid: drives one turn over the Agent Client Protocol for every harness kind, launching first-party ACP adapters for CLIs that lack an ACP mode. Used by both the per-app data chat and the builder. Ships a tiny `centraid` CLI bin agents shell out to.",
   "license": "SEE LICENSE IN REPOSITORY",
   "repository": {
     "type": "git",

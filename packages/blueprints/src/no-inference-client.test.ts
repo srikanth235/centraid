@@ -155,7 +155,7 @@ describe("no blueprint imports a provider SDK directly (docs/blueprint-seats.md 
       expect(
         hits,
         `${path.relative(PACKAGE_ROOT, file)} imports ${hits.join(", ")} — ` +
-          `the only roads to a model are ctx.agent (the ACP runner registry) ` +
+          `the only roads to a model are ctx.agent (the ACP harness registry) ` +
           `and the device work-lease lane (docs/blueprint-seats.md ` +
           `"Enrichment doctrine")`
       ).toStrictEqual([]);

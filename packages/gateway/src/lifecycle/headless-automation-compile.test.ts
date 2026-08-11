@@ -54,7 +54,7 @@ describe("headless-automation-compile suite", () => {
   async function harness(
     runner: ConversationRunner,
     agent: {
-      runnerKind?: "claude-code";
+      harnessKind?: "claude-code";
       model?: string;
       preflightError?: string;
     } = {}
@@ -89,12 +89,12 @@ describe("headless-automation-compile suite", () => {
   describe(runHeadlessAutomationCompile, () => {
     it("records a successful compile turn on the stable automation conversation", async () => {
       let receivedDraftSessionId: string | undefined;
-      let receivedRunnerKind: string | undefined;
+      let receivedHarnessKind: string | undefined;
       let receivedModel: string | undefined;
       const runner: ConversationRunner = {
         run: async (input) => {
           receivedDraftSessionId = input.draftSessionId;
-          receivedRunnerKind = input.runnerKind;
+          receivedHarnessKind = input.harnessKind;
           receivedModel = input.model;
           input.onEvent({
             type: "final",
@@ -110,17 +110,17 @@ describe("headless-automation-compile suite", () => {
             costUsd: 0.004,
             costSource: "agent",
           });
-          return { adapterKind: "codex" };
+          return { harnessKind: "codex" };
         },
       };
       const { store, onSuccess, onFailure } = await harness(runner, {
-        runnerKind: "claude-code",
+        harnessKind: "claude-code",
         model: "claude-custom",
       });
       expect(onSuccess).toHaveBeenCalledOnce();
       expect(onFailure).not.toHaveBeenCalled();
       expect(receivedDraftSessionId).toBe("compile-digest-1");
-      expect(receivedRunnerKind).toBe("claude-code");
+      expect(receivedHarnessKind).toBe("claude-code");
       expect(receivedModel).toBe("claude-custom");
       const conversationId = "digest/main";
       expect(store.getConversation(conversationId)?.title).toBe("Daily digest");
@@ -179,7 +179,7 @@ describe("headless-automation-compile suite", () => {
             outputTokens: 0,
             costUsd: 0.001,
           });
-          return { adapterKind: "codex" };
+          return { harnessKind: "codex" };
         },
       };
       const { store, onSuccess, onFailure } = await harness(runner);
@@ -279,7 +279,7 @@ describe("headless-automation-compile suite", () => {
         automationName: "Daily digest",
         runId: "compile-reserved",
         error: "Instruction revision failed: empty result",
-        runnerKind: "claude-code",
+        harnessKind: "claude-code",
       });
 
       const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
@@ -395,7 +395,7 @@ describe("headless-automation-compile suite", () => {
         automationRef: "digest/main",
         automationName: "Daily digest",
         instructions: "Summarize mail.",
-        runnerKind: "claude-code",
+        harnessKind: "claude-code",
         providerEgressConsent: consent,
         consentSource: "ladder",
         onSuccess: vi.fn<CompileSuccess>().mockResolvedValue(undefined),
@@ -420,7 +420,7 @@ describe("headless-automation-compile suite", () => {
       const journalDbFile = path.join(dir, "journal.db");
       const run = vi.fn<ConversationRunner["run"]>(async (input) => {
         input.onEvent({ type: "final", text: "Files ready." });
-        return { adapterKind: "claude-code" };
+        return { harnessKind: "claude-code" };
       });
       const consent = new ProviderEgressConsentStore(
         makeJournalDbProvider(journalDbFile),
@@ -436,7 +436,7 @@ describe("headless-automation-compile suite", () => {
         automationRef: "digest/main",
         automationName: "Daily digest",
         instructions: "Summarize mail.",
-        runnerKind: "claude-code",
+        harnessKind: "claude-code",
         providerEgressConsent: consent,
         consentSource: "ladder",
         onSuccess: vi.fn<CompileSuccess>().mockResolvedValue(undefined),

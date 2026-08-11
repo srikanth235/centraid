@@ -27,7 +27,7 @@ import type {
   AutomationTurnStreamEvent,
   ConversationRunner,
   ConversationTurnAttachment,
-  RunnerKind,
+  HarnessKind,
   TurnAttachment,
   TurnStreamEvent,
 } from "@centraid/app-engine";
@@ -110,12 +110,12 @@ export interface InteractiveAutomationTurnOptions {
   journalDbFile: string;
   runnerSessionDir: string;
   runner: ConversationRunner;
-  runnerKind: RunnerKind;
+  harnessKind: HarnessKind;
   model?: string;
   configPins?: Readonly<Record<string, string>>;
-  /** Egress consent answered by the user for this turn — one runner, or the
+  /** Egress consent answered by the user for this turn — one harness, or the
    *  set a ladder attempt asked about. */
-  providerConsent?: RunnerKind | readonly RunnerKind[];
+  providerConsent?: HarnessKind | readonly HarnessKind[];
   attachmentRefs?: ConversationTurnAttachment[];
   turnAttachments?: TurnAttachment[];
   /** Resolve historical upload hashes into this automation app's blob CAS. */
@@ -213,7 +213,7 @@ async function workspaceArtifact(
   };
 }
 
-/** `file:` URLs from a runner are foreign input and may be malformed. */
+/** `file:` URLs from a harness are foreign input and may be malformed. */
 function decodeReportedPath(reportedPath: string): string | undefined {
   if (!reportedPath.startsWith("file:")) return reportedPath;
   try {
@@ -225,7 +225,7 @@ function decodeReportedPath(reportedPath: string): string | undefined {
 }
 
 /**
- * Run one steering turn. The lock covers ledger context selection, runner
+ * Run one steering turn. The lock covers ledger context selection, harness
  * dispatch, and resume-handle update so two messages on one automation cannot
  * race the same cached ACP session.
  */
@@ -238,7 +238,7 @@ export async function runInteractiveAutomationTurn(
     ref,
     opts.row.ownerApp,
     opts.row.name,
-    opts.runnerKind
+    opts.harnessKind
   );
 
   return withConversationLock(
@@ -266,7 +266,7 @@ export async function runInteractiveAutomationTurn(
         }
         const binding = store.getHarnessBinding(
           conversationId,
-          opts.runnerKind
+          opts.harnessKind
         );
         const turnsBeforeCurrent = store.listTurns(conversationId);
         const hydrationMessages = hydrationMessagesFromLedger(
@@ -560,7 +560,7 @@ export async function runInteractiveAutomationTurn(
         let adapter:
           | {
               adapterSessionId?: string;
-              adapterKind?: string;
+              harnessKind?: string;
               adapterUsageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
               hydrated?: boolean;
               hydrationTokens?: number;
@@ -577,14 +577,14 @@ export async function runInteractiveAutomationTurn(
               ? { attachments: opts.turnAttachments }
               : {}),
             extraSystemPrompt: preamble,
-            runnerKind: opts.runnerKind,
+            harnessKind: opts.harnessKind,
             ...(opts.model ? { model: opts.model } : {}),
             ...(opts.configPins ? { configPins: opts.configPins } : {}),
             ...(opts.providerConsent
               ? { providerConsent: opts.providerConsent }
               : {}),
-            ...(conversation.adapterKind
-              ? { activeAdapterKind: conversation.adapterKind }
+            ...(conversation.harnessKind
+              ? { activeHarnessKind: conversation.harnessKind }
               : {}),
             permissionPolicy: "deny",
             abortSignal: opts.abortSignal,
@@ -594,7 +594,7 @@ export async function runInteractiveAutomationTurn(
                   prevBindingId: binding.id,
                 }
               : {}),
-            ...(binding ? { prevAdapterKind: binding.kind } : {}),
+            ...(binding ? { prevHarnessKind: binding.kind } : {}),
             ...(binding?.usageSnapshot
               ? { prevAdapterUsageSnapshot: binding.usageSnapshot }
               : {}),
@@ -801,7 +801,7 @@ export async function runInteractiveAutomationTurn(
               turnId: opts.turnId,
               ordinal: notice.ordinal,
               kind: "step",
-              name: `notice:${notice.level}:${notice.code ?? "runner"}`,
+              name: `notice:${notice.level}:${notice.code ?? "harness"}`,
               outputJson: safeJson({ text: notice.message }),
               ok: true,
               startedAt: notice.at,
@@ -834,9 +834,9 @@ export async function runInteractiveAutomationTurn(
           if (adapter?.hydrationTokens !== undefined) {
             store.setTurnHydrationTokens(opts.turnId, adapter.hydrationTokens);
           }
-          const observedAdapter = adapter?.adapterKind
+          const observedHarness = adapter?.harnessKind
             ? {
-                kind: adapter.adapterKind,
+                kind: adapter.harnessKind,
                 ...(adapter.adapterSessionId
                   ? { sessionId: adapter.adapterSessionId }
                   : {}),
@@ -846,8 +846,8 @@ export async function runInteractiveAutomationTurn(
                 ...(adapter.hydrated ? { hydrated: true } : {}),
               }
             : undefined;
-          if (ok) store.noteTurn(conversationId, "", observedAdapter);
-          else store.noteFailedTurn(conversationId, "", observedAdapter);
+          if (ok) store.noteTurn(conversationId, "", observedHarness);
+          else store.noteFailedTurn(conversationId, "", observedHarness);
         });
         emitTurn({
           type: "item.end",

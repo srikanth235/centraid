@@ -7,17 +7,17 @@
  * the turn orchestrator.
  */
 
-import type { AgentFailureClass } from "@centraid/app-engine";
+import type { HarnessFailureClass } from "@centraid/app-engine";
 
 import { AUTH_REQUIRED_CODE, AcpRpcError } from "./json-rpc.js";
 import type { AcpTurnConfig } from "./types.js";
 
-export { type AgentFailureClass } from "@centraid/app-engine";
+export { type HarnessFailureClass } from "@centraid/app-engine";
 
 /**
  * The taxonomy is owned by `@centraid/app-engine` (the `TurnStreamEvent`
  * contract the breakers key off). Re-exported, never re-declared — two copies
- * of the union is how the classifier and the runner drift apart.
+ * of the union is how the classifier and the harness drift apart.
  */
 
 /** ACP JSON-RPC "Internal error" — often a stand-in for "not configured". */
@@ -44,7 +44,7 @@ const INIT_STAGES =
 const AUTHISH =
   /\b(?<authTerm>oauth|auth(?:entication|enticate(?:d|s)?|enticating)?|sign[\s-]?in|log[\s-]?in|not logged|unauthori[sz]ed|api[_ ]?key|credentials?|configure|provider)\b/iu;
 
-const KEYWORD_CLASSES: Array<[RegExp, AgentFailureClass]> = [
+const KEYWORD_CLASSES: Array<[RegExp, HarnessFailureClass]> = [
   [/\b(?<quota>rate limit|quota|too many requests|429)\b/iu, "quota"],
   [/\b(?<wedge>wedge|idle watchdog)\b/iu, "wedge"],
   [/\b(?<timeout>timeout|timed out)\b/iu, "timeout"],
@@ -52,14 +52,14 @@ const KEYWORD_CLASSES: Array<[RegExp, AgentFailureClass]> = [
   [/\b(?<exit>exit|exited|signal|broken pipe)\b/iu, "exit"],
 ];
 
-function keywordClass(text: string): AgentFailureClass | undefined {
+function keywordClass(text: string): HarnessFailureClass | undefined {
   for (const [pattern, cls] of KEYWORD_CLASSES)
     if (pattern.test(text)) return cls;
   return undefined;
 }
 
 export interface ClassifiedAgentFailure {
-  failureClass: AgentFailureClass;
+  failureClass: HarnessFailureClass;
   message: string;
 }
 
@@ -155,7 +155,7 @@ function failureClassOf(
   err: unknown,
   message: string,
   stderr: string
-): AgentFailureClass {
+): HarnessFailureClass {
   if (err instanceof AcpRpcError) {
     if (QUOTA_ERROR_CODES.has(err.code)) return "quota";
   }

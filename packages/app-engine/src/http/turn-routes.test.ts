@@ -153,7 +153,7 @@ describe("turn-routes", () => {
     expect(text).toMatch(/event: end/u);
   });
 
-  test("POST /_turn passes the runner-owned session file under the scratch dir", async () => {
+  test("POST /_turn passes the harness-owned session file under the scratch dir", async () => {
     let seenSessionFile = "";
     const runner: ConversationRunner = {
       async run(input) {
@@ -486,9 +486,9 @@ describe("turn-routes", () => {
     expect(text).toMatch(/"text":"ok"/u);
   });
 
-  test('GET /centraid/_turn/runner-status returns "none" when no runner configured', async () => {
+  test('GET /centraid/_turn/harness-status returns "none" when no harness configured', async () => {
     await bootstrap();
-    const res = await fetch(`${server.url}/centraid/_turn/runner-status`, {
+    const res = await fetch(`${server.url}/centraid/_turn/harness-status`, {
       headers: { Authorization: `Bearer ${server.token}` },
     });
     expect(res.status).toBe(200);
@@ -537,7 +537,7 @@ describe("turn-routes", () => {
     const aDone = new Promise<void>((resolve) => {
       releaseA = resolve;
     });
-    const runnerA: ConversationRunner = {
+    const harnessA: ConversationRunner = {
       async run(input) {
         aStarted = true;
         input.onEvent({ type: "assistant.start" });
@@ -550,14 +550,14 @@ describe("turn-routes", () => {
     );
     const runtimeA = new Runtime({
       appsDir: workspaceA,
-      conversationRunner: runnerA,
+      conversationRunner: harnessA,
     });
     const serverA = await startRuntimeHttpServer({ runtime: runtimeA });
     await runtimeA.bootstrap();
     await runtimeA.registry.ensureUploaded("demo");
 
     // -- Setup runtime B: runner finishes instantly.
-    const runnerB: ConversationRunner = {
+    const harnessB: ConversationRunner = {
       async run(input) {
         input.onEvent({ type: "final", text: "b-final" });
       },
@@ -567,7 +567,7 @@ describe("turn-routes", () => {
     );
     const runtimeB = new Runtime({
       appsDir: workspaceB,
-      conversationRunner: runnerB,
+      conversationRunner: harnessB,
     });
     const serverB = await startRuntimeHttpServer({ runtime: runtimeB });
     await runtimeB.bootstrap();
@@ -713,7 +713,7 @@ describe("turn-routes", () => {
 
   /** An in-memory `AskModelPrefs` fake — mirrors the gateway's prefs-store + catalog wiring. */
   function fakeAskModel(opts?: {
-    runnerKind?: string;
+    harnessKind?: string;
     defaultModel?: string;
     catalog?: { id: string; label: string }[];
   }): AskModelPrefs & { current: string | null } {
@@ -726,7 +726,7 @@ describe("turn-routes", () => {
         state.current = v;
       },
       get: async (): Promise<AskModelInfo> => ({
-        runnerKind: opts?.runnerKind ?? "codex",
+        harnessKind: opts?.harnessKind ?? "codex",
         ...(opts?.defaultModel ? { defaultModel: opts.defaultModel } : {}),
         current: state.current,
         catalog: opts?.catalog ?? [],
@@ -779,7 +779,7 @@ describe("turn-routes", () => {
 
   test("GET /_turn/model returns the picker state — no override means current: null", async () => {
     const askModel = fakeAskModel({
-      runnerKind: "codex",
+      harnessKind: "codex",
       defaultModel: "gpt-5.5",
       catalog: [
         { id: "gpt-5.5", label: "GPT-5.5" },
@@ -794,7 +794,7 @@ describe("turn-routes", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as AskModelInfo;
     expect(body).toStrictEqual({
-      runnerKind: "codex",
+      harnessKind: "codex",
       defaultModel: "gpt-5.5",
       current: null,
       catalog: [
@@ -806,7 +806,7 @@ describe("turn-routes", () => {
 
   test("PUT /_turn/model sets the override and GET reflects it", async () => {
     const askModel = fakeAskModel({
-      runnerKind: "codex",
+      harnessKind: "codex",
       defaultModel: "gpt-5.5",
     });
     await bootstrapWithAskModel(askModel);
@@ -833,7 +833,7 @@ describe("turn-routes", () => {
 
   test("PUT /_turn/model with model: null clears the override back to default", async () => {
     const askModel = fakeAskModel({
-      runnerKind: "codex",
+      harnessKind: "codex",
       defaultModel: "gpt-5.5",
     });
     askModel.current = "gpt-5.5-mini"; // pre-existing override

@@ -3,7 +3,7 @@
  *
  * This owns the model-facing carrier: a real ACP subprocess discovers the
  * per-turn loopback MCP server, calls `vault_invoke` once for every native
- * blueprint, and relays the runner's consent outcome and receipt unchanged.
+ * blueprint, and relays the harness's consent outcome and receipt unchanged.
  * Command semantics and journal durability stay owned by each vault command's
  * integration tests; duplicating the vault engine here would turn this into a
  * second, weaker command test.

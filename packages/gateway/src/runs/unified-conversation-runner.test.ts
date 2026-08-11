@@ -77,7 +77,7 @@ describe("unified-conversation-runner", () => {
         captured = { input, config };
         input.onEvent({ type: "assistant.delta", delta: "ok" });
         input.onEvent({ type: "final", text: "done" });
-        return { adapterKind: "codex", sessionId: "thread-1" };
+        return { harnessKind: "codex", sessionId: "thread-1" };
       },
     });
 
@@ -107,7 +107,7 @@ describe("unified-conversation-runner", () => {
     expect(runner.runKind).toBe("build");
 
     // Resume handle round-trips back to the route.
-    expect(result?.adapterKind).toBe("codex");
+    expect(result?.harnessKind).toBe("codex");
     expect(result?.adapterSessionId).toBe("thread-1");
 
     // Stream events flowed through.
@@ -123,7 +123,7 @@ describe("unified-conversation-runner", () => {
       publicBaseUrl: () => "http://127.0.0.1:9999",
       runTurn: async (input): Promise<TurnResult> => {
         cwd = input.cwd;
-        return { adapterKind: "codex" };
+        return { harnessKind: "codex" };
       },
     });
 
@@ -177,7 +177,7 @@ describe("unified-conversation-runner", () => {
           "export default async () => ({});",
           "utf8"
         );
-        return { adapterKind: "codex", sessionId: "thread-2" };
+        return { harnessKind: "codex", sessionId: "thread-2" };
       },
     });
 

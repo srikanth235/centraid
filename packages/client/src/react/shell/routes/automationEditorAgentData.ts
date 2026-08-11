@@ -5,7 +5,7 @@ import type {
 
 export type AutomationAgentEditorData = Pick<
   AutomationEditorData,
-  "agentRunners" | "defaultModel" | "defaultRunnerKind"
+  "agentHarnesses" | "defaultModel" | "defaultHarnessKind"
 >;
 
 function catalogDefaultModel(
@@ -23,14 +23,14 @@ function catalogDefaultModel(
   );
 }
 
-/** Dynamic gateway runner/model catalog plus the effective automations pins. */
+/** Dynamic gateway harness/model catalog plus the effective automations pins. */
 export function buildAutomationAgentEditorData(
   status: AgentsStatusDTO
 ): AutomationAgentEditorData {
-  const defaultRunnerKind =
-    status.subsystemRunnerByKey.automations ?? status.selectedKind;
+  const defaultHarnessKind =
+    status.subsystemHarnessByKey.automations ?? status.selectedKind;
   return {
-    agentRunners: status.cards.map((card) => ({
+    agentHarnesses: status.cards.map((card) => ({
       accent: card.accent,
       connected: card.connected,
       defaultModel: catalogDefaultModel(status, card.kind),
@@ -38,7 +38,7 @@ export function buildAutomationAgentEditorData(
       label: card.title,
       models: card.models,
     })),
-    defaultModel: catalogDefaultModel(status, defaultRunnerKind),
-    defaultRunnerKind,
+    defaultModel: catalogDefaultModel(status, defaultHarnessKind),
+    defaultHarnessKind,
   };
 }

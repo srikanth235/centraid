@@ -17,26 +17,26 @@ import { describe, expect, test } from "vitest";
 import { ConversationStore, makeJournalDbProvider } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-import { RUNNER_BACKENDS } from "../registry.js";
-import type { RunnerKind } from "../types.js";
+import { HARNESSES } from "../registry.js";
+import type { HarnessKind } from "../types.js";
 import { runAutomation } from "./run-automation.js";
 
-const isRunnerKind = (value: string): value is RunnerKind =>
-  Object.hasOwn(RUNNER_BACKENDS, value);
+const isHarnessKind = (value: string): value is HarnessKind =>
+  Object.hasOwn(HARNESSES, value);
 describe("live-automation-failover suite", () => {
   test.skipIf(process.env.CENTRAID_LIVE_AUTOMATION !== "1")(
     "a missing primary binary advances a real automation fire to its fallback",
     async () => {
       const primaryValue = process.env.CENTRAID_LIVE_FAILOVER_PRIMARY ?? "acp";
       const fallbackValue =
-        process.env.CENTRAID_LIVE_FAILOVER_RUNNER ?? "codex";
-      if (!isRunnerKind(primaryValue) || !isRunnerKind(fallbackValue)) {
+        process.env.CENTRAID_LIVE_FAILOVER_HARNESS ?? "codex";
+      if (!isHarnessKind(primaryValue) || !isHarnessKind(fallbackValue)) {
         throw new Error(
           `Unknown failover route: ${primaryValue}->${fallbackValue}`
         );
       }
       if (primaryValue === fallbackValue)
-        throw new Error("Primary and fallback runners must differ.");
+        throw new Error("Primary and fallback harnesses must differ.");
       const primary = primaryValue;
       const fallback = fallbackValue;
       const root = await tempDir("centraid-live-automation-failover-");
@@ -79,8 +79,8 @@ describe("live-automation-failover suite", () => {
       );
 
       const failovers: Array<{
-        from: RunnerKind;
-        to: RunnerKind;
+        from: HarnessKind;
+        to: HarnessKind;
         failureClass: string;
         failedRunId: string;
         nextRunId: string;
@@ -91,26 +91,26 @@ describe("live-automation-failover suite", () => {
         appsDir,
         codeAppsDir,
         journalDbFile,
-        runner: primary,
-        runnerLadder: [primary, fallback],
-        runnerPrefsFor: async (runner) => {
-          if (runner === primary) {
+        harness: primary,
+        harnessLadder: [primary, fallback],
+        harnessPrefsFor: async (harness) => {
+          if (harness === primary) {
             return {
-              kind: runner,
+              kind: harness,
               binPath: path.join(root, "missing-codex-binary"),
             };
           }
           const binPath =
-            runner === "codex"
+            harness === "codex"
               ? process.env.CENTRAID_CODEX_BIN
-              : runner === "claude-code"
+              : harness === "claude-code"
                 ? process.env.CENTRAID_CLAUDE_BIN
-                : runner === "gemini"
+                : harness === "gemini"
                   ? process.env.CENTRAID_GEMINI_BIN
-                  : runner === "opencode"
+                  : harness === "opencode"
                     ? process.env.CENTRAID_OPENCODE_BIN
                     : undefined;
-          return { kind: runner, ...(binPath ? { binPath } : {}) };
+          return { kind: harness, ...(binPath ? { binPath } : {}) };
         },
         onFailover: (event) => failovers.push(event),
         timeoutMs: 90_000,

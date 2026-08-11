@@ -170,7 +170,7 @@ function harness(): { req: IncomingMessage; res: ServerResponse } {
 }
 
 describe("driveTurnOverSse recovery hydration", () => {
-  it("includes the sequence-zero turn when an existing runner handle self-heals", async () => {
+  it("includes the sequence-zero turn when an existing harness handle self-heals", async () => {
     const dir = await tempDir("centraid-turn-recovery-");
     const appsDir = path.join(dir, "apps");
     const appDir = path.join(appsDir, "notes");
@@ -212,7 +212,7 @@ describe("driveTurnOverSse recovery hydration", () => {
       async run(input) {
         codex = input.resumeForKind?.("codex");
         input.onEvent({ type: "final", text: "next answer" });
-        return { adapterKind: "codex", adapterSessionId: "codex-session" };
+        return { harnessKind: "codex", adapterSessionId: "codex-session" };
       },
     };
     await driveTurnOverSse({
@@ -223,7 +223,7 @@ describe("driveTurnOverSse recovery hydration", () => {
       dataDir: appDir,
       extraSystemPrompt: "app context",
       runner,
-      runnerKind: "codex",
+      harnessKind: "codex",
       conversationStore: history,
       conversationRunnerSessionDir: runnerSessionDir,
       conversationLocks: new Map(),
@@ -287,7 +287,7 @@ describe("driveTurnOverSse recovery hydration", () => {
         codex = input.resumeForKind?.("codex");
         claude = input.resumeForKind?.("claude-code");
         input.onEvent({ type: "final", text: "ok" });
-        return { adapterKind: "claude-code" };
+        return { harnessKind: "claude-code" };
       },
     };
     await driveTurnOverSse({
@@ -298,7 +298,7 @@ describe("driveTurnOverSse recovery hydration", () => {
       dataDir: appDir,
       extraSystemPrompt: "app context",
       runner,
-      runnerKind: "codex",
+      harnessKind: "codex",
       conversationStore: history,
       conversationRunnerSessionDir: runnerSessionDir,
       conversationLocks: new Map(),
@@ -358,7 +358,7 @@ describe("driveTurnOverSse recovery hydration", () => {
         input.resumeForKind?.("codex");
         input.onEvent({ type: "error", message: "model overloaded" });
         return {
-          adapterKind: "codex",
+          harnessKind: "codex",
           hydrated: true,
           hydrationKind: "recovery",
         };
@@ -372,7 +372,7 @@ describe("driveTurnOverSse recovery hydration", () => {
       dataDir: appDir,
       extraSystemPrompt: "app context",
       runner,
-      runnerKind: "codex",
+      harnessKind: "codex",
       conversationStore: history,
       conversationRunnerSessionDir: runnerSessionDir,
       conversationLocks: new Map(),
@@ -423,7 +423,7 @@ describe("driveTurnOverSse recovery hydration", () => {
           locations: [{ path: path.join(appDir, "subdir") }, { path: huge }],
         });
         input.onEvent({ type: "final", text: "done" });
-        return { adapterKind: "codex" };
+        return { harnessKind: "codex" };
       },
     };
     await driveTurnOverSse({
@@ -434,7 +434,7 @@ describe("driveTurnOverSse recovery hydration", () => {
       dataDir: appDir,
       extraSystemPrompt: "app context",
       runner,
-      runnerKind: "codex",
+      harnessKind: "codex",
       conversationStore: history,
       conversationRunnerSessionDir: runnerSessionDir,
       conversationLocks: new Map(),

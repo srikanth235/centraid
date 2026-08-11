@@ -2,7 +2,7 @@
  * governance: allow-repo-hygiene file-size-limit (#567) the generic ACP lifecycle is one ordered initialize/configure/resume/prompt/settle state machine; splitting its transaction would scatter failure cleanup and confirmed-state accounting
  *
  * Generic ACP (Agent Client Protocol) backend — the ONE integration path
- * for every runner kind (issue #479).
+ * for every harness kind (issue #479).
  *
  * Turn flow: launch (or warm reuse) → initialize → session resume|load|new →
  * pin mode/model → session/prompt → stopReason handling → warm park or kill.
@@ -357,7 +357,7 @@ export async function runAcpTurn(
             terminal: false,
           },
           clientInfo: {
-            name: "centraid-local-runner",
+            name: "centraid-local-harness",
             title: "Centraid",
             version: "0.1.0",
           },
@@ -464,7 +464,7 @@ export async function runAcpTurn(
         level: "warn",
         code: "additional_directories_unsupported",
         message:
-          "This runner does not advertise scoped additional directories, so the selected folders were not shared.",
+          "This harness does not advertise scoped additional directories, so the selected folders were not shared.",
       });
     }
 
@@ -489,7 +489,7 @@ export async function runAcpTurn(
           level: "warn",
           code: "permission_mode_unavailable",
           message:
-            `This runner didn’t offer its non-interactive permission mode (${wantMode}), ` +
+            `This harness didn’t offer its non-interactive permission mode (${wantMode}), ` +
             `so tool use may stall waiting for an approval this surface can’t show.`,
         });
       }
@@ -551,7 +551,7 @@ export async function runAcpTurn(
             level: "info",
             code: "hydration_attachment_described",
             message:
-              `This runner can’t re-attach ${mapped.skipped.join(", ")}. ` +
+              `This harness can’t re-attach ${mapped.skipped.join(", ")}. ` +
               "Their names and media types remain in the conversation handoff.",
           });
         }
@@ -568,7 +568,7 @@ export async function runAcpTurn(
           level: "warn",
           code: "attachment_unsupported",
           message:
-            `This runner can’t read ${mapped.skipped.length === 1 ? "this attachment" : "these attachments"}, ` +
+            `This harness can’t read ${mapped.skipped.length === 1 ? "this attachment" : "these attachments"}, ` +
             `so ${mapped.skipped.length === 1 ? "it was" : "they were"} skipped: ${mapped.skipped.join(", ")}.`,
         });
       }

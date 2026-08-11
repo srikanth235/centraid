@@ -1,5 +1,5 @@
 /*
- * The agents-status route reports the v0-supported runner roster while the
+ * The agents-status route reports the v0-supported harness roster while the
  * broader backend registry remains available to persisted configuration.
  * These tests cover the offered list shape and resolver plumbing; the CLI
  * probe itself runs for real and is not asserted on (its result varies by
@@ -8,7 +8,7 @@
 
 import { describe, expect, test } from "vitest";
 
-import { SUPPORTED_RUNNER_KINDS } from "@centraid/agent-runtime";
+import { SUPPORTED_HARNESS_KINDS } from "@centraid/agent-runtime";
 
 import type { AgentAcpCapabilities } from "./agents-routes.ts";
 import { modelsFromCapabilities, readAgentsStatus } from "./agents-routes.ts";
@@ -44,10 +44,10 @@ const compareStringValues = (
 };
 
 describe("agents-routes", () => {
-  test("reports one entry per supported runner kind", async () => {
+  test("reports one entry per supported harness kind", async () => {
     const s = await readAgentsStatus();
     expect(s.agents.map((a) => a.kind).sort(compareStringValues)).toStrictEqual(
-      [...SUPPORTED_RUNNER_KINDS].sort(compareStringValues)
+      [...SUPPORTED_HARNESS_KINDS].sort(compareStringValues)
     );
     // Every entry is self-describing: the client renders off these, never off a
     // local table keyed on kinds it happens to know.
@@ -73,7 +73,7 @@ describe("agents-routes", () => {
   test("an unavailable agent carries the install hint; an available one does not", async () => {
     const s = await readAgentsStatus({
       binPathFor: (kind) =>
-        kind === "pi" ? "/definitely/not/a/runner" : undefined,
+        kind === "pi" ? "/definitely/not/a/harness" : undefined,
       refresh: true,
     });
     const pi = s.agents.find((a) => a.kind === "pi");
@@ -96,7 +96,7 @@ describe("agents-routes", () => {
     });
     // Every product-supported kind is offered the override, not just a known pair.
     expect(seen.sort(compareStringValues)).toStrictEqual(
-      [...SUPPORTED_RUNNER_KINDS].sort(compareStringValues)
+      [...SUPPORTED_HARNESS_KINDS].sort(compareStringValues)
     );
   });
 
@@ -122,7 +122,7 @@ describe("agents-routes", () => {
     });
     // Asked once per registered kind, and each answer landed on its own entry.
     expect(calls.map(([k]) => k).sort()).toStrictEqual(
-      [...SUPPORTED_RUNNER_KINDS].sort((a, b) => a.localeCompare(b))
+      [...SUPPORTED_HARNESS_KINDS].sort((a, b) => a.localeCompare(b))
     );
     const codex = s.agents.find((a) => a.kind === "codex");
     expect(codex?.models).toStrictEqual([
@@ -149,7 +149,7 @@ describe("agents-routes", () => {
       },
       refresh: true,
     });
-    expect(seen).toStrictEqual(SUPPORTED_RUNNER_KINDS.map(() => true));
+    expect(seen).toStrictEqual(SUPPORTED_HARNESS_KINDS.map(() => true));
   });
 
   // Catalog enumeration is opt-in per kind (codex + claude-code), but the

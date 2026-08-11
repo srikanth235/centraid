@@ -5,7 +5,7 @@ import {
   saveUserPrefs,
 } from "../../../gateway-client.js";
 import type {
-  AgentRunnerKind,
+  AgentHarnessKind,
   AgentsStatusDTO,
   ModelSubsystem,
 } from "../../screen-contracts.js";
@@ -15,22 +15,22 @@ import type {
 // host. This maps that snapshot into the AgentsStatusDTO the
 // SettingsProvidersScreen renders.
 //
-// The snapshot is a LIST (`{ agents: [...] }`), one entry per runner kind the
+// The snapshot is a LIST (`{ agents: [...] }`), one entry per harness kind the
 // gateway registers — it used to be `codex*`/`claude*` field pairs matched
-// against a local 2-row table, which meant a runner the gateway grew was
+// against a local 2-row table, which meant a harness the gateway grew was
 // invisible here until this file was edited too. Nothing below enumerates
-// runner kinds locally any more: the gateway's list drives the cards, the
+// harness kinds locally any more: the gateway's list drives the cards, the
 // model-prefs read, and the pickers alike.
 //
 // Model selection moved off desktop-local settings and onto the gateway
 // prefs store (`GET/PUT /_centraid-user/prefs`) so every client sharing a
-// gateway sees the same picks. Keys are `model.<runnerKind>.<slot>` where
-// `<slot>` is `default` (the runner's own default) or one of the
+// gateway sees the same picks. Keys are `model.<harnessKind>.<slot>` where
+// `<slot>` is `default` (the harness's own default) or one of the
 // `ModelSubsystem`s (`assistant` | `ask` | `builder` | `automations`). A
 // missing/empty value falls through to the next tier server-side.
 //
-// Runner selection is per subsystem the same way: `runner.<subsystem>` pins
-// one register to a runner, and `agent.runner.kind` is the DEFAULT agent
+// Harness selection is per subsystem the same way: `harness.<subsystem>` pins
+// one register to a harness, and `agent.harness.kind` is the DEFAULT agent
 // every unpinned subsystem inherits. Same fall-through rule — a
 // missing/empty pin resolves server-side, so this module only ever sends
 // explicit pins and deletes.
@@ -38,29 +38,29 @@ import type {
 type Snap = Awaited<ReturnType<typeof getAgentsStatus>>;
 
 /**
- * Resolve stale/open runner preference strings onto a runner actually reported
+ * Resolve stale/open harness preference strings onto a harness actually reported
  * by this gateway. Settings still renders every open kind from the wire; turn
  * pickers must not POST a kind absent from that same snapshot.
  */
-export function resolveReportedRunnerKind(
+export function resolveReportedHarnessKind(
   status: AgentsStatusDTO,
-  requested: AgentRunnerKind | null | undefined,
+  requested: AgentHarnessKind | null | undefined,
   subsystem: ModelSubsystem
-): AgentRunnerKind {
+): AgentHarnessKind {
   const reported = new Set(status.cards.map((card) => card.kind));
   const candidates = [
     requested,
-    status.subsystemRunnerByKey[subsystem],
+    status.subsystemHarnessByKey[subsystem],
     status.selectedKind,
     status.cards[0]?.kind,
   ];
   return (
     candidates.find(
-      (candidate): candidate is AgentRunnerKind =>
+      (candidate): candidate is AgentHarnessKind =>
         typeof candidate === "string" && reported.has(candidate)
     ) ??
     requested ??
-    status.subsystemRunnerByKey[subsystem] ??
+    status.subsystemHarnessByKey[subsystem] ??
     status.selectedKind
   );
 }
@@ -92,8 +92,8 @@ const ACCENT_BY_KIND: Record<string, string> = {
 };
 const DEFAULT_ACCENT = "var(--c-slate)";
 
-/** The runner every unpinned subsystem falls back to when prefs name none. */
-const FALLBACK_KIND: AgentRunnerKind = "codex";
+/** The harness every unpinned subsystem falls back to when prefs name none. */
+const FALLBACK_KIND: AgentHarnessKind = "codex";
 
 const SUBSYSTEMS: readonly ModelSubsystem[] = [
   "assistant",
@@ -103,14 +103,14 @@ const SUBSYSTEMS: readonly ModelSubsystem[] = [
 ];
 
 function modelPrefKey(
-  kind: AgentRunnerKind,
+  kind: AgentHarnessKind,
   slot: "default" | ModelSubsystem
 ): string {
   return `model.${kind}.${slot}`;
 }
 
 function configPrefKey(
-  kind: AgentRunnerKind,
+  kind: AgentHarnessKind,
   slot: "default" | ModelSubsystem,
   category: string
 ): string {
@@ -118,27 +118,27 @@ function configPrefKey(
 }
 
 /**
- * The per-subsystem runner pin. NOT under `agent.runner.*` — the daemon's
+ * The per-subsystem harness pin. NOT under `agent.harness.*` — the daemon's
  * config seeder owns that whole namespace and nulls every key it knows on
  * boot, so a pin parked there would evaporate on restart.
  */
-function runnerPrefKey(subsystem: ModelSubsystem): string {
-  return `runner.${subsystem}`;
+function harnessPrefKey(subsystem: ModelSubsystem): string {
+  return `harness.${subsystem}`;
 }
 
-function runnerLadderPrefKey(subsystem: ModelSubsystem): string {
-  return `runner.ladder.${subsystem}`;
+function harnessLadderPrefKey(subsystem: ModelSubsystem): string {
+  return `harness.ladder.${subsystem}`;
 }
 
-/** Pull the explicit `runner.<subsystem>` pins out of the raw prefs snapshot. */
-function readRunnerPrefs(
+/** Pull the explicit `harness.<subsystem>` pins out of the raw prefs snapshot. */
+function readHarnessPrefs(
   prefs: Record<string, unknown>
-): Partial<Record<ModelSubsystem, AgentRunnerKind>> {
-  const byKey: Partial<Record<ModelSubsystem, AgentRunnerKind>> = {};
+): Partial<Record<ModelSubsystem, AgentHarnessKind>> {
+  const byKey: Partial<Record<ModelSubsystem, AgentHarnessKind>> = {};
   for (const s of SUBSYSTEMS) {
-    const v = prefs[runnerPrefKey(s)];
+    const v = prefs[harnessPrefKey(s)];
     // Any non-empty string counts as a pin. This used to check against a
-    // closed pair, which would have silently dropped a pin onto a runner
+    // closed pair, which would have silently dropped a pin onto a harness
     // kind this build predates — the gateway is what resolves a pin, and it
     // treats an unknown one as "inherit" anyway.
     if (typeof v === "string" && v) byKey[s] = v;
@@ -147,12 +147,12 @@ function readRunnerPrefs(
 }
 
 /** Read ordered ladder membership written as an array (or legacy JSON text). */
-function readRunnerLadderPrefs(
+function readHarnessLadderPrefs(
   prefs: Record<string, unknown>
-): Partial<Record<ModelSubsystem, AgentRunnerKind[]>> {
-  const byKey: Partial<Record<ModelSubsystem, AgentRunnerKind[]>> = {};
+): Partial<Record<ModelSubsystem, AgentHarnessKind[]>> {
+  const byKey: Partial<Record<ModelSubsystem, AgentHarnessKind[]>> = {};
   for (const subsystem of SUBSYSTEMS) {
-    const raw = prefs[runnerLadderPrefKey(subsystem)];
+    const raw = prefs[harnessLadderPrefKey(subsystem)];
     let decoded: unknown = raw;
     if (typeof raw === "string") {
       try {
@@ -163,7 +163,7 @@ function readRunnerLadderPrefs(
     }
     if (!Array.isArray(decoded)) continue;
     const kinds = decoded.filter(
-      (value, index): value is AgentRunnerKind =>
+      (value, index): value is AgentHarnessKind =>
         typeof value === "string" &&
         value.length > 0 &&
         decoded.indexOf(value) === index
@@ -176,11 +176,11 @@ function readRunnerLadderPrefs(
 /**
  * Pull every `model.<kind>.<slot>` string out of the raw prefs snapshot, for
  * each kind the gateway reported. Driven by the gateway's list rather than a
- * local table so a new runner's saved models are read, not stranded.
+ * local table so a new harness's saved models are read, not stranded.
  */
 function readModelPrefs(
   prefs: Record<string, unknown>,
-  kinds: readonly AgentRunnerKind[]
+  kinds: readonly AgentHarnessKind[]
 ): {
   defaultByKind: Record<string, string>;
   subsystemByKind: Record<string, Partial<Record<ModelSubsystem, string>>>;
@@ -245,7 +245,7 @@ function readConfigPrefs(
 
 /**
  * One wire entry → one card. Every displayed string comes from the gateway
- * (`label`, `version`, `hint`), so a runner kind this build has never heard of
+ * (`label`, `version`, `hint`), so a harness kind this build has never heard of
  * still renders a complete, honest card — only the accent falls back.
  */
 function capabilityChips(
@@ -338,7 +338,7 @@ function toCard(
 
 function toDTO(
   status: Snap,
-  kind: AgentRunnerKind,
+  kind: AgentHarnessKind,
   defaultByKind: Record<string, string>,
   subsystemByKind: Record<string, Partial<Record<ModelSubsystem, string>>>,
   defaultConfigPinsByKind: Record<string, Record<string, string>>,
@@ -346,8 +346,8 @@ function toDTO(
     string,
     Partial<Record<ModelSubsystem, Record<string, string>>>
   >,
-  subsystemRunnerByKey: Partial<Record<ModelSubsystem, AgentRunnerKind>>,
-  subsystemRunnerLadders: Partial<Record<ModelSubsystem, AgentRunnerKind[]>>
+  subsystemHarnessByKey: Partial<Record<ModelSubsystem, AgentHarnessKind>>,
+  subsystemHarnessLadders: Partial<Record<ModelSubsystem, AgentHarnessKind[]>>
 ): AgentsStatusDTO {
   const agents = status.agents ?? [];
   return {
@@ -371,8 +371,8 @@ function toDTO(
       null,
       2
     ),
-    subsystemRunnerByKey,
-    subsystemRunnerLadders,
+    subsystemHarnessByKey,
+    subsystemHarnessLadders,
     selectedKind: kind,
   };
 }
@@ -384,12 +384,12 @@ export async function loadProviders(opts?: {
     getAgentsStatus(opts).catch(() => ({ agents: [] }) as Snap),
     getUserPrefs().catch(() => ({}) as Record<string, unknown>),
   ]);
-  const kindRaw = prefs["agent.runner.kind"];
+  const kindRaw = prefs["agent.harness.kind"];
   // Trust the persisted kind as-is (the gateway validated it on write and
   // resolves it on read); only an absent/blank value falls back.
   const selectedKind =
     typeof kindRaw === "string" && kindRaw
-      ? (kindRaw as AgentRunnerKind)
+      ? (kindRaw as AgentHarnessKind)
       : FALLBACK_KIND;
   const { defaultByKind, subsystemByKind } = readModelPrefs(
     prefs,
@@ -403,15 +403,17 @@ export async function loadProviders(opts?: {
     subsystemByKind,
     config.defaultByKind,
     config.subsystemByKind,
-    readRunnerPrefs(prefs),
-    readRunnerLadderPrefs(prefs)
+    readHarnessPrefs(prefs),
+    readHarnessLadderPrefs(prefs)
   );
 }
 
-/** Switch the DEFAULT agent — the runner every unpinned subsystem inherits. */
-export async function activateRunner(kind: AgentRunnerKind): Promise<boolean> {
+/** Switch the DEFAULT agent — the harness every unpinned subsystem inherits. */
+export async function activateHarness(
+  kind: AgentHarnessKind
+): Promise<boolean> {
   try {
-    await saveUserPrefs({ "agent.runner.kind": kind });
+    await saveUserPrefs({ "agent.harness.kind": kind });
     return true;
   } catch {
     return false;
@@ -419,39 +421,39 @@ export async function activateRunner(kind: AgentRunnerKind): Promise<boolean> {
 }
 
 /**
- * Pin one subsystem to a runner ('' clears the key, so the subsystem
+ * Pin one subsystem to a harness ('' clears the key, so the subsystem
  * inherits the default agent again — the same `'' → null` delete convention
  * the model setters use).
  */
-export async function setSubsystemRunner(
+export async function setSubsystemHarness(
   subsystem: ModelSubsystem,
-  kind: AgentRunnerKind | ""
+  kind: AgentHarnessKind | ""
 ): Promise<boolean> {
   try {
-    await saveUserPrefs({ [runnerPrefKey(subsystem)]: kind || null });
+    await saveUserPrefs({ [harnessPrefKey(subsystem)]: kind || null });
     return true;
   } catch {
     return false;
   }
 }
 
-export function setSubsystemRunnerLadder(
+export function setSubsystemHarnessLadder(
   subsystem: ModelSubsystem,
-  kinds: AgentRunnerKind[]
+  kinds: AgentHarnessKind[]
 ): void {
   void saveUserPrefs({
-    [runnerLadderPrefKey(subsystem)]: kinds.length > 0 ? kinds : null,
+    [harnessLadderPrefKey(subsystem)]: kinds.length > 0 ? kinds : null,
   });
 }
 
 /** Persist this agent's default model ('' clears the key, falling through to the backend default). */
-export function setAgentModel(kind: AgentRunnerKind, modelId: string): void {
+export function setAgentModel(kind: AgentHarnessKind, modelId: string): void {
   void saveUserPrefs({ [modelPrefKey(kind, "default")]: modelId || null });
 }
 
 /** Persist this agent's per-subsystem model override ('' clears the key, falling through to the default model). */
 export function setSubsystemModel(
-  kind: AgentRunnerKind,
+  kind: AgentHarnessKind,
   subsystem: ModelSubsystem,
   modelId: string
 ): void {
@@ -459,7 +461,7 @@ export function setSubsystemModel(
 }
 
 export function setAgentConfigPin(
-  kind: AgentRunnerKind,
+  kind: AgentHarnessKind,
   category: string,
   value: string
 ): void {
@@ -469,7 +471,7 @@ export function setAgentConfigPin(
 }
 
 export function setSubsystemConfigPin(
-  kind: AgentRunnerKind,
+  kind: AgentHarnessKind,
   subsystem: ModelSubsystem,
   category: string,
   value: string

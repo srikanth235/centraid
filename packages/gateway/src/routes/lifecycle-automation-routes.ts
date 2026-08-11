@@ -262,8 +262,8 @@ export async function handleAutomationCreate(
     ...(Array.isArray(body.apps)
       ? { apps: body.apps.filter((a) => typeof a === "string") }
       : {}),
-    ...(typeof body.runner === "string" && body.runner
-      ? { runner: body.runner }
+    ...(typeof body.harness === "string" && body.harness
+      ? { harness: body.harness }
       : {}),
     ...(typeof body.model === "string" && body.model
       ? { model: body.model }
@@ -422,7 +422,7 @@ export async function handleAutomationUpdate(
       ? (body.connections as automation.ConnectionBinding[])
       : undefined
     : undefined;
-  const hasRunnerKey = Object.hasOwn(body, "runner");
+  const hasHarnessKey = Object.hasOwn(body, "harness");
   const hasModelKey = Object.hasOwn(body, "model");
   const hasEnrichVariantKey = Object.hasOwn(body, "enrichVariant");
   if (
@@ -449,14 +449,14 @@ export async function handleAutomationUpdate(
     vaultInput === undefined &&
     !hasConnectorKey &&
     !hasConnectionsKey &&
-    !hasRunnerKey &&
+    !hasHarnessKey &&
     !hasModelKey &&
     !hasEnrichVariantKey
   ) {
     return sendJson(res, 400, {
       error: "bad_request",
       message:
-        "update needs at least one of { name, prompt, triggers, connections, connector, runner, model, enrichVariant }",
+        "update needs at least one of { name, prompt, triggers, connections, connector, harness, model, enrichVariant }",
     });
   }
 
@@ -585,11 +585,11 @@ export async function handleAutomationUpdate(
     if (connectorInput === null) delete patched.connector;
     else if (connectorInput !== undefined) patched.connector = connectorInput;
   }
-  if (hasRunnerKey || hasModelKey) {
+  if (hasHarnessKey || hasModelKey) {
     const requires = { ...existing.requires } as Record<string, unknown>;
-    if (hasRunnerKey) {
-      if (body.runner === null) delete requires.runner;
-      else requires.runner = body.runner;
+    if (hasHarnessKey) {
+      if (body.harness === null) delete requires.harness;
+      else requires.harness = body.harness;
     }
     if (hasModelKey) {
       if (body.model === null) delete requires.model;

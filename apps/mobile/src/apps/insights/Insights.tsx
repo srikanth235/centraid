@@ -518,7 +518,7 @@ function UsageSection({
         <View style={styles.panel}>
           <View style={styles.panelHead}>
             <Text style={styles.panelTitle}>By effort</Text>
-            <Text style={styles.panelMeta}>RUNNER-CONFIRMED</Text>
+            <Text style={styles.panelMeta}>HARNESS-CONFIRMED</Text>
           </View>
           {efforts.map((e) => (
             <View key={e.effort} style={styles.model}>

@@ -27,7 +27,7 @@ import type {
   InsightsKpis,
   InsightsModelRow,
   InsightsPeakDay,
-  InsightsRunnerRow,
+  InsightsHarnessRow,
   InsightsSourceRow,
   InsightsSummary,
 } from "./insights-types.js";
@@ -121,8 +121,8 @@ export class InsightsStore {
 
     const daily = foldDaily(stmts, since);
     const bySource = foldBySource(stmts, since);
-    const byRunner: InsightsRunnerRow[] = (
-      stmts.byRunner.all(since) as Array<{
+    const byHarness: InsightsHarnessRow[] = (
+      stmts.byHarness.all(since) as Array<{
         provider: string;
         runs: number;
         tokens: number | null;
@@ -146,7 +146,7 @@ export class InsightsStore {
       kpis,
       daily,
       bySource,
-      byRunner,
+      byHarness,
       byModel,
       byEffort,
       recent,

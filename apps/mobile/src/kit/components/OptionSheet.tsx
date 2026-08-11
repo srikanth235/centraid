@@ -16,9 +16,9 @@ import { Text } from "./NativeText";
 export interface SheetOption {
   id: string;
   label: string;
-  /** Secondary line — e.g. a runner's readiness hint. */
+  /** Secondary line — e.g. a harness's readiness hint. */
   detail?: string;
-  /** Listed but not choosable (a runner that failed its preflight). */
+  /** Listed but not choosable (a harness that failed its preflight). */
   disabled?: boolean;
 }
 
@@ -37,7 +37,7 @@ export interface OptionSheetProps {
  * (RN's `Alert` renders at most three buttons there, so it cannot list agents).
  *
  * This replaced tap-to-cycle chips (#567 D12): cycling walked the user through
- * every dead runner — one preflight each — to reach the one they wanted.
+ * every dead harness — one preflight each — to reach the one they wanted.
  */
 export default function OptionSheet({
   visible,

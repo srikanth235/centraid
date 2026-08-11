@@ -148,9 +148,9 @@ export default function InsightsScreen({
     1,
     ...summary.bySource.map((r) => r.costUsd || r.tokens)
   );
-  const runnerMax = Math.max(
+  const harnessMax = Math.max(
     1,
-    ...summary.byRunner.map((r) => r.costUsd || r.tokens)
+    ...summary.byHarness.map((r) => r.costUsd || r.tokens)
   );
   const modelTotal = Math.max(
     1,
@@ -268,8 +268,8 @@ export default function InsightsScreen({
       {!hasSpend && kpis.generations === 0 ? (
         <div className={styles.firstUse}>
           Run a chat, build, or automation — usage shows up here. Costs are
-          agent-reported when the runner provides them, otherwise estimated from
-          public rates.
+          agent-reported when the harness provides them, otherwise estimated
+          from public rates.
         </div>
       ) : null}
 
@@ -358,11 +358,11 @@ export default function InsightsScreen({
         </div>
 
         <div className={styles.col}>
-          <Panel title="By agent" meta="runner · sorted by $">
+          <Panel title="By agent" meta="harness · sorted by $">
             <div className={styles.models}>
-              {summary.byRunner.map((r) => {
+              {summary.byHarness.map((r) => {
                 const pct = Math.round(
-                  ((r.costUsd || r.tokens) / runnerMax) * 100
+                  ((r.costUsd || r.tokens) / harnessMax) * 100
                 );
                 return (
                   <div key={r.provider} className={styles.model}>
@@ -382,7 +382,7 @@ export default function InsightsScreen({
                   </div>
                 );
               })}
-              {summary.byRunner.length === 0 ? (
+              {summary.byHarness.length === 0 ? (
                 <PanelEmpty message="No agent usage recorded yet." />
               ) : null}
             </div>
@@ -418,7 +418,7 @@ export default function InsightsScreen({
             </div>
           </Panel>
 
-          <Panel title="By effort" meta="runner-confirmed thought level">
+          <Panel title="By effort" meta="harness-confirmed thought level">
             <div className={styles.models}>
               {summary.byEffort.map((e) => {
                 const pct = Math.round(
@@ -510,7 +510,7 @@ export default function InsightsScreen({
 
       <p className={styles.footnote}>
         Completed runs in this vault only. Agent-reported costs come from the
-        runner; estimates use public model rates. Incomplete data is never
+        harness; estimates use public model rates. Incomplete data is never
         treated as free.
       </p>
     </div>

@@ -45,7 +45,7 @@ const summary: InsightsSummary = {
       costUsd: 0.3,
     },
   ],
-  byRunner: [
+  byHarness: [
     { provider: "claude-code", runs: 7, tokens: 11_000, costUsd: 2.5 },
   ],
   byModel: [
@@ -118,7 +118,7 @@ const empty: InsightsSummary = {
   },
   daily: [],
   bySource: [],
-  byRunner: [],
+  byHarness: [],
   byModel: [],
   byEffort: [],
   recent: [],

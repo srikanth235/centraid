@@ -35,7 +35,7 @@ function rawConversation(over: Partial<RawConversation> = {}): RawConversation {
     app_id: "app",
     automation_id: null,
     title: "Hello",
-    adapter_kind: null,
+    harness_kind: null,
     adapter_session_id: null,
     adapter_usage_json: null,
     turn_count: 2,
@@ -116,7 +116,7 @@ describe("store-sql row mappers", () => {
     const full = conversationFromRaw(
       rawConversation({
         automation_id: "app/digest",
-        adapter_kind: "acp",
+        harness_kind: "acp",
         adapter_session_id: "sess",
         pinned: 1,
         archived: 1,
@@ -129,7 +129,7 @@ describe("store-sql row mappers", () => {
       appId: "app",
       automationId: "app/digest",
       title: "Hello",
-      adapterKind: "acp",
+      harnessKind: "acp",
       adapterSessionId: "sess",
       hydrationCount: 0,
       turnCount: 2,
@@ -248,7 +248,7 @@ describe("store-sql prepare()", () => {
     expect(stmts.insertItem.run).toBeTypeOf("function");
     expect(stmts.upsertState.run).toBeTypeOf("function");
 
-    // (id, kind, user_id, app_id, automation_id, title, adapter_kind,
+    // (id, kind, user_id, app_id, automation_id, title, harness_kind,
     //  created_at, updated_at) — adapter_session_id / adapter_usage_json /
     //  turn_count / pinned are fixed in SQL.
     stmts.insertConversation.run(

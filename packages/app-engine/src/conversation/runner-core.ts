@@ -8,7 +8,7 @@
  * `ConversationRunner` the gateway's `/_turn` route can inject does the same
  * thing around that turn: load prefs, resolve a cwd, build the system prompt,
  * thread the `centraid_*` dispatcher into a `ToolContext`, resume when the
- * prior turn used the same runner kind, drive the turn, and (optionally) run a
+ * prior turn used the same harness kind, drive the turn, and (optionally) run a
  * post-turn side effect. That spine used to be copied into both
  * `makeConversationRunner` (agent-runtime, data-only chat) and the gateway's
  * `makeUnifiedConversationRunner` (code+data builder chat); they now differ
@@ -34,15 +34,15 @@ import type {
   TurnContext,
 } from "./runner-core-types.js";
 import type {
-  AgentFailureClass,
+  HarnessFailureClass,
   ConversationRunner,
   ConversationTurnInput,
   ConversationTurnResult,
   TurnStreamEvent,
 } from "./runner.js";
 import type {
-  RunnerKind,
-  RunnerPrefs,
+  HarnessKind,
+  HarnessPrefs,
   ToolContext,
   TurnInput,
   TurnResult,
@@ -61,11 +61,11 @@ export function makeConversationRunnerCore(
 
   return {
     ...(opts.runKind ? { runKind: opts.runKind } : {}),
-    resolveRunnerKind: async (): Promise<RunnerKind | undefined> =>
+    resolveHarnessKind: async (): Promise<HarnessKind | undefined> =>
       (await opts.prefsLoader(opts.subsystem))?.kind,
     async run(input: ConversationTurnInput): Promise<ConversationTurnResult> {
-      const loadedPrefs = input.runnerKind
-        ? await opts.prefsLoader(opts.subsystem, input.runnerKind)
+      const loadedPrefs = input.harnessKind
+        ? await opts.prefsLoader(opts.subsystem, input.harnessKind)
         : await opts.prefsLoader(opts.subsystem);
       if (!loadedPrefs) {
         input.onEvent({
@@ -75,13 +75,13 @@ export function makeConversationRunnerCore(
         });
         throw new Error("no coding agent configured");
       }
-      // A host that predates the runnerKind loader argument may still return
-      // another runner's launch settings. Keep the requested kind but discard
+      // A host that predates the harnessKind loader argument may still return
+      // another harness's launch settings. Keep the requested kind but discard
       // that mismatched binary/args; registry defaults are safer than launching
-      // runner A through runner B's executable.
-      const primaryPrefs: RunnerPrefs =
-        input.runnerKind && loadedPrefs.kind !== input.runnerKind
-          ? { kind: input.runnerKind }
+      // harness A through harness B's executable.
+      const primaryPrefs: HarnessPrefs =
+        input.harnessKind && loadedPrefs.kind !== input.harnessKind
+          ? { kind: input.harnessKind }
           : loadedPrefs;
 
       const cwd = await opts.resolveCwd(input);
@@ -100,26 +100,26 @@ export function makeConversationRunnerCore(
         ...(opts.vaultInvoke ? { vaultInvoke: opts.vaultInvoke() } : {}),
         ...(opts.vaultContent ? { vaultContent: opts.vaultContent() } : {}),
       };
-      const configuredLadder = opts.runnerLadder
-        ? await opts.runnerLadder(opts.subsystem, primaryPrefs.kind)
+      const configuredLadder = opts.harnessLadder
+        ? await opts.harnessLadder(opts.subsystem, primaryPrefs.kind)
         : [primaryPrefs.kind];
-      const ladder: RunnerKind[] = [];
+      const ladder: HarnessKind[] = [];
       for (const kind of [primaryPrefs.kind, ...configuredLadder]) {
         if (!ladder.includes(kind)) ladder.push(kind);
       }
-      const healthContext = opts.runnerHealthContext?.(input, cwd) ?? cwd;
+      const healthContext = opts.harnessHealthContext?.(input, cwd) ?? cwd;
       let lastError: Extract<TurnStreamEvent, { type: "error" }> | undefined;
       let lastResult: TurnResult | undefined;
       let completedCtx: TurnContext | undefined;
       let consumedHydrationTokens: number | undefined;
-      const activeAdapterKind =
-        input.activeAdapterKind ?? input.prevAdapterKind;
+      const activeHarnessKind =
+        input.activeHarnessKind ?? input.prevHarnessKind;
       // Kinds this turn actually consulted, and why the last one was refused —
       // so an all-rungs-unavailable turn can name them instead of blaming
       // "every configured agent" with an anonymous 'unknown' failure class.
-      const consulted: RunnerKind[] = [];
-      let lastBreakerClass: AgentFailureClass | undefined;
-      const consented: readonly RunnerKind[] =
+      const consulted: HarnessKind[] = [];
+      let lastBreakerClass: HarnessFailureClass | undefined;
+      const consented: readonly HarnessKind[] =
         input.providerConsent === undefined
           ? []
           : typeof input.providerConsent === "string"
@@ -145,8 +145,8 @@ export function makeConversationRunnerCore(
         ) {
           if (
             consentSource === "ladder" ||
-            activeAdapterKind === undefined ||
-            activeAdapterKind === kind ||
+            activeHarnessKind === undefined ||
+            activeHarnessKind === kind ||
             consented.includes(kind)
           ) {
             // Initial use is implicit in choosing the surface. A ladder rung
@@ -178,18 +178,18 @@ export function makeConversationRunnerCore(
                 ? `${kind} is the next failover provider. Allow this conversation to be sent to it?`
                 : `Allow this conversation to be sent to ${kind}?`,
           });
-          return { adapterKind: primaryPrefs.kind };
+          return { harnessKind: primaryPrefs.kind };
         }
-        const breaker = opts.runnerHealth?.canAttempt(healthContext, kind);
+        const breaker = opts.harnessHealth?.canAttempt(healthContext, kind);
         if (breaker && !breaker.allowed) {
           if (breaker.failureClass) lastBreakerClass = breaker.failureClass;
           input.onEvent({
             type: "notice",
             level: "warn",
-            code: "runner_breaker_open",
+            code: "harness_breaker_open",
             message:
               `${kind} is temporarily paused for this workspace after a ` +
-              `${breaker.failureClass ?? "runner"} failure; trying the next configured agent.`,
+              `${breaker.failureClass ?? "harness"} failure; trying the next configured agent.`,
           });
           return attemptRung(rung + 1);
         }
@@ -197,7 +197,7 @@ export function makeConversationRunnerCore(
           input.onEvent({
             type: "notice",
             level: "warn",
-            code: "runner_failover",
+            code: "harness_failover",
             message:
               `${ladder[0]} is unavailable at the turn boundary. Using ${kind}; ` +
               "provider-specific model and effort pins were cleared.",
@@ -214,7 +214,7 @@ export function makeConversationRunnerCore(
           kind === primaryPrefs.kind
             ? primaryPrefs
             : ((await opts.prefsLoader(opts.subsystem, kind)) ?? { kind });
-        const prefs: RunnerPrefs = loaded.kind === kind ? loaded : { kind };
+        const prefs: HarnessPrefs = loaded.kind === kind ? loaded : { kind };
         const turnCtx: TurnContext = { input, prefs, cwd };
         const extraSystemPrompt = opts.buildExtraSystemPrompt
           ? await opts.buildExtraSystemPrompt(turnCtx)
@@ -229,7 +229,7 @@ export function makeConversationRunnerCore(
         // Resume only against the backend that minted the opaque session id.
         const resumeId = plan
           ? plan.sessionId
-          : input.prevAdapterKind === prefs.kind
+          : input.prevHarnessKind === prefs.kind
             ? input.prevAdapterSessionId
             : undefined;
         const resumeUsage = plan
@@ -251,9 +251,9 @@ export function makeConversationRunnerCore(
         const recoveryHydrationAttachments = plan
           ? plan.recoveryHydrationAttachments
           : input.recoveryHydrationAttachments;
-        // The ledger may carry a delta even when this runner resumes its own
+        // The ledger may carry a delta even when this harness resumes its own
         // ACP session (A → B → A). A supplied hydration plan is therefore an
-        // explicit instruction, not merely a runner-kind mismatch heuristic.
+        // explicit instruction, not merely a harness-kind mismatch heuristic.
         const forceHydration = hydrationContext !== undefined;
 
         // Explicit model/config pins belong to the selected provider. A
@@ -323,7 +323,7 @@ export function makeConversationRunnerCore(
         }
 
         if (!failure) {
-          opts.runnerHealth?.reportOk(healthContext, kind);
+          opts.harnessHealth?.reportOk(healthContext, kind);
           completedCtx = turnCtx;
           // Bill the hydration THIS rung was handed, not the route's original
           // plan — a failover rung carries a different prompt and cost.
@@ -336,9 +336,9 @@ export function makeConversationRunnerCore(
           return;
         }
 
-        const failureClass: AgentFailureClass =
+        const failureClass: HarnessFailureClass =
           failure.failureClass ?? "unknown";
-        opts.runnerHealth?.reportFailure(
+        opts.harnessHealth?.reportFailure(
           healthContext,
           kind,
           failureClass,
@@ -367,7 +367,7 @@ export function makeConversationRunnerCore(
             failureClass: lastBreakerClass ?? "unknown",
           };
         if (!lastError) input.onEvent(unavailable);
-        return { adapterKind: primaryPrefs.kind };
+        return { harnessKind: primaryPrefs.kind };
       }
 
       if (completedCtx && opts.onTurnComplete) {
@@ -379,10 +379,10 @@ export function makeConversationRunnerCore(
       }
 
       const result: TurnResult = lastResult ?? {
-        adapterKind: completedCtx?.prefs.kind ?? primaryPrefs.kind,
+        harnessKind: completedCtx?.prefs.kind ?? primaryPrefs.kind,
       };
       return {
-        adapterKind: result.adapterKind,
+        harnessKind: result.harnessKind,
         ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),
         ...(result.usageSnapshot
           ? { adapterUsageSnapshot: result.usageSnapshot }

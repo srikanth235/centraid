@@ -72,7 +72,7 @@ export interface InsightsSourceRow {
   costUsd: number;
   automationName?: string;
 }
-export interface InsightsRunnerRow {
+export interface InsightsHarnessRow {
   provider: string;
   runs: number;
   tokens: number;
@@ -131,7 +131,7 @@ export interface InsightsSummary {
   kpis: InsightsKpis;
   daily: InsightsDailyPoint[];
   bySource: InsightsSourceRow[];
-  byRunner: InsightsRunnerRow[];
+  byHarness: InsightsHarnessRow[];
   byModel: InsightsModelRow[];
   byEffort: InsightsEffortRow[];
   recent: InsightsActivityRow[];
@@ -629,23 +629,23 @@ export interface AutomationEditorData {
    *  this one hands off to when a run fails. Optional/additive. */
   onFailure?: string | null;
   /** Notifications tab: manifest `requires.model` (falling back to
-   *  the selected runner's effective default) — the model the compiled plan
+   *  the selected harness's effective default) — the model the compiled plan
    *  runs on. `null` means "Use default". Optional/additive. */
   model?: string | null;
-  /** Manifest `requires.runner`; `null` means the automations subsystem runner. */
-  runner?: AgentRunnerKind | null;
-  /** Effective automations subsystem runner inherited when `runner` is null. */
-  defaultRunnerKind?: AgentRunnerKind;
-  /** Effective model inherited for `defaultRunnerKind` when `model` is null. */
+  /** Manifest `requires.harness`; `null` means the automations subsystem harness. */
+  harness?: AgentHarnessKind | null;
+  /** Effective automations subsystem harness inherited when `harness` is null. */
+  defaultHarnessKind?: AgentHarnessKind;
+  /** Effective model inherited for `defaultHarnessKind` when `model` is null. */
   defaultModel?: string | null;
   /**
    * Gateway-wide default cron timezone (prefs `automation.cron.defaultTimezone`).
    * Used when a cron trigger omits `tz` (issue #570). Absent/empty → host-local.
    */
   defaultCronTimeZone?: string | null;
-  /** Dynamic gateway runner/model catalog used by the editor Agent control. */
-  agentRunners?: Array<{
-    kind: AgentRunnerKind;
+  /** Dynamic gateway harness/model catalog used by the editor Agent control. */
+  agentHarnesses?: Array<{
+    kind: AgentHarnessKind;
     label: string;
     accent: string;
     connected: boolean;
@@ -663,8 +663,8 @@ export interface AutomationEditorSaveFields {
    */
   connections?: Array<{ connectionId: string; kind: string; label: string }>;
   /** Explicit harness pin; `null` clears back to the automations default. */
-  runner?: AgentRunnerKind | null;
-  /** Explicit model pin; `null` clears back to the selected runner's default. */
+  harness?: AgentHarnessKind | null;
+  /** Explicit model pin; `null` clears back to the selected harness's default. */
   model?: string | null;
 }
 /** Credential payload when attaching a catalog connector from the editor. */
@@ -947,7 +947,7 @@ export interface AutomationThreadBridgeProps {
     text: string,
     options: {
       attachments?: BuilderAttachmentRef[];
-      runnerKind?: AgentRunnerKind;
+      harnessKind?: AgentHarnessKind;
       model?: string;
       thinking?: string;
       onContext?: (context: { used: number; size: number }) => void;
@@ -960,7 +960,7 @@ export interface AutomationThreadBridgeProps {
   /** Auth-aware transcript thumbnail loader. */
   loadAttachmentImage?: (hash: string, mime: string) => Promise<string>;
   /** Session-ready preflight before an attended per-conversation switch. */
-  onSetRunner?: (runnerKind: AgentRunnerKind) => Promise<AsstModelPickerDTO>;
+  onSetHarness?: (harnessKind: AgentHarnessKind) => Promise<AsstModelPickerDTO>;
   onCopyWebhook: (url: string) => void;
   onRotateWebhook: () => Promise<boolean>;
   /** Confirm + delete; resolves true when deleted (thread is navigating away). */
@@ -989,15 +989,15 @@ export interface SettingsAppearanceBridgeProps {
 
 // ── Settings: providers (agents console) ────────────────────────────────────
 /**
- * A runner kind as it arrives on the wire. Deliberately an OPEN string rather
- * than a closed union: the gateway derives the list from its own runner
+ * A harness kind as it arrives on the wire. Deliberately an OPEN string rather
+ * than a closed union: the gateway derives the list from its own harness
  * registry, and a gateway newer than this client will name kinds this build
  * has never heard of. Narrowing here would make those unparseable — the exact
  * failure docs/protocol.md C1a forbids. The client renders whatever the
- * gateway lists, using the wire `label`, and only consults `AGENT_RUNNER_KINDS`
+ * gateway lists, using the wire `label`, and only consults `AGENT_HARNESS_KINDS`
  * for cosmetic polish it happens to have on hand.
  */
-export type AgentRunnerKind = string;
+export type AgentHarnessKind = string;
 export interface AgentModelDTO {
   id: string;
   name?: string;
@@ -1005,7 +1005,7 @@ export interface AgentModelDTO {
   tier?: "smart" | "balanced" | "fast";
 }
 export interface AgentCardDTO {
-  kind: AgentRunnerKind;
+  kind: AgentHarnessKind;
   title: string;
   accent: string;
   subtitle: string;
@@ -1015,14 +1015,14 @@ export interface AgentCardDTO {
   /** ACP initialize/session probe succeeded and did not request authentication. */
   sessionReady: boolean;
   /**
-   * The runner is installed but its capability probe has not reported yet —
+   * The harness is installed but its capability probe has not reported yet —
    * the gateway omits `capabilities` entirely until the probe succeeds, and it
    * also omits them when the probe throws. Without this flag "we haven't
    * checked" is indistinguishable from "you are signed out", which is how a
-   * cold gateway came to label every installed runner "sign-in needed".
+   * cold gateway came to label every installed harness "sign-in needed".
    */
   sessionProbePending?: boolean;
-  /** Why an installed runner cannot join unattended failover. */
+  /** Why an installed harness cannot join unattended failover. */
   fallbackBlockedReason?: string;
   /** Live ACP capability evidence gates the corresponding turn controls. */
   modelConfigurable?: boolean;
@@ -1054,22 +1054,22 @@ export interface AgentCardDTO {
 }
 /**
  * The chat/agent subsystems that can each pin their own model, independent
- * of the runner's default (issue: model config → gateway prefs store).
- * Mirrors the gateway prefs keys `model.<runnerKind>.<subsystem>`.
+ * of the harness's default (issue: model config → gateway prefs store).
+ * Mirrors the gateway prefs keys `model.<harnessKind>.<subsystem>`.
  */
 export type ModelSubsystem = "assistant" | "ask" | "builder" | "automations";
 export interface AgentsStatusDTO {
-  /** The DEFAULT agent (`agent.runner.kind`) — the runner every subsystem
+  /** The DEFAULT agent (`agent.harness.kind`) — the harness every subsystem
    *  without its own pin inherits. */
-  selectedKind: AgentRunnerKind;
+  selectedKind: AgentHarnessKind;
   cards: AgentCardDTO[];
   anyLoading: boolean;
   savedModelByKind: Record<string, string>;
-  /** Per-runner subsystem model overrides, keyed by runner kind then subsystem. */
+  /** Per-harness subsystem model overrides, keyed by harness kind then subsystem. */
   subsystemModelByKind: Record<string, Partial<Record<ModelSubsystem, string>>>;
-  /** Semantic config pins at the runner-default tier. */
+  /** Semantic config pins at the harness-default tier. */
   defaultConfigPinsByKind: Record<string, Record<string, string>>;
-  /** Semantic config pins at the runner + subsystem tier. */
+  /** Semantic config pins at the harness + subsystem tier. */
   subsystemConfigPinsByKind: Record<
     string,
     Partial<Record<ModelSubsystem, Record<string, string>>>
@@ -1077,56 +1077,56 @@ export interface AgentsStatusDTO {
   /** Sanitized, exportable capability evidence from the latest probe. */
   diagnosticsJson: string;
   /**
-   * Per-subsystem runner pins (`runner.<subsystem>`). An ABSENT subsystem
+   * Per-subsystem harness pins (`harness.<subsystem>`). An ABSENT subsystem
    * inherits `selectedKind` — the map only carries explicit pins, so a
    * missing entry and "pinned to the default agent" stay distinguishable.
    */
-  subsystemRunnerByKey: Partial<Record<ModelSubsystem, AgentRunnerKind>>;
-  /** Ordered automatic failover members after the resolved primary runner. */
-  subsystemRunnerLadders: Partial<Record<ModelSubsystem, AgentRunnerKind[]>>;
+  subsystemHarnessByKey: Partial<Record<ModelSubsystem, AgentHarnessKind>>;
+  /** Ordered automatic failover members after the resolved primary harness. */
+  subsystemHarnessLadders: Partial<Record<ModelSubsystem, AgentHarnessKind[]>>;
 }
 export interface SettingsProvidersBridgeProps {
   loadStatus: () => Promise<AgentsStatusDTO>;
   refreshModels: () => Promise<AgentsStatusDTO>;
   /** Switch the DEFAULT agent — the fallback every unpinned subsystem
    *  inherits; resolves true on success. */
-  activateRunner: (kind: AgentRunnerKind) => Promise<boolean>;
+  activateHarness: (kind: AgentHarnessKind) => Promise<boolean>;
   /** Persist this agent's default model ('' = clears back to the backend default). */
-  setAgentModel: (kind: AgentRunnerKind, modelId: string) => void;
+  setAgentModel: (kind: AgentHarnessKind, modelId: string) => void;
   /** Persist this agent's per-subsystem model override ('' = clears back to the default model). */
   setSubsystemModel: (
-    kind: AgentRunnerKind,
+    kind: AgentHarnessKind,
     subsystem: ModelSubsystem,
     modelId: string
   ) => void;
-  /** Persist a semantic runner-default config pin ('' clears it). */
+  /** Persist a semantic harness-default config pin ('' clears it). */
   setAgentConfigPin: (
-    kind: AgentRunnerKind,
+    kind: AgentHarnessKind,
     category: string,
     value: string
   ) => void;
   /** Persist a semantic per-subsystem config pin ('' clears it). */
   setSubsystemConfigPin: (
-    kind: AgentRunnerKind,
+    kind: AgentHarnessKind,
     subsystem: ModelSubsystem,
     category: string,
     value: string
   ) => void;
   /**
-   * Pin this subsystem to a runner, independent of the default agent.
+   * Pin this subsystem to a harness, independent of the default agent.
    * `''` clears the pin, so the subsystem inherits `selectedKind` again.
    */
-  setSubsystemRunner: (
+  setSubsystemHarness: (
     subsystem: ModelSubsystem,
-    kind: AgentRunnerKind | ""
+    kind: AgentHarnessKind | ""
   ) => Promise<boolean>;
   /**
    * Replace one lane's ordered automatic failover membership. Removing a
    * member also revokes ladder-derived provider grants at the gateway.
    */
-  setSubsystemRunnerLadder: (
+  setSubsystemHarnessLadder: (
     subsystem: ModelSubsystem,
-    kinds: AgentRunnerKind[]
+    kinds: AgentHarnessKind[]
   ) => void;
 }
 
@@ -1300,7 +1300,7 @@ export interface AsstUsageDTO {
   /** True when `costUsd` is a live client-side estimate (ledger cost is exact). */
   estimated?: boolean;
   model?: string;
-  /** ACP-confirmed semantic thought level; absent when the runner did not confirm it. */
+  /** ACP-confirmed semantic thought level; absent when the harness did not confirm it. */
   effort?: string;
 }
 /**
@@ -1323,7 +1323,7 @@ export type AsstMsgDTO =
   /** A live streaming reasoning/thinking row (issue #420, Wave 2). Live-only —
    *  reasoning is not persisted in the ledger, so it never comes back on reload. */
   | { kind: "thinking"; text: string; streaming: boolean; msgId?: string }
-  /** A non-fatal runner notice (issue #420) — e.g. "this model can't read PDF
+  /** A non-fatal harness notice (issue #420) — e.g. "this model can't read PDF
    *  attachments". Persisted as a notice step and replayed on reload. */
   | { kind: "notice"; level: "warn" | "info"; text: string; msgId?: string }
   | {
@@ -1391,18 +1391,18 @@ export interface AssistantSnapshot {
   canLoadEarlier?: boolean;
   /** A previous page is being fetched right now. */
   loadingEarlier?: boolean;
-  /** False while a persisted conversation's runner binding is loading. */
-  runnerReady?: boolean;
-  /** Changes when the screen must reload runner/model capability data. */
+  /** False while a persisted conversation's harness binding is loading. */
+  harnessReady?: boolean;
+  /** Changes when the screen must reload harness/model capability data. */
   pickerRevision?: number;
 }
 /**
- * The composer's inline model picker (subsystem `assistant`, active runner
- * only) — mirrors the same `model.<runnerKind>.assistant` gateway pref the
+ * The composer's inline model picker (subsystem `assistant`, active harness
+ * only) — mirrors the same `model.<harnessKind>.assistant` gateway pref the
  * Settings → Models → Agents "Chat & agent subsystems" group reads/writes
  * (settingsProvidersData.ts), so both surfaces always agree. `models` is the
- * active runner's catalog; `selectedModelId` is `''` when the subsystem has
- * no override (falls through to `defaultModelName`, the runner's own default
+ * active harness's catalog; `selectedModelId` is `''` when the subsystem has
+ * no override (falls through to `defaultModelName`, the harness's own default
  * — either its saved default model or its catalog-marked default).
  */
 export interface AsstModelOptionDTO {
@@ -1411,8 +1411,8 @@ export interface AsstModelOptionDTO {
   default?: boolean;
 }
 export interface AsstModelPickerDTO {
-  runners: Array<{
-    kind: AgentRunnerKind;
+  harnesses: Array<{
+    kind: AgentHarnessKind;
     title: string;
     connected: boolean;
     sessionReady: boolean;
@@ -1420,7 +1420,7 @@ export interface AsstModelPickerDTO {
     sessionProbePending?: boolean;
     hint?: string;
   }>;
-  selectedRunnerKind: AgentRunnerKind;
+  selectedHarnessKind: AgentHarnessKind;
   workspaceKinds: Array<"vault-data" | "app" | "draft">;
   connected: boolean;
   models: AsstModelOptionDTO[];
@@ -1478,8 +1478,8 @@ export interface AssistantBridgeProps {
   onSetModel: (modelId: string) => void;
   /** Persist the subsystem thought_level override ('' clears it). */
   onSetEffort: (effort: string) => void;
-  /** Select a runner for this conversation and reload its semantic controls. */
-  onSetRunner: (runnerKind: AgentRunnerKind) => Promise<AsstModelPickerDTO>;
+  /** Select a harness for this conversation and reload its semantic controls. */
+  onSetHarness: (harnessKind: AgentHarnessKind) => Promise<AsstModelPickerDTO>;
   /** Persist the Centraid-scoped working directory for this conversation. */
   onSetWorkspaceKind?: (kind: "vault-data" | "app" | "draft") => void;
   /** Composer entity-mention search (issue #420). Absent = mentions disabled. */
@@ -1626,8 +1626,8 @@ export interface BuilderChatSnapshot {
   context?: { used: number; size: number };
   model?: string;
   effort?: string;
-  /** Capability-backed attended runner controls for this builder conversation. */
-  runnerConfig?: AsstModelPickerDTO;
+  /** Capability-backed attended harness controls for this builder conversation. */
+  harnessConfig?: AsstModelPickerDTO;
   workspaceKind: "vault-data" | "app" | "draft";
   workspaceKinds: Array<"vault-data" | "app" | "draft">;
 }
@@ -1646,7 +1646,7 @@ export interface BuilderChatBridgeProps {
   onToggleGroup: (id: string) => void;
   onSetView: (view: "chat" | "history") => void;
   onSetWorkspaceKind: (kind: "vault-data" | "app" | "draft") => void;
-  onSetRunner: (runnerKind: AgentRunnerKind) => Promise<AsstModelPickerDTO>;
+  onSetHarness: (harnessKind: AgentHarnessKind) => Promise<AsstModelPickerDTO>;
   onSetModel: (modelId: string) => void;
   onSetEffort: (effort: string) => void;
   /** Fill the version-history host — vanilla owns the async renderer. */

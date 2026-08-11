@@ -16,19 +16,19 @@
  * that performs egress. That conflated two different facts: WHERE a process
  * runs, and WHETHER it talks to a third party. The gateway is the member's
  * own infrastructure — part of their trust domain, same as their phone —
- * and running *on* it is not by itself egress. What IS egress is a runner
+ * and running *on* it is not by itself egress. What IS egress is a harness
  * that talks to a THIRD-PARTY PROVIDER over the network. `ctx.agent`
- * dispatches through the runner registry (`RUNNER_KINDS` in app-engine:
+ * dispatches through the harness registry (`HARNESS_KINDS` in app-engine:
  * codex, claude-code, gemini, qwen, opencode, grok, kimi, copilot, cursor,
- * kilo, cline, goose, auggie, vibe, droid, pi, acp) — every runner shipped
+ * kilo, cline, goose, auggie, vibe, droid, pi, acp) — every harness shipped
  * today happens to be a coding-agent harness that talks to a remote
  * provider, which is why the dispatcher gates each call behind PROVIDER
  * EGRESS consent (#567). That is a fact about today's roster, not a
  * definition: the door stays open for a gateway-hosted local-inference
- * runner (a custom `acp` kind fronting a model that runs inside the
+ * harness (a custom `acp` kind fronting a model that runs inside the
  * gateway's own process, with no network egress) whose model turns would be
  * legitimately inside the trust domain. The lane fact is therefore "does
- * this runner egress to a provider" — a property of the RUNNER, not of
+ * this harness egress to a provider" — a property of the HARNESS, not of
  * "which machine issued the call".
  *
  * The one lane that genuinely never leaves the member's own devices at all
@@ -38,14 +38,14 @@
  * Vision / Android ML Kit / a local Tesseract-compatible worker, "No image
  * or recognized text leaves the user's devices"). Deterministic in-process
  * work (phash, clustering, trip grouping) is `gateway`-tier work in the same
- * sense as a future local-inference runner: it runs inside the member's own
+ * sense as a future local-inference harness: it runs inside the member's own
  * infrastructure and reaches no provider.
  *
  * So the axis reads: `off` — nothing runs. `device` — the member's phone or
  * laptop may do device-lease work; the gateway may do its own deterministic
- * work; no runner call is allowed. `gateway` — the member's own gateway may
+ * work; no harness call is allowed. `gateway` — the member's own gateway may
  * additionally do whatever it is already wired to, including a `ctx.agent`
- * turn through the runner registry — which, for every runner shipped today,
+ * turn through the harness registry — which, for every harness shipped today,
  * reaches a third-party provider. There is no separate `provider` tier:
  * provider egress is enforced per call at the dispatcher (#567) and per
  * capability at the consent gate (decision S9, `enrich_request.capability`)
@@ -62,7 +62,7 @@
  * doc-entity-linker, doc-filer, obligation-extractor) stops running — each of
  * them declares
  * `enrich.lane: "gateway"` because each one takes a `ctx.agent` model turn,
- * and every runner in this build's registry routes that turn to a
+ * and every harness in this build's registry routes that turn to a
  * third-party provider. `gateway` is the seeded default for a freshly
  * bootstrapped vault (`packages/vault/src/bootstrap.ts`); each of those
  * enrichers still starts `enabled: false` in its own manifest, so the tier
@@ -80,8 +80,8 @@ export type EnrichDomain = (typeof ENRICH_DOMAINS)[number];
 /**
  * Which lane an enricher's work runs in — the same two non-`off` points on
  * the tier axis, restated as what the ENRICHER needs rather than what the
- * OWNER allows. `gateway` needs a `ctx.agent` turn through the runner
- * registry, which every runner shipped today routes to a third-party
+ * OWNER allows. `gateway` needs a `ctx.agent` turn through the harness
+ * registry, which every harness shipped today routes to a third-party
  * provider. `device` is deterministic and/or device-lease work that reaches
  * no provider. Manifests that omit it are read as `gateway` — assuming the
  * cheaper lane would be assuming consent.
@@ -151,7 +151,7 @@ export function decideEnrichmentGate(
       allowed: false,
       reason:
         `${who} refused: enrichment for "${input.domain}" is set to "${input.tier}", and this enricher needs the ` +
-        `"${input.lane}" lane — a model turn through the runner registry, which every runner in this runtime ` +
+        `"${input.lane}" lane — a model turn through the harness registry, which every harness in this runtime ` +
         `routes to a third-party provider, so the run would leave this member's trust domain. Set the tier to ` +
         `"gateway" to allow that, or use the device lane.`,
     };

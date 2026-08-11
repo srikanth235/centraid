@@ -10,7 +10,7 @@ import {
   minVersionString,
   parseSemver,
 } from "./preflight.ts";
-import { getRunnerBackend } from "./registry.ts";
+import { getHarness } from "./registry.ts";
 
 describe("matrix-durability", () => {
   test("invalidatePreflightCache is safe to call repeatedly (no throw)", () => {
@@ -21,7 +21,7 @@ describe("matrix-durability", () => {
 
   test("parseSemver round-trips minVersionString for registered kinds", () => {
     const kind = "gemini" as const;
-    const backend = getRunnerBackend(kind);
+    const backend = getHarness(kind);
     const text = minVersionString(kind);
     const parsed = parseSemver(text);
     expect(parsed).toStrictEqual(backend.minVersion);

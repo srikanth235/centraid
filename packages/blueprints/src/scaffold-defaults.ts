@@ -323,7 +323,7 @@ handler on schedule while it is running.
   minted server-side, never hand-written.
 - \`requires.model\` is the model \`ctx.agent({ prompt, json? })\` routes
   through — the ONE billed rail. **Never set it to \`centraid-mock/*\`** —
-  that would recurse into the runner. Deterministic work needs no \`requires\`
+  that would recurse into the harness. Deterministic work needs no \`requires\`
   at all: read/write through \`ctx.vault\`, HTTP through \`ctx.fetch\`, cursors
   through \`ctx.state\` — zero tokens, zero processes.
 - The runtime validates the manifest on every read; keep the shape exactly.

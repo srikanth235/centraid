@@ -57,7 +57,7 @@ export default function AssistantScreen({
     declineConsent,
     attach,
     removeAttachment,
-    selectRunner,
+    selectHarness,
     selectModel,
     selectEffort,
   } = useAssistant();
@@ -115,9 +115,9 @@ export default function AssistantScreen({
   const composerPad = keyboardUp ? 8 : insets.bottom + 8;
   // Which picker is open, if any. Selection presents the platform's own
   // single-choice list (#567 D12) — the user picks the agent they want instead
-  // of cycling through the dead ones. `selectRunner` still preflights and
-  // reverts, so a chosen-but-unready runner surfaces as a selection error.
-  const [picker, setPicker] = useState<"runner" | "model" | "effort" | null>(
+  // of cycling through the dead ones. `selectHarness` still preflights and
+  // reverts, so a chosen-but-unready harness surfaces as a selection error.
+  const [picker, setPicker] = useState<"harness" | "model" | "effort" | null>(
     null
   );
   const pickerSpec: {
@@ -128,17 +128,17 @@ export default function AssistantScreen({
   } | null =
     !config || picker === null
       ? null
-      : picker === "runner"
+      : picker === "harness"
         ? {
             title: "Agent",
-            options: config.runners.map((runner) => ({
-              id: runner.kind,
-              label: runner.label,
-              ...(runner.hint ? { detail: runner.hint } : {}),
-              ...(runner.sessionReady ? {} : { disabled: true }),
+            options: config.harnesses.map((harness) => ({
+              id: harness.kind,
+              label: harness.label,
+              ...(harness.hint ? { detail: harness.hint } : {}),
+              ...(harness.sessionReady ? {} : { disabled: true }),
             })),
-            ...(config.runnerKind ? { selectedId: config.runnerKind } : {}),
-            onSelect: selectRunner,
+            ...(config.harnessKind ? { selectedId: config.harnessKind } : {}),
+            onSelect: selectHarness,
           }
         : picker === "model"
           ? {
@@ -245,16 +245,16 @@ export default function AssistantScreen({
               />
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Change assistant runner"
-                onPress={() => setPicker("runner")}
-                disabled={!config?.runners.length || sending}
+                accessibilityLabel="Change assistant harness"
+                onPress={() => setPicker("harness")}
+                disabled={!config?.harnesses.length || sending}
                 style={styles.statusChip}
               >
                 <Text numberOfLines={1} style={styles.statusText}>
-                  {config?.runners.find(
-                    (runner) => runner.kind === config.runnerKind
+                  {config?.harnesses.find(
+                    (harness) => harness.kind === config.harnessKind
                   )?.label ??
-                    config?.runnerKind ??
+                    config?.harnessKind ??
                     "Agent"}
                 </Text>
               </Pressable>

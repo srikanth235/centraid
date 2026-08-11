@@ -118,7 +118,7 @@ describe("interactive-automation-turn suite", () => {
       run: async (turn) => {
         received = turn;
         input.emit?.(turn);
-        return { adapterKind: "codex", adapterSessionId: "cached-2" };
+        return { harnessKind: "codex", adapterSessionId: "cached-2" };
       },
     };
     const stream: TurnStreamEvent[] = [];
@@ -130,7 +130,7 @@ describe("interactive-automation-turn suite", () => {
       journalDbFile,
       runnerSessionDir: path.join(dir, "sessions"),
       runner,
-      runnerKind: "codex",
+      harnessKind: "codex",
       model: "gpt-test",
       abortSignal: new AbortController().signal,
       conversationLocks: new Map(),
@@ -156,10 +156,10 @@ describe("interactive-automation-turn suite", () => {
       expect(cold.received.prevAdapterSessionId).toBeUndefined();
       expect(resumed.received.prevAdapterSessionId).toBe("cached-1");
       expect(resumed.received.permissionPolicy).toBe("deny");
-      expect(resumed.received.runnerKind).toBe("codex");
+      expect(resumed.received.harnessKind).toBe("codex");
       expect(resumed.received.model).toBe("gpt-test");
       expect(resumed.store.getConversation("brief/main")).toMatchObject({
-        adapterKind: "codex",
+        harnessKind: "codex",
         adapterSessionId: "cached-2",
       });
       cold.store.close();
@@ -325,7 +325,7 @@ describe("interactive-automation-turn suite", () => {
       out.store.close();
     });
 
-    it("keeps one automation conversation and routes A→B→A through per-runner watermarks", async () => {
+    it("keeps one automation conversation and routes A→B→A through per-harness watermarks", async () => {
       const dir = await tempDir("interactive-automation-switch-");
       dirs.push(dir);
       const journalDbFile = path.join(dir, "journal.db");
@@ -334,13 +334,13 @@ describe("interactive-automation-turn suite", () => {
       const runner: ConversationRunner = {
         run: async (turn) => {
           calls.push(turn);
-          const isB = turn.runnerKind === "claude-code";
+          const isB = turn.harnessKind === "claude-code";
           turn.onEvent({
             type: "final",
             text: isB ? "B durable answer" : "A return answer",
           });
           return {
-            adapterKind: isB ? "claude-code" : "codex",
+            harnessKind: isB ? "claude-code" : "codex",
             adapterSessionId: isB ? "session-b" : "cached-1",
             hydrated: true,
             hydrationTokens: turn.hydrationContext?.estimatedTokens,
@@ -361,13 +361,13 @@ describe("interactive-automation-turn suite", () => {
         ...common,
         turnId: "interactive-b",
         message: "Ask B",
-        runnerKind: "claude-code",
+        harnessKind: "claude-code",
       });
       await runInteractiveAutomationTurn({
         ...common,
         turnId: "interactive-a-return",
         message: "Return to A",
-        runnerKind: "codex",
+        harnessKind: "codex",
       });
 
       expect(calls[0]?.prevAdapterSessionId).toBeUndefined();
@@ -409,7 +409,7 @@ describe("interactive-automation-turn suite", () => {
         run: async (turn) => {
           turn.onEvent({ type: "final", text: "Must not commit separately." });
           return {
-            adapterKind: "codex",
+            harnessKind: "codex",
             adapterSessionId: "atomic-session",
             hydrated: true,
             hydrationTokens: 12,
@@ -425,7 +425,7 @@ describe("interactive-automation-turn suite", () => {
           journalDbFile,
           runnerSessionDir: path.join(dir, "sessions"),
           runner,
-          runnerKind: "codex",
+          harnessKind: "codex",
           abortSignal: new AbortController().signal,
           conversationLocks: new Map(),
           onEvent: () => undefined,

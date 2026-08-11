@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit (#567) one Automation Q&A route suite shares the mocked bridge and persistence fixture across runner, model, effort, provider-consent, and reload cases
+// governance: allow-repo-hygiene file-size-limit (#567) one Automation Q&A route suite shares the mocked bridge and persistence fixture across harness, model, effort, provider-consent, and reload cases
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -332,8 +332,8 @@ describe("AutomationViewRoute suite", () => {
       defaultConfigPinsByKind: {},
       subsystemConfigPinsByKind: {},
       diagnosticsJson: "{}",
-      subsystemRunnerByKey: { automations: "codex" },
-      subsystemRunnerLadders: {},
+      subsystemHarnessByKey: { automations: "codex" },
+      subsystemHarnessLadders: {},
       cards: [
         {
           kind: "codex",
@@ -395,8 +395,8 @@ describe("AutomationViewRoute suite", () => {
           copilot: { automations: { thought_level: "medium" } },
         },
         diagnosticsJson: "{}",
-        subsystemRunnerByKey: { automations: "codex" },
-        subsystemRunnerLadders: {},
+        subsystemHarnessByKey: { automations: "codex" },
+        subsystemHarnessLadders: {},
         cards: [
           {
             kind: "codex",
@@ -440,7 +440,7 @@ describe("AutomationViewRoute suite", () => {
       } satisfies TypeImport_1kred2y.AgentsStatusDTO;
       expect(
         automationPicker(status, "codex", {
-          runner: "codex",
+          harness: "codex",
           model: "gpt-a",
           thoughtLevel: "high",
         })
@@ -452,25 +452,25 @@ describe("AutomationViewRoute suite", () => {
       });
       expect(
         automationPicker(status, "copilot", {
-          runner: "codex",
+          harness: "codex",
           model: "gpt-a",
           thoughtLevel: "high",
         })
       ).toMatchObject({
-        selectedRunnerKind: "copilot",
+        selectedHarnessKind: "copilot",
         selectedModelId: "copilot-default",
         selectedEffortId: "medium",
       });
       expect(
         automationPicker(status, "copilot", {
-          runner: "codex",
+          harness: "codex",
           model: "gpt-a",
           thoughtLevel: "high",
         })
       ).not.toMatchObject({ modelLocked: true, effortLocked: true });
     });
 
-    it("resolves an unregistered manifest runner to a reported fallback and keeps its pins", () => {
+    it("resolves an unregistered manifest harness to a reported fallback and keeps its pins", () => {
       const status = {
         selectedKind: "codex",
         anyLoading: false,
@@ -479,8 +479,8 @@ describe("AutomationViewRoute suite", () => {
         defaultConfigPinsByKind: {},
         subsystemConfigPinsByKind: {},
         diagnosticsJson: "{}",
-        subsystemRunnerByKey: { automations: "codex" },
-        subsystemRunnerLadders: {},
+        subsystemHarnessByKey: { automations: "codex" },
+        subsystemHarnessLadders: {},
         cards: [
           {
             kind: "codex",
@@ -504,13 +504,13 @@ describe("AutomationViewRoute suite", () => {
         ],
       } satisfies TypeImport_1kred2y.AgentsStatusDTO;
       expect(
-        automationPicker(status, "future-runner", {
-          runner: "future-runner",
+        automationPicker(status, "future-harness", {
+          harness: "future-harness",
           model: "gpt-a",
           thoughtLevel: "high",
         })
       ).toMatchObject({
-        selectedRunnerKind: "codex",
+        selectedHarnessKind: "codex",
         selectedModelId: "gpt-a",
         selectedEffortId: "high",
         modelLocked: true,
@@ -629,31 +629,31 @@ describe("AutomationViewRoute suite", () => {
       expect(api.runAutomationNow).not.toHaveBeenCalled();
     });
 
-    it("restores the persisted conversation runner ahead of subsystem defaults", async () => {
+    it("restores the persisted conversation harness ahead of subsystem defaults", async () => {
       api.listAutomationTurns.mockResolvedValueOnce([
-        { ...turn, adapterKind: "copilot" },
+        { ...turn, harnessKind: "copilot" },
       ]);
       const bridge = await mount();
       await expect(bridge.loadData()).resolves.toMatchObject({
-        runnerConfig: { selectedRunnerKind: "copilot" },
+        harnessConfig: { selectedHarnessKind: "copilot" },
       });
     });
 
-    it("binds the runner to the latest run that recorded an adapter, not list order", () => {
+    it("binds the harness to the latest run that recorded an adapter, not list order", () => {
       const runs = [
         {
           ...turn,
           turnId: "newest",
           seq: 3,
           startedAt: 300,
-          adapterKind: "copilot",
+          harnessKind: "copilot",
         },
         {
           ...turn,
           turnId: "older",
           seq: 2,
           startedAt: 200,
-          adapterKind: "codex",
+          harnessKind: "codex",
         },
         { ...turn, turnId: "no-adapter", seq: 4, startedAt: 400 },
       ];

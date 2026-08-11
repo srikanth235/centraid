@@ -118,8 +118,8 @@ function providerStatus(kinds: Array<[string, string?]>): ProviderStatus {
     defaultConfigPinsByKind: {},
     subsystemConfigPinsByKind: {},
     diagnosticsJson: "{}",
-    subsystemRunnerByKey: { assistant: "codex" },
-    subsystemRunnerLadders: {},
+    subsystemHarnessByKey: { assistant: "codex" },
+    subsystemHarnessLadders: {},
     cards: kinds.map(([kind, title]) => providerCard(kind, title)),
   };
 }
@@ -165,7 +165,7 @@ function conversation(
     id: "conversation-1",
     originAppId: null,
     title: "Assistant",
-    adapterKind: null,
+    harnessKind: null,
     adapterSessionId: null,
     turnCount: 0,
     pinned: false,
@@ -311,10 +311,10 @@ describe("AssistantRoute suite", () => {
   });
 
   describe("AssistantRoute picker + workspace", () => {
-    it("carries breaker health in the runner hint, like the builder and automation pickers", async () => {
+    it("carries breaker health in the harness hint, like the builder and automation pickers", async () => {
       const bridge = await mount();
       await expect(bridge.loadModelPicker()).resolves.toMatchObject({
-        runners: expect.arrayContaining([
+        harnesses: expect.arrayContaining([
           expect.objectContaining({
             kind: "codex",
             hint: "ready · quota open",
@@ -323,24 +323,24 @@ describe("AssistantRoute suite", () => {
       });
     });
 
-    it("puts the explicitly selected runner on the next turn", async () => {
+    it("puts the explicitly selected harness on the next turn", async () => {
       const bridge = await mount();
       await bridge.loadModelPicker();
-      await bridge.onSetRunner("claude-code");
+      await bridge.onSetHarness("claude-code");
 
       await act(async () => {
-        bridge.onSend("which runner handled this?");
+        bridge.onSend("which harness handled this?");
         await Promise.resolve();
       });
 
       expect(api.streamAssistantTurn).toHaveBeenCalledWith(
-        expect.objectContaining({ runnerKind: "claude-code" }),
+        expect.objectContaining({ harnessKind: "claude-code" }),
         expect.any(Function),
         expect.anything()
       );
     });
 
-    it("keeps the latest overlapping runner switch", async () => {
+    it("keeps the latest overlapping harness switch", async () => {
       const first = deferred<ProviderStatus>();
       const second = deferred<ProviderStatus>();
       providers.loadProviders
@@ -349,8 +349,8 @@ describe("AssistantRoute suite", () => {
         .mockReturnValueOnce(second.promise);
       const bridge = await mount();
 
-      const firstSwitch = bridge.onSetRunner("claude-code");
-      const secondSwitch = bridge.onSetRunner("copilot");
+      const firstSwitch = bridge.onSetHarness("claude-code");
+      const secondSwitch = bridge.onSetHarness("copilot");
       second.resolve(
         providerStatus([
           ["codex", "Codex"],
@@ -369,18 +369,18 @@ describe("AssistantRoute suite", () => {
       await firstSwitch;
 
       await act(async () => {
-        bridge.onSend("which runner won the race?");
+        bridge.onSend("which harness won the race?");
         await Promise.resolve();
       });
 
       expect(api.streamAssistantTurn).toHaveBeenCalledWith(
-        expect.objectContaining({ runnerKind: "copilot" }),
+        expect.objectContaining({ harnessKind: "copilot" }),
         expect.any(Function),
         expect.anything()
       );
     });
 
-    it("does not let the initial picker load overwrite a persisted runner", async () => {
+    it("does not let the initial picker load overwrite a persisted harness", async () => {
       const transcript = deferred<
         ReturnType<typeof conversation> & { messages: [] }
       >();
@@ -394,7 +394,7 @@ describe("AssistantRoute suite", () => {
       // adapter binding. It must remain observational until that binding wins.
       await bridge.loadModelPicker();
       transcript.resolve({
-        ...conversation({ adapterKind: "claude-code" }),
+        ...conversation({ harnessKind: "claude-code" }),
         messages: [],
       });
       await act(async () => {
@@ -403,12 +403,12 @@ describe("AssistantRoute suite", () => {
       });
 
       await act(async () => {
-        bridge.onSend("use the persisted runner");
+        bridge.onSend("use the persisted harness");
         await Promise.resolve();
       });
 
       expect(api.streamAssistantTurn).toHaveBeenCalledWith(
-        expect.objectContaining({ runnerKind: "claude-code" }),
+        expect.objectContaining({ harnessKind: "claude-code" }),
         expect.any(Function),
         expect.anything()
       );

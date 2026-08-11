@@ -116,11 +116,11 @@ describe("serve scenarios", () => {
     expect(handle.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
   });
 
-  test("runnerStatus is reachable and returns a RunnerStatus body", async () => {
-    const res = await fetch(`${handle.url}/centraid/_turn/runner-status`, {
+  test("harnessStatus is reachable and returns a HarnessStatus body", async () => {
+    const res = await fetch(`${handle.url}/centraid/_turn/harness-status`, {
       headers: { Authorization: `Bearer ${handle.token}` },
     });
-    // Whether the runner shows `ok` depends on whether codex / claude-code
+    // Whether the harness shows `ok` depends on whether codex / claude-code
     // is installed on the test host. We only assert the route is mounted
     // and returns a well-shaped status (the Electron embed has the same
     // default — prefs loader falls back to codex when no pref is set).
@@ -130,7 +130,7 @@ describe("serve scenarios", () => {
     expect(body.ok).toBeTypeOf("boolean");
   });
 
-  test("agents status is reachable and lists every registered runner", async () => {
+  test("agents status is reachable and lists every registered harness", async () => {
     const res = await fetch(`${handle.url}/centraid/_agents/status`, {
       headers: { Authorization: `Bearer ${handle.token}` },
     });

@@ -25,7 +25,7 @@ export type Route =
       /** Segments under `/centraid/<appId>/`, starting with `_turn`. */
       segments: string[];
     }
-  | { kind: "app-runner-status"; refresh: boolean }
+  | { kind: "app-harness-status"; refresh: boolean }
   | { kind: "not-found" };
 
 const PREFIX = "/centraid";
@@ -101,17 +101,17 @@ export function parseRoute(method: string, rawUrl: string): Route {
     return { kind: "not-found" };
   }
 
-  // /centraid/_turn/runner-status — gateway-wide preflight for local CLI
+  // /centraid/_turn/harness-status — gateway-wide preflight for local CLI
   // adapters. Not app-scoped; reserved id `_turn` is checked before the
   // generic `app-*` dispatch below.
   if (segments[0] === "_turn") {
     if (
-      segments[1] === "runner-status" &&
+      segments[1] === "harness-status" &&
       segments.length === 2 &&
       m === "GET"
     ) {
       return {
-        kind: "app-runner-status",
+        kind: "app-harness-status",
         refresh: url.searchParams.get("refresh") === "1",
       };
     }

@@ -37,8 +37,8 @@ function makeStatus(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {
     defaultConfigPinsByKind: {},
     subsystemConfigPinsByKind: {},
     diagnosticsJson: "{}",
-    subsystemRunnerByKey: {},
-    subsystemRunnerLadders: {},
+    subsystemHarnessByKey: {},
+    subsystemHarnessLadders: {},
     cards: [
       {
         kind: "codex",
@@ -106,8 +106,8 @@ function makeProps(
     refreshModels: vi
       .fn<SettingsProvidersBridgeProps["refreshModels"]>()
       .mockResolvedValue(makeStatus()),
-    activateRunner: vi
-      .fn<SettingsProvidersBridgeProps["activateRunner"]>()
+    activateHarness: vi
+      .fn<SettingsProvidersBridgeProps["activateHarness"]>()
       .mockResolvedValue(true),
     setAgentModel: vi.fn<SettingsProvidersBridgeProps["setAgentModel"]>(),
     setAgentConfigPin:
@@ -116,11 +116,11 @@ function makeProps(
       vi.fn<SettingsProvidersBridgeProps["setSubsystemModel"]>(),
     setSubsystemConfigPin:
       vi.fn<SettingsProvidersBridgeProps["setSubsystemConfigPin"]>(),
-    setSubsystemRunner: vi
-      .fn<SettingsProvidersBridgeProps["setSubsystemRunner"]>()
+    setSubsystemHarness: vi
+      .fn<SettingsProvidersBridgeProps["setSubsystemHarness"]>()
       .mockResolvedValue(true),
-    setSubsystemRunnerLadder:
-      vi.fn<SettingsProvidersBridgeProps["setSubsystemRunnerLadder"]>(),
+    setSubsystemHarnessLadder:
+      vi.fn<SettingsProvidersBridgeProps["setSubsystemHarnessLadder"]>(),
     ...over,
   };
 }
@@ -202,7 +202,7 @@ describe("SettingsProvidersScreen suite", () => {
       });
       const el = await mount(props);
       await pick(sel(el, "Default agent"), "claude-code");
-      expect(props.activateRunner).toHaveBeenCalledWith("claude-code");
+      expect(props.activateHarness).toHaveBeenCalledWith("claude-code");
     });
 
     it("routes a single subsystem to a different agent than the default", async () => {
@@ -213,12 +213,12 @@ describe("SettingsProvidersScreen suite", () => {
       });
       const el = await mount(props);
       await pick(sel(el, "Agent for In-app Ask"), "claude-code");
-      expect(props.setSubsystemRunner).toHaveBeenCalledWith(
+      expect(props.setSubsystemHarness).toHaveBeenCalledWith(
         "ask",
         "claude-code"
       );
       // The default lane is untouched — this is the whole point of the change.
-      expect(props.activateRunner).not.toHaveBeenCalled();
+      expect(props.activateHarness).not.toHaveBeenCalled();
     });
 
     it("clears a lane back to inheriting the default", async () => {
@@ -227,14 +227,14 @@ describe("SettingsProvidersScreen suite", () => {
           .fn<SettingsProvidersBridgeProps["loadStatus"]>()
           .mockResolvedValue(
             makeStatusBothConnected({
-              subsystemRunnerByKey: { ask: "claude-code" },
+              subsystemHarnessByKey: { ask: "claude-code" },
             })
           ),
       });
       const el = await mount(props);
       expect(sel(el, "Agent for In-app Ask").value).toBe("claude-code");
       await pick(sel(el, "Agent for In-app Ask"), "");
-      expect(props.setSubsystemRunner).toHaveBeenCalledWith("ask", "");
+      expect(props.setSubsystemHarness).toHaveBeenCalledWith("ask", "");
     });
 
     it("requires explicit confirmation before adding ordered failover membership", async () => {
@@ -252,7 +252,7 @@ describe("SettingsProvidersScreen suite", () => {
         );
       });
       expect(dialog.openConfirm).toHaveBeenCalledOnce();
-      expect(props.setSubsystemRunnerLadder).toHaveBeenCalledWith(
+      expect(props.setSubsystemHarnessLadder).toHaveBeenCalledWith(
         "automations",
         ["claude-code"]
       );
@@ -286,7 +286,7 @@ describe("SettingsProvidersScreen suite", () => {
         await Promise.resolve();
       });
       expect(el.textContent).toContain("Claude Code was not added");
-      expect(props.setSubsystemRunnerLadder).not.toHaveBeenCalled();
+      expect(props.setSubsystemHarnessLadder).not.toHaveBeenCalled();
     });
 
     it("will not offer an agent that has not passed its session preflight as a fallback", async () => {
@@ -305,7 +305,7 @@ describe("SettingsProvidersScreen suite", () => {
       expect(add.disabled).toBe(true);
     });
 
-    it("explains why an installed runner is ineligible for unattended failover", async () => {
+    it("explains why an installed harness is ineligible for unattended failover", async () => {
       const status = makeStatusBothConnected();
       const props = makeProps({
         loadStatus: vi
@@ -335,7 +335,7 @@ describe("SettingsProvidersScreen suite", () => {
           .fn<SettingsProvidersBridgeProps["loadStatus"]>()
           .mockResolvedValue(
             makeStatus({
-              subsystemRunnerByKey: { assistant: "cursor" },
+              subsystemHarnessByKey: { assistant: "cursor" },
             })
           ),
       });
@@ -346,7 +346,7 @@ describe("SettingsProvidersScreen suite", () => {
         "cursor · existing hidden pin"
       );
       await pick(assistant, "");
-      expect(props.setSubsystemRunner).toHaveBeenCalledWith("assistant", "");
+      expect(props.setSubsystemHarness).toHaveBeenCalledWith("assistant", "");
     });
 
     it("shows the stored ladder in full, including a member that is now the lane primary", async () => {
@@ -358,7 +358,7 @@ describe("SettingsProvidersScreen suite", () => {
           .mockResolvedValue(
             withSessionReady(
               makeStatusBothConnected({
-                subsystemRunnerLadders: {
+                subsystemHarnessLadders: {
                   automations: ["codex", "claude-code"],
                 },
               })
@@ -377,7 +377,7 @@ describe("SettingsProvidersScreen suite", () => {
           '[aria-label="Move Claude Code earlier for Automations"]'
         )?.click();
       });
-      expect(props.setSubsystemRunnerLadder).toHaveBeenCalledWith(
+      expect(props.setSubsystemHarnessLadder).toHaveBeenCalledWith(
         "automations",
         ["claude-code", "codex"]
       );
@@ -404,7 +404,7 @@ describe("SettingsProvidersScreen suite", () => {
           .fn<SettingsProvidersBridgeProps["loadStatus"]>()
           .mockResolvedValue(
             makeStatusBothConnected({
-              subsystemRunnerByKey: { ask: "claude-code" },
+              subsystemHarnessByKey: { ask: "claude-code" },
             })
           ),
       });
@@ -425,7 +425,7 @@ describe("SettingsProvidersScreen suite", () => {
           .fn<SettingsProvidersBridgeProps["loadStatus"]>()
           .mockResolvedValue(
             makeStatusBothConnected({
-              subsystemRunnerByKey: { ask: "claude-code" },
+              subsystemHarnessByKey: { ask: "claude-code" },
             })
           ),
       });
@@ -446,7 +446,7 @@ describe("SettingsProvidersScreen suite", () => {
           .fn<SettingsProvidersBridgeProps["loadStatus"]>()
           .mockResolvedValue(
             makeStatusBothConnected({
-              subsystemRunnerByKey: { builder: "claude-code" },
+              subsystemHarnessByKey: { builder: "claude-code" },
             })
           ),
       });
@@ -594,7 +594,7 @@ describe("SettingsProvidersScreen suite", () => {
       expect(tile?.querySelector("svg")).toBeTruthy();
     });
 
-    it("lists a runner kind this build predates, disabled until it is available", async () => {
+    it("lists a harness kind this build predates, disabled until it is available", async () => {
       const base = makeStatus();
       const el = await mount(
         makeProps({

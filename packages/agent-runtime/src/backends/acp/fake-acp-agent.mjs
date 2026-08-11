@@ -21,7 +21,7 @@
  *                   tools/list, tools/call — and report what happened
  *   --mode=vault-parity dial the same server and invoke one representative
  *                   typed write for every native blueprint, including a
- *                   high-risk command whose real runner can park it
+ *                   high-risk command whose real harness can park it
  *   --mode=auth     reject session/new with ACP's AUTH_REQUIRED (-32000)
  *   --mode=auth-prompt accept session/new, then reject the diagnostic prompt
  *                   with an auth-ish Internal error (real Claude failure shape)

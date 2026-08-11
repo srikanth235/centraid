@@ -1,9 +1,9 @@
 /*
- * Runner-kind routing for the automation dispatch path (issue #479).
+ * Harness-kind routing for the automation dispatch path (issue #479).
  *
  * A fire has its OWN dispatch surface, separate from the conversation
  * `runTurn`: `ctx.agent` is a one-shot against the user's real provider,
- * routed through the runner registry. Issue #484 removed the `ctx.tool` rail
+ * routed through the harness registry. Issue #484 removed the `ctx.tool` rail
  * (and the mock-LLM session it puppeted), so the dispatch surface no longer
  * accepts a tool dispatcher — a fire whose handler only touches ctx.vault /
  * ctx.state constructs nothing and spawns nothing. These tests pin the
@@ -26,8 +26,8 @@ import type {
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-import { RUNNER_BACKENDS } from "../registry.ts";
-import type { RunnerKind } from "../types.ts";
+import { HARNESSES } from "../registry.ts";
+import type { HarnessKind } from "../types.ts";
 import { startLiveDispatch } from "./run-automation-live-dispatch.ts";
 import type { LiveDispatch } from "./run-automation-live-dispatch.ts";
 
@@ -35,7 +35,7 @@ const ACP_KINDS = [
   "gemini",
   "qwen",
   "acp",
-] as const satisfies readonly RunnerKind[];
+] as const satisfies readonly HarnessKind[];
 
 /** Restore any backend a test swapped out of the registry table. */
 const restores: Array<() => void> = [];
@@ -53,30 +53,30 @@ describe("run-automation-dispatch suite", () => {
    * `registry.test.ts` uses. Returns the recorder.
    */
   function stubBackendRunTurn(
-    kind: RunnerKind,
+    kind: HarnessKind,
     impl: (
       input: TurnInput,
       config: TurnConfig
     ) => TurnResult | void | Promise<TurnResult | void>
   ): { calls: Array<{ input: TurnInput; config: TurnConfig }> } {
-    const original = RUNNER_BACKENDS[kind];
+    const original = HARNESSES[kind];
     const calls: Array<{ input: TurnInput; config: TurnConfig }> = [];
-    RUNNER_BACKENDS[kind] = {
+    HARNESSES[kind] = {
       ...original,
       runTurn: async (input, config) => {
         calls.push({ input, config });
         const result = await impl(input, config);
-        return result ?? { adapterKind: kind };
+        return result ?? { harnessKind: kind };
       },
     };
     restores.push(() => {
-      RUNNER_BACKENDS[kind] = original;
+      HARNESSES[kind] = original;
     });
     return { calls };
   }
 
   async function openDispatch(
-    runner: RunnerKind,
+    harness: HarnessKind,
     model?: string
   ): Promise<LiveDispatch> {
     const workdir = await tempDir("centraid-automation-dispatch-");
@@ -86,7 +86,7 @@ describe("run-automation-dispatch suite", () => {
       "demo/nightly",
       "demo",
       "Nightly",
-      runner
+      harness
     );
     store.close();
     const dispatch = await startLiveDispatch({
@@ -94,7 +94,7 @@ describe("run-automation-dispatch suite", () => {
       runId: "run-1",
       automationRef: "demo/nightly",
       journalDbFile,
-      runner,
+      harness,
       ...(model ? { model } : {}),
       onLog: () => undefined,
     });
@@ -207,7 +207,7 @@ describe("run-automation-dispatch suite", () => {
     await expect(
       agentDispatcher({ prompt: "go" }, dispatchCtx)
     ).rejects.toThrow(
-      /centraid-agent-failure:.*"runner":"acp".*"message":"no binary configured"/u
+      /centraid-agent-failure:.*"harness":"acp".*"message":"no binary configured"/u
     );
   });
 
@@ -216,11 +216,11 @@ describe("run-automation-dispatch suite", () => {
       await import("./run-automation-live-dispatch.ts");
     expect(
       parseAutomationAgentFailure(
-        'Error: centraid-agent-failure:{"runner":"codex","failureClass":"spawn","message":"missing"}\n' +
-          "    at MessagePort.<anonymous> (runner.js:71:25)"
+        'Error: centraid-agent-failure:{"harness":"codex","failureClass":"spawn","message":"missing"}\n' +
+          "    at MessagePort.<anonymous> (harness.js:71:25)"
       )
     ).toStrictEqual({
-      runner: "codex",
+      harness: "codex",
       failureClass: "spawn",
       message: "missing",
     });
@@ -248,10 +248,10 @@ describe("run-automation-dispatch suite", () => {
       runId: "run-fallback",
       automationRef: "demo/nightly",
       journalDbFile,
-      runner: "codex",
+      harness: "codex",
       model: "gpt-primary",
       configPins: { thought_level: "xhigh" },
-      runnerPrefsFor: async (kind) =>
+      harnessPrefsFor: async (kind) =>
         kind === "claude-code"
           ? { kind, configPins: { thought_level: "high" } }
           : { kind: "codex" },
@@ -310,7 +310,7 @@ describe("run-automation-dispatch suite", () => {
     const claude = stubBackendRunTurn("claude-code", (input) => {
       input.onEvent({ type: "final", text: "B answer" });
       return {
-        adapterKind: "claude-code",
+        harnessKind: "claude-code",
         sessionId: "session-b",
         hydrated: true,
       };
@@ -320,7 +320,7 @@ describe("run-automation-dispatch suite", () => {
       runId: "b-turn",
       automationRef: ref,
       journalDbFile,
-      runner: "claude-code",
+      harness: "claude-code",
       onLog: () => undefined,
     });
     const duringB = new ConversationStore(makeJournalDbProvider(journalDbFile));
@@ -345,14 +345,14 @@ describe("run-automation-dispatch suite", () => {
 
     const codex = stubBackendRunTurn("codex", (input) => {
       input.onEvent({ type: "final", text: "A returns" });
-      return { adapterKind: "codex", sessionId: "session-a" };
+      return { harnessKind: "codex", sessionId: "session-a" };
     });
     const aDispatch = await startLiveDispatch({
       workdir,
       runId: "a-return",
       automationRef: ref,
       journalDbFile,
-      runner: "codex",
+      harness: "codex",
       onLog: () => undefined,
     });
     const duringA = new ConversationStore(makeJournalDbProvider(journalDbFile));
@@ -396,8 +396,8 @@ describe("run-automation-dispatch suite", () => {
    * journal, so these tests exercise the durable rows rather than a fake.
    */
   async function openConsentedDispatch(opts: {
-    runner: RunnerKind;
-    ladderMembers: readonly RunnerKind[];
+    harness: HarnessKind;
+    ladderMembers: readonly HarnessKind[];
     consentSource?: "direct" | "ladder";
     seed?: (consent: ProviderEgressConsentStore) => void;
   }): Promise<{ dispatch: LiveDispatch; consent: ProviderEgressConsentStore }> {
@@ -408,7 +408,7 @@ describe("run-automation-dispatch suite", () => {
       "demo/nightly",
       "demo",
       "Nightly",
-      opts.runner
+      opts.harness
     );
     store.close();
     const consent = new ProviderEgressConsentStore(
@@ -421,7 +421,7 @@ describe("run-automation-dispatch suite", () => {
       runId: "run-1",
       automationRef: "demo/nightly",
       journalDbFile,
-      runner: opts.runner,
+      harness: opts.harness,
       providerEgressConsent: consent,
       ...(opts.consentSource ? { consentSource: opts.consentSource } : {}),
       onLog: () => undefined,
@@ -435,7 +435,7 @@ describe("run-automation-dispatch suite", () => {
       input.onEvent({ type: "final", text: "ok" });
     });
     const { dispatch, consent } = await openConsentedDispatch({
-      runner: "codex",
+      harness: "codex",
       ladderMembers: [],
       consentSource: "direct",
     });
@@ -452,7 +452,7 @@ describe("run-automation-dispatch suite", () => {
       input.onEvent({ type: "final", text: "ok" });
     });
     const { dispatch } = await openConsentedDispatch({
-      runner: "claude-code",
+      harness: "claude-code",
       ladderMembers: ["claude-code"],
       consentSource: "ladder",
     });
@@ -468,7 +468,7 @@ describe("run-automation-dispatch suite", () => {
       input.onEvent({ type: "final", text: "ok" });
     });
     const { dispatch } = await openConsentedDispatch({
-      runner: "codex",
+      harness: "codex",
       ladderMembers: ["codex"],
       consentSource: "direct",
       seed: (consent) => {
@@ -483,14 +483,14 @@ describe("run-automation-dispatch suite", () => {
     expect(stub.calls).toHaveLength(0);
   });
 
-  test("a manifest-pinned runner the user never authored is denied, not auto-granted", async () => {
+  test("a manifest-pinned harness the user never authored is denied, not auto-granted", async () => {
     const stub = stubBackendRunTurn("gemini", (input) => {
       input.onEvent({ type: "final", text: "ok" });
     });
     // The manifest pin arrives as a ladder-sourced derivation; the live ladder
     // does not contain gemini, so nothing may leave the device.
     const { dispatch, consent } = await openConsentedDispatch({
-      runner: "gemini",
+      harness: "gemini",
       ladderMembers: ["claude-code"],
       consentSource: "ladder",
     });

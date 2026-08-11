@@ -1,7 +1,7 @@
 /*
- * Per-runner model enumeration.
+ * Per-harness model enumeration.
  *
- * There is no per-kind enumeration strategy any more (issue #484). A runner
+ * There is no per-kind enumeration strategy any more (issue #484). A harness
  * reports its models the same way it reports anything else — over ACP: an
  * agent advertises its model selector as a `configOptions` entry on the
  * `session/new` result. So enumeration is one generic ACP probe (launch →
@@ -19,26 +19,26 @@
  * best-effort: any failure (binary missing, adapter not installed, timeout,
  * AUTH_REQUIRED) resolves to `[]`, so the `CatalogWarmer` skips the write and
  * the cached entry (if any) is preserved. Enumeration runs only through the
- * warmer (boot + Refresh), never on a normal runner-status read.
+ * warmer (boot + Refresh), never on a normal harness-status read.
  */
 
-import type { RunnerKind, RunnerModel } from "@centraid/app-engine";
+import type { HarnessKind, HarnessModel } from "@centraid/app-engine";
 
-import { RUNNER_BACKENDS } from "../registry.js";
+import { HARNESSES } from "../registry.js";
 
 /**
- * Enumerate the models the active runner can serve, via the runner-backend
+ * Enumerate the models the active harness can serve, via the harness-backend
  * registry's per-kind `enumerateModels` hook (codex / claude-code → the
  * generic ACP model probe; every other kind → empty, since it pins its model
  * per-session rather than exposing a catalog). Returns `[]` on any failure or
  * unknown kind — never throws.
  */
-export function enumerateRunnerModels(prefs: {
-  kind: RunnerKind;
+export function enumerateHarnessModels(prefs: {
+  kind: HarnessKind;
   binPath?: string;
   extraArgs?: string[];
-}): Promise<RunnerModel[]> {
-  const backend = RUNNER_BACKENDS[prefs.kind];
+}): Promise<HarnessModel[]> {
+  const backend = HARNESSES[prefs.kind];
   if (!backend) return Promise.resolve([]);
   return backend.enumerateModels({
     ...(prefs.binPath ? { binPath: prefs.binPath } : {}),

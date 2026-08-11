@@ -255,7 +255,7 @@ export async function pinModel(args: {
       type: "notice",
       level: "warn",
       code: "model_unsupported",
-      message: `This runner picks its own model — the selected model (${args.requested}) was ignored.`,
+      message: `This harness picks its own model — the selected model (${args.requested}) was ignored.`,
     });
     return current;
   }
@@ -270,7 +270,7 @@ export async function pinModel(args: {
       level: "warn",
       code: "model_not_offered",
       message:
-        `This runner doesn’t offer the selected model (${args.requested}) — ` +
+        `This harness doesn’t offer the selected model (${args.requested}) — ` +
         `it used its own default instead.`,
     });
     return current;
@@ -293,7 +293,7 @@ export async function pinModel(args: {
         level: "warn",
         code: "model_unconfirmed",
         message:
-          `This runner accepted the selected model (${args.requested}) but reported ` +
+          `This harness accepted the selected model (${args.requested}) but reported ` +
           `a different active model, so Centraid will record the model as unknown.`,
       });
       return undefined;
@@ -307,7 +307,7 @@ export async function pinModel(args: {
       level: "warn",
       code: "model_not_offered",
       message:
-        `This runner refused the selected model (${args.requested}) — ` +
+        `This harness refused the selected model (${args.requested}) — ` +
         `it used its own default instead.`,
     });
     return current;
@@ -335,7 +335,7 @@ export async function pinThoughtLevel(args: {
       type: "notice",
       level: "warn",
       code: "thought_level_unsupported",
-      message: `This runner does not advertise an effort control — the selected effort (${args.requested}) was ignored.`,
+      message: `This harness does not advertise an effort control — the selected effort (${args.requested}) was ignored.`,
     });
     return current;
   }
@@ -352,7 +352,7 @@ export async function pinThoughtLevel(args: {
       type: "notice",
       level: "warn",
       code: "thought_level_not_offered",
-      message: `This runner does not offer the selected effort (${args.requested}) for its active model — it used its own default instead.`,
+      message: `This harness does not offer the selected effort (${args.requested}) for its active model — it used its own default instead.`,
     });
     return current;
   }
@@ -375,7 +375,7 @@ export async function pinThoughtLevel(args: {
         type: "notice",
         level: "warn",
         code: "thought_level_unconfirmed",
-        message: `The runner accepted the effort request but reported a different active effort, so Centraid will record effort as unknown.`,
+        message: `The harness accepted the effort request but reported a different active effort, so Centraid will record effort as unknown.`,
       });
       return undefined;
     }
@@ -385,7 +385,7 @@ export async function pinThoughtLevel(args: {
       type: "notice",
       level: "warn",
       code: "thought_level_not_offered",
-      message: `This runner refused the selected effort (${args.requested}) — it used its own default instead.`,
+      message: `This harness refused the selected effort (${args.requested}) — it used its own default instead.`,
     });
     return current;
   }

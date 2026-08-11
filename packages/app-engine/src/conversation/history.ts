@@ -55,13 +55,13 @@ export interface ConversationSummary {
   /** Owner of the session — the gateway-side user UUID from `UserStore`. */
   userId: string;
   title: string;
-  /** Runner kind that owns `adapterSessionId` (codex | claude-code). */
-  adapterKind: string | null;
-  /** Opaque per-runner resume handle; `null` until the first turn lands. */
+  /** Harness kind that owns `adapterSessionId` (codex | claude-code). */
+  harnessKind: string | null;
+  /** Opaque per-harness resume handle; `null` until the first turn lands. */
   adapterSessionId: string | null;
   /** Number of completed turns on this session. */
   turnCount: number;
-  /** Number of canonical-ledger hydrations across runner/session handoffs. */
+  /** Number of canonical-ledger hydrations across harness/session handoffs. */
   hydrationCount: number;
   /** Most recent hydration boundary. */
   lastHydratedAt?: number;
@@ -188,16 +188,16 @@ export interface ConversationTurnAttachment {
 
 /**
  * One item of a completed chat turn, handed to `recordTurn`. The chat route
- * accumulates these from the runner's `TurnStreamEvent`s.
+ * accumulates these from the harness's `TurnStreamEvent`s.
  */
 export type TurnNode =
   | {
       kind: "step";
       /** Accumulated assistant text for the turn. */
       text: string;
-      /** True when this step carries a runner/turn error message. */
+      /** True when this step carries a harness/turn error message. */
       isError?: boolean;
-      /** Durable runner/failover/self-heal notice rather than model prose. */
+      /** Durable harness/failover/self-heal notice rather than model prose. */
       notice?: { level: "info" | "warn"; code?: string };
       model?: string;
       provider?: string;
@@ -733,7 +733,7 @@ export class ConversationHistoryStore {
     };
   }
 
-  /** Bump turn_count + persist the runner-resume handle. */
+  /** Bump turn_count + persist the harness-resume handle. */
   noteTurn(
     appId: string,
     sessionId: string,
@@ -755,7 +755,7 @@ export class ConversationHistoryStore {
   getAdapterResumeState(
     appId: string,
     sessionId: string,
-    runnerKind?: string
+    harnessKind?: string
   ):
     | {
         bindingId?: string;
@@ -768,7 +768,7 @@ export class ConversationHistoryStore {
     const meta = this.ownedMeta(appId, sessionId);
     if (!meta) return undefined;
     const { store } = this.appConversation(appId);
-    const kind = runnerKind ?? meta.adapterKind ?? undefined;
+    const kind = harnessKind ?? meta.harnessKind ?? undefined;
     const binding = kind ? store.getHarnessBinding(sessionId, kind) : undefined;
     if (binding) {
       return {
@@ -783,12 +783,12 @@ export class ConversationHistoryStore {
     }
     // A targeted lookup asks only for that provider's resumable binding.
     // Falling back to the conversation's different active provider would
-    // pair the wrong opaque session id with the requested runner. A miss is
+    // pair the wrong opaque session id with the requested harness. A miss is
     // `undefined` — an empty object reads as "state found, all fields absent"
     // at every call site that only truthiness-tests the result.
-    if (runnerKind) return undefined;
+    if (harnessKind) return undefined;
     return {
-      ...(meta.adapterKind ? { kind: meta.adapterKind } : {}),
+      ...(meta.harnessKind ? { kind: meta.harnessKind } : {}),
       ...(meta.adapterSessionId ? { sessionId: meta.adapterSessionId } : {}),
       ...(meta.adapterUsageSnapshot
         ? { usageSnapshot: meta.adapterUsageSnapshot }
@@ -1107,7 +1107,7 @@ function recordNode(
       kind: "step",
       ...(node.notice
         ? {
-            name: `notice:${node.notice.level}:${node.notice.code ?? "runner"}`,
+            name: `notice:${node.notice.level}:${node.notice.code ?? "harness"}`,
           }
         : {}),
       outputJson: JSON.stringify({
@@ -1238,7 +1238,7 @@ function toMeta(c: ConversationMeta): ConversationSummary {
     id: c.id,
     userId: c.userId,
     title: c.title,
-    adapterKind: c.adapterKind ?? null,
+    harnessKind: c.harnessKind ?? null,
     adapterSessionId: c.adapterSessionId ?? null,
     turnCount: c.turnCount,
     hydrationCount: c.hydrationCount,

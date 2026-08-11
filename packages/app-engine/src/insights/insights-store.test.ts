@@ -113,7 +113,7 @@ describe("InsightsStore (#514)", () => {
     expect("quotaTokens" in s.kpis).toBe(false);
     expect(s.daily).toStrictEqual([]);
     expect(s.bySource).toStrictEqual([]);
-    expect(s.byRunner).toStrictEqual([]);
+    expect(s.byHarness).toStrictEqual([]);
     expect(s.byModel).toStrictEqual([]);
     expect(s.byEffort).toStrictEqual([]);
     expect(s.recent).toStrictEqual([]);
@@ -194,7 +194,7 @@ describe("InsightsStore (#514)", () => {
     expect(s.kpis.failedCostUsd).toBeCloseTo(0.03, 4);
   });
 
-  it("ranks bySource and byRunner by cost and surfaces attention", () => {
+  it("ranks bySource and byHarness by cost and surfaces attention", () => {
     const { runs, insights } = setup();
     seedRun(runs, {
       kind: "automation",
@@ -217,12 +217,12 @@ describe("InsightsStore (#514)", () => {
     const s = insights.summary();
     expect(s.bySource[0]?.key).toBe("app/big");
     expect(s.bySource[0]?.costUsd).toBeCloseTo(1, 4);
-    expect(s.byRunner[0]?.provider).toBe("claude-code");
+    expect(s.byHarness[0]?.provider).toBe("claude-code");
     expect(s.attention?.key).toBe("app/big");
     expect(s.attention!.share).toBeGreaterThanOrEqual(0.4);
   });
 
-  it("groups only runner-confirmed effort and carries it into recent activity", () => {
+  it("groups only harness-confirmed effort and carries it into recent activity", () => {
     const { runs, insights } = setup();
     seedRun(runs, {
       kind: "chat",

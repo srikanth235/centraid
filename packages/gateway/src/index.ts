@@ -149,7 +149,7 @@ export {
 } from "./routes/push-wake-routes.js";
 // The vault-register tool runners, giving chat turns `vault_sql` /
 // `vault_invoke` / `vault_content` capability through the same
-// consent/receipt pipeline the codex/claude runners use (issue #319).
+// consent/receipt pipeline the codex/claude harnesses use (issue #319).
 export {
   makeVaultToolRunners,
   assistantCwd,

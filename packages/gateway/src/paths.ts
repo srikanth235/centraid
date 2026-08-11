@@ -66,8 +66,8 @@ export interface GatewayPaths {
 
   /**
    * Optional path to the gateway-owned model catalog (`model-catalog.json`,
-   * issue #188). When set, the default `runnerStatus` reporter persists the
-   * chat picker's per-runner model list here and re-enumerates it on Refresh.
+   * issue #188). When set, the default `harnessStatus` reporter persists the
+   * chat picker's per-harness model list here and re-enumerates it on Refresh.
    * Omit to enumerate without persistence; there is no hardcoded default seed.
    */
   modelCatalogFile?: string;

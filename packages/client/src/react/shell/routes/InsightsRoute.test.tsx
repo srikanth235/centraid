@@ -89,7 +89,7 @@ describe("InsightsRoute suite", () => {
       costUsd: number;
       automationName?: string;
     }>,
-    byRunner: [],
+    byHarness: [],
     byModel: [],
     byEffort: [],
     recent: [],

@@ -2,7 +2,7 @@
  * Opt-in live smoke for issue #567 acceptance. It exercises the two
  * requested registry kinds through the same `runTurn` entry point as product
  * surfaces. CI does not run it because it requires locally-authenticated CLIs
- * and incurs one tiny provider turn per runner.
+ * and incurs one tiny provider turn per harness.
  */
 
 import { mkdtemp, rm } from "node:fs/promises";
@@ -13,19 +13,19 @@ import type { TurnInput, TurnStreamEvent } from "@centraid/app-engine";
 
 import { probeAcpCapabilities } from "../src/backends/acp/probe-capabilities.js";
 import { clearWarmPool } from "../src/backends/acp/session-warm.js";
-import { acpConfigFor, RUNNER_BACKENDS } from "../src/registry.js";
+import { acpConfigFor, HARNESSES } from "../src/registry.js";
 import { runTurn } from "../src/runtime.js";
-import type { RunnerKind } from "../src/types.js";
+import type { HarnessKind } from "../src/types.js";
 
-const isRunnerKind = (kind: string): kind is RunnerKind =>
-  Object.hasOwn(RUNNER_BACKENDS, kind);
+const isHarnessKind = (kind: string): kind is HarnessKind =>
+  Object.hasOwn(HARNESSES, kind);
 
 const requested = (process.env.CENTRAID_LIVE_ADAPTERS ?? "codex,claude-code")
   .split(",")
   .map((kind) => kind.trim())
-  .filter(isRunnerKind);
+  .filter(isHarnessKind);
 
-const binFor = (kind: RunnerKind): string | undefined =>
+const binFor = (kind: HarnessKind): string | undefined =>
   kind === "codex"
     ? process.env.CENTRAID_CODEX_BIN
     : kind === "claude-code"
@@ -44,7 +44,7 @@ interface LiveAttempt {
 }
 
 async function runLive(
-  kind: RunnerKind,
+  kind: HarnessKind,
   cwd: string,
   message: string,
   input: Partial<
@@ -129,7 +129,7 @@ const runNextAdapter = async (index: number): Promise<void> => {
     const ok =
       !attempt.error &&
       Boolean(attempt.final?.text.trim()) &&
-      attempt.result.adapterKind === kind &&
+      attempt.result.harnessKind === kind &&
       effortRoundTrip;
     process.stdout.write(
       `${JSON.stringify({
@@ -174,9 +174,9 @@ await runNextAdapter(0);
 
 if (requested.length >= 2) {
   const [first, second] = requested as [
-    RunnerKind,
-    RunnerKind,
-    ...RunnerKind[],
+    HarnessKind,
+    HarnessKind,
+    ...HarnessKind[],
   ];
   const cwd = await mkdtemp(path.join(tmpdir(), "centraid-live-switch-"));
   try {

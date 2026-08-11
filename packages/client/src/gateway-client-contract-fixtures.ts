@@ -131,7 +131,7 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
   if (path === "/centraid/_templates") return json([]);
   if (path === "/_centraid-user/id") return json({ id: "user-1" });
   if (path === "/_centraid-user/prefs")
-    return json({ prefs: { runner: "codex" } });
+    return json({ prefs: { harness: "codex" } });
   if (path === "/centraid/_apps/_sessions" && method === "POST") {
     const body = JSON.parse(String(init?.body)) as { sessionId: string };
     return json({ sessionId: body.sessionId });

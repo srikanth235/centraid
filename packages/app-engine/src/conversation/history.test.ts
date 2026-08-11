@@ -308,7 +308,7 @@ describe(ConversationHistoryStore, () => {
     expect(found?.error).toBe("nope");
   });
 
-  it("persists A→B→A bindings, per-runner watermarks, workspace, lock, and cascade GC", () => {
+  it("persists A→B→A bindings, per-harness watermarks, workspace, lock, and cascade GC", () => {
     const dir = freshVaultDir();
     const durable = new ConversationHistoryStore(workspaceFor(dir));
     const session = durable.createSession(APP);
@@ -419,30 +419,30 @@ describe(ConversationHistoryStore, () => {
       plainRows(
         db
           .prepare(
-            `SELECT runner_kind, acp_session_id, status
+            `SELECT harness_kind, acp_session_id, status
              FROM conversation_harness_sessions
             WHERE conversation_id = ?
             ORDER BY created_at, acp_session_id`
           )
           .all(session.id) as Array<{
-          runner_kind: string;
+          harness_kind: string;
           acp_session_id: string;
           status: string;
         }>
       )
     ).toStrictEqual([
       {
-        runner_kind: "codex",
+        harness_kind: "codex",
         acp_session_id: "codex-session",
         status: "stale",
       },
       {
-        runner_kind: "claude-code",
+        harness_kind: "claude-code",
         acp_session_id: "claude-session",
         status: "warm",
       },
       {
-        runner_kind: "codex",
+        harness_kind: "codex",
         acp_session_id: "codex-session-2",
         status: "active",
       },
@@ -517,7 +517,7 @@ describe(ConversationHistoryStore, () => {
     durable.recordTurn(APP, {
       ...turn(session.id, "ask B while codex is down", ""),
       ok: false,
-      error: "runner unavailable",
+      error: "harness unavailable",
       finalText: undefined,
       nodes: [],
       failedAdapter: { kind: "codex", sessionId: "codex-session" },
@@ -536,7 +536,7 @@ describe(ConversationHistoryStore, () => {
     ).toContain("ask B while codex is down");
   });
 
-  it("keeps one active/one warm process while A→B→C retains every runner resume handle", () => {
+  it("keeps one active/one warm process while A→B→C retains every harness resume handle", () => {
     const dir = freshVaultDir();
     const durable = new ConversationHistoryStore(workspaceFor(dir));
     const session = durable.createSession(APP);
@@ -557,25 +557,29 @@ describe(ConversationHistoryStore, () => {
       plainRows(
         db
           .prepare(
-            `SELECT runner_kind, acp_session_id, status
+            `SELECT harness_kind, acp_session_id, status
              FROM conversation_harness_sessions
             WHERE conversation_id = ?
             ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'warm' THEN 1 ELSE 2 END`
           )
           .all(session.id) as Array<{
-          runner_kind: string;
+          harness_kind: string;
           acp_session_id: string;
           status: string;
         }>
       )
     ).toStrictEqual([
-      { runner_kind: "copilot", acp_session_id: "copilot-c", status: "active" },
       {
-        runner_kind: "claude-code",
+        harness_kind: "copilot",
+        acp_session_id: "copilot-c",
+        status: "active",
+      },
+      {
+        harness_kind: "claude-code",
         acp_session_id: "claude-b",
         status: "warm",
       },
-      { runner_kind: "codex", acp_session_id: "codex-a", status: "cold" },
+      { harness_kind: "codex", acp_session_id: "codex-a", status: "cold" },
     ]);
     expect(
       durable.getAdapterResumeState(APP, session.id, "copilot")
@@ -609,22 +613,22 @@ describe(ConversationHistoryStore, () => {
       plainRows(
         db
           .prepare(
-            `SELECT runner_kind, acp_session_id, status
+            `SELECT harness_kind, acp_session_id, status
              FROM conversation_harness_sessions
             WHERE conversation_id = ?
             ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'warm' THEN 1 ELSE 2 END`
           )
           .all(session.id) as Array<{
-          runner_kind: string;
+          harness_kind: string;
           acp_session_id: string;
           status: string;
         }>
       )
     ).toStrictEqual([
-      { runner_kind: "codex", acp_session_id: "codex-a", status: "active" },
-      { runner_kind: "copilot", acp_session_id: "copilot-c", status: "warm" },
+      { harness_kind: "codex", acp_session_id: "codex-a", status: "active" },
+      { harness_kind: "copilot", acp_session_id: "copilot-c", status: "warm" },
       {
-        runner_kind: "claude-code",
+        harness_kind: "claude-code",
         acp_session_id: "claude-b",
         status: "cold",
       },
@@ -854,11 +858,11 @@ describe(ConversationHistoryStore, () => {
       startedAt: t,
       endedAt: t + 5,
       ok: false,
-      error: "runner crashed",
+      error: "harness crashed",
       nodes: [
         {
           kind: "step",
-          text: "runner crashed",
+          text: "harness crashed",
           isError: true,
           startedAt: t,
           endedAt: t + 5,
@@ -871,7 +875,7 @@ describe(ConversationHistoryStore, () => {
     >;
     expect(ai).toMatchObject({
       kind: "ai",
-      text: "runner crashed",
+      text: "harness crashed",
       error: true,
     });
   });
@@ -938,26 +942,26 @@ describe(ConversationHistoryStore, () => {
   it("noteTurn bumps turn_count and persists the adapter columns", () => {
     const s = store.createSession(APP);
     expect(s.turnCount).toBe(0);
-    expect(s.adapterKind).toBeNull();
+    expect(s.harnessKind).toBeNull();
 
     const after1 = store.noteTurn(APP, s.id, {
       kind: "codex",
       sessionId: "cx-1",
     });
     expect(after1?.turnCount).toBe(1);
-    expect(after1?.adapterKind).toBe("codex");
+    expect(after1?.harnessKind).toBe("codex");
     expect(after1?.adapterSessionId).toBe("cx-1");
 
     // Adapter omitted — counters move, adapter columns stay.
     const after2 = store.noteTurn(APP, s.id);
     expect(after2?.turnCount).toBe(2);
-    expect(after2?.adapterKind).toBe("codex");
+    expect(after2?.harnessKind).toBe("codex");
     expect(after2?.adapterSessionId).toBe("cx-1");
 
     // Adapter present but no sessionId — kind updates, session id is kept.
     const after3 = store.noteTurn(APP, s.id, { kind: "claude-code" });
     expect(after3?.turnCount).toBe(3);
-    expect(after3?.adapterKind).toBe("claude-code");
+    expect(after3?.harnessKind).toBe("claude-code");
     expect(after3?.adapterSessionId).toBe("cx-1");
   });
 

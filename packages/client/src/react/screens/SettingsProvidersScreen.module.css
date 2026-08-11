@@ -258,7 +258,7 @@
   text-overflow: ellipsis;
 }
 
-/* Used-by chips replace the old "Active" pill. Under one global runner
+/* Used-by chips replace the old "Active" pill. Under one global harness
    "Active" was the useful fact; once every lane routes independently, the
    useful fact is which lanes land here — it answers what breaks if this
    agent goes away. */

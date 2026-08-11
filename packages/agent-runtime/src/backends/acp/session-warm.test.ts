@@ -163,7 +163,7 @@ describe("session-warm suite", () => {
     await disposeSlot(slot!);
   });
 
-  test("a conversation keeps only its newest warm runner binding", async () => {
+  test("a conversation keeps only its newest warm harness binding", async () => {
     const codex = makeConn();
     putWarmSlot({
       kind: "codex",

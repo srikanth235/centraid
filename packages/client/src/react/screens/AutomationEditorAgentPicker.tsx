@@ -6,30 +6,33 @@ import { Icon } from "../ui/index.js";
 
 import styles from "./AutomationEditorScreen.module.css";
 
-type RunnerOption = NonNullable<AutomationEditorData["agentRunners"]>[number];
+type HarnessOption = NonNullable<
+  AutomationEditorData["agentHarnesses"]
+>[number];
 
 export function AutomationEditorAgentPicker({
-  runners,
-  runner,
+  harnesses,
+  harness,
   model,
-  defaultRunnerKind,
+  defaultHarnessKind,
   defaultModel,
   onChange,
 }: {
-  runners: RunnerOption[];
-  runner: string | null | undefined;
+  harnesses: HarnessOption[];
+  harness: string | null | undefined;
   model: string | null | undefined;
-  defaultRunnerKind: string | undefined;
+  defaultHarnessKind: string | undefined;
   defaultModel: string | null | undefined;
-  onChange: (next: { runner: string | null; model: string | null }) => void;
+  onChange: (next: { harness: string | null; model: string | null }) => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const effectiveRunner = runner ?? defaultRunnerKind ?? runners[0]?.kind ?? "";
-  const selected = runners.find((option) => option.kind === effectiveRunner);
+  const effectiveHarness =
+    harness ?? defaultHarnessKind ?? harnesses[0]?.kind ?? "";
+  const selected = harnesses.find((option) => option.kind === effectiveHarness);
   const effectiveDefaultModel =
     selected?.defaultModel ??
-    (effectiveRunner === defaultRunnerKind ? defaultModel : null);
+    (effectiveHarness === defaultHarnessKind ? defaultModel : null);
 
   useEffect(() => {
     if (!open) return;
@@ -62,7 +65,7 @@ export function AutomationEditorAgentPicker({
         <Icon name="Cpu" size={14} />
         <span>Agent</span>
         <span className={styles.agentChipValue}>
-          {(selected?.label ?? effectiveRunner) || "Default"}
+          {(selected?.label ?? effectiveHarness) || "Default"}
         </span>
         <Icon name="ChevronDown" size={12} />
       </button>
@@ -79,17 +82,18 @@ export function AutomationEditorAgentPicker({
             </p>
           </div>
           <label className={styles.agentPickerField}>
-            <span>Runner</span>
+            <span>Harness</span>
             <select
-              value={runner ?? ""}
+              value={harness ?? ""}
               onChange={(event) =>
-                onChange({ runner: event.target.value || null, model: null })
+                onChange({ harness: event.target.value || null, model: null })
               }
             >
               <option value="">
-                Use default{defaultRunnerKind ? ` (${defaultRunnerKind})` : ""}
+                Use default
+                {defaultHarnessKind ? ` (${defaultHarnessKind})` : ""}
               </option>
-              {runners.map((option) => (
+              {harnesses.map((option) => (
                 <option key={option.kind} value={option.kind}>
                   {option.label}
                   {option.connected ? "" : " · unavailable"}
@@ -103,7 +107,7 @@ export function AutomationEditorAgentPicker({
               value={model ?? ""}
               onChange={(event) =>
                 onChange({
-                  runner: runner ?? null,
+                  harness: harness ?? null,
                   model: event.target.value || null,
                 })
               }

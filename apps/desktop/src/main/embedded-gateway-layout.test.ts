@@ -47,7 +47,7 @@ describe("embedded-gateway-layout scenarios", () => {
    * - PricingWarmer (#445) refreshes LiteLLM into `model-pricing.json` when the
    *   host pins a cache path and the on-disk table is stale/absent. A fresh
    *   fixture file skips the fetch entirely.
-   * - CatalogWarmer enumerates runner models into `model-catalog.json` after a
+   * - CatalogWarmer enumerates harness models into `model-catalog.json` after a
    *   successful CLI probe; an empty seeded catalog is still a valid file so a
    *   later merge only rewrites contents.
    *
@@ -72,7 +72,7 @@ describe("embedded-gateway-layout scenarios", () => {
     );
     await fs.writeFile(
       path.join(cacheDir, "model-catalog.json"),
-      `${JSON.stringify({ version: 2, runners: {} }, null, 2)}\n`
+      `${JSON.stringify({ version: 2, harnesses: {} }, null, 2)}\n`
     );
   }
 

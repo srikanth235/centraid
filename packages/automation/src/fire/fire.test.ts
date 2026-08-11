@@ -143,7 +143,7 @@ describe(runFire, () => {
         appsDir,
         journalDbFile,
         runId: "failover-attempt",
-        runnerKind: "copilot",
+        harnessKind: "copilot",
         note: notice,
         failoverNotice: notice,
       },
@@ -308,7 +308,7 @@ describe(runFire, () => {
         automationRef: "notes/ask",
         appsDir,
         journalDbFile,
-        runnerKind: "codex",
+        harnessKind: "codex",
         model: "a-capable-model",
         onRunEvent: (ev) => events.push(ev),
       },
@@ -496,7 +496,7 @@ describe(runFire, () => {
         automationRef: "notes/priced",
         appsDir,
         journalDbFile,
-        runnerKind: "codex",
+        harnessKind: "codex",
         model: "priced-fixture-model",
       },
       { openDispatch: dispatch }
@@ -548,7 +548,7 @@ describe(runFire, () => {
         automationRef: "notes/unmodelled",
         appsDir,
         journalDbFile,
-        runnerKind: "acp",
+        harnessKind: "acp",
       },
       { openDispatch: dispatch }
     );
@@ -590,11 +590,11 @@ describe(runFire, () => {
         automationRef: "notes/main",
         appsDir,
         journalDbFile,
-        runnerKind: "codex",
+        harnessKind: "codex",
         resolveNestedRuntime: async (ref) =>
           ref === "notes/recover"
-            ? { runnerKind: "claude-code", model: "recovery-model" }
-            : { runnerKind: "codex" },
+            ? { harnessKind: "claude-code", model: "recovery-model" }
+            : { harnessKind: "codex" },
       },
       { openDispatch: stubDispatch(opened, closes) }
     );
@@ -603,7 +603,7 @@ describe(runFire, () => {
     expect(
       opened.map((entry) => [
         entry.automationRef,
-        entry.runnerKind,
+        entry.harnessKind,
         entry.model,
       ])
     ).toStrictEqual([
@@ -611,8 +611,8 @@ describe(runFire, () => {
       ["notes/recover", "claude-code", "recovery-model"],
     ]);
     const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
-    expect(store.getConversation("notes/main")?.adapterKind).toBe("codex");
-    expect(store.getConversation("notes/recover")?.adapterKind).toBe(
+    expect(store.getConversation("notes/main")?.harnessKind).toBe("codex");
+    expect(store.getConversation("notes/recover")?.harnessKind).toBe(
       "claude-code"
     );
     store.close();
@@ -641,7 +641,7 @@ describe(runFire, () => {
         automationRef: "notes/settle",
         appsDir,
         journalDbFile,
-        runnerKind: "codex",
+        harnessKind: "codex",
       },
       { openDispatch: dispatch }
     );

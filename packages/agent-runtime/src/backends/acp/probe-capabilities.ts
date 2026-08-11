@@ -35,7 +35,7 @@ export interface AcpConfigOptionSnapshot {
   currentValue?: string;
 }
 
-/** Wire-stable capability snapshot for one runner kind on this host. */
+/** Wire-stable capability snapshot for one harness kind on this host. */
 export interface AcpAgentCapabilities {
   /** CLI spawned and answered `initialize`. */
   reachable: boolean;

@@ -1,5 +1,5 @@
 /*
- * Generic ACP model enumeration — the ONE way every runner kind reports its
+ * Generic ACP model enumeration — the ONE way every harness kind reports its
  * model catalog (issue #484).
  *
  * There is no bespoke claude/codex enumerator any more. ACP already carries
@@ -30,7 +30,7 @@ import os from "node:os";
 import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 
-import type { RunnerModel } from "@centraid/app-engine";
+import type { HarnessModel } from "@centraid/app-engine";
 
 import { lowPriorityCommand } from "../../low-priority.js";
 import { ACP_PROTOCOL_VERSION, createAcpConnection } from "./json-rpc.js";
@@ -61,7 +61,7 @@ const KILL_GRACE_MS = 2_000;
  */
 export async function enumerateAcpModels(
   config: AcpTurnConfig
-): Promise<RunnerModel[]> {
+): Promise<HarnessModel[]> {
   // Launch is impossible with no binary (or a missing adapter) — `planLaunch`
   // throws, and an unenumerable kind simply has no catalog. Notices are
   // irrelevant here (no transcript), so they are collected and dropped.
@@ -134,7 +134,7 @@ export async function enumerateAcpModels(
 async function probe(
   conn: ReturnType<typeof createAcpConnection>,
   cwd: string
-): Promise<RunnerModel[]> {
+): Promise<HarnessModel[]> {
   await conn.request<InitializeResult>("initialize", {
     protocolVersion: ACP_PROTOCOL_VERSION,
     clientCapabilities: {
@@ -142,7 +142,7 @@ async function probe(
       terminal: false,
     },
     clientInfo: {
-      name: "centraid-local-runner",
+      name: "centraid-local-harness",
       title: "Centraid",
       version: "0.1.0",
     },
@@ -162,7 +162,7 @@ async function probe(
 }
 
 /**
- * Map the agent's offered `{ value, name }` pairs to `RunnerModel[]`: `value`
+ * Map the agent's offered `{ value, name }` pairs to `HarnessModel[]`: `value`
  * → `id`, `name` → label (dropped when it merely echoes the id), and the
  * option's `currentValue` flagged as the default selection. Dedupes by id and
  * drops blanks. Exported for tests.
@@ -170,14 +170,14 @@ async function probe(
 export function mapOfferedModels(
   offered: OfferedModel[],
   currentValue?: string
-): RunnerModel[] {
+): HarnessModel[] {
   const seen = new Set<string>();
-  const models: RunnerModel[] = [];
+  const models: HarnessModel[] = [];
   for (const entry of offered) {
     const id = entry.value.trim();
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    const model: RunnerModel = { id };
+    const model: HarnessModel = { id };
     const name = entry.name?.trim();
     if (name && name !== id) model.name = name;
     if (currentValue && id === currentValue) model.default = true;

@@ -294,11 +294,11 @@ describe("automation turn live projection", () => {
     ]);
   });
 
-  it("replays a durable runner notice as a notice instead of an answer", () => {
+  it("replays a durable harness notice as a notice instead of an answer", () => {
     const state = createAutomationLiveTraceFromItems("Run the brief.", [
       item(1, "step", {
         name: "notice:warn:attachment-unsupported",
-        outputJson: '{"text":"This runner cannot read PDF attachments."}',
+        outputJson: '{"text":"This harness cannot read PDF attachments."}',
       }),
     ]);
     expect(automationLiveMessages(state)).toStrictEqual([
@@ -306,7 +306,7 @@ describe("automation turn live projection", () => {
       expect.objectContaining({
         kind: "notice",
         level: "warn",
-        text: "This runner cannot read PDF attachments.",
+        text: "This harness cannot read PDF attachments.",
       }),
     ]);
   });

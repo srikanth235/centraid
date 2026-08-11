@@ -382,10 +382,10 @@ export interface CentraidConnectivityReport {
  */
 export interface CentraidAgentStatusEntry {
   /**
-   * The runner kind (`codex`, `claude-code`, `gemini`, `qwen`, `acp`). An OPEN
+   * The harness kind (`codex`, `claude-code`, `gemini`, `qwen`, `acp`). An OPEN
    * string, deliberately: a newer gateway may register kinds this build has
    * never heard of, and they must still parse and render (docs/protocol.md
-   * C1a). Compare against `AGENT_RUNNER_KINDS` only to decide whether extra
+   * C1a). Compare against `AGENT_HARNESS_KINDS` only to decide whether extra
    * client-side polish (an accent colour) applies — never to filter the list.
    */
   kind: string;
@@ -399,11 +399,11 @@ export interface CentraidAgentStatusEntry {
   minVersion: string;
   /** Install/setup hint — present only when the CLI is NOT available. */
   hint?: string;
-  /** Models this runner can serve, from the gateway catalog (issue #188). */
-  models: CentraidRunnerModel[];
+  /** Models this harness can serve, from the gateway catalog (issue #188). */
+  models: CentraidHarnessModel[];
   /** Load state of `models` — loading vs ready vs empty. */
   modelsStatus: CentraidSurfaceStatus;
-  /** The model this runner defaults to, when its catalog names one. */
+  /** The model this harness defaults to, when its catalog names one. */
   defaultModel?: string;
   /**
    * Live ACP capability strip (vault HTTP MCP, session resume/load, model
@@ -436,10 +436,10 @@ export interface CentraidAgentStatusEntry {
     probedAt?: number;
     reason?: string;
   };
-  /** Persisted circuit-breaker state for this runner across workspace contexts. */
+  /** Persisted circuit-breaker state for this harness across workspace contexts. */
   health?: Array<{
     workspaceContext: string;
-    runnerKind: string;
+    harnessKind: string;
     failureClass: string;
     consecutiveFailures: number;
     state: "closed" | "open" | "half-open";
@@ -450,7 +450,7 @@ export interface CentraidAgentStatusEntry {
 }
 
 export interface CentraidAgentsStatus {
-  /** One entry per runner kind the gateway registers. */
+  /** One entry per harness kind the gateway registers. */
   agents: CentraidAgentStatusEntry[];
 }
 
@@ -467,9 +467,9 @@ export interface CentraidConversationSummary {
   /** App the chat was opened from; `null` for chats started from the shell. */
   originAppId: string | null;
   title: string;
-  /** Runner kind that owns `adapterSessionId`. */
-  adapterKind: string | null;
-  /** Opaque per-runner resume handle. */
+  /** Harness kind that owns `adapterSessionId`. */
+  harnessKind: string | null;
+  /** Opaque per-harness resume handle. */
   adapterSessionId: string | null;
   /** Number of completed turns. */
   turnCount: number;
@@ -480,7 +480,7 @@ export interface CentraidConversationSummary {
   createdAt: number;
   updatedAt: number;
   messageCount: number;
-  /** Count of runner/session handoffs rebuilt from canonical ledger history. */
+  /** Count of harness/session handoffs rebuilt from canonical ledger history. */
   hydrationCount: number;
   lastHydratedAt?: number;
 }
@@ -1086,13 +1086,13 @@ interface CentraidApi {
 
   // Coding-agent detection moved to the gateway (`GET /centraid/_agents/status`,
   // read via `renderer/gateway-client-conversation.ts`): the gateway is colocated with
-  // the runner, so it probes its own host. No IPC, no desktop-side probing.
+  // the harness, so it probes its own host. No IPC, no desktop-side probing.
 
   // getUserId / getUserPrefs / saveUserPrefs moved to the renderer's direct
   // HTTP client (renderer/gateway-client.ts) under the thin-client pivot —
   // pure `/_centraid-user` reads/writes. The main-side preflight-cache drop
   // that rode `saveUserPrefs` is no longer needed (the cache keys on the
-  // runner prefs that matter, and the runner-status read force-invalidates).
+  // harness prefs that matter, and the harness-status read force-invalidates).
 
   // Automations (issue #98). Every automation lives inside an app
   // folder under `appsDir`; these read/write that app tree and the
@@ -1145,7 +1145,7 @@ export interface CentraidInsightsSourceRow {
   automationName?: string;
 }
 
-export interface CentraidInsightsRunnerRow {
+export interface CentraidInsightsHarnessRow {
   provider: string;
   runs: number;
   tokens: number;
@@ -1214,7 +1214,7 @@ export interface CentraidInsightsSummary {
   kpis: CentraidInsightsKpis;
   daily: CentraidInsightsDailyPoint[];
   bySource: CentraidInsightsSourceRow[];
-  byRunner: CentraidInsightsRunnerRow[];
+  byHarness: CentraidInsightsHarnessRow[];
   byModel: CentraidInsightsModelRow[];
   byEffort: CentraidInsightsEffortRow[];
   recent: CentraidInsightsActivityRow[];
@@ -1231,8 +1231,8 @@ export interface CentraidAutomationTurnRecord {
   /** The automation's last-known display name, recorded on its conversation —
    *  survives the automation being deleted (falls back to `automationId`). */
   automationName?: string;
-  /** Active runner binding on the stable automation conversation. */
-  adapterKind?: string;
+  /** Active harness binding on the stable automation conversation. */
+  harnessKind?: string;
   /** Built-in activity that is grouped away from app automation history. */
   systemLane?: "recognition";
   triggerKind:
@@ -1323,7 +1323,7 @@ export interface CentraidAutomationManifest {
   >;
   requires: {
     mcps?: readonly string[];
-    runner?: string;
+    harness?: string;
     model?: string;
     thoughtLevel?: string;
   };
@@ -1420,7 +1420,7 @@ export interface CentraidMintedWebhook {
 }
 
 /** One model a runtime can serve. */
-export interface CentraidRunnerModel {
+export interface CentraidHarnessModel {
   id: string;
   name?: string;
   default?: boolean;
@@ -1440,10 +1440,10 @@ export type CentraidSurfaceStatus = "loading" | "ready" | "empty";
 // what an agent can reach. Host tools are still enumerated gateway-side; they
 // just feed the builder's grounding block now, never a client surface.
 
-/** Preflight snapshot returned by `getRunnerStatus`. */
-export interface CentraidRunnerStatus {
+/** Preflight snapshot returned by `getHarnessStatus`. */
+export interface CentraidHarnessStatus {
   /**
-   * The configured runner kind, or `'none'` when none is. Open string for the
+   * The configured harness kind, or `'none'` when none is. Open string for the
    * same reason as `CentraidAgentStatusEntry.kind` — a newer gateway can name
    * a kind this build doesn't know, and the status must still parse.
    */
@@ -1454,8 +1454,8 @@ export interface CentraidRunnerStatus {
   versionAtLeast?: boolean;
   reason?: string;
   hint?: string;
-  /** Models the active runner can serve, from the gateway catalog. */
-  models?: CentraidRunnerModel[];
+  /** Models the active harness can serve, from the gateway catalog. */
+  models?: CentraidHarnessModel[];
   /** Load state of `models` — lets the composer picker show loading vs empty. */
   modelsStatus?: CentraidSurfaceStatus;
 }
@@ -1641,7 +1641,7 @@ declare global {
     id: string;
     originAppId: string | null;
     title: string;
-    adapterKind: string | null;
+    harnessKind: string | null;
     adapterSessionId: string | null;
     turnCount: number;
     pinned: boolean;
@@ -1743,7 +1743,7 @@ declare global {
     >;
     requires: {
       mcps?: readonly string[];
-      runner?: string;
+      harness?: string;
       model?: string;
       thoughtLevel?: string;
     };
@@ -1816,7 +1816,7 @@ declare global {
     seq: number;
     automationId?: string;
     automationName?: string;
-    adapterKind?: string;
+    harnessKind?: string;
     systemLane?: "recognition";
     triggerKind:
       | "scheduled"
@@ -1906,7 +1906,7 @@ declare global {
     costUsd: number;
     automationName?: string;
   }
-  interface CentraidInsightsRunnerRow {
+  interface CentraidInsightsHarnessRow {
     provider: string;
     runs: number;
     tokens: number;
@@ -1965,7 +1965,7 @@ declare global {
     kpis: CentraidInsightsKpis;
     daily: CentraidInsightsDailyPoint[];
     bySource: CentraidInsightsSourceRow[];
-    byRunner: CentraidInsightsRunnerRow[];
+    byHarness: CentraidInsightsHarnessRow[];
     byModel: CentraidInsightsModelRow[];
     byEffort: CentraidInsightsEffortRow[];
     recent: CentraidInsightsActivityRow[];

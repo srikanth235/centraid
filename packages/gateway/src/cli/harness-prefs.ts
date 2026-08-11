@@ -1,5 +1,5 @@
 /*
- * Seed the daemon's prefs file with `agent.runner.*` prefs from the
+ * Seed the daemon's prefs file with `agent.harness.*` prefs from the
  * config file.
  *
  * Without this, the runtime's per-turn prefs loader would see an empty
@@ -18,30 +18,33 @@ import type { PrefsStore } from "@centraid/app-engine";
 
 import type { DaemonConfig } from "./config.js";
 
-const RUNNER_KEYS = [
-  "agent.runner.kind",
-  "agent.runner.binPath",
-  "agent.runner.extraArgs",
+const HARNESS_KEYS = [
+  "agent.harness.kind",
+  "agent.harness.binPath",
+  "agent.harness.extraArgs",
 ] as const;
 
 export function buildPrefsPatch(config: DaemonConfig): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
-  for (const k of RUNNER_KEYS) patch[k] = null;
-  if (config.runner) {
-    patch["agent.runner.kind"] = config.runner.kind;
-    if (config.runner.binPath !== undefined) {
-      patch["agent.runner.binPath"] = config.runner.binPath;
+  for (const k of HARNESS_KEYS) patch[k] = null;
+  if (config.harness) {
+    patch["agent.harness.kind"] = config.harness.kind;
+    if (config.harness.binPath !== undefined) {
+      patch["agent.harness.binPath"] = config.harness.binPath;
     }
-    if (config.runner.extraArgs !== undefined) {
-      patch["agent.runner.extraArgs"] = config.runner.extraArgs;
+    if (config.harness.extraArgs !== undefined) {
+      patch["agent.harness.extraArgs"] = config.harness.extraArgs;
     }
   }
   return patch;
 }
 
-export function seedRunnerPrefs(prefs: PrefsStore, config: DaemonConfig): void {
-  // Always apply the patch, even when `runner` is absent — that's the case
-  // where the operator removed a previously seeded runner block and expects
+export function seedHarnessPrefs(
+  prefs: PrefsStore,
+  config: DaemonConfig
+): void {
+  // Always apply the patch, even when `harness` is absent — that's the case
+  // where the operator removed a previously seeded harness block and expects
   // the next boot to clear it. `buildPrefsPatch` defaults every known key to
   // `null`, so an empty config wipes prior state.
   prefs.setPrefs(buildPrefsPatch(config));

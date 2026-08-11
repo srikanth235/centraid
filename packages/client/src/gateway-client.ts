@@ -392,12 +392,12 @@ export async function getUserPrefs(): Promise<Record<string, unknown>> {
 /**
  * Merge `patch` into the gateway-side prefs store; returns the full map.
  *
- * The old IPC handler also called `noteRunnerPrefsChanged()` to drop the
+ * The old IPC handler also called `noteHarnessPrefsChanged()` to drop the
  * main process's in-memory preflight cache. That's no longer needed from
- * here: the preflight cache keys on the runner prefs that matter
+ * here: the preflight cache keys on the harness prefs that matter
  * (kind / binPath / provider id+baseUrl+envKey), so a change to any of
- * them re-probes automatically; and the runner-status panel
- * (`getRunnerStatus`) force-invalidates before every read regardless.
+ * them re-probes automatically; and the harness-status panel
+ * (`getHarnessStatus`) force-invalidates before every read regardless.
  */
 export async function saveUserPrefs(
   patch: Record<string, unknown>
@@ -418,7 +418,7 @@ export async function saveUserPrefs(
 // ---- Automations + insights (`/centraid/_automations`, `/centraid/_insights`) ----
 // Read/run/analytics proxies. Code (manifests) resolves gateway-side from
 // the materialized `main`; run ledgers + analytics from the gateway's data
-// dir. A turn-now fires on the gateway host with ITS runner + provider key.
+// dir. A turn-now fires on the gateway host with ITS harness + provider key.
 
 /** Every automation on `main`, sorted by name. */
 export async function listAutomations(): Promise<CentraidAutomationRow[]> {
@@ -710,7 +710,7 @@ export async function streamAutomationConversationTurn(
       sizeBytes: number;
       filename?: string;
     }>;
-    runnerKind?: string;
+    harnessKind?: string;
     model?: string;
     thinking?: string;
   }
@@ -726,7 +726,7 @@ export async function streamAutomationConversationTurn(
         message,
         ...(providerConsent?.length ? { providerConsent } : {}),
         ...(turn?.attachments?.length ? { attachments: turn.attachments } : {}),
-        ...(turn?.runnerKind ? { runnerKind: turn.runnerKind } : {}),
+        ...(turn?.harnessKind ? { harnessKind: turn.harnessKind } : {}),
         ...(turn?.model ? { model: turn.model } : {}),
         ...(turn?.thinking ? { thinking: turn.thinking } : {}),
       }),

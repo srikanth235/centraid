@@ -183,7 +183,7 @@ test.skip("7.4 — the copilot past-chats history lists prior sessions and filte
       id: "c1",
       originAppId: "notes",
       title: "Grocery list",
-      adapterKind: null,
+      harnessKind: null,
       adapterSessionId: null,
       turnCount: 2,
       createdAt: 1_700_000_000_000,
@@ -194,7 +194,7 @@ test.skip("7.4 — the copilot past-chats history lists prior sessions and filte
       id: "c2",
       originAppId: "notes",
       title: "Trip planning",
-      adapterKind: null,
+      harnessKind: null,
       adapterSessionId: null,
       turnCount: 1,
       createdAt: 1_700_000_000_000,
@@ -438,7 +438,7 @@ test("11.1 — Analytics renders the spend hero", async () => {
         costUsd: 0.8,
       },
     ],
-    byRunner: [
+    byHarness: [
       { provider: "claude-code", runs: 7, tokens: 12345, costUsd: 1.23 },
     ],
     byModel: [{ model: "tier-deep", runs: 7, tokens: 12345, costUsd: 1.23 }],

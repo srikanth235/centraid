@@ -18,8 +18,8 @@ import {
 } from "./cli.ts";
 import { validateConfig, DaemonConfigError } from "./config.ts";
 import { platformDefaultDataDir } from "./data-dir.ts";
+import { buildPrefsPatch, seedHarnessPrefs } from "./harness-prefs.ts";
 import { daemonLayoutFor } from "./paths.ts";
-import { buildPrefsPatch, seedRunnerPrefs } from "./runner-prefs.ts";
 
 const here = import.meta.dirname;
 const CLI_TS = path.resolve(here, "cli.ts");
@@ -168,19 +168,19 @@ describe("cli scenarios", () => {
       dataDir: "/tmp/x",
       host: "0.0.0.0",
       port: 8765,
-      runner: {
+      harness: {
         kind: "codex",
         binPath: "/opt/bin/codex",
         extraArgs: ["--foo"],
       },
     });
-    expect(full.runner?.kind).toBe("codex");
-    expect(full.runner?.binPath).toBe("/opt/bin/codex");
+    expect(full.harness?.kind).toBe("codex");
+    expect(full.harness?.binPath).toBe("/opt/bin/codex");
   });
 
-  test("buildPrefsPatch clears every runner key when no runner is configured", () => {
+  test("buildPrefsPatch clears every harness key when no harness is configured", () => {
     const patch = buildPrefsPatch({ dataDir: "/x" });
-    // No runner → every key must clear to null so a removed entry in the
+    // No harness → every key must clear to null so a removed entry in the
     // config file actually wipes the DB.
     for (const v of Object.values(patch)) expect(v).toBeNull();
   });
@@ -188,16 +188,16 @@ describe("cli scenarios", () => {
   test("buildPrefsPatch sets only the keys the config carries", () => {
     const patch = buildPrefsPatch({
       dataDir: "/x",
-      runner: { kind: "claude-code" },
+      harness: { kind: "claude-code" },
     });
-    expect(patch["agent.runner.kind"]).toBe("claude-code");
-    expect(patch["agent.runner.binPath"]).toBeNull();
-    expect(patch["agent.runner.extraArgs"]).toBeNull();
+    expect(patch["agent.harness.kind"]).toBe("claude-code");
+    expect(patch["agent.harness.binPath"]).toBeNull();
+    expect(patch["agent.harness.extraArgs"]).toBeNull();
   });
 
-  test("seedRunnerPrefs calls setPrefs even on empty config so a removed runner is cleared", () => {
-    // Regression: an early `if (!runner) return` would skip setPrefs entirely
-    // when the block is absent, leaving a previously seeded `agent.runner.*`
+  test("seedHarnessPrefs calls setPrefs even on empty config so a removed harness is cleared", () => {
+    // Regression: an early `if (!harness) return` would skip setPrefs entirely
+    // when the block is absent, leaving a previously seeded `agent.harness.*`
     // row stale across reboots.
     const patches: Array<Record<string, unknown>> = [];
     const fakeStore = {
@@ -206,7 +206,7 @@ describe("cli scenarios", () => {
         return p;
       },
     } as unknown as PrefsStore;
-    seedRunnerPrefs(fakeStore, { dataDir: "/x" });
+    seedHarnessPrefs(fakeStore, { dataDir: "/x" });
     expect(patches).toHaveLength(1);
     for (const v of Object.values(patches[0]!)) expect(v).toBeNull();
   });

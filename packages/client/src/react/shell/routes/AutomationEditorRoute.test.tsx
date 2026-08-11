@@ -178,7 +178,7 @@ describe("AutomationEditorRoute", () => {
     api.listAgents.mockReset().mockResolvedValue([
       {
         agentId: "agent-1",
-        hostKey: "daily",
+        enrollmentKey: "daily",
         partyId: "party-1",
         name: "Daily",
         modelRef: "gpt-5",
@@ -249,9 +249,9 @@ describe("AutomationEditorRoute", () => {
 
     helpers.beginAuthorize.mockReset().mockResolvedValue("https://auth.test");
     helpers.buildAgentData.mockReset().mockReturnValue({
-      agentRunners: [],
+      agentHarnesses: [],
       defaultModel: null,
-      defaultRunnerKind: "codex",
+      defaultHarnessKind: "codex",
     });
     helpers.buildCreateData.mockReset().mockReturnValue({
       automationId: null,
@@ -330,8 +330,8 @@ describe("AutomationEditorRoute", () => {
       defaultConfigPinsByKind: {},
       subsystemConfigPinsByKind: {},
       diagnosticsJson: "{}",
-      subsystemRunnerByKey: {},
-      subsystemRunnerLadders: {},
+      subsystemHarnessByKey: {},
+      subsystemHarnessLadders: {},
     });
     helpers.openWebhookReveal.mockReset().mockResolvedValue(undefined);
     helpers.loadEditor.mockReset().mockResolvedValue({
@@ -348,7 +348,7 @@ describe("AutomationEditorRoute", () => {
       onFailure: "notify",
       row,
       rowId: "row-1",
-      runner: "codex",
+      harness: "codex",
       triggers: row.triggers,
     });
     Object.defineProperty(navigator, "clipboard", {
@@ -375,7 +375,7 @@ describe("AutomationEditorRoute", () => {
         automationId: "daily/daily",
         enabled: true,
         mode: "edit",
-        runner: "codex",
+        harness: "codex",
       });
       expect(data.triggers.map((trigger) => trigger.kind)).toStrictEqual([
         "webhook",
@@ -393,7 +393,7 @@ describe("AutomationEditorRoute", () => {
           instructions: "Run every weekday.",
           model: null,
           name: "Daily revised",
-          runner: null,
+          harness: null,
           triggers: [{ kind: "data", entities: ["business.invoice"] }],
         })
       ).resolves.toBe(true);
@@ -404,7 +404,7 @@ describe("AutomationEditorRoute", () => {
             { connectionId: "connection-1", kind: "github", label: "Work" },
           ],
           model: null,
-          runner: null,
+          harness: null,
           vault: expect.objectContaining({
             scopes: [{ schema: "business", table: "invoice", verbs: "read" }],
           }),
@@ -482,7 +482,7 @@ describe("AutomationEditorRoute", () => {
         onFailure: null,
         row: null,
         rowId: null,
-        runner: null,
+        harness: null,
         triggers: [],
       });
       const bridge = await mount({
@@ -503,7 +503,7 @@ describe("AutomationEditorRoute", () => {
           instructions: "Create it",
           model: "openai/gpt-test",
           name: "Created",
-          runner: "codex",
+          harness: "codex",
           triggers: [{ kind: "cron", expr: "0 9 * * *" }],
         })
       ).resolves.toBe(true);
@@ -512,7 +512,7 @@ describe("AutomationEditorRoute", () => {
           enabled: false,
           model: "openai/gpt-test",
           name: "Created",
-          runner: "codex",
+          harness: "codex",
         })
       );
     });

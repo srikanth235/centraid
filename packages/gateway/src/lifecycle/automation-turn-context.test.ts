@@ -18,7 +18,7 @@ function row(dir: string): AutomationRow {
     enabled: true,
     prompt: "Summarize important account changes.",
     triggers: [],
-    requires: { runner: "codex", model: "gpt-test" },
+    requires: { harness: "codex", model: "gpt-test" },
     connections: [
       { connectionId: "gmail-work", kind: "pull.gmail", label: "Work" },
     ],

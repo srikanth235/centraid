@@ -36,7 +36,7 @@ export function buildCreateAutomationEditorData(opts: {
     name: template?.name ?? name,
     onFailure: null,
     rowId: null,
-    runner: null,
+    harness: null,
     triggers,
     webhook: null,
     ...agent,

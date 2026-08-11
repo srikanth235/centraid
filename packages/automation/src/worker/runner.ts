@@ -224,7 +224,7 @@ const runs = {
 
 // ctx.vault — a second RPC channel aimed at the owner's personal vault
 // (duaility §12). The parent resolves this automation to its enrolled
-// `agent.agent` credential host-side; the worker carries capability, never
+// `consent.agent` credential host-side; the worker carries capability, never
 // a key. Same surface an app handler's `ctx.vault` exposes, plus `parked`
 // (this agent's invocations awaiting owner confirmation) and `changes`
 // (the consented journal feed data triggers ride).

@@ -101,7 +101,7 @@ describe("preflight suite", () => {
     expect(status.minVersion).toBe(minVersionString("codex"));
   });
 
-  test("session-ready preflight rejects an installed but unauthenticated ACP runner", async () => {
+  test("session-ready preflight rejects an installed but unauthenticated ACP harness", async () => {
     const status = await runPreflight(
       {
         kind: "acp",
@@ -181,7 +181,7 @@ describe("preflight suite", () => {
     expect(warm.models?.map((m) => m.id)).toStrictEqual(["gpt-x"]);
   });
 
-  // ---- pluggable runner kinds (gemini / qwen / custom acp) ----------------
+  // ---- pluggable harness kinds (gemini / qwen / custom acp) ----------------
 
   test("gemini/qwen preflight probe their bin and carry the registry min version", async () => {
     invalidatePreflightCache();
@@ -211,7 +211,7 @@ describe("preflight suite", () => {
 
   test("a missing opencode/grok/kimi binary reports unavailable with the install hint", async () => {
     // The hint IS the "why not" the providers console shows, so an unavailable
-    // runner must never come back hintless.
+    // harness must never come back hintless.
     const expected = {
       opencode: /opencode-ai/u,
       grok: /SuperGrok|X Premium/u,
@@ -262,7 +262,7 @@ describe("preflight suite", () => {
 
   test("a missing binary for any added kind reports unavailable with its install hint", async () => {
     // The hint IS the "why not" the providers console shows, so an unavailable
-    // runner must never come back hintless — and for these kinds it is often
+    // harness must never come back hintless — and for these kinds it is often
     // the only place the paid-plan / provider-config requirement appears.
     const expected = {
       copilot: /gh\.io\/copilot-install|copilot-cli/u,
@@ -320,7 +320,7 @@ describe("preflight suite", () => {
     expect(status.hint ?? "").toMatch(/Settings/u);
   });
 
-  test("custom acp kind probes a configured binPath like any other runner", async () => {
+  test("custom acp kind probes a configured binPath like any other harness", async () => {
     invalidatePreflightCache();
     const status = await runPreflight({ kind: "acp", binPath: "true" });
     expect(status.ok).toBe(true);

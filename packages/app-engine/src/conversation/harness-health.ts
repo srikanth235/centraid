@@ -1,22 +1,22 @@
 /*
- * Persistent ACP runner health and circuit breakers (#567).
+ * Persistent ACP harness health and circuit breakers (#567).
  *
- * Breakers are scoped to workspace context × runner × failure class. Auth is
+ * Breakers are scoped to workspace context × harness × failure class. Auth is
  * indefinite until a real ACP preflight succeeds; quota heals on a backed-off
  * vendor clock; timeout/wedge expiry admits one half-open probe.
  */
 
 import type { DatabaseProvider } from "../stores/gateway-db.js";
-import type { AgentFailureClass } from "./runner.js";
-import type { RunnerKind } from "./turn.js";
+import type { HarnessFailureClass } from "./runner.js";
+import type { HarnessKind } from "./turn.js";
 
-export interface RunnerHealthPolicy {
+export interface HarnessHealthPolicy {
   readonly threshold: number;
   readonly cooldownMs: number;
 }
 
-export const RUNNER_HEALTH_POLICIES: Readonly<
-  Record<AgentFailureClass, RunnerHealthPolicy>
+export const HARNESS_HEALTH_POLICIES: Readonly<
+  Record<HarnessFailureClass, HarnessHealthPolicy>
 > = {
   spawn: { threshold: 2, cooldownMs: 60_000 },
   auth: { threshold: 1, cooldownMs: 0 },
@@ -28,17 +28,17 @@ export const RUNNER_HEALTH_POLICIES: Readonly<
   unknown: { threshold: 3, cooldownMs: 60_000 },
 };
 
-export interface RunnerHealthStatus {
+export interface HarnessHealthStatus {
   readonly allowed: boolean;
   readonly breakerUntil?: number;
-  readonly failureClass?: AgentFailureClass;
+  readonly failureClass?: HarnessFailureClass;
   readonly halfOpen?: boolean;
 }
 
-export interface RunnerHealthEntry {
+export interface HarnessHealthEntry {
   workspaceContext: string;
-  runnerKind: RunnerKind;
-  failureClass: AgentFailureClass;
+  harnessKind: HarnessKind;
+  failureClass: HarnessFailureClass;
   consecutiveFailures: number;
   state: "closed" | "open" | "half-open";
   breakerUntil?: number;
@@ -47,36 +47,36 @@ export interface RunnerHealthEntry {
   lastOkAt?: number;
 }
 
-export interface RunnerHealthController {
+export interface HarnessHealthController {
   canAttempt: (
     workspaceContext: string,
-    runnerKind: RunnerKind,
+    harnessKind: HarnessKind,
     now?: number
-  ) => RunnerHealthStatus;
+  ) => HarnessHealthStatus;
   reportFailure: (
     workspaceContext: string,
-    runnerKind: RunnerKind,
-    failureClass: AgentFailureClass,
+    harnessKind: HarnessKind,
+    failureClass: HarnessFailureClass,
     error: string,
     now?: number
   ) => void;
   reportOk: (
     workspaceContext: string,
-    runnerKind: RunnerKind,
+    harnessKind: HarnessKind,
     now?: number
   ) => void;
   reportPreflightOk: (
     workspaceContext: string,
-    runnerKind: RunnerKind,
+    harnessKind: HarnessKind,
     now?: number
   ) => void;
-  list: (workspaceContext?: string, now?: number) => RunnerHealthEntry[];
+  list: (workspaceContext?: string, now?: number) => HarnessHealthEntry[];
 }
 
 interface BreakerRow {
   workspace_context: string;
-  runner_kind: RunnerKind;
-  failure_class: AgentFailureClass;
+  harness_kind: HarnessKind;
+  failure_class: HarnessFailureClass;
   consecutive_failures: number;
   breaker_until: number | null;
   half_open_claimed_at: number | null;
@@ -85,31 +85,31 @@ interface BreakerRow {
   last_ok_at: number | null;
 }
 
-export class RunnerHealthStore implements RunnerHealthController {
+export class HarnessHealthStore implements HarnessHealthController {
   constructor(
     private readonly dbProvider: DatabaseProvider,
     private readonly policies: Readonly<
-      Record<AgentFailureClass, RunnerHealthPolicy>
-    > = RUNNER_HEALTH_POLICIES
+      Record<HarnessFailureClass, HarnessHealthPolicy>
+    > = HARNESS_HEALTH_POLICIES
   ) {}
 
   canAttempt(
     workspaceContext: string,
-    runnerKind: RunnerKind,
+    harnessKind: HarnessKind,
     now = Date.now()
-  ): RunnerHealthStatus {
+  ): HarnessHealthStatus {
     const db = this.dbProvider();
     const rows = db
       .prepare(
-        `SELECT workspace_context, runner_kind, failure_class, consecutive_failures,
+        `SELECT workspace_context, harness_kind, failure_class, consecutive_failures,
                 breaker_until, half_open_claimed_at, last_error,
                 last_failure_at, last_ok_at
-           FROM runner_health
-          WHERE workspace_context = ? AND runner_kind = ? AND consecutive_failures > 0
+           FROM harness_health
+          WHERE workspace_context = ? AND harness_kind = ? AND consecutive_failures > 0
           ORDER BY CASE failure_class WHEN 'auth' THEN 0 ELSE 1 END,
                    COALESCE(breaker_until, 0) DESC`
       )
-      .all(workspaceContext, runnerKind) as unknown as BreakerRow[];
+      .all(workspaceContext, harnessKind) as unknown as BreakerRow[];
     for (const row of rows) {
       if (row.breaker_until === -1 || (row.breaker_until ?? 0) > now) {
         return {
@@ -126,15 +126,15 @@ export class RunnerHealthStore implements RunnerHealthController {
       ) {
         const claim = db
           .prepare(
-            `UPDATE runner_health
+            `UPDATE harness_health
                 SET half_open_claimed_at = ?
-              WHERE workspace_context = ? AND runner_kind = ? AND failure_class = ?
+              WHERE workspace_context = ? AND harness_kind = ? AND failure_class = ?
                 AND (half_open_claimed_at IS NULL OR half_open_claimed_at < ?)`
           )
           .run(
             now,
             workspaceContext,
-            runnerKind,
+            harnessKind,
             row.failure_class,
             now - 60_000
           );
@@ -148,8 +148,8 @@ export class RunnerHealthStore implements RunnerHealthController {
 
   reportFailure(
     workspaceContext: string,
-    runnerKind: RunnerKind,
-    failureClass: AgentFailureClass,
+    harnessKind: HarnessKind,
+    failureClass: HarnessFailureClass,
     error: string,
     now = Date.now()
   ): void {
@@ -158,10 +158,10 @@ export class RunnerHealthStore implements RunnerHealthController {
     const current = db
       .prepare(
         `SELECT consecutive_failures
-           FROM runner_health
-          WHERE workspace_context = ? AND runner_kind = ? AND failure_class = ?`
+           FROM harness_health
+          WHERE workspace_context = ? AND harness_kind = ? AND failure_class = ?`
       )
-      .get(workspaceContext, runnerKind, failureClass) as
+      .get(workspaceContext, harnessKind, failureClass) as
       | { consecutive_failures: number }
       | undefined;
     const count = (current?.consecutive_failures ?? 0) + 1;
@@ -178,11 +178,11 @@ export class RunnerHealthStore implements RunnerHealthController {
               )
             : now + policy.cooldownMs;
     db.prepare(
-      `INSERT INTO runner_health (
-         workspace_context, runner_kind, failure_class, consecutive_failures,
+      `INSERT INTO harness_health (
+         workspace_context, harness_kind, failure_class, consecutive_failures,
          breaker_until, half_open_claimed_at, last_error, last_failure_at
        ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
-       ON CONFLICT(workspace_context, runner_kind, failure_class) DO UPDATE SET
+       ON CONFLICT(workspace_context, harness_kind, failure_class) DO UPDATE SET
          consecutive_failures = excluded.consecutive_failures,
          breaker_until = excluded.breaker_until,
          half_open_claimed_at = NULL,
@@ -190,7 +190,7 @@ export class RunnerHealthStore implements RunnerHealthController {
          last_failure_at = excluded.last_failure_at`
     ).run(
       workspaceContext,
-      runnerKind,
+      harnessKind,
       failureClass,
       count,
       breakerUntil,
@@ -201,43 +201,43 @@ export class RunnerHealthStore implements RunnerHealthController {
 
   reportOk(
     workspaceContext: string,
-    runnerKind: RunnerKind,
+    harnessKind: HarnessKind,
     now = Date.now()
   ): void {
     this.dbProvider()
       .prepare(
-        `UPDATE runner_health
+        `UPDATE harness_health
             SET consecutive_failures = 0, breaker_until = NULL,
                 half_open_claimed_at = NULL, last_ok_at = ?
-          WHERE workspace_context = ? AND runner_kind = ? AND failure_class <> 'auth'`
+          WHERE workspace_context = ? AND harness_kind = ? AND failure_class <> 'auth'`
       )
-      .run(now, workspaceContext, runnerKind);
+      .run(now, workspaceContext, harnessKind);
   }
 
   reportPreflightOk(
     workspaceContext: string,
-    runnerKind: RunnerKind,
+    harnessKind: HarnessKind,
     now = Date.now()
   ): void {
     this.dbProvider()
       .prepare(
-        `UPDATE runner_health
+        `UPDATE harness_health
             SET consecutive_failures = 0, breaker_until = NULL,
                 half_open_claimed_at = NULL, last_ok_at = ?
-          WHERE workspace_context = ? AND runner_kind = ? AND failure_class = 'auth'`
+          WHERE workspace_context = ? AND harness_kind = ? AND failure_class = 'auth'`
       )
-      .run(now, workspaceContext, runnerKind);
+      .run(now, workspaceContext, harnessKind);
   }
 
-  list(workspaceContext?: string, now = Date.now()): RunnerHealthEntry[] {
+  list(workspaceContext?: string, now = Date.now()): HarnessHealthEntry[] {
     const rows = this.dbProvider()
       .prepare(
-        `SELECT workspace_context, runner_kind, failure_class, consecutive_failures,
+        `SELECT workspace_context, harness_kind, failure_class, consecutive_failures,
                 breaker_until, half_open_claimed_at, last_error,
                 last_failure_at, last_ok_at
-           FROM runner_health
+           FROM harness_health
           WHERE (? IS NULL OR workspace_context = ?)
-          ORDER BY workspace_context, runner_kind, failure_class`
+          ORDER BY workspace_context, harness_kind, failure_class`
       )
       .all(
         workspaceContext ?? null,
@@ -255,7 +255,7 @@ export class RunnerHealthStore implements RunnerHealthController {
             : "open";
       return {
         workspaceContext: row.workspace_context,
-        runnerKind: row.runner_kind,
+        harnessKind: row.harness_kind,
         failureClass: row.failure_class,
         consecutiveFailures: row.consecutive_failures,
         state,

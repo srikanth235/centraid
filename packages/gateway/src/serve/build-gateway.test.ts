@@ -724,11 +724,11 @@ describe("build-gateway scenarios", () => {
       const before = (await (
         await fetch(`${srv.url}/centraid/demo/_turn/model`)
       ).json()) as {
-        runnerKind: string;
+        harnessKind: string;
         current: string | null;
         catalog: unknown[];
       };
-      expect(before.runnerKind).toBe("codex"); // prefsLoader's default when unset
+      expect(before.harnessKind).toBe("codex"); // prefsLoader's default when unset
       expect(before.current).toBeNull();
       expect(before.catalog).toStrictEqual([]);
 
@@ -766,27 +766,27 @@ describe("build-gateway scenarios", () => {
     }
   });
 
-  test("the ask model picker follows ask’s OWN runner pin, not the default agent", async () => {
+  test("the ask model picker follows ask’s OWN harness pin, not the default agent", async () => {
     await gateway.start("http://127.0.0.1:0");
     await gateway.runtime.registry.ensureUploaded("demo");
     const srv = await mountUnauthed(gateway.composedHandler);
     try {
       // The default agent stays codex; only the `ask` register is re-pinned.
       gateway.prefs.setPrefs({
-        "agent.runner.kind": "codex",
-        "runner.ask": "claude-code",
+        "agent.harness.kind": "codex",
+        "harness.ask": "claude-code",
       });
 
-      // GET reports ask's resolved runner — the picker must offer the models of
+      // GET reports ask's resolved harness — the picker must offer the models of
       // the backend the ask turn will actually run on.
       const info = (await (
         await fetch(`${srv.url}/centraid/demo/_turn/model`)
       ).json()) as {
-        runnerKind: string;
+        harnessKind: string;
       };
-      expect(info.runnerKind).toBe("claude-code");
+      expect(info.harnessKind).toBe("claude-code");
 
-      // ...and PUT writes THAT runner's key. Reading one key while writing
+      // ...and PUT writes THAT harness's key. Reading one key while writing
       // another is the exact bug per-subsystem resolution has to avoid.
       const putRes = await fetch(`${srv.url}/centraid/demo/_turn/model`, {
         method: "PUT",
@@ -797,7 +797,7 @@ describe("build-gateway scenarios", () => {
       expect(gateway.prefs.getAllPrefs()["model.claude-code.ask"]).toBe(
         "claude-sonnet-4-6"
       );
-      // The default agent's key is untouched — no cross-runner bleed.
+      // The default agent's key is untouched — no cross-harness bleed.
       expect(gateway.prefs.getAllPrefs()["model.codex.ask"]).toBeUndefined();
 
       // The round-trip agrees: GET reads back what PUT wrote.
@@ -818,16 +818,16 @@ describe("build-gateway scenarios", () => {
     const srv = await mountUnauthed(gateway.composedHandler);
     try {
       // Back-compat is the hard requirement: a prefs file that predates
-      // per-subsystem selection carries only `agent.runner.kind`, and every
+      // per-subsystem selection carries only `agent.harness.kind`, and every
       // register must resolve to it exactly as it did before.
-      gateway.prefs.setPrefs({ "agent.runner.kind": "claude-code" });
+      gateway.prefs.setPrefs({ "agent.harness.kind": "claude-code" });
 
       const info = (await (
         await fetch(`${srv.url}/centraid/demo/_turn/model`)
       ).json()) as {
-        runnerKind: string;
+        harnessKind: string;
       };
-      expect(info.runnerKind).toBe("claude-code");
+      expect(info.harnessKind).toBe("claude-code");
     } finally {
       await srv.close();
     }

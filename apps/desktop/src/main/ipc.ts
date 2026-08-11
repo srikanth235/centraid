@@ -409,9 +409,9 @@ export function registerIpcHandlers(): void {
   // pivot.
   //
   // Coding-agent detection + the custom OpenAI-compatible endpoint config
-  // also left the main process: the gateway is colocated with the runner, so
+  // also left the main process: the gateway is colocated with the harness, so
   // it owns both the credential probe (`GET /centraid/_agents/status`) and
-  // the runner preflight (`GET /centraid/_turn/runner-status`). The renderer
+  // the harness preflight (`GET /centraid/_turn/harness-status`). The renderer
   // reads them over HTTP via `renderer/gateway-client-conversation.ts` — a remote
   // gateway reports its own host's agents.
 

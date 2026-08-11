@@ -1,12 +1,12 @@
 /*
  * Gateway-owned host-capability catalog store.
  *
- * Persists, per runner, the host runtime's self-reported model list (the chat
+ * Persists, per harness, the host runtime's self-reported model list (the chat
  * picker) at a host-supplied `<dir>/model-catalog.json`. (The tool surface it
  * once also tracked went away with the `ctx.tool` rail — issue #484.)
  *
  * This module is pure storage: read + merge-write. It NEVER enumerates, so
- * reads are instant (no CLI spawn, no SDK call) — `readRunnerModels` just
+ * reads are instant (no CLI spawn, no SDK call) — `readHarnessModels` just
  * returns the cached field or `[]`. Enumeration (and the write-back) is owned
  * by the `CatalogWarmer` (./catalog-warmer.ts), which boot and Refresh both
  * drive; there is no hardcoded seed (a cold catalog yields `[]`, and the UI
@@ -20,25 +20,25 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import type { RunnerKind, RunnerModel } from "@centraid/app-engine";
+import type { HarnessKind, HarnessModel } from "@centraid/app-engine";
 
 const CATALOG_VERSION = 2 as const;
 
 interface CatalogEntry {
   /** Hash of the enumerated model ids — lets a reader spot a stale entry. */
   hash?: string;
-  models?: RunnerModel[];
+  models?: HarnessModel[];
   /** ISO timestamp the model list was enumerated. */
   enumeratedAt?: string;
 }
 
 interface ModelCatalogFile {
   version: typeof CATALOG_VERSION;
-  runners: Partial<Record<RunnerKind, CatalogEntry>>;
+  harnesses: Partial<Record<HarnessKind, CatalogEntry>>;
 }
 
 /** Stable hash of a model set, by id. */
-export function hashModelIds(models: readonly RunnerModel[]): string {
+export function hashModelIds(models: readonly HarnessModel[]): string {
   return createHash("sha256")
     .update(models.map((m) => m.id).join("\n"))
     .digest("hex")
@@ -53,7 +53,7 @@ export async function readCatalog(
     const parsed = JSON.parse(
       await fs.readFile(catalogPath, "utf8")
     ) as ModelCatalogFile;
-    if (parsed && parsed.version === CATALOG_VERSION && parsed.runners)
+    if (parsed && parsed.version === CATALOG_VERSION && parsed.harnesses)
       return parsed;
     return undefined;
   } catch {
@@ -62,22 +62,22 @@ export async function readCatalog(
 }
 
 /**
- * Merge a partial patch into a single runner's entry (read-modify-write): the
+ * Merge a partial patch into a single harness's entry (read-modify-write): the
  * patch writes only its own fields and the merge preserves the rest of the
  * entry. Best-effort.
  */
 export async function writeCatalogEntry(
   catalogPath: string,
-  kind: RunnerKind,
+  kind: HarnessKind,
   patch: Partial<CatalogEntry>
 ): Promise<void> {
   try {
     const existing = (await readCatalog(catalogPath)) ?? {
       version: CATALOG_VERSION,
-      runners: {},
+      harnesses: {},
     };
     existing.version = CATALOG_VERSION;
-    existing.runners[kind] = { ...existing.runners[kind], ...patch };
+    existing.harnesses[kind] = { ...existing.harnesses[kind], ...patch };
     await fs.mkdir(path.dirname(catalogPath), { recursive: true });
     await fs.writeFile(catalogPath, JSON.stringify(existing, null, 2), "utf8");
   } catch {
@@ -86,14 +86,14 @@ export async function writeCatalogEntry(
 }
 
 /**
- * Read a runner's cached models straight from the catalog — no enumeration, no
+ * Read a harness's cached models straight from the catalog — no enumeration, no
  * seed. `[]` until the `CatalogWarmer` has populated the entry (boot or
  * Refresh). The chat picker reads this and pairs it with `deriveStatus` to show
  * a loading vs empty state.
  */
-export async function readRunnerModels(
+export async function readHarnessModels(
   catalogPath: string,
-  kind: RunnerKind
-): Promise<RunnerModel[]> {
-  return (await readCatalog(catalogPath))?.runners[kind]?.models ?? [];
+  kind: HarnessKind
+): Promise<HarnessModel[]> {
+  return (await readCatalog(catalogPath))?.harnesses[kind]?.models ?? [];
 }

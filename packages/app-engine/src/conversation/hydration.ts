@@ -57,7 +57,7 @@ function outputText(outputJson: string | undefined): string | undefined {
 /**
  * Project completed live-ledger rows into the hydrator's custody-safe input.
  * Tool outputs are intentionally excluded; workspace/CAS references survive
- * as labels so the next runner can re-read them without replaying vault data.
+ * as labels so the next harness can re-read them without replaying vault data.
  */
 export function hydrationMessagesFromLedger(
   turns: readonly Turn[],

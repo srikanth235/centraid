@@ -22,7 +22,7 @@ The ledger is a mutable band in each vault's `journal.db`, not a per-app `runtim
 - `turns` — executions under a conversation; and
 - `items` — ordered input, model-step, tool, and agent trace rows.
 
-The same file also carries attachments metadata, automation state, archival indexes, runner health, and the `run_summary` view used by Insights. App data lives in the vault plane; handlers reach it through injected `ctx.vault`/`ctx.db` capabilities rather than opening gateway-owned files.
+The same file also carries attachments metadata, automation state, archival indexes, harness health, and the `run_summary` view used by Insights. App data lives in the vault plane; handlers reach it through injected `ctx.vault`/`ctx.db` capabilities rather than opening gateway-owned files.
 
 ## Invariants
 

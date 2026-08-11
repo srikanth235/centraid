@@ -3,7 +3,7 @@
 Centraid's **Insights domain** — transparency and control over agent usage (issue #514 rewrite). Folded into `@centraid/app-engine` from the former `@centraid/analytics` package (#151).
 
 - **`AnalyticsStore`** — read-only lens over the vault's `run_summary` VIEW.
-- **`InsightsStore`** — aggregates for the desktop Insights screen: spend floors, agent-reported vs estimated cost, unpriced/unreported counts, by-source / by-runner / by-model, peak day, attention callout.
+- **`InsightsStore`** — aggregates for the desktop Insights screen: spend floors, agent-reported vs estimated cost, unpriced/unreported counts, by-source / by-harness / by-model, peak day, attention callout.
 
 ## Product rules
 

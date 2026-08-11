@@ -37,7 +37,7 @@ export interface RawConversation {
   app_id: string | null;
   automation_id: string | null;
   title: string;
-  adapter_kind: string | null;
+  harness_kind: string | null;
   adapter_session_id: string | null;
   adapter_usage_json: string | null;
   hydration_count?: number;
@@ -145,7 +145,7 @@ export function conversationFromRaw(raw: RawConversation): Conversation {
     ...(raw.app_id === null ? {} : { appId: raw.app_id }),
     ...(raw.automation_id === null ? {} : { automationId: raw.automation_id }),
     title: raw.title,
-    ...(raw.adapter_kind === null ? {} : { adapterKind: raw.adapter_kind }),
+    ...(raw.harness_kind === null ? {} : { harnessKind: raw.harness_kind }),
     ...(raw.adapter_session_id === null
       ? {}
       : { adapterSessionId: raw.adapter_session_id }),
@@ -333,7 +333,7 @@ export interface PreparedStatements {
 // Reconstructed transcript length = total items across the conversation's
 // turns (one `message_in` per turn + each step/tool item).
 const CONV_COLS = `c.id, c.kind, c.user_id, c.app_id, c.automation_id, c.title,
-        c.adapter_kind, c.adapter_session_id, c.adapter_usage_json,
+        c.harness_kind, c.adapter_session_id, c.adapter_usage_json,
         c.hydration_count, c.last_hydrated_at, c.turn_count, c.pinned, c.archived,
         c.created_at, c.updated_at`;
 
@@ -342,7 +342,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     insertConversation: db.prepare(`
       INSERT INTO conversations
         (id, kind, user_id, app_id, automation_id, title,
-         adapter_kind, adapter_session_id, adapter_usage_json,
+         harness_kind, adapter_session_id, adapter_usage_json,
          turn_count, pinned, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, 0, ?, ?)
     `),
@@ -420,7 +420,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     ),
     noteTurnWithAdapter: db.prepare(`
       UPDATE conversations
-      SET turn_count = turn_count + 1, updated_at = ?, adapter_kind = ?,
+      SET turn_count = turn_count + 1, updated_at = ?, harness_kind = ?,
           adapter_session_id = ?, adapter_usage_json = ?,
           hydration_count = hydration_count + ?,
           last_hydrated_at = CASE WHEN ? = 1 THEN ? ELSE last_hydrated_at END
@@ -428,7 +428,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     `),
     noteTurnKindOnly: db.prepare(`
       UPDATE conversations
-      SET turn_count = turn_count + 1, updated_at = ?, adapter_kind = ?,
+      SET turn_count = turn_count + 1, updated_at = ?, harness_kind = ?,
           hydration_count = hydration_count + ?,
           last_hydrated_at = CASE WHEN ? = 1 THEN ? ELSE last_hydrated_at END
       WHERE id = ? AND user_id = ?

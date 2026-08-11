@@ -41,7 +41,7 @@ export {
 // `centraid preview snapshot` flow; expose the dist-dir resolver.
 export { defaultCentraidCliDir } from "./cli/centraid-cli-dir.js";
 
-export type { RunnerKind, RunnerPrefs } from "./types.js";
+export type { HarnessKind, HarnessPrefs } from "./types.js";
 
 export {
   runTurn,
@@ -76,16 +76,16 @@ export {
   type AcpAgentCapabilities,
 } from "./backends/acp/capabilities-cache.js";
 
-// Runner-backend registry — the single dispatch table every runner kind
+// Harness-backend registry — the single dispatch table every harness kind
 // registers with. `runTurn`, preflight, and model enumeration all read from
-// it; the gateway can enumerate `RUNNER_BACKENDS` for labels / defaults.
+// it; the gateway can enumerate `HARNESSES` for labels / defaults.
 export {
-  RUNNER_BACKENDS,
-  SUPPORTED_RUNNER_BACKENDS,
-  SUPPORTED_RUNNER_KINDS,
-  getRunnerBackend,
-  type RunnerBackend,
-  type RunnerVersion,
+  HARNESSES,
+  SUPPORTED_HARNESSES,
+  SUPPORTED_HARNESS_KINDS,
+  getHarness,
+  type HarnessSpec,
+  type HarnessVersion,
 } from "./registry.js";
 
 export {
@@ -99,12 +99,12 @@ export {
   compareSemver,
 } from "./preflight.js";
 
-// Per-runner model catalog (issue #188). The pure read (`readRunnerModels`) is
+// Per-harness model catalog (issue #188). The pure read (`readHarnessModels`) is
 // exposed so the gateway can surface each agent's models for the per-agent
-// picker in Settings → Agents and the active runner via runner-status; the
+// picker in Settings → Agents and the active harness via harness-status; the
 // `CatalogWarmer` owns enumeration (boot + Refresh) and `deriveStatus` turns
 // the cache into the picker's loading/ready/empty tri-state.
-export { readRunnerModels } from "./models/catalog.js";
+export { readHarnessModels } from "./models/catalog.js";
 export {
   CatalogWarmer,
   deriveStatus,
@@ -112,12 +112,12 @@ export {
   type CatalogWarmerOptions,
   type SurfaceStatus,
 } from "./models/catalog-warmer.js";
-export { enumerateRunnerModels } from "./models/enumerators.js";
+export { enumerateHarnessModels } from "./models/enumerators.js";
 
 // Local-side per-fire orchestrator for automations (issue #90 model-B).
 // Looks up the user-owned automation and runs its handler against a live
 // dispatch surface. The only billed rail is `ctx.agent` — a bounded model
-// turn routed through the runner registry (issue #479); the deterministic
+// turn routed through the harness registry (issue #479); the deterministic
 // rails (`ctx.vault` / `ctx.fetch` / `ctx.state` / `ctx.runs`) run in-process.
 export {
   runAutomation,

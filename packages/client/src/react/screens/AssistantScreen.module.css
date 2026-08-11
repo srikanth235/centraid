@@ -229,7 +229,7 @@
   animation: cd-asst-blink 1s steps(2) infinite;
   vertical-align: text-bottom;
 }
-/* Runner notice row (issue #420, Wave 6) — e.g. dropped-PDF warning. */
+/* Harness notice row (issue #420, Wave 6) — e.g. dropped-PDF warning. */
 .notice {
   display: flex;
   align-items: center;

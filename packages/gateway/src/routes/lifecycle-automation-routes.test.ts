@@ -40,7 +40,7 @@ interface CreatedAutomation {
       name: string;
       prompt: string;
       triggers: unknown[];
-      requires?: { runner?: string; model?: string };
+      requires?: { harness?: string; model?: string };
     };
   };
   webhook?: { id: string; secret: string; url: string };
@@ -155,28 +155,28 @@ describe("lifecycle-automation-routes scenarios", () => {
     ]);
   });
 
-  test("create/update persist runner and model pins, and null clears both", async () => {
+  test("create/update persist harness and model pins, and null clears both", async () => {
     const created = await createAutomation("pinned-agent", {
-      runner: "claude-code",
+      harness: "claude-code",
       model: "claude-custom",
     });
     expect(created.row.manifest.requires).toStrictEqual({
-      runner: "claude-code",
+      harness: "claude-code",
       model: "claude-custom",
     });
 
     const changed = await update(created.row.ref, {
-      runner: "codex",
+      harness: "codex",
       model: "gpt-custom",
     });
     expect(changed.status).toBe(200);
     expect(
       (changed.json.row as { manifest: { requires: Record<string, unknown> } })
         .manifest.requires
-    ).toStrictEqual({ runner: "codex", model: "gpt-custom" });
+    ).toStrictEqual({ harness: "codex", model: "gpt-custom" });
 
     const cleared = await update(created.row.ref, {
-      runner: null,
+      harness: null,
       model: null,
     });
     expect(cleared.status).toBe(200);
@@ -439,9 +439,9 @@ describe("lifecycle-automation-routes scenarios", () => {
     handle = await serve({
       paths: pathsUnder(dataDir),
       runTurn: async (input, config) => {
-        const runner = config.prefs.kind;
-        attempted.push(runner);
-        if (runner === "codex") {
+        const harness = config.prefs.kind;
+        attempted.push(harness);
+        if (harness === "codex") {
           input.onEvent({
             type: "error",
             message: "codex failed to spawn",
@@ -450,12 +450,12 @@ describe("lifecycle-automation-routes scenarios", () => {
         } else {
           input.onEvent({ type: "final", text: "Plan ready" });
         }
-        return { adapterKind: runner };
+        return { harnessKind: harness };
       },
     });
     handle.prefs.setPrefs({
-      "runner.automations": "codex",
-      "runner.ladder.automations": ["codex", "claude-code"],
+      "harness.automations": "codex",
+      "harness.ladder.automations": ["codex", "claude-code"],
     });
 
     const created = await createAutomation("compile-failover", {

@@ -72,9 +72,9 @@ export interface Conversation {
   /** The automation ref (`<appId>/<id>`) — set for `kind: 'automation'`. */
   readonly automationId?: string;
   readonly title: string;
-  /** Runner kind that owns `adapterSessionId` — any ACP runner kind (#479). */
-  readonly adapterKind?: string;
-  /** Opaque per-runner resume handle; absent until the first turn lands. */
+  /** Harness kind that owns `adapterSessionId` — any ACP harness kind (#479). */
+  readonly harnessKind?: string;
+  /** Opaque per-harness resume handle; absent until the first turn lands. */
   readonly adapterSessionId?: string;
   /** Last cumulative ACP counters paired with `adapterSessionId`. */
   readonly adapterUsageSnapshot?: AdapterUsageSnapshot;
@@ -102,9 +102,9 @@ export interface Conversation {
 /**
  * One resumable ACP session bound to the canonical conversation ledger.
  *
- * A conversation may keep several bindings (one per runner used over its
- * lifetime), but only the conversation's selected runner is active and at
- * most one prior runner remains process-warm. Older valid handles are cold;
+ * A conversation may keep several bindings (one per harness used over its
+ * lifetime), but only the conversation's selected harness is active and at
+ * most one prior harness remains process-warm. Older valid handles are cold;
  * stale is reserved for invalid or superseded handles that cannot resume.
  * The watermark is the last canonical turn sequence whose content that ACP
  * session has observed, so A → B → A can resume A and hydrate only B's delta.
@@ -200,7 +200,7 @@ export interface Item {
   readonly turnId: string;
   readonly ordinal: number;
   /**
-   * Runner-native call identity. ACP tool calls can overlap, so start/result
+   * Harness-native call identity. ACP tool calls can overlap, so start/result
    * correlation must use this value rather than display name or ordinal.
    */
   readonly callId?: string;
@@ -214,7 +214,7 @@ export interface Item {
   readonly name?: string;
   readonly argsJson?: string;
   readonly outputJson?: string;
-  /** Lossless runner envelope for diagnostics and future protocol fields. */
+  /** Lossless harness envelope for diagnostics and future protocol fields. */
   readonly rawJson?: string;
   readonly ok: boolean;
   readonly error?: string;
@@ -226,7 +226,7 @@ export interface Item {
   readonly outputTokens?: number;
   readonly cacheReadTokens?: number;
   readonly cacheWriteTokens?: number;
-  /** `step` / `agent` — the confirmed model, runner, and effort that served the call. */
+  /** `step` / `agent` — the confirmed model, harness, and effort that served the call. */
   readonly model?: string;
   readonly provider?: string;
   readonly effort?: string;

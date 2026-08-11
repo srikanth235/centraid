@@ -51,10 +51,10 @@ import type {
   TurnStreamEvent,
   Dispatcher,
   ModelSubsystem,
-  RunnerKind,
-  RunnerPrefs,
+  HarnessKind,
+  HarnessPrefs,
   RunTurnFn,
-  RunnerHealthController,
+  HarnessHealthController,
   ProviderEgressConsentController,
   VaultInvokeRunner,
   VaultContentRunner,
@@ -76,15 +76,15 @@ export { type RunTurnFn } from "@centraid/app-engine";
 export interface UnifiedConversationRunnerOptions {
   /** Git store backing app code; the draft worktree lives in its sessions. */
   store: WorktreeStore;
-  /** Per-turn runner prefs (kind + provider). Loaded fresh so settings
+  /** Per-turn harness prefs (kind + provider). Loaded fresh so settings
    *  changes apply without a restart — mirrors `makeConversationRunner`.
-   *  Receives `subsystem` so a host that pins a runner per subsystem
+   *  Receives `subsystem` so a host that pins a harness per subsystem
    *  answers with THIS register's kind. */
   prefsLoader: (
     subsystem?: ModelSubsystem,
-    runnerKind?: RunnerKind
-  ) => Promise<RunnerPrefs | undefined>;
-  /** Which subsystem's runner/model prefs builder turns ride. The gateway
+    harnessKind?: HarnessKind
+  ) => Promise<HarnessPrefs | undefined>;
+  /** Which subsystem's harness/model prefs builder turns ride. The gateway
    *  passes `'builder'`; unset → the host's default agent. */
   subsystem?: ModelSubsystem;
   /** Resolve the shared app-engine dispatcher for the `centraid_*` tools.
@@ -116,12 +116,12 @@ export interface UnifiedConversationRunnerOptions {
   sessionIdFor?: (appId: string) => string;
   /** Turn driver — defaults to `runTurn`; injected in tests. */
   runTurn?: RunTurnFn;
-  runnerLadder?: (
+  harnessLadder?: (
     subsystem: ModelSubsystem | undefined,
-    primary: RunnerKind
-  ) => Promise<readonly RunnerKind[]> | readonly RunnerKind[];
-  runnerHealth?: RunnerHealthController;
-  runnerHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
+    primary: HarnessKind
+  ) => Promise<readonly HarnessKind[]> | readonly HarnessKind[];
+  harnessHealth?: HarnessHealthController;
+  harnessHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
   providerEgressConsent?: ProviderEgressConsentController;
   onFailover?: Parameters<typeof makeConversationRunnerCore>[0]["onFailover"];
 }
@@ -199,10 +199,10 @@ export function makeUnifiedConversationRunner(
     // The model turn driver — the local codex/claude `runTurn` unless a
     // test injects a stub.
     runTurn: opts.runTurn ?? runTurn,
-    ...(opts.runnerLadder ? { runnerLadder: opts.runnerLadder } : {}),
-    ...(opts.runnerHealth ? { runnerHealth: opts.runnerHealth } : {}),
-    ...(opts.runnerHealthContext
-      ? { runnerHealthContext: opts.runnerHealthContext }
+    ...(opts.harnessLadder ? { harnessLadder: opts.harnessLadder } : {}),
+    ...(opts.harnessHealth ? { harnessHealth: opts.harnessHealth } : {}),
+    ...(opts.harnessHealthContext
+      ? { harnessHealthContext: opts.harnessHealthContext }
       : {}),
     ...(opts.providerEgressConsent
       ? { providerEgressConsent: opts.providerEgressConsent }

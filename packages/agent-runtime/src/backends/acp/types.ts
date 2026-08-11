@@ -1,6 +1,6 @@
 /*
  * The public contract of the generic ACP backend (issue #479): what a caller
- * hands `runAcpTurn` and what a runner kind declares about itself.
+ * hands `runAcpTurn` and what a harness kind declares about itself.
  *
  * Two flavours of agent land here:
  *   - CLIs that speak ACP natively (Gemini CLI, Qwen Code, a custom `acp`
@@ -17,7 +17,7 @@
 
 import type {
   AdapterUsageSnapshot,
-  RunnerKind,
+  HarnessKind,
   ToolContext,
   TurnAttachment,
   TurnStreamEvent,
@@ -37,7 +37,7 @@ export interface AcpTurnInput {
    * The turn's vault runners. When present (and the agent supports HTTP MCP)
    * they are served from a per-turn loopback MCP endpoint named in
    * `mcpServers`, which is how `vault_sql` / `vault_invoke` / `vault_content`
-   * reach EVERY runner kind through one mechanism.
+   * reach EVERY harness kind through one mechanism.
    */
   toolContext?: ToolContext;
   /**
@@ -64,7 +64,7 @@ export interface AcpTurnInput {
   recoveryHydrationContext?: string;
   /** Historical files accompanying full-ledger recovery. */
   recoveryHydrationAttachments?: TurnAttachment[];
-  /** A runner change already proved that this turn must hydrate. */
+  /** A harness change already proved that this turn must hydrate. */
   forceHydration?: boolean;
   /**
    * Extra absolute workspace roots for agents that advertise
@@ -87,7 +87,7 @@ export interface AcpAdapterSpec {
   /** npm package providing the adapter. Its `bin` entry is resolved from node_modules. */
   readonly packageName: string;
   /**
-   * Env var through which `RunnerPrefs.binPath` reaches the UNDERLYING CLI.
+   * Env var through which `HarnessPrefs.binPath` reaches the UNDERLYING CLI.
    * With an adapter in the middle, `binPath` means "the agent CLI"
    * (`CLAUDE_CODE_EXECUTABLE` / `CODEX_PATH`), never the adapter itself.
    */
@@ -109,8 +109,8 @@ export interface AcpAdapterSpec {
 }
 
 export interface AcpTurnConfig {
-  /** The runner kind this invocation represents — echoed as `adapterKind`. */
-  kind: RunnerKind;
+  /** The harness kind this invocation represents — echoed as `harnessKind`. */
+  kind: HarnessKind;
   /**
    * Human label for this kind, used only in operator-facing messages.
    * Defaults to `kind` when absent.

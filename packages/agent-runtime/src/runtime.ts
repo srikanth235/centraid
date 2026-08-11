@@ -2,8 +2,8 @@
  * Unified agent-turn primitive.
  *
  * Both chat and builder share this entry point. It dispatches to a
- * `RunnerBackend` from the registry (`./registry.ts`) based on the user's
- * persisted `agent.runner.kind` pref:
+ * `HarnessSpec` from the registry (`./registry.ts`) based on the user's
+ * persisted `agent.harness.kind` pref:
  *
  * Since issue #479 every kind uses the same transport — the generic ACP
  * client over JSON-RPC stdio. They differ only in what is spawned:
@@ -23,7 +23,7 @@
 
 import type { TurnConfig, TurnInput, TurnResult } from "@centraid/app-engine";
 
-import { RUNNER_BACKENDS } from "./registry.js";
+import { HARNESSES } from "./registry.js";
 
 // The turn-driver contract (`ToolContext`, `TurnInput/Config/Result`)
 // now lives in `@centraid/app-engine` so the backend-agnostic run engine can
@@ -40,9 +40,9 @@ export async function runTurn(
   input: TurnInput,
   config: TurnConfig
 ): Promise<TurnResult> {
-  const backend = RUNNER_BACKENDS[config.prefs.kind];
+  const backend = HARNESSES[config.prefs.kind];
   if (!backend) {
-    throw new Error(`unknown runner kind: ${String(config.prefs.kind)}`);
+    throw new Error(`unknown harness kind: ${String(config.prefs.kind)}`);
   }
   return backend.runTurn(input, config);
 }

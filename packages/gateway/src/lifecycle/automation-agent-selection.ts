@@ -1,62 +1,62 @@
 import {
-  isRunnerKind,
+  isHarnessKind,
   resolveSubsystemConfigPins,
   resolveSubsystemModel,
 } from "@centraid/app-engine";
-import type { RunnerKind } from "@centraid/app-engine";
+import type { HarnessKind } from "@centraid/app-engine";
 import type { ManifestRequires } from "@centraid/automation";
 
 /**
- * Where the selected runner came from. `prefs` means the user's own
+ * Where the selected harness came from. `prefs` means the user's own
  * automations primary (or a manifest pin that names it anyway) — user-authored
  * consent for unattended egress. `manifest` means the automation's own
- * `requires.runner` chose a different provider; manifests are agent-writable,
+ * `requires.harness` chose a different provider; manifests are agent-writable,
  * so that selection is NOT consent and must be checked against the user's
  * ladder before anything leaves the device (#567 D13/D5).
  */
-type AutomationRunnerSelectionSource = "prefs" | "manifest";
+type AutomationHarnessSelectionSource = "prefs" | "manifest";
 
 export interface AutomationAgentSelection {
-  runner: RunnerKind;
-  selectionSource: AutomationRunnerSelectionSource;
+  harness: HarnessKind;
+  selectionSource: AutomationHarnessSelectionSource;
   model?: string;
   configPins?: Readonly<Record<string, string>>;
 }
 
 /**
  * Resolve one automation's harness/model with manifest pins taking priority.
- * Runner keys stay open in the manifest for registry forward compatibility;
+ * Harness keys stay open in the manifest for registry forward compatibility;
  * this host executes only keys registered in its current runtime.
  */
 export function resolveAutomationAgentSelection(
   requires: ManifestRequires,
   prefs: Record<string, unknown>,
-  fallbackRunner: RunnerKind,
+  fallbackHarness: HarnessKind,
   options: { includeManifestProviderPins?: boolean } = {}
 ): AutomationAgentSelection {
-  const runner = isRunnerKind(requires.runner)
-    ? requires.runner
-    : fallbackRunner;
-  const selectionSource: AutomationRunnerSelectionSource =
-    runner === fallbackRunner ? "prefs" : "manifest";
+  const harness = isHarnessKind(requires.harness)
+    ? requires.harness
+    : fallbackHarness;
+  const selectionSource: AutomationHarnessSelectionSource =
+    harness === fallbackHarness ? "prefs" : "manifest";
   const includeManifestProviderPins =
     options.includeManifestProviderPins ?? true;
   const model = resolveSubsystemModel(
     prefs,
-    runner,
+    harness,
     "automations",
     includeManifestProviderPins ? requires.model : undefined
   );
   const configPins = resolveSubsystemConfigPins(
     prefs,
-    runner,
+    harness,
     "automations",
     includeManifestProviderPins && requires.thoughtLevel
       ? { thought_level: requires.thoughtLevel }
       : {}
   );
   return {
-    runner,
+    harness,
     selectionSource,
     ...(model ? { model } : {}),
     ...(Object.keys(configPins).length > 0 ? { configPins } : {}),
@@ -71,7 +71,7 @@ export function resolveAutomationAgentSelection(
 export function resolveAutomationRewriteModel(
   requires: ManifestRequires,
   selection: {
-    runner: RunnerKind;
+    harness: HarnessKind;
     model?: string;
     configPins?: Readonly<Record<string, string>>;
   },
@@ -82,5 +82,5 @@ export function resolveAutomationRewriteModel(
   if (typeof configuredRewrite === "string" && configuredRewrite)
     return configuredRewrite;
   if (fastModel) return fastModel;
-  return selection.runner === "claude-code" ? "fast" : selection.model;
+  return selection.harness === "claude-code" ? "fast" : selection.model;
 }

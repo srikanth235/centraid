@@ -152,7 +152,7 @@ There is no `ctx.random()` / `ctx.uuid()` — get these needs deterministically 
 
 ### Two cost rails
 
-- **Deterministic rails are free.** `ctx.vault`, `ctx.fetch`, `ctx.state`, and `ctx.runs` are serviced parent-side, in-process, by the gateway — **zero model tokens, zero child processes, zero HTTP servers**, on every runner kind. A fire whose handler never calls `ctx.agent` cannot bill anything. Prefer these (plus plain JS) for anything that doesn't need judgment: reading/writing vault data, fetching external HTTP, listing, filtering, shaping.
+- **Deterministic rails are free.** `ctx.vault`, `ctx.fetch`, `ctx.state`, and `ctx.runs` are serviced parent-side, in-process, by the gateway — **zero model tokens, zero child processes, zero HTTP servers**, on every harness kind. A fire whose handler never calls `ctx.agent` cannot bill anything. Prefer these (plus plain JS) for anything that doesn't need judgment: reading/writing vault data, fetching external HTTP, listing, filtering, shaping.
 - **`ctx.agent` is the only billed path.** It is a bounded one-shot turn against the user's real provider. Reserve it for genuine inference — summarize, classify, extract, draft. Don't reach for it to do work a `ctx.vault` / `ctx.fetch` call or a deterministic JS transform already covers. When you do use it, pass a `json` schema and batch (one structured call over the whole set, never a per-item `ctx.agent` loop), and declare the cheapest sufficient `requires.model` tier.
 
 The publish gate lints for the removed `ctx.tool` rail: a handler that calls it fails with _"ctx.tool was removed: handlers do deterministic work with ctx.vault / ctx.fetch / ctx.state, and delegate judgment to ctx.agent."_

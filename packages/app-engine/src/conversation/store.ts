@@ -82,8 +82,8 @@ export interface CreateConversationInput {
   readonly appId?: string;
   readonly automationId?: string;
   readonly title?: string;
-  /** Initial runner binding; mutable after successful handoffs. */
-  readonly adapterKind?: string;
+  /** Initial harness binding; mutable after successful handoffs. */
+  readonly harnessKind?: string;
 }
 
 export interface InsertTurnInput {
@@ -231,8 +231,8 @@ export function conversationMatchExpression(query: string): string | null {
 }
 
 /**
- * Ledger cap for a runner's raw envelope. `args_json` / `output_json` arrive
- * already capped, but `raw_json` carries the SAME payload inside the runner's
+ * Ledger cap for a harness's raw envelope. `args_json` / `output_json` arrive
+ * already capped, but `raw_json` carries the SAME payload inside the harness's
  * envelope (an entire file read, a full tool result) and is written TWICE per
  * tool call — once at `openItem`, once at `closeItem`. Uncapped that is
  * megabytes per call into `journal.db`, straight through #544's disk budget
@@ -369,7 +369,7 @@ export class ConversationStore {
       input.appId ?? null,
       input.automationId ?? null,
       input.title ?? "",
-      input.adapterKind ?? null,
+      input.harnessKind ?? null,
       now,
       now
     );
@@ -382,9 +382,9 @@ export class ConversationStore {
         ? {}
         : { automationId: input.automationId }),
       title: input.title ?? "",
-      ...(input.adapterKind === undefined
+      ...(input.harnessKind === undefined
         ? {}
-        : { adapterKind: input.adapterKind }),
+        : { harnessKind: input.harnessKind }),
       hydrationCount: 0,
       turnCount: 0,
       pinned: false,
@@ -395,16 +395,16 @@ export class ConversationStore {
   }
 
   /**
-   * Ensure one long-lived ledger conversation for this automation. Runner
-   * ownership is the mutable `(adapterKind, adapterSessionId)` binding on the
-   * row, never part of conversation identity. A runner switch therefore keeps
-   * one contiguous history and simply declines the old runner's resume handle.
+   * Ensure one long-lived ledger conversation for this automation. Harness
+   * ownership is the mutable `(harnessKind, adapterSessionId)` binding on the
+   * row, never part of conversation identity. A harness switch therefore keeps
+   * one contiguous history and simply declines the old harness's resume handle.
    */
   ensureAutomationConversation(
     automationRef: string,
     appId?: string,
     name?: string,
-    runnerKind?: string
+    harnessKind?: string
   ): string {
     const conversationId = automationRef;
     const existing = this.getConversation(conversationId);
@@ -416,7 +416,7 @@ export class ConversationStore {
         automationId: automationRef,
         ...(appId === undefined ? {} : { appId }),
         ...(name === undefined ? {} : { title: name }),
-        ...(runnerKind === undefined ? {} : { adapterKind: runnerKind }),
+        ...(harnessKind === undefined ? {} : { harnessKind }),
       });
       return conversationId;
     }
@@ -583,7 +583,7 @@ export class ConversationStore {
     stmts.touchConversation.run(now, id, userId);
   }
 
-  /** Bump turn_count + updated_at; optionally persist the runner-resume handle. */
+  /** Bump turn_count + updated_at; optionally persist the harness-resume handle. */
   noteTurn(
     id: string,
     userId: string,
@@ -617,36 +617,38 @@ export class ConversationStore {
       // for handles that must never be resumed again.
       const active = db
         .prepare(
-          `SELECT runner_kind, acp_session_id
+          `SELECT harness_kind, acp_session_id
              FROM conversation_harness_sessions
             WHERE conversation_id = ? AND status = 'active'
             LIMIT 1`
         )
-        .get(id) as { runner_kind: string; acp_session_id: string } | undefined;
+        .get(id) as
+        | { harness_kind: string; acp_session_id: string }
+        | undefined;
       const activeChanges =
         active !== undefined &&
-        (active.runner_kind !== adapter.kind ||
+        (active.harness_kind !== adapter.kind ||
           active.acp_session_id !== adapter.sessionId);
       if (activeChanges) {
         db.prepare(
           `UPDATE conversation_harness_sessions
               SET status = 'cold'
             WHERE conversation_id = ? AND status = 'warm'
-              AND NOT (runner_kind = ? AND acp_session_id = ?)`
+              AND NOT (harness_kind = ? AND acp_session_id = ?)`
         ).run(id, adapter.kind, adapter.sessionId);
         db.prepare(
           `UPDATE conversation_harness_sessions
               SET status = 'warm'
             WHERE conversation_id = ? AND status = 'active'
-              AND NOT (runner_kind = ? AND acp_session_id = ?)`
+              AND NOT (harness_kind = ? AND acp_session_id = ?)`
         ).run(id, adapter.kind, adapter.sessionId);
       }
       db.prepare(
         `INSERT INTO conversation_harness_sessions (
-           id, conversation_id, runner_kind, acp_session_id, usage_snapshot_json,
+           id, conversation_id, harness_kind, acp_session_id, usage_snapshot_json,
            hydrated_through_seq, status, last_used_at, created_at
          ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)
-         ON CONFLICT(conversation_id, runner_kind, acp_session_id) DO UPDATE SET
+         ON CONFLICT(conversation_id, harness_kind, acp_session_id) DO UPDATE SET
            usage_snapshot_json = excluded.usage_snapshot_json,
            hydrated_through_seq = MAX(
              conversation_harness_sessions.hydrated_through_seq,
@@ -664,13 +666,13 @@ export class ConversationStore {
         now,
         now
       );
-      // A runner can have only one resumable binding. Superseded opaque ids
+      // A harness can have only one resumable binding. Superseded opaque ids
       // stay as `stale` audit rows rather than silently disappearing.
       db.prepare(
         `UPDATE conversation_harness_sessions
             SET status = 'stale'
           WHERE conversation_id = ?
-            AND runner_kind = ?
+            AND harness_kind = ?
             AND acp_session_id <> ?
             AND status <> 'stale'`
       ).run(id, adapter.kind, adapter.sessionId);
@@ -694,7 +696,7 @@ export class ConversationStore {
               hydrated_through_seq,
               (SELECT COALESCE(MAX(seq), -1) FROM turns WHERE conversation_id = ?)
             )
-          WHERE conversation_id = ? AND runner_kind = ? AND acp_session_id = ?`
+          WHERE conversation_id = ? AND harness_kind = ? AND acp_session_id = ?`
       ).run(id, id, adapter.kind, adapter.sessionId);
     } else if (adapter) {
       res = stmts.noteTurnKindOnly.run(
@@ -744,7 +746,7 @@ export class ConversationStore {
         `UPDATE conversation_harness_sessions
             SET usage_snapshot_json = COALESCE(?, usage_snapshot_json),
                 last_used_at = ?
-          WHERE conversation_id = ? AND runner_kind = ? AND acp_session_id = ?
+          WHERE conversation_id = ? AND harness_kind = ? AND acp_session_id = ?
             AND status <> 'stale'`
       ).run(
         adapter.usageSnapshot ? JSON.stringify(adapter.usageSnapshot) : null,
@@ -765,27 +767,27 @@ export class ConversationStore {
     return true;
   }
 
-  /** Latest non-stale resumable session for this conversation + runner. */
+  /** Latest non-stale resumable session for this conversation + harness. */
   getHarnessBinding(
     conversationId: string,
-    runnerKind: string
+    harnessKind: string
   ): ConversationHarnessSession | undefined {
     const { db } = this.ensureReady();
     const raw = db
       .prepare(
-        `SELECT id, conversation_id, runner_kind, acp_session_id,
+        `SELECT id, conversation_id, harness_kind, acp_session_id,
                 usage_snapshot_json, hydrated_through_seq, status,
                 last_used_at, created_at
            FROM conversation_harness_sessions
-          WHERE conversation_id = ? AND runner_kind = ? AND status <> 'stale'
+          WHERE conversation_id = ? AND harness_kind = ? AND status <> 'stale'
           ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, last_used_at DESC
           LIMIT 1`
       )
-      .get(conversationId, runnerKind) as
+      .get(conversationId, harnessKind) as
       | {
           id: string;
           conversation_id: string;
-          runner_kind: string;
+          harness_kind: string;
           acp_session_id: string;
           usage_snapshot_json: string | null;
           hydrated_through_seq: number;
@@ -808,7 +810,7 @@ export class ConversationStore {
     return {
       id: raw.id,
       conversationId: raw.conversation_id,
-      kind: raw.runner_kind,
+      kind: raw.harness_kind,
       acpSessionId: raw.acp_session_id,
       ...(usageSnapshot ? { usageSnapshot } : {}),
       hydratedThroughSeq: Number(raw.hydrated_through_seq),

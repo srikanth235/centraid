@@ -11,7 +11,7 @@ import type {
   ConversationRunner,
   ProviderConsentSource,
   ProviderEgressConsentController,
-  RunnerKind,
+  HarnessKind,
   TurnStreamEvent,
 } from "@centraid/app-engine";
 import type * as TypeImport_4y0tle from "@centraid/app-engine";
@@ -34,7 +34,7 @@ export interface HeadlessCompileOptions {
   automationName: string;
   instructions: string;
   /** Validated manifest harness override. */
-  runnerKind?: RunnerKind;
+  harnessKind?: HarnessKind;
   /** Explicit manifest/prefs-resolved model for this compile. */
   model?: string;
   /** Semantic ACP configuration pins for this compile. */
@@ -42,8 +42,8 @@ export interface HeadlessCompileOptions {
   /** Durable egress grant controller; compile attempts are unattended. */
   providerEgressConsent?: ProviderEgressConsentController;
   /**
-   * How the user authored this attempt's runner: `direct` = their automations
-   * primary, `ladder` = current failover membership. Omit when the runner came
+   * How the user authored this attempt's harness: `direct` = their automations
+   * primary, `ladder` = current failover membership. Omit when the harness came
    * from a manifest pin the user never authored — the compile is then denied
    * unless a real grant already exists (#567 D13).
    */
@@ -71,7 +71,7 @@ export interface RecordFailedAutomationCompileOptions {
   automationName: string;
   runId: string;
   error: string;
-  runnerKind?: RunnerKind;
+  harnessKind?: HarnessKind;
   /** Turn note. Defaults to the "reserved id never started" wording. */
   note?: string;
   /** Turn summary shown in the thread. Defaults to `Compile failed`. */
@@ -140,7 +140,7 @@ export function recordFailedAutomationCompile(
       opts.automationRef,
       opts.appId,
       opts.automationName,
-      opts.runnerKind
+      opts.harnessKind
     );
     store.insertTurn({
       turnId: opts.runId,
@@ -294,7 +294,7 @@ export async function runHeadlessAutomationCompile(
     opts.automationRef,
     opts.appId,
     opts.automationName,
-    opts.runnerKind
+    opts.harnessKind
   );
   const lockToken = randomUUID();
   if (!store.acquireTurnLock(conversationId, lockToken)) {
@@ -313,8 +313,8 @@ export async function runHeadlessAutomationCompile(
       throw new Error(
         `automation conversation "${conversationId}" was not created`
       );
-    const binding = opts.runnerKind
-      ? store.getHarnessBinding(conversationId, opts.runnerKind)
+    const binding = opts.harnessKind
+      ? store.getHarnessBinding(conversationId, opts.harnessKind)
       : undefined;
     const turnsBeforeCurrent = store.listTurns(conversationId);
     const hydrationMessages = hydrationMessagesFromLedger(
@@ -353,8 +353,8 @@ export async function runHeadlessAutomationCompile(
       triggerKind: "compile",
       note:
         opts.failoverNotice ??
-        (opts.runnerKind
-          ? `Compiling plan with ${opts.runnerKind}`
+        (opts.harnessKind
+          ? `Compiling plan with ${opts.harnessKind}`
           : "Compiling plan"),
       startedAt,
     });
@@ -393,7 +393,7 @@ export async function runHeadlessAutomationCompile(
     let adapter:
       | {
           adapterSessionId?: string;
-          adapterKind?: string;
+          harnessKind?: string;
           adapterUsageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
           hydrated?: boolean;
           hydrationTokens?: number;
@@ -433,23 +433,23 @@ export async function runHeadlessAutomationCompile(
       // or invent a lane for a provider absent from the ladder (#567 D5/D13).
       const consent = opts.providerEgressConsent;
       if (
-        opts.runnerKind &&
+        opts.harnessKind &&
         consent &&
-        !consent.has(conversationId, opts.runnerKind, "automations")
+        !consent.has(conversationId, opts.harnessKind, "automations")
       ) {
         const derived =
           opts.consentSource === undefined
             ? false
             : (consent.recordDerived?.(
                 conversationId,
-                opts.runnerKind,
+                opts.harnessKind,
                 opts.consentSource,
                 "automations"
               ) ?? false);
         if (!derived) {
           throw new Error(
-            `Unattended compile cannot send this automation to ${opts.runnerKind}: ` +
-              `no consent is recorded for it. Add ${opts.runnerKind} to the automations ` +
+            `Unattended compile cannot send this automation to ${opts.harnessKind}: ` +
+              `no consent is recorded for it. Add ${opts.harnessKind} to the automations ` +
               `agent or its failover ladder in Settings, or approve the provider in a ` +
               `conversation with this automation.`
           );
@@ -472,11 +472,11 @@ export async function runHeadlessAutomationCompile(
           message,
           register: "build",
           extraSystemPrompt: "",
-          ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
+          ...(opts.harnessKind ? { harnessKind: opts.harnessKind } : {}),
           ...(opts.model ? { model: opts.model } : {}),
           ...(opts.configPins ? { configPins: opts.configPins } : {}),
-          ...(conversation.adapterKind
-            ? { activeAdapterKind: conversation.adapterKind }
+          ...(conversation.harnessKind
+            ? { activeHarnessKind: conversation.harnessKind }
             : {}),
           ...(binding?.acpSessionId
             ? {
@@ -484,7 +484,7 @@ export async function runHeadlessAutomationCompile(
                 prevBindingId: binding.id,
               }
             : {}),
-          ...(binding ? { prevAdapterKind: binding.kind } : {}),
+          ...(binding ? { prevHarnessKind: binding.kind } : {}),
           ...(binding?.usageSnapshot
             ? { prevAdapterUsageSnapshot: binding.usageSnapshot }
             : {}),
@@ -579,9 +579,9 @@ export async function runHeadlessAutomationCompile(
         store.noteTurn(
           conversationId,
           "",
-          adapter?.adapterKind
+          adapter?.harnessKind
             ? {
-                kind: adapter.adapterKind,
+                kind: adapter.harnessKind,
                 ...(adapter.adapterSessionId
                   ? { sessionId: adapter.adapterSessionId }
                   : {}),
@@ -631,9 +631,9 @@ export async function runHeadlessAutomationCompile(
         if (adapter?.hydrationTokens !== undefined) {
           store.setTurnHydrationTokens(runId, adapter.hydrationTokens);
         }
-        const observedAdapter = adapter?.adapterKind
+        const observedHarness = adapter?.harnessKind
           ? {
-              kind: adapter.adapterKind,
+              kind: adapter.harnessKind,
               ...(adapter.adapterSessionId
                 ? { sessionId: adapter.adapterSessionId }
                 : {}),
@@ -643,7 +643,7 @@ export async function runHeadlessAutomationCompile(
               ...(adapter.hydrated ? { hydrated: true } : {}),
             }
           : undefined;
-        store.noteFailedTurn(conversationId, "", observedAdapter);
+        store.noteFailedTurn(conversationId, "", observedHarness);
       });
       if (failureClass === undefined) {
         await opts.onFailure?.(messageLocal);

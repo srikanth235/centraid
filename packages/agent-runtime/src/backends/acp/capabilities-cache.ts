@@ -1,5 +1,5 @@
 /*
- * In-memory cache of `probeAcpCapabilities` results, keyed by runner kind +
+ * In-memory cache of `probeAcpCapabilities` results, keyed by harness kind +
  * effective launch overrides. Settings reads serve the cache; `?refresh=1`
  * forces a re-probe.
  * Probes are expensive (spawn + initialize), so we never run them on every
@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import type { RunnerKind } from "@centraid/app-engine";
+import type { HarnessKind } from "@centraid/app-engine";
 
 import { acpConfigFor } from "../../registry.js";
 import { probeAcpCapabilities } from "./probe-capabilities.js";
@@ -37,7 +37,7 @@ function isExpired(caps: AcpAgentCapabilities, now: number): boolean {
 }
 
 function key(
-  kind: RunnerKind,
+  kind: HarnessKind,
   binPath?: string,
   extraArgs?: readonly string[]
 ): string {
@@ -100,7 +100,7 @@ async function writePersisted(
  * every Settings open is too expensive.
  */
 export async function resolveAcpCapabilities(
-  kind: RunnerKind,
+  kind: HarnessKind,
   opts?: {
     binPath?: string;
     extraArgs?: string[];

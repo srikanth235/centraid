@@ -33,8 +33,8 @@ import styles from "./AssistantScreen.module.css";
 const NO_ENTITIES = async (): Promise<never[]> => [];
 
 const EMPTY_MODEL_PICKER: AsstModelPickerDTO = {
-  runners: [],
-  selectedRunnerKind: "",
+  harnesses: [],
+  selectedHarnessKind: "",
   workspaceKinds: ["vault-data"],
   connected: false,
   models: [],
@@ -45,7 +45,7 @@ const EMPTY_MODEL_PICKER: AsstModelPickerDTO = {
   selectedEffortId: "",
 };
 
-export function RunnerPicker({
+export function HarnessPicker({
   picker,
   loaded,
   busy,
@@ -56,23 +56,23 @@ export function RunnerPicker({
   busy: boolean;
   onSelect: (kind: string) => void;
 }): JSX.Element | null {
-  if (picker.runners.length === 0) return null;
+  if (picker.harnesses.length === 0) return null;
   return (
     <label className={styles.effortPicker}>
-      <span className={styles.srOnly}>Assistant runner</span>
+      <span className={styles.srOnly}>Assistant harness</span>
       <select
-        aria-label="Assistant runner"
+        aria-label="Assistant harness"
         title="Switching agents creates a bounded context handoff and may require provider consent."
-        value={picker.selectedRunnerKind}
+        value={picker.selectedHarnessKind}
         disabled={!loaded || busy}
         onChange={(event) => onSelect(event.target.value)}
       >
-        {picker.runners.map((runner) => (
-          <option key={runner.kind} value={runner.kind} title={runner.hint}>
-            {runner.title}
-            {runner.sessionReady
+        {picker.harnesses.map((harness) => (
+          <option key={harness.kind} value={harness.kind} title={harness.hint}>
+            {harness.title}
+            {harness.sessionReady
               ? ""
-              : runner.sessionProbePending
+              : harness.sessionProbePending
                 ? " — checking…"
                 : " — setup or sign-in needed"}
           </option>
@@ -83,7 +83,7 @@ export function RunnerPicker({
 }
 
 /**
- * Inline composer model picker (subsystem `assistant`, active runner).
+ * Inline composer model picker (subsystem `assistant`, active harness).
  */
 export function ModelPicker({
   picker,
@@ -254,7 +254,7 @@ export default function AssistantScreen({
   loadModelPicker,
   onSetModel,
   onSetEffort,
-  onSetRunner,
+  onSetHarness,
   onSetWorkspaceKind,
   searchEntities,
   slashCommands,
@@ -273,7 +273,7 @@ export default function AssistantScreen({
   const [modelPickerLoaded, setModelPickerLoaded] = useState(false);
   const [pickerLoadedKey, setPickerLoadedKey] = useState<string | null>(null);
   const pickerLoadSeqRef = useRef(0);
-  const runnerSwitchSeqRef = useRef(0);
+  const harnessSwitchSeqRef = useRef(0);
   // The key changes during a thread/capability revision, so the old loaded
   // state cannot briefly enable controls while the new picker is in flight.
   const pickerLoadKey = `${conversationId ?? ""}:${snap.pickerRevision ?? 0}`;
@@ -340,12 +340,12 @@ export default function AssistantScreen({
 
   useEffect(() => {
     const loadSeq = ++pickerLoadSeqRef.current;
-    const switchSeq = ++runnerSwitchSeqRef.current;
+    const switchSeq = ++harnessSwitchSeqRef.current;
     let cancelled = false;
     const active = (): boolean =>
       !cancelled &&
       pickerLoadSeqRef.current === loadSeq &&
-      runnerSwitchSeqRef.current === switchSeq;
+      harnessSwitchSeqRef.current === switchSeq;
     void loadModelPicker()
       .then((p) => {
         if (!active()) return;
@@ -413,24 +413,24 @@ export default function AssistantScreen({
     setModelPicker((picker) => ({ ...picker, selectedEffortId: effort }));
     onSetEffort(effort);
   };
-  const selectRunner = (runnerKind: string): void => {
-    const switchSeq = ++runnerSwitchSeqRef.current;
+  const selectHarness = (harnessKind: string): void => {
+    const switchSeq = ++harnessSwitchSeqRef.current;
     // Invalidate a passive picker request that started before this explicit
-    // switch; its completion must not re-enable the old runner's controls.
+    // switch; its completion must not re-enable the old harness's controls.
     pickerLoadSeqRef.current += 1;
     setModelPickerLoaded(false);
     // `finally` is load-bearing: a rejected switch used to leave every picker
     // disabled forever (plus an unhandled rejection). Mirrors BuilderChatPane.
-    void onSetRunner(runnerKind)
+    void onSetHarness(harnessKind)
       .then((picker) => {
-        if (runnerSwitchSeqRef.current === switchSeq) setModelPicker(picker);
+        if (harnessSwitchSeqRef.current === switchSeq) setModelPicker(picker);
       })
       .catch(() => {
         // The route owns the user-facing failure (it toasts the preflight
         // reason); the screen's only job here is not to strand its controls.
       })
       .finally(() => {
-        if (runnerSwitchSeqRef.current === switchSeq)
+        if (harnessSwitchSeqRef.current === switchSeq)
           setModelPickerLoaded(true);
       });
   };
@@ -626,8 +626,8 @@ export default function AssistantScreen({
               onStop={onStop}
               busy={snap.busy}
               // Do not let the first turn outrun provider/capability loading or
-              // a persisted conversation runner binding.
-              disabled={!pickerReady || snap.runnerReady === false}
+              // a persisted conversation harness binding.
+              disabled={!pickerReady || snap.harnessReady === false}
               canSend={
                 draft.trim().length > 0 ||
                 snap.pendingAttachments.some(
@@ -689,11 +689,11 @@ export default function AssistantScreen({
               }
               model={
                 <>
-                  <RunnerPicker
+                  <HarnessPicker
                     picker={modelPicker}
                     loaded={pickerReady}
                     busy={snap.busy}
-                    onSelect={selectRunner}
+                    onSelect={selectHarness}
                   />
                   <ModelPicker
                     picker={modelPicker}

@@ -30,7 +30,7 @@ describe("capture agent fallback", () => {
       });
       input.onEvent({ type: "final", text: "" });
       return {
-        adapterKind: "codex",
+        harnessKind: "codex",
         text: "",
         inputTokens: 0,
         outputTokens: 0,
@@ -44,7 +44,7 @@ describe("capture agent fallback", () => {
     await expect(
       classifyCaptureWithAgent({
         runTurn,
-        runnerPrefs: { kind: "codex" },
+        harnessPrefs: { kind: "codex" },
         cwd: "/tmp",
         text: "Maybe call Priya",
       })

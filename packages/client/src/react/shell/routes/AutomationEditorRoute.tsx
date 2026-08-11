@@ -202,8 +202,9 @@ export default function AutomationEditorRoute({
             automationId: loaded.row.ref,
             connectors: loaded.connectors,
             consent: filterConsentForAutomation(
-              agents.find((agent) => agent.hostKey === loaded.row?.ownerApp)
-                ?.agentId,
+              agents.find(
+                (agent) => agent.enrollmentKey === loaded.row?.ownerApp
+              )?.agentId,
               blocking,
               grants
             ),
@@ -215,7 +216,7 @@ export default function AutomationEditorRoute({
             name: loaded.name,
             onFailure: loaded.onFailure,
             rowId: loaded.rowId,
-            runner: loaded.runner,
+            harness: loaded.harness,
             triggers: loaded.triggers.map(triggerToDto),
             webhook: hero.webhook,
             ...buildAutomationAgentEditorData(agentStatus),
@@ -239,9 +240,9 @@ export default function AutomationEditorRoute({
                 ...(connections === undefined
                   ? { connections: [] }
                   : { connections }),
-                ...(fields.runner === undefined
+                ...(fields.harness === undefined
                   ? {}
-                  : { runner: fields.runner }),
+                  : { harness: fields.harness }),
                 ...(fields.model === undefined ? {} : { model: fields.model }),
               });
               if (row) rowRef.current = row;
@@ -268,7 +269,7 @@ export default function AutomationEditorRoute({
                 ? { vault: vaultForTriggers(fields.triggers) }
                 : {}),
               ...(connections ? { connections } : {}),
-              ...(fields.runner ? { runner: fields.runner } : {}),
+              ...(fields.harness ? { harness: fields.harness } : {}),
               ...(fields.model ? { model: fields.model } : {}),
             });
             if (row) {

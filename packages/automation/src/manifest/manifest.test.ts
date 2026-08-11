@@ -224,18 +224,18 @@ describe(validateManifest, () => {
     ).toThrow(ManifestError);
   });
 
-  it("round-trips an open runner key and rejects only empty/non-string values", () => {
+  it("round-trips an open harness key and rejects only empty/non-string values", () => {
     expect(
       validateManifest(
-        baseManifest({ requires: { runner: "future-registry-runner" } })
-      ).requires.runner
-    ).toBe("future-registry-runner");
+        baseManifest({ requires: { harness: "future-registry-harness" } })
+      ).requires.harness
+    ).toBe("future-registry-harness");
     expect(() =>
-      validateManifest(baseManifest({ requires: { runner: "" } }))
-    ).toThrow(/requires\.runner must be a non-empty string/u);
+      validateManifest(baseManifest({ requires: { harness: "" } }))
+    ).toThrow(/requires\.harness must be a non-empty string/u);
     expect(() =>
-      validateManifest(baseManifest({ requires: { runner: 42 } }))
-    ).toThrow(/requires\.runner must be a non-empty string/u);
+      validateManifest(baseManifest({ requires: { harness: 42 } }))
+    ).toThrow(/requires\.harness must be a non-empty string/u);
   });
 
   it("round-trips an open thought-level pin and rejects empty values", () => {

@@ -19,12 +19,12 @@
 import type { ConversationWorkspaceKind, RunKind } from "./schema.js";
 import type {
   AdapterUsageSnapshot,
-  RunnerKind,
+  HarnessKind,
   TurnAttachment,
 } from "./turn.js";
 import type * as TypeImport_bjbigq from "./turn.js";
 
-export type AgentFailureClass =
+export type HarnessFailureClass =
   | "spawn"
   | "auth"
   | "init"
@@ -59,7 +59,7 @@ export type TurnStreamEvent =
       sql?: string;
       /** ACP tool kind when the agent supplied one (read/edit/delete/move/…​). */
       kind?: string;
-      /** Lossless runner event envelope when the adapter exposes one. */
+      /** Lossless harness event envelope when the adapter exposes one. */
       rawJson?: string;
     }
   | {
@@ -83,7 +83,7 @@ export type TurnStreamEvent =
         mime: string;
         filename?: string;
       }>;
-      /** Lossless runner event envelope when the adapter exposes one. */
+      /** Lossless harness event envelope when the adapter exposes one. */
       rawJson?: string;
     }
   | {
@@ -96,35 +96,35 @@ export type TurnStreamEvent =
   | {
       type: "final";
       text: string;
-      /** Runner-native completion reason, preserved verbatim. */
+      /** Harness-native completion reason, preserved verbatim. */
       stopReason?: string;
-      /** Lossless runner completion envelope. */
+      /** Lossless harness completion envelope. */
       rawJson?: string;
     }
   | {
       type: "error";
       message: string;
       /** Stable agent failure class used by breakers and turn-boundary failover. */
-      failureClass?: AgentFailureClass;
-      /** Runner-native completion reason, preserved verbatim. */
+      failureClass?: HarnessFailureClass;
+      /** Harness-native completion reason, preserved verbatim. */
       stopReason?: string;
-      /** Lossless runner completion envelope. */
+      /** Lossless harness completion envelope. */
       rawJson?: string;
     }
   | { type: "aborted" }
   | {
       type: "consent.required";
       consentKind: "provider-egress";
-      provider: RunnerKind;
+      provider: HarnessKind;
       reason: "direct" | "ladder";
       message: string;
     }
   /**
    * A non-fatal, human-readable notice about the turn — surfaced in the
    * transcript and folded into the ledger as a notice step (issue #420).
-   * A runner that can't consume an attachment kind (e.g. Codex silently drops
+   * A harness that can't consume an attachment kind (e.g. Codex silently drops
    * PDF `document` blocks) emits `code:'attachment_unsupported'` so the user
-   * sees "this runner can't read PDF attachments" instead of nothing. Both
+   * sees "this harness can't read PDF attachments" instead of nothing. Both
    * chat surfaces render it via the shared parser.
    */
   | { type: "notice"; level: "warn" | "info"; code?: string; message: string }
@@ -148,7 +148,7 @@ export type TurnStreamEvent =
       }>;
     }
   /**
-   * Per-turn token usage, emitted once when the runner reports the
+   * Per-turn token usage, emitted once when the harness reports the
    * turn's totals (codex `turn/completed`, Claude SDK `result`). The
    * chat route folds this into the turn's `kind='step'` run node so the
    * unified ledger has real token + cost accounting for chat turns.
@@ -196,8 +196,8 @@ export interface ConversationTurnInput {
    */
   conversationId: string;
   /**
-   * Absolute path to a runner-owned scratch session file (under the central
-   * `conversationRunnerSessionDir`, named `<conversationId>.jsonl`). The runner is free to
+   * Absolute path to a harness-owned scratch session file (under the central
+   * `conversationRunnerSessionDir`, named `<conversationId>.jsonl`). The harness is free to
    * use this for its own file-based session-resume mechanism, if it has one.
    * It is NOT the chat transcript — the transcript lives in the gateway DB.
    */
@@ -224,7 +224,7 @@ export interface ConversationTurnInput {
    */
   extraSystemPrompt: string;
   /** Optional validated per-turn harness override (for automation manifests). */
-  runnerKind?: RunnerKind;
+  harnessKind?: HarnessKind;
   model?: string;
   /** Optional category-keyed ACP pins (`model`, `thought_level`, future categories). */
   configPins?: Readonly<Record<string, string>>;
@@ -234,7 +234,7 @@ export interface ConversationTurnInput {
    * a second cross-provider switch does not silently revoke the first. A bare
    * string stays wire-valid and means a one-element set.
    */
-  providerConsent?: RunnerKind | readonly RunnerKind[];
+  providerConsent?: HarnessKind | readonly HarnessKind[];
   /** Explicitly owner-selected extra workspace roots for this conversation. */
   additionalDirectories?: string[];
   /** Host-resolved Centraid workspace root selected for this conversation. */
@@ -258,21 +258,21 @@ export interface ConversationTurnInput {
    */
   idempotencyKey?: string;
   /**
-   * The runner's previous resume handle, read from the `conversations` row
-   * by the route. The adapter resumes only when `prevAdapterKind` matches
-   * the kind it's about to use — a mid-session runner switch starts fresh.
+   * The harness's previous resume handle, read from the `conversations` row
+   * by the route. The adapter resumes only when `prevHarnessKind` matches
+   * the kind it's about to use — a mid-session harness switch starts fresh.
    */
   prevAdapterSessionId?: string;
   /** Durable binding row that supplied `prevAdapterSessionId`. */
   prevBindingId?: string;
   /**
    * Provider that owns the conversation's currently active binding. This is
-   * deliberately separate from `prevAdapterKind`: a requested provider may
+   * deliberately separate from `prevHarnessKind`: a requested provider may
    * have an older warm binding even though another provider is active.
    * Provider-egress consent is based on this active-provider axis.
    */
-  activeAdapterKind?: string;
-  prevAdapterKind?: string;
+  activeHarnessKind?: string;
+  prevHarnessKind?: string;
   /** Cumulative counters stored with the prior ACP session id. */
   prevAdapterUsageSnapshot?: AdapterUsageSnapshot;
   /** Bounded canonical-ledger context available if this turn starts fresh. */
@@ -285,7 +285,7 @@ export interface ConversationTurnInput {
   };
   /** Historical files re-attached only if the target advertises their block type. */
   hydrationAttachments?: TypeImport_bjbigq.TurnAttachment[];
-  /** Full-ledger recovery plan used only if this runner's own resume handle expired. */
+  /** Full-ledger recovery plan used only if this harness's own resume handle expired. */
   recoveryHydrationContext?: {
     prompt: string;
     includedTurns: number;
@@ -308,13 +308,13 @@ export interface ConversationTurnInput {
    * the spine then falls back to the precomputed `prevAdapter*` /
    * `hydration*` fields above, which is exactly the pre-existing behavior.
    */
-  resumeForKind?: (kind: RunnerKind) => TurnResumePlan | undefined;
+  resumeForKind?: (kind: HarnessKind) => TurnResumePlan | undefined;
   onEvent: (event: TurnStreamEvent) => void;
 }
 
-/** One runner kind's resume handle plus the hydration it would need. */
+/** One harness kind's resume handle plus the hydration it would need. */
 export interface TurnResumePlan {
-  /** That runner's own resumable opaque session id, when it has a binding. */
+  /** That harness's own resumable opaque session id, when it has a binding. */
   sessionId?: string;
   /** Durable binding row that supplied `sessionId`. */
   bindingId?: string;
@@ -337,10 +337,10 @@ export interface ConversationTurnResult {
    */
   adapterSessionId?: string;
   /** Adapter kind that wrote `adapterSessionId`. */
-  adapterKind?: string;
+  harnessKind?: string;
   /** Cumulative counters to persist with the resume handle. */
   adapterUsageSnapshot?: AdapterUsageSnapshot;
-  /** True when a fresh runner/session consumed canonical ledger hydration. */
+  /** True when a fresh harness/session consumed canonical ledger hydration. */
   hydrated?: boolean;
   /**
    * Which hydration the adapter actually consumed. `'recovery'` means the
@@ -356,8 +356,8 @@ export interface ConversationTurnResult {
 }
 
 export interface ConversationRunner {
-  /** Resolve this surface's currently selected runner before hydration lookup. */
-  resolveRunnerKind?: () => Promise<RunnerKind | undefined>;
+  /** Resolve this surface's currently selected harness before hydration lookup. */
+  resolveHarnessKind?: () => Promise<HarnessKind | undefined>;
   /**
    * The ledger `RunKind` a turn through this runner persists as — a property
    * of the *surface*, not the individual turn. The builder-capable unified

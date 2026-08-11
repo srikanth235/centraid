@@ -335,7 +335,7 @@ describe(automationTurnMessages, () => {
           ordinal: 1,
           kind: "agent",
           ok: false,
-          error: "runner disconnected",
+          error: "harness disconnected",
           startedAt: 1,
           endedAt: 2,
           durationMs: 1,
@@ -348,7 +348,7 @@ describe(automationTurnMessages, () => {
       true
     );
     expect(answer?.kind === "ai" && !answer.streaming && answer.copyText).toBe(
-      "runner disconnected"
+      "harness disconnected"
     );
   });
 });

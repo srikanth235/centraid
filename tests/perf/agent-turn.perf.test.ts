@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { RUNNER_BACKENDS, runTurn } from "@centraid/agent-runtime";
+import { HARNESSES, runTurn } from "@centraid/agent-runtime";
 import type { TurnConfig, TurnInput } from "@centraid/agent-runtime";
 import {
   qualityRegressionBudget,
@@ -12,10 +12,10 @@ const TURNS = 2_000;
 
 describe("agent-turn.perf", () => {
   test("dispatches runner turns through the registry within budget", async () => {
-    const original = RUNNER_BACKENDS.acp;
-    RUNNER_BACKENDS.acp = {
+    const original = HARNESSES.acp;
+    HARNESSES.acp = {
       ...original,
-      runTurn: async () => ({ adapterKind: "acp", sessionId: "perf" }),
+      runTurn: async () => ({ harnessKind: "acp", sessionId: "perf" }),
     };
     try {
       const input = {
@@ -53,7 +53,7 @@ describe("agent-turn.perf", () => {
       });
       expect(passed).toBe(true);
     } finally {
-      RUNNER_BACKENDS.acp = original;
+      HARNESSES.acp = original;
     }
   });
 });

@@ -7,12 +7,12 @@
  * — it only touches app-engine primitives. The one thing it needs from
  * agent-runtime is the `ctx.agent` dispatch surface: a bounded model turn
  * against the user's real provider. This file builds that surface (capturing
- * the runner kind) and injects it as `openDispatch`, leaving the spine — and
+ * the harness kind) and injects it as `openDispatch`, leaving the spine — and
  * the onFailure cascade — to app-engine.
  *
- * The captured kind is any registered `RunnerKind`: `startLiveDispatch` routes
- * `ctx.agent` through the `RunnerBackend` registry (issue #479). `'codex'`
- * remains the default only because a caller that names no runner gets the
+ * The captured kind is any registered `HarnessKind`: `startLiveDispatch` routes
+ * `ctx.agent` through the `HarnessSpec` registry (issue #479). `'codex'`
+ * remains the default only because a caller that names no harness gets the
  * historical one. Issue #484 removed the `ctx.tool` rail (and the eager
  * mock-LLM server it spawned per fire), so a fire whose handler never calls
  * `ctx.agent` starts zero child processes and zero HTTP servers.
@@ -20,19 +20,19 @@
 
 import { randomUUID } from "node:crypto";
 
-import { isRunnerKind } from "@centraid/app-engine";
+import { isHarnessKind } from "@centraid/app-engine";
 import type {
   AutomationTriggerKind,
   AutomationTriggerOrigin,
   AutomationTurnStreamEvent,
   ProviderEgressConsentController,
-  RunnerHealthController,
-  RunnerPrefs,
+  HarnessHealthController,
+  HarnessPrefs,
   VaultBridge,
 } from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
 
-import type { RunnerKind } from "../types.js";
+import type { HarnessKind } from "../types.js";
 import {
   parseAutomationAgentFailure,
   startLiveDispatch,
@@ -71,31 +71,31 @@ export interface RunAutomationOptions {
     automationRef: string
   ) => VaultBridge | undefined | Promise<VaultBridge | undefined>;
   /** Which CLI to drive. Defaults to codex. */
-  runner?: RunnerKind;
+  harness?: HarnessKind;
   /**
-   * Whether `runner` came from the user's own settings (`prefs`) or from the
+   * Whether `harness` came from the user's own settings (`prefs`) or from the
    * automation's agent-writable manifest (`manifest`). Only the former is
    * consent for unattended egress; a manifest pin must still be a live ladder
    * member or carry an existing grant (#567 D13).
    */
-  runnerSelectionSource?: "prefs" | "manifest";
+  harnessSelectionSource?: "prefs" | "manifest";
   /**
    * Fallback model id/alias for this fire's `ctx.agent` calls, applied only
    * when the automation's manifest doesn't set `requires.model` (that always
    * wins — see `runFire`'s `OpenDispatchArgs.model`). The caller resolves
-   * this from prefs (`model.<runnerKind>.automations` → `model.<runnerKind>.default`)
+   * this from prefs (`model.<harnessKind>.automations` → `model.<harnessKind>.default`)
    * before calling in; `undefined` here means "no prefs fallback either" —
    * the backend sends no `model` field and uses its own built-in default.
    */
   model?: string;
   /** Semantic ACP configuration pins resolved for the automation subsystem. */
   configPins?: Readonly<Record<string, string>>;
-  /** Ordered, pre-consented fallback runners for ctx.agent calls. */
-  runnerLadder?: readonly RunnerKind[];
+  /** Ordered, pre-consented fallback harnesses for ctx.agent calls. */
+  harnessLadder?: readonly HarnessKind[];
   /** Load launch settings/default pins for each failover rung. */
-  runnerPrefsFor?: (runner: RunnerKind) => Promise<RunnerPrefs | undefined>;
-  runnerHealth?: RunnerHealthController;
-  runnerHealthContext?: string;
+  harnessPrefsFor?: (harness: HarnessKind) => Promise<HarnessPrefs | undefined>;
+  harnessHealth?: HarnessHealthController;
+  harnessHealthContext?: string;
   /** Durable conversation×provider grant controller for unattended fires. */
   providerEgressConsent?: ProviderEgressConsentController;
   /** Resolve historical attachment hashes for scheduled handoff hydration. */
@@ -103,8 +103,8 @@ export interface RunAutomationOptions {
   /** Alert/monitor seam when a failed fire advances to the next rung. */
   onFailover?: (event: {
     automationRef: string;
-    from: RunnerKind;
-    to: RunnerKind;
+    from: HarnessKind;
+    to: HarnessKind;
     failureClass: string;
     failedRunId: string;
     nextRunId: string;
@@ -151,7 +151,7 @@ export interface RunAutomationOptions {
   resolveEnrichPolicy?: automation.RunFireOptions["resolveEnrichPolicy"];
   /** Resolve each onFailure target's own automation pin. */
   resolveNestedRuntime?: (automationRef: string) => Promise<{
-    runnerKind?: RunnerKind;
+    harnessKind?: HarnessKind;
     model?: string;
     configPins?: Readonly<Record<string, string>>;
   }>;
@@ -166,9 +166,9 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
   outcome: automation.HandlerOutcome;
   record: automation.RunRecord;
 }> {
-  const primary: RunnerKind = opts.runner ?? "codex";
-  const ladder: RunnerKind[] = [];
-  for (const kind of [primary, ...(opts.runnerLadder ?? [])]) {
+  const primary: HarnessKind = opts.harness ?? "codex";
+  const ladder: HarnessKind[] = [];
+  for (const kind of [primary, ...(opts.harnessLadder ?? [])]) {
     if (!ladder.includes(kind)) ladder.push(kind);
   }
   const baseRunId =
@@ -181,7 +181,7 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
   const condemned: string[] = [];
 
   const runRung = async (index: number): Promise<void> => {
-    const runner = ladder[index]!;
+    const harness = ladder[index]!;
     const isPrimary = index === 0;
     // A known-open breaker is decided BEFORE the handler runs. `ctx.agent`
     // checks it too, but by then the handler's earlier side effects
@@ -189,14 +189,14 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
     // replay them. Scoped only when the caller supplied the same health
     // context the dispatcher uses — otherwise the keys would not match and the
     // dispatcher's check stays the only honest one.
-    if (opts.runnerHealthContext && opts.runnerHealth) {
-      const breaker = opts.runnerHealth.canAttempt(
-        opts.runnerHealthContext,
-        runner
+    if (opts.harnessHealthContext && opts.harnessHealth) {
+      const breaker = opts.harnessHealth.canAttempt(
+        opts.harnessHealthContext,
+        harness
       );
       if (!breaker.allowed) {
         const reason =
-          `${runner} is circuit-broken (${breaker.failureClass ?? "unknown"})` +
+          `${harness} is circuit-broken (${breaker.failureClass ?? "unknown"})` +
           `${breaker.breakerUntil ? ` until ${new Date(breaker.breakerUntil).toISOString()}` : ""}`;
         condemned.push(reason);
         const next = ladder[index + 1];
@@ -211,13 +211,13 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         if (next) {
           opts.onFailover?.({
             automationRef: opts.automationRef,
-            from: runner,
+            from: harness,
             to: next,
             failureClass: breaker.failureClass ?? "unknown",
             failedRunId:
               index === 0
                 ? baseRunId
-                : `${baseRunId}:failover:${index}:${runner}`,
+                : `${baseRunId}:failover:${index}:${harness}`,
             nextRunId: `${baseRunId}:failover:${index + 1}:${next}`,
           });
           return runRung(index + 1);
@@ -225,28 +225,30 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         return;
       }
     }
-    const prefs = await opts.runnerPrefsFor?.(runner);
+    const prefs = await opts.harnessPrefsFor?.(harness);
     const model = isPrimary ? opts.model : undefined;
     const configPins = isPrimary ? opts.configPins : prefs?.configPins;
     const runId =
-      index === 0 ? baseRunId : `${baseRunId}:failover:${index}:${runner}`;
+      index === 0 ? baseRunId : `${baseRunId}:failover:${index}:${harness}`;
     const openDispatch: automation.OpenDispatch = (args) =>
       startLiveDispatch({
         workdir: args.workdir,
         runId: args.runId,
         automationRef: args.automationRef,
         journalDbFile: opts.journalDbFile,
-        runner: isRunnerKind(args.runnerKind) ? args.runnerKind : runner,
+        harness: isHarnessKind(args.harnessKind) ? args.harnessKind : harness,
         // A manifest capability tier, when present, still wins. Provider-
         // specific owner pins are deliberately cleared after the first rung.
         ...((args.model ?? model) ? { model: args.model ?? model } : {}),
         ...((args.configPins ?? configPins)
           ? { configPins: args.configPins ?? configPins }
           : {}),
-        ...(opts.runnerPrefsFor ? { runnerPrefsFor: opts.runnerPrefsFor } : {}),
-        ...(opts.runnerHealth ? { runnerHealth: opts.runnerHealth } : {}),
-        ...(opts.runnerHealthContext
-          ? { runnerHealthContext: opts.runnerHealthContext }
+        ...(opts.harnessPrefsFor
+          ? { harnessPrefsFor: opts.harnessPrefsFor }
+          : {}),
+        ...(opts.harnessHealth ? { harnessHealth: opts.harnessHealth } : {}),
+        ...(opts.harnessHealthContext
+          ? { harnessHealthContext: opts.harnessHealthContext }
           : {}),
         ...(opts.providerEgressConsent
           ? { providerEgressConsent: opts.providerEgressConsent }
@@ -255,10 +257,10 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
           ? { hydrationAttachmentPath: opts.hydrationAttachmentPath }
           : {}),
         // A manifest-pinned primary is not user-authored consent; it may still
-        // egress if the user's live failover ladder contains that runner, which
+        // egress if the user's live failover ladder contains that harness, which
         // is exactly what `recordDerived('ladder', …)` verifies.
         consentSource:
-          isPrimary && opts.runnerSelectionSource !== "manifest"
+          isPrimary && opts.harnessSelectionSource !== "manifest"
             ? "direct"
             : "ladder",
         onLog: args.onLog,
@@ -278,7 +280,7 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
         ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
         ...(opts.onLog ? { onLog: opts.onLog } : {}),
-        runnerKind: runner,
+        harnessKind: harness,
         ...(model ? { model } : {}),
         ...(configPins ? { configPins } : {}),
         allowManifestProviderPins: isPrimary,
@@ -317,15 +319,15 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
     const nextRunId = `${baseRunId}:failover:${index + 1}:${next}`;
     opts.onLog?.(
       "warn",
-      `${runner} failed at automation fire boundary (${failure.failureClass}); ` +
+      `${harness} failed at automation fire boundary (${failure.failureClass}); ` +
         `re-entering ${opts.automationRef} with ${next} as ${nextRunId}`
     );
     failoverNotice =
-      `${runner} failed at the automation fire boundary (${failure.failureClass}). ` +
+      `${harness} failed at the automation fire boundary (${failure.failureClass}). ` +
       `Continuing with ${next}; provider-specific model and effort pins were cleared.`;
     opts.onFailover?.({
       automationRef: opts.automationRef,
-      from: runner,
+      from: harness,
       to: next,
       failureClass: failure.failureClass,
       failedRunId: runId,
@@ -341,7 +343,7 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
     // closes the run stream and records the health error — instead of inventing
     // a run record for work that never started.
     throw new Error(
-      `automation ${opts.automationRef}: no runner available — ${condemned.join("; ")}`
+      `automation ${opts.automationRef}: no harness available — ${condemned.join("; ")}`
     );
   }
   return last;

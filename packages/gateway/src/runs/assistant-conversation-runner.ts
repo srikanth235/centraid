@@ -12,7 +12,7 @@
  *   - prompt: the route assembles the full assistant preamble (register +
  *     answer format + live vault map); the runner passes it through.
  *
- * Provider-agnostic like every runner here: prefs pick codex/claude per
+ * Provider-agnostic like every harness here: prefs pick codex/claude per
  * turn, and the injected `runTurn` drives whichever is configured.
  */
 
@@ -26,10 +26,10 @@ import type {
   ConversationTurnInput,
   Dispatcher,
   ModelSubsystem,
-  RunnerKind,
-  RunnerPrefs,
+  HarnessKind,
+  HarnessPrefs,
   RunTurnFn,
-  RunnerHealthController,
+  HarnessHealthController,
   ProviderEgressConsentController,
   VaultInvokeRunner,
   VaultContentRunner,
@@ -39,14 +39,14 @@ import type {
 import type { VaultRegistry } from "../serve/vault-registry.js";
 
 export interface AssistantConversationRunnerOptions {
-  /** Per-turn runner prefs (kind + provider) — same loader app chat uses.
-   *  Receives `subsystem` so a host that pins a runner per subsystem answers
+  /** Per-turn harness prefs (kind + provider) — same loader app chat uses.
+   *  Receives `subsystem` so a host that pins a harness per subsystem answers
    *  with THIS register's kind (assistant and ask are separate pins). */
   prefsLoader: (
     subsystem?: ModelSubsystem,
-    runnerKind?: RunnerKind
-  ) => Promise<RunnerPrefs | undefined>;
-  /** Which subsystem's runner/model prefs these turns ride. The gateway
+    harnessKind?: HarnessKind
+  ) => Promise<HarnessPrefs | undefined>;
+  /** Which subsystem's harness/model prefs these turns ride. The gateway
    *  builds this factory twice — `'assistant'` for the shell register and
    *  `'ask'` for the per-app copilot; unset → the host's default agent. */
   subsystem?: ModelSubsystem;
@@ -62,12 +62,12 @@ export interface AssistantConversationRunnerOptions {
   buildPrompt?: (input: ConversationTurnInput) => Promise<string> | string;
   /** Turn driver — defaults to `runTurn`; injected in tests. */
   runTurn?: RunTurnFn;
-  runnerLadder?: (
+  harnessLadder?: (
     subsystem: ModelSubsystem | undefined,
-    primary: RunnerKind
-  ) => Promise<readonly RunnerKind[]> | readonly RunnerKind[];
-  runnerHealth?: RunnerHealthController;
-  runnerHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
+    primary: HarnessKind
+  ) => Promise<readonly HarnessKind[]> | readonly HarnessKind[];
+  harnessHealth?: HarnessHealthController;
+  harnessHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
   providerEgressConsent?: ProviderEgressConsentController;
   onFailover?: Parameters<typeof makeConversationRunnerCore>[0]["onFailover"];
 }
@@ -127,10 +127,10 @@ export function makeAssistantConversationRunner(
     ...(opts.subsystem ? { subsystem: opts.subsystem } : {}),
     getDispatcher: opts.getDispatcher,
     runTurn: opts.runTurn ?? runTurn,
-    ...(opts.runnerLadder ? { runnerLadder: opts.runnerLadder } : {}),
-    ...(opts.runnerHealth ? { runnerHealth: opts.runnerHealth } : {}),
-    ...(opts.runnerHealthContext
-      ? { runnerHealthContext: opts.runnerHealthContext }
+    ...(opts.harnessLadder ? { harnessLadder: opts.harnessLadder } : {}),
+    ...(opts.harnessHealth ? { harnessHealth: opts.harnessHealth } : {}),
+    ...(opts.harnessHealthContext
+      ? { harnessHealthContext: opts.harnessHealthContext }
       : {}),
     ...(opts.providerEgressConsent
       ? { providerEgressConsent: opts.providerEgressConsent }

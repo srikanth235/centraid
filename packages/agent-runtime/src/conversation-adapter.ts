@@ -4,7 +4,7 @@
  * The turn runs with cwd = `input.dataDir` (the resolved
  * `appDataDir(entry)`) and the route's app-context preamble passed through
  * verbatim. It wires no vault runners, so the turn carries no data tools —
- * hosts with a vault mount their own runner configs instead. No draft
+ * hosts with a vault mount their own harness configs instead. No draft
  * worktree, no authoring grounding, no post-turn side effects — those are
  * the builder chat's job (`makeUnifiedConversationRunner`).
  *
@@ -25,18 +25,18 @@ import type {
 } from "@centraid/app-engine";
 
 import { runTurn } from "./runtime.js";
-import type { RunnerKind, RunnerPrefs } from "./types.js";
+import type { HarnessKind, HarnessPrefs } from "./types.js";
 
 export interface MakeConversationRunnerOptions {
-  /** Loader for the user's persisted runner prefs. Called per turn so
+  /** Loader for the user's persisted harness prefs. Called per turn so
    *  the adapter picks up settings changes without a runtime restart.
    *  Receives `subsystem` when one is configured, so a host that scopes
-   *  runner selection per subsystem can answer with the right kind. */
+   *  harness selection per subsystem can answer with the right kind. */
   prefsLoader: (
     subsystem?: ModelSubsystem,
-    runnerKind?: RunnerKind
-  ) => Promise<RunnerPrefs | undefined>;
-  /** Which subsystem's runner/model prefs this adapter rides. Unset →
+    harnessKind?: HarnessKind
+  ) => Promise<HarnessPrefs | undefined>;
+  /** Which subsystem's harness/model prefs this adapter rides. Unset →
    *  the host's default agent (the pre-existing behavior). */
   subsystem?: ModelSubsystem;
   /**

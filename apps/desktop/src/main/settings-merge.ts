@@ -7,7 +7,7 @@
  *   - a value in the patch       → set it
  *
  * Chat-model selection no longer lives here — it moved to the gateway prefs
- * store (`model.<runnerKind>.<slot>` keys via `GET/PUT /_centraid-user/prefs`,
+ * store (`model.<harnessKind>.<slot>` keys via `GET/PUT /_centraid-user/prefs`,
  * see `settingsProvidersData.ts`), so every client sharing a gateway sees the
  * same picks instead of each desktop install keeping its own.
  */

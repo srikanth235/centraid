@@ -1502,11 +1502,11 @@ export function wireThemeToggle(
       });
     });
 
-    // ---------- Inline model picker (subsystem `ask`, active runner) ----------
+    // ---------- Inline model picker (subsystem `ask`, active harness) ----------
     // A quiet text control in the composer's controls row — shows the
     // current override's display name, or "Default" when the subsystem has
     // no override. Backed by `GET`/`PUT <app>/_turn/model` (the SAME
-    // `model.<runnerKind>.ask` prefs key the gateway resolves at turn
+    // `model.<harnessKind>.ask` prefs key the gateway resolves at turn
     // time — see `resolveSubsystemModel`), so the picker and the actual
     // turn always agree. No caching beyond the current panel session: each
     // `open()` re-fetches, since the pref can change elsewhere (desktop
@@ -2405,7 +2405,7 @@ export function wireThemeToggle(
             finalizeRich(ev.text);
             return;
           case "notice":
-            // Non-fatal runner notice (issue #420), e.g. "can't read PDFs".
+            // Non-fatal harness notice (issue #420), e.g. "can't read PDFs".
             typing.done();
             api.ai(esc(ev.message || "Notice"));
             return;

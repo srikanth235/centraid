@@ -1,10 +1,10 @@
-// governance: allow-repo-hygiene file-size-limit (#567) the provider settings screen coordinates one atomic runner/preflight/capability/ladder state surface whose optimistic rollback must remain centralized
+// governance: allow-repo-hygiene file-size-limit (#567) the provider settings screen coordinates one atomic harness/preflight/capability/ladder state surface whose optimistic rollback must remain centralized
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, JSX } from "react";
 
 import type {
   AgentCardDTO,
-  AgentRunnerKind,
+  AgentHarnessKind,
   AgentsStatusDTO,
   ModelSubsystem,
   SettingsProvidersBridgeProps,
@@ -44,7 +44,7 @@ function schedulePoll(
   timerRef.current = setTimeout(() => {
     void loadStatus().then((s) => {
       // Poll only fills in loading model lists — keep the user's
-      // optimistic runner/model selection, don't reapply from the server.
+      // optimistic harness/model selection, don't reapply from the server.
       onStatus(s);
       if (s.anyLoading && Date.now() < deadlineRef.current)
         schedulePoll(timerRef, deadlineRef, loadStatus, onStatus);
@@ -62,7 +62,7 @@ function clearTimers(
 
 /**
  * The routing lanes. Each resolves independently to an (agent, model) pair —
- * a lane left unset inherits the default lane. Before per-subsystem runners
+ * a lane left unset inherits the default lane. Before per-subsystem harnesses
  * these were model-only overrides hanging off one globally-active agent.
  */
 const ALL_SUBSYSTEM_ROWS: ReadonlyArray<{
@@ -97,7 +97,7 @@ const ALL_SUBSYSTEM_ROWS: ReadonlyArray<{
 const ROUTING_ROWS = ALL_SUBSYSTEM_ROWS.filter((row) => row.key !== "builder");
 
 /**
- * One routing lane. `runner === ''` means inherit the default lane, and the
+ * One routing lane. `harness === ''` means inherit the default lane, and the
  * inherit option names what it resolves to — "Use default model" alone told you
  * nothing about what would actually run, and with agents inheriting too that
  * ambiguity would have doubled.
@@ -106,7 +106,7 @@ function RouteRow({
   label,
   hint,
   cards,
-  runner,
+  harness,
   model,
   effort,
   resolvedCard,
@@ -114,7 +114,7 @@ function RouteRow({
   resolvedAgentDefaultEffort,
   defaultCard,
   ladder,
-  onSetRunner,
+  onSetHarness,
   onSetModel,
   onSetEffort,
   onSetLadder,
@@ -123,7 +123,7 @@ function RouteRow({
   label: string;
   hint: string;
   cards: AgentCardDTO[];
-  runner: AgentRunnerKind | "";
+  harness: AgentHarnessKind | "";
   model: string;
   effort: string;
   resolvedCard: AgentCardDTO | undefined;
@@ -131,11 +131,11 @@ function RouteRow({
   resolvedAgentDefault: string;
   resolvedAgentDefaultEffort: string;
   defaultCard: AgentCardDTO | undefined;
-  ladder: AgentRunnerKind[];
-  onSetRunner: (v: string) => void;
+  ladder: AgentHarnessKind[];
+  onSetHarness: (v: string) => void;
   onSetModel: (v: string) => void;
   onSetEffort: (v: string) => void;
-  onSetLadder: (v: AgentRunnerKind[]) => void;
+  onSetLadder: (v: AgentHarnessKind[]) => void;
   unattended: boolean;
 }): JSX.Element {
   const [fallbackPick, setFallbackPick] = useState("");
@@ -169,16 +169,16 @@ function RouteRow({
       </div>
       <div className={styles.routeControls}>
         <Select
-          value={runner}
-          onChange={onSetRunner}
-          inherited={!runner}
+          value={harness}
+          onChange={onSetHarness}
+          inherited={!harness}
           ariaLabel={`Agent for ${label}`}
         >
           <option value="">
             {defaultCard ? `Use default · ${defaultCard.title}` : "Use default"}
           </option>
-          {runner && !cards.some((card) => card.kind === runner) ? (
-            <option value={runner}>{runner} · existing hidden pin</option>
+          {harness && !cards.some((card) => card.kind === harness) ? (
+            <option value={harness}>{harness} · existing hidden pin</option>
           ) : null}
           {cards.map((c) => (
             <option key={c.kind} value={c.kind} disabled={!c.connected}>
@@ -276,7 +276,7 @@ function RouteRow({
             value={fallbackPick}
             disabled={availableFallbacks.length === 0}
             onChange={(event) => {
-              const kind = event.target.value as AgentRunnerKind;
+              const kind = event.target.value as AgentHarnessKind;
               if (!kind) return;
               setFallbackPick(kind);
               setFallbackFeedback(null);
@@ -327,7 +327,7 @@ function RouteRow({
  * which lanes land on it.
  *
  * The page previously led with an exclusive Codex/Claude-Code radio, because
- * exactly one agent could be active. Per-subsystem runners retire that
+ * exactly one agent could be active. Per-subsystem harnesses retire that
  * premise: there is no "active" agent any more, only a *default* one that
  * unset lanes fall back to — so it became the first lane of the same table
  * rather than a separate control above it.
@@ -335,16 +335,16 @@ function RouteRow({
 export default function SettingsProvidersScreen({
   loadStatus,
   refreshModels,
-  activateRunner,
+  activateHarness,
   setAgentModel,
   setAgentConfigPin,
   setSubsystemModel,
   setSubsystemConfigPin,
-  setSubsystemRunner,
-  setSubsystemRunnerLadder,
+  setSubsystemHarness,
+  setSubsystemHarnessLadder,
 }: SettingsProvidersBridgeProps): JSX.Element {
   const [status, setStatus] = useState<AgentsStatusDTO | null>(null);
-  const [defaultKind, setDefaultKind] = useState<AgentRunnerKind>("codex");
+  const [defaultKind, setDefaultKind] = useState<AgentHarnessKind>("codex");
   const [savedByKind, setSavedByKind] = useState<Record<string, string>>({});
   const [subsystemByKind, setSubsystemByKind] = useState<
     Record<string, Partial<Record<ModelSubsystem, string>>>
@@ -355,11 +355,11 @@ export default function SettingsProvidersScreen({
   const [subsystemConfigByKind, setSubsystemConfigByKind] = useState<
     Record<string, Partial<Record<ModelSubsystem, Record<string, string>>>>
   >({});
-  const [runnerBySubsystem, setRunnerBySubsystem] = useState<
-    Partial<Record<ModelSubsystem, AgentRunnerKind>>
+  const [harnessBySubsystem, setHarnessBySubsystem] = useState<
+    Partial<Record<ModelSubsystem, AgentHarnessKind>>
   >({});
-  const [runnerLadders, setRunnerLadders] = useState<
-    Partial<Record<ModelSubsystem, AgentRunnerKind[]>>
+  const [harnessLadders, setHarnessLadders] = useState<
+    Partial<Record<ModelSubsystem, AgentHarnessKind[]>>
   >({});
   const [busyModels, setBusyModels] = useState(false);
   const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
@@ -374,8 +374,8 @@ export default function SettingsProvidersScreen({
     setSubsystemByKind(s.subsystemModelByKind);
     setDefaultConfigByKind(s.defaultConfigPinsByKind);
     setSubsystemConfigByKind(s.subsystemConfigPinsByKind);
-    setRunnerBySubsystem(s.subsystemRunnerByKey);
-    setRunnerLadders(s.subsystemRunnerLadders);
+    setHarnessBySubsystem(s.subsystemHarnessByKey);
+    setHarnessLadders(s.subsystemHarnessLadders);
   }, []);
 
   const poll = useCallback(() => {
@@ -408,13 +408,13 @@ export default function SettingsProvidersScreen({
   const onSetDefault = (kind: string): void => {
     if (!kind || kind === defaultKind) return;
     const prev = defaultKind;
-    setDefaultKind(kind as AgentRunnerKind); // optimistic
-    void activateRunner(kind as AgentRunnerKind).then((ok) => {
+    setDefaultKind(kind as AgentHarnessKind); // optimistic
+    void activateHarness(kind as AgentHarnessKind).then((ok) => {
       if (!ok) setDefaultKind(prev);
     });
   };
 
-  const onSetModel = (kind: AgentRunnerKind, v: string): void => {
+  const onSetModel = (kind: AgentHarnessKind, v: string): void => {
     setSavedByKind((m) => {
       const next = { ...m };
       if (v) next[kind] = v;
@@ -425,7 +425,7 @@ export default function SettingsProvidersScreen({
   };
 
   const onSetSubsystemModel = (
-    kind: AgentRunnerKind,
+    kind: AgentHarnessKind,
     subsystem: ModelSubsystem,
     v: string
   ): void => {
@@ -438,35 +438,40 @@ export default function SettingsProvidersScreen({
     setSubsystemModel(kind, subsystem, v);
   };
 
-  const onSetSubsystemRunner = (subsystem: ModelSubsystem, v: string): void => {
-    const previous = runnerBySubsystem[subsystem];
-    setRunnerBySubsystem((m) => {
+  const onSetSubsystemHarness = (
+    subsystem: ModelSubsystem,
+    v: string
+  ): void => {
+    const previous = harnessBySubsystem[subsystem];
+    setHarnessBySubsystem((m) => {
       const next = { ...m };
-      if (v) next[subsystem] = v as AgentRunnerKind;
+      if (v) next[subsystem] = v as AgentHarnessKind;
       else delete next[subsystem];
       return next;
     });
-    void setSubsystemRunner(subsystem, v as AgentRunnerKind | "").then((ok) => {
-      if (ok) return;
-      setRunnerBySubsystem((current) => {
-        const next = { ...current };
-        if (previous) next[subsystem] = previous;
-        else delete next[subsystem];
-        return next;
-      });
-    });
+    void setSubsystemHarness(subsystem, v as AgentHarnessKind | "").then(
+      (ok) => {
+        if (ok) return;
+        setHarnessBySubsystem((current) => {
+          const next = { ...current };
+          if (previous) next[subsystem] = previous;
+          else delete next[subsystem];
+          return next;
+        });
+      }
+    );
   };
 
-  const onSetSubsystemRunnerLadder = (
+  const onSetSubsystemHarnessLadder = (
     subsystem: ModelSubsystem,
-    kinds: AgentRunnerKind[]
+    kinds: AgentHarnessKind[]
   ): void => {
-    setRunnerLadders((current) => ({ ...current, [subsystem]: kinds }));
-    setSubsystemRunnerLadder(subsystem, kinds);
+    setHarnessLadders((current) => ({ ...current, [subsystem]: kinds }));
+    setSubsystemHarnessLadder(subsystem, kinds);
   };
 
   const onSetAgentConfig = (
-    kind: AgentRunnerKind,
+    kind: AgentHarnessKind,
     category: string,
     value: string
   ): void => {
@@ -480,7 +485,7 @@ export default function SettingsProvidersScreen({
   };
 
   const onSetSubsystemConfig = (
-    kind: AgentRunnerKind,
+    kind: AgentHarnessKind,
     subsystem: ModelSubsystem,
     category: string,
     value: string
@@ -501,13 +506,13 @@ export default function SettingsProvidersScreen({
   };
 
   const cards = status?.cards ?? [];
-  const cardFor = (kind: AgentRunnerKind): AgentCardDTO | undefined =>
+  const cardFor = (kind: AgentHarnessKind): AgentCardDTO | undefined =>
     cards.find((c) => c.kind === kind);
   const defaultCard = cardFor(defaultKind);
   /** A lane's agent: its own override, else the default lane's. */
-  const resolvedKind = (s: ModelSubsystem): AgentRunnerKind =>
-    runnerBySubsystem[s] ?? defaultKind;
-  const usedBy = (kind: AgentRunnerKind): string[] =>
+  const resolvedKind = (s: ModelSubsystem): AgentHarnessKind =>
+    harnessBySubsystem[s] ?? defaultKind;
+  const usedBy = (kind: AgentHarnessKind): string[] =>
     ALL_SUBSYSTEM_ROWS.filter((r) => resolvedKind(r.key) === kind).map(
       (r) => r.label
     );
@@ -571,7 +576,7 @@ export default function SettingsProvidersScreen({
                   label={row.label}
                   hint={row.hint}
                   cards={cards}
-                  runner={runnerBySubsystem[row.key] ?? ""}
+                  harness={harnessBySubsystem[row.key] ?? ""}
                   model={subsystemByKind[kind]?.[row.key] ?? ""}
                   effort={
                     subsystemConfigByKind[kind]?.[row.key]?.thought_level ?? ""
@@ -586,13 +591,13 @@ export default function SettingsProvidersScreen({
                     ""
                   }
                   defaultCard={defaultCard}
-                  ladder={runnerLadders[row.key] ?? []}
-                  onSetRunner={(v) => onSetSubsystemRunner(row.key, v)}
+                  ladder={harnessLadders[row.key] ?? []}
+                  onSetHarness={(v) => onSetSubsystemHarness(row.key, v)}
                   onSetModel={(v) => onSetSubsystemModel(kind, row.key, v)}
                   onSetEffort={(v) =>
                     onSetSubsystemConfig(kind, row.key, "thought_level", v)
                   }
-                  onSetLadder={(v) => onSetSubsystemRunnerLadder(row.key, v)}
+                  onSetLadder={(v) => onSetSubsystemHarnessLadder(row.key, v)}
                   unattended={row.key === "automations"}
                 />
               );

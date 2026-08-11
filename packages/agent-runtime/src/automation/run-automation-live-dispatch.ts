@@ -1,14 +1,14 @@
 /*
- * Live `ctx.agent` dispatch for the local automation runner.
+ * Live `ctx.agent` dispatch for the local automation harness.
  *
  * Split out of `run-automation.ts` so that file can stay focused on the
  * per-fire lifecycle (manifest load, audit store, onFailure cascade). This
  * module owns the one billed rail — `ctx.agent`, a bounded one-shot turn
  * against the user's real provider.
  *
- * Issue #479 — `ctx.agent` honours every registered runner kind through ONE
- * path: `getRunnerBackend(kind).runTurn`, the same seam chat uses. Pinning
- * `runner.automations` to any kind actually drives that agent.
+ * Issue #479 — `ctx.agent` honours every registered harness kind through ONE
+ * path: `getHarness(kind).runTurn`, the same seam chat uses. Pinning
+ * `harness.automations` to any kind actually drives that agent.
  *
  * Issue #484 — the `ctx.tool` rail was removed. It used to dispatch tool
  * batches to a persistent mock-LLM session that puppeted the claude/codex
@@ -29,12 +29,12 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import type {
-  AgentFailureClass,
+  HarnessFailureClass,
   ProviderConsentSource,
   ProviderEgressConsentController,
-  RunnerHealthController,
-  RunnerKind,
-  RunnerPrefs,
+  HarnessHealthController,
+  HarnessKind,
+  HarnessPrefs,
   TurnStreamEvent,
 } from "@centraid/app-engine";
 import {
@@ -46,7 +46,7 @@ import {
 import type * as TypeImport_4y0tle from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
 
-import { getRunnerBackend } from "../registry.js";
+import { getHarness } from "../registry.js";
 
 export interface LiveDispatchOptions {
   /** The automation app directory — also the agent's cwd. */
@@ -54,9 +54,9 @@ export interface LiveDispatchOptions {
   runId: string;
   /** Stable automation conversation identity (`<appId>/<automationId>`). */
   automationRef: string;
-  /** Canonical per-vault ledger holding runner bindings and hydration watermarks. */
+  /** Canonical per-vault ledger holding harness bindings and hydration watermarks. */
   journalDbFile: string;
-  runner: RunnerKind;
+  harness: HarnessKind;
   /**
    * Model id/alias for `ctx.agent` calls (manifest `requires.model`, or the
    * caller's prefs-resolved fallback — see `RunAutomationOptions.model`).
@@ -65,17 +65,17 @@ export interface LiveDispatchOptions {
   model?: string;
   /** Semantic ACP configuration pins, keyed by capability category. */
   configPins?: Readonly<Record<string, string>>;
-  /** Load launch settings/default config for this fire's selected runner. */
-  runnerPrefsFor?: (runner: RunnerKind) => Promise<RunnerPrefs | undefined>;
-  runnerHealth?: RunnerHealthController;
-  runnerHealthContext?: string;
+  /** Load launch settings/default config for this fire's selected harness. */
+  harnessPrefsFor?: (harness: HarnessKind) => Promise<HarnessPrefs | undefined>;
+  harnessHealth?: HarnessHealthController;
+  harnessHealthContext?: string;
   providerEgressConsent?: ProviderEgressConsentController;
   /**
-   * How the user authored this rung's runner: `direct` = their automations
+   * How the user authored this rung's harness: `direct` = their automations
    * primary, `ladder` = current failover membership (validated against the
    * live ladder before anything egresses). Both are user-authored consent
-   * (#567 D13). Omit when the runner came from a source the user did not
-   * author — a manifest `requires.runner` pin naming a provider absent from
+   * (#567 D13). Omit when the harness came from a source the user did not
+   * author — a manifest `requires.harness` pin naming a provider absent from
    * their settings — so the fire is denied unless a real grant already exists.
    */
   consentSource?: ProviderConsentSource;
@@ -100,12 +100,12 @@ export interface LiveDispatch {
 const AGENT_FAILURE_PREFIX = "centraid-agent-failure:";
 
 export interface AutomationAgentFailure {
-  runner: RunnerKind;
-  failureClass: AgentFailureClass;
+  harness: HarnessKind;
+  failureClass: HarnessFailureClass;
   message: string;
 }
 
-/** Preserve typed runner failure metadata through the handler worker boundary. */
+/** Preserve typed harness failure metadata through the handler worker boundary. */
 export function parseAutomationAgentFailure(
   error: string | undefined
 ): AutomationAgentFailure | undefined {
@@ -122,12 +122,12 @@ export function parseAutomationAgentFailure(
       .split(/\r?\n/u, 1)[0]
       ?.trim();
     const parsed = JSON.parse(payload ?? "") as {
-      runner?: unknown;
+      harness?: unknown;
       failureClass?: unknown;
       message?: unknown;
     };
     if (
-      typeof parsed.runner !== "string" ||
+      typeof parsed.harness !== "string" ||
       typeof parsed.failureClass !== "string" ||
       typeof parsed.message !== "string"
     ) {
@@ -144,8 +144,8 @@ function agentFailureError(failure: AutomationAgentFailure): Error {
 }
 
 /**
- * Stand up the live dispatch surface for the CLI runner. `ctx.agent` routes to
- * the user's REAL provider through the runner registry; everything else on the
+ * Stand up the live dispatch surface for the CLI harness. `ctx.agent` routes to
+ * the user's REAL provider through the harness registry; everything else on the
  * `ctx.*` surface is deterministic and serviced parent-side, so this allocates
  * nothing eagerly. The scratch dir is created lazily, only when a `ctx.agent`
  * call carries vault derivatives to stage.
@@ -170,7 +170,7 @@ export async function startLiveDispatch(
     60_000
   );
   lockLeaseHeartbeat.unref?.();
-  let latestAdapter:
+  let latestHarness:
     | {
         kind: string;
         sessionId?: string;
@@ -178,7 +178,7 @@ export async function startLiveDispatch(
         hydrated?: boolean;
       }
     | undefined;
-  let observedAdapter:
+  let observedHarness:
     | {
         kind: string;
         sessionId?: string;
@@ -193,9 +193,9 @@ export async function startLiveDispatch(
     scratchReady = true;
   };
 
-  // Vault-derivative attachments (issue #299): the runner already resolved
+  // Vault-derivative attachments (issue #299): the harness already resolved
   // and receipted them; here they become scratch files the agent's native
-  // multimodal Read path picks up — one mechanism for every runner, no
+  // multimodal Read path picks up — one mechanism for every harness, no
   // per-backend wire format. The scratch dir materializes only on first use.
   const stageAttachments = async (
     call: automation.AgentCall
@@ -222,7 +222,7 @@ export async function startLiveDispatch(
     return { prompt: call.prompt, attachments };
   };
 
-  // ctx.agent routes to the user's REAL provider through the SAME runner
+  // ctx.agent routes to the user's REAL provider through the SAME harness
   // registry chat uses — one integration path for every kind (issue #479).
   // `runTurn` normalizes each agent's stream into TurnStreamEvents, so this
   // reads `final` / `error` and coerces the answer with no per-backend wire
@@ -230,7 +230,7 @@ export async function startLiveDispatch(
   //
   // Two deliberate limits. (1) ACP has no `--output-schema` equivalent, so
   // `call.json` is enforced by `coerceAgentAnswer` alone. (2) A fire carries
-  // only the runner KIND (the gateway drops binPath / extraArgs for every
+  // only the harness KIND (the gateway drops binPath / extraArgs for every
   // kind), so the backend resolves its default binary off PATH. The custom
   // `acp` kind has no default binary and therefore surfaces a clear `error`
   // event, raised below.
@@ -238,58 +238,58 @@ export async function startLiveDispatch(
     call,
     ctx
   ): Promise<unknown> => {
-    const runner = opts.runner;
+    const harness = opts.harness;
     // Unattended egress is never prompted (#567 D5) — it is authorized at
     // authoring time. So derive the grant honestly rather than minting one:
     // `recordDerived` refuses to resurrect a revoked provider and refuses a
     // ladder source the user's live settings do not contain. A controller
     // without the derived-consent seam denies rather than assumes.
     const consent = opts.providerEgressConsent;
-    if (consent && !consent.has(opts.automationRef, runner, "automations")) {
+    if (consent && !consent.has(opts.automationRef, harness, "automations")) {
       const derived =
         opts.consentSource === undefined
           ? false
           : (consent.recordDerived?.(
               opts.automationRef,
-              runner,
+              harness,
               opts.consentSource,
               "automations"
             ) ?? false);
       if (!derived) {
         throw agentFailureError({
-          runner,
+          harness,
           failureClass: "unknown",
           message:
-            `Unattended egress to ${runner} is not consented for ${opts.automationRef}. ` +
-            `Add ${runner} to the automations agent or its failover ladder in Settings, ` +
+            `Unattended egress to ${harness} is not consented for ${opts.automationRef}. ` +
+            `Add ${harness} to the automations agent or its failover ladder in Settings, ` +
             `or run this automation interactively and approve the provider.`,
         });
       }
     }
     const staged = await stageAttachments(call);
-    const scope = opts.runnerHealthContext ?? opts.workdir;
-    const breaker = opts.runnerHealth?.canAttempt(scope, runner);
+    const scope = opts.harnessHealthContext ?? opts.workdir;
+    const breaker = opts.harnessHealth?.canAttempt(scope, harness);
     if (breaker && !breaker.allowed) {
       throw agentFailureError({
-        runner,
+        harness,
         failureClass: breaker.failureClass ?? "unknown",
-        message: `Runner breaker is open${breaker.breakerUntil ? ` until ${new Date(breaker.breakerUntil).toISOString()}` : ""}.`,
+        message: `Harness breaker is open${breaker.breakerUntil ? ` until ${new Date(breaker.breakerUntil).toISOString()}` : ""}.`,
       });
     }
-    const loaded = (await opts.runnerPrefsFor?.(runner)) ?? { kind: runner };
-    const prefs: RunnerPrefs =
-      loaded.kind === runner ? loaded : { kind: runner };
+    const loaded = (await opts.harnessPrefsFor?.(harness)) ?? { kind: harness };
+    const prefs: HarnessPrefs =
+      loaded.kind === harness ? loaded : { kind: harness };
     let finalText = "";
     let failure: Extract<TurnStreamEvent, { type: "error" }> | undefined;
     const binding =
-      latestAdapter?.sessionId === undefined
-        ? runsStore.getHarnessBinding(opts.automationRef, runner)
+      latestHarness?.sessionId === undefined
+        ? runsStore.getHarnessBinding(opts.automationRef, harness)
         : undefined;
-    const resumeSessionId = latestAdapter?.sessionId ?? binding?.acpSessionId;
-    const resumeUsage = latestAdapter?.usageSnapshot ?? binding?.usageSnapshot;
+    const resumeSessionId = latestHarness?.sessionId ?? binding?.acpSessionId;
+    const resumeUsage = latestHarness?.usageSnapshot ?? binding?.usageSnapshot;
     const completedTurns = runsStore.listTurns(opts.automationRef);
     const hydrationMessages =
-      latestAdapter === undefined
+      latestHarness === undefined
         ? hydrationMessagesFromLedger(
             completedTurns,
             (turnId) => runsStore.listItems(turnId),
@@ -298,7 +298,7 @@ export async function startLiveDispatch(
           )
         : [];
     const recoveryMessages =
-      latestAdapter === undefined && binding
+      latestHarness === undefined && binding
         ? hydrationMessagesFromLedger(
             completedTurns,
             (turnId) => runsStore.listItems(turnId),
@@ -320,14 +320,14 @@ export async function startLiveDispatch(
     let result:
       | {
           sessionId?: string;
-          adapterKind: string;
+          harnessKind: string;
           usageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
           hydrated?: boolean;
           hydrationKind?: "handoff" | "recovery";
         }
       | undefined;
     try {
-      result = await getRunnerBackend(runner).runTurn(
+      result = await getHarness(harness).runTurn(
         {
           conversationId: opts.automationRef,
           cwd: opts.workdir,
@@ -392,8 +392,8 @@ export async function startLiveDispatch(
       };
     }
     if (result) {
-      observedAdapter = {
-        kind: result.adapterKind,
+      observedHarness = {
+        kind: result.harnessKind,
         ...(result.sessionId ? { sessionId: result.sessionId } : {}),
         ...(result.usageSnapshot
           ? { usageSnapshot: result.usageSnapshot }
@@ -409,19 +409,19 @@ export async function startLiveDispatch(
     }
     if (!failure) {
       if (result) {
-        latestAdapter = observedAdapter;
+        latestHarness = observedHarness;
       }
-      opts.runnerHealth?.reportOk(scope, runner);
+      opts.harnessHealth?.reportOk(scope, harness);
       return automation.coerceAgentAnswer(finalText, call.json);
     }
     const typedFailure: AutomationAgentFailure = {
-      runner,
+      harness,
       failureClass: failure.failureClass ?? "unknown",
       message: failure.message,
     };
-    opts.runnerHealth?.reportFailure(
+    opts.harnessHealth?.reportFailure(
       scope,
-      runner,
+      harness,
       typedFailure.failureClass,
       typedFailure.message
     );
@@ -435,8 +435,8 @@ export async function startLiveDispatch(
       if (hydrationTokens > 0) {
         store.setTurnHydrationTokens(turnId, hydrationTokens);
       }
-      if (ok) store.noteTurn(conversationId, "", latestAdapter);
-      else store.noteFailedTurn(conversationId, "", observedAdapter);
+      if (ok) store.noteTurn(conversationId, "", latestHarness);
+      else store.noteFailedTurn(conversationId, "", observedHarness);
     },
     async close(): Promise<void> {
       if (closed) return;

@@ -1,5 +1,5 @@
 /*
- * Launch planning: what process to spawn for a runner kind, and with what
+ * Launch planning: what process to spawn for a harness kind, and with what
  * environment.
  *
  * Native-ACP kinds spawn their own CLI with the ACP flag. Adapter-backed kinds
@@ -43,7 +43,7 @@ export function planLaunch(
     const bin = config.binPath ?? config.defaultBin;
     if (!bin) {
       throw new Error(
-        "No binary configured for the ACP runner — set its path in Settings → Agents."
+        "No binary configured for the ACP harness — set its path in Settings → Agents."
       );
     }
     const nativeEnv = agentSpawnEnv({

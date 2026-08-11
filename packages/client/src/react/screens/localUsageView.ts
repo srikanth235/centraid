@@ -71,7 +71,7 @@ export const COMPONENT_PRESENTATION: Readonly<
     blurb: "Snapshot keyring, engine state, and bytes waiting to go offsite.",
   },
   cache: {
-    label: "Runner cache",
+    label: "Harness cache",
     color: "var(--c-slate)",
     blurb: "Coding-agent scratch space. Derived — safe to delete at any time.",
   },

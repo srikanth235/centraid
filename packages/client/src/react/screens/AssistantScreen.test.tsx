@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit (#567) one component-level suite shares the Assistant bridge fixture across runner, capability, workspace, attachment, stop, and transcript behavior
+// governance: allow-repo-hygiene file-size-limit (#567) one component-level suite shares the Assistant bridge fixture across harness, capability, workspace, attachment, stop, and transcript behavior
 // (Provider-egress consent lives on the ROUTE, not this screen — see AssistantRoute.test.tsx.)
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -27,7 +27,7 @@ function modelPickerDTO(
   over: Partial<AsstModelPickerDTO> = {}
 ): AsstModelPickerDTO {
   return {
-    runners: [
+    harnesses: [
       {
         kind: "codex",
         title: "Codex",
@@ -36,7 +36,7 @@ function modelPickerDTO(
         hint: "ready",
       },
     ],
-    selectedRunnerKind: "codex",
+    selectedHarnessKind: "codex",
     workspaceKinds: ["vault-data"],
     connected: true,
     models: [
@@ -83,8 +83,8 @@ function makeProps(
       .mockResolvedValue(modelPickerDTO()),
     onSetModel: vi.fn<AssistantBridgeProps["onSetModel"]>(),
     onSetEffort: vi.fn<AssistantBridgeProps["onSetEffort"]>(),
-    onSetRunner: vi
-      .fn<AssistantBridgeProps["onSetRunner"]>()
+    onSetHarness: vi
+      .fn<AssistantBridgeProps["onSetHarness"]>()
       .mockResolvedValue(modelPickerDTO()),
     ...over,
   };
@@ -738,7 +738,7 @@ describe("AssistantScreen suite", () => {
         ).toContain("Opus 5");
       });
 
-      it('"Use default" clears the override back to the runner default', async () => {
+      it('"Use default" clears the override back to the harness default', async () => {
         const props = makeProps({
           loadModelPicker: vi
             .fn<AssistantBridgeProps["loadModelPicker"]>()
@@ -792,13 +792,13 @@ describe("AssistantScreen suite", () => {
       expect(props.onSetEffort).toHaveBeenCalledWith("high");
     });
 
-    it("re-enables the pickers when a runner switch rejects", async () => {
+    it("re-enables the pickers when a harness switch rejects", async () => {
       const props = makeProps({
         loadModelPicker: vi
           .fn<AssistantBridgeProps["loadModelPicker"]>()
           .mockResolvedValue(
             modelPickerDTO({
-              runners: [
+              harnesses: [
                 {
                   kind: "codex",
                   title: "Codex",
@@ -816,28 +816,28 @@ describe("AssistantScreen suite", () => {
               ],
             })
           ),
-        onSetRunner: vi
-          .fn<AssistantBridgeProps["onSetRunner"]>()
+        onSetHarness: vi
+          .fn<AssistantBridgeProps["onSetHarness"]>()
           .mockRejectedValue(new Error("preflight failed")),
       });
       const el = await mount(props);
       push(emptySnap());
       await flush();
-      const runner = el.querySelector(
-        'select[aria-label="Assistant runner"]'
+      const harness = el.querySelector(
+        'select[aria-label="Assistant harness"]'
       ) as HTMLSelectElement;
-      expect(runner.disabled).toBe(false);
+      expect(harness.disabled).toBe(false);
       await act(async () => {
-        runner.value = "copilot";
-        runner.dispatchEvent(new Event("change", { bubbles: true }));
+        harness.value = "copilot";
+        harness.dispatchEvent(new Event("change", { bubbles: true }));
         await Promise.resolve();
       });
       await flush();
       // A rejected switch used to leave every picker disabled for good.
-      expect(props.onSetRunner).toHaveBeenCalledWith("copilot");
+      expect(props.onSetHarness).toHaveBeenCalledWith("copilot");
       expect(
         el.querySelector<HTMLSelectElement>(
-          'select[aria-label="Assistant runner"]'
+          'select[aria-label="Assistant harness"]'
         )?.disabled
       ).toBe(false);
     });
@@ -863,7 +863,7 @@ describe("AssistantScreen suite", () => {
       const first = deferred<AsstModelPickerDTO>();
       const codex = modelPickerDTO();
       const claude = modelPickerDTO({
-        runners: [
+        harnesses: [
           {
             kind: "codex",
             title: "Codex",
@@ -879,7 +879,7 @@ describe("AssistantScreen suite", () => {
             hint: "ready",
           },
         ],
-        selectedRunnerKind: "claude-code",
+        selectedHarnessKind: "claude-code",
         defaultModelName: "Claude default",
       });
       const props = makeProps({
@@ -895,7 +895,7 @@ describe("AssistantScreen suite", () => {
       expect(
         (
           el.querySelector(
-            'select[aria-label="Assistant runner"]'
+            'select[aria-label="Assistant harness"]'
           ) as HTMLSelectElement
         ).value
       ).toBe("claude-code");
@@ -906,17 +906,17 @@ describe("AssistantScreen suite", () => {
       expect(
         (
           el.querySelector(
-            'select[aria-label="Assistant runner"]'
+            'select[aria-label="Assistant harness"]'
           ) as HTMLSelectElement
         ).value
       ).toBe("claude-code");
     });
 
-    it("keeps the latest overlapping runner switch", async () => {
+    it("keeps the latest overlapping harness switch", async () => {
       const claudeResult = deferred<AsstModelPickerDTO>();
       const copilotResult = deferred<AsstModelPickerDTO>();
       const initial = modelPickerDTO({
-        runners: [
+        harnesses: [
           {
             kind: "codex",
             title: "Codex",
@@ -944,47 +944,47 @@ describe("AssistantScreen suite", () => {
         loadModelPicker: vi
           .fn<AssistantBridgeProps["loadModelPicker"]>()
           .mockResolvedValue(initial),
-        onSetRunner: vi
-          .fn<AssistantBridgeProps["onSetRunner"]>()
+        onSetHarness: vi
+          .fn<AssistantBridgeProps["onSetHarness"]>()
           .mockReturnValueOnce(claudeResult.promise)
           .mockReturnValueOnce(copilotResult.promise),
       });
       const el = await mount(props);
       push(emptySnap());
       await flush();
-      const runner = el.querySelector(
-        'select[aria-label="Assistant runner"]'
+      const harness = el.querySelector(
+        'select[aria-label="Assistant harness"]'
       ) as HTMLSelectElement;
 
       await act(async () => {
-        runner.value = "claude-code";
-        runner.dispatchEvent(new Event("change", { bubbles: true }));
-        runner.value = "copilot";
-        runner.dispatchEvent(new Event("change", { bubbles: true }));
+        harness.value = "claude-code";
+        harness.dispatchEvent(new Event("change", { bubbles: true }));
+        harness.value = "copilot";
+        harness.dispatchEvent(new Event("change", { bubbles: true }));
       });
-      expect(props.onSetRunner).toHaveBeenNthCalledWith(1, "claude-code");
-      expect(props.onSetRunner).toHaveBeenNthCalledWith(2, "copilot");
+      expect(props.onSetHarness).toHaveBeenNthCalledWith(1, "claude-code");
+      expect(props.onSetHarness).toHaveBeenNthCalledWith(2, "copilot");
 
       copilotResult.resolve(
         modelPickerDTO({
-          runners: initial.runners,
-          selectedRunnerKind: "copilot",
+          harnesses: initial.harnesses,
+          selectedHarnessKind: "copilot",
           defaultModelName: "Copilot default",
         })
       );
       await flush();
-      expect(runner.value).toBe("copilot");
+      expect(harness.value).toBe("copilot");
 
       claudeResult.resolve(
         modelPickerDTO({
-          runners: initial.runners,
-          selectedRunnerKind: "claude-code",
+          harnesses: initial.harnesses,
+          selectedHarnessKind: "claude-code",
           defaultModelName: "Claude default",
         })
       );
       await flush();
-      expect(runner.value).toBe("copilot");
-      expect(runner.disabled).toBe(false);
+      expect(harness.value).toBe("copilot");
+      expect(harness.disabled).toBe(false);
     });
 
     it("hides the workspace select while there is only one workspace", async () => {

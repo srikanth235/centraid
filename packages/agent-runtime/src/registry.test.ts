@@ -2,9 +2,9 @@ import { existsSync } from "node:fs";
 
 import { describe, expect, test } from "vitest";
 
-import { RUNNER_KINDS } from "@centraid/app-engine";
+import { HARNESS_KINDS } from "@centraid/app-engine";
 import type {
-  RunnerKind,
+  HarnessKind,
   TurnConfig,
   TurnInput,
   TurnStreamEvent,
@@ -13,13 +13,13 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { resolveAdapterEntry } from "./backends/acp/adapter-bin.ts";
 import { planLaunch } from "./backends/acp/launch.ts";
-import { RUNNER_BACKENDS, acpConfigFor, getRunnerBackend } from "./registry.ts";
+import { HARNESSES, acpConfigFor, getHarness } from "./registry.ts";
 import { runTurn } from "./runtime.ts";
 
 describe("registry", () => {
-  test("every known runner kind is registered with coherent metadata", () => {
-    for (const kind of RUNNER_KINDS) {
-      const backend = RUNNER_BACKENDS[kind];
+  test("every known harness kind is registered with coherent metadata", () => {
+    for (const kind of HARNESS_KINDS) {
+      const backend = HARNESSES[kind];
       expect(backend, `missing backend for ${kind}`).toBeDefined();
       expect(backend.kind).toBe(kind);
       expect(backend.label.length).toBeGreaterThan(0);
@@ -32,35 +32,33 @@ describe("registry", () => {
   test("every kind keeps the USER-FACING CLI as its default bin; custom acp has none", () => {
     // Adapter-backed kinds included: preflight probes and version-hints the CLI
     // the user installs, never the ACP adapter we launch it through.
-    expect(RUNNER_BACKENDS.codex.defaultBin).toBe("codex");
-    expect(RUNNER_BACKENDS["claude-code"].defaultBin).toBe("claude");
-    expect(RUNNER_BACKENDS.gemini.defaultBin).toBe("gemini");
-    expect(RUNNER_BACKENDS.qwen.defaultBin).toBe("qwen");
-    expect(RUNNER_BACKENDS.opencode.defaultBin).toBe("opencode");
-    expect(RUNNER_BACKENDS.grok.defaultBin).toBe("grok");
-    expect(RUNNER_BACKENDS.kimi.defaultBin).toBe("kimi");
-    expect(RUNNER_BACKENDS.kilo.defaultBin).toBe("kilo");
-    expect(RUNNER_BACKENDS.cline.defaultBin).toBe("cline");
-    expect(RUNNER_BACKENDS.goose.defaultBin).toBe("goose");
-    expect(RUNNER_BACKENDS.auggie.defaultBin).toBe("auggie");
-    expect(RUNNER_BACKENDS.droid.defaultBin).toBe("droid");
+    expect(HARNESSES.codex.defaultBin).toBe("codex");
+    expect(HARNESSES["claude-code"].defaultBin).toBe("claude");
+    expect(HARNESSES.gemini.defaultBin).toBe("gemini");
+    expect(HARNESSES.qwen.defaultBin).toBe("qwen");
+    expect(HARNESSES.opencode.defaultBin).toBe("opencode");
+    expect(HARNESSES.grok.defaultBin).toBe("grok");
+    expect(HARNESSES.kimi.defaultBin).toBe("kimi");
+    expect(HARNESSES.kilo.defaultBin).toBe("kilo");
+    expect(HARNESSES.cline.defaultBin).toBe("cline");
+    expect(HARNESSES.goose.defaultBin).toBe("goose");
+    expect(HARNESSES.auggie.defaultBin).toBe("auggie");
+    expect(HARNESSES.droid.defaultBin).toBe("droid");
     // copilot: the npm package is `@github/copilot` but the BIN is `copilot`.
     // Also NOT `copilot-language-server` — that is a different package entirely
     // (an LSP for editor completions), and it does not speak ACP.
-    expect(RUNNER_BACKENDS.copilot.defaultBin).toBe("copilot");
-    expect(RUNNER_BACKENDS.copilot.defaultBin).not.toBe("@github/copilot");
-    expect(RUNNER_BACKENDS.copilot.defaultBin).not.toBe(
-      "copilot-language-server"
-    );
+    expect(HARNESSES.copilot.defaultBin).toBe("copilot");
+    expect(HARNESSES.copilot.defaultBin).not.toBe("@github/copilot");
+    expect(HARNESSES.copilot.defaultBin).not.toBe("copilot-language-server");
     // cursor: the installer makes BOTH `agent` and `cursor-agent`. We use the
     // qualified one on purpose — a bare `agent` on PATH is far too generic.
-    expect(RUNNER_BACKENDS.cursor.defaultBin).toBe("cursor-agent");
-    expect(RUNNER_BACKENDS.cursor.defaultBin).not.toBe("agent");
+    expect(HARNESSES.cursor.defaultBin).toBe("cursor-agent");
+    expect(HARNESSES.cursor.defaultBin).not.toBe("agent");
     // vibe: `vibe-acp` is a SEPARATE binary from `vibe`, not a mode of it.
-    expect(RUNNER_BACKENDS.vibe.defaultBin).toBe("vibe-acp");
+    expect(HARNESSES.vibe.defaultBin).toBe("vibe-acp");
     // pi: same shape as vibe — `pi-acp` is a standalone ACP server binary.
-    expect(RUNNER_BACKENDS.pi.defaultBin).toBe("pi-acp");
-    expect(RUNNER_BACKENDS.acp.defaultBin).toBeUndefined();
+    expect(HARNESSES.pi.defaultBin).toBe("pi-acp");
+    expect(HARNESSES.acp.defaultBin).toBeUndefined();
   });
 
   test("natively ACP-speaking kinds enumerate no models (no hardcoded provider ids)", async () => {
@@ -84,9 +82,7 @@ describe("registry", () => {
           "acp",
         ] as const
       ).map((kind) =>
-        expect(
-          RUNNER_BACKENDS[kind].enumerateModels({})
-        ).resolves.toStrictEqual([])
+        expect(HARNESSES[kind].enumerateModels({})).resolves.toStrictEqual([])
       )
     );
   });
@@ -108,7 +104,7 @@ describe("registry", () => {
       // target rather than an adapter env var.
       expect(config.adapter).toBeUndefined();
       expect(config.binPath).toBe(`/opt/bin/${kind}`);
-      // Claude tier vocabulary must not leak onto non-Claude runners.
+      // Claude tier vocabulary must not leak onto non-Claude harnesses.
       expect(config.resolveModel).toBeUndefined();
     }
   });
@@ -121,17 +117,17 @@ describe("registry", () => {
 
   test("grok pins the ACP-capable minimum, not the string-sort-adjacent 0.2.11", () => {
     // 0.2.11 predates ACP support; only a string sort makes it look newer.
-    expect(RUNNER_BACKENDS.grok.minVersion).toStrictEqual({
+    expect(HARNESSES.grok.minVersion).toStrictEqual({
       major: 0,
       minor: 2,
       patch: 106,
     });
-    expect(RUNNER_BACKENDS.opencode.minVersion).toStrictEqual({
+    expect(HARNESSES.opencode.minVersion).toStrictEqual({
       major: 1,
       minor: 18,
       patch: 4,
     });
-    expect(RUNNER_BACKENDS.kimi.minVersion).toStrictEqual({
+    expect(HARNESSES.kimi.minVersion).toStrictEqual({
       major: 1,
       minor: 17,
       patch: 0,
@@ -141,19 +137,19 @@ describe("registry", () => {
   test("kimi install hint uses the Python toolchain, not npm", () => {
     // Every other hint is an `npm i -g`; kimi-cli is installed with uv or the
     // vendor script, so a copy-pasted npm hint would be wrong for it.
-    const hint = RUNNER_BACKENDS.kimi.installHint;
+    const hint = HARNESSES.kimi.installHint;
     expect(hint).toMatch(/uv tool install kimi-cli/u);
     expect(hint).not.toMatch(/npm/u);
     // Grok's paid-subscription requirement is what makes an install-but-fail
-    // runner self-explanatory, so it must stay in the hint.
-    expect(RUNNER_BACKENDS.grok.installHint).toMatch(/SuperGrok|X Premium/u);
+    // harness self-explanatory, so it must stay in the hint.
+    expect(HARNESSES.grok.installHint).toMatch(/SuperGrok|X Premium/u);
   });
 
   // ---- wave 7: eight more ACP-native kinds ---------------------------------
 
   test("the eight added kinds pin their exact ACP invocation", () => {
     // The invocation is the whole per-kind difference, so each is pinned
-    // exactly — a "tidy-up" that changes any of these ships a broken runner.
+    // exactly — a "tidy-up" that changes any of these ships a broken harness.
     expect(acpConfigFor("copilot", {}).acpArgs).toStrictEqual(["--acp"]);
     expect(acpConfigFor("cursor", {}).acpArgs).toStrictEqual(["acp"]);
     expect(acpConfigFor("kilo", {}).acpArgs).toStrictEqual(["acp"]);
@@ -168,7 +164,7 @@ describe("registry", () => {
       "acp-daemon",
     ]);
     // vibe: EMPTY. `vibe-acp` is its own entrypoint, so there is no mode flag to
-    // pass. If this ever becomes `['acp']`, the runner is broken.
+    // pass. If this ever becomes `['acp']`, the harness is broken.
     expect(acpConfigFor("vibe", {}).acpArgs).toStrictEqual([]);
   });
 
@@ -192,7 +188,7 @@ describe("registry", () => {
       const config = acpConfigFor(kind, { binPath: `/opt/bin/${kind}` });
       expect(config.adapter, kind).toBeUndefined();
       expect(config.binPath, kind).toBe(`/opt/bin/${kind}`);
-      // Claude tier vocabulary must not leak onto non-Claude runners.
+      // Claude tier vocabulary must not leak onto non-Claude harnesses.
       expect(config.resolveModel, kind).toBeUndefined();
     }
   });
@@ -231,42 +227,42 @@ describe("registry", () => {
     // 2026.07.16 is year.month.day, NOT semver. It flows through the same
     // numeric comparison and orders correctly, so it needs no special case —
     // but do not "normalise" the major down to something semver-shaped.
-    expect(RUNNER_BACKENDS.cursor.minVersion).toStrictEqual({
+    expect(HARNESSES.cursor.minVersion).toStrictEqual({
       major: 2026,
       minor: 7,
       patch: 16,
     });
-    expect(RUNNER_BACKENDS.copilot.minVersion).toStrictEqual({
+    expect(HARNESSES.copilot.minVersion).toStrictEqual({
       major: 1,
       minor: 0,
       patch: 71,
     });
-    expect(RUNNER_BACKENDS.kilo.minVersion).toStrictEqual({
+    expect(HARNESSES.kilo.minVersion).toStrictEqual({
       major: 7,
       minor: 4,
       patch: 11,
     });
-    expect(RUNNER_BACKENDS.cline.minVersion).toStrictEqual({
+    expect(HARNESSES.cline.minVersion).toStrictEqual({
       major: 3,
       minor: 0,
       patch: 46,
     });
-    expect(RUNNER_BACKENDS.goose.minVersion).toStrictEqual({
+    expect(HARNESSES.goose.minVersion).toStrictEqual({
       major: 1,
       minor: 43,
       patch: 0,
     });
-    expect(RUNNER_BACKENDS.auggie.minVersion).toStrictEqual({
+    expect(HARNESSES.auggie.minVersion).toStrictEqual({
       major: 0,
       minor: 33,
       patch: 0,
     });
-    expect(RUNNER_BACKENDS.vibe.minVersion).toStrictEqual({
+    expect(HARNESSES.vibe.minVersion).toStrictEqual({
       major: 2,
       minor: 21,
       patch: 0,
     });
-    expect(RUNNER_BACKENDS.droid.minVersion).toStrictEqual({
+    expect(HARNESSES.droid.minVersion).toStrictEqual({
       major: 0,
       minor: 175,
       patch: 1,
@@ -277,7 +273,7 @@ describe("registry", () => {
     // `pi-acp` is the ACP server's own entrypoint, so `acpArgs` is EMPTY (no mode
     // flag to add) and there is no adapter — binPath is the spawn target.
     expect(acpConfigFor("pi", {}).acpArgs).toStrictEqual([]);
-    expect(RUNNER_BACKENDS.pi.minVersion).toStrictEqual({
+    expect(HARNESSES.pi.minVersion).toStrictEqual({
       major: 0,
       minor: 0,
       patch: 31,
@@ -285,28 +281,26 @@ describe("registry", () => {
     const config = acpConfigFor("pi", { binPath: "/opt/bin/pi-acp" });
     expect(config.adapter).toBeUndefined();
     expect(config.binPath).toBe("/opt/bin/pi-acp");
-    // Claude tier vocabulary must not leak onto a non-Claude runner.
+    // Claude tier vocabulary must not leak onto a non-Claude harness.
     expect(config.resolveModel).toBeUndefined();
-    expect(RUNNER_BACKENDS.pi.installHint).toMatch(/pi-acp/u);
+    expect(HARNESSES.pi.installHint).toMatch(/pi-acp/u);
   });
 
   test("paid-plan and out-of-band-setup requirements stay in the install hints", () => {
-    // An installed-but-failing runner has to explain itself, or it reads as our
+    // An installed-but-failing harness has to explain itself, or it reads as our
     // bug. These three fail AFTER a successful install for reasons only the
     // hint can convey.
-    expect(RUNNER_BACKENDS.copilot.installHint).toMatch(
+    expect(HARNESSES.copilot.installHint).toMatch(
       /paid Copilot subscription/iu
     );
-    expect(RUNNER_BACKENDS.cursor.installHint).toMatch(/paid Cursor plan/iu);
-    expect(RUNNER_BACKENDS.auggie.installHint).toMatch(/paid Augment plan/iu);
+    expect(HARNESSES.cursor.installHint).toMatch(/paid Cursor plan/iu);
+    expect(HARNESSES.auggie.installHint).toMatch(/paid Augment plan/iu);
     // goose fails session/new with an opaque -32603, NOT ACP's AUTH_REQUIRED,
     // until a provider is configured — so the hint has to say so up front.
-    expect(RUNNER_BACKENDS.goose.installHint).toMatch(/goose configure/u);
+    expect(HARNESSES.goose.installHint).toMatch(/goose configure/u);
     // vibe is a Python tool, like kimi — an npm hint would be wrong.
-    expect(RUNNER_BACKENDS.vibe.installHint).toMatch(
-      /uv tool install mistral-vibe/u
-    );
-    expect(RUNNER_BACKENDS.vibe.installHint).not.toMatch(/npm/u);
+    expect(HARNESSES.vibe.installHint).toMatch(/uv tool install mistral-vibe/u);
+    expect(HARNESSES.vibe.installHint).not.toMatch(/npm/u);
   });
 
   test("the eight added kinds route their turns through the generic ACP client", async () => {
@@ -328,7 +322,7 @@ describe("registry", () => {
         const events: TurnStreamEvent[] = [];
         const controller = new AbortController();
         controller.abort();
-        const result = await RUNNER_BACKENDS[kind].runTurn(
+        const result = await HARNESSES[kind].runTurn(
           {
             cwd: await tempDir("registry-acp-wave7-"),
             message: "hi",
@@ -338,7 +332,7 @@ describe("registry", () => {
           } as unknown as TurnInput,
           { prefs: { kind } }
         );
-        expect(result.adapterKind, kind).toBe(kind);
+        expect(result.harnessKind, kind).toBe(kind);
         expect(
           events.map((e) => e.type),
           kind
@@ -359,7 +353,7 @@ describe("registry", () => {
         const events: TurnStreamEvent[] = [];
         const controller = new AbortController();
         controller.abort();
-        const result = await RUNNER_BACKENDS[kind].runTurn(
+        const result = await HARNESSES[kind].runTurn(
           {
             cwd: await tempDir("registry-acp-"),
             message: "hi",
@@ -369,7 +363,7 @@ describe("registry", () => {
           } as unknown as TurnInput,
           { prefs: { kind } }
         );
-        expect(result.adapterKind).toBe(kind);
+        expect(result.harnessKind).toBe(kind);
         // The ACP client always terminates an aborted turn with `aborted`.
         expect(events.map((e) => e.type)).toContain("aborted");
       })
@@ -385,7 +379,7 @@ describe("registry", () => {
         const events: TurnStreamEvent[] = [];
         const controller = new AbortController();
         controller.abort();
-        const result = await RUNNER_BACKENDS[kind].runTurn(
+        const result = await HARNESSES[kind].runTurn(
           {
             cwd: await tempDir("registry-acp-native-"),
             message: "hi",
@@ -395,7 +389,7 @@ describe("registry", () => {
           } as unknown as TurnInput,
           { prefs: { kind } }
         );
-        expect(result.adapterKind).toBe(kind);
+        expect(result.harnessKind).toBe(kind);
         expect(events.map((e) => e.type)).toContain("aborted");
       })
     );
@@ -445,22 +439,22 @@ describe("registry", () => {
     }
   });
 
-  test("getRunnerBackend rejects an unknown kind", () => {
-    expect(() => getRunnerBackend("nope" as RunnerKind)).toThrow(
-      /no runner backend/u
+  test("getHarness rejects an unknown kind", () => {
+    expect(() => getHarness("nope" as HarnessKind)).toThrow(
+      /no harness backend/u
     );
   });
 
   test("runTurn dispatches to the backend for the configured kind", async () => {
     // Stub a backend in the table and confirm runTurn routes to it, threading
     // input/config through unchanged.
-    const original = RUNNER_BACKENDS.acp;
+    const original = HARNESSES.acp;
     let seen: { input?: TurnInput; config?: TurnConfig } = {};
-    RUNNER_BACKENDS.acp = {
+    HARNESSES.acp = {
       ...original,
       runTurn: async (input, config) => {
         seen = { input, config };
-        return { adapterKind: "acp", sessionId: "stub-session" };
+        return { harnessKind: "acp", sessionId: "stub-session" };
       },
     };
     try {
@@ -476,13 +470,13 @@ describe("registry", () => {
       };
       const result = await runTurn(input, config);
       expect(result).toStrictEqual({
-        adapterKind: "acp",
+        harnessKind: "acp",
         sessionId: "stub-session",
       });
       expect(seen.config?.prefs.kind).toBe("acp");
       expect(seen.input?.message).toBe("hi");
     } finally {
-      RUNNER_BACKENDS.acp = original;
+      HARNESSES.acp = original;
     }
   });
 });

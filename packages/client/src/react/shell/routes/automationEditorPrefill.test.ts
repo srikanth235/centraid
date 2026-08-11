@@ -80,7 +80,7 @@ describe(buildCreateAutomationEditorData, () => {
 });
 
 describe(buildAutomationAgentEditorData, () => {
-  it("derives effective automations pins and runner-scoped model defaults", () => {
+  it("derives effective automations pins and harness-scoped model defaults", () => {
     const data = buildAutomationAgentEditorData({
       anyLoading: false,
       cards: [
@@ -111,14 +111,14 @@ describe(buildAutomationAgentEditorData, () => {
       diagnosticsJson: "{}",
       selectedKind: "codex",
       subsystemModelByKind: { acp: { automations: "acp-automations" } },
-      subsystemRunnerByKey: { automations: "acp" },
-      subsystemRunnerLadders: {},
+      subsystemHarnessByKey: { automations: "acp" },
+      subsystemHarnessLadders: {},
     });
 
-    expect(data.defaultRunnerKind).toBe("acp");
+    expect(data.defaultHarnessKind).toBe("acp");
     expect(data.defaultModel).toBe("acp-automations");
     expect(
-      data.agentRunners?.find((runner) => runner.kind === "acp")
+      data.agentHarnesses?.find((harness) => harness.kind === "acp")
     ).toMatchObject({
       defaultModel: "acp-automations",
       label: "Work ACP",

@@ -1,19 +1,19 @@
 import { describe, expect, test } from "vitest";
 
-import { RunnerHealthStore } from "./runner-health.js";
-import type { RunnerHealthPolicy } from "./runner-health.js";
-import type { AgentFailureClass } from "./runner.js";
+import { HarnessHealthStore } from "./harness-health.js";
+import type { HarnessHealthPolicy } from "./harness-health.js";
+import type { HarnessFailureClass } from "./runner.js";
 import { newProvider } from "./store-test-fixtures.js";
 
 const policies = Object.fromEntries(
   ["spawn", "auth", "init", "timeout", "quota", "wedge", "exit", "unknown"].map(
     (key) => [key, { threshold: key === "spawn" ? 2 : 1, cooldownMs: 100 }]
   )
-) as Record<AgentFailureClass, RunnerHealthPolicy>;
-describe("runner-health suite", () => {
-  test("breakers are persistent and isolated by workspace, runner, and class", () => {
+) as Record<HarnessFailureClass, HarnessHealthPolicy>;
+describe("harness-health suite", () => {
+  test("breakers are persistent and isolated by workspace, harness, and class", () => {
     const provider = newProvider();
-    const health = new RunnerHealthStore(provider, policies);
+    const health = new HarnessHealthStore(provider, policies);
 
     health.reportFailure("vault-a", "codex", "spawn", "first", 1_000);
     expect(health.canAttempt("vault-a", "codex", 1_001).allowed).toBe(true);
@@ -28,7 +28,7 @@ describe("runner-health suite", () => {
       true
     );
     expect(
-      new RunnerHealthStore(provider, policies).canAttempt(
+      new HarnessHealthStore(provider, policies).canAttempt(
         "vault-a",
         "codex",
         1_011
@@ -38,7 +38,7 @@ describe("runner-health suite", () => {
   });
 
   test("ordinary success leaves auth open until a real preflight succeeds", () => {
-    const health = new RunnerHealthStore(newProvider(), policies);
+    const health = new HarnessHealthStore(newProvider(), policies);
     health.reportFailure("vault-a", "codex", "auth", "login", 1_000);
     health.reportFailure("vault-a", "codex", "quota", "429", 1_000);
     expect(health.canAttempt("vault-a", "codex", 1_001).allowed).toBe(false);
@@ -52,7 +52,7 @@ describe("runner-health suite", () => {
   });
 
   test("quota backs off and timeout admits exactly one half-open claimant", () => {
-    const health = new RunnerHealthStore(newProvider(), policies);
+    const health = new HarnessHealthStore(newProvider(), policies);
     health.reportFailure("vault-a", "codex", "quota", "429", 1_000);
     expect(health.canAttempt("vault-a", "codex", 1_050).allowed).toBe(false);
     expect(health.canAttempt("vault-a", "codex", 1_101).allowed).toBe(true);
@@ -66,7 +66,7 @@ describe("runner-health suite", () => {
     expect(health.list("vault-a", 2_101)).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          runnerKind: "codex",
+          harnessKind: "codex",
           failureClass: "timeout",
           state: "half-open",
         }),
@@ -75,14 +75,14 @@ describe("runner-health suite", () => {
   });
 
   test("list reports open and closed breaker metadata across all workspaces", () => {
-    const health = new RunnerHealthStore(newProvider(), policies);
+    const health = new HarnessHealthStore(newProvider(), policies);
     health.reportFailure("vault-a", "codex", "spawn", "first failure", 1_000);
     health.reportFailure("vault-a", "codex", "spawn", "second failure", 1_010);
 
     expect(health.list(undefined, 1_011)).toStrictEqual([
       expect.objectContaining({
         workspaceContext: "vault-a",
-        runnerKind: "codex",
+        harnessKind: "codex",
         failureClass: "spawn",
         consecutiveFailures: 2,
         state: "open",
@@ -96,7 +96,7 @@ describe("runner-health suite", () => {
     expect(health.list()).toStrictEqual([
       expect.objectContaining({
         workspaceContext: "vault-a",
-        runnerKind: "codex",
+        harnessKind: "codex",
         failureClass: "spawn",
         consecutiveFailures: 0,
         state: "closed",

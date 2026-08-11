@@ -144,7 +144,7 @@ describe(compileHydrationPlan, () => {
     expect(plan.prompt).not.toContain("large tool output must not cross");
   });
 
-  it("projects only completed turns past a runner watermark", () => {
+  it("projects only completed turns past a harness watermark", () => {
     const turns = [
       {
         turnId: "old",

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { RUNNER_BACKENDS, runTurn } from "@centraid/agent-runtime";
+import { HARNESSES, runTurn } from "@centraid/agent-runtime";
 import type { TurnConfig, TurnInput } from "@centraid/agent-runtime";
 import {
   qualityRegressionBudget,
@@ -12,11 +12,11 @@ const SESSIONS = 256;
 
 describe("agent-sessions.scale", () => {
   test("fans concurrent sessions through the runner registry", async () => {
-    const original = RUNNER_BACKENDS.acp;
-    RUNNER_BACKENDS.acp = {
+    const original = HARNESSES.acp;
+    HARNESSES.acp = {
       ...original,
       runTurn: async (input) => ({
-        adapterKind: "acp",
+        harnessKind: "acp",
         sessionId: String(input.message),
       }),
     };
@@ -62,7 +62,7 @@ describe("agent-sessions.scale", () => {
       });
       expect(passed).toBe(true);
     } finally {
-      RUNNER_BACKENDS.acp = original;
+      HARNESSES.acp = original;
     }
   });
 });

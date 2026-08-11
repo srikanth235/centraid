@@ -2,13 +2,13 @@
  *  `onTurnComplete` seams once prefs are loaded and the cwd is resolved. */
 import type { Dispatcher } from "../handlers/dispatcher.js";
 import type { ModelSubsystem } from "../stores/prefs-store.js";
+import type { HarnessHealthController } from "./harness-health.js";
 import type { ProviderEgressConsentController } from "./provider-egress-consent.js";
-import type { RunnerHealthController } from "./runner-health.js";
 import type { ConversationTurnInput } from "./runner.js";
 import type { RunKind } from "./schema.js";
 import type {
-  RunnerKind,
-  RunnerPrefs,
+  HarnessKind,
+  HarnessPrefs,
   RunTurnFn,
   VaultContentRunner,
   VaultInvokeRunner,
@@ -17,28 +17,28 @@ import type {
 
 export interface TurnContext {
   input: ConversationTurnInput;
-  prefs: RunnerPrefs;
+  prefs: HarnessPrefs;
   /** The working dir this turn runs in (data dir, or draft worktree). */
   cwd: string;
 }
 
 export interface ConversationRunnerCoreOptions {
   /**
-   * Loader for the user's persisted runner prefs. Called per turn so the
+   * Loader for the user's persisted harness prefs. Called per turn so the
    * runner picks up settings changes without a runtime restart — including a
-   * change to WHICH runner this register rides, since the loader resolves
-   * `runner.<subsystem>` fresh on every call.
+   * change to WHICH harness this register rides, since the loader resolves
+   * `harness.<subsystem>` fresh on every call.
    *
    * The `subsystem` argument is this register's identity (`opts.subsystem`),
-   * so a host that scopes runner selection per subsystem can answer with the
-   * right kind. Optional on both sides: hosts with one global runner ignore
+   * so a host that scopes harness selection per subsystem can answer with the
+   * right kind. Optional on both sides: hosts with one global harness ignore
    * it, and a runner built without `subsystem` calls the loader bare — which
    * is exactly the pre-existing behavior.
    */
   prefsLoader: (
     subsystem?: ModelSubsystem,
-    runnerKind?: RunnerKind
-  ) => Promise<RunnerPrefs | undefined>;
+    harnessKind?: HarnessKind
+  ) => Promise<HarnessPrefs | undefined>;
   /**
    * Which subsystem's prefs this runner rides — passed to `prefsLoader` on
    * every turn. Left unset by registers with no per-subsystem identity
@@ -108,24 +108,24 @@ export interface ConversationRunnerCoreOptions {
    */
   runKind?: RunKind;
   /**
-   * Ordered turn-boundary failover candidates. The selected runner remains
-   * first; hosts commonly resolve this from `runner.ladder.<subsystem>`.
+   * Ordered turn-boundary failover candidates. The selected harness remains
+   * first; hosts commonly resolve this from `harness.ladder.<subsystem>`.
    */
-  runnerLadder?: (
+  harnessLadder?: (
     subsystem: ModelSubsystem | undefined,
-    primary: RunnerKind
-  ) => Promise<readonly RunnerKind[]> | readonly RunnerKind[];
+    primary: HarnessKind
+  ) => Promise<readonly HarnessKind[]> | readonly HarnessKind[];
   /** Persistent workspace-scoped breaker controller. */
-  runnerHealth?: RunnerHealthController;
+  harnessHealth?: HarnessHealthController;
   /** Stable health scope. Defaults to the resolved cwd. */
-  runnerHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
+  harnessHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
   /** Hard conversation × provider egress gate. */
   providerEgressConsent?: ProviderEgressConsentController;
   /** Host alert seam for unattended/manual boundary failover selection. */
   onFailover?: (event: {
     conversationId: string;
     subsystem?: ModelSubsystem;
-    from: RunnerKind;
-    to: RunnerKind;
+    from: HarnessKind;
+    to: HarnessKind;
   }) => void;
 }

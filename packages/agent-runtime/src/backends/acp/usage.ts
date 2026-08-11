@@ -17,7 +17,7 @@
 
 import type {
   AdapterUsageSnapshot,
-  RunnerKind,
+  HarnessKind,
   TurnStreamEvent,
 } from "@centraid/app-engine";
 
@@ -155,7 +155,7 @@ export function readCost(raw: unknown): UsageCost | undefined {
  * can only revisit ledger rows whose model is non-NULL.
  */
 export function buildUsageEvent(
-  kind: RunnerKind,
+  kind: HarnessKind,
   model: string | undefined,
   effort: string | undefined,
   tokens: TokenUsage,

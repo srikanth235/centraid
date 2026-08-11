@@ -33,7 +33,7 @@ import type {
 import { openConfirm } from "../../confirm.js";
 import {
   loadProviders,
-  resolveReportedRunnerKind,
+  resolveReportedHarnessKind,
 } from "../settingsProvidersData.js";
 import {
   BUILDER_SUGGESTIONS,
@@ -158,7 +158,7 @@ async function streamBuilderWithConsent(input: {
   onEvent: (event: TurnStreamEvent) => void;
   onDeclined: (provider: string) => void;
   workspaceKind: "vault-data" | "app" | "draft";
-  runnerKind?: string;
+  harnessKind?: string;
   model?: string;
   thinking?: string;
   /** Vault the builder conversation is pinned to (#599) — explicit, never ambient. */
@@ -179,7 +179,7 @@ async function streamBuilderWithConsent(input: {
         idempotencyKey: input.idempotencyKey,
         workspaceKind: input.workspaceKind,
         ...(input.scopeId ? { scopeId: input.scopeId } : {}),
-        ...(input.runnerKind ? { runnerKind: input.runnerKind } : {}),
+        ...(input.harnessKind ? { harnessKind: input.harnessKind } : {}),
         ...(input.model ? { model: input.model } : {}),
         ...(input.thinking ? { thinking: input.thinking } : {}),
         ...(providerConsent === undefined ? {} : { providerConsent }),
@@ -247,16 +247,16 @@ const configSectionSignatures = (
 
 function builderModelPicker(
   status: AgentsStatusDTO,
-  requestedRunner?: string
+  requestedHarness?: string
 ): AsstModelPickerDTO {
-  const runnerKind = resolveReportedRunnerKind(
+  const harnessKind = resolveReportedHarnessKind(
     status,
-    requestedRunner,
+    requestedHarness,
     "builder"
   );
-  const card = status.cards.find((entry) => entry.kind === runnerKind);
+  const card = status.cards.find((entry) => entry.kind === harnessKind);
   const models = card?.modelConfigurable ? card.models : [];
-  const defaultId = status.savedModelByKind[runnerKind] ?? "";
+  const defaultId = status.savedModelByKind[harnessKind] ?? "";
   const defaultModel =
     models.find((model) => model.id === defaultId) ??
     models.find((model) => model.default) ??
@@ -265,23 +265,23 @@ function builderModelPicker(
     (option) => option.category === "thought_level"
   );
   const defaultEffort =
-    status.defaultConfigPinsByKind[runnerKind]?.thought_level ??
+    status.defaultConfigPinsByKind[harnessKind]?.thought_level ??
     effortOption?.currentValue ??
     "";
   return {
-    runners: status.cards.map((runner) => ({
-      kind: runner.kind,
-      title: runner.title,
-      connected: runner.connected,
-      sessionReady: runner.sessionReady,
+    harnesses: status.cards.map((harness) => ({
+      kind: harness.kind,
+      title: harness.title,
+      connected: harness.connected,
+      sessionReady: harness.sessionReady,
       hint: [
-        runner.subtitle,
-        ...(runner.breakerStates ?? []).map(
+        harness.subtitle,
+        ...(harness.breakerStates ?? []).map(
           (state) => `${state.failureClass} ${state.state}`
         ),
       ].join(" · "),
     })),
-    selectedRunnerKind: runnerKind,
+    selectedHarnessKind: harnessKind,
     workspaceKinds: ["draft", "app", "vault-data"],
     connected: card?.connected ?? false,
     models: models.map((model) => ({
@@ -291,13 +291,13 @@ function builderModelPicker(
     })),
     defaultModelName:
       defaultModel?.name ?? defaultModel?.id ?? "gateway default",
-    selectedModelId: status.subsystemModelByKind[runnerKind]?.builder ?? "",
+    selectedModelId: status.subsystemModelByKind[harnessKind]?.builder ?? "",
     efforts: effortOption?.values ?? [],
     defaultEffortName:
       effortOption?.values.find((value) => value.value === defaultEffort)
         ?.name ?? defaultEffort,
     selectedEffortId:
-      status.subsystemConfigPinsByKind[runnerKind]?.builder?.thought_level ??
+      status.subsystemConfigPinsByKind[harnessKind]?.builder?.thought_level ??
       "",
     supportsAdditionalDirectories: card?.additionalDirectories === true,
     supportsAttachments: card?.supportsAttachments === true,
@@ -306,18 +306,18 @@ function builderModelPicker(
 }
 
 /**
- * Restore an existing conversation's durable runner binding ahead of the
+ * Restore an existing conversation's durable harness binding ahead of the
  * subsystem default/current in-memory picker. A reload must never silently
  * send the next turn back through a different provider.
  */
 export function builderPickerForConversation(
   status: AgentsStatusDTO,
   conversationAdapterKind?: string,
-  selectedRunnerKind?: string
+  selectedHarnessKind?: string
 ): AsstModelPickerDTO {
   return builderModelPicker(
     status,
-    conversationAdapterKind ?? selectedRunnerKind
+    conversationAdapterKind ?? selectedHarnessKind
   );
 }
 
@@ -355,7 +355,7 @@ export interface BuilderViewModel {
   toggleGroup: (id: string) => void;
   setChatView: (v: ChatView) => void;
   setChatWorkspaceKind: (kind: "vault-data" | "app" | "draft") => void;
-  setChatRunner: (runnerKind: string) => Promise<AsstModelPickerDTO>;
+  setChatHarness: (harnessKind: string) => Promise<AsstModelPickerDTO>;
   setChatModel: (modelId: string) => void;
   setChatEffort: (effort: string) => void;
   setTab: (t: Tab) => void;
@@ -462,9 +462,9 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     undefined
   );
   const sessionConfig = useRef<{ model?: string; effort?: string }>({});
-  const runnerConfig = useRef<AsstModelPickerDTO | undefined>(undefined);
+  const harnessConfig = useRef<AsstModelPickerDTO | undefined>(undefined);
   const providersStatus = useRef<AgentsStatusDTO | undefined>(undefined);
-  const conversationRunnerKind = useRef<string | undefined>(undefined);
+  const conversationHarnessKind = useRef<string | undefined>(undefined);
   const workspaceKind = useRef<"vault-data" | "app" | "draft">("draft");
 
   // ── Snapshot funnel ───────────────────────────────────────────────────────
@@ -483,7 +483,9 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       historyNonce: historyNonce.current,
       ...(sessionContext.current ? { context: sessionContext.current } : {}),
       ...sessionConfig.current,
-      ...(runnerConfig.current ? { runnerConfig: runnerConfig.current } : {}),
+      ...(harnessConfig.current
+        ? { harnessConfig: harnessConfig.current }
+        : {}),
       workspaceKind: workspaceKind.current,
       workspaceKinds: ["draft", "app", "vault-data"],
     };
@@ -535,10 +537,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     void loadProviders().then((status) => {
       if (cancelled) return;
       providersStatus.current = status;
-      runnerConfig.current = builderPickerForConversation(
+      harnessConfig.current = builderPickerForConversation(
         status,
-        conversationRunnerKind.current,
-        runnerConfig.current?.selectedRunnerKind
+        conversationHarnessKind.current,
+        harnessConfig.current?.selectedHarnessKind
       );
       renderChat();
     });
@@ -808,12 +810,12 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
           const transcript = await loadConversation(id, sessions[0].id).catch(
             () => undefined
           );
-          if (transcript?.adapterKind) {
-            conversationRunnerKind.current = transcript.adapterKind;
+          if (transcript?.harnessKind) {
+            conversationHarnessKind.current = transcript.harnessKind;
             if (providersStatus.current) {
-              runnerConfig.current = builderPickerForConversation(
+              harnessConfig.current = builderPickerForConversation(
                 providersStatus.current,
-                transcript.adapterKind
+                transcript.harnessKind
               );
               renderChat();
             }
@@ -874,14 +876,14 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
             // Explicit, never ambient: the turn lands in the vault the
             // conversation was created in (issue #599).
             ...(targetScope.current ? { scopeId: targetScope.current } : {}),
-            ...(runnerConfig.current?.selectedRunnerKind
-              ? { runnerKind: runnerConfig.current.selectedRunnerKind }
+            ...(harnessConfig.current?.selectedHarnessKind
+              ? { harnessKind: harnessConfig.current.selectedHarnessKind }
               : {}),
-            ...(runnerConfig.current?.selectedModelId
-              ? { model: runnerConfig.current.selectedModelId }
+            ...(harnessConfig.current?.selectedModelId
+              ? { model: harnessConfig.current.selectedModelId }
               : {}),
-            ...(runnerConfig.current?.selectedEffortId
-              ? { thinking: runnerConfig.current.selectedEffortId }
+            ...(harnessConfig.current?.selectedEffortId
+              ? { thinking: harnessConfig.current.selectedEffortId }
               : {}),
             ...(attachments?.length ? { attachments } : {}),
             signal: agentAbort.current.signal,
@@ -1192,25 +1194,25 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     [renderChat]
   );
 
-  const setChatRunner = useCallback(
-    async (runnerKind: string): Promise<AsstModelPickerDTO> => {
-      const previous = runnerConfig.current?.selectedRunnerKind;
+  const setChatHarness = useCallback(
+    async (harnessKind: string): Promise<AsstModelPickerDTO> => {
+      const previous = harnessConfig.current?.selectedHarnessKind;
       const status = await loadProviders({ refresh: true });
-      const target = status.cards.find((card) => card.kind === runnerKind);
+      const target = status.cards.find((card) => card.kind === harnessKind);
       if (!target?.sessionReady) {
         showToast(
           target?.subtitle ??
-            `${runnerKind} did not complete its session preflight.`
+            `${harnessKind} did not complete its session preflight.`
         );
         const unchanged = builderModelPicker(status, previous);
-        runnerConfig.current = unchanged;
+        harnessConfig.current = unchanged;
         renderChat();
         return unchanged;
       }
-      const next = builderModelPicker(status, runnerKind);
+      const next = builderModelPicker(status, harnessKind);
       providersStatus.current = status;
-      conversationRunnerKind.current = runnerKind;
-      runnerConfig.current = next;
+      conversationHarnessKind.current = harnessKind;
+      harnessConfig.current = next;
       sessionContext.current = undefined;
       sessionConfig.current = {};
       renderChat();
@@ -1221,9 +1223,9 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
 
   const setChatModel = useCallback(
     (modelId: string): void => {
-      if (!runnerConfig.current) return;
-      runnerConfig.current = {
-        ...runnerConfig.current,
+      if (!harnessConfig.current) return;
+      harnessConfig.current = {
+        ...harnessConfig.current,
         selectedModelId: modelId,
       };
       renderChat();
@@ -1233,9 +1235,9 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
 
   const setChatEffort = useCallback(
     (effort: string): void => {
-      if (!runnerConfig.current) return;
-      runnerConfig.current = {
-        ...runnerConfig.current,
+      if (!harnessConfig.current) return;
+      harnessConfig.current = {
+        ...harnessConfig.current,
         selectedEffortId: effort,
       };
       renderChat();
@@ -1297,7 +1299,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     toggleGroup,
     setChatView: setChatViewCb,
     setChatWorkspaceKind,
-    setChatRunner,
+    setChatHarness,
     setChatModel,
     setChatEffort,
     setTab: setTabCb,

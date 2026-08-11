@@ -9,7 +9,7 @@
  *   - `streamTurn` POSTs `/centraid/<appId>/_turn` and parses the SSE stream
  *     into the gateway's native `TurnStreamEvent`s (fetch + ReadableStream
  *     reader, not `EventSource` — we need a POST body + the Bearer header).
- *     The gateway-side runner (Phase 3a `makeUnifiedConversationRunner`) runs the
+ *     The gateway-side harness (Phase 3a `makeUnifiedConversationRunner`) runs the
  *     turn in the app's draft worktree with the union of tools, so one turn
  *     can both tweak the app's code and operate its data.
  *   - the chat-history surface (`/_centraid-conversations/apps/<appId>/sessions…`)
@@ -33,7 +33,7 @@ import type { TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
 
 import type {
   CentraidAgentsStatus,
-  CentraidRunnerStatus,
+  CentraidHarnessStatus,
 } from "./centraid-api.js";
 import {
   auth,
@@ -50,29 +50,29 @@ export { type TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
 // definition now lives in one place (the wire contract, turn-stream.d.ts).
 
 /**
- * Runner preflight + model catalog from the ACTIVE gateway. Reads the
- * gateway's own `GET /centraid/_turn/runner-status` — so a remote gateway
- * reports its own configured runner and models, and the chat picker
+ * Harness preflight + model catalog from the ACTIVE gateway. Reads the
+ * gateway's own `GET /centraid/_turn/harness-status` — so a remote gateway
+ * reports its own configured harness and models, and the chat picker
  * can list them.
  */
-export async function getRunnerStatus(
+export async function getHarnessStatus(
   opts: { refresh?: boolean } = {}
-): Promise<CentraidRunnerStatus> {
+): Promise<CentraidHarnessStatus> {
   const { baseUrl, token } = await auth();
   const path = opts.refresh
-    ? "/centraid/_turn/runner-status?refresh=1"
-    : "/centraid/_turn/runner-status";
+    ? "/centraid/_turn/harness-status?refresh=1"
+    : "/centraid/_turn/harness-status";
   const res = await doFetch(baseUrl, path, {
     method: "GET",
     headers: authHeaders(token),
   });
-  return readJson<CentraidRunnerStatus>(res, "fetch runner status");
+  return readJson<CentraidHarnessStatus>(res, "fetch harness status");
 }
 
 /**
  * Which coding-agent credentials are present on the ACTIVE gateway's host.
  * Reads the gateway's `GET /centraid/_agents/status` — detection lives
- * beside the runner, so a remote gateway reports its own host's agents
+ * beside the harness, so a remote gateway reports its own host's agents
  * rather than whatever is installed on the desktop.
  */
 export async function getAgentsStatus(
@@ -112,8 +112,8 @@ export interface StreamTurnInput {
    * onto the vault register. Absent = builder chat (unchanged).
    */
   register?: "ask" | "build";
-  /** Per-conversation runner selection; does not mutate the device default. */
-  runnerKind?: string;
+  /** Per-conversation harness selection; does not mutate the device default. */
+  harnessKind?: string;
   model?: string;
   thinking?: string;
   /** Files uploaded ahead of the turn (issue #190). */
@@ -280,7 +280,7 @@ export async function streamTurn(
       conversationId: input.conversationId,
       message: input.message,
       ...(input.register ? { register: input.register } : {}),
-      ...(input.runnerKind ? { runnerKind: input.runnerKind } : {}),
+      ...(input.harnessKind ? { harnessKind: input.harnessKind } : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(input.retryOf ? { retryOf: input.retryOf } : {}),
@@ -334,7 +334,7 @@ export async function streamAssistantTurn(
     JSON.stringify({
       conversationId: input.conversationId,
       message: input.message,
-      ...(input.runnerKind ? { runnerKind: input.runnerKind } : {}),
+      ...(input.harnessKind ? { harnessKind: input.harnessKind } : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(input.retryOf ? { retryOf: input.retryOf } : {}),

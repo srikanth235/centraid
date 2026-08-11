@@ -153,7 +153,7 @@ function computeDelta(
       roll.cost += num(t.total_cost_usd);
       delta.models.set(model, roll);
     }
-    // No "default" bucket: only a runner-confirmed thought_level is durable.
+    // No "default" bucket: only a harness-confirmed thought_level is durable.
     const effort = dominantEffortOf(journal, t.id as string);
     if (effort !== null) {
       const roll = delta.efforts.get(effort) ?? {

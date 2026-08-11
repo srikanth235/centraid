@@ -19,7 +19,7 @@ function stubRunTurn(text: string, capture?: Capture): RunTurnFn {
     }
     input.onEvent({ type: "assistant.delta", delta: text });
     input.onEvent({ type: "final", text });
-    return { adapterKind: config.prefs.kind };
+    return { harnessKind: config.prefs.kind };
   };
 }
 
@@ -55,7 +55,7 @@ describe(generateConversationTitle, () => {
     const runTurn = stubRunTurn('  "Budget planning"  ', capture);
     const title = await generateConversationTitle({
       runTurn,
-      runnerPrefs: { kind: "claude-code" },
+      harnessPrefs: { kind: "claude-code" },
       cwd: "/tmp/x",
       model: "fast",
       userMessage: "help me plan a budget",
@@ -72,7 +72,7 @@ describe(generateConversationTitle, () => {
   it("returns undefined when the model produced nothing usable", async () => {
     const title = await generateConversationTitle({
       runTurn: stubRunTurn("   "),
-      runnerPrefs: { kind: "claude-code" },
+      harnessPrefs: { kind: "claude-code" },
       cwd: "/tmp/x",
       model: "fast",
       userMessage: "hi",
@@ -88,7 +88,7 @@ describe(generateConversationTitle, () => {
     await expect(
       generateConversationTitle({
         runTurn,
-        runnerPrefs: { kind: "claude-code" },
+        harnessPrefs: { kind: "claude-code" },
         cwd: "/tmp/x",
         model: "fast",
         userMessage: "hi",

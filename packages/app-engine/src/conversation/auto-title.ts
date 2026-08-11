@@ -21,7 +21,7 @@
  */
 
 import type { TurnStreamEvent } from "./runner.js";
-import type { RunTurnFn, RunnerPrefs, TurnInput } from "./turn.js";
+import type { RunTurnFn, HarnessPrefs, TurnInput } from "./turn.js";
 
 /** Longest title we keep — matches the ledger's derived-title budget. */
 const MAX_TITLE_CHARS = 60;
@@ -36,8 +36,8 @@ const TITLE_SYSTEM_PROMPT = [
 export interface GenerateTitleDeps {
   /** The shared turn driver — agent-runtime `runTurn` in production. */
   runTurn: RunTurnFn;
-  /** Active runner prefs (kind + optional binPath/extraArgs). */
-  runnerPrefs: RunnerPrefs;
+  /** Active harness prefs (kind + optional binPath/extraArgs). */
+  harnessPrefs: HarnessPrefs;
   /** Working dir for the one-shot runner (the assistant cwd). */
   cwd: string;
   /** Capability tier or model alias for the titler — a TIER token like `fast`. */
@@ -124,7 +124,7 @@ export async function generateConversationTitle(
     onEvent,
   };
   try {
-    await deps.runTurn(input, { prefs: deps.runnerPrefs });
+    await deps.runTurn(input, { prefs: deps.harnessPrefs });
   } finally {
     if (timer) clearTimeout(timer);
   }

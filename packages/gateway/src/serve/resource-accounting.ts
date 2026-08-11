@@ -23,7 +23,7 @@
  * all injectable, so this is unit-testable with a fake clock and no process
  * state. `build-gateway.ts` constructs one at boot, wires the record* hooks
  * through the vault registry / backup service / worker admission / agent
- * runners, and publishes `snapshot()` on the health metrics source.
+ * harnesses, and publishes `snapshot()` on the health metrics source.
  */
 
 /** Rolling window for `backgroundTimerFiresLastHour`. */

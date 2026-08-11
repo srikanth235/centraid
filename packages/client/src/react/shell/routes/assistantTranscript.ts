@@ -62,7 +62,7 @@ export type AsstMsg =
     }
   /** Live-only streaming reasoning row (issue #420, Wave 2). */
   | { kind: "thinking"; text: string; streaming?: boolean }
-  /** Durable runner notice (issue #420, Wave 6) — e.g. dropped-PDF warning. */
+  /** Durable harness notice (issue #420, Wave 6) — e.g. dropped-PDF warning. */
   | { kind: "notice"; level: "warn" | "info"; text: string }
   | {
       kind: "ai";

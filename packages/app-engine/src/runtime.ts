@@ -7,7 +7,7 @@ import { ChangeBus } from "./changes/change-bus.js";
 import type { ConversationHistoryStore } from "./conversation/history.js";
 import type { ConversationRunner } from "./conversation/runner.js";
 import type { ConversationWorkspaceKind } from "./conversation/schema.js";
-import type { RunnerKind } from "./conversation/turn.js";
+import type { HarnessKind } from "./conversation/turn.js";
 import { Dispatcher, statusForToolError } from "./handlers/dispatcher.js";
 import type { ToolResult } from "./handlers/dispatcher.js";
 import type { VaultBridge } from "./handlers/vault-bridge.js";
@@ -95,7 +95,7 @@ export interface RuntimeOptions {
    */
   conversationRunner?: ConversationRunner;
   /**
-   * Scratch base dir for runner-owned chat session files — or a provider
+   * Scratch base dir for harness-owned chat session files — or a provider
    * (the gateway wires the ACTIVE vault's `runner-sessions/` dir, #280).
    * The `POST /centraid/<id>/_turn` route passes `<dir>/<conversationId>.jsonl`
    * as `ConversationTurnInput.sessionFile`. Defaults to an OS-tmpdir path
@@ -114,11 +114,11 @@ export interface RuntimeOptions {
   ) => Promise<{ name?: string; description?: string }>;
   /**
    * Optional preflight reporter for the gateway-wide
-   * `GET /centraid/_turn/runner-status` route. Returns the host's view of
-   * each adapter's readiness so the chat panel can show a Setup screen
+   * `GET /centraid/_turn/harness-status` route. Returns the host's view of
+   * each harness's readiness so the chat panel can show a Setup screen
    * instead of failing per-turn when the CLI is missing or unauthenticated.
    */
-  runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
+  harnessStatus?: (opts?: HarnessStatusOptions) => Promise<HarnessStatus>;
   /**
    * Optional code-dir resolver (issue #137). When provided, the runtime
    * serves handlers + static files from whatever dir this returns for an
@@ -160,7 +160,7 @@ export interface RuntimeOptions {
   /**
    * Optional ask-model picker backing (subsystem `ask`). When provided,
    * `GET`/`PUT /centraid/<id>/_turn/model` let the kit Ask panel's inline
-   * model picker read/set the `model.<runnerKind>.ask` prefs override —
+   * model picker read/set the `model.<harnessKind>.ask` prefs override —
    * the SAME key `resolveSubsystemModel` reads at turn time, so the
    * picker and the actual turn always agree. Without it those routes 503.
    */
@@ -181,7 +181,7 @@ export type ModelTier = "smart" | "balanced" | "fast";
  * enumerate its catalog. The `id` is what the chat picker persists and
  * hands back as the chat model.
  */
-export interface RunnerModel {
+export interface HarnessModel {
   /** Stable model id passed back as the chat model (e.g. "openai-codex/gpt-5.5"). */
   id: string;
   /** Human-friendly label for the picker; falls back to `id` when absent. */
@@ -201,23 +201,23 @@ export interface RunnerModel {
  * catalog. `loading` = enumeration in flight, nothing cached yet; `ready` = a
  * cached list is available (even while a refresh re-enumerates); `empty` =
  * enumeration finished or never ran and found nothing (incl. CLI unavailable).
- * Lives here (not agent-runtime) because `RunnerStatus` carries it and
+ * Lives here (not agent-runtime) because `HarnessStatus` carries it and
  * app-engine is the lower layer; agent-runtime re-exports it.
  */
 export type SurfaceStatus = "loading" | "ready" | "empty";
 
-/** Options for the runner-status reporter (e.g. force a model reclassify). */
-export interface RunnerStatusOptions {
+/** Options for the harness-status reporter (e.g. force a model reclassify). */
+export interface HarnessStatusOptions {
   /** Force a fresh model-tier classification rather than serving the cache. */
   refresh?: boolean;
 }
 
 /**
- * Shape returned by the runner-status preflight route. Both hosts share
+ * Shape returned by the harness-status preflight route. Both hosts share
  * the schema, reporting the configured CLI adapter.
  */
-export interface RunnerStatus {
-  kind: RunnerKind | "none";
+export interface HarnessStatus {
+  kind: HarnessKind | "none";
   ok: boolean;
   /** Adapter version string when detectable (e.g. "codex 0.20.4"). */
   version?: string;
@@ -242,11 +242,11 @@ export interface RunnerStatus {
    * until the catalog has been warmed (boot or Refresh enumerates and persists);
    * `modelsStatus` distinguishes "still enumerating" from "enumerated empty".
    */
-  models?: RunnerModel[];
+  models?: HarnessModel[];
   /**
    * Load state of the model list above — lets the chat picker show a loading
    * placeholder before the first warm completes, vs an empty state when the
-   * runner reports no models. Absent when the host doesn't track a catalog.
+   * harness reports no models. Absent when the host doesn't track a catalog.
    */
   modelsStatus?: SurfaceStatus;
 }
@@ -293,8 +293,10 @@ export class Runtime {
   readonly appMeta?: (
     entry: RegistryEntry
   ) => Promise<{ name?: string; description?: string }>;
-  /** Optional runner-status preflight. */
-  readonly runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
+  /** Optional harness-status preflight. */
+  readonly harnessStatus?: (
+    opts?: HarnessStatusOptions
+  ) => Promise<HarnessStatus>;
   /** Optional ask-model picker backing. See `RuntimeOptions.askModel`. */
   readonly askModel?: AskModelPrefs;
   /** Optional per-vault turn-concurrency gate. See `RuntimeOptions.turnLimiter`. */
@@ -346,7 +348,7 @@ export class Runtime {
     this.sessionDirProvider =
       typeof sessionDir === "string" ? () => sessionDir : sessionDir;
     this.appMeta = opts.appMeta;
-    this.runnerStatus = opts.runnerStatus;
+    this.harnessStatus = opts.harnessStatus;
     this.askModel = opts.askModel;
     if (opts.turnLimiter) this.turnLimiter = opts.turnLimiter;
     if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
@@ -380,7 +382,7 @@ export class Runtime {
     return fresh;
   }
 
-  /** Scratch base dir for runner-owned chat session files (per active vault). */
+  /** Scratch base dir for harness-owned chat session files (per active vault). */
   get conversationRunnerSessionDir(): string {
     return this.sessionDirProvider();
   }
@@ -875,16 +877,16 @@ export class Runtime {
           return;
         }
 
-        case "app-runner-status": {
-          if (!this.runnerStatus) {
+        case "app-harness-status": {
+          if (!this.harnessStatus) {
             sendJson(res, 200, {
               kind: "none",
               ok: false,
-              reason: "no runner configured",
+              reason: "no harness configured",
             });
             return;
           }
-          const status = await this.runnerStatus({ refresh: route.refresh });
+          const status = await this.harnessStatus({ refresh: route.refresh });
           sendJson(res, 200, status);
           return;
         }

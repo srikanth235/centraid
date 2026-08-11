@@ -27,14 +27,14 @@ import {
   setOfflineCopy,
 } from "./settingsAccountData.js";
 import {
-  activateRunner,
+  activateHarness,
   loadProviders,
   setAgentModel,
   setAgentConfigPin,
   setSubsystemModel,
   setSubsystemConfigPin,
-  setSubsystemRunner,
-  setSubsystemRunnerLadder,
+  setSubsystemHarness,
+  setSubsystemHarnessLadder,
 } from "./settingsProvidersData.js";
 import {
   attachVaultConnection,
@@ -466,13 +466,13 @@ export default function SettingsRoute({
                 <SettingsProvidersScreen
                   loadStatus={() => loadProviders()}
                   refreshModels={() => loadProviders({ refresh: true })}
-                  activateRunner={activateRunner}
+                  activateHarness={activateHarness}
                   setAgentModel={setAgentModel}
                   setAgentConfigPin={setAgentConfigPin}
                   setSubsystemModel={setSubsystemModel}
                   setSubsystemConfigPin={setSubsystemConfigPin}
-                  setSubsystemRunner={setSubsystemRunner}
-                  setSubsystemRunnerLadder={setSubsystemRunnerLadder}
+                  setSubsystemHarness={setSubsystemHarness}
+                  setSubsystemHarnessLadder={setSubsystemHarnessLadder}
                 />
               ) : page === "profile" ? (
                 selfProfile.status === "loading" ? (

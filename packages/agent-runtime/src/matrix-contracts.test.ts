@@ -1,18 +1,18 @@
 /**
  * Matrix cell agent-runtime.contracts (#535 coverable-today).
- * Registry shape is the public contract every runner kind must satisfy.
+ * Registry shape is the public contract every harness kind must satisfy.
  */
 import { describe, expect, test } from "vitest";
 
-import { RUNNER_KINDS } from "@centraid/app-engine";
+import { HARNESS_KINDS } from "@centraid/app-engine";
 
-import { RUNNER_BACKENDS, getRunnerBackend } from "./registry.ts";
+import { HARNESSES, getHarness } from "./registry.ts";
 
 describe("matrix-contracts", () => {
-  test("every RunnerKind has a backend with kind/label/minVersion/runTurn contract", () => {
-    for (const kind of RUNNER_KINDS) {
-      const backend = getRunnerBackend(kind);
-      expect(backend).toBe(RUNNER_BACKENDS[kind]);
+  test("every HarnessKind has a backend with kind/label/minVersion/runTurn contract", () => {
+    for (const kind of HARNESS_KINDS) {
+      const backend = getHarness(kind);
+      expect(backend).toBe(HARNESSES[kind]);
       expect(backend.kind).toBe(kind);
       expect(backend.label.length).toBeGreaterThan(0);
       expect(backend.minVersion).toStrictEqual(
@@ -29,8 +29,8 @@ describe("matrix-contracts", () => {
   });
 
   test("unknown kind is not silently present in the registry table", () => {
-    expect(Object.keys(RUNNER_BACKENDS).sort()).toStrictEqual(
-      [...RUNNER_KINDS].sort((a, b) => a.localeCompare(b))
+    expect(Object.keys(HARNESSES).sort()).toStrictEqual(
+      [...HARNESS_KINDS].sort((a, b) => a.localeCompare(b))
     );
   });
 });

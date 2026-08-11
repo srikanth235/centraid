@@ -4,7 +4,7 @@ import type { JSX } from "react";
 //
 // Glyphs are vendored from the ACP registry CDN
 // (cdn.agentclientprotocol.com/registry/v1/latest/<id>.svg) — one monochrome
-// mark per supported runner kind. Every glyph is drawn with `currentColor` and
+// mark per supported harness kind. Every glyph is drawn with `currentColor` and
 // carries NO hardcoded colour, so each one inherits the card's accent (or the
 // muted ink token when the agent is unavailable) through the `color` the
 // `AgentGlyph` wrapper sets. Each entry keeps the source SVG's own `viewBox`
@@ -13,7 +13,7 @@ import type { JSX } from "react";
 //
 // This is cosmetic polish only, exactly like `ACCENT_BY_KIND`: a kind absent
 // here still renders a complete card and falls back to a neutral generic glyph.
-// It never gates or filters the gateway's runner list.
+// It never gates or filters the gateway's harness list.
 
 interface Glyph {
   readonly viewBox: string;
@@ -88,7 +88,7 @@ export const AGENT_GLYPHS: Record<string, Glyph> = {
 };
 
 /**
- * The identity glyph for one runner kind, drawn in `currentColor`. `color` is
+ * The identity glyph for one harness kind, drawn in `currentColor`. `color` is
  * the card accent when the agent is connected and a muted ink token otherwise,
  * so the glyph tints exactly like the rest of the card. An unrecognised kind
  * (a gateway newer than this build) falls back to a neutral generic mark rather

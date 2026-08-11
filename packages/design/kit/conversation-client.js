@@ -108,7 +108,7 @@ export function vaultAppsPath() {
 
 /**
  * The inline model picker's state, shared by both surfaces. `current` is the
- * subsystem override (null = "use default"); `catalog` is the runner's model
+ * subsystem override (null = "use default"); `catalog` is the harness's model
  * list; `defaultModel` is the resolved gateway default's display name.
  * @typedef {{ loaded: boolean, current: string|null, defaultModel: string, catalog: Array<{id: string, label?: string}> }} ModelState
  */

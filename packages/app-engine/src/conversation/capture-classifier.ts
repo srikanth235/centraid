@@ -1,5 +1,5 @@
 import type { TurnStreamEvent } from "./runner.js";
-import type { RunTurnFn, RunnerPrefs, TurnInput } from "./turn.js";
+import type { RunTurnFn, HarnessPrefs, TurnInput } from "./turn.js";
 
 const CAPTURE_SYSTEM_PROMPT = [
   "Classify one universal-capture draft for a personal organizer.",
@@ -18,7 +18,7 @@ export interface AgentCapturePreview {
 
 export interface ClassifyCaptureDeps {
   runTurn: RunTurnFn;
-  runnerPrefs: RunnerPrefs;
+  harnessPrefs: HarnessPrefs;
   cwd: string;
   text: string;
   model?: string;
@@ -90,7 +90,7 @@ export async function classifyCaptureWithAgent(
     onEvent,
   };
   try {
-    await deps.runTurn(input, { prefs: deps.runnerPrefs });
+    await deps.runTurn(input, { prefs: deps.harnessPrefs });
   } finally {
     if (timer) clearTimeout(timer);
   }

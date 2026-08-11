@@ -13,7 +13,7 @@ import { makeConversationRunnerCore } from "./runner-core.js";
 import type { ConversationTurnInput, TurnStreamEvent } from "./runner.js";
 import type {
   RunTurnFn,
-  RunnerPrefs,
+  HarnessPrefs,
   TurnConfig,
   TurnInput,
   TurnResult,
@@ -47,7 +47,7 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
         kind === "claude-code"
           ? { kind, configPins: { thought_level: "high" } }
           : { kind: "codex", configPins: { thought_level: "xhigh" } },
-      runnerLadder: () => ["codex", "claude-code"],
+      harnessLadder: () => ["codex", "claude-code"],
       getDispatcher: () => dispatcher,
       resolveCwd: (input) => input.dataDir,
       runTurn: async (input, config) => {
@@ -58,11 +58,11 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
             message: "quota exceeded",
             failureClass: "quota",
           });
-          return { adapterKind: "codex" };
+          return { harnessKind: "codex" };
         }
         input.onEvent({ type: "final", text: "fallback answer" });
         return {
-          adapterKind: "claude-code",
+          harnessKind: "claude-code",
           sessionId: "claude-1",
           hydrated: true,
         };
@@ -71,7 +71,7 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
 
     const result = await runner.run(
       turnInput({
-        prevAdapterKind: "codex",
+        prevHarnessKind: "codex",
         prevAdapterSessionId: "codex-1",
         model: "gpt-codex",
         configPins: { model: "gpt-codex", thought_level: "xhigh" },
@@ -91,16 +91,16 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
     expect(events).toContainEqual(
       expect.objectContaining({ type: "error", failureClass: "quota" })
     );
-    expect(result).toMatchObject({ adapterKind: "codex" });
+    expect(result).toMatchObject({ harnessKind: "codex" });
   });
 
   it("does not retry after meaningful output has begun", async () => {
-    const kinds: RunnerPrefs["kind"][] = [];
+    const kinds: HarnessPrefs["kind"][] = [];
     const events: TurnStreamEvent[] = [];
     const runner = makeConversationRunnerCore({
       subsystem: "assistant",
       prefsLoader: async (_subsystem, kind) => ({ kind: kind ?? "codex" }),
-      runnerLadder: () => ["codex", "claude-code"],
+      harnessLadder: () => ["codex", "claude-code"],
       getDispatcher: () => dispatcher,
       resolveCwd: (input) => input.dataDir,
       runTurn: async (turn, config) => {
@@ -111,7 +111,7 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
           message: "agent exited",
           failureClass: "exit",
         });
-        return { adapterKind: config.prefs.kind };
+        return { harnessKind: config.prefs.kind };
       },
     });
 
@@ -123,13 +123,13 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
     ]);
   });
 
-  it("skips a runner whose workspace breaker is open", async () => {
-    const kinds: RunnerPrefs["kind"][] = [];
+  it("skips a harness whose workspace breaker is open", async () => {
+    const kinds: HarnessPrefs["kind"][] = [];
     const runner = makeConversationRunnerCore({
       subsystem: "assistant",
       prefsLoader: async (_subsystem, kind) => ({ kind: kind ?? "codex" }),
-      runnerLadder: () => ["codex", "claude-code"],
-      runnerHealth: {
+      harnessLadder: () => ["codex", "claude-code"],
+      harnessHealth: {
         canAttempt: (_scope, kind) =>
           kind === "codex"
             ? {
@@ -147,7 +147,7 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
       resolveCwd: (input) => input.dataDir,
       runTurn: async (_turn, config) => {
         kinds.push(config.prefs.kind);
-        return { adapterKind: config.prefs.kind };
+        return { harnessKind: config.prefs.kind };
       },
     });
 
@@ -161,13 +161,13 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
     // inherited that plan — which, for an active primary sitting at the
     // ledger's head, is "no session id and no hydration". The whole
     // conversation silently vanished on the very turn a failover happened.
-    const planned: RunnerPrefs["kind"][] = [];
+    const planned: HarnessPrefs["kind"][] = [];
     let seen: TurnInput | undefined;
     const runner = makeConversationRunnerCore({
       subsystem: "assistant",
       prefsLoader: async (_subsystem, kind) => ({ kind: kind ?? "codex" }),
-      runnerLadder: () => ["codex", "claude-code"],
-      runnerHealth: {
+      harnessLadder: () => ["codex", "claude-code"],
+      harnessHealth: {
         canAttempt: (_scope, kind) =>
           kind === "codex"
             ? { allowed: false, failureClass: "auth" }
@@ -181,13 +181,13 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
       resolveCwd: (input) => input.dataDir,
       runTurn: async (input, config) => {
         seen = input;
-        return { adapterKind: config.prefs.kind };
+        return { harnessKind: config.prefs.kind };
       },
     });
 
     await runner.run(
       turnInput({
-        prevAdapterKind: "codex",
+        prevHarnessKind: "codex",
         resumeForKind: (kind) => {
           planned.push(kind);
           // The primary is caught up (nothing to replay); the fallback has
@@ -218,7 +218,7 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
     const runner = makeConversationRunnerCore({
       subsystem: "assistant",
       prefsLoader: async () => ({ kind: "codex" }),
-      runnerHealth: {
+      harnessHealth: {
         canAttempt: () => ({ allowed: false, failureClass: "auth" }),
         reportFailure: () => undefined,
         reportOk: () => undefined,
@@ -227,7 +227,7 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
       },
       getDispatcher: () => dispatcher,
       resolveCwd: (input) => input.dataDir,
-      runTurn: async () => ({ adapterKind: "codex" }),
+      runTurn: async () => ({ harnessKind: "codex" }),
     });
 
     await runner.run(turnInput({ onEvent: (event) => events.push(event) }));
@@ -244,19 +244,19 @@ describe("makeConversationRunnerCore — provider egress consent", () => {
   it("implicitly grants the initial choice and gates an attended cross-provider switch", async () => {
     const grants = new Set<string>();
     const runTurn = vi.fn<RunTurnFn>(
-      async (): Promise<TurnResult> => ({ adapterKind: "codex" })
+      async (): Promise<TurnResult> => ({ harnessKind: "codex" })
     );
     const events: TurnStreamEvent[] = [];
     const runner = makeConversationRunnerCore({
       subsystem: "assistant",
       prefsLoader: async () => ({ kind: "codex" }),
       providerEgressConsent: {
-        has: (conversationId, runnerKind) =>
-          grants.has(`${conversationId}:${runnerKind}`),
-        grant: (conversationId, runnerKind) =>
-          grants.add(`${conversationId}:${runnerKind}`),
-        revoke: (conversationId, runnerKind) =>
-          grants.delete(`${conversationId}:${runnerKind}`),
+        has: (conversationId, harnessKind) =>
+          grants.has(`${conversationId}:${harnessKind}`),
+        grant: (conversationId, harnessKind) =>
+          grants.add(`${conversationId}:${harnessKind}`),
+        revoke: (conversationId, harnessKind) =>
+          grants.delete(`${conversationId}:${harnessKind}`),
       },
       getDispatcher: () => dispatcher,
       resolveCwd: (input) => input.dataDir,
@@ -269,8 +269,8 @@ describe("makeConversationRunnerCore — provider egress consent", () => {
 
     await runner.run(
       turnInput({
-        runnerKind: "claude-code",
-        prevAdapterKind: "codex",
+        harnessKind: "claude-code",
+        prevHarnessKind: "codex",
         onEvent: (event) => events.push(event),
       })
     );
@@ -285,8 +285,8 @@ describe("makeConversationRunnerCore — provider egress consent", () => {
 
     await runner.run(
       turnInput({
-        runnerKind: "claude-code",
-        prevAdapterKind: "codex",
+        harnessKind: "claude-code",
+        prevHarnessKind: "codex",
         providerConsent: "claude-code",
         onEvent: (event) => events.push(event),
       })
@@ -300,19 +300,19 @@ describe("makeConversationRunnerCore — provider egress consent", () => {
     // conversation, so switching back to an earlier one does not re-prompt.
     const grants = new Set<string>();
     const runTurn = vi.fn<RunTurnFn>(
-      async (): Promise<TurnResult> => ({ adapterKind: "gemini" })
+      async (): Promise<TurnResult> => ({ harnessKind: "gemini" })
     );
     const events: TurnStreamEvent[] = [];
     const runner = makeConversationRunnerCore({
       subsystem: "assistant",
       prefsLoader: async (_subsystem, kind) => ({ kind: kind ?? "codex" }),
       providerEgressConsent: {
-        has: (conversationId, runnerKind) =>
-          grants.has(`${conversationId}:${runnerKind}`),
-        grant: (conversationId, runnerKind) =>
-          grants.add(`${conversationId}:${runnerKind}`),
-        revoke: (conversationId, runnerKind) =>
-          grants.delete(`${conversationId}:${runnerKind}`),
+        has: (conversationId, harnessKind) =>
+          grants.has(`${conversationId}:${harnessKind}`),
+        grant: (conversationId, harnessKind) =>
+          grants.add(`${conversationId}:${harnessKind}`),
+        revoke: (conversationId, harnessKind) =>
+          grants.delete(`${conversationId}:${harnessKind}`),
       },
       getDispatcher: () => dispatcher,
       resolveCwd: (input) => input.dataDir,
@@ -321,8 +321,8 @@ describe("makeConversationRunnerCore — provider egress consent", () => {
 
     await runner.run(
       turnInput({
-        runnerKind: "gemini",
-        prevAdapterKind: "codex",
+        harnessKind: "gemini",
+        prevHarnessKind: "codex",
         providerConsent: ["claude-code", "gemini"],
         onEvent: (event) => events.push(event),
       })
@@ -335,17 +335,17 @@ describe("makeConversationRunnerCore — provider egress consent", () => {
   });
 
   it("treats an explicitly configured ladder rung as recorded subsystem consent", async () => {
-    const granted: Array<[string, RunnerPrefs["kind"], string]> = [];
+    const granted: Array<[string, HarnessPrefs["kind"], string]> = [];
     const runTurn = vi.fn<RunTurnFn>(
       async (_input: TurnInput, config: TurnConfig): Promise<TurnResult> => ({
-        adapterKind: config.prefs.kind,
+        harnessKind: config.prefs.kind,
       })
     );
     const runner = makeConversationRunnerCore({
       subsystem: "assistant",
       prefsLoader: async (_subsystem, kind) => ({ kind: kind ?? "codex" }),
-      runnerLadder: () => ["codex", "claude-code"],
-      runnerHealth: {
+      harnessLadder: () => ["codex", "claude-code"],
+      harnessHealth: {
         canAttempt: (_scope, kind) =>
           kind === "codex"
             ? { allowed: false, failureClass: "auth" }
@@ -369,7 +369,7 @@ describe("makeConversationRunnerCore — provider egress consent", () => {
       runTurn,
     });
 
-    await runner.run(turnInput({ prevAdapterKind: "codex" }));
+    await runner.run(turnInput({ prevHarnessKind: "codex" }));
     expect(runTurn).toHaveBeenCalledOnce();
     expect(runTurn.mock.calls[0]![1].prefs.kind).toBe("claude-code");
     expect(granted).toContainEqual(["conv-1", "claude-code", "ladder"]);

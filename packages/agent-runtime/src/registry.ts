@@ -1,17 +1,17 @@
 /*
- * Runner backend registry — the single dispatch table for every runner
+ * Harness backend registry — the single dispatch table for every harness
  * kind the runtime can drive.
  *
  * governance: allow-repo-hygiene file-size-limit — this is a per-kind
- * dispatch table; it grows one backend entry per RunnerKind by design, so it
+ * dispatch table; it grows one backend entry per HarnessKind by design, so it
  * legitimately exceeds the 500-line file cap. Split into a data module before
  * it doubles, not per added kind.
  *
  * Before this existed, three sites hardcoded a per-kind switch: `runTurn`
  * (a two-arm `if`), `preflight` (`MIN_VERSIONS` / `defaultBinFor` /
  * `hintFor`), and `models/enumerators` (a `switch`). They now all read
- * from `RUNNER_BACKENDS` below, so adding a runner kind is one entry here
- * plus its `RunnerKind` literal in `@centraid/app-engine` — nothing else
+ * from `HARNESSES` below, so adding a harness kind is one entry here
+ * plus its `HarnessKind` literal in `@centraid/app-engine` — nothing else
  * branches on the kind.
  *
  * Since issue #479 there is exactly ONE integration path: the generic ACP
@@ -35,8 +35,8 @@
 
 import type {
   RunTurnFn,
-  RunnerKind,
-  RunnerModel,
+  HarnessKind,
+  HarnessModel,
   TurnConfig,
   TurnInput,
   TurnResult,
@@ -48,25 +48,25 @@ import { enumerateAcpModels } from "./backends/acp/enumerate-models.js";
 import { resolveClaudeModel } from "./models/tiers.js";
 
 /** A pinned semantic version — the minimum whose protocol we've verified. */
-export interface RunnerVersion {
+export interface HarnessVersion {
   major: number;
   minor: number;
   patch: number;
 }
 
-/** Prefs slice a model enumerator reads (never the whole `RunnerPrefs`). */
+/** Prefs slice a model enumerator reads (never the whole `HarnessPrefs`). */
 export interface EnumeratePrefs {
   binPath?: string;
   extraArgs?: string[];
 }
 
 /**
- * Everything the runtime needs to know about one runner kind, gathered in
+ * Everything the runtime needs to know about one harness kind, gathered in
  * one place: how to drive a turn, its default binary, the minimum verified
  * version, the install hint, and how to enumerate its models.
  */
-export interface RunnerBackend {
-  readonly kind: RunnerKind;
+export interface HarnessSpec {
+  readonly kind: HarnessKind;
   /** Human label for pickers / status surfaces. */
   readonly label: string;
   /**
@@ -79,23 +79,23 @@ export interface RunnerBackend {
    */
   readonly defaultBin?: string;
   /** Minimum CLI version whose event/flag schema we've verified. */
-  readonly minVersion: RunnerVersion;
+  readonly minVersion: HarnessVersion;
   /** Caller-facing install/setup hint (shown when the CLI is missing). */
   readonly installHint: string;
   /** Drive one model turn. Emits `TurnStreamEvent`s; resolves with the resume id. */
   readonly runTurn: RunTurnFn;
-  /** Enumerate the models this runner can serve. Best-effort, never throws. */
-  readonly enumerateModels: (prefs: EnumeratePrefs) => Promise<RunnerModel[]>;
+  /** Enumerate the models this harness can serve. Best-effort, never throws. */
+  readonly enumerateModels: (prefs: EnumeratePrefs) => Promise<HarnessModel[]>;
 }
 
 // ---- the one backend shape ----------------------------------------------
 
 interface AcpBackendSpec {
-  kind: RunnerKind;
+  kind: HarnessKind;
   label: string;
   defaultBin?: string;
   acpArgs: string[];
-  minVersion: RunnerVersion;
+  minVersion: HarnessVersion;
   installHint: string;
   /**
    * Static env for the spawned process, whichever flavour this kind is: the
@@ -113,7 +113,7 @@ interface AcpBackendSpec {
    * Enumerate this kind's models by probing a real ACP session (launch →
    * initialize → session/new → read the model config option). Off by default:
    * the probe spawns the agent, and the boot warmer warms EVERY detected
-   * runner, so a universal default would spawn a process per installed native
+   * harness, so a universal default would spawn a process per installed native
    * kind at boot — many of which just answer `AUTH_REQUIRED`. The two
    * adapter-backed kinds that had bespoke enumerators before #484 (codex,
    * claude-code) opt in; every native kind stays on "Gateway default" and
@@ -150,20 +150,20 @@ export function buildAcpConfig(
 }
 
 /** Every registered spec, keyed by kind — the launch-config source of truth. */
-const ACP_SPECS = new Map<RunnerKind, AcpBackendSpec>();
+const ACP_SPECS = new Map<HarnessKind, AcpBackendSpec>();
 
 /** The launch config a kind would use for the given prefs. Test/diagnostic seam. */
 export function acpConfigFor(
-  kind: RunnerKind,
+  kind: HarnessKind,
   prefs: { binPath?: string; extraArgs?: string[] }
 ): AcpTurnConfig {
   const spec = ACP_SPECS.get(kind);
   if (!spec)
-    throw new Error(`no runner backend registered for kind "${String(kind)}"`);
+    throw new Error(`no harness backend registered for kind "${String(kind)}"`);
   return buildAcpConfig(spec, prefs);
 }
 
-function makeAcpBackend(spec: AcpBackendSpec): RunnerBackend {
+function makeAcpBackend(spec: AcpBackendSpec): HarnessSpec {
   ACP_SPECS.set(spec.kind, spec);
   return {
     kind: spec.kind,
@@ -228,7 +228,7 @@ function makeAcpBackend(spec: AcpBackendSpec): RunnerBackend {
         acpConfig
       );
       return {
-        adapterKind: spec.kind,
+        harnessKind: spec.kind,
         ...(result.sessionId ? { sessionId: result.sessionId } : {}),
         ...(result.usageSnapshot
           ? { usageSnapshot: result.usageSnapshot }
@@ -246,9 +246,9 @@ function makeAcpBackend(spec: AcpBackendSpec): RunnerBackend {
     // launch config a turn would. Everything else returns nothing and the
     // picker stays on "Gateway default".
     enumerateModels: spec.probeModels
-      ? (prefs: EnumeratePrefs): Promise<RunnerModel[]> =>
+      ? (prefs: EnumeratePrefs): Promise<HarnessModel[]> =>
           enumerateAcpModels(buildAcpConfig(spec, prefs))
-      : (): Promise<RunnerModel[]> => Promise.resolve([]),
+      : (): Promise<HarnessModel[]> => Promise.resolve([]),
   };
 }
 
@@ -529,8 +529,8 @@ const acpBackend = makeAcpBackend({
     "Set the ACP CLI’s binary path in Settings → Agents, and add its ACP flag (e.g. `--acp`) under extra args.",
 });
 
-/** The dispatch table. Keyed on `RunnerKind` — TS enforces full coverage. */
-export const RUNNER_BACKENDS: Record<RunnerKind, RunnerBackend> = {
+/** The dispatch table. Keyed on `HarnessKind` — TS enforces full coverage. */
+export const HARNESSES: Record<HarnessKind, HarnessSpec> = {
   codex: codexBackend,
   "claude-code": claudeBackend,
   gemini: geminiBackend,
@@ -551,25 +551,25 @@ export const RUNNER_BACKENDS: Record<RunnerKind, RunnerBackend> = {
 };
 
 /** The deliberately small v0 product roster. */
-export const SUPPORTED_RUNNER_KINDS = [
+export const SUPPORTED_HARNESS_KINDS = [
   "codex",
   "claude-code",
   "opencode",
   "grok",
   "pi",
-] as const satisfies readonly RunnerKind[];
+] as const satisfies readonly HarnessKind[];
 
-export const SUPPORTED_RUNNER_BACKENDS: readonly RunnerBackend[] =
-  SUPPORTED_RUNNER_KINDS.map((kind) => RUNNER_BACKENDS[kind]);
+export const SUPPORTED_HARNESSES: readonly HarnessSpec[] =
+  SUPPORTED_HARNESS_KINDS.map((kind) => HARNESSES[kind]);
 
 /**
- * Resolve the backend for a runner kind. Throws on an unregistered kind —
+ * Resolve the backend for a harness kind. Throws on an unregistered kind —
  * callers that must never throw (best-effort enumeration) index
- * `RUNNER_BACKENDS` directly and guard for `undefined`.
+ * `HARNESSES` directly and guard for `undefined`.
  */
-export function getRunnerBackend(kind: RunnerKind): RunnerBackend {
-  const backend = RUNNER_BACKENDS[kind];
+export function getHarness(kind: HarnessKind): HarnessSpec {
+  const backend = HARNESSES[kind];
   if (!backend)
-    throw new Error(`no runner backend registered for kind "${String(kind)}"`);
+    throw new Error(`no harness backend registered for kind "${String(kind)}"`);
   return backend;
 }

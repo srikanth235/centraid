@@ -50,8 +50,8 @@ export interface InsightsSourceRow {
   automationName?: string;
 }
 
-export interface InsightsRunnerRow {
-  /** ACP stamps provider = RunnerKind; "unknown" when missing. */
+export interface InsightsHarnessRow {
+  /** ACP stamps provider = HarnessKind; "unknown" when missing. */
   provider: string;
   runs: number;
   tokens: number;
@@ -66,7 +66,7 @@ export interface InsightsModelRow {
 }
 
 export interface InsightsEffortRow {
-  /** ACP semantic thought_level confirmed by the runner. */
+  /** ACP semantic thought_level confirmed by the harness. */
   effort: string;
   runs: number;
   tokens: number;
@@ -118,7 +118,7 @@ export interface InsightsSummary {
   kpis: InsightsKpis;
   daily: InsightsDailyPoint[];
   bySource: InsightsSourceRow[];
-  byRunner: InsightsRunnerRow[];
+  byHarness: InsightsHarnessRow[];
   byModel: InsightsModelRow[];
   byEffort: InsightsEffortRow[];
   recent: InsightsActivityRow[];

@@ -16,7 +16,7 @@ describe(runTurn, () => {
     const config = { prefs: { kind: "bogus" } } as unknown as TurnConfig;
 
     await expect(runTurn(input, config)).rejects.toThrow(
-      /unknown runner kind/u
+      /unknown harness kind/u
     );
   });
 });
