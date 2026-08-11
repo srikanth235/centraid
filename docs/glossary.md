@@ -7,8 +7,8 @@ Authoritative product vocabulary. Prefer these terms in code, docs, commits, and
 | Term | Meaning | Code |
 | --- | --- | --- |
 | **conversation** | Durable thread. Single-kind: `kind ∈ {chat, build, automation}`. | `packages/app-engine/src/conversation/schema.ts`; tables in `gateway-db.ts` |
-| **turn** | One execution under a conversation (`conversation_id` NOT NULL, FK, CASCADE). One reply round for chat; one compile/fire / `ctx.agent` round for automation. | same |
-| **item** | Ordered trace element under a turn. `kind ∈ {message_in, step, tool, agent}`. Inbound is `message_in` ordinal 0. | same |
+| **turn** | One execution under a conversation (`conversation_id` NOT NULL, FK, CASCADE). One reply round for chat; one compile/fire / `ctx.delegate` round for automation. | same |
+| **item** | Ordered trace element under a turn. `kind ∈ {message_in, step, tool, delegate}`. Inbound is `message_in` ordinal 0. | same |
 | **run_summary** | Derived VIEW over the ledger for Insights — not a separate write path. | `packages/app-engine/src/stores/gateway-db.ts` |
 
 There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automation is a conversation whose other side is a deterministic script; its transcript is the same ledger.
@@ -22,6 +22,7 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | "message" as the unit of agent work | **item** (or `message_in` item) | Messages are one item kind |
 | "run" / "run node" as a ledger layer | **turn** / **item** | Pre-#190 vocabulary |
 | "thread" as a table name | **conversation** | Informal synonym only |
+| "agent" for the model-turn item kind | **delegate** (`item.kind ∈ {message_in, step, tool, delegate}`) | _agent_ is reserved for principals — owners, devices, and enrolled autonomous callers (`consent.agent`) — not the judgment rail (#743) |
 
 "Chat" remains fine in **UI copy** ("Ask your vault") and when `conversation.kind === 'chat'`.
 
@@ -56,11 +57,11 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **CAS / custody** | Content-addressed blob store; local-only vs remote-primary lifecycle. | `packages/vault` blob; backup package |
 | **skill** | Agent grounding unit (`SKILL.md`) loaded by the agent runtime. | `packages/gateway/src/skills` |
 | **recognition automation** | Bundled handler that owns its ML implementation, reads bytes/text with `ctx.vault.content`, and writes model-versioned derivatives with `ctx.vault.invoke`. Model assets may live in the local automation runtime; there is no separate enrichment service or generic inference context. | `packages/blueprints/automations/{photo-ocr,transcript,embed-image,embed-text,faces}` |
-| **deterministic step** | The self-contained, non-agent branch of a recognition automation: same input + pinned local specialist model gives the same canonical result without provider egress. | `tools/recognition-automations/automation-handlers`; generated handlers under `packages/blueprints/automations` |
-| **agent variant** | An optional alternate step in the same template using `ctx.agent`, the pinned-runner and provider-egress-consent rails. Only OCR declares one; it is not a provider kind or second engine. | `packages/automation/src/manifest/manifest.ts`; `packages/agent-runtime/src/automation/run-automation.ts` |
+| **deterministic step** | The self-contained, non-delegate branch of a recognition automation: same input + pinned local specialist model gives the same canonical result without provider egress. | `tools/recognition-automations/automation-handlers`; generated handlers under `packages/blueprints/automations` |
+| **delegate step** | An optional alternate step in the same template using `ctx.delegate`, the pinned-harness and provider-egress-consent rails. Only OCR declares one; it is not a provider kind or second engine. | `packages/automation/src/manifest/manifest.ts`; `packages/agent-runtime/src/automation/run-automation.ts` |
 | **design tokens** | Shared colors, type, spacing, icons across desktop/web/mobile. | `packages/design` |
 | **receipt** | (1) Vault write receipt id from consent pipeline; (2) repo `receipts/issue-N-*.md` for issue work. | context-dependent |
-| **prefs** | Device-level gateway preferences in `gateway.db` — runner, theme, etc. Not the vault owner identity. | `GatewayDatabase.prefRows()` / `setPref()` |
+| **prefs** | Device-level gateway preferences in `gateway.db` — harness, theme, etc. Not the vault owner identity. | `GatewayDatabase.prefRows()` / `setPref()` |
 
 ## Hosts and clients
 
@@ -181,6 +182,8 @@ The vocabulary for how one item set crosses from an origin vault to an audience 
 | `com.centraid.*` identifiers | **`dev.centraid.*`** ([identifiers.md](identifiers.md)) |
 | "confirm / reject" as the pair of things an owner does to a **proposal** | **answer** — one verb with three members: `confirm`, `reject`, `dismiss` ("reviewed, deliberately left unnamed"). A pair could not finish a review queue: an owner with no way to say "I looked and I am not naming this" only ever has Skip, and a skipped proposal returns for ever. See [`media.answer_face_proposal`](../packages/vault/src/commands/enrich.ts) and the shared queue model [`triage-session.ts`](../packages/blueprints/apps/_shared/triage-session.ts) (#712, #725). |
 | **deleting** a rejected proposal row | a rejection is a **state** (`review_state`), never a `DELETE` — a deleted row remembers nothing, so the enricher's next run proposes the same thing again and the owner answers it for ever. Suppression is one `WHERE review_state = 'proposed'` in [`enrich-publishers.ts`](../packages/vault/src/ingest/enrich-publishers.ts) (#712). |
+| "runner" / "adapter" / "backend" / "provider" as a stand-in for the installed CLI | **harness** — the installed agentic CLI Centraid drives (`claude-code`, `codex`, `opencode`, `grok`, `pi`, …). `RunnerKind` → `HarnessKind`, `RUNNER_BACKENDS` → `HARNESSES`, `getRunnerBackend` → `getHarness` (#743). **provider** still names a vendor receiving egress (billing/egress language only); **adapter** still names the first-party ACP shim npm packages (`@agentclientprotocol/claude-agent-acp`, `@agentclientprotocol/codex-acp`) and nothing else; ACP's own protocol "agent" role word inside `backends/acp/**` is untouched |
+| "`<schema>_<schema>`" as a table name (a plane repeating its own schema name for its central table) | name the **row**, not the schema — `agent_agent` → `consent_agent`, `media_media_asset` → `media_asset` (#743) |
 
 ## Inconsistencies (known dual vocabulary)
 
@@ -191,6 +194,7 @@ These pairs appear in code and docs for historical reasons. Prefer the **canonic
 | host / gateway | **gateway** for the product process | "host" in host-agnostic package comments | Desktop "hosts" the embed; the product backend is the gateway |
 | profile / gateway id | **gateway id** in multi-gateway switcher | "profile" in older settings paths | Same durable folder under `gateways/<id>/` |
 | chat / conversation | **conversation ⊃ turn ⊃ item** | "chat" only in UI copy | Ledger model forbids "chat" as the technical term |
+| agent / harness | **harness** in identifiers, prefs keys, tables, and code | "Agents" in user-facing UI copy (Settings → Agents, the agent picker) | Market word; same precedent as chat/conversation — copy keeps the familiar term while every identifier says harness (#743) |
 | template / blueprint | **blueprint** for shipped source | "template" in gallery UI | After install it is an **app** |
 | server / gateway | **gateway** | HTTP "server" for the listener socket |  |
 | Approvals / Inbox / Notifications | **Notifications** in UI labels, docs, wire names, and identifiers | `Approvals*` file/component names, the `approvals` route kind, and mobile nav routes | Approvals → Inbox in #647, Inbox → **Notifications** in #665 (copy, identifiers, `/_vault/notifications` routes, `notifications_notice` table). The remaining `Approvals*` identifiers await a mechanical rename |

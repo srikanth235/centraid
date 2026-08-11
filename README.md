@@ -20,7 +20,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 ## What it does
 
 - **Install apps** — 8 blueprint apps (Docs, Photos, Notes, People, Locker, Tally, Agenda, Tasks). Installing writes a consent row and grants the scopes the app declares — nothing is copied; apps serve from the shipped release, upgrade with it, and uninstall keeps your data.
-- **Automate your data** — automation templates (Google/Microsoft/GitHub/GitLab/Linear/Notion/Todoist/Slack/Dropbox connectors plus enrichers like photo captioner and document deadlines) that fire on a schedule, webhook, condition, or vault data change. Each is a saved conversation; its handler runs in a worker thread with a curated `ctx` surface (`ctx.vault`, `ctx.agent`, `ctx.fetch`, KV state, run history). Templates still copy into the vault.
+- **Automate your data** — automation templates (Google/Microsoft/GitHub/GitLab/Linear/Notion/Todoist/Slack/Dropbox connectors plus enrichers like photo captioner and document deadlines) that fire on a schedule, webhook, condition, or vault data change. Each is a saved conversation; its handler runs in a worker thread with a curated `ctx` surface (`ctx.vault`, `ctx.delegate`, `ctx.fetch`, KV state, run history). Templates still copy into the vault.
 - **Connect Google without Cloud Console** — Centraid Assist uses a stateless public OAuth ceremony so desktop/PWA clients paired to a remote gateway can connect Calendar or Contacts without exposing that gateway. The browser carries only a short-lived code; tokens are sealed only on the gateway. BYO OAuth remains under Advanced. [Privacy and architecture](docs/oauth-assist.md).
 - **Ask your vault** — a vault-wide assistant reads across every app through one tool register; each app also answers data questions on its own `/centraid/<id>/_turn` surface.
 - **Explore the model** — **Vault Atlas** maps every kind, how kinds relate (a star centered on `core_party`), and a browsable table editor — every write going through the journalled command path.
@@ -41,7 +41,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
  │  app-engine        agent-runtime      automation  │
  │  declared-handler  ACP turn driver    cron+webhook│
  │  dispatcher        (one path, every   fire spine  │
- │      │             runner kind)            │      │
+ │      │             harness kind)           │      │
  │      ▼                                     ▼      │
  │  vault plane: vault.db + journal.db  scheduler    │
  │  (consent-checked commands, receipts)             │
@@ -95,7 +95,7 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `packages/gateway` | Host-agnostic gateway: wires everything below against injected paths/secrets. Ships the `centraid-gateway` daemon. |
 | `packages/vault` | The personal ontology: `vault.db` + `journal.db` DDL, consent gateway, typed commands, sealed columns, sync/outbox spine. |
 | `packages/app-engine` | Runtime engine: handler loader, declared-handler dispatcher, conversation ledger, `/centraid` HTTP surface. |
-| `packages/agent-runtime` | Drives one turn through the Agent Client Protocol — the single path for every runner kind, with first-party adapters for CLIs that don't speak ACP ([docs/runners.md](docs/runners.md)); ships the vault-register tools and the `centraid` CLI. |
+| `packages/agent-runtime` | Drives one turn through the Agent Client Protocol — the single path for every harness kind, with first-party adapters for CLIs that don't speak ACP ([docs/runners.md](docs/runners.md)); ships the vault-register tools and the `centraid` CLI. |
 | `packages/automation` | Manifest schema, fire spine, in-process scheduler, webhook ingress, worker-thread handler runner. |
 | `packages/tunnel` | iroh QUIC wire protocol — device tunnel + one-time pairing; the TS reference the Swift/Kotlin mobile ports mirror. |
 | `packages/blueprints` | Template gallery: 8 blueprint apps + 27 automation templates, plus blank-app scaffolders. Renders on the kit layer of `packages/design`. |

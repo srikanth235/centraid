@@ -280,7 +280,7 @@ Generated-state properties cover blob custody and replica intent idempotency. Th
 
 Do not add another local helper when the shared package already owns the seam — for `mkdtemp`, fake timers, and `Math.random` this is enforced by lint, not left to review (see [Test-kit seams](#test-kit-seams-656-layer-4)).
 
-Deterministic automation fires need no mock: their handlers run in-process against the parent-side `ctx.vault` / `ctx.fetch` / `ctx.state` rails, and only `ctx.agent` reaches a provider. In tests that provider turn is faked through the ACP fake-agent fixture (`packages/agent-runtime/src/backends/acp/fake-acp-agent.mjs`), the same seam chat turns use — there is no automation-specific mock LLM (the `@centraid/mock-llm` package was removed with the `ctx.tool` rail).
+Deterministic automation fires need no mock: their handlers run in-process against the parent-side `ctx.vault` / `ctx.fetch` / `ctx.state` rails, and only `ctx.delegate` reaches a provider. In tests that provider turn is faked through the ACP fake-agent fixture (`packages/agent-runtime/src/backends/acp/fake-acp-agent.mjs`), the same seam chat turns use — there is no automation-specific mock LLM (the `@centraid/mock-llm` package was removed with the `ctx.tool` rail).
 
 ## Lane schedule and commands
 

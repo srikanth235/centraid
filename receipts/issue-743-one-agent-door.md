@@ -5,7 +5,7 @@
 - [x] Vault schema renames: `agent.agent` → `consent.agent` (`consent_agent`), `host_key` → `enrollment_key`, `journal` attribution `agent_id` → `caller_id`, `media_media_asset` → `media_asset`; replica unavailable-columns + replica-shape tests updated
 - [x] Harness axis rename (`RunnerKind` → `HarnessKind`, `RUNNER_BACKENDS` → `HARNESSES`, `adapterKind` → harness-named, `requires.runner` → `requires.harness`, …)
 - [x] Delegate rail rename (`ctx.agent` → `ctx.delegate`, ledger item `kind:"delegate"`, worker messages, failure prefix)
-- [ ] Glossary / docs A1 write-back (forbidden synonyms, delegate step, schema-naming rule)
+- [x] Glossary / docs A1 write-back (forbidden synonyms, delegate step, schema-naming rule)
 - [ ] `ctx.delegate` dispatched through the accounted chat spine (metering, budgeted hydration, kind-scoped resume)
 - [ ] HarnessSessions extraction keyed `(conversationRef, harnessKind)`; per-binding settlement + multi-harness regression test
 - [ ] Per-call `harness`/`model`/`configPins` on `ctx.delegate`; consent fail-closed (#567 D13); compiler grounding + blueprint handlers regenerated
@@ -75,6 +75,21 @@
   `harness_kind` but missed a raw SQL string in `tests/quality/user-facing-qualities.test.ts`,
   leaving F1 failing with `no such column: c.adapter_kind`. The query, its row type, and its loop
   variable are corrected here; the quality suite is back to 14/14.
+
+- **Docs / glossary A1 write-back (fourth slice).** Done in full: Glossary / docs A1 write-back
+  (forbidden synonyms, delegate step, schema-naming rule). `docs/glossary.md` now lists the ledger
+  item kinds as `{message_in, step, tool, delegate}`, renames the manifest concept "agent variant"
+  to **"delegate step"** (pairing with the existing "deterministic step"), and gains three
+  forbidden-synonym rows — runner/adapter/backend/provider-as-CLI → **harness**; agent-for-the-
+  model-turn-rail → **delegate** (agent reserved for principals); and the schema-naming rule that
+  **a table never repeats its schema's name**, citing `agent_agent` → `consent_agent` and
+  `media_media_asset` → `media_asset`. A tolerated dual-vocabulary row records that user-facing
+  copy keeps "Agents" (the market word) while every identifier says `harness`, following the
+  existing chat/conversation precedent. `docs/runners.md` was rewritten to harness vocabulary, and
+  ARCHITECTURE.md, README.md, CONSTITUTION.md, TESTING.md, `docs/decisions.md`,
+  `docs/blueprint-seats.md`, `docs/recognition-automations.md`, `docs/photos-derived-ledger.md`,
+  and `docs/config-ownership.md` were swept for the renamed identifiers. CHANGELOG.md gains an
+  Unreleased → Changed entry recording the breaking v0 renames.
 
 ### Files touched (vault-schema slice)
 
@@ -540,6 +555,24 @@ The delegate-rail rename plus the `harness_kind` SQL regression fix; every path 
 - `tests/quality/user-facing-qualities.test.ts`
 - `tools/recognition-automations/automation-handlers/photo-ocr.js`
 
+### Files touched (docs write-back slice)
+
+Markdown only; no code changed in this slice.
+
+- `ARCHITECTURE.md`
+- `CHANGELOG.md`
+- `CONSTITUTION.md`
+- `README.md`
+- `TESTING.md`
+- `docs/blueprint-seats.md`
+- `docs/config-ownership.md`
+- `docs/decisions.md`
+- `docs/glossary.md`
+- `docs/photos-derived-ledger.md`
+- `docs/recognition-automations.md`
+- `docs/runners.md`
+- `receipts/issue-743-one-agent-door.md`
+
 ## Out of scope
 
 - Renaming the `@centraid/agent-runtime` npm package (README disclaimer instead — see issue).
@@ -578,6 +611,21 @@ The delegate-rail rename plus the `harness_kind` SQL regression fix; every path 
   left alone — they describe "reported by the model/ACP harness", a different axis than the rail,
   and the issue's rename list does not name them. The manifest's `agentVariant` / "agent variant"
   → "delegate step" wording belongs to the glossary write-back slice.
+- `docs/runners.md` keeps its filename rather than becoming `harnesses.md`: its one inbound link
+  lives in `packages/agent-runtime/src/registry.ts`, a `.ts` file outside the docs slice's edit
+  fence. The issue's acceptance criteria already list `docs/runners.md` scope as a tolerated case.
+  The file's prose is fully harness-vocabulary, with a note at the top pointing at the glossary's
+  tolerated-dual entry.
+- Governance-frozen historical sections were deliberately NOT rewritten: CONSTITUTION.md's
+  Evolution Log and QUALITY.md's Resolved list are declared `frozen-section` in
+  `.governance/conf/.../doc-integrity.conf` and describe past PRs in the vocabulary current at the
+  time. The live `handler-uses-ctx-primitives` directive text WAS updated.
+- `docs/runners.md`'s "billed rail" line documented a stale positional signature
+  (`ctx.agent(prompt, { json, model })`); it was corrected to the real options-object form
+  `ctx.delegate({ prompt, json, model })` rather than mechanically substituting the new name into
+  a wrong signature.
+- Glossary L2/L4 entries keep the word "agent": they describe autonomous *principals*, which is
+  precisely the surviving meaning under the new forbidden-synonym row.
 
 ## Verification
 
@@ -608,121 +656,164 @@ bun run --cwd packages/automation test
 bunx vitest run --config vitest.quality.config.ts user-facing-qualities
 ```
 
+- **Docs slice.** `bun run test:qualities` → 4 files / 23 tests passed. `bash .governance/run.sh`
+  → `internal-doc-links` and `doc-integrity` pass (no frozen section touched, no doc link broken).
+  The attestation audit caught `format-check` failing on three of this slice's own files
+  (`CHANGELOG.md`, `docs/config-ownership.md`, `docs/glossary.md` — emphasis style and a stale
+  table column width); they were formatted with the pinned oxfmt and restaged, and the directive
+  now passes.
+
 - Further slices append their verification here as they land.
 
 ## Audit
 
 Independent re-attestation against the CURRENT `git diff --cached`, fresh context, no reliance on
-the committing agent's claims. Prior slices are **already committed** — `git log --oneline -3`:
+the committing agent's claims. This audit supersedes the previous (delegate-rail-slice) audit
+content below the heading. Four slices are now in play — three **already committed**
+(`git log --oneline -4`):
 
 ```
+9a07465d refactor(automation)!: rename the handler judgment rail to ctx.delegate (#743)
 5624e365 refactor(harness)!: rename the installed-CLI axis to harness (#743)
 4162072c refactor(vault)!: consent.agent, caller_id, enrollment_key, media_asset renames (#743)
 3f12bdea fix(recognition): refresh rewritten text embeddings (#736) (#737)
 ```
 
-So the vault-schema slice (`4162072c`) and the harness-axis slice (`5624e365`) are both in `HEAD`
-and out of scope for this audit. This audit covers the **new staged slice only**: the delegate-rail
-rename (`ctx.agent`→`ctx.delegate`, `AgentDispatcher`→`DelegateDispatcher`,
-`AgentCall`/`AgentAttachment`/`AgentContentRef`→`Delegate*`, `agent-answer.ts`→`delegate-answer.ts`,
-`coerceAgentAnswer`→`coerceDelegateAnswer`, worker messages `"agent"`/`"agent-reply"`→
-`"delegate"`/`"delegate-reply"`, ledger `ItemKind` `"agent"`→`"delegate"`,
-`AGENT_FAILURE_PREFIX`→`DELEGATE_FAILURE_PREFIX`, `AutomationAgentFailure`→
-`AutomationDelegateFailure`, `HandlerOutcome.agentCalls`→`delegateCalls`) plus a regression fix in
-`tests/quality/user-facing-qualities.test.ts` (`adapter_kind`→`harness_kind`, missed by the
-previously-committed harness slice). `git diff --cached --stat` → 62 files changed, 532
-insertions(+), 412 deletions(-); `git diff --cached -M --summary` → exactly one rename,
-`packages/automation/src/handler/{agent-answer.ts => delegate-answer.ts}` (51% similarity).
+`git show --stat` on each of the three confirms they landed as real, substantive commits (184 / 204
+/ 62 files respectively, all referencing `#743`). This audit covers the **new staged slice only**:
+the docs/glossary A1 write-back — `git diff --cached --stat` → 13 files changed, 115 insertions(+),
+56 deletions(-) (ARCHITECTURE.md, CHANGELOG.md, CONSTITUTION.md, README.md, TESTING.md, 7
+`docs/*.md` files, and the receipt itself). The working tree also carries large **unstaged** `.ts`
+changes from a concurrently-running agent (`git status --porcelain` shows
+`packages/app-engine/src/conversation/posture.ts` and
+`packages/gateway/src/lifecycle/automation-delegate-metering.test.ts` untracked, plus modifications
+in `run-automation-live-dispatch.ts`, `turn-sse.ts`, `build-gateway.ts`, etc. — these are correctly
+**not** staged and are excluded from this audit; they match the still-unchecked "`ctx.delegate`
+dispatched through the accounted chat spine" checklist item).
 
-1. **`## What changed` faithfully describes the staged diff, no misrepresentation, no undescribed
-   substantive change** — **PASS, with one disclosure gap noted below**.
-   - `git diff --cached --name-only | sort` (62 files) diffed against the receipt's "### Files
-     touched (delegate-rail slice)" list → matches (same 62 paths, only differing by the receipt
-     file itself, which is expected self-reference). Every staged file is accounted for.
-   - **(a) Legacy `kind:"agent"` read-mapping, no migration** — verified true.
-     `git diff --cached -- packages/app-engine/src/conversation/store-sql.ts` shows exactly one
-     mapping site, in `itemFromRaw`:
-     `kind: (raw.kind === "agent" ? "delegate" : raw.kind) as ItemKind,` with a comment citing #743
-     and "the one read boundary". No other `raw.kind === "agent"` translation exists anywhere in the
-     diff (`git diff --cached | grep -n 'raw.kind'` → this single hunk). No migration file, `ALTER
-     TABLE`, or backfill script is staged — `git diff --cached --stat` has no `migrat*` path, and
-     `gateway-db.ts`'s `ensureConversationLedger` stays `CREATE TABLE IF NOT EXISTS` throughout (no
-     new `ALTER TABLE items` statement was added for this rename, unlike the pre-existing
-     `effort`/`cost_source` column adds at lines 706/765 of that file). This matches the receipt's
-     "v0: straight renames, no aliases, no migrations" framing.
-   - **(b) `items` CHECK constraint + `run_summary` view updated** — verified true, but with a real
-     disclosure gap. `git diff --cached -- packages/app-engine/src/stores/gateway-db.ts` shows
-     `CHECK (kind IN ('message_in','step','tool','agent'))` → `...,'delegate'))`, the
-     `idx_items_run_rollup` partial-index `WHERE` clause, and all three `run_summary` dominant-*
-     subqueries (`model`, `provider`, `effort`) moved from `kind IN ('step','agent')` to
-     `kind IN ('step','delegate')` — real, correctly described. **However**: the `items` table is
-     still declared `CREATE TABLE IF NOT EXISTS`, so an **existing** dev/local vault whose `items`
-     table was created before this commit keeps the **old** CHECK (`...,'agent')`) — a subsequent
-     write of `kind:"delegate"` against that pre-existing table would raise a SQLite CHECK-constraint
-     violation, not "just work," until the table is dropped/recreated. The module's own header
-     comment (unchanged by this diff, `gateway-db.ts:89-96`) documents this as standing v0 policy
-     ("a ledger shape change edits the DDL in place and dev vaults are recreated... v0: no data
-     migrations"), so it is not a new landmine introduced by this slice — but the receipt's `##
-     Decisions` section (4 bullets: `hostKey`→`enrollmentKey` threading, `media.asset` logical
-     naming, two data-fixture updates, provenance `agent_id` preserved) **does not mention this
-     CHECK/IF-NOT-EXISTS caveat at all**, and I found no other line in the receipt (`## What changed`,
-     `## Verification`) that states it either — confirmed via `grep -in 'IF NOT EXISTS\|existing
-     install\|fresh table\|CHECK constraint' receipts/issue-743-one-agent-door.md` → zero hits. The
-     receipt's factual claim (CHECK/view were updated) is accurate and not misrepresented, but the
-     operational caveat the task asked me to confirm was disclosed is **not present** in the
-     receipt's Decisions section.
-   - **Regression fix described** — verified true. `git diff --cached --
-     tests/quality/user-facing-qualities.test.ts` shows `agentDispatcher`→`delegateDispatcher`,
-     `ctx.agent(...)`→`ctx.delegate(...)`, and the raw SQL `SELECT c.adapter_kind, ...`→
-     `SELECT c.harness_kind, ...` plus its row type and loop variable (`runner`→`harness`) all
-     corrected in this file only — matches the receipt's "Regression fix" paragraph exactly.
-   - No other hunk in the 62-file diff introduces a behavior change beyond the rename: skimmed every
-     non-mechanical file (`ctx.ts`, `runner.ts`, `worker/runner.ts`, `fire.ts`, `manifest.ts`,
-     `lint.ts`, both `SKILL.md` files) — all are 1:1 token substitutions (`Agent*`→`Delegate*`,
-     `agent`→`delegate` in strings/comments/prose), no added/removed conditionals or logic.
+1. **`## What changed` faithfully describes the staged diff** — **REFUTED**, on a real
+   verification-claim inaccuracy (glossary content itself is accurate; see detail).
+   - **Glossary additions, checked individually against `git diff --cached -- docs/glossary.md`**:
+     - Ledger item-kind list now includes `delegate`: **confirmed** — `item.kind ∈ {message_in,
+       step, tool, delegate}` (was `..., agent}`), both in the vocabulary table and in the new
+       forbidden-synonym row.
+     - "agent variant" → "delegate step": **confirmed** — the recognition-vocabulary row's term
+       column changed from `**agent variant**` to `**delegate step**`, definition now reads
+       "`ctx.delegate`, the pinned-harness and provider-egress-consent rails" (was `ctx.agent`,
+       pinned-runner).
+     - Forbidden-synonym row for the harness axis: **confirmed** — `"runner" / "adapter" /
+       "backend" / "provider" as a stand-in for the installed CLI` → **harness**, with the
+       `RunnerKind`→`HarnessKind` etc. mapping and the `provider`/`adapter`/ACP-role carve-outs, at
+       `docs/glossary.md:185`.
+     - Forbidden-synonym row for agent→delegate: **confirmed** — `"agent" for the model-turn item
+       kind` → **delegate**, `*agent* is reserved for principals — owners, devices, and enrolled
+       autonomous callers (`consent.agent`) — not the judgment rail (#743)`.
+     - Schema-naming rule: **confirmed** — new forbidden-synonym row `"<schema>_<schema>>" as a
+       table name (a plane repeating its own schema name for its central table)` → `name the
+       **row**, not the schema — agent_agent → consent_agent, media_media_asset → media_asset
+       (#743)`.
+     - Tolerated dual-vocabulary row for "Agents" UI copy: **confirmed** — new row under
+       "Inconsistencies" — `agent / harness` → **harness** in identifiers/prefs/tables/code, "Agents"
+       tolerated in UI copy (Settings → Agents, agent picker), citing the chat/conversation
+       precedent and `#743`.
+     All six claimed glossary additions genuinely exist as described. `docs/runners.md` was also
+     confirmed rewritten to harness vocabulary throughout (56 changed lines, all mechanical
+     `runner`→`harness` / `RunnerKind`→`HarnessKind` substitutions plus one added filename-rationale
+     paragraph at the top), and ARCHITECTURE.md / CONSTITUTION.md / README.md / TESTING.md /
+     `docs/decisions.md` / `docs/blueprint-seats.md` / `docs/recognition-automations.md` /
+     `docs/photos-derived-ledger.md` / `docs/config-ownership.md` all show only the claimed
+     identifier-rename sweep (`ctx.agent`→`ctx.delegate`, `runner`→`harness`,
+     `media.media_asset`→`media.asset`, `runner_kind`→`harness_kind`) with no other semantic change.
+   - **CHANGELOG.md gained an entry**: confirmed — one new `### Changed` bullet under
+     `## [Unreleased]` documenting the full breaking-rename list, citing `#743`.
+   - **Receipt does not overstate the docs sweep** in its narrative prose — the "Files touched (docs
+     write-back slice)" list (13 paths) matches `git diff --cached --name-only` exactly.
+   - **Real inaccuracy found**: the receipt's own newly-added `## Verification` bullet for this
+     slice claims `bash .governance/run.sh` → **"all 25 directives pass."** Independently re-running
+     it now (fresh, this audit) gives **24 passed, 1 failed**:
+     ```
+     ✗ format-check (3 violations)
+         CHANGELOG.md - not formatted (run: bun run format)
+         docs/config-ownership.md - not formatted (run: bun run format)
+         docs/glossary.md - not formatted (run: bun run format)
+     ```
+     These three files are **staged docs-slice files**, not the concurrently-running agent's
+     unstaged `.ts` work, so this is squarely attributable to this slice, not a false positive from
+     the other agent's tree state. Diffing each file against its oxfmt-formatted form (copied to a
+     scratch dir, not written back into the repo) shows the exact cause: CHANGELOG.md and
+     docs/glossary.md use `*agent*` (asterisk emphasis) where oxfmt's markdown style requires
+     `_agent_` (underscore emphasis), and docs/config-ownership.md has a stale table column width
+     (the `Owner` header/divider in the `model-catalog.json` row wasn't re-padded after "Runner
+     status" → "Harness status" changed the longest cell in that column). All three are real,
+     mechanical, pre-existing-tool-detectable defects in the staged diff. This directly contradicts
+     the receipt's "all 25 directives pass" claim, so `## What changed`/`## Verification` overstates
+     the actual governance-clean state of this slice.
 
 2. **Each checked `- [x]` item is realized; unchecked `- [ ]` items are not claimed done** —
    **PASS**.
-   - Vault schema (checked): realized in `HEAD` (commit `4162072c`) — `git show --stat 4162072c`
-     confirms it landed as its own commit, ahead of `5624e365`.
-   - Harness axis (checked): realized in `HEAD` (commit `5624e365`) — `git show --stat 5624e365`
-     confirms it landed as its own commit.
-   - Delegate rail (checked, newly flipped `[ ]`→`[x]` in this staged diff — confirmed via `git diff
-     --cached -- receipts/issue-743-one-agent-door.md`): realized in the **staged** diff — `git grep
-     -n 'ctx\.agent\b|AgentDispatcher|coerceAgentAnswer|centraid-agent-failure:|AgentCall\b|
-     agentCalls\b' -- packages apps tools tests` → **0 hits**. `git grep -n 'adapter_kind' --
-     packages apps tests` → **0 hits** (confirms the regression fix removed the last reference,
-     since the harness slice already renamed the column itself).
-   - The remaining 6 unchecked items (glossary/docs write-back, accounted `ctx.delegate` dispatch,
-     `HarnessSessions` extraction, per-call harness/model/configPins, SDK adoption, #740 closure)
-     have no trace in the staged diff — no `HarnessSessions` file, no `@agentclientprotocol/sdk` in
-     any `package.json` diff, `run-automation-live-dispatch.ts`'s diff is rename-only (still calls
-     `getHarness(...).runTurn` directly, not the chat-spine `runTurn`) — correctly left unchecked.
+   - Vault schema (checked): realized in `HEAD`, commit `4162072c` (`git show --stat` confirms,
+     184 files, `#743` in subject).
+   - Harness axis (checked): realized in `HEAD`, commit `5624e365` (204 files, `#743`).
+   - Delegate rail (checked): realized in `HEAD`, commit `9a07465d` (62 files, `#743`).
+   - Docs write-back (checked, flipped `[ ]`→`[x]` in **this** staged diff — confirmed via `git diff
+     --cached -- receipts/issue-743-one-agent-door.md`): realized in the staged diff — all six
+     glossary claims verified above, plus a new "### Files touched (docs write-back slice)" section
+     and three new "## Decisions" bullets (runners.md filename rationale, frozen-section exclusion,
+     runners.md signature-fix correction, glossary L2/L4 preservation) added in this same diff.
+   - The remaining 5 unchecked items (`ctx.delegate` dispatched through the accounted chat spine,
+     `HarnessSessions` extraction, per-call harness/model/configPins, `@agentclientprotocol/sdk`
+     adoption, closing #740) have **zero footprint in the staged diff** — `git diff --cached
+     --stat` touches only markdown plus the receipt; no `.ts`/`.js` file is staged. They correctly
+     remain unchecked; their in-progress (unstaged) work belongs to the other, concurrently-running
+     agent and is out of scope here.
 
-3. **`## Checklist` mirrors the issue's `Scope > In:` bullets, no missing/contradicting entries** —
-   **PASS**. Fetched issue #743 fresh via `mcp__github__issue_read` (srikanth235/centraid). Its
-   `# Scope > In:` has 9 bullets; the receipt's checklist has 9 lines, mapping 1:1 (the issue's
-   single "every rename in the Decision tables…" bullet is split across the receipt's 3 rename
-   lines — vault schema, harness axis, delegate rail — a faithful expansion; "metering +
-   hydration-token accounting" is folded into the `ctx.delegate` dispatch line's parenthetical). No
-   checklist line asserts something the issue text contradicts.
+3. **`## Checklist` mirrors issue #743's `Scope > In:` bullets** — **PASS**. Fetched issue #743
+   fresh via `mcp__github__issue_read` (srikanth235/centraid, unchanged since the prior audit — same
+   9-bullet `# Scope > In:` list: renames incl. vault schema/item-kind; `ctx.delegate` dispatch
+   through the chat spine + fork deletion; HarnessSessions extraction + settlement; metering/hydration
+   accounting; per-call harness/model/configPins + consent + failover; compiler work order + skills +
+   5 handlers + lint messages; `@agentclientprotocol/sdk` adoption; glossary/docs A1 write-back; and
+   closing #740). The receipt's 9-line checklist maps 1:1 onto these (the issue's single "every
+   rename…" bullet is faithfully split across the receipt's 3 rename lines; "metering +
+   hydration-token accounting" folds into the `ctx.delegate` dispatch line's parenthetical). The
+   docs/glossary checklist line's parenthetical ("forbidden synonyms, delegate step, schema-naming
+   rule") exactly echoes the issue's own "Glossary (A1 write-back, same PR)" scope bullet. No
+   checklist line asserts anything the issue text contradicts.
 
 **Independent verification run fresh in this audit:**
-- `git grep -n 'ctx\.agent\b|AgentDispatcher|coerceAgentAnswer|centraid-agent-failure:|AgentCall\b|
-  agentCalls\b' -- packages apps tools tests` → **0 hits**.
-- `git grep -n 'adapter_kind' -- packages apps tests` → **0 hits**.
-- `bun run typecheck` → **green**, 35/35 package tasks (`cache hit` / full turbo).
-- `bunx vitest run --config vitest.quality.config.ts user-facing-qualities` → **14/14 passed**
-  (20.82s).
+- `bash .governance/run.sh` → **24 passed, 1 failed** (`format-check`, 3 violations — see above).
+  All other 24 directives, including `doc-integrity` and `internal-doc-links`, pass. This failure is
+  **not** attributable to the other agent's unstaged `.ts` work — the three flagged files
+  (`CHANGELOG.md`, `docs/config-ownership.md`, `docs/glossary.md`) are staged docs-slice files.
+- `bun run test:qualities` → **green**, 4 files / 23 tests passed (86.97s).
+- `git grep -nE 'RunnerKind|RUNNER_BACKENDS|getRunnerBackend|ctx\.agent|agent_agent|media_media_asset' -- '*.md' ':!receipts' ':!CHANGELOG.md'`
+  → 3 hits, all justified:
+  - `CONSTITUTION.md:247` and `QUALITY.md:42` — both fall under `frozen-section` protection
+    (`.governance/packs/governance-kit/audit/directives/doc-integrity/directive.yaml` defaults:
+    `frozen-section QUALITY.md Resolved`, `frozen-section CONSTITUTION.md Evolution Log`); these are
+    dated historical entries (2026-08-10 and earlier) correctly quoting the vocabulary current at
+    the time they were written, exactly as the receipt's own "Decisions" section claims.
+  - `docs/glossary.md:185-186` — the two new forbidden-synonym rows themselves, which must name the
+    retired terms (`RunnerKind`, `RUNNER_BACKENDS`, `getRunnerBackend`, `agent_agent`,
+    `media_media_asset`) to document the rename — self-referential and expected, per the task's own
+    carve-out for a doc quoting an old name while describing the rename.
 
-**Overall verdict: PASS.** `## What changed` accurately describes the staged delegate-rail rename
-and regression fix; the legacy `kind:"agent"` read-mapping exists at exactly one boundary with no
-migration added; the CHECK constraint and `run_summary` view updates are real, though the receipt's
-Decisions section omits the (pre-existing, codebase-standard v0) caveat that already-created `items`
-tables keep the old CHECK until recreated — a disclosure gap, not a misrepresentation. Checklist
-state matches the repo exactly (2 items realized in prior commits, 1 newly realized in this staged
-diff, 6 correctly left unchecked). The checklist mirrors the issue's Scope > In list. All four
-independent verification commands pass as expected.
+**Overall verdict: REFUTED.** The glossary content itself is fully faithful — all six specifically
+claimed additions (item-kind list, "agent variant"→"delegate step", the two new forbidden-synonym
+rows, the schema-naming rule, and the tolerated "Agents" UI-copy dual-vocabulary row) genuinely
+exist in the staged diff exactly as described, the CHANGELOG entry is real, the checklist state is
+correct (3 items realized in prior commits, 1 newly and correctly realized in this staged diff, 5
+correctly left unchecked), and the checklist mirrors issue #743's Scope > In list. However, the
+receipt's own `## Verification` section asserts `bash .governance/run.sh` → "all 25 directives
+pass," and an independent fresh run of that exact command in this audit shows **24/25**, with a real
+`format-check` failure across three of the thirteen staged files (`CHANGELOG.md`,
+`docs/config-ownership.md`, `docs/glossary.md`) — a stray `*emphasis*` vs. `_emphasis_` style
+mismatch and one stale markdown-table column width, both squarely inside this slice's own edits, not
+the concurrently-running agent's unstaged `.ts` changes. Since the governance pre-commit hook itself
+would block this exact staged tree on `format-check`, and the receipt affirmatively (and incorrectly)
+claims that gate is clean, this slice should not land as staged — run `bun run format` (or fix the
+three spots by hand) and restage before commit, then correct the Verification bullet's directive
+count.
 
 ## Session
 

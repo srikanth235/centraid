@@ -1,12 +1,14 @@
-# Runners (coding-agent harnesses)
+# Harnesses (coding-agent CLIs)
 
-A **runner** is a coding-agent CLI Centraid can drive to produce a turn — `codex`, `claude-code`, `gemini`, `qwen`, `opencode`, `grok`, `kimi`, `copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`, `droid`, `pi`, or a custom `acp` binary. The user-facing ids (`RunnerKind`) are stable; how we talk to them is not.
+This file's name (`docs/runners.md`) predates #743's harness rename; the inbound link from [`registry.ts`](../packages/agent-runtime/src/registry.ts) is code and out of this slice's scope, so the filename stays put — see [glossary.md](glossary.md#inconsistencies-known-dual-vocabulary) for the tolerated dual. Content below uses **harness** throughout, matching code.
+
+A **harness** is a coding-agent CLI Centraid can drive to produce a turn — `codex`, `claude-code`, `gemini`, `qwen`, `opencode`, `grok`, `kimi`, `copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`, `droid`, `pi`, or a custom `acp` binary. The user-facing ids (`HarnessKind`) are stable; how we talk to them is not.
 
 ## Registry and offered roster
 
 The runtime registry remains intentionally open for persisted preferences and custom deployments. The v0 Settings inventory and new routing controls offer exactly **Codex, Claude Code, opencode, Grok, and pi**. A previously saved pin to another registered kind remains visible and removable and continues to run; it is not silently rewritten.
 
-CLI availability probes are cached by runner kind plus effective binary for 24 hours. Settings → Agents **Refresh** bypasses that cache and repopulates it, so repeat visits do not spawn every CLI while an explicit diagnostic refresh still observes installs and removals immediately.
+CLI availability probes are cached by harness kind plus effective binary for 24 hours. Settings → Agents **Refresh** bypasses that cache and repopulates it, so repeat visits do not spawn every CLI while an explicit diagnostic refresh still observes installs and removals immediately.
 
 ## Registered harnesses
 
@@ -33,23 +35,23 @@ CLI availability probes are cached by runner kind plus effective binary for 24 h
 Per-kind notes worth not rediscovering:
 
 - **opencode** — never pass `--mdns` (ours or a user's `extraArgs`): it defaults the listen hostname to `0.0.0.0`, publishing an unauthenticated code-execution agent to the LAN. opencode also reports the richest usage of any kind (tokens including cache read/write, plus a server-priced USD cost); the generic reader in the ACP backend picks it up with no kind-specific code.
-- **grok** — xAI's first-party Grok Build CLI (Apache-2.0). `0.2.106`, not `0.2.11`: the two are only adjacent under a string sort, and the older one predates ACP entirely. A paid subscription is required, which is why the install hint says so — otherwise an installed-but-failing runner looks like our bug.
+- **grok** — xAI's first-party Grok Build CLI (Apache-2.0). `0.2.106`, not `0.2.11`: the two are only adjacent under a string sort, and the older one predates ACP entirely. A paid subscription is required, which is why the install hint says so — otherwise an installed-but-failing harness looks like our bug.
 - **kimi** — the `acp` **subcommand**, not the deprecated `--acp` flag. They are not synonyms: the flag is single-session with no session list/load, and we resume via `session/load`. Kimi CLI is a Python tool (`uv`, not npm) — the only kind whose install hint isn't an `npm i -g`. The project is mid-rename to "Kimi Code" (new repo, Apache-2.0 → MIT), but the `kimi` binary and `kimi acp` invocation survive it.
 
-- **copilot** — the npm package is `@github/copilot`, but the **binary is `copilot`**; those differ, unlike every other kind. Do not confuse it with `@github/copilot-language-server` (bin `copilot-language-server`), which is an editor-completion LSP, speaks no ACP, and is not a runner. `--acp` also takes a `--port` for TCP mode; we speak stdio, so `--port` must never be passed.
+- **copilot** — the npm package is `@github/copilot`, but the **binary is `copilot`**; those differ, unlike every other kind. Do not confuse it with `@github/copilot-language-server` (bin `copilot-language-server`), which is an editor-completion LSP, speaks no ACP, and is not a harness. `--acp` also takes a `--port` for TCP mode; we speak stdio, so `--port` must never be passed.
 - **cursor** — versions are **CalVer** (`2026.07.16` = year.month.day), not semver. They flow through the same numeric `compareSemver` and order correctly, so no special case is needed — but do not "normalise" the major down to a semver-shaped number. The installer creates **both** `agent` and `cursor-agent` symlinks; we deliberately use `cursor-agent`, because a bare `agent` on PATH is a dangerously generic name.
 - **goose** — Homebrew's formula is `block-goose-cli`, but the binary is `goose`. With no provider configured it fails `session/new` with an opaque **`-32603 Internal error`**, _not_ ACP's `AUTH_REQUIRED`, so the backend's auth handling cannot turn it into an actionable message. Telling the user to run `goose configure` first is the only fix available from here — keep it in the hint.
 - **vibe** — `defaultBin` is **`vibe-acp`**, a separate binary from `vibe`: the ACP server is its own entrypoint, not a mode of the main CLI. That is why `acpArgs` is empty. `vibe acp` does not exist. Like kimi it is a Python tool (`uv`), not npm.
 - **pi** — `defaultBin` is **`pi-acp`**, a standalone ACP server binary (npm package `pi-acp`, bin `pi-acp`), not a mode of a `pi` CLI — the same shape as `vibe`, so `acpArgs` is empty too.
 - **droid** — the ACP invocation is a **subcommand plus a value-bearing flag** (`exec --output-format acp-daemon`), not a mode flag; the three tokens are inseparable.
 - **auggie / droid** — both ship self-updating CLIs, which can swap the binary out from under a running turn. Each carries launch env to suppress it (`AUGMENT_DISABLE_AUTO_UPDATE=1`; `DROID_DISABLE_AUTO_UPDATE=true` + `FACTORY_DROID_AUTO_UPDATE_ENABLED=false`).
-- **Devin is deliberately NOT a kind.** Its `session/new` times out with no response at all in the ACP registry's daily probe, it reports its version as `0.0.0-dev`, and its own docs document no `acp` subcommand. It would ship as a broken runner. It remains reachable through the custom `acp` kind if someone wants to try it.
+- **Devin is deliberately NOT a kind.** Its `session/new` times out with no response at all in the ACP registry's daily probe, it reports its version as `0.0.0-dev`, and its own docs document no `acp` subcommand. It would ship as a broken harness. It remains reachable through the custom `acp` kind if someone wants to try it.
 
 ## One integration path: ACP
 
-Since issue #479 there is **exactly one** turn-driving transport: the generic Agent Client Protocol client in [`packages/agent-runtime/src/backends/acp/backend.ts`](../packages/agent-runtime/src/backends/acp/backend.ts). The bespoke `runCodexTurn` (codex `app-server` JSON-RPC) and `runClaudeTurn` (in-process `@anthropic-ai/claude-agent-sdk`) backends are **deleted**. Anything that branches on runner kind above the registry is a bug.
+Since issue #479 there is **exactly one** turn-driving transport: the generic Agent Client Protocol client in [`packages/agent-runtime/src/backends/acp/backend.ts`](../packages/agent-runtime/src/backends/acp/backend.ts). The bespoke `runCodexTurn` (codex `app-server` JSON-RPC) and `runClaudeTurn` (in-process `@anthropic-ai/claude-agent-sdk`) backends are **deleted**. Anything that branches on harness kind above the registry is a bug.
 
-Runners come in two flavours, and the difference is confined to _how the ACP-speaking process is launched_:
+Harnesses come in two flavours, and the difference is confined to _how the ACP-speaking process is launched_:
 
 | Flavour | Kinds | Launch |
 | --- | --- | --- |
@@ -64,16 +66,16 @@ Neither Claude Code nor Codex has an ACP mode of its own, so each is driven thro
 
 `defaultBin` always names the **user-facing CLI** (`claude`, `codex`), even for adapter-backed kinds. That is what the user installs and authenticates, what preflight probes with `--version`, and what the install hint talks about. The adapter is our implementation detail and is never surfaced.
 
-Likewise, `RunnerPrefs.binPath` means **"the agent CLI"**, not "the process we spawn". For adapter-backed kinds it is forwarded through the adapter's own env var (`CLAUDE_CODE_EXECUTABLE`, `CODEX_PATH`) rather than used as the spawn target.
+Likewise, `HarnessPrefs.binPath` means **"the agent CLI"**, not "the process we spawn". For adapter-backed kinds it is forwarded through the adapter's own env var (`CLAUDE_CODE_EXECUTABLE`, `CODEX_PATH`) rather than used as the spawn target.
 
 ## Adding a new harness
 
-One registry entry in [`registry.ts`](../packages/agent-runtime/src/registry.ts), plus its `RunnerKind` literal in `@centraid/app-engine`. Nothing else branches on the kind — `runTurn`, preflight, model enumeration, the gateway's status route, the daemon config validator, the providers console cards, and the per-subsystem pins all read the registry or the gateway's list. Adding `opencode`, `grok` and `kimi` needed exactly those two edits, and so did the later batch of eight (`copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`, `droid`) — the only extra work was generalising the adapter-only launch-env field into the shared `env` above, because `auggie` and `droid` are the first _native_ kinds that need launch env. This section is accurate because it was followed.
+One registry entry in [`registry.ts`](../packages/agent-runtime/src/registry.ts), plus its `HarnessKind` literal in `@centraid/app-engine`. Nothing else branches on the kind — `runTurn`, preflight, model enumeration, the gateway's status route, the daemon config validator, the providers console cards, and the per-subsystem pins all read the registry or the gateway's list. Adding `opencode`, `grok` and `kimi` needed exactly those two edits, and so did the later batch of eight (`copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`, `droid`) — the only extra work was generalising the adapter-only launch-env field into the shared `env` above, because `auggie` and `droid` are the first _native_ kinds that need launch env. This section is accurate because it was followed.
 
 Two **cosmetic, optional** client-side lists exist. Neither gates anything — a kind absent from both still renders a complete card off the gateway's wire `label`/`version`/`hint`:
 
 - `ACCENT_BY_KIND` in [`settingsProvidersData.ts`](../packages/client/src/react/shell/routes/settingsProvidersData.ts) — the card accent, defaulting to neutral. Accent only; do **not** vendor third-party icon artwork.
-- `AGENT_RUNNER_KINDS` in [`screen-contracts.ts`](../packages/client/src/react/screen-contracts.ts) — "kinds this build knows by name". `AgentRunnerKind` is deliberately an open `string` (docs/protocol.md C1a), so this never validates or filters.
+- `AGENT_HARNESS_KINDS` in [`screen-contracts.ts`](../packages/client/src/react/screen-contracts.ts) — "kinds this build knows by name". `AgentHarnessKind` is deliberately an open `string` (docs/protocol.md C1a), so this never validates or filters.
 
 A natively ACP-speaking CLI:
 
@@ -106,7 +108,7 @@ const barBackend = makeAcpBackend({
   env: { BAR_HEADLESS: "1" }, // same field as above — not adapter-specific
   adapter: {
     packageName: "@vendor/bar-acp", // pinned dep; bin resolved from node_modules
-    binPathEnvVar: "BAR_PATH", // where RunnerPrefs.binPath lands
+    binPathEnvVar: "BAR_PATH", // where HarnessPrefs.binPath lands
     sessionModeId: "bypassPermissions", // headless policy expressed as an ACP mode
   },
 });
@@ -116,7 +118,7 @@ An adapter-backed kind also needs the adapter added with `bun add` in `packages/
 
 ### Headless policy
 
-Gateway turns have no approval UI wired to them, so a runner that prompts for permission deadlocks on the first file write. Centraid's own consent layer (vault grants, outbox) is the gate that matters. Every kind must therefore reach a non-interactive posture, expressed one of two ways:
+Gateway turns have no approval UI wired to them, so a harness that prompts for permission deadlocks on the first file write. Centraid's own consent layer (vault grants, outbox) is the gate that matters. Every kind must therefore reach a non-interactive posture, expressed one of two ways:
 
 - **launch env** — codex: `INITIAL_AGENT_MODE=agent-full-access` (equivalent to `approvalPolicy:'never'` + a full-access sandbox), applied at startup with no client round-trip. This is the same `env` field native kinds use for their self-update suppressors.
 - **session mode** — claude: `session/set_mode` with `bypassPermissions` once the session exists.
@@ -133,9 +135,9 @@ Kinds whose picker offers capability tiers (`smart`/`balanced`/`fast`) set `reso
 
 All session configuration is a category-keyed `configPins` map. The well-known categories are `model`, `thought_level`, and `mode`; adapter-specific ids such as Codex's `reasoning_effort` and Claude's `effort` never cross the engine boundary. Model is pinned first, then the client re-reads any `config_option_update` before pinning `thought_level`, because a model change can rebuild the valid effort values. A requested value is not accounting evidence: model and effort are stamped only after ACP confirms the current value or accepts the pin.
 
-An automation can pin the runner, model, and thought level in `automation.json`: `requires.runner` is an open, non-empty registry key and `requires.model` is the model id/alias; `requires.thoughtLevel` is the semantic effort value. At execution time the gateway accepts the runner only when the current `RUNNER_KINDS` registry recognizes it; an unknown future/removed key falls back to `runner.automations` (then the default agent). Per category, precedence is manifest pin, runner+subsystem preference, runner-wide preference, then backend default. The same resolution feeds headless compile plus manual, scheduled, and webhook fires. Any automation-specific conversational route must reuse this resolver rather than reading subsystem prefs directly, so authoring and execution cannot silently use different harnesses.
+An automation can pin the harness, model, and thought level in `automation.json`: `requires.harness` is an open, non-empty registry key and `requires.model` is the model id/alias; `requires.thoughtLevel` is the semantic effort value. At execution time the gateway accepts the harness only when the current `isHarnessKind` registry recognizes it; an unknown future/removed key falls back to `harness.automations` (then the default harness). Per category, precedence is manifest pin, harness+subsystem preference, harness-wide preference, then backend default. The same resolution feeds headless compile plus manual, scheduled, and webhook fires. Any automation-specific conversational route must reuse this resolver rather than reading subsystem prefs directly, so authoring and execution cannot silently use different harnesses.
 
-`agent.runner.binPath` and `agent.runner.extraArgs` belong only to the configured default runner. A manifest pin to another registered kind uses that kind's registry launch defaults; never carry one runner's executable or flags across a per-turn override.
+`agent.harness.binPath` and `agent.harness.extraArgs` belong only to the configured default harness. A manifest pin to another registered kind uses that kind's registry launch defaults; never carry one harness's executable or flags across a per-turn override.
 
 ### Usage
 
@@ -145,13 +147,13 @@ The backend folds these into **one** `usage` event at the end of the turn, stamp
 
 ### Unified routing, continuity, and egress
 
-Every conversational surface resolves a primary runner plus `runner.ladder.<subsystem>` at a turn boundary. A prompt is **never retried inside a turn**: once a runner receives it, that turn settles visibly on success or failure. An already-open breaker may skip a runner before the prompt is sent. Interactive conversations consider the ladder again on the next owner turn; scheduled fires and headless compiles re-enter at their outer fire/compile boundary, with a new ledger turn id for every rung. Spawn, auth (`-32000` or an auth-ish internal error), initialization, timeout, quota, wedge, and exit failures have independent persistent breakers keyed by vault workspace and runner. Auth stays open until a successful live preflight observes re-auth; quota uses TTL/backoff; timeout and wedge admit one half-open claimant. A fallback drops the previous provider's model/config pins, starts or resumes its own binding, and writes a reader-visible notice naming the failed class.
+Every conversational surface resolves a primary harness plus `harness.ladder.<subsystem>` at a turn boundary. A prompt is **never retried inside a turn**: once a harness receives it, that turn settles visibly on success or failure. An already-open breaker may skip a harness before the prompt is sent. Interactive conversations consider the ladder again on the next owner turn; scheduled fires and headless compiles re-enter at their outer fire/compile boundary, with a new ledger turn id for every rung. Spawn, auth (`-32000` or an auth-ish internal error), initialization, timeout, quota, wedge, and exit failures have independent persistent breakers keyed by vault workspace and harness. Auth stays open until a successful live preflight observes re-auth; quota uses TTL/backoff; timeout and wedge admit one half-open claimant. A fallback drops the previous provider's model/config pins, starts or resumes its own binding, and writes a reader-visible notice naming the failed class.
 
-Hydration is bounded by tokens and complete-turn boundaries. User and assistant text is retained, tool calls become one-line summaries, tool output is omitted, attachments are filename/MIME references, and custody-pruned archive segments never re-enter provider context. Failed `session/resume` or `session/load` self-heals through `session/new` plus hydration from watermark zero. The `conversation_harness_sessions` binding table holds each runner's opaque ACP session id, cumulative usage snapshot, per-runner hydration watermark, status, and last-use time. `active` is the selected runner, at most one prior runner is `warm`, older valid handles are `cold`, and only invalid or superseded handles are `stale`. `conversations.adapter_*` is only the read-through active binding. A→B→A therefore keeps one conversation id, resumes A's own handle, and sends only the ledger delta past A's watermark. The durable turn lock is the single writer; binding/watermark advancement commits with the turn. Conversation pruning cascades to bindings.
+Hydration is bounded by tokens and complete-turn boundaries. User and assistant text is retained, tool calls become one-line summaries, tool output is omitted, attachments are filename/MIME references, and custody-pruned archive segments never re-enter provider context. Failed `session/resume` or `session/load` self-heals through `session/new` plus hydration from watermark zero. The `conversation_harness_sessions` binding table holds each harness's opaque ACP session id, cumulative usage snapshot, per-harness hydration watermark, status, and last-use time. `active` is the selected harness, at most one prior harness is `warm`, older valid handles are `cold`, and only invalid or superseded handles are `stale`. `conversations.adapter_*` is only the read-through active binding. A→B→A therefore keeps one conversation id, resumes A's own handle, and sends only the ledger delta past A's watermark. The durable turn lock is the single writer; binding/watermark advancement commits with the turn. Conversation pruning cascades to bindings.
 
 Before any prompt, hydration, attachment, vault-tool result, or other content leaves the gateway, the exact conversation × provider pair must have an active grant. Initial use is implicit in the owner's chosen surface. An attended cross-provider switch is confirm-gated once per conversation×provider. Settings ladder membership is itself the explicit consent for unattended failover, so a ladder rung auto-grants with source `ladder` and never prompts at fire time. Ladders are never populated from installed CLIs. Removing a provider from all of one subsystem's effective ladder revokes grants from that subsystem's membership, even when another ladder retains the provider, without revoking direct grants or the other subsystem's grant.
 
-Settings runner changes are serialized and preflighted before the atomic prefs write. A failed preflight leaves the prior route and active conversation binding intact. Each conversation keeps at most one process-warm binding while retaining older valid handles as cold durable resume state; stale bindings are audit-only and never resumed. The process pool also enforces bounded idle LRU reaping.
+Settings harness changes are serialized and preflighted before the atomic prefs write. A failed preflight leaves the prior route and active conversation binding intact. Each conversation keeps at most one process-warm binding while retaining older valid handles as cold durable resume state; stale bindings are audit-only and never resumed. The process pool also enforces bounded idle LRU reaping.
 
 The primary workspace is one durable, conversation-scoped Centraid root: `vault-data`, `app`, or `draft`. Additional directories are the explicit escape hatch: absolute canonical directories only, never `/`, deduplicated by realpath, capability-gated, and persisted as the conversation's consent record.
 
@@ -171,7 +173,7 @@ The server is hand-rolled (a tools-only Streamable-HTTP surface: `initialize`, `
 
 An agent that surfaces its MCP calls as ACP `tool_call` updates already renders the call, so the backend suppresses its own `tool.start` / `tool.result` for it. Agents that keep MCP calls private get our events instead — either way the transcript shows the call exactly once.
 
-A turn with no vault runners advertises **no** MCP server. An agent without `mcpCapabilities.http` gets a `vault_tools_unavailable` notice rather than silently losing the vault.
+A turn with no vault harnesses advertises **no** MCP server. An agent without `mcpCapabilities.http` gets a `vault_tools_unavailable` notice rather than silently losing the vault.
 
 ### Attachments
 
@@ -198,7 +200,7 @@ Centraid is a **headless turn driver + vault MCP host**, not a full IDE ACP clie
 | Model pin | `session/set_config_option` each turn; failed pins are **warn** notices |
 | Vault MCP | HTTP when agent advertises it; otherwise **stdio bridge** (`vault-mcp-stdio-proxy.mjs`) to the same loopback HTTP endpoint |
 | Session continuity | Resume/load notices; short warm process pool (same kind+cwd+session, ~2 min idle) |
-| Capabilities | Settings **Refresh models & capabilities** probes ACP `initialize` plus one bounded diagnostic prompt, persists the full option/signal snapshot by runner launch config, and shows vault / resume / model / effort / context / location / scoped-folder / sign-in chips. It may re-apply the current model value to observe updates but never selects an alternative model. |
+| Capabilities | Settings **Refresh models & capabilities** probes ACP `initialize` plus one bounded diagnostic prompt, persists the full option/signal snapshot by harness launch config, and shows vault / resume / model / effort / context / location / scoped-folder / sign-in chips. It may re-apply the current model value to observe updates but never selects an alternative model. |
 | Plans / diffs / artifacts | `phase: plan` with normalized `plan[]`; tool results may carry `diffs[]`, `locations[]`, inline artifacts, and `phase: diff` |
 | `additionalDirectories` | Passed on session lifecycle when the agent advertises the capability and the turn supplies paths |
 
@@ -215,7 +217,7 @@ Still **not** product features (intentional):
 
 Recorded honestly so nobody rediscovers them as bugs:
 
-- **`ctx.agent` structured output.** The retired codex arm handed `call.json` to `codex exec --output-schema`. ACP has no equivalent, so `call.json` is now enforced by `coerceAgentAnswer` alone for every kind — which is what the claude arm always did.
+- **`ctx.delegate` structured output.** The retired codex arm handed `call.json` to `codex exec --output-schema`. ACP has no equivalent, so `call.json` is now enforced by `coerceDelegateAnswer` alone for every kind — which is what the claude arm always did.
 - **Codex `localImage` paths.** The retired codex arm passed image attachments by path and let codex read them; ACP has no path-based image block, so images are base64-inlined into the prompt for every kind. Functionally equivalent, marginally more bytes on the wire.
 
 ## Tool catalog (transport-neutral registration)
@@ -228,24 +230,24 @@ Issue #504 batch 4. The **single registration surface** for vault tools is the b
 | `VAULT_INVOKE_TOOL`  | Typed vault commands        |
 | `VAULT_CONTENT_TOOL` | Document text by content id |
 
-**MCP is one adapter**, not the catalog itself — [`vault-mcp-server.ts`](../packages/agent-runtime/src/backends/acp/vault-mcp-server.ts) wraps those constants for ACP agents. Do **not** add a second per-runner tool adapter matrix (#479 killed that path).
+**MCP is one adapter**, not the catalog itself — [`vault-mcp-server.ts`](../packages/agent-runtime/src/backends/acp/vault-mcp-server.ts) wraps those constants for ACP agents. Do **not** add a second per-harness tool adapter matrix (#479 killed that path).
 
 ### Add a tool
 
 1. Declare `{ name, description, inputSchema }` next to the existing constants (same module or a sibling catalog module re-exported from agent-runtime).
-2. Implement dispatch once (shared runner on `ToolContext`).
+2. Implement dispatch once (shared harness on `ToolContext`).
 3. Expose through the MCP adapter if agents should see it over ACP.
-4. **Native tool injection** stays **gated** on an ACP capability that **both** first-party adapters implement — do not prefer native injection or fork per runner.
+4. **Native tool injection** stays **gated** on an ACP capability that **both** first-party adapters implement — do not prefer native injection or fork per harness.
 
 **Mechanical vs judgment:** judgment + review; no second adapter without an ACP standard both adapters implement.
 
 ## Automations ride the same single ACP path
 
-The bespoke automation `ctx.tool` rail — a per-fire mock-LLM endpoint that pointed a native claude/codex CLI at a deterministic handler — was **removed** (#484). There is no automation-only agent path left; automations use the same transport as chat.
+The bespoke automation `ctx.tool` rail — a per-fire mock-LLM endpoint that pointed a native claude/codex CLI at a deterministic handler — was **removed** (#484). There is no automation-only harness path left; automations use the same transport as chat.
 
 An automation fire now has exactly two cost profiles:
 
-- **Deterministic rails** — `ctx.vault` (SQL + invoke + content), `ctx.state`, `ctx.runs`, `ctx.fetch`, `ctx.input` — run **parent-side, in-process** in the gateway. Zero model tokens, zero child processes, zero HTTP servers, on every runner kind. A fire whose handler never calls `ctx.agent` cannot spawn anything or bill anything.
-- **Billed rail** — `ctx.agent(prompt, { json, model })` — a bounded one-shot turn against the user's real provider, routed through the **same single ACP backend as chat** (`getRunnerBackend(kind).runTurn`), so it works on all runner kinds like everything else.
+- **Deterministic rails** — `ctx.vault` (SQL + invoke + content), `ctx.state`, `ctx.runs`, `ctx.fetch`, `ctx.input` — run **parent-side, in-process** in the gateway. Zero model tokens, zero child processes, zero HTTP servers, on every harness kind. A fire whose handler never calls `ctx.delegate` cannot spawn anything or bill anything.
+- **Billed rail** — `ctx.delegate({ prompt, json, model })` — a bounded one-shot turn against the user's real provider, routed through the **same single ACP backend as chat** (`getHarness(kind).runTurn`), so it works on all harness kinds like everything else.
 
 Primary fires, interactive automation turns, headless compilation, standing-instruction rewrites, and `onFailure` cascades all use that same registry-backed harness selection. There is no warmed catalog choice injected as a hidden automation default: selecting “Gateway default” leaves the model unset and lets the live backend choose. Only the live ACP confirmation described above becomes accounting identity.
