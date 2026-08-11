@@ -6,10 +6,15 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { RunTurnFn } from "@centraid/app-engine";
+
 import type {
   LiveDispatch,
   LiveDispatchOptions,
 } from "./run-automation-live-dispatch.js";
+
+/** Stand-in for the host's accounted turn driver (#743). */
+const stubRunTurn: RunTurnFn = async () => ({ harnessKind: "codex" });
 
 const { runFire } = vi.hoisted(() => ({
   runFire: vi.fn<typeof TypeImport_2es3ft.runFire>(),
@@ -96,6 +101,7 @@ describe("run-automation suite", () => {
         automationRef: "app/digest",
         appsDir: "/apps",
         journalDbFile: "/j.db",
+        runTurn: stubRunTurn,
         harness: "claude-code",
         model: "m1",
         runId: "run-1",
@@ -128,6 +134,9 @@ describe("run-automation suite", () => {
           runId: "run-1",
           harness: "claude-code",
           model: "from-manifest",
+          // The accounted seam rides every rung — a fire never resolves its
+          // own harness (#743).
+          runTurn: stubRunTurn,
         })
       );
 
@@ -148,6 +157,7 @@ describe("run-automation suite", () => {
         automationRef: "app/a",
         appsDir: "/apps",
         journalDbFile: "/j.db",
+        runTurn: stubRunTurn,
       });
       const deps = runFire.mock.calls[0]![1];
       deps.openDispatch({
@@ -181,6 +191,7 @@ describe("run-automation suite", () => {
         automationRef: "app/digest",
         appsDir: "/apps",
         journalDbFile: "/j.db",
+        runTurn: stubRunTurn,
         runId: "run-fire",
         harness: "codex",
         harnessLadder: ["codex", "claude-code"],
@@ -226,6 +237,7 @@ describe("run-automation suite", () => {
         automationRef: "app/digest",
         appsDir: "/apps",
         journalDbFile: "/j.db",
+        runTurn: stubRunTurn,
         runId: "run-fire",
         harness: "codex",
         harnessLadder: ["codex", "claude-code"],
@@ -255,6 +267,7 @@ describe("run-automation suite", () => {
         automationRef: "app/digest",
         appsDir: "/apps",
         journalDbFile: "/j.db",
+        runTurn: stubRunTurn,
         runId: "run-fire",
         harness: "codex",
         harnessLadder: ["codex", "claude-code"],
@@ -294,6 +307,7 @@ describe("run-automation suite", () => {
           automationRef: "app/digest",
           appsDir: "/apps",
           journalDbFile: "/j.db",
+          runTurn: stubRunTurn,
           harness: "codex",
           harnessHealthContext: "vault-1",
           harnessHealth: {
@@ -313,6 +327,7 @@ describe("run-automation suite", () => {
         automationRef: "app/digest",
         appsDir: "/apps",
         journalDbFile: "/j.db",
+        runTurn: stubRunTurn,
         harness: "gemini",
         harnessSelectionSource: "manifest",
       });

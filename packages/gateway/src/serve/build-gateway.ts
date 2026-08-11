@@ -2301,6 +2301,10 @@ export async function buildGateway(
         appsDir: ws.appsDir,
         journalDbFile: ws.journalDbFile,
         codeAppsDir: host.codeAppsDir(),
+        // `ctx.delegate` runs on the SAME accounted driver as every chat,
+        // compile, and steering turn (#743): a fire is metered at the one
+        // door, not exempt from it (#528 Phase C).
+        runTurn: accountRunTurn(options.runTurn ?? runTurn),
         // Each fire's ctx.vault rides the automation's enrolled
         // consent.agent credential, resolved per app id (duaility §12).
         vaultFor: async (appId: string, ref: string) => {

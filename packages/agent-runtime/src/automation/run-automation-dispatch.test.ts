@@ -1,14 +1,17 @@
 /*
- * Harness-kind routing for the automation dispatch path (issue #479).
+ * Harness-kind routing for the automation dispatch path (issues #479, #743).
  *
- * A fire has its OWN dispatch surface, separate from the conversation
- * `runTurn`: `ctx.delegate` is a one-shot against the user's real provider,
- * routed through the harness registry. Issue #484 removed the `ctx.tool` rail
- * (and the mock-LLM session it puppeted), so the dispatch surface no longer
- * accepts a tool dispatcher — a fire whose handler only touches ctx.vault /
- * ctx.state constructs nothing and spawns nothing. These tests pin the
- * `ctx.delegate` routing at the one surviving seam.
+ * `ctx.delegate` is a one-shot against the user's real provider driven through
+ * the host's INJECTED, resource-accounted `runTurn` — the same door chat,
+ * compile, and steering use. Issue #484 removed the `ctx.tool` rail (and the
+ * mock-LLM session it puppeted), so the dispatch surface no longer accepts a
+ * tool dispatcher — a fire whose handler only touches ctx.vault / ctx.state
+ * constructs nothing and spawns nothing. These tests pin the `ctx.delegate`
+ * routing at the one surviving seam.
  */
+
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 import { describe, afterEach, expect, test } from "vitest";
 
@@ -18,6 +21,7 @@ import {
   ProviderEgressConsentStore,
 } from "@centraid/app-engine";
 import type {
+  RunTurnFn,
   TurnConfig,
   TurnInput,
   TurnResult,
@@ -30,6 +34,21 @@ import { HARNESSES } from "../registry.ts";
 import type { HarnessKind } from "../types.ts";
 import { startLiveDispatch } from "./run-automation-live-dispatch.ts";
 import type { LiveDispatch } from "./run-automation-live-dispatch.ts";
+
+/** Turns that passed through the host's accounted seam this test. */
+let accountedTurns = 0;
+
+/**
+ * Stand-in for the gateway's `accountRunTurn(runTurn)`: the ONE driver the
+ * host injects. It counts, then resolves the registry exactly as the real
+ * accounted seam does — so a dispatch that reached a harness some other way
+ * shows up as a harness call the counter never saw.
+ */
+const accountedRunTurn: RunTurnFn = (input, config) => {
+  accountedTurns += 1;
+  const spec = HARNESSES[config.prefs.kind];
+  return spec.runTurn(input, config);
+};
 
 const ACP_KINDS = [
   "gemini",
@@ -94,6 +113,7 @@ describe("run-automation-dispatch suite", () => {
       runId: "run-1",
       automationRef: "demo/nightly",
       journalDbFile,
+      runTurn: accountedRunTurn,
       harness,
       ...(model ? { model } : {}),
       onLog: () => undefined,
@@ -248,6 +268,7 @@ describe("run-automation-dispatch suite", () => {
       runId: "run-fallback",
       automationRef: "demo/nightly",
       journalDbFile,
+      runTurn: accountedRunTurn,
       harness: "codex",
       model: "gpt-primary",
       configPins: { thought_level: "xhigh" },
@@ -320,6 +341,7 @@ describe("run-automation-dispatch suite", () => {
       runId: "b-turn",
       automationRef: ref,
       journalDbFile,
+      runTurn: accountedRunTurn,
       harness: "claude-code",
       onLog: () => undefined,
     });
@@ -352,6 +374,7 @@ describe("run-automation-dispatch suite", () => {
       runId: "a-return",
       automationRef: ref,
       journalDbFile,
+      runTurn: accountedRunTurn,
       harness: "codex",
       onLog: () => undefined,
     });
@@ -389,6 +412,91 @@ describe("run-automation-dispatch suite", () => {
     finalStore.close();
   });
 
+  // ---- one door: the accounted seam (#743) ----------------------------------
+
+  test("no dispatch path reaches a harness without passing the accounted seam", async () => {
+    const stub = stubBackendRunTurn("codex", (input) => {
+      input.onEvent({ type: "final", text: "answer" });
+    });
+    const before = accountedTurns;
+    const { delegateDispatcher } = await openDispatch("codex");
+    await delegateDispatcher({ prompt: "go" }, dispatchCtx);
+
+    // Every harness call this dispatch made is a call the host's accounted
+    // driver was handed first. An equal count is the whole claim: a turn that
+    // reached the harness some other way would raise `stub.calls` alone.
+    expect(stub.calls).toHaveLength(1);
+    expect(accountedTurns - before).toBe(stub.calls.length);
+
+    // …and structurally, so a future edit cannot quietly reopen the fork: the
+    // dispatch module does not import the harness registry at all. Resolving
+    // its own harness IS the bypass — that is how unattended fires became the
+    // one unmetered path (#743).
+    const source = await readFile(
+      path.join(import.meta.dirname, "run-automation-live-dispatch.ts"),
+      "utf8"
+    );
+    expect(source).not.toMatch(/from "\.\.\/registry\.js"/u);
+    expect(source).not.toMatch(/\bgetHarness\(/u);
+  });
+
+  test("automation hydration is compiled under the same token budget as chat", async () => {
+    const workdir = await tempDir("centraid-automation-hydration-budget-");
+    const journalDbFile = `${workdir}/journal.db`;
+    const ref = "demo/nightly";
+    const seed = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    seed.ensureAutomationConversation(ref, "demo", "Nightly", "codex");
+    // A year of a chatty automation: far more ledger than any budget funds.
+    for (let index = 0; index < 40; index += 1) {
+      const turnId = `history-${index}`;
+      seed.insertTurn({
+        turnId,
+        conversationId: ref,
+        triggerKind: "scheduled",
+        startedAt: index * 2,
+      });
+      seed.finishTurn({
+        turnId,
+        endedAt: index * 2 + 1,
+        ok: true,
+        summary: `turn-${index} ${"padding ".repeat(600)}`,
+      });
+    }
+    seed.close();
+
+    const codex = stubBackendRunTurn("codex", (input) => {
+      input.onEvent({ type: "final", text: "ok" });
+      return { harnessKind: "codex", sessionId: "session-a", hydrated: true };
+    });
+    const dispatch = await startLiveDispatch({
+      workdir,
+      runId: "budgeted",
+      automationRef: ref,
+      journalDbFile,
+      runTurn: accountedRunTurn,
+      harness: "codex",
+      onLog: () => undefined,
+    });
+    openDispatches.push(dispatch);
+    await dispatch.delegateDispatcher({ prompt: "go" }, dispatchCtx);
+
+    const hydration = codex.calls[0]?.input.hydrationContext ?? "";
+    expect(hydration).toBeTruthy();
+    // The fold fits the 8k budget the chat spine compiles against. NOTE the
+    // budget itself is not new — `compileHydrationPlan` has defaulted to
+    // 8k/`minTurns: 2` since #567. What this asserts is that the automation
+    // path reads that budget from `TURN_POSTURES` rather than re-deriving it,
+    // so chat and fire cannot drift apart again.
+    expect(Math.ceil(hydration.length / 4)).toBeLessThanOrEqual(8_000);
+    // Budgeted, not merely truncated: the newest turns survive verbatim, the
+    // oldest are dropped and counted.
+    expect(hydration).toContain("turn-39");
+    expect(hydration).not.toContain("turn-0 ");
+    expect(hydration).toMatch(
+      /\d+ older turn\(s\) omitted to fit the context budget/u
+    );
+  });
+
   // ---- unattended provider-egress consent (#567 D5/D13) ---------------------
 
   /**
@@ -421,6 +529,7 @@ describe("run-automation-dispatch suite", () => {
       runId: "run-1",
       automationRef: "demo/nightly",
       journalDbFile,
+      runTurn: accountedRunTurn,
       harness: opts.harness,
       providerEgressConsent: consent,
       ...(opts.consentSource ? { consentSource: opts.consentSource } : {}),

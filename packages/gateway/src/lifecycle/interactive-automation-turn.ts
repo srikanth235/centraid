@@ -21,6 +21,7 @@ import {
   compileHydrationPlan,
   hydrationMessagesFromLedger,
   resolveItemCost,
+  TURN_POSTURES,
   withConversationLock,
 } from "@centraid/app-engine";
 import type {
@@ -285,12 +286,14 @@ export async function runInteractiveAutomationTurn(
         const hydrationPlan =
           hydrationMessages.length > 0
             ? compileHydrationPlan(hydrationMessages, {
+                ...TURN_POSTURES.steering.hydration,
                 includeAttachmentReferences: true,
               })
             : undefined;
         const recoveryHydrationPlan =
           recoveryMessages.length > 0
             ? compileHydrationPlan(recoveryMessages, {
+                ...TURN_POSTURES.steering.hydration,
                 includeAttachmentReferences: true,
               })
             : undefined;

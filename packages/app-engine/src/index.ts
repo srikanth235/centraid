@@ -57,6 +57,9 @@ export {
   type ConversationRunnerCoreOptions,
   type TurnContext,
 } from "./conversation/runner-core.js";
+// The four callers' postures (#743) — one table, read by every caller that
+// drives a turn, so consent/hydration/permission policy cannot fork per path.
+export { TURN_POSTURES, type TurnPosture } from "./conversation/posture.js";
 export {
   buildExtraPrompt,
   type BuildExtraPromptInput,

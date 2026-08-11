@@ -10,10 +10,10 @@
  * the harness kind) and injects it as `openDispatch`, leaving the spine — and
  * the onFailure cascade — to app-engine.
  *
- * The captured kind is any registered `HarnessKind`: `startLiveDispatch` routes
- * `ctx.delegate` through the `HarnessSpec` registry (issue #479). `'codex'`
- * remains the default only because a caller that names no harness gets the
- * historical one. Issue #484 removed the `ctx.tool` rail (and the eager
+ * The captured kind is any registered `HarnessKind`, and the turn driver is
+ * the host's accounted `runTurn` — the same one chat, compile, and steering
+ * run on (issues #479, #743). `'codex'` remains the default only because a
+ * caller that names no harness gets the historical one. Issue #484 removed the `ctx.tool` rail (and the eager
  * mock-LLM server it spawned per fire), so a fire whose handler never calls
  * `ctx.delegate` starts zero child processes and zero HTTP servers.
  */
@@ -28,6 +28,7 @@ import type {
   ProviderEgressConsentController,
   HarnessHealthController,
   HarnessPrefs,
+  RunTurnFn,
   VaultBridge,
 } from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
@@ -70,6 +71,12 @@ export interface RunAutomationOptions {
     appId: string,
     automationRef: string
   ) => VaultBridge | undefined | Promise<VaultBridge | undefined>;
+  /**
+   * The host's resource-accounted turn driver, forwarded to `ctx.delegate`.
+   * The gateway hands the same `accountRunTurn`-wrapped `RunTurnFn` it hands
+   * chat, compile, and steering — a fire is not a second door (#743).
+   */
+  runTurn: RunTurnFn;
   /** Which CLI to drive. Defaults to codex. */
   harness?: HarnessKind;
   /**
@@ -236,6 +243,7 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         runId: args.runId,
         automationRef: args.automationRef,
         journalDbFile: opts.journalDbFile,
+        runTurn: opts.runTurn,
         harness: isHarnessKind(args.harnessKind) ? args.harnessKind : harness,
         // A manifest capability tier, when present, still wins. Provider-
         // specific owner pins are deliberately cleared after the first rung.

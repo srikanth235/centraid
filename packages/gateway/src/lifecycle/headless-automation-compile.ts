@@ -6,6 +6,7 @@ import {
   compileHydrationPlan,
   hydrationMessagesFromLedger,
   resolveItemCost,
+  TURN_POSTURES,
 } from "@centraid/app-engine";
 import type {
   ConversationRunner,
@@ -333,12 +334,14 @@ export async function runHeadlessAutomationCompile(
     const hydrationPlan =
       hydrationMessages.length > 0
         ? compileHydrationPlan(hydrationMessages, {
+            ...TURN_POSTURES.compile.hydration,
             includeAttachmentReferences: true,
           })
         : undefined;
     const recoveryHydrationPlan =
       recoveryMessages.length > 0
         ? compileHydrationPlan(recoveryMessages, {
+            ...TURN_POSTURES.compile.hydration,
             includeAttachmentReferences: true,
           })
         : undefined;

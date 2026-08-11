@@ -18,6 +18,7 @@ import { ConversationStore, makeJournalDbProvider } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { HARNESSES } from "../registry.js";
+import { runTurn } from "../runtime.js";
 import type { HarnessKind } from "../types.js";
 import { runAutomation } from "./run-automation.js";
 
@@ -91,6 +92,9 @@ describe("live-automation-failover suite", () => {
         appsDir,
         codeAppsDir,
         journalDbFile,
+        // The real turn driver — the host injects the accounted wrapper around
+        // this very function (#743).
+        runTurn,
         harness: primary,
         harnessLadder: [primary, fallback],
         harnessPrefsFor: async (harness) => {

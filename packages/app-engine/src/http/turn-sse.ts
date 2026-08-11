@@ -29,6 +29,7 @@ import type {
   TurnNode,
 } from "../conversation/history.js";
 import { compileHydrationPlan } from "../conversation/hydration.js";
+import { TURN_POSTURES } from "../conversation/posture.js";
 import type {
   ConversationTurnInput,
   ConversationRunner,
@@ -539,8 +540,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
             if (!delta || delta.messages.length === 0)
               return { attachments: [] };
             const compiled = compileHydrationPlan(delta.messages, {
-              tokenBudget: 8_000,
-              minTurns: 2,
+              ...TURN_POSTURES.chat.hydration,
               includeAttachmentReferences: true,
             });
             if (compiled.includedTurns === 0) return { attachments: [] };

@@ -7,8 +7,13 @@
  * against the user's real provider.
  *
  * Issue #479 — `ctx.delegate` honours every registered harness kind through
- * ONE path: `getHarness(kind).runTurn`, the same seam chat uses. Pinning
- * `harness.automations` to any kind actually drives that agent.
+ * ONE path. Issue #743 made that literal: the turn driver is INJECTED
+ * (`opts.runTurn`), and the host injects the same resource-accounted
+ * `RunTurnFn` chat, compile, and steering run on. This file must never reach
+ * the harness registry itself — a door that resolves its own harness is a door
+ * past the metering, and unattended fires were the one unmetered path.
+ * Everything else that used to differ here is now the `fire` row of
+ * `TURN_POSTURES` (consent, hydration budget, permissions).
  *
  * Issue #484 — the `ctx.tool` rail was removed. It used to dispatch tool
  * batches to a persistent mock-LLM session that puppeted the claude/codex
@@ -36,6 +41,7 @@ import type {
   HarnessHealthController,
   HarnessKind,
   HarnessPrefs,
+  RunTurnFn,
   TurnStreamEvent,
 } from "@centraid/app-engine";
 import {
@@ -43,11 +49,13 @@ import {
   ConversationStore,
   hydrationMessagesFromLedger,
   makeJournalDbProvider,
+  TURN_POSTURES,
 } from "@centraid/app-engine";
 import type * as TypeImport_4y0tle from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
 
-import { getHarness } from "../registry.js";
+/** The posture every `ctx.delegate` turn runs under (#743). */
+const POSTURE = TURN_POSTURES.fire;
 
 export interface LiveDispatchOptions {
   /** The automation app directory — also the agent's cwd. */
@@ -58,6 +66,13 @@ export interface LiveDispatchOptions {
   /** Canonical per-vault ledger holding harness bindings and hydration watermarks. */
   journalDbFile: string;
   harness: HarnessKind;
+  /**
+   * The host's resource-accounted turn driver — the SAME seam chat, compile,
+   * and steering are handed (`accountRunTurn` in the gateway). Required, not
+   * defaulted: a fallback to the registry would silently restore the unmetered
+   * path this injection exists to close.
+   */
+  runTurn: RunTurnFn;
   /**
    * Model id/alias for `ctx.delegate` calls (manifest `requires.model`, or the
    * caller's prefs-resolved fallback — see `RunAutomationOptions.model`).
@@ -99,6 +114,14 @@ export interface LiveDispatch {
 }
 
 const DELEGATE_FAILURE_PREFIX = "centraid-delegate-failure:";
+
+/** One harness binding this fire touched — the resume handle plus its usage. */
+interface TouchedBinding {
+  kind: string;
+  sessionId?: string;
+  usageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
+  hydrated?: boolean;
+}
 
 export interface AutomationDelegateFailure {
   harness: HarnessKind;
@@ -146,10 +169,10 @@ function delegateFailureError(failure: AutomationDelegateFailure): Error {
 
 /**
  * Stand up the live dispatch surface for the CLI harness. `ctx.delegate`
- * routes to the user's REAL provider through the harness registry; everything
- * else on the `ctx.*` surface is deterministic and serviced parent-side, so
- * this allocates nothing eagerly. The scratch dir is created lazily, only
- * when a `ctx.delegate` call carries vault derivatives to stage.
+ * routes to the user's REAL provider through the injected turn driver;
+ * everything else on the `ctx.*` surface is deterministic and serviced
+ * parent-side, so this allocates nothing eagerly. The scratch dir is created
+ * lazily, only when a `ctx.delegate` call carries vault derivatives to stage.
  */
 export async function startLiveDispatch(
   opts: LiveDispatchOptions
@@ -171,22 +194,15 @@ export async function startLiveDispatch(
     60_000
   );
   lockLeaseHeartbeat.unref?.();
-  let latestHarness:
-    | {
-        kind: string;
-        sessionId?: string;
-        usageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
-        hydrated?: boolean;
-      }
-    | undefined;
-  let observedHarness:
-    | {
-        kind: string;
-        sessionId?: string;
-        usageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
-        hydrated?: boolean;
-      }
-    | undefined;
+  // Bindings this fire has already touched, KEYED BY HARNESS KIND: an opaque
+  // ACP session id resumes only against the harness that minted it, which is
+  // the same rule `TurnResumePlan` states for chat. A single unkeyed slot
+  // would hand harness B harness A's session id the moment one fire reaches
+  // two kinds. Per-binding watermark settlement lands with HarnessSessions;
+  // until then the last binding touched is the one this turn settles.
+  const resumable = new Map<HarnessKind, TouchedBinding>();
+  let lastObserved: TouchedBinding | undefined;
+  let lastSettled: TouchedBinding | undefined;
   let hydrationTokens = 0;
   const ensureScratch = async (): Promise<void> => {
     if (scratchReady) return;
@@ -223,8 +239,23 @@ export async function startLiveDispatch(
     return { prompt: call.prompt, attachments };
   };
 
-  // ctx.delegate routes to the user's REAL provider through the SAME harness
-  // registry chat uses — one integration path for every kind (issue #479).
+  // Fold the ledger under the posture's budget — the same one chat compiles
+  // against. An unbudgeted fold is what made this path drift: a long-running
+  // automation re-sent its whole history into every cold session. A fold that
+  // funds no turn at all is no fold, exactly as in `turn-sse.ts`.
+  const compileBudgeted = (
+    messages: ReturnType<typeof hydrationMessagesFromLedger>
+  ): ReturnType<typeof compileHydrationPlan> | undefined => {
+    if (messages.length === 0) return undefined;
+    const compiled = compileHydrationPlan(messages, {
+      ...POSTURE.hydration,
+      includeAttachmentReferences: true,
+    });
+    return compiled.includedTurns === 0 ? undefined : compiled;
+  };
+
+  // ctx.delegate routes to the user's REAL provider through the injected,
+  // accounted turn driver — the one door chat uses (issues #479, #743).
   // `runTurn` normalizes each agent's stream into TurnStreamEvents, so this
   // reads `final` / `error` and coerces the answer with no per-backend wire
   // format anywhere in this file.
@@ -240,8 +271,9 @@ export async function startLiveDispatch(
     ctx
   ): Promise<unknown> => {
     const harness = opts.harness;
-    // Unattended egress is never prompted (#567 D5) — it is authorized at
-    // authoring time. So derive the grant honestly rather than minting one:
+    // `consent: 'derived'` — unattended egress is never prompted (#567 D5); it
+    // is authorized at authoring time. So derive the grant honestly rather
+    // than minting one:
     // `recordDerived` refuses to resurrect a revoked provider and refuses a
     // ladder source the user's live settings do not contain. A controller
     // without the derived-consent seam denies rather than assumes.
@@ -270,6 +302,10 @@ export async function startLiveDispatch(
     const staged = await stageAttachments(call);
     const scope = opts.harnessHealthContext ?? opts.workdir;
     const breaker = opts.harnessHealth?.canAttempt(scope, harness);
+    // `failover: 'new-run'` — there is no next rung inside this turn to
+    // advance to, so an open breaker is a typed failure the fire spine turns
+    // into a fresh run on the next harness. Chat, on `in-turn`, emits a notice
+    // and walks the ladder instead.
     if (breaker && !breaker.allowed) {
       throw delegateFailureError({
         harness,
@@ -282,42 +318,48 @@ export async function startLiveDispatch(
       loaded.kind === harness ? loaded : { kind: harness };
     let finalText = "";
     let failure: Extract<TurnStreamEvent, { type: "error" }> | undefined;
+    const resumed = resumable.get(harness);
     const binding =
-      latestHarness?.sessionId === undefined
+      resumed?.sessionId === undefined
         ? runsStore.getHarnessBinding(opts.automationRef, harness)
         : undefined;
-    const resumeSessionId = latestHarness?.sessionId ?? binding?.acpSessionId;
-    const resumeUsage = latestHarness?.usageSnapshot ?? binding?.usageSnapshot;
+    const resumeSessionId = resumed?.sessionId ?? binding?.acpSessionId;
+    const resumeUsage = resumed?.usageSnapshot ?? binding?.usageSnapshot;
     const completedTurns = runsStore.listTurns(opts.automationRef);
+    // Without a resumable session id this call starts cold, so its delta is the
+    // whole ledger, not the watermark's tail — the same rule `turn-sse.ts`
+    // applies per rung. A settled binding that minted no session id would
+    // otherwise suppress the fold it is supposed to fund.
+    const watermark = resumeSessionId
+      ? (binding?.hydratedThroughSeq ?? -1)
+      : -1;
     const hydrationMessages =
-      latestHarness === undefined
+      resumed === undefined
         ? hydrationMessagesFromLedger(
             completedTurns,
             (turnId) => runsStore.listItems(turnId),
             (itemId) => runsStore.listAttachmentsForItem(itemId),
-            binding?.hydratedThroughSeq ?? -1
+            watermark
           )
         : [];
+    // A recovery fold only means something against a resume handle the harness
+    // may reject; there is nothing to recover from when none was offered. A
+    // cold-but-resumable call already folds the whole ledger, so its recovery
+    // plan IS that fold — chat's rule, verbatim.
     const recoveryMessages =
-      latestHarness === undefined && binding
+      resumed === undefined && resumeSessionId && watermark !== -1
         ? hydrationMessagesFromLedger(
             completedTurns,
             (turnId) => runsStore.listItems(turnId),
             (itemId) => runsStore.listAttachmentsForItem(itemId)
           )
         : [];
-    const hydrationPlan =
-      hydrationMessages.length > 0
-        ? compileHydrationPlan(hydrationMessages, {
-            includeAttachmentReferences: true,
-          })
-        : undefined;
-    const recoveryHydrationPlan =
-      recoveryMessages.length > 0
-        ? compileHydrationPlan(recoveryMessages, {
-            includeAttachmentReferences: true,
-          })
-        : undefined;
+    const hydrationPlan = compileBudgeted(hydrationMessages);
+    const recoveryHydrationPlan = resumeSessionId
+      ? watermark === -1
+        ? hydrationPlan
+        : compileBudgeted(recoveryMessages)
+      : undefined;
     let result:
       | {
           sessionId?: string;
@@ -328,13 +370,17 @@ export async function startLiveDispatch(
         }
       | undefined;
     try {
-      result = await getHarness(harness).runTurn(
+      result = await opts.runTurn(
         {
           conversationId: opts.automationRef,
           cwd: opts.workdir,
           message: staged.prompt,
           ...(staged.attachments ? { attachments: staged.attachments } : {}),
           extraSystemPrompt: "",
+          // `permissions: 'deny'` — nobody is at the keyboard to answer a
+          // permission request, and #484 stands: a handler's judgment turn is
+          // never an autonomous tool-enabled agent turn.
+          permissionPolicy: POSTURE.permissions,
           ...(opts.model ? { model: opts.model } : {}),
           ...((opts.configPins ?? prefs.configPins)
             ? { configPins: opts.configPins ?? prefs.configPins }
@@ -393,7 +439,7 @@ export async function startLiveDispatch(
       };
     }
     if (result) {
-      observedHarness = {
+      lastObserved = {
         kind: result.harnessKind,
         ...(result.sessionId ? { sessionId: result.sessionId } : {}),
         ...(result.usageSnapshot
@@ -401,6 +447,8 @@ export async function startLiveDispatch(
           : {}),
         ...(result.hydrated ? { hydrated: true } : {}),
       };
+      // Bill the fold this call was actually handed — the turn's hydration
+      // tokens are recorded on the fire's turn exactly as chat records them.
       if (result.hydrated) {
         hydrationTokens +=
           result.hydrationKind === "recovery"
@@ -409,8 +457,9 @@ export async function startLiveDispatch(
       }
     }
     if (!failure) {
-      if (result) {
-        latestHarness = observedHarness;
+      if (lastObserved && result) {
+        resumable.set(harness, lastObserved);
+        lastSettled = lastObserved;
       }
       opts.harnessHealth?.reportOk(scope, harness);
       return automation.coerceDelegateAnswer(finalText, call.json);
@@ -436,8 +485,8 @@ export async function startLiveDispatch(
       if (hydrationTokens > 0) {
         store.setTurnHydrationTokens(turnId, hydrationTokens);
       }
-      if (ok) store.noteTurn(conversationId, "", latestHarness);
-      else store.noteFailedTurn(conversationId, "", observedHarness);
+      if (ok) store.noteTurn(conversationId, "", lastSettled);
+      else store.noteFailedTurn(conversationId, "", lastObserved);
     },
     async close(): Promise<void> {
       if (closed) return;
