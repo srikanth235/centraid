@@ -10,11 +10,12 @@
  * `(conversationRef, harnessKind)`, so each harness resumes its OWN session id
  * and every binding the fire touched settles itself.
  *
- * The second harness enters through the accounted seam: `runTurn` reports the
- * harness that actually produced the session id, which is not necessarily the
- * one the call asked for. Naming a harness per `ctx.delegate` call is #743
- * item (c); the invariant under test is the same either way — a session id
- * belongs to whoever minted it.
+ * Per #743 Part 2 item (c) the handler now names its harness PER CALL
+ * (`ctx.delegate({ harness })`) rather than the fire's whole ambient harness
+ * changing mid-flight — the literal shape the issue's acceptance criterion
+ * describes: "a fire whose handler calls ctx.delegate twice with two
+ * different harnesses resumes each harness's own acp_session_id and settles
+ * both bindings' watermarks".
  */
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -99,19 +100,20 @@ describe("one fire, two harnesses", () => {
     return { workdir, journalDbFile, ref };
   }
 
-  test("each harness resumes its own session id and both watermarks settle", async () => {
+  test("ctx.delegate twice with two different harnesses resumes each one's own session id and settles both watermarks", async () => {
     const { workdir, journalDbFile, ref } =
       await seededJournal("session-codex-old");
 
-    // The accounted seam lands on claude-code for the first delegate call and
-    // on codex for the second — one fire, two harnesses, two session ids.
-    let landing = 0;
+    // Two LITERAL ctx.delegate calls, each naming its own harness — the
+    // shape the issue's acceptance criterion describes, not two calls that
+    // happen to land on different backends through the same ambient kind.
+    const claude = stubHarness("claude-code", (input) => {
+      input.onEvent({ type: "final", text: "answer" });
+      return { harnessKind: "claude-code", sessionId: "session-claude-new" };
+    });
     const codex = stubHarness("codex", (input) => {
       input.onEvent({ type: "final", text: "answer" });
-      landing += 1;
-      return landing === 1
-        ? { harnessKind: "claude-code", sessionId: "session-claude-new" }
-        : { harnessKind: "codex", sessionId: "session-codex-new" };
+      return { harnessKind: "codex", sessionId: "session-codex-new" };
     });
 
     const dispatch = await startLiveDispatch({
@@ -130,20 +132,27 @@ describe("one fire, two harnesses", () => {
       triggerKind: "scheduled",
       startedAt: 3,
     });
-    await dispatch.delegateDispatcher({ prompt: "step one" }, dispatchCtx);
-    await dispatch.delegateDispatcher({ prompt: "step two" }, dispatchCtx);
+    await dispatch.delegateDispatcher(
+      { prompt: "step one", harness: "claude-code" },
+      dispatchCtx
+    );
+    await dispatch.delegateDispatcher(
+      { prompt: "step two", harness: "codex" },
+      dispatchCtx
+    );
     store.finishTurn({ turnId: "fire-1", endedAt: 4, ok: true });
     dispatch.finalizeTurn(store, ref, "fire-1", true);
     store.close();
     await dispatch.close();
 
-    // Resume: codex's own durable handle, on BOTH calls. The second call is
-    // the regression — an unkeyed slot would have offered it the session id
-    // claude-code minted a moment earlier.
-    expect(codex.calls).toHaveLength(2);
+    // Each named harness heard exactly its own call.
+    expect(claude.calls).toHaveLength(1);
+    expect(codex.calls).toHaveLength(1);
+    // Resume: codex's own durable handle, not the one claude-code minted a
+    // moment earlier — the regression an unkeyed slot would have produced.
     expect(codex.calls[0]?.prevSessionId).toBe("session-codex-old");
-    expect(codex.calls[1]?.prevSessionId).toBe("session-codex-old");
-    expect(codex.calls[1]?.prevSessionId).not.toBe("session-claude-new");
+    expect(codex.calls[0]?.prevSessionId).not.toBe("session-claude-new");
+    expect(claude.calls[0]?.prevSessionId).toBeUndefined();
 
     // Settlement: BOTH bindings exist, each holding its own minted session id,
     // and BOTH watermarks advanced to this fire's turn (seq 1).

@@ -53,6 +53,9 @@ type WorkerMessage =
       prompt: string;
       json?: unknown;
       content?: { contentId: string; variant: string; maxBytes?: number }[];
+      harness?: string;
+      model?: string;
+      configPins?: Record<string, string>;
     }
   | {
       type: "state";
@@ -312,17 +315,29 @@ const ctx = {
    * alongside the prompt — the HOST resolves them under this automation's
    * grant, receipts each fetch, and stages the bytes for the provider; the
    * worker never holds them (issue #299 §2).
+   *
+   * `harness` / `model` / `configPins` are per-call overrides (#743 Part 2
+   * item c, absorbing #740): omit them and the call rides the fire's fixed
+   * harness/model/pins exactly as before. Naming a harness here NAMES an
+   * already-consented one — the host validates it the same way it validates
+   * the fire-level harness (#567 D13); it never mints a new grant.
    */
   delegate(args: {
     prompt: string;
     json?: unknown;
     content?: { contentId: string; variant: string; maxBytes?: number }[];
+    harness?: string;
+    model?: string;
+    configPins?: Record<string, string>;
   }): Promise<unknown> {
     return rpcCall({
       type: "delegate",
       prompt: args.prompt,
       ...(args.json === undefined ? {} : { json: args.json }),
       ...(args.content === undefined ? {} : { content: args.content }),
+      ...(args.harness === undefined ? {} : { harness: args.harness }),
+      ...(args.model === undefined ? {} : { model: args.model }),
+      ...(args.configPins === undefined ? {} : { configPins: args.configPins }),
     });
   },
   state,

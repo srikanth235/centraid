@@ -45,14 +45,19 @@ export interface ManifestRequires {
   /** MCP server ids the handler requires (`["github", "linear"]`). */
   readonly mcps?: readonly string[];
   /**
-   * Coding-agent harness used by compile, interactive turns, and `ctx.delegate`.
-   * This is an open registry key: manifests validate only that it is non-empty;
-   * the executing gateway decides whether the key is registered and otherwise
-   * falls back to the automations subsystem preference.
+   * Coding-agent harness used by compile, interactive turns, and every
+   * `ctx.delegate` call that names no harness of its own. This is an open
+   * registry key: manifests validate only that it is non-empty; the
+   * executing gateway decides whether the key is registered and otherwise
+   * falls back to the automations subsystem preference. A per-call
+   * `ctx.delegate({ harness })` overrides this for that one call (#740) —
+   * this field governs authoring/interactive turns and every call that
+   * doesn't opt out of it.
    */
   readonly harness?: string;
   /**
-   * Model the `ctx.delegate` calls should route through. Format: `provider/model-id`
+   * Model the `ctx.delegate` calls should route through, when a call does not
+   * name its own `model`. Format: `provider/model-id`
    * (`"anthropic/claude-3-5-sonnet"`, `"openai/gpt-4o"`). Must not target the
    * mock provider (`centraid-mock/*`) — that would recurse into the mock
    * StreamFn. Validation rejects it.

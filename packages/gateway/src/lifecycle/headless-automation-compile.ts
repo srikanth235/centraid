@@ -171,6 +171,7 @@ export const HEADLESS_COMPILE_WORK_ORDER = (
     "Update automation.json only when derived requirements or vault scopes need to change.",
     "Write a complete deterministic handler.js that implements the instructions.",
     'When the instructions describe reacting to vault-data changes, declare a data trigger; when they describe a data-state window ("due in N days"), declare a condition trigger — with vault read scopes covering every watched entity — instead of approximating either with a cron poll.',
+    'When the instructions name a specific harness and/or model for a step (e.g. "use opencode deepseek-ocr for the OCR step", "summarize with the default harness"), compile that into `ctx.delegate({ harness, model, prompt, ... })` on exactly that call — do not rewrite manifest.requires.harness or requires.model for a per-step preference, and never invent a harness/model the instructions did not name. Omit harness/model entirely on a call the instructions leave unspecified — it rides the automation\'s own fixed harness/model. A step naming a harness that fails must surface that failure, never silently retry a different harness inside the handler.',
     "Leave existing cron/webhook triggers alone unless the instructions changed them.",
     "Do not change the enabled field; the gateway owns enable/disable lifecycle after validation.",
     "Use generated.by = 'centraid-compiler'. Do not ask questions. Stop after the files are ready.",

@@ -46,6 +46,7 @@ import type {
 } from "@centraid/app-engine";
 import {
   ConversationStore,
+  isHarnessKind,
   makeJournalDbProvider,
   TURN_POSTURES,
 } from "@centraid/app-engine";
@@ -247,7 +248,34 @@ export async function startLiveDispatch(
     call,
     ctx
   ): Promise<unknown> => {
-    const harness = opts.harness;
+    // Per-call harness (#743 Part 2 item c, absorbing #740). Naming, not
+    // constructing: `call.harness` must resolve to a harness this dispatch
+    // surface already knows about (the registry's fixed HarnessKind union) —
+    // an unregistered name fails typed rather than silently falling back to
+    // the fire's harness.
+    let harness: HarnessKind;
+    if (call.harness === undefined) {
+      harness = opts.harness;
+    } else if (isHarnessKind(call.harness)) {
+      harness = call.harness;
+    } else {
+      throw delegateFailureError({
+        harness: opts.harness,
+        failureClass: "unknown",
+        message: `ctx.delegate named an unregistered harness "${call.harness}".`,
+      });
+    }
+    // A call naming a harness other than the fire's own is code-authored
+    // (handler.js, possibly compiled from a manifest pin) — never a live user
+    // selection — so it is validated exactly the way a manifest
+    // `requires.harness` pin is validated: only CURRENT failover-ladder
+    // membership can consent it (#567 D13). A call that repeats the fire's
+    // own harness keeps that harness's own consent provenance (the direct
+    // primary stays direct).
+    const consentSource: ProviderConsentSource | undefined =
+      call.harness !== undefined && harness !== opts.harness
+        ? "ladder"
+        : opts.consentSource;
     // `consent: 'derived'` — unattended egress is never prompted (#567 D5); it
     // is authorized at authoring time. So derive the grant honestly rather
     // than minting one:
@@ -257,12 +285,12 @@ export async function startLiveDispatch(
     const consent = opts.providerEgressConsent;
     if (consent && !consent.has(opts.automationRef, harness, "automations")) {
       const derived =
-        opts.consentSource === undefined
+        consentSource === undefined
           ? false
           : (consent.recordDerived?.(
               opts.automationRef,
               harness,
-              opts.consentSource,
+              consentSource,
               "automations"
             ) ?? false);
       if (!derived) {
@@ -293,6 +321,9 @@ export async function startLiveDispatch(
     const loaded = (await opts.harnessPrefsFor?.(harness)) ?? { kind: harness };
     const prefs: HarnessPrefs =
       loaded.kind === harness ? loaded : { kind: harness };
+    // Per-call model/configPins override the fire's own (#743 Part 2 item c).
+    const model = call.model ?? opts.model;
+    const configPins = call.configPins ?? opts.configPins;
     let finalText = "";
     let failure: Extract<TurnStreamEvent, { type: "error" }> | undefined;
     // One question to one owner: what does THIS harness resume, and what does
@@ -320,9 +351,9 @@ export async function startLiveDispatch(
           // permission request, and #484 stands: a handler's judgment turn is
           // never an autonomous tool-enabled agent turn.
           permissionPolicy: POSTURE.permissions,
-          ...(opts.model ? { model: opts.model } : {}),
-          ...((opts.configPins ?? prefs.configPins)
-            ? { configPins: opts.configPins ?? prefs.configPins }
+          ...(model ? { model } : {}),
+          ...((configPins ?? prefs.configPins)
+            ? { configPins: configPins ?? prefs.configPins }
             : {}),
           abortSignal: ctx.abortSignal,
           ...(plan.sessionId ? { prevSessionId: plan.sessionId } : {}),

@@ -347,6 +347,65 @@ describe(runFire, () => {
     store.close();
   });
 
+  it("carries a per-call harness/model/configPins from handler.js through the real worker boundary (#743 Part 2 item c)", async () => {
+    // The worker/parent RPC bridge is real here (unlike the dispatcher-level
+    // unit tests in agent-runtime) — this proves the wire shape added for
+    // per-call harness/model/configPins actually crosses the worker_threads
+    // boundary intact, not merely that the types compile.
+    await writeAutomation(
+      appsDir,
+      "notes",
+      "ocr",
+      manifest({ name: "OCR" }),
+      `export default async ({ ctx }) => {
+         const answer = await ctx.delegate({
+           prompt: 'transcribe',
+           harness: 'opencode',
+           model: 'deepseek/deepseek-ocr',
+           configPins: { thought_level: 'low' },
+         });
+         return { output: answer };
+       };`
+    );
+    const seen: Array<{
+      harness?: string;
+      model?: string;
+      configPins?: Record<string, string>;
+    }> = [];
+    const dispatch = (): Promise<DispatchSurface> =>
+      Promise.resolve({
+        delegateDispatcher: async (call) => {
+          seen.push({
+            harness: call.harness,
+            model: call.model,
+            configPins: call.configPins as Record<string, string> | undefined,
+          });
+          return "transcribed text";
+        },
+        async close() {},
+      });
+
+    const { outcome } = await runFire(
+      {
+        automationRef: "notes/ocr",
+        appsDir,
+        journalDbFile,
+        harnessKind: "codex",
+      },
+      { openDispatch: dispatch }
+    );
+
+    expect(outcome.ok).toBe(true);
+    expect(outcome.output).toBe("transcribed text");
+    expect(seen).toStrictEqual([
+      {
+        harness: "opencode",
+        model: "deepseek/deepseek-ocr",
+        configPins: { thought_level: "low" },
+      },
+    ]);
+  });
+
   it("persists overlapping ACP tool calls as distinct callId-keyed items", async () => {
     await writeAutomation(
       appsDir,

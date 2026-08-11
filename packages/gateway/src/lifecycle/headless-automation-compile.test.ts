@@ -265,6 +265,18 @@ describe("headless-automation-compile suite", () => {
         "Leave existing cron/webhook triggers alone unless the instructions changed them."
       );
     });
+
+    it("teaches the compiler to name a per-step harness/model on ctx.delegate (#743 Part 2 item c / #740)", () => {
+      const prompt = HEADLESS_COMPILE_WORK_ORDER(
+        "Use opencode deepseek-ocr for the OCR step, then summarize with the default harness."
+      );
+      expect(prompt).toContain("ctx.delegate({ harness, model, prompt, ... })");
+      expect(prompt).toContain("never invent a harness/model");
+      expect(prompt).toContain(
+        "rides the automation's own fixed harness/model"
+      );
+      expect(prompt).toContain("never silently retry a different harness");
+    });
   });
 
   describe(recordFailedAutomationCompile, () => {

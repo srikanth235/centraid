@@ -131,7 +131,16 @@ export async function handleDelegateMessage(
   prompt: string,
   json: unknown,
   content?: readonly DelegateContentRef[],
-  vault?: VaultBridge
+  vault?: VaultBridge,
+  /**
+   * Per-call harness/model/configPins (#743 Part 2 item c, absorbing #740).
+   * Forwarded verbatim to the dispatcher — this layer only carries the wire
+   * shape across the worker boundary; naming-vs-consent validation happens
+   * in the injected `delegateDispatcher` (#567 D13).
+   */
+  harness?: string,
+  model?: string,
+  configPins?: Readonly<Record<string, string>>
 ): Promise<CtxReply> {
   const ordinal = nextOrdinal(audit);
   const started = Date.now();
@@ -143,7 +152,12 @@ export async function handleDelegateMessage(
     ordinal,
     kind: "delegate",
     name: "delegate",
-    args: { prompt, ...(content?.length ? { content } : {}) },
+    args: {
+      prompt,
+      ...(content?.length ? { content } : {}),
+      ...(harness ? { harness } : {}),
+      ...(model ? { model } : {}),
+    },
     started,
   });
   // When the runner streams (issue #158, Phase 2), forward each chat event as a
@@ -251,7 +265,15 @@ export async function handleDelegateMessage(
       ? await resolveContentAttachments(vault, content)
       : undefined;
     const result = await delegateDispatcher(
-      { prompt, json, ...(attachments ? { attachments } : {}), onEvent },
+      {
+        prompt,
+        json,
+        ...(attachments ? { attachments } : {}),
+        ...(harness ? { harness } : {}),
+        ...(model ? { model } : {}),
+        ...(configPins ? { configPins } : {}),
+        onEvent,
+      },
       dispatchCtx
     );
     closeDanglingTools("Tool call ended without a terminal result.");

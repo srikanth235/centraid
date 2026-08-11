@@ -108,6 +108,24 @@ export interface DelegateCall {
    * delegate item. Absent for runners still on the collect-on-exit path.
    */
   readonly onEvent?: (ev: TurnStreamEvent) => void;
+  /**
+   * Per-call harness override (#743 Part 2 item c, absorbing #740). Naming,
+   * not constructing: the dispatcher validates this against the user's own
+   * settings exactly as it validates the fire-level harness (#567 D13) — it
+   * never mints a harness the caller has not authored. Omitted = the fire's
+   * fixed harness (`requires.harness` / the automations subsystem default).
+   */
+  readonly harness?: string;
+  /**
+   * Per-call model override. Omitted = the fire's model (manifest
+   * `requires.model`, or the caller's prefs-resolved fallback).
+   */
+  readonly model?: string;
+  /**
+   * Per-call semantic ACP configuration pins. Omitted = the fire's
+   * `configPins` (manifest / prefs fallback).
+   */
+  readonly configPins?: Readonly<Record<string, string>>;
 }
 
 export type DelegateDispatcher = (
@@ -382,6 +400,9 @@ type WorkerToParentMessage =
       prompt: string;
       json?: unknown;
       content?: { contentId: string; variant: string; maxBytes?: number }[];
+      harness?: string;
+      model?: string;
+      configPins?: Record<string, string>;
     }
   | { type: "fetch"; id: number; spec: FetchSpecWire }
   | { type: "connector-open"; id: number; principal: string }
@@ -1055,7 +1076,10 @@ export async function runHandler(
           msg.prompt,
           msg.json,
           msg.content,
-          opts.vault
+          opts.vault,
+          msg.harness,
+          msg.model,
+          msg.configPins
         ).then((reply) => {
           send({ type: "delegate-reply", id: msg.id, ...reply });
         });
