@@ -35,19 +35,6 @@ export function stateLine(state: TileMediaState): string | null {
 }
 
 /**
- * The `gateway` state's honest cousin for a BORROWED scope (#726 P4/P6):
- * nothing to paint locally, but "on the gateway" would be a LIE — it is not
- * THIS gateway that holds it, it is the lender's. Mirrors mobile's "on the
- * gateway" analogue but names the actual custodian, exactly as the P6 spec
- * requires ("at <person>'s vault", never a broken tile or an error). Callers
- * choose this over `stateLine("gateway")` when `TileVault.borrowed` is true —
- * see `Tile.tsx`.
- */
-export function peerStateLine(holderLabel: string): string {
-  return `at ${holderLabel}’s vault`;
-}
-
-/**
  * The state a tile STARTS in, from the record. A row with no paintable source
  * is `on the gateway` from the first frame rather than after a failed fetch —
  * a grey mosaic with no explanation is a bug (§14).
@@ -65,11 +52,6 @@ export interface TileVault {
   /** A CSS colour the rule paints. Never Photos' own identity hue on a
    *  control — this is a 2px CONTENT marker, which §2.1 sanctions by name. */
   hue: string;
-  /** True when this mark names a scope LENT to the member (#726 P4/P6),
-   *  false for the member's own other vault. Distinguishes "on the gateway"
-   *  (still true — it is THIS gateway) from "at ⟨person⟩'s vault" (the
-   *  content lives on someone else's). */
-  borrowed: boolean;
 }
 
 // A vault colour arrives from the shell, so it is narrowed to the two shapes a
@@ -107,7 +89,6 @@ export function vaultMarker(scope: InlineScope | undefined): TileVault | null {
     initial: [...label][0]?.toUpperCase() ?? "?",
     label,
     hue: safeHue(scope.color),
-    borrowed: scope.borrowed !== undefined,
   };
 }
 

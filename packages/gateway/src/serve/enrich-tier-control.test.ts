@@ -7,10 +7,11 @@
  * separate `provider` tier; provider egress is gated per call (#567) and
  * per capability (S9's own consent read), independently of this tier. That
  * enforcement is only honest if the owner can actually move the tier, so the
- * law this file states is the whole loop: what Settings → Enrichment writes
- * is what `decideEnrichmentGate` later reads, with the app-readable mirror in
- * between. Gateway is the one package that depends on BOTH halves, which is
- * why the loop is pinned here rather than in vault or automation alone.
+ * law this file states is the whole loop: what the owner-only vault policy
+ * writes is what `decideEnrichmentGate` later reads, with the app-readable
+ * mirror in between. Gateway is the one package that depends on BOTH halves,
+ * which is why the loop is pinned here rather than in vault or automation
+ * alone.
  *
  * `updateEnrichSettings` is exercised directly — it is the authoritative
  * writer that `PUT /centraid/_vault/enrich` calls, and the client control
@@ -147,8 +148,8 @@ describe("enrichment tier control", () => {
     expect(before.allowed).toBe(false);
 
     // The one gate that IS wired on this execution path today is the
-    // domain tier, and it is answered the same way Settings → Enrichment
-    // answers it: an explicit owner write, not a migration default.
+    // domain tier, and it is answered by an explicit owner write, not a
+    // migration default.
     updateEnrichSettings(db, { photos: "gateway" });
 
     const after = gateFor("gateway");
@@ -186,12 +187,12 @@ describe("enrichment refusal notice", () => {
     };
   }
 
-  it("law: the card names the tier in force and points at the control", () => {
+  it("law: the card names the tier in force and points at recognition automations", () => {
     const device = enrichRefusalNotice({ domain: "photos", tier: "device" });
     expect(device.kind).toBe("enrichment");
     expect(device.sourceRef).toBe("photos");
     expect(device.headline).toContain("limited to your devices");
-    expect(device.detail?.deepLink).toBe("/settings/enrichment");
+    expect(device.detail?.deepLink).toBe("/automations");
     expect(device.detail?.enrichDomain).toBe("photos");
   });
 

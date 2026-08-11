@@ -3,11 +3,7 @@ import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import type { RedeemLinkTicketOutcome } from "../../gateway-client-links.js";
-import type {
-  BorrowBudget,
-  GatewayLink,
-  ReceiveSetting,
-} from "../../gateway-client.js";
+import type { GatewayLink, ReceiveSetting } from "../../gateway-client.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import StatusPill from "../ui/StatusPill.js";
@@ -17,14 +13,8 @@ import buttonCss from "../ui/Button.module.css";
 import deviceStyles from "./DevicesCard.module.css";
 import styles from "./SharingCard.module.css";
 
-/** 1 GB in bytes — the UI's own display unit; the wire is always bytes. */
-const GB = 1024 * 1024 * 1024;
-
 /**
- * One link row, with its own D9 receive-setting control and per-link
- * borrow-storage budget (#726 P6 gap 2) — split out of `SharingCard.tsx` so
- * neither setting's own async load gates the whole card's first paint, and
- * to keep that file under the repo's file-size guidance.
+ * One link row, with its own receive-setting control.
  */
 export default function LinkRow({
   link,
@@ -34,8 +24,6 @@ export default function LinkRow({
   onApprove,
   loadReceiveSetting,
   onSetReceiveSetting,
-  loadBorrowBudget,
-  onSetBorrowBudget,
 }: {
   link: GatewayLink;
   otherLabel: string;
@@ -47,11 +35,6 @@ export default function LinkRow({
     linkId: string,
     setting: ReceiveSetting
   ) => Promise<ReceiveSetting>;
-  loadBorrowBudget: (linkId: string) => Promise<BorrowBudget>;
-  onSetBorrowBudget: (
-    linkId: string,
-    budgetBytes: number
-  ) => Promise<BorrowBudget>;
 }): JSX.Element {
   const [setting, setSetting] = useState<ReceiveSetting | null>(null);
   useEffect(() => {
@@ -65,28 +48,6 @@ export default function LinkRow({
       live = false;
     };
   }, [link.linkId, loadReceiveSetting]);
-
-  const [budget, setBudget] = useState<BorrowBudget | null>(null);
-  const [draftGb, setDraftGb] = useState("");
-  useEffect(() => {
-    let live = true;
-    loadBorrowBudget(link.linkId)
-      .then((value) => {
-        if (!live) return;
-        setBudget(value);
-        setDraftGb((value.budgetBytes / GB).toFixed(1));
-      })
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [link.linkId, loadBorrowBudget]);
-
-  const saveBudget = (): void => {
-    const gb = Number(draftGb);
-    if (!Number.isFinite(gb) || gb < 0) return;
-    void onSetBorrowBudget(link.linkId, Math.round(gb * GB)).then(setBudget);
-  };
 
   return (
     <div className={deviceStyles.row}>
@@ -127,21 +88,6 @@ export default function LinkRow({
             <option value="ask">Ask first</option>
             <option value="refuse">Refuse</option>
           </select>
-        </div>
-        <div className={deviceStyles.meta}>
-          <span>Borrow storage budget</span>
-          <input
-            type="number"
-            min={0}
-            step={0.5}
-            aria-label={`Borrow storage budget for ${otherLabel}, in gigabytes`}
-            className={styles.receiveSelect}
-            value={draftGb}
-            disabled={budget === null}
-            onChange={(event) => setDraftGb(event.target.value)}
-            onBlur={saveBudget}
-          />
-          <span>GB{budget?.isDefault ? " (default)" : ""}</span>
         </div>
       </div>
       {!link.approved && !link.revoked ? (

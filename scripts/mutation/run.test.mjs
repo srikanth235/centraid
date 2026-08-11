@@ -71,7 +71,7 @@ describe("MUTATION_SEEDS", () => {
         "packages/time-engine",
         "packages/tunnel",
         "packages/vault",
-        "tools/enrichment-service",
+        "tools/recognition-automations",
       ].sort()
     );
     for (const seed of MUTATION_SEEDS) {

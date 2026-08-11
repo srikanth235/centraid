@@ -29,4 +29,5 @@ export const I = {
 // The folder row's hover-revealed tools retain their compact geometry while
 // sharing the same canonical glyphs.
 export const RENAME_ICON = glyph("Pencil", 14, 1.7);
+export const SHARE_ICON = glyph("Share", 14, 1.7);
 export const DELETE_ICON = glyph("Trash", 14, 1.7);

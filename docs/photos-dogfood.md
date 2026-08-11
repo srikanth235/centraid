@@ -49,8 +49,10 @@ Run this motion:
    - [ ] Key photo appears on the Collection tile.
    - [ ] Offline, the cached key photo still renders.
 
-9. **Enrichment service (#724).** Run the reference service locally (`bun run --cwd tools/enrichment-service setup && bun run --cwd tools/enrichment-service serve`) and point the gateway at it (`CENTRAID_ENRICH_URL=http://127.0.0.1:8787`). Verify:
-   - [ ] OCR a receipt or a photo of a sign, then search for a word from it — the text hit appears once the OCR sweep has run.
+9. **Recognition automations.** Install the optional local model runtime and weights (`bun run --cwd tools/recognition-automations setup`), then run the gateway normally. Verify:
+   - [ ] OCR an image of a receipt or sign, then search for a word from it — the text hit appears once the OCR automation has run.
+   - [ ] OCR a PDF with embedded text and a scanned PDF; both become searchable, with rendered-page OCR used only where a text layer is absent.
+   - [ ] Missing assets or an OCR model error produces a visible failed automation turn rather than a stuck spinner.
    - [ ] Consent-scan faces from the People shelf's empty-state gate (or "Detect faces"); verify the review queue fills with proposed regions on your own library.
    - [ ] Name an unnamed cluster and confirm a proposal onto a known person; verify the person's photos are browsable from their card.
    - [ ] Forget a person (`media.forget_person`) and verify their regions disappear from the review queue and no photo still shows their name.

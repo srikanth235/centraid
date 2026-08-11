@@ -1,62 +1,101 @@
 import type { InlineScope } from "../inline-types.ts";
-// The give/lend destination list every app's share sheet needs (issue #726
-// P6, ScopeAppDeclaration's "lendable" contract §D11): ONE list holding both
-// the member's own OTHER writable vaults and every LINKED person, with no
-// distinction drawn between a co-hosted and a remote peer — locality is
-// routing, not semantics (D3). Neither the label nor the order here may hint
-// at where a destination physically lives.
-//
-// TWO VERBS, ONE SUBJECT EACH. A give (`window.centraid.place`) copies a
-// FIXED set of items — what is selected right now. A lend
-// (`window.centraid.lend`) opens a live window over the CALLER'S WHOLE scope
-// for this app's own entity family (`ScopeAppDeclaration.mintedIdFamilies`)
-// — not just what happens to be selected. A share sheet that offers both
-// verbs must say so in its own copy (see `ShareSheet.tsx`'s lend note):
-// selecting three photographs and choosing "Lend" does not lend three
-// photographs, it lends the library they came from.
+// Commons picks PEOPLE. A second vault owned by the same person is never a
+// member: it syncs through that owner's own topology, outside this roster.
+// Locality remains routing, not product semantics.
 import { mountedScopes } from "./scope-kit.ts";
 
-/** One place a give or a lend could land. Deliberately carries no "kind"
- *  (own vault vs. linked person) — see the file header. */
+/** One person a share could include. Deliberately carries no locality kind. */
 export interface ShareDestination {
   id: string;
   label: string;
+  /** Explicit identity for a person, including someone who has not joined. */
+  partyId?: string;
+  /** Absent until an invited person creates and joins with a vault. */
+  vaultId?: string;
 }
 
-/**
- * Every mounted scope this member could copy INTO right now: writable, not
- * the current scope, and not a scope someone else lent them (a read edge
- * lends, it never delegates the right to receive a NEW share into it from
- * here — that destination is reached through its OWN link, listed by
- * `linkedDestinations` below once one exists).
- */
-export function ownVaultDestinations(
-  scopes: readonly InlineScope[],
-  current: string | null | undefined = ""
-): ShareDestination[] {
-  return scopes
-    .filter(
-      (scope) => scope.id !== current && scope.canWrite && !scope.borrowed
+/** A person from the member's own People directory. The host joins this
+ * identity to a linked vault when one exists; an absent vault is a real
+ * invitation target, not an error or an invented staging location. */
+export interface ShareTarget {
+  partyId: string;
+  label: string;
+  vaultId?: string;
+}
+
+export interface ShareCircle {
+  circleId: string;
+  label: string;
+  members: ShareMemberSelection[];
+}
+
+export interface ShareMemberSelection {
+  partyId?: string;
+  vaultId?: string;
+  capability: "read" | "read+write";
+}
+
+/** Turn the independently selected capability on each person row into the
+ * exact Commons member array. In particular, an invitation never gets a
+ * synthetic vault id. */
+export function selectedShareMembers(
+  destinations: readonly ShareDestination[],
+  selections: Readonly<Record<string, "read" | "read+write">>
+): ShareMemberSelection[] {
+  return destinations.flatMap((destination) => {
+    const capability = selections[destination.id];
+    if (!capability) return [];
+    return [
+      {
+        ...(destination.partyId ? { partyId: destination.partyId } : {}),
+        ...(destination.vaultId ? { vaultId: destination.vaultId } : {}),
+        capability,
+      },
+    ];
+  });
+}
+
+export function selectionsForCircle(
+  destinations: readonly ShareDestination[],
+  circle: ShareCircle
+): Record<string, "read" | "read+write"> {
+  const capabilityByParty = new Map(
+    circle.members.flatMap((member) =>
+      member.partyId ? [[member.partyId, member.capability] as const] : []
     )
-    .map((scope) => ({ id: scope.id, label: scope.label }));
+  );
+  return Object.fromEntries(
+    destinations.flatMap((destination) => {
+      const capability = destination.partyId
+        ? capabilityByParty.get(destination.partyId)
+        : undefined;
+      return capability ? [[destination.id, capability]] : [];
+    })
+  );
+}
+
+export async function loadShareCircles(): Promise<ShareCircle[]> {
+  if (!window.centraid.shareCircles) return [];
+  try {
+    return await window.centraid.shareCircles();
+  } catch {
+    return [];
+  }
 }
 
 /** A raw `window.centraid.links()` row, before a label is attached. */
 export interface LinkRow {
   linkId: string;
   vaultId: string;
+  partyId: string;
   approved: boolean;
 }
 
 /**
- * Best-effort human label for a linked vault id. A vault that has already
- * lent something IN carries its own label (the borrowed scope's
- * `holderLabel`); one that has not is a genuine wire gap — this gateway has
- * no route that names a linked-but-never-shared-with vault — so it falls
- * back to a short id rather than inventing a name.
+ * Best-effort human label for a linked vault id.
  */
 function linkLabel(vaultId: string, scopes: readonly InlineScope[]): string {
-  const known = scopes.find((scope) => scope.id === vaultId && scope.borrowed);
+  const known = scopes.find((scope) => scope.id === vaultId);
   if (known) return known.label;
   return `Linked vault ${vaultId.length > 10 ? `${vaultId.slice(0, 8)}…` : vaultId}`;
 }
@@ -74,38 +113,58 @@ export function linkedDestinations(
     .map((link) => ({
       id: link.vaultId,
       label: linkLabel(link.vaultId, scopes),
+      partyId: link.partyId,
+      vaultId: link.vaultId,
     }));
 }
 
-/** ONE destination list (D3): own other vaults, then linked people, in the
- *  order the caller supplied them — never re-sorted or grouped by locality. */
-export function shareDestinations(
-  scopes: readonly InlineScope[],
-  currentScopeId: string | null | undefined,
-  links: readonly LinkRow[]
+/** People-directory targets, preserving invited people whose identity has no
+ * vault binding yet. A linked vault already mounted as an own destination is
+ * omitted so the same destination never appears twice. */
+export function peopleDestinations(
+  people: readonly ShareTarget[],
+  scopes: readonly InlineScope[]
 ): ShareDestination[] {
-  const own = ownVaultDestinations(scopes, currentScopeId);
-  const people = linkedDestinations(links, scopes);
-  return [...own, ...people];
+  const mounted = new Set(scopes.map((scope) => scope.id));
+  const seen = new Set<string>();
+  return people.flatMap((person) => {
+    if (!person.partyId || seen.has(person.partyId)) return [];
+    seen.add(person.partyId);
+    if (person.vaultId && mounted.has(person.vaultId)) return [];
+    return [
+      {
+        id: person.vaultId ?? `party:${person.partyId}`,
+        label: person.label,
+        partyId: person.partyId,
+        ...(person.vaultId ? { vaultId: person.vaultId } : {}),
+      },
+    ];
+  });
 }
 
 /**
- * Load the full destination list live: mounted scopes plus a fresh
- * `window.centraid.links()` call. Never throws — a host with no link plane
- * (or a transient failure) answers the own-vaults half alone, same
- * degrade-to-what-you-have posture the rest of this kit takes.
+ * Load the people roster live. Never throws: a transient People read falls
+ * back to approved links, and a host with neither answers an empty roster.
  */
 export async function loadShareDestinations(
-  currentScopeId: string | null | undefined,
+  _currentScopeId: string | null | undefined,
   scopes: readonly InlineScope[] = mountedScopes()
 ): Promise<ShareDestination[]> {
+  if (window.centraid.shareTargets) {
+    try {
+      return peopleDestinations(await window.centraid.shareTargets(), scopes);
+    } catch {
+      // Fall through to the older link-only surface. A transient People read
+      // must not make an already-linked destination disappear.
+    }
+  }
   let links: LinkRow[] = [];
   try {
     links = (await window.centraid.links?.()) ?? [];
   } catch {
     links = [];
   }
-  return shareDestinations(scopes, currentScopeId, links);
+  return linkedDestinations(links, scopes);
 }
 
 /**
@@ -117,76 +176,6 @@ export function shareBlockedReason(
   destinations: readonly ShareDestination[]
 ): string | null {
   return destinations.length === 0
-    ? "There is nowhere to share to yet — no other vault, and nobody linked."
+    ? "There is nobody to share with yet — add someone in People first."
     : null;
-}
-
-/** D7's irrevocable warning — a GIVE copies bytes the recipient then owns
- *  outright; nothing this app does afterward can reach back and remove them.
- *  Shown BEFORE a give fires, never after (the invariant this whole sheet
- *  exists to satisfy). */
-export const GIVE_IRREVOCABLE_WARNING =
-  "Giving makes a copy they own. You can’t take it back — only ask.";
-
-/** D7's lend wording — the ONLY correct verb for closing a live window.
- *  Never "take back": what was already read cannot be un-seen, only the
- *  window itself can close. */
-export const STOP_LENDING_LABEL = "Stop lending";
-
-/** The note a share sheet shows once "Lend" is chosen, over items that were
- *  selected for a GIVE — lending has no per-item granularity (see the file
- *  header), so the sheet must say what it actually does before it fires. */
-export function lendScopeNote(appLabel: string): string {
-  return `Lending shares your whole ${appLabel} library as a live view — not just what’s selected here.`;
-}
-
-/** The one live-edge scope declaration this kit's v1 lend offers: the app's
- *  own primary entity family, unfiltered (#726 P6 — a deliberate v1 scoping
- *  decision; per-album/per-item lend scoping is future work, flagged in the
- *  P6 report rather than half-built here). `mintedIdFamilies[0]` is always
- *  `"<schema>.<table>"` (`ScopeAppDeclaration`'s own contract). */
-export function wholeLibraryLendScope(
-  mintedIdFamilies: readonly string[]
-): Array<{ schema: string; table: string }> {
-  const [schema, table] = (mintedIdFamilies[0] ?? "").split(".");
-  return schema && table ? [{ schema, table }] : [];
-}
-
-/**
- * One scope's mask-selection-time reach fact, restated from the gateway's
- * own `ScopeSearchReach` (`packages/gateway/src/serve/lend-search-reach.ts`)
- * without importing it — blueprint apps are unbundled browser ES modules
- * and cannot import from the gateway package (`search-scaffold.ts`'s own
- * "BROWSER ES MODULE, NO BUNDLER" header states the same rule for the
- * query-time reach types). The gateway's `POST /_gateway/edges` response for
- * a live edge carries one of these per lent scope (#726 P4 D10,
- * `edges-routes.ts`'s `edgeWire`).
- */
-export interface LendSearchReach {
-  schema: string;
-  table: string;
-  /** `true` when the lent field mask excludes a column the physical table
-   *  actually has — search over this scope will not reach everything. */
-  masksSearchableColumns: boolean;
-}
-
-/**
- * The mask-selection-time half of D10: named the SAME MOMENT a lend is
- * created — the `POST /_gateway/edges` response that opens it — rather than
- * discovered later as thinner-than-expected search results. `null` when
- * every lent scope searches everything it has, which is the ONLY outcome
- * v1's lend can produce today (`wholeLibraryLendScope` never sets a field
- * mask); this stays ready for the per-field lend scoping #726 P6 flagged as
- * future work, so that feature does not also need to invent where its
- * warning surfaces.
- */
-export function searchReachWarning(
-  reach: readonly LendSearchReach[] | undefined,
-  destinationLabel: string
-): string | null {
-  if (!reach) return null;
-  const masked = reach.filter((scope) => scope.masksSearchableColumns);
-  if (masked.length === 0) return null;
-  const tables = masked.map((scope) => scope.table || scope.schema).join(", ");
-  return `${destinationLabel}’s search of this will not reach every column (narrower than the full ${tables} table).`;
 }

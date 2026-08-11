@@ -1,5 +1,5 @@
 // Details drawer (#detailsRoot root).
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { mountedScopes } from "../../_shared/scope-kit.ts";
 import { ShareSheet } from "../../_shared/ShareSheet.tsx";
@@ -118,11 +118,60 @@ export function Details({
   const m = typeMeta(doc.media_type);
   const trashed = doc.trashed;
   const [historyOpen, setHistoryOpen] = useState(false);
-  // Share (issue #726 P6): opens the unified give sheet. Docs has no
-  // scope declaration (no `mintedIdFamilies` — a document isn't a live
-  // entity family this app lends), so only "give" is offered.
+  // Documents use the same ceremony-free commons sheet as every container.
   const [shareOpen, setShareOpen] = useState(false);
   const [shareStatus, setShareStatus] = useState("");
+  const actorVaultId = mountedScopes()[0]?.id ?? "";
+  const [residentDocumentId, setResidentDocumentId] = useState<string | null>(
+    null
+  );
+  const commonsResident = residentDocumentId === doc.document_id;
+  useEffect(() => {
+    let active = true;
+    if (!actorVaultId || !window.centraid.commonsResidents) return;
+    void window.centraid
+      .commonsResidents(actorVaultId)
+      .then((items) => {
+        if (active)
+          setResidentDocumentId(
+            items.some(
+              (item) =>
+                item.itemType === "core.document" &&
+                item.itemId === doc.document_id
+            )
+              ? doc.document_id
+              : null
+          );
+      })
+      .catch(() => {
+        if (active) setResidentDocumentId(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [actorVaultId, doc.document_id]);
+
+  const saveToMyVault = async (): Promise<void> => {
+    if (!commonsResident || !actorVaultId || !window.centraid.retainCommonsItem)
+      return;
+    try {
+      await window.centraid.retainCommonsItem({
+        actorVaultId,
+        itemType: "core.document",
+        itemId: doc.document_id,
+      });
+      setResidentDocumentId(null);
+      setShareStatus(
+        "Saved to my vault. This copy survives if the share ends."
+      );
+    } catch (error) {
+      setShareStatus(
+        error instanceof Error
+          ? `Document was not saved: ${error.message}`
+          : "Document was not saved to your vault."
+      );
+    }
+  };
   // The blob custody projection (issue #352 phase 4) — null for an inline
   // document or one the standing sweep hasn't reached yet, rendered as
   // nothing rather than a guess.
@@ -236,6 +285,15 @@ export function Details({
           </div>
           {trashed ? null : (
             <>
+              {commonsResident ? (
+                <button
+                  type="button"
+                  className={`kit-btn quiet ${shared.detailBtn}`}
+                  onClick={() => void saveToMyVault()}
+                >
+                  Save to my vault
+                </button>
+              ) : null}
               <button
                 type="button"
                 className={`kit-btn quiet ${shared.detailBtn}`}
@@ -248,7 +306,6 @@ export function Details({
                 onClose={() => setShareOpen(false)}
                 sourceScopeId={mountedScopes()[0]?.id ?? ""}
                 scopes={mountedScopes()}
-                verbs={["give"]}
                 itemType="core.document"
                 itemIds={[doc.document_id]}
                 appLabel="Docs"

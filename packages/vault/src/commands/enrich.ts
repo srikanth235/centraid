@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#731) the typed enrichment command pack keeps OCR, transcript, embedding, face, and provenance validation in one derivative-write boundary.
 // The enrichment command pack (issue #299): the typed verbs the spine's
 // non-staged writes ride. Staged output (captions, tags, faces, albums,
 // filing) lands through `sync.stage_rows` + the enrich publishers; these
@@ -18,6 +19,8 @@
 //   - `enrich.request_enrichment` / `enrich.upsert_embedding`: the
 //     on-demand queue and the additive vector index (issue #299 phase 5).
 
+import { stampDerivation } from "../enrich/derivation.js";
+import { rebuildFaceClusters } from "../enrich/face-clusters.js";
 import { encodeVector } from "../enrich/similarity.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -36,6 +39,28 @@ const SET_EXTRACTED_TEXT: CommandDefinition = {
       content_id: { type: "string", minLength: 1 },
       text: { type: "string", minLength: 1 },
       variant: { type: "string", enum: ["text", "transcript"] },
+      capability: { type: "string", minLength: 1 },
+      model: { type: "string", minLength: 1 },
+      prompt_rev: { type: "string", minLength: 1 },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      regions: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["text"],
+          additionalProperties: false,
+          properties: {
+            text: { type: "string" },
+            box: {
+              type: "array",
+              minItems: 4,
+              maxItems: 4,
+              items: { type: "integer", minimum: 0 },
+            },
+            confidence: { type: "number", minimum: 0, maximum: 1 },
+          },
+        },
+      },
     },
   },
   outputSchema: {
@@ -70,21 +95,107 @@ const SET_EXTRACTED_TEXT: CommandDefinition = {
   handler: setExtractedText,
 };
 
+type ExtractedTextRegion = {
+  text: string;
+  box?: [number, number, number, number];
+  confidence?: number;
+};
+
 function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     content_id: string;
     text: string;
     variant?: "text" | "transcript";
+    capability?: string;
+    model?: string;
+    prompt_rev?: string;
+    confidence?: number;
+    regions?: ExtractedTextRegion[];
   };
-  return writeExtractedText(
+  const result = writeExtractedText(
     ctx,
     input.content_id,
     input.text,
     input.variant ?? "text"
   );
+  if (input.model && input.capability) {
+    const regions =
+      input.regions === undefined
+        ? undefined
+        : dropOutOfBoundsRegions(ctx, input.content_id, input.regions);
+    stampDerivation(ctx.db, {
+      targetType: "core.content_item",
+      targetId: input.content_id,
+      variant: input.variant ?? "text",
+      capability: input.capability,
+      model: input.model,
+      payload: {
+        ...(input.prompt_rev ? { prompt_rev: input.prompt_rev } : {}),
+        ...(input.confidence === undefined
+          ? {}
+          : { confidence: input.confidence }),
+        ...(regions === undefined ? {} : { regions }),
+      },
+      now: ctx.now,
+    });
+    ctx.wrote("enrich.derivation", input.content_id);
+  }
+  return result;
 }
 
-/** Shared canonical derivative writer for reviewed local OCR and enrichers. */
+/**
+ * OCR boxes are declared against ONE asset's pixel dimensions, but until now
+ * nothing gateway-side checked them — the bundled `photo-ocr` handler's
+ * `canonicalRegions` drops an out-of-bounds box before it ever calls this
+ * command, but that check lives in a read-only bundled file, not at the
+ * write boundary. `enrich.upsert_faces` already rejects a face box outside
+ * its asset; this mirrors that so validation lives at the one gateway-side
+ * staged write, not scattered across every caller (issue #731). Unlike a
+ * face — which IS its box — a text region's box is an annotation on top of
+ * real text, so an out-of-bounds box is dropped rather than failing the
+ * whole write: the text survives, and an absent box (like an absent
+ * confidence) is never invented as `[0,0,0,0]`.
+ */
+function dropOutOfBoundsRegions(
+  ctx: HandlerCtx,
+  contentId: string,
+  regions: ExtractedTextRegion[]
+): ExtractedTextRegion[] {
+  const asset = ctx.db
+    .prepare("SELECT width, height FROM media_media_asset WHERE content_id = ?")
+    .get(contentId) as
+    | { width: number | null; height: number | null }
+    | undefined;
+  const width = asset?.width ?? null;
+  const height = asset?.height ?? null;
+  if (width === null && height === null) return regions;
+  return regions.map((region) => {
+    if (!region.box) return region;
+    const [x, y, w, h] = region.box;
+    const inBounds =
+      (width === null || x + w <= width) &&
+      (height === null || y + h <= height);
+    if (inBounds) return region;
+    const { box: _box, ...rest } = region;
+    return rest;
+  });
+}
+
+/**
+ * Shared canonical derivative writer for reviewed local OCR and enrichers.
+ *
+ * A REWRITE (an OCR/transcript model bump correcting the same content_id's
+ * text) gets a FRESH `derivative_id` rather than an in-place UPDATE.
+ * `embed-text`'s bounded cursor walks `derivative_id > cursor`: an in-place
+ * update would leave the row's id behind an already-advanced cursor, so the
+ * rewritten text would never re-enter the embedding sweep and semantic
+ * search would keep serving vectors of the stale text forever (issue #731).
+ * A fresh, strictly-later id (derivative ids are UUIDv7, so lexicographic
+ * order is creation order) re-enters that sweep exactly once. The row's
+ * logical identity is `(content_id, variant)`, enforced by the table's own
+ * UNIQUE constraint — nothing outside this module keys off `derivative_id`
+ * surviving a rewrite (it is a bare primary key, never a foreign key).
+ */
 export function writeExtractedText(
   ctx: HandlerCtx,
   contentId: string,
@@ -99,21 +210,17 @@ export function writeExtractedText(
   const byteSize = Buffer.byteLength(text, "utf8");
   if (existing) {
     ctx.db
-      .prepare(
-        `UPDATE core_content_derivative SET text_content = ?, byte_size = ? WHERE derivative_id = ?`
-      )
-      .run(text, byteSize, existing.derivative_id);
-    ctx.wrote("core.content_derivative", existing.derivative_id);
-  } else {
-    const derivativeId = ctx.newId();
-    ctx.db
-      .prepare(
-        `INSERT INTO core_content_derivative (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
-         VALUES (?, ?, ?, NULL, 'text/plain', ?, ?, ?)`
-      )
-      .run(derivativeId, contentId, variant, byteSize, text, ctx.now);
-    ctx.wrote("core.content_derivative", derivativeId);
+      .prepare(`DELETE FROM core_content_derivative WHERE derivative_id = ?`)
+      .run(existing.derivative_id);
   }
+  const derivativeId = ctx.newId();
+  ctx.db
+    .prepare(
+      `INSERT INTO core_content_derivative (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
+       VALUES (?, ?, ?, NULL, 'text/plain', ?, ?, ?)`
+    )
+    .run(derivativeId, contentId, variant, byteSize, text, ctx.now);
+  ctx.wrote("core.content_derivative", derivativeId);
   ctx.cite({
     claim: `${variant} (${byteSize} bytes) now feeds the content search index`,
     entityType: "core.content_item",
@@ -457,6 +564,15 @@ const UPSERT_EMBEDDING: CommandDefinition = {
         maxItems: MAX_EMBEDDING_DIM,
         items: { type: "number" },
       },
+      capability: { type: "string", enum: ["embed-image", "embed-text"] },
+      // Which version of the SOURCE the vector was computed from — e.g.
+      // `embed-text`'s source `core_content_derivative.derivative_id`. Lets a
+      // caller distinguish "this target's embedding is current" from "the
+      // model is current but the source was rewritten since" (issue #731):
+      // model-only staleness checks miss a same-model text rewrite.
+      // Optional because `embed-image` has no comparable versioned source —
+      // its target IS the asset it reads bytes from.
+      source_version: { type: "string", minLength: 1 },
     },
   },
   outputSchema: {
@@ -483,6 +599,8 @@ const UPSERT_EMBEDDING: CommandDefinition = {
       entity_id: string;
       model: string;
       vector: number[];
+      capability?: "embed-image" | "embed-text";
+      source_version?: string;
     };
     const existing = ctx.db
       .prepare(
@@ -516,6 +634,20 @@ const UPSERT_EMBEDDING: CommandDefinition = {
         );
     }
     ctx.wrote("enrich.embedding", embeddingId);
+    if (input.capability) {
+      stampDerivation(ctx.db, {
+        targetType: input.entity_type,
+        targetId: input.entity_id,
+        variant: "embedding",
+        capability: input.capability,
+        model: input.model,
+        ...(input.source_version === undefined
+          ? {}
+          : { payload: { source_version: input.source_version } }),
+        now: ctx.now,
+      });
+      ctx.wrote("enrich.derivation", input.entity_id);
+    }
     return { embedding_id: embeddingId, dim: input.vector.length };
   },
 };
@@ -564,6 +696,184 @@ const MARK_REQUESTS_DRAINED: CommandDefinition = {
   },
 };
 
+const REBUILD_FACE_CLUSTERS: CommandDefinition = {
+  name: "enrich.rebuild_face_clusters",
+  ownerSchema: "enrich",
+  inputSchema: { type: "object", additionalProperties: false, properties: {} },
+  outputSchema: {
+    type: "object",
+    required: ["matched", "clusters", "clustered", "updated"],
+    properties: {
+      matched: { type: "integer" },
+      clusters: { type: "integer" },
+      clustered: { type: "integer" },
+      updated: { type: "integer" },
+    },
+  },
+  preconditions: [],
+  postconditions: [],
+  idempotency: "retry-safe",
+  risk: "medium",
+  handler: (ctx) => {
+    const before = ctx.db
+      .prepare("SELECT region_id FROM media_face_cluster")
+      .all() as unknown as { region_id: string }[];
+    const result = rebuildFaceClusters(ctx.db, { now: ctx.now });
+    if (result.updated > 0) {
+      const after = ctx.db
+        .prepare("SELECT region_id FROM media_face_cluster")
+        .all() as unknown as { region_id: string }[];
+      for (const regionId of new Set(
+        [...before, ...after].map((row) => row.region_id)
+      )) {
+        ctx.wrote("media.face_cluster", regionId);
+      }
+    }
+    return {
+      matched: result.matched,
+      clusters: result.clusters,
+      clustered: result.clustered,
+      updated: result.updated,
+    };
+  },
+};
+
+const UPSERT_FACES: CommandDefinition = {
+  name: "enrich.upsert_faces",
+  ownerSchema: "enrich",
+  inputSchema: {
+    type: "object",
+    required: ["asset_id", "model", "faces"],
+    additionalProperties: false,
+    properties: {
+      asset_id: { type: "string", minLength: 1 },
+      model: { type: "string", minLength: 1 },
+      faces: {
+        type: "array",
+        maxItems: 100,
+        items: {
+          type: "object",
+          required: ["box", "confidence", "embedding"],
+          additionalProperties: false,
+          properties: {
+            box: {
+              type: "array",
+              minItems: 4,
+              maxItems: 4,
+              items: { type: "integer", minimum: 0 },
+            },
+            confidence: { type: "number", minimum: 0, maximum: 1 },
+            embedding: {
+              type: "array",
+              minItems: 1,
+              maxItems: MAX_EMBEDDING_DIM,
+              items: { type: "number" },
+            },
+          },
+        },
+      },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["regions"],
+    properties: { regions: { type: "integer" } },
+  },
+  preconditions: [
+    {
+      name: "asset_live",
+      sql: "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id AND deleted_at IS NULL",
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  postconditions: [],
+  idempotency: "retry-safe",
+  risk: "medium",
+  handler: (ctx) => {
+    const input = ctx.input as {
+      asset_id: string;
+      model: string;
+      faces: {
+        box: [number, number, number, number];
+        confidence: number;
+        embedding: number[];
+      }[];
+    };
+    const asset = ctx.db
+      .prepare("SELECT width, height FROM media_media_asset WHERE asset_id = ?")
+      .get(input.asset_id) as { width: number | null; height: number | null };
+    for (const face of input.faces) {
+      const [x, y, width, height] = face.box;
+      if (
+        width <= 0 ||
+        height <= 0 ||
+        (asset.width !== null && x + width > asset.width) ||
+        (asset.height !== null && y + height > asset.height)
+      )
+        throw new Error("face box lies outside the asset");
+      if (face.embedding.some((value) => !Number.isFinite(value)))
+        throw new Error("face embedding contains a non-finite value");
+    }
+    const proposed = ctx.db
+      .prepare(
+        "SELECT region_id FROM media_face_region WHERE asset_id = ? AND review_state = 'proposed'"
+      )
+      .all(input.asset_id) as unknown as { region_id: string }[];
+    for (const row of proposed) {
+      ctx.db
+        .prepare(
+          "DELETE FROM enrich_embedding WHERE target_type = 'media.face_region' AND target_id = ?"
+        )
+        .run(row.region_id);
+      ctx.db
+        .prepare("DELETE FROM media_face_region WHERE region_id = ?")
+        .run(row.region_id);
+      ctx.wrote("media.face_region", row.region_id);
+    }
+    for (const face of input.faces) {
+      const regionId = ctx.newId();
+      ctx.db
+        .prepare(
+          "INSERT INTO media_face_region (region_id, asset_id, bbox_json, confidence) VALUES (?, ?, ?, ?)"
+        )
+        .run(
+          regionId,
+          input.asset_id,
+          JSON.stringify(face.box),
+          face.confidence
+        );
+      const embeddingId = ctx.newId();
+      ctx.db
+        .prepare(
+          "INSERT INTO enrich_embedding (embedding_id, target_type, target_id, model, dim, vector, created_at) VALUES (?, 'media.face_region', ?, ?, ?, ?, ?)"
+        )
+        .run(
+          embeddingId,
+          regionId,
+          input.model,
+          face.embedding.length,
+          encodeVector(face.embedding),
+          ctx.now
+        );
+      ctx.wrote("media.face_region", regionId);
+      ctx.wrote("enrich.embedding", embeddingId);
+    }
+    stampDerivation(ctx.db, {
+      targetType: "media.media_asset",
+      targetId: input.asset_id,
+      variant: "faces",
+      capability: "faces",
+      model: input.model,
+      payload: { count: input.faces.length },
+      now: ctx.now,
+    });
+    ctx.wrote("enrich.derivation", input.asset_id);
+    return { regions: input.faces.length };
+  },
+};
+
 /** The vault owner's party — apps and device callers act as the owner. */
 function ownerPartyId(ctx: HandlerCtx): string {
   const owner = ctx.db
@@ -580,4 +890,6 @@ export function registerEnrichCommands(gateway: Gateway): void {
   gateway.registerCommand(REQUEST_ENRICHMENT);
   gateway.registerCommand(UPSERT_EMBEDDING);
   gateway.registerCommand(MARK_REQUESTS_DRAINED);
+  gateway.registerCommand(UPSERT_FACES);
+  gateway.registerCommand(REBUILD_FACE_CLUSTERS);
 }

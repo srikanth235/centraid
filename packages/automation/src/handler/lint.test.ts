@@ -91,6 +91,20 @@ describe(lintHandlerSource, () => {
     expect(findings[0]!.rule).toBe("no-process-ambient");
   });
 
+  it("allows only local asset I/O for release-managed model bundles", () => {
+    const source = `
+      import { readFile } from "node:fs/promises";
+      const root = process.env.CENTRAID_AUTOMATION_RUNTIME_DIR;
+      const random = Math.random();
+      const response = await fetch("https://example.test");
+    `;
+    expect(
+      lintHandlerSource(source, { allowLocalModelAssets: true }).map(
+        (finding) => finding.rule
+      )
+    ).toStrictEqual(["no-math-random", "no-raw-fetch"]);
+  });
+
   it("does not flag patterns that appear only in comments or strings", () => {
     const src = `
       // Do not call Date.now() here.

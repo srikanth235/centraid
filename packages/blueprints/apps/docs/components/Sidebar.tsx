@@ -5,7 +5,7 @@
 import { useEffect, useRef } from "react";
 
 import { fmtBytes } from "../format.ts";
-import { DELETE_ICON, I, RENAME_ICON } from "../icons.ts";
+import { DELETE_ICON, I, RENAME_ICON, SHARE_ICON } from "../icons.ts";
 import { armConfirm } from "../kit.ts";
 import type { DriveDoc, Folder, Nav } from "../types.ts";
 import { Icon } from "./Shared.tsx";
@@ -171,6 +171,9 @@ function FolderRow({
   navFolderId,
   renamingFolderId,
   onSelectNav,
+  onShareFolder,
+  residentFolderIds,
+  onSaveFolder,
   onStartRename,
   onDeleteFolder,
   onRenameCommit,
@@ -182,6 +185,9 @@ function FolderRow({
   navFolderId: string | undefined;
   renamingFolderId: string | null;
   onSelectNav: (nav: Nav) => void;
+  onShareFolder: (folder: Folder) => void;
+  residentFolderIds: ReadonlySet<string>;
+  onSaveFolder: (folder: Folder) => Promise<void>;
   onStartRename: (folderId: string) => void;
   onDeleteFolder: (folder: Folder) => void;
   onRenameCommit: (folderId: string, name: string) => void;
@@ -209,6 +215,27 @@ function FolderRow({
         onClick={() => onSelectNav({ kind: "folder", folderId: f.folder_id })}
       />
       <span className={styles.folderTools}>
+        <button
+          type="button"
+          className="kit-icon-btn"
+          aria-label={
+            residentFolderIds.has(f.folder_id)
+              ? "Save to my vault"
+              : `Share ${f.name}`
+          }
+          title={
+            residentFolderIds.has(f.folder_id)
+              ? "Save to my vault"
+              : `Share ${f.name}`
+          }
+          onClick={(e) => {
+            e.stopPropagation();
+            if (residentFolderIds.has(f.folder_id)) void onSaveFolder(f);
+            else onShareFolder(f);
+          }}
+        >
+          <Icon svg={SHARE_ICON} />
+        </button>
         <button
           type="button"
           className="kit-icon-btn"
@@ -251,6 +278,9 @@ export function FolderList({
   creatingFolder,
   trashCount,
   onSelectNav,
+  onShareFolder,
+  residentFolderIds,
+  onSaveFolder,
   onStartRename,
   onDeleteFolder,
   onRenameCommit,
@@ -266,6 +296,9 @@ export function FolderList({
   creatingFolder: boolean;
   trashCount: number;
   onSelectNav: (nav: Nav) => void;
+  onShareFolder: (folder: Folder) => void;
+  residentFolderIds: ReadonlySet<string>;
+  onSaveFolder: (folder: Folder) => Promise<void>;
   onStartRename: (folderId: string) => void;
   onDeleteFolder: (folder: Folder) => void;
   onRenameCommit: (folderId: string, name: string) => void;
@@ -287,6 +320,9 @@ export function FolderList({
           navFolderId={navFolderId}
           renamingFolderId={renamingFolderId}
           onSelectNav={onSelectNav}
+          onShareFolder={onShareFolder}
+          residentFolderIds={residentFolderIds}
+          onSaveFolder={onSaveFolder}
           onStartRename={onStartRename}
           onDeleteFolder={onDeleteFolder}
           onRenameCommit={onRenameCommit}

@@ -168,6 +168,36 @@ describe("run-automation-dispatch suite", () => {
     expect(answer).toStrictEqual({ count: 3 });
   });
 
+  test("automation attachments stay on the ACP capability-gated attachment rail", async () => {
+    const stub = stubBackendRunTurn("gemini", (input) => {
+      input.onEvent({ type: "final", text: "visible text" });
+    });
+    const { agentDispatcher } = await openDispatch("gemini");
+
+    await agentDispatcher(
+      {
+        prompt: "read the photograph",
+        attachments: [
+          {
+            name: "receipt.jpg",
+            mediaType: "image/jpeg",
+            base64: Buffer.from("image-bytes").toString("base64"),
+          },
+        ],
+      },
+      dispatchCtx
+    );
+
+    expect(stub.calls[0]?.input.message).toBe("read the photograph");
+    expect(stub.calls[0]?.input.attachments).toStrictEqual([
+      expect.objectContaining({
+        mime: "image/jpeg",
+        filename: "receipt.jpg",
+        path: expect.stringContaining(".automation-scratch"),
+      }),
+    ]);
+  });
+
   test("ctx.agent surfaces an ACP backend error that produced no text", async () => {
     stubBackendRunTurn("acp", (input) => {
       input.onEvent({ type: "error", message: "no binary configured" });

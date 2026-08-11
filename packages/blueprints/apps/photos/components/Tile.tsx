@@ -35,7 +35,6 @@ import { mountMedia } from "../media.ts";
 import {
   initialMediaState,
   kindLabel,
-  peerStateLine,
   showsKindSlot,
   showsVaultInitial,
   stateLine,
@@ -110,14 +109,7 @@ export function Tile({
     initialMediaState(asset)
   );
   const media = state ?? seen;
-  // A borrowed scope's "nothing to paint here" is never "on the gateway" —
-  // that gateway is someone else's, and the honest line names them
-  // (#726 P4/P6). Every other state (bytes/failed/pending, and an owned
-  // audience's `gateway` state) keeps its existing, final wording.
-  const line =
-    media === "gateway" && vaultMark?.borrowed
-      ? peerStateLine(vaultMark.label)
-      : (stateLine(media) ?? note ?? null);
+  const line = stateLine(media) ?? note ?? null;
   const kind = showsKindSlot(rung) ? kindLabel(asset) : null;
   const key = assetKey(asset);
   const name = asset.title ?? asset.kind ?? "Photograph";

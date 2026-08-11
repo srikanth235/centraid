@@ -52,6 +52,14 @@ const SOURCE_EXCLUSIONS = [
   "packages/blueprints/visual-harness/**",
   "packages/blueprints/.app-boot/**",
   "packages/blueprints/kit/**",
+  // Release-generated recognition bundles are deployed artifacts; their
+  // source-of-truth lives under tools/recognition-automations, where the
+  // local lint/typecheck/test gates own the implementation.
+  "packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js",
+  "packages/blueprints/automations/embed-image/automations/embed-image/handler.js",
+  "packages/blueprints/automations/embed-text/automations/embed-text/handler.js",
+  "packages/blueprints/automations/faces/automations/faces/handler.js",
+  "packages/blueprints/automations/transcript/automations/transcript/handler.js",
   "packages/test-kit/**",
   "apps/web/src/generated/**",
   "apps/web/public/**",

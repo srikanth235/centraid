@@ -50,6 +50,69 @@ describe("AutomationThreadScreen", () => {
     expect(el.textContent).toContain("Paused");
   });
 
+  it("shows explicit recognition consequences and passes the chosen variant", async () => {
+    const data = makeData({
+      recognition: {
+        capability: "ocr",
+        selected: "deterministic",
+        deterministicLabel: "Deterministic service",
+        agent: {
+          model: "provider/member-selected-model",
+          latency: "Agent OCR takes seconds instead of milliseconds.",
+          consequence: "Agent runs are billed and re-derive eligible photos.",
+        },
+      },
+    });
+    const props = makeProps({}, data);
+    const el = await mount(props);
+    expect(el.textContent).toContain(
+      "Agent OCR takes seconds instead of milliseconds."
+    );
+    expect(el.textContent).toContain(
+      "Agent runs are billed and re-derive eligible photos."
+    );
+    expect(el.textContent).toContain("explicit provider-egress consent");
+
+    const method = el.querySelector<HTMLSelectElement>(
+      'select[aria-label="Recognition method"]'
+    )!;
+    await act(async () => {
+      method.value = "agent";
+      method.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(
+      el.querySelector<HTMLSelectElement>(
+        'select[aria-label="Pinned agent model"]'
+      )?.value
+    ).toBe("provider/member-selected-model");
+    await act(async () =>
+      byText(el, "button", "Run now")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true })
+      )
+    );
+    expect(props.onSetRecognitionVariant).toHaveBeenCalledWith("agent");
+    expect(props.onRunNow).toHaveBeenCalledWith();
+  });
+
+  it("disables the agent recognition choice until a model is pinned", async () => {
+    const data = makeData({
+      recognition: {
+        capability: "ocr",
+        selected: "deterministic",
+        deterministicLabel: "Deterministic service",
+        agent: {
+          model: null,
+          latency: "Agent OCR takes seconds.",
+          consequence: "Agent runs are billed and re-derive eligible photos.",
+        },
+      },
+    });
+    const el = await mount(makeProps({}, data));
+    const agent = el.querySelector<HTMLOptionElement>('option[value="agent"]');
+    expect(agent?.disabled).toBe(true);
+    expect(el.textContent).toContain("Choose an agent model in Compiler");
+  });
+
   it("opens the overflow menu and edits setup from it", async () => {
     const props = makeProps();
     const el = await mount(props);

@@ -40,6 +40,7 @@ export const ROUTES = {
   gatewayDevices: `${GATEWAY_PLANE_PREFIX}/devices`,
   gatewayReplicaChanges: `${GATEWAY_PLANE_PREFIX}/replica/changes`,
   gatewayEdges: `${GATEWAY_PLANE_PREFIX}/edges`,
+  gatewayCommons: `${GATEWAY_PLANE_PREFIX}/commons`,
   gatewayScopedBlobs: `${GATEWAY_PLANE_PREFIX}/blobs`,
   vaultStatus: `${VAULT_PLANE_PREFIX}/status`,
   vaultErase: `${VAULT_PLANE_PREFIX}/vaults:erase`,
@@ -50,14 +51,6 @@ export const ROUTES = {
   vaultReplicaBootstrap: `${VAULT_PLANE_PREFIX}/replica/bootstrap`,
   vaultReplicaChanges: `${VAULT_PLANE_PREFIX}/changes`,
   vaultReplicaIntents: `${VAULT_PLANE_PREFIX}/replica/intents`,
-  // A borrowed shape's device-facing bootstrap/tail (#726 P5 device route):
-  // a phone reads a LENT scope through the SAME wire envelope its own
-  // replica bootstrap/changes use, sourced from the audience gateway's
-  // borrowed store rather than a mounted vault.
-  vaultReplicaBorrowedBootstrap: `${VAULT_PLANE_PREFIX}/replica/borrowed/bootstrap`,
-  vaultReplicaBorrowedChanges: `${VAULT_PLANE_PREFIX}/replica/borrowed/changes`,
-  vaultReplicaBorrowedIntents: `${VAULT_PLANE_PREFIX}/replica/borrowed/intents`,
-  vaultReplicaBorrowedOutcomes: `${VAULT_PLANE_PREFIX}/replica/borrowed/outcomes`,
   vaultScopes: `${VAULT_PLANE_PREFIX}/scopes`,
   vaultApps: `${VAULT_PLANE_PREFIX}/apps`,
   vaultConnections: `${VAULT_PLANE_PREFIX}/connections`,

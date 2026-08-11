@@ -5,7 +5,7 @@
 // record's `personal` marker, never from its name — so this is the one place
 // that reads the mounted scopes and hands Photos a map it can look a vault up
 // in. Where a share GOES is not here at all: the phone asks the member with
-// the unified give/lend sheet (`kit/share/ShareSheet.tsx`, issue #726 P6),
+// the ceremony-free commons sheet (`kit/share/ShareSheet.tsx`, issue #731),
 // so there is no pointer to resolve on this surface.
 
 import { useMemo } from "react";

@@ -1,0 +1,30 @@
+{
+  "name": "@centraid/recognition-automations",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Build-time source and local model assets for Centraid's self-contained recognition automation handlers. No server or inference service.",
+  "license": "SEE LICENSE IN REPOSITORY",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/srikanth235/centraid.git",
+    "directory": "tools/recognition-automations"
+  },
+  "type": "module",
+  "scripts": {
+    "build:automations": "bun run build-automation-handlers.ts",
+    "format": "oxfmt -c ../../oxfmt.config.ts --disable-nested-config --write .",
+    "lint": "oxlint -c ../../oxlint.config.ts --disable-nested-config --deny-warnings .",
+    "setup": "bun run setup.ts",
+    "test": "vitest run",
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@centraid/test-kit": "workspace:*",
+    "@types/node": "^26.1.2",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.15"
+  }
+}

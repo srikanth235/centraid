@@ -51,6 +51,8 @@ export interface GatewayLink {
    *  Symmetric with `vaultA`/`vaultB`: `labelA` names `vaultA`. */
   labelA: string | null;
   labelB: string | null;
+  partyIdA?: string | null;
+  partyIdB?: string | null;
   approvedByA: boolean;
   approvedByB: boolean;
   /** Both sides have approved — the only state that authorizes an edge. */
@@ -60,16 +62,6 @@ export interface GatewayLink {
   remoteVaultId: string | null;
   revoked: boolean;
   createdAt: string;
-}
-
-/** The caller's own borrow-budget setting for one link (#726 P6 gap 2) — how
- *  much local storage this vault will hold BORROWED from the other side. */
-export interface BorrowBudget {
-  linkId: string;
-  vaultId: string;
-  budgetBytes: number;
-  /** `true` when no custom row exists — `budgetBytes` is the constant default. */
-  isDefault: boolean;
 }
 
 /** Every link touching a vault this caller owns. */
@@ -148,35 +140,6 @@ export async function setReceiveSetting(
     "set receive setting"
   );
   return out.setting;
-}
-
-/** The caller's OWN per-link borrow budget (#726 P6 gap 2) — never the
- *  peer's, same one-side discipline as the receive setting above. */
-export async function getBorrowBudget(linkId: string): Promise<BorrowBudget> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `${LINKS_PATH}/${enc(linkId)}/borrow-budget`,
-    { method: "GET", headers: authHeaders(token) }
-  );
-  return readJson<BorrowBudget>(res, "read borrow budget");
-}
-
-export async function setBorrowBudget(
-  linkId: string,
-  budgetBytes: number
-): Promise<BorrowBudget> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `${LINKS_PATH}/${enc(linkId)}/borrow-budget`,
-    {
-      method: "PUT",
-      headers: authHeaders(token, "application/json"),
-      body: JSON.stringify({ budgetBytes }),
-    }
-  );
-  return readJson<BorrowBudget>(res, "set borrow budget");
 }
 
 /** A minted, pasteable/scannable ticket for a vault the caller owns

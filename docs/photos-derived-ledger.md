@@ -1,6 +1,6 @@
 # Photos derived-intelligence foundation (E1/E2/E3)
 
-Settled **2026-08-07** (issue #721; faces, Memories, and the enrichment-service rewire settled under #724 on the same date). How enriched data lands in the vault, how the enrichment service is configured, and the structural decisions that keep derived rows serviceable and optional.
+Settled **2026-08-07** (issue #721; faces and Memories settled under #724 on the same date), amended **2026-08-10** for self-contained recognition automations. How model-derived data lands in the vault and the structural decisions that keep derived rows serviceable and optional.
 
 ## Derived rows are vault rows
 
@@ -22,11 +22,11 @@ Derived rows replicate, backup, and erase like any vault row. A phone that impor
 2. **on-view** — an app opened an unenriched item.
 3. **manual** — an owner explicitly asked (e.g. "detect faces now"). Scoped by `capability` (which enricher owns the consent) or `required_capability` (the device-lease lane); an untagged manual row is unrepresentable by CHECK.
 
-**The queue is the database.** Rows are durable before any work begins and `drained_at` is the settle marker, so a crashed indexer resumes from `WHERE drained_at IS NULL` — restart-safety is structural, not a feature. The photo-embedding sweep ([`packages/gateway/src/enrich/embedding-sweep.ts`](../packages/gateway/src/enrich/embedding-sweep.ts)) additionally backfills from a `LEFT JOIN` of live assets against `enrich_embedding` for the current model, so it needs no cooperation from importers: anything the vault holds and has not embedded is work. Issue #724 generalized this pass into [`capability-sweep.ts`](../packages/gateway/src/enrich/capability-sweep.ts), shared by embeddings, OCR, faces, and transcripts alike — see [docs/enrichment-service.md](enrichment-service.md).
+**The queue is the database.** Rows are durable before any work begins and `drained_at` is the settle marker, so a crashed worker resumes from `WHERE drained_at IS NULL` — restart-safety is structural, not a feature. Recognition scheduling belongs to the automation engine (#731): the `embed-image`, `embed-text`, `photo-ocr`, `transcript`, and `faces` templates run bounded batches of 16, stage typed vault commands, and advance template cursor watermarks. There is no gateway-private capability-sweep engine or generic supersession selector. On first enable, compatible `enrich_derivation` stamps seed the cursor; a model/prompt revision re-arms only affected rows.
 
-The sweep runs on the gateway's hourly sweep clock, after the blob sweep (fresh imports get their preview rungs first), in calm batches of 16, gated on the owner's `enrich_policy` photos tier being `gateway`. It embeds from the **thumbnail/preview derivative, never the original** — nobody needs a 48MP RAW to produce an embedding tensor. Embedding computation is issue #724's **enrichment service** — a single loopback-only HTTP seam configured via `CENTRAID_ENRICH_URL`, replacing the earlier spawned-embedder-process design (`CENTRAID_EMBEDDER_PATH`/`_MODEL`, now deleted). See [docs/enrichment-service.md](enrichment-service.md) for the wire contract, config, and the full capability table; [`packages/gateway/src/enrich/embedding-sweep.ts`](../packages/gateway/src/enrich/embedding-sweep.ts) is the photo-embedding spec that rides the shared [`capability-sweep.ts`](../packages/gateway/src/enrich/capability-sweep.ts).
+The automation fire gate checks the owner's `enrich_policy` tier before model work. Image automation reads the **thumbnail/preview derivative, never the original** — nobody needs a 48MP RAW to produce an embedding tensor. Each bundled handler reads it through `ctx.vault.content`, runs its own implementation with local model assets when needed, and persists typed results through `ctx.vault.invoke`. There is no enrichment service, reserved fetch, `ctx.infer`, or `ctx.enrich`. See [docs/recognition-automations.md](recognition-automations.md).
 
-**Honest unavailability.** When no enrichment service is configured (or nothing is indexed yet for the current model), `POST /centraid/_vault/enrich/semantic-search` returns `200 {status: "unavailable", reason}` — no fake vectors, no silent truncation. The mobile search surface treats that (and any network failure) as the semantic hit group simply being absent; every other search plane keeps working.
+**Honest unavailability.** When local embedding assets are unavailable (or nothing is indexed yet for the current model), `POST /centraid/_vault/enrich/semantic-search` returns `200 {status: "unavailable", reason}` — no fake vectors, no silent truncation. The mobile search surface treats that (and any network failure) as the semantic hit group simply being absent; every other search plane keeps working.
 
 ## sqlite-vec: two rules, from the first commit
 
@@ -53,7 +53,7 @@ Derived rows are **advisory, never blocking.** A missing embedding does not prev
 
 See [`apps/mobile/src/kit/replica/mount-plan.ts`](../apps/mobile/src/kit/replica/mount-plan.ts) for the phone-startup pattern: the replica mounts immediately from disk without waiting for embeddings to be available, because the canonical data (photos, captions) are already there. Enrichment is the read-plane optimization, not the baseline.
 
-**Consent.** The owner's per-domain tier (`enrich_policy`: `off | device | gateway`) is the standing consent every sweep checks before it runs; manual asks are additionally scoped by `capability`/`required_capability` so one consent never becomes every enricher's cue (the CHECK constraints in `enrich_request` make the untagged shape unrepresentable).
+**Consent.** The owner's per-domain tier (`enrich_policy`: `off | device | gateway`) is the standing consent `runFire` checks before an automation runs; manual asks are additionally scoped by `capability`/`required_capability` so one consent never becomes every enricher's cue (the CHECK constraints in `enrich_request` make the untagged shape unrepresentable). Faces reads only its open capability-tagged queue or a prior stamp that proves past consent; it never scans the ambient library.
 
 ## Memories v0 (issue #724 W7)
 
@@ -61,21 +61,21 @@ A third rebuildable projection beside the phash `cluster_id`, same mold exactly:
 
 ## E4 shipped; E6 is dead by decision
 
-**E4 — faces.** Shipped in issue #724, on the reference enrichment service's permissively-licensed model pair (YuNet + SFace, both MIT/Apache-2.0 — see [docs/enrichment-service.md](enrichment-service.md#faces) and [`tools/enrichment-service/LICENSES.md`](../tools/enrichment-service/LICENSES.md)), clearing the licensing block this section used to record. Detection is consent-gated per [docs/enrichment-service.md](enrichment-service.md#faces) — a face asserts an identity, so it carries its own consent tag distinct from the domain-tier gate every other capability answers to. The delete cascade the [SECURITY.md](../SECURITY.md) threat model required before E4 could ship is `media.forget_person` ([`packages/vault/src/commands/media.ts`](../packages/vault/src/commands/media.ts)): its postcondition proves zero rows remain across face regions, face embeddings, derivation stamps, and cluster rows, proven by test across replica propagation and recovery export/import. The consent-gated naming UI ([`apps/mobile/src/apps/photos/EnrichmentConsent.tsx`](../apps/mobile/src/apps/photos/EnrichmentConsent.tsx)) now sits in front of a real pipeline.
+**E4 — faces.** Shipped in issue #724 with the permissively-licensed YuNet + SFace pair (MIT/Apache-2.0 — see [docs/recognition-automations.md](recognition-automations.md#scheduling-consent-and-provenance) and [`tools/recognition-automations/LICENSES.md`](../tools/recognition-automations/LICENSES.md)), clearing the licensing block this section used to record. The bundled handler runs both models itself. Detection is consent-gated: a face asserts an identity, so it carries its own consent tag distinct from the domain-tier gate every other capability answers to. The delete cascade the [SECURITY.md](../SECURITY.md) threat model required before E4 could ship is `media.forget_person` ([`packages/vault/src/commands/media.ts`](../packages/vault/src/commands/media.ts)): its postcondition proves zero rows remain across face regions, face embeddings, derivation stamps, and cluster rows, proven by test across replica propagation and recovery export/import. The consent-gated naming UI ([`apps/mobile/src/apps/photos/EnrichmentConsent.tsx`](../apps/mobile/src/apps/photos/EnrichmentConsent.tsx)) now sits in front of a real pipeline.
 
 **E6 — device-side indexing — dead by decision, not deferred.** Issue #724 settled this: enrichment stays **gateway-only**. The schema's placement-is-a-scheduling-policy design (any node holding the bytes and the model may write a derived row) is no longer being kept open for a future device-side writer; the front-loaded costs that would have justified one — model distribution through app stores, Core ML / NNAPI delegation, a second preprocessing implementation that must agree with the first or clusters drift — were judged not worth paying against a gateway that already holds every byte and can run the reference service on ordinary hardware. See [docs/decisions.md](decisions.md) for the settled #724 decision record.
 
 ## Related
 
 - [`packages/vault/src/schema/enrich.ts`](../packages/vault/src/schema/enrich.ts) — DDL for `enrich_embedding`, `enrich_request`, `enrich_policy`, `media_asset_phash`.
-- [`packages/gateway/src/enrich/service-client.ts`](../packages/gateway/src/enrich/service-client.ts) — the enrichment service client (config, wire contract, caps); replaces the deleted `CENTRAID_EMBEDDER_PATH` spawn design.
-- [docs/enrichment-service.md](enrichment-service.md) — the canonical doc for the service, its capability table, and the reference implementation.
+- [`packages/blueprints/automations`](../packages/blueprints/automations) — shipped recognition handlers.
+- [docs/recognition-automations.md](recognition-automations.md) — the canonical model-execution and local-asset design.
 - [`packages/gateway/src/enrich/sqlite-vec.ts`](../packages/gateway/src/enrich/sqlite-vec.ts) — sqlite-vec extension lifecycle for semantic search.
 - [`packages/automation/src/fire/enrich-gate.ts`](../packages/automation/src/fire/enrich-gate.ts) — tier ordering (off/device/gateway) and consent scopes.
 - [`packages/vault/src/enrich/model-id.ts`](../packages/vault/src/enrich/model-id.ts) — the `<name>@<version>` model-identity convention.
 - [`packages/vault/src/enrich/similarity.ts`](../packages/vault/src/enrich/similarity.ts) — the brute-force cosine fallback ranker.
 - [`packages/vault/src/enrich/memories.ts`](../packages/vault/src/enrich/memories.ts) — Memories v0's rebuild sweep (on-this-day/trip/similar).
-- [`packages/vault/src/enrich/derivation.ts`](../packages/vault/src/enrich/derivation.ts) — the `enrich_derivation` provenance stamp and supersession query.
+- [`packages/vault/src/enrich/derivation.ts`](../packages/vault/src/enrich/derivation.ts) — the `enrich_derivation` provenance stamp.
 - [`packages/vault/src/enrich/face-clusters.ts`](../packages/vault/src/enrich/face-clusters.ts) — party-anchored face matching and stranger grouping.
 - [`packages/vault/src/commands/media.ts`](../packages/vault/src/commands/media.ts) — `media.forget_person`, the proven delete cascade.
 - [`apps/mobile/src/apps/photos/memories-model.ts`](../apps/mobile/src/apps/photos/memories-model.ts) — the mobile read-side grouping and honest-empty-state rules.

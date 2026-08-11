@@ -2,7 +2,7 @@
 // every part of an app asks about them. Deliberately tiny and dependency-free
 // so the store, the components and the write sites share ONE answer. Moved
 // here from `apps/photos/scopes.ts` unchanged (issue #726 D11): an app
-// becomes lendable by declaring three lines against this kit, not by writing
+// becomes shareable by declaring three lines against this kit, not by writing
 // its own sharing code — see `ScopeAppDeclaration` below.
 //
 // THE SOLO FALLBACK. A single-scope host (the served bridge, the visual
@@ -91,7 +91,7 @@ export function scopeAttr(
 }
 
 /**
- * The three facts an app declares to become lendable (issue #726 D11) —
+ * The three facts an app declares to become shareable (issue #726 D11) —
  * nothing here is sharing CODE, only sharing DATA the shared kit consumes:
  *
  *  * `mergeKey` — the field `mergeScopePages` (`scope-merge.ts`) orders and

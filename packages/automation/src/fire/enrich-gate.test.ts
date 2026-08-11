@@ -176,6 +176,39 @@ describe("enrichment tier gate", () => {
     expect(outcome.error).toContain("ctx.agent is refused");
   });
 
+  it("refuses an explicit agent variant until the owner pins a model", async () => {
+    await writeAutomation(appsDir, {
+      ...enricherManifest("device"),
+      enrich: {
+        domain: "photos",
+        capability: "ocr",
+        lane: "device",
+        agentVariant: {
+          selected: "agent",
+          promptRev: "ocr-v1",
+          latency: "seconds instead of milliseconds",
+          consequence: "billed and re-derives eligible photographs",
+        },
+      },
+    });
+    const opened: OpenDispatchArgs[] = [];
+
+    const { outcome } = await runFire(
+      {
+        automationRef: "photos/face-finder",
+        appsDir,
+        journalDbFile,
+        resolveEnrichPolicy: () => "gateway",
+      },
+      { openDispatch: countingDispatch(opened) }
+    );
+
+    expect(outcome.skipped).toBe(true);
+    expect(outcome.error).toContain("requires an explicit pinned model");
+    expect(outcome.error).toContain("provider-egress consent");
+    expect(opened).toStrictEqual([]);
+  });
+
   it("leaves a non-enricher automation entirely alone", async () => {
     await writeAutomation(appsDir, {
       name: "Digest",
@@ -196,6 +229,46 @@ describe("enrichment tier gate", () => {
 
     expect(outcome.ok).toBe(true);
     expect(opened).toHaveLength(1);
+  });
+
+  it.each(["off", "device"] as const)(
+    "recognition gateway recipes do not start their handler at the %s tier",
+    async (tier) => {
+      const { outcome, opened } = await fire({
+        lane: "gateway",
+        resolveEnrichPolicy: () => tier,
+        handler: `export default async () => ({ output: { ran: true } });`,
+      });
+      expect(outcome.skipped).toBe(true);
+      expect(opened).toStrictEqual([]);
+    }
+  );
+
+  it("keeps ctx.fetch connector-only for a non-enricher", async () => {
+    await writeAutomation(
+      appsDir,
+      {
+        name: "Digest",
+        version: "0.1.0",
+        enabled: true,
+        prompt: "do the thing",
+        triggers: [{ kind: "cron", expr: "0 9 * * *" }],
+        requires: {},
+        history: { keep: { count: 100 } },
+        generated: { by: "test", at: "2026-08-05" },
+      },
+      `export default async ({ ctx }) => ({ output: await ctx.fetch({ url: 'https://example.test', method: 'GET' }) });`
+    );
+    const { outcome } = await runFire(
+      {
+        automationRef: "photos/face-finder",
+        appsDir,
+        journalDbFile,
+      },
+      { openDispatch: countingDispatch([]) }
+    );
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toContain("ctx.fetch is connector-only");
   });
 });
 

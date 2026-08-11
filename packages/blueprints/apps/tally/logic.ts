@@ -79,10 +79,15 @@ export function createLogic({
 
   async function act(
     action: string,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    intentId?: string
   ): Promise<VaultOutcome | undefined> {
     try {
-      return await window.centraid.write({ action, input });
+      return await window.centraid.write({
+        action,
+        input,
+        ...(intentId ? { intentId } : {}),
+      });
     } catch (error) {
       notice(String((error as { message?: string })?.message ?? error));
       return undefined;
@@ -246,7 +251,11 @@ export function createLogic({
     try {
       const res = await read("group", { group_id: groupId });
       if (res?.me) dash.me = res.me;
-      state.modalMembers = res?.members ?? [];
+      // Departed people stay in the group query for historical ledger
+      // balances, but cannot be selected for a new/changed expense.
+      state.modalMembers = (res?.members ?? []).filter(
+        (member) => !member.departed
+      );
     } catch {
       state.modalMembers = [];
     }
@@ -348,9 +357,10 @@ export function createLogic({
   // Build the decorated row shape the group/friend ledger queries return, so
   // an optimistic add renders through the exact same components (ExpenseRow)
   // as a fetched row — plus `pending`/`parked` flags for the kit chip.
-  function optimisticExpenseRow(
-    exp: ExpenseModel,
-    base: ExpenseBase
+  function pendingExpenseRow(
+    groupId: string,
+    base: ExpenseBase,
+    expenseId: string
   ): LedgerRow {
     const myShare =
       base.splits.find((s) => s.party_id === dash.me)?.share_minor ?? 0;
@@ -364,10 +374,9 @@ export function createLogic({
       your_amount_minor = myShare;
     }
     return {
-      expense_id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      group_id: exp.groupId,
-      group_name:
-        dash.groups.find((g) => g.group_id === exp.groupId)?.name ?? "",
+      expense_id: expenseId,
+      group_id: groupId,
+      group_name: dash.groups.find((g) => g.group_id === groupId)?.name ?? "",
       description: base.description,
       amount_minor: base.amount_minor,
       paid_by: base.paid_by,
@@ -380,6 +389,151 @@ export function createLogic({
       pending: true,
       parked: false,
     };
+  }
+
+  function optimisticExpenseRow(
+    exp: ExpenseModel,
+    base: ExpenseBase
+  ): LedgerRow {
+    return pendingExpenseRow(
+      exp.groupId,
+      base,
+      `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    );
+  }
+
+  /**
+   * Rebuild Tally's flagship optimistic overlay from vault-resident Commons
+   * intents. A reload therefore does not erase a member's expense merely
+   * because the steward is offline; executed commands disappear once server
+   * truth is queryable, while parked and denied rows keep their reason.
+   */
+  async function refreshCommonsExpenses(): Promise<void> {
+    if (!window.centraid.commonsIntents) return;
+    let intents: CentraidCommonsIntent[];
+    try {
+      intents = await window.centraid.commonsIntents();
+    } catch {
+      return;
+    }
+    const durable: LedgerRow[] = [];
+    for (const intent of intents) {
+      // `LedgerRow["intentStatus"]` has no "executed" member — an executed
+      // intent never becomes a row — so the wire status is narrowed once
+      // here and the "executed" case is checked on `intent` itself below.
+      const status = intent.status as LedgerRow["intentStatus"];
+      // A settled-but-not-executed intent the member already dismissed
+      // stays gone across refreshes (issue #731 m6, extended by goal 2) —
+      // pending/parked rows are never in this set, so they keep
+      // re-appearing exactly as before.
+      const dismissibleSettled =
+        status === "denied" || status === "expired" || status === "cancelled";
+      if (
+        intent.command !== "tally.add_expense" ||
+        intent.status === "executed" ||
+        (dismissibleSettled &&
+          state.dismissedCommonsIntentIds.has(intent.intentId))
+      )
+        continue;
+      const raw = intent.input;
+      const groupId = typeof raw.group_id === "string" ? raw.group_id : "";
+      const description =
+        typeof raw.description === "string" ? raw.description : "";
+      const paidBy = typeof raw.paid_by === "string" ? raw.paid_by : "";
+      const amountMinor = Number(raw.amount_minor);
+      if (!groupId || !description || !paidBy || !Number.isFinite(amountMinor))
+        continue;
+      const splits = Array.isArray(raw.splits)
+        ? raw.splits.flatMap((entry): SplitEntry[] => {
+            if (!entry || typeof entry !== "object") return [];
+            const split = entry as Record<string, unknown>;
+            const partyId =
+              typeof split.party_id === "string" ? split.party_id : "";
+            const shareMinor = Number(split.share_minor);
+            return partyId && Number.isFinite(shareMinor)
+              ? [{ party_id: partyId, share_minor: shareMinor }]
+              : [];
+          })
+        : [];
+      const row = pendingExpenseRow(
+        groupId,
+        {
+          description,
+          amount_minor: amountMinor,
+          paid_by: paidBy,
+          category: typeof raw.category === "string" ? raw.category : "general",
+          spent_on:
+            typeof raw.spent_on === "string"
+              ? raw.spent_on
+              : new Date(intent.createdAt).toISOString().slice(0, 10),
+          splits,
+        },
+        `commons-${intent.intentId}`
+      );
+      row.commonsIntentId = intent.intentId;
+      row.intentStatus = status;
+      row.parked = true;
+      row.pendingReason = intent.reason;
+      row.stewardLabel = intent.stewardLabel;
+      durable.push(row);
+    }
+    state.pendingExpenses = durable;
+  }
+
+  /**
+   * Settle a settled-but-not-executed (`denied`/`expired`/`cancelled`)
+   * durable Commons intent out of the ledger overlay for good (issue #731
+   * m6, extended by goal 2) — a no-op for anything else, so a pending/parked
+   * row (still genuinely in flight) can never be dismissed away. Removes it
+   * from `state.pendingExpenses` immediately (no round trip to wait on) and
+   * remembers the id so the next `refreshCommonsExpenses` doesn't resurrect it.
+   */
+  function dismissCommonsIntent(intentId: string) {
+    const row = state.pendingExpenses.find(
+      (r) => r.commonsIntentId === intentId
+    );
+    if (
+      !row ||
+      (row.intentStatus !== "denied" &&
+        row.intentStatus !== "expired" &&
+        row.intentStatus !== "cancelled")
+    )
+      return;
+    state.dismissedCommonsIntentIds.add(intentId);
+    state.pendingExpenses = state.pendingExpenses.filter(
+      (r) => r.commonsIntentId !== intentId
+    );
+    render();
+  }
+
+  /**
+   * Cancel a durable Commons intent that has not executed yet (issue #731
+   * goal 2) — meaningful only while it is still `pending`/`parked`; a no-op
+   * otherwise. A genuine race with the steward (or the peer sweep retrying a
+   * parked intent) is possible, so this never assumes the cancel won: it
+   * re-syncs from `commonsIntents()` afterward and lets the row show
+   * whatever actually settled — `cancelled`, or the steward's real answer if
+   * the race was lost.
+   */
+  async function cancelCommonsIntent(intentId: string) {
+    const row = state.pendingExpenses.find(
+      (r) => r.commonsIntentId === intentId
+    );
+    if (
+      !row ||
+      (row.intentStatus !== "pending" && row.intentStatus !== "parked")
+    )
+      return;
+    const cancel = window.centraid.cancelCommonsIntent;
+    if (!cancel) return;
+    try {
+      await cancel({ intentId });
+    } catch {
+      // A transport failure leaves the row exactly as it was; the refresh
+      // below (or the member's next action) reconciles it either way.
+    }
+    await refreshCommonsExpenses();
+    render();
   }
 
   async function saveExpense() {
@@ -477,15 +631,21 @@ export function createLogic({
     //              ghost adds, until some later change resolves it;
     //   failed/denied/threw → the row is removed and the notice banner
     //              carries the existing plain-language reason.
+    const intentId = globalThis.crypto.randomUUID();
     const row = optimisticExpenseRow(exp, base);
+    row.commonsIntentId = intentId;
     state.pendingExpenses.push(row);
     closeExpense();
     render();
-    const outcome = await act("add-expense", {
-      group_id: exp.groupId,
-      ...base,
-      ...currencyFields,
-    });
+    const outcome = await act(
+      "add-expense",
+      {
+        group_id: exp.groupId,
+        ...base,
+        ...currencyFields,
+      },
+      intentId
+    );
     if (outcome?.status === "executed") {
       notice("");
       statusLine("Expense added · receipted.");
@@ -493,7 +653,19 @@ export function createLogic({
     }
     if (outcome?.status === "parked") {
       row.parked = true;
+      row.intentStatus = "parked";
+      row.pendingReason = outcome.reason ?? outcome.message;
       narrate(outcome); // the existing parked banner copy
+      render();
+      return;
+    }
+    await refreshCommonsExpenses();
+    if (
+      state.pendingExpenses.some(
+        (pending) => pending.commonsIntentId === intentId
+      )
+    ) {
+      if (outcome) narrate(outcome);
       render();
       return;
     }
@@ -783,6 +955,9 @@ export function createLogic({
     narrate,
     act,
     read,
+    refreshCommonsExpenses,
+    dismissCommonsIntent,
+    cancelCommonsIntent,
     applyDenied,
     directory,
     personOf,

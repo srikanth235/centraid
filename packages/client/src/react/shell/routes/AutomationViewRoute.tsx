@@ -5,6 +5,7 @@ import {
   auth,
   deleteAutomation,
   fetchAssistantAttachmentUrl,
+  invokeAutomationAndAwait,
   listAutomationTurns,
   MAX_ATTACHMENT_BYTES,
   readGatewayCapabilities,
@@ -12,6 +13,7 @@ import {
   runAutomationNow,
   setAutomationEnabled,
   streamAutomationConversationTurn,
+  updateAutomation,
   uploadConversationAttachment,
 } from "../../../gateway-client.js";
 import {
@@ -333,16 +335,44 @@ export default function AutomationViewRoute({
           const row = rowRef.current;
           if (!row) return null;
           try {
-            const { turnId } = await runAutomationNow({
-              automationId: row.ref,
-            });
-            showToast("Run started");
+            const { turnId } = row.manifest.enrich?.agentVariant
+              ? await invokeAutomationAndAwait({
+                  automationId: row.ref,
+                })
+              : await runAutomationNow({ automationId: row.ref });
+            showToast(
+              row.manifest.enrich?.agentVariant
+                ? "Recognition completed"
+                : "Run started"
+            );
             return turnId;
           } catch (error) {
             showToast(
               `Run failed: ${error instanceof Error ? error.message : String(error)}`
             );
             return null;
+          }
+        }}
+        onSetRecognitionVariant={async (variant) => {
+          const row = rowRef.current;
+          if (!row) return false;
+          try {
+            const updated = await updateAutomation({
+              automationId: row.ref,
+              enrichVariant: variant,
+            });
+            if (updated.row) rowRef.current = updated.row;
+            showToast(
+              variant === "agent"
+                ? "Agent recognition selected; future runs may incur provider cost"
+                : "Deterministic recognition selected"
+            );
+            return true;
+          } catch (error) {
+            showToast(
+              `Could not change recognition method: ${error instanceof Error ? error.message : String(error)}`
+            );
+            return false;
           }
         }}
         onToggleEnabled={async (next) => {

@@ -16,11 +16,12 @@ export interface AgentCaptureCandidate {
 
 export interface CaptureOcrExtraction {
   text: string;
-  confidence: number;
-  engine: "enrichment-service";
+  /** Absent when the selected recognizer cannot ground an honest score. */
+  confidence?: number;
+  engine: "automation";
 }
 
-export async function recognizeCaptureImage(
+export async function recognizeCaptureContent(
   file: File
 ): Promise<CaptureOcrExtraction | undefined> {
   const { baseUrl, token } = await auth();
@@ -32,7 +33,7 @@ export async function recognizeCaptureImage(
   if (response.status === 503) return undefined;
   const body = await readJson<{ extraction: CaptureOcrExtraction }>(
     response,
-    "recognize capture image"
+    "recognize capture content"
   );
   return body.extraction;
 }

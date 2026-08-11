@@ -433,7 +433,7 @@ export class ReplicaSqliteStore {
     }
     if (schema.hasUnavailableFields) {
       throw new ReplicaSearchRefusedError(
-        `${request.entity} has fields withheld by the lend mask`
+        `${request.entity} has fields withheld by this scope`
       );
     }
     const spec = replicaLocalSearchSpec(request.entity);

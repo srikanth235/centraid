@@ -221,6 +221,16 @@ export interface RunFireOptions {
   ) => Promise<EnrichTier | undefined> | EnrichTier | undefined;
   /** Injected-fetch transient backoff schedule (ms) — tests shrink it. */
   fetchRetryDelaysMs?: readonly number[];
+  /**
+   * Host-owned next-tick queue for bounded handlers that report remaining
+   * backlog. The callback must enqueue a fresh ordinary fire; it must not
+   * recurse on this stack. Each pass therefore gets its own run id, policy
+   * check, ledger turn, and batch bound.
+   */
+  rearm?: (input: {
+    automationRef: string;
+    completedRunId: string;
+  }) => void | Promise<void>;
 }
 
 export interface RunRecord {
@@ -329,6 +339,33 @@ export async function runFire(
       },
     };
   };
+
+  // Recognition selection is recipe state, not a one-off fire option. Inject
+  // it into every invocation so cron/data/manual fires cannot diverge, and do
+  // not let a caller smuggle the billed lane through an arbitrary payload.
+  const configuredAgentVariant = row.manifest.enrich?.agentVariant;
+  const handlerInput = configuredAgentVariant
+    ? {
+        ...(opts.input !== null &&
+        typeof opts.input === "object" &&
+        !Array.isArray(opts.input)
+          ? (opts.input as Record<string, unknown>)
+          : {}),
+        variant: configuredAgentVariant.selected,
+        ...(configuredAgentVariant.selected === "agent" &&
+        row.manifest.requires.model
+          ? { agentModel: row.manifest.requires.model }
+          : {}),
+      }
+    : opts.input;
+  if (
+    configuredAgentVariant?.selected === "agent" &&
+    !row.manifest.requires.model
+  ) {
+    return skipRun(
+      `${opts.automationRef}: agent variant requires an explicit pinned model and provider-egress consent`
+    );
+  }
 
   // ENRICHMENT TIER GATE — the privacy choke point.
   //
@@ -516,7 +553,7 @@ export async function runFire(
       triggerOrigin: opts.triggerOrigin ?? "cron",
       ...(opts.note ? { note: opts.note } : {}),
       ...(opts.failoverNotice ? { failoverNotice: opts.failoverNotice } : {}),
-      ...(opts.input === undefined ? {} : { input: opts.input }),
+      ...(handlerInput === undefined ? {} : { input: handlerInput }),
       ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
       ...(row.manifest.outputSchema
         ? { outputSchema: row.manifest.outputSchema }
@@ -649,6 +686,25 @@ export async function runFire(
     toolBatches: outcome.toolBatches,
     agentCalls: outcome.agentCalls,
   };
+  const output =
+    outcome.output !== null &&
+    typeof outcome.output === "object" &&
+    !Array.isArray(outcome.output)
+      ? (outcome.output as Record<string, unknown>)
+      : undefined;
+  if (outcome.ok && output?.rearm === true && opts.rearm) {
+    try {
+      await opts.rearm({
+        automationRef: opts.automationRef,
+        completedRunId: runId,
+      });
+    } catch (error) {
+      onLog(
+        "error",
+        `${opts.automationRef}: could not re-arm bounded backlog after ${runId}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
   return { outcome, record };
 }
 

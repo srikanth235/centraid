@@ -383,6 +383,7 @@
         "@number0/iroh": "1.1.0",
       },
       "devDependencies": {
+        "@centraid/protocol": "workspace:*",
         "@centraid/test-kit": "workspace:*",
         "@types/node": "^26.1.2",
         "typescript": "catalog:",
@@ -404,8 +405,8 @@
         "typescript": "catalog:",
       },
     },
-    "tools/enrichment-service": {
-      "name": "@centraid/enrichment-service",
+    "tools/recognition-automations": {
+      "name": "@centraid/recognition-automations",
       "version": "0.1.0",
       "devDependencies": {
         "@centraid/test-kit": "workspace:*",
@@ -700,8 +701,6 @@
 
     "@centraid/desktop": ["@centraid/desktop@workspace:apps/desktop"],
 
-    "@centraid/enrichment-service": ["@centraid/enrichment-service@workspace:tools/enrichment-service"],
-
     "@centraid/extension": ["@centraid/extension@workspace:apps/extension"],
 
     "@centraid/gateway": ["@centraid/gateway@workspace:packages/gateway"],
@@ -711,6 +710,8 @@
     "@centraid/oauth-worker": ["@centraid/oauth-worker@workspace:apps/oauth-worker"],
 
     "@centraid/protocol": ["@centraid/protocol@workspace:packages/protocol"],
+
+    "@centraid/recognition-automations": ["@centraid/recognition-automations@workspace:tools/recognition-automations"],
 
     "@centraid/test-kit": ["@centraid/test-kit@workspace:packages/test-kit"],
 

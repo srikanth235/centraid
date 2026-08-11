@@ -59,7 +59,7 @@ export interface DeviceEnrichmentLease {
   /**
    * The wire twin of the gateway's `EnrichmentCapability`, narrowed by issue
    * #724 to the device lane: model-shaped work runs on the gateway's
-   * enrichment service and is never leased to a device.
+   * recognition automation and is never leased to a device.
    */
   capability: "previews" | "poster" | "pdfText";
   contributionVariant: string | null;

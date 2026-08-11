@@ -35,8 +35,8 @@ export function makeCaptureRouteHandler(
       if (!options.recognizeOcr)
         return sendJson(res, 503, { error: "ocr_unavailable" });
       const mediaType = String(req.headers["content-type"] ?? "");
-      if (!mediaType.startsWith("image/"))
-        return sendJson(res, 415, { error: "image_required" });
+      if (!mediaType.startsWith("image/") && mediaType !== "application/pdf")
+        return sendJson(res, 415, { error: "visual_content_required" });
       try {
         const result = await options.recognizeOcr(
           await readBody(req, MAX_OCR_BYTES),
@@ -45,7 +45,7 @@ export function makeCaptureRouteHandler(
         return sendJson(res, 200, { extraction: result });
       } catch (error) {
         if (error instanceof RangeError)
-          return sendJson(res, 413, { error: "image_too_large" });
+          return sendJson(res, 413, { error: "content_too_large" });
         return sendJson(res, 503, { error: "ocr_unavailable" });
       }
     }

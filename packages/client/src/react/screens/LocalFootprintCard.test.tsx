@@ -8,9 +8,8 @@ import type {
 } from "../../gateway-client-local-storage.js";
 import LocalFootprintCard from "./LocalFootprintCard.js";
 
-// Issue #726 finding 4: the gateway ships `"borrowed"` (#726 P4 D4, the
-// "held for others" line) and, over time, will ship component ids this
-// client build has never heard of. Neither may throw a TypeError on the
+// Over time the gateway will ship component ids this client build has never
+// heard of. Such a value may not throw a TypeError on the
 // footprint card — `footprintSlices`' legend and `VaultBreakdown`'s
 // per-vault rows both index component presentation by an id that arrives
 // over the wire unchecked, so both paths are exercised here.
@@ -56,22 +55,6 @@ function render(r: LocalUsageReportDTO | null): string {
 }
 
 describe("LocalFootprintCard — an unrecognized component never crashes the card", () => {
-  it("renders `borrowed` with its held-for-others label, in the legend and by vault", () => {
-    const html = render(
-      report({
-        components: [{ component: "borrowed", bytes: GB, files: 4 }],
-        vaults: [
-          {
-            vaultId: "v1",
-            bytes: 2 * GB,
-            components: [{ component: "borrowed", bytes: 2 * GB, files: 8 }],
-          },
-        ],
-      })
-    );
-    expect(html).toContain("Held for others");
-  });
-
   it("does not throw, and still shows the id and byte count, for a component this build has never heard of — in the legend AND the per-vault breakdown", () => {
     const withUnknown = report({
       components: [

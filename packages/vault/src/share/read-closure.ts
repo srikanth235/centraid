@@ -25,6 +25,7 @@ import type {
   ShareableItemType,
   WireClosure,
   WireCollection,
+  WireDocsFolder,
   WireItem,
   WireRow,
   WireRows,
@@ -56,6 +57,7 @@ interface ClosureDraft {
   derivatives: Map<string, DerivativeRow>;
   mediaAssets: Map<string, MediaAssetRow>;
   documents: Map<string, DocumentRow>;
+  docsFolders: Map<string, WireDocsFolder>;
   collections: Map<string, WireCollection>;
   lockerItems: Map<string, WireRow>;
   tallyGroups: Map<string, WireTallyGroup>;
@@ -68,6 +70,7 @@ function draft(): ClosureDraft {
     derivatives: new Map(),
     mediaAssets: new Map(),
     documents: new Map(),
+    docsFolders: new Map(),
     collections: new Map(),
     lockerItems: new Map(),
     tallyGroups: new Map(),
@@ -236,6 +239,61 @@ function poolCollection(
   }
 }
 
+const DOCS_FOLDER_SCHEME_URI = "https://centraid.dev/schemes/folders";
+
+/**
+ * Pool the actual Docs folder closure. A folder owns every document currently
+ * filed anywhere below it, so re-reading this closure after an ordinary
+ * `core.add_document` naturally makes the new child follow the grant.
+ */
+function poolDocsFolder(
+  origin: DatabaseSync,
+  into: ClosureDraft,
+  itemId: string
+): void {
+  if (into.docsFolders.has(itemId)) return;
+  const scheme = origin
+    .prepare(
+      `SELECT s.* FROM core_concept_scheme s
+        JOIN core_concept c ON c.scheme_id = s.scheme_id
+       WHERE c.concept_id = ? AND c.notation != 'root' AND s.uri = ?`
+    )
+    .get(itemId, DOCS_FOLDER_SCHEME_URI) as WireRow | undefined;
+  if (!scheme) throw absent("docs.folder", itemId);
+  const folders = origin
+    .prepare(
+      `WITH RECURSIVE descendants(concept_id, scheme_id, notation, pref_label,
+                                  alt_labels_json, broader_concept_id, definition, depth) AS (
+         SELECT concept_id, scheme_id, notation, pref_label, alt_labels_json,
+                broader_concept_id, definition, 0
+           FROM core_concept WHERE concept_id = ?
+         UNION ALL
+         SELECT child.concept_id, child.scheme_id, child.notation, child.pref_label,
+                child.alt_labels_json, child.broader_concept_id, child.definition,
+                parent.depth + 1
+           FROM core_concept child
+           JOIN descendants parent ON child.broader_concept_id = parent.concept_id
+       )
+       SELECT concept_id, scheme_id, notation, pref_label, alt_labels_json,
+              broader_concept_id, definition
+         FROM descendants ORDER BY depth, concept_id`
+    )
+    .all(itemId) as WireRow[];
+  const folderIds = folders.map((folder) => String(folder.concept_id));
+  const slots = folderIds.map(() => "?").join(", ");
+  const tags = origin
+    .prepare(
+      `SELECT * FROM core_tag
+        WHERE target_type = 'core.document' AND concept_id IN (${slots})
+        ORDER BY tag_id`
+    )
+    .all(...folderIds) as WireRow[];
+  for (const tag of tags) {
+    poolDocument(origin, into, String(tag.target_id));
+  }
+  into.docsFolders.set(itemId, { scheme, folders, tags });
+}
+
 function poolLockerItem(
   origin: DatabaseSync,
   into: ClosureDraft,
@@ -280,6 +338,9 @@ function poolItem(
       return;
     case "core.collection":
       poolCollection(origin, into, itemId, redactLocation);
+      return;
+    case "docs.folder":
+      poolDocsFolder(origin, into, itemId);
       return;
     case "locker.item":
       poolLockerItem(origin, into, itemId);
@@ -331,6 +392,7 @@ export function readShareClosure(
     derivatives: [...into.derivatives.values()],
     mediaAssets: [...into.mediaAssets.values()],
     documents: [...into.documents.values()],
+    docsFolders: [...into.docsFolders.values()],
     collections: [...into.collections.values()],
     lockerItems: [...into.lockerItems.values()],
     tallyGroups: [...into.tallyGroups.values()],

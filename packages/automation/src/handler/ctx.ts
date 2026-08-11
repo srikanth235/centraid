@@ -60,10 +60,14 @@ export interface AgentContentRef {
  * fail-closed — a denied or missing derivative fails the agent call with
  * the reason (and receipt id) in the error, never a silent partial prompt.
  */
-async function resolveAgentAttachments(
+export async function resolveContentAttachments(
   vault: VaultBridge | undefined,
   refs: readonly AgentContentRef[]
 ): Promise<AgentAttachment[]> {
+  // A content-free call needs no vault authority. In particular, recognition
+  // capability probes use the same resolver with an empty list before the
+  // reserved deterministic executor checks the addressed capability.
+  if (refs.length === 0) return [];
   if (!vault) {
     throw new Error(
       "ctx.agent content refs need a vault surface — the host mounted no vault plane"
@@ -81,7 +85,7 @@ async function resolveAgentAttachments(
       });
       if (!reply.ok) {
         throw new Error(
-          `ctx.agent content[${i}] (${ref.contentId} ${ref.variant}): ${reply.error}`
+          `ctx content[${i}] (${ref.contentId} ${ref.variant}): ${reply.error}`
         );
       }
       const out = reply.result as
@@ -90,7 +94,7 @@ async function resolveAgentAttachments(
         | { status: string };
       if (out.status !== "ok") {
         throw new Error(
-          `ctx.agent content[${i}] (${ref.contentId} ${ref.variant}) did not resolve: ${out.status}`
+          `ctx content[${i}] (${ref.contentId} ${ref.variant}) did not resolve: ${out.status}`
         );
       }
       const resolved = out as {
@@ -244,7 +248,7 @@ export async function handleAgentMessage(
   };
   try {
     const attachments = content?.length
-      ? await resolveAgentAttachments(vault, content)
+      ? await resolveContentAttachments(vault, content)
       : undefined;
     const result = await agentDispatcher(
       { prompt, json, ...(attachments ? { attachments } : {}), onEvent },
@@ -263,7 +267,17 @@ export async function handleAgentMessage(
       ended: Date.now(),
       ...usageCloseFields(lastUsage),
     });
-    return { ok: true, result };
+    const confirmedResult =
+      lastUsage?.model &&
+      result &&
+      typeof result === "object" &&
+      !Array.isArray(result)
+        ? {
+            ...(result as Record<string, unknown>),
+            __centraidModel: lastUsage.model,
+          }
+        : result;
+    return { ok: true, result: confirmedResult };
   } catch (caughtError) {
     const error =
       caughtError instanceof Error ? caughtError.message : String(caughtError);

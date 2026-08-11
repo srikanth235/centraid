@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "embed-text",
+  "name": "Text embeddings",
+  "kind": "automation",
+  "description": "Builds the seat-local text similarity index through deterministic automation runs.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

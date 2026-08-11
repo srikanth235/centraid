@@ -2,7 +2,7 @@
 //
 // Three blueprint apps each hand-copied the same union of "what can be
 // placed into an audience vault": the web `AudiencePlacement.tsx` (retired
-// #726 P6, replaced by the give/lend `ShareSheet.tsx` every web app now
+// #726 P6, replaced by the shared `ShareSheet.tsx` every web app now
 // shares), its mobile twin `AudiencePlacementSheet.tsx` (retired the same
 // way, replaced by `apps/mobile/src/kit/share/ShareSheet.tsx`), and Photos'
 // own copy-to-vault wiring (`apps/photos/sharing.ts`) for
@@ -37,6 +37,7 @@ export type PlaceableItemType =
   | "core.collection"
   | "core.content_item"
   | "core.document"
+  | "docs.folder"
   | "media.media_asset"
   | "tally.group";
 
@@ -57,6 +58,7 @@ export const PLACEMENT_REGISTRY: readonly PlacementEntity[] = [
   { itemType: "core.collection", appId: "photos", label: "album" },
   { itemType: "core.content_item", appId: "notes", label: "note" },
   { itemType: "core.document", appId: "docs", label: "document" },
+  { itemType: "docs.folder", appId: "docs", label: "folder" },
   { itemType: "media.media_asset", appId: "photos", label: "photo" },
   { itemType: "tally.group", appId: "tally", label: "group" },
 ];

@@ -67,6 +67,7 @@ describe("atlas", () => {
     expect(packKindOf("consent")).toBe("machinery");
     expect(packKindOf("blob")).toBe("machinery");
     expect(packKindOf("outbox")).toBe("machinery");
+    expect(packKindOf("share")).toBe("machinery");
   });
 
   test("every ATLAS_KIND_FRIENDLY key is a real registry logical name — no dead keys", () => {

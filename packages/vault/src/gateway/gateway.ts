@@ -76,6 +76,16 @@ import {
 } from "../schema/sealed.js";
 import { SEED_DEMO_ACTIVITY } from "../schema/seed.js";
 import { resolveEntity } from "../schema/tables.js";
+import { isCommonsCommandActable } from "../share/actable.js";
+import {
+  appendCommonsOperation,
+  appendCommonsOperationInTransaction,
+  assertCommonsWithinMax,
+  CommonsMaxSizeError,
+  commonsGrantForCommand,
+  queueCommonsIntent,
+  sequenceCommonsCircleCommandInTransaction,
+} from "../share/commons.js";
 import { resolveRefCards } from "./cards.js";
 import type { RefRequest, ResolveResult } from "./cards.js";
 import { evaluateConsent } from "./consent.js";
@@ -199,6 +209,25 @@ function provenanceScopeFailure(
   return null;
 }
 
+/** Human pending-copy for a member intent. The steward party is part of the
+ * projected Commons closure; absence is tolerated for old/incomplete seats. */
+function commonsStewardDeviceLabel(
+  vault: DatabaseSync,
+  stewardPartyId: string
+): string {
+  const row = vault
+    .prepare("SELECT display_name FROM core_party WHERE party_id = ?")
+    .get(stewardPartyId) as { display_name: string } | undefined;
+  const label = row?.display_name.trim().replace(/\s+/gu, " ");
+  if (!label) return "the commons steward's device";
+  const possessive = /['’]s$/iu.test(label)
+    ? label
+    : /['’]$/u.test(label)
+      ? `${label}s`
+      : `${label}'s`;
+  return `${possessive} device`;
+}
+
 export interface GatewayDeps {
   /** Best-effort hint emitted only after journal.db provenance is durable. */
   onProvenanceCommitted?: (entityTypes?: readonly string[]) => void;
@@ -207,11 +236,34 @@ export interface GatewayDeps {
    * changes. `created` is true only when a new owner decision was added.
    */
   onDecisionChanged?: (created: boolean) => void;
+  /** Runs only after the command/log transaction commits. */
+  onCommonsCommandSequenced?: (grantId: string) => void;
+  /** Doorbell emitted after a member intent is durably queued. */
+  onCommonsIntentQueued?: (grantId: string) => void;
 }
 
 export type InvocationBatchResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: unknown };
+
+/** A Commons op/reconciliation failure is still inside the pre-commit
+ * gateway batch and must roll back the command marker and domain rows. */
+const commonsOperationErrors = new WeakSet<object>();
+function markCommonsOperationError(source: unknown): Error {
+  const error = new Error(
+    source instanceof Error ? source.message : String(source)
+  );
+  error.name = "CommonsOperationError";
+  commonsOperationErrors.add(error);
+  return error;
+}
+function isCommonsOperationError(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    commonsOperationErrors.has(value)
+  );
+}
 
 export class Gateway {
   /** Registered commands: handler + sealed-class declarations (issue #293). */
@@ -219,6 +271,8 @@ export class Gateway {
   private readonly lockerAuthentication: LockerAuthentication;
   private activeBatchInvocationIds: string[] | undefined;
   private activeBatchDecisionChanges: boolean[] | undefined;
+  private activeBatchCommonsGrantIds: string[] | undefined;
+  private activeBatchCommonsIntentGrantIds: string[] | undefined;
 
   constructor(
     private readonly db: VaultDb,
@@ -275,12 +329,9 @@ export class Gateway {
     });
   }
 
-  /**
-   * Batch variant used by the request queue. A post-canonical journal failure
-   * rejects only its own caller: its vault mutation and recovery marker still
-   * cross the shared vault commit boundary, while the journal savepoint is
-   * rolled back for deterministic replay on retry.
-   */
+  /** Batch variant used by the request queue. Each run owns matching vault
+   * and journal savepoints: a failure rolls back both sides plus provisional
+   * notification markers, while sibling runs may still commit together. */
   invokeBatchSettled<T>(
     runs: readonly (() => T)[]
   ): InvocationBatchResult<T>[] {
@@ -294,17 +345,69 @@ export class Gateway {
     }
     const invocationIds: string[] = [];
     const decisionChanges: boolean[] = [];
+    const commonsGrantIds: string[] = [];
+    const commonsIntentGrantIds: string[] = [];
     this.activeBatchInvocationIds = invocationIds;
     this.activeBatchDecisionChanges = decisionChanges;
+    this.activeBatchCommonsGrantIds = commonsGrantIds;
+    this.activeBatchCommonsIntentGrantIds = commonsIntentGrantIds;
     try {
       this.db.vault.exec("BEGIN IMMEDIATE");
       this.db.journal.exec("BEGIN IMMEDIATE");
       const replicaCommit = beginReplicaCommit(this.db.vault);
       reclaimProvenOrdinaryInvocationCommitsInTransaction(this.db);
-      const results = runs.map((run): InvocationBatchResult<T> => {
+      const results = runs.map((run, index): InvocationBatchResult<T> => {
+        const savepoint = `gateway_batch_run_${index}`;
+        const invocationLength = invocationIds.length;
+        const decisionLength = decisionChanges.length;
+        const commonsLength = commonsGrantIds.length;
+        const commonsIntentLength = commonsIntentGrantIds.length;
+        const markersBefore = new Set(
+          (
+            this.db.vault
+              .prepare("SELECT invocation_id FROM replica_invocation_commit")
+              .all() as { invocation_id: string }[]
+          ).map((row) => row.invocation_id)
+        );
+        this.db.vault.exec(`SAVEPOINT ${savepoint}`);
+        this.db.journal.exec(`SAVEPOINT ${savepoint}`);
         try {
-          return { ok: true, value: run() };
+          const value = run();
+          this.db.vault.exec(`RELEASE ${savepoint}`);
+          this.db.journal.exec(`RELEASE ${savepoint}`);
+          return { ok: true, value };
         } catch (error) {
+          // A command can cross the canonical vault commit and then fail
+          // while finalizing journal evidence. Preserve that marker and its
+          // domain writes so the next retry repairs the journal exactly once;
+          // only work that never crossed the boundary rolls back to the
+          // per-run vault savepoint. The finalization helper has already
+          // rolled back its own incomplete evidence prefix; the outer journal
+          // savepoint is retained only when replay needs its invocation row.
+          const committedAfterStart = (
+            this.db.vault
+              .prepare("SELECT invocation_id FROM replica_invocation_commit")
+              .all() as { invocation_id: string }[]
+          ).some((row) => !markersBefore.has(row.invocation_id));
+          // Commons byte-budget rejection is a pre-commit policy failure:
+          // the command may already have recorded its ordinary invocation
+          // marker, but none of the domain/op rows may escape the batch.
+          // Preserve markers only for failures after the canonical command
+          // crossed the durable boundary (journal-finalization/replay).
+          const shouldRollback =
+            error instanceof CommonsMaxSizeError ||
+            isCommonsOperationError(error) ||
+            !committedAfterStart;
+          if (shouldRollback) {
+            this.db.vault.exec(`ROLLBACK TO ${savepoint}`);
+            this.db.journal.exec(`ROLLBACK TO ${savepoint}`);
+          }
+          this.db.vault.exec(`RELEASE ${savepoint}`);
+          this.db.journal.exec(`RELEASE ${savepoint}`);
+          invocationIds.length = invocationLength;
+          decisionChanges.length = decisionLength;
+          commonsGrantIds.length = commonsLength;
+          commonsIntentGrantIds.length = commonsIntentLength;
           return { ok: false, error };
         }
       });
@@ -317,12 +420,17 @@ export class Gateway {
       endReplicaCommit(this.db.vault, replicaCommit);
       this.db.vault.exec("COMMIT");
       this.db.journal.exec("COMMIT");
-      // A rejected run may still have crossed the canonical boundary and left
-      // a pending marker. Publish only once journal proof is also durable.
+      // Failed runs were rolled back to matching vault + journal savepoints.
+      // Publish notifications only for the successful runs now durable in
+      // both databases.
       notifyReplicaCommit(this.db.vault);
       if (decisionChanges.length > 0) {
         this.emitDecisionChanged(decisionChanges.some(Boolean));
       }
+      for (const grantId of new Set(commonsGrantIds))
+        this.emitCommonsCommandSequenced(grantId);
+      for (const grantId of new Set(commonsIntentGrantIds))
+        this.emitCommonsIntentQueued(grantId);
       return results;
     } catch (error) {
       if (this.db.journal.isTransaction) this.db.journal.exec("ROLLBACK");
@@ -331,6 +439,8 @@ export class Gateway {
     } finally {
       this.activeBatchInvocationIds = undefined;
       this.activeBatchDecisionChanges = undefined;
+      this.activeBatchCommonsGrantIds = undefined;
+      this.activeBatchCommonsIntentGrantIds = undefined;
     }
   }
 
@@ -342,6 +452,27 @@ export class Gateway {
       this.activeBatchInvocationIds.push(outcome.invocationId);
     }
     return outcome;
+  }
+
+  /** Reconciliation is after commit and therefore cannot turn durable success
+   * into a reported failure. Mount/peer sweeps repair a missed best-effort hint. */
+  private emitCommonsCommandSequenced(grantId: string): void {
+    try {
+      this.deps.onCommonsCommandSequenced?.(grantId);
+    } catch {
+      // The canonical op is already committed. Restore reconciliation is the
+      // durable retry path, so this post-commit notification must not throw.
+    }
+  }
+
+  /** Intent delivery is recovered by the bounded sweep, so its prompt wake
+   * is best-effort and cannot turn a durable queue write into a failure. */
+  private emitCommonsIntentQueued(grantId: string): void {
+    try {
+      this.deps.onCommonsIntentQueued?.(grantId);
+    } catch {
+      // The persisted intent remains discoverable by the sweep clock.
+    }
   }
 
   /** Register a domain command: the agent.command contract row + handler. */
@@ -968,24 +1099,172 @@ export class Gateway {
 
   /** Typed-command invocation: the only write path (rule R04). */
   invoke(cred: Credential, rawRequest: InvokeRequest): InvokeOutcome {
-    return this.invokeCore(this.identify(cred), rawRequest);
+    const identity = this.identify(cred);
+    const grant = commonsGrantForCommand(
+      this.db.vault,
+      rawRequest.command,
+      rawRequest.input
+    );
+    if (!grant) return this.invokeCore(identity, rawRequest);
+    if (!isCommonsCommandActable(grant.containerType, rawRequest.command)) {
+      const reason = `command ${rawRequest.command} is not declared for ${grant.containerType}`;
+      const receiptId = writeReceipt(this.db.journal, {
+        grantId: grant.grantId,
+        invocationId: rawRequest.invocationId ?? null,
+        action: `act ${rawRequest.command}`,
+        objectType: "share.commons",
+        objectId: grant.grantId,
+        purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
+        decision: "deny",
+        detail: { failing: reason },
+      });
+      return { status: "denied", receiptId, reason };
+    }
+    const local = this.db.vault
+      .prepare("SELECT vault_id, owner_party_id FROM core_vault LIMIT 1")
+      .get() as { vault_id: string; owner_party_id: string | null } | undefined;
+    if (!local?.owner_party_id) return this.invokeCore(identity, rawRequest);
+    const grantActor = this.db.vault
+      .prepare(
+        `SELECT b.party_id FROM share_party_vault_binding b
+         JOIN social_circle_member m ON m.party_id = b.party_id
+         JOIN share_commons_member_state s
+           ON s.grant_id = ? AND s.party_id = b.party_id AND s.status = 'current'
+         WHERE b.vault_id = ? AND b.revoked_at IS NULL
+           AND m.circle_id = ? LIMIT 1`
+      )
+      .get(grant.grantId, local.vault_id, grant.circleId) as
+      | { party_id: string }
+      | undefined;
+    const actorPartyId = grantActor?.party_id ?? local.owner_party_id;
+    if (grant.stewardPartyId !== actorPartyId) {
+      // Installed apps are the ordinary foreground UI door. Only an enrolled
+      // agent is an automation/background executor; treating every non-device
+      // credential as background silently discarded inline app member writes.
+      const background = cred.kind === "agent";
+      const stewardLabel = commonsStewardDeviceLabel(
+        this.db.vault,
+        grant.stewardPartyId
+      );
+      const reason = background
+        ? "commons automations execute only at the steward's seat"
+        : `waiting for ${stewardLabel}`;
+      if (!background)
+        queueCommonsIntent({
+          seat: this.db.vault,
+          ...(rawRequest.intentId ? { intentId: rawRequest.intentId } : {}),
+          grantId: grant.grantId,
+          actorPartyId,
+          command: rawRequest.command,
+          commandInput: rawRequest.input,
+          stewardLabel,
+          now: nowIso(),
+        });
+      if (!background) {
+        if (this.activeBatchCommonsIntentGrantIds)
+          this.activeBatchCommonsIntentGrantIds.push(grant.grantId);
+        else this.emitCommonsIntentQueued(grant.grantId);
+      }
+      const receiptId = writeReceipt(this.db.journal, {
+        grantId: grant.grantId,
+        invocationId: rawRequest.invocationId ?? null,
+        action: `act ${rawRequest.command}`,
+        objectType: "share.commons",
+        objectId: grant.grantId,
+        purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
+        decision: "deny",
+        detail: { failing: reason, actorPartyId },
+      });
+      return { status: "denied", receiptId, reason };
+    }
+    if (!this.db.vault.isTransaction && !this.db.journal.isTransaction) {
+      const [settled] = this.invokeBatchSettled([
+        () => this.invoke(cred, rawRequest),
+      ]);
+      if (!settled)
+        throw new Error("commons invocation batch returned no result");
+      if (!settled.ok) {
+        if (settled.error instanceof CommonsMaxSizeError) {
+          const receiptId = writeReceipt(this.db.journal, {
+            grantId: grant.grantId,
+            invocationId: rawRequest.invocationId ?? null,
+            action: `act ${rawRequest.command}`,
+            objectType: "share.commons",
+            objectId: grant.grantId,
+            purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
+            decision: "deny",
+            detail: { failing: settled.error.message, actorPartyId },
+          });
+          return {
+            status: "denied",
+            receiptId,
+            reason: settled.error.message,
+          };
+        }
+        throw settled.error;
+      }
+      return settled.value;
+    }
+    const outcome = this.invokeCore(identity, rawRequest);
+    const executed =
+      outcome.status === "executed" || outcome.status === "replayed";
+    if (executed)
+      assertCommonsWithinMax(this.db.vault, local.vault_id, grant.grantId);
+    const append = this.db.vault.isTransaction
+      ? appendCommonsOperationInTransaction
+      : appendCommonsOperation;
+    try {
+      append({
+        steward: this.db.vault,
+        grantId: grant.grantId,
+        actorPartyId,
+        kind: rawRequest.command.includes("delete") ? "delete" : "command",
+        command: rawRequest.command,
+        input: rawRequest.input,
+        outcome: executed ? "executed" : "refused",
+        ...(executed || !outcome.reason ? {} : { reason: outcome.reason }),
+        now: nowIso(),
+      });
+    } catch (error) {
+      throw markCommonsOperationError(error);
+    }
+    let reconciledGrantIds: string[] = [];
+    if (executed) {
+      try {
+        reconciledGrantIds = sequenceCommonsCircleCommandInTransaction({
+          steward: this.db.vault,
+          primaryGrantId: grant.grantId,
+          actorPartyId,
+          command: rawRequest.command,
+          commandInput: rawRequest.input,
+          now: nowIso(),
+        });
+      } catch (error) {
+        throw markCommonsOperationError(error);
+      }
+    }
+    if (executed)
+      for (const reconciledGrantId of reconciledGrantIds)
+        assertCommonsWithinMax(
+          this.db.vault,
+          local.vault_id,
+          reconciledGrantId
+        );
+    const changedGrantIds = new Set([grant.grantId, ...reconciledGrantIds]);
+    if (this.activeBatchCommonsGrantIds)
+      this.activeBatchCommonsGrantIds.push(...changedGrantIds);
+    else
+      for (const changedGrantId of changedGrantIds)
+        this.emitCommonsCommandSequenced(changedGrantId);
+    return outcome;
   }
 
-  /**
-   * Invoke as an ALREADY-RESOLVED identity, skipping credential
-   * authentication (issue #726 P5). The one caller today is the origin half
-   * of a live lend edge: the gateway's peer-lend route has already proved
-   * the caller over the peer transport and checked the edge is live and
-   * write-capable, so there is no credential left to authenticate — only an
-   * identity to run. From here on this is an ORDINARY invocation: the same
-   * consent chain, the same Tier-3/4 parking, the same hash-chained
-   * receipts and journal as any local action. There is no second write path.
-   */
-  invokeAsIdentity(
-    identity: Identity,
+  /** Explicit Commons rail already authorized and sequenced the command. */
+  invokeCommonsCanonical(
+    cred: Credential,
     rawRequest: InvokeRequest
   ): InvokeOutcome {
-    return this.invokeCore(identity, rawRequest);
+    return this.invokeCore(this.identify(cred), rawRequest);
   }
 
   private invokeCore(
@@ -1808,7 +2087,7 @@ export class Gateway {
     ) {
       throw new GatewayError(
         "consent",
-        `variant "${request.variant}" is not agent-readable — derivatives egress, never originals (issue #299): ${AGENT_CONTENT_VARIANTS.join(", ")}`
+        `variant "${request.variant}" is not agent-readable: ${AGENT_CONTENT_VARIANTS.join(", ")}`
       );
     }
     const consent = evaluateConsent(

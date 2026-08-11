@@ -11,7 +11,7 @@
 // can do with the platform it already has: rasterize a preview, grab a video
 // poster frame, pull text out of a PDF. Everything model-shaped — OCR,
 // transcription, embedding — left this lane and now runs on the gateway's one
-// enrichment service (`packages/gateway/src/enrich/service-client.ts`).
+// self-contained recognition automations.
 //
 // Why not both lanes: a capability offered in two places is a capability with
 // two answers to "which model produced this row, and is it current?" — the
@@ -166,7 +166,7 @@ export function queueDeviceEnrichmentRequest(
 }
 
 // Audio has no row here any more: its only device rung was `transcript`, which
-// is now the enrichment service's (see the lane split). A recording therefore
+// is now the transcript automation's (see the lane split). A recording therefore
 // queues no device job at all, and its transcript arrives from the gateway's
 // own sweep rather than from whichever phone happened to be charging.
 const DEVICE_DERIVATIVE_RULES: readonly {

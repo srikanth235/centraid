@@ -7,8 +7,9 @@
 //   1. NO ENRICHMENT WRITE MAY BE ISSUED WITHOUT AN EXPLICIT ANSWER. The
 //      previous surface was a popover with a `Detect faces now` button: one
 //      click, one write, no facts. Mounting, opening the question, reading the
-//      policy, declining and closing must all write nothing, and only the
-//      `Run on this device` answer may reach `window.centraid.write`.
+//      policy, declining and closing must all write nothing. This build has
+//      no device-side faces producer, so its on-device answer is unavailable
+//      and cannot reach `window.centraid.write` either.
 //   2. THE EGRESS DISCLOSURE MUST BE ON SCREEN. The cloud panel is the only
 //      place in Photos where the product says a downscaled copy of every
 //      photograph would leave the device. It renders even though this repo
@@ -184,7 +185,10 @@ describe("the enrichment consent surface", () => {
       copy.ENRICHMENT_UNAVAILABLE.modelTier
     );
     expect(copy.deviceAnswerFor("off").available).toBe(false);
-    expect(copy.deviceAnswerFor("device").available).toBe(true);
+    expect(copy.deviceAnswerFor("device")).toStrictEqual({
+      available: false,
+      reason: copy.ENRICHMENT_UNAVAILABLE.deviceUnavailable,
+    });
     expect(copy.deviceAnswerFor(null).available).toBe(false);
     expect(copy.deviceAnswerFor("device", true).available).toBe(false);
   });
@@ -193,7 +197,10 @@ describe("the enrichment consent surface", () => {
     // A raw `enrich.policy` row can reach this module without going through
     // packages/vault's own normalizing read (queries/enrichment-status.ts
     // reads the table directly) — see this file's C5 COMPAT comment.
-    expect(copy.deviceAnswerFor("local").available).toBe(true);
+    expect(copy.deviceAnswerFor("local")).toStrictEqual({
+      available: false,
+      reason: copy.ENRICHMENT_UNAVAILABLE.deviceUnavailable,
+    });
     expect(copy.deviceAnswerFor("model").available).toBe(false);
     expect(copy.deviceAnswerFor("model").reason).toBe(
       copy.ENRICHMENT_UNAVAILABLE.modelTier
@@ -230,7 +237,10 @@ describe("the enrichment gate (issue #712 C2, re-homed into People's empty state
     gate.ensurePolicyLoaded();
     expect(write).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
-    expect(gate.props(6214)?.onDevice.available).toBe(true);
+    expect(gate.props(6214)?.onDevice).toStrictEqual({
+      available: false,
+      reason: copy.ENRICHMENT_UNAVAILABLE.deviceUnavailable,
+    });
   });
 
   it("writes nothing when the member declines", async () => {
@@ -244,27 +254,22 @@ describe("the enrichment gate (issue #712 C2, re-homed into People's empty state
     expect(gate.props(6214)).toBeNull();
   });
 
-  it("issues the request only from the explicit on-device answer", async () => {
+  it("does not issue a request when no device-side faces producer exists", async () => {
     const gate = createEnrichmentGate({ onData });
     gate.ensurePolicyLoaded();
     await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
     expect(write).not.toHaveBeenCalled();
     gate.props(6214)?.onRunOnDevice();
-    expect(write).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
-        action: "request-enrichment",
-        input: { entity_type: "media.media_asset" },
-      })
-    );
+    expect(write).not.toHaveBeenCalled();
   });
 
-  it("takes one answer, not two — a second call writes nothing more", async () => {
+  it("repeated unavailable on-device answers remain write-free", async () => {
     const gate = createEnrichmentGate({ onData });
     gate.ensurePolicyLoaded();
     await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
     gate.props(6214)?.onRunOnDevice();
     gate.props(6214)?.onRunOnDevice();
-    expect(write).toHaveBeenCalledOnce();
+    expect(write).not.toHaveBeenCalled();
   });
 
   it("refuses the answer outright when the library's tier cannot honour it", async () => {

@@ -541,7 +541,6 @@ export default function TallyHome({
             ""
         )}
         noun="Tally group"
-        verbs={["give"]}
         itemType="tally.group"
         itemIds={[activeGroupId]}
         onDone={(outcome) => postStatus(outcome.message)}

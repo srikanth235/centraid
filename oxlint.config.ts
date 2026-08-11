@@ -146,6 +146,15 @@ export default defineConfig({
     "**/node_modules/**",
     "apps/oauth-worker/worker-configuration.d.ts",
     "apps/web/src/generated/**",
+    // Release-generated recognition bundles carry minified/transformed module
+    // imports that are not authored lint input. Their source modules are
+    // linted under tools/recognition-automations and the emitted handlers have
+    // manifest, behavior, and size conformance tests.
+    "packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js",
+    "packages/blueprints/automations/embed-image/automations/embed-image/handler.js",
+    "packages/blueprints/automations/embed-text/automations/embed-text/handler.js",
+    "packages/blueprints/automations/faces/automations/faces/handler.js",
+    "packages/blueprints/automations/transcript/automations/transcript/handler.js",
   ]),
   rules: {
     // Ultracite's core preset contains type-aware rules. They cannot execute

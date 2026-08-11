@@ -291,7 +291,6 @@ export function SelectionBarView({
         onClose={() => setShareOpen(false)}
         sourceScopeId={ownId}
         scopes={scopes}
-        verbs={["give"]}
         itemType="media.media_asset"
         itemIds={[...selectedIds]}
         onDone={(outcome) => {
@@ -455,7 +454,6 @@ export function SelectionBottomBar({
         onClose={() => setShareOpen(false)}
         sourceScopeId={ownId}
         scopes={scopes}
-        verbs={["give"]}
         itemType="media.media_asset"
         itemIds={[...selectedIds]}
         onDone={(outcome) => {

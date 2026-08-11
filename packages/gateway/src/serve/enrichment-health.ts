@@ -29,6 +29,11 @@ import type { HealthProbe } from "./health-registry.js";
  *  vault's installed automations without needing to read blueprints' own
  *  package layout at runtime. */
 export const ENRICHER_AUTOMATION_IDS = [
+  "photo-ocr",
+  "transcript",
+  "embed-image",
+  "embed-text",
+  "faces",
   "doc-text-extractor",
   "doc-filer",
   "doc-entity-linker",

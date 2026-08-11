@@ -1,7 +1,9 @@
 // Vocabulary guard for the Photos app (issue #599). A multi-scope app mounts
 // over the member's own scope AND shared audience scopes, so app-facing copy
 // speaks of scopes by their human label ("Library", "Family") — the storage
-// noun "vault" must never reach a user-visible string.
+// noun "vault" must never reach a user-visible string except for the small,
+// reviewed #731 phrases that explain ownership or literally name the
+// receiver-side "Save to my vault" action.
 //
 // HOW THE SCAN TELLS APP-FACING COPY FROM CODE. Two filters, both deliberately
 // simple enough to reason about:
@@ -87,13 +89,26 @@ function stripComments(source: string): string {
 
 /** The word as a user would read it: whitespace/edge bounded, not `x.vault`. */
 const OFFENCE = /(?:^|[\s>({[])vault(?=[\s.,!;:?'’"”)\]}<-]|$)/gimu;
+const APPROVED_VAULT_COPY = [
+  /\bSave to my vault\b/giu,
+  /\bSaved to my vault\b/giu,
+  /\bsaved to your vault\b/giu,
+  /\bthis vault(?:'s|’s) device-only policy\b/giu,
+  /\bthe vault(?:'s|’s) enrichment policy\b/giu,
+  /\bthis vault permits gateway recognition\b/giu,
+  /\bthe vault permits gateway recognition\b/giu,
+];
 
 function offences(source: string): string[] {
   const stripped = stripComments(source);
   const hits: string[] = [];
   for (const line of stripped.split("\n")) {
+    const unapproved = APPROVED_VAULT_COPY.reduce(
+      (copy, approved) => copy.replace(approved, ""),
+      line
+    );
     OFFENCE.lastIndex = 0;
-    if (OFFENCE.test(line)) hits.push(line.trim());
+    if (OFFENCE.test(unapproved)) hits.push(line.trim());
   }
   return hits;
 }
@@ -103,7 +118,7 @@ describe("Photos app vocabulary (#599)", () => {
     expect(sourceFiles(PHOTOS_DIR).length).toBeGreaterThan(20);
   });
 
-  it("never shows the storage noun in user-visible copy", () => {
+  it("shows the storage noun only in reviewed ownership copy", () => {
     const found: string[] = [];
     for (const file of sourceFiles(PHOTOS_DIR)) {
       for (const line of offences(fs.readFileSync(file, "utf8"))) {

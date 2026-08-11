@@ -127,6 +127,8 @@ export class VaultLinksStore {
     fromPublicKey: string;
     toVaultId: string;
     toPublicKey: string;
+    fromPartyId?: string;
+    toPartyId?: string;
     /**
      * Both vaults are on THIS gateway (unlike the remote ceremony's
      * self-declared label), so their display names are already known and
@@ -152,7 +154,7 @@ export class VaultLinksStore {
       `INSERT INTO vault_links (
          link_id, vault_a, vault_b, public_key_a, public_key_b,
          label_a, label_b, approved_by_a, approved_by_b, permissions_json, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       linkId,
       a,
       b,
@@ -162,6 +164,16 @@ export class VaultLinksStore {
       (fromIsA ? input.toLabel : input.fromLabel) ?? null,
       fromIsA ? createdAt : null,
       fromIsA ? null : createdAt,
+      JSON.stringify(
+        input.fromPartyId && input.toPartyId
+          ? {
+              commonsPartyIds: {
+                [input.fromVaultId]: input.fromPartyId,
+                [input.toVaultId]: input.toPartyId,
+              },
+            }
+          : {}
+      ),
       createdAt
     );
     return this.get(linkId)!;
@@ -243,6 +255,38 @@ export class VaultLinksStore {
       localIsA ? peerRoute : null,
       JSON.stringify(input.permissions ?? {}),
       now
+    );
+    return this.peerForVault(input.peerVaultId, input.localVaultId);
+  }
+
+  /** Complete the explicit party identities exchanged by a remote ceremony
+   * without reissuing approvals, changing routes, or treating vault keys as
+   * party ids. Both gateway copies end with the same direction-free mapping. */
+  recordCommonsParties(input: {
+    localVaultId: string;
+    localPartyId: string;
+    peerVaultId: string;
+    peerPartyId: string;
+  }): LinkedPeer | undefined {
+    const link = this.findPair(input.localVaultId, input.peerVaultId);
+    if (!link || link.revoked) return undefined;
+    const existing =
+      typeof link.permissions["commonsPartyIds"] === "object" &&
+      link.permissions["commonsPartyIds"] !== null
+        ? (link.permissions["commonsPartyIds"] as Record<string, unknown>)
+        : {};
+    const permissions = {
+      ...link.permissions,
+      commonsPartyIds: {
+        ...existing,
+        [input.localVaultId]: input.localPartyId,
+        [input.peerVaultId]: input.peerPartyId,
+      },
+    };
+    this.gatewayDatabase.run(
+      "UPDATE vault_links SET permissions_json = ? WHERE link_id = ?",
+      JSON.stringify(permissions),
+      link.linkId
     );
     return this.peerForVault(input.peerVaultId, input.localVaultId);
   }

@@ -28,7 +28,7 @@ export const coverageProjects = [
   ...mobileVitestProjects,
   "apps/oauth-worker",
   "apps/web",
-  "tools/enrichment-service",
+  "tools/recognition-automations",
 ];
 
 // What v8 instruments. Shared with the diff-coverage config so a scoped run

@@ -25,21 +25,21 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            tools/enrichment-service/runtime/node_modules
-            tools/enrichment-service/runtime/bun.lock
-            tools/enrichment-service/runtime/models
-          key: enrichment-models-${{ runner.os }}-${{ hashFiles('tools/enrichment-service/models.lock.json', 'tools/enrichment-service/runtime/package.json') }}
+            tools/recognition-automations/runtime/node_modules
+            tools/recognition-automations/runtime/bun.lock
+            tools/recognition-automations/runtime/models
+          key: enrichment-models-${{ runner.os }}-${{ hashFiles('tools/recognition-automations/models.lock.json', 'tools/recognition-automations/runtime/package.json') }}
       - name: Install and verify pinned model runtime
-        run: bun run --cwd tools/enrichment-service setup
+        run: bun run --cwd tools/recognition-automations setup
       - name: Save pinned model runtime
         if: steps.model_cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            tools/enrichment-service/runtime/node_modules
-            tools/enrichment-service/runtime/bun.lock
-            tools/enrichment-service/runtime/models
-          key: enrichment-models-${{ runner.os }}-${{ hashFiles('tools/enrichment-service/models.lock.json', 'tools/enrichment-service/runtime/package.json') }}
+            tools/recognition-automations/runtime/node_modules
+            tools/recognition-automations/runtime/bun.lock
+            tools/recognition-automations/runtime/models
+          key: enrichment-models-${{ runner.os }}-${{ hashFiles('tools/recognition-automations/models.lock.json', 'tools/recognition-automations/runtime/package.json') }}
       - name: Run capability handshake and real-weight goldens
         run: bun run test:enrich:live
       - name: Upload real-model evidence

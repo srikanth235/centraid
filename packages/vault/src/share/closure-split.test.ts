@@ -326,7 +326,7 @@ describe("closure split", () => {
     expect(() =>
       projectShareClosure(
         audience.vault,
-        { ...closure, formatVersion: 2 as unknown as 1 },
+        { ...closure, formatVersion: 3 as unknown as 2 },
         { sharedBy: "member-priya" }
       )
     ).toThrow(/unsupported share closure format/u);

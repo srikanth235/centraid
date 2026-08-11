@@ -55,6 +55,7 @@ export type ShareableItemType =
   | "core.collection"
   | "core.content_item"
   | "core.document"
+  | "docs.folder"
   | "locker.item"
   | "tally.group"
   | "media.media_asset";
@@ -63,6 +64,7 @@ const SHAREABLE_ITEM_TYPES: readonly ShareableItemType[] = [
   "core.collection",
   "core.content_item",
   "core.document",
+  "docs.folder",
   "locker.item",
   "tally.group",
   "media.media_asset",
@@ -76,9 +78,10 @@ export function isShareableItemType(value: string): value is ShareableItemType {
 /**
  * The wire format's only version. There is no ladder and no COMPAT shim
  * (pre-1.0 hard floor): a closure that does not say `1` is refused, because a
- * half-understood closure would be projected as silent data loss.
+ * half-understood closure would be projected as silent data loss. Version 2
+ * adds the actual Docs folder container and its filing tags.
  */
-export const CLOSURE_FORMAT_VERSION = 1;
+export const CLOSURE_FORMAT_VERSION = 2;
 
 /** What a shareable table's column may hold. No BLOB columns cross. */
 export type WireValue = string | number | null;
@@ -148,6 +151,17 @@ export interface WireCollection {
   entries: WireRow[];
 }
 
+/**
+ * A Docs folder is its actual SKOS container, not a cosmetic collection.
+ * `folders` contains the requested concept followed by its descendants;
+ * `tags` files every carried document into one of those concepts.
+ */
+export interface WireDocsFolder {
+  scheme: WireRow;
+  folders: WireRow[];
+  tags: WireRow[];
+}
+
 /** A Tally group's whole ledger. Receipt bytes ride the shared content pool. */
 export interface WireTallyGroup {
   group: WireRow;
@@ -174,6 +188,7 @@ export interface WireRows {
   derivatives: DerivativeRow[];
   mediaAssets: MediaAssetRow[];
   documents: DocumentRow[];
+  docsFolders: WireDocsFolder[];
   collections: WireCollection[];
   /**
    * Locker rows arrive still sealed under the ORIGIN vault's DEK, so they can

@@ -104,6 +104,35 @@ describe(runFire, () => {
     expect(closes.n).toBe(1);
   });
 
+  it("asks the host for a detached follow-up only after a settled bounded pass", async () => {
+    await writeAutomation(
+      appsDir,
+      "notes",
+      "digest",
+      manifest(),
+      `export default async () => ({ summary: 'bounded pass', output: { rearm: true } });`
+    );
+    const requests: Array<{
+      automationRef: string;
+      completedRunId: string;
+    }> = [];
+    const { record } = await runFire(
+      {
+        automationRef: "notes/digest",
+        appsDir,
+        journalDbFile,
+        rearm: (request) => void requests.push(request),
+      },
+      { openDispatch: stubDispatch([], { n: 0 }) }
+    );
+    expect(requests).toStrictEqual([
+      { automationRef: "notes/digest", completedRunId: record.runId },
+    ]);
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    expect(store.getTurn(record.runId)?.endedAt).not.toBeNull();
+    store.close();
+  });
+
   it("persists a failover boundary as a transcript notice that survives reload", async () => {
     await writeAutomation(appsDir, "notes", "digest", manifest());
     const notice =

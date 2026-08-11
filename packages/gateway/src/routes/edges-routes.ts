@@ -12,11 +12,7 @@
  * answers `not_found` — topology hiding, you learn nothing about a vault you
  * cannot reach.
  *
- * `mode: 'live'` (#726 P4) is the other kind of edge: not a copy but a WINDOW.
- * It carries `scopes` instead of `itemIds` — a live edge has no fixed item
- * set, because its contents are whatever its consent scope covers at read
- * time — and it settles on `established` rather than `completed`, since there
- * is nothing to finish.
+ * The retired live/lend mode is intentionally not accepted here (#731).
  */
 
 import type { IncomingMessage } from "node:http";
@@ -33,15 +29,9 @@ import type { ShareVaultRef, ShareableItemType } from "@centraid/vault";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
-import type { BorrowedDeps } from "../serve/lend-audience.js";
-import type { LendScope } from "../serve/lend-grant.js";
-import type { LeaseSigner } from "../serve/lend-lease.js";
-import { searchReachFor } from "../serve/lend-search-reach.js";
-import type { ScopeSearchReach } from "../serve/lend-search-reach.js";
 import { judgeEdgeCrossing } from "../serve/link-crossing.js";
 import type { PeerDial } from "../serve/peer-edge-give-client.js";
 import type { VaultLinksStore } from "../serve/vault-links-store.js";
-import { openLiveEdge } from "./edges-live.js";
 import { reconcileRemoteEdge } from "./edges-reconcile-remote.js";
 import type { EdgeKind, EdgeMode, EdgeRow } from "./edges-reconcile.js";
 import { readEdgeRow, reconcileEdge } from "./edges-reconcile.js";
@@ -58,10 +48,7 @@ interface EdgeInput {
   itemType: ShareableItemType;
   /** Snapshot only: the fixed set of items the edge copies. */
   itemIds: string[];
-  /** Live only: the standing row/column restriction the window is cut to. */
-  scopes: LendScope[];
-  /** Snapshot edges are always 'read'; a live edge may carry 'read+act' (#726 P5). */
-  verbs: "read" | "read+act";
+  verbs: "read";
 }
 
 export interface EdgesRouteDeps {
@@ -79,16 +66,6 @@ export interface EdgesRouteDeps {
    * tests inject the same in-process transport the link ceremony tests do).
    */
   peerDial?: PeerDial;
-  /**
-   * `VaultRegistry.signAsVault` (#726 P4). A live edge's lease is signed by
-   * the ORIGIN VAULT's own identity key; a build without a signer can create
-   * snapshot edges but never lends — refused as a capability, typed.
-   */
-  signAsVault?: LeaseSigner;
-  /** The borrowed slots, for a CO-HOSTED live edge whose audience is here. */
-  borrowed?: BorrowedDeps;
-  /** Base64 identity key of a local vault (P1). */
-  vaultPublicKey?: (vaultId: string) => string | undefined;
 }
 
 export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
@@ -126,16 +103,6 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    // Lending needs a vault signature for the lease (#726 P4 D8). A build
-    // wired without a signer refuses as a CAPABILITY, before any ownership
-    // check — never by silently opening an unsigned window.
-    if (input.mode === "live" && !deps.signAsVault) {
-      return sendJson(res, 400, {
-        error: "lending_unavailable",
-        message: "this gateway cannot sign a lease for a live edge",
-      });
-    }
-
     // The ACTING owner must own the origin outright — an edge only ever
     // leaves a vault you own. That is a fact about the caller, not about the
     // pair, so it stays here; whether the PAIR may be crossed at all is the
@@ -184,25 +151,7 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
       });
     }
     try {
-      if (input.mode === "live") {
-        row = await openLiveEdge({
-          db: deps.gatewayDatabase,
-          row,
-          origin,
-          audienceLabel:
-            deps.links.peerForVault(input.audienceVaultId)?.peerLabel ??
-            input.audienceVaultId,
-          scopes: input.scopes,
-          verbs: input.verbs,
-          signAsVault: deps.signAsVault!,
-          ...(route ? { route } : {}),
-          ...(deps.peerDial ? { peerDial: deps.peerDial } : {}),
-          ...(deps.borrowed ? { borrowed: deps.borrowed } : {}),
-          ...(deps.vaultPublicKey
-            ? { vaultPublicKey: deps.vaultPublicKey }
-            : {}),
-        });
-      } else if (route) {
+      if (route) {
         if (!deps.peerDial)
           throw new Error("this gateway cannot dial out to a peer");
         row = await reconcileRemoteEdge(
@@ -229,16 +178,7 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
       return sendJson(
         res,
         200,
-        edgeWire(
-          row,
-          receiptFor(deps.gatewayDatabase, row.edge_id),
-          // Visible at MASK-SELECTION time (#726 P4 D10) — the same response
-          // that establishes the edge already names which of its own scopes
-          // will refuse a full search, before anyone has run one.
-          input.mode === "live"
-            ? searchReachFor(origin.vault, input.scopes)
-            : undefined
-        )
+        edgeWire(row, receiptFor(deps.gatewayDatabase, row.edge_id))
       );
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -269,9 +209,7 @@ function insertOrRead(
   const now = new Date().toISOString();
   // One column, two meanings by mode: the fixed item set a snapshot copies, or
   // the standing declaration a window is cut to.
-  const scopeJson = JSON.stringify(
-    input.mode === "live" ? input.scopes : input.itemIds
-  );
+  const scopeJson = JSON.stringify(input.itemIds);
   db.run(
     `INSERT INTO share_edges
        (edge_id, created_by_device, owner_id, kind, mode, item_type,
@@ -310,21 +248,14 @@ function insertOrRead(
 
 function edgeWire(
   row: EdgeRow,
-  accessReceiptId?: string,
-  searchReach?: ScopeSearchReach[]
+  accessReceiptId?: string
 ): Record<string, unknown> {
   return {
     edgeId: row.edge_id,
     kind: row.kind,
     mode: row.mode,
     itemType: row.item_type,
-    ...(row.mode === "live"
-      ? { scopes: JSON.parse(row.scope_json ?? "[]") }
-      : { itemIds: JSON.parse(row.scope_json ?? "[]") }),
-    // #726 P4 item 7 (D10): present only for a live edge whose reach was
-    // computable — a scope with `masksSearchableColumns: true` will REFUSE a
-    // search over its excluded columns rather than silently under-searching.
-    ...(searchReach && searchReach.length > 0 ? { searchReach } : {}),
+    itemIds: JSON.parse(row.scope_json ?? "[]"),
     originVaultId: row.origin_vault_id,
     audienceVaultId: row.audience_vault_id,
     verbs: row.verbs,
@@ -355,8 +286,10 @@ function parseInput(body: Record<string, unknown>): EdgeInput {
     return value;
   };
   const mode = string("mode");
-  if (mode !== "snapshot" && mode !== "live")
-    throw new Error("mode must be snapshot or live");
+  if (mode !== "snapshot")
+    throw new Error(
+      "mode must be snapshot; live lending was removed in issue #731"
+    );
   const kind = string("kind");
   if (kind !== "add" && kind !== "move")
     throw new Error("kind must be add or move");
@@ -368,27 +301,7 @@ function parseInput(body: Record<string, unknown>): EdgeInput {
   if (originVaultId === audienceVaultId)
     throw new Error("origin and audience vaults must differ");
   const verbs = string("verbs");
-  if (verbs !== "read" && verbs !== "read+act")
-    throw new Error("verbs must be read or read+act");
-  // A live edge has no fixed item set — its contents are whatever its scope
-  // covers at read time — so the two modes take DIFFERENT inputs and neither
-  // accepts the other's.
-  if (mode === "live") {
-    if (kind !== "add") throw new Error("a live edge cannot be a move");
-    return {
-      edgeId: string("edgeId"),
-      originVaultId,
-      audienceVaultId,
-      mode,
-      kind,
-      itemType,
-      itemIds: [],
-      scopes: parseScopes(body.scopes),
-      verbs,
-    };
-  }
-  // A snapshot copies bytes once; there is nothing left to act on afterward.
-  if (verbs !== "read") throw new Error("a snapshot edge's verbs must be read");
+  if (verbs !== "read") throw new Error("verbs must be read");
   const rawItemIds = body.itemIds;
   if (!Array.isArray(rawItemIds) || rawItemIds.length === 0)
     throw new Error("itemIds must be a non-empty array");
@@ -407,46 +320,8 @@ function parseInput(body: Record<string, unknown>): EdgeInput {
     kind,
     itemType,
     itemIds,
-    scopes: [],
-    verbs,
+    verbs: "read",
   };
-}
-
-/**
- * The lend scope declaration. Deliberately the SAME shape
- * `consent_grant_scope` stores — a row filter and a field mask over a
- * schema/table — because the grant this becomes is an ordinary consent grant
- * and a translation layer would be a second vocabulary to keep honest.
- */
-function parseScopes(raw: unknown): LendScope[] {
-  if (!Array.isArray(raw) || raw.length === 0)
-    throw new Error("a live edge needs a non-empty scopes array");
-  return raw.map((entry, index) => {
-    if (entry === null || typeof entry !== "object")
-      throw new Error(`scopes[${index}] must be an object`);
-    const scope = entry as Record<string, unknown>;
-    if (typeof scope.schema !== "string" || scope.schema.length === 0)
-      throw new Error(`scopes[${index}].schema must be a non-empty string`);
-    if (scope.table !== undefined && typeof scope.table !== "string")
-      throw new Error(`scopes[${index}].table must be a string`);
-    if (scope.rowFilter !== undefined && !Array.isArray(scope.rowFilter))
-      throw new Error(`scopes[${index}].rowFilter must be an array`);
-    if (
-      scope.fieldMask !== undefined &&
-      (!Array.isArray(scope.fieldMask) ||
-        scope.fieldMask.some((column) => typeof column !== "string"))
-    ) {
-      throw new Error(`scopes[${index}].fieldMask must be a string array`);
-    }
-    return {
-      schema: scope.schema,
-      ...(typeof scope.table === "string" ? { table: scope.table } : {}),
-      ...(scope.rowFilter
-        ? { rowFilter: scope.rowFilter as LendScope["rowFilter"] }
-        : {}),
-      ...(scope.fieldMask ? { fieldMask: scope.fieldMask as string[] } : {}),
-    };
-  });
 }
 
 /** First-occurrence order preserved — `scope_json` is a SET, not a log. */

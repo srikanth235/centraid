@@ -1,0 +1,37 @@
+{
+  "name": "Photo OCR",
+  "version": "0.1.0",
+  "description": "Extracts searchable reading-order text from new photographs in bounded batches.",
+  "enabled": false,
+  "prompt": "When photographs arrive, extract visible text from preview derivatives in bounded batches. Preserve absent confidence and never send originals.",
+  "triggers": [
+    {
+      "kind": "data",
+      "entities": ["media.media_asset"],
+      "every": "*/5 * * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads photograph previews and derivation stamps, then writes validated searchable text.",
+    "scopes": [
+      { "schema": "media", "verbs": "read" },
+      { "schema": "core", "verbs": "read+act" },
+      { "schema": "enrich", "verbs": "read" }
+    ]
+  },
+  "enrich": {
+    "domain": "photos",
+    "capability": "ocr",
+    "lane": "gateway",
+    "agentVariant": {
+      "selected": "deterministic",
+      "promptRev": "ocr-v1",
+      "latency": "Specialist OCR usually takes tens of milliseconds; an agent takes seconds.",
+      "consequence": "Changing variant re-derives eligible photographs; agent runs are billed."
+    }
+  },
+  "history": { "keep": { "count": 100 } },
+  "generated": { "by": "centraid-template", "at": "2026-08-10T00:00:00.000Z" }
+}

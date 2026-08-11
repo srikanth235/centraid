@@ -43,6 +43,8 @@ const api = vi.hoisted(() => ({
   deleteAutomation: vi.fn<typeof TypeImport_1gl5zx7.deleteAutomation>(),
   getBlocking: vi.fn<typeof TypeImport_1gl5zx7.getBlocking>(),
   getUserPrefs: vi.fn<typeof TypeImport_1gl5zx7.getUserPrefs>(),
+  invokeAutomationAndAwait:
+    vi.fn<typeof TypeImport_1gl5zx7.invokeAutomationAndAwait>(),
   listAgents: vi.fn<typeof TypeImport_1gl5zx7.listAgents>(),
   listOutboxGrants: vi.fn<typeof TypeImport_1gl5zx7.listOutboxGrants>(),
   listTemplates: vi.fn<typeof TypeImport_1gl5zx7.listTemplates>(),
@@ -50,7 +52,6 @@ const api = vi.hoisted(() => ({
   readAutomationSource: vi.fn<typeof TypeImport_1gl5zx7.readAutomationSource>(),
   rotateAutomationWebhookSecret:
     vi.fn<typeof TypeImport_1gl5zx7.rotateAutomationWebhookSecret>(),
-  runAutomationNow: vi.fn<typeof TypeImport_1gl5zx7.runAutomationNow>(),
   searchVaultAnchors: vi.fn<typeof TypeImport_1gl5zx7.searchVaultAnchors>(),
   searchVaultEntities: vi.fn<typeof TypeImport_1gl5zx7.searchVaultEntities>(),
   setAutomationEnabled: vi.fn<typeof TypeImport_1gl5zx7.setAutomationEnabled>(),
@@ -209,7 +210,10 @@ describe("AutomationEditorRoute", () => {
         url: "https://gateway.test/hook-1",
       },
     });
-    api.runAutomationNow.mockReset().mockResolvedValue({ turnId: "turn-1" });
+    api.invokeAutomationAndAwait.mockReset().mockResolvedValue({
+      turnId: "turn-1",
+      result: { turnId: "turn-1", outcome: { ok: true } },
+    });
     api.searchVaultAnchors.mockReset().mockResolvedValue([
       {
         type: "core.link_anchor",

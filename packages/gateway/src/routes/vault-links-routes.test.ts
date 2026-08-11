@@ -54,6 +54,10 @@ describe("vault-links-routes", () => {
       // the registry that mints them.
       vaultPublicKey: (vaultId) =>
         vaultId.startsWith("vault-") ? `key-${vaultId}` : undefined,
+      ownerPartyFor: (vaultId) =>
+        vaultId.startsWith("vault-")
+          ? `party-${vaultId.slice("vault-".length)}`
+          : undefined,
       ...(options.vaultNames
         ? { vaultName: (vaultId: string) => options.vaultNames![vaultId] }
         : {}),
@@ -87,9 +91,19 @@ describe("vault-links-routes", () => {
     });
     expect(proposed.status).toBe(201);
     const proposedBody = (await proposed.json()) as {
-      link: { linkId: string; approved: boolean };
+      link: {
+        linkId: string;
+        approved: boolean;
+        partyIdA: string | null;
+        partyIdB: string | null;
+      };
     };
     expect(proposedBody.link.approved).toBe(false);
+    expect(
+      [proposedBody.link.partyIdA, proposedBody.link.partyIdB].toSorted(
+        (a, b) => (a ?? "").localeCompare(b ?? "")
+      )
+    ).toStrictEqual(["party-daughter", "party-father"]);
 
     // Father already sees it as proposed.
     const fatherList = await fetch(base, {
@@ -266,92 +280,5 @@ describe("vault-links-routes", () => {
     };
     expect(body.link.labelA).toBeNull();
     expect(body.link.labelB).toBeNull();
-  });
-
-  test("borrow-budget: defaults to the generous constant, then a custom value round-trips (#726 P6 gap 2)", async () => {
-    const { base } = await setup();
-    const proposed = await fetch(base, {
-      method: "POST",
-      headers: {
-        [AUTHED_DEVICE_HEADER]: "father-phone",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        vaultId: "vault-father",
-        otherVaultId: "vault-daughter",
-      }),
-    });
-    const { link } = (await proposed.json()) as { link: { linkId: string } };
-
-    const budgetPath = `${base}/${link.linkId}/borrow-budget`;
-    const initial = await fetch(budgetPath, {
-      headers: { [AUTHED_DEVICE_HEADER]: "daughter-phone" },
-    });
-    expect(initial.status).toBe(200);
-    await expect(initial.json()).resolves.toMatchObject({
-      linkId: link.linkId,
-      vaultId: "vault-daughter",
-      isDefault: true,
-      budgetBytes: 20 * 1024 * 1024 * 1024,
-    });
-
-    const set = await fetch(budgetPath, {
-      method: "PUT",
-      headers: {
-        [AUTHED_DEVICE_HEADER]: "daughter-phone",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ budgetBytes: 5_000_000 }),
-    });
-    expect(set.status).toBe(200);
-    await expect(set.json()).resolves.toMatchObject({
-      budgetBytes: 5_000_000,
-      isDefault: false,
-    });
-
-    const reread = await fetch(budgetPath, {
-      headers: { [AUTHED_DEVICE_HEADER]: "daughter-phone" },
-    });
-    await expect(reread.json()).resolves.toMatchObject({
-      budgetBytes: 5_000_000,
-      isDefault: false,
-    });
-
-    // Never the peer's — the father's own row is untouched and still default.
-    const fathersOwn = await fetch(budgetPath, {
-      headers: { [AUTHED_DEVICE_HEADER]: "father-phone" },
-    });
-    await expect(fathersOwn.json()).resolves.toMatchObject({
-      vaultId: "vault-father",
-      isDefault: true,
-    });
-  });
-
-  test("a negative or fractional borrow budget is refused typed", async () => {
-    const { base } = await setup();
-    const proposed = await fetch(base, {
-      method: "POST",
-      headers: {
-        [AUTHED_DEVICE_HEADER]: "father-phone",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        vaultId: "vault-father",
-        otherVaultId: "vault-daughter",
-      }),
-    });
-    const { link } = (await proposed.json()) as { link: { linkId: string } };
-    const response = await fetch(`${base}/${link.linkId}/borrow-budget`, {
-      method: "PUT",
-      headers: {
-        [AUTHED_DEVICE_HEADER]: "father-phone",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ budgetBytes: -1 }),
-    });
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({
-      error: "invalid_budget_bytes",
-    });
   });
 });

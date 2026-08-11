@@ -115,6 +115,8 @@ export interface RunAutomationOptions {
   onLog?: (level: "info" | "warn" | "error", msg: string) => void;
   /** Live run-stream sink (issue #158); forwarded to the fire spine. */
   onRunEvent?: (ev: AutomationTurnStreamEvent) => void;
+  /** Host-owned detached queue for another bounded pass over remaining work. */
+  rearm?: automation.RunFireOptions["rearm"];
   /**
    * Trigger that caused this fire. Defaults to `'scheduled'`. The onFailure
    * dispatch loop uses `'on_failure'`.
@@ -281,6 +283,7 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         ...(configPins ? { configPins } : {}),
         allowManifestProviderPins: isPrimary,
         ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
+        ...(opts.rearm ? { rearm: opts.rearm } : {}),
         ...(opts.triggerKind ? { triggerKind: opts.triggerKind } : {}),
         ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
         // The caller's trigger-gap/cursor note stays on every rung; a failover

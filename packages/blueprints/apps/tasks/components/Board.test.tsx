@@ -68,11 +68,11 @@ describe("Board's per-scope reach panel", () => {
   it("names an unreached scope BESIDE the own scope's rows — never a swap for them", () => {
     const reach: ScopeSearchReach[] = [
       { scope: "own", state: "reached" },
-      { scope: "lent-by-priya", state: "unreached", detail: "peer offline" },
+      { scope: "commons-priya", state: "unreached", detail: "peer offline" },
     ];
     const html = render(reach);
     expect(html).toContain("Not every scope answered");
-    expect(html).toContain("lent-by-priya");
+    expect(html).toContain("commons-priya");
     expect(html).toContain("peer offline");
     // The reached scope's tasks are still on screen — the point of a NAMED
     // gap is that it sits beside good results, never in place of them.
@@ -83,13 +83,13 @@ describe("Board's per-scope reach panel", () => {
     const reach: ScopeSearchReach[] = [
       { scope: "own", state: "reached" },
       {
-        scope: "borrowed-narrow",
+        scope: "commons-read-only",
         state: "refused",
         detail: "search excludes a masked column",
       },
     ];
     const html = render(reach);
-    expect(html).toContain("borrowed-narrow");
+    expect(html).toContain("commons-read-only");
     expect(html).toContain("search excludes a masked column");
   });
 });

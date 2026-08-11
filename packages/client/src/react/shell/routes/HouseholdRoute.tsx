@@ -2,23 +2,22 @@ import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import {
+  answerCommonsInvitation,
+  claimCommonsInvitation,
   answerPendingEdge,
   approveGatewayLink,
-  closeGatewayEdge,
   createGatewayDeviceTicket,
-  getBorrowBudget,
   getGatewayDeviceWorkStatus,
   getReceiveSetting,
-  listBorrowedScopes,
   listGatewayDevices,
   listGatewayEdges,
   listGatewayLinks,
   listGatewayOwners,
+  listCommonsInvitations,
   listPendingEdges,
   proposeGatewayLink,
   renameGatewayDevice,
   revokeGatewayDevice,
-  setBorrowBudget,
   setGatewayDeviceCompute,
   setReceiveSetting,
 } from "../../../gateway-client.js";
@@ -48,6 +47,7 @@ export default function HouseholdRoute(): JSX.Element {
   // Household is describing, so there is no gateway to pick first any more.
   const [newVaultOpen, setNewVaultOpen] = useState(false);
   const canCreateVault = typeof window.CentraidApi.createVault === "function";
+  const ownVaultIds = scopes.scopes.map((scope) => scope.id);
 
   // 1s ticker for the devices card's humanized ages, suspended while the tab is
   // hidden (issue #528 Phase D wakeup hygiene) — same discipline as Gateway.
@@ -99,8 +99,7 @@ export default function HouseholdRoute(): JSX.Element {
         loadDeviceWorkStatus={getGatewayDeviceWorkStatus}
         sharing={{
           now,
-          ownVaultIds: scopes.scopes.map((scope) => scope.id),
-          loadBorrowed: listBorrowedScopes,
+          ownVaultIds,
           loadLinks: listGatewayLinks,
           onProposeLink: proposeGatewayLink,
           onApproveLink: approveGatewayLink,
@@ -109,13 +108,9 @@ export default function HouseholdRoute(): JSX.Element {
           loadEdges: listGatewayEdges,
           loadPending: listPendingEdges,
           onAnswerPending: answerPendingEdge,
-          // The owner-facing revoke route (#726 P6 gap 1) — one door, the
-          // gateway disambiguates the origin ("Stop lending") from the
-          // audience ("Stop borrowing") by which side's row the caller owns.
-          onStopLending: closeGatewayEdge,
-          onStopBorrowing: closeGatewayEdge,
-          loadBorrowBudget: getBorrowBudget,
-          onSetBorrowBudget: setBorrowBudget,
+          loadCommonsInvitations: listCommonsInvitations,
+          onClaimCommonsInvitation: claimCommonsInvitation,
+          onAnswerCommonsInvitation: answerCommonsInvitation,
         }}
       />
     </PageScroll>

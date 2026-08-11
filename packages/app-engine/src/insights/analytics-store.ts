@@ -35,6 +35,15 @@ import type { DatabaseProvider } from "../stores/gateway-db.js";
 export interface ListSummariesOptions {
   /** Scope to one automation handle. */
   readonly automationRef?: string;
+  /**
+   * Drop rows whose `automation_ref` is one of these handles — applied in
+   * SQL, before `LIMIT`, so a flood of runs on an excluded handle can never
+   * crowd everything else out of the window (issue #731 M2: a 500-photo
+   * import filled the whole `turns` window with recognition runs and left
+   * the member's own "Recent activity" empty). Ignored when `automationRef`
+   * is also set (a single-ref scope has nothing left to exclude).
+   */
+  readonly excludeAutomationRefs?: readonly string[];
   readonly limit?: number;
 }
 
@@ -131,6 +140,13 @@ export class AnalyticsStore {
   private readonly provider: DatabaseProvider;
   private db: DatabaseSync | undefined;
   private stmts: PreparedStatements | undefined;
+  /**
+   * `NOT IN (...)` statements are keyed by placeholder count and rebuilt
+   * whenever the db handle changes (vault switch) — the exclude list's
+   * length is small and fixed in practice (the recognition template set),
+   * so this stays a handful of entries.
+   */
+  private excludeStmts = new Map<number, StatementSync>();
 
   constructor(provider: DatabaseProvider) {
     this.provider = provider;
@@ -150,7 +166,22 @@ export class AnalyticsStore {
       `),
     };
     this.db = db;
+    this.excludeStmts = new Map();
     return this.stmts;
+  }
+
+  /** `SELECT * FROM run_summary WHERE automation_ref NOT IN (...)`, prepared once per exclude-list length and reused across calls. */
+  private listExcluding(refs: readonly string[]): StatementSync {
+    const cached = this.excludeStmts.get(refs.length);
+    if (cached) return cached;
+    const placeholders = refs.map(() => "?").join(", ");
+    const stmt = (this.db as DatabaseSync).prepare(`
+      SELECT * FROM run_summary
+      WHERE automation_ref IS NULL OR automation_ref NOT IN (${placeholders})
+      ORDER BY started_at DESC LIMIT ?
+    `);
+    this.excludeStmts.set(refs.length, stmt);
+    return stmt;
   }
 
   /** One run's summary by id, or `undefined`. */
@@ -160,13 +191,18 @@ export class AnalyticsStore {
     return raw ? fromRaw(raw) : undefined;
   }
 
-  /** Run summaries newest-first; optionally scoped to one automation. */
+  /** Run summaries newest-first; optionally scoped to one automation, or with a set of automation handles excluded (both applied in SQL, before `LIMIT`). */
   listSummaries(opts: ListSummariesOptions = {}): RunSummary[] {
     const { listAll, listByRef } = this.ensureReady();
     const limit = opts.limit ?? 100;
     const rows =
       opts.automationRef === undefined
-        ? (listAll.all(limit) as unknown as RawSummary[])
+        ? opts.excludeAutomationRefs && opts.excludeAutomationRefs.length > 0
+          ? (this.listExcluding(opts.excludeAutomationRefs).all(
+              ...opts.excludeAutomationRefs,
+              limit
+            ) as unknown as RawSummary[])
+          : (listAll.all(limit) as unknown as RawSummary[])
         : (listByRef.all(opts.automationRef, limit) as unknown as RawSummary[]);
     return rows.map(fromRaw);
   }

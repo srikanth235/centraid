@@ -92,6 +92,18 @@ export const POLY_REF_REGISTRY: readonly PolyRefEntry[] = [
     note: "Share-by-placement provenance (issue #599 decision 11): the record of where a PROJECTED row came from. Once that row is purged out of the audience vault there is nothing left to attribute, exactly like a tag — and a stale record would keep an audience badge claiming a shared item that no longer exists.",
   },
   {
+    table: "share_commons_lineage",
+    pairs: [{ typeCol: "item_type", idCol: "item_id" }],
+    policy: "delete",
+    note: "Commons projection lineage names a resident row. Once the row is purged there is nothing left for revoke to scrub, and retaining the marker could make a later row that reuses the id look shared.",
+  },
+  {
+    table: "share_commons_retained",
+    pairs: [{ typeCol: "item_type", idCol: "item_id" }],
+    policy: "delete",
+    note: "Save-to-my-vault retention protects the current resident row from a later Commons revoke. If the owner purges that row, its marker must leave too so an id reused by a future row cannot inherit retention.",
+  },
+  {
     table: "core_attachment",
     pairs: [{ typeCol: "target_type", idCol: "target_id" }],
     policy: "delete",
@@ -155,6 +167,14 @@ export const POLY_REF_REGISTRY: readonly PolyRefEntry[] = [
  * either the canonical shape would land in the scan and be forced to a decision.
  */
 export const POLY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
+  [
+    "share_circle_grant",
+    "The container pair is durable Commons control truth, not an independently swept live pointer. Active root deletion is structurally refused by the actable registry; after revocation, the grant and its receipts intentionally survive container removal for restore/reconciliation and audit.",
+  ],
+  [
+    "share_commons_invitation",
+    "Consent metadata may name a container that is not present in the receiving vault before acceptance, and it remains the historical accept/refuse record after unshare. The Commons invitation lifecycle, not target-row purge, owns its status and retention.",
+  ],
   [
     "core_entity_revision",
     "Append-only P5 lifecycle history (issue #630). entity_type/entity_id names the row whose pre-mutation snapshot is retained for undo, audit, and export; it must survive soft delete and eventual purge rather than being treated as a live dangling pointer.",

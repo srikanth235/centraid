@@ -97,11 +97,11 @@ describe("Photos search fan-out — per-scope reach (#726 D10/D11)", () => {
     delete (globalThis as { window?: unknown }).window;
   });
 
-  it("keeps the OWN scope's results and stays `ready` when a borrowed scope is unreachable — names it in reachFacts instead of blanking the answer", async () => {
+  it("keeps the OWN scope's results and stays `ready` when a shared scope is unreachable — names it in reachFacts instead of blanking the answer", async () => {
     mount(
       [
         { id: "own", label: "Library", canWrite: true },
-        { id: "lent", label: "Priya", canWrite: false },
+        { id: "commons", label: "Priya", canWrite: false },
       ],
       () =>
         Promise.resolve([
@@ -110,25 +110,25 @@ describe("Photos search fan-out — per-scope reach (#726 D10/D11)", () => {
             ok: true,
             data: { assets: [asset("a1", "2020-01-01")] },
           },
-          { scope: "lent", ok: false, error: { message: "peer offline" } },
+          { scope: "commons", ok: false, error: { message: "peer offline" } },
         ])
     );
     const { results, status, facts } = await search("beach");
     expect(status).toBe("ready");
     expect(results?.map((a) => a.asset_id)).toStrictEqual(["a1"]);
-    expect(facts).toStrictEqual([{ label: "lent", value: "peer offline" }]);
+    expect(facts).toStrictEqual([{ label: "commons", value: "peer offline" }]);
   });
 
   it("collapses to `unreachable` only when NOTHING reached — the one case with nothing genuine to show", async () => {
     mount(
       [
         { id: "own", label: "Library", canWrite: true },
-        { id: "lent", label: "Priya", canWrite: false },
+        { id: "commons", label: "Priya", canWrite: false },
       ],
       () =>
         Promise.resolve([
           { scope: "own", ok: false, error: { message: "vault offline" } },
-          { scope: "lent", ok: false, error: { message: "peer offline" } },
+          { scope: "commons", ok: false, error: { message: "peer offline" } },
         ])
     );
     const { results, status, facts } = await search("beach");
@@ -143,7 +143,7 @@ describe("Photos search fan-out — per-scope reach (#726 D10/D11)", () => {
     mount(
       [
         { id: "own", label: "Library", canWrite: true },
-        { id: "lent", label: "Priya", canWrite: false },
+        { id: "commons", label: "Priya", canWrite: false },
       ],
       () =>
         Promise.resolve([
@@ -153,7 +153,7 @@ describe("Photos search fan-out — per-scope reach (#726 D10/D11)", () => {
             data: { assets: [asset("a1", "2020-01-01")] },
           },
           {
-            scope: "lent",
+            scope: "commons",
             ok: true,
             data: { assets: [asset("a2", "2020-02-02")] },
           },

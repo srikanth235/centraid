@@ -129,9 +129,13 @@
       ],
       "project": ["src/**/*.{ts,tsx}", "scripts/*.{js,mjs}"]
     },
-    "tools/enrichment-service": {
-      "entry": ["src/server.ts", "setup.ts"],
-      "project": ["src/**/*.ts"],
+    "tools/recognition-automations": {
+      "entry": [
+        "setup.ts",
+        "build-automation-handlers.ts",
+        "automation-handlers/*.js"
+      ],
+      "project": ["src/**/*.ts", "automation-handlers/*.js"],
       "ignoreDependencies": ["onnxruntime-node"]
     }
   }

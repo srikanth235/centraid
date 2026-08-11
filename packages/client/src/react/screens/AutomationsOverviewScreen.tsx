@@ -410,15 +410,19 @@ export default function AutomationsOverviewScreen({
   }
 
   const { rows, runs, health } = state;
+  const memberRows = rows.filter((row) => row.systemLane === undefined);
+  const recognitionRows = rows.filter(
+    (row) => row.systemLane === "recognition"
+  );
   const activeCount = health.active;
   const pausedCount = health.paused;
   const draftCount = health.drafts;
-  const attentionCount = rows.filter(
+  const attentionCount = memberRows.filter(
     (r) => r.attentionCount > 0 || r.lastRunOk === false
   ).length;
 
   const subtitle =
-    rows.length === 0
+    memberRows.length === 0
       ? "Run on a schedule or when your data changes."
       : [
           `${activeCount} active`,
@@ -434,7 +438,7 @@ export default function AutomationsOverviewScreen({
           .join(" · ");
 
   const q = filter.trim().toLowerCase();
-  const sortedRows = sortOverviewRows(rows);
+  const sortedRows = sortOverviewRows(memberRows);
   const visibleRows = q
     ? sortedRows.filter(
         (r) =>
@@ -444,9 +448,15 @@ export default function AutomationsOverviewScreen({
       )
     : sortedRows;
 
-  const recentRuns = runs.slice(0, RECENT_CAP);
+  const recentRuns = runs
+    .filter((run) => run.systemLane === undefined)
+    .slice(0, RECENT_CAP);
+  const recognitionRuns = runs
+    .filter((run) => run.systemLane === "recognition")
+    .slice(0, RECENT_CAP);
   const runGroups = groupRuns(recentRuns);
-  const isEmpty = rows.length === 0;
+  const recognitionRunGroups = groupRuns(recognitionRuns);
+  const isEmpty = memberRows.length === 0;
 
   return (
     <div className={styles.page} data-testid="automations-overview">
@@ -476,8 +486,8 @@ export default function AutomationsOverviewScreen({
           <section className={styles.section}>
             <div className={styles.sectionHead}>
               <span className={styles.sectionLabel}>Your automations</span>
-              <span className={styles.sectionCount}>{rows.length}</span>
-              {rows.length >= 4 ? (
+              <span className={styles.sectionCount}>{memberRows.length}</span>
+              {memberRows.length >= 4 ? (
                 <label className={styles.filterWrap}>
                   <Icon name="Search" size={13} />
                   <input
@@ -546,6 +556,50 @@ export default function AutomationsOverviewScreen({
           </section>
         </>
       )}
+
+      {recognitionRows.length > 0 ? (
+        <details className={styles.systemSection}>
+          <summary className={styles.systemSummary}>
+            <span className={styles.sectionLabel}>Recognition</span>
+            <span className={styles.sectionCount}>
+              {recognitionRows.length}
+            </span>
+            <span className={styles.systemHint}>Built-in recipes</span>
+          </summary>
+          <div
+            className={cx(gridCss.appsGrid, gridCss.appsGridSmall)}
+            data-testid="recognition-grid"
+          >
+            {sortOverviewRows(recognitionRows).map((row) => (
+              <AutoTile key={row.ref} row={row} onOpen={onOpenAutomation} />
+            ))}
+          </div>
+        </details>
+      ) : null}
+
+      {recognitionRuns.length > 0 ? (
+        <details className={styles.systemSection}>
+          <summary className={styles.systemSummary}>
+            <span className={styles.sectionLabel}>Recognition history</span>
+            <span className={styles.sectionCount}>
+              {recognitionRuns.length}
+            </span>
+            <span className={styles.systemHint}>System activity</span>
+          </summary>
+          <div className={styles.activity}>
+            {recognitionRunGroups.map((group) => (
+              <div key={group.label} className={styles.activityGroup}>
+                <span className={styles.activityGroupLabel}>{group.label}</span>
+                <div className={styles.activityList}>
+                  {group.runs.map((run) => (
+                    <ActivityRow key={run.runId} run={run} onOpen={onOpenRun} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }

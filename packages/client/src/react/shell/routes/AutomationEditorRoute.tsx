@@ -8,12 +8,12 @@ import {
   createAutomation,
   deleteAutomation,
   getBlocking,
+  invokeAutomationAndAwait,
   listAgents,
   listTemplates,
   listOutboxGrants,
   readAutomationSource,
   rotateAutomationWebhookSecret,
-  runAutomationNow,
   setAutomationEnabled,
   getUserPrefs,
   listVaultEntityTypes,
@@ -379,7 +379,9 @@ export default function AutomationEditorRoute({
             // same rail as the compile that produced the plan. Navigating to
             // the run viewer is an explicit "Full trace" click, not a side
             // effect of pressing Test.
-            const { turnId } = await runAutomationNow({ automationId: ref });
+            const { turnId } = await invokeAutomationAndAwait({
+              automationId: ref,
+            });
             return turnId;
           } catch (error) {
             showToast(

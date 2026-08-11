@@ -18,6 +18,8 @@
       { "schema": "core", "table": "concept_scheme", "verbs": "read" },
       { "schema": "core", "table": "collection", "verbs": "read" },
       { "schema": "core", "table": "collection_entry", "verbs": "read" },
+      { "schema": "social", "table": "circle", "verbs": "read" },
+      { "schema": "social", "table": "circle_member", "verbs": "read" },
       { "schema": "media", "table": "add_asset", "verbs": "act" },
       { "schema": "media", "table": "update_asset", "verbs": "act" },
       { "schema": "media", "table": "delete_asset", "verbs": "act" },

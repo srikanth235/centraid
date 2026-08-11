@@ -47,6 +47,23 @@ The offline replica extends the additive wire contract with fields that are safe
 
 The browser outbox migration is additive: it never drops the pending-intent store. Settling an intent atomically records its sanitized outcome and removes the queued input, so conflict details survive a reload without retaining the original payload.
 
+### Commons stream and cursor contract (#731)
+
+Commons does not add a second device replica dialect. A device still holds one ordinary physical replica cursor for each vault, and that cursor covers all rows in the vault even when they came from several circle grants. The commons plane additionally persists a logical applied offset keyed by `(grant_id, member_vault_id)`. That offset is not a transport credential and does not authorize a row; it only says which monotonic operation sequence that member vault has applied.
+
+Each grant has its own steward-serialized sequence. Commands and control changes (`member_added`, `member_removed`, `capability_changed`, `grant_revoked`, `delete`, and `steward_transferred`) share the same ordering. Therefore one vault participating in several groups has one physical replica cursor plus one logical offset per grant; there is no vault-global order between unrelated groups and no cursor that coordinates their writes. Writers coordinate only through the relevant grant's steward.
+
+Deterministic apply rules:
+
+- apply only the next sequence after the member's current logical offset; duplicates at or below the offset are no-ops;
+- a gap does not skip forward — fetch the missing tail or re-bootstrap;
+- bootstrap is the latest complete closure checkpoint at sequence N followed by operations greater than N, never a from-zero replay;
+- an operation outcome and its signature/attribution fields are immutable for that `(grant, sequence)`;
+- the domain mutation and cursor advance settle atomically at the member vault;
+- derivative rows are absent from the closure and stream, so each member's local recognition pipeline remains authoritative.
+
+Commons is pre-release (v0) and carries **no** wire compatibility surface: there is exactly one frame and command shape, every chain, digest, signature, and offset field is required, and a peer presenting anything else is a hard fault that parks the grant's sync with a named state. No optional-when-absent parsing, no version negotiation, no legacy-generation migration — a replica in an older shape is re-bootstrapped, not migrated. An implementation that cannot enforce the commons command/signature contract must present the single update wall; it must not fall back to snapshot sharing or an unsigned write path.
+
 ### Pair-ticket multi-vault redemption
 
 A pair ticket is one-time onboarding envelope, not a gateway-wide grant. Its server-side invitation contains an ordered list of vault ids the owner already owns — no `role` field; access is ownership, not a grant per vault (#726 P0). Redemption creates the corresponding vault-scoped enrollments in one transaction and returns the first vault as the initial active vault. Newer responses additionally carry `vaultIds` and `vaults[]` with per-vault enrollment metadata; readers must default an absent list to the primary vault.

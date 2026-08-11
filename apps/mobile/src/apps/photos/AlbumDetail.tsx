@@ -25,6 +25,10 @@ import ShareSheet from "../../kit/share/ShareSheet";
 import { useTheme } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import { optimisticValues } from "../../lib/replica/optimistic";
+import {
+  listCommonsResidents,
+  retainCommonsItem,
+} from "../../lib/replica/placement-transport";
 import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
 import { makeStyles } from "./AlbumDetail.styles";
@@ -43,13 +47,6 @@ import { useCopyToVault } from "./use-copy-to-vault";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 const KEEP_ORIGINALS_KEY = "photos.keepOriginalAlbums";
-
-// Mirrors `photosScopeDeclaration.mintedIdFamilies[0]`
-// (packages/blueprints/apps/photos/scope-declaration.ts) — not imported
-// directly: that module chains into `_shared/scope-kit.ts`, which assumes a
-// browser ESM host (`.ts`-extension relative imports, an ambient
-// `window.centraid`) that mobile's TypeScript program does not provide.
-const LEND_MINTED_ID_FAMILIES = ["media.media_asset"];
 
 export default function AlbumDetail({
   route,
@@ -71,7 +68,7 @@ export default function AlbumDetail({
   );
   const [selection, setSelection] = useState(new Set<string>());
   const [renameOpen, setRenameOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
+  const [residentAlbumId, setResidentAlbumId] = useState<string>();
   const [name, setName] = useState("");
   const [keepOriginals, setKeepOriginals] = useState(false);
   // Which album's "keep originals" pin has finished hydrating. Derived rather
@@ -81,6 +78,48 @@ export default function AlbumDetail({
   const album = collections.rows.find(
     (row) => row.collection_id === route.params.albumId
   );
+  const albumVaultId = String(
+    album?.__centraidScopeId ?? replica.vaultId ?? ""
+  );
+  const commonsAlbum = residentAlbumId === route.params.albumId;
+  useEffect(() => {
+    let active = true;
+    if (!replica.gatewayBase || !albumVaultId) return;
+    void listCommonsResidents(replica.gatewayBase, albumVaultId)
+      .then((items) => {
+        if (active)
+          setResidentAlbumId(
+            items.some(
+              (item) =>
+                item.itemType === "core.collection" &&
+                item.itemId === route.params.albumId
+            )
+              ? route.params.albumId
+              : undefined
+          );
+      })
+      .catch(() => {
+        if (active) setResidentAlbumId(undefined);
+      });
+    return () => {
+      active = false;
+    };
+  }, [albumVaultId, replica.gatewayBase, route.params.albumId]);
+
+  const saveAlbumToMyVault = async (): Promise<void> => {
+    if (!replica.gatewayBase || !albumVaultId || !commonsAlbum) return;
+    try {
+      await retainCommonsItem(replica.gatewayBase, {
+        actorVaultId: albumVaultId,
+        itemType: "core.collection",
+        itemId: route.params.albumId,
+      });
+      setResidentAlbumId(undefined);
+      postStatus("Saved to my vault. This copy survives if the share ends.");
+    } catch (error) {
+      surfaceWriteFailure(error, "Album not saved to your vault");
+    }
+  };
   const ids = new Set(
     entries.rows
       .filter((row) => row.collection_id === route.params.albumId)
@@ -314,9 +353,7 @@ export default function AlbumDetail({
     addToAlbum: canChangeAlbum
       ? { run: () => addToAnotherAlbum() }
       : { unavailableReason: writeBlockedReason! },
-    // Share (issue #726 P6): opens the unified give/lend sheet — the
-    // destination list holds both the member's own other vaults and every
-    // linked person, never a sole-destination shortcut.
+    // Share uses the same ceremony-free commons destination list everywhere.
     share: copyToVault.handler,
     download: { unavailableReason: NO_DOWNLOAD_REASON },
     trash: canChangeAlbum
@@ -415,8 +452,8 @@ export default function AlbumDetail({
             </Pressable>
           </View>
         ) : (
-          // Share, Rename and Delete all WRITE. Each stays visible when the
-          // member may not write — hiding a control answers "why can I not
+          // Rename and Delete both WRITE. Each stays visible when the
+          // member may not write — hiding either answers "why can I not
           // do this?" with silence — and each is disabled, inert, and
           // explained by the one line under this row.
           <View style={styles.actions}>
@@ -446,24 +483,16 @@ export default function AlbumDetail({
                 color={canChangeAlbum ? colors.text : colors.textDisabled}
               />
             </Pressable>
-            <Pressable
-              accessibilityLabel="Share album with household"
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !canChangeAlbum }}
-              accessibilityHint={writeBlockedReason ?? undefined}
-              disabled={!canChangeAlbum}
-              onPress={() => {
-                if (!canChangeAlbum) return;
-                setShareOpen(true);
-              }}
-              style={styles.headerBtn}
-            >
-              <Icon
-                name="users"
-                size={20}
-                color={canChangeAlbum ? colors.text : colors.textDisabled}
-              />
-            </Pressable>
+            {commonsAlbum ? (
+              <Pressable
+                accessibilityLabel="Save to my vault"
+                accessibilityRole="button"
+                onPress={() => void saveAlbumToMyVault()}
+                style={styles.headerBtn}
+              >
+                <Icon name="copy" size={20} color={colors.text} />
+              </Pressable>
+            ) : null}
             <Pressable
               accessibilityLabel="Rename album"
               accessibilityRole="button"
@@ -576,20 +605,6 @@ export default function AlbumDetail({
           </Pressable>
         </View>
       </Modal>
-      <ShareSheet
-        visible={shareOpen}
-        onClose={() => setShareOpen(false)}
-        sourceVaultId={String(
-          album?.__centraidScopeId ?? replica.vaultId ?? ""
-        )}
-        noun="Album"
-        verbs={["give", "lend"]}
-        itemType="core.collection"
-        itemIds={[route.params.albumId]}
-        mintedIdFamilies={LEND_MINTED_ID_FAMILIES}
-        appLabel="Photos"
-        onDone={(outcome) => postStatus(outcome.message)}
-      />
       <ShareSheet
         visible={copyToVault.picking}
         onClose={() => copyToVault.dismiss()}

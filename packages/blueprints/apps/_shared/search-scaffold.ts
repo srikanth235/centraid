@@ -141,13 +141,13 @@ export function deriveSearchStatus(input: {
  *                 edge, timeout) — a STATE, never zero hits.
  *   - 'refused'   the scope answered but named columns it will not search —
  *                 a field mask excluded an indexed column
- *                 (`BorrowedStore.search()`'s `refusedEntities`, D10) — so it
+ *                 (the replica search transport's refused entities, D10) — so it
  *                 REFUSES rather than pretending a narrower index was the
  *                 whole one.
  *
  * A row filter is deliberately NOT a fourth state here: `row_filter_json`
  * compiles into the origin's projection before any row crosses the wire
- * (`lend-origin.ts`), so a filtered-out row was never in the borrowed store
+ * at the source, so a filtered-out row was never in the projected scope
  * to page past in the first place — there is no client-side fact left to
  * report about it. Enforcement lives entirely at the gateway; this scaffold
  * has nothing to add there and nothing to get wrong.
@@ -165,7 +165,7 @@ export interface ScopeSearchReach {
  * (`window.centraid.readAll`'s `InlineScopeRead<T>[]` shape: `{scope, ok,
  * error?}`) plus which scopes are KNOWN to refuse before any query even runs
  * — the mask-selection-time half of D10 (`searchReachFor` on the gateway
- * names these when a live edge is lent; a caller threads that answer through
+ * names these when a mounted scope cannot be reached; a caller threads that answer through
  * to `refusedScopes` here rather than discovering it query by query).
  *
  * `refused` wins over `unreached` for a scope that is BOTH: a scope whose

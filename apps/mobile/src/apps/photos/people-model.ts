@@ -192,7 +192,7 @@ function parseBbox(json: unknown): PeopleCover["bbox"] {
 /**
  * The cover of a set of regions: the EARLIEST region id with a photograph
  * behind it. Region ids sort stably (they are derived from the asset, the
- * model and the box — see `faces-sweep.ts`), so a cover does not shuffle
+ * model and the box — see the `faces` automation), so a cover does not shuffle
  * between loads the way a "newest" or "highest confidence" rule would.
  */
 function coverOf(regions: readonly FaceRegionRow[]): PeopleCover | null {
