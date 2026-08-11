@@ -423,7 +423,7 @@ describe("Tasks restore against a host with no durable surfaces", () => {
       configurable: true,
       // A host that can write but exposes neither durable surface.
       value: {
-        write: vi.fn<NonNullable<typeof window.centraid.write>>(async () => ({
+        write: vi.fn<() => Promise<VaultOutcome>>(async () => ({
           status: "queued",
           invocationId: "i-1",
         })),
