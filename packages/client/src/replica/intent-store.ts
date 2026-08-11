@@ -3,8 +3,16 @@ import type {
   IntentRecordStore,
   NewStoredIntent,
 } from "./intent-record-store.js";
-import { buildIntentOutcome } from "./intent-record-store.js";
-import type { IntentOutcome, IntentState, ReplicaIntent } from "./types.js";
+import {
+  buildIntentAttention,
+  buildIntentOutcome,
+} from "./intent-record-store.js";
+import type {
+  IntentAttentionRecord,
+  IntentOutcome,
+  IntentState,
+  ReplicaIntent,
+} from "./types.js";
 
 export { MemoryIntentStore } from "./memory-intent-store.js";
 export type {
@@ -15,7 +23,8 @@ export type {
 const INTENTS = "intents";
 const META = "meta";
 const OUTCOMES = "outcomes";
-const INTENT_STORE_VERSION = 3;
+const ATTENTION = "attention";
+const INTENT_STORE_VERSION = 4;
 const STATE_CREATED_ORDER = "stateCreatedOrder";
 
 interface IntentMeta {
@@ -53,6 +62,10 @@ export class IndexedDbIntentStore implements IntentRecordStore {
         db.createObjectStore(META, { keyPath: "key" });
       if (!db.objectStoreNames.contains(OUTCOMES))
         db.createObjectStore(OUTCOMES, { keyPath: "intentId" });
+      // v4 (issue #738): the attention journal. Additive like every store
+      // above — a v3 database upgrades in place and keeps its queued intents.
+      if (!db.objectStoreNames.contains(ATTENTION))
+        db.createObjectStore(ATTENTION, { keyPath: "intentId" });
     });
     const db = await requestResult(request);
     return new IndexedDbIntentStore(name, db, factory);
@@ -174,7 +187,10 @@ export class IndexedDbIntentStore implements IntentRecordStore {
     allowed: readonly IntentState[],
     patch: Partial<ReplicaIntent>
   ): Promise<ReplicaIntent> {
-    const tx = this.db.transaction([INTENTS, OUTCOMES], "readwrite");
+    const tx = this.db.transaction(
+      [INTENTS, OUTCOMES, ATTENTION],
+      "readwrite"
+    );
     const store = tx.objectStore(INTENTS);
     const existing = (await requestResult(store.get(intentId))) as
       | ReplicaIntent
@@ -198,8 +214,12 @@ export class IndexedDbIntentStore implements IntentRecordStore {
     const outcome = buildIntentOutcome(settled);
     // Outcome journaling and payload scrubbing share one transaction: a
     // restart can observe either the queued intent or its terminal outcome,
-    // never a silently lost delivery.
+    // never a silently lost delivery. A settlement that did not EXECUTE also
+    // journals an attention record here (issue #738), so the row the member
+    // still has to answer for outlives the intent it came from.
     tx.objectStore(OUTCOMES).put(clone(outcome));
+    const attention = buildIntentAttention(settled, outcome.settledAt);
+    if (attention) tx.objectStore(ATTENTION).put(clone(attention));
     store.delete(intentId);
     await transactionDone(tx);
     return clone(settled);
@@ -221,11 +241,37 @@ export class IndexedDbIntentStore implements IntentRecordStore {
       .map(clone);
   }
 
+  async attention(): Promise<IntentAttentionRecord[]> {
+    const tx = this.db.transaction(ATTENTION, "readonly");
+    const values = (await requestResult(
+      tx.objectStore(ATTENTION).getAll()
+    )) as IntentAttentionRecord[];
+    await transactionDone(tx);
+    return values
+      .sort((left, right) => left.settledAt.localeCompare(right.settledAt))
+      .map(clone);
+  }
+
+  async dismissAttention(intentId: string): Promise<boolean> {
+    const tx = this.db.transaction(ATTENTION, "readwrite");
+    const store = tx.objectStore(ATTENTION);
+    const existing = (await requestResult(store.get(intentId))) as
+      | IntentAttentionRecord
+      | undefined;
+    if (existing) store.delete(intentId);
+    await transactionDone(tx);
+    return existing !== undefined;
+  }
+
   async clear(): Promise<void> {
-    const tx = this.db.transaction([INTENTS, META, OUTCOMES], "readwrite");
+    const tx = this.db.transaction(
+      [INTENTS, META, OUTCOMES, ATTENTION],
+      "readwrite"
+    );
     tx.objectStore(INTENTS).clear();
     tx.objectStore(META).clear();
     tx.objectStore(OUTCOMES).clear();
+    tx.objectStore(ATTENTION).clear();
     await transactionDone(tx);
   }
 

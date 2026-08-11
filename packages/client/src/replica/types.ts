@@ -106,6 +106,45 @@ export interface IntentOutcome {
   settledAt?: string;
 }
 
+/** Terminal statuses that hold a row on screen until a member answers them. */
+export type IntentAttentionStatus = "denied" | "conflict" | "failed";
+
+/**
+ * One settled-but-unexecuted write the member still has to answer for (issue
+ * #738): denied, conflicted, or failed. The outbox drops the intent on settle,
+ * so without this journal the projected row would leave every read and a
+ * denied CREATE would silently disappear — the exact defect class the issue
+ * names. This record is what makes "the row persists with the explanation and
+ * edit/retry/discard" survive a reload.
+ *
+ * It is a CLIENT-LOCAL journal, not wire state: nothing here is sent to a
+ * gateway and no intent schema changes.
+ *
+ * `input` is retained deliberately, against `settle`'s scrub-the-queued-input
+ * rule. The rule exists because a settled intent has no remaining use for its
+ * payload; an attention row does — it is the only thing edit/retry can
+ * re-issue from. Withholding it would not withhold the member's content
+ * either, since `optimistic` already carries the projected values the row
+ * renders. Retention is bounded by the member's own answer: `dismissAttention`
+ * (discard or retry) deletes the record, and `clear`/`destroy` wipe the
+ * journal with the rest of the outbox. Executed and parked outcomes journal
+ * nothing.
+ */
+export interface IntentAttentionRecord {
+  intentId: string;
+  status: IntentAttentionStatus;
+  appId: string;
+  action: string;
+  reason?: string;
+  /** The projection the row re-renders from after a reload. */
+  optimistic: OptimisticMutation[];
+  /** The app's own payload, for edit/retry. */
+  input?: ReplicaValue;
+  /** Expected vs actual versions, so a conflict row can say which. */
+  conflict?: ReplicaConflict;
+  settledAt: string;
+}
+
 export interface ReplicaChangeBatch {
   protocolVersion: typeof REPLICA_PROTOCOL_VERSION;
   schemaEpoch: string;

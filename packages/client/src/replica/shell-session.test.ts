@@ -147,6 +147,12 @@ describe("shell-session", () => {
       pendingIntents: vi
         .fn<ShellReplicaCoordinator["pendingIntents"]>()
         .mockResolvedValue([]),
+      attentionIntents: vi
+        .fn<ShellReplicaCoordinator["attentionIntents"]>()
+        .mockResolvedValue([]),
+      dismissAttentionIntent: vi
+        .fn<ShellReplicaCoordinator["dismissAttentionIntent"]>()
+        .mockResolvedValue(false),
       subscribeInvalidations: vi
         .fn<ShellReplicaCoordinator["subscribeInvalidations"]>()
         .mockReturnValue(() => undefined),

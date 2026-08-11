@@ -11,6 +11,7 @@ import { LiveQuery } from "./live-query.js";
 import type { ReplicaStore } from "./store.js";
 import type {
   EnqueueIntentInput,
+  IntentAttentionRecord,
   IntentOutcome,
   ReplicaBootstrapHeader,
   ReplicaChangeBatch,
@@ -313,6 +314,16 @@ export class ReplicaCoordinator {
 
   pendingIntents(): Promise<ReplicaIntent[]> {
     return this.intents.pending();
+  }
+
+  /** Settled writes that did not execute and still await a member's answer
+   *  (issue #738). Durable, so a reload rebuilds them from local truth. */
+  attentionIntents(): Promise<IntentAttentionRecord[]> {
+    return this.intents.attention();
+  }
+
+  dismissAttentionIntent(intentId: string): Promise<boolean> {
+    return this.intents.dismissAttention(intentId);
   }
 
   subscribeInvalidations(

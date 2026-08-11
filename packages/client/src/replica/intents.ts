@@ -4,6 +4,7 @@ import type { IntentRecordStore } from "./intent-record-store.js";
 import { intentPayloadHash } from "./payload-hash.js";
 import type {
   EnqueueIntentInput,
+  IntentAttentionRecord,
   IntentOutcome,
   IntentState,
   OptimisticMutation,
@@ -172,6 +173,16 @@ export class IntentQueue {
 
   listSettled(limit?: number): Promise<IntentOutcome[]> {
     return this.store.listSettled(limit);
+  }
+
+  /** Settled writes still waiting on a member (issue #738) — the durable
+   *  source a reload rebuilds denied/conflict/failed rows from. */
+  attention(): Promise<IntentAttentionRecord[]> {
+    return this.store.attention();
+  }
+
+  dismissAttention(intentId: string): Promise<boolean> {
+    return this.store.dismissAttention(intentId);
   }
 
   close(): void {

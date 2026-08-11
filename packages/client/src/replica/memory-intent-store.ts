@@ -3,12 +3,21 @@ import type {
   IntentRecordStore,
   NewStoredIntent,
 } from "./intent-record-store.js";
-import { buildIntentOutcome } from "./intent-record-store.js";
-import type { IntentOutcome, IntentState, ReplicaIntent } from "./types.js";
+import {
+  buildIntentAttention,
+  buildIntentOutcome,
+} from "./intent-record-store.js";
+import type {
+  IntentAttentionRecord,
+  IntentOutcome,
+  IntentState,
+  ReplicaIntent,
+} from "./types.js";
 
 export class MemoryIntentStore implements IntentRecordStore {
   readonly #records = new Map<string, ReplicaIntent>();
   readonly #outcomes = new Map<string, IntentOutcome>();
+  readonly #attention = new Map<string, IntentAttentionRecord>();
   #nextOrder = 1;
 
   async add(intent: NewStoredIntent): Promise<ReplicaIntent> {
@@ -94,6 +103,11 @@ export class MemoryIntentStore implements IntentRecordStore {
     this.#records.delete(intentId);
     const outcome = buildIntentOutcome(settled);
     this.#outcomes.set(intentId, outcome);
+    // A settlement that did not execute keeps its row answerable (issue #738):
+    // journal it alongside the outcome, in the same step that scrubs the
+    // intent, so nothing can observe a lost denial.
+    const attention = buildIntentAttention(settled, outcome.settledAt);
+    if (attention) this.#attention.set(intentId, clone(attention));
     return clone(settled);
   }
 
@@ -106,9 +120,20 @@ export class MemoryIntentStore implements IntentRecordStore {
       .map(clone);
   }
 
+  async attention(): Promise<IntentAttentionRecord[]> {
+    return [...this.#attention.values()]
+      .sort((left, right) => left.settledAt.localeCompare(right.settledAt))
+      .map(clone);
+  }
+
+  async dismissAttention(intentId: string): Promise<boolean> {
+    return this.#attention.delete(intentId);
+  }
+
   async clear(): Promise<void> {
     this.#records.clear();
     this.#outcomes.clear();
+    this.#attention.clear();
     this.#nextOrder = 1;
   }
 

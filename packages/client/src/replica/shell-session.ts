@@ -35,13 +35,19 @@ import {
 } from "./storage-manifest.js";
 import type { ReplicaIdentityInventory } from "./storage-manifest.js";
 import { TerminalReplicaPurgeRetryLoop } from "./terminal-purge-retry.js";
-import { DEFAULT_REPLICA_PURPOSE } from "./types.js";
+import {
+  DEFAULT_REPLICA_PURPOSE,
+  REPLICA_SYNTHETIC_PRIMARY_KEY,
+} from "./types.js";
 import type {
   EnqueueIntentInput,
+  IntentAttentionRecord,
+  IntentAttentionStatus,
   IntentOutcome,
   OptimisticMutation,
   ReplicaBootstrapHeader,
   ReplicaChangeBatch,
+  ReplicaConflict,
   ReplicaCursor,
   ReplicaBaseVersion,
   ReplicaDependency,
@@ -117,6 +123,24 @@ export interface ShellPendingWrite {
   optimistic: OptimisticMutation[];
 }
 
+/**
+ * One settled write that did not execute and still awaits a member's answer
+ * (issue #738), scoped to the asking app. Rebuilt from the durable attention
+ * journal, so a denied CREATE keeps its row — with its reason, its projected
+ * values, and (for a conflict) expected vs actual versions — across a reload.
+ */
+export interface ShellAttentionWrite {
+  intentId: string;
+  appId: string;
+  action: string;
+  status: IntentAttentionStatus;
+  reason?: string;
+  optimistic: OptimisticMutation[];
+  input?: ReplicaValue;
+  conflict?: ReplicaConflict;
+  settledAt: string;
+}
+
 export interface ShellReplicaCoordinator {
   bootstrap: (
     snapshot: Awaited<ReturnType<typeof fetchReplicaBootstrap>>
@@ -148,6 +172,8 @@ export interface ShellReplicaCoordinator {
   ) => Promise<ReplicaIntent | undefined>;
   recoverSending: () => Promise<ReplicaIntent[]>;
   pendingIntents: () => Promise<ReplicaIntent[]>;
+  attentionIntents: () => Promise<IntentAttentionRecord[]>;
+  dismissAttentionIntent: (intentId: string) => Promise<boolean>;
   subscribeInvalidations: (
     listener: (invalidations: readonly ReplicaInvalidation[]) => void
   ) => () => void;
@@ -359,6 +385,72 @@ export class ReplicaShellSession {
         input: structuredClone(intent.input),
         optimistic: structuredClone(intent.optimistic),
       }));
+  }
+
+  /**
+   * This app's settled-but-unexecuted writes from the durable attention
+   * journal (issue #738) — the reload path for denied/conflict/failed rows,
+   * which the outbox no longer holds because `settle` scrubbed the intent.
+   */
+  async attentionWrites(appId: string): Promise<ShellAttentionWrite[]> {
+    this.assertOpen();
+    const records = await this.coordinator.attentionIntents();
+    return records
+      .filter((record) => record.appId === appId)
+      .map((record) => structuredClone(record));
+  }
+
+  /**
+   * Forget one attention record, because the member discarded it or took it
+   * for a retry. Scoped to the asking app: a record another app owns is never
+   * dismissible from here, and the answer is false rather than a throw so a
+   * double-click is idempotent.
+   */
+  async dismissAttentionWrite(
+    appId: string,
+    intentId: string
+  ): Promise<boolean> {
+    this.assertOpen();
+    const records = await this.coordinator.attentionIntents();
+    const owned = records.find(
+      (record) => record.intentId === intentId && record.appId === appId
+    );
+    if (!owned) return false;
+    return this.coordinator.dismissAttentionIntent(intentId);
+  }
+
+  /**
+   * The local replica's version for one row, for a write that wants
+   * optimistic concurrency (`ShellReplicaWriteInput.baseVersions`). It is
+   * read through the app's own consented shape and its exposed primary key;
+   * an opaque-identity shape has no filterable key, so the honest answer
+   * there is undefined — the caller sends no precondition rather than a
+   * guessed one.
+   */
+  async rowVersion(
+    appId: string,
+    entity: string,
+    rowId: string,
+    purpose?: string
+  ): Promise<number | undefined> {
+    this.assertOpen();
+    const shapeId = this.resolveShapeId(appId, entity, undefined, purpose);
+    const schema = this.#catalog
+      .find((shape) => shape.shapeId === shapeId)
+      ?.entities.find((item) => item.entity === entity);
+    // `resolveShapeId` only returns a shape that carries this entity, so the
+    // schema is present; an opaque primary key is a real absence of a
+    // filterable column, not a missing schema.
+    if (!schema || schema.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY)
+      return undefined;
+    const result = await this.coordinator.readWire({
+      shapeId,
+      entity,
+      where: [{ column: schema.primaryKey, op: "eq", value: rowId }],
+      limit: 1,
+      ...(purpose ? { purpose } : {}),
+    });
+    return result.rows[0]?.rowVersion;
   }
 
   subscribe(
