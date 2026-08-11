@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "faces",
+  "name": "Face recognition",
+  "kind": "automation",
+  "description": "Detects faces only from explicit consent requests or prior consent stamps.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

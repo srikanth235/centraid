@@ -409,6 +409,8 @@ export interface AuOverviewRowDTO {
   attentionCount: number;
   /** The newest attempt is a successful or failed fallback rung. */
   recentFailover?: boolean;
+  /** Built-in recipe grouped outside the member's automation fleet. */
+  systemLane?: "recognition";
 }
 export interface AuOverviewRunDTO {
   runId: string;
@@ -421,6 +423,8 @@ export interface AuOverviewRunDTO {
   /** Raw fire time (ms epoch) — the "Recent activity" list's date-group
    *  separators are derived from this client-side. */
   startedAt: number;
+  /** Built-in run grouped outside app automation activity. */
+  systemLane?: "recognition";
 }
 export interface AuOverviewData {
   rows: AuOverviewRowDTO[];
@@ -881,6 +885,18 @@ export interface AutomationThreadData {
   plan: AuPlanStatusDTO;
   /** Native interactive automation-turn endpoint advertised by the gateway. */
   automationTurns?: boolean;
+  /** Optional deterministic-vs-agent recognition choice declared by manifest. */
+  recognition?: {
+    capability: string;
+    selected: "deterministic" | "agent";
+    deterministicLabel: string;
+    agent: {
+      /** Null means the agent path is deliberately unreachable until pinned. */
+      model: string | null;
+      latency: string;
+      consequence: string;
+    };
+  };
 }
 export interface AutomationThreadBridgeProps {
   /** Load the automation + its runs + its consent surface. `null` = not found. */
@@ -907,6 +923,10 @@ export interface AutomationThreadBridgeProps {
     turnId: string,
     onMessages: (messages: AsstMsgDTO[]) => void,
     signal: AbortSignal
+  ) => Promise<boolean>;
+  /** Persist the recognition path used by every future fire. */
+  onSetRecognitionVariant?: (
+    variant: "deterministic" | "agent"
   ) => Promise<boolean>;
   /** Start a manual fire and return its native turn id. */
   onRunNow: () => Promise<string | null>;

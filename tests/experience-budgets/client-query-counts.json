@@ -1,9 +1,9 @@
 {
-  "approvedDeviation": "#725 app-axis rebase: Photos now consumes seven bounded face-cluster and memory reads on first paint; Atlas counts the four newly registered media tables. Measured baselines are approved without adding an HTTP request.",
+  "approvedDeviation": "#731 Atlas now counts the registered Commons control tables during its bounded first-paint census; the measured SQL baseline rises from 128 to 138 with no additional HTTP request.",
   "screens": {
     "photos-grid": { "sqlStatements": 68, "httpRequests": 1 },
     "notifications": { "sqlStatements": 8, "httpRequests": 3 },
-    "atlas": { "sqlStatements": 128, "httpRequests": 2 },
+    "atlas": { "sqlStatements": 138, "httpRequests": 2 },
     "assistant": { "sqlStatements": 22, "httpRequests": 1 }
   }
 }

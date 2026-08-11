@@ -2,7 +2,7 @@
 
 **Personal software. Your data. Your apps. Your devices.**
 
-Install an app and a local gateway runs it — on your desktop, browser, and phone — or add an agent that works your data in the background. Every app is a thin projection over one **vault** on your machine — a shared personal ontology where your people, money, documents and plans live once, borrowed through grants you sign. App code is a folder of HTML + JS handlers versioned in a local git store; apps serve from the shipped release and update with it, and are authored by agents (the builder that does that ships hidden for v1).
+Install an app and a local gateway runs it — on your desktop, browser, and phone — or add an agent that works your data in the background. Every app is a thin projection over one **vault** on your machine — a shared personal ontology where your people, money, documents and plans live once, accessed through grants you sign. App code is a folder of HTML + JS handlers versioned in a local git store; apps serve from the shipped release and update with it, and are authored by agents (the builder that does that ships hidden for v1).
 
 [Docs](https://centraid.dev/docs/) · [Get started](https://centraid.dev/docs/start/) · [Architecture](ARCHITECTURE.md) · [Agents map](AGENTS.md) · [Contributing](CONTRIBUTING.md)
 
@@ -76,7 +76,7 @@ For Pi-class always-on hosts, prefer f2fs/btrfs or a USB SSD and mount the data 
 
 Mobile companion: `bun run dev:mobile` (Expo dev build), then pair it from desktop Household → Devices with a one-time ticket or QR.
 
-Optional model capabilities: run the reference enrichment service (`tools/enrichment-service`, after `bun run setup`) and point the gateway at its loopback URL with `CENTRAID_ENRICH_URL`. If transcript support is needed, configure the service's `ENRICH_SERVICE_TRANSCRIPT_URL` to an OpenAI-compatible whisper endpoint; the gateway has no desktop-local ASR adapter.
+Optional model capabilities are self-contained in their recognition automation handlers. Install the local runtime dependencies and model assets with `bun run --cwd tools/recognition-automations setup`; handlers load those assets directly (or from `CENTRAID_AUTOMATION_RUNTIME_DIR`) and use `ctx.vault.content` / `ctx.vault.invoke` for vault I/O. No enrichment service or gateway inference primitive is configured. The transcript recipe decodes bounded audio/video locally and runs its bundled Whisper model through the same automation path.
 
 The PWA connects with only a pairing ticket over relay-only Iroh/WASM, so a gateway URL is not required. A standalone gateway can also serve the PWA as a same-host web origin; remote gateway connections remain ticket-only Iroh. Generated apps receive separate, single-app sessions and cannot call shell/admin routes.
 

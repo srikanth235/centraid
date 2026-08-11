@@ -3,7 +3,8 @@
  * #352 phase 3/4) — the owner's on-demand "Detect faces now", `reason:
  * 'manual'` distinguishing it from the enricher's own passive
  * search-miss/on-view triggers. `entity_id` is optional: omitted, this asks
- * the enricher to sweep the whole photos domain rather than one asset.
+ * the recognition recipe to process the whole photos domain rather than one
+ * asset. The request remains the explicit consent boundary either way.
  *
  * `capability: 'faces'` is pinned here, not accepted from the caller (the
  * action's `input` schema is `additionalProperties: false`, so it cannot be
@@ -13,12 +14,10 @@
  * same untagged row was picked up by every enabled enricher, which turned one
  * consent into consent for captioning, screenshot OCR and the rest.
  *
- * NOTHING DRAINS THIS ROW TODAY. The `face-proposer` automation that used to
- * was deleted in issue #712 — face detection is moving into the Photos app
- * itself — so a request queued here waits, tagged and un-drained, until that
- * producer exists. It is queued rather than refused because the tag is the
- * consent record: the member's answer is what this action is for, and the
- * work it authorizes is the part that has not shipped.
+ * The release-managed `faces/faces` recognition recipe drains this row only
+ * after a successful, capability-scoped derivation. It never treats the
+ * ambient library as consent: a target-less request is the explicit
+ * vault-wide grant, and a targeted request authorizes only that asset.
  *
  * @type {import('@centraid/openclaw-plugin').ActionHandler}
  */

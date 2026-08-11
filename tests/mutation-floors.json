@@ -17,6 +17,6 @@
   "packages/cli": 90,
   "packages/design": 71,
   "apps/oauth-worker": 88,
-  "tools/enrichment-service": 80,
-  "approvedDeviation": "#672 renamed packages/design-tokens -> packages/design. #709 Binding Layer expands the mutate set (css.ts + typography.ts + tile.ts). CI Stryker on PR #709 run 30901194404 measured packages/design at 74.30% (css 63.92 / tile 72.73 / typography 96.08). Prior 93 floor was the design-tokens-only seed (css-properties alone ~96%). Re-seeded to 71 (~3pt under the CI measurement), matching the CI-linux reseed pattern in this file's header for backup/blueprints. #725 seeds tools/enrichment-service at 80 from an 83.00 measured score."
+  "tools/recognition-automations": 80,
+  "approvedDeviation": "#672 renamed packages/design-tokens -> packages/design. #709 Binding Layer expands the mutate set (css.ts + typography.ts + tile.ts). CI Stryker on PR #709 run 30901194404 measured packages/design at 74.30% (css 63.92 / tile 72.73 / typography 96.08). Prior 93 floor was the design-tokens-only seed (css-properties alone ~96%). Re-seeded to 71 (~3pt under the CI measurement), matching the CI-linux reseed pattern in this file's header for backup/blueprints. #725 seeds tools/recognition-automations at 80 from an 83.00 measured score."
 }

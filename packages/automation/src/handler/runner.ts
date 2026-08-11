@@ -372,6 +372,7 @@ interface FetchSpecWire {
   method?: string;
   headers?: Record<string, string>;
   body?: string;
+  content?: { contentId: string; variant: string; maxBytes?: number }[];
 }
 
 type WorkerToParentMessage =
@@ -1070,8 +1071,7 @@ export async function runHandler(
             type: "fetch-reply",
             id: msg.id,
             ok: false,
-            error:
-              "ctx.fetch is connector-only (issue #293) — declare manifest.connector",
+            error: "ctx.fetch is connector-only",
           });
           return;
         }
@@ -1079,7 +1079,8 @@ export async function runHandler(
           level: "info",
           msg: `fetch ${msg.spec.method ?? "GET"} ${msg.spec.url}`,
         });
-        void executeFetch(msg.spec)
+        const request = executeFetch(msg.spec);
+        void request
           .then((result) => {
             send({ type: "fetch-reply", id: msg.id, ok: true, result });
           })

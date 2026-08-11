@@ -1,10 +1,9 @@
 /*
  * docs/blueprint-seats.md "Enrichment doctrine" (issue #712 C5), checked
- * mechanically: a blueprint app or automation reaches a model through
- * through host-owned seams only. Provider model calls use `ctx.agent`; local
- * model-derived features use the gateway's one enrichment-service client.
- * A blueprint app, automation, or mobile seat may import neither a provider
- * SDK nor the enrichment client/service package directly.
+ * mechanically: provider model calls use `ctx.agent`, while recognition
+ * automations bundle local model execution and use ctx.vault content/invoke.
+ * A blueprint app, automation, or mobile seat may not import a provider SDK
+ * or resurrect the deleted service/generic-inference roads.
  *
  * This is a TRIPWIRE, not a proof (same caveat as
  * `blueprint-seats.test.ts`'s S1/S2/S5 check): it greps import specifiers
@@ -78,10 +77,13 @@ const PROVIDER_PACKAGES = [
 const IMPORT_SPECIFIER_RE =
   /(?:from\s+|require\(|import\()\s*["'](?<specifier>[^"']+)["']/gu;
 
-const ENRICHMENT_CLIENT_TERMS = [
+const OBSOLETE_INFERENCE_TERMS = [
   "@centraid/enrichment-service",
   "CENTRAID_ENRICH_URL",
   "enrich/service-client",
+  "centraid://enrichment/",
+  "ctx.infer",
+  "ctx.enrich",
 ] as const;
 
 function sourceFiles(dir: string): string[] {
@@ -111,8 +113,8 @@ function importedProviderPackages(text: string): string[] {
   return hits;
 }
 
-function enrichmentClientReferences(text: string): string[] {
-  return ENRICHMENT_CLIENT_TERMS.filter((term) => text.includes(term));
+function obsoleteInferenceReferences(text: string): string[] {
+  return OBSOLETE_INFERENCE_TERMS.filter((term) => text.includes(term));
 }
 
 const allFiles = [
@@ -171,19 +173,19 @@ describe("no blueprint imports a provider SDK directly (docs/blueprint-seats.md 
     allFiles
       .filter((file) => file !== import.meta.filename)
       .map((file) => [path.relative(PACKAGE_ROOT, file), file] as const)
-  )("%s does not own the enrichment-service client", (_label, file) => {
-    const hits = enrichmentClientReferences(readFileSync(file, "utf8"));
+  )("%s uses no obsolete inference road", (_label, file) => {
+    const hits = obsoleteInferenceReferences(readFileSync(file, "utf8"));
     expect(
       hits,
-      `${path.relative(PACKAGE_ROOT, file)} reaches the enrichment service directly; only packages/gateway/src/enrich/service-client.ts may do that`
+      `${path.relative(PACKAGE_ROOT, file)} uses obsolete inference terms: ${hits.join(", ")}; recognition handlers bundle model execution and use ctx.vault content/invoke`
     ).toStrictEqual([]);
   });
 
-  it("[law:enrichment-single-client] SABOTAGE: detects a direct service client", () => {
+  it("[law:recognition-self-contained] SABOTAGE: detects deleted inference roads", () => {
     expect(
-      enrichmentClientReferences(
-        'import { createEnrichmentClient } from "@centraid/enrichment-service";'
+      obsoleteInferenceReferences(
+        'await ctx.infer.embed(input); fetch("centraid://enrichment/ocr");'
       )
-    ).toStrictEqual(["@centraid/enrichment-service"]);
+    ).toStrictEqual(["centraid://enrichment/", "ctx.infer"]);
   });
 });

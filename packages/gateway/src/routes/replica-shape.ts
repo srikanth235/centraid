@@ -19,8 +19,7 @@ import {
 } from "@centraid/vault";
 import type { FilterClause, ConsentAllow, ReplicaRow } from "@centraid/vault";
 
-import { readGrantees, readLentGrantee } from "./replica-grantees.js";
-import type { LentGranteeAccess } from "./replica-grantees.js";
+import { readGrantees } from "./replica-grantees.js";
 import { preparedStatement } from "./sql-statement-cache.js";
 
 export const REPLICA_PROTOCOL_VERSION = 1 as const;
@@ -29,21 +28,11 @@ export const REPLICA_SYNTHETIC_PRIMARY_KEY = "__centraid_row_id";
 
 export interface ReplicaShapeAccess {
   /** Ownership-sourced write authority (#726): the device's owner owns the
-   *  vault. Kept as a flowing field — later phases put read-only lent scopes
-   *  through this same seam. */
+   *  vault. Commons readers use independently resident vault rows. */
   canWrite: boolean;
   rememberDevice: boolean;
   /** Trusted web-app session header or an explicit shell selection. */
   appId?: string;
-  /**
-   * The vault-as-grantee plane (#726 P4). A live edge mints a real consent
-   * grant at the origin whose grantee is the AUDIENCE VAULT's party row, so
-   * `activeGrants` selects it by `grantee_party_id` exactly as it selects an
-   * app by `app_id` — a third kind of row in a table that already exists, not
-   * a parallel permission model. Mutually exclusive with `appId`; when set,
-   * app grants are not consulted at all.
-   */
-  grantee?: LentGranteeAccess;
 }
 
 export interface ReplicaEntitySchemaWire {
@@ -358,9 +347,7 @@ export function buildReplicaShapes(
   access: ReplicaShapeAccess,
   now = new Date().toISOString()
 ): ReplicaServerShape[] {
-  const grantees = access.grantee
-    ? readLentGrantee(db, now, access.grantee)
-    : readGrantees(db, now, access.appId);
+  const grantees = readGrantees(db, now, access.appId);
   const shapes: ReplicaServerShape[] = [];
   const nowMs = Date.parse(now);
   const replicaEpoch = currentReplicaLogState(db).epoch;
@@ -376,26 +363,13 @@ export function buildReplicaShapes(
       try {
         const decision = evaluateConsent(
           db,
-          access.grantee
-            ? {
-                // A read-only lent edge structurally denies act/reveal
-                // (`mayAct: false`) the same way a readonly device does; a
-                // read+act edge carries the SAME predicate `access.canWrite`
-                // an app's identity already flows through below (#726 P5) —
-                // no parallel gate, one flowing field.
-                kind: "agent",
-                callerId: access.grantee.partyId,
-                provAgentKind: "ai_agent",
-                partyId: access.grantee.partyId,
-                mayAct: access.canWrite,
-              }
-            : {
-                kind: "app",
-                callerId: grantee.app_id,
-                provAgentKind: "app",
-                partyId: null,
-                mayAct: access.canWrite,
-              },
+          {
+            kind: "app",
+            callerId: grantee.app_id,
+            provAgentKind: "app",
+            partyId: null,
+            mayAct: access.canWrite,
+          },
           ref.schema,
           ref.table,
           "read",

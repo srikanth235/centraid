@@ -3,8 +3,8 @@ import { createServer } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { makeCaptureOcrRecognizer } from "../capture/capture-ocr.js";
-import { startFakeEnrichService } from "../enrich/fake-enrich-service.test-fixtures.js";
-import type { FakeEnrichService } from "../enrich/fake-enrich-service.test-fixtures.js";
+import type { CaptureAutomationInvoker } from "../capture/capture-ocr.js";
+import { SYSTEM_CAPTURE_OCR_REF } from "../enrich/system-recognition.js";
 import {
   CAPTURE_CLASSIFY_PATH,
   CAPTURE_OCR_PATH,
@@ -56,19 +56,19 @@ describe("capture classify route", () => {
     expect(response.status).toBe(503);
   });
 
-  it("accepts only bounded image bytes for the enrichment-service OCR backstop", async () => {
+  it("accepts only bounded image/PDF bytes for the OCR automation", async () => {
     const recognizeOcr = vi.fn<
       (
         input: Buffer,
         mediaType: string
       ) => Promise<{
         confidence: number;
-        engine: "enrichment-service";
+        engine: "automation";
         text: string;
       }>
     >(async (input) => ({
       confidence: 0.9,
-      engine: "enrichment-service",
+      engine: "automation",
       text: input.toString("utf8"),
     }));
     const handler = makeCaptureRouteHandler({
@@ -89,6 +89,14 @@ describe("capture classify route", () => {
       Buffer.from("receipt"),
       "image/jpeg"
     );
+    const pdf = Buffer.from("%PDF-1.7\nfixture\n%%EOF");
+    await expect(
+      requestRaw(handler, CAPTURE_OCR_PATH, pdf, "application/pdf")
+    ).resolves.toMatchObject({
+      status: 200,
+      body: { extraction: { text: pdf.toString("utf8") } },
+    });
+    expect(recognizeOcr).toHaveBeenLastCalledWith(pdf, "application/pdf");
     await expect(
       requestRaw(
         handler,
@@ -99,32 +107,21 @@ describe("capture classify route", () => {
     ).resolves.toMatchObject({ status: 415 });
   });
 
-  describe("recognizeOcr wired to the real enrichment service", () => {
-    const services: FakeEnrichService[] = [];
-    afterEach(
-      async () =>
-        void (await Promise.all(services.splice(0).map((s) => s.close())))
-    );
-
-    it("returns the service's regions, joined in reading order", async () => {
-      const service = await startFakeEnrichService({
-        capabilities: {
-          ocr: {
-            result: () => ({
-              regions: [
-                { text: "world", confidence: 0.5, box: [0, 10, 1, 1] },
-                { text: "hello", confidence: 0.9, box: [0, 0, 1, 1] },
-              ],
-            }),
+  describe("recognizeOcr enters the awaited Photo OCR automation", () => {
+    it("passes inline bytes to the stable recipe and returns its result", async () => {
+      const invoke = vi.fn<CaptureAutomationInvoker>(async () => ({
+        outcome: {
+          ok: true,
+          output: {
+            text: "hello\nworld",
+            confidence: 0.7,
+            engine: "automation",
           },
         },
-      });
-      services.push(service);
+      }));
       const handler = makeCaptureRouteHandler({
         classify: async () => undefined,
-        recognizeOcr: makeCaptureOcrRecognizer(service.config, {
-          timeoutMs: 2_000,
-        }),
+        recognizeOcr: makeCaptureOcrRecognizer(invoke),
       });
       const response = await requestRaw(
         handler,
@@ -137,16 +134,29 @@ describe("capture classify route", () => {
         body: {
           extraction: {
             text: "hello\nworld",
-            engine: "enrichment-service",
+            confidence: 0.7,
+            engine: "automation",
           },
+        },
+      });
+      expect(invoke).toHaveBeenCalledWith(SYSTEM_CAPTURE_OCR_REF, {
+        capture: {
+          bytes: Buffer.from("receipt").toString("base64"),
+          mediaType: "image/jpeg",
         },
       });
     });
 
-    it("answers 503 when no enrichment service is configured — never uploads to a third party", async () => {
+    it("answers 503 when the recipe is skipped by policy", async () => {
       const handler = makeCaptureRouteHandler({
         classify: async () => undefined,
-        recognizeOcr: makeCaptureOcrRecognizer(null),
+        recognizeOcr: makeCaptureOcrRecognizer(async () => ({
+          outcome: {
+            ok: false,
+            skipped: true,
+            error: "photos enrichment is off",
+          },
+        })),
       });
       const response = await requestRaw(
         handler,
@@ -158,14 +168,12 @@ describe("capture classify route", () => {
       expect(response.body).toStrictEqual({ error: "ocr_unavailable" });
     });
 
-    it("answers 503 when the service does not offer ocr", async () => {
-      const service = await startFakeEnrichService({ capabilities: {} });
-      services.push(service);
+    it("answers 503 when the recipe records service unavailability as failure", async () => {
       const handler = makeCaptureRouteHandler({
         classify: async () => undefined,
-        recognizeOcr: makeCaptureOcrRecognizer(service.config, {
-          timeoutMs: 2_000,
-        }),
+        recognizeOcr: makeCaptureOcrRecognizer(async () => ({
+          outcome: { ok: false, error: "capture OCR unavailable" },
+        })),
       });
       const response = await requestRaw(
         handler,

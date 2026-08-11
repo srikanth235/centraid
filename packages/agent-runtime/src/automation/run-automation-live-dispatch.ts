@@ -199,10 +199,13 @@ export async function startLiveDispatch(
   // per-backend wire format. The scratch dir materializes only on first use.
   const stageAttachments = async (
     call: automation.AgentCall
-  ): Promise<string> => {
-    if (!call.attachments?.length) return call.prompt;
+  ): Promise<{
+    prompt: string;
+    attachments?: Array<{ path: string; mime: string; filename?: string }>;
+  }> => {
+    if (!call.attachments?.length) return { prompt: call.prompt };
     await ensureScratch();
-    const lines = await Promise.all(
+    const attachments = await Promise.all(
       call.attachments.map(async (att) => {
         const file = path.join(
           scratchDir,
@@ -213,10 +216,10 @@ export async function startLiveDispatch(
         } else {
           await fs.writeFile(file, Buffer.from(att.base64, "base64"));
         }
-        return `- ${file} (${att.mediaType})`;
+        return { path: file, mime: att.mediaType, filename: att.name };
       })
     );
-    return `${call.prompt}\n\nAttached files — read each from disk before answering (images are visual input):\n${lines.join("\n")}`;
+    return { prompt: call.prompt, attachments };
   };
 
   // ctx.agent routes to the user's REAL provider through the SAME runner
@@ -263,7 +266,7 @@ export async function startLiveDispatch(
         });
       }
     }
-    const effectivePrompt = await stageAttachments(call);
+    const staged = await stageAttachments(call);
     const scope = opts.runnerHealthContext ?? opts.workdir;
     const breaker = opts.runnerHealth?.canAttempt(scope, runner);
     if (breaker && !breaker.allowed) {
@@ -328,7 +331,8 @@ export async function startLiveDispatch(
         {
           conversationId: opts.automationRef,
           cwd: opts.workdir,
-          message: effectivePrompt,
+          message: staged.prompt,
+          ...(staged.attachments ? { attachments: staged.attachments } : {}),
           extraSystemPrompt: "",
           ...(opts.model ? { model: opts.model } : {}),
           ...((opts.configPins ?? prefs.configPins)

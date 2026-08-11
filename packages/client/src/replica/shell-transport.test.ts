@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import type * as TypeImport_1n561g5 from "../gateway-client-core.js";
 import { ReplicaRebootstrapRequiredError } from "./errors.js";
 import {
-  borrowedReplicaFetcher,
   fetchReplicaChanges,
   fetchReplicaIntentOutcomes,
 } from "./shell-transport.js";
@@ -32,46 +31,6 @@ const gatewayAuth = {
   token: "secret",
   vaultId: "vault-a",
 };
-
-describe(borrowedReplicaFetcher, () => {
-  it("routes the ordinary session contract through one encoded edge", async () => {
-    const delegate = vi
-      .fn<ReplicaFetcher>()
-      .mockResolvedValue(new Response("{}", { status: 200 }));
-    const fetcher = borrowedReplicaFetcher("edge/a", delegate);
-
-    await fetcher(
-      gatewayAuth.baseUrl,
-      "/centraid/_vault/replica/bootstrap?window=5000",
-      { method: "GET" }
-    );
-    await fetcher(
-      gatewayAuth.baseUrl,
-      "/centraid/_vault/changes?since=borrowed%3Aedge%2Fa%3A17&shapeIds=s",
-      { method: "GET" }
-    );
-    await fetcher(gatewayAuth.baseUrl, "/centraid/_vault/replica/intents", {
-      method: "POST",
-    });
-
-    expect(delegate.mock.calls.map((call) => call[1])).toStrictEqual([
-      "/centraid/_vault/replica/borrowed/bootstrap?edgeId=edge%2Fa",
-      "/centraid/_vault/replica/borrowed/changes?edgeId=edge%2Fa&since=17",
-      "/centraid/_vault/replica/borrowed/intents?edgeId=edge%2Fa",
-    ]);
-  });
-
-  it("keeps borrowed checkpoints local", async () => {
-    const delegate = vi.fn<ReplicaFetcher>();
-    const response = await borrowedReplicaFetcher("edge-1", delegate)(
-      gatewayAuth.baseUrl,
-      "/centraid/_vault/replica/checkpoint",
-      { method: "POST" }
-    );
-    expect(response.status).toBe(200);
-    expect(delegate).not.toHaveBeenCalled();
-  });
-});
 
 describe(fetchReplicaChanges, () => {
   it("attests the sorted, deduplicated persisted shape ids on every pull", async () => {

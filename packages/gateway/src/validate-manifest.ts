@@ -34,7 +34,8 @@ function findFirstInOrder<T, R>(
  * parses against the automation manifest schema and every handler is replay-safe.
  */
 export async function validateManifestAt(
-  appDir: string
+  appDir: string,
+  options: { releaseManagedModelBundle?: boolean } = {}
 ): Promise<string | undefined> {
   let raw: string;
   try {
@@ -81,7 +82,13 @@ export async function validateManifestAt(
     // error surfaces first.
     const manifestError = await validateAutomationManifestsAt(appDir);
     if (manifestError) return manifestError;
-    const handlerError = await lintAutomationHandlersAt(appDir);
+    // Generated recognition handlers include audited third-party model/PDF
+    // code whose dead branches contain clocks/randomness. Only the reserved,
+    // read-only system lifecycle can set this flag; its human-owned entry
+    // source is linted before bundling in @centraid/automation's template suite.
+    const handlerError = options.releaseManagedModelBundle
+      ? undefined
+      : await lintAutomationHandlersAt(appDir);
     if (handlerError) return handlerError;
   }
   // Design token contract (issue #686 D3): app CSS must consume

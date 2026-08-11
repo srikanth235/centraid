@@ -147,7 +147,7 @@ export function enrichRefusalNotice(input: {
           : `${subject} was refused by its setting (${input.tier})`;
   return {
     detail: {
-      deepLink: "/settings/enrichment",
+      deepLink: "/automations",
       enrichDomain: input.domain,
       sourceType: "app",
       ...(input.tier === undefined ? {} : { tier: input.tier }),

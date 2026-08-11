@@ -452,14 +452,13 @@ export default function ApprovalsRoute(): JSX.Element {
         onOpenNotice={(notice) => {
           const ref = notice.detail.automationRef;
           const appId = notice.detail.appId;
-          // An enrichment-tier refusal (decision S9) has exactly one useful
-          // destination: the control that decides it. Checked before the
-          // automation branch — the card is keyed by DOMAIN, not by whichever
-          // of the seven enrichers happened to be refused first.
-          if (typeof notice.detail.enrichDomain === "string") {
-            navigate({ kind: "settings", page: "enrichment" });
-          } else if (typeof ref === "string") {
+          // Recognition controls are the built-in automation recipes. A
+          // refusal therefore opens its recipe when the notice identifies
+          // one, and otherwise opens the collapsed Recognition fleet.
+          if (typeof ref === "string") {
             navigate({ kind: "automation-view", automationId: ref });
+          } else if (typeof notice.detail.enrichDomain === "string") {
+            navigate({ kind: "automations" });
           } else if (notice.kind === "gateway-health") {
             // Legacy rows only (issue #665): health no longer projects into the
             // Notifications, but cards written by an earlier build survive in vault.db

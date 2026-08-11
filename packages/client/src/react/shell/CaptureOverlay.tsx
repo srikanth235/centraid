@@ -229,7 +229,7 @@ export function CaptureOverlay({
           aria-expanded={scanOpen}
           onClick={() => setScanOpen((value) => !value)}
         >
-          {scanOpen ? "Hide image scan" : "Scan an image or receipt"}
+          {scanOpen ? "Hide visual scan" : "Scan an image, receipt, or PDF"}
         </button>
         {scanOpen ? <CaptureScanPanel onSaved={onClose} /> : null}
         <label className={styles.label}>

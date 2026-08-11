@@ -81,6 +81,7 @@ function makeState(): AppState {
     expenseUndo: null,
     modalMembers: [],
     pendingExpenses: [],
+    dismissedCommonsIntentIds: new Set(),
   };
 }
 
@@ -184,6 +185,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     // The sidebar snapshot and the active detail view are independent reads —
     // run them together (issue #404); a final bump reconciles the tree.
     await Promise.all([refreshDashboard(), loadView()]);
+    await logicRef.current?.refreshCommonsExpenses();
     bump();
   }, [refreshDashboard, loadView]);
 
@@ -206,6 +208,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     closeSettle: handleCloseSettle,
     deleteExpense: handleDeleteExpense,
     deleteGroup: handleDeleteGroup,
+    dismissCommonsIntent: handleDismissDeniedIntent,
+    cancelCommonsIntent: handleCancelCommonsIntent,
     addGroupMember: handleAddGroupMember,
     openAddExpense: handleOpenAddExpense,
     openAddFriend: handleOpenAddFriend,
@@ -250,7 +254,6 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   useEffect(() => {
     const stopDoorbell = onDataChange(CHANGE_TABLES, async () => {
       await refreshAll();
-      stateRef.current.pendingExpenses = [];
       bump();
     });
     const stopFocus = onFocusRefresh(() => void refreshAll());
@@ -470,6 +473,14 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
           currency={dash.currency}
           onOpenDetail={handleOpenDetail}
           onAddExpense={handleOpenAddExpense}
+          onDismissDenied={(row) =>
+            row.commonsIntentId &&
+            handleDismissDeniedIntent(row.commonsIntentId)
+          }
+          onCancelIntent={(row) =>
+            row.commonsIntentId &&
+            handleCancelCommonsIntent(row.commonsIntentId)
+          }
         />
       </>
     );

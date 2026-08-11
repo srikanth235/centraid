@@ -5,11 +5,7 @@ import { describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
-import {
-  stampDerivation,
-  stampedModel,
-  supersededTargets,
-} from "./derivation.js";
+import { stampDerivation, stampedModel } from "./derivation.js";
 
 const T0 = "2026-07-15T00:00:00.000Z";
 const T1 = "2026-07-16T00:00:00.000Z";
@@ -108,82 +104,6 @@ describe("derivation", () => {
         variant: "caption",
       })
     ).toBeNull();
-    db.close();
-  });
-
-  test("a version bump hands back exactly the targets the old model produced", () => {
-    const db = openVaultDb();
-    stamp(db, "old-1", "tess@1");
-    stamp(db, "old-2", "tess@1");
-    stamp(db, "current", "tess@2");
-    const superseded = supersededTargets(db.vault, {
-      capability: "ocr",
-      variant: "caption",
-      currentModel: "tess@2",
-    });
-    expect(superseded.map((row) => row.targetId)).toStrictEqual([
-      "old-1",
-      "old-2",
-    ]);
-    expect(superseded[0]!.model).toBe("tess@1");
-    db.close();
-  });
-
-  test("another model's rows are left alone, and so are unparseable ones", () => {
-    const db = openVaultDb();
-    stamp(db, "other-family", "paddle@9");
-    stamp(db, "hand-written", "my ocr (final)");
-    stamp(db, "newer", "tess@5");
-    expect(
-      supersededTargets(db.vault, {
-        capability: "ocr",
-        variant: "caption",
-        currentModel: "tess@2",
-      })
-    ).toStrictEqual([]);
-    db.close();
-  });
-
-  test("the selector is scoped by capability, variant, family and bounded by limit", () => {
-    const db = openVaultDb();
-    stamp(db, "a", "tess@1");
-    stamp(db, "b", "tess@1");
-    stamp(db, "c", "tess@1", {
-      variant: "transcript",
-      capability: "transcript",
-    });
-    stampDerivation(db.vault, {
-      targetType: "core.content_item",
-      targetId: "doc-1",
-      variant: "caption",
-      capability: "ocr",
-      model: "tess@1",
-      now: T0,
-    });
-
-    expect(
-      supersededTargets(db.vault, {
-        capability: "ocr",
-        variant: "caption",
-        currentModel: "tess@2",
-        limit: 1,
-      })
-    ).toHaveLength(1);
-    expect(
-      supersededTargets(db.vault, {
-        capability: "ocr",
-        variant: "caption",
-        currentModel: "tess@2",
-        targetType: "core.content_item",
-      }).map((row) => row.targetId)
-    ).toStrictEqual(["doc-1"]);
-    expect(
-      supersededTargets(db.vault, {
-        capability: "ocr",
-        variant: "caption",
-        currentModel: "tess@2",
-      })
-    ).toHaveLength(3);
     db.close();
   });
 

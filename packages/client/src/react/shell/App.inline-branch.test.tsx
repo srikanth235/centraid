@@ -46,6 +46,7 @@ vi.mock(import("../../gateway-client.js"), () => ({
       { id: "todos", name: "Todos", kind: "app", hasIndex: true },
     ]),
   listAutomations: () => Promise.resolve([]),
+  listAutomationTurnsByLane: () => Promise.resolve([]),
   listAutomationTurns: () => Promise.resolve([]),
   getNotifications: () =>
     Promise.resolve({

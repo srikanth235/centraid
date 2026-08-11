@@ -92,6 +92,7 @@ export interface RedeemLinkTicketDeps {
   request: PeerRequest;
   /** This side's vault and its identity key — what the peer will record. */
   localVault: { vaultId: string; publicKey: string };
+  localOwnerPartyId?: string;
   /** This side's dial route, so the peer can reach back. */
   localRoute: { endpointId: string; relayHints: string[] };
   localLabel: string;
@@ -118,6 +119,9 @@ export async function redeemLinkTicket(
         secret: deps.ticket.secret,
         vaultId: deps.localVault.vaultId,
         vaultPublicKey: deps.localVault.publicKey,
+        ...(deps.localOwnerPartyId
+          ? { ownerPartyId: deps.localOwnerPartyId }
+          : {}),
         endpointId: deps.localRoute.endpointId,
         relayHints: deps.localRoute.relayHints,
         label: deps.localLabel,
@@ -159,6 +163,7 @@ export async function redeemLinkTicket(
   }
   const peerVaultId = body.vaultId;
   const peerPublicKey = body.vaultPublicKey;
+  const peerOwnerPartyId = body.ownerPartyId;
   if (typeof peerVaultId !== "string" || typeof peerPublicKey !== "string") {
     return { state: "bad_request", detail: "peer answer named no vault" };
   }
@@ -189,9 +194,19 @@ export async function redeemLinkTicket(
       assertedAt: Date.now(),
     },
     peerLabel: typeof body.label === "string" ? body.label : peerVaultId,
-    ...(typeof body.permissions === "object" && body.permissions !== null
-      ? { permissions: body.permissions as Record<string, unknown> }
-      : {}),
+    permissions: {
+      ...(typeof body.permissions === "object" && body.permissions !== null
+        ? (body.permissions as Record<string, unknown>)
+        : {}),
+      ...(deps.localOwnerPartyId && typeof peerOwnerPartyId === "string"
+        ? {
+            commonsPartyIds: {
+              [deps.localVault.vaultId]: deps.localOwnerPartyId,
+              [peerVaultId]: peerOwnerPartyId,
+            },
+          }
+        : {}),
+    },
   });
   if (!link)
     return { state: "bad_request", detail: "link could not be stored" };

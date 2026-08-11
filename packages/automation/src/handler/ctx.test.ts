@@ -4,7 +4,12 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { handleRunsMessage, handleStateMessage, nextOrdinal } from "./ctx.js";
+import {
+  handleRunsMessage,
+  handleStateMessage,
+  nextOrdinal,
+  resolveContentAttachments,
+} from "./ctx.js";
 import type { AuditState } from "./ctx.js";
 
 function audit(over: Partial<AuditState> = {}): AuditState {
@@ -34,6 +39,22 @@ describe(nextOrdinal, () => {
     expect(nextOrdinal(a)).toBe(3);
     expect(nextOrdinal(a)).toBe(4);
     expect(a.ordinal).toBe(5);
+  });
+});
+
+describe(resolveContentAttachments, () => {
+  it("needs no vault surface when the call has no content refs", async () => {
+    await expect(
+      resolveContentAttachments(undefined, [])
+    ).resolves.toStrictEqual([]);
+  });
+
+  it("still fails closed for a content-bearing call without a vault surface", async () => {
+    await expect(
+      resolveContentAttachments(undefined, [
+        { contentId: "content-1", variant: "preview" },
+      ])
+    ).rejects.toThrow("need a vault surface");
   });
 });
 

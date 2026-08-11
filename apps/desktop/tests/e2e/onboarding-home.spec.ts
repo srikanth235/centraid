@@ -131,6 +131,10 @@ test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands 
       fullPage: true,
     });
     await page.screenshot({
+      path: path.join(evidenceDir, "issue-731-recognition-commons.png"),
+      fullPage: true,
+    });
+    await page.screenshot({
       path: path.join(evidenceDir, "issue-696-chat-harness.png"),
       fullPage: true,
     });
@@ -386,9 +390,9 @@ test("2.6e — Photos opens into the app view and yields the #724 UI evidence", 
   // Memories rails, the camera-roll import offer) and have no e2e harness of
   // their own; Photos-open is the shared surface every one of them feeds, so
   // it is the honest frame for this change set too. The gateway-side half of
-  // #724 — the enrichment service seam, OCR and faces sweeps — has no pixels
-  // by construction: it answers honestly unavailable until an owner configures
-  // a service, which is exactly what this frame shows.
+  // #724 — recognition automation, OCR and faces flows — has no pixels
+  // by construction: it answers honestly unavailable until local model assets
+  // are installed, which is exactly what this frame shows.
   gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
@@ -406,6 +410,35 @@ test("2.6e — Photos opens into the app view and yields the #724 UI evidence", 
     await mkdir(evidenceDir, { recursive: true });
     await page.screenshot({
       path: path.join(evidenceDir, "issue-724-enrichment-service.png"),
+      fullPage: true,
+    });
+  } finally {
+    await closeApp(app);
+  }
+});
+
+test("2.6f — Photos opens into the app view and yields the #739 UI evidence", async () => {
+  // #739 changes Photos' Places map and the surrounding shell, so the honest
+  // evidence frame is the Photos app inside that shell. Geometry and renderer
+  // behavior are pinned by their focused tests; this capture proves the
+  // integrated surface still opens and paints under the desktop host.
+  gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
+  await seedRemoteGateway(env, gateway);
+  const { app, page } = await launchApp(env);
+  try {
+    await waitForHome(page);
+    await openTile(page, "photos");
+    const appView = page.locator(
+      '[data-testid="app-view"], [data-testid="inline-app-view"]'
+    );
+    await expect(appView).toBeVisible();
+    const evidenceDir = path.resolve(
+      import.meta.dirname,
+      "../../../../artifacts/e2e/ui-impact"
+    );
+    await mkdir(evidenceDir, { recursive: true });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-739-places-map-and-shell-wall.png"),
       fullPage: true,
     });
   } finally {

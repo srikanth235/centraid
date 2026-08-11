@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "transcript",
+  "name": "Transcript",
+  "kind": "automation",
+  "description": "Transcribes new audio and video through the deterministic enrichment executor.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

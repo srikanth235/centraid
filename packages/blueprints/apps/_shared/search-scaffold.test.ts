@@ -150,18 +150,22 @@ describe(perScopeReach, () => {
     expect(
       perScopeReach([
         { scope: "photos-own", ok: true },
-        { scope: "photos-lent", ok: false, error: { message: "peer offline" } },
+        {
+          scope: "photos-commons",
+          ok: false,
+          error: { message: "peer offline" },
+        },
       ])
     ).toStrictEqual([
       { scope: "photos-own", state: "reached" },
-      { scope: "photos-lent", state: "unreached", detail: "peer offline" },
+      { scope: "photos-commons", state: "unreached", detail: "peer offline" },
     ]);
   });
 
   it("omits detail for an unreached scope with no error message", () => {
-    expect(perScopeReach([{ scope: "photos-lent", ok: false }])).toStrictEqual([
-      { scope: "photos-lent", state: "unreached" },
-    ]);
+    expect(
+      perScopeReach([{ scope: "photos-commons", ok: false }])
+    ).toStrictEqual([{ scope: "photos-commons", state: "unreached" }]);
   });
 
   // [law:mask-refuses-not-no-matches] #726 P4 D10: a scope whose field mask
@@ -169,12 +173,14 @@ describe(perScopeReach, () => {
   // was the whole one, and refused beats unreached when a caller knows both.
   it("marks a scope REFUSED when it is named in refusedScopes, even if it also answered ok", () => {
     const reach = perScopeReach(
-      [{ scope: "photos-lent", ok: true }],
-      new Map([["photos-lent", "field mask excludes core.content_item.title"]])
+      [{ scope: "photos-commons", ok: true }],
+      new Map([
+        ["photos-commons", "field mask excludes core.content_item.title"],
+      ])
     );
     expect(reach).toStrictEqual([
       {
-        scope: "photos-lent",
+        scope: "photos-commons",
         state: "refused",
         detail: "field mask excludes core.content_item.title",
       },
@@ -183,8 +189,10 @@ describe(perScopeReach, () => {
 
   it("prefers the refusal reason over an unreached scope's transport error", () => {
     const reach = perScopeReach(
-      [{ scope: "photos-lent", ok: false, error: { message: "timeout" } }],
-      new Map([["photos-lent", "field mask excludes core.content_item.title"]])
+      [{ scope: "photos-commons", ok: false, error: { message: "timeout" } }],
+      new Map([
+        ["photos-commons", "field mask excludes core.content_item.title"],
+      ])
     );
     expect(reach[0]!.state).toBe("refused");
     expect(reach[0]!.detail).toBe(
@@ -196,21 +204,21 @@ describe(perScopeReach, () => {
     expect(
       perScopeReach([
         {
-          scope: "photos-lent",
+          scope: "photos-commons",
           ok: false,
           error: {
             code: "REPLICA_SEARCH_REFUSED",
             message:
-              "Search refused in this scope: title is withheld by the lend mask",
+              "Search refused in this scope: title is withheld by the scope mask",
           },
         },
       ])
     ).toStrictEqual([
       {
-        scope: "photos-lent",
+        scope: "photos-commons",
         state: "refused",
         detail:
-          "Search refused in this scope: title is withheld by the lend mask",
+          "Search refused in this scope: title is withheld by the scope mask",
       },
     ]);
   });
@@ -221,7 +229,7 @@ describe(scopeReachFacts, () => {
     expect(
       scopeReachFacts([
         { scope: "photos-own", state: "reached" },
-        { scope: "photos-lent", state: "unreached", detail: "peer offline" },
+        { scope: "photos-commons", state: "unreached", detail: "peer offline" },
         {
           scope: "photos-shared",
           state: "refused",
@@ -229,15 +237,17 @@ describe(scopeReachFacts, () => {
         },
       ])
     ).toStrictEqual([
-      { label: "photos-lent", value: "peer offline" },
+      { label: "photos-commons", value: "peer offline" },
       { label: "photos-shared", value: "field mask excludes title" },
     ]);
   });
 
   it("falls back to a generic value when no detail was given", () => {
     expect(
-      scopeReachFacts([{ scope: "photos-lent", state: "unreached" }])
-    ).toStrictEqual([{ label: "photos-lent", value: "could not be reached" }]);
+      scopeReachFacts([{ scope: "photos-commons", state: "unreached" }])
+    ).toStrictEqual([
+      { label: "photos-commons", value: "could not be reached" },
+    ]);
   });
 
   it("is empty when every scope reached", () => {

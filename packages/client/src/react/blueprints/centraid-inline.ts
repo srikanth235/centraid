@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#731) the inline host bridge keeps query, write, sharing, Commons claim, resident-save, and replica invalidation doors in one security boundary.
 import type {
   InlineAppModule,
   InlineScope,
@@ -35,13 +36,32 @@ import type { ReplicaShellSession } from "../../replica/shell-session.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
 import { authorizeBlobUrl } from "./blob-auth.js";
 import { runInlineQuery } from "./inlineQueryCtx.js";
-import { loadLinkDestinations, performLend } from "./lend-wire.js";
-import type {
-  InlineLendResult,
-  InlineLendScope,
-  InlineLinkDestination,
-} from "./lend-wire.js";
 import { placementWireFromEdge } from "./placement-wire.js";
+import {
+  loadCommonsResidents,
+  loadLinkDestinations,
+  performCommonsRetain,
+  performCommonsShare,
+} from "./share-wire.js";
+
+interface InlineLinkDestination {
+  linkId: string;
+  vaultId: string;
+  partyId: string;
+  approved: boolean;
+}
+
+interface InlineCommonsResident {
+  grantId: string;
+  itemType: string;
+  itemId: string;
+  originItemId: string;
+}
+
+interface InlineCommonsShareResult extends Record<string, unknown> {
+  grantId: string;
+  claims: Array<{ partyId: string; claimToken: string }>;
+}
 
 /** The kit change-feed event shape (blueprints' ambient `CentraidChangeDetail`). */
 interface InlineChangeDetail {
@@ -70,6 +90,47 @@ export interface InlineScopeBinding {
 export type InlineScopeRead<T> =
   | { scope: string; ok: true; data: T }
   | { scope: string; ok: false; error: { code?: string; message: string } };
+
+/** Durable member-side overlay for a command waiting on its Commons steward.
+ * `expired` (a parked intent that outlived its review window) and
+ * `cancelled` (a member-initiated cancel) are settled states like `denied`
+ * (issue #731 goal 2). */
+export interface InlineCommonsIntent {
+  intentId: string;
+  grantId: string;
+  actorPartyId: string;
+  command: string;
+  input: Record<string, unknown>;
+  status:
+    | "pending"
+    | "parked"
+    | "executed"
+    | "denied"
+    | "expired"
+    | "cancelled";
+  reason?: string;
+  stewardLabel?: string;
+  createdAt: string;
+  settledAt?: string;
+}
+
+/** A People-directory identity available to the ceremony-free share sheet. */
+export interface InlineShareTarget {
+  partyId: string;
+  label: string;
+  /** Absent while the person is invited but has not joined with a vault. */
+  vaultId?: string;
+}
+
+export interface InlineShareCircle {
+  circleId: string;
+  label: string;
+  members: Array<{
+    partyId: string;
+    capability: "read" | "read+write";
+    vaultId?: string;
+  }>;
+}
 
 /** A refusal the app is expected to render, not a crash. */
 export class InlineScopeError extends Error {
@@ -106,6 +167,21 @@ export interface InlineCentraidClient {
     signal?: AbortSignal;
     scope?: string;
   }) => Promise<T>;
+  /** Commands durably queued on this member seat while its steward is away. */
+  commonsIntents: (opts?: {
+    scope?: string;
+    signal?: AbortSignal;
+  }) => Promise<InlineCommonsIntent[]>;
+  /** Cancel a durable Commons intent that has not executed yet (issue #731
+   * goal 2). Idempotent and safe to race with the steward — the vault-side
+   * guard only ever moves a still-open (`pending`/`parked`) intent to
+   * `cancelled`; an intent the steward already settled comes back
+   * unchanged, so the caller reads the real outcome off the result rather
+   * than assuming the cancel won. */
+  cancelCommonsIntent: (opts: {
+    intentId: string;
+    scope?: string;
+  }) => Promise<{ status: string; cancelled: boolean }>;
   place: (opts: {
     linkToken: string;
     kind: "add" | "move";
@@ -113,6 +189,7 @@ export interface InlineCentraidClient {
       | "core.collection"
       | "core.content_item"
       | "core.document"
+      | "docs.folder"
       | "locker.item"
       | "media.media_asset"
       | "tally.group";
@@ -120,25 +197,36 @@ export interface InlineCentraidClient {
     sourceVaultId: string;
     targetVaultId: string;
   }) => Promise<Record<string, unknown>>;
-  /**
-   * Open a LIVE window over a scope (#726 P4/P6 — a LEND, as opposed to
-   * `place()`'s GIVE). Revocable by the origin at any time ("stop lending" —
-   * never "take back": a lend never promises what has already been read is
-   * un-seeable). A build with no lend plane refuses with `lending_unavailable`.
-   */
-  lend: (opts: {
-    linkToken: string;
-    itemType:
+  /** Share a complete actable container into every joined member's vault. */
+  share: (opts: {
+    containerType:
       | "core.collection"
       | "core.content_item"
       | "core.document"
+      | "docs.folder"
       | "locker.item"
       | "media.media_asset"
       | "tally.group";
-    scopes: InlineLendScope[];
+    containerId: string;
     sourceVaultId: string;
-    targetVaultId: string;
-  }) => Promise<InlineLendResult>;
+    members: {
+      partyId?: string;
+      vaultId?: string;
+      capability: "read" | "read+write";
+    }[];
+    circleId?: string;
+  }) => Promise<InlineCommonsShareResult>;
+  /** People-directory identities, joined to a vault only after acceptance. */
+  shareTargets: () => Promise<InlineShareTarget[]>;
+  /** Deliberately reusable named audiences. Implicit per-container circles
+   * are excluded by construction. */
+  shareCircles: () => Promise<InlineShareCircle[]>;
+  commonsResidents: (actorVaultId?: string) => Promise<InlineCommonsResident[]>;
+  retainCommonsItem: (opts: {
+    actorVaultId: string;
+    itemType: string;
+    itemId: string;
+  }) => Promise<{ retained: boolean; grantIds: string[] }>;
   /** The household's cross-vault links (#726 P6) — candidate share
    *  destinations beyond the member's own mounted scopes, co-hosted and
    *  remote alike (D3: locality is routing, not semantics). */
@@ -210,6 +298,145 @@ function errorDetail(error: unknown): { code?: string; message: string } {
     ...(typeof code === "string" ? { code } : {}),
     message: error instanceof Error ? error.message : String(error),
   };
+}
+
+async function loadShareTargets(
+  session: InlineScopeSession,
+  ownVaultId: string
+): Promise<InlineShareTarget[]> {
+  const [peopleResult, vaultResult, links] = await Promise.all([
+    session
+      .read("people", {
+        entity: "core.party",
+        orderBy: { column: "display_name", dir: "asc" },
+        limit: 500,
+      })
+      .catch(() => undefined),
+    session
+      .read("people", { entity: "core.vault", limit: 1 })
+      .catch(() => undefined),
+    loadLinkDestinations(ownVaultId),
+  ]);
+  const ownerPartyId = vaultResult?.rows[0]?.values["owner_party_id"];
+  const linkedByParty = new Map(
+    links.map((link) => [link.partyId, link.vaultId])
+  );
+  const targets = new Map<string, InlineShareTarget>();
+  for (const row of peopleResult?.rows ?? []) {
+    const partyId = row.values["party_id"];
+    const displayName = row.values["display_name"];
+    if (
+      typeof partyId !== "string" ||
+      partyId === ownerPartyId ||
+      typeof displayName !== "string" ||
+      !displayName.trim()
+    )
+      continue;
+    const vaultId = linkedByParty.get(partyId);
+    targets.set(partyId, {
+      partyId,
+      label: displayName,
+      ...(vaultId ? { vaultId } : {}),
+    });
+  }
+  for (const link of links) {
+    if (targets.has(link.partyId)) continue;
+    targets.set(link.partyId, {
+      partyId: link.partyId,
+      vaultId: link.vaultId,
+      label: `Linked person ${link.vaultId.length > 10 ? `${link.vaultId.slice(0, 8)}…` : link.vaultId}`,
+    });
+  }
+  return [...targets.values()];
+}
+
+async function loadShareCircles(
+  session: InlineScopeSession,
+  ownVaultId: string
+): Promise<InlineShareCircle[]> {
+  const [circles, members, groups, targets, vault] = await Promise.all([
+    session
+      .read("tally", { entity: "social.circle", limit: 500 })
+      .catch(() => undefined),
+    session
+      .read("tally", { entity: "social.circle_member", limit: 2_000 })
+      .catch(() => undefined),
+    session
+      .read("tally", { entity: "tally.group", limit: 500 })
+      .catch(() => undefined),
+    loadShareTargets(session, ownVaultId),
+    session
+      .read("people", { entity: "core.vault", limit: 1 })
+      .catch(() => undefined),
+  ]);
+  // A current-owner Tally group is the shipped, deliberate named-circle
+  // surface. Commons' implicit circles have no tally_group decorator; a
+  // projected/foreign group has another owner. Neither can enter this picker.
+  const ownerPartyId = vault?.rows[0]?.values["owner_party_id"];
+  if (typeof ownerPartyId !== "string") return [];
+  const ownedCircles = new Set(
+    (circles?.rows ?? []).flatMap((row) => {
+      const circleId = row.values["circle_id"];
+      return typeof circleId === "string" &&
+        row.values["owner_party_id"] === ownerPartyId
+        ? [circleId]
+        : [];
+    })
+  );
+  const reusable = new Set(
+    (groups?.rows ?? []).flatMap((row) => {
+      const circleId = row.values["circle_id"];
+      return typeof circleId === "string" && ownedCircles.has(circleId)
+        ? [circleId]
+        : [];
+    })
+  );
+  const targetByParty = new Map(
+    targets.map((target) => [target.partyId, target])
+  );
+  const byCircle = new Map<string, InlineShareCircle["members"]>();
+  const incomplete = new Set<string>();
+  for (const row of members?.rows ?? []) {
+    const circleId = row.values["circle_id"];
+    const partyId = row.values["party_id"];
+    if (
+      typeof circleId !== "string" ||
+      !reusable.has(circleId) ||
+      typeof partyId !== "string"
+    )
+      continue;
+    if (partyId === ownerPartyId) continue;
+    const target = targetByParty.get(partyId);
+    // The steward is implicit in createCommonsGrant and is never submitted as
+    // a member. Every other member must resolve exactly; a partial roster is
+    // not offered as reusable.
+    if (!target) {
+      incomplete.add(circleId);
+      continue;
+    }
+    const capability =
+      row.values["capability"] === "read+write" ? "read+write" : "read";
+    const list = byCircle.get(circleId) ?? [];
+    list.push({
+      partyId,
+      capability,
+      ...(target.vaultId ? { vaultId: target.vaultId } : {}),
+    });
+    byCircle.set(circleId, list);
+  }
+  return (circles?.rows ?? []).flatMap((row) => {
+    const circleId = row.values["circle_id"];
+    const label = row.values["name"];
+    if (
+      typeof circleId !== "string" ||
+      !reusable.has(circleId) ||
+      incomplete.has(circleId) ||
+      typeof label !== "string" ||
+      !label.trim()
+    )
+      return [];
+    return [{ circleId, label, members: byCircle.get(circleId) ?? [] }];
+  });
 }
 
 /**
@@ -323,10 +550,6 @@ export function createInlineCentraidClient(
       })) as T;
     } catch (error) {
       if (!canFallbackOnline(error)) throw error;
-      // A borrowed scope exists only as the audience gateway's masked replica;
-      // sending its edge-scoped id through an ordinary app query would either
-      // address no vault or, worse, bypass the lend projection.
-      if (binding.scope.borrowed) throw error;
       return (await gatewayRead(
         appId,
         opts.query,
@@ -419,6 +642,79 @@ export function createInlineCentraidClient(
       } as T;
     },
 
+    async commonsIntents(opts) {
+      const binding = bindingFor(opts?.scope);
+      if (!binding.scope.id) return [];
+      const { baseUrl, token } = await auth();
+      const response = await doFetch(
+        baseUrl,
+        `${ROUTES.gatewayCommons}/intents?actorVaultId=${encodeURIComponent(binding.scope.id)}`,
+        {
+          headers: authHeaders(token),
+          ...(opts?.signal ? { signal: opts.signal } : {}),
+        }
+      );
+      const payload = await readJson<{
+        intents?: Array<{
+          intentId: string;
+          grantId: string;
+          actorPartyId: string;
+          command: string;
+          inputJson: string;
+          status: InlineCommonsIntent["status"];
+          reason?: string | null;
+          stewardLabel?: string | null;
+          createdAt: string;
+          settledAt?: string | null;
+        }>;
+      }>(response, "list commons intents");
+      return (payload.intents ?? []).map((intent) => {
+        let input: Record<string, unknown> = {};
+        try {
+          const parsed: unknown = JSON.parse(intent.inputJson);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+            input = parsed as Record<string, unknown>;
+        } catch {
+          // A malformed historical row remains visible with an empty payload;
+          // the overlay must not disappear merely because it cannot be drawn.
+        }
+        const stewardLabel = intent.stewardLabel ?? undefined;
+        const reason =
+          intent.reason ??
+          (intent.status === "pending" || intent.status === "parked"
+            ? `Waiting for ${stewardLabel || "the Commons steward"}.`
+            : undefined);
+        return {
+          intentId: intent.intentId,
+          grantId: intent.grantId,
+          actorPartyId: intent.actorPartyId,
+          command: intent.command,
+          input,
+          status: intent.status,
+          ...(reason ? { reason } : {}),
+          ...(stewardLabel ? { stewardLabel } : {}),
+          createdAt: intent.createdAt,
+          ...(intent.settledAt ? { settledAt: intent.settledAt } : {}),
+        };
+      });
+    },
+
+    async cancelCommonsIntent(opts) {
+      const binding = bindingFor(opts.scope);
+      if (!binding.scope.id) return { status: "pending", cancelled: false };
+      const { baseUrl, token } = await auth();
+      const response = await doFetch(
+        baseUrl,
+        `${ROUTES.gatewayCommons}/intents/${encodeURIComponent(opts.intentId)}/cancel`,
+        {
+          method: "POST",
+          headers: authHeaders(token, "application/json"),
+          body: JSON.stringify({ actorVaultId: binding.scope.id }),
+        }
+      );
+      return readJson(response, "cancel commons intent");
+    },
+
     async place(opts) {
       bindingFor(opts.sourceVaultId);
       const target = bindingFor(opts.targetVaultId);
@@ -456,13 +752,35 @@ export function createInlineCentraidClient(
       return placementWireFromEdge(edge, opts);
     },
 
-    async lend(opts) {
+    async share(opts) {
       bindingFor(opts.sourceVaultId);
       if (!isOnline())
         throw new Error(
-          "Lending needs a gateway connection on web; the native app queues it offline."
+          "Sharing needs a gateway connection on web; the native app queues writes offline."
         );
-      return performLend(await auth(), opts);
+      return performCommonsShare(await auth(), opts);
+    },
+
+    shareTargets() {
+      return loadShareTargets(primary.session, primary.scope.id);
+    },
+
+    shareCircles() {
+      return loadShareCircles(primary.session, primary.scope.id);
+    },
+
+    commonsResidents(actorVaultId = primary.scope.id) {
+      bindingFor(actorVaultId);
+      return auth().then((gatewayAuth) =>
+        loadCommonsResidents(gatewayAuth, actorVaultId)
+      );
+    },
+
+    retainCommonsItem(opts) {
+      bindingFor(opts.actorVaultId);
+      return auth().then((gatewayAuth) =>
+        performCommonsRetain(gatewayAuth, opts)
+      );
     },
 
     links() {

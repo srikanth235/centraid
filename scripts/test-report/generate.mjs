@@ -638,7 +638,7 @@ function evidenceStatus(status, lane, lastAt, freshness) {
 function buildEnrichmentLive(result, freshness) {
   if (!result) {
     return {
-      owner: "tools/enrichment-service/src/model-goldens.live.test.ts",
+      owner: "tools/recognition-automations/src/model-goldens.live.test.ts",
       lane: "enrichment-live",
       status: "missing",
       lastAt: null,

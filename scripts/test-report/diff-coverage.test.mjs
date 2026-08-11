@@ -43,7 +43,7 @@ describe("isInstrumentableSource", () => {
     expect(isInstrumentableSource("packages/vault/src/foo.ts")).toBe(true);
     expect(isInstrumentableSource("apps/web/src/main.tsx")).toBe(true);
     expect(
-      isInstrumentableSource("tools/enrichment-service/src/server.ts")
+      isInstrumentableSource("tools/recognition-automations/src/ctc.ts")
     ).toBe(true);
     expect(
       isInstrumentableSource(

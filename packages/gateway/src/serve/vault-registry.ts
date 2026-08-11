@@ -123,6 +123,10 @@ export interface VaultRegistryOptions {
     vaultId: string,
     entityTypes?: readonly string[]
   ) => void;
+  /** Forwarded after an ordinary steward command is sequenced in a Commons grant. */
+  onCommonsCommandSequenced?: (vaultId: string, grantId: string) => void;
+  /** Forwarded after a member intent is durably queued. */
+  onCommonsIntentQueued?: (vaultId: string, grantId: string) => void;
   /** Forwarded to each plane for the unified Notifications event/wake channel. */
   onNotificationsChanged?: (vaultId: string, wake: boolean) => void;
   /** SQLite durability selected by the gateway hardware profile. */
@@ -197,6 +201,12 @@ export class VaultRegistry {
   private readonly onProvenanceCommitted:
     | ((vaultId: string, entityTypes?: readonly string[]) => void)
     | undefined;
+  private readonly onCommonsCommandSequenced:
+    | ((vaultId: string, grantId: string) => void)
+    | undefined;
+  private readonly onCommonsIntentQueued:
+    | ((vaultId: string, grantId: string) => void)
+    | undefined;
   private readonly onNotificationsChanged:
     | ((vaultId: string, wake: boolean) => void)
     | undefined;
@@ -239,6 +249,8 @@ export class VaultRegistry {
     this.s3Credentials = options.s3Credentials;
     this.previewCodec = options.previewCodec;
     this.onProvenanceCommitted = options.onProvenanceCommitted;
+    this.onCommonsCommandSequenced = options.onCommonsCommandSequenced;
+    this.onCommonsIntentQueued = options.onCommonsIntentQueued;
     this.onNotificationsChanged = options.onNotificationsChanged;
     this.synchronous = options.synchronous;
     this.shouldDeferBackgroundWork = options.shouldDeferBackgroundWork;
@@ -495,6 +507,12 @@ export class VaultRegistry {
       ...(this.previewCodec ? { previewCodec: this.previewCodec } : {}),
       ...(this.onProvenanceCommitted
         ? { onProvenanceCommitted: this.onProvenanceCommitted }
+        : {}),
+      ...(this.onCommonsCommandSequenced
+        ? { onCommonsCommandSequenced: this.onCommonsCommandSequenced }
+        : {}),
+      ...(this.onCommonsIntentQueued
+        ? { onCommonsIntentQueued: this.onCommonsIntentQueued }
         : {}),
       ...(this.onNotificationsChanged
         ? { onNotificationsChanged: this.onNotificationsChanged }

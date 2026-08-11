@@ -42,6 +42,7 @@ import {
 } from "./gateway-client-core.js";
 
 export * from "./gateway-client-core.js";
+export * from "./gateway-client-automations.js";
 export * from "./gateway-client-automation-compile.js";
 export * from "./gateway-client-capture.js";
 export * from "./gateway-client-push.js";
@@ -469,6 +470,37 @@ export async function runAutomationNow(input: {
   return readJson<CentraidAutomationTurnResult>(res, "run automation");
 }
 
+/**
+ * Fire through the gateway's ordinary automation path and wait for the
+ * handler outcome. Test Run and synchronous product gestures use this seam;
+ * Run now remains the background/SSE affordance.
+ */
+export async function invokeAutomationAndAwait(input: {
+  automationId: string;
+  payload?: unknown;
+}): Promise<CentraidAutomationInvokeResult> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_automations/invoke-and-await?ref=${enc(input.automationId)}`,
+    {
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify(input.payload ?? {}),
+    }
+  );
+  const result = await readJson<CentraidAutomationInvokeResult>(
+    res,
+    "invoke automation and await"
+  );
+  if (result.result.outcome && !result.result.outcome.ok) {
+    throw new Error(
+      result.result.outcome.error ?? "Automation finished unsuccessfully."
+    );
+  }
+  return result;
+}
+
 /** Native automation turns, newest-first. Omit `automationId` for the global feed. */
 export async function listAutomationTurns(input: {
   automationId?: string;
@@ -893,23 +925,22 @@ export {
   approveGatewayLink,
   getReceiveSetting,
   setReceiveSetting,
-  getBorrowBudget,
-  setBorrowBudget,
   type GatewayLink,
   type ReceiveSetting,
-  type BorrowBudget,
 } from "./gateway-client-links.js";
 export {
   listGatewayEdges,
   giveEdge,
-  lendEdge,
+  createCommons,
+  listCommonsInvitations,
+  claimCommonsInvitation,
+  answerCommonsInvitation,
   listPendingEdges,
   answerPendingEdge,
-  closeGatewayEdge,
   type GatewayEdge,
   type EdgeMode,
   type EdgeKind,
   type EdgeStatus,
-  type LendScopeInput,
   type PendingEdge,
+  type CommonsInvitation,
 } from "./gateway-client-edges.js";

@@ -659,7 +659,7 @@
     },
     {
       "name": "group",
-      "description": "One group: its meta, members with their net balances, and the expense ledger (newest first), each row decorated with the owner's lent/borrowed amount and its per-person splits.",
+      "description": "One group: its meta, current members plus departed durable ledger participants with their net balances, and the expense ledger (newest first), each row decorated with the owner's lent/borrowed amount and its per-person splits.",
       "input": {
         "type": "object",
         "properties": { "group_id": { "type": "string", "minLength": 1 } },

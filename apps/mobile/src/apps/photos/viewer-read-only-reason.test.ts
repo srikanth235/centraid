@@ -116,9 +116,13 @@ describe("the viewer bottom bar states the reason inline, never only in a hint (
   });
 
   it("names every target even though the chip/capsule row draws no words", () => {
-    // Dropping the DRAWN labels is only allowed because the accessible name is
-    // still read from `action.label` — the very field they were drawn from.
-    expect(TOOLBAR_SRC).toMatch(/label=\{action\.label\}/u);
+    // Dropping the DRAWN labels is only allowed because the accessible name
+    // still comes from the action vocabulary. A Commons resident save gets its
+    // exact product name; every other target retains `action.label`.
+    expect(TOOLBAR_SRC).toMatch(
+      /const label\s*=\s*id === ["']copy["'] && onSaveToMyVault\s*\?\s*["']Save to my vault["']\s*:\s*action\.label/u
+    );
+    expect(TOOLBAR_SRC).toMatch(/label=\{label\}/u);
     expect(CHROME_SRC).toMatch(/accessibilityLabel=\{label\}/u);
   });
 

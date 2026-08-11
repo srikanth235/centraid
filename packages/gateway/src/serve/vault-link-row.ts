@@ -49,6 +49,9 @@ export interface LinkedPeer {
   localVaultId: string;
   peerVaultId: string;
   peerPublicKey: string;
+  /** Party identities exchanged during the approved link ceremony. */
+  peerPartyId?: string;
+  localPartyId?: string;
   peerLabel: string | null;
   myLabel: string | null;
   route: LinkRoute;
@@ -144,6 +147,16 @@ export function isLinkApproved(link: VaultLink): boolean {
   );
 }
 
+export function partyIdForLinkedVault(
+  link: VaultLink,
+  vaultId: string
+): string | undefined {
+  const ids = link.permissions["commonsPartyIds"];
+  if (!ids || typeof ids !== "object") return undefined;
+  const value = (ids as Record<string, unknown>)[vaultId];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
 /** The unordered pair's canonical order — smaller id first (the table's CHECK). */
 export function pairOf(vaultX: string, vaultY: string): [string, string] {
   return vaultX < vaultY ? [vaultX, vaultY] : [vaultY, vaultX];
@@ -160,11 +173,22 @@ export function peerViewOf(
   const route = routeTo(link, peerVaultId);
   // A peer view is a view of a vault elsewhere; a local pair has no far side.
   if (!route) return undefined;
+  const partyIds =
+    typeof link.permissions["commonsPartyIds"] === "object" &&
+    link.permissions["commonsPartyIds"] !== null
+      ? (link.permissions["commonsPartyIds"] as Record<string, unknown>)
+      : {};
   return {
     linkId: link.linkId,
     localVaultId,
     peerVaultId,
     peerPublicKey: mine === "a" ? link.publicKeyB : link.publicKeyA,
+    ...(typeof partyIds[peerVaultId] === "string"
+      ? { peerPartyId: partyIds[peerVaultId] }
+      : {}),
+    ...(typeof partyIds[localVaultId] === "string"
+      ? { localPartyId: partyIds[localVaultId] }
+      : {}),
     peerLabel: mine === "a" ? link.labelB : link.labelA,
     myLabel: mine === "a" ? link.labelA : link.labelB,
     route,

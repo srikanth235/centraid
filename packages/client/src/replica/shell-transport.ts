@@ -1,5 +1,3 @@
-import { ROUTES } from "@centraid/protocol";
-
 import { authHeaders, GatewayClientError, href } from "../gateway-auth.js";
 import type { GatewayAuth } from "../gateway-auth.js";
 import {
@@ -38,61 +36,6 @@ export type ReplicaFetcher = (
  */
 const defaultReplicaFetcher: ReplicaFetcher = (baseUrl, pathname, init) =>
   fetch(href(baseUrl, pathname), init as RequestInit);
-
-/**
- * Adapt the ordinary replica transport to one borrowed edge. The session above
- * this seam remains completely ordinary: it receives the canonical bootstrap,
- * change, intent, and outcome envelopes and persists them in its own
- * edge-scoped database. Only the HTTP address changes.
- */
-export function borrowedReplicaFetcher(
-  edgeId: string,
-  delegate: ReplicaFetcher
-): ReplicaFetcher {
-  if (!edgeId) throw new ReplicaProtocolError("A borrowed edge id is required");
-  const edge = encodeURIComponent(edgeId);
-  return async (baseUrl, pathname, init) => {
-    const url = new URL(pathname, "http://replica.local");
-    if (url.pathname === ROUTES.vaultReplicaBootstrap) {
-      return delegate(
-        baseUrl,
-        `${ROUTES.vaultReplicaBorrowedBootstrap}?edgeId=${edge}`,
-        init
-      );
-    }
-    if (url.pathname === ROUTES.vaultReplicaChanges) {
-      const raw = url.searchParams.get("since") ?? "";
-      const separator = raw.lastIndexOf(":");
-      const since = separator >= 0 ? raw.slice(separator + 1) : raw;
-      return delegate(
-        baseUrl,
-        `${ROUTES.vaultReplicaBorrowedChanges}?edgeId=${edge}&since=${encodeURIComponent(since)}`,
-        init
-      );
-    }
-    if (url.pathname === ROUTES.vaultReplicaIntents) {
-      return delegate(
-        baseUrl,
-        `${ROUTES.vaultReplicaBorrowedIntents}?edgeId=${edge}`,
-        init
-      );
-    }
-    if (url.pathname === "/centraid/_vault/replica/outcomes") {
-      return delegate(
-        baseUrl,
-        `${ROUTES.vaultReplicaBorrowedOutcomes}?edgeId=${edge}`,
-        init
-      );
-    }
-    if (url.pathname === "/centraid/_vault/replica/checkpoint") {
-      return new Response(JSON.stringify({ saved: true }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }
-    return delegate(baseUrl, pathname, init);
-  };
-}
 
 export class ReplicaTransportError extends GatewayClientError {
   constructor(

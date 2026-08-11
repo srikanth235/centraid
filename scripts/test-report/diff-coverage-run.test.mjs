@@ -72,8 +72,8 @@ describe("workspaceDirOf", () => {
     expect(workspaceDirOf("apps/mobile/src/lib/upload/enqueue.ts")).toBe(
       "apps/mobile"
     );
-    expect(workspaceDirOf("tools/enrichment-service/src/server.ts")).toBe(
-      "tools/enrichment-service"
+    expect(workspaceDirOf("tools/recognition-automations/src/ctc.ts")).toBe(
+      "tools/recognition-automations"
     );
     expect(
       workspaceDirOf("packages/blueprints/apps/tasks/handlers/create.ts")

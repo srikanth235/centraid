@@ -100,6 +100,14 @@ export interface ManifestEnrich {
    * `model`: assuming the cheaper lane would be assuming consent.
    */
   readonly lane: EnrichLane;
+  /** Optional billed ACP step offered by this template instead of deterministic fetch. */
+  readonly agentVariant?: {
+    /** Persisted capability choice. Scheduled and manual fires use the same path. */
+    readonly selected: "deterministic" | "agent";
+    readonly promptRev: string;
+    readonly latency: string;
+    readonly consequence: string;
+  };
 }
 
 export interface CostEstimate {
@@ -1263,10 +1271,49 @@ function validateEnrich(raw: unknown): ManifestEnrich | undefined {
       "enrich.lane"
     );
   }
+  let agentVariant: ManifestEnrich["agentVariant"];
+  if (e.agentVariant !== undefined) {
+    if (
+      e.agentVariant === null ||
+      typeof e.agentVariant !== "object" ||
+      Array.isArray(e.agentVariant)
+    ) {
+      throw new ManifestError(
+        "invalid_field",
+        "manifest.enrich.agentVariant must be an object",
+        "enrich.agentVariant"
+      );
+    }
+    const variant = e.agentVariant as Record<string, unknown>;
+    if (
+      variant.selected !== undefined &&
+      variant.selected !== "deterministic" &&
+      variant.selected !== "agent"
+    ) {
+      throw new ManifestError(
+        "invalid_field",
+        "manifest.enrich.agentVariant.selected must be deterministic or agent",
+        "enrich.agentVariant.selected"
+      );
+    }
+    agentVariant = {
+      selected: variant.selected === "agent" ? "agent" : "deterministic",
+      promptRev: requireString(
+        variant.promptRev,
+        "enrich.agentVariant.promptRev"
+      ),
+      latency: requireString(variant.latency, "enrich.agentVariant.latency"),
+      consequence: requireString(
+        variant.consequence,
+        "enrich.agentVariant.consequence"
+      ),
+    };
+  }
   return {
     domain: e.domain as EnrichDomain,
     capability,
     lane: (e.lane as EnrichLane | undefined) ?? "gateway",
+    ...(agentVariant ? { agentVariant } : {}),
   };
 }
 

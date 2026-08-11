@@ -29,7 +29,6 @@ import type { EdgeRow } from "../routes/edges-reconcile.js";
 import { makePeerPlaneHandler } from "../routes/peer-plane.js";
 import { EnrollmentStore } from "./enrollment-store.js";
 import { GatewayDatabase } from "./gateway-db.js";
-import type { BorrowedDeps } from "./lend-audience.js";
 import { judgeEdgeCrossing } from "./link-crossing.js";
 import type { PeerDial } from "./peer-edge-give-client.js";
 import {
@@ -43,7 +42,7 @@ import { VaultLinksStore } from "./vault-links-store.js";
 
 export interface Side {
   vaultId: string;
-  /** The vault's REAL P1 identity key — what a lease signature verifies against. */
+  /** The vault's REAL P1 identity key — what an edge/link signature verifies against. */
   publicKey: string;
   /** `VaultRegistry.signAsVault`, for a fixture with no registry. */
   signAsVault: (vaultId: string, bytes: Buffer) => Buffer | undefined;
@@ -187,27 +186,24 @@ function wireHandler(
 }
 
 /** A peer request that lands on `side`'s real handler, as the relay would deliver it. */
-export function transportTo(
-  side: Side,
-  callerEndpointId: string,
-  /** The live-edge half (#726 P4); omitted, every `lend/*` frame is not_found. */
-  borrowed?: BorrowedDeps
-): PeerRequest {
+export function transportTo(side: Side, callerEndpointId: string): PeerRequest {
   const handler = makePeerPlaneHandler({
     links: side.links,
     peerProof: side.proof,
     vaultPublicKey: (vaultId) =>
       vaultId === side.vaultId ? side.publicKey : undefined,
+    ownerPartyFor: (vaultId) =>
+      vaultId === side.vaultId ? side.ownerPartyId : undefined,
     localRoute: () => ({ endpointId: side.endpointId, relayHints: [] }),
     localLabel: () => side.label,
     vaultFor: (vaultId) => (vaultId === side.vaultId ? side.vault : undefined),
+    commonsVaultFor: (vaultId) =>
+      vaultId === side.vaultId ? side.vault : undefined,
+    commonsGatewayFor: (vaultId) =>
+      vaultId === side.vaultId ? side.gateway : undefined,
+    commonsCredentialFor: (vaultId) =>
+      vaultId === side.vaultId ? side.ownerCredential : undefined,
     gatewayDatabase: side.gatewayDb,
-    lend: {
-      signAsVault: side.signAsVault,
-      ...(borrowed ? { borrowed } : {}),
-      gatewayFor: (vaultId) =>
-        vaultId === side.vaultId ? side.gateway : undefined,
-    },
   });
   return wireHandler(handler, callerEndpointId, side.proof);
 }
@@ -222,8 +218,7 @@ export function transportTo(
  */
 export function transportToHost(
   sides: readonly [Side, ...Side[]],
-  callerEndpointId: string,
-  borrowed?: BorrowedDeps
+  callerEndpointId: string
 ): PeerRequest {
   const host = sides[0];
   const sideFor = (vaultId: string): Side | undefined =>
@@ -232,27 +227,21 @@ export function transportToHost(
     links: host.links,
     peerProof: host.proof,
     vaultPublicKey: (vaultId) => sideFor(vaultId)?.publicKey,
+    ownerPartyFor: (vaultId) => sideFor(vaultId)?.ownerPartyId,
     localRoute: () => ({ endpointId: host.endpointId, relayHints: [] }),
     localLabel: () => host.label,
     vaultFor: (vaultId) => sideFor(vaultId)?.vault,
+    commonsVaultFor: (vaultId) => sideFor(vaultId)?.vault,
+    commonsGatewayFor: (vaultId) => sideFor(vaultId)?.gateway,
+    commonsCredentialFor: (vaultId) => sideFor(vaultId)?.ownerCredential,
     gatewayDatabase: host.gatewayDb,
-    lend: {
-      signAsVault: (vaultId, bytes) =>
-        sideFor(vaultId)?.signAsVault(vaultId, bytes),
-      ...(borrowed ? { borrowed } : {}),
-      gatewayFor: (vaultId) => sideFor(vaultId)?.gateway,
-    },
   });
   return wireHandler(handler, callerEndpointId, host.proof);
 }
 
-export function dialFrom(
-  caller: Side,
-  callee: Side,
-  borrowed?: BorrowedDeps
-): PeerDial {
+export function dialFrom(caller: Side, callee: Side): PeerDial {
   return {
-    request: transportTo(callee, caller.endpointId, borrowed),
+    request: transportTo(callee, caller.endpointId),
     endpointTicketFor: (endpointId) => `ticket-for-${endpointId}`,
   };
 }
@@ -261,11 +250,10 @@ export function dialFrom(
  *  answering as one gateway) FROM `caller`. */
 export function dialFromHost(
   caller: Side,
-  sides: readonly [Side, ...Side[]],
-  borrowed?: BorrowedDeps
+  sides: readonly [Side, ...Side[]]
 ): PeerDial {
   return {
-    request: transportToHost(sides, caller.endpointId, borrowed),
+    request: transportToHost(sides, caller.endpointId),
     endpointTicketFor: (endpointId) => `ticket-for-${endpointId}`,
   };
 }
@@ -290,6 +278,7 @@ export async function link(shower: Side, scanner: Side): Promise<void> {
     links: scanner.links,
     request: transportTo(shower, scanner.endpointId),
     localVault: { vaultId: scanner.vaultId, publicKey: scanner.publicKey },
+    localOwnerPartyId: scanner.ownerPartyId,
     localRoute: { endpointId: scanner.endpointId, relayHints: [] },
     localLabel: scanner.label,
   });

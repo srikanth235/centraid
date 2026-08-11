@@ -1,228 +1,203 @@
-// ONE share sheet (issue #726 P6, web + mobile in spirit — this is the web
-// half; apps/mobile/src/kit/share/ShareSheet.tsx is the native one). A
-// give/lend toggle over ONE destination list — the member's own other
-// vaults and every linked person, mixed, never sorted or labelled by where a
-// destination physically lives (D3).
-//
-// REPLACES the P0 interim "Copy to ⟨sole destination⟩" shortcut
-// (`sharing.ts`'s `soleDestination`/`copyActionLabel`/`destinationBlockedReason`)
-// — that shortcut only ever offered the ONE other writable scope and refused
-// outright the moment a second destination (or a linked person) existed. This
-// sheet is what "choosing one is not available on this device yet" was
-// waiting for.
+/** Ceremony-free commons ShareSheet: pick people, choose capability, share. */
 import { useEffect, useRef, useState } from "react";
 
 import type { InlineScope } from "../inline-types.ts";
+import { commonsInviteMessage, encodeCommonsInvite } from "./commons-invite.ts";
+import { manualShareSelection } from "./named-circle-selection.ts";
 import type { PlaceableItemType } from "./placement-registry.ts";
 import {
-  GIVE_IRREVOCABLE_WARNING,
-  lendScopeNote,
   loadShareDestinations,
-  searchReachWarning,
+  loadShareCircles,
+  selectionsForCircle,
+  selectedShareMembers,
   shareBlockedReason,
-  wholeLibraryLendScope,
 } from "./share-kit.ts";
-import type { LendSearchReach, ShareDestination } from "./share-kit.ts";
+import type { ShareCircle, ShareDestination } from "./share-kit.ts";
 
 import styles from "./ShareSheet.module.css";
 
-export type ShareVerb = "give" | "lend";
+export type ShareVerb = "share";
+
+interface InviteHandoff {
+  partyId: string;
+  label: string;
+  uri: string;
+}
 
 export interface ShareSheetProps {
   open: boolean;
   onClose: () => void;
-  /** The scope the shared thing (or the whole library, for a lend) lives in
-   *  right now. */
   sourceScopeId: string;
   scopes: readonly InlineScope[];
-  /** Which verbs this call site can honestly offer. A give needs a concrete
-   *  item set (`itemIds`); a lend needs a declared entity family
-   *  (`mintedIdFamilies`) — pass only what applies. */
-  verbs: readonly ShareVerb[];
-  /** What a GIVE copies. Ignored when `verbs` excludes `"give"`. */
   itemType?: PlaceableItemType;
   itemIds?: readonly string[];
-  /** What a LEND opens a window over (`ScopeAppDeclaration.mintedIdFamilies`)
-   *  and the human name the lend note uses. Ignored when `verbs` excludes
-   *  `"lend"`. */
-  mintedIdFamilies?: readonly string[];
   appLabel?: string;
-  /**
-   * Override the GIVE execution for `itemIds`, e.g. Photos' selection bar
-   * routing through its own tested `copy-into-scope` batch command instead
-   * of N sequential `place()` calls. Absent falls back to the generic
-   * per-item `window.centraid.place()` loop below (what Lightbox's
-   * single-item give, and any app with no specialized batch command, use).
-   */
-  giveMany?: (
-    destination: ShareDestination
-  ) => Promise<{ ok: boolean; message: string }>;
   onDone: (outcome: { verb: ShareVerb; ok: boolean; message: string }) => void;
+  /**
+   * The label of a named circle (`ShareCircle.label`) to preselect the
+   * moment circles finish loading — for a container that reuses its OWN
+   * named circle, i.e. a group sharing itself (issue #731 M3). A container
+   * like that is bound to that circle's exact stored roster + capabilities
+   * server-side regardless of what this sheet submits, so leaving the
+   * picker on "choose people individually" (every new pick defaulting to
+   * `read+write`) refuses with the commons layer's exact-roster message the
+   * moment a submitted capability drifts from what's stored. Preselecting
+   * the matching circle sources each person's capability from its OWN
+   * stored roster (`selectionsForCircle`), so the default path submits
+   * exactly what the commons layer already expects.
+   */
+  preferredCircleLabel?: string;
 }
 
-type Stage = "pick" | "confirm" | "busy";
-
 export function ShareSheet(props: ShareSheetProps) {
-  const { open, onClose, sourceScopeId, scopes, verbs } = props;
-  const [verb, setVerb] = useState<ShareVerb>(verbs[0] ?? "give");
   const [destinations, setDestinations] = useState<ShareDestination[] | null>(
     null
   );
-  const [targetId, setTargetId] = useState<string | null>(null);
-  const [stage, setStage] = useState<Stage>("pick");
+  const [selections, setSelections] = useState<
+    Record<string, "read" | "read+write">
+  >({});
+  const [circles, setCircles] = useState<ShareCircle[]>([]);
+  const [selectedCircleId, setSelectedCircleId] = useState("");
+  const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [inviteHandoffs, setInviteHandoffs] = useState<InviteHandoff[]>([]);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  // The sheet should re-fetch destinations only when it (re)opens, never on
-  // every scope/verb array identity change while it's already showing — so
-  // the effect below reads the LATEST props through this ref instead of
-  // declaring them as dependencies. The ref is synced in its own effect
-  // (never written during render) and declared first so it's current by
-  // the time the open-triggered effect below runs in the same commit.
-  const openInputsRef = useRef({ sourceScopeId, scopes, verbs });
   useEffect(() => {
-    openInputsRef.current = { sourceScopeId, scopes, verbs };
-  });
-
-  useEffect(() => {
-    if (!open) return;
-    const {
-      sourceScopeId: openSourceScopeId,
-      scopes: openScopes,
-      verbs: openVerbs,
-    } = openInputsRef.current;
-    setVerb(openVerbs[0] ?? "give");
-    setStage("pick");
-    setErrorMessage(null);
-    setDestinations(null);
-    setTargetId(null);
-    let live = true;
-    void loadShareDestinations(openSourceScopeId, openScopes)
-      .then((list) => {
-        if (!live) return;
-        setDestinations(list);
-        setTargetId(list[0]?.id ?? null);
-      })
-      .catch((error: unknown) => {
-        if (!live) return;
+    if (!props.open) return;
+    let active = true;
+    void Promise.resolve().then(async () => {
+      if (!active) return;
+      setBusy(false);
+      setErrorMessage(null);
+      setDestinations(null);
+      setSelectedCircleId("");
+      setInviteHandoffs([]);
+      try {
+        const [rows, namedCircles] = await Promise.all([
+          loadShareDestinations(props.sourceScopeId, props.scopes),
+          loadShareCircles(),
+        ]);
+        if (!active) return;
+        setDestinations(rows);
+        setCircles(namedCircles);
+        // Auto-reuse the item's own named circle when there is one (see
+        // `preferredCircleLabel` above) — sourcing selections from the
+        // circle's stored roster, not a blank slate defaulting new picks to
+        // `read+write`.
+        const preferredCircle = props.preferredCircleLabel
+          ? namedCircles.find(
+              (circle) => circle.label === props.preferredCircleLabel
+            )
+          : undefined;
+        if (preferredCircle) {
+          setSelectedCircleId(preferredCircle.circleId);
+          setSelections(selectionsForCircle(rows, preferredCircle));
+        } else {
+          setSelections({});
+        }
+      } catch (error) {
+        if (!active) return;
         setDestinations([]);
         setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Share destinations could not be loaded."
+          error instanceof Error ? error.message : "People could not be loaded."
         );
-      });
+      }
+    });
     return () => {
-      live = false;
+      active = false;
     };
-  }, [open]);
+  }, [
+    props.open,
+    props.scopes,
+    props.sourceScopeId,
+    props.preferredCircleLabel,
+  ]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (!dialog || !open) return;
-    const prior =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-    if (typeof dialog.showModal === "function") dialog.showModal();
-    else dialog.setAttribute("open", "");
-    dialog
-      .querySelector<HTMLElement>("input, select, button:not([disabled])")
-      ?.focus();
+    if (!dialog || !props.open) return;
+    dialog.showModal?.();
     return () => {
       if (dialog.open) dialog.close();
-      prior?.focus();
     };
-  }, [open]);
+  }, [props.open]);
 
-  if (!open) return null;
-
+  if (!props.open) return null;
   const blocked = destinations ? shareBlockedReason(destinations) : null;
-  const target = destinations?.find((d) => d.id === targetId) ?? null;
-  const appLabel = props.appLabel ?? "this app";
+  const preferredCircle = props.preferredCircleLabel
+    ? circles.find((circle) => circle.label === props.preferredCircleLabel)
+    : undefined;
+  const isPreferredCircleSelected =
+    Boolean(preferredCircle) && selectedCircleId === preferredCircle?.circleId;
+  const selected = (destinations ?? []).flatMap((destination) => {
+    const capability = selections[destination.id];
+    return capability ? [{ destination, capability }] : [];
+  });
+  const members = selectedShareMembers(destinations ?? [], selections);
 
-  const runGive = async (): Promise<void> => {
-    if (!target) return;
-    setStage("busy");
-    if (props.giveMany) {
-      const outcome = await props.giveMany(target);
-      props.onDone({ verb: "give", ...outcome });
-      onClose();
-      return;
-    }
-    const { itemType, itemIds } = props;
-    if (!itemType || !itemIds?.length) return;
-    const outcomes = await Promise.all(
-      itemIds.map((itemId) =>
-        window.centraid.place!({
-          linkToken: crypto.randomUUID(),
-          kind: "add",
-          itemType,
-          itemId,
-          sourceVaultId: sourceScopeId,
-          targetVaultId: target.id,
-        })
-          .then((result) => result.status === "executed")
-          .catch(() => false)
-      )
+  const toggle = (destination: ShareDestination): void => {
+    const next = manualShareSelection(
+      selections,
+      destination.id,
+      selections[destination.id] ? undefined : "read+write"
     );
-    const failures = outcomes.filter((ok) => !ok).length;
-    const count = itemIds.length;
-    props.onDone({
-      verb: "give",
-      ok: failures === 0,
-      message:
-        failures === 0
-          ? `Given to ${target.label}.`
-          : `${count - failures} of ${count} given to ${target.label}; the rest did not land.`,
-    });
-    onClose();
+    setSelectedCircleId(next.circleId);
+    setSelections(next.selections);
   };
 
-  const runLend = async (): Promise<void> => {
-    if (!target || !props.mintedIdFamilies?.length) return;
-    setStage("busy");
-    const scopeDecl = wholeLibraryLendScope(props.mintedIdFamilies);
+  const run = async (): Promise<void> => {
+    if (!selected.length || !props.itemType || !props.itemIds?.length) return;
+    setBusy(true);
     try {
-      const result = await window.centraid.lend!({
-        linkToken: crypto.randomUUID(),
-        // The lend's own item type is the ENTITY FAMILY being lent (the
-        // whole library, per the file header), never the GIVE's `itemType`
-        // prop — a call site can legitimately give one item type (an album,
-        // say) and lend a different one (the library it lives in).
-        itemType: props.mintedIdFamilies[0] as never,
-        scopes: scopeDecl,
-        sourceVaultId: sourceScopeId,
-        targetVaultId: target.id,
-      });
-      const settled =
-        result.status === "executed" || result.status === "established";
-      // Named at MASK-SELECTION time (#726 P4 D10): the gateway's `/edges`
-      // response for this lend carries `searchReach`
-      // (`lend-search-reach.ts`'s `ScopeSearchReach`), threaded through the
-      // client wire's `InlineLendResult` and the ambient `CentraidClient.
-      // lend()` return type (both `searchReach?: LendSearchReach[]`-shaped)
-      // all the way to here.
-      const reach: LendSearchReach[] | undefined = result.searchReach;
-      const warning = settled ? searchReachWarning(reach, target.label) : null;
+      const results = await Promise.all(
+        props.itemIds.map((containerId) =>
+          window.centraid.share!({
+            sourceVaultId: props.sourceScopeId,
+            containerType: props.itemType!,
+            containerId,
+            members,
+            ...(selectedCircleId ? { circleId: selectedCircleId } : {}),
+          })
+        )
+      );
+      const handoffs = results.flatMap((result) =>
+        (result.claims ?? []).map((claim) => {
+          const destination = selected.find(
+            ({ destination: candidate }) => candidate.partyId === claim.partyId
+          )?.destination;
+          return {
+            partyId: claim.partyId,
+            label: destination?.label ?? "Invited person",
+            uri: encodeCommonsInvite({
+              stewardVaultId: props.sourceScopeId,
+              claimToken: claim.claimToken,
+            }),
+          };
+        })
+      );
+      const invited = selected.filter(
+        ({ destination }) => !destination.vaultId
+      ).length;
       props.onDone({
-        verb: "lend",
-        ok: settled,
-        message: settled
-          ? `Lending to ${target.label}.${warning ? ` ${warning}` : ""}`
-          : (result.reason ?? `Not lent to ${target.label}.`),
+        verb: "share",
+        ok: true,
+        message: invited
+          ? `Shared with ${selected.length} people; ${invited} ${invited === 1 ? "is" : "are"} invited and will join after creating a vault.`
+          : `Shared with ${selected.length} ${selected.length === 1 ? "person" : "people"}.`,
       });
+      if (handoffs.length) {
+        setInviteHandoffs(handoffs);
+        setBusy(false);
+      } else props.onClose();
     } catch (error) {
-      props.onDone({
-        verb: "lend",
-        ok: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : `Not lent to ${target.label}.`,
-      });
+      setBusy(false);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not share with the selected people."
+      );
     }
-    onClose();
   };
 
   return (
@@ -232,107 +207,189 @@ export function ShareSheet(props: ShareSheetProps) {
       aria-modal="true"
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        props.onClose();
       }}
     >
       <button
         type="button"
         className="kit-modal-scrim"
         aria-label="Close"
-        onClick={onClose}
+        onClick={props.onClose}
       />
       <div className="kit-modal" style={{ maxWidth: "420px" }}>
         <h2>Share</h2>
-
-        {verbs.length > 1 ? (
-          <div className={`kit-seg stretch ${styles.toggle}`}>
-            {verbs.map((candidate) => (
-              <button
-                key={candidate}
-                type="button"
-                className={verb === candidate ? "on" : ""}
-                aria-pressed={verb === candidate}
-                onClick={() => {
-                  setVerb(candidate);
-                  setStage("pick");
-                }}
-              >
-                {candidate === "give" ? "Give" : "Lend"}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {verb === "lend" ? (
-          <p className={styles.note}>{lendScopeNote(appLabel)}</p>
-        ) : null}
-
+        <p className={styles.note}>
+          Pick people. Each person who joins stores a full copy in their vault
+          and backup.
+        </p>
         {destinations === null ? (
-          <p className={styles.note}>Finding places to share to…</p>
+          <p className={styles.note}>Finding people…</p>
         ) : blocked ? (
           <p className={styles.note}>{blocked}</p>
         ) : (
-          <select
-            className={styles.destList}
-            aria-label="Destination"
-            size={Math.min(destinations.length, 6)}
-            value={targetId ?? ""}
-            onChange={(event) => setTargetId(event.target.value)}
-          >
-            {destinations.map((dest) => (
-              <option key={dest.id} value={dest.id} className={styles.destItem}>
-                {dest.label}
-              </option>
-            ))}
-          </select>
+          <>
+            {circles.length ? (
+              <label className={styles.circleChoice}>
+                Reuse a named circle (optional)
+                <select
+                  value={selectedCircleId}
+                  onChange={(event) => {
+                    const circleId = event.target.value;
+                    setSelectedCircleId(circleId);
+                    const circle = circles.find(
+                      (candidate) => candidate.circleId === circleId
+                    );
+                    setSelections(
+                      circle ? selectionsForCircle(destinations, circle) : {}
+                    );
+                  }}
+                >
+                  <option value="">Choose people individually</option>
+                  {circles.map((circle) => (
+                    <option key={circle.circleId} value={circle.circleId}>
+                      Named group · {circle.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {isPreferredCircleSelected ? (
+              <p className={styles.preselected}>
+                Sharing with {preferredCircle?.label}&apos;s existing members,
+                each kept at their current access.
+              </p>
+            ) : null}
+            <fieldset className={styles.destList} aria-label="People">
+              {destinations.map((destination) => {
+                const capability = selections[destination.id];
+                return (
+                  <div className={styles.destItem} key={destination.id}>
+                    <label className={styles.personChoice}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(capability)}
+                        onChange={() => toggle(destination)}
+                      />
+                      <span>
+                        {destination.label}
+                        {destination.vaultId ? null : (
+                          <small className={styles.invited}>
+                            Invited — waiting for a vault
+                          </small>
+                        )}
+                      </span>
+                    </label>
+                    {capability ? (
+                      <select
+                        aria-label={`${destination.label} capability`}
+                        value={capability}
+                        onChange={(event) => {
+                          const next = manualShareSelection(
+                            selections,
+                            destination.id,
+                            event.target.value as "read" | "read+write"
+                          );
+                          setSelectedCircleId(next.circleId);
+                          setSelections(next.selections);
+                        }}
+                      >
+                        <option value="read+write">Can edit</option>
+                        <option value="read">Can view</option>
+                      </select>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </fieldset>
+          </>
         )}
-
+        <p className={styles.note}>
+          Someone without a vault remains invited until they install, create a
+          vault, and accept.
+        </p>
         {errorMessage ? <p className={styles.error}>{errorMessage}</p> : null}
-
-        {verb === "give" && stage === "confirm" ? (
-          <p className={styles.warn}>{GIVE_IRREVOCABLE_WARNING}</p>
+        {inviteHandoffs.length ? (
+          <section className={styles.handoffs} aria-label="Share invitations">
+            <h3>Send these one-time invitations</h3>
+            <p className={styles.note}>
+              Each person installs Centraid, creates a vault, connects to you if
+              remote, redeems this invitation, then accepts its size.
+            </p>
+            {inviteHandoffs.map((handoff, index) => {
+              const message = commonsInviteMessage(handoff.uri);
+              return (
+                <div
+                  className={styles.handoff}
+                  key={`${handoff.partyId}:${index}`}
+                >
+                  <strong>{handoff.label}</strong>
+                  <div>
+                    <button
+                      type="button"
+                      className="kit-btn"
+                      onClick={() =>
+                        void navigator.clipboard
+                          .writeText(message)
+                          .catch(() =>
+                            setErrorMessage("Invitation could not be copied.")
+                          )
+                      }
+                    >
+                      Copy invite
+                    </button>{" "}
+                    <button
+                      type="button"
+                      className="kit-btn"
+                      onClick={() =>
+                        void (
+                          navigator.share
+                            ? navigator.share({
+                                title: `Centraid invitation for ${handoff.label}`,
+                                text: message,
+                              })
+                            : navigator.clipboard.writeText(message)
+                        ).catch(() =>
+                          setErrorMessage("Invitation could not be shared.")
+                        )
+                      }
+                    >
+                      Share invite
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </section>
         ) : null}
-
         <div className="kit-modal-foot">
-          <button type="button" className="kit-btn" onClick={onClose}>
-            Cancel
-          </button>
-          {verb === "give" ? (
-            stage === "confirm" ? (
-              <button
-                type="button"
-                className="kit-btn primary"
-                disabled={!target}
-                onClick={() => void runGive()}
-              >
-                Give — can’t undo
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="kit-btn primary"
-                disabled={!target || stage === "busy"}
-                onClick={() => setStage("confirm")}
-              >
-                Continue
-              </button>
-            )
-          ) : (
+          {inviteHandoffs.length ? (
             <button
               type="button"
               className="kit-btn primary"
-              disabled={!target || stage === "busy"}
-              onClick={() => void runLend()}
+              onClick={() => {
+                setInviteHandoffs([]);
+                props.onClose();
+              }}
             >
-              {stage === "busy" ? "Lending…" : "Lend"}
+              Done
             </button>
+          ) : (
+            <>
+              <button type="button" className="kit-btn" onClick={props.onClose}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="kit-btn primary"
+                disabled={selected.length === 0 || busy}
+                onClick={() => void run()}
+              >
+                {busy ? "Sharing…" : "Share"}
+              </button>
+            </>
           )}
         </div>
       </div>
     </dialog>
   );
 }
-
-/** Re-exported so a "stop lending" control elsewhere in the app quotes the
- *  exact same wording — never "take back" (D7). */
-export { STOP_LENDING_LABEL } from "./share-kit.ts";

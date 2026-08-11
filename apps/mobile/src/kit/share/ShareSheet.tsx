@@ -1,70 +1,52 @@
-// ONE share sheet (issue #726 P6) — the native half; `packages/blueprints/
-// apps/_shared/ShareSheet.tsx` is the web one. A give/lend toggle over ONE
-// destination list: the member's own other writable vaults AND every linked
-// person, mixed, never sorted or labelled by where a destination physically
-// lives (D3).
-//
-// REPLACES `kit/share/CopyToVaultPicker.tsx` (the P0 sole-destination copy
-// picker) AND `kit/components/AudiencePlacementSheet.tsx` (the P0 collection-
-// level share sheet) — both did the same job this one does, for two
-// different callers, neither aware of linked people or lending. Both are
-// deleted; every former caller is rewired to this file.
-import * as Crypto from "expo-crypto";
-import React, { useEffect, useRef, useState } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  View,
+} from "react-native";
 
+import {
+  commonsInviteMessage,
+  encodeCommonsInvite,
+} from "@centraid/blueprints/apps/_shared/commons-invite";
+import { manualShareSelection } from "@centraid/blueprints/apps/_shared/named-circle-selection";
 import type { PlaceableItemType } from "@centraid/blueprints/apps/_shared/placement-registry";
 
 import { listLinks } from "../../lib/replica/links-transport";
-import type { LendScopeInput } from "../../lib/replica/placement-transport";
+import type { GatewayLink } from "../../lib/replica/links-transport";
 import { Text } from "../components/NativeText";
 import TopSafeArea from "../components/TopSafeArea";
+import { useReplicaQuery } from "../hooks/useReplicaQuery";
 import { useReplica } from "../replica/ReplicaProvider";
 import { borders, radii, spacing, t, useTheme } from "../theme";
+import { useNamedShareCircles } from "./named-circles";
+import {
+  nativeShareTargets,
+  selectionsForNativeCircle,
+  selectedNativeShareMembers,
+} from "./share-targets";
 
-export type ShareVerb = "give" | "lend";
+export type ShareVerb = "share";
 
-/** Best-effort human label for a linked vault id — a vault that has already
- *  lent something IN carries its own label; one that has not is a genuine
- *  wire gap (no route names a linked-but-never-shared-with vault yet). */
-function destinationLabel(
-  vaultId: string,
-  scopes: readonly { vaultId: string; label: string; borrowed?: unknown }[]
-): string {
-  const known = scopes.find((s) => s.vaultId === vaultId && s.borrowed);
-  if (known) return known.label;
-  return `Linked vault ${vaultId.length > 10 ? `${vaultId.slice(0, 8)}…` : vaultId}`;
+interface InviteHandoff {
+  partyId: string;
+  label: string;
+  uri: string;
 }
 
 export interface ShareSheetProps {
   visible: boolean;
   onClose: () => void;
   sourceVaultId: string;
-  /** What the sheet is sharing, for its own title copy ("Share ⟨noun⟩"). */
   noun: string;
-  verbs: readonly ShareVerb[];
-  /** What a GIVE copies. Ignored when `verbs` excludes `"give"`. */
   itemType?: PlaceableItemType;
   itemIds?: readonly string[];
-  /** Batch-give override — e.g. Photos' selection bar routing through its
-   *  own tested batch write instead of N sequential `place()` calls. Absent
-   *  falls back to a per-item `session.place()` loop. */
-  giveMany?: (destination: {
-    vaultId: string;
-    label: string;
-  }) => Promise<{ ok: boolean; message: string }>;
-  /** What a LEND opens a window over, and the human name its note uses.
-   *  Ignored when `verbs` excludes `"lend"`. */
-  mintedIdFamilies?: readonly string[];
   appLabel?: string;
   onDone: (outcome: { verb: ShareVerb; ok: boolean; message: string }) => void;
-}
-
-function wholeLibraryLendScope(
-  mintedIdFamilies: readonly string[]
-): LendScopeInput[] {
-  const [schema, table] = (mintedIdFamilies[0] ?? "").split(".");
-  return schema && table ? [{ schema, table }] : [];
 }
 
 export default function ShareSheet({
@@ -72,188 +54,135 @@ export default function ShareSheet({
   onClose,
   sourceVaultId,
   noun,
-  verbs,
   itemType,
   itemIds,
-  giveMany,
-  mintedIdFamilies,
-  appLabel,
   onDone,
 }: ShareSheetProps): React.JSX.Element {
   const { colors } = useTheme();
   const replica = useReplica();
-  const [verb, setVerb] = useState<ShareVerb>(verbs[0] ?? "give");
-  const [linkDestinations, setLinkDestinations] = useState<
-    { vaultId: string; label: string }[]
-  >([]);
+  const parties = useReplicaQuery(
+    "people",
+    useMemo(() => ({ entity: "core.party", limit: 500 }), [])
+  );
+  const vault = useReplicaQuery(
+    "people",
+    useMemo(() => ({ entity: "core.vault", limit: 1 }), [])
+  );
+  const [links, setLinks] = useState<GatewayLink[]>([]);
+  const [selections, setSelections] = useState<
+    Record<string, "read" | "read+write">
+  >({});
   const [busy, setBusy] = useState(false);
-  // A GIVE is irrevocable the instant it lands (D7) — this is the confirm
-  // step that warns BEFORE it fires, never after. A LEND needs none: it is
-  // revocable at any time ("stop lending"), so a single tap is honest.
-  const [confirming, setConfirming] = useState<{
-    vaultId: string;
-    label: string;
-  } | null>(null);
-
-  // The sheet should re-fetch link destinations only when it (re)opens,
-  // never on every scope/verb/gateway identity change while it's already
-  // showing — so the effect below reads the LATEST values through this ref
-  // instead of declaring them as dependencies. The ref is synced in its own
-  // effect (never written during render) and declared first so it's current
-  // by the time the visible-triggered effect below runs in the same commit.
+  const [selectedCircleId, setSelectedCircleId] = useState("");
+  const [inviteHandoffs, setInviteHandoffs] = useState<InviteHandoff[]>([]);
   const openInputsRef = useRef({
-    verbs,
-    sourceVaultId,
     gatewayBase: replica.gatewayBase,
-    scopes: replica.scopes,
   });
+
   useEffect(() => {
     openInputsRef.current = {
-      verbs,
-      sourceVaultId,
       gatewayBase: replica.gatewayBase,
-      scopes: replica.scopes,
     };
   });
 
   useEffect(() => {
     if (!visible) return;
-    const {
-      verbs: openVerbs,
-      sourceVaultId: openSourceVaultId,
-      gatewayBase: base,
-      scopes: openScopes,
-    } = openInputsRef.current;
-    setVerb(openVerbs[0] ?? "give");
-    setBusy(false);
-    setConfirming(null);
-    let live = true;
-    if (!base) return;
-    const scopes = openScopes ?? [];
-    listLinks(base)
-      .then((links) => {
-        if (!live) return;
-        const mounted = new Set(scopes.map((s) => s.vaultId));
-        setLinkDestinations(
-          links
-            .filter((link) => link.approved && !link.revoked)
-            .map((link) =>
-              link.vaultA === openSourceVaultId ? link.vaultB : link.vaultA
-            )
-            .filter(
-              (vaultId) =>
-                vaultId !== openSourceVaultId && !mounted.has(vaultId)
-            )
-            .map((vaultId) => ({
-              vaultId,
-              label: destinationLabel(vaultId, scopes),
-            }))
-        );
-      })
-      .catch(() => {
-        if (live) setLinkDestinations([]);
-      });
+    const { gatewayBase } = openInputsRef.current;
+    let active = true;
+    void Promise.resolve().then(async () => {
+      if (!active) return;
+      setBusy(false);
+      setSelections({});
+      setSelectedCircleId("");
+      setInviteHandoffs([]);
+      if (!gatewayBase) return;
+      try {
+        const nextLinks = await listLinks(gatewayBase);
+        if (active) setLinks(nextLinks);
+      } catch {
+        if (active) setLinks([]);
+      }
+    });
     return () => {
-      live = false;
+      active = false;
     };
   }, [visible]);
 
-  const ownDestinations = (replica.scopes ?? [])
-    .filter(
-      (scope) =>
-        scope.vaultId !== sourceVaultId && scope.canWrite && !scope.borrowed
-    )
-    .map((scope) => ({ vaultId: scope.vaultId, label: scope.label }));
-  const destinations = [...ownDestinations, ...linkDestinations];
+  const ownerPartyId =
+    typeof vault.rows[0]?.owner_party_id === "string"
+      ? vault.rows[0].owner_party_id
+      : undefined;
+  const destinations = nativeShareTargets({
+    sourceVaultId,
+    ownerPartyId,
+    parties: parties.rows,
+    links,
+    scopes: replica.scopes ?? [],
+  });
+  const selected = destinations.flatMap((destination) => {
+    const capability = selections[destination.id];
+    return capability ? [{ destination, capability }] : [];
+  });
+  const members = selectedNativeShareMembers(destinations, selections);
+  const namedCircles = useNamedShareCircles(destinations, ownerPartyId);
 
-  const runGive = async (destination: {
-    vaultId: string;
-    label: string;
-  }): Promise<void> => {
-    setBusy(true);
-    if (giveMany) {
-      const outcome = await giveMany(destination);
-      onDone({ verb: "give", ...outcome });
-      onClose();
+  const share = async (): Promise<void> => {
+    if (!replica.session || !itemType || !itemIds?.length || !selected.length)
       return;
-    }
-    const session = replica.session;
-    if (!session || !itemType || !itemIds?.length) {
-      setBusy(false);
-      return;
-    }
-    const outcomes = await Promise.all(
-      itemIds.map((itemId) =>
-        session
-          .place({
-            kind: "add",
-            itemType,
-            itemId,
-            sourceVaultId,
-            targetVaultId: destination.vaultId,
-          })
-          .then((result) => result.status === "executed")
-          .catch(() => false)
-      )
-    );
-    const failures = outcomes.filter((ok) => !ok).length;
-    const count = itemIds.length;
-    onDone({
-      verb: "give",
-      ok: failures === 0,
-      message:
-        failures === 0
-          ? `Given to ${destination.label}.`
-          : `${count - failures} of ${count} given to ${destination.label}; the rest did not land.`,
-    });
-    onClose();
-  };
-
-  const runLend = async (destination: {
-    vaultId: string;
-    label: string;
-  }): Promise<void> => {
-    if (!replica.session || !mintedIdFamilies?.length) return;
     setBusy(true);
+    let producedHandoffs = false;
     try {
-      const record = await replica.session.lend({
-        linkToken: Crypto.randomUUID(),
-        // The lend's own item type is the ENTITY FAMILY being lent (the
-        // whole library, per the file header), never the GIVE's `itemType`
-        // prop — a call site can legitimately give one item type (an album,
-        // say) and lend a different one (the library it lives in).
-        itemType: mintedIdFamilies[0]!,
-        scopes: wholeLibraryLendScope(mintedIdFamilies),
-        sourceVaultId,
-        targetVaultId: destination.vaultId,
-      });
+      const results = await Promise.all(
+        itemIds.map((containerId) =>
+          replica.session!.share({
+            sourceVaultId,
+            containerType: itemType,
+            containerId,
+            members,
+            ...(selectedCircleId ? { circleId: selectedCircleId } : {}),
+          })
+        )
+      );
+      const handoffs = results.flatMap((result) =>
+        (result.claims ?? []).map((claim) => ({
+          partyId: claim.partyId,
+          label:
+            selected.find(
+              ({ destination }) => destination.partyId === claim.partyId
+            )?.destination.label ?? "Invited person",
+          uri: encodeCommonsInvite({
+            stewardVaultId: sourceVaultId,
+            claimToken: claim.claimToken,
+          }),
+        }))
+      );
+      const invited = selected.filter(
+        ({ destination }) => !destination.vaultId
+      ).length;
       onDone({
-        verb: "lend",
-        ok: record.status === "executed",
-        message:
-          record.status === "executed"
-            ? `Lending to ${destination.label}.`
-            : (record.reason ?? `Not lent to ${destination.label}.`),
+        verb: "share",
+        ok: true,
+        message: invited
+          ? `Shared with ${selected.length} people; ${invited} ${invited === 1 ? "is" : "are"} invited and will join after creating a vault.`
+          : `Shared with ${selected.length} ${selected.length === 1 ? "person" : "people"}.`,
       });
+      if (handoffs.length) {
+        producedHandoffs = true;
+        setInviteHandoffs(handoffs);
+      }
     } catch (error) {
       onDone({
-        verb: "lend",
+        verb: "share",
         ok: false,
         message:
           error instanceof Error
             ? error.message
-            : `Not lent to ${destination.label}.`,
+            : "Could not share with the selected people.",
       });
+    } finally {
+      setBusy(false);
+      if (!producedHandoffs) onClose();
     }
-    onClose();
-  };
-
-  const choose = (destination: { vaultId: string; label: string }): void => {
-    if (verb === "give") {
-      setConfirming(destination);
-      return;
-    }
-    void runLend(destination);
   };
 
   return (
@@ -265,127 +194,265 @@ export default function ShareSheet({
     >
       <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
         <View style={styles.header}>
-          <View style={styles.headerCopy}>
-            <Text style={[styles.title, { color: colors.text }]}>
-              Share {noun.toLowerCase()}
-            </Text>
-          </View>
-          <Pressable
-            accessibilityLabel="Close"
-            accessibilityRole="button"
-            onPress={onClose}
-          >
+          <Text style={[styles.title, { color: colors.text }]}>
+            Share {noun.toLowerCase()}
+          </Text>
+          <Pressable accessibilityRole="button" onPress={onClose}>
             <Text style={{ color: colors.accent }}>Cancel</Text>
           </Pressable>
         </View>
 
-        {verbs.length > 1 ? (
-          <View style={[styles.toggle, { borderColor: colors.line }]}>
-            {verbs.map((candidate) => (
-              <Pressable
-                accessibilityLabel={candidate === "give" ? "Give" : "Lend"}
-                accessibilityRole="button"
-                accessibilityState={{ selected: verb === candidate }}
-                key={candidate}
-                onPress={() => setVerb(candidate)}
-                style={[
-                  styles.toggleTab,
-                  verb === candidate && { backgroundColor: colors.bgElev },
-                ]}
-              >
-                <Text
-                  style={{
-                    color: verb === candidate ? colors.accent : colors.textSoft,
-                  }}
-                >
-                  {candidate === "give" ? "Give" : "Lend"}
-                </Text>
-              </Pressable>
-            ))}
+        <Text style={[styles.note, { color: colors.textSoft }]}>
+          Pick people. Everyone who joins gets the full shared item in their own
+          vault and backup.
+        </Text>
+
+        {namedCircles.length ? (
+          <View style={styles.circleList}>
+            <Text style={[t("small"), { color: colors.textSoft }]}>
+              Reuse a named circle (optional)
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.circleRow}>
+                {namedCircles.map((circle) => (
+                  <Pressable
+                    key={circle.circleId}
+                    accessibilityRole="button"
+                    accessibilityState={{
+                      selected: selectedCircleId === circle.circleId,
+                    }}
+                    onPress={() => {
+                      const next =
+                        selectedCircleId === circle.circleId
+                          ? ""
+                          : circle.circleId;
+                      setSelectedCircleId(next);
+                      setSelections(
+                        next
+                          ? selectionsForNativeCircle(destinations, circle)
+                          : {}
+                      );
+                    }}
+                    style={[
+                      styles.circlePill,
+                      { borderColor: colors.line },
+                      selectedCircleId === circle.circleId && {
+                        backgroundColor: colors.bgElev,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: colors.accent }}>
+                      Named group · {circle.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </ScrollView>
           </View>
         ) : null}
 
-        {verb === "lend" ? (
-          <Text style={[styles.note, { color: colors.textSoft }]}>
-            Lending shares your whole {appLabel ?? "library"} as a live view —
-            not just what’s selected here.
-          </Text>
-        ) : (
-          <Text style={[styles.note, { color: colors.textSoft }]}>
-            {verb === "give"
-              ? "This makes a copy they own. You can’t take it back — only ask."
-              : ""}
-          </Text>
-        )}
-
-        {confirming ? (
-          <View style={styles.confirm}>
-            <Text style={[styles.note, { color: colors.text }]}>
-              Giving makes a copy {confirming.label} owns. You can’t take it
-              back — only ask.
-            </Text>
-            <View style={styles.confirmActions}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setConfirming(null)}
-                style={[styles.row, { borderColor: colors.line }]}
-              >
-                <Text style={[styles.rowTitle, { color: colors.textSoft }]}>
-                  Back
-                </Text>
-              </Pressable>
-              <Pressable
-                accessibilityLabel={`Give — can't undo — to ${confirming.label}`}
-                accessibilityRole="button"
-                disabled={busy}
-                onPress={() => void runGive(confirming)}
-                style={[
-                  styles.row,
-                  {
-                    backgroundColor: colors.accent,
-                    borderColor: colors.accent,
-                  },
-                ]}
-              >
-                <Text style={[styles.rowTitle, { color: colors.bg }]}>
-                  Give — can’t undo
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : destinations.length === 0 ? (
+        {destinations.length === 0 ? (
           <Text style={[styles.empty, { color: colors.textSoft }]}>
-            There is nowhere to share to yet — no other vault, and nobody
-            linked.
+            Add someone in People to share with them.
           </Text>
         ) : (
-          destinations.map((destination) => (
+          <ScrollView contentContainerStyle={styles.list}>
+            {destinations.map((destination) => {
+              const capability = selections[destination.id];
+              return (
+                <View
+                  key={destination.id}
+                  style={[
+                    styles.row,
+                    {
+                      backgroundColor: colors.bgElev,
+                      borderColor: colors.line,
+                    },
+                  ]}
+                >
+                  <Pressable
+                    accessibilityLabel={`Share with ${destination.label}`}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: Boolean(capability) }}
+                    disabled={busy}
+                    onPress={() => {
+                      const next = manualShareSelection(
+                        selections,
+                        destination.id,
+                        selections[destination.id] ? undefined : "read+write"
+                      );
+                      setSelectedCircleId(next.circleId);
+                      setSelections(next.selections);
+                    }}
+                    style={styles.person}
+                  >
+                    <Text style={[styles.check, { color: colors.accent }]}>
+                      {capability ? "✓" : "○"}
+                    </Text>
+                    <View style={styles.personCopy}>
+                      <Text style={[styles.rowTitle, { color: colors.text }]}>
+                        {destination.label}
+                      </Text>
+                      {destination.vaultId ? null : (
+                        <Text
+                          style={[styles.invited, { color: colors.textSoft }]}
+                        >
+                          Invited — waiting for a vault
+                        </Text>
+                      )}
+                    </View>
+                  </Pressable>
+                  {capability ? (
+                    <View style={[styles.toggle, { borderColor: colors.line }]}>
+                      {(["read", "read+write"] as const).map((candidate) => (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityState={{
+                            selected: capability === candidate,
+                          }}
+                          key={candidate}
+                          onPress={() => {
+                            const next = manualShareSelection(
+                              selections,
+                              destination.id,
+                              candidate
+                            );
+                            setSelectedCircleId(next.circleId);
+                            setSelections(next.selections);
+                          }}
+                          style={[
+                            styles.toggleTab,
+                            capability === candidate && {
+                              backgroundColor: colors.bg,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              color:
+                                capability === candidate
+                                  ? colors.accent
+                                  : colors.textSoft,
+                            }}
+                          >
+                            {candidate === "read" ? "Can view" : "Can edit"}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+          </ScrollView>
+        )}
+        {inviteHandoffs.length ? (
+          <View style={styles.handoffs}>
+            <Text style={[t("control"), { color: colors.text }]}>
+              Send these one-time invitations
+            </Text>
+            <Text style={[t("small"), { color: colors.textSoft }]}>
+              Each person installs Centraid, creates a vault, connects to you if
+              remote, redeems this invitation, then accepts its size.
+            </Text>
+            {inviteHandoffs.map((handoff, index) => (
+              <View
+                key={`${handoff.partyId}:${index}`}
+                style={[styles.handoff, { borderColor: colors.line }]}
+              >
+                <Text style={[t("body"), { color: colors.text }]}>
+                  {handoff.label}
+                </Text>
+                <View style={styles.inviteActions}>
+                  <Pressable
+                    accessibilityLabel={`Copy invitation for ${handoff.label}`}
+                    accessibilityRole="button"
+                    onPress={() =>
+                      void Clipboard.setStringAsync(
+                        commonsInviteMessage(handoff.uri)
+                      )
+                    }
+                    style={[styles.circlePill, { borderColor: colors.line }]}
+                  >
+                    <Text style={{ color: colors.accent }}>Copy</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityLabel={`Share invitation with ${handoff.label}`}
+                    accessibilityRole="button"
+                    onPress={() =>
+                      void Share.share({
+                        message: commonsInviteMessage(handoff.uri),
+                      })
+                    }
+                    style={[styles.circlePill, { borderColor: colors.line }]}
+                  >
+                    <Text style={{ color: colors.accent }}>Share</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        <View style={styles.footer}>
+          {inviteHandoffs.length ? (
             <Pressable
-              accessibilityLabel={`${verb === "give" ? "Give" : "Lend"} to ${destination.label}`}
               accessibilityRole="button"
-              disabled={busy}
-              key={destination.vaultId}
-              onPress={() => choose(destination)}
+              onPress={() => {
+                setInviteHandoffs([]);
+                onClose();
+              }}
+              style={[styles.shareButton, { backgroundColor: colors.accent }]}
+            >
+              <Text style={{ color: colors.onAccent }}>Done</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: busy || selected.length === 0 }}
+              disabled={busy || selected.length === 0}
+              onPress={() => void share()}
               style={[
-                styles.row,
-                { backgroundColor: colors.bgElev, borderColor: colors.line },
+                styles.shareButton,
+                {
+                  backgroundColor:
+                    busy || selected.length === 0
+                      ? colors.bgSunken
+                      : colors.accent,
+                },
               ]}
             >
-              <Text style={[styles.rowTitle, { color: colors.text }]}>
-                {destination.label}
+              <Text style={{ color: colors.onAccent }}>
+                {busy ? "Sharing…" : "Share"}
               </Text>
             </Pressable>
-          ))
-        )}
+          )}
+        </View>
       </TopSafeArea>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  confirm: { gap: spacing[3], paddingHorizontal: spacing[4] },
-  confirmActions: { flexDirection: "row", gap: spacing[2] },
-  empty: { lineHeight: 22, paddingVertical: 18 },
+  circleList: { gap: spacing[1], paddingHorizontal: spacing[4] },
+  circlePill: {
+    borderRadius: radii.md,
+    borderWidth: borders.hairline,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  circleRow: { flexDirection: "row", gap: spacing[2] },
+  check: { ...t("body"), width: 20 },
+  empty: { lineHeight: 22, paddingHorizontal: spacing[4], paddingVertical: 18 },
+  footer: { paddingHorizontal: spacing[4], paddingVertical: spacing[3] },
+  handoff: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    borderWidth: borders.hairline,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: spacing[3],
+  },
+  handoffs: { gap: spacing[2], paddingHorizontal: spacing[4] },
   header: {
     alignItems: "flex-start",
     flexDirection: "row",
@@ -394,18 +461,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[3],
   },
-  headerCopy: { flex: 1 },
   note: {
     ...t("small"),
     paddingHorizontal: spacing[4],
     paddingBottom: spacing[2],
   },
-  row: {
+  invited: t("small"),
+  inviteActions: { flexDirection: "row", gap: spacing[1] },
+  list: { paddingTop: spacing[1] },
+  person: {
     alignItems: "center",
+    flexDirection: "row",
+    flex: 1,
+    minHeight: 52,
+  },
+  personCopy: { flex: 1 },
+  row: {
     borderRadius: radii.md,
     borderWidth: borders.hairline,
-    flexDirection: "row",
-    justifyContent: "space-between",
     marginHorizontal: spacing[4],
     marginBottom: spacing[2],
     minHeight: 58,
@@ -414,12 +487,18 @@ const styles = StyleSheet.create({
   rowTitle: t("body"),
   safe: { flex: 1 },
   title: t("title"),
+  shareButton: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    minHeight: 46,
+    justifyContent: "center",
+  },
   toggle: {
     borderRadius: radii.md,
     borderWidth: borders.hairline,
     flexDirection: "row",
-    marginHorizontal: spacing[4],
     marginBottom: spacing[2],
+    width: 180,
     overflow: "hidden",
   },
   toggleTab: { alignItems: "center", flex: 1, paddingVertical: spacing[2] },

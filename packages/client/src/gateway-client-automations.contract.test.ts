@@ -112,6 +112,15 @@ describe("renderer gateway automation contracts", () => {
     ).resolves.toBeNull();
     await client.readAutomation({ automationId: "daily/daily" });
     await client.runAutomationNow({ automationId: "daily/daily" });
+    await expect(
+      client.invokeAutomationAndAwait({
+        automationId: "daily/daily",
+        payload: { variant: "deterministic" },
+      })
+    ).resolves.toMatchObject({
+      turnId: "turn-awaited",
+      result: { outcome: { ok: true } },
+    });
     await client.listAutomationTurns({ automationId: "daily/daily", limit: 3 });
     await client.listAutomationTurns({});
     await client.readAutomationTurn({ turnId: "turn-1" });
@@ -152,6 +161,13 @@ describe("renderer gateway automation contracts", () => {
     expect(
       sent(
         "/centraid/_automations/turn-now",
+        (q) => q.get("ref") === "daily/daily",
+        "POST"
+      )
+    ).toBe(true);
+    expect(
+      sent(
+        "/centraid/_automations/invoke-and-await",
         (q) => q.get("ref") === "daily/daily",
         "POST"
       )

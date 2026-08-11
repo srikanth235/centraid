@@ -17,12 +17,7 @@
 import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
 
 /** Stable component vocabulary — mirrors `serve/local-usage.ts`'s
- *  `LocalComponentId`. Renaming one of these is a wire change.
- *
- *  `borrowed` — rows and bytes LENT TO this machine by other people (#726
- *  P4 D4): not this owner's data and not backed up, but it is this owner's
- *  disk, so it gets a component of its own rather than hiding inside a
- *  total (`local-usage.ts`'s own doc comment on the id). */
+ *  `LocalComponentId`. Renaming one of these is a wire change. */
 export type LocalComponentId =
   | "ledger"
   | "vault-db"
@@ -33,8 +28,7 @@ export type LocalComponentId =
   | "logs"
   | "cache"
   | "templates"
-  | "storage"
-  | "borrowed";
+  | "storage";
 
 export interface LocalComponentUsageDTO {
   component: LocalComponentId;

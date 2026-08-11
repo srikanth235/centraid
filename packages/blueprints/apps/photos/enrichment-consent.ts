@@ -142,18 +142,16 @@ export const ENRICHMENT_NOTE =
  *  - `denied` — Photos cannot even read the policy, so it does not know what
  *    it would be consenting to.
  */
-// EACH OF THESE NAMES THE CONTROL BY ITS PATH, not by a scope noun. The tier is
-// an OWNER setting that spans every scope (`enrich_policy`, one row per domain
-// — see decision S9), so "this library's privacy settings" sent a member
-// hunting for a per-library control that does not exist. Naming the page also
-// removes the need for a storage noun here at all, which keeps the #599 gate
-// satisfied without inventing a scope-shaped fiction. The page itself is
-// Settings → Enrichment (`SettingsEnrichmentScreen.tsx`).
+// Recognition is controlled by the built-in recipes in Automations. The
+// owner-only vault policy remains the execution-time privacy gate, while each
+// capability's visible on/off control is its automation enabled bit.
 export const ENRICHMENT_UNAVAILABLE = {
+  deviceUnavailable:
+    "Not available: this build has no device-side face detector. The Faces recognition recipe runs only on the gateway, which this vault’s device-only policy does not allow.",
   cloudUnavailable:
-    "Not available from here: whether photographs may go to a model provider is decided in Settings → Enrichment — Photos cannot name a helper on its own.",
+    "Not available from here: choose the Photo OCR recipe’s agent variant under Automations → Recognition, where its model, latency, and billing consequence are shown before a run.",
   offTier:
-    "Not available: enrichment for photographs is switched off in Settings → Enrichment, so nothing would run.",
+    "Not available: the vault’s enrichment policy refuses photograph recognition, so this request cannot run.",
   // KEY NAME KEPT AS `modelTier` for both clients' sake (EnrichmentConsent.tsx
   // reads it by this name) even though the tier it now describes is named
   // `gateway` (issue #712 C5, renamed from `model`) — the CONTENT below is
@@ -165,14 +163,14 @@ export const ENRICHMENT_UNAVAILABLE = {
   // states — "what leaves the device: nothing" — is not one this module can
   // vouch for once the vault has widened past `device`.
   modelTier:
-    "Not available: enrichment for photographs is already set to the gateway tier in Settings → Enrichment, so a run from here would not stay on this device the way the on-device answer promises.",
+    "Not available: this vault permits gateway recognition, so a run from here would not stay on this device the way the on-device answer promises. Review the recipe under Automations → Recognition.",
   denied:
-    "Photos cannot read the enrichment setting for photographs, so it cannot tell you what a run would do. It is in Settings → Enrichment.",
+    "Photos cannot read the vault’s enrichment policy, so it cannot tell you what a run would do. Recognition recipes are listed under Automations → Recognition.",
 } as const;
 
 /** What the status line says once the member has answered on this device. */
 export const ENRICHMENT_REQUESTED_NOTE =
-  "Face detection was asked for on this device. It runs in the background and you will be asked to name each group yourself.";
+  "Face detection was requested. The request stays queued until the Faces recipe is enabled and the vault permits gateway recognition; queueing it does not mean recognition has run.";
 
 /** What an offline client says when the ask could not reach the gateway yet.
  *  The ANSWER was still given and is still binding — only its delivery is
@@ -201,8 +199,9 @@ export type AnswerAvailability = SharedAnswerAvailability;
  * axis (issue #712 C5, renamed from `off | local | model`). It is not this
  * consent — it is the envelope this consent lives inside:
  *
- *   * `device` — the on-device promise in Panel A is true, so the answer is
- *     offered;
+ *   * `device` — the policy would permit a device producer, but this build
+ *     has no device-side face detector, so the answer is withheld and names
+ *     that missing producer;
  *   * `gateway` — this vault's enrichment may reach a runner that takes a
  *     model turn, and every runner shipped today routes that turn to a
  *     third-party provider, so `what leaves the device → nothing` would be
@@ -238,7 +237,11 @@ export function deviceAnswerFor(
   // (`queries/enrichment-status.ts` reads `enrich.policy` straight, not
   // through that helper), so this comparison accepts both spellings rather
   // than assume every caller normalized first.
-  if (tier === "device" || tier === "local") return { available: true };
+  if (tier === "device" || tier === "local")
+    return {
+      available: false,
+      reason: ENRICHMENT_UNAVAILABLE.deviceUnavailable,
+    };
   if (tier === "gateway" || tier === "model")
     return { available: false, reason: ENRICHMENT_UNAVAILABLE.modelTier };
   if (tier == null) return { available: false };

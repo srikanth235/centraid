@@ -16,8 +16,6 @@ import type { ServerResponse } from "node:http";
 import type { LocalBlobStore } from "@centraid/vault";
 
 import type { GatewayDatabase } from "../serve/gateway-db.js";
-import { mintLease } from "../serve/lend-lease.js";
-import type { LeaseSigner } from "../serve/lend-lease.js";
 import { hasGivenEdge } from "../serve/peer-give-authorization.js";
 import { readEdgeRow } from "./edges-reconcile.js";
 import type { PeerIdentity } from "./peer-plane.js";
@@ -26,9 +24,6 @@ import { sendJson } from "./route-helpers.js";
 export interface PeerBlobRouteDeps {
   gatewayDatabase: GatewayDatabase;
   blobsFor: (vaultId: string) => LocalBlobStore | undefined;
-  /** Present in a lending-capable build so a live-edge byte read renews the
-   *  same signed lease as a row/bootstrap contact. */
-  signAsVault?: LeaseSigner;
 }
 
 function parsePositiveInt(raw: string | null): number | undefined {
@@ -64,14 +59,6 @@ export function handlePeerBlobChunk(
   // one remote gateway, and a remote-vault claim alone cannot disambiguate
   // two LOCAL vaults linked to the same remote one).
   //
-  // INVARIANT (re-audit): this same lookup also serves `edgeId`s that name a
-  // LIVE (lent) edge, never explicitly inserted here — it works only because
-  // opening a live edge for a remote audience writes this exact `share_edges`
-  // row at the origin as a side effect (`edges-routes.ts`'s `insertOrRead`,
-  // via `openLiveEdge`). If that write is ever skipped, this lookup 404s and
-  // `fillBorrowedBlobsOverPeer` (`../serve/lend-blob-pull.ts`) never fails —
-  // it parks the pull as "pending" forever, silently. Pinned by
-  // `lend-blob-pull.test.ts`.
   const row = readEdgeRow(deps.gatewayDatabase, edgeId);
   if (!row) return sendJson(res, 404, { state: "not_found" });
   const link = peer.linkForPair(row.origin_vault_id, row.audience_vault_id);
@@ -83,18 +70,6 @@ export function handlePeerBlobChunk(
   ) {
     return sendJson(res, 404, { state: "not_found" });
   }
-  const lease =
-    row.mode === "live" && deps.signAsVault
-      ? mintLease(deps.signAsVault, {
-          edgeId: row.edge_id,
-          originVaultId: row.origin_vault_id,
-          audienceVaultId: row.audience_vault_id,
-        })
-      : undefined;
-  // A live-edge response without a vault-signed renewal would turn
-  // authenticated byte contact into silent lease decay. Refuse instead.
-  if (row.mode === "live" && !lease)
-    return sendJson(res, 404, { state: "not_found" });
   const store = deps.blobsFor(link.localVaultId);
   const stat = store?.statSync(sha256);
   if (!store || !stat) return sendJson(res, 404, { state: "not_found" });
@@ -112,6 +87,5 @@ export function handlePeerBlobChunk(
     length: bytes.length,
     totalSize: stat.size,
     bytes: bytes.toString("base64"),
-    ...(lease ? { lease } : {}),
   });
 }

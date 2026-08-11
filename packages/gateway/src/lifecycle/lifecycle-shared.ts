@@ -70,6 +70,12 @@ export interface LifecycleRouteOptions {
    * never shadow the shipped blueprint the resolver serves in place.
    */
   isBundledAppId?: (id: string) => boolean;
+  /** Stable host-managed recipe refs whose implementation is release-owned.
+   * Owners may toggle them and choose declared model/variant settings, but
+   * cannot delete, compile, or rewrite their code/intent in place. */
+  isSystemManagedAutomation?: (automationRef: string) => boolean;
+  /** Release-owned code-store app ids (the container of a system recipe). */
+  isSystemManagedApp?: (appId: string) => boolean;
   /**
    * Install a bundled blueprint app in place (issue #434): enroll the
    * `consent.app` record (origin 'installed') + register in the runtime +
@@ -204,7 +210,9 @@ export async function publishAndReconcile(
     ephemeralSession?: boolean;
   }
 ): Promise<void> {
-  const validationError = await validateManifestAt(input.appDir);
+  const validationError = await validateManifestAt(input.appDir, {
+    releaseManagedModelBundle: opts.isSystemManagedApp?.(input.appId) === true,
+  });
   if (validationError)
     throw new AppScaffoldError("invalid_manifest", validationError);
   // Apply the staged app's declared ext tables to the vault as part of the

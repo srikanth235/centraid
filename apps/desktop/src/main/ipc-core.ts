@@ -156,7 +156,7 @@ export function keychainPromptExpected(host: {
  * on-device file-ASR adapter (`device-transcription.ts`, the
  * `CENTRAID_DEVICE_ASR_*` env trio, and the `DEVICE_TRANSCRIPT_AVAILABLE` /
  * `DEVICE_TRANSCRIBE` IPC channels) is deleted — transcription now runs on
- * the gateway's enrichment service (`transcript-sweep.ts`), never on a
+ * the gateway's deterministic `transcript` automation, never on a
  * member's desktop. The key ITSELF stays in the return shape rather than
  * being dropped: `compute` is the fixed wire shape a device PUTs to the
  * gateway's compute-advertisement endpoint

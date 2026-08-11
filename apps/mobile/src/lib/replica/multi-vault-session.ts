@@ -18,7 +18,7 @@ import type {
   NativeWriteInput,
   NativeWriteResult,
 } from "./native-session";
-import type { LendIntent, LendRecord } from "./placement-transport";
+import type { CommonsIntent, CommonsRecord } from "./placement-transport";
 
 export interface MultiVaultSessionOptions {
   reader: MultiVaultReplicaReader;
@@ -27,12 +27,7 @@ export interface MultiVaultSessionOptions {
   focusedVaultId: () => string | undefined;
   createId: () => string;
   sendPlacement: (input: PlacementIntent) => Promise<PlacementRecord>;
-  /**
-   * Open a live edge (#726 P6). Optional — a host that never wires a lend
-   * transport gets `MultiVaultReplicaSession.lend()` throwing a typed
-   * refusal rather than a silent no-op (fail-closed).
-   */
-  sendLend?: (input: LendIntent) => Promise<LendRecord>;
+  sendCommons?: (input: CommonsIntent) => Promise<CommonsRecord>;
   isConnected: () => boolean;
   isNetworkWorkAllowed?: () => Promise<boolean>;
   onScopePulled?: (vaultId: string) => void;
@@ -46,7 +41,7 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
   readonly #focusedVaultId: () => string | undefined;
   readonly #createId: () => string;
   readonly #sendPlacement: (input: PlacementIntent) => Promise<PlacementRecord>;
-  readonly #sendLend: (input: LendIntent) => Promise<LendRecord>;
+  readonly #sendCommons: (input: CommonsIntent) => Promise<CommonsRecord>;
   readonly #isConnected: () => boolean;
   readonly #isNetworkWorkAllowed: () => Promise<boolean>;
   readonly #onScopePulled: ((vaultId: string) => void) | undefined;
@@ -59,12 +54,10 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     this.#focusedVaultId = options.focusedVaultId;
     this.#createId = options.createId;
     this.#sendPlacement = options.sendPlacement;
-    this.#sendLend =
-      options.sendLend ??
+    this.#sendCommons =
+      options.sendCommons ??
       (() =>
-        Promise.reject(
-          new Error("this build cannot lend a scope — no lend transport wired")
-        ));
+        Promise.reject(new Error("Sharing is unavailable in this session.")));
     this.#isConnected = options.isConnected;
     this.#isNetworkWorkAllowed =
       options.isNetworkWorkAllowed ?? (() => Promise.resolve(true));
@@ -237,21 +230,11 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     return this.#reader.placement(record.linkToken) ?? record;
   }
 
-  /**
-   * Open a live window over a scope (#726 P6) — a LEND, as opposed to
-   * `place()`'s GIVE. NOT queued through the durable placement outbox: a
-   * live edge is a real-time round trip, not bytes to replay, so an offline
-   * caller gets an honest rejection instead of a silent queue entry.
-   */
-  lend(input: LendIntent): Promise<LendRecord> {
+  share(input: CommonsIntent): Promise<CommonsRecord> {
     if (!this.#isConnected()) {
-      return Promise.reject(
-        new Error(
-          "Lending needs a gateway connection; queuing it offline isn't supported."
-        )
-      );
+      return Promise.reject(new Error("Sharing needs a gateway connection."));
     }
-    return this.#sendLend(input);
+    return this.#sendCommons(input);
   }
 
   placements(): PlacementRecord[] {

@@ -276,12 +276,24 @@ function offsetToPosition(
  * one finding per match, sorted by position. An empty array means the handler
  * is, lexically, clean. Pure — no I/O, no throw.
  */
-export function lintHandlerSource(source: string): HandlerLintFinding[] {
+export function lintHandlerSource(
+  source: string,
+  options: { allowLocalModelAssets?: boolean } = {}
+): HandlerLintFinding[] {
   const codeOnly = maskNonCode(source, true);
   const withStrings = maskNonCode(source, false);
   const lines = source.split("\n");
   const findings: HandlerLintFinding[] = [];
   for (const rule of RULES) {
+    // Release-managed recognition bundles are allowed to read only their
+    // local native/model assets. Callers must opt in from the reserved system
+    // lifecycle; authored handlers never receive this exception. Network,
+    // clocks, randomness and every other replay hazard stay forbidden.
+    if (
+      options.allowLocalModelAssets &&
+      (rule.id === "no-node-io-import" || rule.id === "no-process-ambient")
+    )
+      continue;
     const masked = rule.target === "withStrings" ? withStrings : codeOnly;
     rule.re.lastIndex = 0;
     let m: RegExpExecArray | null;

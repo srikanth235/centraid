@@ -1,8 +1,13 @@
 /*
- * `gateway.db`'s DDL and its one legacy migration, extracted out of
- * `gateway-db.ts` to keep that file under the 500-line cap (mirrors the P1
- * precedent of `device-ticket-mint.ts`). Both functions are pure over a
- * `DatabaseSync` handle — no lock/lease concerns belong here.
+ * `gateway.db`'s DDL, extracted out of `gateway-db.ts` to keep that file
+ * under the 500-line cap (mirrors the P1 precedent of
+ * `device-ticket-mint.ts`). Pre-1.0, this repo carries NO backward
+ * compatibility for `gateway.db`: there are no legacy-generation migrations
+ * here, on principle. `installGatewaySchema` is the single source of truth
+ * for the current shape; a `gateway.db` written by an older generation is
+ * expected to be erased and re-onboarded, not migrated in place. The
+ * function below is pure over a `DatabaseSync` handle — no lock/lease
+ * concerns belong here.
  */
 
 import type { DatabaseSync } from "node:sqlite";
@@ -145,23 +150,19 @@ export function installGatewaySchema(db: DatabaseSync): void {
      * three. The audience projection always commits before a move deletes
      * its source; replay resumes from target_state/source_state.
      *
-     * mode = 'live' (#726 P4) is the other kind: a WINDOW, not a copy. Its
-     * scope_json holds a standing scope declaration rather than an item set —
-     * a live edge has no fixed items — and it settles on 'established' rather
-     * than 'completed'. kind = 'move' stays snapshot-only: you cannot move
-     * away what you are still holding open.
+     * The retired live/lend relationship is not represented (#731).
      */
     CREATE TABLE IF NOT EXISTS share_edges (
       edge_id TEXT PRIMARY KEY,
       created_by_device TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
       owner_id TEXT NOT NULL REFERENCES owners(owner_id) ON DELETE CASCADE,
       kind TEXT NOT NULL CHECK (kind IN ('add', 'move')),
-      mode TEXT NOT NULL CHECK (mode IN ('snapshot', 'live')),
+      mode TEXT NOT NULL CHECK (mode = 'snapshot'),
       item_type TEXT NOT NULL,
       scope_json TEXT,
       origin_vault_id TEXT NOT NULL,
       audience_vault_id TEXT NOT NULL,
-      verbs TEXT NOT NULL CHECK (verbs IN ('read', 'read+act')),
+      verbs TEXT NOT NULL CHECK (verbs = 'read'),
       target_item_ids_json TEXT,
       target_state TEXT NOT NULL CHECK (target_state IN ('queued', 'executed')),
       source_state TEXT NOT NULL CHECK (source_state IN ('not-needed', 'queued', 'executed')),
@@ -268,31 +269,14 @@ export function installGatewaySchema(db: DatabaseSync): void {
      * D9 (#726 P3 decision 9): each side's own accept|ask|refuse preference
      * for gives ARRIVING at its vault over a link. Keyed by (link_id,
      * vault_id) rather than added as vault_links columns, so setting it never
-     * touches the ceremony/route columns' schema or their migration probe. No
-     * row for a pair means 'accept' — the default that makes an approved link
-     * behave exactly as P2 already did, before D9 existed.
+     * touches the ceremony/route columns' schema. No row for a pair means
+     * 'accept' — the default that makes an approved link behave exactly as
+     * P2 already did, before D9 existed.
      */
     CREATE TABLE IF NOT EXISTS link_receive_settings (
       link_id TEXT NOT NULL,
       vault_id TEXT NOT NULL,
       setting TEXT NOT NULL CHECK (setting IN ('accept', 'ask', 'refuse')),
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (link_id, vault_id)
-    ) STRICT;
-    /*
-     * A vault's own per-link byte budget for what it holds BORROWED from the
-     * other side (#726 P6 gap 2) — keyed exactly like link_receive_settings:
-     * only the vault named by vault_id sets or reads ITS OWN budget, never
-     * the peer's. No row means the generous constant default
-     * (DEFAULT_BORROWED_LINK_BYTE_BUDGET, lend-blob-pull.ts) — existing
-     * behavior is unchanged until an owner turns the knob down (or up, to
-     * resume a parked edge — the sweep re-reads this live, every tick, so
-     * there is no separate "unpark" step).
-     */
-    CREATE TABLE IF NOT EXISTS link_borrow_budgets (
-      link_id TEXT NOT NULL,
-      vault_id TEXT NOT NULL,
-      budget_bytes INTEGER NOT NULL,
       updated_at TEXT NOT NULL,
       PRIMARY KEY (link_id, vault_id)
     ) STRICT;
@@ -354,99 +338,6 @@ export function installGatewaySchema(db: DatabaseSync): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     ) STRICT;
-    /*
-     * A live edge's revoke the ORIGIN has decided but has not yet delivered
-     * to an unreachable AUDIENCE (#726 P6 gap 1). Mirrors peer_pending_
-     * refusals exactly: the revoke is already fully effective here the
-     * instant this row lands (lent_edges.revoked_at is set, the grant is
-     * revoked, a later pull answers not_found) — this row is only the
-     * courtesy push that lets the audience learn sooner than its own lease
-     * expiry or next tail. drainPendingLendCloses (peer-plane-sweep.ts's
-     * same tick) POSTs it to lend/close and deletes the row once delivered
-     * or once the audience answers not_found (nothing left to acknowledge).
-     */
-    CREATE TABLE IF NOT EXISTS peer_pending_lend_closes (
-      edge_id TEXT PRIMARY KEY,
-      link_id TEXT NOT NULL,
-      peer_vault_id TEXT NOT NULL,
-      local_vault_id TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    ) STRICT;
-    /*
-     * A LIVE edge this gateway LENDS (#726 P4). Until now an edge was a
-     * snapshot: bytes copied, relationship over. A live edge is a standing
-     * window onto content that still lives here, so what is durable is not a
-     * projection but the CONSENT that authorizes one — grant_id points at the
-     * ordinary consent_access_grant row whose grantee is the audience
-     * vault's party. Revoking is revoking that grant; this row is bookkeeping
-     * beside it, never a second authority.
-     *
-     * row_key_secret stands where an app's consent_app.signing_key stands
-     * (the opaque-row-id HMAC). It lives HERE rather than in the vault on
-     * purpose: someone holding a copy of the vault must not be able to
-     * reconstruct the row ids a particular audience was shown.
-     *
-     * lease_expires_at is the origin's copy of what it last signed (D8) —
-     * advisory here, since the authority is the signed lease the audience
-     * holds, and the audience's own clock is what enforces it.
-     *
-     * verbs (#726 P5): 'read' (P4's only shape) or 'read+act' — a
-     * write-capable edge. Fixed at open time; a live edge's verbs never
-     * change in place, so this column is read, never updated.
-     */
-    CREATE TABLE IF NOT EXISTS lent_edges (
-      edge_id TEXT PRIMARY KEY,
-      origin_vault_id TEXT NOT NULL,
-      audience_vault_id TEXT NOT NULL,
-      grantee_party_id TEXT NOT NULL,
-      grant_id TEXT NOT NULL,
-      row_key_secret TEXT NOT NULL,
-      item_type TEXT NOT NULL,
-      verbs TEXT NOT NULL DEFAULT 'read' CHECK (verbs IN ('read', 'read+act')),
-      lease_expires_at TEXT NOT NULL,
-      revoked_at TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    ) STRICT;
-    CREATE INDEX IF NOT EXISTS lent_edges_audience
-      ON lent_edges(audience_vault_id, revoked_at);
-    /*
-     * The AUDIENCE's mirror (#726 P4): a live edge someone lends to a vault
-     * here. It exists before any rows do — the origin announces the edge, and
-     * this gateway then PULLS the bootstrap on its own schedule — so it cannot
-     * be inferred from the borrowed store's replica_shape rows.
-     *
-     * origin_public_key is the key the LINK pinned, copied here so lease
-     * verification never depends on re-resolving a link that may since have
-     * been revoked. Deliberately in gateway.db and NOT in the borrowed store:
-     * the borrowed store holds another person's data and nothing of ours.
-     *
-     * state: 'offered' (opened, never synced), 'established' (rows are
-     * flowing), 'parked' (a sync ran and made no progress this contact —
-     * reason says why: byte budget or unreachable, #726 P4 item 8), or
-     * 'dropped' (the one deletion path, terminal). 'parked' is re-evaluated
-     * live on every tick, never a sticky give-up.
-     */
-    CREATE TABLE IF NOT EXISTS borrowed_edges (
-      edge_id TEXT PRIMARY KEY,
-      link_id TEXT NOT NULL,
-      origin_vault_id TEXT NOT NULL,
-      audience_vault_id TEXT NOT NULL,
-      item_type TEXT NOT NULL,
-      holder_label TEXT NOT NULL,
-      origin_public_key TEXT NOT NULL,
-      -- 'read' or 'read+act' (#726 P5) — the audience's own copy of what
-      -- lend/open announced, so a device asking "may I write here" is
-      -- answered without a round trip to the origin.
-      verbs TEXT NOT NULL DEFAULT 'read' CHECK (verbs IN ('read', 'read+act')),
-      state TEXT NOT NULL CHECK (state IN ('offered', 'established', 'parked', 'dropped')),
-      reason TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    ) STRICT;
-    CREATE INDEX IF NOT EXISTS borrowed_edges_origin
-      ON borrowed_edges(origin_vault_id, state);
     CREATE TABLE IF NOT EXISTS push_registrations (
       device_id TEXT PRIMARY KEY REFERENCES devices(endpoint_id) ON DELETE CASCADE,
       expo_token TEXT NOT NULL UNIQUE,
@@ -468,89 +359,5 @@ export function installGatewaySchema(db: DatabaseSync): void {
     ) STRICT;
     CREATE INDEX IF NOT EXISTS web_push_registrations_device_idx
       ON web_push_registrations(device_id);
-  `);
-}
-
-/*
- * Pre-1.0 link-table merge (issue #726 P3): two phases landed two link
- * tables — `vault_links` for pairs on this machine and `peer_links` for pairs
- * across machines — and D3 permits exactly one answerer for "may an edge
- * cross to vault X". Both shapes are unreleased, so they are DROPPED rather
- * than dual-written; `installGatewaySchema` then creates the unified
- * `vault_links`. Idempotent by construction: the probe finds neither the
- * superseded table nor the superseded column shape on a merged database.
- */
-export function migrateSupersededLinks(db: DatabaseSync): void {
-  const hasTable = (name: string): boolean =>
-    db
-      .prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?")
-      .get(name) !== undefined;
-  const merged =
-    !hasTable("vault_links") ||
-    (
-      db.prepare("PRAGMA table_info(vault_links)").all() as Array<{
-        name: string;
-      }>
-    ).some((column) => column.name === "public_key_a");
-  if (merged && !hasTable("peer_links")) return;
-  db.exec(`
-    BEGIN IMMEDIATE;
-    DROP TABLE IF EXISTS peer_links;
-    ${merged ? "" : "DROP TABLE IF EXISTS vault_links;"}
-    COMMIT;
-  `);
-}
-
-/*
- * Pre-1.0 legacy migration (issue #726 P0): a gateway.db written under the
- * #599 household model carries `members`/`member_roles`. Rename the tables
- * and columns to the ownership vocabulary, seed `vault_owners` with each
- * vault's earliest-created admin (fallback: earliest member holding any
- * role), and drop the role lattice. Idempotent by construction: the probe
- * finds no `members` table on a migrated or fresh database.
- */
-export function migrateLegacyMembers(db: DatabaseSync): void {
-  const legacy = db
-    .prepare(
-      "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'members'"
-    )
-    .get();
-  if (!legacy) return;
-  db.exec(`
-    BEGIN IMMEDIATE;
-    ALTER TABLE members RENAME TO owners;
-    ALTER TABLE owners RENAME COLUMN member_id TO owner_id;
-    ALTER TABLE devices RENAME COLUMN member_id TO owner_id;
-    ALTER TABLE tickets RENAME COLUMN member_id TO owner_id;
-    CREATE TABLE IF NOT EXISTS vault_owners (
-      vault_id TEXT PRIMARY KEY,
-      owner_id TEXT NOT NULL REFERENCES owners(owner_id) ON DELETE CASCADE
-    ) STRICT;
-    INSERT OR IGNORE INTO vault_owners (vault_id, owner_id)
-      SELECT vault_id, owner_id FROM (
-        SELECT mr.vault_id AS vault_id, mr.member_id AS owner_id,
-               ROW_NUMBER() OVER (
-                 PARTITION BY mr.vault_id
-                 ORDER BY (mr.role = 'admin') DESC, o.created_at, o.owner_id
-               ) AS pick
-          FROM member_roles mr
-          JOIN owners o ON o.owner_id = mr.member_id
-      ) WHERE pick = 1;
-    DROP TABLE member_roles;
-    -- Legacy tickets carry role-bearing grants that can no longer be
-    -- honoured; they are 15-minute invitations, so dropping them is cheaper
-    -- and safer than rewriting their grant shape.
-    DELETE FROM tickets;
-    -- #726 P2 replaced both tables' column shapes (single item → an item
-    -- SET, one receipt per edge rather than per item); pre-1.0, this audit
-    -- trail carries no migration promise, same call already made for
-    -- tickets above. installGatewaySchema recreates both fresh below.
-    DROP TABLE IF EXISTS placement_intents;
-    DROP TABLE IF EXISTS share_access_receipts;
-    -- The default share-target pointer died with the /share plane (#726).
-    DELETE FROM prefs
-      WHERE key = 'share.defaultTargetVaultId'
-         OR key GLOB 'member.*.share.defaultTargetVaultId';
-    COMMIT;
   `);
 }

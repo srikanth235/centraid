@@ -1,5 +1,4 @@
-// One link row for Sharing.tsx (#726 P6) — the D9 receive setting and the
-// per-link borrow-storage budget (gap 2), both tap-to-cycle to match this
+// One link row for Sharing.tsx — the receive setting is tap-to-cycle to match this
 // screen's existing component idiom (nothing here uses a TextInput/keyboard
 // entry). Split out to keep Sharing.tsx under the repo's file-size guidance.
 //
@@ -14,23 +13,15 @@ import { Text } from "../kit/components/NativeText";
 import type { useTheme } from "../kit/theme";
 import { density, radii, t } from "../kit/theme";
 import {
-  getBorrowBudget,
   getReceiveSetting,
   mintLinkTicket,
   redeemLinkTicket,
-  setBorrowBudget,
   setReceiveSetting,
 } from "../lib/replica/links-transport";
 import type {
-  BorrowBudget,
   GatewayLink,
   ReceiveSetting,
 } from "../lib/replica/links-transport";
-
-/** 1 GB in bytes — the UI's own display unit; the wire is always bytes. */
-const GB = 1024 * 1024 * 1024;
-/** Tap-to-cycle presets (#726 P6 gap 2). */
-const BUDGET_PRESETS_GB = [1, 5, 20, 50, 100] as const;
 
 export default function SharingLinkRow({
   link,
@@ -69,31 +60,6 @@ export default function SharingLinkRow({
     void setReceiveSetting(gatewayBase, link.linkId, next);
   };
 
-  const [budget, setBudget] = useState<BorrowBudget | undefined>();
-  useEffect(() => {
-    if (!gatewayBase) return;
-    let live = true;
-    getBorrowBudget(gatewayBase, link.linkId)
-      .then((value) => {
-        if (live) setBudget(value);
-      })
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [gatewayBase, link.linkId]);
-
-  const cycleBudget = (): void => {
-    if (!gatewayBase || !budget) return;
-    const currentGb = budget.budgetBytes / GB;
-    const nextGb =
-      BUDGET_PRESETS_GB.find((gb) => gb > currentGb + 0.01) ??
-      BUDGET_PRESETS_GB[0];
-    const nextBytes = nextGb * GB;
-    setBudget({ ...budget, budgetBytes: nextBytes, isDefault: false });
-    void setBorrowBudget(gatewayBase, link.linkId, nextBytes);
-  };
-
   return (
     <View
       style={[
@@ -110,17 +76,6 @@ export default function SharingLinkRow({
       <Pressable accessibilityRole="button" disabled={!setting} onPress={cycle}>
         <Text style={[t("small"), { color: colors.textSoft }]}>
           Receive gives: {setting ?? "…"} (tap to change)
-        </Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        disabled={!budget}
-        onPress={cycleBudget}
-      >
-        <Text style={[t("small"), { color: colors.textSoft }]}>
-          Borrow budget:{" "}
-          {budget ? `${(budget.budgetBytes / GB).toFixed(0)} GB` : "…"}
-          {budget?.isDefault ? " (default)" : ""} (tap to change)
         </Text>
       </Pressable>
       {!link.approved && !link.revoked ? (

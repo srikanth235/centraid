@@ -27,6 +27,8 @@ const api = vi.hoisted(() => ({
   auth: vi.fn<typeof TypeImport_1gl5zx7.auth>(),
   compileAutomation: vi.fn<typeof TypeImport_1gl5zx7.compileAutomation>(),
   deleteAutomation: vi.fn<typeof TypeImport_1gl5zx7.deleteAutomation>(),
+  invokeAutomationAndAwait:
+    vi.fn<typeof TypeImport_1gl5zx7.invokeAutomationAndAwait>(),
   listAutomationTurns: vi.fn<typeof TypeImport_1gl5zx7.listAutomationTurns>(),
   readAutomationTurnExpanded:
     vi.fn<typeof TypeImport_1gl5zx7.readAutomationTurnExpanded>(),
@@ -36,6 +38,7 @@ const api = vi.hoisted(() => ({
     vi.fn<typeof TypeImport_1gl5zx7.rotateAutomationWebhookSecret>(),
   runAutomationNow: vi.fn<typeof TypeImport_1gl5zx7.runAutomationNow>(),
   setAutomationEnabled: vi.fn<typeof TypeImport_1gl5zx7.setAutomationEnabled>(),
+  updateAutomation: vi.fn<typeof TypeImport_1gl5zx7.updateAutomation>(),
   streamAutomationConversationTurn:
     vi.fn<typeof TypeImport_1gl5zx7.streamAutomationConversationTurn>(),
   streamAutomationTurn: vi.fn<typeof TypeImport_1gl5zx7.streamAutomationTurn>(),
@@ -194,6 +197,13 @@ describe("AutomationViewRoute suite", () => {
       .mockReset()
       .mockResolvedValue({ compileTurnId: "compile-1" });
     api.deleteAutomation.mockReset().mockResolvedValue({ ok: true });
+    api.invokeAutomationAndAwait.mockReset().mockResolvedValue({
+      turnId: "recognition-turn",
+      result: {
+        turnId: "recognition-turn",
+        outcome: { ok: true },
+      },
+    });
     api.listAutomationTurns.mockReset().mockResolvedValue([
       { ...turn, totalInputTokens: 12, totalOutputTokens: 8 },
       {
@@ -577,6 +587,46 @@ describe("AutomationViewRoute suite", () => {
       await expect(bridge.onRotateWebhook()).resolves.toBe(true);
       await expect(bridge.onDelete()).resolves.toBe(true);
       expect(actions.navigate).toHaveBeenCalledWith({ kind: "automations" });
+    });
+
+    it("runs a recognition agent variant only through the awaited payload path", async () => {
+      const base = await helpers.loadThread({
+        automationId: "daily/daily",
+        gatewayOrigin: "http://127.0.0.1:5173",
+      });
+      const recognition = automationRow();
+      recognition.manifest.requires.model = "provider/member-selected-model";
+      recognition.manifest.enrich = {
+        domain: "photos",
+        capability: "ocr",
+        lane: "gateway",
+        agentVariant: {
+          selected: "deterministic",
+          promptRev: "ocr-v1",
+          latency: "Agent runs take seconds.",
+          consequence: "Billed and re-derives eligible photographs.",
+        },
+      };
+      helpers.loadThread.mockResolvedValue({
+        ...base!,
+        row: recognition,
+      });
+      const bridge = await mount();
+      await bridge.loadData();
+
+      api.updateAutomation.mockResolvedValue({ row: recognition });
+      await expect(bridge.onSetRecognitionVariant?.("agent")).resolves.toBe(
+        true
+      );
+      await expect(bridge.onRunNow()).resolves.toBe("recognition-turn");
+      expect(api.updateAutomation).toHaveBeenCalledWith({
+        automationId: "daily/daily",
+        enrichVariant: "agent",
+      });
+      expect(api.invokeAutomationAndAwait).toHaveBeenCalledWith({
+        automationId: "daily/daily",
+      });
+      expect(api.runAutomationNow).not.toHaveBeenCalled();
     });
 
     it("restores the persisted conversation runner ahead of subsystem defaults", async () => {

@@ -33,7 +33,7 @@ type ParentMessage =
   | { type: "run"; request: WorkerRequest };
 
 /**
- * A `ctx.fetch` request (issue #293 decision 8, connector-only). Any string
+ * A `ctx.fetch` request. Connector calls may carry secret placeholders;
  * may carry `{{secret:locker:<item_id>:<column>}}` placeholders — the PARENT
  * resolves them after the message leaves this worker, so plaintext secrets
  * never enter handler memory and cannot be logged from here.
@@ -43,6 +43,7 @@ export interface FetchSpec {
   method?: string;
   headers?: Record<string, string>;
   body?: string;
+  content?: { contentId: string; variant: string; maxBytes?: number }[];
 }
 
 type WorkerMessage =
@@ -289,10 +290,10 @@ const ctx = {
   /** ISO fire-start instant: current enough for leases, deterministic on replay. */
   now: req.now,
   /**
-   * Transport-level HTTP for connectors (issue #293): strings may reference
+   * Governed transport. Connector strings may reference
    * declared secrets as `{{secret:locker:<item_id>:<column>}}` — the host
    * substitutes and performs the request; the secret never enters this
-   * worker. Non-connector runs are refused host-side.
+   * worker.
    */
   fetch(spec: FetchSpec): Promise<{
     status: number;

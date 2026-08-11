@@ -1,0 +1,23 @@
+{
+  "name": "Face recognition",
+  "version": "0.1.0",
+  "description": "Processes only the explicit faces consent queue in bounded batches; never scans the ambient library.",
+  "enabled": false,
+  "prompt": "When I explicitly request face detection, process only those consent-tagged photographs in bounded batches.",
+  "triggers": [
+    { "kind": "data", "entities": ["enrich.request"], "every": "*/5 * * * *" }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads open face-consent requests and photograph previews, then writes validated face regions and drains only satisfied requests.",
+    "scopes": [
+      { "schema": "core", "verbs": "read+act" },
+      { "schema": "enrich", "verbs": "read+act" },
+      { "schema": "media", "verbs": "read+act" }
+    ]
+  },
+  "enrich": { "domain": "photos", "capability": "faces", "lane": "gateway" },
+  "history": { "keep": { "count": 100 } },
+  "generated": { "by": "centraid-template", "at": "2026-08-10T00:00:00.000Z" }
+}

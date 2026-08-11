@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "files": [
+    {
+      "model": "clip-vit-b-32@1",
+      "path": "clip/visual.onnx",
+      "sha256": "33a3df41ceef21acdf371af00f6dd0456ec1f9eba24d03a7720f9c3734e40859",
+      "license": "MIT",
+      "url": "https://huggingface.co/immich-app/ViT-B-32__openai/resolve/main/visual/model.onnx"
+    },
+    {
+      "model": "clip-vit-b-32@1",
+      "path": "clip/textual.onnx",
+      "sha256": "b80cf0af751533a6712d92247f0ddc0c95208748bc59a1a27f33e67be6864e3b",
+      "license": "MIT",
+      "url": "https://huggingface.co/immich-app/ViT-B-32__openai/resolve/main/textual/model.onnx"
+    },
+    {
+      "model": "clip-vit-b-32@1",
+      "path": "clip/vocab.json",
+      "sha256": "5047b556ce86ccaf6aa22b3ffccfc52d391ea4accdab9c2f2407da5b742d4363",
+      "license": "MIT",
+      "url": "https://huggingface.co/immich-app/ViT-B-32__openai/resolve/main/textual/vocab.json"
+    },
+    {
+      "model": "clip-vit-b-32@1",
+      "path": "clip/merges.txt",
+      "sha256": "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a",
+      "license": "MIT",
+      "url": "https://huggingface.co/immich-app/ViT-B-32__openai/resolve/main/textual/merges.txt"
+    },
+    {
+      "model": "pp-ocrv4@1",
+      "path": "ocr/det.onnx",
+      "sha256": "d2a7720d45a54257208b1e13e36a8479894cb74155a5efe29462512d42f49da9",
+      "license": "Apache-2.0",
+      "url": "https://huggingface.co/SWHL/RapidOCR/resolve/main/PP-OCRv4/ch_PP-OCRv4_det_infer.onnx"
+    },
+    {
+      "model": "pp-ocrv4@1",
+      "path": "ocr/rec.onnx",
+      "sha256": "48fc40f24f6d2a207a2b1091d3437eb3cc3eb6b676dc3ef9c37384005483683b",
+      "license": "Apache-2.0",
+      "url": "https://huggingface.co/SWHL/RapidOCR/resolve/main/PP-OCRv4/ch_PP-OCRv4_rec_infer.onnx"
+    },
+    {
+      "model": "pp-ocrv4@1",
+      "path": "ocr/dict.txt",
+      "sha256": "a1c84d9bdb9ab29043c58896224d32941783eb821629618416dcb08f12886492",
+      "license": "Apache-2.0",
+      "url": "https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/main/ppocr/utils/ppocr_keys_v1.txt"
+    },
+    {
+      "model": "yunet-sface@1",
+      "path": "faces/yunet.onnx",
+      "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+      "license": "MIT",
+      "url": "https://huggingface.co/opencv/face_detection_yunet/resolve/main/face_detection_yunet_2023mar.onnx"
+    },
+    {
+      "model": "yunet-sface@1",
+      "path": "faces/sface.onnx",
+      "sha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
+      "license": "Apache-2.0",
+      "url": "https://huggingface.co/opencv/face_recognition_sface/resolve/main/face_recognition_sface_2021dec.onnx"
+    },
+    {
+      "model": "whisper-tiny.en-q8@1",
+      "path": "transcript/config.json",
+      "sha256": "251ea843b5901a99efa58c0b99b8052c6019aa3e7d2baf46693a1128ff606233",
+      "license": "MIT",
+      "url": "https://huggingface.co/onnx-community/whisper-tiny.en/resolve/2575352d61be1bf7225cf8f8b268a4678025fc58/config.json"
+    },
+    {
+      "model": "whisper-tiny.en-q8@1",
+      "path": "transcript/generation_config.json",
+      "sha256": "7b2e8451ed5f118e75fdd991409d72119d21d2fef1eba9723f68fb9c57fe5dc9",
+      "license": "MIT",
+      "url": "https://huggingface.co/onnx-community/whisper-tiny.en/resolve/2575352d61be1bf7225cf8f8b268a4678025fc58/generation_config.json"
+    },
+    {
+      "model": "whisper-tiny.en-q8@1",
+      "path": "transcript/preprocessor_config.json",
+      "sha256": "a6a76d28c93edb273669eb9e0b0636a2bddbb1272c3261e47b7ca6dfdbac1b8d",
+      "license": "MIT",
+      "url": "https://huggingface.co/onnx-community/whisper-tiny.en/resolve/2575352d61be1bf7225cf8f8b268a4678025fc58/preprocessor_config.json"
+    },
+    {
+      "model": "whisper-tiny.en-q8@1",
+      "path": "transcript/added_tokens.json",
+      "sha256": "560be47bea388757f8d4cc185c5d82067426cbb6361e38016dd90ddc01ab203a",
+      "license": "MIT",
+      "url": "https://huggingface.co/onnx-community/whisper-tiny.en/resolve/2575352d61be1bf7225cf8f8b268a4678025fc58/added_tokens.json"
+    },
+    {
+      "model": "whisper-tiny.en-q8@1",
+      "path": "transcript/merges.txt",
+      "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5",
+      "license": "MIT",
+      "url": "https://huggingface.co/onnx-community/whisper-tiny.en/resolve/2575352d61be1bf7225cf8f8b268a4678025fc58/merges.txt"
+    },
+    {
+      "model": "whisper-tiny.en-q8@1",
+      "path": "transcript/normalizer.json",
+      "sha256": "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd",
+      "license": "MIT",
+      "url": "https://huggingface.co/onnx-community/whisper-tiny.en/resolve/2575352d61be1bf7225cf8f8b268a4678025fc58/normalizer.json"
+    },
+    {
+      "model": "whisper-tiny.en-q8@1",
+      "path": "transcript/special_tokens_map.json",
+      "sha256": "98bdf3ec5b32e31575b02f64b0a32bde7c0449075d34484a7df9bdd3cdeb9fb9",
+      "license": "MIT",
+      "url": "https://huggingface.co/onnx-community/whisper-tiny.en/resolve/2575352d61be1bf7225cf8f8b268a4678025fc58/special_tokens_map.json"
+    },
+    {
+      "model": "whisper-tiny.en-q8@1",
+      "path": "transcript/tokenizer.json",
+      "sha256": "5eb60cec1e77aeeb6869a2bb5a8e01a84c3fe5d072d75369343021fe6f5310d0",
+      "license": "MIT",
+      "url": "https://huggingface.co/onnx-community/whisper-tiny.en/resolve/2575352d61be1bf7225cf8f8b268a4678025fc58/tokenizer.json"
+    },
+    {
+      "model": "whisper-tiny.en-q8@1",
+      "path": "transcript/tokenizer_config.json",
+      "sha256": "93879c3dccdd4b976f709acd85b44778873f30c275e67026f30ca1e4c975230c",
+      "license": "MIT",
+      "url": "https://huggingface.co/onnx-community/whisper-tiny.en/resolve/2575352d61be1bf7225cf8f8b268a4678025fc58/tokenizer_config.json"
+    },
+    {
+      "model": "whisper-tiny.en-q8@1",
+      "path": "transcript/vocab.json",
+      "sha256": "f6bd25a65e4e63ca31360e9fb11c7e4f9a391a78385d640acd814092dd6eee4f",
+      "license": "MIT",
+      "url": "https://huggingface.co/onnx-community/whisper-tiny.en/resolve/2575352d61be1bf7225cf8f8b268a4678025fc58/vocab.json"
+    },
+    {
+      "model": "whisper-tiny.en-q8@1",
+      "path": "transcript/onnx/encoder_model_quantized.onnx",
+      "sha256": "e93ec822f16a8fd264e7de972ad17d615ea7334b75a52d54c50c2e18dd503a25",
+      "license": "MIT",
+      "url": "https://huggingface.co/onnx-community/whisper-tiny.en/resolve/2575352d61be1bf7225cf8f8b268a4678025fc58/onnx/encoder_model_quantized.onnx"
+    },
+    {
+      "model": "whisper-tiny.en-q8@1",
+      "path": "transcript/onnx/decoder_model_merged_quantized.onnx",
+      "sha256": "c0592d0749413c960569e1c7fb806b060d5d18f3ebad4a95cbf9a77dc6e9be52",
+      "license": "MIT",
+      "url": "https://huggingface.co/onnx-community/whisper-tiny.en/resolve/2575352d61be1bf7225cf8f8b268a4678025fc58/onnx/decoder_model_merged_quantized.onnx"
+    }
+  ]
+}

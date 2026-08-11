@@ -30,11 +30,6 @@
   color: var(--text-faint);
   background: color-mix(in srgb, var(--text) 8%, transparent);
 }
-.verbBadge[data-verb="lend"] {
-  color: var(--accent-deep, var(--accent));
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
 .reason {
   font-size: var(--t-control-size);
   line-height: 1.4;

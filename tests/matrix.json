@@ -626,7 +626,7 @@
     "apps/mobile": "mobile",
     "apps/oauth-worker": "oauth-worker",
     "apps/web": "web",
-    "tools/enrichment-service": "gateway"
+    "tools/recognition-automations": "gateway"
   },
   "notes": {
     "web.concurrency": "Partial\u2192stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic. Tracked under #656.",
@@ -1660,6 +1660,11 @@
     }
   ],
   "laws": {
+    "commons-steward-ordered-convergence": {
+      "statement": "Each Commons grant has one independent monotonic steward sequence; cursor-gapped members converge to the same domain state, and capability downgrades govern commands from their exact stream position onward.",
+      "owner": "packages/vault/src/share/commons-convergence-properties.test.ts",
+      "flow": "commons-convergence-properties"
+    },
     "placement-registry-parity": {
       "statement": "Every placeable blueprint entity is enumerated once and Locker is structurally excluded.",
       "owner": "packages/blueprints/src/placement-registry.test.ts",
@@ -1695,8 +1700,8 @@
       "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
       "flow": "blueprint-search-law"
     },
-    "enrichment-single-client": {
-      "statement": "Only the gateway owns the enrichment-service client; apps and automations cannot reach it directly.",
+    "recognition-self-contained": {
+      "statement": "Blueprint apps, automations, and mobile code use host-owned model seams and never resurrect provider SDKs or deleted inference roads.",
       "owner": "packages/blueprints/src/no-inference-client.test.ts",
       "flow": "blueprint-enrichment-law"
     },
@@ -1712,12 +1717,12 @@
     },
     "enrichment-model-lock": {
       "statement": "Every live-model file and native runtime dependency is immutable by version/digest and its permissive licence is recorded in LICENSES.md.",
-      "owner": "tools/enrichment-service/src/models-lock.test.ts",
+      "owner": "tools/recognition-automations/src/models-lock.test.ts",
       "flow": "enrichment-service-contract"
     },
     "enrichment-live": {
       "statement": "Pinned real weights satisfy the advertised capability/model handshake and the committed OCR, embedding, and face-geometry goldens.",
-      "owner": "tools/enrichment-service/src/model-goldens.live.test.ts",
+      "owner": "tools/recognition-automations/src/model-goldens.live.test.ts",
       "flow": "enrichment-service-contract"
     },
     "backup-round-trip": {
@@ -2011,7 +2016,7 @@
     },
     {
       "id": "blueprint-enrichment-law",
-      "name": "Only the gateway owns the enrichment-service client",
+      "name": "Recognition handlers are self-contained and use no deleted inference road",
       "surface": "blueprints",
       "dimension": "contracts",
       "tier": "contract",
@@ -2029,11 +2034,11 @@
     },
     {
       "id": "enrichment-service-contract",
-      "name": "Enrichment service handshake, validation, and bounded requests",
-      "surface": "gateway",
+      "name": "Recognition handlers own bounded model execution and typed vault I/O",
+      "surface": "automations",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "tools/enrichment-service/src/server.test.ts",
+      "owner": "packages/automation/src/manifest/enricher-templates.test.ts",
       "minimumTests": 8
     },
     {
@@ -2098,6 +2103,15 @@
       "tier": "unit",
       "owner": "packages/vault/src/gateway/json-schema-properties.test.ts",
       "minimumTests": 7
+    },
+    {
+      "id": "commons-convergence-properties",
+      "name": "Commons sequencing and cursor-gapped convergence properties",
+      "surface": "vault-core",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/vault/src/share/commons-convergence-properties.test.ts",
+      "minimumTests": 3
     },
     {
       "id": "backup-crypto-properties",

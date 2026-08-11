@@ -46,6 +46,14 @@ Ordinary writes stay in each replica's durable intent outbox. Add/Move uses a se
 
 Replay is idempotent. A crash can leave a completed target and pending source removal, but cannot delete the source before the target exists. Queued changes may be cancelled. Permission denial, terminal failure, and parked retries remain visible until dismissed.
 
+### Commons writes and cursors
+
+A circle-backed commons is not mounted as a special borrowed scope. Its domain rows and blobs are real residents of each joined member vault, so the ordinary per-vault replica, backup, search, and attachment paths cover them. The phone still has exactly one physical replica cursor for that vault even when the vault participates in many commons.
+
+Offline commons writes use the durable `share_commons_intent` rail. A pending row is an honest UI overlay, not an optimistic domain record; it can say “waiting for Alice's device” when the grant's steward is unavailable. After the steward verifies capability, container allowlist, member-vault signature, and replay nonce, the executed/refused outcome receives the next per-grant sequence and the member catches up normally.
+
+`share_commons_cursor(grant_id, member_vault_id)` is a logical operation offset alongside the physical replica cursor. Ten Tally groups in one vault therefore mean one vault cursor plus ten grant offsets, not eleven sync engines. The vault cursor transports resulting row changes; each grant's steward sequence independently orders that group's writes. Late join and restore begin from a closure checkpoint at sequence N, then consume the tail. Removal or revocation detaches and scrubs only that grant's lineage; other vault rows, outboxes, grants, and cursors remain intact.
+
 ## Background work and push privacy
 
 The Expo background task maps to BGTaskScheduler on iOS and WorkManager on Android. It runs the same pull, intent, placement, and upload queues as the foreground and calls the same metered/battery upload policy. Platform timing is opportunistic; correctness always comes from the durable outboxes and the next foreground pull.

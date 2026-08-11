@@ -3,7 +3,8 @@
 // derived data lands as ontology rows through the staging spine, attribution
 // is injected server-side and owner assertions are terminal, the owner's
 // auto-publish trust is what lets captions land without a review click, and
-// the agent content primitive only ever spells derivatives.
+// the agent content primitive keeps visual originals unreachable while
+// allowing bounded audio/video sources for self-contained ASR.
 
 import { DatabaseSync } from "node:sqlite";
 
@@ -795,10 +796,105 @@ describe("enrich", () => {
         .get(doc.content_id) as { n: number };
       expect(derivatives.n).toBe(1);
     });
+
+    test("re-extraction gets a fresh derivative_id so a bounded embed cursor can catch the rewrite (issue #731)", () => {
+      // embed-text's cursor walks `derivative_id > cursor`. An in-place
+      // UPDATE would leave the rewritten row's id behind an already-advanced
+      // cursor, so the corrected text would never be re-embedded and
+      // semantic search would keep serving a stale vector.
+      const staged = gw.stageBlob(owner, {
+        bytes: PNG_BYTES,
+        filename: "scan2.png",
+      });
+      const doc = output<{ document_id: string; content_id: string }>(
+        invoke(owner, "core.add_document", {
+          staged_sha: staged.sha256,
+          title: "scan2",
+        })
+      );
+      invoke(agent, "core.set_extracted_text", {
+        content_id: doc.content_id,
+        text: "first pass OCR",
+      });
+      const before = db.vault
+        .prepare(
+          `SELECT derivative_id FROM core_content_derivative WHERE content_id = ? AND variant = 'text'`
+        )
+        .get(doc.content_id) as { derivative_id: string };
+      invoke(agent, "core.set_extracted_text", {
+        content_id: doc.content_id,
+        text: "corrected OCR after a model bump",
+      });
+      const after = db.vault
+        .prepare(
+          `SELECT derivative_id FROM core_content_derivative WHERE content_id = ? AND variant = 'text'`
+        )
+        .get(doc.content_id) as { derivative_id: string };
+      expect(after.derivative_id).not.toBe(before.derivative_id);
+      // uuidv7 ids are lexicographically time-ordered. Prove it the way
+      // embed-text's bounded cursor actually queries — `derivative_id >
+      // cursor` — rather than asserting string order directly: a cursor
+      // parked at the pre-rewrite id must find the rewritten row.
+      const rescanned = db.vault
+        .prepare(
+          `SELECT count(*) AS n FROM core_content_derivative
+            WHERE content_id = ? AND variant = 'text' AND derivative_id > ?`
+        )
+        .get(doc.content_id, before.derivative_id) as { n: number };
+      expect(rescanned.n).toBe(1);
+      // Still exactly one live row — a rewrite replaces, it doesn't append.
+      const derivatives = db.vault
+        .prepare(
+          `SELECT count(*) AS n FROM core_content_derivative WHERE content_id = ? AND variant = 'text'`
+        )
+        .get(doc.content_id) as { n: number };
+      expect(derivatives.n).toBe(1);
+    });
+
+    test("an OCR box outside the asset's dimensions is dropped; the text and in-bounds regions survive (issue #731)", () => {
+      const staged = gw.stageBlob(owner, {
+        bytes: PNG_BYTES,
+        filename: "photo.png",
+      });
+      const asset = output<{ asset_id: string; content_id: string }>(
+        invoke(owner, "media.add_asset", {
+          staged_sha: staged.sha256,
+          kind: "photo",
+          width: 100,
+          height: 80,
+        })
+      );
+      const set = invoke(agent, "core.set_extracted_text", {
+        content_id: asset.content_id,
+        text: "Total\nOut of bounds",
+        capability: "ocr",
+        model: "ocr@1",
+        regions: [
+          { text: "Total", box: [10, 10, 20, 20] },
+          // x + w = 90 + 20 = 110 > width 100 — out of bounds.
+          { text: "Out of bounds", box: [90, 70, 20, 20], confidence: 0.5 },
+        ],
+      });
+      expect(set.status).toBe("executed");
+      const stamp = db.vault
+        .prepare(
+          `SELECT payload_json FROM enrich_derivation WHERE target_id = ? AND variant = 'text'`
+        )
+        .get(asset.content_id) as { payload_json: string };
+      const payload = JSON.parse(stamp.payload_json) as {
+        regions: { text: string; box?: number[]; confidence?: number }[];
+      };
+      expect(payload.regions).toStrictEqual([
+        { text: "Total", box: [10, 10, 20, 20] },
+        // The box is dropped, not clamped or replaced — and its confidence
+        // is preserved exactly as given, never invented or zeroed.
+        { text: "Out of bounds", confidence: 0.5 },
+      ]);
+    });
   });
 
   describe("agent content access (the #296 §7 seam)", () => {
-    test("text and thumb variants serve size-bounded; originals are structurally unreachable; every fetch receipts", async () => {
+    test("text/thumb and bounded AV originals serve; visual originals stay unreachable; every fetch receipts", async () => {
       const original = gw.stageBlob(owner, {
         bytes: PNG_BYTES,
         filename: "photo.png",
@@ -824,13 +920,38 @@ describe("enrich", () => {
       );
       expect(thumb.mediaType).toBe("image/jpeg");
 
-      // Originals are not a spelling this surface has.
+      // The spelling exists for ASR, but a visual source is still structurally
+      // unreachable so EXIF/GPS-bearing bytes never cross this rail.
       await expect(
         gw.contentForAgent(agent, {
           contentId: asset.content_id,
           variant: "original",
         })
-      ).rejects.toThrow(/derivatives egress, never originals/u);
+      ).resolves.toMatchObject({ status: "no-variant" });
+
+      const audioBytes = Buffer.from("bounded-audio-fixture");
+      const stagedAudio = gw.stageBlob(owner, {
+        bytes: audioBytes,
+        filename: "voice.wav",
+        mediaType: "audio/wav",
+      });
+      const audio = output<{ content_id: string }>(
+        invoke(owner, "media.add_asset", {
+          staged_sha: stagedAudio.sha256,
+          kind: "audio",
+        })
+      );
+      const originalAudio = await gw.contentForAgent(agent, {
+        contentId: audio.content_id,
+        variant: "original",
+        maxBytes: audioBytes.length,
+      });
+      expect(originalAudio.status).toBe("ok");
+      assert(originalAudio.status === "ok" && originalAudio.kind === "bytes");
+      expect(Buffer.from(originalAudio.base64, "base64")).toStrictEqual(
+        audioBytes
+      );
+      expect(originalAudio.mediaType).toBe("audio/wav");
 
       // The text variant reads the derivative row.
       invoke(agent, "core.set_extracted_text", {
@@ -918,6 +1039,48 @@ describe("enrich", () => {
         .all() as { reason: string; detail: string }[];
       expect(open).toHaveLength(1);
       expect(open[0]!.reason).toBe("search-miss");
+    });
+
+    test("upsert_embedding stamps an optional source_version alongside the model (issue #731)", () => {
+      // `source_version` lets embed-text distinguish "this target's
+      // embedding is current" from "the model is current but the source
+      // derivative was rewritten since" — a model-only stamp comparison
+      // cannot see a same-model text rewrite.
+      const { assetId } = addPhoto();
+      invoke(agent, "enrich.upsert_embedding", {
+        entity_type: "media.media_asset",
+        entity_id: assetId,
+        model: "embed-text@1",
+        vector: [1, 0, 0],
+        capability: "embed-text",
+        source_version: "deriv-1",
+      });
+      const stamp = db.vault
+        .prepare(
+          `SELECT payload_json FROM enrich_derivation WHERE target_id = ? AND variant = 'embedding'`
+        )
+        .get(assetId) as { payload_json: string };
+      expect(JSON.parse(stamp.payload_json)).toStrictEqual({
+        source_version: "deriv-1",
+      });
+
+      // A later upsert with a fresh source_version REPLACES the stamp.
+      invoke(agent, "enrich.upsert_embedding", {
+        entity_type: "media.media_asset",
+        entity_id: assetId,
+        model: "embed-text@1",
+        vector: [0, 1, 0],
+        capability: "embed-text",
+        source_version: "deriv-2",
+      });
+      const after = db.vault
+        .prepare(
+          `SELECT payload_json FROM enrich_derivation WHERE target_id = ? AND variant = 'embedding'`
+        )
+        .get(assetId) as { payload_json: string };
+      expect(JSON.parse(after.payload_json)).toStrictEqual({
+        source_version: "deriv-2",
+      });
     });
 
     test("an owner search miss records ONE open request; agent misses record nothing; draining closes it", () => {

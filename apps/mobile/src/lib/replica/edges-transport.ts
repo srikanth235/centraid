@@ -19,7 +19,7 @@ export type EdgeStatus =
 export interface GatewayEdge {
   edgeId: string;
   kind: "add" | "move";
-  mode: "snapshot" | "live";
+  mode: "snapshot";
   itemType: string;
   itemIds?: string[];
   originVaultId: string;
@@ -81,23 +81,4 @@ export async function answerPendingEdge(
   if (!response.ok)
     throw new Error(`answer pending edge failed (${response.status})`);
   return (await response.json()) as { edgeId: string; decision: string };
-}
-
-/**
- * Close an edge by id — `DELETE /centraid/_gateway/edges/:edgeId` (#726 P6
- * gap 1). The gateway disambiguates the caller's side: the ORIGIN owner
- * reaches `closeLiveEdge` ("Stop lending"), the AUDIENCE owner reaches
- * `dropBorrowedEdge` ("Stop borrowing"). One door; the caller only ever
- * supplies the edge id.
- */
-export async function closeEdge(
-  baseUrl: string,
-  edgeId: string
-): Promise<Record<string, unknown>> {
-  const response = await fetch(
-    new URL(`${ROUTES.gatewayEdges}/${encodeURIComponent(edgeId)}`, baseUrl),
-    { method: "DELETE", headers: authHeader() }
-  );
-  if (!response.ok) throw new Error(`close edge failed (${response.status})`);
-  return (await response.json()) as Record<string, unknown>;
 }

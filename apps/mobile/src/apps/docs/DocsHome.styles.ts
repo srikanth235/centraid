@@ -1,6 +1,6 @@
 import { StyleSheet } from "react-native";
 
-import { family } from "../../kit/theme";
+import { family, t } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
   addCopy: { flex: 1, marginLeft: 12 },
@@ -96,6 +96,7 @@ export const styles = StyleSheet.create({
     minHeight: 56,
     paddingHorizontal: 18,
   },
+  headerActions: { alignItems: "center", flexDirection: "row", gap: 12 },
   headerCopy: { flex: 1 },
   icon: {
     alignItems: "center",
@@ -147,6 +148,8 @@ export const styles = StyleSheet.create({
     marginHorizontal: 18,
     paddingHorizontal: 12,
   },
+  shareFolder: { alignItems: "center", flexDirection: "row", gap: 5 },
+  shareFolderText: t("control"),
   subtitle: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 2 },
   title: { fontFamily: family.sansMedium, fontSize: 23, letterSpacing: -0.5 },
   viewButton: {

@@ -264,60 +264,6 @@ async function until(
 }
 
 describe(createNativeReplicaSession, () => {
-  test("mounts and writes a borrowed edge through the ordinary native session", async () => {
-    const borrowedAuth = { ...gatewayAuth, vaultId: "borrowed:edge-1" };
-    const borrowedCursor = { epoch: "borrowed:edge-1", seq: 1 };
-    const borrowedPage = {
-      ...page(borrowedCursor),
-      vaultId: "borrowed:edge-1",
-      shapes: snapshot(borrowedCursor).shapes.map((shape) => ({
-        ...shape,
-        appId: "lent:party-priya",
-      })),
-    };
-    const gateway = createGateway()
-      .on("/replica/borrowed/bootstrap", () => json(borrowedPage))
-      .on("/replica/borrowed/changes", () =>
-        json({
-          ...noChanges(borrowedCursor),
-          from: borrowedCursor,
-          to: borrowedCursor,
-        })
-      )
-      .on("/replica/borrowed/intents", () =>
-        json({ outcome: { intentId: "intent-1", status: "executed" } })
-      );
-    const session = await createNativeReplicaSession({
-      gatewayAuth: borrowedAuth,
-      borrowedEdgeId: "edge-1",
-      fetcher: gateway.fetcher,
-      changeFeed: createFeed(),
-      driver: new NodeSqliteDriver(),
-      digest: nodeDigest,
-      idFactory: sequentialIds(),
-      pollIntervalMs: 60_000,
-    });
-    try {
-      await expect(
-        session.read("tasks", { entity: "core.content_item" })
-      ).resolves.toMatchObject({ rows: [{ values: { title: "Original" } }] });
-      await expect(
-        session.write("tasks", {
-          action: "complete",
-          input: { id: "photo-1" },
-        })
-      ).resolves.toMatchObject({ status: "executed" });
-      expect(gateway.pathnames).toContain(
-        "/centraid/_vault/replica/borrowed/bootstrap?edgeId=edge-1"
-      );
-      expect(gateway.pathnames).toContain(
-        "/centraid/_vault/replica/borrowed/intents?edgeId=edge-1"
-      );
-    } finally {
-      await session.close();
-    }
-  });
-
   test("bootstraps on start and pulls deltas when the feed reports a newer cursor", async () => {
     const gateway = createGateway()
       .on("/replica/bootstrap", () =>

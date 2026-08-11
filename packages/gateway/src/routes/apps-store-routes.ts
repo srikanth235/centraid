@@ -57,6 +57,9 @@ import {
 export { validateManifestAt } from "../validate-manifest.js";
 
 export interface AppsStoreRouteOptions {
+  /** Release-managed app code may be inspected but never mutated through the
+   * generic store door; the host upgrades it from its bundled snapshot. */
+  isReadOnlyApp?: (appId: string) => boolean;
   /**
    * Called after a successful publish/rollback with the app id, so the
    * host can register the app in the runtime's registry (a brand-new
@@ -154,6 +157,13 @@ export function makeAppsStoreRouteHandler(
       const appId = decodeURIComponent(segments[1] ?? "");
       const verb = segments[2];
       if (!appId || appId.startsWith("_")) return false;
+      if (method !== "GET" && opts.isReadOnlyApp?.(appId)) {
+        sendJson(res, 403, {
+          error: "system_recipe_read_only",
+          message: `${appId} is a release-managed recognition recipe and cannot be changed through the app store.`,
+        });
+        return true;
+      }
 
       // ---- per-app collection-level: DELETE /_apps/<appId> ----
       if (segments.length === 2 && method === "DELETE") {

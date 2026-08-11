@@ -26,6 +26,20 @@ import {
 import type { LifecycleRouteOptions } from "../lifecycle/lifecycle-shared.js";
 import { readFileMap, readJson, sendJson } from "./route-helpers.js";
 
+function refuseSystemRecipeMutation(
+  opts: LifecycleRouteOptions,
+  res: ServerResponse,
+  ref: { appId: string; automationId: string },
+  action: string
+): true | undefined {
+  const canonical = `${ref.appId}/${ref.automationId}`;
+  if (!opts.isSystemManagedAutomation?.(canonical)) return undefined;
+  return sendJson(res, 403, {
+    error: "system_recipe_read_only",
+    message: `${canonical} is a release-managed recognition recipe; ${action} is unavailable. Toggle it or change its declared model/variant settings instead.`,
+  });
+}
+
 // ---- POST /centraid/_automations/compile?ref= (hidden builder compile) ----
 
 export async function handleAutomationCompile(
@@ -41,6 +55,8 @@ export async function handleAutomationCompile(
       error: "bad_request",
       message: "compile needs ?ref=",
     });
+  const refused = refuseSystemRecipeMutation(opts, res, ref, "compile");
+  if (refused) return refused;
   if (!opts.compileAutomation) {
     return sendJson(res, 503, {
       error: "unavailable",
@@ -81,6 +97,8 @@ export async function handleAutomationRevise(
       error: "bad_request",
       message: "revise needs ?ref=",
     });
+  const refused = refuseSystemRecipeMutation(opts, res, ref, "revision");
+  if (refused) return refused;
   if (!opts.reviseAutomation) {
     return sendJson(res, 503, {
       error: "unavailable",
@@ -406,6 +424,24 @@ export async function handleAutomationUpdate(
     : undefined;
   const hasRunnerKey = Object.hasOwn(body, "runner");
   const hasModelKey = Object.hasOwn(body, "model");
+  const hasEnrichVariantKey = Object.hasOwn(body, "enrichVariant");
+  if (
+    opts.isSystemManagedAutomation?.(`${ref.appId}/${ref.automationId}`) &&
+    (nameInput !== undefined ||
+      promptInput !== undefined ||
+      triggersInput !== undefined ||
+      vaultInput !== undefined ||
+      hasConnectorKey ||
+      hasConnectionsKey)
+  ) {
+    const refused = refuseSystemRecipeMutation(
+      opts,
+      res,
+      ref,
+      "editing its name, instructions, triggers, access, or connections"
+    );
+    if (refused) return refused;
+  }
   if (
     nameInput === undefined &&
     promptInput === undefined &&
@@ -414,12 +450,13 @@ export async function handleAutomationUpdate(
     !hasConnectorKey &&
     !hasConnectionsKey &&
     !hasRunnerKey &&
-    !hasModelKey
+    !hasModelKey &&
+    !hasEnrichVariantKey
   ) {
     return sendJson(res, 400, {
       error: "bad_request",
       message:
-        "update needs at least one of { name, prompt, triggers, connections, connector, runner, model }",
+        "update needs at least one of { name, prompt, triggers, connections, connector, runner, model, enrichVariant }",
     });
   }
 
@@ -560,6 +597,40 @@ export async function handleAutomationUpdate(
     }
     patched.requires = requires;
   }
+  if (hasEnrichVariantKey) {
+    if (
+      body.enrichVariant !== "deterministic" &&
+      body.enrichVariant !== "agent"
+    ) {
+      if (ephemeralSession) await opts.store.closeSession(sessionId);
+      return sendJson(res, 400, {
+        error: "bad_request",
+        message: "enrichVariant must be deterministic or agent",
+      });
+    }
+    const enrich = existing.enrich;
+    if (!enrich?.agentVariant) {
+      if (ephemeralSession) await opts.store.closeSession(sessionId);
+      return sendJson(res, 400, {
+        error: "bad_request",
+        message:
+          "enrichVariant is only valid for a recognition recipe with an agent variant",
+      });
+    }
+    const requires = patched.requires as Record<string, unknown>;
+    if (body.enrichVariant === "agent" && !requires.model) {
+      if (ephemeralSession) await opts.store.closeSession(sessionId);
+      return sendJson(res, 400, {
+        error: "bad_request",
+        message:
+          "agent recognition requires an explicit pinned model before provider egress can be consented",
+      });
+    }
+    patched.enrich = {
+      ...enrich,
+      agentVariant: { ...enrich.agentVariant, selected: body.enrichVariant },
+    };
+  }
   const manifest = automation.validateManifest(patched);
   const changedFile: ScaffoldFile = {
     path: targetPath,
@@ -620,6 +691,13 @@ export async function handleAutomationRotateWebhook(
       message: "rotate-webhook needs ?ref=",
     });
   }
+  const refused = refuseSystemRecipeMutation(
+    opts,
+    res,
+    ref,
+    "webhook rotation"
+  );
+  if (refused) return refused;
   const body = await readJson(req);
   const publish = body.publish === true;
   const explicitSession =
@@ -757,6 +835,8 @@ export async function handleAutomationDelete(
       error: "bad_request",
       message: "delete needs ?ref=",
     });
+  const refused = refuseSystemRecipeMutation(opts, res, ref, "deletion");
+  if (refused) return refused;
   const publish = url.searchParams.get("publish") === "true";
 
   // A whole automation app (`kind: 'automation'`) is removed wholesale;

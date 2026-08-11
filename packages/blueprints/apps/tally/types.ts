@@ -22,6 +22,8 @@ export interface Friend extends Person {
 /** A group member (group view / modal member list) — a person plus their net. */
 export interface Member extends Person {
   net_minor?: number;
+  /** Durable ledger participant who is no longer in the group's circle. */
+  departed?: boolean;
 }
 
 /** A group card on the dashboard / sidebar (net folded to the owner's stance). */
@@ -116,6 +118,17 @@ export interface LedgerRow {
   };
   pending?: boolean;
   parked?: boolean;
+  /** Durable Commons command state backing this optimistic row. `expired`
+   *  (a parked intent that outlived its review window) and `cancelled` (a
+   *  member-initiated cancel) are settled states like `denied` (issue #731
+   *  goal 2) — the ambient `centraid.d.ts` `CentraidCommonsIntent.status`
+   *  has not been widened to include them yet (out of this change's
+   *  ownership; see the PR notes), so `refreshCommonsExpenses` assigns into
+   *  this wider field with an explicit cast rather than narrowing here. */
+  intentStatus?: "pending" | "parked" | "denied" | "expired" | "cancelled";
+  commonsIntentId?: string;
+  pendingReason?: string;
+  stewardLabel?: string;
 }
 
 /** One interleaved activity entry (expense or settlement). */
@@ -280,6 +293,14 @@ export interface AppState {
   expenseUndo: ExpenseUndo | null;
   modalMembers: Member[];
   pendingExpenses: LedgerRow[];
+  /** Denied durable Commons intents the member has cleared from the ledger
+   *  overlay (issue #731 m6) — `refreshCommonsExpenses` re-derives
+   *  `pendingExpenses` from `commonsIntents()` on every refresh, and a
+   *  denial (unlike an executed write) never ages out of that feed on its
+   *  own, so a dismissal has to be remembered client-side or it would
+   *  reappear on the next refresh. Presentation state only, like the rest of
+   *  `AppState` — a dismissal does not survive a reload. */
+  dismissedCommonsIntentIds: Set<string>;
 }
 
 /** The nav patch setNav folds into `state` (a view switch). */

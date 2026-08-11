@@ -62,7 +62,7 @@
 }
 
 /* A named per-scope reach gap beside otherwise-good board sections (issue
-   #726 D10/D11): a lent scope that could not be reached is a fact next to
+   #726 D10/D11): a mounted scope that could not be reached is a fact next to
    whatever other scope's tasks still rendered — same treatment as
    `_shared/SearchScaffold.module.css`'s `.partial`, kept as its own copy
    since this module has no dependency on that one. */

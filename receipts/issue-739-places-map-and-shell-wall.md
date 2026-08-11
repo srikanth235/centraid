@@ -21,7 +21,7 @@ Shell
 Places
 
 - [x] L1a — a coordinate adopts a place the member already named
-- [x] L1b — `place-name`, a sixth capability on the enrichment seam
+- [ ] L1b — automatic place naming is deferred to a design against recognition automations
 - [x] L2 — one projection module, executed by both renderers
 - [x] L3 — the pin is a photograph; no coordinates printed anywhere
 - [x] `media.add_asset` accepts coordinates, so the inline door can make a place
@@ -40,7 +40,7 @@ Seeded data
 
 Docs
 
-- [x] `docs/photos-places.md`, the `place-name` section, the AGENTS index
+- [x] `docs/photos-places.md` and the AGENTS index
 
 ## What changed
 
@@ -123,25 +123,13 @@ so a photograph in the back garden joins "Home" instead of minting
 `37.4419, -122.1430` beside it. The two radii answer different questions —
 "same coordinate" is ~11m; "that place" has to cover a house and its garden.
 
-**`place-name` — a sixth capability on the one ML seam (#724).** Wire types in
-`wire-shapes.ts` and a reader in `result-readers.ts` (both split out of
-`service-client.ts` — see Decisions), a `CapabilitySweepSpec` in `place-name-sweep.ts` wired
-into the vault plane's sweep clock, and a reference implementation in
-`tools/enrichment-service` that is a gazetteer lookup rather than a model. Two
-guarantees are structural, not conventional:
-
-- **A human's name is never overwritten.** The coordinate-label shape is a SQL
-  predicate in the backlog query, so a named place is never sent to the
-  service at all — and the `UPDATE` repeats the guard, because a member can
-  rename during the round trip.
-- **"Nothing is near here" is an answer.** `null` stamps without writing, so
-  the backfill stops asking about the Pacific instead of retrying forever.
-
-Ranking is not nearest-wins: a settlement counts only if the coordinate falls
-inside a reach derived from its population, and the smallest
-distance-as-fraction-of-reach wins. A fixed radius is wrong in both directions
-at once — it lets a village claim the next valley and stops a city naming its
-own countryside.
+**Automatic place naming remains deferred.** `main` replaced the enrichment
+service and gateway sweep architecture with self-contained recognition
+automations in #735. The merge resolution deliberately removes this branch's
+old `place-name` service client, sweep, and reference implementation instead
+of resurrecting deleted infrastructure or disguising a redesign as conflict
+resolution. The member-named-place adoption above remains the shipped naming
+layer; coordinate placeholders remain hidden from the UI.
 
 **One projection, two renderers.** New `place-map.ts` imports nothing — no
 React, no stylesheet, no token. The web draws it in SVG; Expo draws the same
@@ -215,7 +203,7 @@ a redesigned Toolbar select, label registers moved to `--t-small` /
 `--t-small-strong` (`.launchLabel`, `.stemFootLabel`, `ShelfStrip`'s `.tab`),
 and several `min-inline-size: 0` truncation fixes.
 
-### Seeded data, and one lock line
+### Seeded data
 
 **`seed.js` gains coordinates.** `PLACE_BY_FILE` maps 16 of the 19 frames onto
 9 coordinates, spread into all three `media.add_asset` calls through
@@ -225,10 +213,6 @@ share a coordinate so grouping is visible, portraits share coordinates with
 landscapes so People and Places intersect, and three frames stay unlocated
 because a roll where every frame knows where it was is not a roll anyone has.
 `demo-seed.test.ts` pins all three counts.
-
-`bun.lock` gains one line — `@centraid/protocol` as a dev dependency of
-`packages/tunnel`, which that package's own `package.json` already declared.
-Lock drift corrected by `bun install`, belonging to no claim above.
 
 ## Decisions
 
@@ -257,24 +241,38 @@ product that emits anything about vault contents. Removing `react-native-maps`
 made the phone strictly more private than before this work; the cost, stated
 plainly, is that there is no land under the pins.
 
-**`service-client.ts` was split three ways rather than waived.** Adding
-`place-name` pushed it to 690 lines against a 625 limit. The split is along a
-real seam — `wire-shapes.ts` is the frozen contract, `result-readers.ts` is the
-distrust of a foreign program's numbers, `service-client.ts` is config and
-transport — and consumers import the shapes directly. A re-export barrel would
-have been a one-line fix and `no-barrel-file` correctly refused it.
+**The rebase keeps the recognition-automations architecture intact.** The
+branch originally split and extended `service-client.ts`, but #735 deleted
+that transport and its gateway sweeps. Conflict resolution takes `main` for
+capture OCR, semantic search, the vault plane, and recognition value shapes;
+all old-seam additions remain deleted. A future automatic place resolver is a
+separate product and licensing decision, not a compatibility shim.
 
 **The `Podfile.lock` hermes-engine drift was reverted, not committed.** It came
 from a failed `pod install` on this host, not from this work. `ci:native-state`
 L4 was already red before this branch and is not blessed here.
 
+## User impact
+
+Photos now shows located photographs as recognisable image pins on the same
+privacy-preserving projection on web and mobile. Coordinates are never printed
+as if they were names, and the mobile surface no longer contacts an operating
+system map provider. The shared shell has clearer wall/content contrast and a
+recognisable search control, while the photo viewer uses more of a compact
+screen and reliably resolves pending local blobs.
+
+First-run: onboarding and the fresh Home remain unchanged. The changed desktop
+Photos harness opens the integrated app surface and emits
+`artifacts/e2e/ui-impact/issue-739-places-map-and-shell-wall.png`; the focused
+projection and renderer suites pin the populated Places behavior.
+
 
 ## Out of scope
 
-- **Vendoring a gazetteer.** `place-name` is unadvertised until a table is
-  installed, so today's behaviour is unchanged and coordinate labels stay.
-  GeoNames `cities500` converted to the documented TSV is the intended source;
-  shipping it is a licensing/distribution decision.
+- **Automatic coordinate-to-settlement naming.** It needs a licensed
+  gazetteer, a self-contained automation design, and provenance/backfill rules
+  for the current architecture. Coordinate placeholders remain hidden until
+  that work is intentionally designed.
 - **A vendored coastline** (Natural Earth 110m) — the cheaper middle path to
   real land with no network. Same reason.
 - **Proxied or consent-gated tiles.** Designed and documented in
@@ -290,16 +288,14 @@ L4 was already red before this branch and is not blessed here.
 - `bun run typecheck` — 35/35 packages.
 - `bun run lint`, `bun run format`, `bun run knip` — clean.
 - Per-package `bun run test`: blueprints 93 files / 3283 tests, gateway 222,
-  client 232, mobile 133, vault 147, design 33, enrichment-service 15. All
+  client 232, mobile 133, vault 147, design 33. All
   pass. The combined `bun run test` shows sporadic failures under parallel
   load (a different file each run, each passing in isolation); that contention
   predates this work.
 - New behaviour tests worth naming: "merges or separates by the DRAWING, not
   by the data"; "measures its own scale bar honestly" (checked against the
   known ~215km Palo Alto → west shore distance rather than against the
-  projection's own arithmetic); "a name the member typed is never overwritten"
-  (asserts the service received **zero** calls); "an owner who said off
-  produces no request at all"; "prints no coordinates anywhere — not on the
+  projection's own arithmetic); "prints no coordinates anywhere — not on the
   margins, not under a pin".
 - The privacy claim is a test, not a comment. An earlier revision asserted
   `not.toMatch(/<image\b/)`, which became wrong once pins were images; the
@@ -340,8 +336,8 @@ Each checked item, and where it is evidenced:
 - The search control gets a magnifier — see "The stem, in detail".
 - L1a — a coordinate adopts a place the member already named — see
   "`findOrCreatePlaceTx` resolves in three steps"; `media-places.test.ts`.
-- L1b — `place-name`, a sixth capability on the enrichment seam — see the
-  `place-name` paragraph; `place-name-sweep.test.ts` (10 tests).
+- L1b — deliberately deferred during the #735 architecture reconciliation;
+  see "Automatic place naming remains deferred" and Out of scope.
 - L2 — one projection module, executed by both renderers — see "One
   projection, two renderers"; `place-map.test.ts`.
 - L3 — the pin is a photograph; no coordinates printed anywhere — see "The pin
@@ -359,9 +355,8 @@ Each checked item, and where it is evidenced:
 - An open sheet suspends the zoom foot and filmstrip; the gutter goes — same
   paragraph (`visibility: hidden`, `60px` → `var(--sp-2)`).
 - `seed.js` places 16 of 19 frames across 9 coordinates; counts pinned — see
-  "Seeded data, and one lock line"; `demo-seed.test.ts`.
-- `docs/photos-places.md`, the `place-name` section, the AGENTS index — all
-  three are in the file list below.
+  "Seeded data"; `demo-seed.test.ts`.
+- `docs/photos-places.md` and the AGENTS index — both are in the file list below.
 
 
 ### Known-red, not blessed
@@ -379,10 +374,9 @@ sections above.
 
 - `AGENTS.md`
 - `QUALITY.md`
+- `apps/desktop/tests/e2e/onboarding-home.spec.ts`
 - `apps/mobile/src/apps/photos/PlacesMap.tsx`
 - `apps/mobile/src/screens/home/places.ts`
-- `bun.lock`
-- `docs/enrichment-service.md`
 - `docs/photos-places.md`
 - `knip.json`
 - `packages/blueprints/apps/photos/Chrome.module.css`
@@ -428,29 +422,36 @@ sections above.
 - `packages/design/src/index.ts`
 - `packages/design/src/roles.ts`
 - `packages/design/src/themes/shared.ts`
-- `packages/gateway/src/capture/capture-ocr.ts`
-- `packages/gateway/src/enrich/capability-sweep.ts`
-- `packages/gateway/src/enrich/faces-sweep.ts`
-- `packages/gateway/src/enrich/fake-enrich-service.test-fixtures.ts`
-- `packages/gateway/src/enrich/ocr-sweep.ts`
-- `packages/gateway/src/enrich/place-name-sweep.test.ts`
-- `packages/gateway/src/enrich/place-name-sweep.ts`
-- `packages/gateway/src/enrich/result-readers.ts`
-- `packages/gateway/src/enrich/semantic-search.ts`
-- `packages/gateway/src/enrich/service-client.test.ts`
-- `packages/gateway/src/enrich/service-client.ts`
-- `packages/gateway/src/enrich/wire-shapes.ts`
 - `packages/gateway/src/serve/demo-seed.test.ts`
-- `packages/gateway/src/serve/vault-plane.ts`
 - `packages/vault/src/commands/media-places.test.ts`
 - `packages/vault/src/commands/media.ts`
 - `receipts/issue-739-places-map-and-shell-wall.md`
-- `tools/enrichment-service/src/capabilities/place-name.test.ts`
-- `tools/enrichment-service/src/capabilities/place-name.ts`
-- `tools/enrichment-service/src/capabilities/registry.ts`
-- `tools/enrichment-service/src/types.ts`
 
 ## Audit
+
+Independent post-merge audit against `git diff origin/main`:
+
+1. **What changed faithfully describes the final diff — PASS.** The receipt's
+   file inventory exactly matches the 54-file PR diff. The merge removes every
+   old enrichment-service/place-name path, preserves `main`'s recognition
+   architecture, and describes the added #739 desktop evidence harness.
+2. **Every checked checklist item is realized — PASS.** The auditor verified
+   the shell wall/hue/glyph/margin/container/search work; member-named place
+   adoption, coordinate input, shared projection, photo pins, and no basemap;
+   viewer loading and compact-sheet changes; seeded counts; and docs. L1b is
+   explicitly unchecked and deferred.
+3. **The checklist mirrors issue #739 — PASS.** Every actionable Proposal and
+   Problem item is represented. Automatic place naming remains visible as
+   unchecked scope rather than being silently omitted; the viewer, seed, and
+   docs additions are disclosed separately.
+
+### Superseded pre-rebase record
+
+The record below describes the original branch before #735 replaced the
+enrichment-service seam. Its `place-name` claims and file inventory are not
+claims about the reconciled PR; the Decisions and Out of scope sections above
+record the final merge policy. Final verification is the green `check:pr` and
+GitHub Actions run recorded when this merge resolution lands.
 
 Attested by an independent sub-agent against `git diff --cached`, the receipt, and issue #739.
 
@@ -466,12 +467,10 @@ two that earlier rounds refuted:
   - var(--ph-sheet)) }`, the `visibility: hidden` suspension of `.stageFoot`/`.filmstrip`,
   and `.mediaWrap { padding-inline: 60px → var(--sp-2) }`. All five are in
   `Lightbox.module.css`'s `max-width: 720px` block as described.
-- **`seed.js` is covered.** "Seeded data, and one lock line" names `PLACE_BY_FILE`,
+- **`seed.js` is covered.** "Seeded data" names `PLACE_BY_FILE`,
   `placeInput(file)`, the three `media.add_asset` spreads, and the new log line; I
   counted 16 file entries over 9 distinct coordinate pairs, matching the claim, and
   `demo-seed.test.ts` pins 16 `place_id IS NOT NULL`, 9 `core_place`, 3 `place_id IS NULL`.
-  The `bun.lock` line is `@centraid/protocol` as a devDependency under `packages/tunnel`,
-  exactly as stated.
 
 Spot-checks of the rest held: `.stem { background: var(--bg-app) }` in `chrome.module.css`
 with the matching `roles.ts` / `themes/shared.ts` restatements; `colorKey` removed from
@@ -563,3 +562,4 @@ items, the `seed.js` item, and the Docs item.
 | date | harness | session |
 | --- | --- | --- |
 | 2026-08-11 | claude-code | 68189439-8557-4cd3-9e90-961a46f58161 |
+| 2026-08-11 | codex | 019fef34-d7cc-7cc2-a9e0-83964bc4f746 |

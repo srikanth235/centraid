@@ -8,7 +8,7 @@ Places is built in three layers that ship independently. Each is useful without 
 
 | Layer | What | Where |
 | --- | --- | --- |
-| **Names** | A coordinate becomes somewhere a person recognises | `findOrCreatePlaceTx` + the `place-name` capability |
+| **Names** | A coordinate adopts a nearby place the member already named | `findOrCreatePlaceTx` |
 | **Geometry** | Coordinates become pin positions, shared by both surfaces | [`place-map.ts`](../packages/blueprints/apps/photos/place-map.ts) |
 | **Cartography** | The pin is a photograph; a scale bar and north say the rest | The two renderers |
 
@@ -20,9 +20,7 @@ A place row is minted the moment a photograph arrives carrying GPS, by `findOrCr
 2. **The exact rounded coordinate (~11m).** The identity rung that stops a burst of frames minting a row per shutter click. The row keeps the precise coordinates of whichever asset created it; only identity is rounded.
 3. **A new row labelled with its own coordinates**, e.g. `39.0021, -120.1131`.
 
-Step 3's labels are what the **`place-name` capability** later replaces — see [enrichment-service.md](enrichment-service.md#place-name-a-coordinate-is-not-bytes) for the wire contract, the ranking, and how to install a gazetteer. Two rules matter enough to repeat here: a name a human typed is never overwritten (the label shape is a SQL predicate in the backlog query, so a named place is never even sent), and "no settlement is near this coordinate" is a real answer that stamps without writing, so the backfill stops asking.
-
-`isCoordinateLabel` (vault) and `COORDINATE_LABEL_GLOB` (gateway) are a **pair** — one writes the labels, the other finds them. A change to the minted format has to move both.
+Step 3 remains an unnamed placeholder. Automatic coordinate-to-settlement naming is not part of the current recognition-automations architecture: unlike OCR, faces, or embeddings it needs a separately licensed gazetteer and carries no member bytes to recognise. If that capability returns, it must be designed as a self-contained automation against the current architecture. A member-entered name must remain authoritative and must never be overwritten by derived data.
 
 ## Layer 2 — one projection, two renderers
 

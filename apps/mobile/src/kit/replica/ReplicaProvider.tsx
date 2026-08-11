@@ -19,7 +19,6 @@ import {
   syncNotifications,
 } from "../../lib/notifications-core";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
-import { borrowedChangeFeed } from "../../lib/replica/borrowed-change-feed";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "../../lib/replica/mobile-gateway-compatibility-core";
 import type { MobileCompatibilityDisposition } from "../../lib/replica/mobile-gateway-compatibility-core";
@@ -38,7 +37,10 @@ import {
   openMountedReplicaReaderDriver,
   openNativeReplicaDriver,
 } from "../../lib/replica/op-sqlite-driver";
-import { postLend, postPlacement } from "../../lib/replica/placement-transport";
+import {
+  postCommons,
+  postPlacement,
+} from "../../lib/replica/placement-transport";
 import { isReplicaStorageFullError } from "../../lib/replica/replica-storage-error";
 import { clearPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import { nativeSyncAllowed } from "../../lib/upload/native-policy";
@@ -239,7 +241,6 @@ export function ReplicaProvider({
             void registerReplicaPushWake(baseUrl);
             void scheduleDailyBriefNotification();
             for (const scope of scopes) {
-              if (scope.borrowed) continue;
               void syncDueNotifications(baseUrl, scope.vaultId);
               void syncNotifications(baseUrl, scope.vaultId);
             }
@@ -358,12 +359,7 @@ export function ReplicaProvider({
                 vaultId: scope.vaultId,
               },
               fetcher: fetcher(scope.vaultId),
-              changeFeed: scope.borrowed
-                ? borrowedChangeFeed()
-                : multiplex!.scope(scope.vaultId),
-              ...(scope.borrowed
-                ? { borrowedEdgeId: scope.borrowed.edgeId }
-                : {}),
+              changeFeed: multiplex!.scope(scope.vaultId),
               driver,
               appState: AppState,
               isConnected: () => connected,
@@ -403,7 +399,7 @@ export function ReplicaProvider({
           isNetworkWorkAllowed: nativeSyncAllowed,
           onScopePulled: updateScopeFreshness,
           sendPlacement: (input) => postPlacement(currentBase, input),
-          sendLend: (input) => postLend(currentBase, input),
+          sendCommons: (input) => postCommons(currentBase, input),
         });
         if (cancelled) {
           await facade.close();

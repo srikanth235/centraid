@@ -96,7 +96,12 @@ import {
   workerAdmissionStats,
 } from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
-import { bundledAppDir, listBundledAppTemplates } from "@centraid/blueprints";
+import {
+  bundledAppDir,
+  listBundledAppTemplates,
+  listTemplates,
+  readTemplateFiles,
+} from "@centraid/blueprints";
 import { KIT_DIR } from "@centraid/design/kit";
 import { ROUTES } from "@centraid/protocol";
 import {
@@ -106,6 +111,7 @@ import {
 } from "@centraid/tunnel";
 import {
   KeyStore,
+  recompileCommonsGrants,
   readBlobStoreSettings,
   readEnrichPolicyTier,
   custodyStateCounts,
@@ -122,7 +128,10 @@ import { openStorageConnectionStore } from "../backup/storage-connections.js";
 import { makeStorageCredentialsResolver } from "../backup/storage-credentials.js";
 import { StorageUsagePoller } from "../backup/storage-usage.js";
 import { makeCaptureOcrRecognizer } from "../capture/capture-ocr.js";
-import { readEnrichServiceConfig } from "../enrich/service-client.js";
+import {
+  isSystemRecognitionRef,
+  SYSTEM_RECOGNITION_TEMPLATE_IDS,
+} from "../enrich/system-recognition.js";
 import {
   closeJournalConversationStores,
   journalConversationStore,
@@ -165,8 +174,15 @@ import {
 } from "../routes/automations-routes.js";
 import { makeBackupRouteHandler } from "../routes/backup-routes.js";
 import { makeBlobRouteHandler } from "../routes/blob-routes.js";
-import { makeBorrowedReplicaRouteHandler } from "../routes/borrowed-replica-routes.js";
 import { makeCaptureRouteHandler } from "../routes/capture-routes.js";
+import {
+  COMMONS_RECOVERY_PATH,
+  makeCommonsRecoveryRouteHandler,
+} from "../routes/commons-recovery-routes.js";
+import {
+  COMMONS_PATH,
+  makeCommonsRouteHandler,
+} from "../routes/commons-routes.js";
 import { makeConnectionsRouteHandler } from "../routes/connections-routes.js";
 import { makeDataPlaneControlHandler } from "../routes/data-plane-control.js";
 import type { DataPlaneControlOptions } from "../routes/data-plane-control.js";
@@ -175,7 +191,6 @@ import { makeDeviceWorkRouteHandler } from "../routes/device-work-routes.js";
 import { makeDevicesRouteHandler } from "../routes/devices-routes.js";
 import { makeDiagnosticsRouteHandler } from "../routes/diagnostics-routes.js";
 import { makeEdgeAnswerRouteHandler } from "../routes/edge-answer-routes.js";
-import { makeEdgeCloseRouteHandler } from "../routes/edges-close-routes.js";
 import { EDGES_PATH, makeEdgesRouteHandler } from "../routes/edges-routes.js";
 import {
   SEMANTIC_SEARCH_PATH,
@@ -207,6 +222,7 @@ import { makeResourceRouteHandler } from "../routes/resource-routes.js";
 import {
   isDirectHostRequest,
   isLoopbackRequest,
+  readFileMap,
   sendJson,
 } from "../routes/route-helpers.js";
 import { assertRouteSecurityCoverage } from "../routes/route-security.js";
@@ -231,9 +247,8 @@ import { isExpectedPrewarmSkip } from "./app-prewarm-errors.js";
 import type { AssistOAuthConfig } from "./assist-oauth.js";
 import { pollProviderEventSource } from "./automation-event-sources.js";
 import { createBlobSweepHealthProbe } from "./blob-sweep-health.js";
-import { borrowedRoot } from "./borrowed-paths.js";
-import { BorrowedSlots } from "./borrowed-slots.js";
 import { createBrokerHealthProbe } from "./broker-health.js";
+import { commonsObservabilitySection } from "./commons-observability.js";
 import { companionRequestAllowed } from "./companion-access.js";
 import { ConnectionBroker } from "./connection-broker.js";
 import type { DataPlaneHttpOptions } from "./data-plane-handoff.js";
@@ -254,7 +269,6 @@ import {
 import { HealthRegistry } from "./health-registry.js";
 import { kitlessHostIdentity } from "./host-identity.js";
 import { probeHostLimits } from "./host-limits.js";
-import { borrowedEdgesForVaults } from "./lend-audience.js";
 import { LocalUsageScanner } from "./local-usage.js";
 import {
   enrichRefusalNotice,
@@ -270,6 +284,12 @@ import {
 } from "./notifications-events.js";
 import { OutboxExecutor } from "./outbox-executor.js";
 import type { PairingTicketStore } from "./pairing-store.js";
+import {
+  claimPeerCommonsInvitation,
+  invitePeerToCommons,
+  pullPeerCommons,
+  refusePeerCommonsInvitation,
+} from "./peer-commons-client.js";
 import type { PeerDial } from "./peer-edge-give-client.js";
 import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
 import { PowerContextMonitor } from "./power-context.js";
@@ -485,7 +505,11 @@ export type FireAutomation = (
     /** Let the cursor engine retain its pending receipt on infrastructure failure. */
     propagateError?: boolean;
   }
-) => Promise<void>;
+) => Promise<{
+  turnId: string;
+  outcome?: automation.HandlerOutcome;
+  record?: automation.RunRecord;
+}>;
 
 /** A route handler in the gateway chain: `true` when it owned the response. */
 export type RouteHandler = (
@@ -647,6 +671,8 @@ interface VaultHost {
     sessionId: string
   ) => Promise<string | undefined>;
   runner: ConversationRunner;
+  /** Materialize the shipped recognition recipes into this vault's code store. */
+  ensureSystemRecognitionRecipes: () => Promise<void>;
   /** Store-backed route handlers (apps-store / lifecycle / automations). */
   handlers: RouteHandler[];
 }
@@ -900,7 +926,27 @@ export async function buildGateway(
   const bundledAppIds = new Set(
     (await listBundledAppTemplates()).map((t) => t.id)
   );
-  const isBundledAppId = (id: string): boolean => bundledAppIds.has(id);
+  const recognitionTemplateIds = new Set<string>(
+    SYSTEM_RECOGNITION_TEMPLATE_IDS
+  );
+  const systemRecognitionTemplates = (await listTemplates()).filter(
+    (template) =>
+      template.kind === "automation" && recognitionTemplateIds.has(template.id)
+  );
+  if (systemRecognitionTemplates.length !== recognitionTemplateIds.size) {
+    const found = new Set(
+      systemRecognitionTemplates.map((template) => template.id)
+    );
+    const missing = [...recognitionTemplateIds].filter((id) => !found.has(id));
+    throw new Error(
+      `bundled recognition catalog is incomplete: missing ${missing.join(", ")}`
+    );
+  }
+  // Lifecycle creation/clone must not let member code shadow the stable ids
+  // capture and capability settings address. UI blueprints and recognition
+  // recipes differ in how they are installed, but both are shipped ids.
+  const isBundledAppId = (id: string): boolean =>
+    bundledAppIds.has(id) || recognitionTemplateIds.has(id);
 
   health.reportOk("instance", "gateway.db exclusive process lock held");
   if (gatewayDatabase.networkFileSystem) {
@@ -1034,6 +1080,7 @@ export async function buildGateway(
   let requestNotificationsWake: (vaultId: string) => void = (vaultId) => {
     pendingNotificationsWakes.add(vaultId);
   };
+  let nudgeCommonsSweep = (): void => undefined;
   const vaultRegistry: VaultRegistry = openVaultRegistry({
     rootDir: paths.vaultDir,
     synchronous: hardwareProfile.sqliteSynchronous,
@@ -1083,6 +1130,19 @@ export async function buildGateway(
     s3Credentials: makeStorageCredentialsResolver(storageConnections),
     onProvenanceCommitted: (vaultId, entityTypes) =>
       provenanceDoorbell(vaultId, entityTypes),
+    onCommonsCommandSequenced: (vaultId, grantId) => {
+      const steward = vaultRegistry.get(vaultId);
+      if (!steward) return;
+      recompileCommonsGrants({
+        steward: steward.db,
+        stewardVaultId: vaultId,
+        stewardPartyId: steward.boot.ownerPartyId,
+        grantId,
+        vaultFor: (memberVaultId) => vaultRegistry.get(memberVaultId)?.db,
+        now: new Date().toISOString(),
+      });
+    },
+    onCommonsIntentQueued: () => nudgeCommonsSweep(),
     onNotificationsChanged: (vaultId, wake) => {
       notificationsEvents.publish(vaultId, wake);
       if (wake) requestNotificationsWake(vaultId);
@@ -1246,9 +1306,6 @@ export async function buildGateway(
       cache: paths.cacheDir,
       logs: paths.logsDir,
       templates: paths.templatesCacheDir,
-      // Borrowed bytes are outside every vault directory BY DESIGN (#726 P4),
-      // which is exactly why they would otherwise be invisible here.
-      borrowed: borrowedRoot(dataDir),
     }),
   });
 
@@ -1599,14 +1656,12 @@ export async function buildGateway(
   }
 
   /*
-   * Household migration (#726 P1): every owner who owns NO vault gets
-   * "<label>'s vault" minted on THIS machine, once. Naturally idempotent —
-   * an owner who already owns a vault (including one just minted above, or
-   * one this loop minted on a prior boot) is skipped, so a fresh boot after
-   * migration mints nothing extra. Covers ownerless rows left by P0's
-   * admin-fallback migration and by the host-custody `POST /owners` lane
-   * (which creates the person but not a vault). Devices stay enrolled to
-   * their owner; content stays exactly where it is.
+   * Every owner owns at least one vault (#726 P1). The host-custody
+   * `POST /owners` lane creates the person but not a vault, so boot mints
+   * "<label>'s vault" on THIS machine for anyone still ownerless. Naturally
+   * idempotent — an owner who already owns a vault (including one just
+   * minted above, or one this loop minted on a prior boot) is skipped.
+   * Devices stay enrolled to their owner; content stays where it is.
    */
   for (const owner of enrollmentStore.owners.list()) {
     if (enrollmentStore.owners.vaultsOwnedBy(owner.ownerId).length > 0)
@@ -1996,7 +2051,7 @@ export async function buildGateway(
     plane: VaultPlane,
     appId: string,
     dir: string | undefined
-  ): Promise<void> => {
+  ) => {
     if (!dir) return;
     try {
       const raw = JSON.parse(
@@ -2102,10 +2157,7 @@ export async function buildGateway(
   // each run over the event bus. Scheduled fires enter their vault's scope
   // via `runWithVaultContext` (see schedulerFor); manual fires inherit the
   // request's scope.
-  const fireAutomation: FireAutomation = async (
-    automationRef,
-    opts
-  ): Promise<void> => {
+  const fireAutomation: FireAutomation = async (automationRef, opts) => {
     // Mint the runId here so every fire (cron included) has a bus channel.
     const runId =
       opts.runId ??
@@ -2228,7 +2280,7 @@ export async function buildGateway(
         // A terminal turn is the durable acknowledgement. If the gateway
         // died after it finished but before the source cursor committed,
         // replaying this source element is a no-op.
-        if (prior?.endedAt !== undefined) return;
+        if (prior?.endedAt !== undefined) return { turnId: runId };
         // An interrupted turn can be retried under the exact same run id.
         // Cascading removes its partial items; deterministic vault
         // invocation ids then replay already-applied effects.
@@ -2277,6 +2329,22 @@ export async function buildGateway(
         // and skips the run with the reason stated.
         resolveEnrichPolicy: (domain) =>
           readEnrichPolicyTier(vaultRegistry.current().db.vault, domain),
+        rearm: ({ automationRef: ref, completedRunId }) => {
+          const vaultId = ws.vaultId;
+          const task = new Promise<void>((resolve, reject) => {
+            const immediate = setImmediate(() => {
+              void runWithVaultContext({ vaultId }, () =>
+                fireAutomation(ref, {
+                  triggerKind: "scheduled",
+                  triggerOrigin: "data",
+                  note: `bounded backlog continues after ${completedRunId}`,
+                }).then(() => undefined)
+              ).then(resolve, reject);
+            });
+            immediate.unref();
+          });
+          trackDetachedAutomationTask(task, `re-arm ${ref}`);
+        },
         resolveNestedRuntime: async (nestedRef) => {
           const nested = await resolveAutomationAgentForRef(
             nestedRef,
@@ -2330,6 +2398,7 @@ export async function buildGateway(
       // on the next clock tick (issue #306 phase 3).
       drainOutbox(vaultRegistry.current());
       health.reportOk("automation-runs");
+      return { turnId: runId, outcome: result.outcome, record: result.record };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       recordAutomationNotice("failure", message);
@@ -2346,6 +2415,7 @@ export async function buildGateway(
       );
       logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
       if (opts.propagateError) throw error;
+      return { turnId: runId };
     }
   };
 
@@ -2378,6 +2448,7 @@ export async function buildGateway(
     const built = runWithVaultContext({ vaultId }, async () => {
       const host = await buildHost(plane);
       await requireRuntime().bootstrap();
+      await host.ensureSystemRecognitionRecipes();
       await forEachSequentially(await host.store.listApps(), async (appId) => {
         await requireRuntime().registry.ensureUploaded(appId);
         vaultRegistry.enrollApp(appId);
@@ -2436,6 +2507,7 @@ export async function buildGateway(
     const host = await hostFor(plane);
     await runWithVaultContext({ vaultId: id }, async () => {
       await requireRuntime().bootstrap();
+      await host.ensureSystemRecognitionRecipes();
       await forEachSequentially(await host.store.listApps(), async (appId) => {
         await requireRuntime().registry.ensureUploaded(appId);
         vaultRegistry.enrollApp(appId);
@@ -2824,6 +2896,8 @@ export async function buildGateway(
       // Bundled ids are reserved (issue #434): a scaffold/clone must never
       // mint one, or a code-store app would shadow the shipped blueprint.
       isBundledAppId,
+      isSystemManagedAutomation: isSystemRecognitionRef,
+      isSystemManagedApp: (appId) => recognitionTemplateIds.has(appId),
       // Install a bundled blueprint in place (issue #434): its UI is already
       // part of the main client, so enroll with origin 'installed', register
       // the data plane, and grant declared scopes — no git or id minting.
@@ -3001,8 +3075,125 @@ export async function buildGateway(
       },
     };
 
+    // Mount-time materialization happens before this host is published in
+    // `settledHosts`, so it must not call the runtime-registration callbacks
+    // that resolve code back through that map. The ordinary mount loop below
+    // registers, enrolls, grants and prewarms every newly published recipe.
+    const systemInstallLifecycleOpts: LifecycleRouteOptions = {
+      store,
+      codeAppsDir,
+      ensureRegistered: async () => undefined,
+      deregister: async () => undefined,
+      reconcile: () => undefined,
+      ext,
+      // The generated recognition bundles contain vendored ML/PDF runtime
+      // code. Their human-owned sources are linted in the blueprint suite;
+      // this release-only lifecycle needs the matching validation profile.
+      isSystemManagedApp: (appId) => recognitionTemplateIds.has(appId),
+    };
+    const ensureSystemRecognitionRecipe = async (
+      template: (typeof systemRecognitionTemplates)[number],
+      existing: Set<string>
+    ): Promise<void> => {
+      const templateFiles = await readTemplateFiles(template);
+      const manifestPath = `automations/${template.id}/${automation.MANIFEST_FILE}`;
+      const manifestFile = templateFiles.find(
+        (file) => file.path === manifestPath
+      );
+      if (!manifestFile)
+        throw new Error(
+          `bundled recognition recipe ${template.id} has no ${manifestPath}`
+        );
+      const desired = automation.parseManifest(manifestFile.content);
+      const current = existing.has(template.id)
+        ? await automation
+            .readAppOwned(codeAppsDir(), template.id, template.id)
+            .catch(() => undefined)
+        : undefined;
+      const preservedRequires = current
+        ? Object.fromEntries(
+            (["runner", "model", "thoughtLevel"] as const).flatMap((key) =>
+              current.manifest.requires[key] === undefined
+                ? []
+                : [[key, current.manifest.requires[key]]]
+            )
+          )
+        : {};
+      const currentVariant = current?.manifest.enrich?.agentVariant?.selected;
+      const merged = automation.validateManifest({
+        ...desired,
+        enabled: current?.enabled ?? desired.enabled,
+        requires: { ...desired.requires, ...preservedRequires },
+        ...(desired.enrich
+          ? {
+              enrich: {
+                ...desired.enrich,
+                ...(desired.enrich.agentVariant
+                  ? {
+                      agentVariant: {
+                        ...desired.enrich.agentVariant,
+                        selected:
+                          currentVariant ??
+                          desired.enrich.agentVariant.selected,
+                      },
+                    }
+                  : {}),
+              },
+            }
+          : {}),
+      });
+      const files = templateFiles.map((file) =>
+        file.path === manifestPath
+          ? {
+              ...file,
+              content: `${JSON.stringify(merged, null, 2)}\n`,
+            }
+          : file
+      );
+      const activeDir = existing.has(template.id)
+        ? await store.resolveActiveAppDir(template.id)
+        : undefined;
+      const currentFiles = activeDir ? await readFileMap(activeDir) : [];
+      const sameFiles =
+        currentFiles.length === files.length &&
+        files.every((file) =>
+          currentFiles.some(
+            (candidate) =>
+              candidate.path === file.path && candidate.content === file.content
+          )
+        );
+      if (sameFiles) return;
+      const sessionId = `system-recognition-${template.id}`;
+      await prepareLifecycleSession(store, sessionId, true);
+      // Release-owned recipes are exact snapshots. Clearing the session's
+      // app dir removes stale helper files from an older bundled version;
+      // the owner-controlled manifest state was merged above.
+      const sessionAppDir = await store.snapshotSessionAppDir(
+        sessionId,
+        template.id
+      );
+      await fs.rm(sessionAppDir, { recursive: true, force: true });
+      await stageAndMaybePublish(systemInstallLifecycleOpts, {
+        appId: template.id,
+        sessionId,
+        files,
+        publish: true,
+        message: `${existing.has(template.id) ? "upgrade" : "install"} bundled recognition recipe ${template.id}`,
+        ephemeralSession: true,
+      });
+      existing.add(template.id);
+    };
+    const ensureSystemRecognitionRecipes = async (): Promise<void> => {
+      const existing = new Set(await store.listApps());
+      for (const template of systemRecognitionTemplates) {
+        // oxlint-disable-next-line no-await-in-loop -- lifecycle publication shares one store and must preserve the bundled template order
+        await ensureSystemRecognitionRecipe(template, existing);
+      }
+    };
+
     const handlers: RouteHandler[] = [
       makeAppsStoreRouteHandler(store, {
+        isReadOnlyApp: (appId) => recognitionTemplateIds.has(appId),
         onAppLive: async (appId) => {
           await requireRuntime().registry.ensureUploaded(appId);
           vaultRegistry.enrollApp(appId);
@@ -3059,6 +3250,14 @@ export async function buildGateway(
             triggerOrigin: "manual",
           });
         },
+        invokeAndAwait: ({ automationRef, turnId, payload }) =>
+          fireAutomation(automationRef, {
+            runId: turnId,
+            triggerKind: "manual",
+            triggerOrigin: "manual",
+            input: payload,
+            propagateError: true,
+          }),
         subscribeTurnEvents: (turnId, listener) =>
           runEventBus.subscribe(turnId, listener),
         runInteractiveTurn: async ({
@@ -3149,6 +3348,7 @@ export async function buildGateway(
       codeAppsDir,
       draftCodeDir,
       runner,
+      ensureSystemRecognitionRecipes,
       handlers,
     };
   }
@@ -3460,7 +3660,7 @@ export async function buildGateway(
                 fireAutomation(ref, {
                   triggerKind: "scheduled",
                   triggerOrigin: "cron",
-                })
+                }).then(() => undefined)
               ),
             store: triggerStoreFor(vaultId),
             readCursor: (input) =>
@@ -3595,7 +3795,15 @@ export async function buildGateway(
             );
           }
         }
-        const diff = await sched.reconcile(rows);
+        // Disabled bundled recognition recipes remain durable app rows so
+        // Automations can show their owner-controlled toggles, but they must
+        // not occupy scheduler registrations or bootstrap data cursors until
+        // enabled. Ordinary disabled automations stay in `rows` so their
+        // cursor retention semantics remain unchanged.
+        const schedulerRows = rows.filter(
+          (row) => !recognitionTemplateIds.has(row.ownerApp) || row.enabled
+        );
+        const diff = await sched.reconcile(schedulerRows);
         if (diff.added.length || diff.updated.length || diff.removed.length) {
           logger.info(
             `scheduler reconcile (vault ${vaultId}) — ` +
@@ -4014,6 +4222,15 @@ export async function buildGateway(
         paths,
         backup: options.backup,
         deviceAccessEnabled: Boolean(options.deviceAccess),
+        // Steward-absence + local Commons sync instrumentation (#731):
+        // reachability, absence episodes, pull outcomes, op-log size, and
+        // member lag per grant — read-only, no network egress. See
+        // docs/logs.md.
+        ...commonsObservabilitySection({
+          vaults: vaultRegistry
+            .planesList()
+            .map((plane) => ({ vaultId: plane.boot.vaultId, db: plane.db })),
+        }),
       },
     });
 
@@ -4133,6 +4350,8 @@ export async function buildGateway(
               vaultPublicKey: (vaultId) =>
                 vaultRegistry.vaultIdentity(vaultId)?.publicKey,
               vaultName: (vaultId) => vaultRegistry.get(vaultId)?.name,
+              ownerPartyFor: (vaultId) =>
+                vaultRegistry.get(vaultId)?.boot.ownerPartyId,
               ...(options.peerPlane?.dial
                 ? {
                     peer: {
@@ -4162,7 +4381,14 @@ export async function buildGateway(
       "/centraid/_gateway/capture",
       makeCaptureRouteHandler({
         classify: classifyCapture,
-        recognizeOcr: makeCaptureOcrRecognizer(readEnrichServiceConfig()),
+        recognizeOcr: makeCaptureOcrRecognizer((automationRef, input) =>
+          fireAutomation(automationRef, {
+            triggerKind: "manual",
+            triggerOrigin: "manual",
+            input,
+            propagateError: true,
+          })
+        ),
       })
     ),
     // A single JSON document a user can save + hand to support: version,
@@ -4267,7 +4493,15 @@ export async function buildGateway(
     // owns.
     forRoutePrefixes(
       SEMANTIC_SEARCH_PATH,
-      makeEnrichSearchRouteHandler(vaultRegistry)
+      makeEnrichSearchRouteHandler(vaultRegistry, {
+        embedQuery: (query) =>
+          fireAutomation("embed-text/embed-text", {
+            triggerKind: "manual",
+            triggerOrigin: "manual",
+            input: { query },
+            propagateError: true,
+          }),
+      })
     ),
     // Blob custody (issue #296): staged uploads in, consent-checked +
     // Range-capable bytes out. Mounted BEFORE the generic `_vault`
@@ -4542,37 +4776,112 @@ export async function buildGateway(
     installedApps: (vaultId) => vaultRegistry.get(vaultId)?.installedAppIds(),
     ensureAppInstalled: ensureBundledAppInstalled,
     ...(options.isHostCustody ? { isHostCustody: options.isHostCustody } : {}),
-    // Borrowed scopes (#726 P4 item 6) — the lend plane's own bookkeeping,
-    // not the borrowed slots themselves: the listing needs to know an edge
-    // exists and how it's reaching, never its rows or bytes.
-    borrowedScopes: (audienceVaultIds) =>
-      borrowedEdgesForVaults(gatewayDatabase, audienceVaultIds),
   });
   const multiplexReplicaHandler = makeMultiplexReplicaRouteHandler(
     vaultRegistry,
     enrollmentStore
   );
-  // The borrowed slots (#726 P4). One per counterparty vault, lazily opened,
-  // deliberately under `<dataDir>/borrowed/` — outside every vault directory,
-  // so no backup source, vault walk, or hosted copy can reach them.
-  const borrowedSlots = new BorrowedSlots(gatewayDatabase, dataDir);
-  // The device-facing door onto a borrowed shape (#726 P5 device route) —
-  // ownership-authorized, same posture as the scopes listing below.
-  const borrowedReplicaHandler = makeBorrowedReplicaRouteHandler({
-    gatewayDatabase,
-    enrollments: enrollmentStore,
-    storeFor: borrowedSlots.storeFor,
-  });
   const edgesHandler = makeEdgesRouteHandler({
     gatewayDatabase,
     enrollments: enrollmentStore,
     links: vaultLinksStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
     ...(options.peerPlane?.dial ? { peerDial: options.peerPlane.dial } : {}),
-    signAsVault: (vaultId, bytes) => vaultRegistry.signAsVault(vaultId, bytes),
-    borrowed: borrowedSlots,
-    vaultPublicKey: (vaultId) =>
+  });
+  const commonsHandler = makeCommonsRouteHandler({
+    enrollments: enrollmentStore,
+    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+    gatewayFor: (vaultId) => vaultRegistry.get(vaultId)?.gateway,
+    credentialFor: (vaultId) => {
+      const plane = vaultRegistry.get(vaultId);
+      return plane
+        ? {
+            kind: "device" as const,
+            deviceId: plane.boot.deviceId,
+            deviceKey: plane.boot.deviceKey,
+          }
+        : undefined;
+    },
+    ownerPartyFor: (vaultId) => vaultRegistry.get(vaultId)?.boot.ownerPartyId,
+    vaultPublicKeyFor: (vaultId) =>
       vaultRegistry.vaultIdentity(vaultId)?.publicKey,
+    linkedVaultPublicKey: (localVaultId, peerVaultId) => {
+      const link = vaultLinksStore.findPair(localVaultId, peerVaultId);
+      if (
+        !link ||
+        link.revoked ||
+        link.approvedByA === null ||
+        link.approvedByB === null
+      )
+        return undefined;
+      return peerVaultId === link.vaultA ? link.publicKeyA : link.publicKeyB;
+    },
+    invitePeer: async (invitation) => {
+      const { stewardVaultId, memberVaultId } = invitation;
+      const link = vaultLinksStore.peerForVault(memberVaultId, stewardVaultId);
+      const dial = options.peerPlane?.dial;
+      if (!link || !dial) return false;
+      return invitePeerToCommons({
+        dial,
+        route: link.route,
+        invitation,
+      });
+    },
+    acceptPeer: async ({
+      stewardVaultId,
+      memberVaultId,
+      grantId,
+      expectedSizeBytes,
+    }) => {
+      const member = vaultRegistry.get(memberVaultId);
+      const link = vaultLinksStore.peerForVault(stewardVaultId, memberVaultId);
+      const dial = options.peerPlane?.dial;
+      if (!member || !link || !dial) return false;
+      const result = await pullPeerCommons({
+        dial,
+        route: link.route,
+        stewardVaultId,
+        memberVaultId,
+        grantId,
+        seat: member.db,
+        acceptInvitation: true,
+        expectedSizeBytes,
+      });
+      return result.state === "current";
+    },
+    claimPeer: async ({ stewardVaultId, memberVaultId, claimToken }) => {
+      const member = vaultRegistry.get(memberVaultId);
+      const link = vaultLinksStore.peerForVault(stewardVaultId, memberVaultId);
+      const dial = options.peerPlane?.dial;
+      if (!member || !link || !dial) return false;
+      return claimPeerCommonsInvitation({
+        dial,
+        route: link.route,
+        stewardVaultId,
+        memberVaultId,
+        claimToken,
+        seat: member.db,
+      });
+    },
+    refusePeer: async ({ stewardVaultId, memberVaultId, grantId }) => {
+      const link = vaultLinksStore.peerForVault(stewardVaultId, memberVaultId);
+      const dial = options.peerPlane?.dial;
+      if (!link || !dial) return false;
+      return refusePeerCommonsInvitation({
+        dial,
+        route: link.route,
+        stewardVaultId,
+        memberVaultId,
+        grantId,
+      });
+    },
+  });
+  // Owner-tier steward-absence recovery (#731): same enrollment-derived
+  // owner check and vault resolution as `commonsHandler` above — this is a
+  // sibling door onto the same Commons plane, not a new auth story.
+  const commonsRecoveryHandler = makeCommonsRecoveryRouteHandler({
+    enrollments: enrollmentStore,
+    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
   });
   // The D9 answer route (#726 P3 decision 9) — a same-machine owner-tier
   // surface, mounted like any other route, distinct from the peer plane.
@@ -4582,17 +4891,6 @@ export async function buildGateway(
     links: vaultLinksStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
     ...(options.peerPlane?.dial ? { peerDial: options.peerPlane.dial } : {}),
-  });
-  // The owner-facing revoke route (#726 P6 gap 1): the ORIGIN owner stops
-  // lending an edge, the AUDIENCE owner drops one lent to them — same door,
-  // disambiguated by which side's row the caller owns.
-  const edgeCloseHandler = makeEdgeCloseRouteHandler({
-    gatewayDatabase,
-    enrollments: enrollmentStore,
-    links: vaultLinksStore,
-    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-    ...(options.peerPlane?.dial ? { peerDial: options.peerPlane.dial } : {}),
-    borrowed: borrowedSlots,
   });
   /*
    * The peer plane (#726 P3 decision 6). Mounted OUTSIDE the prefix registry
@@ -4606,23 +4904,27 @@ export async function buildGateway(
         peerProof: options.peerPlane.proof,
         vaultPublicKey: (vaultId) =>
           vaultRegistry.vaultIdentity(vaultId)?.publicKey,
+        ownerPartyFor: (vaultId) =>
+          vaultRegistry.get(vaultId)?.boot.ownerPartyId,
         localRoute: options.peerPlane.localRoute,
         localLabel: () => os.hostname().replace(/\.local$/u, ""),
         budget: createTokenBucket(PEER_PLANE_BUDGET),
         // The remote-give frames (#726 P3 decision 7) — same vault resolver
         // and gateway.db the same-machine edge plane already uses.
         vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-        gatewayDatabase,
-        // The live-edge frames (#726 P4, P5).
-        lend: {
-          signAsVault: (vaultId, bytes) =>
-            vaultRegistry.signAsVault(vaultId, bytes),
-          borrowed: borrowedSlots,
-          // Write-back (#726 P5): the mounted origin's own `Gateway`, so a
-          // lend/intent frame runs through the SAME instance a local action
-          // does — Gateway.invokeAsIdentity, not a second execution path.
-          gatewayFor: (vaultId) => vaultRegistry.get(vaultId)?.gateway,
+        commonsVaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+        commonsGatewayFor: (vaultId) => vaultRegistry.get(vaultId)?.gateway,
+        commonsCredentialFor: (vaultId) => {
+          const plane = vaultRegistry.get(vaultId);
+          return plane
+            ? {
+                kind: "device" as const,
+                deviceId: plane.boot.deviceId,
+                deviceKey: plane.boot.deviceKey,
+              }
+            : undefined;
         },
+        gatewayDatabase,
       })
     : undefined;
   /*
@@ -4638,19 +4940,21 @@ export async function buildGateway(
     db: gatewayDatabase,
     links: vaultLinksStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+    commonsVaults: () =>
+      vaultRegistry.planesList().map((plane) => ({
+        vaultId: plane.boot.vaultId,
+        db: plane.db,
+        gateway: plane.gateway,
+        credential: plane.ownerCredential,
+      })),
     dial: () => options.peerPlane?.dial,
-    borrowed: borrowedSlots,
-    signAsVault: (vaultId, bytes) => vaultRegistry.signAsVault(vaultId, bytes),
-    // Write-back drain (#726 P5) — same co-hosted door the peer plane's
-    // lend/intent frame uses, so a co-hosted edge's queued writes tail on
-    // this gateway's own clock exactly like its rows do.
-    gatewayFor: (vaultId) => vaultRegistry.get(vaultId)?.gateway,
     ...(options.peerPlane?.blobPullIntervalMs === undefined
       ? {}
       : { idleIntervalMs: options.peerPlane.blobPullIntervalMs }),
     shouldDefer: () => health.shouldDeferBackgroundWork(),
     logger,
   });
+  nudgeCommonsSweep = () => peerPlaneSweep.nudge();
   const pushRegistrationHandler =
     makePushRegistrationRouteHandler(gatewayDatabase);
   const pushWakeRelay = new PushWakeRelay(
@@ -4774,9 +5078,6 @@ export async function buildGateway(
     // scope below; the `x-centraid-vault` header is irrelevant to it.
     if (url.pathname === SCOPES_PATH && (await scopesHandler(req, res)))
       return true;
-    // Same posture: spans no single vault (a borrowed shape has no mounted
-    // vault behind it on THIS gateway at all), so it is dispatched here too.
-    if (await borrowedReplicaHandler(req, res)) return true;
     if (
       url.pathname === MULTIPLEX_REPLICA_CHANGES_PATH &&
       (await multiplexReplicaHandler(req, res))
@@ -4784,20 +5085,23 @@ export async function buildGateway(
       return true;
     if (url.pathname === EDGES_PATH && (await edgesHandler(req, res)))
       return true;
+    if (
+      (url.pathname === COMMONS_PATH ||
+        url.pathname.startsWith(`${COMMONS_PATH}/`)) &&
+      (await commonsHandler(req, res))
+    )
+      return true;
+    if (
+      url.pathname === COMMONS_RECOVERY_PATH &&
+      (await commonsRecoveryHandler(req, res))
+    )
+      return true;
     // The D9 answer surface (#726 P3 decision 9): `/centraid/_gateway/edges/pending`
     // and `/centraid/_gateway/edges/:edgeId/answer` — sub-paths `edgesHandler`
     // itself never matches (it checks exact equality against `EDGES_PATH`).
     if (
       url.pathname.startsWith(`${EDGES_PATH}/`) &&
       (await edgeAnswerHandler(req, res))
-    )
-      return true;
-    // The owner-facing revoke route (#726 P6 gap 1) — `DELETE
-    // /centraid/_gateway/edges/:edgeId`, a sibling sub-path `edgeAnswerHandler`
-    // itself never matches (it only answers `pending` and `:edgeId/answer`).
-    if (
-      url.pathname.startsWith(`${EDGES_PATH}/`) &&
-      (await edgeCloseHandler(req, res))
     )
       return true;
     if (
@@ -4872,6 +5176,18 @@ export async function buildGateway(
   let unsubscribeLateMount = (): void => undefined;
   const lateMountTasks = new Set<Promise<void>>();
 
+  const recompileMountedCommons = (): void => {
+    const now = new Date().toISOString();
+    for (const steward of vaultRegistry.planesList())
+      recompileCommonsGrants({
+        steward: steward.db,
+        stewardVaultId: steward.boot.vaultId,
+        stewardPartyId: steward.boot.ownerPartyId,
+        vaultFor: (memberVaultId) => vaultRegistry.get(memberVaultId)?.db,
+        now,
+      });
+  };
+
   const start = async (publicBaseUrl: string): Promise<void> => {
     // Publish the live origin to the unified chat runner so post-turn
     // webhook minting can build absolute `_centraid-hook` URLs.
@@ -4897,7 +5213,7 @@ export async function buildGateway(
                 (error instanceof Error ? error.message : String(error))
             )
           ),
-      ]).then(() => undefined);
+      ]).then(() => recompileMountedCommons());
       lateMountTasks.add(task);
       void task.finally(() => lateMountTasks.delete(task));
     });
@@ -4920,6 +5236,10 @@ export async function buildGateway(
     await forEachSequentially(vaultRegistry.planesList(), (plane) =>
       hostFor(plane).then(() => undefined)
     );
+    // Commons mechanics are compiled state, not backup truth. A normal mount,
+    // restore, or restore-after-erase rebuilds every local member seat from
+    // the steward grants after all vaults are available.
+    recompileMountedCommons();
 
     // Vault standing duties on the gateway clock: a sweep now, then hourly.
     vaultRegistry.start();
@@ -4973,7 +5293,6 @@ export async function buildGateway(
     pushWakeRelay.stop();
     webAppSessions.stopSweeping();
     peerPlaneSweep.stop();
-    borrowedSlots.close();
     // A mount notification may already be building its code host. Let that
     // bounded work settle before closing vault databases or removing temp
     // roots; otherwise shutdown races git/SQLite initialization.

@@ -14,7 +14,6 @@ import { nativeSyncAllowed } from "../upload/native-policy";
 import { getActiveVaultLink, hydrateVaultLinks } from "../vault-links";
 import { selectBackgroundScopes } from "./background-scopes";
 import type { CachedBackgroundScope } from "./background-scopes";
-import { borrowedChangeFeed } from "./borrowed-change-feed";
 import { requireMobileOfflineGateway } from "./mobile-gateway-compatibility";
 import { MultiVaultReplicaReader } from "./multi-vault-reader";
 import type { MountedReplicaScope } from "./multi-vault-reader";
@@ -89,13 +88,11 @@ export async function runBackgroundReplicaSync(): Promise<void> {
           nativeReplicaDigest,
           storageLocation
         );
-        const feed = scope.borrowed
-          ? borrowedChangeFeed()
-          : new NativeVaultChangeFeed({
-              gatewayAuth: auth,
-              storage: AsyncStorage,
-            });
-        if (feed instanceof NativeVaultChangeFeed) feeds.push(feed);
+        const feed = new NativeVaultChangeFeed({
+          gatewayAuth: auth,
+          storage: AsyncStorage,
+        });
+        feeds.push(feed);
         let session:
           | Awaited<ReturnType<typeof createNativeReplicaSession>>
           | undefined;
@@ -112,16 +109,11 @@ export async function runBackgroundReplicaSync(): Promise<void> {
             isConnected: () => true,
             isNetworkWorkAllowed: nativeSyncAllowed,
             bootstrapWindow: MOBILE_REPLICA_BOOTSTRAP_WINDOW,
-            ...(scope.borrowed
-              ? { borrowedEdgeId: scope.borrowed.edgeId }
-              : {}),
           });
           await session.pullNow();
           await session.flushIntents();
-          if (!scope.borrowed) {
-            await syncDueNotifications(baseUrl, scope.vaultId);
-            await syncNotifications(baseUrl, scope.vaultId);
-          }
+          await syncDueNotifications(baseUrl, scope.vaultId);
+          await syncNotifications(baseUrl, scope.vaultId);
           sessions.set(scope.vaultId, session);
         } catch (error) {
           if (session) await session.close();
@@ -138,7 +130,6 @@ export async function runBackgroundReplicaSync(): Promise<void> {
           // Absent means the gateway predates the ownership wire — fail
           // closed, exactly as the role-era default read as read-only.
           canWrite: scope.canWrite ?? false,
-          ...(scope.borrowed ? { borrowed: scope.borrowed } : {}),
           databaseName: await nativeReplicaDatabasePath(
             { gatewayId: active.gatewayId, vaultId: scope.vaultId },
             nativeReplicaDigest,

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { parseCard } from "../../capture.js";
 import {
-  recognizeCaptureImage,
+  recognizeCaptureContent,
   runBlueprintCaptureAction,
   runBlueprintCaptureQuery,
   stageCaptureFile,
@@ -34,7 +34,7 @@ export function CaptureScanPanel({
   const [file, setFile] = useState<File>();
   const [extraction, setExtraction] = useState<{
     text: string;
-    confidence: number;
+    confidence?: number;
     engine: string;
   }>();
   const [receipt, setReceipt] = useState<ReceiptDraft>();
@@ -105,10 +105,10 @@ export function CaptureScanPanel({
     if (!next) return;
     setBusy(true);
     try {
-      const result = await recognizeCaptureImage(next);
+      const result = await recognizeCaptureContent(next);
       if (!result)
         throw new Error(
-          "Gateway OCR is not configured. This PWA fallback needs a local Tesseract-compatible executable."
+          "The Photo OCR automation could not run. Check its model assets and try again."
         );
       setExtraction(result);
       setReceipt(parseReceiptText(result.text));
@@ -233,17 +233,16 @@ export function CaptureScanPanel({
 
   return (
     <section className={styles.scanPanel} aria-labelledby="scan-title">
-      <h3 id="scan-title">Camera or receipt scan</h3>
+      <h3 id="scan-title">Image, receipt, or PDF scan</h3>
       <p className={styles.hint}>
         OCR stays local to the device or your gateway. Review every extracted
         field before anything is committed.
       </p>
       <label className={styles.label}>
-        Image
+        Image or PDF
         <input
           type="file"
-          accept="image/*"
-          capture="environment"
+          accept="image/*,application/pdf"
           onChange={(event) => void chooseFile(event.target.files?.[0])}
         />
       </label>
@@ -251,8 +250,10 @@ export function CaptureScanPanel({
       {extraction ? (
         <>
           <p className={styles.hint}>
-            {extraction.engine} · {Math.round(extraction.confidence * 100)}%
-            extraction confidence
+            {extraction.engine}
+            {extraction.confidence === undefined
+              ? " · confidence not reported"
+              : ` · ${Math.round(extraction.confidence * 100)}% extraction confidence`}
           </p>
           <div className={styles.kinds} aria-label="Scan destination">
             {(["tally", "docs", "photos", "locker"] as const).map((id) => (

@@ -133,8 +133,8 @@ const NAMED_PLACE_RADIUS_DEG = 0.0015;
  * A place row whose name is just its own coordinates, e.g. "37.4419,
  * -122.1430". These are the labels this function mints when nothing better is
  * known, and they must NOT be treated as names — adopting one would spread a
- * meaningless string across a whole neighbourhood, and the geocoding sweep
- * looks for exactly this shape to find the rows still waiting for a real name.
+ * meaningless string across a whole neighbourhood. The UI likewise treats
+ * this shape as an unnamed placeholder, never as a readable place name.
  */
 export function isCoordinateLabel(name: string | null | undefined): boolean {
   return /^-?\d{1,3}\.\d+,\s*-?\d{1,3}\.\d+$/u.test((name ?? "").trim());
@@ -153,10 +153,9 @@ export function isCoordinateLabel(name: string | null | undefined): boolean {
  *      where they live still gets a shelf of coordinates.
  *   2. The exact rounded coordinate (~11m), which is the identity rung that
  *      keeps a burst of frames from minting a row per shutter click.
- *   3. Failing both, a new row labelled with its own coordinates. Reverse
- *      geocoding does not happen here — a command handler makes no network
- *      egress, and offline geocoding is the enrichment service's job (the
- *      `place-name` capability), which renames these rows later.
+ *   3. Failing both, a new row labelled with its own coordinates. Automatic
+ *      coordinate-to-settlement naming is intentionally deferred; the UI
+ *      hides this placeholder until the member supplies a readable name.
  *
  * `geo_lat`/`geo_lng` on a fresh row stay PRECISE; only identity is rounded.
  */

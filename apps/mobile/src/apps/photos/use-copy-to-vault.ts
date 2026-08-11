@@ -6,30 +6,18 @@
 // and the share call to drift apart, which is the defect `photos-selection.ts`
 // exists to prevent one level up.
 //
-// REPLACES the P0 sole-destination shortcut this file used to implement
-// directly (a live control that placed straight into the one other writable
-// vault, or opened `CopyToVaultPicker` when several existed). The control now
-// ALWAYS opens `kit/share/ShareSheet.tsx` — ONE destination list holding both
-// the member's own other vaults and every linked person (issue #726 P6) — so
-// a household with a linked person and no second OWNED vault is no longer
-// told there is "nowhere to copy to". The batch write itself is unchanged:
-// `batchCopyToVault` already uses the real `/edges` door (`session.place`),
-// so `ShareSheet`'s `giveMany` override reuses it rather than looping
-// per-item calls the tested batch helper already does better (progress text,
-// concurrency via `runSelectionBatch`).
+// The control always opens the Commons ShareSheet: one destination list holds
+// people, invitations, and deliberate reusable named circles. The sheet sends
+// the selected assets as real `media.media_asset` containers; there is no
+// Photos-only copy override or silent legacy batch path.
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 
 import type { SelectionHandler } from "@centraid/blueprints/apps/_shared/selection-engine";
 
 import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import { surfaceWriteFailure } from "../../kit/replica/write-outcome";
 import type { ShareSheetProps } from "../../kit/share/ShareSheet";
-import {
-  batchCopyToVault,
-  copyOutcomeMessage,
-} from "./photos-selection-writes";
 import type { VaultAsset } from "./photos-selection-writes";
 
 export interface CopyToVault {
@@ -52,39 +40,19 @@ export function useCopyToVault(
 ): CopyToVault {
   const { session, vaultId } = useReplica();
   const [picking, setPicking] = useState(false);
-
-  const giveMany = useCallback(
-    async (destination: {
-      vaultId: string;
-      label: string;
-    }): Promise<{ ok: boolean; message: string }> => {
-      if (!session)
-        return { ok: false, message: "Not connected to a gateway." };
-      try {
-        const outcome = await batchCopyToVault(
-          session,
-          selected(),
-          destination.vaultId,
-          vaultId
-        );
-        onDone();
-        return {
-          ok: outcome.refused.length === 0,
-          message: copyOutcomeMessage(outcome, destination.label),
-        };
-      } catch (error) {
-        surfaceWriteFailure(error, `Photos not given to ${destination.label}`);
-        return {
-          ok: false,
-          message: `Photos not given to ${destination.label}.`,
-        };
-      }
-    },
-    [onDone, selected, session, vaultId]
+  const targets = selected();
+  const sourceVaultId = targets[0]?.sourceVaultId ?? vaultId ?? "";
+  const hasMixedSources = targets.some(
+    (asset) => (asset.sourceVaultId ?? vaultId ?? "") !== sourceVaultId
   );
 
   const handler: SelectionHandler = session
-    ? { run: () => setPicking(true) }
+    ? hasMixedSources
+      ? {
+          unavailableReason:
+            "Select photos from one vault at a time before sharing.",
+        }
+      : { run: () => setPicking(true) }
     : {
         unavailableReason:
           "Not connected to a gateway, so nothing can be shared from here.",
@@ -96,14 +64,14 @@ export function useCopyToVault(
     picking,
     dismiss: () => setPicking(false),
     sheetProps: {
-      sourceVaultId: vaultId ?? "",
+      sourceVaultId,
       noun: "Photos",
-      verbs: ["give"],
       itemType: "media.media_asset",
-      giveMany,
-      // `ShareSheet` closes itself (calls `onClose`/`dismiss`) right after
-      // this fires — only the status line is this hook's to post.
-      onDone: (outcome) => postStatus(outcome.message),
+      itemIds: targets.map((asset) => asset.assetId),
+      onDone: (outcome) => {
+        postStatus(outcome.message);
+        if (outcome.ok) onDone();
+      },
     },
   };
 }

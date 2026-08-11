@@ -1,9 +1,5 @@
-// The unified give/lend destination model (issue #726 P6,
-// apps/_shared/share-kit.ts). Replaces photos-copy-destinations.test.ts,
-// which covered the retired P0 sole-destination shortcut
-// (apps/photos/sharing.ts, deleted). ONE destination list now holds both the
-// member's own other writable vaults and every linked person — never sorted
-// or labelled by where a destination physically lives (D3).
+// The ceremony-free Commons destination model (issue #731): a roster of
+// people, never another vault owned by the same person.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -14,35 +10,52 @@ interface Scope {
   label: string;
   canWrite: boolean;
   personal?: boolean;
-  borrowed?: { edgeId: string; holderLabel: string };
 }
 interface LinkRow {
   linkId: string;
   vaultId: string;
+  partyId: string;
   approved: boolean;
 }
 interface ShareDestination {
   id: string;
   label: string;
+  partyId?: string;
+  vaultId?: string;
 }
 
 const moduleUrl = pathToFileURL(
   path.resolve(import.meta.dirname, "../apps/_shared/share-kit.ts")
 ).href;
 const shareKit = (await import(moduleUrl)) as {
-  ownVaultDestinations: (
-    scopes: readonly Scope[],
-    currentScopeId: string | null | undefined
-  ) => ShareDestination[];
   linkedDestinations: (
     links: readonly LinkRow[],
     scopes: readonly Scope[]
   ) => ShareDestination[];
-  shareDestinations: (
-    scopes: readonly Scope[],
-    currentScopeId: string | null | undefined,
-    links: readonly LinkRow[]
+  peopleDestinations: (
+    people: readonly { partyId: string; label: string; vaultId?: string }[],
+    scopes: readonly Scope[]
   ) => ShareDestination[];
+  selectedShareMembers: (
+    destinations: readonly ShareDestination[],
+    selections: Readonly<Record<string, "read" | "read+write">>
+  ) => Array<{
+    partyId?: string;
+    vaultId?: string;
+    capability: "read" | "read+write";
+  }>;
+  selectionsForCircle: (
+    destinations: readonly ShareDestination[],
+    circle: {
+      circleId: string;
+      label: string;
+      members: Array<{
+        partyId?: string;
+        capability: "read" | "read+write";
+      }>;
+    }
+  ) => Record<string, "read" | "read+write">;
+  loadShareCircles: () => Promise<Array<{ circleId: string; label: string }>>;
   loadShareDestinations: (
     currentScopeId: string | null | undefined,
     scopes: readonly Scope[]
@@ -50,22 +63,7 @@ const shareKit = (await import(moduleUrl)) as {
   shareBlockedReason: (
     destinations: readonly ShareDestination[]
   ) => string | null;
-  wholeLibraryLendScope: (
-    mintedIdFamilies: readonly string[]
-  ) => Array<{ schema: string; table: string }>;
-  searchReachWarning: (
-    reach: readonly LendSearchReach[] | undefined,
-    destinationLabel: string
-  ) => string | null;
-  GIVE_IRREVOCABLE_WARNING: string;
-  STOP_LENDING_LABEL: string;
 };
-
-interface LendSearchReach {
-  schema: string;
-  table: string;
-  masksSearchableColumns: boolean;
-}
 
 const OWN: Scope = {
   id: "own",
@@ -79,71 +77,116 @@ const FAMILY: Scope = {
   canWrite: true,
   personal: false,
 };
-const READ_ONLY: Scope = {
-  id: "tom",
-  label: "Tom's photographs",
-  canWrite: false,
-  personal: false,
-};
-const BORROWED: Scope = {
-  id: "lent",
-  label: "Priya",
-  canWrite: false,
-  personal: false,
-  borrowed: { edgeId: "edge-1", holderLabel: "Priya" },
-};
-
-describe("ownVaultDestinations — own OTHER writable, unlent scopes", () => {
-  it("excludes the current scope, read-only scopes, and anything borrowed", () => {
-    const listed = shareKit.ownVaultDestinations(
-      [OWN, FAMILY, READ_ONLY, BORROWED],
-      "own"
-    );
-    expect(listed.map((d: ShareDestination) => d.id)).toStrictEqual(["fam"]);
-  });
-
-  it("answers nothing on a solo mount", () => {
-    expect(shareKit.ownVaultDestinations([OWN], "own")).toStrictEqual([]);
-  });
-});
-
 describe("linkedDestinations — approved links not already mounted", () => {
   it("names the OTHER side of the link, best-effort labelled", () => {
     const links: LinkRow[] = [
-      { linkId: "l1", vaultId: "peer-1", approved: true },
+      {
+        linkId: "l1",
+        vaultId: "peer-1",
+        partyId: "party-peer",
+        approved: true,
+      },
     ];
     const listed = shareKit.linkedDestinations(links, [OWN]);
     expect(listed).toStrictEqual([
-      { id: "peer-1", label: "Linked vault peer-1" },
+      {
+        id: "peer-1",
+        label: "Linked vault peer-1",
+        partyId: "party-peer",
+        vaultId: "peer-1",
+      },
     ]);
   });
 
-  it("excludes a link whose vault is already mounted (e.g. already borrowed) — never listed twice", () => {
+  it("excludes a link whose vault is already mounted — never listed twice", () => {
     const links: LinkRow[] = [
-      { linkId: "l1", vaultId: "lent", approved: true },
+      { linkId: "l1", vaultId: "fam", partyId: "party-family", approved: true },
     ];
-    expect(shareKit.linkedDestinations(links, [OWN, BORROWED])).toStrictEqual(
-      []
-    );
+    expect(shareKit.linkedDestinations(links, [OWN, FAMILY])).toStrictEqual([]);
   });
 
   it("excludes an unapproved or revoked link", () => {
     const links: LinkRow[] = [
-      { linkId: "l1", vaultId: "peer-1", approved: false },
+      {
+        linkId: "l1",
+        vaultId: "peer-1",
+        partyId: "party-peer",
+        approved: false,
+      },
     ];
     expect(shareKit.linkedDestinations(links, [OWN])).toStrictEqual([]);
   });
 });
 
-describe("shareDestinations — ONE list, own vaults then linked people", () => {
-  it("concatenates without re-sorting or grouping by locality", () => {
-    const links: LinkRow[] = [
-      { linkId: "l1", vaultId: "peer-1", approved: true },
-    ];
-    const listed = shareKit.shareDestinations([OWN, FAMILY], "own", links);
-    expect(listed.map((d: ShareDestination) => d.id)).toStrictEqual([
-      "fam",
-      "peer-1",
+describe("peopleDestinations — joined and invited identities", () => {
+  it("keeps a party with no vault as an honest invited destination", () => {
+    expect(
+      shareKit.peopleDestinations(
+        [
+          { partyId: "asha", label: "Asha" },
+          { partyId: "ben", label: "Ben", vaultId: "peer-ben" },
+        ],
+        [OWN]
+      )
+    ).toStrictEqual([
+      { id: "party:asha", label: "Asha", partyId: "asha" },
+      {
+        id: "peer-ben",
+        label: "Ben",
+        partyId: "ben",
+        vaultId: "peer-ben",
+      },
+    ]);
+  });
+
+  it("deliberately reuses one named circle's exact per-person capabilities", () => {
+    expect(
+      shareKit.selectionsForCircle(
+        [
+          { id: "party:asha", label: "Asha", partyId: "asha" },
+          { id: "ben-vault", label: "Ben", partyId: "ben" },
+          { id: "unrelated", label: "Cara", partyId: "cara" },
+        ],
+        {
+          circleId: "trip",
+          label: "Goa trip",
+          members: [
+            { partyId: "asha", capability: "read" },
+            { partyId: "ben", capability: "read+write" },
+          ],
+        }
+      )
+    ).toStrictEqual({
+      "party:asha": "read",
+      "ben-vault": "read+write",
+    });
+  });
+
+  it("builds one multi-member array with an independent capability per person", () => {
+    expect(
+      shareKit.selectedShareMembers(
+        [
+          { id: "party:asha", label: "Asha", partyId: "asha" },
+          {
+            id: "ben-vault",
+            label: "Ben",
+            partyId: "ben",
+            vaultId: "ben-vault",
+          },
+          { id: "cara-vault", label: "Cara", vaultId: "cara-vault" },
+        ],
+        {
+          "party:asha": "read",
+          "ben-vault": "read+write",
+        }
+      )
+    ).toStrictEqual([
+      { partyId: "asha", capability: "read" },
+      {
+        partyId: "ben",
+        vaultId: "ben-vault",
+        capability: "read+write",
+      },
     ]);
   });
 });
@@ -151,7 +194,7 @@ describe("shareDestinations — ONE list, own vaults then linked people", () => 
 describe("shareBlockedReason", () => {
   it("states the honest zero-destination reason", () => {
     expect(shareKit.shareBlockedReason([])).toBe(
-      "There is nowhere to share to yet — no other vault, and nobody linked."
+      "There is nobody to share with yet — add someone in People first."
     );
   });
 
@@ -170,83 +213,55 @@ describe("loadShareDestinations — live window.centraid.links()", () => {
     delete (globalThis as { window?: unknown }).window;
   });
 
-  it("merges own vaults with a live links() answer", async () => {
+  it("loads linked people without listing another vault owned by me", async () => {
     (globalThis as { window?: unknown }).window = {
       centraid: {
         links: () =>
           Promise.resolve([
-            { linkId: "l1", vaultId: "peer-1", approved: true },
+            {
+              linkId: "l1",
+              vaultId: "peer-1",
+              partyId: "party-peer",
+              approved: true,
+            },
           ]),
       },
     };
     const listed = await shareKit.loadShareDestinations("own", [OWN, FAMILY]);
-    expect(listed.map((d: ShareDestination) => d.id)).toStrictEqual([
-      "fam",
-      "peer-1",
+    expect(listed.map((d: ShareDestination) => d.id)).toStrictEqual(["peer-1"]);
+  });
+
+  it("answers no people when the host has no People or link plane", async () => {
+    (globalThis as { window?: unknown }).window = { centraid: {} };
+    const listed = await shareKit.loadShareDestinations("own", [OWN, FAMILY]);
+    expect(listed).toStrictEqual([]);
+  });
+
+  it("prefers People targets so an invitation does not need a vault", async () => {
+    (globalThis as { window?: unknown }).window = {
+      centraid: {
+        shareTargets: () =>
+          Promise.resolve([{ partyId: "asha", label: "Asha" }]),
+      },
+    };
+    await expect(
+      shareKit.loadShareDestinations("own", [OWN, FAMILY])
+    ).resolves.toStrictEqual([
+      { id: "party:asha", label: "Asha", partyId: "asha" },
     ]);
   });
 
-  it("degrades to own-vaults-only when the host has no link plane", async () => {
-    (globalThis as { window?: unknown }).window = { centraid: {} };
-    const listed = await shareKit.loadShareDestinations("own", [OWN, FAMILY]);
-    expect(listed.map((d: ShareDestination) => d.id)).toStrictEqual(["fam"]);
-  });
-});
-
-describe("wholeLibraryLendScope", () => {
-  it("splits the app's primary minted family into schema/table", () => {
-    expect(
-      shareKit.wholeLibraryLendScope(["media.media_asset", "core.collection"])
-    ).toStrictEqual([{ schema: "media", table: "media_asset" }]);
-  });
-
-  it("answers nothing for a declaration with no minted families", () => {
-    expect(shareKit.wholeLibraryLendScope([])).toStrictEqual([]);
-  });
-});
-
-describe("searchReachWarning — the mask-selection-time half of D10", () => {
-  it("is null when no scope masks any searchable column", () => {
-    expect(
-      shareKit.searchReachWarning(
-        [
-          {
-            schema: "media",
-            table: "media_asset",
-            masksSearchableColumns: false,
-          },
-        ],
-        "Priya"
-      )
-    ).toBeNull();
-  });
-
-  it("is null when the edges response carried no reach at all (an older gateway, or a build with no signer)", () => {
-    expect(shareKit.searchReachWarning(undefined, "Priya")).toBeNull();
-  });
-
-  it("names the destination and the narrowed table when a scope masks a searchable column", () => {
-    const warning = shareKit.searchReachWarning(
-      [{ schema: "media", table: "media_asset", masksSearchableColumns: true }],
-      "Priya"
-    );
-    expect(warning).toContain("Priya");
-    expect(warning).toContain("media_asset");
-  });
-
-  it("is empty for an empty reach array — nothing was lent, nothing to warn about", () => {
-    expect(shareKit.searchReachWarning([], "Priya")).toBeNull();
-  });
-});
-
-describe("wording (D7)", () => {
-  it("never says 'take back' for a lend, and warns a give is irrevocable", () => {
-    expect(shareKit.STOP_LENDING_LABEL.toLowerCase()).not.toContain(
-      "take back"
-    );
-    expect(shareKit.STOP_LENDING_LABEL).toBe("Stop lending");
-    expect(shareKit.GIVE_IRREVOCABLE_WARNING.toLowerCase()).toContain(
-      "can’t take it back"
-    );
+  it("loads deliberate named circles from the host without inventing one", async () => {
+    (globalThis as { window?: unknown }).window = {
+      centraid: {
+        shareCircles: () =>
+          Promise.resolve([
+            { circleId: "trip", label: "Goa trip", members: [] },
+          ]),
+      },
+    };
+    await expect(shareKit.loadShareCircles()).resolves.toMatchObject([
+      { circleId: "trip", label: "Goa trip" },
+    ]);
   });
 });

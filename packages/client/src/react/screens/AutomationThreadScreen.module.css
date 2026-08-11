@@ -9,6 +9,64 @@
 .loadingBody {
   margin-top: 14px;
 }
+.recognitionChoice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+}
+.recognitionChoiceHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.recognitionChoiceTitle {
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  color: var(--text);
+}
+.recognitionChoiceCapability {
+  font-family: var(--font-mono);
+  font-size: var(--t-control-size);
+  color: var(--text-ghost);
+}
+.recognitionChoice select {
+  max-width: 100%;
+  border: 0.5px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text);
+  padding: 6px 8px;
+}
+.recognitionChoiceDetail {
+  margin: 0;
+  font-size: var(--t-control-size);
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+.recognitionChoiceDetail label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.recognitionChoiceDetail p {
+  margin: 2px 0;
+}
+.recognitionCompilerLink {
+  align-self: flex-start;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--t-control-size);
+  cursor: pointer;
+}
 
 /* ── Header ─────────────────────────────────────────────────────────── */
 .head {

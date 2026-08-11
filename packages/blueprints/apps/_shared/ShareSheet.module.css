@@ -1,9 +1,5 @@
-/* The give/lend toggle + destination list (#726 P6). Layout only — colour
-   and shape come from kit.css's `.kit-modal`/`.kit-seg`/`.kit-popover-item`. */
-
-.toggle {
-  margin: 10px 0 12px;
-}
+/* The ceremony-free commons destination list (#731). Layout only — colour
+   and shape come from kit.css's `.kit-modal`/`.kit-popover-item`. */
 
 .note {
   margin: 0 0 10px;
@@ -12,15 +8,46 @@
 }
 
 .destList {
+  display: grid;
+  gap: 2px;
   width: 100%;
+  max-height: 280px;
+  overflow: auto;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   padding: 4px;
   font: var(--t-small);
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.circleChoice {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 10px;
+  font: var(--t-small);
+  color: var(--text-soft);
 }
 
 .destItem {
-  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 8px;
+}
+
+.personChoice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.invited {
+  display: block;
+  color: var(--text-soft);
 }
 
 .warn {
@@ -32,8 +59,42 @@
   font: var(--t-small);
 }
 
+/* Signposts that the item's own named circle was auto-reused (#731 M3) —
+   its exact stored roster + capabilities, not a fresh manual pick. */
+.preselected {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in oklab, var(--success) 35%, var(--line));
+  border-radius: var(--r-md);
+  background: color-mix(in oklab, var(--success) 8%, transparent);
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
 .error {
   margin: 8px 0 0;
   font: var(--t-small);
   color: var(--danger);
+}
+
+.handoffs {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.handoffs h3 {
+  margin: 0;
+  font: var(--t-body);
+}
+
+.handoff {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  font: var(--t-small);
 }

@@ -74,3 +74,16 @@
   font-weight: 600;
   margin-top: 2px;
 }
+/* Settles a denied durable Commons intent out of the overlay (#731 m6). */
+.dismiss {
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: var(--t-control);
+  text-decoration: underline;
+  color: var(--text-faint);
+}
+.dismiss:hover {
+  color: var(--text-soft);
+}

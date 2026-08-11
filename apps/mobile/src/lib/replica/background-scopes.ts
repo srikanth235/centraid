@@ -4,15 +4,6 @@ export interface CachedBackgroundScope {
   vaultId: string;
   label?: string;
   canWrite?: boolean;
-  borrowed?: {
-    edgeId: string;
-    originVaultId: string;
-    holderLabel: string;
-    itemType: string;
-    reachState: "offered" | "established" | "parked";
-    reason: string | null;
-    mounted: boolean;
-  };
 }
 
 /** The focused write target always survives the four-scope background cap. */

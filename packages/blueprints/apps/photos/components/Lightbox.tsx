@@ -42,7 +42,6 @@ import {
 } from "../icons.tsx";
 import { gridSrc, isRenderableUri } from "../media.ts";
 import { act, narrate, notice } from "../outcomes.ts";
-import { photosScopeDeclaration } from "../scope-declaration.ts";
 import type { Album, Asset, Place } from "../types.ts";
 import {
   captureLine,
@@ -148,12 +147,57 @@ export function LightboxShell({
   const downloadHref = safeMediaUrl(asset.content_uri);
   const editable =
     isRenderableUri(asset.content_uri) && !isVideoAsset(asset) && canWrite;
-  // Share (issue #726 P6): opens the unified give/lend sheet rather than
-  // firing a sole-destination shortcut. Give copies this ONE photograph;
-  // lend opens a live window over the whole library (the sheet's own note
-  // says so) — see `_shared/ShareSheet.tsx`'s header for why lend has no
-  // per-item granularity.
+  // Share opens the ceremony-free commons sheet for this photograph.
   const [shareOpen, setShareOpen] = useState(false);
+  const scopes = mountedScopes();
+  const actorVaultId = asset.scope_id ?? scopes[0]?.id ?? "";
+  const [residentAssetId, setResidentAssetId] = useState<string | null>(null);
+  const commonsResident = residentAssetId === asset.asset_id;
+  useEffect(() => {
+    let active = true;
+    if (!actorVaultId || !window.centraid.commonsResidents) return;
+    void window.centraid
+      .commonsResidents(actorVaultId)
+      .then((items) => {
+        if (active)
+          setResidentAssetId(
+            items.some(
+              (item) =>
+                item.itemType === "media.media_asset" &&
+                item.itemId === asset.asset_id
+            )
+              ? asset.asset_id
+              : null
+          );
+      })
+      .catch(() => {
+        if (active) setResidentAssetId(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [actorVaultId, asset.asset_id]);
+
+  async function saveToMyVault(): Promise<void> {
+    if (!commonsResident || !actorVaultId || !window.centraid.retainCommonsItem)
+      return;
+    try {
+      await window.centraid.retainCommonsItem({
+        actorVaultId,
+        itemType: "media.media_asset",
+        itemId: asset.asset_id,
+      });
+      setResidentAssetId(null);
+      notice("Saved to my vault. This copy survives if the share ends.");
+      await refresh();
+    } catch (error) {
+      notice(
+        error instanceof Error
+          ? `Photo was not saved: ${error.message}`
+          : "Photo was not saved to your vault."
+      );
+    }
+  }
 
   async function trash(): Promise<void> {
     const outcome = await act(
@@ -207,11 +251,12 @@ export function LightboxShell({
     copy: {
       id: "copy",
       icon: ShareIcon,
-      label: "Share",
+      label: commonsResident ? "Save to my vault" : "Share",
       // The sheet resolves the true empty state (own vaults sync, linked
       // people async) itself — this control never disables on a guess.
       disabled: false,
-      onRun: () => setShareOpen(true),
+      onRun: () =>
+        commonsResident ? void saveToMyVault() : setShareOpen(true),
     },
     download: {
       id: "download",
@@ -261,14 +306,12 @@ export function LightboxShell({
         onClose={() => setShareOpen(false)}
         sourceScopeId={asset.scope_id ?? mountedScopes()[0]?.id ?? ""}
         scopes={mountedScopes()}
-        verbs={["give", "lend"]}
         itemType="media.media_asset"
         itemIds={[asset.asset_id]}
-        mintedIdFamilies={photosScopeDeclaration.mintedIdFamilies}
         appLabel="Photos"
         onDone={(outcome) => {
           notice(outcome.message);
-          if (outcome.ok && outcome.verb === "give") void refresh();
+          if (outcome.ok && outcome.verb === "share") void refresh();
         }}
       />
       <div className={styles.topbar} ref={barRef}>

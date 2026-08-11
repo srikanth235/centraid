@@ -1,4 +1,4 @@
-// The three lines that make Photos lendable (issue #726 D11): everything a
+// The three lines that make Photos projectable across scopes: everything a
 // share needs to know about this app's rows, declared once against the
 // shared kit (apps/_shared/scope-kit.ts) — no sharing code of Photos' own.
 import type { ScopeAppDeclaration } from "../_shared/scope-kit.ts";

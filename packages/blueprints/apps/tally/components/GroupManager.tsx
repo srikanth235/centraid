@@ -28,13 +28,15 @@ export function GroupManager({
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(group.name);
-  // Share (issue #726 P6): opens the unified give sheet. Tally has no
-  // scope declaration (no `mintedIdFamilies` — a group isn't a live
-  // entity family this app lends), so only "give" is offered.
+  // A Tally group is the named circle-backed proof for commons sharing.
   const [shareOpen, setShareOpen] = useState(false);
   const [shareStatus, setShareStatus] = useState("");
   const available = useMemo(() => {
-    const present = new Set(members.map((member) => member.party_id));
+    const present = new Set(
+      members
+        .filter((member) => !member.departed)
+        .map((member) => member.party_id)
+    );
     return friends.filter((friend) => !present.has(friend.party_id));
   }, [friends, members]);
   const [partyId, setPartyId] = useState("");
@@ -86,8 +88,11 @@ export function GroupManager({
               color={member.color}
               initials={member.initials}
             />
-            <span>{member.party_id === me ? "You" : member.name}</span>
-            {member.party_id === me ? null : (
+            <span>
+              {member.party_id === me ? "You" : member.name}
+              {member.departed ? " · Departed" : ""}
+            </span>
+            {member.party_id === me || member.departed ? null : (
               <ArmedButton
                 className="kit-btn danger"
                 label="Remove"
@@ -145,10 +150,21 @@ export function GroupManager({
         onClose={() => setShareOpen(false)}
         sourceScopeId={mountedScopes()[0]?.id ?? ""}
         scopes={mountedScopes()}
-        verbs={["give"]}
         itemType="tally.group"
         itemIds={[group.group_id]}
         appLabel="Tally"
+        // A tally.group container is bound to its OWN named circle
+        // server-side (issue #731 M3) — the commons layer checks any share
+        // of it against that circle's exact stored roster + capabilities,
+        // no matter what the sheet submits. `GroupMeta.name` is read
+        // straight off that circle's `social.circle.name` (dashboard.ts:
+        // "a group decorates a social.circle — the circle carries the
+        // name"), so it doubles as the circle's `ShareCircle.label` and
+        // lets the sheet auto-reuse the right circle instead of opening on
+        // a blank manual pick that defaults every new selection to
+        // `read+write` and refuses the moment that drifts from a
+        // pre-#731-migration `read` roster.
+        preferredCircleLabel={group.name}
         onDone={(outcome) => setShareStatus(outcome.message)}
       />
       {shareStatus ? (

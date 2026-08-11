@@ -78,6 +78,31 @@
   font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
+.systemSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 0.5px solid var(--line);
+  padding-top: 14px;
+}
+.systemSummary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  list-style: none;
+}
+.systemSummary::-webkit-details-marker {
+  display: none;
+}
+.systemHint {
+  margin-left: auto;
+  font-size: var(--t-control-size);
+  color: var(--text-ghost);
+}
+.systemSection[open] > .systemSummary {
+  margin-bottom: 12px;
+}
 .filterWrap {
   margin-left: auto;
   display: inline-flex;

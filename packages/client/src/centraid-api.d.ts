@@ -714,8 +714,8 @@ interface CentraidApi {
       ocr: boolean;
       embedding: boolean;
       // Permanently false (issue #724 W6): desktop's on-device file-ASR
-      // adapter is deleted — transcription runs on the gateway's
-      // enrichment service now, never on a member's device. The key stays
+      // adapter is deleted — transcription belongs to its self-contained
+      // recognition automation, never to a device compute lease. The key stays
       // in this wire shape (`DeviceComputeCapabilities` in
       // `gateway-client-devices.ts` mirrors it) rather than being dropped.
       transcript: boolean;
@@ -1233,6 +1233,8 @@ export interface CentraidAutomationTurnRecord {
   automationName?: string;
   /** Active runner binding on the stable automation conversation. */
   adapterKind?: string;
+  /** Built-in activity that is grouped away from app automation history. */
+  systemLane?: "recognition";
   triggerKind:
     | "scheduled"
     | "manual"
@@ -1325,6 +1327,17 @@ export interface CentraidAutomationManifest {
     model?: string;
     thoughtLevel?: string;
   };
+  enrich?: {
+    domain: string;
+    capability: string;
+    lane: "device" | "gateway";
+    agentVariant?: {
+      selected: "deterministic" | "agent";
+      promptRev: string;
+      latency: string;
+      consequence: string;
+    };
+  };
   /** App ids this automation is associated with. */
   apps?: readonly string[];
   costEstimate?: { model: string; tokensPerFire: number };
@@ -1358,6 +1371,8 @@ export interface CentraidAutomationRow {
   ownerApp: string;
   /** Globally-unique handle — `<ownerApp>/<id>`. Pass this as `automationId`. */
   ref: string;
+  /** Built-in recipe grouped under Automations → Recognition. */
+  systemLane?: "recognition";
   manifest: CentraidAutomationManifest;
 }
 
@@ -1368,6 +1383,21 @@ export interface CentraidAutomationRow {
  */
 export interface CentraidAutomationTurnResult {
   turnId: string;
+}
+
+/** Awaited response from the ordinary automation fire spine. */
+export interface CentraidAutomationInvokeResult {
+  turnId: string;
+  result: {
+    turnId: string;
+    outcome?: {
+      ok: boolean;
+      skipped?: boolean;
+      output?: unknown;
+      error?: string;
+      summary?: string;
+    };
+  };
 }
 
 /**
@@ -1717,6 +1747,17 @@ declare global {
       model?: string;
       thoughtLevel?: string;
     };
+    enrich?: {
+      domain: string;
+      capability: string;
+      lane: "device" | "gateway";
+      agentVariant?: {
+        selected: "deterministic" | "agent";
+        promptRev: string;
+        latency: string;
+        consequence: string;
+      };
+    };
     apps?: readonly string[];
     costEstimate?: { model: string; tokensPerFire: number };
     onFailure?: string;
@@ -1743,10 +1784,24 @@ declare global {
     enabled: boolean;
     ownerApp: string;
     ref: string;
+    systemLane?: "recognition";
     manifest: CentraidAutomationManifest;
   }
   interface CentraidAutomationTurnResult {
     turnId: string;
+  }
+  interface CentraidAutomationInvokeResult {
+    turnId: string;
+    result: {
+      turnId: string;
+      outcome?: {
+        ok: boolean;
+        skipped?: boolean;
+        output?: unknown;
+        error?: string;
+        summary?: string;
+      };
+    };
   }
   interface CentraidMintedWebhook {
     automationId: string;
@@ -1762,6 +1817,7 @@ declare global {
     automationId?: string;
     automationName?: string;
     adapterKind?: string;
+    systemLane?: "recognition";
     triggerKind:
       | "scheduled"
       | "manual"

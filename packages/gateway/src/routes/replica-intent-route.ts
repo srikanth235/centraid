@@ -187,7 +187,7 @@ export async function handleReplicaIntent(
   }
 
   // `access.canWrite` is the one predicate for "may this caller mutate" —
-  // ownership-sourced (#726), and kept flowing so later read-only lent
+  // ownership-sourced (#726), and kept flowing so read-only commons
   // scopes are denied here rather than deeper in the vault plane.
   const deniedReason = context.access.canWrite
     ? undefined
