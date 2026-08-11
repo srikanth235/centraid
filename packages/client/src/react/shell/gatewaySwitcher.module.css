@@ -46,6 +46,9 @@
    eyebrow — one eyebrow style across the pair, not two near-misses. */
 .eyebrow {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-size: var(--t-control-size);
   line-height: 1.25;
   letter-spacing: 0.06em;
@@ -132,7 +135,7 @@
   display: block;
   font: var(--t-title);
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.25;
   color: var(--text);
   letter-spacing: -0.01em;

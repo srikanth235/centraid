@@ -65,12 +65,20 @@ export default class ErrorBoundary extends Component<
           borderRadius: 12,
         }}
       >
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>{title}</h1>
+        {/* Inline styles on purpose: this renders when something upstream has
+            already broken, so it must not depend on a stylesheet having loaded.
+            That is why each `font` carries a literal fallback after the token —
+            the ramp when it is there, a readable approximation when it is not.
+            The weights are the two we vendor; 600 was synthesised. */}
+        <h1
+          style={{ margin: 0, font: "var(--t-title, 500 20px/26px system-ui)" }}
+        >
+          {title}
+        </h1>
         <p
           style={{
             margin: 0,
-            fontSize: 14,
-            lineHeight: 1.5,
+            font: "var(--t-small, 400 13px/19px system-ui)",
             color: "var(--text-soft)",
           }}
         >

@@ -32,6 +32,8 @@
 .miniDow span {
   text-align: center;
   font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
   padding: 2px 0;
 }
@@ -68,7 +70,7 @@
   /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
      the theme-stable --text-inv (kit.css header contract, #686). */
   color: var(--text-inv);
-  font-weight: 600;
+  font-weight: 500;
 }
 .miniDot {
   position: absolute;
@@ -130,6 +132,8 @@
 }
 .calCount {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }

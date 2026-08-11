@@ -27,7 +27,7 @@
 .navItem[aria-current="true"] {
   background: var(--accs);
   color: var(--accd-fg);
-  font-weight: 600;
+  font-weight: 500;
 }
 .listitem {
   display: flex;
@@ -61,6 +61,8 @@
 .liSub {
   display: block;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   margin-top: 1px;
   overflow: hidden;

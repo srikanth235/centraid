@@ -42,6 +42,8 @@
   background: var(--bg);
   outline: none;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   text-align: end;
 }
@@ -52,6 +54,8 @@
   width: 78px;
   text-align: end;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-soft);
 }

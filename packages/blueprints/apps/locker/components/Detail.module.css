@@ -61,7 +61,7 @@
 .wtStat .n {
   font-family: var(--font-mono);
   font-size: 28px;
-  font-weight: 600;
+  font-weight: 500;
   font-variant-numeric: var(--t-mono-numeric);
 }
 .wtStat .k {

@@ -24,6 +24,8 @@
   text-align: center;
   padding: var(--sp-2) 0 6px;
   font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
 }
 .dayCell {
@@ -72,7 +74,7 @@
   /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
      the theme-stable --text-inv (kit.css header contract, #686). */
   color: var(--text-inv);
-  font-weight: 600;
+  font-weight: 500;
 }
 .dayPills {
   display: flex;
@@ -125,6 +127,8 @@
   /* Above .dayOpen — see .pill. */
   position: relative;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-size: var(--t-control-size);
   font-variant-numeric: var(--t-mono-numeric);
   text-align: start;

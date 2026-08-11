@@ -35,7 +35,7 @@
 .rowName {
   font-family: var(--font-sans);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 .rowSub {
@@ -50,7 +50,7 @@
 .kindBadge {
   font-family: var(--font-mono);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 2px 7px;
@@ -74,7 +74,7 @@
 }
 
 .testResult {
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   overflow-wrap: anywhere;
 }
 .testResult[data-ok="true"] {
@@ -121,7 +121,7 @@
 .kindOption[data-active="true"] {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent-deep, var(--accent));
-  font-weight: 600;
+  font-weight: 500;
 }
 .fieldRow {
   display: flex;
@@ -148,7 +148,7 @@
   background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
   border-radius: 8px;
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text);
   outline: none;
   caret-color: var(--accent);
@@ -222,7 +222,7 @@
 .binaryOption[data-active="true"] {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent-deep, var(--accent));
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .gateReason {

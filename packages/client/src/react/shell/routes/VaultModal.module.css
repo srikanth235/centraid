@@ -68,7 +68,7 @@
   flex: 1;
   font: var(--t-small-strong);
   font-size: 15.5px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--text);
 }
@@ -97,7 +97,7 @@
 .profModalPreviewName {
   font: var(--t-title);
   font-size: 14.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -135,7 +135,7 @@
   color: var(--text);
   font: var(--t-body);
   font-size: var(--t-small-size);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
 }
 .profModalSave[disabled] {

@@ -87,6 +87,8 @@
 .cell.last {
   width: 110px;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
 }
 .cell.status {

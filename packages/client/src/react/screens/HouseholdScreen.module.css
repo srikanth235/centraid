@@ -113,7 +113,7 @@
 .vaultName {
   font: var(--t-title);
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -129,8 +129,11 @@
   flex-shrink: 0;
   align-self: flex-start;
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-faint);

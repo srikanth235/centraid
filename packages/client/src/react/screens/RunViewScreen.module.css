@@ -58,7 +58,7 @@
   gap: 9px;
   font-family: var(--font-sans);
   font-size: var(--t-title-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.02em;
   color: var(--text);
 }
@@ -106,7 +106,7 @@
 }
 .logStatV {
   font-size: var(--t-body-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .logStatTrig {
@@ -304,7 +304,7 @@
 }
 .tlName {
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -385,7 +385,7 @@
 }
 .tlTrigLabel {
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .tlTrigHead time {
@@ -401,7 +401,7 @@
   align-items: center;
   gap: 8px;
   font-size: var(--t-small-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   margin-bottom: 9px;
 }
@@ -431,7 +431,7 @@
   background: none;
   font: inherit;
   font-size: 11.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--accent);
   cursor: pointer;
 }
@@ -583,7 +583,7 @@
   border: none;
   font: inherit;
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   cursor: pointer;
 }

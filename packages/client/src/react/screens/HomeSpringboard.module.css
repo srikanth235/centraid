@@ -83,14 +83,39 @@
 
 /* The identity mark. The ONLY place the tile spends the app's hue — never on
    a control, and the radius is the 26% identity rule, set inline by
-   `iconChipRadius()` rather than guessed here. */
+   `iconChipRadius()` rather than guessed here.
+
+   A TINTED LABEL, not a filled badge. `packages/design/src/tile.ts` states the
+   finish for every app icon in the product: "the container is the app hue at
+   13% (light) / 20% (dark) over the surface, the mark is the full hue … the
+   metaphor is a tinted paper label, not a glass button." Mobile composites
+   exactly that through `iconChipFinish`, and the stem's vault head draws it
+   through `.chip` in chrome.module.css.
+
+   This rule used to do the opposite — the full hue as `background` with a
+   `--text-inv` glyph — so Home was the one surface in the product wearing eight
+   saturated badges while the phone beside it wore eight pale labels. The
+   percentages here are `ICON_CHIP_TINT`, and they have to stay in step with it. */
 .mark {
+  background: color-mix(
+    in oklab,
+    var(--chip-hue, var(--text-soft)) 13%,
+    var(--bg)
+  );
   block-size: 30px;
-  color: var(--text-inv);
+  color: var(--chip-hue, var(--text-soft));
   display: grid;
   flex: 0 0 auto;
   inline-size: 30px;
   place-items: center;
+}
+
+:global([data-theme="dark"]) .mark {
+  background: color-mix(
+    in oklab,
+    var(--chip-hue, var(--text-soft)) 20%,
+    var(--bg)
+  );
 }
 
 .name {
@@ -108,6 +133,8 @@
   color: var(--text-faint);
   flex: 0 0 auto;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
 }
 
@@ -152,6 +179,8 @@
   border-radius: var(--r-sm);
   color: var(--text-inv);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   inset-block-end: var(--sp-2);
   inset-inline-end: var(--sp-2);
@@ -174,8 +203,43 @@
   color: var(--text-soft);
   display: -webkit-box;
   /* Serif, because a document and a note are prose and the tile should read
-     like the app does. Line-clamped, never clipped. */
+     like the app does. Line-clamped, never clipped.
+
+     The `reading` role is tuned for an app's full measure — 19/33. A tile is
+     not that measure: at 19/33 three clamped lines eat the tile's whole
+     vertical budget and the excerpt out-shouts the title above it, which is
+     the actual name of the thing. Native hit this first and overrides `prose`
+     to the body rung for the same reason (TileBody.tsx's `prose`); this is
+     that same override, so the two surfaces clamp at the same size. */
   font: var(--t-reading);
+  font-size: var(--t-body-size);
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* Docs is NOT the reading register. Native's Docs tile is a ruled list of file
+   names in sans (TileBody.tsx's `RuledRows`) — there is no serif anywhere in
+   it; only Notes gets `Prose`. Web drew both tiles as prose, which put two
+   serif blocks on a grid where Expo has one, and made "the second register
+   means prose" stop meaning anything.
+
+   The rung is `body`, NOT `small`, and role names do not carry across the two
+   ramps: native's `small` is 15/21 and web's is 13/19, so porting native's
+   `fileName: t("small")` by NAME lands two rungs below what the phone actually
+   draws. What native encodes is the RELATIONSHIP — `docTitle` and the rows it
+   lists sit at the same size and differ only in weight, so the title leads by
+   colour and weight rather than by out-sizing its own content. That is
+   `bodyStrong` over `body` here. It also puts this excerpt on the same 15px
+   line as the Notes excerpt beside it: two previews doing the same job at two
+   different sizes is what read as "thinner". */
+.docExcerpt {
+  color: var(--text-soft);
+  display: -webkit-box;
+  font: var(--t-body);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   line-clamp: 3;
@@ -186,6 +250,8 @@
 .readingStamp {
   color: var(--text-faint);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   margin-block-start: auto;
   padding-block-start: var(--sp-2);
@@ -196,13 +262,19 @@
 .eventTime {
   color: var(--text-soft);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
 }
 
 .eventTitle {
   color: var(--text);
   display: -webkit-box;
-  font: var(--t-title);
+  /* `title` is the SCREEN's rung — the word "Home" at the top of this page. An
+     event inside one tile of eight is not that, and at 20/26 two clamped lines
+     of it were taller than the Docs tile's entire excerpt. Native reads the
+     same handoff and lands on the body rung (TileBody.tsx's `eventTitle`). */
+  font: var(--t-body-strong);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -216,7 +288,13 @@
 .afterLine {
   border-block-start: 1px solid var(--line);
   color: var(--text-faint);
-  font: var(--t-small);
+  /* Mono, like every other after-line on Home — this line says "and then
+     what", and it is the same role native gives it (TileBody.tsx's
+     `afterLine`, shared with Tally's third line). */
+  font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  font-variant-numeric: var(--t-mono-numeric);
   margin-block-start: auto;
   overflow: hidden;
   padding-block-start: var(--sp-2);
@@ -256,6 +334,8 @@
 .facesMore {
   color: var(--text-faint);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   margin-inline-start: var(--sp-2);
 }
@@ -309,11 +389,19 @@
 .figure {
   color: var(--text);
   /* The display rung, in the numeric face: a balance is the one number on
-     Home big enough to read across a room, and it is still a ramp size. */
-  font-family: var(--font-mono);
+     Home big enough to read across a room, and it is still a ramp size.
+
+     Built by composing the mono ROLE and overriding the size, the way native
+     does (TileBody.tsx's `figure`) — reaching for `--font-mono` plus a bare
+     size rung instead is how a surface ends up with the family but not the
+     tabular figures or the bidi isolation a number needs. */
+  font: var(--t-mono);
   font-size: var(--t-display-size);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
-  line-height: 36px;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
   margin-block-start: var(--sp-2);
 }
 

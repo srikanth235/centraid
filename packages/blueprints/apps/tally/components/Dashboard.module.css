@@ -40,7 +40,7 @@
   font-family: var(--font-mono);
   font-variant-numeric: var(--t-mono-numeric);
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   text-align: end;
   flex-shrink: 0;
 }
@@ -67,7 +67,7 @@
   font-family: var(--font-mono);
   font-variant-numeric: var(--t-mono-numeric);
   font-size: 26px;
-  font-weight: 600;
+  font-weight: 500;
   margin-top: var(--sp-2);
   letter-spacing: -0.02em;
 }
@@ -127,12 +127,16 @@
 }
 .gcardMem {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   margin-top: 1px;
 }
 .gcardBal {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
 }
 .trashRow {

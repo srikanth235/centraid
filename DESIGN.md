@@ -94,14 +94,14 @@ colors:
 typography:
   display:
     fontFamily: "Instrument Serif"
-    fontSize: "31px"
+    fontSize: "34px"
     fontWeight: "400"
-    lineHeight: "36px"
+    lineHeight: "40px"
     letterSpacing: "-0.01em"
   title:
-    fontFamily: "Instrument Sans"
+    fontFamily: "Schibsted Grotesk"
     fontSize: "20px"
-    fontWeight: "500"
+    fontWeight: "600"
     lineHeight: "26px"
   reading:
     fontFamily: "Source Serif 4"
@@ -109,39 +109,39 @@ typography:
     fontWeight: "400"
     lineHeight: "33px"
   body:
-    fontFamily: "Instrument Sans"
+    fontFamily: "Schibsted Grotesk"
     fontSize: "15px"
-    fontWeight: "400"
+    fontWeight: "500"
     lineHeight: "22px"
   body-strong:
-    fontFamily: "Instrument Sans"
+    fontFamily: "Schibsted Grotesk"
     fontSize: "15px"
-    fontWeight: "500"
+    fontWeight: "600"
     lineHeight: "22px"
   small:
-    fontFamily: "Instrument Sans"
-    fontSize: "13px"
-    fontWeight: "400"
-    lineHeight: "19px"
-  small-strong:
-    fontFamily: "Instrument Sans"
+    fontFamily: "Schibsted Grotesk"
     fontSize: "13px"
     fontWeight: "500"
     lineHeight: "19px"
+  small-strong:
+    fontFamily: "Schibsted Grotesk"
+    fontSize: "13px"
+    fontWeight: "600"
+    lineHeight: "19px"
   control:
-    fontFamily: "Instrument Sans"
+    fontFamily: "Schibsted Grotesk"
     fontSize: "11px"
     fontWeight: "500"
     lineHeight: "15px"
   eyebrow:
-    fontFamily: "Instrument Sans"
+    fontFamily: "Schibsted Grotesk"
     fontSize: "11px"
-    fontWeight: "400"
+    fontWeight: "500"
     lineHeight: "15px"
     letterSpacing: "0.06em"
     textTransform: "uppercase"
   mono:
-    fontFamily: "DM Mono"
+    fontFamily: "Spline Sans Mono"
     fontSize: "11.5px"
     fontWeight: "400"
     lineHeight: "16px"
@@ -378,30 +378,30 @@ The role registry marks values as `literal`, `scalar`, `solved`, or `wash`; only
 
 ## Typography
 
-Roles are not families. There is one face per genus, all four shipped from the repo with no network fetch: `Instrument Sans` sans, `Source Serif 4` serif, `Instrument Serif` display, and `DM Mono` mono. Every family token carries mandatory CJK fallbacks — none of the four faces has CJK coverage, and without them the display face silently drops to a UA default and the product's signature disappears in its largest markets. Mobile maps those genera to loaded faces through the same names.
+Roles are not families. There is one face per genus, all four shipped from the repo with no network fetch: `Schibsted Grotesk` sans, `Source Serif 4` serif, `Instrument Serif` display, and `Spline Sans Mono` mono. Every family token carries mandatory CJK fallbacks — none of the four faces has CJK coverage, and without them the display face silently drops to a UA default and the product's signature disappears in its largest markets. Mobile maps those genera to loaded faces through the same names.
 
 | Role | Brief role | Face | Size / line-height | Weight | Native delta |
 | --- | --- | --- | --- | --- | --- |
-| `--t-display` | Display | Instrument Serif | 31 / 36, −0.01em | 400 | −4 / −4 |
-| `--t-title` | (sanctioned intermediate) | Instrument Sans | 20 / 26 | 500 | +2 / +2 |
+| `--t-display` | Display | Instrument Serif | 34 / 40, −0.01em | 400 | −4 / −4 |
+| `--t-title` | (sanctioned intermediate) | Schibsted Grotesk | 20 / 26 | 600 | +2 / +2 |
 | `--t-reading` | Reading | Source Serif 4 | 19 / 33 | 400 | −1.5 / −2 |
-| `--t-body` | Body | Instrument Sans | 15 / 22 | 400 | +2 / +2 |
-| `--t-body-strong` | Body emphasis | Instrument Sans | 15 / 22 | 500 | +2 / +2 |
-| `--t-small` | UI | Instrument Sans | 13 / 19 | 400 | +2 / +2 |
-| `--t-small-strong` | UI | Instrument Sans | 13 / 19 | 500 | +2 / +2 |
-| `--t-control` | Micro | Instrument Sans | 11 / 15 | 500 | +2 / +2 |
-| `--t-eyebrow` | Micro caps | Instrument Sans | 11 / 15, +0.06em, uppercase | 400 | +2 / +2 |
-| `--t-mono` | Numeric | DM Mono | 11.5 / 16, tabular-nums | 400 | +1 / +2 |
+| `--t-body` | Body | Schibsted Grotesk | 15 / 22 | 500 | +2 / +2 |
+| `--t-body-strong` | Body emphasis | Schibsted Grotesk | 15 / 22 | 600 | +2 / +2 |
+| `--t-small` | UI | Schibsted Grotesk | 13 / 19 | 500 | +2 / +2 |
+| `--t-small-strong` | UI | Schibsted Grotesk | 13 / 19 | 600 | +2 / +2 |
+| `--t-control` | Micro | Schibsted Grotesk | 11 / 15 | 500 | +2 / +2 |
+| `--t-eyebrow` | Micro caps | Schibsted Grotesk | 11 / 15, +0.06em, uppercase | 500 | +2 / +2 |
+| `--t-mono` | Numeric | Spline Sans Mono | 11.5 / 16, tabular-nums | 400 | +1 / +2 |
 
-`--t-title` is the one role with no slot in the brief. It is kept deliberately: a section heading between the 31px display serif and the 15px body is real, and the alternative is every surface inventing one. Everything else is the brief's seven roles, with the two-weight pairs named from the prose side (`small`) and the control side (`small-strong`, `control`).
+`--t-title` is the one role with no slot in the brief. It is kept deliberately: a section heading between the 34px display serif and the 15px body is real, and the alternative is every surface inventing one. Everything else is the brief's seven roles, with the two-weight pairs named from the prose side (`small`) and the control side (`small-strong`, `control`).
 
 Link is not a size role: it inherits, takes `--link`, and is always underlined.
 
 Every `--t-*` is a `font` shorthand, and the properties that shorthand cannot carry travel beside it as their own tokens rather than as decoration a stylesheet has to remember: `--t-display-tracking` −0.01em, `--t-eyebrow-tracking` 0.06em, `--t-eyebrow-transform` uppercase, and `--t-mono-numeric` tabular-nums. "Numerics are tabular in every app, without exception" is only true while that last one exists and is used.
 
-The numeric role also declares its own reading direction: `--t-mono-direction` `ltr` and `--t-mono-bidi` `isolate`, set once on the role, never per span. A number is not a word — under RTL the bidi algorithm reorders a mixed digit-and-word run (`30 July 2026 · 17:42` reads back to front) unless the role pins its own direction and isolates it from the surrounding paragraph. This lands on TEXT elements only: a layout container must never carry the numeric face, because its inline axis would flip along with it. The defect was shell-wide, not app-specific — it was reordering the stem's gateway line and the account handle beside every mono-set date and count in the product. The distinct composable size rungs are `--t-display-size` 31px, `--t-title-size` 20px, `--t-reading-size` 19px, `--t-body-size` 15px, `--t-small-size` 13px, `--t-control-size` 11px, and `--t-mono-size` 11.5px. `--t-body-strong-size` does not exist because it would duplicate the body rung, and the same is true of `--t-small-strong-size` and `--t-eyebrow-size`. There are no line-height rungs. The declaration order in `typography.ts` is ramp order precisely because it decides which name owns each rung.
+The numeric role also declares its own reading direction: `--t-mono-direction` `ltr` and `--t-mono-bidi` `isolate`, set once on the role, never per span. A number is not a word — under RTL the bidi algorithm reorders a mixed digit-and-word run (`30 July 2026 · 17:42` reads back to front) unless the role pins its own direction and isolates it from the surrounding paragraph. This lands on TEXT elements only: a layout container must never carry the numeric face, because its inline axis would flip along with it. The defect was shell-wide, not app-specific — it was reordering the stem's gateway line and the account handle beside every mono-set date and count in the product. The distinct composable size rungs are `--t-display-size` 34px, `--t-title-size` 20px, `--t-reading-size` 19px, `--t-body-size` 15px, `--t-small-size` 13px, `--t-control-size` 11px, and `--t-mono-size` 11.5px. `--t-body-strong-size` does not exist because it would duplicate the body rung, and the same is true of `--t-small-strong-size` and `--t-eyebrow-size`. There are no line-height rungs. The declaration order in `typography.ts` is ramp order precisely because it decides which name owns each rung.
 
-Native consumes the pre-lowered `nativeDelta`; it does not parse CSS or do runtime math. Two roles step DOWN on a phone rather than up — display to 27 and reading to 17.5 — because a 31px serif title overruns a 390px screen. Text scaling and Dynamic Type may enlarge a role, never shrink it below 11px.
+Native consumes the pre-lowered `nativeDelta`; it does not parse CSS or do runtime math. Two roles step DOWN on a phone rather than up — display to 30 and reading to 17.5 — because a 34px serif title overruns a 390px screen. Text scaling and Dynamic Type may enlarge a role, never shrink it below 11px.
 
 ## Layout
 

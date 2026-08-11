@@ -32,6 +32,7 @@
   background: var(--bg-elev);
   color: var(--text-soft);
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -70,6 +71,9 @@
 }
 .kvK {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   text-transform: uppercase;
   color: var(--text-faint);
 }
@@ -110,6 +114,9 @@
 .note .when {
   margin-top: 6px;
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   color: var(--text-faint);
 }
 .taskrow {
@@ -144,6 +151,9 @@
   min-height: 0;
   padding: 3px 9px;
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   text-transform: uppercase;
 }
 span.chipSm {

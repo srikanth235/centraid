@@ -87,6 +87,8 @@
    11px floor. */
 .rung {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: tabular-nums;
   color: var(--text-soft);
   min-inline-size: 2ch;

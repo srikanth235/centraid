@@ -55,7 +55,7 @@
 }
 .initials {
   font-size: 19px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.01em;
   color: var(--text-inv);
 }
@@ -70,7 +70,7 @@
 .identityName {
   font: var(--t-title);
   font-size: var(--t-body-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   overflow-wrap: break-word;
 }
@@ -92,6 +92,9 @@
 }
 .fieldLabel {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;

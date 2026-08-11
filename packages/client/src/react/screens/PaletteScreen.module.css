@@ -124,7 +124,7 @@
 .noResults strong {
   color: var(--text);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
 }
 .noResults span {
   font-size: var(--t-mono-size);

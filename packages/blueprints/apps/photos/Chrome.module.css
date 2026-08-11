@@ -328,6 +328,8 @@
   background: color-mix(in oklab, var(--scrim) 92%, transparent);
   color: var(--text-inv);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   pointer-events: none;
 }

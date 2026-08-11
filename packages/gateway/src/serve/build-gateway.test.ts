@@ -370,7 +370,7 @@ describe("build-gateway scenarios", () => {
     }
   });
 
-  test("a fresh data dir auto-founds Shared then Personal, and a second boot is a no-op (#603)", async () => {
+  test("a fresh data dir auto-founds Personal only, and a second boot is a no-op (#603)", async () => {
     await gateway.stop();
     await fs.rm(dataDir, { recursive: true, force: true });
     dataDir = await tempDir(`build-gateway-autofound-${crypto.randomUUID()}-`);
@@ -383,20 +383,15 @@ describe("build-gateway scenarios", () => {
         pair: () => ({ ok: false }),
       },
     });
-    // Shared is founded FIRST, but the client-facing listing leads with the
-    // marked Personal vault (#665) — the same vault the registry hands
-    // unscoped callers and unnamed pair tickets. Founding order survives in
-    // `planesList()`, which background work iterates.
+    // Founding creates exactly ONE vault: the marked Personal (#665) — the
+    // same vault the registry hands unscoped callers and unnamed pair
+    // tickets. No household vault is conjured beside it; #726 made the vault
+    // the unit of sharing, so a shared space is one a person creates.
     expect(gateway.vaults.list().map((v) => v.name)).toStrictEqual([
       "Personal",
-      "Shared",
     ]);
-    expect(gateway.vaults.list().map((v) => v.personal)).toStrictEqual([
-      true,
-      undefined,
-    ]);
+    expect(gateway.vaults.list().map((v) => v.personal)).toStrictEqual([true]);
     expect(gateway.vaults.planesList().map((p) => p.name)).toStrictEqual([
-      "Shared",
       "Personal",
     ]);
     const founded = gateway.vaults.list().map((v) => v.vaultId);
@@ -447,34 +442,38 @@ describe("build-gateway scenarios", () => {
     await gateway.stop();
     gateway = await buildGateway({ paths: pathsUnder(dataDir) });
     expect(gateway.vaults.list().map((v) => v.vaultId)).toStrictEqual(founded);
-    // The `personal` marker is durable, so the remount lists in the same
-    // default-first order rather than reverting to founding order (#665).
+    // The `personal` marker is durable, so the remount lists the same vault
+    // as default rather than re-deriving it from founding order (#665).
     expect(gateway.vaults.list().map((v) => v.name)).toStrictEqual([
       "Personal",
-      "Shared",
     ]);
   });
 
-  test("an existing data dir with one vault is left exactly as it was found (#603)", async () => {
+  test("an existing data dir is left exactly as it was found, even without the founded vault (#603)", async () => {
     await gateway.stop();
     await fs.rm(dataDir, { recursive: true, force: true });
     dataDir = await tempDir(`build-gateway-existing-${crypto.randomUUID()}-`);
     gateway = await buildGateway({ paths: pathsUnder(dataDir) });
-    const [shared] = gateway.vaults.list();
-    gateway.vaults.delete(gateway.vaults.list()[1]!.vaultId);
+    // Replace the founded Personal with a vault of the member's own making:
+    // the dir is now inhabited but carries no `personal`-marked vault, the
+    // shape a rebuild must adopt rather than "repair" by founding again.
+    const work = gateway.vaults.create("Work");
+    for (const vault of gateway.vaults.list()) {
+      if (vault.vaultId !== work.vaultId) gateway.vaults.delete(vault.vaultId);
+    }
     await gateway.stop();
 
     gateway = await buildGateway({ paths: pathsUnder(dataDir) });
     expect(gateway.vaults.list().map((v) => v.vaultId)).toStrictEqual([
-      shared!.vaultId,
+      work.vaultId,
     ]);
   });
 
   test("an inhabited gateway whose vaults were all erased is NOT re-founded (#603)", async () => {
     // Erasing every vault leaves the filesystem registry fresh but keeps the
     // `owners` rows in gateway.db. Restarting the daemon in that state must
-    // wait for restore — auto-founding a new Shared + Personal over it would
-    // silently bury restore-after-erase.
+    // wait for restore — auto-founding a new Personal over it would silently
+    // bury restore-after-erase.
     for (const vault of gateway.vaults.list()) {
       gateway.vaults.delete(vault.vaultId);
     }
@@ -484,9 +483,9 @@ describe("build-gateway scenarios", () => {
     expect(gateway.vaults.list()).toStrictEqual([]);
   });
 
-  test("the host that founded the vaults OWNS both (#603, #726)", async () => {
+  test("the host that founded the vault OWNS it (#603, #726)", async () => {
     const founded = gateway.vaults.list().map((v) => v.vaultId);
-    expect(founded).toHaveLength(2);
+    expect(founded).toHaveLength(1);
     // Release the gateway's handle before reading gateway.db from outside it.
     await gateway.stop();
     const database = GatewayDatabase.open(dataDir);
@@ -499,7 +498,7 @@ describe("build-gateway scenarios", () => {
       expect(rows.map((row) => row.vault_id).sort()).toStrictEqual(
         [...founded].sort()
       );
-      // ONE owner owns both — a fresh install has no "Unassigned" binding.
+      // ONE owner — a fresh install has no "Unassigned" binding.
       expect(new Set(rows.map((row) => row.owner_id)).size).toBe(1);
       const owners = database.db
         .prepare("SELECT COUNT(*) AS n FROM owners")
@@ -512,12 +511,12 @@ describe("build-gateway scenarios", () => {
     }
   });
 
-  // Exit evidence #4 (#726 P1): founding still auto-creates Shared+Personal
+  // Exit evidence #4 (#726 P1): founding auto-creates the one Personal vault
   // owned by the founding owner (covered above), AND a fresh boot after the
   // household-migration sweep mints no extra vaults.
   test("household migration mints a vault for every ownerless owner, once (#726 P1)", async () => {
     const foundedCount = gateway.vaults.list().length;
-    expect(foundedCount).toBe(2);
+    expect(foundedCount).toBe(1);
     // Release the gateway's exclusive lock before touching gateway.db directly.
     await gateway.stop();
 
@@ -593,7 +592,7 @@ describe("build-gateway scenarios", () => {
     // The registry is mandatory now — the whole app world is vault-scoped.
     expect(gateway.vaults).toBeDefined();
     expect(gateway.vaults.current().boot.fresh).toBe(true);
-    expect(gateway.vaults.list()).toHaveLength(2);
+    expect(gateway.vaults.list()).toHaveLength(1);
     // The owner consent surface answers through the composed chain.
     const mounted = await mountUnauthed(gateway.composedHandler);
     try {
@@ -866,7 +865,7 @@ describe("build-gateway scenarios", () => {
       // Wired-in probes: the boot vault mounted, no connections configured.
       expect(byName.get("vaults")).toMatchObject({
         status: "ok",
-        detail: "2 vaults mounted",
+        detail: "1 vault mounted",
       });
       expect(byName.get("connections")).toMatchObject({ status: "ok" });
       // Reconcile ran during start() and reported the scheduler healthy.
@@ -876,7 +875,7 @@ describe("build-gateway scenarios", () => {
       // enabled. No s3 tier is configured, and both remain honest ok states.
       expect(byName.get("enrichment")).toMatchObject({
         status: "ok",
-        detail: "0 of 10 enrichers enabled",
+        detail: "0 of 5 enrichers enabled",
       });
       expect(byName.get("blob-sweep")?.status).toBe("ok");
       // The host-pushed failure carries its structured event.

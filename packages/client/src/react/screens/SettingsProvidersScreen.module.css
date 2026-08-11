@@ -246,7 +246,7 @@
 .rowName {
   font-family: var(--font-sans);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 .rowSub {
@@ -271,7 +271,7 @@
 }
 .usedByChip {
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   font-family: var(--font-mono);
@@ -294,7 +294,7 @@
 }
 .usedByNone {
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   font-family: var(--font-mono);

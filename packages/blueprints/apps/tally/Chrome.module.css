@@ -285,7 +285,7 @@
 .banner strong {
   display: block;
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
   margin-bottom: 1px;
 }
 .banner.notice::before {

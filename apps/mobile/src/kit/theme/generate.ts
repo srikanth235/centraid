@@ -6,19 +6,21 @@ import type { NativeTheme } from "@centraid/design";
 
 // Direct sub-path exports (see App.tsx's import comment) fix each face's
 // weight to its own RN font-family name. The Binding Layer's four faces:
-// Instrument Sans (body/UI), Instrument Serif (display), Source Serif 4
-// (reading), DM Mono (numeric).
+// Schibsted Grotesk (body/UI), Instrument Serif (display), Source Serif 4
+// (reading), Spline Sans Mono (numeric). The `regular`/`medium` keys name
+// the ramp's two REGISTERS, not weights: on the sans the regular register is
+// the 500 cut and the strong register the 600 (typography.ts).
 const FONT_ROLES = {
   display: {
     regular: "InstrumentSerif_400Regular",
   },
   mono: {
-    medium: "DMMono_500Medium",
-    regular: "DMMono_400Regular",
+    medium: "SplineSansMono_500Medium",
+    regular: "SplineSansMono_400Regular",
   },
   sans: {
-    medium: "InstrumentSans_500Medium",
-    regular: "InstrumentSans_400Regular",
+    medium: "SchibstedGrotesk_600SemiBold",
+    regular: "SchibstedGrotesk_500Medium",
   },
   serif: {
     regular: "SourceSerif4_400Regular",

@@ -99,6 +99,8 @@
 }
 .detailExt {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   text-align: center;
@@ -160,6 +162,8 @@
 }
 .detailGrid dt {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   margin: 0;

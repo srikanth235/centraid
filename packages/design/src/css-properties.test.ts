@@ -100,7 +100,7 @@ describe("generated stylesheet values", () => {
     // so 200% OS text scale, which moves the ROOT font-size, actually reaches
     // these rungs; a `px` literal would be invisible to that preference.
     expect(Object.values(rungs)).toStrictEqual([
-      "1.9375rem",
+      "2.125rem",
       "1.25rem",
       "1.1875rem",
       "0.9375rem",
@@ -153,7 +153,7 @@ describe("generated stylesheet values", () => {
       "display",
       "reading",
     ]);
-    expect(type.display.size + type.display.nativeDelta.size).toBe(27);
+    expect(type.display.size + type.display.nativeDelta.size).toBe(30);
     expect(type.reading.size + type.reading.nativeDelta.size).toBe(17.5);
   });
 

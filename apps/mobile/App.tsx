@@ -1,16 +1,19 @@
 // Direct sub-path imports avoid the package's barrel index.js which
 // re-exports every weight (some of which Metro fails to resolve).
 //
-// The Binding Layer's four faces, two weights (400 / 500) each where the face
-// ships one: Instrument Sans (body/UI), Instrument Serif (display, plus its
-// italic for the home greeting), Source Serif 4 (reading), DM Mono (numeric).
-import DMMono_400Regular from "@expo-google-fonts/dm-mono/400Regular/DMMono_400Regular.ttf";
-import DMMono_500Medium from "@expo-google-fonts/dm-mono/500Medium/DMMono_500Medium.ttf";
-import InstrumentSans_400Regular from "@expo-google-fonts/instrument-sans/400Regular/InstrumentSans_400Regular.ttf";
-import InstrumentSans_500Medium from "@expo-google-fonts/instrument-sans/500Medium/InstrumentSans_500Medium.ttf";
+// The Binding Layer's four faces. The sans carries its two registers as real
+// static cuts — Schibsted Grotesk 500 (regular) and 600 (strong); see the
+// weight rationale atop packages/design/src/typography.ts. Instrument Serif
+// is the display cut (plus its italic for the home greeting), Source Serif 4
+// the reading register, Spline Sans Mono the numeric register (400, plus the
+// 500 a handful of screens reach directly through `family.monoMedium`).
 import InstrumentSerif_400Regular from "@expo-google-fonts/instrument-serif/400Regular/InstrumentSerif_400Regular.ttf";
 import InstrumentSerif_400Regular_Italic from "@expo-google-fonts/instrument-serif/400Regular_Italic/InstrumentSerif_400Regular_Italic.ttf";
+import SchibstedGrotesk_500Medium from "@expo-google-fonts/schibsted-grotesk/500Medium/SchibstedGrotesk_500Medium.ttf";
+import SchibstedGrotesk_600SemiBold from "@expo-google-fonts/schibsted-grotesk/600SemiBold/SchibstedGrotesk_600SemiBold.ttf";
 import SourceSerif4_400Regular from "@expo-google-fonts/source-serif-4/400Regular/SourceSerif4_400Regular.ttf";
+import SplineSansMono_400Regular from "@expo-google-fonts/spline-sans-mono/400Regular/SplineSansMono_400Regular.ttf";
+import SplineSansMono_500Medium from "@expo-google-fonts/spline-sans-mono/500Medium/SplineSansMono_500Medium.ttf";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useFonts } from "expo-font";
@@ -399,13 +402,13 @@ export default function App(): React.JSX.Element | null {
   // the tradeoff note below the effects). `useFonts` still re-renders this
   // component when the faces land, which is what swaps the system fallback out.
   useFonts({
-    DMMono_400Regular,
-    DMMono_500Medium,
-    InstrumentSans_400Regular,
-    InstrumentSans_500Medium,
     InstrumentSerif_400Regular,
     InstrumentSerif_400Regular_Italic,
+    SchibstedGrotesk_500Medium,
+    SchibstedGrotesk_600SemiBold,
     SourceSerif4_400Regular,
+    SplineSansMono_400Regular,
+    SplineSansMono_500Medium,
   });
 
   useEffect(() => {

@@ -22,9 +22,8 @@ function Section({
       <h2
         style={{
           color: "var(--text-faint, #6b7280)",
-          fontSize: 12,
-          fontWeight: 600,
-          letterSpacing: "0.08em",
+          font: "var(--t-eyebrow, 400 11px/15px system-ui)",
+          letterSpacing: "var(--t-eyebrow-tracking, 0.06em)",
           margin: "0 0 14px",
           textTransform: "uppercase",
         }}
@@ -72,7 +71,9 @@ export default function Gallery(): JSX.Element {
       >
         <Logo size={36} />
         <div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>desktop-ui</div>
+          <div style={{ font: "var(--t-title, 500 20px/26px system-ui)" }}>
+            desktop-ui
+          </div>
           <div style={{ color: "var(--text-faint, #6b7280)", fontSize: 13 }}>
             React DOM primitives · pixel-identical to the vanilla shell
           </div>

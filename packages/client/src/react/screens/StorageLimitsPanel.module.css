@@ -55,7 +55,7 @@
 .controlTitles h3 {
   margin: 0;
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--text);
 }

@@ -36,6 +36,9 @@
 }
 .example {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
 }
 
 /* The `searching` state. Determinate copy on the page, never a spinner and

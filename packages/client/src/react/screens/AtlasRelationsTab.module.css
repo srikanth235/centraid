@@ -257,7 +257,7 @@
 }
 .crumbSep {
   color: var(--text-ghost);
-  font-size: var(--t-control-size);
+  font: var(--t-control);
 }
 .crumb {
   font-family: var(--font-mono);
@@ -389,7 +389,7 @@
   line-height: 1.5;
 }
 .dLede b {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 /* "A few of yours" — up to three real sample rows of the current centre */
@@ -463,7 +463,7 @@
 }
 .chipCount {
   color: var(--text-ghost);
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   font-variant-numeric: tabular-nums;
 }
 .roFoot {
@@ -566,7 +566,7 @@
   line-height: 1;
   letter-spacing: 0;
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -819,7 +819,7 @@
   animation-delay: calc(var(--dly, 0ms) + 140ms);
 }
 .nodeLabelBig {
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   fill: var(--text-soft);
   opacity: 1;
 }

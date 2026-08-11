@@ -35,7 +35,7 @@
   font-family: var(--font-mono);
   font-variant-numeric: var(--t-mono-numeric);
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 500;
 }
 .exmain {
   flex: 1;
@@ -71,7 +71,7 @@
   font-family: var(--font-mono);
   font-variant-numeric: var(--t-mono-numeric);
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   margin-top: 2px;
 }
 /* Settles a denied durable Commons intent out of the overlay (#731 m6). */

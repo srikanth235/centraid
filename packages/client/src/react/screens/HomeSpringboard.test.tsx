@@ -118,7 +118,13 @@ describe("screens/HomeSpringboard", () => {
     it("spends the app's identity hue on the mark and nowhere else", () => {
       const el = mount();
       const mark = tile(el, "photos").querySelector(".mark") as HTMLElement;
-      expect(mark.style.background).toContain("--c-amber");
+      // As the chip's VARIABLE, not as its background. The stylesheet
+      // composites it at `ICON_CHIP_TINT` over `--bg` and strokes the glyph in
+      // the full hue — the finish `design/src/tile.ts` defines and mobile's
+      // `iconChipFinish` composites by hand. Painting `background` here is what
+      // made Home's chips filled badges while the phone drew tinted labels.
+      expect(mark.style.getPropertyValue("--chip-hue")).toContain("--c-amber");
+      expect(mark.style.background).toBe("");
       // The tile itself takes no hue — the shell spends none.
       expect(tile(el, "photos").getAttribute("style")).toBeNull();
     });
@@ -146,14 +152,18 @@ describe("screens/HomeSpringboard", () => {
       );
     });
 
-    it("docs and notes read in the reading register", () => {
+    it("only notes reads in the reading register", () => {
       const el = mount();
       expect(tile(el, "docs").querySelector(".readingTitle")?.textContent).toBe(
         "Lease agreement"
       );
-      // The handoff's docs body: a serif prose excerpt under the title, in the
-      // same reading register Notes uses.
-      expect(tile(el, "docs").querySelector(".reading")?.textContent).toBe(
+      // Docs is NOT the reading register. Native draws this tile as a ruled
+      // list of file names in sans (TileBody.tsx's `RuledRows`) and keeps
+      // `Prose` for Notes alone; web drew both as serif, which is how two
+      // prose blocks ended up on a grid that has one. The excerpt stays — the
+      // web tile model carries an excerpt, not rows — but it is UI text.
+      expect(tile(el, "docs").querySelector(".reading")).toBeNull();
+      expect(tile(el, "docs").querySelector(".docExcerpt")?.textContent).toBe(
         "The landlord agreed to the longer notice period."
       );
       expect(tile(el, "notes").querySelector(".reading")?.textContent).toBe(

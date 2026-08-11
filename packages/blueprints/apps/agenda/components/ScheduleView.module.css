@@ -32,6 +32,8 @@
 }
 .schedDow {
   font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
 }
 .schedMy {
@@ -71,6 +73,8 @@
 }
 .schedTime {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   color: var(--text-soft);
   width: 7.25rem;
   flex-shrink: 0;

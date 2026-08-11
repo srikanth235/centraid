@@ -26,7 +26,7 @@ import { HOME_SEARCH_EVERYTHING } from "../../home-copy.js";
 import { isWebHost } from "../host-platform.js";
 import PaletteScreen from "../screens/PaletteScreen.js";
 import WhatsNewModal from "../screens/WhatsNewModal.js";
-import Button from "../ui/Button.js";
+import { IconButton } from "../ui/Button.js";
 import { ShellActionsProvider } from "./actions.js";
 import type { ShellActions } from "./actions.js";
 import AllAppsSheet from "./AllAppsSheet.js";
@@ -1085,29 +1085,49 @@ export default function App(): JSX.Element {
   //
   // Home's bar names the screen, not the vault: the vault is at the head of the
   // stem, true on every route, and saying it twice on one screen would make the
-  // reader check whether the two are the same thing. ONE action, and it is the
-  // filled ink — "Search everything" is the third and last entry onto the ONE
-  // palette (⌘K and the stem's Search control are the others), and finding a
-  // thing is the verb Home exists for. All apps lives in the stem's foot.
-  const renderAppBar = useCallback((nav: ShellNav): ShellAppBar | undefined => {
-    if (nav.route.kind !== "home") return undefined;
-    return {
-      title: "Home",
-      actions: (
-        // Titlebar scale, so Home's bar is exactly as tall as the bar on a
-        // route that only navigates. `size="chrome"` used to unfill a primary
-        // — the size class set its own background after the variant rules —
-        // which is why this carried variant alone; that cascade is fixed and
-        // guarded, so the commit keeps its ink at the smaller size.
-        <Button
-          label={HOME_SEARCH_EVERYTHING}
-          onClick={() => setPaletteOpen(true)}
-          size="chrome"
-          variant="primary"
-        />
-      ),
-    };
-  }, []);
+  // reader check whether the two are the same thing.
+  //
+  // The SAME argument retires the bar's own FILLED search action, on both
+  // layouts. It was the third entrance to the one palette and it was the loud
+  // one: on the wide layout the stem's Search control sits beside it wearing
+  // the identical words, so Home said "Search everything" twice and the reader
+  // has to check whether the two are the same thing; and either way a filled
+  // pill next to the `+ Add` commit is a second filled ink, where the brief
+  // allows one per view (DESIGN.md, control vocabulary).
+  //
+  // Wide keeps no action at all — the stem holds search. Compact has no stem,
+  // so the bar is the only entrance and keeps ONE, as the bare magnifier the
+  // phone already uses (`VaultHeader.tsx`, `accessibilityLabel="Search
+  // everything"`). Mobile settled this exact question first and wrote down the
+  // answer: `HomeTitleRow.tsx` took a filled "Search everything" OUT of Home's
+  // title row because "on a screen made of previews, the loudest thing should
+  // be a member's own photograph, not a word". A PWA on a phone is that same
+  // screen, so it gets that same treatment rather than the pill.
+  const renderAppBar = useCallback(
+    (nav: ShellNav): ShellAppBar | undefined => {
+      if (nav.route.kind !== "home") return undefined;
+      if (!compact) return { title: "Home" };
+      return {
+        title: "Home",
+        actions: (
+          // Icon-only, so the label lives in the accessible name rather than in
+          // ink. `IconButton` carries no variant and no commit gate — which is
+          // also the fix for the outage bug the filled version had: as a
+          // `primary`, `commit` defaulted true, so with the gateway down the
+          // control went recessive, refused to open the palette, and printed
+          // the offline sentence inline INSIDE the app bar. The palette reads
+          // the local replica, so searching must keep working offline.
+          <IconButton
+            icon="Search"
+            ariaLabel={HOME_SEARCH_EVERYTHING}
+            title={HOME_SEARCH_EVERYTHING}
+            onClick={() => setPaletteOpen(true)}
+          />
+        ),
+      };
+    },
+    [compact]
+  );
 
   const renderRoute = useCallback(
     (nav: ShellNav): JSX.Element => {

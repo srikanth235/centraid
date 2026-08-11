@@ -184,6 +184,8 @@
   text-align: center;
   color: color-mix(in oklab, var(--text-inv) 60%, transparent);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   padding-block-end: var(--sp-4);
   padding-inline: var(--sp-4);

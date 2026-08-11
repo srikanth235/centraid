@@ -43,10 +43,20 @@ const loadHomeSample = vi.fn<typeof TypeImport_sample.loadHomeSample>();
 const seedHomeSample = vi.fn<typeof TypeImport_sample.seedHomeSample>();
 const syncHomeSampleReplica =
   vi.fn<typeof TypeImport_sample.syncHomeSampleReplica>();
+// The automatic first fill. `hasAutoSeeded` defaults to TRUE here — every case
+// in this suite is about the surface, not about day one, and a mock that let
+// the fill run would start one behind each of them. The auto-fill's own cases
+// override it.
+const hasAutoSeeded = vi.fn<typeof TypeImport_sample.hasAutoSeeded>();
+const markAutoSeeded = vi.fn<typeof TypeImport_sample.markAutoSeeded>();
+const autoSeedVaultId = vi.fn<typeof TypeImport_sample.autoSeedVaultId>();
 vi.mock(import("./homeSample.js"), () => ({
   NO_SAMPLE: { rows: 0, seedable: [] },
+  autoSeedVaultId: () => autoSeedVaultId(),
   clearHomeSample: () => Promise.resolve(),
+  hasAutoSeeded: (vaultId: string) => hasAutoSeeded(vaultId),
   loadHomeSample: () => loadHomeSample(),
+  markAutoSeeded: (vaultId: string) => markAutoSeeded(vaultId),
   seedHomeSample: (
     seedable: readonly string[],
     onProgress?: (progress: TypeImport_sample.HomeSampleProgress) => void
@@ -141,6 +151,9 @@ describe("HomeRoute", () => {
     loadHomeSample.mockReset().mockResolvedValue({ rows: 0, seedable: [] });
     seedHomeSample.mockReset().mockResolvedValue([]);
     syncHomeSampleReplica.mockReset().mockResolvedValue(undefined);
+    hasAutoSeeded.mockReset().mockResolvedValue(true);
+    markAutoSeeded.mockReset().mockResolvedValue(undefined);
+    autoSeedVaultId.mockReset().mockResolvedValue("vault-1");
     navigate.mockClear();
     openCommandPalette.mockClear();
     // The route's reads live in the shared cache; start each case from an
@@ -219,6 +232,62 @@ describe("HomeRoute", () => {
     for (const [input] of loadHomeTileContent.mock.calls)
       expect(input.brief).toBeDefined();
     expect(el).toBeTruthy();
+  });
+
+  it("fills a fresh vault on its own, marking the vault BEFORE it writes", async () => {
+    loadHomeSample.mockResolvedValue({ rows: 0, seedable: ["tasks"] });
+    hasAutoSeeded.mockResolvedValue(false);
+
+    await render([app("tasks")]);
+
+    expect(seedHomeSample).toHaveBeenCalledWith(
+      ["tasks"],
+      expect.any(Function)
+    );
+    expect(markAutoSeeded).toHaveBeenCalledWith("vault-1");
+    // Marked FIRST. A fill that dies halfway costs this vault its automatic
+    // demonstration; the alternative is a vault that retries the write on
+    // every visit for as long as it keeps failing.
+    expect(markAutoSeeded.mock.invocationCallOrder[0]!).toBeLessThan(
+      seedHomeSample.mock.invocationCallOrder[0]!
+    );
+  });
+
+  it("never refills a vault whose sample was cleared", async () => {
+    // The emptiness that triggers the automatic fill is exactly the state
+    // "Clear the sample" produces, so without the durable marker clearing
+    // would put the rows straight back and the control would be a no-op
+    // wearing a label. This is the test that says clearing is FINAL.
+    loadHomeSample.mockResolvedValue({ rows: 0, seedable: ["tasks"] });
+    hasAutoSeeded.mockResolvedValue(true);
+
+    await render([app("tasks")]);
+
+    expect(seedHomeSample).not.toHaveBeenCalled();
+    expect(markAutoSeeded).not.toHaveBeenCalled();
+  });
+
+  it("does not fill a vault it cannot name", async () => {
+    // Writing invented rows into a vault the client cannot identify is the one
+    // outcome this feature must never produce — and it is reachable, because
+    // the vault id comes from a gateway read that can fail.
+    loadHomeSample.mockResolvedValue({ rows: 0, seedable: ["tasks"] });
+    hasAutoSeeded.mockResolvedValue(false);
+    autoSeedVaultId.mockResolvedValue(null);
+
+    await render([app("tasks")]);
+
+    expect(seedHomeSample).not.toHaveBeenCalled();
+    expect(markAutoSeeded).not.toHaveBeenCalled();
+  });
+
+  it("does not fill a vault that already carries sample rows", async () => {
+    loadHomeSample.mockResolvedValue({ rows: 12, seedable: ["tasks"] });
+    hasAutoSeeded.mockResolvedValue(false);
+
+    await render([app("tasks")]);
+
+    expect(seedHomeSample).not.toHaveBeenCalled();
   });
 
   it("refetches the tiles only after the replica has pulled the seeded rows", async () => {

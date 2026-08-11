@@ -169,12 +169,17 @@ describe("App suite", () => {
       const el = await mount();
       expect(el.querySelector(".window")).not.toBeNull();
       // Home's body is the springboard and nothing else (issue #708). The bar
-      // names the SCREEN and carries one action — the vault is at the head of
-      // the stem, true on every route, so Home does not say it a second time.
+      // names the SCREEN — the vault is at the head of the stem, true on every
+      // route, so Home does not say it a second time.
       const bar = el.querySelector(".appBar")!;
       expect(bar.textContent).toContain("Home");
-      expect(bar.textContent).toContain("Search everything");
       expect(bar.textContent).not.toContain("All apps");
+      // …and on the WIDE layout it carries no action at all. The bar's search
+      // control was a second "Search everything" beside the stem's own, and a
+      // second filled ink beside the `+ Add` commit. Compact, where the band is
+      // a row of tabs and the stem control does not exist, still gets it — the
+      // compact suite below owns that half of the contract.
+      expect(bar.textContent).not.toContain("Search everything");
       // The stem holds the vault head, Search, the PINNED destinations, and a
       // foot of All apps + the account row (Settings and What's new live in
       // its menu, as they did before #707).

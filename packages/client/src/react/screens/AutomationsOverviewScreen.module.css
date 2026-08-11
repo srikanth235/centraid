@@ -68,7 +68,7 @@
 .sectionLabel {
   font-family: var(--font-mono);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -97,7 +97,7 @@
 }
 .systemHint {
   margin-left: auto;
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   color: var(--text-ghost);
 }
 .systemSection[open] > .systemSummary {
@@ -135,7 +135,7 @@
   padding: 20px 16px;
   border: 0.5px dashed var(--line);
   border-radius: var(--r-md, 12px);
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text-faint);
 }
 .filterClear {
@@ -144,7 +144,7 @@
   color: var(--accent);
   font: inherit;
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   padding: 0;
 }
@@ -222,7 +222,7 @@
   border-radius: 999px;
   font-family: var(--font-mono);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--c-amber-text);
   background: color-mix(in srgb, var(--c-amber) 16%, transparent);
   border: 0.5px solid color-mix(in srgb, var(--c-amber) 32%, transparent);
@@ -233,7 +233,7 @@
   border-radius: 999px;
   font-family: var(--font-mono);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.02em;
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 12%, transparent);
@@ -245,7 +245,7 @@
   border-radius: 999px;
   font-family: var(--font-mono);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.02em;
   color: var(--c-amber-text);
   background: color-mix(in srgb, var(--c-amber) 12%, transparent);
@@ -276,7 +276,7 @@
 .activityGroupLabel {
   font-family: var(--font-mono);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -331,7 +331,7 @@
   flex: none;
   max-width: 220px;
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -340,7 +340,7 @@
 .activityOrigin {
   flex: 1;
   min-width: 0;
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -348,13 +348,13 @@
 }
 .activityWhen {
   flex: none;
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   color: var(--text-ghost);
 }
 .activityEmpty {
   padding: 24px 16px;
   text-align: center;
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text-faint);
 }
 
@@ -431,7 +431,7 @@
 }
 .suggestName {
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .suggestDesc {
@@ -455,7 +455,7 @@
   /* An <output> (implicit role=status) replaced the div this was written for;
      `display` keeps the block box the surrounding stack assumes. */
   display: block;
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text-faint);
 }
 .skelHead {
@@ -499,7 +499,7 @@
 }
 .errorText {
   max-width: 420px;
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text-faint);
   margin-bottom: 6px;
 }

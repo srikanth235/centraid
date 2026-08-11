@@ -33,7 +33,7 @@
   border: 0;
   background: transparent;
   border-radius: var(--r-sm);
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text);
   text-align: left;
 }

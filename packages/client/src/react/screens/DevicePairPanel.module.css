@@ -19,7 +19,7 @@
 }
 .pairLead strong {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .grantSummary {
@@ -32,7 +32,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent-deep, var(--accent));
-  font-size: var(--t-control-size);
+  font: var(--t-control);
 }
 
 /* "Add someone" (#726 P1): the hosting-posture sentences on a minted-person
@@ -69,7 +69,7 @@
   background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
   border-radius: 8px;
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text);
   outline: none;
   caret-color: var(--accent);

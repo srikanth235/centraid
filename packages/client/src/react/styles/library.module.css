@@ -72,7 +72,7 @@
   background: var(--bg-elev);
   box-shadow: 0 0 0 0.5px var(--line);
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
 }
 .discSegIc {
   display: inline-flex;

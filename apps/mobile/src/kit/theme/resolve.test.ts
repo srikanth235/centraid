@@ -52,10 +52,10 @@ describe("navigation theme lowering", () => {
 
   it("maps navigation weights onto the loaded sans family — no bold rung", () => {
     expect(navThemes.light.fonts.regular.fontFamily).toBe(
-      "InstrumentSans_400Regular"
+      "SchibstedGrotesk_500Medium"
     );
     expect(navThemes.dark.fonts.bold.fontFamily).toBe(
-      "InstrumentSans_500Medium"
+      "SchibstedGrotesk_600SemiBold"
     );
   });
 });

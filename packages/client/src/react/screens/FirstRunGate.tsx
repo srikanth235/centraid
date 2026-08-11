@@ -17,7 +17,7 @@ import styles from "./OnboardingScreen.module.css";
  * First run branches on PLATFORM, not on gateway state (issue #603).
  *
  * There is no founding ceremony and no "uninitialized" gateway any more: a
- * fresh gateway founds "Shared" + "Personal" at construction, so the only
+ * fresh gateway founds "Personal" at construction, so the only
  * question left is which gateway this device should talk to.
  *
  *   - Desktop (Electron) can answer two ways, so it gets a chooser: start a

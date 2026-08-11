@@ -38,7 +38,7 @@ body {
   color: var(--text-inv);
   cursor: pointer;
   font: inherit;
-  font-weight: 600;
+  font-weight: 500;
   min-height: var(--target-min);
   padding: var(--sp-2) var(--sp-3);
 }

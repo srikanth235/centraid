@@ -10,6 +10,8 @@ const clean = {
   rawFontWeight: 0,
   rawRadius: 0,
   paletteHueAsText: 0,
+  typeSizeRung: 0,
+  roleModifierGap: 0,
 };
 
 test("analyzeCss ignores comments and accepts token-owned font stacks", () => {
@@ -49,13 +51,17 @@ test("analyzeCss counts raw font-size but not inherit or a var knob", () => {
 });
 
 test("analyzeCss clears the composable size rungs but not the shorthands", () => {
+  // A rung is not RAW — it is tokened, so `rawFontSize` stays clean. It is
+  // still debt, because a rung taken alone gets the size while weight, leading
+  // and family fall back to whatever an ancestor set; `typeSizeRung` is the
+  // metric that says so.
   assert.deepEqual(
     analyzeCss(`
       .a { font-size: var(--t-body-size); }
       .b { font-size: var(--t-hero-size); }
       .c { font-size: var(--t-mono-size) !important; }
     `),
-    clean
+    { ...clean, typeSizeRung: 3 }
   );
   // `--t-<key>` is a `font` shorthand; as a `font-size` value the declaration
   // is invalid and dropped whole, so it stays debt even though it is a var().

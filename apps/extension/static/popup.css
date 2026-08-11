@@ -170,7 +170,7 @@ button:hover {
   margin: var(--sp-3) var(--sp-1) 0;
   color: var(--text-soft);
   font: var(--t-control);
-  font-weight: 600;
+  font-weight: 500;
 }
 .quiet {
   padding: var(--sp-1) var(--sp-2);
@@ -197,7 +197,7 @@ details {
 }
 summary {
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 500;
 }
 .stack {
   display: grid;

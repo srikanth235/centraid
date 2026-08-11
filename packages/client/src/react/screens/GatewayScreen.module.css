@@ -61,7 +61,7 @@
 .title h1 {
   margin: 0;
   font-family: var(--font-sans);
-  font-weight: 600;
+  font-weight: 500;
   font-size: 25px;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -121,7 +121,7 @@
 .tabBadge {
   font-family: var(--font-mono);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1;
   padding: 2px 5px;
   border-radius: 999px;
@@ -247,7 +247,7 @@
 
 .statusWord {
   font-family: var(--font-sans);
-  font-weight: 700;
+  font-weight: 500;
   font-size: 30px;
   line-height: 1.05;
   letter-spacing: -0.02em;
@@ -317,7 +317,7 @@
 }
 .figureValue {
   font-family: var(--font-mono);
-  font-weight: 600;
+  font-weight: 500;
   font-size: var(--t-title-size);
   letter-spacing: -0.01em;
   color: var(--text);
@@ -453,7 +453,7 @@
 }
 .resourceModeLabel {
   font-family: var(--font-sans);
-  font-weight: 600;
+  font-weight: 500;
   font-size: 12.5px;
   letter-spacing: -0.01em;
   color: var(--text-soft);
@@ -855,7 +855,7 @@
 .panelHead h2 {
   margin: 0;
   font-family: var(--font-sans);
-  font-weight: 600;
+  font-weight: 500;
   font-size: var(--t-body-size);
   letter-spacing: -0.01em;
   color: var(--text);
@@ -1090,7 +1090,7 @@
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   border-color: var(--accent);
   color: var(--accent-deep);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 /* Identity list. */

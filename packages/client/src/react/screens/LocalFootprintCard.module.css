@@ -51,7 +51,7 @@
 .headlineFigure {
   font-family: var(--font-sans);
   font-size: 34px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.03em;
   line-height: 1;
   color: var(--text);
@@ -183,7 +183,7 @@
   flex: none;
 }
 .legendLabel {
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text);
   min-width: 0;
   overflow: hidden;
@@ -247,7 +247,7 @@
 }
 .vaultName {
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .vaultOwner {

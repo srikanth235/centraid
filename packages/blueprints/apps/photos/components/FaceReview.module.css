@@ -67,6 +67,9 @@
   padding: 1px 4px;
   border-radius: var(--r-sm);
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-size: var(--t-small-size);
   color: var(--on-stage);
   background: color-mix(in oklab, var(--stage) 55%, transparent);
@@ -173,6 +176,9 @@
 }
 .rowSub {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-size: var(--t-small-size);
   color: var(--text-faint);
 }

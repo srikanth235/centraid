@@ -43,7 +43,7 @@
 .auDrawerName {
   font-family: var(--font-sans);
   font-size: 17px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .auDrawerTrig {

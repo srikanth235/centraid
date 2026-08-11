@@ -56,7 +56,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   color: var(--text-soft);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
@@ -201,7 +201,7 @@
   border: none;
   font: inherit;
   font-size: var(--t-small-size);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition:
     transform 0.14s ease,
@@ -283,7 +283,7 @@
 }
 .auOvName {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .auOvRight {
@@ -363,7 +363,7 @@
 }
 .auOvRunName {
   font-size: var(--t-small-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -390,7 +390,7 @@
 }
 .auOvRunMeta {
   display: block;
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
 }

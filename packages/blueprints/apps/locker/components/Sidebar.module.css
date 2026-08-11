@@ -97,7 +97,7 @@
 .navItem[aria-current="true"] {
   background: var(--accs);
   color: var(--accd-fg);
-  font-weight: 600;
+  font-weight: 500;
 }
 .navItem[aria-current="true"] .ic {
   color: var(--accd-fg);

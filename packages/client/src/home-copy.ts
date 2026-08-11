@@ -126,6 +126,23 @@ export const HOME_SAMPLE_OFFER_LABEL = "Fill it with a sample week";
 export const HOME_SAMPLE_OFFER_HINT =
   "Invented content in the real structure — a week of events, notes, photos, documents, people and expenses. Nothing leaves this device, and one tap clears all of it.";
 
+/**
+ * While a fill is RUNNING, in place of the offer above it.
+ *
+ * The offer's lead is a question — and a question is the wrong thing to leave
+ * on screen once the answer is already being written, doubly so for the fill a
+ * fresh vault now starts on its own, which no one was asked. So the running
+ * state states what is happening and, in the same breath, that it comes out
+ * again: the sentence a member reads while unfamiliar rows appear in what is
+ * supposed to be their own archive has to answer "why is this here" before they
+ * have finished asking it.
+ */
+export const HOME_SAMPLE_FILLING_LEAD =
+  "Filling this in, so it has something to show";
+
+export const HOME_SAMPLE_FILLING_HINT =
+  "Invented content in the real structure — a week of events, notes, photos, documents, people and expenses. Nothing leaves this device, and clearing it takes one tap, below, whenever you want your own vault back.";
+
 /** While the sample is loaded. Present tense, first word does the work. */
 export const HOME_SAMPLE_LOADED_TITLE = "Sample data";
 

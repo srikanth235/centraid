@@ -229,7 +229,7 @@
 }
 
 .bottomActionLabel {
-  font: 500 11px var(--font-sans);
+  font: var(--t-control);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

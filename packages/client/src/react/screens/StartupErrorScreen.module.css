@@ -34,6 +34,7 @@
   align-items: center;
   gap: 4px;
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   letter-spacing: 0.22em;
   color: var(--text-faint);
 }
@@ -81,6 +82,9 @@
   display: block;
   margin-bottom: 4px;
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -91,6 +95,9 @@
   margin: 0;
   overflow-wrap: anywhere;
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   color: var(--text-soft);
 }
 

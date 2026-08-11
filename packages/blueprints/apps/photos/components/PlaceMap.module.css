@@ -53,6 +53,8 @@
 .tick,
 .north {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   /* The mono rung's own size, not a number typed here: an SVG <text> inherits
      the page's type scale like anything else, and a literal would drift the
      moment the ramp moves. */
@@ -117,6 +119,8 @@
   inset-inline-end: 0;
   padding: 1px 4px;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-size: var(--t-mono-size);
   font-variant-numeric: var(--t-mono-numeric);
   line-height: 1.4;

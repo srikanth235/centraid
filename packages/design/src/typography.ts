@@ -1,25 +1,54 @@
 // Centraid's one semantic type scale — the Binding Layer's second invariant.
 //
-// ONE RAMP, TWO REGISTERS. Seven sizes, four faces, two weights (400 and 500).
-// Every app declares its primary register — reading or scanning — and draws
-// every role from this one ramp. Numerics are mono and tabular in every app,
-// without exception, which is why `mono` carries `variantNumeric` here rather
-// than leaving it to a stylesheet.
+// ONE RAMP, TWO REGISTERS. Seven sizes, four faces, two weights per genus:
+// the sans draws at 500 (regular) and 600 (strong); the serifs and the mono
+// are 400-only. Every app declares its primary register — reading or
+// scanning — and draws every role from this one ramp. Numerics are mono and
+// tabular in every app, without exception, which is why `mono` carries
+// `variantNumeric` here rather than leaving it to a stylesheet.
+//
+// WHY THE SANS RUNGS ARE 500/700 AND NOT 400/500 (issue: body text read too
+// light, especially on the dark theme). Measured by canvas ink coverage at
+// 15px on one rasteriser, the previous sans regular laid down ~18% less ink
+// than the faces this product is read alongside, and thin stems on a dark
+// ground are the first thing to fail for low-vision readers. Schibsted
+// Grotesk at 500 lands within ~5% of that reference while its ~0.75 x-height
+// (vs 0.708 before) adds apparent size on top.
+//
+// The strong rung is 600, NOT 700. The registers must move by the same
+// amount, and 400 -> 500 was never the same step as 500 -> 700: measured,
+// the old pair differed by ~19% ink, 500/700 by ~28%, and 500/600 by ~14%.
+// 700 also overshoots the reference body weight by ~21%. This product spends
+// its strong register on UI CHROME — nav labels, tile names, section
+// headings — far more than on emphasis inside prose, so a true bold reads as
+// shouting across the whole shell. Both cuts are real static files — no
+// synthetic bolding, and React Native (which cannot reach a variable axis)
+// bundles the same two instances.
+//
+// The STRONG register is for emphasis — `title`, `bodyStrong`, `smallStrong`.
+// It is deliberately NOT where `control` sits. Micro text is the most
+// repeated thing in the product (200+ call sites: every button label, every
+// chip), and at 11px the strong cut measures ~11% more ink than the old
+// control did, which reads as every button shouting at once. It is also a
+// hierarchy inversion — an 11px strong label out-weighs the 13px strong
+// label above it, because stroke weight does not scale down linearly. The
+// regular cut at 11px measures within 2% of the control weight this ramp
+// replaced, so `control` keeps its old presence and loses the shouting.
 //
 // The brief's seven roles map onto the repo's role NAMES (no alias layer, and
 // no rename of ~400 consumer sites):
 //
-//   Display  → `display`      31/36 display-serif 400, −.01em
+//   Display  → `display`      34/40 display-serif 400, −.01em
 //   Reading  → `reading`      19/33 serif 400              (new)
-//   Body     → `body`         15/22 sans 400  (+ `bodyStrong` at 500)
-//   UI       → `small`        13/19 sans 400  (+ `smallStrong` at 500)
-//   Micro    → `control`      11/15 sans 500  (+ `eyebrow` at 400, caps)
+//   Body     → `body`         15/22 sans 500  (+ `bodyStrong` at 600)
+//   UI       → `small`        13/19 sans 500  (+ `smallStrong` at 600)
+//   Micro    → `control`      11/15 sans 500  (+ `eyebrow` at 500, caps)
 //   Numeric  → `mono`         11.5/16 mono 400, tabular
 //   Link     → not a size role: `--link` plus an underline, inheriting.
 //
-// `title` (20/26 sans 500) is the ONE sanctioned intermediate. It is not in
+// `title` (20/26 sans 600) is the ONE sanctioned intermediate. It is not in
 // the brief; it is kept because ~50 sites need a section heading between the
-// 31px display serif and the 15px body, and inventing one per surface is
+// 34px display serif and the 15px body, and inventing one per surface is
 // exactly the drift the ramp exists to stop.
 //
 // Nothing falls below 11px. Emitters may adapt units (blueprint uses rem), but
@@ -28,8 +57,8 @@
 
 export const fonts = {
   display: "Instrument Serif",
-  mono: "DM Mono",
-  sans: "Instrument Sans",
+  mono: "Spline Sans Mono",
+  sans: "Schibsted Grotesk",
   serif: "Source Serif 4",
 } as const;
 
@@ -41,8 +70,8 @@ export type FontFamily = keyof typeof fonts;
 export const fontStacks = {
   display:
     "'Instrument Serif', Charter, 'Hiragino Mincho ProN', 'Noto Serif JP', 'Noto Serif SC', 'Songti SC', Georgia, serif",
-  mono: "'DM Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
-  sans: "'Instrument Sans', 'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif",
+  mono: "'Spline Sans Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+  sans: "'Schibsted Grotesk', 'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif",
   serif:
     "'Source Serif 4', Charter, 'Hiragino Mincho ProN', 'Noto Serif JP', 'Noto Serif SC', 'Songti SC', Georgia, serif",
 } as const satisfies Record<FontFamily, string>;
@@ -56,7 +85,7 @@ export interface TypeStyle {
   size: number;
   lineHeight: number;
   family: FontFamily;
-  weight: "400" | "500";
+  weight: "400" | "500" | "600";
   nativeDelta: NativeDelta;
   /** Tracking, in em. Only the display and micro-caps rungs carry one. */
   letterSpacing?: string;
@@ -87,10 +116,10 @@ export const NATIVE_DELTA_BY_FAMILY = {
 } as const satisfies Record<FontFamily, NativeDelta>;
 
 /**
- * The two roles the brief gives an explicit mobile size for. A 31px display
+ * The two roles the brief gives an explicit mobile size for. A 34px display
  * serif overruns a 390px phone title, and 19px reading prose is one step
  * looser than a phone column wants, so both step DOWN rather than up:
- * display 31 → 27, reading 19 → 17.5.
+ * display 34 → 30, reading 19 → 17.5.
  */
 export const NATIVE_DELTA_OVERRIDES = {
   display: { lineHeight: -4, size: -4 },
@@ -117,15 +146,15 @@ export const type = {
   display: style("display", {
     family: "display",
     letterSpacing: "-0.01em",
-    lineHeight: 36,
-    size: 31,
+    lineHeight: 40,
+    size: 34,
     weight: "400",
   }),
   title: style("title", {
     family: "sans",
     lineHeight: 26,
     size: 20,
-    weight: "500",
+    weight: "600",
   }),
   reading: style("reading", {
     family: "serif",
@@ -137,25 +166,25 @@ export const type = {
     family: "sans",
     lineHeight: 22,
     size: 15,
-    weight: "400",
+    weight: "500",
   }),
   bodyStrong: style("bodyStrong", {
     family: "sans",
     lineHeight: 22,
     size: 15,
-    weight: "500",
+    weight: "600",
   }),
   small: style("small", {
     family: "sans",
     lineHeight: 19,
     size: 13,
-    weight: "400",
+    weight: "500",
   }),
   smallStrong: style("smallStrong", {
     family: "sans",
     lineHeight: 19,
     size: 13,
-    weight: "500",
+    weight: "600",
   }),
   control: style("control", {
     family: "sans",
@@ -169,7 +198,7 @@ export const type = {
     lineHeight: 15,
     size: 11,
     textTransform: "uppercase",
-    weight: "400",
+    weight: "500",
   }),
   mono: style("mono", {
     direction: "ltr",
@@ -356,6 +385,55 @@ export function typeModifiers(
     }
   }
   return out;
+}
+
+/**
+ * One class per role, carrying everything the role owns — the web's answer to
+ * native's `t()`.
+ *
+ * `typeModifiers` above says a surface "cannot get one without the rest by
+ * accident". On native that is true by construction: `t(role)` is the only
+ * entry point and it returns family, size, leading, tracking, caps and figures
+ * together, so there is no way to take the size and leave the rest. On web it
+ * was only true if every author remembered to write four declarations, and the
+ * audit says they did not — `--t-*-size` was reached for 645 times against 181
+ * uses of the shorthand, and `--t-mono` appeared without its numeric token
+ * repeatedly. An invariant that depends on memory is a convention, not a
+ * mechanism.
+ *
+ * `composes: t-mono from global` is now the one move that gets the whole role,
+ * matching `t("mono")` field for field. The `--t-*` custom properties stay —
+ * they are what these classes are built from, and a rule that needs the role
+ * inside a selector the class cannot reach still uses them.
+ */
+export function typeRoleClasses(
+  scale: Readonly<Record<string, TypeStyle>>
+): string {
+  const rules: string[] = [];
+  for (const key of Object.keys(scale)) {
+    const role = typeKeyToKebab(key);
+    const styleValue = scale[key] as TypeStyle;
+    const decls = [`font: var(--t-${role});`];
+    if (styleValue.letterSpacing !== undefined) {
+      decls.push(`letter-spacing: var(--t-${role}-tracking);`);
+    }
+    if (styleValue.textTransform !== undefined) {
+      decls.push(`text-transform: var(--t-${role}-transform);`);
+    }
+    if (styleValue.variantNumeric !== undefined) {
+      decls.push(`font-variant-numeric: var(--t-${role}-numeric);`);
+    }
+    // Direction and bidi are TEXT-element properties (see `typeModifiers`), so
+    // they travel with the class exactly as they travel with `t()`.
+    if (styleValue.direction !== undefined) {
+      decls.push(`direction: var(--t-${role}-direction);`);
+    }
+    if (styleValue.unicodeBidi !== undefined) {
+      decls.push(`unicode-bidi: var(--t-${role}-bidi);`);
+    }
+    rules.push(`.t-${role} {\n  ${decls.join("\n  ")}\n}`);
+  }
+  return rules.join("\n");
 }
 
 /** `type`'s raw px sizes, lowered to `rem` — feeds `typeSizeRungs` so the

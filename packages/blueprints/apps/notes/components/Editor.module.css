@@ -42,6 +42,8 @@
 }
 .saveLabel {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   min-width: 92px;
@@ -88,6 +90,7 @@
   display: block;
   width: 100%;
   font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
   color: var(--text);
   background: none;
   border: none;
@@ -141,7 +144,7 @@
 .mdH3 {
   margin: 14px 0 var(--sp-1);
   font-family: var(--font-sans);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .mdH1 {
@@ -284,6 +287,9 @@
 .receiptChip {
   flex-shrink: 0;
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   color: var(--accent-text);
   border: 1px solid var(--accent-soft);
   border-radius: var(--r-sm);

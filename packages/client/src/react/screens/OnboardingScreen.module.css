@@ -123,6 +123,8 @@
   margin-inline-start: auto;
   color: var(--text-faint);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
 }
 
@@ -366,6 +368,9 @@
   margin: var(--sp-1) 0 0;
   color: var(--text-soft);
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   word-break: break-word;
 }
 

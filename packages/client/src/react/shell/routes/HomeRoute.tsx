@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import type { LocalUsageReportDTO } from "../../../gateway-client-local-storage.js";
@@ -9,8 +9,11 @@ import PageScroll from "../PageScroll.js";
 import { useCachedQuery } from "../queryCache.js";
 import { HOME_CONFLICTS, homeOutOfRoom } from "./homeConditions.js";
 import {
+  autoSeedVaultId,
   clearHomeSample,
+  hasAutoSeeded,
   loadHomeSample,
+  markAutoSeeded,
   NO_SAMPLE,
   seedHomeSample,
   syncHomeSampleReplica,
@@ -177,6 +180,45 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
       .then(refreshAfterSample)
       .finally(() => setClearing(false));
   }, [refreshAfterSample]);
+
+  /*
+   * The one automatic fill.
+   *
+   * A vault's first Home fills itself, so the front door makes the product's
+   * argument instead of asking the member to accept an offer that demonstrates
+   * nothing until they do. Everything about the fill is otherwise unchanged —
+   * same generators, same working state, and the same "Sample data · Clear the
+   * sample" note that `SampleLoaded` already draws once the rows land.
+   *
+   * Four guards, and each one is load-bearing:
+   *
+   *   • `attempted` — a ref, not state, because it must be true for the REST OF
+   *     THIS MOUNT the instant the effect commits. State would not settle until
+   *     the next render, and the sample query refreshing mid-fill would re-enter
+   *     here and start a second run over the first.
+   *   • the query being `ready` — `NO_SAMPLE` is what an in-flight or failed
+   *     read looks like, and it is indistinguishable from "empty vault" on the
+   *     two fields below. Filling on a read that has not landed yet would seed a
+   *     vault that is already full.
+   *   • `rows === 0` — never write over a vault that already has sample rows.
+   *   • `hasAutoSeeded` — the durable half, and the reason "Clear the sample"
+   *     means something. It is marked BEFORE the fill runs, so a fill that dies
+   *     halfway costs this vault its automatic demonstration rather than
+   *     retrying on every visit forever.
+   */
+  const attempted = useRef(false);
+  useEffect(() => {
+    if (attempted.current) return;
+    if (sampleQuery.state.status !== "ready") return;
+    if (sample.rows > 0 || sample.seedable.length === 0) return;
+    attempted.current = true;
+    void (async () => {
+      const vaultId = await autoSeedVaultId();
+      if (vaultId === null || (await hasAutoSeeded(vaultId))) return;
+      await markAutoSeeded(vaultId);
+      onSeed();
+    })();
+  }, [sampleQuery.state.status, sample.rows, sample.seedable.length, onSeed]);
 
   const apps: AppMetaResolvedType[] = [...userApps, ...drafts];
   /** The gateway app id (a bundled install keeps its own id). */

@@ -106,6 +106,8 @@
 }
 .meta {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   color: var(--text-faint);
   margin-top: 20px;
   font-variant-numeric: var(--t-mono-numeric);
@@ -122,7 +124,7 @@
   font-size: 19px;
   letter-spacing: 0.14em;
   color: var(--accd-fg);
-  font-weight: 600;
+  font-weight: 500;
   font-variant-numeric: var(--t-mono-numeric);
 }
 .ring {

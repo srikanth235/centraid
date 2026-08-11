@@ -44,17 +44,26 @@
   outline: 1.5px solid var(--focus-ring-color);
 }
 
+/* "New conversation in <vault>" — the line that says where what you type will
+   land, so it has to survive a glance. It took `--t-small` and then shrank it
+   to 11.5px, a size the sans ramp does not have (it is the mono rung), which
+   left 13px leading around 11.5px text.
+
+   The name is the part that matters, and it used to earn that with weight 600
+   — a weight the ramp does not define, so the browser synthesised it from the
+   500 face. `smallStrong` is the sanctioned emphasis twin: same 13/19 box as
+   its neighbour, so nothing reflows, and the rest of the contrast comes from
+   colour (`--text-faint` → `--text`) rather than a weight we do not ship. */
 .fixed {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font: var(--t-small);
-  font-size: 11.5px;
   color: var(--text-faint);
 }
 .fixedName {
-  color: var(--text-soft);
-  font-weight: 600;
+  font: var(--t-small-strong);
+  color: var(--text);
 }
 
 /* The strip a route puts the picker in — above the assistant transcript, above

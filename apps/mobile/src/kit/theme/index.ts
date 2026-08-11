@@ -22,19 +22,22 @@ export { density, metrics, pageMargin } from "./tokens.generated";
 // One family name per (family, weight) pair. Keep in sync with the
 // imports in App.tsx — anything referenced here must be loaded there.
 //
-// The Binding Layer's ramp carries exactly four faces and two weights (400 /
-// 500): Instrument Sans for body/UI text, Instrument Serif for the display
-// role, Source Serif 4 for the reading register, and DM Mono for the numeric
-// register. There is no bold/semibold rung any more — a caller that used to
-// reach for `sansBold` now reaches for `sansMedium`, the heaviest weight the
-// ramp has.
+// The Binding Layer's ramp carries exactly four faces, two registers each
+// where the face ships both: Schibsted Grotesk for body/UI text, Instrument
+// Serif for the display role, Source Serif 4 for the reading register, and
+// Spline Sans Mono for the numeric register. The `Regular`/`Medium` suffixes
+// name the REGISTER, not the weight — on the sans the regular register is
+// the 500 cut and the strong register the 600 (see the weight rationale atop
+// packages/design/src/typography.ts). There is no rung above the strong
+// register — a caller that used to reach for `sansBold` reaches for
+// `sansMedium`, the heaviest the ramp has.
 export const family = {
   displayItalic: "InstrumentSerif_400Regular_Italic",
   displayRegular: "InstrumentSerif_400Regular",
-  monoMedium: "DMMono_500Medium",
-  monoRegular: "DMMono_400Regular",
-  sansMedium: "InstrumentSans_500Medium",
-  sansRegular: "InstrumentSans_400Regular",
+  monoMedium: "SplineSansMono_500Medium",
+  monoRegular: "SplineSansMono_400Regular",
+  sansMedium: "SchibstedGrotesk_600SemiBold",
+  sansRegular: "SchibstedGrotesk_500Medium",
   serifRegular: "SourceSerif4_400Regular",
 } as const;
 
@@ -47,8 +50,8 @@ const FAMILY_BY_WEIGHT: Record<FamilyKey, Record<string, string>> = {
     "500": family.monoMedium,
   },
   sans: {
-    "400": family.sansRegular,
-    "500": family.sansMedium,
+    "500": family.sansRegular,
+    "600": family.sansMedium,
   },
   serif: { "400": family.serifRegular },
 };
@@ -73,7 +76,7 @@ export const t = (
   };
   const map = FAMILY_BY_WEIGHT[def.family as FamilyKey];
   const fontFamily =
-    map[def.weight] ?? map["400"] ?? map["500"] ?? family.sansRegular;
+    map[def.weight] ?? map["500"] ?? map["400"] ?? family.sansRegular;
   return {
     fontFamily,
     fontSize: def.fontSize,

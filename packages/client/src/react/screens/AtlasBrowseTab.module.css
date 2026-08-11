@@ -445,7 +445,7 @@
   letter-spacing: 0.02em;
 }
 .colBadge {
-  font-size: var(--t-control-size);
+  font: var(--t-eyebrow);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 1px 4px;
@@ -454,7 +454,7 @@
   background: var(--bg-sunken);
 }
 .sortArrow {
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   color: var(--accent);
 }
 .gridHeadActions {
@@ -618,7 +618,7 @@
   color: var(--danger);
 }
 .fieldType {
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   color: var(--text-ghost);
   letter-spacing: 0.04em;
 }

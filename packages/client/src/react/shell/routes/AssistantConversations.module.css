@@ -223,6 +223,8 @@
   line-clamp: 1;
   color: var(--text-faint);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
 }
 
@@ -291,6 +293,8 @@
 .count {
   color: var(--text-faint);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
 }
 

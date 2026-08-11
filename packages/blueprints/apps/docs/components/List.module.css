@@ -124,6 +124,8 @@
 }
 .rowMeta {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   margin-top: 2px;
@@ -143,6 +145,8 @@
 .cell.size {
   width: 70px;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   text-align: end;
 }

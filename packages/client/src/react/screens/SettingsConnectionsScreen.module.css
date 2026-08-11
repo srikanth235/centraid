@@ -60,7 +60,7 @@
   min-width: 0;
   border: 0;
   background: transparent;
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text);
   outline: none;
   caret-color: var(--accent);
@@ -78,7 +78,7 @@
 .sectionLabel {
   font-family: var(--font-mono);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -188,7 +188,7 @@
 }
 .tileName {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .tileMeta {
@@ -202,7 +202,7 @@
   flex: none;
   font-family: var(--font-mono);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--success);
@@ -262,10 +262,10 @@
 }
 .syncTitle {
   font-size: var(--t-small-size);
-  font-weight: 600;
+  font-weight: 500;
 }
 .syncMeta {
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   color: var(--text-faint);
 }
 .healthBlock {
@@ -289,7 +289,7 @@
 }
 .authKindBanner strong {
   font-size: var(--t-mono-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.02em;
   color: var(--text);
 }
@@ -305,7 +305,7 @@
   flex: none;
   font-family: var(--font-mono);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -346,7 +346,7 @@
 .rowName {
   font-family: var(--font-sans);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 .rowSub {
@@ -358,7 +358,7 @@
   text-overflow: ellipsis;
 }
 .rowAuthNote {
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   color: var(--c-amber-text);
 }
 
@@ -366,7 +366,7 @@
   flex: none;
   font-family: var(--font-mono);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--conn-health, var(--text-faint));
@@ -396,7 +396,7 @@
   padding: 18px 16px;
   border: 0.5px dashed var(--line-strong);
   border-radius: var(--r-xl);
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text-faint);
   text-align: center;
 }
@@ -438,7 +438,7 @@
 .sheetTitle {
   margin: 0;
   font-size: 17px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .sheetTag {
@@ -482,7 +482,7 @@
 .aboutHead {
   padding: 10px 12px;
   font-size: var(--t-mono-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-faint);
   border-bottom: 0.5px solid var(--line);
   background: color-mix(in srgb, var(--text) 2.5%, transparent);
@@ -513,7 +513,7 @@
 }
 .aboutTitle {
   font-size: var(--t-small-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .aboutDesc {
@@ -576,7 +576,7 @@
   background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
   border-radius: 8px;
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text);
   outline: none;
   caret-color: var(--accent);
@@ -618,7 +618,7 @@
 }
 .scopeOption small {
   color: var(--text-ghost);
-  font-size: var(--t-control-size);
+  font: var(--t-control);
 }
 .scopeOption[data-disabled="true"] {
   color: var(--text-ghost);
@@ -709,7 +709,7 @@
 }
 .pickerName {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
 }
 .pickerSub {
   font-size: var(--t-mono-size);

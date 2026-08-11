@@ -29,7 +29,7 @@
 .createTitle {
   width: 100%;
   font: var(--t-title);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   background: none;
   border: none;
@@ -75,7 +75,7 @@
   border-color: var(--line-strong);
   background: var(--accent-soft);
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
 }
 /* A guest chip carries a small initials avatar ahead of the name; selecting
    it invites that person (aria-pressed reuses the calendar-chip treatment). */
@@ -92,7 +92,7 @@
   background: var(--accent-soft);
   color: var(--text-soft);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1;
 }
 .calChip[aria-pressed="true"] .guestChipAvatar {

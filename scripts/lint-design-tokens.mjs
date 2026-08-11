@@ -36,6 +36,8 @@ export const METRICS = [
   "rawFontWeight",
   "rawRadius",
   "paletteHueAsText",
+  "typeSizeRung",
+  "roleModifierGap",
 ];
 
 /** The eight app-icon hues (`palette.ts`). Kept as a literal list rather than
@@ -70,9 +72,20 @@ function countPaletteHueAsText(css) {
   ).length;
 }
 
-/** The two-weight chrome rule (DESIGN.md, typography.ts):
- * 400 + 500/600. `normal` is 400. 700 exists only in `marketingType`, which
- * is web-only and outside the chrome — so it counts as debt here. */
+/** The two-register rule (DESIGN.md, typography.ts): the sans draws at 500
+ * (regular) and 600 (strong); the serifs and the mono are 400-only, `normal`
+ * being 400. Nothing else — 600 is not a near-miss, it is a weight with no
+ * file behind it. `font-faces.ts` types every vendored face's weight and
+ * vendors exactly those instances, so a rule asking for anything off this
+ * set gets SYNTHESISED bold: the browser smears the nearest outline outward.
+ * That reads muddy rather than strong, and it is worse than the real
+ * instance it was reaching past.
+ *
+ * "600" is sanctioned only because the sans now VENDORS that cut as its
+ * strong register. It was previously banned for the opposite reason — 245
+ * declarations had accumulated against a file nobody shipped, while the gate
+ * reported zero regressions. Adding a weight here is only ever correct if
+ * `font-faces.ts` vendors the file too. */
 const SANCTIONED_WEIGHTS = new Set(["400", "500", "600", "normal", "inherit"]);
 
 const declarations = (css, property) => [
@@ -107,12 +120,23 @@ function countRawFontSize(css) {
 }
 
 function countRawFontWeight(css) {
-  return declarations(css, "font-weight").filter((match) => {
+  const longhand = declarations(css, "font-weight").filter((match) => {
     const value = (match.groups?.value ?? "")
       .replace(/!important/giu, "")
       .trim();
     return !SANCTIONED_WEIGHTS.has(value) && !isTokened(value);
   }).length;
+  // A hand-rolled `font:` shorthand states the weight in its first slot, where
+  // no `font-weight` declaration exists for the loop above to find. That blind
+  // spot is how `font: 600 14px var(--font-sans)` sat on the shell's own action
+  // button while the gate reported zero off-scale weights.
+  const shorthand = [
+    ...css.matchAll(/(?<![\w-])font\s*:\s*(?<value>[^;}]+)/giu),
+  ].filter((match) => {
+    const first = (match.groups?.value ?? "").trim().split(/[\s/]+/u)[0];
+    return /^\d+$/u.test(first) && !SANCTIONED_WEIGHTS.has(first);
+  }).length;
+  return longhand + shorthand;
 }
 
 /** One count per `border-radius` declaration that carries an off-scale px
@@ -140,6 +164,82 @@ function countRawRadius(css) {
   }).length;
 }
 
+/** A `--t-<role>-size` rung taken on its own.
+ *
+ * The rung is a SIZE. `--t-<role>` is the role — weight, leading and family
+ * travel with it. Reaching for the rung gets the size while the other three
+ * fall back to whatever an ancestor happened to set, which is how the shell
+ * ended up rendering its own 20/26/500 headline at 400 with `normal` leading.
+ * Native cannot express this at all: `t(role)` is the only entry point there,
+ * and it returns the whole style. This metric is the web's stand-in for that
+ * constraint — a ratchet, because the rung has ~540 legitimate-looking uses
+ * that each need a human to pick the right role.
+ *
+ * Not counted: a block that also states `font-family`/`font-weight`/
+ * `line-height`, or composes a role class. Those have made a deliberate choice
+ * rather than inheriting one by accident. */
+function countTypeSizeRung(css) {
+  let n = 0;
+  for (const match of css.matchAll(/\{(?<body>[^{}]*)\}/gu)) {
+    const body = match.groups?.body ?? "";
+    if (!/font-size\s*:\s*var\(\s*--t-[a-z-]+-size\s*\)/u.test(body)) continue;
+    if (
+      /font-family\s*:|font-weight\s*:|line-height\s*:|\bfont\s*:|composes\s*:/u.test(
+        body
+      )
+    )
+      continue;
+    n += 1;
+  }
+  return n;
+}
+
+/** The modifiers a role owns but the `font` shorthand has no slot for.
+ *
+ * `typeModifiers` in typography.ts says a surface "cannot get one without the
+ * rest by accident" — true on native, where `t()` returns them together, and
+ * false on web until it was measured: 117 blocks took a role and dropped a
+ * modifier, so "numerics are mono and tabular in every app, without exception"
+ * was untrue in 20 places and "a number reads in order under RTL" in 103.
+ *
+ * `direction`/`unicode-bidi` are asked of TEXT elements only — the same
+ * carve-out `typeModifiers` documents, since a layout container carrying the
+ * numeric face would flip its own inline axis with it. */
+const ROLE_MODIFIERS = {
+  display: [["letter-spacing", false]],
+  eyebrow: [
+    ["letter-spacing", false],
+    ["text-transform", false],
+  ],
+  mono: [
+    ["font-variant-numeric", false],
+    ["direction", true],
+    ["unicode-bidi", true],
+  ],
+};
+
+function countRoleModifierGap(css) {
+  let n = 0;
+  for (const match of css.matchAll(/\{(?<body>[^{}]*)\}/gu)) {
+    const body = match.groups?.body ?? "";
+    const isContainer = /display\s*:\s*(?:inline-)?(?:flex|grid)/u.test(body);
+    for (const [role, mods] of Object.entries(ROLE_MODIFIERS)) {
+      if (
+        !new RegExp(String.raw`font\s*:\s*var\(\s*--t-${role}\s*\)`, "u").test(
+          body
+        )
+      )
+        continue;
+      for (const [property, textOnly] of mods) {
+        if (textOnly && isContainer) continue;
+        if (!new RegExp(String.raw`(?:^|[\s;])${property}\s*:`, "u").test(body))
+          n += 1;
+      }
+    }
+  }
+  return n;
+}
+
 export function analyzeCss(css) {
   const stripped = css.replace(/\/\*[\s\S]*?\*\//gu, "");
   const rawHex = [...stripped.matchAll(/#[\da-f]{3,8}\b/giu)].length;
@@ -153,6 +253,8 @@ export function analyzeCss(css) {
     rawFontWeight: countRawFontWeight(stripped),
     rawRadius: countRawRadius(stripped),
     paletteHueAsText: countPaletteHueAsText(stripped),
+    typeSizeRung: countTypeSizeRung(stripped),
+    roleModifierGap: countRoleModifierGap(stripped),
   };
 }
 
@@ -222,7 +324,9 @@ export function formatTotals(actual) {
     `${totals.rawFontSize} raw font-size(s), ` +
     `${totals.rawFontWeight} off-scale font-weight(s), ` +
     `${totals.rawRadius} raw border-radius(es), ` +
-    `${totals.paletteHueAsText} palette-hue-as-text`
+    `${totals.paletteHueAsText} palette-hue-as-text, ` +
+    `${totals.typeSizeRung} bare size rung(s), ` +
+    `${totals.roleModifierGap} role(s) missing a modifier`
   );
 }
 

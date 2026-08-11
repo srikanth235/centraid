@@ -164,12 +164,14 @@ describe("embedded-gateway-layout scenarios", () => {
   );
 
   test(
-    "actual Electron embed auto-founds Shared + Personal on a fresh data dir",
+    "actual Electron embed auto-founds Personal on a fresh data dir",
     async () => {
       // Issue #603: the desktop passes no founding options at all — a fresh data
       // dir is founded by the gateway itself at construction. This is the desktop
       // half of that contract: start the real embed, ask it for its vault list,
-      // and expect the two auto-founded vaults with no ceremony in between.
+      // and expect the one auto-founded vault with no ceremony in between —
+      // founding stopped conjuring a second "Shared" vault once #726 made the
+      // vault itself the unit of sharing.
       const root = await tempDir("desktop-embedded-autofound-");
       roots.push(root);
       await seedWarmerCaches(root);
@@ -194,7 +196,7 @@ describe("embedded-gateway-layout scenarios", () => {
           (body.vaults ?? [])
             .map((vault) => vault.name)
             .sort((a, b) => String(a).localeCompare(String(b)))
-        ).toStrictEqual(["Personal", "Shared"]);
+        ).toStrictEqual(["Personal"]);
       } finally {
         await gateway.close();
       }

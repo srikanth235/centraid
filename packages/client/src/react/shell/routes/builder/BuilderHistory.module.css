@@ -53,11 +53,11 @@
   color: var(--text);
 }
 .tag {
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   color: var(--accent);
 }
 .when {
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   color: var(--text-faint);
 }
 .prompt {

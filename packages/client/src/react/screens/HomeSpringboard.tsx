@@ -24,6 +24,8 @@ import {
   HOME_SAMPLE_FILLING_UNIT,
   HOME_SAMPLE_LOADED_BODY,
   HOME_SAMPLE_LOADED_TITLE,
+  HOME_SAMPLE_FILLING_HINT,
+  HOME_SAMPLE_FILLING_LEAD,
   HOME_SAMPLE_OFFER_HINT,
   HOME_SAMPLE_OFFER_LABEL,
   HOME_SAMPLE_OFFER_LEAD,
@@ -74,7 +76,13 @@ function Mark({
       className={className}
       aria-hidden="true"
       style={{
-        background: hueOf(colorKey),
+        // The hue goes in as the chip's VARIABLE, not as its background: the
+        // stylesheet composites it at `ICON_CHIP_TINT` over `--bg` and strokes
+        // the glyph in the full hue, which is the finish `design/src/tile.ts`
+        // defines and mobile's `iconChipFinish` composites by hand. Painting
+        // `background` here is what made Home's chips filled badges while the
+        // same eight apps on the phone were tinted labels.
+        ["--chip-hue" as string]: hueOf(colorKey),
         // 26% of its own size — the one radius no static token can carry.
         borderRadius: `${iconChipRadius(size)}px`,
       }}
@@ -104,7 +112,7 @@ function TileBody({ body }: { body: HomeTileBody }): JSX.Element {
         <div className={styles.body}>
           <p className={styles.readingTitle}>{body.title}</p>
           {body.excerpt ? (
-            <p className={styles.reading}>{body.excerpt}</p>
+            <p className={styles.docExcerpt}>{body.excerpt}</p>
           ) : null}
         </div>
       );
@@ -374,8 +382,17 @@ function SampleOffer({
 }): JSX.Element {
   return (
     <section className={styles.offer} data-testid="home-sample-offer">
-      <p className={styles.offerLead}>{HOME_SAMPLE_OFFER_LEAD}</p>
-      <p className={styles.offerHint}>{HOME_SAMPLE_OFFER_HINT}</p>
+      {/* A running fill answers the question the offer asks, so it replaces it
+          rather than sitting under it — and on a fresh vault, which now fills
+          itself, the question was never put to anybody. The hint swaps with the
+          lead so the pair reads as one voice: an offer says what pressing will
+          do, a running fill says what is being done and how to undo it. */}
+      <p className={styles.offerLead}>
+        {filling ? HOME_SAMPLE_FILLING_LEAD : HOME_SAMPLE_OFFER_LEAD}
+      </p>
+      <p className={styles.offerHint}>
+        {filling ? HOME_SAMPLE_FILLING_HINT : HOME_SAMPLE_OFFER_HINT}
+      </p>
       {filling ? (
         <WorkingState
           className={styles.offerProgress}

@@ -19,6 +19,15 @@ import type {
   ThemeName,
 } from "../../app-shell-context.js";
 
+/** The media query `system` mode tracks. Exported so the hook subscribes to
+ *  the same one it resolves against.
+ *
+ *  Declared above `DEFAULT_PREFS`: that initializer calls `resolveThemeMode`
+ *  at module load, which reads this binding. A `const` declared below would
+ *  still be in its temporal dead zone at that point, and the whole module —
+ *  and with it the app shell — would throw on import. Keep it first. */
+export const LIGHT_SCHEME_QUERY = "(prefers-color-scheme: light)";
+
 /**
  * `system`, not `dark`. A member who has never opened Settings should see the
  * theme their machine is already in — and until this changed, first run could
@@ -35,10 +44,6 @@ export const DEFAULT_PREFS: AppearancePrefs = {
   themeMode: "system",
   tileVariant: "gradient",
 };
-
-/** The media query `system` mode tracks. Exported so the hook subscribes to
- *  the same one it resolves against. */
-export const LIGHT_SCHEME_QUERY = "(prefers-color-scheme: light)";
 
 /** Resolve a mode to the theme name to apply. `system` reads the OS. */
 export function resolveThemeMode(mode: ThemeMode): ThemeName {

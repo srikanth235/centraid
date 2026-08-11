@@ -71,7 +71,7 @@
 }
 .settingsName {
   font-family: var(--font-sans);
-  font-weight: 600;
+  font-weight: 500;
   font-size: var(--t-body-size);
   line-height: 1.05;
   color: var(--text);
@@ -145,7 +145,7 @@
   color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
 }
 .settingsTabBadge[hidden] {
   display: none;
@@ -175,7 +175,7 @@
   color: var(--accent);
   font: inherit;
   font-size: 11.5px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
 }
 .settingsPaneLink:hover {
@@ -233,7 +233,7 @@
   min-height: 0;
 }
 .settingsPane .settingsRowLabel {
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text-soft);
 }
 .settingsPane .settingsRow:has(.paneSwatches) {
@@ -331,7 +331,7 @@
 .orderSchedule {
   font-family: var(--font-mono);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text);
@@ -343,7 +343,7 @@
   border: 0;
   padding: 0;
   margin: 0;
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   letter-spacing: 0.02em;
   color: var(--text-faint);
   text-decoration: underline;
@@ -406,7 +406,7 @@
 }
 .orderRunsToggle {
   margin-left: auto;
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   background: none;
   border: none;
   color: color-mix(in oklab, var(--text) 55%, transparent);
@@ -422,7 +422,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: var(--t-control-size);
+  font: var(--t-control);
 }
 .orderToggle {
   position: relative;

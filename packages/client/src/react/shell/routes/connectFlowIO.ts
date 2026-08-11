@@ -19,8 +19,8 @@ import { connectGateway } from "./gatewayModals.js";
  * locally as `ConnectFlowBridge` and reconciled by the integration typecheck.
  */
 
-/** The vault a fresh gateway auto-founds for its owner (issue #603). Its peer
- *  is "Shared", which is the default for everyone the owner invites. */
+/** The vault a fresh gateway auto-founds for its owner (issue #603) — the only
+ *  one it founds. */
 const PERSONAL_VAULT_NAME = "Personal";
 
 export interface ConnectFlowBridge {
@@ -106,7 +106,7 @@ export async function loadLocalVaults(): Promise<LocalVaultsResult> {
 
 /**
  * First run's "Start fresh on this Mac" commit (issue #603). The embedded
- * gateway founds "Shared" + "Personal" at construction, so there is no
+ * gateway founds "Personal" at construction, so there is no
  * ceremony and no vault to create here — this only makes the local gateway
  * active and addresses the owner's own vault. Throws with a user-facing
  * message the onboarding host renders inline.
@@ -125,8 +125,8 @@ export async function connectFreshLocalGateway(): Promise<ConnectFlowResult> {
     null;
   // Reinstalling over existing data may find no personal vault at all (it was
   // erased). Landing on the oldest vault is still the right place to enter,
-  // but it is "Shared", so it must NOT be flagged renamable (issue #603 C10:
-  // the fallback used to rename everyone's shared vault).
+  // but that vault is one the member made and may share, so it must NOT be
+  // flagged renamable (issue #603 C10: the fallback used to rename it).
   const target = personal ?? loaded.vaults[0] ?? null;
   if (!target) {
     throw new Error(

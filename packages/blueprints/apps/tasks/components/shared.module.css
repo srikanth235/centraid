@@ -9,6 +9,8 @@
 /* Metadata eyebrow label (Capture When/Flag, Detail sections, Sidebar Today). */
 .eyebrowLabel {
   font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
 }
 
@@ -71,6 +73,8 @@
   flex-shrink: 0;
   align-self: center;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }

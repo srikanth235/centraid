@@ -115,7 +115,7 @@
   margin-top: 6px;
   font-family: var(--font-sans);
   font-size: var(--t-body-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .settingsNavSection {
@@ -210,7 +210,7 @@
 .settingsPageTitle {
   margin: 0;
   font-family: var(--font-sans);
-  font-weight: 600;
+  font-weight: 500;
   font-size: 21px;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -227,7 +227,7 @@
   align-items: center;
   gap: 4px;
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.04em;
   color: var(--c-forest-text);
 }

@@ -11,7 +11,7 @@
 .sectionTitle {
   margin: 0;
   font-size: var(--t-small-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-soft);
   text-transform: uppercase;
   letter-spacing: 0.04em;

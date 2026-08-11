@@ -52,10 +52,12 @@ const fontSourceRoot = (genus: FontFamily): string => {
         require.resolve("@fontsource/instrument-serif/package.json")
       );
     case "mono":
-      return path.dirname(require.resolve("@fontsource/dm-mono/package.json"));
+      return path.dirname(
+        require.resolve("@fontsource/spline-sans-mono/package.json")
+      );
     case "sans":
       return path.dirname(
-        require.resolve("@fontsource/instrument-sans/package.json")
+        require.resolve("@fontsource/schibsted-grotesk/package.json")
       );
     case "serif":
       return path.dirname(

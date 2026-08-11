@@ -64,6 +64,8 @@
 }
 .memorySub {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: color-mix(in oklab, var(--text-inv) 80%, transparent);
 }

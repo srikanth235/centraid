@@ -32,7 +32,7 @@
 .statusLabel {
   font-family: var(--font-mono);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--log-status, var(--text-faint));
@@ -131,7 +131,7 @@
   flex: none;
   width: 44px;
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);

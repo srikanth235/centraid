@@ -22,6 +22,8 @@
   gap: var(--sp-2);
   margin: var(--sp-4) 0 6px;
   font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
 }
 .name {
   text-transform: var(--t-eyebrow-transform, uppercase);

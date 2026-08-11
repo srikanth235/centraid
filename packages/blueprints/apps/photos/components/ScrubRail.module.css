@@ -85,6 +85,8 @@
   position: absolute;
   inset-inline-end: calc(100% + var(--sp-1));
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
   background: var(--bg);
@@ -108,6 +110,8 @@
   background: var(--bg);
   color: var(--text);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;

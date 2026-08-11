@@ -192,11 +192,11 @@ describe("serve scenarios", () => {
     expect(body.runtime.nodeVersion).toBe(process.version);
     expect(body.health.status).toStrictEqual(expect.any(String));
     expect(Array.isArray(body.logs)).toBe(true);
-    // Both auto-founded vaults are mounted, sized off vault.db/journal.db.
-    expect(body.vaults).toHaveLength(2);
-    // The diagnostics inventory enumerates planes in FOUNDING order (Shared
-    // leads) — unlike the client-facing listing, which leads with the default
-    // vault (#665). Nothing here reads element 0 as "primary".
+    // The auto-founded vault is mounted, sized off vault.db/journal.db.
+    expect(body.vaults).toHaveLength(1);
+    // The diagnostics inventory enumerates planes in FOUNDING order, which is
+    // not the client-facing listing's default-first order (#665). Nothing
+    // here reads element 0 as "primary".
     expect(body.vaults[0]!.vaultId).toBe(
       handle.vaults.planesList()[0]!.boot.vaultId
     );
@@ -240,12 +240,12 @@ describe("serve scenarios", () => {
       configured: false,
       recoveryKit: { confirmedAt: null },
     });
-    expect(body.vaults).toHaveLength(2);
-    // Backup inventories planes in FOUNDING order, so Shared leads here even
-    // though the client-facing vault listing leads with Personal (#665).
+    expect(body.vaults).toHaveLength(1);
+    // Backup inventories planes in FOUNDING order, which the client-facing
+    // vault listing does not promise to match (#665).
     expect(body.vaults[0]).toMatchObject({
       vaultId: handle.vaults.planesList()[0]!.boot.vaultId,
-      name: "Shared",
+      name: "Personal",
       running: false,
       destination: { kind: "gateway-local" },
       pendingOffsite: { count: 0, bytes: 0 },
@@ -292,7 +292,7 @@ describe("serve scenarios", () => {
       }>;
     };
     expect(beforeBody.configured).toBe(true);
-    expect(beforeBody.vaults).toHaveLength(2);
+    expect(beforeBody.vaults).toHaveLength(1);
     expect(beforeBody.vaults[0]).toMatchObject({ vaultId, running: false });
     expect(beforeBody.vaults[0]?.lastBackupAt).toBeUndefined();
 

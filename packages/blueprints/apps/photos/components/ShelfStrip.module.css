@@ -75,6 +75,8 @@
 /* Numerics are mono and tabular, and read in order under RTL. */
 .tabCount {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
 }

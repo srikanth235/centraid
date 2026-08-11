@@ -14,13 +14,13 @@
   display: flex;
   gap: 8px;
   align-items: baseline;
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   padding: 2px 0;
 }
 .rowDisposition {
   flex: none;
   width: 52px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-soft);
 }
 .row[data-disposition="create"] .rowDisposition {
@@ -37,7 +37,7 @@
 }
 .mapping {
   color: var(--text-faint);
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   flex: 1;
   min-width: 120px;
 }
@@ -45,11 +45,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   padding: 3px 0;
 }
 .connectionLabel {
-  font-weight: 600;
+  font-weight: 500;
 }
 .connection[data-status="needs-auth"] .connectionLabel,
 .connection[data-status="failing"] .connectionLabel {
@@ -59,7 +59,7 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   padding: 3px 0;
 }
 .historySub {

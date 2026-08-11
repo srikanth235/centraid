@@ -74,7 +74,7 @@
 }
 .metricValue {
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   letter-spacing: -0.01em;
 }
@@ -104,7 +104,7 @@
   width: fit-content;
   cursor: pointer;
   color: var(--accent-deep, var(--accent));
-  font-size: var(--t-control-size);
+  font: var(--t-control);
 }
 .metricHow p,
 .exitHow {
@@ -153,7 +153,7 @@
   cursor: pointer;
   color: var(--text-soft);
   font-size: 11.5px;
-  font-weight: 600;
+  font-weight: 500;
 }
 .diagnosticsBody {
   padding-top: 12px;
@@ -291,7 +291,7 @@
   margin: 0;
   color: var(--text);
   font-size: var(--t-mono-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 .destinationGrid {
@@ -304,7 +304,7 @@
 }
 .destinationGrid dt {
   color: var(--text-faint);
-  font-size: var(--t-control-size);
+  font: var(--t-control);
 }
 .destinationGrid dd {
   margin: 2px 0 0;
@@ -389,7 +389,7 @@
   color: var(--text-soft);
   cursor: pointer;
   font-size: 11.5px;
-  font-weight: 600;
+  font-weight: 500;
 }
 .advancedGrid {
   padding-top: 12px;
@@ -473,7 +473,7 @@
 .inventoryStore strong {
   color: var(--text-soft);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
 }
 .inventoryStore > span,
 .inventoryStore em {
@@ -496,7 +496,7 @@
 }
 .inventoryFacts dt,
 .inventoryFacts dd {
-  font-size: var(--t-control-size);
+  font: var(--t-control);
 }
 .inventoryFacts dt {
   color: var(--text-faint);
@@ -520,11 +520,11 @@
   color: var(--text-soft);
   font-family: var(--font-sans);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
 }
 .inventoryHistory b {
   color: var(--text-soft);
-  font-weight: 600;
+  font-weight: 500;
 }
 .verifyBucket {
   align-self: flex-start;
@@ -607,7 +607,7 @@
   flex-direction: column;
   gap: 4px;
   color: var(--text-faint);
-  font-size: var(--t-control-size);
+  font: var(--t-control);
 }
 .kitField input {
   width: 100%;
@@ -677,12 +677,12 @@
 .lossHeadline {
   margin: 0;
   font-size: var(--t-body-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .lossDetail {
   margin: 4px 0 0;
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text-faint);
 }
 
@@ -691,7 +691,7 @@
 .copyCard h3 {
   margin: 0 0 8px;
   font-size: var(--t-small-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-soft);
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -714,7 +714,7 @@
 }
 .deviceListHead {
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--text-ghost);
@@ -722,7 +722,7 @@
 }
 .deviceListRow {
   border-bottom: 0.5px solid var(--line);
-  font-size: var(--t-small-size);
+  font: var(--t-small);
 }
 .deviceListRow:last-child {
   border-bottom: none;
@@ -731,7 +731,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -740,7 +740,7 @@
 .deviceListCurrent {
   flex: none;
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--text-faint);
@@ -771,7 +771,7 @@
 }
 .deviceListError {
   margin: 0;
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text-ghost);
 }
 
@@ -816,7 +816,7 @@
 .copyCardEmphasis {
   margin: 4px 0 0;
   font-size: var(--t-small-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .copyCardFacts {
@@ -831,7 +831,7 @@
   gap: 8px;
 }
 .copyCardFacts dt {
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   color: var(--text-faint);
 }
 .copyCardFacts dd {
@@ -857,6 +857,6 @@
 }
 .restoreSeamNote {
   margin: 0;
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   color: var(--text-ghost);
 }

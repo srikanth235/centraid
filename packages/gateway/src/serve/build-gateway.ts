@@ -1172,16 +1172,21 @@ export async function buildGateway(
    * Auto-found (issue #603). A gateway whose data dir carries no vault is
    * not a state a human should have to resolve: there is no ceremony, no
    * ticket, and no first-run wall. Constructing over a fresh dir creates the
-   * two vaults every household starts with, synchronously, before any route
-   * can observe a zero-vault gateway.
+   * ONE vault a person starts with, synchronously, before any route can
+   * observe a zero-vault gateway.
    *
-   * ORDER IS NOT the default signal any more: "Shared" is still founded
-   * first (ids are UUIDv7, so it sorts oldest and heads every listing), but
-   * the DEFAULT vault is "Personal", marked at founding with the durable
-   * `personal` flag in its own `core_vault.settings_json`. Unscoped requests
-   * and a pair ticket minted without an explicit target land there — the
-   * owner's own space, never the household's shared one. The marker survives
-   * the fresh path renaming "Personal" to the owner's display name.
+   * That vault is "Personal", marked at founding with the durable `personal`
+   * flag in its own `core_vault.settings_json`. Unscoped requests and a pair
+   * ticket minted without an explicit target land there. The marker survives
+   * the fresh path renaming "Personal" to the owner's display name, so the
+   * default never rides on the name or on listing order.
+   *
+   * A second vault named "Shared" used to be founded first and head every
+   * listing. #726 made the VAULT the unit of sharing — a destination is a
+   * vault you own — which left "Shared" an ordinary vault that founding
+   * created for no reason, and every new gateway opened on a room nobody
+   * asked for. Founding one vault is the whole story now; a household vault
+   * is something a person creates and shares deliberately, like any other.
    *
    * `isFresh()` reads the filesystem registry, which counts a vault dir that
    * FAILED to mount — so corruption never re-founds over existing data. A
@@ -1192,7 +1197,7 @@ export async function buildGateway(
    * gateway.db (only that vault's `vault_owners` row goes). A data dir that
    * has EVER enrolled an owner is an inhabited gateway awaiting restore, not
    * a fresh install — auto-founding over it would silently bury
-   * restore-after-erase under a brand-new Shared + Personal.
+   * restore-after-erase under a brand-new Personal.
    */
   const neverInhabited = (): boolean => {
     const row = gatewayDatabase.db
@@ -1204,15 +1209,12 @@ export async function buildGateway(
   };
   const autoFoundedVaults =
     vaultRegistry.isFresh() && neverInhabited()
-      ? [
-          vaultRegistry.create("Shared"),
-          vaultRegistry.create("Personal", { personal: true }),
-        ]
+      ? [vaultRegistry.create("Personal", { personal: true })]
       : [];
-  // "Shared" is an ORDINARY vault — nothing on its record says "sharing"
-  // (issue #711 item H). Both founded vaults belong to the founding owner
-  // (`vault_owners`, written by the enrollment below); there is no default
-  // share destination any more (#726) — a destination is a vault you own.
+  // The founded vault belongs to the founding owner (`vault_owners`, written
+  // by the enrollment below). There is no default share destination (#726) —
+  // a destination is a vault you own — and no household vault is conjured
+  // for you; a person who wants one creates it.
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
   // plane silently fails to open, so the probe asks the registry directly.
@@ -1640,9 +1642,9 @@ export async function buildGateway(
   const hostOwnerEndpointId =
     options.hostDeviceEndpointId ?? embeddedEndpointId;
   if (autoFoundedVaults.length > 0 && hostOwnerEndpointId) {
-    // One founding owner, owner of BOTH auto-founded vaults, in ONE
-    // transaction (issue #603): the host that just founded them is their
-    // owner, and a fresh install has exactly one owner with zero unassigned
+    // One founding owner, owner of the auto-founded vault, in ONE
+    // transaction (issue #603): the host that just founded it is its owner,
+    // and a fresh install has exactly one owner with zero unassigned
     // bindings.
     gatewayDatabase.transaction(() =>
       enrollmentStore.enrollWithinTransaction({

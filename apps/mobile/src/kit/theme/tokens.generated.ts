@@ -160,12 +160,12 @@ export const fonts = {
     regular: 'InstrumentSerif_400Regular',
   },
   mono: {
-    medium: 'DMMono_500Medium',
-    regular: 'DMMono_400Regular',
+    medium: 'SplineSansMono_500Medium',
+    regular: 'SplineSansMono_400Regular',
   },
   sans: {
-    medium: 'InstrumentSans_500Medium',
-    regular: 'InstrumentSans_400Regular',
+    medium: 'SchibstedGrotesk_600SemiBold',
+    regular: 'SchibstedGrotesk_500Medium',
   },
   serif: {
     regular: 'SourceSerif4_400Regular',
@@ -173,16 +173,16 @@ export const fonts = {
 } as const;
 
 export const type = {
-  body: { family: 'sans', fontSize: 17, lineHeight: 24, weight: '400' },
-  bodyStrong: { family: 'sans', fontSize: 17, lineHeight: 24, weight: '500' },
+  body: { family: 'sans', fontSize: 17, lineHeight: 24, weight: '500' },
+  bodyStrong: { family: 'sans', fontSize: 17, lineHeight: 24, weight: '600' },
   control: { family: 'sans', fontSize: 13, lineHeight: 17, weight: '500' },
-  display: { family: 'display', fontSize: 27, lineHeight: 32, weight: '400', letterSpacing: -0.27 },
-  eyebrow: { family: 'sans', fontSize: 13, lineHeight: 17, weight: '400', letterSpacing: 0.78, textTransform: 'uppercase' },
+  display: { family: 'display', fontSize: 30, lineHeight: 36, weight: '400', letterSpacing: -0.3 },
+  eyebrow: { family: 'sans', fontSize: 13, lineHeight: 17, weight: '500', letterSpacing: 0.78, textTransform: 'uppercase' },
   mono: { family: 'mono', fontSize: 12.5, lineHeight: 18, weight: '400', fontVariant: ['tabular-nums'] },
   reading: { family: 'serif', fontSize: 17.5, lineHeight: 31, weight: '400' },
-  small: { family: 'sans', fontSize: 15, lineHeight: 21, weight: '400' },
-  smallStrong: { family: 'sans', fontSize: 15, lineHeight: 21, weight: '500' },
-  title: { family: 'sans', fontSize: 22, lineHeight: 28, weight: '500' },
+  small: { family: 'sans', fontSize: 15, lineHeight: 21, weight: '500' },
+  smallStrong: { family: 'sans', fontSize: 15, lineHeight: 21, weight: '600' },
+  title: { family: 'sans', fontSize: 22, lineHeight: 28, weight: '600' },
 } as const;
 
 // The horizontal page inset every screen uses — NOT a `spacing` rung.

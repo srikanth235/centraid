@@ -45,6 +45,9 @@
   background: none;
   color: var(--text-soft);
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   text-decoration: underline;
   text-underline-offset: 0.15em;
   cursor: pointer;

@@ -59,6 +59,9 @@
 }
 .entry .dt {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   color: var(--text-faint);
 }
 .entry p {

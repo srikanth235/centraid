@@ -85,9 +85,10 @@ export interface ConnectFlowResult {
   /** True only when `vaultId` is the gateway's auto-founded "Personal" vault
    *  — i.e. a vault first run may safely rename to the owner's display name.
    *  A reinstall over existing data has no "Personal" vault (it was already
-   *  renamed), and the fallback there is the oldest vault, which is "Shared".
-   *  Renaming THAT would rename everyone's shared vault, so the flag stays
-   *  false and the host skips the rename. */
+   *  renamed), and the fallback there is the oldest vault — which is whatever
+   *  the member happened to make first, quite possibly one they share. Renaming
+   *  THAT would rename a vault out from under its other readers, so the flag
+   *  stays false and the host skips the rename. */
   ownerVault?: boolean;
 }
 

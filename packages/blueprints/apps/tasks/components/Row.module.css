@@ -22,6 +22,8 @@
 .badge.doing {
   flex-shrink: 0;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -38,6 +40,8 @@
 .meta {
   flex-shrink: 0;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   align-self: center;

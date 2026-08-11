@@ -113,7 +113,13 @@
 .appBand {
   flex-direction: row;
   align-items: stretch;
-  padding-block: 0 var(--sp-2);
+  /* SYMMETRIC, because a floating band centres what it holds. This was
+     `0 var(--sp-2)` — no padding above the tabs and 8px below — which, stacked
+     with the list's column-only block-end and the item's own 7/3 split, left
+     the icon+label group sitting 8px above the band's centre with a visible
+     dead strip beneath the labels. Every rung in this stack is even now, so
+     the row is centred by construction rather than by compensation. */
+  padding-block: var(--sp-2);
   padding-inline: var(--sp-1);
   /* The shorthand REPLACES the desktop stem's trailing hairline — a floating
      band is bounded on four sides or on none. A control border, so it is the
@@ -322,6 +328,8 @@
 }
 .stemSearchKbd {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }
@@ -345,6 +353,12 @@
   flex-direction: row;
   flex: 1;
   overflow: visible;
+  /* The block-end padding above is a COLUMN rule — it holds the seam off the
+     last row in the scrolling desktop stem. Laid out as a row there is no last
+     row below anything, so all it did was hang 12px of dead space under the
+     whole band and lift the tabs off centre. Reset it with the direction. */
+  padding-block-end: 0;
+  align-items: center;
 }
 
 /* The seam under Home. `--line` is the separator hairline — the same token the
@@ -381,10 +395,22 @@
   flex: 1;
   min-inline-size: 0;
   inline-size: auto;
-  padding-block: 7px 3px;
+  /* Even too — same total block size as the old 7/3, just balanced, so the
+     hover capsule sits square around the glyph and label instead of leaving a
+     wider margin above them than below. */
+  padding-block: 5px;
 }
+/* The hover ground is a ROUNDED capsule on every layout. The desktop branch
+   below sets its own `--r-md`, but compact never had one, so a tab's ground
+   was a hard-edged rectangle butting against the band's rounded inner edge —
+   and because a tap leaves hover behind on a touch screen, that square block
+   is what stays on screen after you switch tabs. Inset by one rung so the
+   ground sits inside the band rather than clipping to it. */
 .launchItem:hover {
   background: var(--bg-hover);
+}
+.stem[data-compact="true"] .launchItem {
+  border-radius: var(--r-md);
 }
 .launchItem:focus-visible {
   outline: none;
@@ -445,6 +471,12 @@
 .launchItem[data-active="true"] .launchChip {
   color: var(--text);
 }
+/* THE SAME BARE GLYPH AS EVERY OTHER TAB. More is a destination in the band
+   like Home and Alerts, so its chip follows `.launchChip`'s rule — no ground,
+   no border — rather than carrying one of its own. It used to draw a
+   `1px solid var(--line)` box, which put four bare glyphs and one boxed glyph
+   in a row of five and made the band read as misaligned: the box is a control
+   border, and a tab is not a control inside a control. */
 .launchMoreChip {
   inline-size: 30px;
   block-size: 30px;
@@ -452,9 +484,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  color: var(--text-soft);
+  border-radius: var(--chip-radius, var(--r-md));
+  background: transparent;
+  color: var(--text-faint);
 }
 /* A navigation label is never tertiary text: `--text-soft` is its floor.
 
@@ -463,9 +495,21 @@
    band to spend and takes UI (13px), which is the register every other row in
    the product reads at. Selection moves the WEIGHT only — 400 to 500 at one
    size — so the row never changes height or reflows its neighbours. */
+/* THE ROLE'S OWN WEIGHT, not a lighter one. `--t-control` is 11/500 and
+   `--t-small-strong` is 13/500 in the ramp (`design/src/typography.ts`); this
+   rule used to knock the band's label down to 400 and give the desktop row
+   `--t-small` (13/400), so every unselected destination in the frame was set
+   one weight below the role that names it. At `--text-soft` on `--bg` that
+   measures 7.7:1 — legible by the numbers, and still optically thin, because
+   what a 13px nav label at 400 lacks is stem weight, not contrast.
+
+   Selection therefore no longer moves the weight. It does not need to: the
+   active row changes COLOUR (`--text-soft` → `--text`, 7.7:1 → 16:1), takes
+   the `--bg-elev` ground, and grows the 2px `.launchBar` against the reading
+   edge. Three signals, none of which reflows the row — which was the reason
+   the weight step existed in the first place. */
 .launchLabel {
   font: var(--t-control);
-  font-weight: 400;
   color: var(--text-soft);
   max-inline-size: 100%;
   overflow: hidden;
@@ -474,14 +518,10 @@
   transition: color var(--dur-1) var(--ease);
 }
 .stem:not([data-compact="true"]) .launchLabel {
-  font: var(--t-small);
+  font: var(--t-small-strong);
 }
 .launchItem[data-active="true"] .launchLabel {
-  font-weight: 500;
   color: var(--text);
-}
-.stem:not([data-compact="true"]) .launchItem[data-active="true"] .launchLabel {
-  font: var(--t-small-strong);
 }
 .launchBar {
   inline-size: 16px;
@@ -634,7 +674,10 @@
   flex: 1;
   min-inline-size: 0;
   inline-size: auto;
-  padding-block: 7px 3px;
+  /* Even too — same total block size as the old 7/3, just balanced, so the
+     hover capsule sits square around the glyph and label instead of leaving a
+     wider margin above them than below. */
+  padding-block: 5px;
 }
 /* The active tab is carried by the label weight plus a 2px INK bar — the shell
    spends no hue, and an app's own colour on the frame's band would be the app
@@ -847,6 +890,8 @@
 .appCount {
   flex: none;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-soft);
 }
@@ -855,6 +900,8 @@
 .appMeta {
   margin-block-start: 5px;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-soft);
 }
@@ -954,6 +1001,8 @@
 }
 .kbd {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }
@@ -1233,6 +1282,8 @@
 .sheetRowFixed {
   flex: none;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }
@@ -1279,6 +1330,8 @@
   padding-block: var(--sp-3);
   border-block-start: 1px solid var(--line);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }

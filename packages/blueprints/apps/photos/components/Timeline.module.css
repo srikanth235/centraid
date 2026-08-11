@@ -47,6 +47,8 @@
   gap: var(--sp-2);
   background: var(--bg);
   font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
 }
 .monthName {
   text-transform: var(--t-eyebrow-transform, uppercase);
@@ -57,6 +59,8 @@
    number is mono and tabular everywhere (§18). */
 .monthCount {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
 }
@@ -75,6 +79,8 @@
 }
 .dayMeta {
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }

@@ -50,7 +50,7 @@
   color: var(--text-faint);
   font: inherit;
   font-size: var(--t-mono-size);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   padding: 4px 6px;
 }
@@ -138,7 +138,7 @@
   color: var(--text);
   font: inherit;
   font-size: var(--t-mono-size);
-  font-weight: 600;
+  font-weight: 500;
   border-radius: 999px;
   padding: 4px 8px 4px 6px;
   cursor: pointer;
@@ -154,12 +154,12 @@
 }
 .selectedConnOk {
   color: var(--success);
-  font-size: var(--t-control-size);
+  font: var(--t-control);
 }
 .selectedConnWarn {
   color: var(--c-amber-text);
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
 }
 .selectedConnX {
   color: var(--text-ghost);
@@ -190,7 +190,7 @@
   color: var(--text);
   font: inherit;
   font-size: var(--t-small-size);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   padding: 6px 10px;
   border-radius: 999px;
@@ -258,7 +258,7 @@
   display: grid;
   gap: 5px;
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-faint);
 }
 .agentPickerField select {
@@ -296,7 +296,7 @@
 }
 .connPickerTitle {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .connPickerHint {
@@ -319,7 +319,7 @@
   background: var(--bg-sunken);
 }
 .connPickerSearch {
-  font-size: var(--t-small-size);
+  font: var(--t-small);
 }
 .connPickerList {
   overflow: auto;
@@ -330,7 +330,7 @@
 }
 .connPickerEmpty {
   margin: 12px 4px;
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text-faint);
 }
 .connPickerRow {
@@ -379,7 +379,7 @@
 }
 .connPickerName {
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .connPickerSub {
@@ -440,20 +440,20 @@
 .connAccountLabel {
   overflow: hidden;
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .connAccountPrincipal {
   overflow: hidden;
   color: var(--text-faint);
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .connAccountHealth {
   color: var(--text-faint);
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   white-space: nowrap;
 }
 .connAccountHealth[data-health="ok"] {
@@ -515,7 +515,7 @@
   color: var(--accent);
   font: inherit;
   font-size: var(--t-mono-size);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   padding: 0;
   text-align: left;
@@ -619,7 +619,7 @@
 }
 .fieldLabel {
   font-size: var(--t-mono-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.02em;
   color: var(--text-faint);
 }
@@ -683,7 +683,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--text-soft);
-  font-size: var(--t-control-size);
+  font: var(--t-control);
 }
 .entityToken code {
   color: var(--accent);
@@ -723,7 +723,7 @@
 }
 .mentionOption code {
   color: var(--text-ghost);
-  font-size: var(--t-control-size);
+  font: var(--t-control);
 }
 /* Entity-KIND picker (data/condition trigger inputs) — reuses the @-mention
    popover surface. The input needs a positioned wrapper for the popover to
@@ -757,7 +757,7 @@
 .sectionTitle {
   margin: 0;
   font-size: var(--t-small-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-soft);
 }
 .sectionHeading {
@@ -840,7 +840,7 @@
   color: var(--text);
   font: inherit;
   font-size: var(--t-small-size);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
 }
 @keyframes trigger-in {
@@ -920,7 +920,7 @@
 }
 .trigTitle {
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .trigDesc {
@@ -945,7 +945,7 @@
    .connGroupLbl / .grantsLbl) differing only by 0.5px and 0.01em. */
 .microLabel {
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.03em;
   color: var(--text-ghost);
   text-transform: uppercase;
@@ -1147,7 +1147,7 @@
 }
 .enableLabel {
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .enableHint {
@@ -1237,7 +1237,7 @@
 .grantRevoked {
   flex: none;
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -1311,7 +1311,7 @@
 }
 .enableText {
   font-size: var(--t-mono-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-faint);
   min-width: 1.6em;
 }
@@ -1335,7 +1335,7 @@
   color: var(--text);
   font: inherit;
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 500;
   border-radius: 999px;
   padding: 7px 12px;
   cursor: pointer;

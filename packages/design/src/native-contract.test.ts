@@ -124,7 +124,7 @@ describe("native product-grammar lowering", () => {
     // Everything else gains a point or two on a phone; display and reading
     // are the two the brief gives an explicit smaller mobile size for.
     const nativeType = toNativeTheme("light").type;
-    expect(nativeType.display.fontSize).toBe(27);
+    expect(nativeType.display.fontSize).toBe(30);
     expect(nativeType.reading.fontSize).toBe(17.5);
     expect(nativeType.body.fontSize).toBe(type.body.size + 2);
   });

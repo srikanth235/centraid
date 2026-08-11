@@ -12,6 +12,8 @@
   align-items: center;
   gap: 6px;
   font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
   margin: 2px 2px 10px;
 }

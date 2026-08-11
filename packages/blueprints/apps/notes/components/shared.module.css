@@ -12,6 +12,8 @@
 }
 .eyebrowLabel {
   font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
 }
 .tagChip {
@@ -26,6 +28,9 @@
 }
 .armedLabel {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   padding: 0 2px;
   white-space: nowrap;
 }

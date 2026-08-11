@@ -15,13 +15,21 @@
 //
 // Three rules follow, and the surface has to hold all three:
 //
-//   • It is OFFERED, never applied. Writing to somebody's vault uninvited is
-//     not an onboarding, whatever it looks like afterwards.
+//   • It is APPLIED ONCE, then never again without asking. A fresh vault fills
+//     itself the first time Home opens, because an empty front door is a poor
+//     argument for the product and an offer nobody accepts demonstrates
+//     nothing. This reverses the original rule ("offered, never applied") — the
+//     thing that makes it legitimate rather than presumptuous is the other two
+//     rules plus the demo register underneath: the rows say what they are, and
+//     one act removes them for good. `hasAutoSeeded` is what "for good" means.
 //   • While it is loaded, Home SAYS SO — once, at vault level, beside the other
 //     facts about the vault, not as a badge on every tile.
-//   • Clearing it is one act and it is always in reach.
+//   • Clearing it is one act, it is always in reach, and it is FINAL: nothing
+//     refills a vault whose member has cleared it.
 
 import {
+  getUserPrefs,
+  saveUserPrefs,
   vaultDemoLoad,
   vaultDemoPurge,
   vaultDemoStatus,
@@ -120,6 +128,82 @@ export async function seedHomeSample(
 /** Remove every seeded row in one act — the promise the offer is made on. */
 export async function clearHomeSample(): Promise<void> {
   await vaultDemoPurge();
+}
+
+/**
+ * The gateway pref recording which vaults have already had their one
+ * automatic fill.
+ *
+ * WHY A DURABLE MARKER AND NOT "is the vault empty".
+ *
+ * The fill now runs on its own the first time a member opens Home on a fresh
+ * vault, so the emptiness test that decides to run it is also true the instant
+ * they press "Clear the sample" — and a surface that refills what you just
+ * cleared has not cleared anything. The marker is what makes clearing FINAL:
+ * asked and answered once per vault, and the answer outlives the rows.
+ *
+ * Keyed BY VAULT, because a member with two vaults gets the demonstration in
+ * each; a single global flag would silently withhold it from every vault after
+ * the first. It lives in gateway prefs rather than this device's storage so
+ * that clearing on the desktop is still cleared when the phone pairs in — the
+ * fill is a fact about the vault, not about a browser profile.
+ */
+const AUTO_SEED_PREF = "homeSampleAutoSeeded";
+
+function autoSeededMap(
+  prefs: Record<string, unknown>
+): Record<string, boolean> {
+  const raw = prefs[AUTO_SEED_PREF];
+  return typeof raw === "object" && raw !== null
+    ? (raw as Record<string, boolean>)
+    : {};
+}
+
+/**
+ * Has this vault already had its automatic fill?
+ *
+ * Fail-soft to TRUE — the one direction that cannot do damage. A prefs read
+ * that fails means "we do not know", and the safe reading of not knowing is
+ * "already done": worst case a fresh vault opens empty and keeps the manual
+ * offer, where the other default would write invented rows into a vault whose
+ * member may have cleared them minutes ago.
+ */
+export async function hasAutoSeeded(vaultId: string): Promise<boolean> {
+  try {
+    return autoSeededMap(await getUserPrefs())[vaultId] === true;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * The vault the automatic fill would land in, or null when that is not knowable
+ * right now.
+ *
+ * `null` is not a vault and is never treated as one. An unknown vault means the
+ * fill does not run — writing rows into a vault you cannot name is the one
+ * outcome this feature must never produce, and the member still has the manual
+ * offer.
+ */
+export async function autoSeedVaultId(): Promise<string | null> {
+  try {
+    return (await window.CentraidApi.getGatewayAuth()).vaultId ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Record that this vault's one automatic fill has been spent. */
+export async function markAutoSeeded(vaultId: string): Promise<void> {
+  try {
+    const prefs = await getUserPrefs();
+    await saveUserPrefs({
+      [AUTO_SEED_PREF]: { ...autoSeededMap(prefs), [vaultId]: true },
+    });
+  } catch {
+    // Nothing to do: the caller marks BEFORE it fills precisely so that a
+    // failure here costs the fill rather than costing the member a loop.
+  }
 }
 
 /**

@@ -53,7 +53,7 @@
 .heading {
   margin: 0;
   font-family: var(--font-sans);
-  font-weight: 700;
+  font-weight: 500;
   font-size: 24px;
   letter-spacing: -0.025em;
   color: var(--text);
@@ -100,7 +100,7 @@
   border-radius: 8px;
   background: transparent;
   color: var(--text);
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   cursor: pointer;
 }
 .retry:hover {
@@ -134,7 +134,7 @@
 .title {
   margin: 0;
   font-family: var(--font-sans);
-  font-weight: 600;
+  font-weight: 500;
   font-size: var(--t-small-size);
   letter-spacing: -0.01em;
   color: var(--text);
@@ -156,7 +156,7 @@
 }
 .installed {
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   color: white;
   background: var(--accent);
   border-radius: var(--r-md);
@@ -164,7 +164,7 @@
 }
 .pre {
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   background: color-mix(in oklab, var(--c-amber) 26%, transparent);
   border-radius: var(--r-md);
@@ -173,7 +173,7 @@
 
 .emptyNotes {
   margin: 0;
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text-soft);
 }
 
@@ -186,7 +186,7 @@
 .notes h4 {
   margin: 14px 0 6px;
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: color-mix(in oklab, var(--text-soft) 85%, transparent);
@@ -206,7 +206,7 @@
 }
 .notes strong {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
 }
 .notes code {
   font-family: var(--font-mono);

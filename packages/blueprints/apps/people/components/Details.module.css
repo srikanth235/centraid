@@ -66,6 +66,7 @@
 }
 .detailName {
   font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
   text-align: center;
   margin-top: 14px;
 }

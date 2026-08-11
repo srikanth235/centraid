@@ -122,6 +122,13 @@ test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands 
       path: path.join(evidenceDir, "issue-686-design-consistency.png"),
       fullPage: true,
     });
+    // #747: first paint is where a type ramp is judged. This shot is the whole
+    // ramp at once — greeting in the display serif, tile titles in the strong
+    // register, every label and chip in the regular one.
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-747-binding-layer-type-ramp.png"),
+      fullPage: true,
+    });
     await page.screenshot({
       path: path.join(evidenceDir, "issue-multi-vault-sync-hardening.png"),
       fullPage: true,
@@ -162,12 +169,15 @@ test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands 
     expect(persisted.onboardingCompletedAt).toBeTruthy();
     expect(persisted.gatewayUrl ?? "").not.toBe("");
 
-    // Two auto-founded vaults, with Personal renamed to the display name.
+    // ONE auto-founded vault, renamed to the display name. Founding used to
+    // add a second, "Shared"; a household vault is now something a person
+    // creates deliberately, so first run leaves exactly the vault that is
+    // theirs.
     const listed = (await page.evaluate(() =>
       window.CentraidApi.listGatewayVaults({ gatewayId: "local" })
     )) as { vaults?: Array<{ name: string }> };
     const names = (listed.vaults ?? []).map((vault) => vault.name).sort();
-    expect(names).toEqual(["Ada Lovelace", "Shared"]);
+    expect(names).toEqual(["Ada Lovelace"]);
   } finally {
     await closeApp(app);
   }

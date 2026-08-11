@@ -27,6 +27,8 @@
 .workingCounts {
   color: var(--text-faint);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
 }
 
@@ -123,6 +125,8 @@
 .versionAt {
   color: var(--text-faint);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
 }
 
@@ -193,6 +197,8 @@
 .outOfRoomFigures {
   color: var(--text-faint);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: var(--t-mono-numeric);
 }
 

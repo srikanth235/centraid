@@ -124,6 +124,8 @@
   inset-inline-start: 8px;
   z-index: 2;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: tabular-nums;
   color: var(--on-stage, var(--on-accent));
   text-shadow: 0 1px 3px var(--scrim);
@@ -138,6 +140,8 @@
   inset-inline-end: 6px;
   z-index: 2;
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: tabular-nums;
   color: var(--on-stage, var(--on-accent));
   text-shadow: 0 1px 3px var(--scrim);
@@ -158,6 +162,8 @@
   background: var(--bg);
   color: var(--text-soft);
   font: var(--t-mono);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   font-variant-numeric: tabular-nums;
   /* Clamped to its one line, never clipped (§18). */
   overflow: hidden;

@@ -78,7 +78,7 @@ describe("type role parity across emitters", () => {
     // divergence the role-parity law permits, since it gates family and
     // weight, not size (see typography.ts's `toBlueprintStyle`).
     expect(blueprint["--t-body"]).toContain("0.9375rem/1.4666666666666666");
-    expect(parse(shell["--t-body"] ?? "").weight).toBe("400");
-    expect(parse(blueprint["--t-body"] ?? "").weight).toBe("400");
+    expect(parse(shell["--t-body"] ?? "").weight).toBe("500");
+    expect(parse(blueprint["--t-body"] ?? "").weight).toBe("500");
   });
 });

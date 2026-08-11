@@ -17,8 +17,8 @@ import type { FontFamily } from "./typography";
 /** Filename stem of each vendored face, matching the upstream convention. */
 const FONT_SLUG = {
   display: "instrument-serif",
-  mono: "dm-mono",
-  sans: "instrument-sans",
+  mono: "spline-sans-mono",
+  sans: "schibsted-grotesk",
   serif: "source-serif-4",
 } as const satisfies Record<FontFamily, string>;
 
@@ -40,22 +40,23 @@ export interface FontFile {
   genus: FontFamily;
   /** The CSS `font-family` name, as the type scale spells it. */
   family: string;
-  weight: 400 | 500;
+  weight: 400 | 500 | 600;
   subset: FontSubset;
   /** File name inside `FONTS_DIR`. */
   fileName: string;
 }
 
 /**
- * Every vendored file, and only those. The ramp uses exactly two weights, and
- * only the sans carries both: the display serif, the reading serif and the
- * mono are 400-only roles, so shipping their 500s would be dead bytes on
- * every first paint.
+ * Every vendored file, and only those. The sans carries the ramp's two
+ * registers as REAL static instances — 500 regular and 600 strong (see the
+ * weight rationale atop `typography.ts`); the display serif, the reading
+ * serif and the mono are 400-only roles, so shipping their upper weights
+ * would be dead bytes on every first paint.
  */
 export const FONT_FILES: readonly FontFile[] = (
   [
-    ["sans", 400],
     ["sans", 500],
+    ["sans", 600],
     ["display", 400],
     ["serif", 400],
     ["mono", 400],

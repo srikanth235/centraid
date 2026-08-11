@@ -28,7 +28,7 @@
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--t-display-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.025em;
   color: var(--text);
 }
@@ -157,11 +157,11 @@
 .emptyTitle {
   font-family: var(--font-sans);
   font-size: 17px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .emptyText {
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text-faint);
   margin-bottom: 6px;
 }
@@ -246,7 +246,7 @@
 .name {
   font-family: var(--font-sans);
   font-size: 15.5px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 .desc {
@@ -284,7 +284,7 @@
   align-items: center;
   gap: 4px;
   font-size: 11.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--accent);
   opacity: 0;
   transform: translateX(6px);

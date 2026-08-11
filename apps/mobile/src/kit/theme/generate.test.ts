@@ -85,7 +85,7 @@ describe("typed native lowering", () => {
     expect(a).toContain("export const borders");
     expect(a).toContain("export const pageMargin");
     expect(a).toContain("export const density");
-    expect(a).toContain("InstrumentSans_400Regular");
+    expect(a).toContain("SchibstedGrotesk_500Medium");
     expect(a).not.toContain("Geist");
     expect(a).not.toContain("JetBrainsMono");
     expect(a).not.toContain("PlayfairDisplay");

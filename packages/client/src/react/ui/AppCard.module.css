@@ -137,7 +137,7 @@
 }
 .name {
   font: var(--t-title);
-  font-weight: 600;
+  font-weight: 500;
   font-size: var(--t-body-size);
   letter-spacing: -0.01em;
   color: var(--text);

@@ -102,7 +102,7 @@
   font-family: var(--font-mono);
   font-variant-numeric: var(--t-mono-numeric);
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 500;
 }
 .amt:focus {
   border-color: var(--line-strong);

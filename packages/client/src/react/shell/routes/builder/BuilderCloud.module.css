@@ -19,7 +19,7 @@
   background: transparent;
   padding: 8px 12px;
   border-radius: 8px;
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   color: var(--text-faint);
   display: flex;
   align-items: center;
@@ -62,13 +62,13 @@
 .stageHead h2 {
   margin: 0 0 4px 0;
   font-size: var(--t-title-size);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .stageHead p {
   margin: 0;
   color: var(--text-faint);
-  font-size: var(--t-small-size);
+  font: var(--t-small);
 }
 .refreshBtn {
   flex: none;
@@ -87,7 +87,7 @@
   border: 1px dashed var(--line);
   border-radius: 12px;
   color: var(--text-faint);
-  font-size: var(--t-small-size);
+  font: var(--t-small);
   text-align: center;
 }
 .emptyQuiet {
@@ -115,7 +115,7 @@
 .statValue {
   margin-top: 4px;
   font-size: 24px;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: -0.03em;
   line-height: 1.1;
   color: var(--text);
@@ -135,7 +135,7 @@
 }
 .statSub {
   margin-top: 4px;
-  font-size: var(--t-control-size);
+  font: var(--t-control);
   color: var(--text-faint);
 }
 .logs {
@@ -209,7 +209,7 @@
   color: var(--text-faint);
 }
 .logsLevel {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-soft);
 }
 .logsRow[data-level="warn"] .logsLevel {
@@ -259,7 +259,7 @@
   min-width: 0;
 }
 .automationName {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   font-size: var(--t-small-size);
 }
@@ -329,7 +329,7 @@
 .railGroupHead {
   padding: 14px 12px 4px;
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -395,7 +395,7 @@
 .sectionLabel {
   margin: 26px 0 12px;
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -458,7 +458,7 @@
   align-items: center;
   gap: 7px;
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.13em;
   text-transform: uppercase;
   color: var(--c-forest-text);
@@ -559,7 +559,7 @@
 }
 .feedLive {
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 1px 6px;
@@ -578,7 +578,7 @@
   align-items: center;
   gap: 8px;
   font-size: var(--t-control-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -600,7 +600,7 @@
 }
 .statValue.statMid {
   font-size: var(--t-body-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
   white-space: nowrap;
 }

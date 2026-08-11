@@ -34,7 +34,7 @@
   justify-content: center;
   color: var(--text-inv);
   font: var(--font-sans);
-  font-weight: 600;
+  font-weight: 500;
   font-size: var(--t-body-size);
 }
 .imain {
@@ -110,7 +110,7 @@
   justify-content: center;
   color: var(--text-inv);
   font: var(--font-sans);
-  font-weight: 600;
+  font-weight: 500;
   font-size: 24px;
 }
 .dtitle {
