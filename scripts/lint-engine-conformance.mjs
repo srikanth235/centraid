@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // ENGINE CONFORMANCE — one gate per shared engine (issue #712 E1).
 //
-// docs/blueprint-seats.md "Shared engines" says four things are built once and
-// never per app: placement (A), custody (B), consent (C) and triage (D), plus
-// the search scaffold and the refusal grammar. Each of those had a doc
-// sentence and no mechanical check, so the only cost of ignoring one was a
-// reviewer noticing. This file is that cost.
+// docs/blueprint-seats.md "Shared engines" says these things are built once
+// and never per app: placement (A), custody (B), consent (C), triage (D), and
+// the pending-write overlay (H, issue #738), plus the search scaffold and the
+// refusal grammar. Each of those had a doc sentence and no mechanical check,
+// so the only cost of ignoring one was a reviewer noticing. This file is that
+// cost.
 //
 // WHY ONE SCRIPT RATHER THAN FOUR VITEST FILES. Every one of these rules is
 // CROSS-TREE: the same law binds `packages/blueprints/apps/**` (browser ES
@@ -359,6 +360,101 @@ function checkTriage(root, files) {
   return findings;
 }
 
+// ─── ENGINE H — pending-write overlay ────────────────────────────────────────
+//
+// `apps/_shared/pending-overlay.ts` + per-app `pending-projection.ts` are the
+// one answer to "what does an unsettled write render as" (issue #738). The
+// migration this check guards deletes four hand-rolled copies of the same
+// state machine — Tally's `pendingExpenses`, Tasks'/Agenda's
+// `pendingAdds`/`pendingIds`/`pendingByIntent`, and Notes'
+// `pendingNoteIds`/`pendingCreates` — because each one is a second place a
+// pending row's reload survival can silently stop being true.
+//
+// TWO SHAPES OF REINTRODUCTION, caught differently:
+//
+//   * A freshly declared `pendingFoo` set/map/array — the exact shape of the
+//     four originals, and the shape a copy-paste reintroduces first.
+//   * The four RETIRED identifiers themselves, anywhere — a field, a prop, a
+//     destructure — even where the declaration itself has moved (e.g. a
+//     lifted-out helper still importing the app's old state shape).
+//
+// SCOPED TO `packages/blueprints/apps`, EXCLUDING `_shared` (the engine's own
+// home) and test files (fixtures legitimately spell the old names while a
+// migration is mid-flight). ALLOWLIST STARTS EMPTY: the migrations delete all
+// four sources outright, so nothing should need to be excused. A future
+// legitimate `pendingSomething` identifier that is not this state machine
+// (Docs' `isPendingOffsite` custody vocabulary and Locker's `pendingItemId`
+// selected-item guard are the two the issue anticipated) gets a named,
+// reason-carrying entry here in the same shrink-only style
+// `TRANSFER_INTERNAL_RATCHET` uses — never a silent widening of the pattern.
+
+const PENDING_OVERLAY_APPS = path.join("packages", "blueprints", "apps");
+const PENDING_OVERLAY_SHARED_PREFIX = path.join(
+  "packages",
+  "blueprints",
+  "apps",
+  "_shared"
+);
+
+/** The exact four hand-rolled state names issue #738 replaces. Anything else
+ *  spelled `pending[A-Z]…` is caught by the declaration pattern instead. */
+const RETIRED_PENDING_IDENTIFIERS = [
+  "pendingExpenses",
+  "pendingAdds",
+  "pendingCreates",
+  "pendingByIntent",
+];
+
+/** A freshly minted `pendingFoo` collection — the shape every one of the four
+ *  originals took at its point of declaration. */
+const PENDING_DECLARATION_RE =
+  /\bpending[A-Z]\w*\s*[:=]\s*(?:new Set|new Map|\[\])/gu;
+
+/** Ratchet — may shrink, never grow. Empty at introduction (see header). Each
+ *  entry states why the identifier is not this engine's state machine. */
+const PENDING_OVERLAY_RATCHET = new Map();
+
+function checkPendingOverlay(_root, files) {
+  const findings = [];
+  const appPrefix = `${PENDING_OVERLAY_APPS}${path.sep}`;
+  const sharedPrefix = `${PENDING_OVERLAY_SHARED_PREFIX}${path.sep}`;
+  for (const { label, code } of files) {
+    if (!label.startsWith(appPrefix) || label.startsWith(sharedPrefix))
+      continue;
+    if (/\.(?:test|spec)\.[a-z]+$/u.test(label)) continue;
+    if (PENDING_OVERLAY_RATCHET.has(label)) continue;
+    for (const m of code.matchAll(PENDING_DECLARATION_RE)) {
+      findings.push(
+        `${label}:${lineOf(code, m.index)}: declares \`${m[0].trim()}\` — a ` +
+          `hand-rolled pending-row collection is exactly the shape issue #738 ` +
+          `deleted; project the write through a \`pending-projection.ts\` ` +
+          `declaration and \`_shared/pending-overlay.ts\`'s model instead`
+      );
+    }
+    for (const name of RETIRED_PENDING_IDENTIFIERS) {
+      for (const m of code.matchAll(new RegExp(`\\b${name}\\b`, "gu"))) {
+        findings.push(
+          `${label}:${lineOf(code, m.index)}: names the retired hand-rolled ` +
+            `overlay field \`${name}\` — issue #738 replaced it with the ` +
+            `shared pending-overlay engine's \`rows()\`/\`byRowId()\`; there ` +
+            `is no longer an app-owned pending collection by this name`
+        );
+      }
+    }
+  }
+  // The ratchet may only shrink: a stale entry is a lie about the tree.
+  for (const [label] of PENDING_OVERLAY_RATCHET) {
+    const entry = files.find((f) => f.label === label);
+    if (!entry) {
+      findings.push(
+        `${label}: ratcheted as a pending-overlay exception but the file is ` +
+          `gone — drop the entry`
+      );
+    }
+  }
+  return findings;
+}
+
 // ─── THE REFUSAL GRAMMAR ─────────────────────────────────────────────────────
 //
 // SCOPED, AND SAID SO. A repo-wide "every disabled control states a reason"
@@ -414,6 +510,7 @@ export function scanEngineConformance(root = ROOT) {
     "B custody": checkCustody(root, files),
     "C consent": checkConsent(root, files),
     "D triage": checkTriage(root, files),
+    "H pending-overlay": checkPendingOverlay(root, files),
     "refusal grammar": checkRefusalGrammar(root),
   };
 }
@@ -431,8 +528,9 @@ function main() {
     return;
   }
   console.log(
-    "ok   engine conformance — placement, custody, consent and triage each " +
-      "have exactly one door, and the engine surfaces explain every refusal"
+    "ok   engine conformance — placement, custody, consent, triage, and the " +
+      "pending-write overlay each have exactly one door, and the engine " +
+      "surfaces explain every refusal"
   );
 }
 
