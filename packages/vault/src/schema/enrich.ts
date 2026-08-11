@@ -8,7 +8,7 @@
 //     producer-agnostic like thumbs: the client canvas computes a dHash
 //     today, a server codec plug-in may later. Near-duplicate detection is
 //     then plain SQL over `vault_hamming`. The issue sketched a column on
-//     media_media_asset; it ships as a sidecar keyed by asset_id because
+//     media_asset; it ships as a sidecar keyed by asset_id because
 //     SQLite's ADD COLUMN cannot be written re-runnably (the migration
 //     ladder's de-facto contract — see the v8 rebuild) and a rebuild would
 //     cross media_face_region's live FK. Same queries, one JOIN.
@@ -183,7 +183,7 @@
 
 export const ENRICH_DDL = `
 CREATE TABLE IF NOT EXISTS media_asset_phash (
-  asset_id TEXT PRIMARY KEY REFERENCES media_media_asset(asset_id) ON DELETE CASCADE,
+  asset_id TEXT PRIMARY KEY REFERENCES media_asset(asset_id) ON DELETE CASCADE,
   phash    TEXT NOT NULL CHECK (length(phash) BETWEEN 4 AND 64),
   -- Near-duplicate cluster projection (issue #352 phase 3/4) — see header.
   cluster_id  TEXT,
@@ -220,7 +220,7 @@ CREATE INDEX IF NOT EXISTS idx_media_memory_place
 
 CREATE TABLE IF NOT EXISTS media_memory_member (
   memory_id TEXT NOT NULL REFERENCES media_memory(memory_id) ON DELETE CASCADE,
-  asset_id  TEXT NOT NULL REFERENCES media_media_asset(asset_id) ON DELETE CASCADE,
+  asset_id  TEXT NOT NULL REFERENCES media_asset(asset_id) ON DELETE CASCADE,
   -- Display order within the memory (capture order). Not UNIQUE per memory:
   -- ties (same captured_at) share an ordinal rather than an arbitrary
   -- tiebreak deciding which photo "comes first".

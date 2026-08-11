@@ -85,7 +85,7 @@ interface Call {
 }
 
 const SCOPES = ["own", "family", "club"];
-const TABLES = new Set(["media.media_asset", "core.content_item"]);
+const TABLES = new Set(["media.asset", "core.content_item"]);
 
 let calls: Call[];
 let answers: Map<string, LibraryData>;
@@ -172,7 +172,7 @@ describe("photos-library-store suite", () => {
       await store.refreshAll();
       calls = [];
 
-      store.handleChange({ tables: ["media.media_asset"], scope: "family" });
+      store.handleChange({ tables: ["media.asset"], scope: "family" });
       await Promise.resolve();
       await Promise.resolve();
 
@@ -185,7 +185,7 @@ describe("photos-library-store suite", () => {
       await store.refreshAll();
       calls = [];
 
-      store.handleChange({ tables: ["media.media_asset"] });
+      store.handleChange({ tables: ["media.asset"] });
       await Promise.resolve();
       await Promise.resolve();
 
@@ -352,7 +352,7 @@ describe("photos-library-store suite", () => {
       await store.showMore();
       calls = [];
 
-      store.handleChange({ tables: ["media.media_asset"], scope: "family" });
+      store.handleChange({ tables: ["media.asset"], scope: "family" });
       await Promise.resolve();
       await Promise.resolve();
 

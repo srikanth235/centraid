@@ -35,7 +35,7 @@ const TARGET_FIELDS: Readonly<Record<string, string>> = {
   "core.transaction": "Finance transaction",
   "knowledge.note": "Note + notebook path",
   "locker.item": "Locker login",
-  "media.media_asset": "Photo or video + capture time, place, album",
+  "media.asset": "Photo or video + capture time, place, album",
   "social.message": "Message + attachments",
 };
 

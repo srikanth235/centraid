@@ -271,7 +271,7 @@ export function enrollAgent(
   const agentId = uuidv7();
   db.vault
     .prepare(
-      `INSERT INTO agent_agent (agent_id, party_id, host_key, model_ref, version, enrolled_at, status)
+      `INSERT INTO consent_agent (agent_id, party_id, enrollment_key, model_ref, version, enrolled_at, status)
        VALUES (?, ?, ?, ?, ?, ?, 'active')`
     )
     .run(

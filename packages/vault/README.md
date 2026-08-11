@@ -6,14 +6,14 @@ Implementation of the **Duaility personal ontology** (`duaility-ontology.html`, 
 
 **The ontology (§03)** — all eleven schemas as STRICT SQLite DDL across the two-file physical layout:
 
-- `vault.db` — the sovereign asset: `core` (party, place, event, account/transaction, content_item, activity, observation, link, concept — 16 tables), the `consent` plane model (apps, grants, scopes, shares, policy, devices, export jobs), the `agent` plane model (agents, commands, capabilities, corrections, judgments), and eight life domains (`health`, `finance`, `schedule`, `social`, `knowledge`, `media`, `home`, `business`). 68 tables, engine-enforced FKs, one ACID boundary.
+- `vault.db` — the sovereign asset: `core` (party, place, event, account/transaction, content_item, activity, observation, link, concept — 16 tables), the `consent` plane model (apps, devices, the enrolled agent credential, grants, scopes, shares, policy, export jobs), the `agent` plane model (commands, capabilities, corrections, judgments), and eight life domains (`health`, `finance`, `schedule`, `social`, `knowledge`, `media`, `home`, `business`). 68 tables, engine-enforced FKs, one ACID boundary.
 - `journal.db` — the append-only audit stream: `consent.receipt` (hash-chained), `consent.provenance` (W3C PROV, chained per entity), `agent.command_invocation` / `invocation_check` / `evidence` / `explanation`.
 
 SQLite has no namespaces, so logical `core.party` is physical `core_party`; `resolveEntity()` is the only translation point and doubles as an allow-list.
 
 **The gateway (§10)** — sole holder of connections. Every request walks:
 
-1. **Identity** — callers authenticate as rows (`consent.app`, `agent.agent`, `consent.device`); unknown callers are dropped at transport, no receipt.
+1. **Identity** — callers authenticate as rows (`consent.app`, `consent.device`, `consent.agent`); unknown callers are dropped at transport, no receipt.
 2. **Consent** — active grant, scope covers schema+verb, row filters, field masks, purpose policy, command risk vs `risk_ceiling`. A deny is a receipted outcome, not an exception.
 3. **Contract** — JSON-Schema input validation, preconditions evaluated as real queries and recorded as `invocation_check` rows _before_ anything mutates, `agent.judgment` consulted as constraints.
 4. **Execution** — journal invocation → vault rows write order, idempotent replay off caller invocation ids, postconditions verified with rollback on failure.

@@ -270,8 +270,8 @@ function collectNewestVisibleRows(
       .prepare(
         `SELECT asset_id AS row_id,
                 COALESCE(captured_at, '') AS modified_at,
-                'media.media_asset' AS entity
-           FROM media_media_asset
+                'media.asset' AS entity
+           FROM media_asset
           ORDER BY COALESCE(captured_at, '') DESC LIMIT ?`
       )
       .all(windowLimit) as unknown as Array<{

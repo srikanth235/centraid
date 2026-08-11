@@ -161,7 +161,7 @@ describe("Tally consumes the placement engine with zero engine edits (A6)", () =
     for (const file of ENGINE_FILES.slice(1)) {
       const source = readFileSync(file, "utf8");
       expect(source.toLowerCase(), file).not.toContain("tally");
-      expect(source, file).not.toContain("media.media_asset");
+      expect(source, file).not.toContain("media.asset");
       expect(source, file).not.toContain("core.document");
     }
   });
@@ -230,7 +230,7 @@ describe("native Photos selection reaches Commons with explicit items", () => {
       ),
       "utf8"
     );
-    expect(source).toContain('itemType: "media.media_asset"');
+    expect(source).toContain('itemType: "media.asset"');
     expect(source).toContain("itemIds: targets.map((asset) => asset.assetId)");
     expect(source).not.toContain("giveMany");
   });

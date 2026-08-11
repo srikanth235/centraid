@@ -266,7 +266,7 @@ export function buildCollectionSections(
 ): CollectionSection[] {
   const live = facts.assets.filter((asset) => !asset.deleted);
   // Indexed by BOTH ids a photograph answers to: `id` is the timeline row's
-  // own key, `assetId` is the vault's `media_media_asset.asset_id` — which is
+  // own key, `assetId` is the vault's `media_asset.asset_id` — which is
   // what an album entry and a face region point at. Indexing by one alone
   // silently resolves half the references to nothing.
   const byId = new Map<string, PhotoAsset>();

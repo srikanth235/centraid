@@ -146,7 +146,7 @@ function n() {
 async function r($, B) {
   let v = (
     await $.vault.read({
-      entity: "media.media_asset",
+      entity: "media.asset",
       where: [
         { column: "kind", op: "in", value: ["photo", "scan"] },
         { column: "deleted_at", op: "is-null" },
@@ -181,7 +181,7 @@ async function o({ ctx: $, log: B }) {
       await $.state.set("model", Q));
   let J = (await $.state.get("cursor")) ?? "",
     Y = await $.vault.read({
-      entity: "media.media_asset",
+      entity: "media.asset",
       where: [
         { column: "asset_id", op: "gt", value: J },
         { column: "deleted_at", op: "is-null" },
@@ -233,7 +233,7 @@ async function o({ ctx: $, log: B }) {
     (await $.vault.invoke({
       command: "enrich.upsert_embedding",
       input: {
-        entity_type: "media.media_asset",
+        entity_type: "media.asset",
         entity_id: K.asset_id,
         model: Q,
         vector: _.vector,

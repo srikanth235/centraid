@@ -1284,7 +1284,7 @@ export function commonsGrantForCommand(
     ["core.document", ["document_id"]],
     ["core.collection", ["collection_id"]],
     ["docs.folder", ["folder_id", "parent_folder_id"]],
-    ["media.media_asset", ["asset_id", "media_asset_id"]],
+    ["media.asset", ["asset_id", "media_asset_id"]],
     ["core.content_item", ["content_id", "content_item_id"]],
     ["locker.item", ["item_id", "locker_item_id"]],
   ];

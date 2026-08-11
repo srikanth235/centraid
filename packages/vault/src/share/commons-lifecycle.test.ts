@@ -99,7 +99,7 @@ describe("commons lifecycle and logical cursors", () => {
       ownerPartyId: originBoot.ownerPartyId,
       ownerVaultId: "vault-priya",
       ownerVault: origin,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         {
@@ -300,7 +300,7 @@ describe("commons lifecycle and logical cursors", () => {
     const grant = createCommonsGrant({
       origin: origin.vault,
       ownerPartyId: originBoot.ownerPartyId,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         {
@@ -337,9 +337,7 @@ describe("commons lifecycle and logical cursors", () => {
       removeCommonsFromSeat({ seat: audience, grantId: grant.grantId })
     ).toBe(1);
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 0 });
     recompileCommonsGrants({
       steward: origin,
@@ -354,9 +352,7 @@ describe("commons lifecycle and logical cursors", () => {
       now,
     });
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 1 });
 
     const downgraded = upsertCommonsMember({
@@ -393,9 +389,7 @@ describe("commons lifecycle and logical cursors", () => {
       1
     );
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 0 });
     expect(listCommonsGrants(audience.vault)).toStrictEqual([]);
   });
@@ -412,7 +406,7 @@ describe("commons lifecycle and logical cursors", () => {
       // checkpoint against (#731).
       ownerVaultId: "vault-priya",
       ownerVault: origin,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         {
@@ -462,9 +456,7 @@ describe("commons lifecycle and logical cursors", () => {
     placeCommonsBootstrapBlobs({ source: origin, seat: audience, wire });
     applyCommonsBootstrap({ seat: audience, wire, now });
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 1 });
     expect(
       audience.vault
@@ -502,9 +494,7 @@ describe("commons lifecycle and logical cursors", () => {
     if (frame.state === "tombstone")
       applyCommonsTombstone({ seat: audience, tombstone: frame.tombstone });
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 0 });
     expect(listCommonsGrants(audience.vault)).toStrictEqual([]);
   });
@@ -518,7 +508,7 @@ describe("commons lifecycle and logical cursors", () => {
       ownerPartyId: originBoot.ownerPartyId,
       ownerVaultId: "vault-priya",
       ownerVault: origin,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         {
@@ -545,7 +535,7 @@ describe("commons lifecycle and logical cursors", () => {
         memberVaultId: wire.memberVaultId,
         memberPartyId: audienceBoot.ownerPartyId,
         capability: "read",
-        containerType: "media.media_asset",
+        containerType: "media.asset",
         containerId: photo.assetId,
         containerLabel: "Pending photo",
         currentSizeBytes: photo.bytes.length,
@@ -563,9 +553,7 @@ describe("commons lifecycle and logical cursors", () => {
       })
     ).toMatchObject([pending]);
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 0 });
     expect(
       (
@@ -592,7 +580,7 @@ describe("commons lifecycle and logical cursors", () => {
         memberVaultId: wire.memberVaultId,
         memberPartyId: audienceBoot.ownerPartyId,
         capability: "read",
-        containerType: "media.media_asset",
+        containerType: "media.asset",
         containerId: photo.assetId,
         containerLabel: "Pending photo",
         currentSizeBytes: photo.bytes.length,
@@ -610,15 +598,11 @@ describe("commons lifecycle and logical cursors", () => {
     });
     expect(accepted.status).toBe("accepted");
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 0 });
     applyCommonsBootstrap({ seat: audience, wire, now });
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 1 });
   });
 
@@ -632,7 +616,7 @@ describe("commons lifecycle and logical cursors", () => {
       ownerPartyId: originBoot.ownerPartyId,
       ownerVaultId: "vault-priya",
       ownerVault: origin,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [{ partyId: bob, capability: "read" }],
       now,
@@ -686,9 +670,7 @@ describe("commons lifecycle and logical cursors", () => {
         .get(grant.grantId)
     ).toMatchObject({ kind: "member_joined" });
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 1 });
   });
 
@@ -700,7 +682,7 @@ describe("commons lifecycle and logical cursors", () => {
     const grant = createCommonsGrant({
       origin: origin.vault,
       ownerPartyId: originBoot.ownerPartyId,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         {
@@ -753,9 +735,7 @@ describe("commons lifecycle and logical cursors", () => {
     if (frame.state === "tombstone")
       applyCommonsTombstone({ seat: audience, tombstone: frame.tombstone });
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 0 });
     expect(listCommonsGrants(audience.vault)).toStrictEqual([]);
   });
@@ -769,7 +749,7 @@ describe("commons lifecycle and logical cursors", () => {
       ownerPartyId: originBoot.ownerPartyId,
       ownerVaultId: "vault-priya",
       ownerVault: origin,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         {
@@ -798,7 +778,7 @@ describe("commons lifecycle and logical cursors", () => {
     expect(
       retainCommonsItem({
         seat: audience.vault,
-        itemType: "media.media_asset",
+        itemType: "media.asset",
         itemId: photo.assetId,
         now,
       })
@@ -806,13 +786,13 @@ describe("commons lifecycle and logical cursors", () => {
     expect(
       retainCommonsItem({
         seat: audience.vault,
-        itemType: "media.media_asset",
+        itemType: "media.asset",
         itemId: photo.assetId,
         now,
       })
     ).toMatchObject({ retained: false, grantIds: [grant.grantId] });
     origin.vault
-      .prepare("UPDATE media_media_asset SET favorite = 0 WHERE asset_id = ?")
+      .prepare("UPDATE media_asset SET favorite = 0 WHERE asset_id = ?")
       .run(photo.assetId);
     compileCommons({
       steward: origin,
@@ -830,13 +810,13 @@ describe("commons lifecycle and logical cursors", () => {
     });
     expect(
       audience.vault
-        .prepare("SELECT favorite FROM media_media_asset WHERE asset_id = ?")
+        .prepare("SELECT favorite FROM media_asset WHERE asset_id = ?")
         .get(photo.assetId)
     ).toMatchObject({ favorite: 1 });
     expect(
       audience.vault
         .prepare(
-          "SELECT COUNT(*) AS n FROM core_share_origin WHERE item_type = 'media.media_asset' AND item_id = ?"
+          "SELECT COUNT(*) AS n FROM core_share_origin WHERE item_type = 'media.asset' AND item_id = ?"
         )
         .get(photo.assetId)
     ).toMatchObject({ n: 0 });
@@ -853,7 +833,7 @@ describe("commons lifecycle and logical cursors", () => {
     });
     expect(
       audience.vault
-        .prepare("SELECT favorite FROM media_media_asset WHERE asset_id = ?")
+        .prepare("SELECT favorite FROM media_asset WHERE asset_id = ?")
         .get(photo.assetId)
     ).toMatchObject({ favorite: 1 });
     expect(
@@ -879,9 +859,7 @@ describe("commons lifecycle and logical cursors", () => {
     if (frame.state === "tombstone")
       applyCommonsTombstone({ seat: audience, tombstone: frame.tombstone });
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 1 });
     expect(audience.blobs.local.hasSync(photo.sha256)).toBe(true);
   });

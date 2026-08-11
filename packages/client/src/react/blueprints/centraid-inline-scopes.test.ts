@@ -57,12 +57,12 @@ function fakeSession(): Fake {
     read: vi.fn<InlineScopeSession["read"]>(async () => ({
       rows: [],
       cursor: { epoch: "e", seq: 1 },
-      dependency: { shapeId: "s", entity: "media.media_asset" },
+      dependency: { shapeId: "s", entity: "media.asset" },
     })),
     search: vi.fn<InlineScopeSession["search"]>(async () => ({
       rows: [],
       cursor: { epoch: "e", seq: 1 },
-      dependency: { shapeId: "s", entity: "media.media_asset" },
+      dependency: { shapeId: "s", entity: "media.asset" },
     })),
     write: vi.fn<InlineScopeSession["write"]>(async (_appId, input) => {
       writes.push(input);
@@ -90,7 +90,7 @@ function tellScope(name: string): InlineAppModule["queries"] {
     [name]: {
       default: ({ ctx }: { ctx: unknown }) =>
         (ctx as { vault: { read: (r: unknown) => Promise<unknown> } }).vault
-          .read({ entity: "media.media_asset" })
+          .read({ entity: "media.asset" })
           .then(() => ({ ok: true })),
     },
   } as unknown as InlineAppModule["queries"];
@@ -226,19 +226,19 @@ describe("multi-scope inline client", () => {
     const stop = client.onChange((detail) => seen.push(detail.scope));
     familySession.emit({
       shapeId: "s",
-      entity: "media.media_asset",
+      entity: "media.asset",
       source: "canonical",
     });
     ownSession.emit({
       shapeId: "s",
-      entity: "media.media_asset",
+      entity: "media.asset",
       source: "canonical",
     });
     expect(seen).toStrictEqual(["vault-family", "vault-own"]);
     stop();
     familySession.emit({
       shapeId: "s",
-      entity: "media.media_asset",
+      entity: "media.asset",
       source: "canonical",
     });
     expect(seen).toHaveLength(2);
@@ -266,7 +266,7 @@ describe("multi-scope inline client", () => {
 
     familySession.emit({
       shapeId: "s",
-      entity: "media.media_asset",
+      entity: "media.asset",
       source: "canonical",
     });
     expect(seen.at(-1)).toMatchObject({

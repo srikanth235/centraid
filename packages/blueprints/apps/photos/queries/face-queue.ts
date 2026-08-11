@@ -28,7 +28,7 @@
  * flagged here rather than faked:
  *
  *  - `first seen` (4310) reads as the EARLIEST CAPTURE DATE among the
- *    matching photographs (`media_media_asset.captured_at`), not "when the
+ *    matching photographs (`media_asset.captured_at`), not "when the
  *    enricher first proposed this face" — `media_face_region` has no
  *    `created_at` column, so that fact does not exist in this schema today.
  *    Capture date is the closest true substitute, not an invented one.
@@ -109,7 +109,7 @@ export default async function faceQueue({ ctx }: HandlerArgs) {
     const assetIds = [...new Set(queueSlice.map((r) => r.asset_id))];
     const assetsResult = assetIds.length
       ? await ctx.vault.read({
-          entity: "media.media_asset",
+          entity: "media.asset",
           where: [{ column: "asset_id", op: "in", value: assetIds }],
           limit: assetIds.length,
           purpose,

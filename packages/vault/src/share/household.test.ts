@@ -25,7 +25,7 @@ describe("household audience placement", () => {
     const add = origin.vault.prepare(
       `INSERT INTO core_collection_entry
          (entry_id, collection_id, target_type, target_id, position, added_at)
-       VALUES (?, ?, 'media.media_asset', ?, ?, ?)`
+       VALUES (?, ?, 'media.asset', ?, ?, ?)`
     );
     add.run(uuidv7(), collectionId, first.assetId, 0, now);
     add.run(uuidv7(), collectionId, second.assetId, 1, now);
@@ -51,9 +51,7 @@ describe("household audience placement", () => {
         .get(shared.itemId)
     ).toMatchObject({ name: "Summer", entries: 2 });
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 2 });
 
     expect(
@@ -64,9 +62,7 @@ describe("household audience placement", () => {
       }).removed
     ).toBe(true);
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 0 });
   });
 
@@ -120,7 +116,7 @@ describe("household audience placement", () => {
       .prepare(
         `INSERT INTO core_collection_entry
            (entry_id, collection_id, target_type, target_id, position, added_at)
-         VALUES (?, ?, 'media.media_asset', ?, 0, ?)`
+         VALUES (?, ?, 'media.asset', ?, 0, ?)`
       )
       .run(uuidv7(), collectionId, first.assetId, now);
 

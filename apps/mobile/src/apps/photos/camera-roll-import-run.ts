@@ -75,7 +75,7 @@ async function stageAndPublishOne(
  * device original, stage and publish it, and — for a still that IS a Live
  * Photo — stage and publish its paired video under the SAME `live:<localId>`
  * capture group, exactly the convention `photos-backup.ts`'s own sweep uses
- * (`media_media_asset.capture_group_id`, `commands/media.ts`). One extra
+ * (`media_asset.capture_group_id`, `commands/media.ts`). One extra
  * native call (`liveVideoUri`) per photograph actually being imported, never
  * a bulk pre-scan of the roll — see this module's sibling header for why.
  */

@@ -1100,7 +1100,7 @@ describe("gateway", () => {
         )
         .run();
 
-      // The vault assistant's own enrolled identity — `host_key = '_assistant'`
+      // The vault assistant's own enrolled identity — `enrollment_key = '_assistant'`
       // (VaultPlane.invokeAsAssistant) — rides the same `kind: 'agent'`
       // credential shape as an automation, but callerKind must tell them apart.
       const assistantAgent = enrollAgent(db, {
@@ -1508,7 +1508,7 @@ describe("gateway", () => {
         .run();
       db.vault
         .prepare(
-          `INSERT INTO media_media_asset (asset_id, content_id, kind, deleted_at, purge_at)
+          `INSERT INTO media_asset (asset_id, content_id, kind, deleted_at, purge_at)
          VALUES ('a-lapsed', 'c-live', 'photo', '2020-01-01T00:00:00Z', '2020-01-31T00:00:00Z')`
         )
         .run();
@@ -1516,7 +1516,7 @@ describe("gateway", () => {
       expect(result.assetsPurged).toBe(1);
       const assetGone = db.vault
         .prepare(
-          `SELECT count(*) AS n FROM media_media_asset WHERE asset_id='a-lapsed'`
+          `SELECT count(*) AS n FROM media_asset WHERE asset_id='a-lapsed'`
         )
         .get() as { n: number };
       expect(assetGone.n).toBe(0);
@@ -1683,7 +1683,7 @@ describe("gateway", () => {
         purpose: "dpv:ServiceProvision",
       });
       expect(mine.rows.length).toBeGreaterThan(0);
-      expect(mine.rows.every((r) => r.agent_id === a.agentId)).toBe(true);
+      expect(mine.rows.every((r) => r.caller_id === a.agentId)).toBe(true);
     });
   });
 });

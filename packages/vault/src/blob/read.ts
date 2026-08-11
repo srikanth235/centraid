@@ -41,7 +41,7 @@ const SERVE_REFERENCES: string[] = [
   "SELECT 1 FROM business_invoice WHERE pdf_content_id = i.content_id",
   "SELECT 1 FROM home_warranty WHERE terms_content_id = i.content_id",
   "SELECT 1 FROM home_maintenance_plan WHERE instructions_content_id = i.content_id",
-  "SELECT 1 FROM media_media_asset WHERE content_id = i.content_id",
+  "SELECT 1 FROM media_asset WHERE content_id = i.content_id",
   "SELECT 1 FROM core_collection WHERE cover_content_id = i.content_id",
   "SELECT 1 FROM core_document WHERE current_content_id = i.content_id",
   `WITH RECURSIVE chain(content_id) AS (

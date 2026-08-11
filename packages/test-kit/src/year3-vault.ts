@@ -72,7 +72,7 @@ export function seedYear3Vault(
     "INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, title, created_at) VALUES (?, 'image/jpeg', ?, ?, 4096, ?, ?)"
   );
   const photo = target.vault.prepare(
-    "INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, favorite) VALUES (?, ?, 'photo', ?, 0)"
+    "INSERT INTO media_asset (asset_id, content_id, kind, captured_at, favorite) VALUES (?, ?, 'photo', ?, 0)"
   );
   target.vault.exec("BEGIN IMMEDIATE");
   for (let index = 0; index < counts.parties; index += 1) {

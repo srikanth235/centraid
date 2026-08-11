@@ -205,7 +205,7 @@ describe(loadAutomationThreadData, () => {
     vi.mocked(listAgents).mockResolvedValue([
       {
         agentId: "agent-1",
-        hostKey: "digest",
+        enrollmentKey: "digest",
         partyId: "party-1",
         name: "Daily Digest",
         modelRef: "centraid-automation",

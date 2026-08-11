@@ -157,7 +157,7 @@ describe("tags", () => {
       label: "finance",
     });
     const onAsset = invoke("core.tag_item", {
-      subject_type: "media.media_asset",
+      subject_type: "media.asset",
       subject_id: assetId,
       label: "finance",
     });
@@ -252,12 +252,12 @@ describe("tags", () => {
   test("untag_item removes exactly the named edge on a media asset, leaving others intact", () => {
     const assetId = addAsset();
     const trip = invoke("core.tag_item", {
-      subject_type: "media.media_asset",
+      subject_type: "media.asset",
       subject_id: assetId,
       label: "Trip",
     });
     invoke("core.tag_item", {
-      subject_type: "media.media_asset",
+      subject_type: "media.asset",
       subject_id: assetId,
       label: "Beach",
     });
@@ -269,7 +269,7 @@ describe("tags", () => {
         `SELECT c.notation FROM core_tag t JOIN core_concept c ON c.concept_id = t.concept_id
         WHERE t.target_type = ? AND t.target_id = ?`
       )
-      .all("media.media_asset", assetId) as { notation: string }[];
+      .all("media.asset", assetId) as { notation: string }[];
     expect(remaining.map((r) => r.notation)).toStrictEqual(["beach"]);
   });
 

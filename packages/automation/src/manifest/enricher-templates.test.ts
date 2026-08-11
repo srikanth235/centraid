@@ -431,7 +431,7 @@ describe("recognition automation spine", () => {
     const harness = stubCtx({
       reads: {},
       read: (request) => {
-        if (request.entity === "media.media_asset") {
+        if (request.entity === "media.asset") {
           return (request.orderBy as { dir?: string })?.dir === "desc"
             ? [assets.at(-1)!]
             : assets;
@@ -475,7 +475,7 @@ describe("recognition automation spine", () => {
     const harness = stubCtx({
       reads: {},
       read: (request) => {
-        if (request.entity === "media.media_asset") {
+        if (request.entity === "media.asset") {
           return (request.orderBy as { dir?: string })?.dir === "desc"
             ? [asset]
             : [];
@@ -504,8 +504,7 @@ describe("recognition automation spine", () => {
     const harness = stubCtx({
       reads: {},
       input: { variant: "agent", agentModel: "owner/pin" },
-      read: (request) =>
-        request.entity === "media.media_asset" ? [asset] : [],
+      read: (request) => (request.entity === "media.asset" ? [asset] : []),
       agent: () => ({
         __centraidModel: "acp-confirmed@7",
         regions: [
@@ -546,7 +545,7 @@ describe("recognition automation spine", () => {
     ];
     const transcriptHarness = stubCtx({
       reads: {},
-      read: (request) => (request.entity === "media.media_asset" ? assets : []),
+      read: (request) => (request.entity === "media.asset" ? assets : []),
       content: (request) => {
         contentCalls.push(request);
         return {
@@ -623,9 +622,7 @@ describe("recognition automation spine", () => {
           reads: {},
           read: (request) =>
             request.entity ===
-            (id === "embed-image"
-              ? "media.media_asset"
-              : "core.content_derivative")
+            (id === "embed-image" ? "media.asset" : "core.content_derivative")
               ? [row]
               : [],
           fetch: async (call) => ({
@@ -658,7 +655,7 @@ describe("recognition automation spine", () => {
       read: (request) => {
         if (request.entity === "enrich.request")
           return [{ request_id: "r1", target_id: "a1", capability: "faces" }];
-        if (request.entity === "media.media_asset") return [asset];
+        if (request.entity === "media.asset") return [asset];
         if (request.entity === "enrich.derivation")
           return [{ target_id: "a1", model: "faces@old", variant: "faces" }];
         return [];
@@ -694,7 +691,7 @@ describe("recognition automation spine", () => {
           return [
             { request_id: "vault-wide", target_id: null, capability: "faces" },
           ];
-        if (request.entity === "media.media_asset") return [asset];
+        if (request.entity === "media.asset") return [asset];
         return [];
       },
       fetch: async (call) => ({
@@ -737,8 +734,7 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
     const handler = await loadHandler("photo-ocr");
     const harness = stubCtx({
       reads: {},
-      read: (request) =>
-        request.entity === "media.media_asset" ? [photoAsset] : [],
+      read: (request) => (request.entity === "media.asset" ? [photoAsset] : []),
       content: () => ({ status: "not-found" }),
     });
     // An already-established cursor (not the first fire) — so a subsequent
@@ -760,8 +756,7 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
     });
     const harness = stubCtx({
       reads: {},
-      read: (request) =>
-        request.entity === "media.media_asset" ? [photoAsset] : [],
+      read: (request) => (request.entity === "media.asset" ? [photoAsset] : []),
     });
     const result = (await module.default({
       ctx: harness.ctx,
@@ -776,8 +771,7 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
     const handler = await loadHandler("embed-image");
     const harness = stubCtx({
       reads: {},
-      read: (request) =>
-        request.entity === "media.media_asset" ? [photoAsset] : [],
+      read: (request) => (request.entity === "media.asset" ? [photoAsset] : []),
       content: () => ({ status: "not-found" }),
     });
     harness.state.set("model", "clip-vit-b-32@1");
@@ -811,8 +805,7 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
     const handler = await loadHandler("transcript");
     const harness = stubCtx({
       reads: {},
-      read: (request) =>
-        request.entity === "media.media_asset" ? [audioAsset] : [],
+      read: (request) => (request.entity === "media.asset" ? [audioAsset] : []),
       content: () => ({ status: "not-found" }),
     });
     harness.state.set("model", "whisper-tiny.en-q8@1");
@@ -834,8 +827,7 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
     const handler = await loadHandler("transcript");
     const harness = stubCtx({
       reads: {},
-      read: (request) =>
-        request.entity === "media.media_asset" ? [audioAsset] : [],
+      read: (request) => (request.entity === "media.asset" ? [audioAsset] : []),
       content: () => ({
         status: "too-large",
         byteSize: 999_999_999,
@@ -853,8 +845,7 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
   it("transcript honors an honest empty transcript as a skip — the cursor still advances", async () => {
     const harness = stubCtx({
       reads: {},
-      read: (request) =>
-        request.entity === "media.media_asset" ? [audioAsset] : [],
+      read: (request) => (request.entity === "media.asset" ? [audioAsset] : []),
       content: () => ({
         status: "ok",
         kind: "bytes",

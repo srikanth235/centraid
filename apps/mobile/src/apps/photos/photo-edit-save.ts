@@ -20,7 +20,7 @@
 // column, the action schema and its handler have all carried this field since
 // issue #711 — what this module (and `DeviceMediaInput`, one layer down) was
 // missing was the wire between them. `asset.assetId` is the vault
-// `media_media_asset.asset_id` the source photograph was read in on, and it is
+// `media_asset.asset_id` the source photograph was read in on, and it is
 // exactly what `source_asset_exists` (`commands/media.ts`) checks a claimed
 // source against. A source that arrived from the device only (no vault round
 // trip yet — the asset has never been backed up) has no `assetId`; the new

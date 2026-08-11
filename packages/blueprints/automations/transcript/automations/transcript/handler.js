@@ -165,7 +165,7 @@ function i() {
 async function a(z, G) {
   let K = (
     await z.vault.read({
-      entity: "media.media_asset",
+      entity: "media.asset",
       where: [
         { column: "kind", op: "in", value: ["audio", "video"] },
         { column: "deleted_at", op: "is-null" },
@@ -202,7 +202,7 @@ async function s({ ctx: z, log: G }) {
       await z.state.set("model", J));
   let A = (await z.state.get("cursor")) ?? "",
     Y = await z.vault.read({
-      entity: "media.media_asset",
+      entity: "media.asset",
       where: [
         { column: "asset_id", op: "gt", value: A },
         { column: "kind", op: "in", value: ["audio", "video"] },

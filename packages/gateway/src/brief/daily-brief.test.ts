@@ -59,7 +59,7 @@ describe("daily brief", () => {
       .get() as { content_id: string };
     db.vault
       .prepare(
-        `INSERT INTO media_media_asset
+        `INSERT INTO media_asset
            (asset_id, content_id, kind, captured_at, favorite)
          VALUES (?, ?, 'photo', '2026-07-29T08:00:00.000Z', 0)`
       )

@@ -120,7 +120,7 @@ export default function FaceReview({
   // from the local timeline below, exactly like every other Photos screen.
   const assetsQuery = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "media.media_asset" }), [])
+    useMemo(() => ({ entity: "media.asset" }), [])
   );
 
   const names = useMemo(

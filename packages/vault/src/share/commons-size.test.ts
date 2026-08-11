@@ -91,7 +91,7 @@ describe("Commons full-copy size", () => {
       ownerPartyId: originBoot.ownerPartyId,
       ownerVaultId: "vault-priya",
       ownerVault: origin,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [],
       now: nowIso(),

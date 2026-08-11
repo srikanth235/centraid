@@ -206,7 +206,7 @@ export interface RetentionRefusal {
 
 /**
  * Entities the retention duty REFUSES outright, each with its reason. This is
- * a decision, not a gap: `media.media_asset` has no `created_at` to measure
+ * a decision, not a gap: `media.asset` has no `created_at` to measure
  * against, its rows are lineage-bound (`source_asset_id` self-FK and
  * `media_face_region.asset_id`, both without `ON DELETE`), and asset purging
  * already has a lifecycle (`purge_at` + the lineage-aware sweep above) — a
@@ -217,7 +217,7 @@ export interface RetentionRefusal {
  */
 const RETENTION_REFUSALS: ReadonlyMap<string, string> = new Map([
   [
-    "media.media_asset",
+    "media.asset",
     "media assets are purged by the trash lifecycle, never by blanket retention: no created_at exists to measure against, and edit lineage (source_asset_id) plus face regions block raw deletes",
   ],
 ]);
@@ -343,7 +343,7 @@ function contentRentedElsewhere(db: VaultDb, contentId: string): boolean {
          OR EXISTS(SELECT 1 FROM business_invoice WHERE pdf_content_id = ?)
          OR EXISTS(SELECT 1 FROM home_warranty WHERE terms_content_id = ?)
          OR EXISTS(SELECT 1 FROM home_maintenance_plan WHERE instructions_content_id = ?)
-         OR EXISTS(SELECT 1 FROM media_media_asset WHERE content_id = ? AND deleted_at IS NULL)
+         OR EXISTS(SELECT 1 FROM media_asset WHERE content_id = ? AND deleted_at IS NULL)
        ) AS n`
     )
     .get(
@@ -396,7 +396,7 @@ function ownedByAnotherLiveDocument(
 function isLineageSource(db: VaultDb, assetId: string): boolean {
   const row = db.vault
     .prepare(
-      "SELECT 1 AS present FROM media_media_asset WHERE source_asset_id = ? LIMIT 1"
+      "SELECT 1 AS present FROM media_asset WHERE source_asset_id = ? LIMIT 1"
     )
     .get(assetId) as { present: number } | undefined;
   return row !== undefined;
@@ -416,13 +416,7 @@ function deleteAssetRow(
   now: string,
   assetId: string
 ): void {
-  writeProvenance(
-    db.journal,
-    owner,
-    "media.media_asset",
-    assetId,
-    "sweep.purge"
-  );
+  writeProvenance(db.journal, owner, "media.asset", assetId, "sweep.purge");
   // A face region is itself a polymorphic TARGET now (issue #724 W5): its
   // vector lives in enrich_embedding and its producer in enrich_derivation,
   // both keyed `media.face_region`. Deleting the region without sweeping those
@@ -436,10 +430,8 @@ function deleteAssetRow(
   db.vault
     .prepare("DELETE FROM media_face_region WHERE asset_id = ?")
     .run(assetId);
-  db.vault
-    .prepare("DELETE FROM media_media_asset WHERE asset_id = ?")
-    .run(assetId);
-  cleanupPolyRefs(db.vault, now, "media.media_asset", assetId);
+  db.vault.prepare("DELETE FROM media_asset WHERE asset_id = ?").run(assetId);
+  cleanupPolyRefs(db.vault, now, "media.asset", assetId);
 }
 
 /** What one `purgeContentItem` call did. */
@@ -471,7 +463,7 @@ function purgeContentItem(
   // A trashed media asset over these bytes goes with them — the asset row
   // references the content (NOT NULL), so purging one must purge both.
   const asset = db.vault
-    .prepare("SELECT asset_id FROM media_media_asset WHERE content_id = ?")
+    .prepare("SELECT asset_id FROM media_asset WHERE content_id = ?")
     .get(contentId) as { asset_id: string } | undefined;
   if (asset) {
     // Edit lineage (issue #711 S8). Another asset names this one as its
@@ -639,7 +631,7 @@ function purgeLapsedAssets(
     (
       db.vault
         .prepare(
-          "SELECT asset_id FROM media_media_asset WHERE purge_at IS NOT NULL AND purge_at <= ?"
+          "SELECT asset_id FROM media_asset WHERE purge_at IS NOT NULL AND purge_at <= ?"
         )
         .all(now) as { asset_id: string }[]
     ).map((row) => row.asset_id)

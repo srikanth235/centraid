@@ -50,7 +50,7 @@ async function memberWithGrant(label: string): Promise<{
     ownerPartyId: steward.ownerPartyId,
     ownerVaultId: steward.vaultId,
     ownerVault: steward.vault,
-    containerType: "media.media_asset",
+    containerType: "media.asset",
     containerId: photo.assetId,
     members: [
       {

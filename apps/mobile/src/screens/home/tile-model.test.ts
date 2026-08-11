@@ -104,7 +104,7 @@ describe(selectPhotoMosaic, () => {
 });
 
 describe("the mosaic a seeded, gateway-side vault produces", () => {
-  // The real replica shape for `media.media_asset`: `asset_id` and `content_id`
+  // The real replica shape for `media.asset`: `asset_id` and `content_id`
   // are both NOT NULL in the DDL, `captured_at` is nullable, and the multi-vault
   // reader stamps `__centraidScopeId` on every row. Ten of them, none pinned to
   // this device — which is what a freshly seeded vault looks like from a phone.

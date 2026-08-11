@@ -1,24 +1,15 @@
 // Agent plane DDL — schema `agent` from duaility-ontology.html §03.
-// Model half (vault.db): agent, command, capability, correction, judgment.
+// Model half (vault.db): command, capability, correction, judgment. The
+// plane's central credential row — the enrolled caller itself — is the
+// same species as consent_app/consent_device (an enrolled caller
+// credential), so it lives as `consent_agent` beside them (schema/consent.ts)
+// rather than stuttering this schema's own name here; the rest of the agent
+// plane (command, capability, correction, judgment — reasoning/audit
+// artifacts, not caller credentials) stays put.
 // Audit half (journal.db): command_invocation, invocation_check, evidence,
 // explanation — see journal.ts.
 
 export const AGENT_DDL = `
-CREATE TABLE agent_agent (
-  agent_id    TEXT PRIMARY KEY,
-  party_id    TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
-  -- The host-side enrollment key (Centraid app id, or '_assistant') — the
-  -- lookup identity lookupAgentByName() matches on. Decoupled from
-  -- core_party.display_name, which is the pretty name an approval
-  -- surface renders (issue: parked-invocation trust legibility) and may
-  -- be updated in place without minting a new agent identity.
-  host_key    TEXT NOT NULL UNIQUE,
-  model_ref   TEXT NOT NULL,
-  version     TEXT NOT NULL,
-  enrolled_at TEXT NOT NULL,
-  status      TEXT NOT NULL CHECK (status IN ('active','paused','revoked'))
-) STRICT;
-
 CREATE TABLE agent_command (
   command_id          TEXT PRIMARY KEY,
   name                TEXT NOT NULL UNIQUE,

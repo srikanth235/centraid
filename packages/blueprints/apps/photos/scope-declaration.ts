@@ -19,7 +19,7 @@ export interface MergeableAsset {
 export const photosScopeDeclaration: ScopeAppDeclaration<MergeableAsset> = {
   mergeKey: (asset) => asset.taken_at ?? null,
   mintedIdFamilies: [
-    "media.media_asset",
+    "media.asset",
     "core.collection",
     "core.place",
     "media.memory",

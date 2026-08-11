@@ -75,7 +75,7 @@ export function buildDailyBrief(
   ).map((row) => row);
   const photo = db.vault
     .prepare(
-      `SELECT COUNT(*) AS n FROM media_media_asset
+      `SELECT COUNT(*) AS n FROM media_asset
         WHERE deleted_at IS NULL AND archived_at IS NULL
           AND COALESCE(captured_at, '') >= ? AND captured_at < ?`
     )

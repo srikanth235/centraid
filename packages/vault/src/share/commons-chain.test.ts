@@ -61,7 +61,7 @@ function commons(label: string): {
     ownerPartyId: house.originBoot.ownerPartyId,
     ownerVaultId: STEWARD_VAULT,
     ownerVault: house.origin,
-    containerType: "media.media_asset",
+    containerType: "media.asset",
     containerId: photo.assetId,
     members: [
       {
@@ -142,7 +142,7 @@ function parked(apply: () => void): string | undefined {
 function assets(house: Household): number {
   return (
     house.audience.vault
-      .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
+      .prepare("SELECT COUNT(*) AS n FROM media_asset")
       .get() as { n: number }
   ).n;
 }

@@ -301,7 +301,7 @@ export async function handleAgentMessage(
 /**
  * Service one `ctx.vault` call: open a `tool` run node named `vault.<op>`,
  * proxy through the host-injected bridge (the automation's enrolled
- * `agent.agent` credential lives host-side), and settle the node.
+ * `consent.agent` credential lives host-side), and settle the node.
  *
  * Replay safety: an `invoke` without a caller-supplied `invocationId` gets a
  * deterministic one derived from the run id + the node's ordinal. Re-firing

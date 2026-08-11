@@ -71,7 +71,7 @@ export default async function duplicatesHandler({ ctx }: HandlerArgs) {
     // old cluster is not something to offer trashing again. Clusters left
     // with fewer than 2 live members are dropped entirely below.
     const assetsResult = await ctx.vault.read({
-      entity: "media.media_asset",
+      entity: "media.asset",
       where: [
         { column: "asset_id", op: "in", value: allAssetIds },
         { column: "deleted_at", op: "is-null" },

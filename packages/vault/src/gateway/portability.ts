@@ -160,7 +160,7 @@ export function importVaultExport(
       "core_content_item",
       "core_event",
       "locker_item",
-      "media_media_asset",
+      "media_asset",
       "schedule_task",
       "sync_import_batch",
       "tally_expense",

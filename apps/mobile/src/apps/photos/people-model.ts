@@ -305,7 +305,7 @@ export function buildPeopleShelf(facts: PeopleFacts): PeopleShelf {
 /** The write one "Detect faces" answer makes. Shape only — the caller sends it. */
 export interface DetectFacesIntent {
   action: "request-enrichment";
-  input: { entity_type: "media.media_asset" };
+  input: { entity_type: "media.asset" };
 }
 
 /**
@@ -317,7 +317,7 @@ export interface DetectFacesIntent {
 export function detectFacesIntent(): DetectFacesIntent {
   return {
     action: "request-enrichment",
-    input: { entity_type: "media.media_asset" },
+    input: { entity_type: "media.asset" },
   };
 }
 

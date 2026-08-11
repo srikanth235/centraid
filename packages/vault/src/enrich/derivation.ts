@@ -22,7 +22,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { nowIso, uuidv7 } from "../ids.js";
 
 export interface DerivationStamp {
-  /** The entity the value describes, e.g. `media.media_asset`. */
+  /** The entity the value describes, e.g. `media.asset`. */
   targetType: string;
   targetId: string;
   /** What was produced — `caption`, `text`, `faces`, `transcript`, … */

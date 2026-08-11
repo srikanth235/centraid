@@ -251,7 +251,7 @@ export function EditorView({
           kind: "photo",
           // Both halves of what the commit's sentence promises (issue #711):
           // dated TODAY, and "with this one recorded as its source" — which is
-          // now a real column (`media_media_asset.source_asset_id`) rather
+          // now a real column (`media_asset.source_asset_id`) rather
           // than a claim with nowhere to land. The lineage is what lets the
           // editor's own meta line say where an edited copy came from instead
           // of reading its save date back as a capture date.

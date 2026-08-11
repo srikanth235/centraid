@@ -49,7 +49,7 @@
 //   be the duplication this codebase forbids, not a convenience.
 //
 //   Hide / Unhide — the one row this pass had to wait on. `archived_at` sits
-//   on `media_media_asset`, `timeline-engine.ts` already reads it into
+//   on `media_asset`, `timeline-engine.ts` already reads it into
 //   `PhotoAsset.archived`, and `PhotosLibrary.tsx` already renders an "Open
 //   archived photos" shelf with a live count — every door but the write
 //   itself existed. The write itself was broken, not missing: the action

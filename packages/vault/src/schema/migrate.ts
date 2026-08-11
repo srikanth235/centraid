@@ -75,9 +75,12 @@ export const ONTOLOGY_VERSION = "1.4";
 //     been `shared_by` — composing the two here (rather than hand-editing the
 //     CREATE TABLE to skip the rename) keeps this file mechanism-only and
 //     leaves the DDL modules untouched;
-//   - the consent plane (apps, grants, install memory, the seed registry,
-//     the ext-band registry) before anything that enrolls or scopes;
-//   - the agent plane's model tables;
+//   - the consent plane (apps, devices, the enrolled agent credential,
+//     grants, install memory, the seed registry, the ext-band registry)
+//     before anything that enrolls or scopes;
+//   - the agent plane's reasoning/audit model tables (command, capability,
+//     correction, judgment — the enrolled caller credential itself lives in
+//     CONSENT_DDL as consent_agent, beside consent_app/consent_device);
 //   - the sync spine before the domains (locker's connection anchor FKs it),
 //     with its credential/health sidecars;
 //   - the domains (extensions hold FKs into core; locker's alias sidecar and

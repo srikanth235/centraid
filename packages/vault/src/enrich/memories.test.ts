@@ -126,9 +126,7 @@ describe("memories", () => {
     expect(
       (
         db.vault
-          .prepare(
-            `SELECT captured_at FROM media_media_asset WHERE asset_id = ?`
-          )
+          .prepare(`SELECT captured_at FROM media_asset WHERE asset_id = ?`)
           .get(undated) as { captured_at: string | null }
       ).captured_at
     ).toBeNull();

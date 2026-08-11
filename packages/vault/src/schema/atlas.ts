@@ -277,7 +277,7 @@ export const ATLAS_KIND_FRIENDLY: Readonly<
     blurb: "Notes pinned to a spot in something.",
   },
   // media
-  "media.media_asset": { name: "Media", blurb: "Your photos and videos." },
+  "media.asset": { name: "Media", blurb: "Your photos and videos." },
   "media.face_region": { name: "Faces", blurb: "Faces found in your photos." },
   "media.asset_phash": {
     name: "Fingerprints",

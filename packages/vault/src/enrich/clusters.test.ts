@@ -135,7 +135,7 @@ describe("clusters", () => {
        VALUES (?, 'image/png', ?, ?, 1, '2026-01-01T00:00:00.000Z')`
     );
     const asset = db.vault.prepare(
-      `INSERT INTO media_media_asset (asset_id, content_id, kind)
+      `INSERT INTO media_asset (asset_id, content_id, kind)
        VALUES (?, ?, 'photo')`
     );
     const phash = db.vault.prepare(
@@ -279,7 +279,7 @@ describe("clusters", () => {
       .run();
     db.vault
       .prepare(
-        `INSERT INTO media_media_asset (asset_id, content_id, kind)
+        `INSERT INTO media_asset (asset_id, content_id, kind)
          VALUES ('zz-late-asset', 'zz-late-content', 'photo')`
       )
       .run();

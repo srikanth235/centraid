@@ -183,7 +183,7 @@ describe("shell/routes/homeTileContent", () => {
           { content_id: "c1", content_uri: "blob:sha256-a" },
           { content_id: "c2", content_uri: "https://example.test/remote.jpg" },
         ],
-        "media.media_asset": [
+        "media.asset": [
           { asset_id: "a1", captured_at: "2026-08-01", content_id: "c1" },
           { asset_id: "a2", captured_at: "2026-08-02", content_id: "c2" },
         ],
@@ -227,7 +227,7 @@ describe("shell/routes/homeTileContent", () => {
     const content = await loadHomeTileContent({
       reader: readerOf({
         "core.content_item": [{ content_id: "c1", content_uri: "blob:sha" }],
-        "media.media_asset": [
+        "media.asset": [
           { asset_id: "a1", captured_at: "2026-08-01", content_id: "c1" },
         ],
       }),

@@ -7,7 +7,7 @@
   "triggers": [
     {
       "kind": "data",
-      "entities": ["media.media_asset"],
+      "entities": ["media.asset"],
       "every": "*/5 * * * *"
     }
   ],

@@ -3,7 +3,7 @@
 // Two sources, both already the shell's own:
 //
 //   1. The daily brief (`getDailyBrief`) — a real, content-minimized gateway
-//      read over core_event / schedule_task / media_media_asset / tally_expense.
+//      read over core_event / schedule_task / media_asset / tally_expense.
 //      It already backs Home, so agenda, the tally figure and the photo count
 //      cost nothing extra.
 //   2. The replica shell session — the same door `searchPaletteEntities` uses.
@@ -101,12 +101,7 @@ async function rowsOf(
 async function photoThumbs(
   reader: HomeTileReader
 ): Promise<{ total: number; thumbs: string[] }> {
-  const assets = await rowsOf(
-    reader,
-    "photos",
-    "media.media_asset",
-    WINDOW.mosaic
-  );
+  const assets = await rowsOf(reader, "photos", "media.asset", WINDOW.mosaic);
   const contents = await rowsOf(
     reader,
     "photos",

@@ -382,7 +382,7 @@ function Dq() {
 async function Kq(q, v) {
   return (
     await q.vault.read({
-      entity: "media.media_asset",
+      entity: "media.asset",
       where: [
         { column: "asset_id", op: "eq", value: v },
         { column: "deleted_at", op: "is-null" },
@@ -495,7 +495,7 @@ async function Mq({ ctx: q }) {
       C = (await q.state.get(Q)) ?? "",
       Z = J,
       F = await q.vault.read({
-        entity: "media.media_asset",
+        entity: "media.asset",
         where: [
           { column: "asset_id", op: "gt", value: C },
           { column: "kind", op: "in", value: ["photo", "scan"] },

@@ -650,7 +650,7 @@ export class Gateway {
     // beside the grant filter, so it can narrow but never widen.
     const structuralFilter =
       identity.kind === "agent" && request.entity === "agent.command_invocation"
-        ? [{ column: "agent_id", op: "eq" as const, value: identity.callerId }]
+        ? [{ column: "caller_id", op: "eq" as const, value: identity.callerId }]
         : [];
     const grantFilter = compileFilters(
       target,
@@ -2330,9 +2330,9 @@ export class Gateway {
   private callerKind(identity: Identity): ParkedCallerKind {
     if (identity.kind !== "agent") return identity.kind;
     const row = this.db.vault
-      .prepare("SELECT host_key FROM agent_agent WHERE agent_id = ?")
-      .get(identity.callerId) as { host_key: string } | undefined;
-    return row?.host_key === "_assistant" ? "assistant" : "agent";
+      .prepare("SELECT enrollment_key FROM consent_agent WHERE agent_id = ?")
+      .get(identity.callerId) as { enrollment_key: string } | undefined;
+    return row?.enrollment_key === "_assistant" ? "assistant" : "agent";
   }
 
   /** Display name for a parked caller — WHO wants the act, for the owner. */
@@ -2343,7 +2343,7 @@ export class Gateway {
       .prepare(
         byApp
           ? "SELECT COALESCE(display_name, name) AS name FROM consent_app WHERE app_id = ?"
-          : `SELECT p.display_name AS name FROM agent_agent a
+          : `SELECT p.display_name AS name FROM consent_agent a
                JOIN core_party p ON p.party_id = a.party_id WHERE a.agent_id = ?`
       )
       .get(identity.callerId) as { name: string } | undefined;

@@ -27,13 +27,13 @@ describe("local-orphan-sweep suite", () => {
       origin,
       originVaultId: "vault-priya",
       audience,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: photo.assetId,
       sharedBy: "member-priya",
     });
     unshareFromVault({
       audience,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: shared.itemId,
     });
 
@@ -82,7 +82,7 @@ describe("local-orphan-sweep suite", () => {
     const { origin, originBoot } = household();
     const photo = seedPhoto(origin, originBoot, "sweep-c");
     origin.vault
-      .prepare("DELETE FROM media_media_asset WHERE asset_id = ?")
+      .prepare("DELETE FROM media_asset WHERE asset_id = ?")
       .run(photo.assetId);
     origin.vault
       .prepare("DELETE FROM core_content_derivative WHERE content_id = ?")
@@ -114,7 +114,7 @@ describe("local-orphan-sweep suite", () => {
       origin,
       originVaultId: "vault-priya",
       audience,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: photo.assetId,
       sharedBy: "member-priya",
     });
@@ -123,7 +123,7 @@ describe("local-orphan-sweep suite", () => {
     // The owner deletes the photo from their own library; their sweep now sees
     // the bytes as orphaned HERE and unlinks their own directory entry.
     origin.vault
-      .prepare("DELETE FROM media_media_asset WHERE asset_id = ?")
+      .prepare("DELETE FROM media_asset WHERE asset_id = ?")
       .run(photo.assetId);
     origin.vault
       .prepare("DELETE FROM core_content_derivative WHERE content_id = ?")
@@ -161,7 +161,7 @@ describe("local-orphan-sweep suite", () => {
     // Orphan every one of them (two CAS entries each: original + thumb).
     for (const photo of photos) {
       origin.vault
-        .prepare("DELETE FROM media_media_asset WHERE asset_id = ?")
+        .prepare("DELETE FROM media_asset WHERE asset_id = ?")
         .run(photo.assetId);
       origin.vault
         .prepare("DELETE FROM core_content_derivative WHERE content_id = ?")

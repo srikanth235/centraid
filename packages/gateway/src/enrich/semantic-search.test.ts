@@ -87,7 +87,7 @@ function plantedVault(options: { withVec: boolean }): Planted {
       .prepare(
         `INSERT INTO enrich_embedding
            (embedding_id, target_type, target_id, model, dim, vector, created_at)
-         VALUES (?, 'media.media_asset', ?, ?, ?, ?, ?)`
+         VALUES (?, 'media.asset', ?, ?, ?, ?, ?)`
       )
       .run(
         uuidv7(),
@@ -226,9 +226,7 @@ describe("semantic-search", () => {
     await forEachSequentially([true, false], async (withVec) => {
       const planted = plantedVault({ withVec });
       planted.db.vault
-        .prepare(
-          "UPDATE media_media_asset SET deleted_at = ? WHERE asset_id = ?"
-        )
+        .prepare("UPDATE media_asset SET deleted_at = ? WHERE asset_id = ?")
         .run(nowIso(), planted.assetIds[0]!);
       const outcome = await searchPhotosByText(planted.db, {
         embedQuery: embedQuery(),
@@ -250,7 +248,7 @@ describe("semantic-search", () => {
       .prepare(
         `INSERT INTO enrich_embedding
            (embedding_id, target_type, target_id, model, dim, vector, created_at)
-         VALUES (?, 'media.media_asset', ?, ?, 3, ?, ?)`
+         VALUES (?, 'media.asset', ?, ?, 3, ?, ?)`
       )
       .run(
         uuidv7(),

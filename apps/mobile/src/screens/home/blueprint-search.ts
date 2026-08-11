@@ -127,7 +127,7 @@ export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
     labelFields: ["title"],
     detailFields: ["_snippet", "media_type"],
     // No confirmed date column on core.content_item's search shape (photos'
-    // captured_at lives on media.media_asset, a different entity) — left
+    // captured_at lives on media.asset, a different entity) — left
     // undefined rather than guessed.
   },
   {

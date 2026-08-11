@@ -11,8 +11,8 @@ const REPLICA_PROTOCOL_CREDENTIAL_COLUMNS: Readonly<
   Record<string, readonly string[]>
 > = {
   "consent.app": ["signing_key"],
-  "agent.agent": ["host_key"],
   "consent.device": ["public_key"],
+  "consent.agent": ["enrollment_key"],
 };
 
 /** One structural deny-list shared by log snapshots, bootstrap, and lazy reads. */

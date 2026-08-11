@@ -74,7 +74,7 @@ describe("photos-memories.scale", () => {
        VALUES (?, 'image/jpeg', ?, ?, 4096, ?)`
     );
     const insertAsset = db.vault.prepare(
-      `INSERT INTO media_media_asset
+      `INSERT INTO media_asset
          (asset_id, content_id, kind, captured_at, place_id, capture_group_id, favorite)
        VALUES (?, ?, 'photo', ?, ?, ?, 0)`
     );
@@ -138,7 +138,7 @@ describe("photos-memories.scale", () => {
     // row's own generated id without restructuring the loop above).
     db.vault.exec("BEGIN");
     const updateCaptureGroup = db.vault.prepare(
-      `UPDATE media_media_asset SET capture_group_id = ? WHERE asset_id = ?`
+      `UPDATE media_asset SET capture_group_id = ? WHERE asset_id = ?`
     );
     for (let index = 1; index < ASSET_COUNT; index += 50) {
       const companionKey = String(index).padStart(6, "0");

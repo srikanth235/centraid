@@ -9,7 +9,7 @@ export const PICK_KIND_LABELS = {
   "knowledge.note": "Note",
   "core.collection": "Collection",
   "social.thread": "Thread",
-  "media.media_asset": "Photo",
+  "media.asset": "Photo",
   "home.asset_item": "Belonging",
   "business.client": "Client",
   "business.project": "Project",

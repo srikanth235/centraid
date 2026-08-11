@@ -533,7 +533,7 @@ async function pK(K) {
 async function hK(K, Q) {
   let Z = (
     await K.vault.read({
-      entity: "media.media_asset",
+      entity: "media.asset",
       where: [
         { column: "kind", op: "in", value: ["photo", "scan"] },
         { column: "deleted_at", op: "is-null" },
@@ -595,7 +595,7 @@ async function cK({ ctx: K, log: Q }) {
   }
   let F = (await K.state.get("cursor")) ?? "",
     W = await K.vault.read({
-      entity: "media.media_asset",
+      entity: "media.asset",
       where: [
         { column: "asset_id", op: "gt", value: F },
         { column: "deleted_at", op: "is-null" },

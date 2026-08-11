@@ -246,7 +246,7 @@ const faceRegionPublisher: Publisher = {
   create(vault, _owner, payload) {
     const p = assertPayload<FaceRegionPayload>("FaceRegionPayload", payload);
     const asset = vault
-      .prepare("SELECT asset_id FROM media_media_asset WHERE asset_id = ?")
+      .prepare("SELECT asset_id FROM media_asset WHERE asset_id = ?")
       .get(p.asset_id) as { asset_id: string } | undefined;
     if (!asset)
       throw new Error(`face region names unknown asset ${p.asset_id}`);

@@ -44,7 +44,7 @@ describe("commons peer-plane hardening", () => {
       ownerPartyId: origin.ownerPartyId,
       ownerVaultId: origin.vaultId,
       ownerVault: origin.vault,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         {
@@ -152,7 +152,7 @@ describe("commons peer-plane hardening", () => {
       ownerPartyId: origin.ownerPartyId,
       ownerVaultId: origin.vaultId,
       ownerVault: origin.vault,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         {
@@ -189,9 +189,7 @@ describe("commons peer-plane hardening", () => {
     expect(first.state).toBe("current");
     expect(
       member.vault.vault
-        .prepare(
-          "SELECT COUNT(*) AS n FROM media_media_asset WHERE asset_id = ?"
-        )
+        .prepare("SELECT COUNT(*) AS n FROM media_asset WHERE asset_id = ?")
         .get(photo.assetId)
     ).toMatchObject({ n: 1 });
 
@@ -209,9 +207,7 @@ describe("commons peer-plane hardening", () => {
     expect(second.state).toBe("noop");
     expect(
       member.vault.vault
-        .prepare(
-          "SELECT COUNT(*) AS n FROM media_media_asset WHERE asset_id = ?"
-        )
+        .prepare("SELECT COUNT(*) AS n FROM media_asset WHERE asset_id = ?")
         .get(photo.assetId)
     ).toMatchObject({ n: 1 });
   });
@@ -227,7 +223,7 @@ describe("commons peer-plane hardening", () => {
       ownerPartyId: origin.ownerPartyId,
       ownerVaultId: origin.vaultId,
       ownerVault: origin.vault,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         {
@@ -312,9 +308,7 @@ describe("commons peer-plane hardening", () => {
     });
     expect(
       member.vault.vault
-        .prepare(
-          "SELECT COUNT(*) AS n FROM media_media_asset WHERE asset_id = ?"
-        )
+        .prepare("SELECT COUNT(*) AS n FROM media_asset WHERE asset_id = ?")
         .get(photo.assetId)
     ).toMatchObject({ n: 1 });
   });
@@ -502,7 +496,7 @@ describe("commons peer-plane hardening", () => {
       ownerPartyId: origin.ownerPartyId,
       ownerVaultId: origin.vaultId,
       ownerVault: origin.vault,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         {

@@ -114,7 +114,7 @@ describe("closure split", () => {
       origin,
       originVaultId: "vault-priya",
       audience,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemIds: photos.map((photo) => photo.assetId),
       sharedBy: "member-priya",
       now: () => 1_700_000_000_000,
@@ -125,13 +125,13 @@ describe("closure split", () => {
     );
     expect(shared.blobs).toHaveLength(6);
     expect(
-      rowsOf(audience, "SELECT COUNT(*) AS n FROM media_media_asset")
+      rowsOf(audience, "SELECT COUNT(*) AS n FROM media_asset")
     ).toStrictEqual([{ n: 3 }]);
     expect(
       rowsOf(
         audience,
         `SELECT COUNT(*) AS n FROM core_share_origin
-          WHERE item_type = 'media.media_asset' AND shared_at = 1700000000000`
+          WHERE item_type = 'media.asset' AND shared_at = 1700000000000`
       )
     ).toStrictEqual([{ n: 3 }]);
   });
@@ -153,7 +153,7 @@ describe("closure split", () => {
       .run(originPlaceId, now);
     origin.vault
       .prepare(
-        `UPDATE media_media_asset SET place_id = ?, exif_json = ?
+        `UPDATE media_asset SET place_id = ?, exif_json = ?
           WHERE asset_id = ?`
       )
       .run(
@@ -166,7 +166,7 @@ describe("closure split", () => {
         `INSERT INTO knowledge_annotation
            (annotation_id, author_party_id, target_type, target_id,
             selector_json, body_text, created_at)
-         VALUES (?, ?, 'media.media_asset', ?, NULL, 'a dog on a beach', ?)`
+         VALUES (?, ?, 'media.asset', ?, NULL, 'a dog on a beach', ?)`
       )
       .run(uuidv7(), originBoot.ownerPartyId, photo.assetId, now);
 
@@ -174,7 +174,7 @@ describe("closure split", () => {
       origin,
       originVaultId: "vault-priya",
       audience,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: photo.assetId,
       sharedBy: "member-priya",
       now: () => Date.parse("2026-08-08T00:00:00.000Z"),
@@ -184,7 +184,7 @@ describe("closure split", () => {
     // audience's ontology — never the origin's place id.
     const projectedPlace = audience.vault
       .prepare(
-        `SELECT p.place_id, p.name, p.geo_lat FROM media_media_asset a
+        `SELECT p.place_id, p.name, p.geo_lat FROM media_asset a
            JOIN core_place p ON p.place_id = a.place_id
           WHERE a.asset_id = ?`
       )
@@ -228,7 +228,7 @@ describe("closure split", () => {
       origin,
       originVaultId: "vault-priya",
       audience,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: photo.assetId,
       sharedBy: "member-sid",
     });
@@ -244,7 +244,7 @@ describe("closure split", () => {
     const { origin, originBoot, audience } = household();
     const photo = seedPhoto(origin, originBoot, "strip");
     origin.vault
-      .prepare("UPDATE media_media_asset SET exif_json = ? WHERE asset_id = ?")
+      .prepare("UPDATE media_asset SET exif_json = ? WHERE asset_id = ?")
       .run(
         JSON.stringify({ latitude: 12.9716, longitude: 77.5946 }),
         photo.assetId
@@ -257,7 +257,7 @@ describe("closure split", () => {
       origin,
       originVaultId: "vault-priya",
       audience,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: photo.assetId,
       sharedBy: "member-priya",
     });
@@ -267,7 +267,7 @@ describe("closure split", () => {
     ).toStrictEqual([{ n: 0 }]);
     expect(
       audience.vault
-        .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+        .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
         .get(shared.itemId)
     ).toMatchObject({ place_id: null });
   });
@@ -280,7 +280,7 @@ describe("closure split", () => {
 
     const closure = readShareClosure(origin.vault, {
       originVaultId: "vault-priya",
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemIds: [photo.assetId],
     });
     // oxlint-disable-next-line unicorn/prefer-structured-clone -- the point of this test IS the JSON wire path; structuredClone doesn't serialize the same way and would test something else
@@ -305,7 +305,7 @@ describe("closure split", () => {
     for (const sql of [
       "SELECT * FROM core_content_item",
       "SELECT * FROM core_content_derivative",
-      "SELECT * FROM media_media_asset",
+      "SELECT * FROM media_asset",
       "SELECT * FROM core_share_origin",
       `SELECT target_type, target_id, reason, contribution_variant, requested_at
          FROM enrich_request`,
@@ -319,7 +319,7 @@ describe("closure split", () => {
     const photo = seedPhoto(origin, originBoot, "format");
     const closure = readShareClosure(origin.vault, {
       originVaultId: "vault-priya",
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemIds: [photo.assetId],
     });
 
@@ -340,7 +340,7 @@ describe("closure split", () => {
     expect(() =>
       readShareClosure(origin.vault, {
         originVaultId: "vault-priya",
-        itemType: "media.media_asset",
+        itemType: "media.asset",
         itemIds: [],
       })
     ).toThrow(/at least one item/u);

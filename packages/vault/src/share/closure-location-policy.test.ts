@@ -17,7 +17,7 @@ function withGps(
   assetId: string
 ): void {
   vault.vault
-    .prepare("UPDATE media_media_asset SET exif_json = ? WHERE asset_id = ?")
+    .prepare("UPDATE media_asset SET exif_json = ? WHERE asset_id = ?")
     .run(
       JSON.stringify({
         has_location: true,
@@ -42,7 +42,7 @@ describe("media.location policy at closure read", () => {
 
     const closure = readShareClosure(origin.vault, {
       originVaultId: "vault-priya",
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemIds: [photo.assetId],
       crossOwner: true,
     });
@@ -65,7 +65,7 @@ describe("media.location policy at closure read", () => {
 
     const closure = readShareClosure(origin.vault, {
       originVaultId: "vault-priya",
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemIds: [photo.assetId],
       // crossOwner omitted — same-owner default.
     });
@@ -84,7 +84,7 @@ describe("media.location policy at closure read", () => {
 
     const closure = readShareClosure(origin.vault, {
       originVaultId: "vault-priya",
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemIds: [photo.assetId],
       crossOwner: true,
     });
