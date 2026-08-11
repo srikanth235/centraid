@@ -1,14 +1,17 @@
-import { checkStats, deriveTitle, previewText } from "./format.ts";
-// governance: allow-repo-hygiene file-size-limit cohesive non-visual notes logic module; vault IO, notebook navigation/CRUD, and note commands share the vault predicate translation and parked-write tracking
+import { createPendingOverlayModel } from "../_shared/pending-overlay.ts";
+import type { PendingRowState } from "../_shared/pending-overlay.ts";
+import { checkStats, previewText } from "./format.ts";
+// governance: allow-repo-hygiene file-size-limit cohesive non-visual notes logic module; vault IO, notebook navigation/CRUD, note commands, and the pending-write overlay share the vault predicate translation
 // Non-visual business logic: vault IO (write/act), notebook navigation,
 // notebook CRUD with the vault's predicates translated to sentences, the
-// quick-add/pin/move/delete note commands, parked-write tracking and search.
-// `createLogic` closes over app.tsx's own `state`/`data` (mutated in place,
-// never reassigned) plus the render/refresh entry points app.tsx defines —
-// the same factory shape tasks/logic.js uses. The pure derivations
-// (`sidebarCounts`/`buildWall`) need no closure and are exported standalone
-// so components can call them too.
+// quick-add/pin/move/delete note commands, the pending-write overlay (issue
+// #738) and search. `createLogic` closes over app.tsx's own `state`/`data`
+// (mutated in place, never reassigned) plus the render/refresh entry points
+// app.tsx defines — the same factory shape tasks/logic.ts and agenda/logic.ts
+// use. The pure derivations (`sidebarCounts`/`buildWall`) need no closure and
+// are exported standalone so components can call them too.
 import { debounce, outcomeMessage, statusLine } from "./kit.ts";
+import { notesPendingProjection } from "./pending-projection.ts";
 import type {
   AppData,
   AppState,
@@ -22,6 +25,12 @@ import type {
 type Friendly = Record<string, string>;
 
 export function createLogic({ state, data, render, refresh }: LogicDeps) {
+  // One overlay model per mount (issue #738): every write below mints an
+  // intentId, projects it through `notesPendingProjection`, and folds the
+  // outcome back in. `restorePending`/`pendingByRowId`/`applyPendingChange`
+  // are the three seams app-root.tsx drives (mount/refresh, render, doorbell).
+  const pendingModel = createPendingOverlayModel(notesPendingProjection);
+
   function notice(text: string) {
     const el = document.querySelector<HTMLElement>("#noticeBanner");
     if (!el) return;
@@ -58,82 +67,83 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return false;
   }
 
-  function markPending(
+  /** Rebuild the overlay from the durable outbox — the reload path (issue
+   *  #738). Feature-detected: an older/mock host without `pendingWrites`
+   *  restores to empty, which is fine — attention rows still persist
+   *  in-session from `applyOutcome`. */
+  async function restorePending(): Promise<void> {
+    pendingModel.restore((await window.centraid.pendingWrites?.()) ?? []);
+    render();
+  }
+
+  /** Row-id → pending state for decorating query rows with the chip
+   *  (Wall/Card/Sidebar/Editor call this fresh each render). */
+  function pendingByRowId(): Map<string, PendingRowState> {
+    return pendingModel.byRowId();
+  }
+
+  /** Fold one change-feed event into the overlay; true when the app should
+   *  re-render without a full library refetch (app-root.tsx's doorbell). */
+  function applyPendingChange(detail: CentraidChangeDetail): boolean {
+    return pendingModel.applyChangeDetail(detail);
+  }
+
+  // The universal write path (issue #738): mint the intent id, project the
+  // app's declared optimistic mutations for it, and fold whatever outcome
+  // comes back (or the transport failure) into the model. An action absent
+  // from pending-projection.ts projects nothing — `begin()` is a no-op and
+  // this is exactly the old fire-and-forget write. Returns the raw outcome so
+  // callers narrate/refresh on their own terms (write() below; kit.ts's
+  // wireAttachInput via the exported `act`).
+  async function act(
     action: string,
-    input: Record<string, unknown>,
-    outcome: VaultOutcome | undefined
-  ) {
-    if (action === "create-note") {
-      state.pendingCreates.push({
-        key:
-          outcome?.invocationId ??
-          `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        title: deriveTitle(input.title, input.body_text),
-        notebookId: (input.notebook_id ?? null) as string | null,
+    input: Record<string, unknown>
+  ): Promise<VaultOutcome | undefined> {
+    const intentId = crypto.randomUUID();
+    const optimistic = pendingModel.begin(action, input, intentId);
+    try {
+      const outcome = await window.centraid.write({
+        action,
+        input,
+        intentId,
+        ...(optimistic.length > 0 ? { optimistic } : {}),
       });
-      return;
-    }
-    const noteId = input.note_id ?? input.subject_id;
-    if (
-      noteId &&
-      ["edit-note", "move-note", "delete-note", "attach"].includes(action)
-    ) {
-      state.pendingNoteIds.add(String(noteId));
-    }
-    if (
-      input.notebook_id &&
-      (action === "rename-notebook" || action === "delete-notebook")
-    ) {
-      state.pendingNotebookIds.add(String(input.notebook_id));
+      pendingModel.applyOutcome(outcome.invocationId ?? intentId, {
+        status: outcome.status,
+        ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+        ...(outcome.conflict === undefined
+          ? {}
+          : { conflict: outcome.conflict }),
+      });
+      return outcome;
+    } catch (error) {
+      // The write never reached (or never left) the vault — nothing is
+      // durable, so the optimistic entry settles to `failed` rather than
+      // hanging as `queued` forever (a dismissible/retryable row, same
+      // grammar as a server-reported failure).
+      pendingModel.applyOutcome(intentId, { status: "failed" });
+      const e = error as { message?: string };
+      notice(String(e?.message ?? error));
+      return undefined;
     }
   }
 
-  function clearPending() {
-    state.pendingNoteIds.clear();
-    state.pendingNotebookIds.clear();
-    state.pendingCreates = [];
-  }
-
-  // The generic write: narrate, mark pending on park, refresh (full re-read)
-  // on anything that changed vault-visible shape. Discrete, infrequent
-  // actions (pin, move, delete, notebook CRUD, attach/detach) all go through
-  // this — a refetch per click is cheap and keeps counts/wall consistent.
+  // The generic write: narrate, refresh (full re-read) on anything that
+  // changed vault-visible shape. Discrete, infrequent actions (pin, move,
+  // delete, notebook CRUD) all go through this — a refetch per click is
+  // cheap and keeps counts/wall consistent.
   async function write(
     action: string,
     input: Record<string, unknown>,
     { friendly }: { friendly?: Friendly } = {}
   ): Promise<VaultOutcome | undefined> {
-    let outcome: VaultOutcome | undefined;
-    try {
-      outcome = await window.centraid.write({ action, input });
-    } catch (error) {
-      const e = error as { message?: string };
-      notice(String(e?.message ?? error));
-      return undefined;
-    }
+    const outcome = await act(action, input);
     const executed = narrate(outcome, friendly);
-    if (outcome?.status === "parked") {
-      markPending(action, input, outcome);
+    if (outcome?.status === "parked")
       statusLine("Sent to the owner for confirmation.");
-    }
     if (executed || outcome?.status === "denied") await refresh();
     else render();
     return outcome;
-  }
-
-  // Like write(), but returns the raw outcome so shared helpers (kit.ts
-  // wireAttachInput) can narrate and refresh on their own.
-  async function act(
-    action: string,
-    input: Record<string, unknown>
-  ): Promise<VaultOutcome | undefined> {
-    try {
-      return await window.centraid.write({ action, input });
-    } catch (error) {
-      const e = error as { message?: string };
-      notice(String(e?.message ?? error));
-      return undefined;
-    }
   }
 
   // The editor's continuous autosave (debounced while typing) is the one
@@ -142,22 +152,14 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // successful save patches the already-loaded row in place instead — the
   // same optimization the pre-React app.js made in its own performSave().
   // Parked/failed autosaves are still narrated in the banner; only the
-  // "refetch everything" step is skipped.
+  // "refetch everything" step is skipped — `act()`'s projection (issue #738)
+  // IS the optimistic patch now, composed by the replica on any OTHER read
+  // (another mount, a reload) without this one needing to refetch at all.
   async function editNoteAutosave(
     noteId: string,
     patch: NotePatch
   ): Promise<VaultOutcome | undefined> {
-    let outcome: VaultOutcome | undefined;
-    try {
-      outcome = await window.centraid.write({
-        action: "edit-note",
-        input: { note_id: noteId, ...patch },
-      });
-    } catch (error) {
-      const e = error as { message?: string };
-      notice(String(e?.message ?? error));
-      return undefined;
-    }
+    const outcome = await act("edit-note", { note_id: noteId, ...patch });
     if (outcome?.status === "executed") {
       notice("");
       const note = findNote(noteId);
@@ -174,7 +176,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       }
     } else if (outcome?.status === "parked") {
       notice("");
-      state.pendingNoteIds.add(noteId);
     } else {
       notice(outcomeMessage(outcome) ?? "");
     }
@@ -557,7 +558,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     linkNote,
     applySearchInput,
     clearSearch,
-    clearPending,
+    restorePending,
+    pendingByRowId,
+    applyPendingChange,
   };
 }
 

@@ -1,3 +1,5 @@
+import type { PendingRowState } from "../../_shared/pending-overlay.ts";
+import { pendingChipLabel } from "../../_shared/pending-overlay.ts";
 import { displayText } from "../../_shared/untrusted.ts";
 import { checkStats, notebookColorVar, previewText } from "../format.ts";
 import { I } from "../icons.ts";
@@ -21,7 +23,8 @@ export function Card({
 }: {
   note: Note;
   search: string;
-  pending: boolean;
+  /** This note's overlay entry (issue #738) — undefined when it's settled. */
+  pending: PendingRowState | undefined;
   onOpen: (noteId: string) => void;
   onTogglePin: (note: Note) => void;
 }) {
@@ -111,7 +114,11 @@ export function Card({
         <span className={styles.cardWhen}>
           {relTime(note.updated_at ?? "")}
         </span>
-        {pending ? <span className="kit-pending-chip">pending</span> : null}
+        {pending ? (
+          <span className="kit-pending-chip">
+            {pendingChipLabel(pending.status)}
+          </span>
+        ) : null}
       </div>
     </article>
   );

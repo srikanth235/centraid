@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
 
+import type { PendingRowState } from "../../_shared/pending-overlay.ts";
 import { deriveTitle, parseBlocks, stripInline } from "../format.ts";
 import { I } from "../icons.ts";
 import { relTime, renderAttachments } from "../kit.ts";
@@ -291,7 +292,8 @@ export function Editor({
   note: Note;
   trashed: boolean;
   notebooks: Notebook[];
-  pending: boolean;
+  /** This note's overlay entry (issue #738) — undefined when it's settled. */
+  pending: PendingRowState | undefined;
   registerFlush: (fn: () => Promise<void>) => void;
   onClose: () => void;
   onAutosave: (

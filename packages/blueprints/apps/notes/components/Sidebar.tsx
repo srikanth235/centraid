@@ -7,6 +7,8 @@
 // HTML in index.html (stable, no per-render data), wired once in chrome.ts.
 import { useRef, useState } from "react";
 
+import type { PendingRowState } from "../../_shared/pending-overlay.ts";
+import { pendingChipLabel } from "../../_shared/pending-overlay.ts";
 import { notebookColorVar } from "../format.ts";
 import { I } from "../icons.ts";
 import type { Nav, Notebook, SidebarCounts, SidebarTag } from "../types.ts";
@@ -74,7 +76,7 @@ export function SidebarNav({
   tags,
   tagCounts,
   creatingNotebook,
-  pendingNotebookIds,
+  pendingByRowId,
   onSelect,
   onStartCreate,
   onCancelCreate,
@@ -87,7 +89,7 @@ export function SidebarNav({
   tags: SidebarTag[];
   tagCounts: Map<string, number>;
   creatingNotebook: boolean;
-  pendingNotebookIds: Set<string>;
+  pendingByRowId: Map<string, PendingRowState>;
   onSelect: (nav: Nav) => void;
   onStartCreate: () => void;
   onCancelCreate: () => void;
@@ -140,35 +142,38 @@ export function SidebarNav({
         </button>
       </div>
       <div className={styles.nav}>
-        {notebooks.map((nb) => (
-          <button
-            key={nb.notebook_id}
-            type="button"
-            className={
-              pendingNotebookIds.has(nb.notebook_id)
-                ? `${styles.navItem} kit-pending`
-                : styles.navItem
-            }
-            aria-current={
-              nav.kind === "notebook" && nav.notebookId === nb.notebook_id
-            }
-            onClick={() =>
-              onSelect({ kind: "notebook", notebookId: nb.notebook_id })
-            }
-          >
-            <span
-              className={shared.nbDot}
-              style={{ background: notebookColorVar(nb.notebook_id) }}
-            />
-            <span className={styles.nbName}>{nb.name ?? "Notebook"}</span>
-            <span className={styles.navCount}>
-              {notebookCounts.get(nb.notebook_id) ?? 0}
-            </span>
-            {pendingNotebookIds.has(nb.notebook_id) ? (
-              <span className="kit-pending-chip">pending</span>
-            ) : null}
-          </button>
-        ))}
+        {notebooks.map((nb) => {
+          const pendingRow = pendingByRowId.get(nb.notebook_id);
+          return (
+            <button
+              key={nb.notebook_id}
+              type="button"
+              className={
+                pendingRow ? `${styles.navItem} kit-pending` : styles.navItem
+              }
+              aria-current={
+                nav.kind === "notebook" && nav.notebookId === nb.notebook_id
+              }
+              onClick={() =>
+                onSelect({ kind: "notebook", notebookId: nb.notebook_id })
+              }
+            >
+              <span
+                className={shared.nbDot}
+                style={{ background: notebookColorVar(nb.notebook_id) }}
+              />
+              <span className={styles.nbName}>{nb.name ?? "Notebook"}</span>
+              <span className={styles.navCount}>
+                {notebookCounts.get(nb.notebook_id) ?? 0}
+              </span>
+              {pendingRow ? (
+                <span className="kit-pending-chip">
+                  {pendingChipLabel(pendingRow.status)}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
         {creatingNotebook ? (
           <NewNotebookForm
             onSubmit={onSubmitCreate}

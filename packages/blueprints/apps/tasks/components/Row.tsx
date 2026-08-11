@@ -5,6 +5,8 @@
 // instant it's clicked, reverting if the write didn't execute.
 import { useState } from "react";
 
+import type { PendingRowState } from "../../_shared/pending-overlay.ts";
+import { pendingChipLabel } from "../../_shared/pending-overlay.ts";
 import { displayText } from "../../_shared/untrusted.ts";
 import {
   flagLevel,
@@ -36,7 +38,7 @@ function Highlighted({ text, term }: { text: string; term: string }) {
 export function Row({
   task,
   closed = false,
-  pending = false,
+  pending,
   search = "",
   snippet,
   onOpen,
@@ -44,7 +46,8 @@ export function Row({
 }: {
   task: Task;
   closed?: boolean;
-  pending?: boolean;
+  /** This row's overlay entry (issue #738) — undefined when it's settled. */
+  pending?: PendingRowState;
   search?: string;
   snippet?: string;
   onOpen: (id: string) => void;
@@ -128,7 +131,11 @@ export function Row({
               ↻
             </span>
           ) : null}
-          {pending ? <span className="kit-pending-chip">pending</span> : null}
+          {pending ? (
+            <span className="kit-pending-chip">
+              {pendingChipLabel(pending.status)}
+            </span>
+          ) : null}
         </div>
         {snippet ? (
           <Snippet snippet={snippet} className={styles.rowNote} />

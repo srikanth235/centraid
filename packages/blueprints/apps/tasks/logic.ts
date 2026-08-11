@@ -1,6 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit (#630) — this factory is the
 // cohesive controller for one blueprint; its board, ordering, and write
 // outcomes share the same live app-state closure.
+import { createPendingOverlayModel } from "../_shared/pending-overlay.ts";
+import type { PendingRowState } from "../_shared/pending-overlay.ts";
 import {
   BUCKETS,
   VIEW_BUCKETS,
@@ -10,13 +12,15 @@ import {
   todayStr,
 } from "./format.ts";
 // Non-visual business logic: vault IO (write/act), the board-section
-// derivation, sidebar counts, the session activity log and parked-write
-// tracking. `createLogic` closes over app.tsx's own `state`/`data` (mutated
-// in place, never reassigned) plus the render/refresh entry points app.tsx
-// defines — the same factory shape docs/logic.ts and nav.ts use. The pure
-// derivation helpers (`buildSections`/`sidebarCounts`/`todayProgress`) need
-// no closure and are exported standalone so components can call them too.
+// derivation, sidebar counts, the session activity log and the pending-write
+// overlay (issue #738 — createPendingOverlayModel, one instance per mount).
+// `createLogic` closes over app.tsx's own `state`/`data` (mutated in place,
+// never reassigned) plus the render/refresh entry points app.tsx defines —
+// the same factory shape docs/logic.ts and nav.ts use. The pure derivation
+// helpers (`buildSections`/`sidebarCounts`/`todayProgress`) need no closure
+// and are exported standalone so components can call them too.
 import { debounce, outcomeMessage, statusLine } from "./kit.ts";
+import { tasksPendingProjection } from "./pending-projection.ts";
 import type {
   AppState,
   BoardData,
@@ -36,6 +40,12 @@ interface CapturePayload {
 }
 
 export function createLogic({ state, data, render, refresh }: LogicDeps) {
+  // One overlay model per mount (issue #738): every write below mints an
+  // intentId, projects it through `tasksPendingProjection`, and folds the
+  // outcome back in. `restorePending`/`pendingByRowId`/`applyPendingChange`
+  // are the three seams app-root.tsx drives (mount/refresh, render, doorbell).
+  const pendingModel = createPendingOverlayModel(tasksPendingProjection);
+
   function notice(text: string) {
     const el = document.querySelector<HTMLElement>("#noticeBanner");
     if (!el) return;
@@ -61,31 +71,25 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return false;
   }
 
-  function markPending(
-    action: string,
-    input: Record<string, unknown>,
-    outcome: VaultOutcome | undefined
-  ) {
-    if (action === "add") {
-      state.pendingAdds.push({
-        key:
-          outcome?.invocationId ??
-          `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        title: String(input.title ?? ""),
-        due_at: (input.due_at as string | null | undefined) ?? null,
-        priority: (input.priority as number | undefined) ?? 0,
-        parent_task_id:
-          (input.parent_task_id as string | null | undefined) ?? null,
-      });
-      return;
-    }
-    const id = (input.task_id ?? input.subject_id) as string | undefined;
-    if (id) state.pendingIds.add(id);
+  /** Rebuild the overlay from the durable outbox — the reload path (issue
+   *  #738). Feature-detected: an older/mock host without `pendingWrites`
+   *  restores to empty, which is fine — attention rows still persist
+   *  in-session from `applyOutcome`. */
+  async function restorePending(): Promise<void> {
+    pendingModel.restore((await window.centraid.pendingWrites?.()) ?? []);
+    render();
   }
 
-  function clearPending() {
-    state.pendingIds.clear();
-    state.pendingAdds = [];
+  /** Row-id → pending state for decorating query rows with the chip
+   *  (Board/Detail call this fresh each render). */
+  function pendingByRowId(): Map<string, PendingRowState> {
+    return pendingModel.byRowId();
+  }
+
+  /** Fold one change-feed event into the overlay; true when the app should
+   *  re-render without a full board refetch (app-root.tsx's doorbell). */
+  function applyPendingChange(detail: CentraidChangeDetail): boolean {
+    return pendingModel.applyChangeDetail(detail);
   }
 
   function logActivity(
@@ -103,17 +107,50 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     state.activityLog.set(taskId, list.slice(0, 20));
   }
 
+  // The universal write path (issue #738): mint the intent id, project the
+  // app's declared optimistic mutations for it, and fold whatever outcome
+  // comes back (or the transport failure) into the model. An action absent
+  // from pending-projection.ts projects nothing — `begin()` is a no-op and
+  // this is exactly the old fire-and-forget write. Returns the raw outcome so
+  // callers narrate/refresh on their own terms (write() below; toggleComplete;
+  // kit.ts's wireAttachInput via the exported `act`).
+  async function act(
+    action: string,
+    input: Record<string, unknown>
+  ): Promise<VaultOutcome | undefined> {
+    const intentId = crypto.randomUUID();
+    const optimistic = pendingModel.begin(action, input, intentId);
+    try {
+      const outcome = await window.centraid.write({
+        action,
+        input,
+        intentId,
+        ...(optimistic.length > 0 ? { optimistic } : {}),
+      });
+      pendingModel.applyOutcome(outcome.invocationId ?? intentId, {
+        status: outcome.status,
+        ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+        ...(outcome.conflict === undefined
+          ? {}
+          : { conflict: outcome.conflict }),
+      });
+      return outcome;
+    } catch (error) {
+      // The write never reached (or never left) the vault — nothing is
+      // durable, so the optimistic entry settles to `failed` rather than
+      // hanging as `queued` forever (a dismissible/retryable row, same
+      // grammar as a server-reported failure).
+      pendingModel.applyOutcome(intentId, { status: "failed" });
+      notice(String((error as { message?: unknown })?.message ?? error));
+      return undefined;
+    }
+  }
+
   async function write(
     action: string,
     input: Record<string, unknown>
   ): Promise<VaultOutcome | undefined> {
-    let outcome: VaultOutcome | undefined;
-    try {
-      outcome = await window.centraid.write({ action, input });
-    } catch (error) {
-      notice(String((error as { message?: unknown })?.message ?? error));
-      return undefined;
-    }
+    const outcome = await act(action, input);
     const executed = narrate(outcome);
     if (
       (outcome?.status === "executed" || outcome?.status === "queued") &&
@@ -127,27 +164,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
           window.location.origin
         );
     }
-    if (outcome?.status === "parked") {
-      markPending(action, input, outcome);
+    if (outcome?.status === "parked")
       statusLine("Sent to the owner for confirmation.");
-    }
     if (executed || outcome?.status === "denied") await refresh();
     else render();
     return outcome;
-  }
-
-  // Like write(), but returns the raw outcome so the shared attachment
-  // helpers (kit.ts wireAttachInput) can narrate and refresh on their own.
-  async function act(
-    action: string,
-    input: Record<string, unknown>
-  ): Promise<VaultOutcome | undefined> {
-    try {
-      return await window.centraid.write({ action, input });
-    } catch (error) {
-      notice(String((error as { message?: unknown })?.message ?? error));
-      return undefined;
-    }
   }
 
   function findTask(taskId: string): Task | null {
@@ -285,16 +306,13 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       task.status === "needs-action" || task.status === "in-process";
     const nextStatus = wasOpen ? "completed" : "needs-action";
     const prevStatus = task.status;
-    let outcome: VaultOutcome | undefined;
-    try {
-      outcome = await window.centraid.write({
-        action: "set-status",
-        input: { task_id: task.task_id, status: nextStatus },
-      });
-    } catch (error) {
-      notice(String((error as { message?: unknown })?.message ?? error));
-      return false;
-    }
+    // Registered for the chip (byRowId) even though this path deliberately
+    // never refreshes on its own — the board's own doorbell reconciles it,
+    // same as before the overlay engine existed.
+    const outcome = await act("set-status", {
+      task_id: task.task_id,
+      status: nextStatus,
+    });
     if (outcome?.status === "executed") {
       notice("");
       logActivity(
@@ -316,7 +334,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       return true;
     }
     if (outcome?.status === "parked") {
-      markPending("set-status", { task_id: task.task_id }, outcome);
       statusLine("Sent to the owner for confirmation.");
       render();
       return false;
@@ -481,7 +498,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     removeTag,
     applySearchInput,
     clearSearch,
-    clearPending,
+    restorePending,
+    pendingByRowId,
+    applyPendingChange,
   };
 }
 

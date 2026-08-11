@@ -440,21 +440,17 @@ export function createPendingOverlayModel(
                 record.input ?? {},
                 record.intentId
               ));
+        // The durable record wins; what the model already knew survives a
+        // record whose sensitive input the outbox scrubbed on settle.
+        const reason = record.reason ?? existing?.reason;
+        const input = record.input ?? existing?.input;
         entries.set(record.intentId, {
           intentId: record.intentId,
           action: record.action,
           status,
           mutations,
-          ...(record.reason !== undefined
-            ? { reason: record.reason }
-            : existing?.reason !== undefined
-              ? { reason: existing.reason }
-              : {}),
-          ...(record.input !== undefined
-            ? { input: record.input }
-            : existing?.input !== undefined
-              ? { input: existing.input }
-              : {}),
+          ...(reason === undefined ? {} : { reason }),
+          ...(input === undefined ? {} : { input }),
           ...(existing?.stewardLabel
             ? { stewardLabel: existing.stewardLabel }
             : {}),
@@ -501,8 +497,8 @@ export function createPendingOverlayModel(
           action: intent.command,
           status,
           mutations,
-          ...(intent.reason !== undefined ? { reason: intent.reason } : {}),
-          ...(intent.input !== undefined ? { input: intent.input } : {}),
+          ...(intent.reason === undefined ? {} : { reason: intent.reason }),
+          ...(intent.input === undefined ? {} : { input: intent.input }),
           ...(intent.stewardLabel ? { stewardLabel: intent.stewardLabel } : {}),
           commonsStatus: intent.status,
           enrichmentOnly: true,

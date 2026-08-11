@@ -6,6 +6,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 
+import type { PendingRowState } from "../../_shared/pending-overlay.ts";
+import { pendingChipLabel } from "../../_shared/pending-overlay.ts";
 import { flagLevel, plusDays, todayStr } from "../format.ts";
 import { I } from "../icons.ts";
 import { renderAttachments } from "../kit.ts";
@@ -109,7 +111,8 @@ function AttachStrip({
 
 interface DetailProps {
   task: Task;
-  pending: boolean;
+  /** This task's overlay entry (issue #738) — undefined when it's settled. */
+  pending: PendingRowState | undefined;
   activity: ActivityEntry[];
   onClose: () => void;
   onToggleStatus: (t: Task) => void;
@@ -221,7 +224,11 @@ export function Detail({
             {isDone ? <Icon svg={I.check} /> : null}
           </button>
           <span className={shared.eyebrowLabel}>{statusLabel}</span>
-          {pending ? <span className="kit-pending-chip">pending</span> : null}
+          {pending ? (
+            <span className="kit-pending-chip">
+              {pendingChipLabel(pending.status)}
+            </span>
+          ) : null}
           <button
             type="button"
             className={`kit-icon-btn ${styles.detailClose}`}

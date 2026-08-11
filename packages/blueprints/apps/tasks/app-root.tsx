@@ -82,8 +82,6 @@ function makeState(view: View): AppState {
     boardReach: [],
     detailId: null,
     narrow: false,
-    pendingIds: new Set(),
-    pendingAdds: [],
     activityLog: new Map(),
     readFailedShown: false,
   };
@@ -156,6 +154,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const state = stateRef.current;
     const data = dataRef.current;
     const logic = logicRef.current;
+    // The reload path (issue #738): every full refresh rebuilds the pending
+    // overlay from the durable outbox alongside the canonical read, so a
+    // pending row's visibility survives exactly as long as the outbox does.
+    void logic?.restorePending();
     let res: BoardPayload;
     try {
       // Fans across every mounted scope when this app is installed in more
@@ -265,9 +267,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         refresh,
       });
     }
-    const stopDoorbell = onDataChange(CHANGE_TABLES, () => {
-      logic.clearPending();
-      void refresh();
+    const stopDoorbell = onDataChange(CHANGE_TABLES, (detail) => {
+      if (logic.applyPendingChange(detail)) bump();
+      else void refresh();
     });
     const stopFocus = onFocusRefresh(() => void refresh());
     const onKey = (e: globalThis.KeyboardEvent): void => {
@@ -321,6 +323,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     ])
   );
   const { sections, isEmpty } = buildSections(data, state);
+  // The pending-write overlay's render-time index (issue #738): components
+  // decorate off this ONE map instead of app-owned pending state. Pending
+  // ADD rows already arrive inside `sections` (the query composes them from
+  // the durable outbox) — this only supplies the chip.
+  const pendingByRow = logic.pendingByRowId();
   const q = state.search.trim();
   const activeProject = state.view.startsWith("project:")
     ? data.projects.find(
@@ -417,14 +424,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                 captureFocusRef.current = fn;
               },
             }}
-            pendingAdds={state.pendingAdds}
             sections={sections}
             isEmpty={isEmpty}
             emptyTitle={empty.title}
             emptySub={empty.sub}
             search={state.search}
             snippets={state.searchSnippets}
-            pendingIds={state.pendingIds}
+            pendingByRowId={pendingByRow}
             projects={data.projects}
             projectSections={data.sections}
             footer={footer}
@@ -471,7 +477,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             <Detail
               key={detailTask.task_id}
               task={detailTask}
-              pending={state.pendingIds.has(detailTask.task_id)}
+              pending={pendingByRow.get(detailTask.task_id)}
               activity={state.activityLog.get(detailTask.task_id) ?? []}
               onClose={closeDetail}
               onToggleStatus={(t) => logic.toggleComplete(t)}

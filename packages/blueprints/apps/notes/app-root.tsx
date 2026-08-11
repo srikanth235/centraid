@@ -61,9 +61,6 @@ function makeState(view: AppState["view"]): AppState {
     narrow: false,
     editingNotebookId: null,
     creatingNotebook: false,
-    pendingNoteIds: new Set(),
-    pendingNotebookIds: new Set(),
-    pendingCreates: [],
     readFailedShown: false,
   };
 }
@@ -102,6 +99,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const state = stateRef.current;
     const data = dataRef.current;
     const logic = logicRef.current;
+    // The reload path (issue #738): every full refresh rebuilds the pending
+    // overlay from the durable outbox alongside the canonical read, so a
+    // pending row's visibility survives exactly as long as the outbox does.
+    void logic?.restorePending();
     let res: LibraryPayload;
     try {
       res = await window.centraid.read<LibraryPayload>({
@@ -235,9 +236,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         refresh,
       });
     }
-    const stopDoorbell = onDataChange(CHANGE_TABLES, () => {
-      logic.clearPending();
-      void refresh();
+    const stopDoorbell = onDataChange(CHANGE_TABLES, (detail) => {
+      if (logic.applyPendingChange(detail)) bump();
+      else void refresh();
     });
     const stopFocus = onFocusRefresh(() => void refresh());
     const onKey = (e: globalThis.KeyboardEvent): void => {
@@ -293,6 +294,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const q = state.search.trim();
   const wall = buildWall(data, state);
   const rows = wall.pinned.length + wall.others.length;
+  // The pending-write overlay's render-time index (issue #738): components
+  // decorate off this ONE map instead of app-owned pending state. A pending
+  // create already arrives inside `wall` (the query composes it from the
+  // durable outbox) — this only supplies the chip.
+  const pendingByRow = logic.pendingByRowId();
   const titles: Record<string, string> = {
     all: "All notes",
     pinned: "Pinned",
@@ -374,7 +380,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             tags={data.tags}
             tagCounts={tgCounts}
             creatingNotebook={state.creatingNotebook}
-            pendingNotebookIds={state.pendingNotebookIds}
+            pendingByRowId={pendingByRow}
             onSelect={selectNav}
             onStartCreate={() => {
               state.creatingNotebook = true;
@@ -429,7 +435,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                 focusQuickAddRef.current = fn;
               },
             }}
-            pendingCreates={state.pendingCreates}
             pinned={wall.pinned}
             others={wall.others}
             showPinnedGroup={wall.showPinnedGroup}
@@ -437,7 +442,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             emptyTitle={wall.emptyTitle}
             emptySub={wall.emptySub}
             search={state.search}
-            pendingNoteIds={state.pendingNoteIds}
+            pendingByRowId={pendingByRow}
             footer={footer}
             onShowMore={showMore}
             onEmptyAction={() => {
@@ -455,7 +460,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
               note={editorNote}
               trashed={editorNote.deleted_at != null}
               notebooks={data.notebooks}
-              pending={state.pendingNoteIds.has(editorNote.note_id)}
+              pending={pendingByRow.get(editorNote.note_id)}
               registerFlush={(fn) => {
                 editorFlushRef.current = fn;
               }}

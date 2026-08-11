@@ -1,26 +1,20 @@
+import type { PendingRowState } from "../../_shared/pending-overlay.ts";
 import type { ScopeSearchReach } from "../../_shared/search-scaffold.ts";
 import { scopeReachFacts } from "../../_shared/search-scaffold.ts";
-import { fmtDay } from "../format.ts";
 import { I } from "../icons.ts";
-import type {
-  BoardSection,
-  PendingAdd,
-  Project,
-  Section,
-  Task,
-  View,
-} from "../types.ts";
-// The scrolling board column: the capture bar, a "pending approval" strip
-// for parked adds (no task_id exists yet, so these are rendered as ghost
-// rows rather than real Row components), the bucketed/logbook sections, the
-// empty state and the bounded-window "Show more" footer.
+import type { BoardSection, Project, Section, Task, View } from "../types.ts";
+// The scrolling board column: the capture bar, the bucketed/logbook
+// sections, the empty state and the bounded-window "Show more" footer. A
+// pending ADD arrives as a normal row inside `sections` (the replica composes
+// it from the durable outbox — issue #738); `pendingByRowId` decorates it
+// (and any pending mutation on an existing row) with the chip, same as every
+// other row.
 import { Capture } from "./Capture.tsx";
 import type { CaptureProps } from "./Capture.tsx";
 import { Row } from "./Row.tsx";
 import { Icon } from "./Shared.tsx";
 
 import styles from "./Board.module.css";
-import shared from "./shared.module.css";
 
 // Section tone → eyebrow modifier (explicit map, never a computed styles key).
 const TONE_MOD: Record<string, string | undefined> = {
@@ -28,39 +22,17 @@ const TONE_MOD: Record<string, string | undefined> = {
   accent: styles.toneAccent,
 };
 
-function PendingAddRow({ item }: { item: PendingAdd }) {
-  return (
-    <div className={`${shared.row} kit-pending`}>
-      <span
-        className={shared.circle}
-        data-cancelled="false"
-        aria-hidden="true"
-      />
-      <div className={shared.rowMain}>
-        <div className={shared.rowTitleLine}>
-          <span className={shared.rowTitle}>{item.title}</span>
-          <span className="kit-pending-chip">pending</span>
-        </div>
-      </div>
-      {item.due_at ? (
-        <span className={shared.due}>{fmtDay(item.due_at)}</span>
-      ) : null}
-    </div>
-  );
-}
-
 export function Board({
   view,
   showCapture,
   captureProps,
-  pendingAdds,
   sections,
   isEmpty,
   emptyTitle,
   emptySub,
   search,
   snippets,
-  pendingIds,
+  pendingByRowId,
   projects,
   projectSections,
   footer,
@@ -75,14 +47,13 @@ export function Board({
   view: View;
   showCapture: boolean;
   captureProps: CaptureProps;
-  pendingAdds: PendingAdd[];
   sections: BoardSection[];
   isEmpty: boolean;
   emptyTitle: string;
   emptySub: string;
   search: string;
   snippets: Map<string, string> | null;
-  pendingIds: Set<string>;
+  pendingByRowId: Map<string, PendingRowState>;
   projects: Project[];
   projectSections: Section[];
   footer: { windowSize: number } | null;
@@ -124,21 +95,6 @@ export function Board({
         </div>
       ) : null}
 
-      {pendingAdds.length > 0 && view !== "logbook" ? (
-        <div className={styles.section}>
-          <div className={styles.sectionHead}>
-            <span className={styles.eyebrow}>Pending approval</span>
-            <span className={styles.eyebrowCount}>{pendingAdds.length}</span>
-            <span className={styles.hairline} />
-          </div>
-          <div className={styles.rows}>
-            {pendingAdds.map((item) => (
-              <PendingAddRow key={item.key} item={item} />
-            ))}
-          </div>
-        </div>
-      ) : null}
-
       {sections.map((sec) => (
         <div className={styles.section} key={sec.key}>
           <div className={styles.sectionHead}>
@@ -176,7 +132,7 @@ export function Board({
                 <Row
                   task={task}
                   closed={view === "logbook"}
-                  pending={pendingIds.has(task.task_id)}
+                  pending={pendingByRowId.get(task.task_id)}
                   search={search}
                   snippet={snippets?.get(task.task_id)}
                   onOpen={onOpenDetail}
