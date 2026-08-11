@@ -26,9 +26,16 @@
 /**
  * The one status grammar a pending row renders (issue #738 commitment 3):
  * `queued`/`sending` → quiet chip; `parked` → chip + reason + the
- * owner-approval affordance; `denied`/`conflict`/`failed` → the row persists
- * with the explanation and edit/retry/discard. Silent disappearance of a
- * pending row is a defect class, not a styling choice.
+ * owner-approval affordance; `denied`/`conflict`/`failed`/`expired`/
+ * `cancelled` → the row persists with the explanation and edit/retry/discard.
+ * Silent disappearance of a pending row is a defect class, not a styling
+ * choice.
+ *
+ * Every settled-but-not-executed state keeps its OWN name (issue #731 goal 2,
+ * preserved through the #738 migration): a write the steward let lapse
+ * (`expired`) and one the member withdrew (`cancelled`) are different facts
+ * from a write that was refused (`denied`) or that broke (`failed`), and
+ * collapsing them would print a chip that lies about what happened.
  */
 export type PendingWriteStatus =
   | "queued"
@@ -36,7 +43,9 @@ export type PendingWriteStatus =
   | "parked"
   | "denied"
   | "conflict"
-  | "failed";
+  | "failed"
+  | "expired"
+  | "cancelled";
 
 /** Statuses that keep overlaying reads from the durable outbox. */
 const OVERLAY_STATUSES: ReadonlySet<PendingWriteStatus> = new Set([
@@ -50,6 +59,8 @@ const DISMISSIBLE_STATUSES: ReadonlySet<PendingWriteStatus> = new Set([
   "denied",
   "conflict",
   "failed",
+  "expired",
+  "cancelled",
 ]);
 
 /** Optimistic-concurrency detail a conflict row surfaces verbatim (P2):
@@ -227,6 +238,10 @@ export function pendingReasonCopy(
       return "Someone else changed this first.";
     case "failed":
       return "This change could not be applied.";
+    case "expired":
+      return "This change expired before it was approved.";
+    case "cancelled":
+      return "This change was cancelled.";
     default:
       return "";
   }
@@ -247,6 +262,10 @@ export function pendingChipLabel(status: PendingWriteStatus): string {
       return "conflict";
     case "failed":
       return "failed";
+    case "expired":
+      return "expired";
+    case "cancelled":
+      return "cancelled";
     default:
       return "pending";
   }
@@ -285,6 +304,26 @@ export interface DurablePendingWrite {
   mutations?: readonly PendingMutation[];
 }
 
+/**
+ * The durable ATTENTION slice a seat feeds `restoreAttention()` — the other
+ * half of the reload path (issue #738). A settled write leaves the outbox, so
+ * `restore()` alone can never bring a denied/conflicted/failed row back; this
+ * comes from the client-local attention journal
+ * (`window.centraid.attentionWrites()` on the web seat, the
+ * `replica_intent_attention` table on the phone) and is what makes "the row
+ * persists with its explanation" true across a reload instead of only within
+ * one session's memory.
+ */
+export interface DurableAttentionWrite {
+  intentId: string;
+  action: string;
+  status: "denied" | "conflict" | "failed";
+  reason?: string;
+  input?: Record<string, unknown>;
+  mutations?: readonly PendingMutation[];
+  conflict?: PendingConflictDetail;
+}
+
 /** The commons-intent slice `enrichCommons()` consumes (issue #731 rail). */
 export interface CommonsIntentLike {
   intentId: string;
@@ -315,16 +354,32 @@ interface PendingEntry {
   enrichmentOnly?: boolean;
 }
 
+/**
+ * The one I/O port the model takes. The model stays pure — it holds no
+ * transport and imports nothing — but a row the member DISCARDS (or takes for
+ * a retry) has to leave the durable attention journal too, or the next reload
+ * resurrects it. Wiring that per app would guarantee some app forgets, so the
+ * engine calls the seat's clear function itself.
+ */
+export interface PendingOverlayPorts {
+  /** Forget one attention record durably. Fire-and-forget by contract: the
+   *  seat owns the failure narration, so this returns nothing. */
+  dismissDurable?: (intentId: string) => void;
+}
+
 /** Commons statuses a member may dismiss once settled (issue #731 m6):
  *  terminal without an executed row to show for it. */
 const DISMISSIBLE_COMMONS = new Set(["denied", "expired", "cancelled"]);
 
 /** Server-side commons status → the row grammar. `pending` and `parked` both
- *  wait on the steward; `denied` keeps the row with its reason. */
+ *  wait on the steward; every settled-but-not-executed state keeps its own
+ *  name, so the chip says what actually happened rather than collapsing a
+ *  lapsed or withdrawn request into a generic failure. */
 function statusFromCommons(status: string): PendingWriteStatus | undefined {
   if (status === "pending" || status === "parked") return "parked";
   if (status === "denied") return "denied";
-  if (status === "expired" || status === "cancelled") return "failed";
+  if (status === "expired") return "expired";
+  if (status === "cancelled") return "cancelled";
   return undefined; // executed: the canonical row carries the truth now
 }
 
@@ -338,6 +393,9 @@ function statusFromCommons(status: string): PendingWriteStatus | undefined {
  *   enrichment survive a restore untouched, so no refresh can wipe a row the
  *   grammar says must persist (the issue #738 solo-vault wipe, fixed by
  *   construction).
+ * - `restoreAttention()` rebuilds those attention entries from the durable
+ *   attention journal. It only ever ADDS: an entry this session already
+ *   knows, and one the member has dismissed, are both left alone.
  * - Terminal outcomes never auto-remove a row: `executed` settles it (the
  *   canonical row replaces it in the same change batch), everything else
  *   holds the row until an explicit `dismiss()`.
@@ -345,7 +403,8 @@ function statusFromCommons(status: string): PendingWriteStatus | undefined {
  *   removes nothing.
  */
 export function createPendingOverlayModel(
-  declaration: PendingProjectionDeclaration
+  declaration: PendingProjectionDeclaration,
+  ports: PendingOverlayPorts = {}
 ) {
   const entries = new Map<string, PendingEntry>();
   const dismissed = new Set<string>();
@@ -493,6 +552,44 @@ export function createPendingOverlayModel(
     },
 
     /**
+     * Rebuild attention entries from the durable attention journal — the
+     * reload path for denied/conflict/failed rows, which `restore()` cannot
+     * see because the outbox drops a settled intent (issue #738).
+     *
+     * Purely additive, in both directions that matter: a row the member has
+     * already dismissed stays dismissed (the journal is cleared on dismissal,
+     * but a stale read racing that clear must not resurrect it), and an entry
+     * this session already holds keeps whatever it learned at settle time —
+     * a journal is a floor on what is known, never a ceiling.
+     */
+    restoreAttention(durable: readonly DurableAttentionWrite[]): void {
+      for (const record of durable) {
+        if (dismissed.has(record.intentId)) continue;
+        if (entries.has(record.intentId)) continue;
+        const mutations =
+          record.mutations !== undefined && record.mutations.length > 0
+            ? [...record.mutations]
+            : projectPendingMutations(
+                declaration,
+                record.action,
+                record.input ?? {},
+                record.intentId
+              );
+        entries.set(record.intentId, {
+          intentId: record.intentId,
+          action: record.action,
+          status: record.status,
+          mutations,
+          ...(record.reason === undefined ? {} : { reason: record.reason }),
+          ...(record.input === undefined ? {} : { input: record.input }),
+          ...(record.conflict === undefined
+            ? {}
+            : { conflict: record.conflict }),
+        });
+      }
+    },
+
+    /**
      * Merge the online commons rail (issue #731) as ENRICHMENT: steward
      * label and per-grant status onto matching local rows, and
      * enrichment-only rows for server-side intents the local outbox does not
@@ -540,6 +637,9 @@ export function createPendingOverlayModel(
      * settled commons enrichment per issue #731 m6). A row still waiting —
      * queued, sending, parked, or a live commons pending/parked — is not
      * dismissible and the call is a no-op, so nothing waiting can be lost.
+     *
+     * The durable attention record goes with it (`ports.dismissDurable`):
+     * discarding a row that comes back on the next reload is not discarding.
      */
     dismiss(intentId: string): boolean {
       const entry = entries.get(intentId);
@@ -551,13 +651,16 @@ export function createPendingOverlayModel(
         return false;
       entries.delete(intentId);
       dismissed.add(intentId);
+      ports.dismissDurable?.(intentId);
       return true;
     },
 
     /**
      * Hand back what a retry needs — the cached action and input — and drop
-     * the failed entry. The app re-issues through `begin()` with a FRESH
-     * intent id (the old id's payload hash is bound to the failed attempt).
+     * the failed entry, durable record included: the retry is issued under a
+     * FRESH intent id (the old id's payload hash is bound to the failed
+     * attempt), so leaving the old record would leave a duplicate row behind
+     * on the next reload.
      * Returns undefined for a row still in flight or with no cached input.
      */
     takeForRetry(
@@ -567,6 +670,8 @@ export function createPendingOverlayModel(
       if (!entry || !DISMISSIBLE_STATUSES.has(entry.status)) return undefined;
       if (entry.input === undefined) return undefined;
       entries.delete(intentId);
+      dismissed.add(intentId);
+      ports.dismissDurable?.(intentId);
       return { action: entry.action, input: entry.input };
     },
 

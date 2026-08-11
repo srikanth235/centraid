@@ -137,10 +137,33 @@ describe(pendingReasonCopy, () => {
       "denied",
       "conflict",
       "failed",
+      "expired",
+      "cancelled",
     ] as const) {
       expect(pendingReasonCopy(status).length).toBeGreaterThan(0);
       expect(pendingChipLabel(status).length).toBeGreaterThan(0);
     }
+  });
+
+  // [law:pending-overlay-honesty] Every settled-but-not-executed state keeps
+  // its own name — a lapsed request and a withdrawn one are different facts
+  // from a refusal or a breakage, and the chip must not claim otherwise.
+  it("labels every terminal state distinctly instead of collapsing them", () => {
+    const labels = (
+      ["denied", "conflict", "failed", "expired", "cancelled"] as const
+    ).map(pendingChipLabel);
+    expect(labels).toStrictEqual([
+      "denied",
+      "conflict",
+      "failed",
+      "expired",
+      "cancelled",
+    ]);
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(pendingReasonCopy("expired")).not.toBe(pendingReasonCopy("failed"));
+    expect(pendingReasonCopy("cancelled")).not.toBe(
+      pendingReasonCopy("failed")
+    );
   });
 });
 
@@ -432,6 +455,38 @@ describe(createPendingOverlayModel, () => {
     ]);
     expect(model.dismiss("remote-1")).toBe(false);
     expect(model.rows()).toHaveLength(1);
+  });
+
+  it("carries an expired or cancelled commons intent under its own status, not as a generic failure", () => {
+    const model = createPendingOverlayModel(DECLARATION);
+    model.enrichCommons([
+      {
+        intentId: "remote-expired",
+        command: "tally.add_expense",
+        status: "expired",
+      },
+      {
+        intentId: "remote-cancelled",
+        command: "tally.add_expense",
+        status: "cancelled",
+      },
+    ]);
+    expect(model.rows().map((row) => row.status)).toStrictEqual([
+      "expired",
+      "cancelled",
+    ]);
+    expect(
+      model.rows().map((row) => pendingChipLabel(row.status))
+    ).toStrictEqual(["expired", "cancelled"]);
+    // Both are settled-but-not-executed, so both stay dismissible (issue
+    // #731 m6) — the honest label must not cost the member the control.
+    expect(model.attention().map((row) => row.intentId)).toStrictEqual([
+      "remote-expired",
+      "remote-cancelled",
+    ]);
+    expect(model.dismiss("remote-expired")).toBe(true);
+    expect(model.dismiss("remote-cancelled")).toBe(true);
+    expect(model.rows()).toStrictEqual([]);
   });
 
   it("drops executed commons intents from enrichment — server truth carries them", () => {

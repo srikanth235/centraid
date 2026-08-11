@@ -629,23 +629,23 @@
     "tools/recognition-automations": "gateway"
   },
   "notes": {
-    "web.concurrency": "Partial\u2192stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic. Tracked under #656.",
+    "web.concurrency": "Partial→stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic. Tracked under #656.",
     "mobile.performance": "Partial: tests/scale/large-vault.scale.test.ts pins the readiness data-volume/read budgets and native long lists are mechanically required to stay virtualized; a device-frame budget would strengthen this cell. Tracked under #659.",
     "replica-sync.performance": "Partial: tests/perf/replica-sync-io.perf.test.ts exercises store/bootstrap/IO budget (replaces deleted in-memory fake). Tracked under #659.",
     "tunnel-pairing.performance": "JS fallback floor remains in tunnel-throughput.perf.test.ts; native QUIC budget is tests/perf/tunnel-native.perf.test.ts (nightly when native module present).",
     "blob-custody.durability": "Owned by packages/vault/src/blob/enospc-custody.integration.test.ts (always-on fault-injected ENOSPC). Real hdiutil path remains in disk-full.integration.test.ts behind CENTRAID_DISKFULL_E2E=1 (darwin).",
     "agent-runtime.journey": "packages/agent-runtime/src/backends/acp/journey.integration.test.ts carries two tests while also standing in for the app-engine journey and the three skipped desktop copilot specs; it is too thin for what it is asked to represent. Tracked under #656 (copilot rig under #657).",
-    "builder.publish": "Punted (#496): builder is not in v0. builder.spec.ts \"Publish posts to the gateway\" stays skipped with this product reason \u2014 declared gap, not fake solid.",
-    "desktop.copilot-e2e": "Unconditional Playwright skips in appview-templates-insights (7.2\u20137.4) target removed FAB UI; journey owned at agent-runtime.journey until #470 mock blueprint serving.",
+    "builder.publish": "Punted (#496): builder is not in v0. builder.spec.ts \"Publish posts to the gateway\" stays skipped with this product reason — declared gap, not fake solid.",
+    "desktop.copilot-e2e": "Unconditional Playwright skips in appview-templates-insights (7.2–7.4) target removed FAB UI; journey owned at agent-runtime.journey until #470 mock blueprint serving.",
     "mobile.scalability": "Owned by tests/agent-e2e-mobile/flows/volume-proof.mjs; records a nightly scalability budget and durable numeric measurements.",
     "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom). Tracked under #659.",
-    "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume \u2014 one missed entry per auto per gap; not live fire). Tracked under #659.",
-    "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy \u2014 not full Electron launch). Tracked under #659.",
+    "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume — one missed entry per auto per gap; not live fire). Tracked under #659.",
+    "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy — not full Electron launch). Tracked under #659.",
     "G4.mutation": "StrykerJS nightly on property-defended core packages: vault, client/replica, automation, backup, blob-format, protocol, tunnel, app-engine, gateway, agent-runtime (#532/#545). Floors in tests/mutation-floors.json; scores in artifacts/mutation/ via e2e.yml mutation-testing job. Not per-PR.",
     "G5.interop": "packages/backup test:interop runs via .github/workflows/interop-weekly.yml (schedule + workflow_dispatch, CLAWGNITION_INTEROP=1). Not part of test:quality:nightly (perf+scale+report only).",
     "client.react.floor": "packages/client/src/react/** floors at 65/35 in coverage-floors.json (#587 sustained-level ratchet); journeys + extracted pure modules remain the primary owners.",
     "search": "Flow vault-search owns search over ext/FTS (packages/vault/src/gateway/search.test.ts).",
-    "enrichment": "Flow vault-enrichment owns device enrichment \u2192 searchable transcript (packages/gateway/src/routes/device-work-routes.test.ts).",
+    "enrichment": "Flow vault-enrichment owns device enrichment → searchable transcript (packages/gateway/src/routes/device-work-routes.test.ts).",
     "cross-linking": "Flow vault-cross-link owns core.link_entities (packages/vault/src/gateway/ext.test.ts).",
     "people": "Flow people-crm owns people.* commands (packages/vault/src/commands/people.test.ts).",
     "blank-machine-restore": "Product blank-machine journey is recover.integration.test.ts (recover() + kit). Backup primitive round-trips live under packages/backup engine tests.",
@@ -720,7 +720,7 @@
     "blob-custody.performance": "tests/perf/blob-egress.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #659.",
     "blob-custody.scalability": "tests/scale/blob-gc.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #659.",
     "blob-custody.security": "packages/vault/src/blob/seal.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #656.",
-    "backup-restore.concurrency": "Skip: restore into a LIVE gateway was deleted with the founding plane (#603) \u2014 restore is the offline `recover` verb, so concurrent restore has no surface.",
+    "backup-restore.concurrency": "Skip: restore into a LIVE gateway was deleted with the founding plane (#603) — restore is the offline `recover` verb, so concurrent restore has no surface.",
     "backup-restore.scalability": "tests/scale/backup-restore.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #659.",
     "backup-restore.journey": "packages/gateway/src/backup/backup.integration.test.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #656.",
     "replica-sync.durability": "packages/client/src/replica/sqlite-store.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #656.",
@@ -1660,76 +1660,6 @@
     }
   ],
   "laws": {
-    "commons-steward-ordered-convergence": {
-      "statement": "Each Commons grant has one independent monotonic steward sequence; cursor-gapped members converge to the same domain state, and capability downgrades govern commands from their exact stream position onward.",
-      "owner": "packages/vault/src/share/commons-convergence-properties.test.ts",
-      "flow": "commons-convergence-properties"
-    },
-    "placement-registry-parity": {
-      "statement": "Every placeable blueprint entity is enumerated once and Locker is structurally excluded.",
-      "owner": "packages/blueprints/src/placement-registry.test.ts",
-      "flow": "blueprint-placement-law"
-    },
-    "custody-seat-exclusion": {
-      "statement": "Record-only blueprint apps never import or render byte-custody machinery.",
-      "owner": "packages/blueprints/src/blueprint-seats.test.ts",
-      "flow": "blueprint-custody-law"
-    },
-    "consent-domain-parity": {
-      "statement": "Blueprint consent surfaces and automation scheduling recognize the same enrichment domains.",
-      "owner": "packages/blueprints/apps/_shared/consent-gate.test.ts",
-      "flow": "blueprint-consent-law"
-    },
-    "triage-session-progress": {
-      "statement": "Proposal queues share frozen progress, distinct skip semantics, and reachable completion.",
-      "owner": "packages/blueprints/apps/_shared/triage-session.test.ts",
-      "flow": "blueprint-triage-law"
-    },
-    "search-scaffold-grouping": {
-      "statement": "Search entity configuration owns grouping, ordering, caps, and result-state truth.",
-      "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
-      "flow": "blueprint-search-law"
-    },
-    "per-scope-reach": {
-      "statement": "Every mounted scope reports whether search reached it, was offline, or refused the query instead of collapsing those states into no matches.",
-      "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
-      "flow": "blueprint-search-law"
-    },
-    "mask-refuses-not-no-matches": {
-      "statement": "A field-masked search refusal remains a typed refusal through the replica and search-scaffold boundary and is never rendered as an honest empty result.",
-      "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
-      "flow": "blueprint-search-law"
-    },
-    "recognition-self-contained": {
-      "statement": "Blueprint apps, automations, and mobile code use host-owned model seams and never resurrect provider SDKs or deleted inference roads.",
-      "owner": "packages/blueprints/src/no-inference-client.test.ts",
-      "flow": "blueprint-enrichment-law"
-    },
-    "one-computation": {
-      "statement": "A pure product-law computation is a projection or a shared module imported by every seat, never two seat-local implementations.",
-      "owner": "packages/blueprints/src/one-computation.test.ts",
-      "flow": "blueprint-one-computation-law"
-    },
-    "people-photograph-counts": {
-      "statement": "Every seat counts distinct confirmed photographs, not face regions or unconfirmed proposals, and keeps unnamed groups separate.",
-      "owner": "packages/blueprints/apps/_shared/people-counts.test.ts",
-      "flow": "blueprint-one-computation-law"
-    },
-    "enrichment-model-lock": {
-      "statement": "Every live-model file and native runtime dependency is immutable by version/digest and its permissive licence is recorded in LICENSES.md.",
-      "owner": "tools/recognition-automations/src/models-lock.test.ts",
-      "flow": "enrichment-service-contract"
-    },
-    "enrichment-live": {
-      "statement": "Pinned real weights satisfy the advertised capability/model handshake and the committed OCR, embedding, and face-geometry goldens.",
-      "owner": "tools/recognition-automations/src/model-goldens.live.test.ts",
-      "flow": "enrichment-service-contract"
-    },
-    "backup-round-trip": {
-      "statement": "A restored snapshot reproduces the vault byte-identically \u2014 same files, same directory tree, plus the quarantine marker.",
-      "owner": "packages/backup/src/engine.test.ts",
-      "flow": "backup-round-trip"
-    },
     "backup-incremental": {
       "statement": "A second snapshot after a small change uploads far fewer chunks than the first, so backup cost tracks change, not vault size.",
       "owner": "packages/backup/src/engine.test.ts",
@@ -1741,7 +1671,12 @@
       "flow": "backup-round-trip"
     },
     "backup-restore-refusal": {
-      "statement": "Restore refuses a non-empty destination, a newer vaultUserVersion, an unknown format, and a manifest whose hash does not verify \u2014 and refuses before fetching or materializing anything.",
+      "statement": "Restore refuses a non-empty destination, a newer vaultUserVersion, an unknown format, and a manifest whose hash does not verify — and refuses before fetching or materializing anything.",
+      "owner": "packages/backup/src/engine.test.ts",
+      "flow": "backup-round-trip"
+    },
+    "backup-round-trip": {
+      "statement": "A restored snapshot reproduces the vault byte-identically — same files, same directory tree, plus the quarantine marker.",
       "owner": "packages/backup/src/engine.test.ts",
       "flow": "backup-round-trip"
     },
@@ -1749,6 +1684,111 @@
       "statement": "Verification detects a deleted chunk and a corrupted chunk, and reports a clean snapshot as clean.",
       "owner": "packages/backup/src/engine.test.ts",
       "flow": "backup-round-trip"
+    },
+    "commons-steward-ordered-convergence": {
+      "statement": "Each Commons grant has one independent monotonic steward sequence; cursor-gapped members converge to the same domain state, and capability downgrades govern commands from their exact stream position onward.",
+      "owner": "packages/vault/src/share/commons-convergence-properties.test.ts",
+      "flow": "commons-convergence-properties"
+    },
+    "consent-domain-parity": {
+      "statement": "Blueprint consent surfaces and automation scheduling recognize the same enrichment domains.",
+      "owner": "packages/blueprints/apps/_shared/consent-gate.test.ts",
+      "flow": "blueprint-consent-law"
+    },
+    "custody-seat-exclusion": {
+      "statement": "Record-only blueprint apps never import or render byte-custody machinery.",
+      "owner": "packages/blueprints/src/blueprint-seats.test.ts",
+      "flow": "blueprint-custody-law"
+    },
+    "enrichment-live": {
+      "statement": "Pinned real weights satisfy the advertised capability/model handshake and the committed OCR, embedding, and face-geometry goldens.",
+      "owner": "tools/recognition-automations/src/model-goldens.live.test.ts",
+      "flow": "enrichment-service-contract"
+    },
+    "enrichment-model-lock": {
+      "statement": "Every live-model file and native runtime dependency is immutable by version/digest and its permissive licence is recorded in LICENSES.md.",
+      "owner": "tools/recognition-automations/src/models-lock.test.ts",
+      "flow": "enrichment-service-contract"
+    },
+    "mask-refuses-not-no-matches": {
+      "statement": "A field-masked search refusal remains a typed refusal through the replica and search-scaffold boundary and is never rendered as an honest empty result.",
+      "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
+      "flow": "blueprint-search-law"
+    },
+    "one-computation": {
+      "statement": "A pure product-law computation is a projection or a shared module imported by every seat, never two seat-local implementations.",
+      "owner": "packages/blueprints/src/one-computation.test.ts",
+      "flow": "blueprint-one-computation-law"
+    },
+    "pending-overlay-copy": {
+      "statement": "A gateway reason prints verbatim; offline a waiting write names the connection it waits on, and online a commons write names its steward.",
+      "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts",
+      "flow": "blueprint-pending-overlay-law"
+    },
+    "pending-overlay-enrichment": {
+      "statement": "The commons rail is enrichment only: it adds steward label, per-grant status and server-side rows, and can never remove a locally-queued row.",
+      "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts",
+      "flow": "blueprint-pending-overlay-law"
+    },
+    "pending-overlay-honesty": {
+      "statement": "Every settled-but-not-executed state keeps its own name, so an expired, cancelled, denied or failed row never prints a chip that misstates what happened.",
+      "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts",
+      "flow": "blueprint-pending-overlay-law"
+    },
+    "pending-overlay-key": {
+      "statement": "A pending row's key is derived deterministically from its intent id, with no clock or randomness, so replays and reloads reconcile to the same row.",
+      "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts",
+      "flow": "blueprint-pending-overlay-law"
+    },
+    "pending-overlay-projection": {
+      "statement": "An app declares how each write projects into the rows its queries return; it never implements an overlay itself, and an undeclared action projects nothing.",
+      "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts",
+      "flow": "blueprint-pending-overlay-law"
+    },
+    "pending-overlay-reload": {
+      "statement": "Overlay survival equals outbox survival: a queued row rebuilds from the durable outbox alone, with no gateway fetch and no app-owned state.",
+      "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts",
+      "flow": "blueprint-pending-overlay-law"
+    },
+    "pending-overlay-settlement": {
+      "statement": "An executed write swaps to its canonical row; parked, denied, conflict and failed rows persist with their reason until explicitly discarded, and a conflict names expected versus actual versions.",
+      "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts",
+      "flow": "blueprint-pending-overlay-law"
+    },
+    "pending-overlay-vocabulary": {
+      "statement": "A commons intent names the vault command rather than the app action; the declaration resolves both vocabularies so an enriched row still projects.",
+      "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts",
+      "flow": "blueprint-pending-overlay-law"
+    },
+    "people-photograph-counts": {
+      "statement": "Every seat counts distinct confirmed photographs, not face regions or unconfirmed proposals, and keeps unnamed groups separate.",
+      "owner": "packages/blueprints/apps/_shared/people-counts.test.ts",
+      "flow": "blueprint-one-computation-law"
+    },
+    "per-scope-reach": {
+      "statement": "Every mounted scope reports whether search reached it, was offline, or refused the query instead of collapsing those states into no matches.",
+      "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
+      "flow": "blueprint-search-law"
+    },
+    "placement-registry-parity": {
+      "statement": "Every placeable blueprint entity is enumerated once and Locker is structurally excluded.",
+      "owner": "packages/blueprints/src/placement-registry.test.ts",
+      "flow": "blueprint-placement-law"
+    },
+    "recognition-self-contained": {
+      "statement": "Blueprint apps, automations, and mobile code use host-owned model seams and never resurrect provider SDKs or deleted inference roads.",
+      "owner": "packages/blueprints/src/no-inference-client.test.ts",
+      "flow": "blueprint-enrichment-law"
+    },
+    "search-scaffold-grouping": {
+      "statement": "Search entity configuration owns grouping, ordering, caps, and result-state truth.",
+      "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
+      "flow": "blueprint-search-law"
+    },
+    "triage-session-progress": {
+      "statement": "Proposal queues share frozen progress, distinct skip semantics, and reachable completion.",
+      "owner": "packages/blueprints/apps/_shared/triage-session.test.ts",
+      "flow": "blueprint-triage-law"
     }
   },
   "appEngines": {
@@ -1759,10 +1799,26 @@
         "label": "Placement",
         "flow": "blueprint-placement-law"
       },
-      { "id": "custody", "label": "Custody", "flow": "blueprint-custody-law" },
-      { "id": "consent", "label": "Consent", "flow": "blueprint-consent-law" },
-      { "id": "triage", "label": "Triage", "flow": "blueprint-triage-law" },
-      { "id": "search", "label": "Search", "flow": "blueprint-search-law" },
+      {
+        "id": "custody",
+        "label": "Custody",
+        "flow": "blueprint-custody-law"
+      },
+      {
+        "id": "consent",
+        "label": "Consent",
+        "flow": "blueprint-consent-law"
+      },
+      {
+        "id": "triage",
+        "label": "Triage",
+        "flow": "blueprint-triage-law"
+      },
+      {
+        "id": "search",
+        "label": "Search",
+        "flow": "blueprint-search-law"
+      },
       {
         "id": "enrichment",
         "label": "Enrichment boundary",
@@ -1816,9 +1872,18 @@
       {
         "id": "docs",
         "engines": {
-          "placement": { "status": "pass", "flow": "blueprint-placement-law" },
-          "custody": { "status": "pass", "flow": "blueprint-custody-law" },
-          "consent": { "status": "pass", "flow": "blueprint-consent-law" },
+          "placement": {
+            "status": "pass",
+            "flow": "blueprint-placement-law"
+          },
+          "custody": {
+            "status": "pass",
+            "flow": "blueprint-custody-law"
+          },
+          "consent": {
+            "status": "pass",
+            "flow": "blueprint-consent-law"
+          },
           "triage": {
             "status": "skip",
             "reason": "Docs has no shipped correction-proposal queue.",
@@ -1847,7 +1912,10 @@
             "reason": "Locker is structurally excluded from placement.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "custody": { "status": "pass", "flow": "blueprint-custody-law" },
+          "custody": {
+            "status": "pass",
+            "flow": "blueprint-custody-law"
+          },
           "consent": {
             "status": "skip",
             "reason": "Locker is outside the closed enrichment-domain union.",
@@ -1877,8 +1945,14 @@
       {
         "id": "notes",
         "engines": {
-          "placement": { "status": "pass", "flow": "blueprint-placement-law" },
-          "custody": { "status": "pass", "flow": "blueprint-custody-law" },
+          "placement": {
+            "status": "pass",
+            "flow": "blueprint-placement-law"
+          },
+          "custody": {
+            "status": "pass",
+            "flow": "blueprint-custody-law"
+          },
           "consent": {
             "status": "skip",
             "reason": "Notes is outside the closed enrichment-domain union.",
@@ -1945,11 +2019,26 @@
       {
         "id": "photos",
         "engines": {
-          "placement": { "status": "pass", "flow": "blueprint-placement-law" },
-          "custody": { "status": "pass", "flow": "blueprint-custody-law" },
-          "consent": { "status": "pass", "flow": "blueprint-consent-law" },
-          "triage": { "status": "pass", "flow": "blueprint-triage-law" },
-          "search": { "status": "pass", "flow": "blueprint-search-law" },
+          "placement": {
+            "status": "pass",
+            "flow": "blueprint-placement-law"
+          },
+          "custody": {
+            "status": "pass",
+            "flow": "blueprint-custody-law"
+          },
+          "consent": {
+            "status": "pass",
+            "flow": "blueprint-consent-law"
+          },
+          "triage": {
+            "status": "pass",
+            "flow": "blueprint-triage-law"
+          },
+          "search": {
+            "status": "pass",
+            "flow": "blueprint-search-law"
+          },
           "enrichment": {
             "status": "pass",
             "flow": "blueprint-enrichment-law"
@@ -1963,7 +2052,10 @@
       {
         "id": "tally",
         "engines": {
-          "placement": { "status": "pass", "flow": "blueprint-placement-law" },
+          "placement": {
+            "status": "pass",
+            "flow": "blueprint-placement-law"
+          },
           "custody": {
             "status": "skip",
             "reason": "Tally is record-only; its receipt-photo origin edge does not import custody.",
@@ -1979,7 +2071,10 @@
             "reason": "Tally declares no proposal queue.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "search": { "status": "pass", "flow": "blueprint-search-law" },
+          "search": {
+            "status": "pass",
+            "flow": "blueprint-search-law"
+          },
           "enrichment": {
             "status": "pass",
             "flow": "blueprint-enrichment-law"
@@ -2282,7 +2377,7 @@
       "tier": "contract",
       "owner": "packages/gateway/src/backup/backup-service.contract.test.ts",
       "minimumTests": 16,
-      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: the no-change and incremental round-trip laws were restated here on top of packages/backup/src/engine.test.ts, which is now their sole owner. The two gateway restatements were deleted only after engine.test.ts was strengthened to cover what they uniquely asserted (bounded incremental put count; restore refusal proven to abort before the dest dir is created). This file keeps fencing, policy echo, and CLI-restore->adopt->quarantine. The round-trip contract did not shrink \u2014 only its restatements did."
+      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: the no-change and incremental round-trip laws were restated here on top of packages/backup/src/engine.test.ts, which is now their sole owner. The two gateway restatements were deleted only after engine.test.ts was strengthened to cover what they uniquely asserted (bounded incremental put count; restore refusal proven to abort before the dest dir is created). This file keeps fencing, policy echo, and CLI-restore->adopt->quarantine. The round-trip contract did not shrink — only its restatements did."
     },
     {
       "id": "backup-crash-recovery",
@@ -2409,7 +2504,7 @@
       "tier": "contract",
       "owner": "packages/automation/src/fire/scheduler-ledger.contract.test.ts",
       "minimumTests": 19,
-      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: removed four example tests whose property twins in the same file already own the law \u2014 'records ONE entry per automation for a gap spanning several missed fire times' (subsumed by 'property: at most one missed entry per automation per gap'), 'returns nothing for a fast-restart gap under the grace margin' (subsumed by 'property: sub-grace gaps never emit misses', whose generator was widened to seconds so the 2.5min fast restart is inside its range), and 'returns nothing for an ordinary tick-to-tick gap' + 'records nothing across ordinary consecutive ticks' (both subsumed by 'property: successive ordinary ticks accumulate zero misses'). The no-backfill contract did not shrink \u2014 only its redundant restatements did; the disabled-only-registry example was deliberately retained because its property twin never generates a zero-enabled registry."
+      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: removed four example tests whose property twins in the same file already own the law — 'records ONE entry per automation for a gap spanning several missed fire times' (subsumed by 'property: at most one missed entry per automation per gap'), 'returns nothing for a fast-restart gap under the grace margin' (subsumed by 'property: sub-grace gaps never emit misses', whose generator was widened to seconds so the 2.5min fast restart is inside its range), and 'returns nothing for an ordinary tick-to-tick gap' + 'records nothing across ordinary consecutive ticks' (both subsumed by 'property: successive ordinary ticks accumulate zero misses'). The no-backfill contract did not shrink — only its redundant restatements did; the disabled-only-registry example was deliberately retained because its property twin never generates a zero-enabled registry."
     },
     {
       "id": "agent-provider-compat",
@@ -2575,7 +2670,7 @@
     },
     {
       "id": "gateway-journey",
-      "name": "Auto-founded gateway \u2192 pair ticket \u2192 phone joins Shared (#603)",
+      "name": "Auto-founded gateway → pair ticket → phone joins Shared (#603)",
       "surface": "gateway",
       "dimension": "journey",
       "tier": "e2e",
@@ -2593,7 +2688,7 @@
     },
     {
       "id": "agent-chat-journey",
-      "name": "Chat message \u2192 vault side effect \u2192 transcript (fake-acp)",
+      "name": "Chat message → vault side effect → transcript (fake-acp)",
       "surface": "agent-runtime",
       "dimension": "journey",
       "tier": "integration",
@@ -2602,13 +2697,13 @@
     },
     {
       "id": "blank-machine-restore",
-      "name": "Blank-machine recover: kit + api-key \u2192 mountable vault (recover())",
+      "name": "Blank-machine recover: kit + api-key → mountable vault (recover())",
       "surface": "backup-restore",
       "dimension": "journey",
       "tier": "integration",
       "owner": "packages/gateway/src/backup/recover.integration.test.ts",
       "minimumTests": 2,
-      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: the separate 'recovery refuses a snapshot written by newer software BEFORE any byte is fetched' test re-ran the whole ~45s seedMachineA fixture to restate the restore-refusal law owned by packages/backup/src/engine.test.ts. It was FOLDED INTO the blank-machine test rather than dropped \u2014 its unique assertions (no vault dir, no .recover-staging-* residue, no keyring escrowed) now run there against the already-seeded machine A. The journey lost no assertion; the test count fell only because two tests became one."
+      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: the separate 'recovery refuses a snapshot written by newer software BEFORE any byte is fetched' test re-ran the whole ~45s seedMachineA fixture to restate the restore-refusal law owned by packages/backup/src/engine.test.ts. It was FOLDED INTO the blank-machine test rather than dropped — its unique assertions (no vault dir, no .recover-staging-* residue, no keyring escrowed) now run there against the already-seeded machine A. The journey lost no assertion; the test count fell only because two tests became one."
     },
     {
       "id": "vault-search",

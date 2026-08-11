@@ -38,7 +38,6 @@ import type {
   AppState,
   Dash,
   DashboardPayload,
-  LedgerRow,
   NavPatch,
   ViewData,
 } from "./types.ts";
@@ -316,25 +315,6 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   const state = stateRef.current;
   const dash = dashRef.current;
 
-  // The commons-enrichment-only rows (issue #738) — another device's queued
-  // write the local outbox has no record of — that belong on the currently
-  // visible ledger. A locally-queued write is already IN `viewData.ledger`
-  // (the replica composes it from the outbox), so only enrichment-only rows
-  // need appending here.
-  const pendingForView = (): LedgerRow[] => {
-    const extra = logic.pendingLedgerRows();
-    if (!extra.length) return [];
-    if (state.view === "group")
-      return extra.filter((r) => r.group_id === state.groupId);
-    if (state.view === "friend")
-      return extra.filter(
-        (r) =>
-          r.paid_by === state.friendId ||
-          (r.splits ?? []).some((s) => s.party_id === state.friendId)
-      );
-    return [];
-  };
-
   // The dashboard hero totals with in-flight optimistic adds folded in (parked
   // rows excluded — a parked write hasn't moved any balance yet).
   const dashWithPending = (): Dash => {
@@ -451,13 +431,12 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       />
     );
   } else if (state.view === "group" || state.view === "friend") {
-    // Commons-enrichment-only rows render on top of the fetched ledger,
-    // newest first — never mutating state.viewData, so a refresh replaces it
-    // wholesale. The fetched rows themselves are decorated with the pending
-    // chip fields via the model's row-id index (issue #738) — a locally
-    // queued write is already IN this list, composed by the replica from
-    // the outbox.
-    const pend = pendingForView();
+    // Pending rows the query could not return render on top of the fetched
+    // ledger, newest first — never mutating state.viewData, so a refresh
+    // replaces it wholesale. The fetched rows themselves are decorated with
+    // the pending chip fields (and the money the query could not derive from
+    // unprojected splits) via the model's row-id index (issue #738).
+    const pend = logic.pendingLedgerRowsForView();
     const byRowId = logic.pendingByRowId();
     const viewData: ViewData | null = state.viewData
       ? {
@@ -465,7 +444,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
           ledger: [
             ...pend,
             ...(state.viewData.ledger ?? []).map((row) =>
-              decorateLedgerRow(row, byRowId)
+              decorateLedgerRow(row, byRowId, dash.me)
             ),
           ],
         }

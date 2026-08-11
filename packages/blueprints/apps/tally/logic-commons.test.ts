@@ -12,7 +12,8 @@ import { describe, expect, test, vi } from "vitest";
 
 import { pendingRowId } from "../_shared/pending-overlay.ts";
 import { createLogic, decorateLedgerRow } from "./logic.ts";
-import type { AppState, Dash, LedgerRow } from "./types.ts";
+import friendHandler from "./queries/friend.ts";
+import type { AppState, Dash, LedgerRow, ViewData } from "./types.ts";
 
 function state(): AppState {
   return {
@@ -162,7 +163,11 @@ describe("Tally pending-write overlay (issue #738)", () => {
       your_amount_minor: 1200,
       splits: [],
     };
-    const decorated = decorateLedgerRow(fetchedRow, logic.pendingByRowId());
+    const decorated = decorateLedgerRow(
+      fetchedRow,
+      logic.pendingByRowId(),
+      "party-bob"
+    );
     expect(decorated.pending).toBe(true);
     expect(decorated.parked).toBe(false);
     expect(decorated.pendingStatus).toBe("queued");
@@ -291,5 +296,263 @@ describe("Tally pending-write overlay (issue #738)", () => {
 
     await logic.enrichCommons();
     expect(logic.pendingByRowId().size).toBe(1);
+  });
+
+  // Issue #738 regression (money). `tally.expense_split` is deliberately not
+  // projected, so the query composes the pending expense with NO split rows
+  // and `ledgerRow()` concludes the payer lent the whole bill. The row must
+  // state the member's own half, and it must agree with the hero total
+  // `inflightBalance()` folds into the dashboard — two numbers for the same
+  // write in the same view disagreeing is the defect this test pins down.
+  test("a queued 50/50 expense states your half, not the whole bill, and agrees with the hero total", async () => {
+    stubCentraid({
+      write: vi.fn<() => Promise<VaultOutcome>>(
+        async () => ({ status: "queued" }) as VaultOutcome
+      ) as CentraidClient["write"],
+    });
+    const logic = newLogic();
+    const splits = [
+      { party_id: "party-bob", share_minor: 3000 },
+      { party_id: "party-ann", share_minor: 3000 },
+    ];
+
+    await logic.act("add-expense", {
+      group_id: "group-trip",
+      description: "Dinner",
+      amount_minor: 6000,
+      paid_by: "party-bob",
+      category: "food",
+      spent_on: "2026-08-10",
+      splits,
+    });
+
+    const byRowId = logic.pendingByRowId();
+    const [rowId] = [...byRowId.keys()];
+    // Exactly what `queries/dashboard.ts`'s `ledgerRow()` returns for the
+    // composed pending expense: the expense row is in the overlay, its split
+    // rows are not, so the query believes Bob lent the entire $60.00.
+    const composed: LedgerRow = {
+      expense_id: rowId!,
+      group_id: "group-trip",
+      description: "Dinner",
+      amount_minor: 6000,
+      category: "food",
+      spent_on: "2026-08-10",
+      paid_by: "party-bob",
+      your_role: "lent",
+      your_amount_minor: 6000,
+      splits: [],
+    };
+
+    const decorated = decorateLedgerRow(composed, byRowId, "party-bob");
+    expect(decorated.your_role).toBe("lent");
+    expect(decorated.your_amount_minor).toBe(3000);
+    expect(decorated.splits).toStrictEqual(splits);
+    expect(decorated.amount_minor).toBe(6000); // the bill itself is unchanged
+    expect(logic.inflightBalance()).toStrictEqual({ owe: 0, owed: 3000 });
+    expect(decorated.your_amount_minor).toBe(logic.inflightBalance().owed);
+  });
+
+  // Issue #738 regression (the friend ledger). `queries/friend.ts` selects on
+  // `splits[friend] != null && splits[me] != null` — unsatisfiable for a
+  // pending expense, whose split rows are deliberately unprojected — so the
+  // friend view is the one ledger that can never compose its own pending row.
+  test("a queued expense with a friend appears in that friend's ledger while pending, with your borrowed half", async () => {
+    const rowId = pendingRowId("intent-dinner");
+    const vaultRows: Record<string, Array<Record<string, unknown>>> = {
+      "core.vault": [{ owner_party_id: "party-bob", base_currency: "USD" }],
+      "tally.friend": [{ party_id: "party-ann" }],
+      "tally.group": [{ group_id: "group-trip", circle_id: "circle-trip" }],
+      "social.circle": [{ circle_id: "circle-trip", name: "Trip" }],
+      "social.circle_member": [
+        { circle_id: "circle-trip", party_id: "party-bob" },
+        { circle_id: "circle-trip", party_id: "party-ann" },
+      ],
+      // What the replica hands the query: one canonical expense with its
+      // splits, plus the composed pending expense — expense row only.
+      "tally.expense": [
+        {
+          expense_id: "expense-lunch",
+          group_id: "group-trip",
+          paid_by: "party-ann",
+          amount_minor: 2000,
+          description: "Lunch",
+          category: "food",
+          spent_on: "2026-08-09",
+        },
+        {
+          expense_id: rowId,
+          group_id: "group-trip",
+          paid_by: "party-ann",
+          amount_minor: 6000,
+          description: "Dinner",
+          category: "food",
+          spent_on: "2026-08-10",
+        },
+      ],
+      "tally.expense_split": [
+        {
+          expense_id: "expense-lunch",
+          party_id: "party-bob",
+          share_minor: 1000,
+        },
+        {
+          expense_id: "expense-lunch",
+          party_id: "party-ann",
+          share_minor: 1000,
+        },
+      ],
+      "core.party": [
+        { party_id: "party-bob", display_name: "Bob" },
+        { party_id: "party-ann", display_name: "Ann" },
+      ],
+    };
+    const payload = (await friendHandler({
+      input: { party_id: "party-ann" },
+      ctx: {
+        vault: {
+          read: vi.fn<
+            (request: { entity: string }) => Promise<{
+              rows: Array<Record<string, unknown>>;
+            }>
+          >(async ({ entity }) => ({ rows: vaultRows[entity] ?? [] })),
+        },
+      },
+    } as unknown as HandlerArgs)) as unknown as ViewData;
+    // The premise: the query returns the canonical row and drops the pending
+    // one. That is not a bug in the query — it is why the client must supply
+    // the pending row itself.
+    expect((payload.ledger ?? []).map((row) => row.expense_id)).toStrictEqual([
+      "expense-lunch",
+    ]);
+
+    const friendState = state();
+    friendState.view = "friend";
+    friendState.friendId = "party-ann";
+    friendState.viewData = payload;
+    const logic = createLogic({
+      state: friendState,
+      dash: dash(),
+      render: vi.fn<() => void>(),
+      renderModals: vi.fn<() => void>(),
+      loadView: vi.fn<() => Promise<void>>(async () => undefined),
+      refreshAll: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+    stubCentraid({
+      pendingWrites: vi.fn<NonNullable<CentraidClient["pendingWrites"]>>(
+        async () => [
+          {
+            intentId: "intent-dinner",
+            action: "add-expense",
+            state: "queued",
+            input: {
+              group_id: "group-trip",
+              description: "Dinner",
+              amount_minor: 6000,
+              paid_by: "party-ann",
+              category: "food",
+              spent_on: "2026-08-10",
+              splits: [
+                { party_id: "party-bob", share_minor: 3000 },
+                { party_id: "party-ann", share_minor: 3000 },
+              ],
+            },
+            mutations: [],
+          },
+        ]
+      ),
+    });
+
+    await logic.restorePendingWrites();
+
+    expect(logic.pendingLedgerRows().map((row) => row.expense_id)).toContain(
+      rowId
+    );
+    const shown = logic.pendingLedgerRowsForView();
+    expect(shown).toHaveLength(1);
+    expect(shown[0]).toMatchObject({
+      expense_id: rowId,
+      description: "Dinner",
+      group_id: "group-trip",
+      amount_minor: 6000,
+      paid_by: "party-ann",
+      paid_by_name: "Ann",
+      your_role: "borrowed",
+      your_amount_minor: 3000,
+      pending: true,
+      pendingStatus: "queued",
+    });
+    expect(shown[0]?.splits).toStrictEqual([
+      { party_id: "party-bob", share_minor: 3000 },
+      { party_id: "party-ann", share_minor: 3000 },
+    ]);
+  });
+
+  // The same write must not be rendered twice: once the group query composes
+  // the pending expense from the outbox, the synthesized copy stands down.
+  test("a pending row the fetched ledger already carries is not appended a second time", async () => {
+    const rowId = pendingRowId("intent-dinner");
+    const groupState = state();
+    groupState.view = "group";
+    groupState.groupId = "group-trip";
+    groupState.viewData = {
+      ledger: [
+        {
+          expense_id: rowId,
+          group_id: "group-trip",
+          description: "Dinner",
+          amount_minor: 6000,
+          category: "food",
+          spent_on: "2026-08-10",
+          paid_by: "party-bob",
+          your_role: "lent",
+          your_amount_minor: 6000,
+          splits: [],
+        },
+      ],
+    };
+    const logic = createLogic({
+      state: groupState,
+      dash: dash(),
+      render: vi.fn<() => void>(),
+      renderModals: vi.fn<() => void>(),
+      loadView: vi.fn<() => Promise<void>>(async () => undefined),
+      refreshAll: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+    stubCentraid({
+      pendingWrites: vi.fn<NonNullable<CentraidClient["pendingWrites"]>>(
+        async () => [
+          {
+            intentId: "intent-dinner",
+            action: "add-expense",
+            state: "queued",
+            input: {
+              group_id: "group-trip",
+              description: "Dinner",
+              amount_minor: 6000,
+              paid_by: "party-bob",
+              category: "food",
+              spent_on: "2026-08-10",
+              splits: [
+                { party_id: "party-bob", share_minor: 3000 },
+                { party_id: "party-ann", share_minor: 3000 },
+              ],
+            },
+            mutations: [],
+          },
+        ]
+      ),
+    });
+
+    await logic.restorePendingWrites();
+
+    expect(logic.pendingLedgerRowsForView()).toStrictEqual([]);
+    // …and the row the query DID compose still gets its money corrected.
+    const decorated = decorateLedgerRow(
+      groupState.viewData.ledger![0]!,
+      logic.pendingByRowId(),
+      "party-bob"
+    );
+    expect(decorated.your_amount_minor).toBe(3000);
   });
 });

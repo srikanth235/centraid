@@ -58,21 +58,82 @@ interface ExpenseBase {
   splits: SplitEntry[];
 }
 
+/** Parse a write's cached `splits` payload back into display split rows. */
+function parseSplits(value: unknown): SplitEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): SplitEntry[] => {
+    if (!item || typeof item !== "object") return [];
+    const split = item as Record<string, unknown>;
+    const partyId = typeof split.party_id === "string" ? split.party_id : "";
+    const shareMinor = Number(split.share_minor);
+    return partyId && Number.isFinite(shareMinor)
+      ? [{ party_id: partyId, share_minor: shareMinor }]
+      : [];
+  });
+}
+
+/**
+ * The money a pending add/edit-expense write implies for the owner — the
+ * SAME arithmetic `queries/dashboard.ts`'s `ledgerRow()` runs against
+ * canonical split rows, restated here because a pending write's splits are
+ * not (and cannot be — `tally.expense_split`'s primary key is composite, so
+ * the client can never mint its wire row id offline) part of the local
+ * optimistic overlay the query composes over. Without this the query returns
+ * the pending expense with `splits: {}`, and a $60 dinner split 50/50 renders
+ * "you lent $60.00" until it settles.
+ *
+ * Returns undefined when the write carries no splits to reason from (a
+ * delete, or a record whose input the outbox scrubbed on settle) — the row's
+ * own values are then the most honest thing we have.
+ */
+function pendingExpenseMoney(
+  input: Record<string, unknown>,
+  me: string | null
+): Pick<LedgerRow, "splits" | "your_role" | "your_amount_minor"> | undefined {
+  const splits = parseSplits(input.splits);
+  if (splits.length === 0) return undefined;
+  const amountMinor = Number(input.amount_minor);
+  const amount = Number.isFinite(amountMinor) ? amountMinor : 0;
+  const paidBy = typeof input.paid_by === "string" ? input.paid_by : "";
+  const mine = me == null ? undefined : splits.find((s) => s.party_id === me);
+  let your_role: Role;
+  let your_amount_minor: number;
+  if (paidBy === me) {
+    your_role = "lent";
+    your_amount_minor = amount - (mine?.share_minor ?? 0);
+  } else if (mine) {
+    your_role = "borrowed";
+    your_amount_minor = mine.share_minor;
+  } else {
+    your_role = "none";
+    your_amount_minor = amount;
+  }
+  return { splits, your_role, your_amount_minor };
+}
+
 /**
  * Fold one row's pending-write overlay state (issue #738) into the display
  * fields `ExpenseRow`/`Ledger` read. `byRowId` is `logic.pendingByRowId()` —
  * a row whose id is not tracked (settled, or never pending) is returned
  * unchanged. Module-level and pure so app-root.tsx can map it over a fetched
  * ledger without re-deriving the index per row.
+ *
+ * `me` is the owner party the money is stated from (`dash.me`): a pending
+ * row's `your_role`/`your_amount_minor`/`splits` are recomputed from the
+ * write's cached input, because the query that composed the row could only
+ * see the expense — never its splits.
  */
 export function decorateLedgerRow(
   row: LedgerRow,
-  byRowId: Map<string, PendingRowState>
+  byRowId: Map<string, PendingRowState>,
+  me: string | null
 ): LedgerRow {
   const entry = byRowId.get(row.expense_id);
   if (!entry) return row;
+  const money = entry.input ? pendingExpenseMoney(entry.input, me) : undefined;
   return {
     ...row,
+    ...money, // undefined when the write carries no splits to reason from
     pending: true,
     parked: entry.status === "parked",
     pendingStatus: entry.status,
@@ -414,54 +475,16 @@ export function createLogic({
 
   // ---------- Pending-write overlay (issue #738) ----------
 
-  /** Parse a write's cached `splits` payload back into display split rows. */
-  function parseSplits(value: unknown): SplitEntry[] {
-    if (!Array.isArray(value)) return [];
-    return value.flatMap((item): SplitEntry[] => {
-      if (!item || typeof item !== "object") return [];
-      const split = item as Record<string, unknown>;
-      const partyId = typeof split.party_id === "string" ? split.party_id : "";
-      const shareMinor = Number(split.share_minor);
-      return partyId && Number.isFinite(shareMinor)
-        ? [{ party_id: partyId, share_minor: shareMinor }]
-        : [];
-    });
-  }
-
   /**
-   * The owner's lent/borrowed stance a pending add-expense input implies —
-   * the same arithmetic `queries/dashboard.ts`'s `ledgerRow()` runs against
-   * canonical splits, restated here because a pending row's splits are not
-   * (and cannot be — `tally_expense_split`'s primary key is composite, so
-   * the client can never mint its wire row id offline) part of the local
-   * optimistic overlay the query composes over.
+   * Synthesize the full ledger row a pending add-expense needs (issue #738)
+   * from the entry's cached `input` — the same fields `refreshCommonsExpenses`
+   * used to decorate durable Commons rows before this migration. Two kinds of
+   * entry need it: a commons-enrichment-only intent (another device's
+   * steward-parked write, which has no local outbox mutation at all), and a
+   * locally-queued write on a ledger whose query cannot return it (the friend
+   * ledger joins on `tally.expense_split`, which is deliberately unprojected).
    */
-  function roleAndAmount(input: Record<string, unknown>): {
-    your_role: Role;
-    your_amount_minor: number;
-  } {
-    const paidBy = typeof input.paid_by === "string" ? input.paid_by : "";
-    const amountMinor = Number(input.amount_minor);
-    const amount = Number.isFinite(amountMinor) ? amountMinor : 0;
-    const myShare =
-      parseSplits(input.splits).find((s) => s.party_id === dash.me)
-        ?.share_minor ?? 0;
-    if (paidBy === dash.me)
-      return { your_role: "lent", your_amount_minor: amount - myShare };
-    if (myShare > 0)
-      return { your_role: "borrowed", your_amount_minor: myShare };
-    return { your_role: "none", your_amount_minor: 0 };
-  }
-
-  /**
-   * Synthesize the full ledger row a commons-enrichment-only entry needs
-   * (issue #738): unlike a locally-queued write, this intent has no local
-   * outbox mutation for the query to compose (a steward-parked write queued
-   * from another device), so the row is built from the entry's cached
-   * `input` — the same fields `refreshCommonsExpenses` used to decorate
-   * durable Commons rows before this migration.
-   */
-  function buildEnrichmentRow(entry: PendingRowState): LedgerRow | undefined {
+  function buildPendingRow(entry: PendingRowState): LedgerRow | undefined {
     if (entry.action !== "add-expense" || !entry.input) return undefined;
     const raw = entry.input;
     const groupId = typeof raw.group_id === "string" ? raw.group_id : "";
@@ -471,7 +494,7 @@ export function createLogic({
     const amountMinor = Number(raw.amount_minor);
     if (!groupId || !description || !paidBy || !Number.isFinite(amountMinor))
       return undefined;
-    const { your_role, your_amount_minor } = roleAndAmount(raw);
+    const money = pendingExpenseMoney(raw, dash.me);
     return {
       expense_id: pendingRowId(entry.intentId),
       group_id: groupId,
@@ -482,24 +505,53 @@ export function createLogic({
       paid_by_name: displayName(paidBy),
       category: typeof raw.category === "string" ? raw.category : "general",
       spent_on: typeof raw.spent_on === "string" ? raw.spent_on : todayKey(),
-      splits: parseSplits(raw.splits),
-      your_role,
-      your_amount_minor,
+      splits: money?.splits ?? [],
+      your_role: money?.your_role ?? "none",
+      your_amount_minor: money?.your_amount_minor ?? amountMinor,
     };
   }
 
-  /** Every commons-enrichment-only row (issue #738) — another device's
-   *  queued write the local outbox has no record of — decorated and ready
-   *  to append to a ledger the way durable commons rows did before. */
+  /** Every tracked add-expense write rendered as a ledger row (issue #738),
+   *  decorated with its chip — local and commons-enrichment-only alike.
+   *  `pendingLedgerRowsForView` decides which of them a given view still
+   *  needs; a row the query already composed is dropped there, not here. */
   function pendingLedgerRows(): LedgerRow[] {
     const byRowId = model.byRowId();
-    return model
-      .rows()
-      .filter((entry) => entry.enrichmentOnly)
-      .flatMap((entry) => {
-        const row = buildEnrichmentRow(entry);
-        return row ? [decorateLedgerRow(row, byRowId)] : [];
-      });
+    return model.rows().flatMap((entry) => {
+      const row = buildPendingRow(entry);
+      return row ? [decorateLedgerRow(row, byRowId, dash.me)] : [];
+    });
+  }
+
+  /**
+   * The pending rows the ACTIVE view still needs appended to its fetched
+   * ledger (issue #738).
+   *
+   * A locally-queued write is normally already IN `state.viewData.ledger` —
+   * the replica composes the projected `tally.expense` row from the outbox on
+   * every read — so anything the fetched ledger already carries is dropped
+   * here rather than rendered twice. The friend ledger is the case that
+   * needs it: `queries/friend.ts` selects on `splits[friend] && splits[me]`,
+   * and a pending expense has no split rows (deliberately unprojected), so
+   * the query can never return it and the row would otherwise vanish from
+   * that view until it settled.
+   */
+  function pendingLedgerRowsForView(): LedgerRow[] {
+    const extra = pendingLedgerRows();
+    if (extra.length === 0) return [];
+    const fetched = new Set(
+      (state.viewData?.ledger ?? []).map((row) => row.expense_id)
+    );
+    const rows = extra.filter((row) => !fetched.has(row.expense_id));
+    if (state.view === "group")
+      return rows.filter((row) => row.group_id === state.groupId);
+    if (state.view === "friend")
+      return rows.filter(
+        (row) =>
+          row.paid_by === state.friendId ||
+          row.splits.some((split) => split.party_id === state.friendId)
+      );
+    return [];
   }
 
   function pendingByRowId(): Map<string, PendingRowState> {
@@ -511,7 +563,7 @@ export function createLogic({
    * sending — a parked write hasn't moved any balance yet). The dashboard
    * query cannot already see this itself: its balance engine reads
    * `tally.expense_split`, and a pending row has no split rows in the
-   * overlay (see `roleAndAmount`) for it to fold in.
+   * overlay (see `pendingExpenseMoney`) for it to fold in.
    */
   function inflightBalance(): { owe: number; owed: number } {
     let owe = 0;
@@ -520,9 +572,10 @@ export function createLogic({
       if (entry.action !== "add-expense") continue;
       if (entry.status !== "queued" && entry.status !== "sending") continue;
       if (!entry.input) continue;
-      const { your_role, your_amount_minor } = roleAndAmount(entry.input);
-      if (your_role === "lent") owed += your_amount_minor;
-      else if (your_role === "borrowed") owe += your_amount_minor;
+      const money = pendingExpenseMoney(entry.input, dash.me);
+      if (!money) continue;
+      if (money.your_role === "lent") owed += money.your_amount_minor;
+      else if (money.your_role === "borrowed") owe += money.your_amount_minor;
     }
     return { owe, owed };
   }
@@ -990,6 +1043,7 @@ export function createLogic({
     applyChangeDetail,
     pendingByRowId,
     pendingLedgerRows,
+    pendingLedgerRowsForView,
     inflightBalance,
     dismissCommonsIntent,
     cancelCommonsIntent,

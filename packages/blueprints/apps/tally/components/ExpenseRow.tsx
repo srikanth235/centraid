@@ -18,8 +18,16 @@ const TONE = {
 
 /** The shared pending-write overlay's attention grammar (issue #738): a row
  *  in one of these statuses persists until the member explicitly dismisses
- *  it — never auto-removed, never silently disappearing. */
-const DISMISSIBLE_PENDING_STATUSES = new Set(["denied", "conflict", "failed"]);
+ *  it — never auto-removed, never silently disappearing. `expired` and
+ *  `cancelled` (issue #731 goal 2) are settled-but-not-executed too, and each
+ *  keeps its own chip label rather than collapsing into "failed". */
+const DISMISSIBLE_PENDING_STATUSES = new Set([
+  "denied",
+  "conflict",
+  "failed",
+  "expired",
+  "cancelled",
+]);
 
 export function ExpenseRow({
   row,
