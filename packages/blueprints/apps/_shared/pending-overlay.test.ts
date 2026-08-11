@@ -239,6 +239,19 @@ describe(createPendingOverlayModel, () => {
     });
   });
 
+  // [law:pending-overlay-reload] An absent answer is not an empty outbox. A
+  // caller that cannot reach its host must skip the restore entirely; folding
+  // "no answer" into `[]` would prune every queued row, which is the wipe
+  // class this issue exists to end, moved to the outbox rail.
+  it("prunes on a genuinely empty outbox, and callers must not fabricate one", () => {
+    const model = createPendingOverlayModel(DECLARATION);
+    model.begin("add-expense", { description: "Ferry" }, "intent-1");
+    expect(model.rows()).toHaveLength(1);
+    // The honest empty answer: the write settled and left the outbox.
+    model.restore([]);
+    expect(model.rows()).toStrictEqual([]);
+  });
+
   it("drops a row whose durable record settled executed — the canonical row carries it now", () => {
     const model = createPendingOverlayModel(DECLARATION);
     model.begin("add-expense", { description: "Ferry" }, "intent-1");

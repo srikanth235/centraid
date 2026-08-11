@@ -100,11 +100,15 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
    *  already in flight can legitimately outlive the client it started on. */
   async function restorePending(): Promise<void> {
     const [durable, attention] = await Promise.all([
-      window.centraid?.pendingWrites?.() ?? [],
-      window.centraid?.attentionWrites?.() ?? [],
+      window.centraid?.pendingWrites?.(),
+      window.centraid?.attentionWrites?.(),
     ]);
-    model.restore(durable);
-    model.restoreAttention(attention);
+    // An absent answer is NOT an empty outbox. `restore` prunes rows the
+    // durable list omits, so folding "no host surface" or "bridge torn down"
+    // into `[]` would delete every queued row — the wipe class #738 exists
+    // to end, merely moved from the commons rail to the outbox rail.
+    if (durable) model.restore(durable);
+    if (attention) model.restoreAttention(attention);
     render();
   }
 

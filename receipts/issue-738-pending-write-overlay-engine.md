@@ -127,7 +127,7 @@ These are true of the shipped code and are not covered by an `[x]` above:
 
 - **"Edit" is not universal.** Retry and discard are offered wherever an app renders attention rows; edit only where a compose surface is bound to the refused payload. Agenda's event drawer, Notes' autosaving editor and People's profile drawer are deliberately not seeded, and delete/move/trash actions carry no correctable text. Photos offers discard alone.
 - **Tally attention rows render in the group and friend ledgers only.** The dashboard and activity views have no ledger, and `SearchResults` does not pass the attention callbacks (pre-existing for dismiss too), so a denied add made from the dashboard is narrated in the notice banner and its row appears when the member opens the group. A pending row is also not clickable, so a denied `edit-expense` row cannot be opened via its detail popover until it is discarded or corrected.
-- **Mobile retry lives in the device-global pending-changes sheet**, not inline on the row where the write happened, and an attention row journaled before this change carries no payload so it is discard-only — inherent to the additive migration.
+- **Mobile retry lives in the device-global pending-changes sheet**, not inline on the row where the write happened, and an attention row journaled before this change carries no payload, so Retry is withheld for it and it is discard-only — inherent to the additive migration.
 - **Conflicts are unreachable on native.** Every adopting blueprint now sends `baseVersions`, but no mobile screen does, and an opaque-identity shape supplies no version rather than guessing one.
 - **The friend view's hero `net_minor` still excludes in-flight writes**, so that header can disagree with the pending row beneath it the way the dashboard hero did before `inflightBalance()` compensated it.
 
@@ -155,20 +155,20 @@ One receipt per implementing issue, per CONSTITUTION.md. — This file.
 
 ### Commands
 
-Reload survival is proven at the durable store on native: the mobile test opens real `node:sqlite` files, queues a write offline, discards the sessions, opens fresh ones against the same files while still offline, and asserts the row still composes. Sabotage-checked — reverting `read()` to a bare `reader.read` fails all four of its cases. On web and desktop the equivalent blueprint tests stub `window.centraid.pendingWrites()` and exercise the engine and app wiring above it; the durable layer beneath is covered separately by the client's own store contracts (`intents.contract.test.ts`, `multi-writer.contract.test.ts` close-and-reopen over `fake-indexeddb`), not end to end in one test. The desktop Playwright offline-reload scenario named in the issue's Validation section was **not** written — see Out of scope.
+Reload survival is proven at the durable store on native: the mobile test opens real `node:sqlite` files, queues a write offline, discards the sessions, opens fresh ones against the same files while still offline, and asserts the row still composes. Sabotage-checked — reverting `read()` to a bare `reader.read` fails all four of its cases. On web and desktop the equivalent blueprint tests stub `window.centraid.pendingWrites()` and exercise the engine and app wiring above it; the durable layer beneath is covered separately by the client's own store contracts (`intents.contract.test.ts`, `multi-writer.contract.test.ts` close-and-reopen over `fake-indexeddb`), not end to end in one test. End to end, `apps/desktop/tests/e2e/offline-reload.spec.ts` closes that gap on the desktop seat: it spawns the real gateway daemon, adds an expense, closes the server, reloads while still unreachable, and asserts the restored row's chip and its client-stored reason.
 
 ```sh
 # the engine's pure laws (27) + every blueprint suite
 cd packages/blueprints && bun run typecheck && bun run test
-#   → 104 files, 3443 tests passed
+#   → 104 files, 3503 tests passed
 
 # mobile seat: composition, per-vault scoping, restart survival
 cd apps/mobile && bun run typecheck && bun run test
-#   → 136 files, 1102 tests passed
+#   → 137 files, 1122 tests passed
 
 # the bridge, the shell session, and the replica contract suites
 cd packages/client && bun run typecheck && bun run test
-#   → 2029 tests passed
+#   → 2038 tests passed
 
 # engine H is registered, gated, and guarded
 bun run test:matrix

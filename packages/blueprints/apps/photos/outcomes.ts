@@ -104,12 +104,18 @@ function announceAttention(): void {
  *  module has no render hook of its own — the caller (app-root.tsx)
  *  re-renders after awaiting this. */
 export async function restorePending(): Promise<void> {
+  // `window.centraid` is optional here, not defensively: a remount tears the
+  // inline bridge down before the next one installs, so a refresh already in
+  // flight can outlive the client it started on.
   const [durable, attention] = await Promise.all([
-    window.centraid.pendingWrites?.() ?? [],
-    window.centraid.attentionWrites?.() ?? [],
+    window.centraid?.pendingWrites?.(),
+    window.centraid?.attentionWrites?.(),
   ]);
-  pendingModel.restore(durable);
-  pendingModel.restoreAttention(attention);
+  // An absent answer is NOT an empty outbox. `restore` prunes rows the durable
+  // list omits, so folding "no host surface" into `[]` would delete every
+  // queued row — the wipe class #738 exists to end.
+  if (durable) pendingModel.restore(durable);
+  if (attention) pendingModel.restoreAttention(attention);
   announceAttention();
 }
 

@@ -325,11 +325,16 @@ export default function ReplicaStatusBar(): React.JSX.Element {
                 // payload the durable journal retained (issue #738 P1). A
                 // placement or a row from before the journal carried the
                 // full record has neither, and stays discard-only.
+                // `input` is the load-bearing check, not `action`/`appId`:
+                // those are legacy columns a pre-journal row still carries, so
+                // gating on them alone offered Retry for a row that could only
+                // ever re-issue an empty payload.
                 const retryable =
                   item.kind === "replica" &&
                   ATTENTION_STATUSES.has(item.status) &&
                   Boolean(item.action) &&
-                  Boolean(item.appId);
+                  Boolean(item.appId) &&
+                  item.input !== undefined;
                 return (
                   <View
                     key={`${item.kind}:${item.vaultId}:${item.id}`}

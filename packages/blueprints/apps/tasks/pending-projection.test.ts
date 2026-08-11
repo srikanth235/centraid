@@ -412,3 +412,35 @@ describe("Tasks pending-write reload survival", () => {
     expect(logic.pendingByRowId().size).toBe(0);
   });
 });
+
+// Issue #738 re-audit: a host without the durable surfaces — the served
+// bridge and the visual-harness mock are both real examples — used to fold
+// "no answer" into an empty outbox, and the restore then pruned the very row
+// it was meant to preserve.
+describe("Tasks restore against a host with no durable surfaces", () => {
+  test("leaves a queued row alone instead of pruning it away", async () => {
+    Object.defineProperty(window, "centraid", {
+      configurable: true,
+      // A host that can write but exposes neither durable surface.
+      value: {
+        write: vi.fn<NonNullable<typeof window.centraid.write>>(async () => ({
+          status: "queued",
+          invocationId: "i-1",
+        })),
+      },
+    });
+    const logic = createLogic({
+      state: state(),
+      data: data(),
+      render: vi.fn<() => void>(),
+      refresh: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+
+    await logic.act("add", { title: "Buy milk" });
+    expect(logic.pendingByRowId().size).toBe(1);
+
+    await logic.restorePending();
+
+    expect(logic.pendingByRowId().size).toBe(1);
+  });
+});

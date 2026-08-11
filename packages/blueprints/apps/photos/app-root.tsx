@@ -1618,9 +1618,13 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
     void store.refreshAll();
     // The reload path for the pending-write overlay (issue #738): rebuild it
     // from the durable outbox on mount, same as every subsequent refresh().
-    void restorePending().then(() => {
-      if (!disposed) renderMain();
-    });
+    void restorePending()
+      .then(() => {
+        if (!disposed) renderMain();
+      })
+      // A mount torn down mid-restore rejects here; the overlay is rebuilt on
+      // the next refresh, so this must not surface as an unhandled rejection.
+      .catch(() => undefined);
 
     return () => {
       // A read may resolve after React removes Chrome's DOM. Fence its
