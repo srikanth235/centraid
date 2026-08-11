@@ -28,6 +28,8 @@ The source modules live under [`tools/recognition-automations/automation-handler
 
 Image-domain recipes use the thumbnail/preview derivative rather than a full-resolution original. Transcription is the deliberate exception because a shortened recording loses content, not merely resolution. Every read has a byte ceiling and an unavailable or oversized input is recorded honestly.
 
+Text embeddings are keyed to their parent content item but sourced from a versioned text or transcript derivative. Their derivation stamp therefore records the source `derivative_id` as `source_version`; `embed-text` treats an embedding as current only when both the model and source version match. Rewriting text under the same embedding model replaces the stored vector instead of leaving semantic search on stale text.
+
 OCR accepts both image media types and `application/pdf`. For a PDF, the handler extracts each page's text layer when present. A page without usable embedded text is rendered locally and passed through the same bundled image recognizer. Capture invokes this same automation synchronously, so missing assets and model failures become ordinary automation-ledger failures rather than a separate gateway error vocabulary.
 
 ## Model assets

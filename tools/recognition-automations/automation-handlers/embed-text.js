@@ -19,6 +19,14 @@ function modelAvailable() {
   return weightsPresent() ? EMBED_MODEL_ID : null;
 }
 
+function stampMatchesSource(stamp, model, sourceVersion) {
+  const stampedSourceVersion =
+    typeof stamp?.payload_json === "string"
+      ? JSON.parse(stamp.payload_json).source_version
+      : stamp?.source_version;
+  return stamp?.model === model && stampedSourceVersion === sourceVersion;
+}
+
 async function seedCursor(ctx, model) {
   const latest = await ctx.vault.read({
     entity: "core.content_derivative",
@@ -38,7 +46,9 @@ async function seedCursor(ctx, model) {
     limit: 1,
     purpose: PURPOSE,
   });
-  return stamps.rows?.[0]?.model === model ? item.derivative_id : "";
+  return stampMatchesSource(stamps.rows?.[0], model, item.derivative_id)
+    ? item.derivative_id
+    : "";
 }
 
 export default async function handler({ ctx, log }) {
@@ -87,7 +97,7 @@ export default async function handler({ ctx, log }) {
       limit: 1,
       purpose: PURPOSE,
     });
-    if (stamps.rows?.[0]?.model === model) {
+    if (stampMatchesSource(stamps.rows?.[0], model, item.derivative_id)) {
       skipped += 1;
       continue;
     }
@@ -115,6 +125,7 @@ export default async function handler({ ctx, log }) {
         model,
         vector: result.vector,
         capability: "embed-text",
+        source_version: item.derivative_id,
       },
       purpose: PURPOSE,
     });
