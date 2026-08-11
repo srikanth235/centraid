@@ -497,3 +497,108 @@ describe(createPendingOverlayModel, () => {
     expect(model.rows()).toStrictEqual([]);
   });
 });
+
+describe("durable attention", () => {
+  const DENIED = {
+    intentId: "intent-denied",
+    action: "add-expense",
+    status: "denied" as const,
+    reason: "steward said no",
+    input: { description: "Ferry", amount_minor: 1250 },
+  };
+
+  // A settled non-executed write survives reload from the client-local
+  // attention journal — the half `restore()` structurally cannot cover.
+  it("rebuilds a denied row from the attention journal on a cold model", () => {
+    const model = createPendingOverlayModel(DECLARATION);
+    expect(model.attention()).toStrictEqual([]);
+    model.restoreAttention([DENIED]);
+    expect(model.attention()).toStrictEqual([
+      {
+        intentId: "intent-denied",
+        action: "add-expense",
+        status: "denied",
+        rowIds: ["pending-intent-denied"],
+        entities: ["tally.expense"],
+        reason: "steward said no",
+        input: { description: "Ferry", amount_minor: 1250 },
+      },
+    ]);
+    // It is attention, not overlay: a rebuilt denial must not start
+    // composing reads again.
+    expect(model.unsettled()).toStrictEqual([]);
+  });
+
+  it("carries the conflict's expected vs actual versions through a reload", () => {
+    const model = createPendingOverlayModel(DECLARATION);
+    model.restoreAttention([
+      {
+        intentId: "intent-conflict",
+        action: "add-expense",
+        status: "conflict",
+        conflict: {
+          entity: "tally.expense",
+          rowId: "expense-1",
+          expectedVersion: 4,
+          actualVersion: 9,
+        },
+      },
+    ]);
+    expect(model.attention()[0]?.conflict).toStrictEqual({
+      entity: "tally.expense",
+      rowId: "expense-1",
+      expectedVersion: 4,
+      actualVersion: 9,
+    });
+  });
+
+  it("never resurrects a row the member dismissed, and never overwrites a live entry", () => {
+    const model = createPendingOverlayModel(DECLARATION);
+    model.restoreAttention([DENIED]);
+    expect(model.dismiss("intent-denied")).toBe(true);
+    // A journal read racing the durable clear must not undo the discard.
+    model.restoreAttention([DENIED]);
+    expect(model.attention()).toStrictEqual([]);
+
+    // An entry this session already holds keeps what it learned at settle
+    // time; the journal is a floor on what is known, not a ceiling.
+    model.begin("add-expense", { description: "Taxi" }, "intent-live");
+    model.applyOutcome("intent-live", { status: "denied", reason: "specific" });
+    model.restoreAttention([
+      { intentId: "intent-live", action: "add-expense", status: "failed" },
+    ]);
+    expect(model.attention()).toStrictEqual([
+      expect.objectContaining({ status: "denied", reason: "specific" }),
+    ]);
+  });
+
+  it("clears the durable record when a row is discarded or taken for retry", () => {
+    const forgotten: string[] = [];
+    const model = createPendingOverlayModel(DECLARATION, {
+      dismissDurable: (intentId) => forgotten.push(intentId),
+    });
+    model.restoreAttention([DENIED, { ...DENIED, intentId: "intent-retry" }]);
+
+    expect(model.dismiss("intent-denied")).toBe(true);
+    expect(model.takeForRetry("intent-retry")).toStrictEqual({
+      action: "add-expense",
+      input: { description: "Ferry", amount_minor: 1250 },
+    });
+    // Both answers reach the durable journal: a retry re-issues under a fresh
+    // intent id, so leaving the old record would duplicate the row on reload.
+    expect(forgotten).toStrictEqual(["intent-denied", "intent-retry"]);
+    expect(model.rows()).toStrictEqual([]);
+  });
+
+  it("leaves an unsettled row alone: nothing waiting is dismissible or durable-cleared", () => {
+    const forgotten: string[] = [];
+    const model = createPendingOverlayModel(DECLARATION, {
+      dismissDurable: (intentId) => forgotten.push(intentId),
+    });
+    model.begin("add-expense", { description: "Ferry" }, "intent-queued");
+    expect(model.dismiss("intent-queued")).toBe(false);
+    expect(model.takeForRetry("intent-queued")).toBeUndefined();
+    expect(forgotten).toStrictEqual([]);
+    expect(model.unsettled()).toHaveLength(1);
+  });
+});

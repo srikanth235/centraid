@@ -262,13 +262,18 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
       : ((await this.#sessions.get(vaultId)?.cancelPendingChange(id)) ?? false);
   }
 
-  dismissPendingChange(
+  async dismissPendingChange(
     id: string,
     vaultId: string,
     kind: "replica" | "placement"
-  ): void {
-    if (kind === "placement") this.dismissPlacement(id);
-    else this.#sessions.get(vaultId)?.dismissAttention(id);
+  ): Promise<void> {
+    if (kind === "placement") {
+      this.dismissPlacement(id);
+      return;
+    }
+    // Awaited so the caller refreshes AFTER the durable record is gone; a
+    // refresh that races the delete redraws the row it just discarded.
+    await this.#sessions.get(vaultId)?.dismissAttention(id);
   }
 
   async place(

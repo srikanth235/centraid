@@ -9,6 +9,7 @@ import type { BoardSection, Project, Section, Task, View } from "../types.ts";
 // it from the durable outbox — issue #738); `pendingByRowId` decorates it
 // (and any pending mutation on an existing row) with the chip, same as every
 // other row.
+import { Attention } from "./Attention.tsx";
 import { Capture } from "./Capture.tsx";
 import type { CaptureProps } from "./Capture.tsx";
 import { Row } from "./Row.tsx";
@@ -33,6 +34,9 @@ export function Board({
   search,
   snippets,
   pendingByRowId,
+  attention,
+  onRetryPending,
+  onDiscardPending,
   projects,
   projectSections,
   footer,
@@ -54,6 +58,11 @@ export function Board({
   search: string;
   snippets: Map<string, string> | null;
   pendingByRowId: Map<string, PendingRowState>;
+  /** Writes that settled without executing (issue #738). They no longer
+   *  overlay any row, so they render as their own panel above the board. */
+  attention: PendingRowState[];
+  onRetryPending: (intentId: string) => void;
+  onDiscardPending: (intentId: string) => void;
   projects: Project[];
   projectSections: Section[];
   footer: { windowSize: number } | null;
@@ -77,6 +86,14 @@ export function Board({
   return (
     <div className={styles.column}>
       {showCapture ? <Capture {...captureProps} /> : null}
+
+      {/* A refused/conflicted/failed write keeps its place until the member
+          answers it — never a row that quietly vanished (issue #738). */}
+      <Attention
+        rows={attention}
+        onRetry={onRetryPending}
+        onDiscard={onDiscardPending}
+      />
 
       {/* A scope that could not be asked, named BESIDE whatever other
           scopes' tasks are still on screen — never a reason to blank the

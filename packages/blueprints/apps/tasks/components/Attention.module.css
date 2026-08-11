@@ -1,0 +1,58 @@
+/* Writes that came back refused, conflicted or broken (issue #738). They sit
+   ABOVE the board's sections because the replica stopped overlaying them —
+   the row they projected is no longer in the list, so this panel is the only
+   place the member can still see, retry or discard them. Authored camelCase;
+   module hashing replaces `tk-`. Chip and buttons stay on the global kit
+   classes (`kit-pending-chip`, `kit-btn`) so the grammar matches every row. */
+
+.panel {
+  max-width: 520px;
+  padding: var(--sp-4);
+  margin-bottom: 20px;
+  border: 1px solid var(--danger);
+  border-radius: var(--r-lg);
+}
+
+.title {
+  margin: 0 0 8px;
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block: 8px;
+  border-block-start: 1px solid var(--line);
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+}
+
+.titleLine {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.label {
+  font: var(--t-small-strong);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.reason {
+  margin-top: 4px;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}

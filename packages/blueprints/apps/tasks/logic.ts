@@ -44,7 +44,19 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // intentId, projects it through `tasksPendingProjection`, and folds the
   // outcome back in. `restorePending`/`pendingByRowId`/`applyPendingChange`
   // are the three seams app-root.tsx drives (mount/refresh, render, doorbell).
-  const pendingModel = createPendingOverlayModel(tasksPendingProjection);
+  // Discarding (or retrying) an attention row also clears its durable record,
+  // through the engine's one port — a row that returns on the next reload was
+  // never really discarded. The clear is fire-and-forget by contract, so the
+  // failure is narrated here rather than swallowed.
+  const pendingModel = createPendingOverlayModel(tasksPendingProjection, {
+    dismissDurable: (intentId) => {
+      const forget = window.centraid.dismissAttentionWrite;
+      if (!forget) return;
+      void forget({ intentId }).catch(() =>
+        notice("That change is gone from this view but may return on reload.")
+      );
+    },
+  });
 
   function notice(text: string) {
     const el = document.querySelector<HTMLElement>("#noticeBanner");
@@ -71,13 +83,44 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return false;
   }
 
-  /** Rebuild the overlay from the durable outbox — the reload path (issue
-   *  #738). Feature-detected: an older/mock host without `pendingWrites`
-   *  restores to empty, which is fine — attention rows still persist
+  /** Rebuild the overlay from local truth — the reload path (issue #738).
+   *  Two durable sources, because a settled write leaves the outbox: the
+   *  outbox for what is still in flight, the attention journal for what came
+   *  back denied/conflicted/failed. Feature-detected: an older/mock host
+   *  without either restores to empty, and attention rows then persist only
    *  in-session from `applyOutcome`. */
   async function restorePending(): Promise<void> {
-    pendingModel.restore((await window.centraid.pendingWrites?.()) ?? []);
+    const [pending, attention] = await Promise.all([
+      window.centraid.pendingWrites?.() ?? [],
+      window.centraid.attentionWrites?.() ?? [],
+    ]);
+    pendingModel.restore(pending);
+    pendingModel.restoreAttention(attention);
     render();
+  }
+
+  /** The rows that settled without executing and still need an answer. */
+  function attentionRows(): PendingRowState[] {
+    return pendingModel.attention();
+  }
+
+  /** Discard one — here and in the durable journal (the model's port). */
+  function dismissPending(intentId: string): boolean {
+    const dismissed = pendingModel.dismiss(intentId);
+    if (dismissed) render();
+    return dismissed;
+  }
+
+  /** Re-issue a refused write under a FRESH intent id: the old id's payload
+   *  hash is bound to the attempt that failed, so replaying it would dedupe
+   *  onto that failure instead of trying again. */
+  async function retryPending(
+    intentId: string
+  ): Promise<VaultOutcome | undefined> {
+    const retry = pendingModel.takeForRetry(intentId);
+    if (!retry) return undefined;
+    render();
+    return write(retry.action, retry.input);
   }
 
   /** Row-id → pending state for decorating query rows with the chip
@@ -107,6 +150,41 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     state.activityLog.set(taskId, list.slice(0, 20));
   }
 
+  /** Writes that change a row that already exists — the ones a second device
+   *  can race. A create has nothing to be stale against. */
+  const VERSIONED_ACTIONS = new Set(["edit", "set-status"]);
+
+  /**
+   * The optimistic-concurrency precondition for one write (issue #738 P2):
+   * the version of the row this device composed the edit against, read from
+   * the local replica. Without it a conflict cannot even occur — the vault
+   * has nothing to compare — so this is what makes a `conflict` outcome, and
+   * its expected-vs-actual row, reachable at all.
+   *
+   * Empty is the honest answer in three cases, and none of them fake a
+   * version: a create, a host without the version surface, and a row the
+   * replica has no canonical version for (an unsettled pending-* row, or a
+   * shape whose identity is opaque). A failure to READ the local replica is
+   * NOT one of those — it propagates and settles the write as failed, which
+   * is retryable, rather than silently downgrading to last-write-wins.
+   */
+  async function baseVersionsFor(
+    action: string,
+    input: Record<string, unknown>
+  ): Promise<CentraidBaseVersion[]> {
+    const taskId = input.task_id;
+    if (!VERSIONED_ACTIONS.has(action) || typeof taskId !== "string") return [];
+    const readVersion = window.centraid.rowVersion;
+    if (!readVersion) return [];
+    const version = await readVersion({
+      entity: "schedule.task",
+      rowId: taskId,
+    });
+    return version === undefined
+      ? []
+      : [{ entity: "schedule.task", rowId: taskId, version }];
+  }
+
   // The universal write path (issue #738): mint the intent id, project the
   // app's declared optimistic mutations for it, and fold whatever outcome
   // comes back (or the transport failure) into the model. An action absent
@@ -121,11 +199,13 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     const intentId = crypto.randomUUID();
     const optimistic = pendingModel.begin(action, input, intentId);
     try {
+      const baseVersions = await baseVersionsFor(action, input);
       const outcome = await window.centraid.write({
         action,
         input,
         intentId,
         ...(optimistic.length > 0 ? { optimistic } : {}),
+        ...(baseVersions.length > 0 ? { baseVersions } : {}),
       });
       pendingModel.applyOutcome(outcome.invocationId ?? intentId, {
         status: outcome.status,
@@ -500,6 +580,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     clearSearch,
     restorePending,
     pendingByRowId,
+    attentionRows,
+    dismissPending,
+    retryPending,
     applyPendingChange,
   };
 }

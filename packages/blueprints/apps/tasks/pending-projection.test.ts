@@ -210,6 +210,191 @@ describe("Tasks pending-write reload survival", () => {
     expect(byRowId.get(boardData.open[0]!.task_id)).toBeDefined();
   });
 
+  test("a denied add persists with its reason across a reload, then retries under a fresh id", async () => {
+    // The durable attention journal the client store keeps (issue #738): the
+    // outbox drops a settled intent, so this is the ONLY thing that can bring
+    // a denied create back after a reload.
+    const journal: NonNullable<
+      Awaited<ReturnType<NonNullable<typeof window.centraid.attentionWrites>>>
+    > = [];
+    const write = vi.fn<typeof window.centraid.write>(async (opts) => {
+      journal.push({
+        intentId: opts.intentId!,
+        action: opts.action,
+        status: "denied",
+        reason: "The owner has not allowed this.",
+        input: opts.input ?? {},
+        mutations: (opts.optimistic ?? []) as never,
+        settledAt: "2026-08-11T10:00:00.000Z",
+      });
+      return {
+        status: "denied",
+        invocationId: opts.intentId,
+        reason: "The owner has not allowed this.",
+      } as never;
+    });
+    const dismissAttentionWrite = vi.fn<
+      NonNullable<typeof window.centraid.dismissAttentionWrite>
+    >(async ({ intentId }) => {
+      const at = journal.findIndex((row) => row.intentId === intentId);
+      if (at < 0) return false;
+      journal.splice(at, 1);
+      return true;
+    });
+    Object.defineProperty(window, "centraid", {
+      configurable: true,
+      value: {
+        write,
+        pendingWrites: async () => [],
+        attentionWrites: async () => journal.map((row) => ({ ...row })),
+        dismissAttentionWrite,
+      },
+    });
+
+    const first = createLogic({
+      state: state(),
+      data: data(),
+      render: vi.fn<() => void>(),
+      refresh: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+    await first.write("add", { title: "Ship the thing" });
+    const deniedId = write.mock.calls[0]![0].intentId!;
+    expect(first.attentionRows()).toMatchObject([
+      {
+        action: "add",
+        status: "denied",
+        reason: "The owner has not allowed this.",
+      },
+    ]);
+    // The replica stopped composing the mutation, so the board's own rows no
+    // longer contain it — the attention entry is the only thing still holding
+    // the row it projected.
+    expect(first.attentionRows()[0]!.rowIds).toStrictEqual([
+      `pending-${deniedId}`,
+    ]);
+
+    // ---- reload: a brand-new logic instance with no memory at all ----
+    const second = createLogic({
+      state: state(),
+      data: data(),
+      render: vi.fn<() => void>(),
+      refresh: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+    expect(second.attentionRows()).toStrictEqual([]);
+    await second.restorePending();
+    expect(second.attentionRows()).toMatchObject([
+      {
+        intentId: deniedId,
+        action: "add",
+        status: "denied",
+        reason: "The owner has not allowed this.",
+        input: { title: "Ship the thing" },
+      },
+    ]);
+
+    // ---- retry: same payload, FRESH intent id, old record forgotten ----
+    await second.retryPending(deniedId);
+    expect(dismissAttentionWrite).toHaveBeenCalledWith({ intentId: deniedId });
+    const retried = write.mock.calls[1]![0];
+    expect(retried.input).toStrictEqual({ title: "Ship the thing" });
+    expect(retried.intentId).not.toBe(deniedId);
+    // The retry was denied too, so exactly one row is answerable — the new
+    // attempt — and the old id is not resurrected by the journal.
+    expect(second.attentionRows()).toMatchObject([
+      { intentId: retried.intentId, action: "add", status: "denied" },
+    ]);
+  });
+
+  test("a discarded row stays discarded across a reload", async () => {
+    const journal: NonNullable<
+      Awaited<ReturnType<NonNullable<typeof window.centraid.attentionWrites>>>
+    > = [
+      {
+        intentId: "intent-denied",
+        action: "add",
+        status: "denied",
+        reason: "The owner has not allowed this.",
+        input: { title: "Ship the thing" },
+        mutations: [],
+        settledAt: "2026-08-11T10:00:00.000Z",
+      },
+    ];
+    const dismissAttentionWrite = vi.fn<
+      NonNullable<typeof window.centraid.dismissAttentionWrite>
+    >(async ({ intentId }) => {
+      const at = journal.findIndex((row) => row.intentId === intentId);
+      if (at < 0) return false;
+      journal.splice(at, 1);
+      return true;
+    });
+    Object.defineProperty(window, "centraid", {
+      configurable: true,
+      value: {
+        pendingWrites: async () => [],
+        attentionWrites: async () => journal.map((row) => ({ ...row })),
+        dismissAttentionWrite,
+      },
+    });
+
+    const before = createLogic({
+      state: state(),
+      data: data(),
+      render: vi.fn<() => void>(),
+      refresh: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+    await before.restorePending();
+    expect(before.attentionRows()).toHaveLength(1);
+    expect(before.dismissPending("intent-denied")).toBe(true);
+    expect(before.attentionRows()).toStrictEqual([]);
+    // Discard reaches the DURABLE record — without this the next reload
+    // brings the row straight back, which is not discarding.
+    expect(dismissAttentionWrite).toHaveBeenCalledWith({
+      intentId: "intent-denied",
+    });
+    expect(journal).toStrictEqual([]);
+
+    const after = createLogic({
+      state: state(),
+      data: data(),
+      render: vi.fn<() => void>(),
+      refresh: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+    await after.restorePending();
+    expect(after.attentionRows()).toStrictEqual([]);
+  });
+
+  test("an edit carries the row version it was composed against, a create carries none", async () => {
+    const write = vi.fn<typeof window.centraid.write>(
+      async () => ({ status: "executed" }) as never
+    );
+    const rowVersion = vi.fn<NonNullable<typeof window.centraid.rowVersion>>(
+      async () => 7
+    );
+    Object.defineProperty(window, "centraid", {
+      configurable: true,
+      value: { write, rowVersion, pendingWrites: async () => [] },
+    });
+    const logic = createLogic({
+      state: state(),
+      data: data(),
+      render: vi.fn<() => void>(),
+      refresh: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+
+    await logic.write("edit", { task_id: "task-1", title: "Renamed" });
+    expect(rowVersion).toHaveBeenCalledWith({
+      entity: "schedule.task",
+      rowId: "task-1",
+    });
+    expect(write.mock.calls[0]![0].baseVersions).toStrictEqual([
+      { entity: "schedule.task", rowId: "task-1", version: 7 },
+    ]);
+
+    // A create has no existing row to be stale against.
+    await logic.write("add", { title: "Fresh" });
+    expect(write.mock.calls[1]![0].baseVersions).toBeUndefined();
+  });
+
   test("restorePending() is a safe no-op when the host has no pendingWrites (visual-harness mock)", async () => {
     Object.defineProperty(window, "centraid", {
       configurable: true,

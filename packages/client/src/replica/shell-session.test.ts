@@ -492,6 +492,95 @@ describe("shell-session", () => {
       await session.purge();
     });
 
+    test("reports only this app's attention records and refuses to dismiss another app's", async () => {
+      const record = {
+        intentId: "intent-denied",
+        status: "denied" as const,
+        appId: "todos",
+        action: "complete",
+        reason: "the owner said no",
+        optimistic: [],
+        input: { taskId: "task-1" },
+        settledAt: "2026-08-11T10:00:00.000Z",
+      };
+      const dismissAttentionIntent = vi
+        .fn<ShellReplicaCoordinator["dismissAttentionIntent"]>()
+        .mockResolvedValue(true);
+      const coordinator = fakeCoordinator({
+        attentionIntents: vi
+          .fn<ShellReplicaCoordinator["attentionIntents"]>()
+          .mockResolvedValue([
+            record,
+            { ...record, intentId: "intent-notes", appId: "notes" },
+          ]),
+        dismissAttentionIntent,
+      });
+      const session = new ReplicaShellSession(
+        { baseUrl: "https://gateway.example", vaultId: "vault" },
+        coordinator,
+        { eventTarget: new EventTarget(), isOnline: () => false }
+      );
+      await session.start({
+        mode: "opfs-sahpool",
+        cursor: { epoch: "warm", seq: 1 },
+        schemaEpoch: "schema",
+      });
+
+      await expect(session.attentionWrites("todos")).resolves.toStrictEqual([
+        record,
+      ]);
+      await expect(
+        session.dismissAttentionWrite("todos", "intent-notes")
+      ).resolves.toBe(false);
+      expect(dismissAttentionIntent).not.toHaveBeenCalled();
+      await expect(
+        session.dismissAttentionWrite("todos", "intent-denied")
+      ).resolves.toBe(true);
+      expect(dismissAttentionIntent).toHaveBeenCalledWith("intent-denied");
+      await session.purge();
+    });
+
+    test("reads a row version through the app's own shape and primary key", async () => {
+      const coordinator = fakeCoordinator({
+        readWire: vi
+          .fn<ShellReplicaCoordinator["readWire"]>()
+          .mockResolvedValue({
+            rows: [
+              {
+                rowId: "task-1",
+                values: { task_id: "task-1" },
+                oversizedFields: [],
+                hasUnavailableFields: false,
+                rowVersion: 12,
+              },
+            ],
+            cursor: { epoch: "e", seq: 1 },
+            dependency: { shapeId: "shape-todos", entity: "core.task" },
+          }),
+      });
+      const session = new ReplicaShellSession(
+        { baseUrl: "https://gateway.example", vaultId: "vault" },
+        coordinator,
+        { eventTarget: new EventTarget(), isOnline: () => false }
+      );
+      await session.start({
+        mode: "opfs-sahpool",
+        cursor: { epoch: "warm", seq: 1 },
+        schemaEpoch: "schema",
+      });
+
+      await expect(
+        session.rowVersion("todos", "core.task", "task-1")
+      ).resolves.toBe(12);
+      expect(coordinator.readWire).toHaveBeenLastCalledWith({
+        shapeId: "shape-todos",
+        entity: "core.task",
+        where: [{ column: "task_id", op: "eq", value: "task-1" }],
+        limit: 1,
+      });
+      await session.purge();
+    });
+
     test("retries a transient bootstrap failure without waiting for an online event", async () => {
       const clock = useFakeClock();
       const coordinator = fakeCoordinator();

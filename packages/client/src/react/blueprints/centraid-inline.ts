@@ -77,7 +77,14 @@ interface InlineChangeDetail {
 /** The replica surface one scope binding needs. */
 export type InlineScopeSession = Pick<
   ReplicaShellSession,
-  "read" | "search" | "write" | "subscribe" | "pendingWrites"
+  | "read"
+  | "search"
+  | "write"
+  | "subscribe"
+  | "pendingWrites"
+  | "attentionWrites"
+  | "dismissAttentionWrite"
+  | "rowVersion"
 >;
 
 /**
@@ -106,6 +113,35 @@ export interface InlinePendingWrite {
   reason?: string;
   input: Record<string, unknown>;
   mutations: InlineOptimisticMutation[];
+}
+
+/** One settled write that did not execute and still awaits the member (issue
+ * #738): denied, conflicted or failed. Durable, so the overlay engine can
+ * rebuild the row — with its reason and (for a conflict) expected vs actual
+ * versions — after a reload, instead of losing it with the scrubbed intent. */
+export interface InlineAttentionWrite {
+  intentId: string;
+  action: string;
+  status: "denied" | "conflict" | "failed";
+  reason?: string;
+  input: Record<string, unknown>;
+  mutations: InlineOptimisticMutation[];
+  conflict?: {
+    entity: string;
+    rowId: string;
+    expectedVersion: number;
+    actualVersion: number;
+  };
+  settledAt: string;
+}
+
+/** One row version an app hands `write({baseVersions})` as an optimistic
+ * concurrency precondition (issue #738 P2). */
+export interface InlineBaseVersion {
+  entity: string;
+  rowId: string;
+  version: number;
+  shapeId?: string;
 }
 
 /** One mounted scope: its shell-resolved descriptor and its replica session. */
@@ -195,12 +231,36 @@ export interface InlineCentraidClient {
     /** Declared pending projection for this write (issue #738) — persisted on
      * the durable intent and composed into every read until settlement. */
     optimistic?: InlineOptimisticMutation[];
+    /** Optimistic-concurrency preconditions (issue #738 P2): the row versions
+     * this write was composed against. The vault refuses with a `conflict`
+     * outcome — expected vs actual — when any of them moved first. */
+    baseVersions?: InlineBaseVersion[];
     signal?: AbortSignal;
     scope?: string;
   }) => Promise<T>;
   /** This app's unsettled writes from one scope's durable outbox (issue
    * #738) — the reload path for the pending-write overlay engine. */
   pendingWrites: (opts?: { scope?: string }) => Promise<InlinePendingWrite[]>;
+  /** This app's settled writes that still await the member (issue #738) —
+   * the reload path for denied/conflict/failed rows, which the outbox drops
+   * on settle. */
+  attentionWrites: (opts?: {
+    scope?: string;
+  }) => Promise<InlineAttentionWrite[]>;
+  /** Forget one attention record, because the member discarded it or took it
+   * for a retry, so a discarded row stays discarded across a reload. */
+  dismissAttentionWrite: (opts: {
+    intentId: string;
+    scope?: string;
+  }) => Promise<boolean>;
+  /** The local replica's version for one row, for `write({baseVersions})`.
+   * Undefined when this scope cannot address the row by an exposed key. */
+  rowVersion: (opts: {
+    entity: string;
+    rowId: string;
+    purpose?: string;
+    scope?: string;
+  }) => Promise<number | undefined>;
   /** Commands durably queued on this member seat while its steward is away. */
   commonsIntents: (opts?: {
     scope?: string;
@@ -307,6 +367,24 @@ async function gatewayRead(
     body: JSON.stringify({ input }),
   });
   return readJson<unknown>(res, `read ${query}`);
+}
+
+/** One stored optimistic mutation, in the shape apps read (no shapeId — the
+ *  shell resolved that already when the write was admitted). */
+function inlineMutation(mutation: {
+  op: "upsert" | "delete";
+  entity: string;
+  rowId: string;
+  values?: unknown;
+}): InlineOptimisticMutation {
+  return mutation.op === "upsert"
+    ? {
+        op: "upsert",
+        entity: mutation.entity,
+        rowId: mutation.rowId,
+        values: mutation.values as Record<string, unknown>,
+      }
+    : { op: "delete", entity: mutation.entity, rowId: mutation.rowId };
 }
 
 /** Map one replica invalidation into the kit change-feed detail shape. */
@@ -640,6 +718,7 @@ export function createInlineCentraidClient(
       input?: Record<string, unknown>;
       intentId?: string;
       optimistic?: InlineOptimisticMutation[];
+      baseVersions?: InlineBaseVersion[];
       signal?: AbortSignal;
       scope?: string;
     }) {
@@ -662,6 +741,13 @@ export function createInlineCentraidClient(
         // the outbox alone.
         ...(opts.optimistic && opts.optimistic.length > 0
           ? { optimistic: opts.optimistic as never }
+          : {}),
+        // The row versions the app composed this write against (issue #738
+        // P2). Forwarded verbatim onto the durable intent and hashed with it,
+        // so the vault can answer `conflict` with expected vs actual instead
+        // of overwriting someone else's newer row.
+        ...(opts.baseVersions && opts.baseVersions.length > 0
+          ? { baseVersions: opts.baseVersions }
           : {}),
       });
       // Shape the intent outcome into the `VaultOutcome` the kit narrates: the
@@ -698,21 +784,47 @@ export function createInlineCentraidClient(
         state: intent.state,
         ...(intent.reason === undefined ? {} : { reason: intent.reason }),
         input: (intent.input ?? {}) as Record<string, unknown>,
-        mutations: intent.optimistic.map((mutation) =>
-          mutation.op === "upsert"
-            ? {
-                op: "upsert" as const,
-                entity: mutation.entity,
-                rowId: mutation.rowId,
-                values: mutation.values as Record<string, unknown>,
-              }
-            : {
-                op: "delete" as const,
-                entity: mutation.entity,
-                rowId: mutation.rowId,
-              }
-        ),
+        mutations: intent.optimistic.map(inlineMutation),
       }));
+    },
+
+    async attentionWrites(opts) {
+      const binding = bindingFor(opts?.scope);
+      const records = await binding.session.attentionWrites(appId);
+      return records.map((record) => ({
+        intentId: record.intentId,
+        action: record.action,
+        status: record.status,
+        ...(record.reason === undefined ? {} : { reason: record.reason }),
+        input: (record.input ?? {}) as Record<string, unknown>,
+        mutations: record.optimistic.map(inlineMutation),
+        ...(record.conflict === undefined
+          ? {}
+          : {
+              conflict: {
+                entity: record.conflict.entity,
+                rowId: record.conflict.rowId,
+                expectedVersion: record.conflict.expectedVersion,
+                actualVersion: record.conflict.actualVersion,
+              },
+            }),
+        settledAt: record.settledAt,
+      }));
+    },
+
+    async dismissAttentionWrite(opts) {
+      const binding = bindingFor(opts.scope);
+      return binding.session.dismissAttentionWrite(appId, opts.intentId);
+    },
+
+    async rowVersion(opts) {
+      const binding = bindingFor(opts.scope);
+      return binding.session.rowVersion(
+        appId,
+        opts.entity,
+        opts.rowId,
+        opts.purpose
+      );
     },
 
     async commonsIntents(opts) {

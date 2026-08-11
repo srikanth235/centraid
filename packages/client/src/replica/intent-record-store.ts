@@ -17,12 +17,11 @@ export function buildIntentAttention(
   settled: ReplicaIntent,
   settledAt = new Date().toISOString()
 ): IntentAttentionRecord | undefined {
-  const status =
-    settled.conflict !== undefined
-      ? "conflict"
-      : settled.state === "denied" || settled.state === "failed"
-        ? settled.state
-        : undefined;
+  const status = settled.conflict
+    ? "conflict"
+    : settled.state === "denied" || settled.state === "failed"
+      ? settled.state
+      : undefined;
   if (status === undefined) return undefined;
   return {
     intentId: settled.intentId,

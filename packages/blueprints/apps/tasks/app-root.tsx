@@ -328,6 +328,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   // ADD rows already arrive inside `sections` (the query composes them from
   // the durable outbox) — this only supplies the chip.
   const pendingByRow = logic.pendingByRowId();
+  // The other half of the same model: writes that settled WITHOUT executing.
+  // They no longer overlay any row, so the board draws them as their own
+  // panel rather than letting them disappear (issue #738).
+  const attention = logic.attentionRows();
   const q = state.search.trim();
   const activeProject = state.view.startsWith("project:")
     ? data.projects.find(
@@ -431,6 +435,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             search={state.search}
             snippets={state.searchSnippets}
             pendingByRowId={pendingByRow}
+            attention={attention}
+            onRetryPending={(intentId) => void logic.retryPending(intentId)}
+            onDiscardPending={(intentId) => logic.dismissPending(intentId)}
             projects={data.projects}
             projectSections={data.sections}
             footer={footer}

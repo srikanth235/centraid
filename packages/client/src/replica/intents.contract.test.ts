@@ -271,6 +271,99 @@ describe(IntentQueue, () => {
     ).resolves.toMatchObject([{ rowId: "task-1" }, { rowId: "task-2" }]);
   });
 
+  test("journals a denied write for attention while it leaves the overlay", async () => {
+    const store = new MemoryIntentStore();
+    const queue = new IntentQueue(store, { idFactory: () => "intent-denied" });
+    const optimistic = [
+      {
+        op: "upsert" as const,
+        shapeId: "shape-agenda",
+        entity: "core.task",
+        rowId: "pending-intent-denied",
+        values: { title: "Ship the thing" },
+      },
+    ];
+    await queue.enqueue({
+      appId: "agenda",
+      action: "create",
+      input: { title: "Ship the thing" },
+      optimistic,
+    });
+    await queue.claimNext();
+    await queue.applyOutcomes([
+      { intentId: "intent-denied", status: "denied", reason: "owner denied" },
+    ]);
+
+    // The overlay is gone — a denied write must stop composing reads.
+    await expect(queue.list()).resolves.toStrictEqual([]);
+    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
+    // The ROW is not gone. Without this journal a denied create leaves every
+    // read and the member never learns it was refused (issue #738).
+    await expect(queue.attention()).resolves.toStrictEqual([
+      {
+        intentId: "intent-denied",
+        status: "denied",
+        appId: "agenda",
+        action: "create",
+        reason: "owner denied",
+        optimistic,
+        input: { title: "Ship the thing" },
+        settledAt: expect.any(String),
+      },
+    ]);
+  });
+
+  test("journals a conflict with its expected vs actual versions, and nothing for an execution", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-conflict",
+    });
+    const conflict = {
+      shapeId: "shape-agenda",
+      entity: "core.event",
+      rowId: "event-1",
+      expectedVersion: 4,
+      actualVersion: 5,
+    };
+    await queue.enqueue({ appId: "agenda", action: "edit", input: {} });
+    await queue.claimNext();
+    await queue.applyOutcomes([
+      { intentId: "intent-conflict", status: "conflict", conflict },
+    ]);
+    await expect(queue.attention()).resolves.toMatchObject([
+      { intentId: "intent-conflict", status: "conflict", conflict },
+    ]);
+
+    const executed = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-executed",
+    });
+    await executed.enqueue({ appId: "agenda", action: "edit", input: {} });
+    await executed.claimNext();
+    await executed.applyOutcomes([
+      { intentId: "intent-executed", status: "executed" },
+    ]);
+    // An executed write has a canonical row to show for itself; journaling
+    // its payload would retain member content for nothing.
+    await expect(executed.attention()).resolves.toStrictEqual([]);
+  });
+
+  test("an attention record leaves only when the member answers it", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-failed",
+    });
+    await queue.enqueue({ appId: "agenda", action: "edit", input: {} });
+    await queue.claimNext();
+    await queue.applyOutcomes([
+      { intentId: "intent-failed", status: "failed", reason: "handler threw" },
+    ]);
+
+    // Reading it, and reading the outbox around it, never prunes it.
+    await expect(queue.pending()).resolves.toStrictEqual([]);
+    await expect(queue.attention()).resolves.toHaveLength(1);
+    await expect(queue.dismissAttention("intent-failed")).resolves.toBe(true);
+    await expect(queue.attention()).resolves.toStrictEqual([]);
+    await expect(queue.dismissAttention("intent-failed")).resolves.toBe(false);
+  });
+
   test("delegates close to the durable store", () => {
     const store = new MemoryIntentStore();
     const close = vi.spyOn(store, "close");

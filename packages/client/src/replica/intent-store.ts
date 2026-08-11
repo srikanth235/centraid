@@ -187,10 +187,7 @@ export class IndexedDbIntentStore implements IntentRecordStore {
     allowed: readonly IntentState[],
     patch: Partial<ReplicaIntent>
   ): Promise<ReplicaIntent> {
-    const tx = this.db.transaction(
-      [INTENTS, OUTCOMES, ATTENTION],
-      "readwrite"
-    );
+    const tx = this.db.transaction([INTENTS, OUTCOMES, ATTENTION], "readwrite");
     const store = tx.objectStore(INTENTS);
     const existing = (await requestResult(store.get(intentId))) as
       | ReplicaIntent

@@ -151,6 +151,84 @@ describe("multi-writer", () => {
         { intentId: "upgrade-intent", state: "queued" },
       ]);
       await expect(upgraded.listSettled()).resolves.toStrictEqual([]);
+      // v4's attention journal (issue #738) is additive in the same way: it
+      // exists after an in-place upgrade, and the queued intent above is
+      // still there rather than dropped for a schema rollout.
+      await expect(upgraded.attention()).resolves.toStrictEqual([]);
+    });
+
+    // Issue #738: settlement scrubs the intent, so the outbox alone cannot
+    // answer "what came back refused". These pin the durable attention
+    // journal across the same close-and-reopen boundary a browser reload is.
+    test("a denied write survives a reopen as an attention record, with its row and reason", async () => {
+      const { factory, name, stores, tabA } = await openTabs();
+      cleanupDatabase(factory, name, stores);
+      await tabA.enqueue(payload);
+      await tabA.claimNext();
+      await tabA.applyOutcomes([
+        {
+          intentId: payload.intentId,
+          status: "denied",
+          reason: "the owner said no",
+        },
+      ]);
+
+      for (const store of stores) store.close();
+      const reopenedStore = await IndexedDbIntentStore.open(name, factory);
+      stores.push(reopenedStore);
+      const reopened = new IntentQueue(reopenedStore);
+
+      // The overlay is correctly empty — and the row is still answerable.
+      await expect(reopened.list()).resolves.toStrictEqual([]);
+      await expect(reopened.overlayMutations()).resolves.toStrictEqual([]);
+      await expect(reopened.attention()).resolves.toStrictEqual([
+        {
+          intentId: payload.intentId,
+          status: "denied",
+          appId: "agenda",
+          action: "complete",
+          reason: "the owner said no",
+          optimistic: payload.optimistic,
+          input: payload.input,
+          settledAt: expect.any(String),
+        },
+      ]);
+    });
+
+    test("a conflict keeps expected vs actual across a reopen, and a dismissal stays dismissed", async () => {
+      const { factory, name, stores, tabA } = await openTabs();
+      cleanupDatabase(factory, name, stores);
+      const conflict = {
+        shapeId: "shape-agenda",
+        entity: "core.task",
+        rowId: "task-1",
+        expectedVersion: 3,
+        actualVersion: 8,
+      };
+      await tabA.enqueue(payload);
+      await tabA.claimNext();
+      await tabA.applyOutcomes([
+        { intentId: payload.intentId, status: "conflict", conflict },
+      ]);
+
+      for (const store of stores) store.close();
+      const secondStore = await IndexedDbIntentStore.open(name, factory);
+      stores.push(secondStore);
+      const second = new IntentQueue(secondStore);
+      await expect(second.attention()).resolves.toMatchObject([
+        { intentId: payload.intentId, status: "conflict", conflict },
+      ]);
+
+      await expect(second.dismissAttention(payload.intentId)).resolves.toBe(
+        true
+      );
+      secondStore.close();
+      const thirdStore = await IndexedDbIntentStore.open(name, factory);
+      stores.push(thirdStore);
+      // Discarding has to outlive the reload too, or it was only a hide.
+      await expect(
+        new IntentQueue(thirdStore).attention()
+      ).resolves.toStrictEqual([]);
     });
 
     // #496 P3 / web.concurrency double-write: concurrent optimistic enqueue of

@@ -45,6 +45,11 @@ function fakeSession(
     search: vi.fn<InlineSession["search"]>(),
     write: vi.fn<InlineSession["write"]>(),
     pendingWrites: vi.fn<InlineSession["pendingWrites"]>(async () => []),
+    attentionWrites: vi.fn<InlineSession["attentionWrites"]>(async () => []),
+    dismissAttentionWrite: vi.fn<InlineSession["dismissAttentionWrite"]>(
+      async () => false
+    ),
+    rowVersion: vi.fn<InlineSession["rowVersion"]>(async () => undefined),
     subscribe: vi.fn<InlineSession["subscribe"]>((_appId, _deps, listener) => {
       subscribers.push(listener);
       return () => undefined;

@@ -315,6 +315,36 @@ interface CentraidPendingWrite {
   mutations: CentraidPendingMutation[];
 }
 
+/** One settled write that did NOT execute and still awaits the member (issue
+ * #738) — what `attentionWrites()` reports. The outbox drops the intent on
+ * settle, so this durable journal is what keeps a denied/conflicted/failed
+ * row (its reason, its projected values, its expected-vs-actual versions)
+ * across a reload instead of letting it vanish. */
+interface CentraidAttentionWrite {
+  intentId: string;
+  action: string;
+  status: "denied" | "conflict" | "failed";
+  reason?: string;
+  input: Record<string, unknown>;
+  mutations: CentraidPendingMutation[];
+  conflict?: {
+    entity: string;
+    rowId: string;
+    expectedVersion: number;
+    actualVersion: number;
+  };
+  settledAt: string;
+}
+
+/** One row version a write carries as an optimistic-concurrency precondition
+ * (issue #738 P2). Obtain it from `rowVersion()`; never invent one. */
+interface CentraidBaseVersion {
+  entity: string;
+  rowId: string;
+  version: number;
+  shapeId?: string;
+}
+
 /** One scope's answer in a `readAll` fan-out. Errors are data, never throws. */
 type CentraidScopeRead<T> =
   | { scope: string; ok: true; data: T }
@@ -361,6 +391,10 @@ interface CentraidClient {
     /** Declared pending projection for this write (issue #738); the replica
      * persists it with the intent and composes it into every read. */
     optimistic?: CentraidPendingMutation[];
+    /** Optimistic-concurrency preconditions (issue #738 P2): the row versions
+     * this write was composed against. The vault answers `conflict` — with
+     * expected vs actual — when one of them moved first. */
+    baseVersions?: CentraidBaseVersion[];
     signal?: AbortSignal;
     /** Which mounted scope the write lands in; defaults to the primary. */
     scope?: string;
@@ -371,6 +405,26 @@ interface CentraidClient {
   pendingWrites?: (opts?: {
     scope?: string;
   }) => Promise<CentraidPendingWrite[]>;
+  /** This app's settled writes that still await the member (issue #738) — the
+   * reload path for denied/conflict/failed rows; absent on older hosts. */
+  attentionWrites?: (opts?: {
+    scope?: string;
+  }) => Promise<CentraidAttentionWrite[]>;
+  /** Forget one attention record (the member discarded it, or took it for a
+   * retry) so a discarded row stays discarded across a reload. */
+  dismissAttentionWrite?: (opts: {
+    intentId: string;
+    scope?: string;
+  }) => Promise<boolean>;
+  /** The local replica's version for one row, for `write({baseVersions})`.
+   * Undefined when this scope cannot address the row by an exposed key — the
+   * honest answer, and the signal to send no precondition at all. */
+  rowVersion?: (opts: {
+    entity: string;
+    rowId: string;
+    purpose?: string;
+    scope?: string;
+  }) => Promise<number | undefined>;
   /** Durable member-side Commons overlay; absent on older/single-scope hosts. */
   commonsIntents?: (opts?: {
     scope?: string;

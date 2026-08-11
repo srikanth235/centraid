@@ -9,6 +9,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import type { PendingRowState } from "../../_shared/pending-overlay.ts";
 import type { ScopeSearchReach } from "../../_shared/search-scaffold.ts";
 import type { BoardSection, Task } from "../types.ts";
 import { Board } from "./Board.tsx";
@@ -23,7 +24,10 @@ const SECTIONS: BoardSection[] = [
   { key: "today", label: "Today", tone: "accent", count: 1, rows: [TASK] },
 ];
 
-function render(reach?: readonly ScopeSearchReach[]): string {
+function render(
+  reach?: readonly ScopeSearchReach[],
+  attention: PendingRowState[] = []
+): string {
   return renderToStaticMarkup(
     createElement(Board, {
       view: "today",
@@ -36,6 +40,9 @@ function render(reach?: readonly ScopeSearchReach[]): string {
       search: "",
       snippets: null,
       pendingByRowId: new Map(),
+      attention,
+      onRetryPending: () => {},
+      onDiscardPending: () => {},
       projects: [],
       projectSections: [],
       footer: null,
@@ -76,6 +83,65 @@ describe("Board's per-scope reach panel", () => {
     // The reached scope's tasks are still on screen — the point of a NAMED
     // gap is that it sits beside good results, never in place of them.
     expect(html).toContain("Own scope&#x27;s task");
+  });
+
+  it("draws no attention panel when nothing settled unexecuted", () => {
+    expect(render()).not.toContain("These changes were not saved");
+  });
+
+  it("keeps a denied add on screen with its reason and both affordances", () => {
+    const denied: PendingRowState = {
+      intentId: "intent-denied",
+      action: "add",
+      status: "denied",
+      rowIds: ["pending-intent-denied"],
+      entities: ["schedule.task"],
+      reason: "The owner has not allowed this.",
+      input: { title: "Ship the thing" },
+    };
+    const html = render(undefined, [denied]);
+    // The row the board no longer has (the overlay stopped composing it) is
+    // still visible, still explained, and still answerable.
+    expect(html).toContain("Ship the thing");
+    expect(html).toContain("The owner has not allowed this.");
+    expect(html).toContain("denied");
+    expect(html).toContain("Retry");
+    expect(html).toContain("Discard");
+  });
+
+  it("a conflict row names the versions, not a generic error", () => {
+    const conflicted: PendingRowState = {
+      intentId: "intent-conflict",
+      action: "edit",
+      status: "conflict",
+      rowIds: ["task-1"],
+      entities: ["schedule.task"],
+      conflict: {
+        entity: "schedule.task",
+        rowId: "task-1",
+        expectedVersion: 7,
+        actualVersion: 9,
+      },
+      input: { task_id: "task-1", title: "Renamed" },
+    };
+    const html = render(undefined, [conflicted]);
+    expect(html).toContain("version 7");
+    expect(html).toContain("version 9");
+    expect(html).toContain("Someone else changed this first.");
+  });
+
+  it("offers discard alone for a record whose payload was never journaled", () => {
+    const failed: PendingRowState = {
+      intentId: "intent-failed",
+      action: "set-status",
+      status: "failed",
+      rowIds: ["task-2"],
+      entities: ["schedule.task"],
+    };
+    const html = render(undefined, [failed]);
+    expect(html).toContain("Status change");
+    expect(html).toContain("Discard");
+    expect(html).not.toContain("Retry");
   });
 
   it("names a refused scope with the mask's own reason, distinct from unreached", () => {

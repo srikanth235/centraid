@@ -295,12 +295,17 @@ export default function ReplicaStatusBar(): React.JSX.Element {
                     </View>
                     <Pressable
                       onPress={() => {
+                        // Refresh only after the durable record is actually
+                        // gone (issue #738) — otherwise the sheet redraws the
+                        // row it just discarded.
                         if (terminal)
-                          session?.dismissPendingChange(
-                            item.id,
-                            item.vaultId,
-                            item.kind
-                          );
+                          void session
+                            ?.dismissPendingChange(
+                              item.id,
+                              item.vaultId,
+                              item.kind
+                            )
+                            .then(refreshPending);
                         else
                           void session
                             ?.cancelPendingChange(

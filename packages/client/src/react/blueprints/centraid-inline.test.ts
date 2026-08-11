@@ -229,6 +229,123 @@ describe(installInlineCentraid, () => {
     ]);
   });
 
+  it("reports the durable attention journal so a denied row survives a reload (issue #738)", async () => {
+    const dismissAttentionWrite = vi.fn<Session["dismissAttentionWrite"]>(
+      async () => true
+    );
+    const session = fakeSession({
+      attentionWrites: vi.fn<Session["attentionWrites"]>(async () => [
+        {
+          intentId: "intent-denied",
+          appId: "tasks",
+          action: "add",
+          status: "denied",
+          reason: "the owner said no",
+          input: { title: "Buy milk" },
+          optimistic: [
+            {
+              op: "upsert",
+              shapeId: "shape-tasks",
+              entity: "tasks.task",
+              rowId: "pending-intent-denied",
+              values: { task_id: "pending-intent-denied", title: "Buy milk" },
+            },
+          ],
+          conflict: {
+            entity: "tasks.task",
+            rowId: "task-1",
+            expectedVersion: 3,
+            actualVersion: 4,
+          },
+          settledAt: "2026-08-11T10:00:00.000Z",
+        },
+      ]),
+      dismissAttentionWrite,
+    });
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "tasks",
+      session,
+      queries: noQueries,
+      target,
+    });
+    const client_ = target.centraid as InlineCentraidClient;
+
+    await expect(client_.attentionWrites()).resolves.toStrictEqual([
+      {
+        intentId: "intent-denied",
+        action: "add",
+        status: "denied",
+        reason: "the owner said no",
+        input: { title: "Buy milk" },
+        mutations: [
+          {
+            op: "upsert",
+            entity: "tasks.task",
+            rowId: "pending-intent-denied",
+            values: { task_id: "pending-intent-denied", title: "Buy milk" },
+          },
+        ],
+        conflict: {
+          entity: "tasks.task",
+          rowId: "task-1",
+          expectedVersion: 3,
+          actualVersion: 4,
+        },
+        settledAt: "2026-08-11T10:00:00.000Z",
+      },
+    ]);
+    expect(session.attentionWrites).toHaveBeenCalledWith("tasks");
+
+    await expect(
+      client_.dismissAttentionWrite({ intentId: "intent-denied" })
+    ).resolves.toBe(true);
+    // Scoped to the asking app: the session decides ownership, not the app.
+    expect(dismissAttentionWrite).toHaveBeenCalledWith(
+      "tasks",
+      "intent-denied"
+    );
+  });
+
+  it("forwards baseVersions onto the write so a conflict can occur at all (issue #738 P2)", async () => {
+    const session = fakeSession({
+      rowVersion: vi.fn<Session["rowVersion"]>(async () => 7),
+    });
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "tasks",
+      session,
+      queries: noQueries,
+      target,
+    });
+    const client_ = target.centraid as InlineCentraidClient;
+
+    await expect(
+      client_.rowVersion({ entity: "tasks.task", rowId: "task-1" })
+    ).resolves.toBe(7);
+    expect(session.rowVersion).toHaveBeenCalledWith(
+      "tasks",
+      "tasks.task",
+      "task-1",
+      undefined
+    );
+
+    await client_.write({
+      action: "edit",
+      input: { task_id: "task-1" },
+      baseVersions: [{ entity: "tasks.task", rowId: "task-1", version: 7 }],
+    });
+    expect(session.writes.at(-1)).toMatchObject({
+      action: "edit",
+      baseVersions: [{ entity: "tasks.task", rowId: "task-1", version: 7 }],
+    });
+
+    // A write with no preconditions carries none — never an empty array that
+    // reads as "I checked and there was nothing".
+    await client_.write({ action: "add", input: { title: "Fresh" } });
+    expect(session.writes.at(-1)).not.toHaveProperty("baseVersions");
+  });
+
   it("exposes vault-resident Commons intents as a durable app overlay", async () => {
     const session = fakeSession();
     const target: { centraid?: unknown } = {};

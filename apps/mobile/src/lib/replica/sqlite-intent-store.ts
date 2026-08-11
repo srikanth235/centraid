@@ -1,8 +1,10 @@
 import {
+  buildIntentAttention,
   buildIntentOutcome,
   ReplicaProtocolError,
 } from "@centraid/client/replica/native";
 import type {
+  IntentAttentionRecord,
   IntentRecordStore,
   IntentOutcome,
   IntentState,
@@ -31,7 +33,8 @@ const DDL = `
     app_id TEXT NOT NULL,
     action TEXT NOT NULL,
     reason TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    record_json TEXT
   );
   CREATE TABLE IF NOT EXISTS replica_intent_outcome (
     intent_id TEXT PRIMARY KEY,
@@ -44,6 +47,7 @@ interface StoredIntentRow {
   record_json: string;
 }
 
+/** The phone's attention row as the sync-status sheet renders it. */
 export interface NativeIntentAttention {
   intentId: string;
   status: "denied" | "failed" | "conflict";
@@ -60,6 +64,7 @@ interface AttentionRow {
   action: string;
   reason: string | null;
   created_at: string;
+  record_json: string | null;
 }
 
 /**
@@ -75,6 +80,18 @@ export class SqliteIntentStore implements IntentRecordStore {
 
   static create(driver: ReplicaSqliteDriver): SqliteIntentStore {
     driver.exec(DDL);
+    // `CREATE TABLE IF NOT EXISTS` cannot widen a table an earlier build
+    // already created, so the attention journal's full-record column is added
+    // here. Additive, like the browser outbox's IndexedDB upgrades: rows a
+    // previous version wrote keep their columns and still render.
+    const columns = driver.all<{ name: string }>(
+      "PRAGMA table_info(replica_intent_attention)"
+    );
+    if (!columns.some((column) => column.name === "record_json")) {
+      driver.exec(
+        "ALTER TABLE replica_intent_attention ADD COLUMN record_json TEXT"
+      );
+    }
     return new SqliteIntentStore(driver);
   }
 
@@ -153,25 +170,23 @@ export class SqliteIntentStore implements IntentRecordStore {
   ): Promise<ReplicaIntent> {
     return this.transaction(() => {
       const settled = this.applyPatch(intentId, allowed, patch, "settle");
-      if (
-        settled.state === "denied" ||
-        settled.state === "failed" ||
-        settled.conflict !== undefined
-      ) {
-        const attentionStatus = settled.conflict ? "conflict" : settled.state;
+      const attention = buildIntentAttention(settled);
+      if (attention) {
         this.driver.run(
           `INSERT INTO replica_intent_attention
-             (intent_id, status, app_id, action, reason, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)
+             (intent_id, status, app_id, action, reason, created_at, record_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(intent_id) DO UPDATE SET
-             status = excluded.status, reason = excluded.reason`,
+             status = excluded.status, reason = excluded.reason,
+             record_json = excluded.record_json`,
           [
-            settled.intentId,
-            attentionStatus,
-            settled.appId,
-            settled.action,
-            settled.reason ?? null,
-            new Date().toISOString(),
+            attention.intentId,
+            attention.status,
+            attention.appId,
+            attention.action,
+            attention.reason ?? null,
+            attention.settledAt,
+            JSON.stringify(attention),
           ]
         );
       }
@@ -217,27 +232,40 @@ export class SqliteIntentStore implements IntentRecordStore {
     });
   }
 
-  attention(): NativeIntentAttention[] {
+  async attention(): Promise<IntentAttentionRecord[]> {
     return this.driver
       .all<AttentionRow>(
-        `SELECT intent_id, status, app_id, action, reason, created_at
-           FROM replica_intent_attention ORDER BY created_at DESC`
+        `SELECT intent_id, status, app_id, action, reason, created_at, record_json
+           FROM replica_intent_attention ORDER BY created_at`
       )
-      .map((row) => ({
-        intentId: row.intent_id,
-        status: row.status,
-        appId: row.app_id,
-        action: row.action,
-        ...(row.reason ? { reason: row.reason } : {}),
-        createdAt: row.created_at,
-      }));
+      .map((row) => {
+        // A row written before the journal carried whole records still
+        // renders: it names the write and its reason, and simply has no
+        // projection or payload to retry from.
+        if (row.record_json)
+          return JSON.parse(row.record_json) as IntentAttentionRecord;
+        return {
+          intentId: row.intent_id,
+          status: row.status,
+          appId: row.app_id,
+          action: row.action,
+          ...(row.reason ? { reason: row.reason } : {}),
+          optimistic: [],
+          settledAt: row.created_at,
+        };
+      });
   }
 
-  dismissAttention(intentId: string): void {
+  async dismissAttention(intentId: string): Promise<boolean> {
+    const existing = this.driver.all<{ intent_id: string }>(
+      "SELECT intent_id FROM replica_intent_attention WHERE intent_id = ?",
+      [intentId]
+    );
     this.driver.run(
       "DELETE FROM replica_intent_attention WHERE intent_id = ?",
       [intentId]
     );
+    return existing.length > 0;
   }
 
   close(): void {

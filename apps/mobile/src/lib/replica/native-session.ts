@@ -446,7 +446,19 @@ export class NativeReplicaSession implements MobileReplicaSession {
         // pending without keeping any pending state of its own.
         rowIds: intent.optimistic.map((mutation) => mutation.rowId),
       })),
-      ...this.#intentStore.attention(),
+      // The durable attention journal (issue #738): settled writes that did
+      // not execute, mapped onto the sheet's row shape. `settledAt` is when
+      // the device learned the answer, which is what the sheet orders by.
+      ...(await this.#intentStore.attention()).map(
+        (record): NativeIntentAttention => ({
+          intentId: record.intentId,
+          status: record.status,
+          appId: record.appId,
+          action: record.action,
+          ...(record.reason ? { reason: record.reason } : {}),
+          createdAt: record.settledAt,
+        })
+      ),
     ];
   }
 
@@ -458,12 +470,14 @@ export class NativeReplicaSession implements MobileReplicaSession {
       status: "denied",
       reason: "Cancelled on this device",
     });
-    this.#intentStore.dismissAttention(intentId);
+    // A cancel is the member answering the row, so the denial it just wrote
+    // must not come back as an attention row.
+    await this.#intentStore.dismissAttention(intentId);
     return true;
   }
 
-  dismissAttention(intentId: string): void {
-    this.#intentStore.dismissAttention(intentId);
+  dismissAttention(intentId: string): Promise<boolean> {
+    return this.#intentStore.dismissAttention(intentId);
   }
 
   catalog(): readonly ReplicaShape[] {

@@ -170,6 +170,8 @@
         "app-inline.tsx",
         "app-root.tsx",
         "app.json",
+        "components/Attention.module.css",
+        "components/Attention.tsx",
         "components/Board.module.css",
         "components/Board.test.tsx",
         "components/Board.tsx",

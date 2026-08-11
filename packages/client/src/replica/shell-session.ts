@@ -434,9 +434,9 @@ export class ReplicaShellSession {
     purpose?: string
   ): Promise<number | undefined> {
     this.assertOpen();
-    const shapeId = this.resolveShapeId(appId, entity, undefined, purpose);
+    const resolved = this.resolveShapeId(appId, entity, undefined, purpose);
     const schema = this.#catalog
-      .find((shape) => shape.shapeId === shapeId)
+      .find((shape) => shape.shapeId === resolved)
       ?.entities.find((item) => item.entity === entity);
     // `resolveShapeId` only returns a shape that carries this entity, so the
     // schema is present; an opaque primary key is a real absence of a
@@ -444,7 +444,7 @@ export class ReplicaShellSession {
     if (!schema || schema.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY)
       return undefined;
     const result = await this.coordinator.readWire({
-      shapeId,
+      shapeId: resolved,
       entity,
       where: [{ column: schema.primaryKey, op: "eq", value: rowId }],
       limit: 1,

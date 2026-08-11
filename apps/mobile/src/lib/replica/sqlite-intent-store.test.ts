@@ -150,6 +150,69 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
     ).toStrictEqual(["a"]);
   });
 
+  // Issue #738: settle scrubs the intent, so without this journal a denied
+  // create's row leaves every read and the member never learns it was refused.
+  test("journals a settled non-executed write for attention, with its projection and payload", async () => {
+    const store = makeStore();
+    const optimistic = [
+      {
+        op: "upsert" as const,
+        shapeId: "shape-photos",
+        entity: "media.media_asset",
+        rowId: "pending-a",
+        values: { title: "Beach" },
+      },
+    ];
+    await store.add(newIntent({ intentId: "a", optimistic }));
+    await store.settle("a", ["queued"], {
+      state: "denied",
+      reason: "the owner said no",
+    });
+
+    await expect(store.list()).resolves.toHaveLength(0);
+    await expect(store.attention()).resolves.toStrictEqual([
+      {
+        intentId: "a",
+        status: "denied",
+        appId: "photos",
+        action: "rename",
+        reason: "the owner said no",
+        optimistic,
+        input: { title: "Beach" },
+        settledAt: expect.any(String),
+      },
+    ]);
+  });
+
+  test("journals a conflict under its own status and nothing for an execution", async () => {
+    const store = makeStore();
+    const conflict = {
+      entity: "media.media_asset",
+      rowId: "asset-1",
+      expectedVersion: 2,
+      actualVersion: 6,
+    };
+    await store.add(newIntent({ intentId: "a" }));
+    await store.settle("a", ["queued"], { state: "failed", conflict });
+    await store.add(newIntent({ intentId: "b" }));
+    await store.settle("b", ["queued"], { state: "executed" });
+
+    await expect(store.attention()).resolves.toMatchObject([
+      { intentId: "a", status: "conflict", conflict },
+    ]);
+  });
+
+  test("an attention record leaves only when the member answers it", async () => {
+    const store = makeStore();
+    await store.add(newIntent({ intentId: "a" }));
+    await store.settle("a", ["queued"], { state: "failed" });
+
+    await expect(store.attention()).resolves.toHaveLength(1);
+    await expect(store.dismissAttention("a")).resolves.toBe(true);
+    await expect(store.attention()).resolves.toStrictEqual([]);
+    await expect(store.dismissAttention("a")).resolves.toBe(false);
+  });
+
   test("clear empties the store", async () => {
     const store = makeStore();
     await store.add(newIntent({ intentId: "a" }));
