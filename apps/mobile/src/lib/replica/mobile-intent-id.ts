@@ -48,4 +48,16 @@ export class MobileIntentIds {
     });
     return intentId;
   }
+
+  /**
+   * A fresh id, bypassing the double-tap coalescing cache entirely (issue
+   * #738): a retry re-issues a write whose action/input are deliberately
+   * IDENTICAL to the one that just failed — `forWrite` would coalesce that
+   * onto the old id if the member retries inside the double-tap window,
+   * defeating the durable attention journal's "the old id's payload hash is
+   * bound to the attempt that failed" contract.
+   */
+  mint(): string {
+    return this.createId();
+  }
 }

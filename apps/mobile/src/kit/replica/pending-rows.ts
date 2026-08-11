@@ -20,6 +20,7 @@ import {
   projectPendingMutations,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import type {
+  PendingConflictDetail,
   PendingProjectionDeclaration,
   PendingWriteStatus,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
@@ -94,4 +95,41 @@ export function pendingRowMarks(
     for (const rowId of change.rowIds) marks.set(rowId, mark);
   }
   return marks;
+}
+
+/** What the sync-status sheet says about one attention row (issue #738 P3). */
+export interface AttentionRowCopy {
+  /** The quiet chip's one word — the same grammar every row uses. */
+  label: string;
+  /** The explanation line. A conflict names its own expected/actual
+   *  versions; anything else falls back to the shared refusal grammar. */
+  reason: string;
+}
+
+/**
+ * A settled-but-unexecuted row's chip label and explanation, from the shared
+ * refusal grammar (`pendingChipLabel`/`pendingReasonCopy`) both seats use —
+ * except a conflict, which must NAME its expected and actual versions rather
+ * than print the generic "someone else changed this" line, so a member can
+ * tell whether retrying is even sensible.
+ */
+export function attentionRowCopy(item: {
+  status: PendingWriteStatus;
+  reason?: string;
+  conflict?: PendingConflictDetail;
+}): AttentionRowCopy {
+  const label = pendingChipLabel(item.status);
+  if (item.conflict) {
+    return {
+      label,
+      reason: `Expected version ${item.conflict.expectedVersion}, but it is now version ${item.conflict.actualVersion}.`,
+    };
+  }
+  return {
+    label,
+    reason: pendingReasonCopy(
+      item.status,
+      item.reason ? { reason: item.reason } : {}
+    ),
+  };
 }

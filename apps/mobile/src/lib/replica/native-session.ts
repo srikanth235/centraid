@@ -457,6 +457,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
           action: record.action,
           ...(record.reason ? { reason: record.reason } : {}),
           createdAt: record.settledAt,
+          // Carried through so a retry can re-issue the write and a conflict
+          // row can name expected vs actual versions (issue #738 P2/P3).
+          ...(record.input === undefined ? {} : { input: record.input }),
+          ...(record.conflict === undefined
+            ? {}
+            : { conflict: record.conflict }),
         })
       ),
     ];
@@ -478,6 +484,17 @@ export class NativeReplicaSession implements MobileReplicaSession {
 
   dismissAttention(intentId: string): Promise<boolean> {
     return this.#intentStore.dismissAttention(intentId);
+  }
+
+  /**
+   * A fresh intent id for this session's next write, for a caller that must
+   * mint one BEFORE calling `write` — a retry (issue #738), which re-issues
+   * the attention journal's own `action`/`input` verbatim and would
+   * otherwise coalesce onto the id of the attempt that just failed (see
+   * `MobileIntentIds.mint`).
+   */
+  mintIntentId(): string {
+    return this.#intentIds.mint();
   }
 
   catalog(): readonly ReplicaShape[] {

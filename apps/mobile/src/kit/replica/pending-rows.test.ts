@@ -3,7 +3,7 @@
 import { describe, expect, test } from "vitest";
 
 import type { PendingChange } from "./pending-changes";
-import { pendingRowMarks } from "./pending-rows";
+import { attentionRowCopy, pendingRowMarks } from "./pending-rows";
 
 const queued: PendingChange = {
   id: "intent-1",
@@ -75,5 +75,48 @@ describe(pendingRowMarks, () => {
     );
 
     expect(marks.size).toBe(0);
+  });
+});
+
+describe(attentionRowCopy, () => {
+  test("prints the gateway's own reason verbatim for a denial", () => {
+    expect(
+      attentionRowCopy({ status: "denied", reason: "Ada has to approve this." })
+    ).toStrictEqual({ label: "denied", reason: "Ada has to approve this." });
+  });
+
+  test("falls back to the shared refusal grammar with no gateway reason", () => {
+    expect(attentionRowCopy({ status: "failed" })).toStrictEqual({
+      label: "failed",
+      reason: "This change could not be applied.",
+    });
+  });
+
+  // Issue #738 P3: a conflict must NAME its expected/actual versions, not
+  // print the generic "someone else changed this" line — the two facts a
+  // member needs to decide whether retrying even makes sense.
+  test("names expected vs actual versions for a conflict, ignoring any generic reason", () => {
+    expect(
+      attentionRowCopy({
+        status: "conflict",
+        reason: "a generic transport reason that must not win",
+        conflict: {
+          entity: "schedule.task",
+          rowId: "task-1",
+          expectedVersion: 2,
+          actualVersion: 5,
+        },
+      })
+    ).toStrictEqual({
+      label: "conflict",
+      reason: "Expected version 2, but it is now version 5.",
+    });
+  });
+
+  test("falls back to the generic conflict line when no version detail is journaled", () => {
+    expect(attentionRowCopy({ status: "conflict" })).toStrictEqual({
+      label: "conflict",
+      reason: "Someone else changed this first.",
+    });
   });
 });

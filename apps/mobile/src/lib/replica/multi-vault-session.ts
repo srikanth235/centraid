@@ -1,5 +1,6 @@
 import type {
   OptimisticMutation,
+  ReplicaConflict,
   ReplicaInvalidation,
   ReplicaReadWireResult,
   ReplicaSearchWireResult,
@@ -216,6 +217,9 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
       kind: "replica" | "placement";
       appId?: string;
       rowIds?: string[];
+      action?: string;
+      input?: Record<string, unknown>;
+      conflict?: ReplicaConflict;
     }>
   > {
     const replica = (
@@ -231,9 +235,19 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
             ...(item.reason ? { reason: item.reason } : {}),
             kind: "replica" as const,
             appId: item.appId,
+            // The action name and journaled payload, so a durable attention
+            // row can be retried under a fresh intent id (issue #738) — the
+            // same fields the outbox rows already had via `label`, now named.
+            action: item.action,
             // Present only while the write is still unsettled: the rows it put
             // on screen, which is what a list joins its pending chip against.
             ...("rowIds" in item ? { rowIds: item.rowIds } : {}),
+            ...("input" in item && item.input !== undefined
+              ? { input: item.input as Record<string, unknown> }
+              : {}),
+            ...("conflict" in item && item.conflict !== undefined
+              ? { conflict: item.conflict }
+              : {}),
           }));
         })
       )
@@ -274,6 +288,19 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     // Awaited so the caller refreshes AFTER the durable record is gone; a
     // refresh that races the delete redraws the row it just discarded.
     await this.#sessions.get(vaultId)?.dismissAttention(id);
+  }
+
+  /**
+   * A fresh intent id for a retry (issue #738): the sync-status sheet is
+   * device-global and has no per-app write wrapper to mint one through
+   * `write`'s own id resolution, and a retry's action/input are deliberately
+   * identical to the attempt that just failed, so they must not coalesce
+   * onto its id (`NativeReplicaSession.mintIntentId`).
+   */
+  mintIntentId(vaultId: string): string {
+    const session = this.#sessions.get(vaultId);
+    if (!session) throw new Error(`Vault ${vaultId} has no write session`);
+    return session.mintIntentId();
   }
 
   async place(

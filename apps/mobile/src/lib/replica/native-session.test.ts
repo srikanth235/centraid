@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
@@ -7,11 +8,13 @@ import type {
   ReplicaChangeBatch,
   ReplicaCursor,
   ReplicaDigest,
+  ReplicaFetcher,
   ReplicaIdFactory,
   ReplicaSnapshot,
   ReplicaSnapshotRow,
   VaultChangeMessage,
 } from "@centraid/client/replica/native";
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import type { AppStateLike, NativeChangeFeed } from "./native-session";
 import { createNativeReplicaSession } from "./native-session";
@@ -219,6 +222,39 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+/**
+ * A transport that bootstraps once (page 1, complete) and then answers each
+ * `POST /replica/intents` from a FIFO queue of outcomes, recording the
+ * `intentId` each request actually carried — what the attention-journal
+ * retry tests need to prove a retry ships under a fresh id (issue #738).
+ */
+function intentGateway(outcomes: readonly Record<string, unknown>[]): {
+  fetcher: ReplicaFetcher;
+  intentIds: string[];
+} {
+  const intentIds: string[] = [];
+  let call = 0;
+  const fetcher: ReplicaFetcher = (_baseUrl, pathname, init) => {
+    if (pathname.includes("/replica/bootstrap")) {
+      return Promise.resolve(json(page({ epoch: "replica-1", seq: 1 })));
+    }
+    if (pathname.includes("/replica/intents")) {
+      const body = JSON.parse(String(init.body ?? "{}")) as {
+        intentId: string;
+      };
+      intentIds.push(body.intentId);
+      const outcome = outcomes[call] ?? { status: "executed" };
+      call += 1;
+      return Promise.resolve(
+        json({ outcome: { intentId: body.intentId, ...outcome } })
+      );
+    }
+    // Bootstrap's own mandatory convergence replay, and any later delta pull.
+    return Promise.resolve(json(noChanges({ epoch: "replica-1", seq: 1 })));
+  };
+  return { fetcher, intentIds };
 }
 
 function changeBatch(
@@ -529,6 +565,210 @@ describe(createNativeReplicaSession, () => {
       const pending = await session.coordinator.pendingIntents();
       expect(pending).toHaveLength(1);
       expect(pending[0]?.state).toBe("queued");
+    } finally {
+      await session.close();
+    }
+  });
+});
+
+// Issue #738 mobile gap 1/3: retry and conflict versions on the attention
+// journal `pendingChanges()` reports. Sabotage-verified — dropping the
+// `input`/`conflict` passthrough this suite covers back to the pre-fix
+// mapping in `pendingChanges()` fails every test below that reads them.
+describe("attention journal retry (issue #738)", () => {
+  test("journals a denied write's action and payload, and clears on dismiss", async () => {
+    const { fetcher, intentIds } = intentGateway([
+      { status: "denied", reason: "the owner said no" },
+    ]);
+    const session = await createNativeReplicaSession({
+      gatewayAuth,
+      fetcher,
+      changeFeed: createFeed(),
+      driver: new NodeSqliteDriver(),
+      digest: nodeDigest,
+      idFactory: sequentialIds(),
+    });
+    try {
+      const result = await session.write("tasks", {
+        action: "add",
+        input: { title: "Beach house" },
+      });
+      expect(result).toMatchObject({ status: "denied" });
+      const deniedId = intentIds[0];
+      expect(deniedId).toBeDefined();
+
+      const attention = (await session.pendingChanges()).find(
+        (item) => "createdAt" in item
+      );
+      expect(attention).toMatchObject({
+        intentId: deniedId,
+        status: "denied",
+        appId: "tasks",
+        action: "add",
+        reason: "the owner said no",
+        input: { title: "Beach house" },
+      });
+
+      await expect(session.dismissAttention(deniedId!)).resolves.toBe(true);
+      expect(
+        (await session.pendingChanges()).some((item) => "createdAt" in item)
+      ).toBe(false);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("carries expected vs actual versions for a conflict, not a generic reason", async () => {
+    const conflict = {
+      entity: "schedule.task",
+      rowId: "task-1",
+      expectedVersion: 2,
+      actualVersion: 5,
+    };
+    const { fetcher } = intentGateway([{ status: "conflict", conflict }]);
+    const session = await createNativeReplicaSession({
+      gatewayAuth,
+      fetcher,
+      changeFeed: createFeed(),
+      driver: new NodeSqliteDriver(),
+      digest: nodeDigest,
+      idFactory: sequentialIds(),
+    });
+    try {
+      const result = await session.write("tasks", {
+        action: "edit",
+        input: { task_id: "task-1", title: "Renamed" },
+      });
+      expect(result).toMatchObject({ status: "conflict" });
+
+      const attention = (await session.pendingChanges()).find(
+        (item) => "createdAt" in item
+      );
+      expect(attention).toMatchObject({ status: "conflict", conflict });
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("a denied write survives a fresh session over the same SQLite file and offers retry", async () => {
+    const file = path.join(tempDirSync("centraid-attention-restart-"), "v.db");
+    const { fetcher } = intentGateway([
+      { status: "denied", reason: "the owner said no" },
+    ]);
+    const before = await createNativeReplicaSession({
+      gatewayAuth,
+      fetcher,
+      changeFeed: createFeed(),
+      driver: new NodeSqliteDriver(file),
+      digest: nodeDigest,
+      idFactory: sequentialIds(),
+    });
+    await before.write("tasks", {
+      action: "add",
+      input: { title: "Beach house" },
+    });
+    await before.close();
+
+    // A cold start over the same file, offline: nothing could have been
+    // re-fetched, so a fetcher that throws proves the row is local truth.
+    const after = await createNativeReplicaSession({
+      gatewayAuth,
+      fetcher: () => Promise.reject(new Error("no network in this test")),
+      changeFeed: createFeed(),
+      driver: new NodeSqliteDriver(file),
+      digest: nodeDigest,
+      idFactory: sequentialIds(),
+      isConnected: () => false,
+    });
+    try {
+      const attention = (await after.pendingChanges()).find(
+        (item) => "createdAt" in item
+      );
+      expect(attention).toMatchObject({
+        status: "denied",
+        appId: "tasks",
+        action: "add",
+        reason: "the owner said no",
+        input: { title: "Beach house" },
+      });
+    } finally {
+      await after.close();
+    }
+  });
+
+  test("a discarded row stays discarded across a restart", async () => {
+    const file = path.join(tempDirSync("centraid-attention-discard-"), "v.db");
+    const { fetcher, intentIds } = intentGateway([{ status: "failed" }]);
+    const before = await createNativeReplicaSession({
+      gatewayAuth,
+      fetcher,
+      changeFeed: createFeed(),
+      driver: new NodeSqliteDriver(file),
+      digest: nodeDigest,
+      idFactory: sequentialIds(),
+    });
+    await before.write("tasks", { action: "add", input: { title: "Gone" } });
+    await expect(before.dismissAttention(intentIds[0]!)).resolves.toBe(true);
+    await before.close();
+
+    const after = await createNativeReplicaSession({
+      gatewayAuth,
+      fetcher: () => Promise.reject(new Error("no network in this test")),
+      changeFeed: createFeed(),
+      driver: new NodeSqliteDriver(file),
+      digest: nodeDigest,
+      idFactory: sequentialIds(),
+      isConnected: () => false,
+    });
+    try {
+      expect(
+        (await after.pendingChanges()).some((item) => "createdAt" in item)
+      ).toBe(false);
+    } finally {
+      await after.close();
+    }
+  });
+
+  test("mintIntentId escapes the double-tap coalescing cache a same-payload retry would hit", async () => {
+    const { fetcher, intentIds } = intentGateway([
+      { status: "denied", reason: "the owner said no" },
+      { status: "executed" },
+    ]);
+    const session = await createNativeReplicaSession({
+      gatewayAuth,
+      fetcher,
+      changeFeed: createFeed(),
+      driver: new NodeSqliteDriver(),
+      digest: nodeDigest,
+      idFactory: sequentialIds(),
+    });
+    try {
+      await session.write("tasks", {
+        action: "add",
+        input: { title: "Beach house" },
+      });
+      const deniedId = intentIds[0]!;
+
+      // The retry contract (ReplicaStatusBar.retryPendingChange): the old
+      // attention record goes first, then a FRESH id — minted explicitly, so
+      // it cannot fall back onto `deniedId` even though the action and input
+      // are byte-identical and issued well inside the double-tap window.
+      await expect(session.dismissAttention(deniedId)).resolves.toBe(true);
+      const freshId = session.mintIntentId();
+      expect(freshId).not.toBe(deniedId);
+      const retried = await session.write("tasks", {
+        action: "add",
+        input: { title: "Beach house" },
+        intentId: freshId,
+      });
+
+      expect(retried).toMatchObject({ status: "executed" });
+      expect(intentIds).toStrictEqual([deniedId, freshId]);
+      // The old attention record is gone, and the successful retry left no
+      // new one — one write's whole lifecycle, not two rows for it.
+      expect(
+        (await session.pendingChanges()).some((item) => "createdAt" in item)
+      ).toBe(false);
     } finally {
       await session.close();
     }

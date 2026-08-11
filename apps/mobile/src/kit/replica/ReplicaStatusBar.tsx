@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 
+import type { PendingWriteStatus } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { formatRelativeTime } from "@centraid/design";
 
 import {
@@ -20,9 +21,20 @@ import Icon from "../components/Icon";
 import { Text } from "../components/NativeText";
 import OutOfRoom from "../components/OutOfRoom";
 import { borders, family, radii, t, useTheme } from "../theme";
+import { attentionRetryWrite } from "./attention-retry";
+import type { PendingChange } from "./pending-changes";
 import { usePendingChanges } from "./pending-changes";
+import { attentionRowCopy } from "./pending-rows";
 import { replicaStatusRow } from "./replica-status";
 import { useReplica } from "./ReplicaProvider";
+
+/** Terminal, member-answerable statuses (issue #738 P2/P3): the row persists
+ *  with its explanation and Retry/Dismiss until the member answers it. */
+const ATTENTION_STATUSES: ReadonlySet<string> = new Set([
+  "denied",
+  "conflict",
+  "failed",
+]);
 
 const DIVERGENCE_MS = 24 * 60 * 60 * 1_000;
 
@@ -65,6 +77,33 @@ export default function ReplicaStatusBar(): React.JSX.Element {
   // One AppState-gated ticker serves every mounted status bar; see
   // ./pending-changes.
   const { pending, refresh: refreshPending } = usePendingChanges(session);
+  /**
+   * Re-issue a denied/conflicted/failed write under a FRESH intent id (issue
+   * #738 P1). The id is minted explicitly, before the write, because a retry
+   * replays the SAME action/input the failed attempt used — left to the
+   * session's own double-tap coalescing, a retry issued within that window
+   * would resolve to the OLD id and never actually retry. Dismisses the old
+   * attention record first — matching the web seat's `takeForRetry` — so a
+   * retry that settles right back into the same outcome does not print two
+   * rows for one write; `writeTo` targets the vault the original write was
+   * queued against, the same routing `Cancel`/`Dismiss` already use below.
+   */
+  const retryPendingChange = (item: PendingChange): void => {
+    const { appId, action } = item;
+    if (!session || item.kind !== "replica" || !action || !appId) return;
+    const write = attentionRetryWrite({
+      appId,
+      action,
+      ...(item.input ? { input: item.input } : {}),
+    });
+    const intentId = session.mintIntentId(item.vaultId);
+    void session
+      .dismissPendingChange(item.id, item.vaultId, item.kind)
+      .then(() =>
+        session.writeTo?.(item.vaultId, appId, { ...write, intentId })
+      )
+      .then(refreshPending);
+  };
   const updatedTimes = scopes.flatMap((scope) =>
     scope.updatedAt ? [Date.parse(scope.updatedAt)] : []
   );
@@ -264,9 +303,33 @@ export default function ReplicaStatusBar(): React.JSX.Element {
               </Text>
             ) : (
               pending.map((item) => {
-                const terminal = ["failed", "denied", "executed"].includes(
-                  item.status
-                );
+                // "conflict" is a terminal, member-answerable status too
+                // (issue #738 P2) — grouped with denied/failed rather than
+                // treated as still-in-flight, which is what `Cancel` is for.
+                const terminal =
+                  ATTENTION_STATUSES.has(item.status) ||
+                  item.status === "executed";
+                // The shared refusal grammar is for the durable replica
+                // attention journal (issue #738); a placement row's status
+                // vocabulary and copy are its own (./multi-vault-reader) and
+                // stay on `humanStatus`/`item.reason` unchanged.
+                const attention =
+                  item.kind === "replica" && ATTENTION_STATUSES.has(item.status)
+                    ? attentionRowCopy({
+                        status: item.status as PendingWriteStatus,
+                        ...(item.reason ? { reason: item.reason } : {}),
+                        ...(item.conflict ? { conflict: item.conflict } : {}),
+                      })
+                    : undefined;
+                // Retryable: a replica-kind attention row whose action and
+                // payload the durable journal retained (issue #738 P1). A
+                // placement or a row from before the journal carried the
+                // full record has neither, and stays discard-only.
+                const retryable =
+                  item.kind === "replica" &&
+                  ATTENTION_STATUSES.has(item.status) &&
+                  Boolean(item.action) &&
+                  Boolean(item.appId);
                 return (
                   <View
                     key={`${item.kind}:${item.vaultId}:${item.id}`}
@@ -285,49 +348,68 @@ export default function ReplicaStatusBar(): React.JSX.Element {
                       <Text
                         style={[styles.cardMeta, { color: colors.textSoft }]}
                       >
-                        {item.vaultLabel} · {humanStatus(item.status)}
+                        {item.vaultLabel} ·{" "}
+                        {attention ? attention.label : humanStatus(item.status)}
                       </Text>
-                      {item.reason ? (
+                      {attention ? (
+                        <Text style={[styles.reason, { color: colors.danger }]}>
+                          {attention.reason}
+                        </Text>
+                      ) : item.reason ? (
                         <Text style={[styles.reason, { color: colors.danger }]}>
                           {item.reason}
                         </Text>
                       ) : null}
                     </View>
-                    <Pressable
-                      onPress={() => {
-                        // Refresh only after the durable record is actually
-                        // gone (issue #738) — otherwise the sheet redraws the
-                        // row it just discarded.
-                        if (terminal)
-                          void session
-                            ?.dismissPendingChange(
-                              item.id,
-                              item.vaultId,
-                              item.kind
-                            )
-                            .then(refreshPending);
-                        else
-                          void session
-                            ?.cancelPendingChange(
-                              item.id,
-                              item.vaultId,
-                              item.kind
-                            )
-                            .then(refreshPending);
-                        refreshPending();
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.action,
-                          {
-                            color: terminal ? colors.textSoft : colors.danger,
-                          },
-                        ]}
+                    <View style={styles.cardActions}>
+                      {retryable ? (
+                        <Pressable
+                          accessibilityLabel={`Retry ${item.label}`}
+                          onPress={() => retryPendingChange(item)}
+                        >
+                          <Text
+                            style={[styles.action, { color: colors.accent }]}
+                          >
+                            Retry
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                      <Pressable
+                        onPress={() => {
+                          // Refresh only after the durable record is actually
+                          // gone (issue #738) — otherwise the sheet redraws the
+                          // row it just discarded.
+                          if (terminal)
+                            void session
+                              ?.dismissPendingChange(
+                                item.id,
+                                item.vaultId,
+                                item.kind
+                              )
+                              .then(refreshPending);
+                          else
+                            void session
+                              ?.cancelPendingChange(
+                                item.id,
+                                item.vaultId,
+                                item.kind
+                              )
+                              .then(refreshPending);
+                          refreshPending();
+                        }}
                       >
-                        {terminal ? "Dismiss" : "Cancel"}
-                      </Text>
-                    </Pressable>
+                        <Text
+                          style={[
+                            styles.action,
+                            {
+                              color: terminal ? colors.textSoft : colors.danger,
+                            },
+                          ]}
+                        >
+                          {terminal ? "Dismiss" : "Cancel"}
+                        </Text>
+                      </Pressable>
+                    </View>
                   </View>
                 );
               })
@@ -381,6 +463,7 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 14,
   },
+  cardActions: { alignItems: "flex-end", gap: 10 },
   cardCopy: { flex: 1 },
   cardMeta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
   cardTitle: { fontFamily: family.sansMedium, fontSize: 14 },

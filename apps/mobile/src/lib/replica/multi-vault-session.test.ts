@@ -104,6 +104,36 @@ function bootstrapOnce(
   };
 }
 
+/**
+ * Like `bootstrapOnce`, plus a FIFO of `/replica/intents` outcomes — for
+ * proving what the mounted facade's `pendingChanges()` reports about a
+ * settled-but-unexecuted write (issue #738 gap 1/3).
+ */
+function bootstrapWithIntentOutcomes(
+  vaultId: string,
+  shapeId: string,
+  rows: ReplicaRow[],
+  outcomes: readonly Record<string, unknown>[]
+): ReplicaFetcher {
+  const base = bootstrapOnce(vaultId, shapeId, rows);
+  let call = 0;
+  return (baseUrl, pathname, init) => {
+    if (!pathname.includes("/replica/intents"))
+      return base(baseUrl, pathname, init);
+    const body = JSON.parse(String(init?.body ?? "{}")) as {
+      intentId: string;
+    };
+    const outcome = outcomes[call] ?? { status: "executed" };
+    call += 1;
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({ outcome: { intentId: body.intentId, ...outcome } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+  };
+}
+
 interface MountedVault {
   scope: MountedReplicaScope;
   file: string;
@@ -113,7 +143,12 @@ interface MountedVault {
 async function openVault(
   vault: MountedVault,
   rows: ReplicaRow[],
-  isConnected: () => boolean
+  isConnected: () => boolean,
+  fetcher: ReplicaFetcher = bootstrapOnce(
+    vault.scope.vaultId,
+    vault.shapeId,
+    rows
+  )
 ): Promise<NativeReplicaSession> {
   return createNativeReplicaSession({
     gatewayAuth: {
@@ -121,7 +156,7 @@ async function openVault(
       gatewayId: "gateway-1",
       vaultId: vault.scope.vaultId,
     },
-    fetcher: bootstrapOnce(vault.scope.vaultId, vault.shapeId, rows),
+    fetcher,
     changeFeed: silentFeed(),
     driver: new NodeSqliteDriver(vault.file),
     digest: nodeDigest,
@@ -380,6 +415,59 @@ describe(MultiVaultReplicaSession, () => {
       expect(pending[0]?.rowIds?.[0]?.startsWith("pending-")).toBe(true);
     } finally {
       await after.close();
+    }
+  });
+
+  // Issue #738 gap 1/3: the sheet's `pendingChanges()` has to carry the
+  // action, the journaled payload, and — for a conflict — the expected/
+  // actual versions, or ReplicaStatusBar has nothing to retry from and
+  // nothing but a generic string to show for a conflict.
+  test("surfaces a denied write's action, vault, and payload for a retry", async () => {
+    const root = tempDirSync("centraid-mounted-attention-");
+    const mounted = vaults(root);
+    const connected = true;
+    const sessions = new Map<string, NativeReplicaSession>([
+      [
+        "personal",
+        await openVault(
+          mounted[0]!,
+          [],
+          () => connected,
+          bootstrapWithIntentOutcomes(
+            mounted[0]!.scope.vaultId,
+            mounted[0]!.shapeId,
+            [],
+            [{ status: "denied", reason: "the owner said no" }]
+          )
+        ),
+      ],
+      ["family", await openVault(mounted[1]!, [], () => connected)],
+    ]);
+    const session = mount(root, sessions, mounted);
+    try {
+      const outcome = await session.writeTo(
+        "personal",
+        "tasks",
+        addTask("Bring the tent")
+      );
+      expect(outcome.status).toBe("denied");
+
+      const pending = await session.pendingChanges();
+      const attention = pending.find((item) => item.status === "denied");
+      expect(attention).toMatchObject({
+        vaultId: "personal",
+        appId: "tasks",
+        action: "add",
+        reason: "the owner said no",
+        input: { title: "Bring the tent" },
+      });
+      // The row a member is answering is unambiguous: only the vault it was
+      // queued against reports it.
+      expect(pending.filter((item) => item.status === "denied")).toHaveLength(
+        1
+      );
+    } finally {
+      await session.close();
     }
   });
 });

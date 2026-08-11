@@ -10,6 +10,8 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
+import type { PendingConflictDetail } from "@centraid/blueprints/apps/_shared/pending-overlay";
+
 export interface PendingChange {
   id: string;
   vaultId: string;
@@ -22,6 +24,13 @@ export interface PendingChange {
   appId?: string;
   /** The rows this unsettled write projected into (./pending-rows). */
   rowIds?: string[];
+  /** The declared action, so a durable attention row can be retried
+   *  (issue #738). Only carried for replica-kind rows. */
+  action?: string;
+  /** The journaled payload a retry re-issues. */
+  input?: Record<string, unknown>;
+  /** Expected vs actual versions, for a conflict row (issue #738 P2). */
+  conflict?: PendingConflictDetail;
 }
 
 /** The one method the ticker needs; the mounted session satisfies it. */

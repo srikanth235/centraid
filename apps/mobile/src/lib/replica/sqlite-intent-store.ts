@@ -9,8 +9,10 @@ import type {
   IntentOutcome,
   IntentState,
   NewStoredIntent,
+  ReplicaConflict,
   ReplicaIntent,
   ReplicaSqliteDriver,
+  ReplicaValue,
 } from "@centraid/client/replica/native";
 
 const DDL = `
@@ -47,7 +49,13 @@ interface StoredIntentRow {
   record_json: string;
 }
 
-/** The phone's attention row as the sync-status sheet renders it. */
+/**
+ * The phone's attention row as the sync-status sheet renders it. Carries the
+ * journaled `input` and (for a conflict) `conflict` so a retry can re-issue
+ * the write and a conflict row can name expected vs actual versions instead
+ * of a generic failure string (issue #738 P2/P3) — the same facts the web
+ * seat's `ShellAttentionWrite` carries.
+ */
 export interface NativeIntentAttention {
   intentId: string;
   status: "denied" | "failed" | "conflict";
@@ -55,6 +63,10 @@ export interface NativeIntentAttention {
   action: string;
   reason?: string;
   createdAt: string;
+  /** The app's own payload, retained for retry. */
+  input?: ReplicaValue;
+  /** Expected vs actual versions, so a conflict row can say which. */
+  conflict?: ReplicaConflict;
 }
 
 interface AttentionRow {
