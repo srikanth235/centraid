@@ -427,6 +427,35 @@ sections above.
 - `packages/vault/src/commands/media.ts`
 - `receipts/issue-739-places-map-and-shell-wall.md`
 
+### Merge reconciliation paths
+
+The merge commit's governance comparison also visits paths changed between its
+two parents, even when they are unchanged relative to the final `main` base.
+These are not additional files in the final PR diff. `bun.lock` was reconciled
+to `main` unchanged. For the current gateway paths, conflict resolution took
+the `main` implementations. The remaining legacy enrichment-service and sweep
+paths stay deleted under the recognition-automations architecture described in
+Decisions above:
+
+- `bun.lock`
+- `packages/gateway/src/capture/capture-ocr.ts`
+- `packages/gateway/src/enrich/capability-sweep.ts`
+- `packages/gateway/src/enrich/faces-sweep.ts`
+- `packages/gateway/src/enrich/fake-enrich-service.test-fixtures.ts`
+- `packages/gateway/src/enrich/ocr-sweep.ts`
+- `packages/gateway/src/enrich/place-name-sweep.test.ts`
+- `packages/gateway/src/enrich/place-name-sweep.ts`
+- `packages/gateway/src/enrich/result-readers.ts`
+- `packages/gateway/src/enrich/semantic-search.ts`
+- `packages/gateway/src/enrich/service-client.test.ts`
+- `packages/gateway/src/enrich/service-client.ts`
+- `packages/gateway/src/enrich/wire-shapes.ts`
+- `packages/gateway/src/serve/vault-plane.ts`
+- `tools/enrichment-service/src/capabilities/place-name.test.ts`
+- `tools/enrichment-service/src/capabilities/place-name.ts`
+- `tools/enrichment-service/src/capabilities/registry.ts`
+- `tools/enrichment-service/src/types.ts`
+
 ## Audit
 
 Independent post-merge audit against `git diff origin/main`:
