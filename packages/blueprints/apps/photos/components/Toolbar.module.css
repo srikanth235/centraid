@@ -10,7 +10,7 @@
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-2) 20px;
+  padding: var(--sp-2) var(--gutter);
   flex-wrap: wrap;
   flex-shrink: 0;
 }
@@ -19,10 +19,36 @@
   display: flex;
   align-items: center;
 }
-.select {
-  font: var(--t-control);
-  padding-block: var(--sp-1);
-  padding-inline: var(--sp-2);
+/* A FULL-HEIGHT OUTLINED MENU, not a chip. The kind filter is one of the two
+   standing controls in this row, and the design draws it at the control height
+   every other menu in the product uses (34px, `--h-control`), in UI-strong on
+   the control hairline. At Micro on 4px of padding it read as a tag someone had
+   applied rather than as a control you can open — and it sat visibly shorter
+   than the stepper beside it, so the row had two baselines. */
+/* The class is DOUBLED to outrank `kit-input`, which the element also carries
+   and which loads after this module — at equal specificity the kit won, and the
+   control came out 44px tall on raised paper, a row rather than a control. Same
+   idiom as `.appRoot.appRoot` in Chrome.module.css. */
+/* NOT `block-size: var(--h-control)`. The design draws this control at 34px,
+   but `:root .kit-input` floors every input at `--target-min` (44px), and that
+   floor is a tap target, not a style — a `block-size` here would be overridden
+   by the min and read as a rule that does nothing. The control therefore stands
+   44px tall on purpose; everything else about it is the design's. If 34px is
+   ever wanted here it is a kit decision about `--target-min`, not a per-app
+   override, because shrinking one app's input below the floor is exactly what
+   the floor exists to stop. */
+.select.select {
+  padding-block: 0;
+  padding-inline: var(--sp-4);
+  font: var(--t-small-strong);
+  color: var(--text-soft);
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+}
+.select.select:hover {
+  border-color: var(--line-sel);
+  color: var(--text);
 }
 
 /* The vault filter and the stepper are groups for the accessibility tree, not

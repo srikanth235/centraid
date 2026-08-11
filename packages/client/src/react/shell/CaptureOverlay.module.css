@@ -23,6 +23,20 @@
   }
 }
 
+/* Below the compact step the NAVIGATION BAND owns the lower edge instead, and
+   it is taller than the composer's 82px — so this button sat on top of the
+   band's last two tabs, which on a phone is the "More" tab and whichever
+   destination precedes it. `--compact-band-inset` is published by
+   chrome.module.css, the file that draws the band, so this rule follows the
+   band's real height instead of keeping a second guess at it. The fallback
+   keeps the composer's number if the variable is ever missing: too high is a
+   cosmetic flaw, on top of the navigation is a dead tab. */
+@media (max-width: 720px) {
+  .launcher {
+    bottom: calc(var(--compact-band-inset, 82px) + var(--sp-2));
+  }
+}
+
 .dialog {
   width: min(620px, calc(100vw - 32px));
   max-height: min(760px, calc(100vh - 32px));

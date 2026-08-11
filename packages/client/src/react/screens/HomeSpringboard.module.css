@@ -15,6 +15,10 @@
   gap: var(--sp-3);
   grid-auto-rows: minmax(136px, auto);
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* A grid item's default `min-width: auto` is its CONTENT's minimum, so
+     without this the springboard refuses to be narrower than the widest
+     unbreakable thing inside it and pushes its own pane wide. */
+  min-inline-size: 0;
 }
 
 /* Size classes: small 1×1, medium 2×1, large 2×2. The class follows the app's
@@ -30,29 +34,6 @@
   grid-row: span 2;
 }
 
-/* Compact form factor: two columns, and large flattens to 2×1 — a 2×2 across
-   half the screen is a tile you scroll past rather than read. */
-@media (max-width: 720px) {
-  .springboard {
-    grid-auto-rows: minmax(152px, auto);
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .tile[data-size="large"] {
-    grid-row: span 1;
-  }
-
-  /* One row of four when large flattens — the columns stay, so the mosaic
-     keeps its proportion instead of becoming four tall slivers. */
-  .mosaic {
-    grid-template-rows: 1fr;
-  }
-
-  .mosaicCell:nth-child(n + 5) {
-    display: none;
-  }
-}
-
 .tile {
   background: var(--bg-elev);
   border: 1px solid var(--line);
@@ -63,6 +44,16 @@
   /* The body takes whatever the row gives it above its own floor, so a tile
      that spans two rows fills them instead of leaving a gap under itself. */
   grid-template-rows: auto minmax(120px, 1fr);
+  /* THE COLUMN MUST BE ABLE TO GET SMALLER THAN ITS CONTENTS. Declared, not
+     left implicit: an implicit grid column is `auto`, which floors at the
+     content's min-content width — and several children here are deliberately
+     `white-space: nowrap` (`.readingTitle`, `.afterLine`, `.name`) so that
+     they can ellipsise. A nowrap run's min-content is the WHOLE string, so the
+     tile's one column sized itself to the longest untruncatable heading and
+     `overflow: hidden` below then sliced it. The ellipsis never appeared
+     because the text was never asked to fit. `minmax(0, 1fr)` removes that
+     floor, which is what turns the clipping back into truncation. */
+  grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
   padding: 0;
   text-align: start;
@@ -85,6 +76,9 @@
   display: flex;
   gap: var(--sp-3);
   padding: var(--sp-3) var(--sp-4);
+  /* So `.name`'s ellipsis has something to ellipsise against — a flex item
+     that cannot shrink hands its content width straight back up to the tile. */
+  min-inline-size: 0;
 }
 
 /* The identity mark. The ONLY place the tile spends the app's hue — never on
@@ -121,6 +115,9 @@
   display: flex;
   flex-direction: column;
   min-block-size: 0;
+  /* Same reason as `.head`: every line-clamp and ellipsis below only works if
+     this box is allowed to be narrower than the prose inside it. */
+  min-inline-size: 0;
   padding: 0 var(--sp-4) var(--sp-4);
 }
 
@@ -665,6 +662,81 @@
   margin-block-end: var(--sp-5);
 }
 
+/* SIZED BY ITS PANE, NOT THE WINDOW — the same rule GatewayScreen's `.page`
+   and DevicesCard already follow. The springboard never gets the whole
+   viewport: the stem takes `--w-stem` (240px) off the leading edge at every
+   width above the compact step, so a 760px window hands this grid about 500px
+   and a viewport media query is reading a number that is 240 too large. That
+   is exactly how four columns survived down to a pane where each tile was
+   120px wide and every heading clipped against its own edge.
+
+   The column tiers below are therefore `@container` queries on THIS element,
+   which is the box the tiles actually have to fit inside. */
 .section {
+  container: home-springboard / inline-size;
   margin-block-end: var(--sp-5);
+  min-inline-size: 0;
+}
+
+/* ── the width tiers ──────────────────────────────────────────────────────
+   AT THE END OF THE FILE ON PURPOSE. These blocks override `.mosaic` and
+   `.tile[data-size]`, and they do it at the SAME specificity — `.mosaic` is
+   one class either way, and a container query adds none. So the only thing
+   deciding the winner is source order, and while these tiers sat at the top
+   the base `.mosaic` rule below them quietly won: on a narrow pane the
+   mosaic kept `grid-template-rows: 1fr 1fr` while
+   `.mosaicCell:nth-child(n + 5)` — two classes, so it DID win — hid the cells
+   that would have filled the second row. The result was a photo strip with an
+   empty band of tile under it, which is what this file looked like before the
+   tiers moved down here.
+
+   New tier rules go at the bottom, not the top. */
+
+/* Three columns once a tile would drop under ~200px. There was no tier here
+   before — the grid went straight from four to two at the compact step — which
+   left every pane between roughly 500 and 900px drawing four columns it could
+   not afford. A `medium` tile spans two of them, so at four columns in a 560px
+   pane a document tile gets 260px and a `small` one gets 125px, and 125px is
+   narrower than the word the heading has to fit. */
+@container home-springboard (max-width: 900px) {
+  .springboard {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Two columns, and large flattens to 2×1 — a 2×2 across half the screen is a
+   tile you scroll past rather than read. */
+@container home-springboard (max-width: 620px) {
+  .springboard {
+    grid-auto-rows: minmax(152px, auto);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tile[data-size="large"] {
+    grid-row: span 1;
+  }
+
+  /* One row of four when large flattens — the columns stay, so the mosaic
+     keeps its proportion instead of becoming four tall slivers. */
+  .mosaic {
+    grid-template-rows: 1fr;
+  }
+
+  .mosaicCell:nth-child(n + 5) {
+    display: none;
+  }
+}
+
+/* One column. Below this a `medium` tile spanning two of two columns is the
+   whole row anyway, so the second column only exists to halve the `small`
+   tiles — and a 140px tile is a swatch, not a piece of an app. */
+@container home-springboard (max-width: 340px) {
+  .springboard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tile[data-size="medium"],
+  .tile[data-size="large"] {
+    grid-column: span 1;
+  }
 }

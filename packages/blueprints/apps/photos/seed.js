@@ -1,8 +1,8 @@
 /**
  * Scenario generator (issue #708): two weeks of a real camera roll — a Tahoe
  * scouting weekend, a city evening, an ordinary backyard sunset — so the grid,
- * the Home mosaic, favorites and albums all have something honest to render on
- * a fresh vault. Runs under the demo register: owner credential, `seed.demo`
+ * the Home mosaic, favorites, albums and Places all have something honest to
+ * render on a fresh vault. Runs under the demo register: owner credential, `seed.demo`
  * provenance, invisible to automations, one-click purge. Deterministic: dates
  * derive from input.now and the roll itself is fixed bytes on disk, so a
  * reload reproduces the same scenario (tests ride this too).
@@ -30,6 +30,64 @@ const PURPOSE = "dpv:ServiceProvision";
 const SAMPLE_DIR = path.join(import.meta.dirname, "sample");
 /** Pacific daylight time — the whole roll is one American trip. */
 const TZ_OFFSET_MIN = -420;
+
+/**
+ * WHERE THE ROLL WAS SHOT.
+ *
+ * Places was the one shelf a seeded vault could not exercise: `placeSections`
+ * only emits a section for assets that actually carry a place, and nothing in
+ * this scenario carried one, so the shelf read "Places 0" on a vault that was
+ * otherwise full. That looked like a missing feature and was really missing
+ * data.
+ *
+ * The pairs below are the real coordinates of the places these frames are
+ * named after, so the shelf groups the way a genuine Tahoe roll would. Three
+ * properties are deliberate rather than incidental, because each one is a
+ * behaviour worth being able to see:
+ *
+ *   - Several frames SHARE a coordinate. `findOrCreatePlaceTx` rounds to four
+ *     decimals (~11m) for identity, so those collapse into one place row with
+ *     a count above 1 — which is the only way to tell grouping works from
+ *     grouping being skipped.
+ *   - Portraits share coordinates with landscapes (Ana at the trailhead sits
+ *     at the trailhead), so People and Places intersect on the same asset.
+ *   - The home frames sit hundreds of kilometres from the trip, so the shelf
+ *     has to show a trip and a home rather than one undifferentiated blob.
+ *
+ * Frames deliberately left OUT of this table stay place-less. A camera roll
+ * where every frame knows where it was is not a camera roll anyone has, and
+ * the "photograph nobody told where it was taken" path needs a case too.
+ */
+const HOME_BACKYARD = { lat: 37.4419, lng: -122.143 };
+const EMBARCADERO = { lat: 37.7955, lng: -122.3937 };
+const TALLAC_TRAILHEAD = { lat: 38.9186, lng: -120.0836 };
+const WEST_SHORE_RIDGE = { lat: 39.0021, lng: -120.1131 };
+const PLACE_BY_FILE = {
+  "downtown-blue-hour.png": EMBARCADERO,
+  "harbor-lights.png": EMBARCADERO,
+  "marco-harbor-wall.png": EMBARCADERO,
+  "cabin-window-morning.png": { lat: 39.0682, lng: -120.1268 },
+  "trailhead-sign.png": TALLAC_TRAILHEAD,
+  "ana-trailhead.png": TALLAC_TRAILHEAD,
+  "granite-switchback.png": { lat: 38.9067, lng: -120.0917 },
+  "sand-harbor-dawn.png": { lat: 39.1979, lng: -119.9308 },
+  "truckee-river-bend.png": { lat: 39.1682, lng: -120.1429 },
+  "emerald-bay-overlook.png": { lat: 38.9542, lng: -120.1094 },
+  "tahoe-dusk-ridge.png": WEST_SHORE_RIDGE,
+  "tahoe-pan.mp4": WEST_SHORE_RIDGE,
+  "backyard-last-light.png": HOME_BACKYARD,
+  "ana-kitchen-window.png": HOME_BACKYARD,
+  "ana-porch-evening.png": HOME_BACKYARD,
+  "ana-and-marco-table.png": HOME_BACKYARD,
+};
+
+/** The coordinate fields `media.add_asset` takes, or nothing when the frame
+ *  carries no location. Spread into the call so a place-less frame sends no
+ *  half-pair — the command refuses one coordinate without the other. */
+function placeInput(file) {
+  const spot = PLACE_BY_FILE[file];
+  return spot ? { latitude: spot.lat, longitude: spot.lng } : {};
+}
 
 /**
  * The roll, newest last. `day`/`hour` place each frame relative to input.now;
@@ -359,6 +417,7 @@ export default async function seedHandler({ input, log, ctx }) {
       height: frame.height,
       thumbhash: frame.thumbhash,
       phash: frame.phash,
+      ...placeInput(frame.file),
     });
     assetIdByFile.set(frame.file, added.asset_id);
     // The general editor rather than set_favorite: one command, and it is the
@@ -389,6 +448,7 @@ export default async function seedHandler({ input, log, ctx }) {
       height: frame.height,
       thumbhash: frame.thumbhash,
       phash: frame.phash,
+      ...placeInput(frame.file),
     });
     assetIdByFile.set(frame.file, added.asset_id);
     if (frame.faces.length)
@@ -407,6 +467,7 @@ export default async function seedHandler({ input, log, ctx }) {
     height: VIDEO.height,
     duration_s: VIDEO.duration,
     thumbhash: VIDEO.thumbhash,
+    ...placeInput(VIDEO.file),
   });
   assetIdByFile.set(VIDEO.file, video.asset_id);
 
@@ -475,10 +536,18 @@ export default async function seedHandler({ input, log, ctx }) {
   });
 
   const faceCount = facesByAsset.reduce((n, e) => n + e.faces.length, 0);
+  const placedFiles = Object.keys(PLACE_BY_FILE);
+  const distinctPlaces = new Set(
+    placedFiles.map((file) => {
+      const spot = PLACE_BY_FILE[file];
+      return `${spot.lat},${spot.lng}`;
+    })
+  ).size;
   log.info(
     `photos scenario: ${ROLL.length + PORTRAITS.length + 1} assets seeded ` +
       `(2 favorites, 1 album of ${ALBUM_FILES.length}, ` +
-      `${faceCount} face proposals across ${facesByAsset.length} frames)`
+      `${faceCount} face proposals across ${facesByAsset.length} frames, ` +
+      `${placedFiles.length} located frames across ${distinctPlaces} places)`
   );
   return { seeded: ROLL.length + PORTRAITS.length + 1 };
 }

@@ -101,6 +101,18 @@ const ICON_DATA = {
     { d: "M11 18h2" },
   ],
   Monitor: [{ d: "M3 4h18v12H3z" }, { d: "M9 20h6M12 16v4" }],
+  // A DESK MACHINE AND A HANDSET, not one screen. `Monitor` is a single
+  // display, and the Devices destination lists every device paired to the
+  // vault — a phone, a laptop, a tablet. One screen standing for a set of
+  // screens is the kind of near-miss that reads as correct until you count
+  // the things on the page it opens.
+  Devices: [
+    { d: "M9 17H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h13a1 1 0 0 1 1 1v3" },
+    {
+      d: "M14 11h6a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z",
+    },
+    { d: "M7 21h4" },
+  ],
   Command: [
     {
       d: "M9 7.5A2.5 2.5 0 1 0 6.5 10H10v4H6.5A2.5 2.5 0 1 0 9 16.5V13h6v3.5A2.5 2.5 0 1 0 17.5 14H14v-4h3.5A2.5 2.5 0 1 0 15 7.5V11H9z",
@@ -126,6 +138,15 @@ const ICON_DATA = {
     {
       d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
     },
+  ],
+  // STORED RECORDS, not stored files. The Data destination is the vault's
+  // structured store — rows a query answers from — and `Folder` is the mark
+  // this product already spends on documents you filed yourself. Reusing it
+  // here made two different destinations wear one glyph.
+  Database: [
+    { d: "M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3z" },
+    { d: "M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" },
+    { d: "M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" },
   ],
   Paperclip: [
     {

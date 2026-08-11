@@ -13,7 +13,7 @@
   display: flex;
   align-items: stretch;
   gap: var(--sp-1);
-  padding-inline: 20px;
+  padding-inline: var(--gutter);
   border-block-end: 1px solid var(--line);
   flex-shrink: 0;
   overflow-x: auto;
@@ -34,7 +34,10 @@
   border: none;
   background: none;
   color: var(--text-soft);
-  font: var(--t-control);
+  /* UI (13px), not Micro. A shelf is a top-level destination inside the app —
+     the same rank as a launcher row in the stem — and it reads at the register
+     every other row in the product does. Micro is for a caption under a chip. */
+  font: var(--t-small);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -54,10 +57,11 @@
 
 /* The carrier: a 2px ink rule on the block-end edge, drawn on the leaf rather
    than by fading the whole tab, so no container opacity expresses state. */
+/* SIZE HOLDS, WEIGHT MOVES. Selecting a shelf must not resize its label: the
+   strip would reflow under the pointer and every tab after it would shift. */
 .tab[data-current="true"] {
   color: var(--text);
-  font: var(--t-control);
-  font-weight: 500;
+  font: var(--t-small-strong);
 }
 .tab[data-current="true"]::after {
   content: "";

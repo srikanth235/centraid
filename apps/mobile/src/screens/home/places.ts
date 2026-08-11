@@ -20,6 +20,7 @@
 // STATE (the member's own toggles) lives in ./home-pins, the same module that
 // already owns the app grid's pin storage — see `getPlacePins` there.
 
+import { DESTINATION_MARKS } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
 /** One of the eleven places, in the handoff's own id spelling (:3424-3436). */
@@ -55,10 +56,16 @@ export interface Place {
   pin: boolean;
 }
 
+/* Marks come from `DESTINATION_MARKS` (`packages/design/src/destinations.ts`),
+   never a literal here. The shell keeps its OWN destination list, under
+   different ids — `stats`/`insights`, `data`/`atlas`, `devices`/`household` —
+   because each side's id is load-bearing for its own router and its own stored
+   pins. The glyph is the one fact both lists must agree on, so it is the one
+   fact neither list owns. */
 /** The places, verbatim from the handoff's `PLACES` array (:3424-3436). */
 export const PLACES: readonly Place[] = [
   {
-    icon: "Home",
+    icon: DESTINATION_MARKS.home,
     id: "home",
     law: true,
     name: "Home",
@@ -67,7 +74,7 @@ export const PLACES: readonly Place[] = [
     what: "The springboard — every app with something in it",
   },
   {
-    icon: "Bell",
+    icon: DESTINATION_MARKS.notifications,
     id: "notifs",
     law: false,
     name: "Notifications",
@@ -76,7 +83,7 @@ export const PLACES: readonly Place[] = [
     what: "Everything the vault wanted to tell you",
   },
   {
-    icon: "Bolt",
+    icon: DESTINATION_MARKS.automations,
     id: "autos",
     law: false,
     name: "Automations",
@@ -85,7 +92,7 @@ export const PLACES: readonly Place[] = [
     what: "Rules that run on this gateway",
   },
   {
-    icon: "Plug",
+    icon: DESTINATION_MARKS.connectors,
     id: "conn",
     law: false,
     name: "Connectors",
@@ -94,7 +101,7 @@ export const PLACES: readonly Place[] = [
     what: "What is allowed to reach outside",
   },
   {
-    icon: "Activity",
+    icon: DESTINATION_MARKS.analytics,
     id: "stats",
     law: false,
     name: "Analytics",
@@ -103,7 +110,7 @@ export const PLACES: readonly Place[] = [
     what: "What is in the vault, counted",
   },
   {
-    icon: "Folder",
+    icon: DESTINATION_MARKS.data,
     id: "data",
     law: false,
     name: "Data",
@@ -112,7 +119,7 @@ export const PLACES: readonly Place[] = [
     what: "Every store, and which app may read it",
   },
   {
-    icon: "Monitor",
+    icon: DESTINATION_MARKS.devices,
     id: "devices",
     law: false,
     name: "Devices",
@@ -121,7 +128,7 @@ export const PLACES: readonly Place[] = [
     what: "The machines holding a copy",
   },
   {
-    icon: "Star",
+    icon: DESTINATION_MARKS.starred,
     id: "starred",
     law: false,
     name: "Starred",
@@ -130,7 +137,7 @@ export const PLACES: readonly Place[] = [
     what: "Anything you marked, from any app",
   },
   {
-    icon: "Cellular",
+    icon: DESTINATION_MARKS.gateway,
     id: "gateway",
     law: false,
     name: "Gateway",
@@ -139,7 +146,7 @@ export const PLACES: readonly Place[] = [
     what: "The machine this vault lives on",
   },
   {
-    icon: "Save",
+    icon: DESTINATION_MARKS.storage,
     id: "storage",
     law: false,
     name: "Storage",
@@ -148,7 +155,7 @@ export const PLACES: readonly Place[] = [
     what: "Disks, backups, and what is left",
   },
   {
-    icon: "Settings",
+    icon: DESTINATION_MARKS.settings,
     id: "settings",
     law: false,
     name: "Settings",

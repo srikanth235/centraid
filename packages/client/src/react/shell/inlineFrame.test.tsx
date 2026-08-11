@@ -402,9 +402,13 @@ describe("shell/inlineFrame", () => {
         )?.groups?.body;
       expect(rule, "the floating-band rule was not found").toBeTypeOf("string");
       expect(rule!).toMatch(/border-radius:\s*var\(--r-lg\)/u);
-      expect(rule!).toMatch(/border:\s*1px solid var\(--line\)/u);
+      expect(rule!).toMatch(/border:\s*1px solid var\(--line-strong\)/u);
       expect(rule!).toMatch(/margin-inline:\s*12px/u);
-      expect(rule!).toMatch(/background:\s*var\(--bg\)/u);
+      // RAISED PAPER, not the page colour. A band that floats over content and
+      // is painted in the page's own tone has only its border to prove it is a
+      // surface at all; `--bg-elev` is the system's raised sheet, and it is
+      // still fully opaque, which is the part this test exists to defend.
+      expect(rule!).toMatch(/background:\s*var\(--bg-elev\)/u);
       expect(rule!).not.toMatch(/backdrop-filter|opacity|box-shadow/u);
     });
   });

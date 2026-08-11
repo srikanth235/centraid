@@ -20,6 +20,8 @@ const LYME: PlaceSection = {
   key: "place-lyme",
   name: "Lyme Regis",
   assets: [asset("a4"), asset("a5")],
+  lat: 50.7256,
+  lng: -2.9366,
 };
 const COAST_ALBUM: Album = {
   album_id: "album-coast",

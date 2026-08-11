@@ -116,11 +116,48 @@ function roundCoord(v: number): number {
 }
 
 /**
- * Find-or-create the core_place an asset's EXIF GPS names. Identity is the
- * rounded coordinate pair; `geo_lat`/`geo_lng` on the row stay precise. A
- * fresh row gets a plain coordinate label — geocoding a human place name is
- * out of scope here (no network egress from a command handler); the owner or
- * a future enrichment pass may rename it later like any other core.place.
+ * How close a photograph has to be to a place the member ALREADY NAMED before
+ * it is treated as having been taken there, in degrees of latitude — about
+ * 170 metres.
+ *
+ * Wide enough to cover a house and its garden, a school and its field, an
+ * office and its car park: a photograph taken in the back yard should join
+ * "Home", not mint "37.4419, -122.1430" beside it. Narrow enough that the next
+ * building along is a different place. It is deliberately far looser than the
+ * ~11m identity rung below, because these are two different questions — that
+ * one asks "is this the same coordinate", this one asks "is this that place".
+ */
+const NAMED_PLACE_RADIUS_DEG = 0.0015;
+
+/**
+ * A place row whose name is just its own coordinates, e.g. "37.4419,
+ * -122.1430". These are the labels this function mints when nothing better is
+ * known, and they must NOT be treated as names — adopting one would spread a
+ * meaningless string across a whole neighbourhood. The UI likewise treats
+ * this shape as an unnamed placeholder, never as a readable place name.
+ */
+export function isCoordinateLabel(name: string | null | undefined): boolean {
+  return /^-?\d{1,3}\.\d+,\s*-?\d{1,3}\.\d+$/u.test((name ?? "").trim());
+}
+
+/**
+ * Find-or-create the core_place an asset's GPS names.
+ *
+ * Three steps, in falling order of how much the vault actually knows:
+ *
+ *   1. A place the member has NAMED, within ~170m. This is the one that makes
+ *      Places readable on day one without any geocoding at all: the vault
+ *      already holds named places from the rest of the product — a home, an
+ *      office, a venue on an event — and a photograph taken at one of them
+ *      belongs to it. Anything else means a member who has carefully named
+ *      where they live still gets a shelf of coordinates.
+ *   2. The exact rounded coordinate (~11m), which is the identity rung that
+ *      keeps a burst of frames from minting a row per shutter click.
+ *   3. Failing both, a new row labelled with its own coordinates. Automatic
+ *      coordinate-to-settlement naming is intentionally deferred; the UI
+ *      hides this placeholder until the member supplies a readable name.
+ *
+ * `geo_lat`/`geo_lng` on a fresh row stay PRECISE; only identity is rounded.
  */
 export function findOrCreatePlaceTx(
   deps: MediaWriteDeps,
@@ -129,6 +166,36 @@ export function findOrCreatePlaceTx(
 ): string {
   const rLat = roundCoord(lat);
   const rLng = roundCoord(lng);
+  // Step 1. A bounding box, not a great-circle distance: SQLite has no
+  // trigonometry without an extension, the box is indexable, and at this
+  // radius the difference between a box and a circle is metres. Longitude is
+  // divided by the cosine of the latitude so the box stays roughly square on
+  // the ground instead of stretching east-west as it moves north.
+  const lngRadius =
+    NAMED_PLACE_RADIUS_DEG / Math.max(0.05, Math.cos((lat * Math.PI) / 180));
+  const named = deps.vault
+    .prepare(
+      `SELECT place_id, name FROM core_place
+        WHERE geo_lat IS NOT NULL AND geo_lng IS NOT NULL
+          AND geo_lat BETWEEN ? AND ?
+          AND geo_lng BETWEEN ? AND ?
+          AND name IS NOT NULL AND trim(name) <> ''
+        ORDER BY (geo_lat - ?) * (geo_lat - ?) + (geo_lng - ?) * (geo_lng - ?)
+        LIMIT 8`
+    )
+    .all(
+      lat - NAMED_PLACE_RADIUS_DEG,
+      lat + NAMED_PLACE_RADIUS_DEG,
+      lng - lngRadius,
+      lng + lngRadius,
+      lat,
+      lat,
+      lng,
+      lng
+    ) as { place_id: string; name: string | null }[];
+  const adoptable = named.find((row) => !isCoordinateLabel(row.name));
+  if (adoptable) return adoptable.place_id;
+
   const existing = deps.vault
     .prepare(
       `SELECT place_id FROM core_place
@@ -372,6 +439,23 @@ const ADD_ASSET: CommandDefinition = {
       width: { type: "integer", minimum: 1 },
       height: { type: "integer", minimum: 1 },
       duration_s: { type: "number", minimum: 0 },
+      // WHERE THIS WAS TAKEN, asserted by the caller rather than read out of
+      // the bytes. Every other spool-derived field on this command already
+      // has an explicit override — capture time, dimensions, duration, the
+      // timezone offset — and the coordinate pair was the one that did not,
+      // which meant the inline door (`data_uri`) could never produce a place
+      // at all: `spoolMeta` is `{}` unless the bytes came through staging, so
+      // Places was unreachable for anything a caller uploaded inline.
+      //
+      // This is an ASSERTION, not an extraction, and the distinction is the
+      // whole reason it is safe to accept here. The media.location policy
+      // gate in the staging pipeline exists to drop GPS the owner chose not
+      // to keep when it is read OUT of a file; a caller typing a coordinate
+      // is stating a fact it already holds, exactly as it states a capture
+      // time. Spool metadata still wins nothing it did not win before —
+      // explicit input takes precedence, same as every field above.
+      latitude: { type: "number", minimum: -90, maximum: 90 },
+      longitude: { type: "number", minimum: -180, maximum: 180 },
       // Perceptual hash (issue #299 §2, Tier 0) — hex, producer-agnostic:
       // the client canvas computes a dHash beside its thumb today.
       phash: {
@@ -403,6 +487,16 @@ const ADD_ASSET: CommandDefinition = {
     {
       name: "exactly_one_source",
       sql: "SELECT ((:data_uri IS NOT NULL) + (:staged_sha IS NOT NULL)) AS n",
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+    {
+      // A coordinate is a PAIR. Half of one is not a weaker location, it is
+      // no location at all, and silently dropping it would let a caller
+      // believe it had placed a photograph it had not. Refuse instead.
+      name: "coordinate_pair_complete",
+      sql: "SELECT ((:latitude IS NULL) = (:longitude IS NULL)) AS n",
       column: "n",
       op: "eq",
       value: 1,
@@ -476,6 +570,8 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     duration_s?: number;
     phash?: string;
     thumbhash?: string;
+    latitude?: number;
+    longitude?: number;
   };
   // Staged claims carry spool metadata (issue #296 §4): the gateway sniffed
   // the type and read EXIF server-side, so capture time and dimensions no
@@ -508,11 +604,16 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     longitude?: number;
   };
   const assetId = ctx.newId();
-  // GPS already passed the media.location policy gate at staging time
-  // (pipeline.ts) — coordinates only ride here when the owner kept them.
+  // GPS from the spool already passed the media.location policy gate at
+  // staging time (pipeline.ts) — those coordinates only ride here when the
+  // owner kept them. An explicit pair wins over the spool's, like every other
+  // field on this command; see the schema note for why asserting a coordinate
+  // is a different act from extracting one.
+  const lat = input.latitude ?? meta.latitude;
+  const lng = input.longitude ?? meta.longitude;
   const placeId =
-    meta.latitude !== undefined && meta.longitude !== undefined
-      ? findOrCreatePlaceTx(deps, meta.latitude, meta.longitude)
+    lat !== undefined && lng !== undefined
+      ? findOrCreatePlaceTx(deps, lat, lng)
       : null;
   insertMediaAssetTx(ctx.db, {
     assetId,

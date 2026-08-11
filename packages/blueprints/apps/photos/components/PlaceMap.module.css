@@ -1,0 +1,194 @@
+/* The Places map. The photographs carry the colour — everything the map adds
+   around them is ink on paper, like every other surface here: the grid is the
+   system hairline, the scale bar is the mono rung, and the raised pin is the
+   place you are reading.
+
+   Nothing in this file names a colour. A map is the classic place a product
+   grows a palette (blue water, green land, orange pins); there is no land to
+   colour, and a pin's meaning is carried by size, position and its own
+   picture, never by hue. */
+
+.figure {
+  margin: 0 0 var(--sp-4);
+}
+
+/* The stage holds the drawing and the pins in one coordinate space: the svg
+   fills it, the pins are positioned in percentages of it, and the aspect
+   ratio comes from the projection so the two never drift apart while the
+   figure scales. */
+.stage {
+  position: relative;
+  inline-size: 100%;
+  /* Matches MAX_DRAW_WIDTH in PlaceMap.tsx: a map is a figure, not a banner,
+     and the two must agree or the svg letterboxes inside its own stage. */
+  max-inline-size: 640px;
+}
+
+.map {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  /* The map is a SUNKEN surface — the page, stepped in. It reads as something
+     you are looking into rather than a card lying on top, which is the right
+     metaphor for a plan view, and it keeps the grid legible without needing a
+     border to contain it. */
+  background: var(--bg-sunken);
+  border-radius: var(--r-md);
+}
+
+/* ── The cartography that survived ─────────────────────────────────────── */
+
+/* Unlabelled, and fainter than it was when it carried numbers: a grid nobody
+   has to read should not compete with the photographs sitting on it. */
+.graticule line {
+  stroke: var(--line);
+  stroke-width: 1;
+  /* Vector-effect keeps the hairline a hairline: the svg scales with the
+     container, and without this the grid would thicken on a wide pane and
+     vanish on a narrow one. */
+  vector-effect: non-scaling-stroke;
+  opacity: 0.6;
+}
+
+.tick,
+.north {
+  font: var(--t-mono);
+  /* The mono rung's own size, not a number typed here: an SVG <text> inherits
+     the page's type scale like anything else, and a literal would drift the
+     moment the ramp moves. */
+  font-size: var(--t-mono-size);
+  font-variant-numeric: var(--t-mono-numeric);
+  fill: var(--text-faint);
+}
+
+.scale line {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* ── The pins, which are photographs ───────────────────────────────────── */
+
+/* Positioned by its CENTRE: the projection returns the point the place sits
+   at, and a pin that hangs down-right from it would put every photograph
+   slightly south-east of where it was taken. */
+.pin {
+  position: absolute;
+  translate: -50% -50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+/* The picture itself: square, cornered like every other tile in this app, and
+   held in a hairline so a dark photograph still has an edge against the
+   sunken plate. Raised paper — see DESIGN.md: on the page, a raised sheet is
+   DARKER in light and LIGHTER in dark, which `--bg-elev` already resolves. */
+.frame {
+  position: relative;
+  inline-size: 100%;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  transition:
+    scale var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+
+.shot {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* The count sits ON the photograph, bottom-right, over a scrim rather than a
+   filled chip: a chip here would spend the view's one ink fill on a number,
+   and invariant 3 keeps that for what the member is actually reading. */
+.count {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-end: 0;
+  padding: 1px 4px;
+  font: var(--t-mono);
+  font-size: var(--t-mono-size);
+  font-variant-numeric: var(--t-mono-numeric);
+  line-height: 1.4;
+  /* Ink over media, so it takes the stage rung — the one ink that does not
+     flip with the theme, because the surface under it (a photograph) does not
+     either. Same pairing the editor uses over the canvas. */
+  color: var(--on-stage);
+  background: color-mix(in oklab, var(--stage) 62%, transparent);
+  border-start-start-radius: var(--r-sm);
+}
+
+/* A name only appears when there is one worth printing (`readableName`), so
+   this rule is often unused — which is correct, and better than a margin of
+   coordinates. */
+.name {
+  max-inline-size: 96px;
+  font: var(--t-small);
+  color: var(--text-soft);
+  text-align: center;
+  text-wrap: balance;
+  /* The map is dense; a place with a long name must not push its neighbours
+     around, so the label is clipped rather than allowed to grow. */
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* Hover and focus LIFT the photograph rather than tinting it — the picture is
+   the content, and washing it is the one thing a hover state here must not
+   do. */
+.pin:hover .frame {
+  scale: 1.06;
+  border-color: var(--text-faint);
+}
+
+.pin:focus-visible {
+  outline: none;
+}
+
+.pin:focus-visible .frame {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* The place being read: the one pin drawn as an ink-edged sheet standing off
+   the plate. Invariant 3's single emphasised element, spent on "this is the
+   place you asked about". */
+.pin[data-active] {
+  z-index: 1;
+}
+
+.pin[data-active] .frame {
+  scale: 1.12;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.pin[data-active] .name {
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame {
+    transition: none;
+  }
+}
+
+/* ── The claim under the map ───────────────────────────────────────────── */
+
+.caption {
+  margin: 6px 0 0;
+  font: var(--t-small);
+  color: var(--text-faint);
+}

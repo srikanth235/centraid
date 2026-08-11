@@ -293,7 +293,14 @@ export function LightboxShell({
   ];
 
   return (
-    <div className={styles.lightbox} ref={rootRef}>
+    <div
+      className={styles.lightbox}
+      ref={rootRef}
+      // THE SHEET'S STATE IS THE WHOLE VIEWER'S STATE, not the body's. It has
+      // to reach the filmstrip and the stage foot, which are the body's
+      // SIBLINGS, so it is said once here rather than twice further down.
+      data-info={!editing && infoOpen ? "open" : undefined}
+    >
       <ShareSheet
         open={shareOpen}
         onClose={() => setShareOpen(false)}
@@ -311,8 +318,12 @@ export function LightboxShell({
         <button
           type="button"
           className={styles.close}
+          // NO `title` BESIDE AN IDENTICAL `aria-label`. The two carried the
+          // same word, so the tooltip told nobody anything the accessible name
+          // did not already say — and the native tooltip paints over the 34px
+          // control that summoned it, hiding the mark it claims to label. The
+          // accessible name is the one that stays.
           aria-label="Close"
-          title="Close"
           onClick={onClose}
         >
           <CloseIcon size={18} />

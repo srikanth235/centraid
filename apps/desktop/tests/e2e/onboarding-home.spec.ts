@@ -417,6 +417,35 @@ test("2.6e — Photos opens into the app view and yields the #724 UI evidence", 
   }
 });
 
+test("2.6f — Photos opens into the app view and yields the #739 UI evidence", async () => {
+  // #739 changes Photos' Places map and the surrounding shell, so the honest
+  // evidence frame is the Photos app inside that shell. Geometry and renderer
+  // behavior are pinned by their focused tests; this capture proves the
+  // integrated surface still opens and paints under the desktop host.
+  gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
+  await seedRemoteGateway(env, gateway);
+  const { app, page } = await launchApp(env);
+  try {
+    await waitForHome(page);
+    await openTile(page, "photos");
+    const appView = page.locator(
+      '[data-testid="app-view"], [data-testid="inline-app-view"]'
+    );
+    await expect(appView).toBeVisible();
+    const evidenceDir = path.resolve(
+      import.meta.dirname,
+      "../../../../artifacts/e2e/ui-impact"
+    );
+    await mkdir(evidenceDir, { recursive: true });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-739-places-map-and-shell-wall.png"),
+      fullPage: true,
+    });
+  } finally {
+    await closeApp(app);
+  }
+});
+
 test("2.7 — the stem nav is present and All apps is reachable", async () => {
   gateway.state.apps = [];
   await seedRemoteGateway(env, gateway);

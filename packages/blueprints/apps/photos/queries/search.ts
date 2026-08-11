@@ -135,7 +135,14 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       const place = asset.place_id
         ? places.byId.get(asset.place_id)
         : undefined;
-      return place ? { place_id: place.place_id, name: place.name } : null;
+      return place
+        ? {
+            place_id: place.place_id,
+            name: place.name,
+            lat: place.lat,
+            lng: place.lng,
+          }
+        : null;
     };
 
     const assets = assetsRaw

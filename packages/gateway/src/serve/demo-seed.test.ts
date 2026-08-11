@@ -191,6 +191,26 @@ describe("demo-seed", () => {
         "SELECT count(*) AS n FROM media_face_region WHERE bbox_json IS NULL"
       )
     ).toBe(0);
+    // Places. The shelf reads its sections off `place_id`, so a roll with no
+    // coordinates renders an empty Places on an otherwise full vault — which
+    // is what it did, and which looked like an unbuilt feature rather than
+    // absent data. Pinned as three separate facts because each fails
+    // differently: that frames are located at all, that identical coordinates
+    // COLLAPSE (16 located frames over 9 rows — a per-photo place row would
+    // make 16 and the shelf a list of duplicates), and that some frames stay
+    // unlocated, since "nobody told this one where it was taken" is a real
+    // state the grid has to keep handling.
+    expect(
+      count(
+        "SELECT count(*) AS n FROM media_media_asset WHERE place_id IS NOT NULL"
+      )
+    ).toBe(16);
+    expect(count("SELECT count(*) AS n FROM core_place")).toBe(9);
+    expect(
+      count(
+        "SELECT count(*) AS n FROM media_media_asset WHERE place_id IS NULL"
+      )
+    ).toBe(3);
     // Two people to name a confirmed face as; face review never invents one.
     expect(
       count(

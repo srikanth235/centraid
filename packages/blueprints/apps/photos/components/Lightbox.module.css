@@ -229,6 +229,40 @@
   max-block-size: none;
   transition: none;
 }
+
+/* The photograph's box BEFORE the photograph, at the geometry the record
+   already knows (see ViewerStage.tsx).
+
+   NOT `--skel`, which is what the tile and the loading grid take. `--skel` is
+   a PAPER tone — it is the right ground for a placeholder sitting on the page,
+   and the wrong one here: the stage is the same near-black in both themes
+   (this file's opening note), so a paper skeleton on it is a bright rectangle
+   that flashes and then hands over to a photograph. A placeholder announcing
+   itself more loudly than the thing it stands in for is backwards.
+
+   So the ground is derived from the stage's own roles, in the same idiom this
+   stylesheet already uses for its raised states — recessive, and legible as
+   "the frame is here, the picture is coming". Static: `--skel`'s no-shimmer
+   rule is about the whole loading register, not about one token. */
+.skeleton {
+  max-inline-size: 100%;
+  max-block-size: 100%;
+  background: color-mix(in oklab, var(--on-stage) 12%, var(--stage));
+  border-radius: var(--r-sm);
+}
+
+/* The image while it still has no pixels. It stays MOUNTED and it stays
+   LOADING — the shell's blob authorizer only ever finds elements that are in
+   the tree — but it must paint nothing at all: a failed `<img>` renders the
+   broken glyph as replaced content, which no `color` can silence. Taken out of
+   flow so the skeleton above holds the stage's geometry alone. */
+.loading {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
 .audio {
   inline-size: min(32rem, 90%);
   padding: var(--sp-6);
@@ -439,19 +473,62 @@
   .body {
     position: relative;
   }
-  /* The phone's sheet: 64% height, with a grabber (§7.2, §D). */
+  /* The phone's sheet: 64% height, with a grabber (§7.2, §D). ONE number,
+     named — the stage below derives its own height from it, so the sheet
+     cannot be resized without the photograph following. */
+  .lightbox {
+    --ph-sheet: 64%;
+  }
   .info {
     position: absolute;
     inset-inline: 0;
     inset-block-end: 0;
     inset-block-start: auto;
     inline-size: auto;
-    block-size: 64%;
+    block-size: var(--ph-sheet);
     border-inline-start: none;
     border-block-start: 1px solid var(--line);
     border-start-start-radius: var(--r-xl);
     border-start-end-radius: var(--r-xl);
   }
+  /* THE SHEET TAKES ITS SPACE FROM THE STAGE, NOT FROM THE PHOTOGRAPH (§7.2).
+     The sheet is absolute, so it removes no space by itself: left alone the
+     stage keeps the whole body, centres the image under the sheet, and hangs
+     the prev/next circles — pinned to 50% of the stage — over the panel. The
+     rail never had this, because there the panel is a flex sibling that really
+     does take its 320px.
+
+     `align-self`, NOT `flex`, is what bounds the stage here. `.body` is a ROW
+     flex container, so the block axis is its CROSS axis: `flex: none` would
+     read as "do not grow along the INLINE axis" and collapse the stage to the
+     width of the photograph inside it — the image then centres in a 387px box
+     on a 549px screen, with the slack painted as stage to its trailing side.
+     The height is set on the cross axis, and the default `stretch` is what has
+     to yield for it, which is exactly what `flex-start` says. */
+  .lightbox[data-info="open"] .stagewrap {
+    align-self: flex-start;
+    block-size: calc(100% - var(--ph-sheet));
+  }
+
+  /* AN OPEN SHEET SUSPENDS THE STAGE'S OWN CONTROLS (§7.1). The zoom foot and
+     the filmstrip steer the photograph, and neither can be worked while the
+     thing under the thumb is a metadata form — the sheet covers the reach.
+     Holding them on screen costs the photograph 98px of the only band it has
+     left in order to show two controls that are, right now, decoration. They
+     come back with the stage the moment the sheet closes.
+
+     `visibility` rather than `display: none`: the filmstrip keeps its scroll
+     position across the toggle, so reopening the stage does not snap the strip
+     back to the start and lose the member's place in the roll. */
+  .lightbox[data-info="open"] .stageFoot,
+  .lightbox[data-info="open"] .filmstrip {
+    visibility: hidden;
+    block-size: 0;
+    padding-block: 0;
+    border-block-start: none;
+    overflow: hidden;
+  }
+
   .grabber {
     display: block;
     inline-size: 36px;
@@ -463,8 +540,16 @@
   .topbar {
     block-size: 52px;
   }
+  /* THE CIRCLES OVERLAY THE PHOTOGRAPH; THEY ARE NOT GIVEN A GUTTER. Reserving
+     60px on each side of a 549px screen spends 22% of the width so two 44px
+     controls can stand outside the image — and the image, which is the whole
+     reason for the surface, was left at 51% of the viewport it is displayed
+     in. The circles carry their own opaque `--stage` fill and hairline, so
+     they hold their edge over a photograph the way they hold it over the
+     stage; floating them back over the corners is what buys the width. The
+     inline padding that remains is the frame, not a gutter. */
   .mediaWrap {
-    padding-inline: 60px;
+    padding-inline: var(--sp-2);
   }
 }
 

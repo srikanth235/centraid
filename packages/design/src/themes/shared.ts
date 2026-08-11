@@ -161,6 +161,15 @@ export const PAGE = { dark: "#0E0E0E", light: "#FDFDFC" } as const;
  * the system. Not a tone an app may declare: it is the surface the frame
  * floats ON, and it is why the ink ramp is solved against `#F0EFED` rather
  * than against the page.
+ *
+ * The desktop stem paints it too, which is the same statement pointed inward:
+ * navigation belongs to the FRAME, so it is drawn on the frame's surface and
+ * not on the page the app is working on. That is the handoff's own rule —
+ * the phone band's Home capsule keeps the frame's colour "never the app's
+ * mat" — and it is the only way to give the stem a distinct surface without
+ * reopening the retired per-app tone axis above: this rung sits BELOW the
+ * page in light and above it in dark, so raised paper inside the stem still
+ * lifts in the direction the rest of the ramp lifts.
  */
 export const WALL = { dark: "#060606", light: "#F0EFED" } as const;
 

@@ -81,10 +81,10 @@ function appGroupIcon(appId: string): PaletteGroupIconDTO | undefined {
 function assistantGroupIcon(): PaletteGroupIconDTO | undefined {
   const assistant = LAUNCHER_DESTINATIONS.find((d) => d.id === "assistant");
   if (!assistant) return undefined;
-  return {
-    html: iconSvg(assistant.icon),
-    ...(assistant.colorKey ? { hue: `var(--c-${assistant.colorKey})` } : {}),
-  };
+  /* No `hue`: the Assistant is a frame destination, and the frame spends no
+     colour (invariant 3). The group still reads as its own because the mark is
+     its own — a hue would have to be borrowed from one of the eight apps. */
+  return { html: iconSvg(assistant.icon) };
 }
 
 /**
