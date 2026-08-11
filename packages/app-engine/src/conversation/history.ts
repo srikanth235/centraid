@@ -29,6 +29,9 @@ import type { PutResult } from "../data/blob-store.js";
 import { resolveItemCost } from "../model-pricing.js";
 import { isValidAppOrAssistantId } from "../registry/app-paths.js";
 import type { WorkspaceProvider } from "../stores/vault-workspace.js";
+import { HarnessSessions } from "./harness-sessions.js";
+import type { TouchedHarnessBinding } from "./harness-sessions.js";
+import type { TurnPosture } from "./posture.js";
 import { collectArchivedRows } from "./rehydrate.js";
 import type { ArchiveBlobReader } from "./rehydrate.js";
 import type {
@@ -259,20 +262,13 @@ export interface RecordTurnInput {
   hydrationTokens?: number;
   /** The turn's ordered trace (assistant steps + tool calls). */
   nodes: TurnNode[];
-  /** Successful ACP binding committed atomically with this turn + watermark. */
-  adapter?: {
-    kind: string;
-    sessionId?: string;
-    usageSnapshot?: AdapterUsageSnapshot;
-    hydrated?: boolean;
-  };
-  /** Failed-turn accounting update that must not switch the active binding. */
-  failedAdapter?: {
-    kind: string;
-    sessionId?: string;
-    usageSnapshot?: AdapterUsageSnapshot;
-    hydrated?: boolean;
-  };
+  /**
+   * Every harness binding this turn touched, in touch order. Committed
+   * atomically with the turn: `ok` decides whether they settle their
+   * watermarks (a successful turn) or only their cumulative accounting (a
+   * failed one, whose prompt never landed).
+   */
+  bindings?: readonly TouchedHarnessBinding[];
 }
 
 // Re-exported for back-compat — every existing import site pulls this from
@@ -671,10 +667,10 @@ export class ConversationHistoryStore {
           ? {}
           : { outputJson: JSON.stringify({ text: input.finalText }) }),
       });
-      if (input.failedAdapter) {
-        store.noteFailedTurn(input.conversationId, userId, input.failedAdapter);
+      if (input.ok) {
+        store.noteTurn(input.conversationId, userId, input.bindings);
       } else {
-        store.noteTurn(input.conversationId, userId, input.adapter);
+        store.noteFailedTurn(input.conversationId, userId, input.bindings);
       }
       const now = Date.now();
       if (existingTitle) {
@@ -733,22 +729,52 @@ export class ConversationHistoryStore {
     };
   }
 
-  /** Bump turn_count + persist the harness-resume handle. */
+  /** Bump turn_count + settle every harness binding the turn touched. */
   noteTurn(
     appId: string,
     sessionId: string,
-    adapter?: {
-      kind: string;
-      sessionId?: string;
-      usageSnapshot?: AdapterUsageSnapshot;
-      hydrated?: boolean;
-    }
+    bindings?: readonly TouchedHarnessBinding[]
   ): ConversationSummary | undefined {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, sessionId)) return undefined;
-    if (!store.noteTurn(sessionId, this.currentUserId(), adapter))
+    if (!store.noteTurn(sessionId, this.currentUserId(), bindings))
       return undefined;
     return this.getSessionMeta(appId, sessionId);
+  }
+
+  /**
+   * The turn's binding/resume/watermark owner for one conversation this app
+   * owns — the same actor the journal-direct callers get from
+   * `ConversationStore.harnessSessions`, over the app-scoped reads (blob CAS
+   * paths included). Undefined when `appId` does not own the conversation.
+   */
+  harnessSessions(
+    appId: string,
+    conversationId: string,
+    hydration: TurnPosture["hydration"]
+  ): HarnessSessions | undefined {
+    const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, conversationId)) return undefined;
+    return new HarnessSessions(
+      {
+        binding: (harnessKind) => {
+          const row = store.getHarnessBinding(conversationId, harnessKind);
+          if (!row) return undefined;
+          return {
+            bindingId: row.id,
+            sessionId: row.acpSessionId,
+            ...(row.usageSnapshot ? { usageSnapshot: row.usageSnapshot } : {}),
+            hydratedThroughSeq: row.hydratedThroughSeq,
+          };
+        },
+        hydrationMessages: (afterSeq) =>
+          this.getHydrationDelta(appId, conversationId, afterSeq)?.messages ??
+          [],
+        retire: (bindingId) => store.markHarnessBindingStale(bindingId),
+        attachmentPath: (hash) => this.blobPathFor(appId, hash),
+      },
+      hydration
+    );
   }
 
   /** Internal ACP resume state; unlike `ConversationSummary`, never crosses the client wire. */

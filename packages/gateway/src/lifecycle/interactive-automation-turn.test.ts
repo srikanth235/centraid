@@ -8,6 +8,7 @@ import type {
   AutomationTurnStreamEvent,
   ConversationRunner,
   ConversationTurnInput,
+  TurnResumePlan,
   TurnStreamEvent,
 } from "@centraid/app-engine";
 import { validateManifest } from "@centraid/automation";
@@ -84,10 +85,9 @@ describe("interactive-automation-turn suite", () => {
       outputJson: '{"count":2}',
     });
     if (withHandle)
-      store.noteTurn(conversationId, "", {
-        kind: "codex",
-        sessionId: "cached-1",
-      });
+      store.noteTurn(conversationId, "", [
+        { kind: "codex", sessionId: "cached-1", ok: true },
+      ]);
     store.close();
   }
 
@@ -104,6 +104,7 @@ describe("interactive-automation-turn suite", () => {
     >;
   }): Promise<{
     received: ConversationTurnInput;
+    plan: TurnResumePlan | undefined;
     stream: TurnStreamEvent[];
     bus: AutomationTurnStreamEvent[];
     store: ConversationStore;
@@ -113,11 +114,19 @@ describe("interactive-automation-turn suite", () => {
     const journalDbFile = path.join(dir, "journal.db");
     seed(journalDbFile, input.withHandle);
     const artifactOptions = (await input.prepareArtifacts?.(dir)) ?? {};
+    let plan: TurnResumePlan | undefined;
     let received!: ConversationTurnInput;
     const runner: ConversationRunner = {
       run: async (turn) => {
         received = turn;
+        // Stand in for the spine: ask the turn's binding owner for this
+        // harness's plan, then report back what the rung drove.
+        plan = turn.harnessSessions?.plan("codex");
         input.emit?.(turn);
+        turn.harnessSessions?.observe("codex", {
+          harnessKind: "codex",
+          sessionId: "cached-2",
+        });
         return { harnessKind: "codex", adapterSessionId: "cached-2" };
       },
     };
@@ -140,6 +149,7 @@ describe("interactive-automation-turn suite", () => {
     });
     return {
       received,
+      plan,
       stream,
       bus,
       store: new ConversationStore(makeJournalDbProvider(journalDbFile)),
@@ -153,8 +163,8 @@ describe("interactive-automation-turn suite", () => {
       expect(cold.received.extraSystemPrompt).toBe(
         resumed.received.extraSystemPrompt
       );
-      expect(cold.received.prevAdapterSessionId).toBeUndefined();
-      expect(resumed.received.prevAdapterSessionId).toBe("cached-1");
+      expect(cold.plan?.sessionId).toBeUndefined();
+      expect(resumed.plan?.sessionId).toBe("cached-1");
       expect(resumed.received.permissionPolicy).toBe("deny");
       expect(resumed.received.harnessKind).toBe("codex");
       expect(resumed.received.model).toBe("gpt-test");
@@ -330,20 +340,28 @@ describe("interactive-automation-turn suite", () => {
       dirs.push(dir);
       const journalDbFile = path.join(dir, "journal.db");
       seed(journalDbFile, true);
-      const calls: ConversationTurnInput[] = [];
+      const plans: Array<TurnResumePlan | undefined> = [];
       const runner: ConversationRunner = {
         run: async (turn) => {
-          calls.push(turn);
-          const isB = turn.harnessKind === "claude-code";
+          const kind = turn.harnessKind!;
+          const plan = turn.harnessSessions?.plan(kind);
+          plans.push(plan);
+          const isB = kind === "claude-code";
           turn.onEvent({
             type: "final",
             text: isB ? "B durable answer" : "A return answer",
           });
-          return {
-            harnessKind: isB ? "claude-code" : "codex",
-            adapterSessionId: isB ? "session-b" : "cached-1",
+          const result = {
+            harnessKind: isB ? ("claude-code" as const) : ("codex" as const),
+            sessionId: isB ? "session-b" : "cached-1",
             hydrated: true,
-            hydrationTokens: turn.hydrationContext?.estimatedTokens,
+            hydrationKind: "handoff" as const,
+          };
+          turn.harnessSessions?.observe(kind, result);
+          return {
+            harnessKind: result.harnessKind,
+            adapterSessionId: result.sessionId,
+            hydrated: true,
           };
         },
       };
@@ -370,13 +388,13 @@ describe("interactive-automation-turn suite", () => {
         harnessKind: "codex",
       });
 
-      expect(calls[0]?.prevAdapterSessionId).toBeUndefined();
-      expect(calls[0]?.hydrationContext?.prompt).toContain(
+      expect(plans[0]?.sessionId).toBeUndefined();
+      expect(plans[0]?.hydrationContext?.prompt).toContain(
         "Found two important changes."
       );
-      expect(calls[1]?.prevAdapterSessionId).toBe("cached-1");
-      expect(calls[1]?.hydrationContext?.prompt).toContain("B durable answer");
-      expect(calls[1]?.hydrationContext?.prompt).not.toContain(
+      expect(plans[1]?.sessionId).toBe("cached-1");
+      expect(plans[1]?.hydrationContext?.prompt).toContain("B durable answer");
+      expect(plans[1]?.hydrationContext?.prompt).not.toContain(
         "Found two important changes."
       );
       const store = new ConversationStore(makeJournalDbProvider(journalDbFile));

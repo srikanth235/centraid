@@ -7,7 +7,7 @@
 - [x] Delegate rail rename (`ctx.agent` → `ctx.delegate`, ledger item `kind:"delegate"`, worker messages, failure prefix)
 - [x] Glossary / docs A1 write-back (forbidden synonyms, delegate step, schema-naming rule)
 - [x] `ctx.delegate` dispatched through the accounted chat spine (metering, budgeted hydration, kind-scoped resume)
-- [ ] HarnessSessions extraction keyed `(conversationRef, harnessKind)`; per-binding settlement + multi-harness regression test
+- [x] HarnessSessions extraction keyed `(conversationRef, harnessKind)`; per-binding settlement + multi-harness regression test
 - [ ] Per-call `harness`/`model`/`configPins` on `ctx.delegate`; consent fail-closed (#567 D13); compiler grounding + blueprint handlers regenerated
 - [ ] `@agentclientprotocol/sdk` adoption; `backends/acp/json-rpc.ts` deleted
 - [ ] Close #740 as absorbed by this issue (per-call harness/model is item 5 of the Decision)
@@ -112,6 +112,28 @@
   `latestHarness` slot became a `Map` keyed by harness kind, so a fire reaching two harnesses can no
   longer resume one harness's opaque session id against the other. The consent check (#567 D13),
   `DELEGATE_FAILURE_PREFIX` marshalling, breaker behavior, and the `local`-tier seal are untouched.
+
+- **One door, part (b): HarnessSessions (sixth slice).** Done in full: HarnessSessions extraction
+  keyed `(conversationRef, harnessKind)`; per-binding settlement + multi-harness regression test.
+  Four call sites each owned a private copy of the binding/resume/watermark planning — the chat SSE
+  driver's `planFor` memo in `turn-sse.ts`, the fire's `resumable` map in
+  `run-automation-live-dispatch.ts`, and hand-rolled `getHarnessBinding` +
+  `hydrationMessagesFromLedger` + `compileHydrationPlan` blocks in `headless-automation-compile.ts`
+  and `interactive-automation-turn.ts`. They collapse into one owner,
+  `packages/app-engine/src/conversation/harness-sessions.ts`, keyed exactly as
+  `conversation_harness_sessions` UNIQUE `(conversation_id, harness_kind, acp_session_id)` always
+  said it should be. It owns the binding row, the resume decision (`TurnResumePlan` moved verbatim,
+  preserving "resume only against the backend that minted the opaque session id"), the budgeted
+  fold and its recovery counterpart, the hydration-token bill, retirement of an abandoned handle,
+  and warm-process association. Both stores hand one out over a narrow `HarnessSessionsLedger`
+  port, so no caller re-derives which session a harness resumes. `ConversationTurnInput
+  .resumeForKind` became `harnessSessions`; `runner-core.ts` asks per rung and reports each rung
+  back. Settlement is now per binding: `noteTurn` / `noteFailedTurn` take
+  `readonly TouchedHarnessBinding[]` instead of one adapter, upserting every delivered binding,
+  superseding predecessors, and advancing every watermark. The fire path retires stale bindings on
+  recovery hydration exactly as chat does. Net 523 insertions / 797 deletions across the 19
+  extraction-site files (net −274) plus the 286-line owner — roughly 555 lines of duplicated
+  planning deleted.
 
 ### Files touched (vault-schema slice)
 
@@ -611,6 +633,31 @@ Markdown only; no code changed in this slice.
 - `packages/gateway/src/serve/build-gateway.ts`
 - `receipts/issue-743-one-agent-door.md`
 
+### Files touched (convergence (b) slice)
+
+- `docs/runners.md`
+- `packages/agent-runtime/src/automation/run-automation-dispatch.test.ts`
+- `packages/agent-runtime/src/automation/run-automation-live-dispatch.ts`
+- `packages/agent-runtime/src/automation/run-automation-multi-harness.test.ts`
+- `packages/app-engine/src/conversation/harness-sessions.ts`
+- `packages/app-engine/src/conversation/history.test.ts`
+- `packages/app-engine/src/conversation/history.ts`
+- `packages/app-engine/src/conversation/runner-core.failover.test.ts`
+- `packages/app-engine/src/conversation/runner-core.ts`
+- `packages/app-engine/src/conversation/runner.ts`
+- `packages/app-engine/src/conversation/store.test.ts`
+- `packages/app-engine/src/conversation/store.ts`
+- `packages/app-engine/src/http/turn-sse.test.ts`
+- `packages/app-engine/src/http/turn-sse.ts`
+- `packages/app-engine/src/index.ts`
+- `packages/gateway/src/lifecycle/headless-automation-compile.ts`
+- `packages/gateway/src/lifecycle/interactive-automation-turn.test.ts`
+- `packages/gateway/src/lifecycle/interactive-automation-turn.ts`
+- `packages/gateway/src/routes/automations-routes.test.ts`
+- `receipts/issue-743-one-agent-door.md`
+- `tests/quality/fixtures/kill-mid-write-child.ts`
+- `tests/quality/user-facing-qualities.test.ts`
+
 ## Out of scope
 
 - Renaming the `@centraid/agent-runtime` npm package (README disclaimer instead — see issue).
@@ -703,6 +750,34 @@ Markdown only; no code changed in this slice.
   fork "used to hand the harness the entire ledger, unbounded", which was false. A discriminating
   test for the zero-turn-fold rule would require a hydration-budget override on the production
   dispatch options purely for testing; that was judged a worse trade than an honest comment.
+- **The acceptance criterion for this slice is satisfied in substance but NOT yet literally.** It
+  reads "a fire whose handler calls `ctx.delegate` twice with two different harnesses". `ctx.delegate`
+  cannot name a harness until slice (c), so the regression test drives the fire twice while the
+  injected accounted `runTurn` reports `claude-code` for the first call and `codex` for the second —
+  legitimate, because `TurnResult.harnessKind` documents itself as echoing the kind that produced
+  `sessionId`. The invariant under test is identical and the assertions are on real rows: call 2 is
+  handed codex's own session id, not the claude-code one minted a moment earlier, and both bindings
+  settle. When (c) lands, the test's two landing branches become two literal
+  `ctx.delegate({ harness })` calls and the criterion reads literally.
+- The test was **demonstrated red before green**: keying the memo on the planned kind instead of the
+  minting kind reproduces the `latestAdapter` bug and fails with
+  `expected 'session-claude-new' to be 'session-codex-old'`.
+- **This is an extraction, not a new layer — with one honest exception.** The planning code is a
+  genuine four-copies-to-one move and the diff is net-negative even counting the new module. The
+  added piece is the `HarnessSessionsLedger` port, needed because two stores (journal-direct
+  `ConversationStore` and app-scoped `ConversationHistoryStore`, with different hydration reads and
+  blob-path resolution) must drive the same owner. Three functions plus an optional fourth, defined
+  next to its only consumer.
+- **`TouchedHarnessBinding` gained an `ok` flag — an addition, not a move.** Once a turn settles
+  several bindings, delivered and errored must be distinguishable per binding: a chat failover turn
+  can end `ok` overall while rung 0 errored, and advancing rung 0's watermark would erase the user's
+  message from every later fold.
+- The `conversation_harness_sessions` SQL stayed in the store: `HarnessSessions` owns the
+  *decisions*, the store owns the writes. Moving the SQL in would have made the owner a second store.
+- `hydration_count` now increments per hydrating binding rather than once per turn — a two-harness
+  turn that re-folded twice genuinely paid twice.
+- Deleted `ConversationTurnInput.prevBindingId`, a pre-existing dead field (written by `turn-sse`,
+  read by nobody) belonging to the concern this slice owns.
 
 ## Verification
 
@@ -758,15 +833,24 @@ bunx vitest run --root packages/gateway src/lifecycle/automation-delegate-meteri
 bunx vitest run --root packages/agent-runtime src/automation
 ```
 
+- **Convergence (b).** `bun run typecheck` green (35/35). app-engine 625/625, automation 419/419,
+  new `run-automation-multi-harness.test.ts` 2/2 (two-harness regression + fire-path stale
+  retirement), `user-facing-qualities` 14/14, `bun run knip` clean. Pre-existing failures unchanged:
+  agent-runtime `launch.test.ts` (2 IS_SANDBOX), gateway `gateway-db-lock.integration.test.ts`.
+  NEW flake class observed and reported for QUALITY.md, unrelated to this slice: gateway
+  `vault-plane-commons.test.ts` and `serve-scheduler-reconcile.test.ts` each time out under
+  full-suite load and pass in isolation.
+
 - Further slices append their verification here as they land.
 
 ## Audit
 
 Independent re-attestation against the CURRENT `git diff --cached`, fresh context, no reliance on
-the committing agent's claims. This audit supersedes the previous (docs-write-back-slice) audit
-content below the heading. Four prior slices are **already committed** (`git log --oneline -5`):
+the committing agent's claims. This audit supersedes the previous (convergence-(a)-slice) audit
+content below the heading. Five prior slices are **already committed** (`git log --oneline -6`):
 
 ```
+aeff86c0 refactor(automation)!: dispatch ctx.delegate through the accounted turn seam (#743)
 6955ec4c docs(glossary)!: harness/delegate vocabulary write-back (#743)
 9a07465d refactor(automation)!: rename the handler judgment rail to ctx.delegate (#743)
 5624e365 refactor(harness)!: rename the installed-CLI axis to harness (#743)
@@ -774,203 +858,186 @@ content below the heading. Four prior slices are **already committed** (`git log
 3f12bdea fix(recognition): refresh rewritten text embeddings (#736) (#737)
 ```
 
-This audit covers the **staged slice only** — "One door, part (a)" (`git diff --cached --stat` →
-13 files, 668 insertions(+), 66 deletions(-)): `run-automation-live-dispatch.ts` +3 test files,
-`run-automation.ts`, the new `posture.ts`, `turn-sse.ts`, `app-engine/index.ts`, the new
-`automation-delegate-metering.test.ts`, `headless-automation-compile.ts`,
-`interactive-automation-turn.ts`, `build-gateway.ts`, and the receipt. This is the first slice of
-the umbrella that is a real architectural change, not a rename — scrutinized accordingly.
+This audit covers the **staged slice only** — "One door, part (b): HarnessSessions" (`git diff
+--cached --stat` → 22 files, 1154 insertions(+), 798 deletions(-)): the new
+`packages/app-engine/src/conversation/harness-sessions.ts` (286 lines), its wiring into
+`ConversationStore.harnessSessions` / `ConversationHistoryStore.harnessSessions` (`store.ts`,
+`history.ts`), the four call-site extractions (`turn-sse.ts`, `run-automation-live-dispatch.ts`,
+`headless-automation-compile.ts`, `interactive-automation-turn.ts`), the per-binding settlement
+change to `noteTurn`/`noteFailedTurn`, the new
+`packages/agent-runtime/src/automation/run-automation-multi-harness.test.ts`, and the receipt. Also
+confirmed clean: `git status` shows no unstaged files at audit time — nothing from a concurrently
+running agent leaked into this diff.
 
-**(1) `## What changed` faithfully describes the staged diff** — **REFUTED**, on a real,
-non-trivial overstatement in the hydration-budget narrative (the metering/resume claims are
-accurate and well-supported).
+**(1) `## What changed` faithfully describes the staged diff** — **PASS**, with one minor
+arithmetic imprecision noted (not materially misleading).
 
-- **(a) `getHarness`/registry import dropped from the dispatch file** — **confirmed**. `git diff
-  --cached` shows `- import { getHarness } from "../registry.js";` removed with no replacement
-  import of the registry anywhere in `run-automation-live-dispatch.ts`. Fresh grep: `git grep -n
-  'getHarness\|registry\.js' -- packages/agent-runtime/src/automation/` hits only test files
-  (`live-automation-failover.test.ts` imports `HARNESSES` from `../registry.js` to *stub* a
-  harness for the test; `run-automation-dispatch.test.ts` references `getHarness(` only inside a
-  regex assertion that the production file must NOT contain it) and one unrelated same-named method
-  `runsStore.getHarnessBinding(...)` (a `ConversationStore` method, not the registry's `getHarness`).
-  Zero production hits. Confirmed.
-- **(b) The gateway supplies the SAME `accountRunTurn`-wrapped driver chat uses** — **confirmed**,
-  and this is the load-bearing, correctly-described fix of the slice. `build-gateway.ts` defines
-  exactly one `accountRunTurn` wrapper (line 1050) that records `resourceAccounting.recordAgentRun`
-  around any base `RunTurnFn`. Every caller applies the identical expression
-  `accountRunTurn(options.runTurn ?? runTurn)`: the unified chat runner (2628), the automations-scoped
-  headless-compile runner (2648), interactive automation turns (2671), automation revision rewriting
-  (3038), and — newly, in this diff — the fire dispatch at `runAutomation({ ..., runTurn:
-  accountRunTurn(options.runTurn ?? runTurn) })` (2307). There is no second/parallel wrapper; it is
-  textually the same call. `run-automation.ts` threads it through as a new required
-  `RunAutomationOptions.runTurn: RunTurnFn` field, and `run-automation-live-dispatch.ts` calls
-  `opts.runTurn(...)` instead of `getHarness(harness).runTurn(...)`. Confirmed genuine, not cosmetic.
-- **(c) "The unbudgeted `forceHydration: true` path is genuinely gone"** — **REFUTED**, overstated.
-  Two independent problems with this claim:
-  - `forceHydration: true` is **not removed** — it is still set unconditionally whenever a
-    `hydrationPlan` exists, at the same call site (now line 394, was line 348 at `HEAD`), unchanged
-    by this diff (`git diff --cached` shows no hunk touching that line).
-  - The **numeric budget itself did not change**. `packages/app-engine/src/conversation/hydration.ts`
-    (untouched by this diff — `git diff --cached -- .../hydration.ts` is empty) has defaulted
-    `tokenBudget` to `Math.max(256, options.tokenBudget ?? 8_000)` and `minTurns` to `Math.max(1,
-    options.minTurns ?? 2)` since commit `18784afe` (`#567`/`#600`), which predates issue #743
-    entirely (`git log --oneline -S "tokenBudget ?? 8_000" -- .../hydration.ts` → one hit,
-    `18784afe`). The pre-diff dispatch code (`git show HEAD:.../run-automation-live-dispatch.ts`)
-    called `compileHydrationPlan(hydrationMessages, { includeAttachmentReferences: true })` with no
-    `tokenBudget`/`minTurns` override — meaning it was **already** budgeted to exactly 8,000
-    tokens / `minTurns: 2`, the same numbers `TURN_POSTURES.fire.hydration` states. Framing this as
-    "the unbudgeted eager fold is gone" therefore overstates what changed: the fold was never
-    numerically unbounded in the code as it stood at `HEAD`.
-  - Likewise, `hydrationTokens`/`store.setTurnHydrationTokens(turnId, hydrationTokens)` — the
-    mechanism that records hydration tokens on automation turns — **already existed** at `HEAD`
-    (same commit `18784afe`, `git log --oneline -S "setTurnHydrationTokens" -- .../run-automation-
-    live-dispatch.ts` → one hit, pre-#743). So "hydration tokens recorded on automation turns"
-    (echoed from the issue's own comparison table, "today only chat records them") was already true
-    before this slice landed.
-  - What genuinely IS new and correctly attributable to this diff: budget/`minTurns` now flow from
-    `TURN_POSTURES` (single source of truth, replacing three separately-hardcoded `8_000`/`minTurns:
-    2` literals across `turn-sse.ts`, `headless-automation-compile.ts`, `interactive-automation-
-    turn.ts`, and the automation dispatch — a real de-duplication win); a fold whose
-    `compiled.includedTurns === 0` is now treated as no fold (`compileBudgeted`'s `undefined`
-    branch), which the pre-diff code did not check; and the recovery-hydration gating changed from
-    "any prior binding" to "only when a resume handle (`resumeSessionId`) exists and the watermark
-    is meaningful" — a real, narrower correctness fix to the resume/recovery interaction, separate
-    from the token-budget claim. These are legitimate, but they are not "the unbudgeted path is
-    gone" — the budget number never moved.
-  - **Test-quality consequence** (see also the closing test-quality judgment below): the new test
-    `"automation hydration is compiled under the same token budget as chat"` asserts the fold fits
-    8k tokens and drops old turns — true today, but that assertion would very likely have also
-    passed against the pre-diff `HEAD` code, because `compileHydrationPlan`'s own default already
-    enforced the identical 8,000/2 numbers with no caller override. The test is a valid smoke test
-    of current behavior but is **not a regression guard for the specific "budgeted" claim** the
-    receipt and the issue's acceptance criterion make; it doesn't have discriminating power against
-    the bug being described.
-- **(d) `latestHarness` keyed by harness kind (`Map`)** — **confirmed**. The single unkeyed
-  `latestHarness`/`observedHarness` closure variables are replaced by `const resumable = new
-  Map<HarnessKind, TouchedBinding>()` plus `lastObserved`/`lastSettled`; `resumeSessionId`/
-  `resumeUsage` now read `resumable.get(harness)` before falling back to the store's persisted
-  binding, and a successful call does `resumable.set(harness, lastObserved)`. A fire that calls two
-  different harnesses can no longer hand harness B harness A's opaque session id. Confirmed.
-- **(e) Behavior change disclosed: fire turns now send `permissionPolicy: "deny"`** — **confirmed**
-  both that the change exists and that it is disclosed. Diff adds `permissionPolicy:
-  POSTURE.permissions` at the `opts.runTurn(...)` call site, where `POSTURE = TURN_POSTURES.fire`
-  and `fire.permissions === "deny"` (`posture.ts`); previously no `permissionPolicy` field was sent
-  at all. The receipt's `## Decisions` section states this explicitly under "**Behavior change,
-  called out explicitly:**" with the correct before/after description and the `#484` rationale
-  (nobody is present to answer a permission request). Confirmed disclosed, not buried.
-- **(f) Per-binding settlement honestly NOT done** — **confirmed**, receipt does not overclaim.
-  `finalizeTurn` still calls `store.noteTurn(conversationId, "", lastSettled)` /
-  `store.noteFailedTurn(conversationId, "", lastObserved)` — a single `adapter` argument, not one
-  per touched binding. `ConversationStore.noteTurn`/`noteFailedTurn` in
-  `packages/app-engine/src/conversation/store.ts` (lines 587, 730) both take exactly one optional
-  `adapter: { kind, sessionId?, usageSnapshot?, hydrated? }` argument — there is no multi-binding
-  entry point for either method to overload into, so a fire that touched two harnesses this turn
-  still only settles the last one touched. The receipt's `## Decisions` bullet ("Per-binding
-  settlement is deliberately NOT done here...") states this accurately, and the checklist correctly
-  leaves the multi-harness settlement item ( `- [ ] HarnessSessions extraction...per-binding
-  settlement + multi-harness regression test`) unchecked. Confirmed honest.
+- **(a) Extraction, net deletion, not a new layer** — **substantially confirmed**. `git diff
+  --cached --numstat` totals 1154 insertions / 798 deletions across 22 files. Splitting out the two
+  wholly-new files (`harness-sessions.ts`, 286/0) and the wholly-new regression test
+  (`run-automation-multi-harness.test.ts`, 262/0) and the receipt itself (83/1) leaves the 19
+  remaining files — the ones that actually held duplicated planning logic plus their tests — at
+  **523 insertions / 797 deletions** (net **-274**), a genuine net deletion. The receipt states
+  "Net 522 insertions / 791 deletions ... about 555 lines of duplicated planning deleted"; the
+  insertions figure is off by 1 and the deletions figure by 6 (three small, unrelated-to-planning
+  files — `automations-routes.test.ts` 3/4, `kill-mid-write-child.ts` 1/1,
+  `user-facing-qualities.test.ts` 3/1 — appear to be excluded from the receipt's manual tally). This
+  is a trivial bookkeeping slip, not a false characterization: the diff genuinely is net-negative
+  across the extraction site, and the receipt is explicit that the 286-line owner is an addition
+  ("Net ... plus the 286-line owner"), so it is not hiding the new file's size. All four claimed
+  duplicate-copy sites really did lose their private planning code, confirmed by reading each hunk:
+  - `turn-sse.ts`: the `resumeStates`/`plans`/`planFor` memo block (~100 lines, including its own
+    `compileHydrationPlan` call and the post-turn stale-binding retirement `if` block) is deleted
+    and replaced by `const harnessSessions = conversationStore?.harnessSessions(...)`; `runner-core.ts`
+    now calls `input.harnessSessions?.plan(kind)` instead of `input.resumeForKind?.(kind)`.
+  - `run-automation-live-dispatch.ts`: the `resumable: Map<HarnessKind, TouchedBinding>` +
+    `compileBudgeted` + inline cold/watermark/recovery-fold computation (~110 lines) is deleted;
+    replaced by `harnessSessions.plan(harness)` / `.observe(...)` / `.observeFailure(...)`, and
+    `finalizeTurn` now reads `harnessSessions.bindings` instead of the old single `lastSettled`/
+    `lastObserved` locals.
+  - `headless-automation-compile.ts`: the inline `getHarnessBinding` + `hydrationMessagesFromLedger`
+    (x2) + `compileHydrationPlan` (x2) block is deleted (~90 lines including the local `adapter`
+    accumulator and its two `noteTurn`/`noteFailedTurn` object-literal reconstructions); replaced by
+    `store.harnessSessions(conversationId, { hydration, attachmentPath })`, `harnessSessions:` passed
+    straight to `opts.runner.run`, and `store.noteTurn(conversationId, "", harnessSessions.bindings)`.
+  - `interactive-automation-turn.ts`: the identical shape of block (~90 lines, including the local
+    `adapter` accumulator) is deleted the same way.
+- **(b) Per-binding settlement is real** — **confirmed**. `ConversationStore.noteTurn`/
+  `noteFailedTurn` (`packages/app-engine/src/conversation/store.ts`) now take
+  `bindings: readonly TouchedHarnessBinding[] = []` and `for (const binding of bindings)` loop,
+  writing/updating a `conversation_harness_sessions` row and (for delivered bindings) advancing each
+  one's `hydrated_through_seq` watermark individually; the conversation row's single denormalized
+  "active harness" column is set from `delivered.at(-1)` (last delivered binding), and `hydratedCount`
+  (not a 0/1 flag) is now threaded into `noteTurnWithAdapter`/`noteTurnKindOnly`. All four call sites
+  (`run-automation-live-dispatch.ts` `finalizeTurn`, `headless-automation-compile.ts`,
+  `interactive-automation-turn.ts`, `turn-sse.ts` via `ConversationHistoryStore.recordTurn`'s new
+  `bindings` field) now pass an array (`harnessSessions.bindings`), not a single adapter object. The
+  old single-`adapter?: {...}` parameter is gone from both `noteTurn` and `noteFailedTurn` signatures
+  and from `RecordTurnInput` (`adapter`/`failedAdapter` fields deleted in favor of one `bindings`
+  field). `finalizeTurn` genuinely no longer settles only the last binding.
+- **(c) Multi-harness test characterization** — **confirmed fair, and the invariant is genuinely
+  proven with real DB rows**. Read `run-automation-multi-harness.test.ts` in full. It configures
+  `startLiveDispatch({ harness: "codex", ... })` and calls `dispatch.delegateDispatcher(...)` twice
+  with no per-call harness argument (that argument does not exist yet — item (c) of the umbrella).
+  Both calls therefore route through `accountedRunTurn` to `HARNESSES["codex"].runTurn`, which is
+  the single stub installed by `stubHarness("codex", ...)`; the stub's own `landing` counter makes
+  it *report* `{ harnessKind: "claude-code", sessionId: "session-claude-new" }` on the first call and
+  `{ harnessKind: "codex", sessionId: "session-codex-new" }` on the second. This is exactly what the
+  receipt's `## Decisions` bullet says: "the test drives the fire twice while the injected accounted
+  `runTurn` reports `claude-code` for the first call and `codex` for the second — legitimate, because
+  `TurnResult.harnessKind` documents itself as echoing the kind that produced `sessionId`." It is a
+  faithful, non-misleading description, not a test dressed up as something it isn't — and the
+  in-file comment says the same thing openly (lines 13-17). The invariant under test — "a session id
+  belongs to whoever minted it, not whoever was asked" — is identical whether the harness switch
+  comes from a per-call `harness` argument (future) or from the accounted seam's own failover/landing
+  behavior (today); `HarnessSessions.observe` keys strictly on `observed.harnessKind ?? plannedKind`
+  and has no way to tell the two apart, so the code path exercised is the real one. The test proves,
+  with **real DB rows read via raw SQL against `conversation_harness_sessions`** (not mocked
+  assertions): (i) resume — both `codex.calls[0].prevSessionId` and `codex.calls[1].prevSessionId`
+  equal the seeded `"session-codex-old"`, and explicitly `codex.calls[1].prevSessionId` is asserted
+  `not.toBe("session-claude-new")`, which is precisely the `latestAdapter` bug reproduced-if-absent;
+  (ii) settlement — after the turn, `getHarnessBinding(ref, "claude-code")` and
+  `getHarnessBinding(ref, "codex")` both independently return rows with `hydratedThroughSeq: 1`, and
+  the raw `conversation_harness_sessions` query confirms three rows: the new claude-code binding
+  (`warm`), the new codex binding (`active`), and the **old** codex session correctly demoted to
+  `stale` (superseded-as-audit, never re-offered) rather than deleted. A second test in the same file
+  exercises the fire path's stale-binding retirement (a `hydrationKind: "recovery"` response) and
+  confirms the abandoned session id's row flips to `stale` via direct SQL. This is a strong,
+  discriminating regression test — not shallow — and the receipt's own characterization of its
+  limits (substance-not-yet-literal, pending item (c)) is honest rather than overclaiming.
+- **(d) `ConversationTurnInput.prevBindingId` deletion + `hydration_count` per-binding change** —
+  both **confirmed**. `packages/app-engine/src/conversation/runner.ts` diff removes `/** Durable
+  binding row that supplied \`prevAdapterSessionId\`. */ prevBindingId?: string;` with no replacement
+  field (the interface's other resume fields are untouched or migrated to `harnessSessions`). In
+  `store.ts`, `noteFailedTurn`'s `hydration_count` update changed from unconditional `+ 1` gated on a
+  single `adapter?.hydrated` boolean to `SET hydration_count = hydration_count + ?` parameterized by
+  `hydratedCount` (`bindings.filter((b) => b.hydrated === true).length`), and `noteTurn`'s
+  `hydratedCount`/`hydrated` pair is likewise now a per-binding count rather than a single flag,
+  threaded into `noteTurnWithAdapter`/`noteTurnKindOnly`. Confirmed as described.
 
-**(2) Each checked `- [x]` item is realized; each `- [ ]` is genuinely not claimed done** — **PASS**,
-with the caveat noted in (1)(c) carried forward (the checklist line's literal claim — "budgeted
-hydration" exists and is data-driven — is true; the overstatement lives in the prose narrative, not
-the checkbox).
+**(2) Each checked `- [x]` item is realized; each `- [ ]` is genuinely not claimed done** —
+**PASS**.
 
-- The newly-flipped line — `- [x] ctx.delegate dispatched through the accounted chat spine
-  (metering, budgeted hydration, kind-scoped resume)` — is realized in the staged diff: metering via
-  (1)(b), hydration reads from `TURN_POSTURES` via (1)(c), kind-scoped resume via (1)(d). All three
-  parenthetical sub-claims have code backing, even though "budgeted" is less of a fix than the prose
-  implies.
-- The four earlier checked items remain realized in `HEAD` (unchanged by this diff): vault schema
-  (`4162072c`), harness axis (`5624e365`), delegate rail (`9a07465d`), docs/glossary write-back
-  (`6955ec4c`) — `git log --oneline -5` confirms all four commit subjects reference `#743`.
-- The two-harness **settlement** regression test is explicitly and correctly NOT claimed — it is
-  named in the still-unchecked `- [ ]` item 6 ("HarnessSessions extraction... per-binding settlement
-  + multi-harness regression test"), consistent with (1)(f) above and with the issue's own
-  acceptance criterion ("A fire whose handler calls `ctx.delegate` twice with two different harnesses
-  ... settles **both** bindings' watermarks") being left for a future slice.
-- Remaining 4 unchecked items (HarnessSessions extraction, per-call `harness`/`model`/`configPins`,
-  `@agentclientprotocol/sdk` adoption, closing #740) have **zero footprint in the staged diff** —
-  `git diff --cached --name-only` touches only `packages/agent-runtime/src/automation/*`,
-  `packages/app-engine/src/conversation/posture.ts`, `packages/app-engine/src/http/turn-sse.ts`,
-  `packages/app-engine/src/index.ts`, `packages/gateway/src/lifecycle/*`,
-  `packages/gateway/src/serve/build-gateway.ts`, and the receipt — no `registry.ts`,
-  `backends/acp/*`, `gateway-db.ts` (schema), `manifest.ts`, blueprint handler, or skill file is
-  staged. Correctly left unchecked.
+- Item 6 — `- [x] HarnessSessions extraction keyed (conversationRef, harnessKind); per-binding
+  settlement + multi-harness regression test` — newly flipped in this staged diff and realized by
+  (1)(a)-(c) above: the module exists, is keyed as claimed, per-binding settlement is real, and the
+  regression test exists and is strong.
+- The five earlier checked items (1-5) remain realized at `HEAD` (unchanged by this diff): vault
+  schema (`4162072c`), harness axis (`5624e365`), delegate rail (`9a07465d`), docs/glossary
+  write-back (`6955ec4c`), and slice (a) "`ctx.delegate` dispatched through the accounted chat spine"
+  (`aeff86c0`) — `git log --oneline -6` confirms all five commit subjects reference `#743`.
+- The three remaining unchecked items — per-call `harness`/`model`/`configPins` on `ctx.delegate`
+  (item 7), `@agentclientprotocol/sdk` adoption (item 8), closing #740 (item 9) — have **zero
+  footprint in the staged diff**. `git diff --cached --name-only` touches only:
+  `docs/runners.md`, `packages/agent-runtime/src/automation/{run-automation-dispatch.test.ts,
+  run-automation-live-dispatch.ts, run-automation-multi-harness.test.ts}`,
+  `packages/app-engine/src/conversation/{harness-sessions.ts, history.ts, history.test.ts,
+  runner-core.ts, runner-core.failover.test.ts, runner.ts, store.ts, store.test.ts}`,
+  `packages/app-engine/src/http/{turn-sse.ts, turn-sse.test.ts}`, `packages/app-engine/src/index.ts`,
+  `packages/gateway/src/lifecycle/{headless-automation-compile.ts,
+  interactive-automation-turn.ts, interactive-automation-turn.test.ts}`,
+  `packages/gateway/src/routes/automations-routes.test.ts`, `receipts/issue-743-one-agent-door.md`,
+  `tests/quality/fixtures/kill-mid-write-child.ts`, `tests/quality/user-facing-qualities.test.ts`.
+  No `registry.ts`, `backends/acp/*`, `manifest.ts`, `ctx.ts`, blueprint handler, skill file, or
+  anything referencing `ctx.delegate({ harness })`, the SDK package, or issue #740's closure is
+  staged. Correctly left unchecked. `delegate-answer`/`ctx.delegate` call sites in this diff are
+  unchanged from `HEAD` — grep for `harness:` inside a `ctx.delegate(` call site in the staged diff
+  returns nothing.
 
 **(3) `## Checklist` mirrors issue #743's `Scope > In:` bullets** — **PASS**. Fetched issue #743
-fresh via `mcp__github__issue_read` (full body, not a cached summary). The issue's `# Scope > In:`
-list (renames incl. vault schema/item-kind; `ctx.delegate` dispatch through the chat spine + fork
-deletion; HarnessSessions extraction + per-binding settlement; metering + hydration-token accounting
-for delegate turns; per-call `harness`/`model`/`configPins` + `#567` D13 consent + failover
-interplay; compiler work order + skills + 5 blueprint handlers + lint messages; `@agentclientprotocol/
-sdk` adoption; glossary/README/ARCHITECTURE/docs A1 write-back; closing #740) maps 1:1 onto the
-receipt's 9-line checklist with no added or missing scope claim.
+fresh via `mcp__github__issue_read` (full body). The issue's `# Scope > In:` list (every rename incl.
+vault schema/item-kind; `ctx.delegate` dispatch through the chat spine + fork deletion; HarnessSessions
+extraction + per-(conversationRef, harnessKind) settlement; metering + hydration-token accounting for
+delegate turns; per-call `harness`/`model`/`configPins` + `#567` D13 consent + failover interplay;
+compiler work order + skills + 5 blueprint handlers + lint messages; `@agentclientprotocol/sdk`
+adoption; glossary/README/ARCHITECTURE/docs A1 write-back; closing #740) maps 1:1 onto the receipt's
+9-line checklist, unchanged in shape from the prior audit (only item 6's checkbox flipped) — no added
+or missing scope claim.
 
 **Independent verification run fresh in this audit:**
-- `bun run typecheck` → **green**, 35/35 tasks (turbo full-turbo replay/cache-hit on unaffected
-  packages, fresh compile on touched ones).
-- `bunx vitest run --root packages/gateway src/lifecycle/automation-delegate-metering.test.ts` →
-  **2/2 passed** (22.5s). Both scenarios genuinely exercise the acceptance criterion: the first fires
-  a real automation over HTTP against a booted gateway with a stubbed `runTurn`, asserts the turn
-  reaches the injected seam (`turns` array populated, `permissionPolicy === "deny"`), asserts
-  `resourceUsage.subsystems.agentRuns.runs` increases, and reads the `delegate` ledger item's
-  `model`/`input_tokens`/`cost_source`/`cost_usd` straight out of the journal SQLite file — a
-  genuinely end-to-end check, not a unit stub. The second fires twice with a non-session-minting
-  stub and asserts exactly one `turns` row has `hydration_tokens > 0`.
-- `bunx vitest run --root packages/agent-runtime src/automation` → **25 passed, 1 skipped** (3.04s).
+- `bun run typecheck` → **green**, 35/35 tasks (full-turbo cache-hit/replay).
+- `bunx vitest run --root packages/agent-runtime src/automation/run-automation-multi-harness.test.ts`
+  → **2/2 passed** (2.36s).
+- `bunx vitest run --root packages/app-engine src/conversation src/http` → **391/391 passed**, 37
+  test files, no failures or skips (11.01s).
 - `bunx vitest run --config vitest.quality.config.ts user-facing-qualities` → **14/14 passed**
-  (22.0s).
-- `git grep -n 'getHarness\|registry\.js' -- packages/agent-runtime/src/automation/` → hits only in
-  test files and the unrelated `getHarnessBinding` store method, as detailed in (1)(a). No
-  production dispatch hit.
+  (22.30s).
+- `git status --porcelain` at audit time shows only the files listed above staged, no unstaged
+  residue — the "concurrently-running agent on a different slice" caveat in the task did not
+  materialize in this diff.
 
-**Test-quality judgment (asked explicitly):**
-- `run-automation-dispatch.test.ts`'s new `"no dispatch path reaches a harness without passing the
-  accounted seam"` test is a genuinely strong regression guard: it asserts a *behavioral* invariant
-  (accounted-seam call count equals harness-stub call count) **and** a *structural* one (source-text
-  assertion that the file contains neither `from "../registry.js"` nor `getHarness(`), which is
-  exactly the pairing the issue's own acceptance criterion asks for ("a test asserts no dispatch path
-  reaches a harness without passing the accounted seam") and exactly what the receipt's own
-  `## Decisions` bullet claims ("asserted at two levels: behaviorally... and structurally..."). Not
-  shallow.
-- `automation-delegate-metering.test.ts` is a real end-to-end gateway-boot test hitting the actual
-  HTTP surface and reading the actual journal SQLite rows for pricing/hydration-token proof. Not
-  shallow.
-- `"automation hydration is compiled under the same token budget as chat"` (in
-  `run-automation-dispatch.test.ts`) is comparatively **shallow** relative to what it's positioned to
-  prove: as established in (1)(c), the 8,000-token/`minTurns: 2` bound it asserts was already the
-  `compileHydrationPlan` default at `HEAD` before this diff, with no caller override in either the
-  old or new dispatch code. The test verifies current, correct behavior, but does not discriminate
-  between the pre-diff and post-diff code paths — it would very plausibly have also passed unmodified
-  against `HEAD`'s dispatch file. It is not a meaningful regression guard for the "budgeted hydration"
-  claim it is named after, even though the surrounding refactor (posture-sourced config, zero-turn-
-  fold handling, recovery-gating) is real.
-- The multi-harness **settlement** regression test the issue's acceptance criteria explicitly ask for
-  is, correctly, **not present** in this slice — it is deferred with the rest of HarnessSessions, as
-  disclosed.
+**Test-quality judgment (asked explicitly): the multi-harness test is genuinely strong.**
+`"each harness resumes its own session id and both watermarks settle"` is not a shallow smoke test:
+it asserts the resume invariant on the exact call-site field the bug would corrupt
+(`prevSessionId`), explicitly asserts the negative (`not.toBe("session-claude-new")`) that would
+catch a regression to the old unkeyed slot, and — critically — verifies settlement by reading real
+rows out of `conversation_harness_sessions` via a raw SQL query rather than only inspecting in-memory
+return values, including confirming the *superseded* old codex row demotes to `stale` rather than
+vanishing (an audit-trail requirement, not just a happy-path check). The companion test for stale
+retirement in the fire path closes the other half of the acceptance criterion. The one honest
+limitation — driving one *configured* harness twice with the *seam* varying its reported kind, rather
+than two literal `ctx.delegate({ harness })` calls — is disclosed plainly in both the test's own
+header comment and the receipt, is technically accurate (per-call harness naming genuinely does not
+exist yet), and exercises the identical code path (`HarnessSessions.observe` keys on
+`observed.harnessKind`, never on what was requested) that a literal two-`ctx.delegate` call would
+exercise once item (c) lands. This is disclosure of a real scope boundary, not a paper-thin test
+posing as a strong one.
 
-**Overall verdict: REFUTED.** The core architectural claim of this slice — `ctx.delegate` now runs
-on the identical `accountRunTurn`-wrapped `RunTurnFn` chat/compile/steering use, closing the one
-truly unmetered path (wall-clock/run-count resource accounting via
-`resourceAccounting.recordAgentRun`) — is real, correctly described, and well-tested; the kind-scoped
-resume `Map`, the disclosed `permissionPolicy: "deny"` behavior change, and the honest
-non-claim of per-binding settlement are all accurate. However, the receipt's narrative
-("the unbudgeted eager fold is gone", "hydration tokens recorded... the one unmetered path... is
-closed" in the hydration sense) and the newly-added regression test both overstate what changed on
-the hydration-budget axis specifically: `packages/app-engine/src/conversation/hydration.ts`'s
-`tokenBudget ?? 8_000` / `minTurns ?? 2` defaults, and the dispatch file's `setTurnHydrationTokens`
-call, both predate issue #743 (commit `18784afe`, `#567`/`#600`) and were never overridden by the
-pre-diff automation dispatch — so the numeric hydration budget in production automation turns did not
-change in this diff, only its data source (hardcoded literal → `TURN_POSTURES`) and two narrower
-edge-case fixes (zero-turn fold treated as no-fold; recovery fold gated to only apply when a resume
-handle exists) did. This is a real inaccuracy in the receipt's own account of its diff, not merely a
-tooling nit — it directly touches one of issue #743's acceptance criteria ("Automation hydration
-respects the same token budget as chat (no unbudgeted `forceHydration` path)"), which reads as though
-this slice closed a numeric gap that, on the evidence, was already closed by unrelated prior work.
-Recommend: soften the `## What changed` hydration paragraph and the corresponding `## Decisions`/
-`## Verification` bullets to describe the *actual* deltas (posture-sourced config, zero-turn no-fold,
-recovery gating) rather than "the unbudgeted fold is gone," and note in the acceptance-criteria
-mapping that the token-budget criterion was already satisfied before this slice by `#567`/`#600`.
+**Overall verdict: PASS.** The staged diff is what the receipt says it is: a genuine extraction of
+four independently-drifted planning copies into one `(conversationRef, harnessKind)`-keyed owner,
+net-negative across the 19 extraction-site files (523 ins / 797 del vs. the receipt's slightly
+imprecise but directionally correct 522/791), landing per-binding settlement in `noteTurn`/
+`noteFailedTurn` for real (confirmed by reading the loop and all four call sites), and shipping a
+multi-harness regression test that is honestly scoped and substantively strong — it proves both the
+resume-isolation and the dual-watermark-settlement halves of the acceptance criterion against real
+SQLite rows, with only the per-call-harness-naming literalism correctly and openly deferred to a
+later slice. The checklist's newly-checked item is realized, the three remaining unchecked items have
+zero footprint in the diff, and the checklist continues to mirror the issue's Scope > In list 1:1.
+`bun run typecheck` (35/35), the multi-harness suite (2/2), `packages/app-engine` conversation+http
+suites (391/391), and `user-facing-qualities` (14/14) all reproduce green independently. The one
+imperfection found — a small (≈1%) arithmetic slip in the receipt's line-count tally — does not rise
+to a REFUTED-level inaccuracy; it is noted for the record but does not misrepresent the shape or
+substance of the change.
 
 ## Session
 

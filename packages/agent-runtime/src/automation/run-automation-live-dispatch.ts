@@ -45,9 +45,7 @@ import type {
   TurnStreamEvent,
 } from "@centraid/app-engine";
 import {
-  compileHydrationPlan,
   ConversationStore,
-  hydrationMessagesFromLedger,
   makeJournalDbProvider,
   TURN_POSTURES,
 } from "@centraid/app-engine";
@@ -114,14 +112,6 @@ export interface LiveDispatch {
 }
 
 const DELEGATE_FAILURE_PREFIX = "centraid-delegate-failure:";
-
-/** One harness binding this fire touched — the resume handle plus its usage. */
-interface TouchedBinding {
-  kind: string;
-  sessionId?: string;
-  usageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
-  hydrated?: boolean;
-}
 
 export interface AutomationDelegateFailure {
   harness: HarnessKind;
@@ -194,16 +184,18 @@ export async function startLiveDispatch(
     60_000
   );
   lockLeaseHeartbeat.unref?.();
-  // Bindings this fire has already touched, KEYED BY HARNESS KIND: an opaque
-  // ACP session id resumes only against the harness that minted it, which is
-  // the same rule `TurnResumePlan` states for chat. A single unkeyed slot
-  // would hand harness B harness A's session id the moment one fire reaches
-  // two kinds. Per-binding watermark settlement lands with HarnessSessions;
-  // until then the last binding touched is the one this turn settles.
-  const resumable = new Map<HarnessKind, TouchedBinding>();
-  let lastObserved: TouchedBinding | undefined;
-  let lastSettled: TouchedBinding | undefined;
-  let hydrationTokens = 0;
+  // The fire's binding/resume/watermark owner — the same actor chat, compile,
+  // and steering drive, keyed by `(conversationRef, harnessKind)`. An opaque
+  // ACP session id resumes only against the harness that MINTED it, and every
+  // binding the fire touches settles its own watermark. The single unkeyed
+  // slot this replaces handed harness B harness A's session id the moment one
+  // fire reached two kinds, and could only ever settle one of them.
+  const harnessSessions = runsStore.harnessSessions(opts.automationRef, {
+    hydration: POSTURE.hydration,
+    ...(opts.hydrationAttachmentPath
+      ? { attachmentPath: opts.hydrationAttachmentPath }
+      : {}),
+  });
   const ensureScratch = async (): Promise<void> => {
     if (scratchReady) return;
     await fs.mkdir(scratchDir, { recursive: true });
@@ -237,21 +229,6 @@ export async function startLiveDispatch(
       })
     );
     return { prompt: call.prompt, attachments };
-  };
-
-  // Fold the ledger under the posture's budget — the same one chat compiles
-  // against. An unbudgeted fold is what made this path drift: a long-running
-  // automation re-sent its whole history into every cold session. A fold that
-  // funds no turn at all is no fold, exactly as in `turn-sse.ts`.
-  const compileBudgeted = (
-    messages: ReturnType<typeof hydrationMessagesFromLedger>
-  ): ReturnType<typeof compileHydrationPlan> | undefined => {
-    if (messages.length === 0) return undefined;
-    const compiled = compileHydrationPlan(messages, {
-      ...POSTURE.hydration,
-      includeAttachmentReferences: true,
-    });
-    return compiled.includedTurns === 0 ? undefined : compiled;
   };
 
   // ctx.delegate routes to the user's REAL provider through the injected,
@@ -318,48 +295,10 @@ export async function startLiveDispatch(
       loaded.kind === harness ? loaded : { kind: harness };
     let finalText = "";
     let failure: Extract<TurnStreamEvent, { type: "error" }> | undefined;
-    const resumed = resumable.get(harness);
-    const binding =
-      resumed?.sessionId === undefined
-        ? runsStore.getHarnessBinding(opts.automationRef, harness)
-        : undefined;
-    const resumeSessionId = resumed?.sessionId ?? binding?.acpSessionId;
-    const resumeUsage = resumed?.usageSnapshot ?? binding?.usageSnapshot;
-    const completedTurns = runsStore.listTurns(opts.automationRef);
-    // Without a resumable session id this call starts cold, so its delta is the
-    // whole ledger, not the watermark's tail — the same rule `turn-sse.ts`
-    // applies per rung. A settled binding that minted no session id would
-    // otherwise suppress the fold it is supposed to fund.
-    const watermark = resumeSessionId
-      ? (binding?.hydratedThroughSeq ?? -1)
-      : -1;
-    const hydrationMessages =
-      resumed === undefined
-        ? hydrationMessagesFromLedger(
-            completedTurns,
-            (turnId) => runsStore.listItems(turnId),
-            (itemId) => runsStore.listAttachmentsForItem(itemId),
-            watermark
-          )
-        : [];
-    // A recovery fold only means something against a resume handle the harness
-    // may reject; there is nothing to recover from when none was offered. A
-    // cold-but-resumable call already folds the whole ledger, so its recovery
-    // plan IS that fold — chat's rule, verbatim.
-    const recoveryMessages =
-      resumed === undefined && resumeSessionId && watermark !== -1
-        ? hydrationMessagesFromLedger(
-            completedTurns,
-            (turnId) => runsStore.listItems(turnId),
-            (itemId) => runsStore.listAttachmentsForItem(itemId)
-          )
-        : [];
-    const hydrationPlan = compileBudgeted(hydrationMessages);
-    const recoveryHydrationPlan = resumeSessionId
-      ? watermark === -1
-        ? hydrationPlan
-        : compileBudgeted(recoveryMessages)
-      : undefined;
+    // One question to one owner: what does THIS harness resume, and what does
+    // it still have to be told? Cold-vs-warm, watermark-vs-whole-ledger, and
+    // the budget the fold compiles under all live there now.
+    const plan = harnessSessions.plan(harness);
     let result:
       | {
           sessionId?: string;
@@ -386,41 +325,25 @@ export async function startLiveDispatch(
             ? { configPins: opts.configPins ?? prefs.configPins }
             : {}),
           abortSignal: ctx.abortSignal,
-          ...(resumeSessionId ? { prevSessionId: resumeSessionId } : {}),
-          ...(resumeUsage ? { prevUsageSnapshot: resumeUsage } : {}),
-          ...(hydrationPlan
+          ...(plan.sessionId ? { prevSessionId: plan.sessionId } : {}),
+          ...(plan.usageSnapshot
+            ? { prevUsageSnapshot: plan.usageSnapshot }
+            : {}),
+          ...(plan.hydrationContext
             ? {
-                hydrationContext: hydrationPlan.prompt,
+                hydrationContext: plan.hydrationContext.prompt,
                 forceHydration: true,
               }
             : {}),
-          ...(opts.hydrationAttachmentPath && hydrationPlan?.attachments.length
-            ? {
-                hydrationAttachments: hydrationPlan.attachments.map(
-                  (attachment) => ({
-                    path: opts.hydrationAttachmentPath!(attachment.hash),
-                    mime: attachment.mime,
-                    ...(attachment.filename
-                      ? { filename: attachment.filename }
-                      : {}),
-                  })
-                ),
-              }
+          ...(plan.hydrationAttachments
+            ? { hydrationAttachments: plan.hydrationAttachments }
             : {}),
-          ...(recoveryHydrationPlan
-            ? { recoveryHydrationContext: recoveryHydrationPlan.prompt }
+          ...(plan.recoveryHydrationContext
+            ? { recoveryHydrationContext: plan.recoveryHydrationContext.prompt }
             : {}),
-          ...(opts.hydrationAttachmentPath &&
-          recoveryHydrationPlan?.attachments.length
+          ...(plan.recoveryHydrationAttachments
             ? {
-                recoveryHydrationAttachments:
-                  recoveryHydrationPlan.attachments.map((attachment) => ({
-                    path: opts.hydrationAttachmentPath!(attachment.hash),
-                    mime: attachment.mime,
-                    ...(attachment.filename
-                      ? { filename: attachment.filename }
-                      : {}),
-                  })),
+                recoveryHydrationAttachments: plan.recoveryHydrationAttachments,
               }
             : {}),
           onEvent: (event) => {
@@ -438,29 +361,15 @@ export async function startLiveDispatch(
         failureClass: "unknown",
       };
     }
+    // The owner records what came back under the harness that MINTED the
+    // session id — the accounted seam may land on a different kind than this
+    // call planned for — and bills the fold it handed this call. The fire's
+    // hydration tokens land on its turn exactly as chat records them.
     if (result) {
-      lastObserved = {
-        kind: result.harnessKind,
-        ...(result.sessionId ? { sessionId: result.sessionId } : {}),
-        ...(result.usageSnapshot
-          ? { usageSnapshot: result.usageSnapshot }
-          : {}),
-        ...(result.hydrated ? { hydrated: true } : {}),
-      };
-      // Bill the fold this call was actually handed — the turn's hydration
-      // tokens are recorded on the fire's turn exactly as chat records them.
-      if (result.hydrated) {
-        hydrationTokens +=
-          result.hydrationKind === "recovery"
-            ? (recoveryHydrationPlan?.estimatedTokens ?? 0)
-            : (hydrationPlan?.estimatedTokens ?? 0);
-      }
+      if (failure) harnessSessions.observeFailure(harness, result);
+      else harnessSessions.observe(harness, result);
     }
     if (!failure) {
-      if (lastObserved && result) {
-        resumable.set(harness, lastObserved);
-        lastSettled = lastObserved;
-      }
       opts.harnessHealth?.reportOk(scope, harness);
       return automation.coerceDelegateAnswer(finalText, call.json);
     }
@@ -482,11 +391,14 @@ export async function startLiveDispatch(
   return {
     delegateDispatcher,
     finalizeTurn(store, conversationId, turnId, ok): void {
-      if (hydrationTokens > 0) {
-        store.setTurnHydrationTokens(turnId, hydrationTokens);
+      // Every binding this fire touched settles itself: two harnesses in one
+      // fire mean two rows and two watermarks, not one of each.
+      const bindings = harnessSessions.bindings;
+      if (harnessSessions.hydrationTokens > 0) {
+        store.setTurnHydrationTokens(turnId, harnessSessions.hydrationTokens);
       }
-      if (ok) store.noteTurn(conversationId, "", lastSettled);
-      else store.noteFailedTurn(conversationId, "", lastObserved);
+      if (ok) store.noteTurn(conversationId, "", bindings);
+      else store.noteFailedTurn(conversationId, "", bindings);
     },
     async close(): Promise<void> {
       if (closed) return;

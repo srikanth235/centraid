@@ -223,9 +223,10 @@ export function makeConversationRunnerCore(
         // Resume and hydration are PER RUNG. This rung may be a failover the
         // route never planned for: it has its own (possibly cold) binding and
         // its own watermark, so the primary target's plan is both the wrong
-        // session id and the wrong delta. Ask the driver for THIS kind's plan;
-        // hosts without a conversation store keep the precomputed fields.
-        const plan = input.resumeForKind?.(kind);
+        // session id and the wrong delta. Ask the turn's `HarnessSessions` for
+        // THIS kind's plan; hosts without a conversation store keep the
+        // precomputed fields.
+        const plan = input.harnessSessions?.plan(kind);
         // Resume only against the backend that minted the opaque session id.
         const resumeId = plan
           ? plan.sessionId
@@ -325,9 +326,12 @@ export function makeConversationRunnerCore(
         if (!failure) {
           opts.harnessHealth?.reportOk(healthContext, kind);
           completedCtx = turnCtx;
-          // Bill the hydration THIS rung was handed, not the route's original
-          // plan — a failover rung carries a different prompt and cost.
-          if (lastResult?.hydrated) {
+          // Report the rung back to the binding owner, which bills the fold it
+          // handed this rung and retires a handle the harness abandoned. A
+          // storeless host has no owner, so it bills here instead.
+          if (input.harnessSessions) {
+            if (lastResult) input.harnessSessions.observe(kind, lastResult);
+          } else if (lastResult?.hydrated) {
             consumedHydrationTokens =
               lastResult.hydrationKind === "recovery"
                 ? recoveryHydrationContext?.estimatedTokens
@@ -336,6 +340,11 @@ export function makeConversationRunnerCore(
           return;
         }
 
+        // A rung that reached a session and then errored still burned tokens
+        // against it. It settles that accounting and nothing else — a failed
+        // rung never advances a watermark and never becomes a later rung's
+        // resume handle.
+        if (lastResult) input.harnessSessions?.observeFailure(kind, lastResult);
         const failureClass: HarnessFailureClass =
           failure.failureClass ?? "unknown";
         opts.harnessHealth?.reportFailure(
@@ -381,6 +390,12 @@ export function makeConversationRunnerCore(
       const result: TurnResult = lastResult ?? {
         harnessKind: completedCtx?.prefs.kind ?? primaryPrefs.kind,
       };
+      // One source of truth for what this turn's hydration cost: the owner
+      // when there is one (it summed every binding it handed a fold to), the
+      // local per-rung reading only on a storeless host.
+      const hydrationTokens = input.harnessSessions
+        ? input.harnessSessions.hydrationTokens || undefined
+        : consumedHydrationTokens;
       return {
         harnessKind: result.harnessKind,
         ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),
@@ -393,9 +408,7 @@ export function makeConversationRunnerCore(
         ...(result.hydrationKind
           ? { hydrationKind: result.hydrationKind }
           : {}),
-        ...(consumedHydrationTokens === undefined
-          ? {}
-          : { hydrationTokens: consumedHydrationTokens }),
+        ...(hydrationTokens === undefined ? {} : { hydrationTokens }),
       };
     },
   };

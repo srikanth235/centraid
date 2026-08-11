@@ -198,10 +198,9 @@ describe("automations-routes suite", () => {
       "brief",
       "Brief"
     );
-    store.noteTurn(conversationId, "", {
-      kind: "copilot",
-      sessionId: "copilot-session",
-    });
+    store.noteTurn(conversationId, "", [
+      { kind: "copilot", sessionId: "copilot-session", ok: true },
+    ]);
     store.insertTurn({
       turnId: `${ref}:100:aaaaaaaa`,
       conversationId,

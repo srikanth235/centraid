@@ -28,16 +28,13 @@ import type {
   ConversationTurnAttachment,
   TurnNode,
 } from "../conversation/history.js";
-import { compileHydrationPlan } from "../conversation/hydration.js";
 import { TURN_POSTURES } from "../conversation/posture.js";
 import type {
   ConversationTurnInput,
   ConversationRunner,
-  TurnResumePlan,
   TurnStreamEvent,
 } from "../conversation/runner.js";
 import type * as TypeImport_wkgbyq from "../conversation/schema.js";
-import type { TurnAttachment } from "../conversation/turn.js";
 import type * as TypeImport_nu6ai6 from "../conversation/turn.js";
 import { costForUsage } from "../model-pricing.js";
 import { SseStream } from "./sse-stream.js";
@@ -492,105 +489,24 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         const targetHarnessKind =
           opts.harnessKind ?? (await runner.resolveHarnessKind?.());
         // The harness failover ladder can land on a provider this route never
-        // targeted, and every provider has its OWN binding and its OWN hydration
-        // watermark. So resume + hydration are resolved PER RUNG, on demand,
-        // through `resumeForKind` — one planned-once-per-kind memo. Resolving it
-        // eagerly against the primary target and reusing that plan down the
-        // ladder silently dropped the whole conversation whenever rung 0 was
-        // skipped (breaker open), and folded the full ledger on every turn even
-        // when no rung ever needed it.
-        const resumeStates = new Map<
-          string,
-          ReturnType<ConversationHistoryStore["getAdapterResumeState"]>
-        >();
-        const resumeStateFor = (
-          kind: string | undefined
-        ): ReturnType<ConversationHistoryStore["getAdapterResumeState"]> => {
-          if (!conversationStore) return undefined;
-          const key = kind ?? "";
-          if (resumeStates.has(key)) return resumeStates.get(key);
-          const state = kind
-            ? conversationStore.getAdapterResumeState(
-                appId,
-                conversationId,
-                kind
-              )
-            : conversationStore.getAdapterResumeState(appId, conversationId);
-          resumeStates.set(key, state);
-          return state;
-        };
-        const resume = resumeStateFor(targetHarnessKind);
-        const plans = new Map<string, TurnResumePlan>();
-        const planFor = (kind: string): TurnResumePlan => {
-          const cached = plans.get(kind);
-          if (cached) return cached;
-          const store = conversationStore!;
-          const state = resumeStateFor(kind);
-          const compile = (
-            afterSeq: number
-          ): {
-            context?: TurnResumePlan["hydrationContext"];
-            attachments: TurnAttachment[];
-          } => {
-            const delta = store.getHydrationDelta(
-              appId,
-              conversationId,
-              afterSeq
-            );
-            if (!delta || delta.messages.length === 0)
-              return { attachments: [] };
-            const compiled = compileHydrationPlan(delta.messages, {
-              ...TURN_POSTURES.chat.hydration,
-              includeAttachmentReferences: true,
-            });
-            if (compiled.includedTurns === 0) return { attachments: [] };
-            return {
-              context: {
-                prompt: compiled.prompt,
-                includedTurns: compiled.includedTurns,
-                omittedTurns: compiled.omittedTurns,
-                estimatedTokens: compiled.estimatedTokens,
-              },
-              attachments: compiled.attachments.map((attachment) => ({
-                path: store.blobPathFor(appId, attachment.hash),
-                mime: attachment.mime,
-                ...(attachment.filename
-                  ? { filename: attachment.filename }
-                  : {}),
-              })),
-            };
-          };
-          // Without a resumable session id this rung starts cold, so its delta is
-          // the whole ledger — and the recovery plan would be that same fold.
-          const watermark = state?.sessionId
-            ? (state.hydratedThroughSeq ?? -1)
-            : -1;
-          const handoff = compile(watermark);
-          const recovery = state?.sessionId
-            ? watermark === -1
-              ? handoff
-              : compile(-1)
-            : undefined;
-          const plan: TurnResumePlan = {
-            ...(state?.sessionId ? { sessionId: state.sessionId } : {}),
-            ...(state?.bindingId ? { bindingId: state.bindingId } : {}),
-            ...(state?.usageSnapshot
-              ? { usageSnapshot: state.usageSnapshot }
-              : {}),
-            ...(handoff.context ? { hydrationContext: handoff.context } : {}),
-            ...(handoff.attachments.length > 0
-              ? { hydrationAttachments: handoff.attachments }
-              : {}),
-            ...(recovery?.context
-              ? { recoveryHydrationContext: recovery.context }
-              : {}),
-            ...(recovery && recovery.attachments.length > 0
-              ? { recoveryHydrationAttachments: recovery.attachments }
-              : {}),
-          };
-          plans.set(kind, plan);
-          return plan;
-        };
+        // targeted, and every provider has its OWN binding and its OWN
+        // hydration watermark. `HarnessSessions` owns both, keyed by harness
+        // kind, and the spine asks it per rung: resolving one plan eagerly
+        // against the primary target and reusing it down the ladder silently
+        // dropped the whole conversation whenever rung 0 was skipped (breaker
+        // open), and folded the full ledger on every turn even when no rung
+        // ever needed it. It also settles every binding the turn touched and
+        // retires the ones a harness abandoned.
+        const harnessSessions = conversationStore?.harnessSessions(
+          appId,
+          conversationId,
+          TURN_POSTURES.chat.hydration
+        );
+        const resume = conversationStore?.getAdapterResumeState(
+          appId,
+          conversationId,
+          targetHarnessKind
+        );
         const input: ConversationTurnInput = {
           appId,
           dataDir: opts.dataDir,
@@ -624,10 +540,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
             ? { activeHarnessKind: conversationMeta.harnessKind }
             : {}),
           ...(resume?.sessionId
-            ? {
-                prevAdapterSessionId: resume.sessionId,
-                prevBindingId: resume.bindingId,
-              }
+            ? { prevAdapterSessionId: resume.sessionId }
             : opts.prevAdapterSessionId
               ? { prevAdapterSessionId: opts.prevAdapterSessionId }
               : {}),
@@ -641,7 +554,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
             : opts.prevAdapterUsageSnapshot
               ? { prevAdapterUsageSnapshot: opts.prevAdapterUsageSnapshot }
               : {}),
-          ...(conversationStore ? { resumeForKind: planFor } : {}),
+          ...(harnessSessions ? { harnessSessions } : {}),
         };
         let runResult:
           | {
@@ -664,27 +577,6 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           req.off("close", onClientClose);
           req.off("error", onClientClose);
           if (conversationStore && !acc.consentRequired) {
-            // Retire a binding the adapter had to abandon (D9). `hydrationKind:
-            // 'recovery'` means the resume handle we handed this harness was
-            // rejected and it self-healed onto a fresh session. Left `active`,
-            // that dead handle would be re-offered on every subsequent turn,
-            // paying a failed resume + a full-ledger recovery fold each time.
-            if (
-              runResult?.hydrationKind === "recovery" &&
-              runResult.harnessKind
-            ) {
-              const dead = plans.get(runResult.harnessKind);
-              if (
-                dead?.bindingId &&
-                dead.sessionId !== runResult.adapterSessionId
-              ) {
-                conversationStore.markAdapterBindingStale(
-                  appId,
-                  conversationId,
-                  dead.bindingId
-                );
-              }
-            }
             // Whether this conversation is still unnamed BEFORE we record — an
             // empty title is the "first turn of a new thread" signal (recordTurn
             // sets the derived truncation below). Read once here so the auto-title
@@ -782,6 +674,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
                   endedAt,
                 });
               }
+              const bindings = harnessSessions?.bindings ?? [];
               conversationStore.recordTurn(appId, {
                 conversationId,
                 // The runner's surface decides the ledger kind: the builder-capable
@@ -821,34 +714,9 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
                 ...(runResult?.hydrationTokens === undefined
                   ? {}
                   : { hydrationTokens: runResult.hydrationTokens }),
-                ...(acc.errorMessage === undefined && runResult?.harnessKind
-                  ? {
-                      adapter: {
-                        kind: runResult.harnessKind,
-                        ...(runResult.adapterSessionId
-                          ? { sessionId: runResult.adapterSessionId }
-                          : {}),
-                        ...(runResult.adapterUsageSnapshot
-                          ? { usageSnapshot: runResult.adapterUsageSnapshot }
-                          : {}),
-                        ...(runResult.hydrated ? { hydrated: true } : {}),
-                      },
-                    }
-                  : {}),
-                ...(acc.errorMessage !== undefined && runResult?.harnessKind
-                  ? {
-                      failedAdapter: {
-                        kind: runResult.harnessKind,
-                        ...(runResult.adapterSessionId
-                          ? { sessionId: runResult.adapterSessionId }
-                          : {}),
-                        ...(runResult.adapterUsageSnapshot
-                          ? { usageSnapshot: runResult.adapterUsageSnapshot }
-                          : {}),
-                        ...(runResult.hydrated ? { hydrated: true } : {}),
-                      },
-                    }
-                  : {}),
+                // Every binding the turn touched, from the one owner that
+                // handed each rung its plan — not just the rung that answered.
+                ...(bindings.length > 0 ? { bindings } : {}),
               });
             } catch {
               /* best-effort — a ledger miss never fails the turn */

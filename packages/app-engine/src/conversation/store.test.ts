@@ -33,15 +33,18 @@ describe("ConversationStore — conversations", () => {
       appId: "app",
     });
     expect(
-      store.noteTurn(conv.id, "u1", {
-        kind: "codex",
-        sessionId: "session-1",
-        usageSnapshot: {
-          inputTokens: 120,
-          outputTokens: 30,
-          cost: { amount: 0.4, currency: "USD" },
+      store.noteTurn(conv.id, "u1", [
+        {
+          kind: "codex",
+          sessionId: "session-1",
+          usageSnapshot: {
+            inputTokens: 120,
+            outputTokens: 30,
+            cost: { amount: 0.4, currency: "USD" },
+          },
+          ok: true,
         },
-      })
+      ])
     ).toBe(true);
     expect(store.getConversation(conv.id)).toMatchObject({
       harnessKind: "codex",

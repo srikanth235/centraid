@@ -325,7 +325,9 @@ describe("run-automation-dispatch suite", () => {
       ok: true,
       summary: "A first answer",
     });
-    seed.noteTurn(ref, "", { kind: "codex", sessionId: "session-a" });
+    seed.noteTurn(ref, "", [
+      { kind: "codex", sessionId: "session-a", ok: true },
+    ]);
     seed.close();
 
     const claude = stubBackendRunTurn("claude-code", (input) => {

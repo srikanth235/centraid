@@ -486,7 +486,9 @@ describe("issue #679 user-facing quality gates", () => {
         endedAt: index * 2 + 2,
       })),
       finalText: "done",
-      adapter: { kind: HARNESS_KINDS[0]!, sessionId: "quality-mcp" },
+      bindings: [
+        { kind: HARNESS_KINDS[0]!, sessionId: "quality-mcp", ok: true },
+      ],
       startedAt: 1,
       endedAt: 20,
       ok: true,

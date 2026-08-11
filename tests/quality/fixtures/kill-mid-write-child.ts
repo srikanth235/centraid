@@ -83,7 +83,7 @@ if (faultPoint === "journal-after-append") {
     userMessage: "acknowledged journal input",
     nodes: [],
     finalText: "acknowledged journal output",
-    adapter: { kind: "codex", sessionId: "quality-crash" },
+    bindings: [{ kind: "codex", sessionId: "quality-crash", ok: true }],
     startedAt: 1,
     endedAt: 2,
     ok: true,

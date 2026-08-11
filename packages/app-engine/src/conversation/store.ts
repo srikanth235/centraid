@@ -41,6 +41,10 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 import type { DatabaseProvider } from "../stores/gateway-db.js";
+import { HarnessSessions } from "./harness-sessions.js";
+import type { TouchedHarnessBinding } from "./harness-sessions.js";
+import { hydrationMessagesFromLedger } from "./hydration.js";
+import type { TurnPosture } from "./posture.js";
 import type { ArchiveSegmentRef } from "./rehydrate.js";
 import type {
   Conversation,
@@ -583,34 +587,44 @@ export class ConversationStore {
     stmts.touchConversation.run(now, id, userId);
   }
 
-  /** Bump turn_count + updated_at; optionally persist the harness-resume handle. */
+  /**
+   * Bump turn_count + updated_at and settle EVERY binding the turn touched.
+   *
+   * One turn can drive more than one harness (a chat failover rung, a fire
+   * whose handler delegates twice), and each of those bindings has its own
+   * opaque session id and its own hydration watermark. Settling only the last
+   * one left the others resumable against a watermark they had already moved
+   * past — the one-observed-harness-per-turn limit #743 deletes. Bindings
+   * settle in touch order, so the LAST one is what the conversation row
+   * records as active.
+   */
   noteTurn(
     id: string,
     userId: string,
-    adapter?: {
-      kind: string;
-      sessionId?: string;
-      usageSnapshot?: AdapterUsageSnapshot;
-      hydrated?: boolean;
-    }
+    bindings: readonly TouchedHarnessBinding[] = []
   ): boolean {
     const { db, stmts } = this.ensureReady();
     const now = Date.now();
-    const hydrated = adapter?.hydrated === true ? 1 : 0;
-    let res;
-    if (adapter && adapter.sessionId !== undefined) {
-      // `turns.seq` starts at 0, so -1 — not 0 — is the "nothing hydrated yet"
-      // sentinel. A 0 here would silently exclude the first turn from every
-      // later delta hydration (`seq > afterSeq`).
-      const maxSeq = Number(
-        (
-          db
-            .prepare(
-              `SELECT COALESCE(MAX(seq), -1) AS seq FROM turns WHERE conversation_id = ?`
-            )
-            .get(id) as { seq: number }
-        ).seq
-      );
+    // `turns.seq` starts at 0, so -1 — not 0 — is the "nothing hydrated yet"
+    // sentinel. A 0 here would silently exclude the first turn from every
+    // later delta hydration (`seq > afterSeq`).
+    const maxSeq = Number(
+      (
+        db
+          .prepare(
+            `SELECT COALESCE(MAX(seq), -1) AS seq FROM turns WHERE conversation_id = ?`
+          )
+          .get(id) as { seq: number }
+      ).seq
+    );
+    for (const binding of bindings) {
+      if (binding.sessionId === undefined) continue;
+      // A rung that errored settles its cumulative usage and nothing else —
+      // it never showed the model the turn a watermark would claim it saw.
+      if (!binding.ok) {
+        this.settleFailedBinding(id, binding, now);
+        continue;
+      }
       // Preserve one active + at most one warm process candidate without
       // discarding older valid resume handles. A displaced warm binding
       // becomes cold (durable but no longer process-warm); stale is reserved
@@ -627,21 +641,21 @@ export class ConversationStore {
         | undefined;
       const activeChanges =
         active !== undefined &&
-        (active.harness_kind !== adapter.kind ||
-          active.acp_session_id !== adapter.sessionId);
+        (active.harness_kind !== binding.kind ||
+          active.acp_session_id !== binding.sessionId);
       if (activeChanges) {
         db.prepare(
           `UPDATE conversation_harness_sessions
               SET status = 'cold'
             WHERE conversation_id = ? AND status = 'warm'
               AND NOT (harness_kind = ? AND acp_session_id = ?)`
-        ).run(id, adapter.kind, adapter.sessionId);
+        ).run(id, binding.kind, binding.sessionId);
         db.prepare(
           `UPDATE conversation_harness_sessions
               SET status = 'warm'
             WHERE conversation_id = ? AND status = 'active'
               AND NOT (harness_kind = ? AND acp_session_id = ?)`
-        ).run(id, adapter.kind, adapter.sessionId);
+        ).run(id, binding.kind, binding.sessionId);
       }
       db.prepare(
         `INSERT INTO conversation_harness_sessions (
@@ -659,9 +673,9 @@ export class ConversationStore {
       ).run(
         randomUUID(),
         id,
-        adapter.kind,
-        adapter.sessionId,
-        adapter.usageSnapshot ? JSON.stringify(adapter.usageSnapshot) : null,
+        binding.kind,
+        binding.sessionId,
+        binding.usageSnapshot ? JSON.stringify(binding.usageSnapshot) : null,
         maxSeq,
         now,
         now
@@ -675,21 +689,46 @@ export class ConversationStore {
             AND harness_kind = ?
             AND acp_session_id <> ?
             AND status <> 'stale'`
-      ).run(id, adapter.kind, adapter.sessionId);
-      res = stmts.noteTurnWithAdapter.run(
-        now,
-        adapter.kind,
-        adapter.sessionId,
-        adapter.usageSnapshot ? JSON.stringify(adapter.usageSnapshot) : null,
-        hydrated,
-        hydrated,
-        now,
-        id,
-        userId
-      );
-      // `noteTurn` is normally called from the same transaction that inserted
-      // the just-completed turn. Set the watermark after the conversation
-      // update as well, so it always observes that transaction's final seq.
+      ).run(id, binding.kind, binding.sessionId);
+    }
+    // The conversation row carries ONE denormalized active harness; the last
+    // DELIVERED binding is it. Hydration is counted per binding that consumed
+    // a fold, so a two-harness turn that re-folded twice reads as two.
+    const delivered = bindings.filter((binding) => binding.ok);
+    const last = delivered.at(-1);
+    const hydratedCount = delivered.filter(
+      (binding) => binding.hydrated === true
+    ).length;
+    const hydrated = hydratedCount > 0 ? 1 : 0;
+    const res =
+      last === undefined
+        ? stmts.noteTurnNoAdapter.run(now, id, userId)
+        : last.sessionId === undefined
+          ? stmts.noteTurnKindOnly.run(
+              now,
+              last.kind,
+              hydratedCount,
+              hydrated,
+              now,
+              id,
+              userId
+            )
+          : stmts.noteTurnWithAdapter.run(
+              now,
+              last.kind,
+              last.sessionId,
+              last.usageSnapshot ? JSON.stringify(last.usageSnapshot) : null,
+              hydratedCount,
+              hydrated,
+              now,
+              id,
+              userId
+            );
+    // `noteTurn` is normally called from the same transaction that inserted
+    // the just-completed turn. Set each watermark after the conversation
+    // update as well, so it always observes that transaction's final seq.
+    for (const binding of delivered) {
+      if (binding.sessionId === undefined) continue;
       db.prepare(
         `UPDATE conversation_harness_sessions
             SET hydrated_through_seq = MAX(
@@ -697,19 +736,7 @@ export class ConversationStore {
               (SELECT COALESCE(MAX(seq), -1) FROM turns WHERE conversation_id = ?)
             )
           WHERE conversation_id = ? AND harness_kind = ? AND acp_session_id = ?`
-      ).run(id, id, adapter.kind, adapter.sessionId);
-    } else if (adapter) {
-      res = stmts.noteTurnKindOnly.run(
-        now,
-        adapter.kind,
-        hydrated,
-        hydrated,
-        now,
-        id,
-        userId
-      );
-    } else {
-      res = stmts.noteTurnNoAdapter.run(now, id, userId);
+      ).run(id, id, binding.kind, binding.sessionId);
     }
     return Number(res.changes) > 0;
   }
@@ -717,11 +744,10 @@ export class ConversationStore {
   /**
    * Commit a completed failed turn without changing the active provider.
    *
-   * If the failed prompt ran against an already-known exact session, advance
-   * only that binding's cumulative accounting. A new target session is
-   * deliberately not inserted: failure must never replace the prior active
-   * binding, while an existing session must not double-book cumulative usage
-   * on its next resume.
+   * Every binding the turn touched advances only its cumulative accounting.
+   * New target sessions are deliberately not inserted: failure must never
+   * replace the prior active binding, while an existing session must not
+   * double-book cumulative usage on its next resume.
    *
    * The hydration watermark is deliberately NOT advanced: the failed turn's
    * user message never reached the model, so it must stay inside the next
@@ -730,41 +756,98 @@ export class ConversationStore {
   noteFailedTurn(
     id: string,
     userId: string,
-    adapter?: {
-      kind: string;
-      sessionId?: string;
-      usageSnapshot?: AdapterUsageSnapshot;
-      hydrated?: boolean;
-    }
+    bindings: readonly TouchedHarnessBinding[] = []
   ): boolean {
     const { db, stmts } = this.ensureReady();
     const now = Date.now();
     const res = stmts.noteTurnNoAdapter.run(now, id, userId);
     if (Number(res.changes) === 0) return false;
-    if (adapter?.sessionId) {
+    for (const binding of bindings) {
+      this.settleFailedBinding(id, binding, now);
+    }
+    const hydratedCount = bindings.filter(
+      (binding) => binding.hydrated === true
+    ).length;
+    if (hydratedCount > 0) {
       db.prepare(
+        `UPDATE conversations
+            SET hydration_count = hydration_count + ?,
+                last_hydrated_at = ?
+          WHERE id = ? AND user_id = ?`
+      ).run(hydratedCount, now, id, userId);
+    }
+    return true;
+  }
+
+  /**
+   * Cumulative accounting for a binding whose dispatch did not deliver: no new
+   * row is inserted (failure must never replace the prior active binding) and
+   * no watermark moves — only the usage snapshot the failed attempt already
+   * burned, so the next resume of that session cannot double-book it.
+   */
+  private settleFailedBinding(
+    id: string,
+    binding: TouchedHarnessBinding,
+    now: number
+  ): void {
+    if (!binding.sessionId) return;
+    this.ensureReady()
+      .db.prepare(
         `UPDATE conversation_harness_sessions
             SET usage_snapshot_json = COALESCE(?, usage_snapshot_json),
                 last_used_at = ?
           WHERE conversation_id = ? AND harness_kind = ? AND acp_session_id = ?
             AND status <> 'stale'`
-      ).run(
-        adapter.usageSnapshot ? JSON.stringify(adapter.usageSnapshot) : null,
+      )
+      .run(
+        binding.usageSnapshot ? JSON.stringify(binding.usageSnapshot) : null,
         now,
         id,
-        adapter.kind,
-        adapter.sessionId
+        binding.kind,
+        binding.sessionId
       );
+  }
+
+  /**
+   * The turn's binding/resume/watermark owner for this conversation, over the
+   * journal ledger directly. The automation fire, the headless compile, and
+   * interactive steering all reach a harness through this; the app-scoped chat
+   * driver gets the same owner from `ConversationHistoryStore`.
+   */
+  harnessSessions(
+    conversationRef: string,
+    options: {
+      hydration: TurnPosture["hydration"];
+      /** Resolve a historical upload hash into this conversation's blob CAS. */
+      attachmentPath?: (hash: string) => string;
     }
-    if (adapter?.hydrated) {
-      db.prepare(
-        `UPDATE conversations
-            SET hydration_count = hydration_count + 1,
-                last_hydrated_at = ?
-          WHERE id = ? AND user_id = ?`
-      ).run(now, id, userId);
-    }
-    return true;
+  ): HarnessSessions {
+    return new HarnessSessions(
+      {
+        binding: (harnessKind) => {
+          const row = this.getHarnessBinding(conversationRef, harnessKind);
+          if (!row) return undefined;
+          return {
+            bindingId: row.id,
+            sessionId: row.acpSessionId,
+            ...(row.usageSnapshot ? { usageSnapshot: row.usageSnapshot } : {}),
+            hydratedThroughSeq: row.hydratedThroughSeq,
+          };
+        },
+        hydrationMessages: (afterSeq) =>
+          hydrationMessagesFromLedger(
+            this.listTurns(conversationRef),
+            (turnId) => this.listItems(turnId),
+            (itemId) => this.listAttachmentsForItem(itemId),
+            afterSeq
+          ),
+        retire: (bindingId) => this.markHarnessBindingStale(bindingId),
+        ...(options.attachmentPath
+          ? { attachmentPath: options.attachmentPath }
+          : {}),
+      },
+      options.hydration
+    );
   }
 
   /** Latest non-stale resumable session for this conversation + harness. */

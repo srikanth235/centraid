@@ -9,6 +9,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { Dispatcher } from "../handlers/dispatcher.js";
+import { HarnessSessions } from "./harness-sessions.js";
+import { TURN_POSTURES } from "./posture.js";
 import { makeConversationRunnerCore } from "./runner-core.js";
 import type { ConversationTurnInput, TurnStreamEvent } from "./runner.js";
 import type {
@@ -185,31 +187,36 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
       },
     });
 
-    await runner.run(
-      turnInput({
-        prevHarnessKind: "codex",
-        resumeForKind: (kind) => {
-          planned.push(kind);
-          // The primary is caught up (nothing to replay); the fallback has
-          // never seen this conversation and needs the whole ledger.
+    // The real owner over a stub ledger: codex is caught up at the ledger's
+    // head; claude-code has never seen this conversation, so its watermark is
+    // -1 and its fold is the whole thing.
+    const harnessSessions = new HarnessSessions(
+      {
+        binding: (kind) => {
+          planned.push(kind as HarnessPrefs["kind"]);
           return kind === "codex"
-            ? { sessionId: "codex-session", bindingId: "binding-codex" }
-            : {
-                hydrationContext: {
-                  prompt: "earlier turns",
-                  includedTurns: 3,
-                  omittedTurns: 0,
-                  estimatedTokens: 42,
-                },
-              };
+            ? {
+                bindingId: "binding-codex",
+                sessionId: "codex-session",
+                hydratedThroughSeq: 0,
+              }
+            : undefined;
         },
-      })
+        hydrationMessages: (afterSeq) =>
+          afterSeq >= 0
+            ? []
+            : [{ payload: { kind: "user", text: "earlier turns" } }],
+        retire: () => undefined,
+      },
+      TURN_POSTURES.chat.hydration
     );
+
+    await runner.run(turnInput({ prevHarnessKind: "codex", harnessSessions }));
 
     // Only the rung actually attempted is planned — no wasted ledger folds.
     expect(planned).toStrictEqual(["claude-code"]);
     expect(seen?.prevSessionId).toBeUndefined();
-    expect(seen?.hydrationContext).toBe("earlier turns");
+    expect(seen?.hydrationContext).toContain("earlier turns");
     expect(seen?.forceHydration).toBe(true);
   });
 

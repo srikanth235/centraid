@@ -60,6 +60,19 @@ export {
 // The four callers' postures (#743) — one table, read by every caller that
 // drives a turn, so consent/hydration/permission policy cannot fork per path.
 export { TURN_POSTURES, type TurnPosture } from "./conversation/posture.js";
+// One actor per (conversationRef, harnessKind) (#743): binding row, resume
+// decision, hydration watermark, warm-process association. Both stores hand
+// one out (`ConversationStore.harnessSessions` / the history facade's), so no
+// caller re-derives "which session does THIS harness resume".
+export {
+  HarnessSessions,
+  type HarnessBindingRow,
+  type HarnessSessionsLedger,
+  type HydrationContext,
+  type ObservedHarnessTurn,
+  type TouchedHarnessBinding,
+  type TurnResumePlan,
+} from "./conversation/harness-sessions.js";
 export {
   buildExtraPrompt,
   type BuildExtraPromptInput,

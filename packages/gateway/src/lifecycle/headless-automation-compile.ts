@@ -2,12 +2,7 @@ import { randomUUID } from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#567) the headless compile boundary is one lock/hydration/failover/ledger transaction; splitting settlement from dispatch would obscure its exactly-once guarantees
 import path from "node:path";
 
-import {
-  compileHydrationPlan,
-  hydrationMessagesFromLedger,
-  resolveItemCost,
-  TURN_POSTURES,
-} from "@centraid/app-engine";
+import { resolveItemCost, TURN_POSTURES } from "@centraid/app-engine";
 import type {
   ConversationRunner,
   ProviderConsentSource,
@@ -15,7 +10,6 @@ import type {
   HarnessKind,
   TurnStreamEvent,
 } from "@centraid/app-engine";
-import type * as TypeImport_4y0tle from "@centraid/app-engine";
 import { validateManifest } from "@centraid/automation";
 import type { Manifest, ManifestVaultScope } from "@centraid/automation";
 
@@ -314,37 +308,15 @@ export async function runHeadlessAutomationCompile(
       throw new Error(
         `automation conversation "${conversationId}" was not created`
       );
-    const binding = opts.harnessKind
-      ? store.getHarnessBinding(conversationId, opts.harnessKind)
-      : undefined;
-    const turnsBeforeCurrent = store.listTurns(conversationId);
-    const hydrationMessages = hydrationMessagesFromLedger(
-      turnsBeforeCurrent,
-      (turnId) => store.listItems(turnId),
-      (itemId) => store.listAttachmentsForItem(itemId),
-      binding?.hydratedThroughSeq ?? -1
-    );
-    const recoveryMessages = binding
-      ? hydrationMessagesFromLedger(
-          turnsBeforeCurrent,
-          (turnId) => store.listItems(turnId),
-          (itemId) => store.listAttachmentsForItem(itemId)
-        )
-      : [];
-    const hydrationPlan =
-      hydrationMessages.length > 0
-        ? compileHydrationPlan(hydrationMessages, {
-            ...TURN_POSTURES.compile.hydration,
-            includeAttachmentReferences: true,
-          })
-        : undefined;
-    const recoveryHydrationPlan =
-      recoveryMessages.length > 0
-        ? compileHydrationPlan(recoveryMessages, {
-            ...TURN_POSTURES.compile.hydration,
-            includeAttachmentReferences: true,
-          })
-        : undefined;
+    // Binding, resume handle, watermark and the budgeted fold are one owner's
+    // job, keyed per harness — the compile asks it per rung through the runner
+    // instead of planning once against the harness it happened to name.
+    const harnessSessions = store.harnessSessions(conversationId, {
+      hydration: TURN_POSTURES.compile.hydration,
+      ...(opts.hydrationAttachmentPath
+        ? { attachmentPath: opts.hydrationAttachmentPath }
+        : {}),
+    });
     const startedAt = Date.now();
     const message = HEADLESS_COMPILE_WORK_ORDER(
       opts.instructions,
@@ -393,15 +365,6 @@ export async function runHeadlessAutomationCompile(
     let rawJson: string | undefined;
     let stopReason: string | undefined;
     let usage: UsageEvent | undefined;
-    let adapter:
-      | {
-          adapterSessionId?: string;
-          harnessKind?: string;
-          adapterUsageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
-          hydrated?: boolean;
-          hydrationTokens?: number;
-        }
-      | undefined;
     const onEvent = (event: TurnStreamEvent): void => {
       if (event.type === "final") {
         finalText = event.text;
@@ -462,84 +425,28 @@ export async function runHeadlessAutomationCompile(
       // Claude adapter pins bypassPermissions and its Codex adapter pins
       // approvalPolicy=never + workspace-write. There is deliberately no
       // per-turn escape hatch on ConversationRunner that can weaken this.
-      adapter =
-        (await opts.runner.run({
-          appId: opts.appId,
-          draftSessionId: opts.draftSessionId,
-          dataDir: opts.dataDir,
-          conversationId,
-          sessionFile: path.join(
-            opts.runnerSessionDir,
-            `${encodeURIComponent(conversationId)}.jsonl`
-          ),
-          message,
-          register: "build",
-          extraSystemPrompt: "",
-          ...(opts.harnessKind ? { harnessKind: opts.harnessKind } : {}),
-          ...(opts.model ? { model: opts.model } : {}),
-          ...(opts.configPins ? { configPins: opts.configPins } : {}),
-          ...(conversation.harnessKind
-            ? { activeHarnessKind: conversation.harnessKind }
-            : {}),
-          ...(binding?.acpSessionId
-            ? {
-                prevAdapterSessionId: binding.acpSessionId,
-                prevBindingId: binding.id,
-              }
-            : {}),
-          ...(binding ? { prevHarnessKind: binding.kind } : {}),
-          ...(binding?.usageSnapshot
-            ? { prevAdapterUsageSnapshot: binding.usageSnapshot }
-            : {}),
-          ...(hydrationPlan
-            ? {
-                hydrationContext: {
-                  prompt: hydrationPlan.prompt,
-                  includedTurns: hydrationPlan.includedTurns,
-                  omittedTurns: hydrationPlan.omittedTurns,
-                  estimatedTokens: hydrationPlan.estimatedTokens,
-                },
-              }
-            : {}),
-          ...(opts.hydrationAttachmentPath && hydrationPlan?.attachments.length
-            ? {
-                hydrationAttachments: hydrationPlan.attachments.map(
-                  (attachment) => ({
-                    path: opts.hydrationAttachmentPath!(attachment.hash),
-                    mime: attachment.mime,
-                    ...(attachment.filename
-                      ? { filename: attachment.filename }
-                      : {}),
-                  })
-                ),
-              }
-            : {}),
-          ...(recoveryHydrationPlan
-            ? {
-                recoveryHydrationContext: {
-                  prompt: recoveryHydrationPlan.prompt,
-                  includedTurns: recoveryHydrationPlan.includedTurns,
-                  omittedTurns: recoveryHydrationPlan.omittedTurns,
-                  estimatedTokens: recoveryHydrationPlan.estimatedTokens,
-                },
-              }
-            : {}),
-          ...(opts.hydrationAttachmentPath &&
-          recoveryHydrationPlan?.attachments.length
-            ? {
-                recoveryHydrationAttachments:
-                  recoveryHydrationPlan.attachments.map((attachment) => ({
-                    path: opts.hydrationAttachmentPath!(attachment.hash),
-                    mime: attachment.mime,
-                    ...(attachment.filename
-                      ? { filename: attachment.filename }
-                      : {}),
-                  })),
-              }
-            : {}),
-          abortSignal: new AbortController().signal,
-          onEvent,
-        })) ?? undefined;
+      await opts.runner.run({
+        appId: opts.appId,
+        draftSessionId: opts.draftSessionId,
+        dataDir: opts.dataDir,
+        conversationId,
+        sessionFile: path.join(
+          opts.runnerSessionDir,
+          `${encodeURIComponent(conversationId)}.jsonl`
+        ),
+        message,
+        register: "build",
+        extraSystemPrompt: "",
+        ...(opts.harnessKind ? { harnessKind: opts.harnessKind } : {}),
+        ...(opts.model ? { model: opts.model } : {}),
+        ...(opts.configPins ? { configPins: opts.configPins } : {}),
+        ...(conversation.harnessKind
+          ? { activeHarnessKind: conversation.harnessKind }
+          : {}),
+        harnessSessions,
+        abortSignal: new AbortController().signal,
+        onEvent,
+      });
       if (errorMessage) throw new Error(errorMessage);
       await opts.onSuccess();
       const endedAt = Date.now();
@@ -576,25 +483,10 @@ export async function runHeadlessAutomationCompile(
                 }),
               }),
         });
-        if (adapter?.hydrationTokens !== undefined) {
-          store.setTurnHydrationTokens(runId, adapter.hydrationTokens);
+        if (harnessSessions.hydrationTokens > 0) {
+          store.setTurnHydrationTokens(runId, harnessSessions.hydrationTokens);
         }
-        store.noteTurn(
-          conversationId,
-          "",
-          adapter?.harnessKind
-            ? {
-                kind: adapter.harnessKind,
-                ...(adapter.adapterSessionId
-                  ? { sessionId: adapter.adapterSessionId }
-                  : {}),
-                ...(adapter.adapterUsageSnapshot
-                  ? { usageSnapshot: adapter.adapterUsageSnapshot }
-                  : {}),
-                ...(adapter.hydrated ? { hydrated: true } : {}),
-              }
-            : undefined
-        );
+        store.noteTurn(conversationId, "", harnessSessions.bindings);
       });
     } catch (error) {
       const messageLocal =
@@ -631,22 +523,10 @@ export async function runHeadlessAutomationCompile(
                 outputJson: JSON.stringify({ stopReason, error: messageLocal }),
               }),
         });
-        if (adapter?.hydrationTokens !== undefined) {
-          store.setTurnHydrationTokens(runId, adapter.hydrationTokens);
+        if (harnessSessions.hydrationTokens > 0) {
+          store.setTurnHydrationTokens(runId, harnessSessions.hydrationTokens);
         }
-        const observedHarness = adapter?.harnessKind
-          ? {
-              kind: adapter.harnessKind,
-              ...(adapter.adapterSessionId
-                ? { sessionId: adapter.adapterSessionId }
-                : {}),
-              ...(adapter.adapterUsageSnapshot
-                ? { usageSnapshot: adapter.adapterUsageSnapshot }
-                : {}),
-              ...(adapter.hydrated ? { hydrated: true } : {}),
-            }
-          : undefined;
-        store.noteFailedTurn(conversationId, "", observedHarness);
+        store.noteFailedTurn(conversationId, "", harnessSessions.bindings);
       });
       if (failureClass === undefined) {
         await opts.onFailure?.(messageLocal);

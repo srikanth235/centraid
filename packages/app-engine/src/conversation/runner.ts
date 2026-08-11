@@ -16,6 +16,7 @@
  * frames and pipes them back to the harness client.
  */
 
+import type { HarnessSessions, HydrationContext } from "./harness-sessions.js";
 import type { ConversationWorkspaceKind, RunKind } from "./schema.js";
 import type {
   AdapterUsageSnapshot,
@@ -23,6 +24,8 @@ import type {
   TurnAttachment,
 } from "./turn.js";
 import type * as TypeImport_bjbigq from "./turn.js";
+
+export type { TurnResumePlan } from "./harness-sessions.js";
 
 export type HarnessFailureClass =
   | "spawn"
@@ -263,8 +266,6 @@ export interface ConversationTurnInput {
    * the kind it's about to use — a mid-session harness switch starts fresh.
    */
   prevAdapterSessionId?: string;
-  /** Durable binding row that supplied `prevAdapterSessionId`. */
-  prevBindingId?: string;
   /**
    * Provider that owns the conversation's currently active binding. This is
    * deliberately separate from `prevHarnessKind`: a requested provider may
@@ -276,56 +277,27 @@ export interface ConversationTurnInput {
   /** Cumulative counters stored with the prior ACP session id. */
   prevAdapterUsageSnapshot?: AdapterUsageSnapshot;
   /** Bounded canonical-ledger context available if this turn starts fresh. */
-  hydrationContext?: {
-    prompt: string;
-    includedTurns: number;
-    omittedTurns: number;
-    /** Estimated prompt tokens injected solely to restore ledger context. */
-    estimatedTokens: number;
-  };
+  hydrationContext?: HydrationContext;
   /** Historical files re-attached only if the target advertises their block type. */
   hydrationAttachments?: TypeImport_bjbigq.TurnAttachment[];
   /** Full-ledger recovery plan used only if this harness's own resume handle expired. */
-  recoveryHydrationContext?: {
-    prompt: string;
-    includedTurns: number;
-    omittedTurns: number;
-    /** Estimated prompt tokens injected solely to restore ledger context. */
-    estimatedTokens: number;
-  };
+  recoveryHydrationContext?: HydrationContext;
   /** Full-ledger counterpart to `hydrationAttachments`. */
   recoveryHydrationAttachments?: TypeImport_bjbigq.TurnAttachment[];
   /**
-   * Per-rung resume + hydration planner, injected by the turn driver (which
-   * owns the conversation store). The failover ladder can land on a provider
-   * other than the one the route targeted, and every rung has its OWN binding
-   * and its OWN hydration watermark. Resolving the plan once against the
-   * primary target and reusing it down the ladder loses the whole
-   * conversation: a fallback rung would start with no resume handle AND no
-   * hydration.
+   * The turn's binding/resume/watermark owner, injected by the turn driver
+   * (which owns the conversation store). The failover ladder can land on a
+   * provider other than the one the route targeted, and every rung has its OWN
+   * binding and its OWN hydration watermark; the spine asks this owner per
+   * rung and reports back what each rung actually drove, so every binding the
+   * turn touched settles itself.
    *
-   * Absent on hosts with no conversation store (automation dispatch paths) —
-   * the spine then falls back to the precomputed `prevAdapter*` /
-   * `hydration*` fields above, which is exactly the pre-existing behavior.
+   * Absent on hosts with no conversation store — the spine then falls back to
+   * the precomputed `prevAdapter*` / `hydration*` fields above, which is
+   * exactly the pre-existing behavior.
    */
-  resumeForKind?: (kind: HarnessKind) => TurnResumePlan | undefined;
+  harnessSessions?: HarnessSessions;
   onEvent: (event: TurnStreamEvent) => void;
-}
-
-/** One harness kind's resume handle plus the hydration it would need. */
-export interface TurnResumePlan {
-  /** That harness's own resumable opaque session id, when it has a binding. */
-  sessionId?: string;
-  /** Durable binding row that supplied `sessionId`. */
-  bindingId?: string;
-  /** Cumulative counters stored with `sessionId`. */
-  usageSnapshot?: AdapterUsageSnapshot;
-  /** Ledger delta past THIS binding's watermark (the full ledger when cold). */
-  hydrationContext?: ConversationTurnInput["hydrationContext"];
-  hydrationAttachments?: TypeImport_bjbigq.TurnAttachment[];
-  /** Full-ledger plan used only if `sessionId` turns out to be expired. */
-  recoveryHydrationContext?: ConversationTurnInput["recoveryHydrationContext"];
-  recoveryHydrationAttachments?: TypeImport_bjbigq.TurnAttachment[];
 }
 
 export interface ConversationTurnResult {

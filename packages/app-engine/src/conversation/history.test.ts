@@ -315,7 +315,7 @@ describe(ConversationHistoryStore, () => {
 
     durable.recordTurn(APP, {
       ...turn(session.id, "ask A", "answer A"),
-      adapter: { kind: "codex", sessionId: "codex-session" },
+      bindings: [{ kind: "codex", sessionId: "codex-session", ok: true }],
     });
     const db = journalFor(dir)();
     expect(
@@ -336,7 +336,9 @@ describe(ConversationHistoryStore, () => {
 
     durable.recordTurn(APP, {
       ...turn(session.id, "ask B", "answer B"),
-      adapter: { kind: "claude-code", sessionId: "claude-session" },
+      bindings: [
+        { kind: "claude-code", sessionId: "claude-session", ok: true },
+      ],
     });
     expect(
       durable.getAdapterResumeState(APP, session.id, "claude-code")
@@ -360,7 +362,7 @@ describe(ConversationHistoryStore, () => {
 
     durable.recordTurn(APP, {
       ...turn(session.id, "back to A", "answer A2"),
-      adapter: { kind: "codex", sessionId: "codex-session" },
+      bindings: [{ kind: "codex", sessionId: "codex-session", ok: true }],
     });
     expect(
       durable.getAdapterResumeState(APP, session.id, "codex")
@@ -395,7 +397,14 @@ describe(ConversationHistoryStore, () => {
     durable.markAdapterBindingStale(APP, session.id, bindingId);
     durable.recordTurn(APP, {
       ...turn(session.id, "self heal A", "answer A3"),
-      adapter: { kind: "codex", sessionId: "codex-session-2", hydrated: true },
+      bindings: [
+        {
+          kind: "codex",
+          sessionId: "codex-session-2",
+          hydrated: true,
+          ok: true,
+        },
+      ],
     });
     expect(
       durable.getAdapterResumeState(APP, session.id, "codex")
@@ -472,10 +481,9 @@ describe(ConversationHistoryStore, () => {
     const dir = freshVaultDir();
     const durable = new ConversationHistoryStore(workspaceFor(dir));
     const session = durable.createSession(APP);
-    durable.noteTurn(APP, session.id, {
-      kind: "codex",
-      sessionId: "codex-session",
-    });
+    durable.noteTurn(APP, session.id, [
+      { kind: "codex", sessionId: "codex-session", ok: true },
+    ]);
     const fresh = durable.getAdapterResumeState(APP, session.id, "codex");
     expect(fresh).toMatchObject({
       sessionId: "codex-session",
@@ -506,7 +514,7 @@ describe(ConversationHistoryStore, () => {
     const session = durable.createSession(APP);
     durable.recordTurn(APP, {
       ...turn(session.id, "ask A", "answer A"),
-      adapter: { kind: "codex", sessionId: "codex-session" },
+      bindings: [{ kind: "codex", sessionId: "codex-session", ok: true }],
     });
     expect(
       durable.getAdapterResumeState(APP, session.id, "codex")
@@ -520,7 +528,7 @@ describe(ConversationHistoryStore, () => {
       error: "harness unavailable",
       finalText: undefined,
       nodes: [],
-      failedAdapter: { kind: "codex", sessionId: "codex-session" },
+      bindings: [{ kind: "codex", sessionId: "codex-session", ok: false }],
     });
     const resume = durable.getAdapterResumeState(APP, session.id, "codex");
     expect(resume).toMatchObject({ hydratedThroughSeq: 0 });
@@ -548,7 +556,7 @@ describe(ConversationHistoryStore, () => {
     ] as const) {
       durable.recordTurn(APP, {
         ...turn(session.id, `ask ${index}`, `answer ${index}`),
-        adapter: { kind: index, sessionId: adapter },
+        bindings: [{ kind: index, sessionId: adapter, ok: true }],
       });
     }
 
@@ -607,7 +615,9 @@ describe(ConversationHistoryStore, () => {
 
     durable.recordTurn(APP, {
       ...turn(session.id, "return to codex", "answer A2"),
-      adapter: { kind: "codex", sessionId: "codex-a", hydrated: true },
+      bindings: [
+        { kind: "codex", sessionId: "codex-a", hydrated: true, ok: true },
+      ],
     });
     expect(
       plainRows(
@@ -944,22 +954,23 @@ describe(ConversationHistoryStore, () => {
     expect(s.turnCount).toBe(0);
     expect(s.harnessKind).toBeNull();
 
-    const after1 = store.noteTurn(APP, s.id, {
-      kind: "codex",
-      sessionId: "cx-1",
-    });
+    const after1 = store.noteTurn(APP, s.id, [
+      { kind: "codex", sessionId: "cx-1", ok: true },
+    ]);
     expect(after1?.turnCount).toBe(1);
     expect(after1?.harnessKind).toBe("codex");
     expect(after1?.adapterSessionId).toBe("cx-1");
 
-    // Adapter omitted — counters move, adapter columns stay.
+    // No binding touched — counters move, adapter columns stay.
     const after2 = store.noteTurn(APP, s.id);
     expect(after2?.turnCount).toBe(2);
     expect(after2?.harnessKind).toBe("codex");
     expect(after2?.adapterSessionId).toBe("cx-1");
 
-    // Adapter present but no sessionId — kind updates, session id is kept.
-    const after3 = store.noteTurn(APP, s.id, { kind: "claude-code" });
+    // A binding with no sessionId — kind updates, session id is kept.
+    const after3 = store.noteTurn(APP, s.id, [
+      { kind: "claude-code", ok: true },
+    ]);
     expect(after3?.turnCount).toBe(3);
     expect(after3?.harnessKind).toBe("claude-code");
     expect(after3?.adapterSessionId).toBe("cx-1");

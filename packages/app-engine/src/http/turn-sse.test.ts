@@ -202,7 +202,7 @@ describe("driveTurnOverSse recovery hydration", () => {
           endedAt: 2,
         },
       ],
-      adapter: { kind: "codex", sessionId: "codex-session" },
+      bindings: [{ kind: "codex", sessionId: "codex-session", ok: true }],
     });
 
     // Read the plan DURING the turn: that is when the ladder resolves it, and
@@ -210,8 +210,14 @@ describe("driveTurnOverSse recovery hydration", () => {
     let codex: TurnResumePlan | undefined;
     const runner: ConversationRunner = {
       async run(input) {
-        codex = input.resumeForKind?.("codex");
+        // Stand in for the spine: ask the owner for this rung's plan, then
+        // report back what the rung drove.
+        codex = input.harnessSessions?.plan("codex");
         input.onEvent({ type: "final", text: "next answer" });
+        input.harnessSessions?.observe("codex", {
+          harnessKind: "codex",
+          sessionId: "codex-session",
+        });
         return { harnessKind: "codex", adapterSessionId: "codex-session" };
       },
     };
@@ -275,7 +281,7 @@ describe("driveTurnOverSse recovery hydration", () => {
       nodes: [
         { kind: "step", text: "earlier answer", startedAt: 1, endedAt: 2 },
       ],
-      adapter: { kind: "codex", sessionId: "codex-session" },
+      bindings: [{ kind: "codex", sessionId: "codex-session", ok: true }],
     });
 
     // Plans must be read DURING the turn — that is when the ladder resolves
@@ -284,9 +290,12 @@ describe("driveTurnOverSse recovery hydration", () => {
     let claude: TurnResumePlan | undefined;
     const runner: ConversationRunner = {
       async run(input) {
-        codex = input.resumeForKind?.("codex");
-        claude = input.resumeForKind?.("claude-code");
+        codex = input.harnessSessions?.plan("codex");
+        claude = input.harnessSessions?.plan("claude-code");
         input.onEvent({ type: "final", text: "ok" });
+        input.harnessSessions?.observe("claude-code", {
+          harnessKind: "claude-code",
+        });
         return { harnessKind: "claude-code" };
       },
     };
@@ -343,7 +352,7 @@ describe("driveTurnOverSse recovery hydration", () => {
       nodes: [
         { kind: "step", text: "earlier answer", startedAt: 1, endedAt: 2 },
       ],
-      adapter: { kind: "codex", sessionId: "dead-session" },
+      bindings: [{ kind: "codex", sessionId: "dead-session", ok: true }],
     });
     const deadBinding = history.getAdapterResumeState(
       "notes",
@@ -355,8 +364,13 @@ describe("driveTurnOverSse recovery hydration", () => {
     // session, but the turn itself fails — so nothing else retires the row.
     const runner: ConversationRunner = {
       async run(input) {
-        input.resumeForKind?.("codex");
+        input.harnessSessions?.plan("codex");
         input.onEvent({ type: "error", message: "model overloaded" });
+        input.harnessSessions?.observeFailure("codex", {
+          harnessKind: "codex",
+          hydrated: true,
+          hydrationKind: "recovery",
+        });
         return {
           harnessKind: "codex",
           hydrated: true,
