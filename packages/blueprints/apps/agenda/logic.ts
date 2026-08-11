@@ -93,11 +93,15 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
    *  from app memory. TWO durable sources, because a settled write leaves the
    *  outbox: the outbox for what is still in flight, the attention journal
    *  for what came back denied/conflicted/failed. Feature-detected because
-   *  the visual-harness mock and older hosts lack both. */
+   *  the visual-harness mock and older hosts lack both.
+   *
+   *  `window.centraid` itself is optional here, not defensively: a remount
+   *  tears the inline bridge down before the next one installs, so a refresh
+   *  already in flight can legitimately outlive the client it started on. */
   async function restorePending(): Promise<void> {
     const [durable, attention] = await Promise.all([
-      window.centraid.pendingWrites?.() ?? [],
-      window.centraid.attentionWrites?.() ?? [],
+      window.centraid?.pendingWrites?.() ?? [],
+      window.centraid?.attentionWrites?.() ?? [],
     ]);
     model.restore(durable);
     model.restoreAttention(attention);

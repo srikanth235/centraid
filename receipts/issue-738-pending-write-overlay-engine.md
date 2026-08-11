@@ -89,6 +89,8 @@ On native, retry re-issues from the journal through `apps/mobile/src/kit/replica
 
 `packages/blueprints/manifest.json` is regenerated for the new app files, and `tests/quality/classification-ratchet.json` re-pins the governed matrix fingerprint (see Decisions).
 
+The issue's requested seat evidence landed as `apps/desktop/tests/e2e/offline-reload.spec.ts`, registered in `apps/desktop/tests/e2e/SCENARIOS.md`: it spawns the real gateway daemon, turns the member's offline-copy switch on through the same handler Settings uses, adds an expense, closes the server, reloads the app while it is still unreachable, and asserts the restored row carries its description, its share, a `pending` chip and a client-stored reason no gateway answer could have supplied. Sabotage-checked — removing only the offline-copy precondition makes the row (and its group) vanish, so the test is not vacuous.
+
 ### Conformance
 
 `scripts/lint-engine-conformance.mjs` gains `checkPendingOverlay`, in the same style as the placement/custody/consent/triage checks: it fails on any reintroduced hand-rolled pending-row collection in `packages/blueprints/apps`, naming the file and line and pointing at the declaration path. Its allowlist is empty and stayed empty. `scripts/lint-engine-conformance.test.mjs` registers engine H in its "no silently empty check" key list.
@@ -117,7 +119,7 @@ On native, retry re-issues from the journal through `apps/mobile/src/kit/replica
 - **Assistant, Insights and Automations surfaces**, which are not replica-write-bearing in this sense.
 - **Any redesign of Approvals/Notifications.** Parked rows link to the existing surface.
 - **An RNTL screen test for mobile pending rows.** `apps/mobile/vitest.projects.ts` admits exactly one React Native component test file, and widening that is shared infrastructure; a plumbing-level restart-survival test over real SQLite files is used instead.
-- **The desktop Playwright offline-reload scenario** named in the issue's Validation section. The behaviour it would cover is asserted at the layers beneath it — the engine's reload law, each app's reload test, and the client store's close-and-reopen contracts — but no browser-level scenario was written, so the seat evidence for web/desktop is unit- and contract-level rather than end to end.
+- **Nothing from the issue's Validation section is outstanding.** The desktop Playwright offline-reload scenario it named is `apps/desktop/tests/e2e/offline-reload.spec.ts`, added in this change set and green locally under `xvfb-run`.
 
 ### Known gaps, stated rather than implied
 
@@ -175,6 +177,12 @@ node --test scripts/lint-engine-conformance.test.mjs
 ```
 
 `bun run check:pr` is the full local mirror of CI and is run before merge.
+
+## User impact
+
+A change you make while your gateway is unreachable now stays visible. Add an expense, a task, an event RSVP or a note offline and the row appears in its own list with a quiet "pending" chip, survives closing and reopening the app, and says plainly what it is waiting for — a connection when you are offline, or the named steward when a shared group needs their approval. The row is drawn from this device's own outbox, so nothing about it depends on reaching the server. A change that comes back refused no longer disappears without explanation: it stays where you left it with the reason, and offers discard, retry, and — where the app has a compose surface bound to that payload — edit, so a rejected entry can be corrected instead of retyped. A change that collided with someone else's edit names both versions rather than reporting a generic failure. The same rows and the same wording now appear on the phone, where an offline change previously showed only a toast and no row at all.
+
+First-run: onboarding and a fresh Home are unchanged — a vault with no queued writes shows nothing new anywhere. The changed desktop harness `apps/desktop/tests/e2e/offline-reload.spec.ts` adds an expense with the gateway closed, reloads the app while it is still unreachable, and emits `artifacts/e2e/ui-impact/issue-738-pending-write-overlay.png` showing the restored Tally ledger row with its pending chip and reason; the engine's own laws and each app's reload test pin the behaviour beneath it.
 
 ## Audit
 
