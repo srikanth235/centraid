@@ -886,15 +886,63 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
     });
   });
 
-  // The old HTTP embedding service stamped each embedding with the source
-  // derivative's id (`source_version`) so a same-model re-embed after a
-  // source rewrite wasn't missed by a model-only stamp match. Local
-  // inference (issue #731) has no such field: `embed-text` now compares
-  // only `model` against `enrich.derivation`, keyed by `content_id`. There
-  // is no current equivalent of "the source was rewritten but the model
-  // didn't change" to test against, so the two tests that asserted the old
-  // `source_version` stamp are dropped rather than rewritten against
-  // behavior the handler no longer has.
+  it("embed-text re-embeds a source rewritten under the same model", async () => {
+    const handler = await loadHandler("embed-text");
+    const item = { derivative_id: "d2", content_id: "c1", variant: "text" };
+    const harness = stubCtx({
+      reads: {},
+      read: (request) => {
+        if (request.entity === "core.content_derivative") return [item];
+        if (request.entity === "enrich.derivation")
+          return [
+            {
+              target_id: "c1",
+              model: "clip-vit-b-32@1",
+              payload_json: JSON.stringify({ source_version: "d1" }),
+            },
+          ];
+        return [];
+      },
+    });
+
+    await handler({ ctx: harness.ctx, log: harness.log });
+
+    expect(harness.invokes).toHaveLength(1);
+    expect(harness.invokes[0]).toMatchObject({
+      command: "enrich.upsert_embedding",
+      input: { model: "clip-vit-b-32@1", source_version: "d2" },
+    });
+  });
+
+  it("embed-text skips when model and source derivative are unchanged", async () => {
+    const handler = await loadHandler("embed-text");
+    const item = { derivative_id: "d2", content_id: "c1", variant: "text" };
+    const harness = stubCtx({
+      reads: {},
+      read: (request) => {
+        if (request.entity === "core.content_derivative") return [item];
+        if (request.entity === "enrich.derivation")
+          return [
+            {
+              target_id: "c1",
+              model: "clip-vit-b-32@1",
+              payload_json: JSON.stringify({ source_version: "d2" }),
+            },
+          ];
+        return [];
+      },
+    });
+    harness.state.set("model", "clip-vit-b-32@1");
+    harness.state.set("cursor", "d1");
+
+    const result = (await handler({
+      ctx: harness.ctx,
+      log: harness.log,
+    })) as { output: { derived: number; skipped: number } };
+
+    expect(result.output).toMatchObject({ derived: 0, skipped: 1 });
+    expect(harness.invokes).toHaveLength(0);
+  });
 });
 
 describe("doc-text-extractor behavior", () => {
