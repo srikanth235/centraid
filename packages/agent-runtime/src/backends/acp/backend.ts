@@ -15,15 +15,17 @@ import type { ChildProcessByStdio } from "node:child_process";
 import { promises as fs } from "node:fs";
 import type { Readable, Writable } from "node:stream";
 
+import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+
 import type { TurnStreamEvent } from "@centraid/app-engine";
 
 import { lowPriorityCommand } from "../../low-priority.js";
 import { acpAttachmentBlocks } from "../../multimodal.js";
 import type { ContentBlock, PromptCapabilities } from "../../multimodal.js";
 import { classifyAgentFailureDetail } from "./agent-errors.js";
+import { connectHarness } from "./connection.js";
+import type { HarnessConnection, HarnessTurnSink } from "./connection.js";
 import { isObject } from "./content.js";
-import { ACP_PROTOCOL_VERSION, createAcpConnection } from "./json-rpc.js";
-import type { AcpConnection, AcpConnectionHandlers } from "./json-rpc.js";
 import { planLaunch } from "./launch.js";
 import {
   permissionAutoAllowNotice,
@@ -115,7 +117,7 @@ export async function runAcpTurn(
   // Assigned on warm take or fresh spawn before any use; definite assignment
   // assertion keeps the dual-path structure readable for tsc.
   let child!: ChildProcessByStdio<Writable, Readable, Readable>;
-  let conn!: AcpConnection;
+  let conn!: HarnessConnection;
   let canClose = false;
   let canResume = false;
   let canLoad = false;
@@ -160,46 +162,33 @@ export async function runAcpTurn(
 
   const stream = createSessionUpdateMapper(emit);
 
-  const makeHandlers = (): AcpConnectionHandlers => ({
-    onServerRequest: (id, method, params) => {
-      touchPromptIdleWatchdog();
-      if (method === "session/request_permission") {
-        if (input.abortSignal.aborted) {
-          conn.respond(id, { outcome: { outcome: "cancelled" } });
-          return;
-        }
-        const toolTitle = readPermissionToolTitle(params);
-        const options = readPermissionOptions(params);
-        if (input.permissionPolicy === "deny") {
-          emit(permissionDeniedNotice(toolTitle));
-          // Refuse THIS request, not the turn: `cancelled` is the wire's
-          // "the prompt turn was cancelled before an answer", and an agent
-          // that honours it unwinds everything — contradicting the notice
-          // above ("this turn may use only its pre-granted tools"). Only an
-          // agent offering no reject option leaves us with `cancelled`.
-          const rejectId = pickRejectPermissionOption(options);
-          conn.respond(
-            id,
-            rejectId
-              ? { outcome: { outcome: "selected", optionId: rejectId } }
-              : { outcome: { outcome: "cancelled" } }
-          );
-          return;
-        }
-        const optionId = pickPermissionOption(options);
-        if (optionId) {
-          emit(permissionAutoAllowNotice(optionId, options, toolTitle));
-          conn.respond(id, { outcome: { outcome: "selected", optionId } });
-        } else {
-          conn.respond(id, { outcome: { outcome: "cancelled" } });
-        }
-        return;
+  // One sink for this turn; the connection's protocol surface is fixed at
+  // connect time, so a warm-reused process is re-pointed, never re-wired.
+  const turnSink: HarnessTurnSink = {
+    onFrame: touchPromptIdleWatchdog,
+    onPermissionRequest: (params) => {
+      if (input.abortSignal.aborted)
+        return { outcome: { outcome: "cancelled" } };
+      const toolTitle = readPermissionToolTitle(params);
+      const options = readPermissionOptions(params);
+      if (input.permissionPolicy === "deny") {
+        emit(permissionDeniedNotice(toolTitle));
+        // Refuse THIS request, not the turn: `cancelled` is the wire's
+        // "the prompt turn was cancelled before an answer", and an agent
+        // that honours it unwinds everything — contradicting the notice
+        // above ("this turn may use only its pre-granted tools"). Only an
+        // agent offering no reject option leaves us with `cancelled`.
+        const rejectId = pickRejectPermissionOption(options);
+        return rejectId
+          ? { outcome: { outcome: "selected", optionId: rejectId } }
+          : { outcome: { outcome: "cancelled" } };
       }
-      conn.respondMethodNotFound(id, method);
+      const optionId = pickPermissionOption(options);
+      if (!optionId) return { outcome: { outcome: "cancelled" } };
+      emit(permissionAutoAllowNotice(optionId, options, toolTitle));
+      return { outcome: { outcome: "selected", optionId } };
     },
-    onNotification: (method, params) => {
-      touchPromptIdleWatchdog();
-      if (method !== "session/update") return;
+    onSessionUpdate: (params) => {
       const optionUpdate = readConfigOptionUpdate(params);
       if (optionUpdate) {
         // `ConfigOptionUpdate.configOptions` is "the full set" per the ACP
@@ -216,7 +205,7 @@ export async function runAcpTurn(
       if (!promptStarted) return;
       stream.handleSessionUpdate(params);
     },
-  });
+  };
 
   // ---- Warm reuse ---------------------------------------------------------
   if (input.prevSessionId) {
@@ -238,7 +227,6 @@ export async function runAcpTurn(
       httpMcp = warm.httpMcp;
       promptCaps = warm.promptCaps as PromptCapabilities;
       continuity = "warm";
-      conn.setHandlers(makeHandlers());
     }
   }
 
@@ -249,22 +237,17 @@ export async function runAcpTurn(
       env: launch.env,
       stdio: ["pipe", "pipe", "pipe"],
     }) as ChildProcessByStdio<Writable, Readable, Readable>;
-    conn = createAcpConnection(child, makeHandlers());
+    conn = connectHarness(child);
   }
+
+  // This turn now owns the connection's server→client traffic; released in
+  // the `finally` below, before the process is parked or killed.
+  const releaseTurn = conn.attach(turnSink);
 
   const abortHandler = (): void => {
     parkWarm = false;
-    if (sessionId && !conn.hasExited()) {
-      try {
-        conn.send({
-          jsonrpc: "2.0",
-          method: "session/cancel",
-          params: { sessionId },
-        });
-      } catch {
-        // ignore
-      }
-    }
+    if (sessionId && !conn.isClosed())
+      conn.notify("session/cancel", { sessionId });
     if (!child.killed) child.kill("SIGTERM");
   };
   if (input.abortSignal.aborted) abortHandler();
@@ -351,7 +334,7 @@ export async function runAcpTurn(
     } else {
       const init = await requestWithTimeout(
         conn.request<InitializeResult>("initialize", {
-          protocolVersion: ACP_PROTOCOL_VERSION,
+          protocolVersion: PROTOCOL_VERSION,
           clientCapabilities: {
             fs: { readTextFile: false, writeTextFile: false },
             terminal: false,
@@ -683,13 +666,16 @@ export async function runAcpTurn(
   } finally {
     rejectPromptIdle = undefined;
     clearPromptIdleWatchdog();
+    // Hand the connection back before it is parked: a warm process that
+    // streams a late frame must not reach this turn's emit/stream closures.
+    releaseTurn();
     await vaultMcp?.close();
 
     if (
       parkWarm &&
       sessionId &&
       !input.abortSignal.aborted &&
-      !conn.hasExited()
+      !conn.isClosed()
     ) {
       putWarmSlot({
         kind: config.kind,
@@ -708,7 +694,7 @@ export async function runAcpTurn(
         promptCaps: promptCaps as Record<string, unknown>,
       });
     } else {
-      if (canClose && sessionId && !conn.hasExited()) {
+      if (canClose && sessionId && !conn.isClosed()) {
         try {
           await requestWithTimeout(
             conn.request("session/close", { sessionId }),

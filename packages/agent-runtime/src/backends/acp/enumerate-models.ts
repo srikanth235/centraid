@@ -30,10 +30,13 @@ import os from "node:os";
 import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 
+import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+
 import type { HarnessModel } from "@centraid/app-engine";
 
 import { lowPriorityCommand } from "../../low-priority.js";
-import { ACP_PROTOCOL_VERSION, createAcpConnection } from "./json-rpc.js";
+import { connectHarness } from "./connection.js";
+import type { HarnessConnection } from "./connection.js";
 import { planLaunch } from "./launch.js";
 import { readConfigOptions, readOfferedModels } from "./session-config.js";
 import type {
@@ -92,14 +95,11 @@ export async function enumerateAcpModels(
     return [];
   }
 
-  const conn = createAcpConnection(child, {
-    // We advertise no client capabilities during a probe, so decline any
-    // server→client request (fs/terminal/permission) politely.
-    onServerRequest: (id, method) => conn.respondMethodNotFound(id, method),
-    // A `session/load` we never issue can't fire; a stray `session/update`
-    // (some agents greet a fresh session) is irrelevant to enumeration.
-    onNotification: () => undefined,
-  });
+  // No sink is attached: we advertise no client capabilities during a probe,
+  // so the connection declines every server→client request (fs / terminal /
+  // permission) on its own, and a stray `session/update` — some agents greet a
+  // fresh session — is irrelevant to enumeration.
+  const conn = connectHarness(child);
 
   try {
     return await withTimeout(probe(conn, cwd), PROBE_TIMEOUT_MS);
@@ -132,11 +132,11 @@ export async function enumerateAcpModels(
  * (including `AUTH_REQUIRED`), which the caller maps to `[]`.
  */
 async function probe(
-  conn: ReturnType<typeof createAcpConnection>,
+  conn: HarnessConnection,
   cwd: string
 ): Promise<HarnessModel[]> {
   await conn.request<InitializeResult>("initialize", {
-    protocolVersion: ACP_PROTOCOL_VERSION,
+    protocolVersion: PROTOCOL_VERSION,
     clientCapabilities: {
       fs: { readTextFile: false, writeTextFile: false },
       terminal: false,

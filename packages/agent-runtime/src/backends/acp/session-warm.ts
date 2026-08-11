@@ -14,7 +14,7 @@
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 
-import type { AcpConnection } from "./json-rpc.js";
+import type { HarnessConnection } from "./connection.js";
 
 const IDLE_MS = 120_000;
 const MAX_WARM_SLOTS = 8;
@@ -39,7 +39,7 @@ export interface WarmAgentSlot {
   cwd: string;
   sessionId: string;
   child: ChildProcessByStdio<Writable, Readable, Readable>;
-  conn: AcpConnection;
+  conn: HarnessConnection;
   canResume: boolean;
   canLoad: boolean;
   canClose: boolean;
@@ -73,7 +73,7 @@ export function takeWarmSlot(
   if (!slot) return undefined;
   pool.delete(key);
   clearTimeout(slot.timer);
-  if (slot.conn.hasExited() || slot.child.killed) {
+  if (slot.conn.isClosed() || slot.child.killed) {
     void disposeSlot(slot);
     return undefined;
   }
@@ -138,7 +138,7 @@ export async function disposeSlot(
 ): Promise<void> {
   const conn = slot.conn;
   const child = slot.child;
-  if ("canClose" in slot && slot.canClose && !conn.hasExited()) {
+  if ("canClose" in slot && slot.canClose && !conn.isClosed()) {
     try {
       await bounded(
         conn.request("session/close", { sessionId: slot.sessionId })

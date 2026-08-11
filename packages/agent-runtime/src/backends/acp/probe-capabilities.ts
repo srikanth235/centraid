@@ -13,9 +13,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 
+import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+
 import { lowPriorityCommand } from "../../low-priority.js";
 import { classifyAgentFailureDetail } from "./agent-errors.js";
-import { ACP_PROTOCOL_VERSION, createAcpConnection } from "./json-rpc.js";
+import { connectHarness } from "./connection.js";
 import { planLaunch } from "./launch.js";
 import {
   findConfigOption,
@@ -185,13 +187,14 @@ export async function probeAcpCapabilities(
   let usageUpdateObserved = false;
   let configOptionUpdateObserved = false;
   let locationsObserved = false;
-  const conn = createAcpConnection(child, {
-    onServerRequest: (id, method) => {
-      conn.respondMethodNotFound(id, method);
-    },
-    onNotification: (method, params) => {
-      if (method !== "session/update" || !params || typeof params !== "object")
-        return;
+  const conn = connectHarness(child);
+  // The probe owns this connection for its whole (short) life, so the sink is
+  // never released — the process dies with it. Server→client requests need no
+  // answer of ours: the probe advertises no client capabilities, and the
+  // connection declines them.
+  conn.attach({
+    onSessionUpdate: (params) => {
+      if (!params || typeof params !== "object") return;
       const update = (params as { update?: Record<string, unknown> }).update;
       if (!update) return;
       if (update.sessionUpdate === "usage_update") usageUpdateObserved = true;
@@ -218,7 +221,7 @@ export async function probeAcpCapabilities(
 
   try {
     const init = await conn.request<InitializeResult>("initialize", {
-      protocolVersion: ACP_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       clientCapabilities: {
         fs: { readTextFile: false, writeTextFile: false },
         terminal: false,

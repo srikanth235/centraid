@@ -1,11 +1,12 @@
+import { RequestError } from "@agentclientprotocol/sdk";
 import { describe, expect, test } from "vitest";
 
 import {
+  AUTH_REQUIRED_CODE,
   authRequiredMessage,
   classifyAgentFailure,
   classifyAgentFailureDetail,
 } from "./agent-errors.js";
-import { AUTH_REQUIRED_CODE, AcpRpcError } from "./json-rpc.js";
 import type { AcpTurnConfig } from "./types.js";
 
 const config: AcpTurnConfig = {
@@ -17,7 +18,7 @@ const config: AcpTurnConfig = {
 describe("agent-errors suite", () => {
   test("AUTH_REQUIRED uses install hint", () => {
     const msg = classifyAgentFailure(
-      new AcpRpcError(AUTH_REQUIRED_CODE, "Authentication required"),
+      new RequestError(AUTH_REQUIRED_CODE, "Authentication required"),
       "",
       config
     );
@@ -27,7 +28,7 @@ describe("agent-errors suite", () => {
 
   test("internal error with auth-ish text becomes actionable", () => {
     const msg = classifyAgentFailure(
-      new AcpRpcError(-32603, "Internal error"),
+      new RequestError(-32603, "Internal error"),
       "provider not configured",
       config
     );
@@ -38,7 +39,7 @@ describe("agent-errors suite", () => {
   test("internal error classifies an expired OAuth authentication failure as auth", () => {
     expect(
       classifyAgentFailureDetail(
-        new AcpRpcError(
+        new RequestError(
           -32603,
           "Failed to authenticate: OAuth session expired"
         ),
@@ -59,7 +60,7 @@ describe("agent-errors suite", () => {
 
   test("auth-ish RPC wording without AUTH_REQUIRED still gets an unauth message", () => {
     const msg = classifyAgentFailure(
-      new AcpRpcError(-32001, "please sign in first"),
+      new RequestError(-32001, "please sign in first"),
       "",
       config
     );
@@ -67,7 +68,7 @@ describe("agent-errors suite", () => {
     expect(msg).toContain("goose configure");
   });
 
-  test("auth-ish text with acp rpc string (non-AcpRpcError) is classified", () => {
+  test("auth-ish text with acp rpc string (non-RequestError) is classified", () => {
     const msg = classifyAgentFailure(
       new Error("acp rpc failed: login required"),
       "not logged in",
@@ -94,7 +95,7 @@ describe("agent-errors suite", () => {
 
   test("internal error without auth-ish text falls through to raw message", () => {
     const msg = classifyAgentFailure(
-      new AcpRpcError(-32603, "disk full"),
+      new RequestError(-32603, "disk full"),
       "ENOSPC",
       config
     );
@@ -156,7 +157,7 @@ describe("agent-errors suite", () => {
     const detail = classifyAgentFailureDetail(
       // -32029 is what the scripted agent (and agents in this space) answer for
       // a rate limit; the text alone would fall through to `init`.
-      new AcpRpcError(-32029, "The model is overloaded, please retry"),
+      new RequestError(-32029, "The model is overloaded, please retry"),
       "HTTP 429 from provider\nretry-after: 60",
       config
     );
@@ -166,7 +167,7 @@ describe("agent-errors suite", () => {
   test("a forwarded HTTP 429 RPC code is a quota failure", () => {
     expect(
       classifyAgentFailureDetail(
-        new AcpRpcError(429, "Too Many Requests"),
+        new RequestError(429, "Too Many Requests"),
         "",
         config
       ).failureClass

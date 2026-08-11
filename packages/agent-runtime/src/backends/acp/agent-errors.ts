@@ -7,9 +7,10 @@
  * the turn orchestrator.
  */
 
+import { RequestError } from "@agentclientprotocol/sdk";
+
 import type { HarnessFailureClass } from "@centraid/app-engine";
 
-import { AUTH_REQUIRED_CODE, AcpRpcError } from "./json-rpc.js";
 import type { AcpTurnConfig } from "./types.js";
 
 export { type HarnessFailureClass } from "@centraid/app-engine";
@@ -19,6 +20,15 @@ export { type HarnessFailureClass } from "@centraid/app-engine";
  * contract the breakers key off). Re-exported, never re-declared — two copies
  * of the union is how the classifier and the harness drift apart.
  */
+
+/**
+ * ACP's `AUTH_REQUIRED` code, taken from the SDK's own factory rather than
+ * spelled out here. 18 of the 31 agents in the ACP registry answer
+ * `session/new` with it until the user has signed their CLI in, so it is the
+ * single most likely first-run failure — worth a real answer instead of a raw
+ * RPC string.
+ */
+export const AUTH_REQUIRED_CODE = RequestError.authRequired().code;
 
 /** ACP JSON-RPC "Internal error" — often a stand-in for "not configured". */
 const INTERNAL_ERROR_CODE = -32603;
@@ -90,7 +100,7 @@ export function classifyAgentFailureDetail(
   const hint = config.installHint ? ` ${config.installHint}` : "";
   const combined = `${err instanceof Error ? err.message : String(err)}\n${stderr}`;
 
-  if (err instanceof AcpRpcError && err.code === AUTH_REQUIRED_CODE) {
+  if (err instanceof RequestError && err.code === AUTH_REQUIRED_CODE) {
     return { failureClass: "auth", message: authRequiredMessage(config) };
   }
 
@@ -98,13 +108,13 @@ export function classifyAgentFailureDetail(
   // stderr routinely mentions "provider" or "api key", which would otherwise
   // send a throttled agent down the "you are not signed in" path and tell the
   // owner to re-authenticate something that is working.
-  if (err instanceof AcpRpcError && QUOTA_ERROR_CODES.has(err.code)) {
+  if (err instanceof RequestError && QUOTA_ERROR_CODES.has(err.code)) {
     const tail = stderr.trim() ? `\n${stderr.trim().slice(-2000)}` : "";
     return { failureClass: "quota", message: `${err.message}${tail}` };
   }
 
   if (
-    err instanceof AcpRpcError &&
+    err instanceof RequestError &&
     err.code === INTERNAL_ERROR_CODE &&
     AUTHISH.test(combined)
   ) {
@@ -119,7 +129,7 @@ export function classifyAgentFailureDetail(
 
   if (
     AUTHISH.test(combined) &&
-    (err instanceof AcpRpcError || /acp rpc/iu.test(combined))
+    (err instanceof RequestError || /acp rpc/iu.test(combined))
   ) {
     return {
       failureClass: "auth",
@@ -156,7 +166,7 @@ function failureClassOf(
   message: string,
   stderr: string
 ): HarnessFailureClass {
-  if (err instanceof AcpRpcError) {
+  if (err instanceof RequestError) {
     if (QUOTA_ERROR_CODES.has(err.code)) return "quota";
   }
   if (OWN_WEDGE.test(message)) return "wedge";
@@ -165,6 +175,6 @@ function failureClassOf(
   return (
     keywordClass(message) ??
     keywordClass(stderr) ??
-    (err instanceof AcpRpcError ? "init" : "unknown")
+    (err instanceof RequestError ? "init" : "unknown")
   );
 }

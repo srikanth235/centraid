@@ -9,7 +9,7 @@
 - [x] `ctx.delegate` dispatched through the accounted chat spine (metering, budgeted hydration, kind-scoped resume)
 - [x] HarnessSessions extraction keyed `(conversationRef, harnessKind)`; per-binding settlement + multi-harness regression test
 - [x] Per-call `harness`/`model`/`configPins` on `ctx.delegate`; consent fail-closed (#567 D13); compiler grounding + blueprint handlers regenerated
-- [ ] `@agentclientprotocol/sdk` adoption; `backends/acp/json-rpc.ts` deleted
+- [x] `@agentclientprotocol/sdk` adoption; `backends/acp/json-rpc.ts` deleted
 - [ ] Close #740 as absorbed by this issue (per-call harness/model is item 5 of the Decision)
 
 ## What changed
@@ -154,6 +154,26 @@
   `ctx.delegate({ harness, model, … })` on that call alone. Slice (b)'s acceptance test is
   literalized: it now makes two real `ctx.delegate({ harness })` calls naming `claude-code` and
   `codex`, so the issue's criterion reads verbatim, with assertions still on real DB rows.
+
+- **One door, part (d): the ACP SDK owns the wire (eighth slice).** Done in full:
+  `@agentclientprotocol/sdk` adoption; `backends/acp/json-rpc.ts` deleted. The hand-rolled wire
+  layer — 218 lines of pending-request map, id allocation, frame dispatch, `AcpRpcError`, a
+  hand-tracked `AUTH_REQUIRED_CODE`, and the `setHandlers` rebinding hook — is gone, replaced by
+  `connection.ts` driving one spawned harness process through `@agentclientprotocol/sdk` pinned
+  exactly at 1.3.0, alongside the two adapter packages already shipped from that org. The SDK's
+  STABLE entrypoint (`client()` → `ClientApp.connect(stream)` → `ClientConnection`, plus
+  `ClientContext.request/notify`, `RequestError`, `CLIENT_METHODS`, `PROTOCOL_VERSION`) now owns
+  request/response correlation, JSON-RPC ids, error codes, the method-not-found answer for
+  capabilities we never advertised, and teardown that rejects in-flight work; `experimental/v2` is
+  imported nowhere. `AUTH_REQUIRED` is now derived rather than asserted — `agent-errors.ts`
+  computes the code from `RequestError.authRequired().code` — so an unsigned-in harness still
+  answers with its own `installHint`. Everything the SDK does not do is kept and green: launch
+  specs, warm pooling, the capability probe and cache, stream normalization, the loopback vault MCP
+  server, and usage normalization. Malformed frames no longer vanish: a line that opens like a
+  frame and fails to parse fails the connection with a typed `AcpFrameError`, surfacing as a
+  `TurnStreamEvent` error instead of hanging until the idle watchdog. Per the issue's design note a
+  connection is owned by one session actor for its life — the handler set is fixed at connect time
+  and only a turn-local sink is attached and released — so `setHandlers` was removed, not ported.
 
 ### Files touched (vault-schema slice)
 
@@ -694,6 +714,22 @@ Markdown only; no code changed in this slice.
 - `packages/gateway/src/lifecycle/headless-automation-compile.ts`
 - `receipts/issue-743-one-agent-door.md`
 
+### Files touched (convergence (d) slice)
+
+- `bun.lock`
+- `packages/agent-runtime/package.json`
+- `packages/agent-runtime/src/backends/acp/agent-errors.test.ts`
+- `packages/agent-runtime/src/backends/acp/agent-errors.ts`
+- `packages/agent-runtime/src/backends/acp/backend.ts`
+- `packages/agent-runtime/src/backends/acp/connection.test.ts`
+- `packages/agent-runtime/src/backends/acp/connection.ts`
+- `packages/agent-runtime/src/backends/acp/enumerate-models.ts`
+- `packages/agent-runtime/src/backends/acp/json-rpc.ts`
+- `packages/agent-runtime/src/backends/acp/probe-capabilities.ts`
+- `packages/agent-runtime/src/backends/acp/session-warm.test.ts`
+- `packages/agent-runtime/src/backends/acp/session-warm.ts`
+- `receipts/issue-743-one-agent-door.md`
+
 ## Out of scope
 
 - Renaming the `@centraid/agent-runtime` npm package (README disclaimer instead — see issue).
@@ -837,6 +873,45 @@ Markdown only; no code changed in this slice.
   directive, the per-call harness/model/configPins block moved to
   `run-automation-per-call-harness.test.ts` (with the consent-store helper it needs), leaving both
   files under the cap.
+- **`session/update` notifications deliberately BYPASS the SDK's client-app dispatch — the most
+  significant deviation in this PR, recorded in full.** `ClientApp`'s constructor unconditionally
+  installs a static handler that runs `zSessionNotification.parse` ahead of every user handler,
+  including one registered with a pass-through parser; a notification the generated union rejects
+  is discarded with a `console.error` and no handler runs. That closed union would silently drop
+  any vendor `sessionUpdate` variant, a `usage_update` lacking the required `used`/`size` (our
+  `--cost`-only shape), and any plan entry lacking `priority`/`status` — and would strip the vendor
+  fields `stream-events.ts` deliberately reads (`filePath` on diffs, `output`/`text` on terminal
+  blocks, token counts on `usage_update`, plan `text`/`title`). Routing updates through it would
+  have re-introduced exactly the silent-drop this slice exists to remove AND degraded the
+  normalization the issue says to keep, so updates reach the sink unparsed. Requests
+  (`session/request_permission`) DO go through the SDK — there is no schema router for requests.
+  Net: the SDK owns the wire and the request path; the update path is transport-only by choice.
+- **The transport is a hand-built `Stream` rather than the SDK's `ndJsonStream`**, for two
+  behavioural reasons: writes must go through `safeStdinWrite` to survive a closed pipe, and
+  `ndJsonStream` `console.error`s and *drops* unparseable lines — the precise silent-drop being
+  removed. What stays hand-written is ~35 lines of stdio↔`Stream` adapter (the SDK has no
+  stdio-child adapter on the stable path); the protocol layer is fully deleted.
+- **stdout EOF fails the stream with `new Error("acp agent exited")`** rather than the SDK's
+  generic "ACP connection closed", which would have erased the cause `classifyAgentFailureDetail`
+  keyword-classifies and regressed the nonzero-exit test from `exit` to `unknown`.
+- **A malformed frame now kills the connection** where it was previously skipped. Non-`{` stdout
+  chatter (banners, progress) is still ignored exactly as before; the strictness applies only to
+  lines that open like a frame. That failure classifies as `unknown` — `HarnessFailureClass` was
+  not extended with a `protocol` member, since that union is owned by `app-engine` and feeds the
+  breakers.
+- `session/cancel` on abort is now async (`ClientContext.notify` awaits a stream write) where it
+  was a synchronous send; the frame is enqueued rather than written before `SIGTERM`. Updates are
+  now delivered synchronously from the stdout handler while responses go through the SDK's async
+  reader, so an update can only arrive earlier relative to a response than before, never later.
+- **Scope caveat on the SDK checkbox, from the independent audit:** the JSON-RPC transport
+  (framing, ids, `RequestError` codes) is genuinely SDK-owned, but `session/update` payload
+  interpretation — the highest-volume inbound frame, carrying the whole turn stream — is
+  deliberately kept outside the SDK's typed dispatch by necessity. A maintainer should NOT read
+  the acceptance checkbox as "every frame is now SDK-typed". The audit verified the underlying
+  claim against `node_modules/@agentclientprotocol/sdk/dist/acp.js` rather than taking it on
+  trust: `ClientApp`'s constructor registers a static handler first in the chain that calls the
+  THROWING `zSessionNotification.parse`, and an exception aborts the whole per-message handler
+  loop in `Connection.processIncomingMessage`, so no later handler ever runs.
 
 ## Verification
 
@@ -909,15 +984,30 @@ bunx vitest run --root packages/agent-runtime src/automation
   `HEADLESS_COMPILE_WORK_ORDER` grounding text. Four gateway HTTP tests failed only under
   concurrent-sandbox contention and passed on isolated re-run.
 
+- **Convergence (d).** `bun run typecheck` green (35/35). agent-runtime `src/backends/acp`
+  215 passed across 3 repeated runs (journey, blueprint-parity, and all `fake-acp-agent.mjs`
+  suites green); new `connection.test.ts` 9/9; app-engine 624/625; gateway 1433 passed;
+  `user-facing-qualities` 14/14; `bun run knip` clean; `bun run format:check` PASS (4058 files);
+  `bun run lint` PASS with `--deny-warnings`; `bun run lint:acp-min-versions` PASS.
+- Reviewer replay for slice (d):
+
+```sh
+test ! -f packages/agent-runtime/src/backends/acp/json-rpc.ts && echo "wire layer deleted"
+grep '"@agentclientprotocol/sdk"' packages/agent-runtime/package.json   # expect exact 1.3.0
+bunx vitest run --root packages/agent-runtime src/backends/acp
+```
+
 - Further slices append their verification here as they land.
 
 ## Audit
 
 Independent re-attestation against the CURRENT `git diff --cached`, fresh context, no reliance on
-the committing agent's claims. This audit supersedes the previous (convergence-(b)-slice) audit
-content below the heading. Six prior slices are **already committed** (`git log --oneline -7`):
+the committing agent's claims. This audit supersedes the previous (convergence-(c)-slice) audit
+content below the heading. This is the **last implementation slice of #743**. Seven prior slices are
+**already committed** (`git log --oneline -8`):
 
 ```
+41dd8bd7 feat(automation)!: name a harness, model, and pins per ctx.delegate call (#743)
 8d328597 refactor(app-engine)!: own harness bindings per (conversation, harness) (#743)
 aeff86c0 refactor(automation)!: dispatch ctx.delegate through the accounted turn seam (#743)
 6955ec4c docs(glossary)!: harness/delegate vocabulary write-back (#743)
@@ -927,200 +1017,199 @@ aeff86c0 refactor(automation)!: dispatch ctx.delegate through the accounted turn
 3f12bdea fix(recognition): refresh rewritten text embeddings (#736) (#737)
 ```
 
-**Contamination check.** The working tree also carries UNSTAGED changes from a concurrently-running
-agent adopting `@agentclientprotocol/sdk` in `packages/agent-runtime/src/backends/acp/**` (deletion
-of `json-rpc.ts`, edits to `agent-errors.ts`, `backend.ts`, `enumerate-models.ts`,
-`probe-capabilities.ts`, `session-warm.ts`, new `connection.ts`/`connection.test.ts`) plus
-`bun.lock`/`package.json`. `git status --porcelain` confirms these are unstaged (` M`/` D`/`??`),
-never `git diff --cached`. This audit reads only `git diff --cached`, which touches exactly 12
-files: `packages/agent-runtime/src/automation/{run-automation-dispatch.test.ts,
-run-automation-live-dispatch.ts, run-automation-multi-harness.test.ts}`,
-`packages/automation/src/{fire/fire.test.ts, handler/ctx.ts, handler/runner.ts,
-manifest/manifest.ts, worker/runner.ts}`, `packages/gateway/{skills/automation-authoring/SKILL.md,
-src/lifecycle/headless-automation-compile.ts, src/lifecycle/headless-automation-compile.test.ts}`,
-and `receipts/issue-743-one-agent-door.md`. None of the ACP-SDK files appear in `--cached`. No
-contamination.
+This audit covers the **staged slice only** — "One door, part (d): the ACP SDK owns the wire"
+(`git diff --cached --stat` → 13 files, 676 insertions(+), 325 deletions(-);
+`packages/agent-runtime/src/backends/acp/**` alone is 594 insertions / 324 deletions). No
+contamination: `git status --porcelain` shows nothing unstaged outside the 13 staged files.
 
-This audit covers the **staged slice only** — "One door, part (c): per-call
-harness/model/configPins, absorbing #740" (`git diff --cached --numstat` → 12 files, 370
-insertions(+), 38 deletions(-)).
+**(1) `## What changed` faithfully describes the staged diff.**
 
-**(1) `## What changed` faithfully describes the staged diff** — **PASS** on every sub-claim
-checked.
+- **(a) `json-rpc.ts` deleted; SDK pinned exactly, no caret — CONFIRMED, PASS.**
+  `git diff --cached --diff-filter=D --name-only` returns exactly
+  `packages/agent-runtime/src/backends/acp/json-rpc.ts`. `packages/agent-runtime/package.json`'s
+  staged hunk adds `"@agentclientprotocol/sdk": "1.3.0"` — no `^`/`~`/range — alongside the two
+  adapter packages already pinned bare (`0.63.0`, `1.1.7`). `bun.lock`'s staged hunk matches
+  (`"@agentclientprotocol/sdk": "1.3.0"`). `node_modules/@agentclientprotocol/sdk/package.json`
+  confirms the installed version is exactly `1.3.0`. `git grep -n "json-rpc"` across
+  `packages/agent-runtime/src` after staging returns zero hits — no dangling import.
+- **(b) `experimental/v2` imported nowhere — CONFIRMED, PASS.** `git diff --cached` contains the
+  string `experimental/v2` in exactly two places, both prose: `connection.ts`'s header comment
+  ("`experimental/v2` is imported nowhere") and the receipt's own Decisions bullet. Every staged
+  import line was enumerated (`agent-errors.ts`, `backend.ts`, `connection.ts`,
+  `enumerate-models.ts`, `probe-capabilities.ts`, `session-warm.ts`) — all import from
+  `"@agentclientprotocol/sdk"` (the stable root entrypoint) or `./connection.js`; none touch
+  `@agentclientprotocol/sdk/v2` or any `experimental` subpath. The package's own `dist/v2/**` exists
+  on disk but is dead weight from this diff's perspective, never referenced.
+- **(c) Warm pooling, probes, vault MCP, stream normalization retained and green — CONFIRMED,
+  PASS.** `ls packages/agent-runtime/src/backends/acp` after staging still lists
+  `session-warm.ts`/`session-warm.test.ts` (warm pooling), `probe-capabilities.ts` +
+  `capabilities-cache.ts`/`.test.ts` (probe + cache), `vault-mcp-server.ts`/`.test.ts` +
+  `vault-mcp-stdio-proxy.mjs` (loopback vault MCP), and `stream-events.ts`/`.test.ts` (stream
+  normalization) — none deleted, none renamed. Independently ran
+  `bunx vitest run --root packages/agent-runtime src/backends/acp` fresh in this audit (results
+  below): 215 passed, only the 2 pre-existing `launch.test.ts` `IS_SANDBOX` failures, which the
+  audit reproduced and confirmed are assertion-order artifacts unrelated to this diff (they assert
+  `"1"` vs the code's `"yes"` — a pre-existing mismatch, not something this diff touches; `launch.ts`
+  is untouched by `git diff --cached --name-only`).
+- **(d) `session/update` bypass — real, and the justification is SOUND. This is the finding that
+  matters most, so it gets full treatment.** Read `connection.ts`'s staged diff: `frameStream`'s
+  `deliver()` intercepts any frame with `method === CLIENT_METHODS.session_update`, calls
+  `sink?.onSessionUpdate?.(frame.params)` directly off the raw parsed JSON, and returns `true` so the
+  frame is **never enqueued onto the `ReadableStream` the SDK's `client()` connection reads from** —
+  the SDK's `ClientApp`/`Connection` machinery never sees a `session/update` frame at all. Confirmed
+  this is not merely asserted but load-bearing: `backend.ts`'s new `HarnessTurnSink.onSessionUpdate`
+  receives `params` and passes them straight to `stream.handleSessionUpdate(params)` with no
+  intervening schema parse.
+  Then independently read `node_modules/@agentclientprotocol/sdk/dist/acp.js` (installed 1.3.0, not
+  taking the receipt's word for it) to check the specific factual claim — "`ClientApp`'s constructor
+  unconditionally installs a static handler that runs `zSessionNotification.parse` ahead of every
+  user handler ... a notification the generated union rejects is discarded with a `console.error` and
+  no handler runs":
+  - `class ClientApp` constructor (line 863): unconditionally calls
+    `this.builder.withHandler({ handleMessage: (message, cx) => sessionUpdateRouter(cx).handleMessage(message), ... })`
+    — this pushes onto `ConnectionBuilder.handlers`, an ordered array, **before any user code can
+    call `.onRequest`/`.onNotification`** (those also route through `withHandler`, via
+    `registerAppRequest`/`registerAppNotification` → `builder.onReceiveRequest`/`onReceiveNotification`
+    → `withHandler`, appending to the *same* array). Registration order is array order, so the
+    session-update router is always first — genuinely "ahead of every user handler," not just the
+    default ones.
+  - `SessionUpdateRouter.handleMessage` (line 675): for a `session/update` notification, calls
+    `validate.zSessionNotification.parse(message.params)` — **`.parse`, not `.safeParse`** — which
+    throws a `ZodError` on any shape the generated union rejects.
+  - `Connection.processIncomingMessage` (jsonrpc.js, ~line 752): iterates
+    `[...staticHandlers, ...dynamicHandlers.values()]` inside one `try`; a throw from any handler in
+    that loop is caught by the single `catch` wrapping the whole loop, so **no later handler in the
+    array runs for that message** — confirming "no handler runs," including a hypothetical user
+    handler registered with a pass-through/identity parser, since it would sit later in the same
+    array and the loop never reaches it.
+  - The `catch` block: for a notification (`current.kind !== "request"`), it does
+    `console.error("Error handling notification", message.raw, response.error)` and returns —
+    **it does not rethrow and does not close the connection.** This exactly matches "discarded with a
+    `console.error`" — the process is silent from the application's point of view (no handler fires,
+    no thrown error reaches caller code), the connection survives, and the frame is gone.
+  **Verdict on this sub-claim: the factual claim about `ClientApp` is TRUE, verified by reading the
+  installed SDK source line-by-line, not inferred from the receipt's prose or documentation.** The
+  design decision that follows from it — deliver `session/update` off the raw transport instead of
+  through `ClientApp`'s dispatch — is therefore a **sound, necessary** consequence, not a
+  hand-wave: routing through `ClientApp` as documented would silently drop any vendor `sessionUpdate`
+  variant, a `usage_update` missing `used`/`size` (this codebase's `--cost`-only shape per the
+  receipt), or a plan entry missing `priority`/`status`, exactly as claimed.
+  **Judged plainly, per the audit brief's instruction not to rubber-stamp:** this is a **partial**,
+  not full, satisfaction of "connection + frame types come from the SDK." Requests
+  (`session/request_permission`) and the outbound wire (id allocation, `RequestError` codes,
+  `initialize`/`session/new`/etc.) genuinely come from the SDK. The single highest-volume,
+  highest-stakes inbound frame type — `session/update`, which is the entire turn-streaming path —
+  is deliberately routed around the SDK's typed dispatch and interpreted by hand-parsing raw JSON,
+  exactly as the 218-line `json-rpc.ts` it replaces did. The SDK still earns its keep here: framing
+  (line splitting, JSON-RPC envelope validation via `isFrame`), id correlation for requests, and
+  error-code semantics are now the SDK's, and those were the parts of `json-rpc.ts` most likely to
+  drift from the wire spec. But "connection + frame types come from the SDK" oversold as a blanket
+  statement would be wrong for the `session/update` shape specifically; the receipt does not oversell
+  it — it discloses the bypass explicitly, at length, and names it "the most significant deviation in
+  this PR" — so the receipt's own honesty is what keeps this a **PASS** rather than a **REFUTED**: the
+  acceptance criterion is met in the sense the issue's Decision item 1 describes (adopt the SDK "for
+  the JSON-RPC connection + typed protocol frames, replacing `json-rpc.ts`"), and the JSON-RPC
+  connection layer (transport-level framing, ids, errors) is fully SDK-owned; the *interpretation* of
+  one specific notification's payload is knowingly kept outside the SDK's schema for a documented,
+  verified-correct reason. A maintainer should read the checked box as "the wire's connection
+  mechanics are the SDK's; session/update's payload shape is still ours by necessity," not as
+  "every frame is now SDK-typed end to end."
+- **(e) Malformed frames surface as a typed error instead of being silently dropped — CONFIRMED,
+  PASS, in both code and test.** `connection.ts`'s `frameStream`: a line starting with `{` that
+  fails `JSON.parse` or fails the `isFrame` guard calls `fail(new AcpFrameError(line))`, which calls
+  `controller.error(error)` on the `ReadableStream` — this propagates into the SDK's connection as a
+  stream error, which (per the SDK's `Connection` machinery) rejects in-flight requests rather than
+  hanging them. `connection.test.ts` (fresh-run in this audit, 9/9 pass) has the test
+  `"a malformed frame fails the pending request instead of hanging"` — asserted twice in the same
+  test body (`await expect(answer).rejects.toBeInstanceOf(AcpFrameError)`, twice, presumably one
+  syntactically-broken-JSON case and one structurally-invalid-but-valid-JSON case) — confirming the
+  rejection type is `AcpFrameError`, not a generic timeout/hang. `backend.ts`'s outer
+  `catch (error)` block (unchanged in structure by this diff, confirmed by reading the staged hunk)
+  feeds any thrown error, including a rejected `conn.request(...)` from a frame failure, through
+  `classifyAgentFailureDetail` and emits it as a `TurnStreamEvent` — so the path from "malformed
+  frame on stdout" to "typed error surfaced to the turn stream" is intact and did not silently regress
+  to the old drop-and-hang behavior `json-rpc.ts` had. Also confirmed the deliberate scope limit
+  the receipt discloses: `HarnessFailureClass` was not extended with a `protocol` member (the
+  `classifyAgentFailureDetail` diff shows no new failure class added), so this classifies as
+  `"unknown"` today — consistent with what the receipt says and not a broken promise, since the
+  receipt only claims "surfaces as a typed error," not "surfaces as a *newly-classified* error."
 
-- **(a) The multi-harness test is now genuinely literal, and still asserts on real DB rows** —
-  **confirmed, and this is the headline result of the slice.** Read
-  `run-automation-multi-harness.test.ts` in full, both before-state (from the prior audit's
-  description) and the staged diff. The test now issues:
-  ```ts
-  await dispatch.delegateDispatcher({ prompt: "step one", harness: "claude-code" }, dispatchCtx);
-  await dispatch.delegateDispatcher({ prompt: "step two", harness: "codex" }, dispatchCtx);
-  ```
-  — two literal `ctx.delegate`-shaped calls, each carrying its own `harness` field, naming
-  `claude-code` and `codex` respectively, against a fire whose own configured harness is `codex`.
-  This is no longer the previous slice's "one stubbed harness reports two different kinds via a
-  landing counter" workaround — the harness comes from the call argument, dispatched through the
-  new `call.harness` branch added in `run-automation-live-dispatch.ts` (`isHarnessKind(call.harness)
-  ? harness = call.harness : ...`). Assertions still hit real state, not mocks: (i) resume —
-  `codex.calls[0]?.prevSessionId` equals the seeded `"session-codex-old"` and is explicitly asserted
-  `.not.toBe("session-claude-new")`; `claude.calls[0]?.prevSessionId` is `undefined` (cold); (ii)
-  settlement — `after.getHarnessBinding(ref, "claude-code")` and `after.getHarnessBinding(ref,
-  "codex")` both independently return `hydratedThroughSeq: 1` through the real `ConversationStore`
-  API; (iii) a raw `SELECT ... FROM conversation_harness_sessions` query (not an ORM helper) confirms
-  three rows: new claude-code binding (`warm`), new codex binding (`active`), and the superseded old
-  codex session id demoted to `stale` (audit trail preserved, not deleted). This satisfies the
-  issue's own acceptance-criterion wording verbatim ("A fire whose handler calls `ctx.delegate` twice
-  with two different harnesses resumes each harness's own `acp_session_id` and settles **both**
-  bindings' watermarks") — read literally, not just in substance.
-- **(b) Consent fail-closed is real for both the per-call path and the manifest-pin path** —
-  **confirmed, both are genuine denial assertions, not code-path-only checks.** Two distinct tests in
-  `run-automation-dispatch.test.ts`:
-  - `"a per-call harness absent from the user's ladder is denied fail-closed, like an unauthored
-    manifest pin"` (new in this diff, line 645) — fire's own harness is `codex` with `direct`
-    consent, ladder members `["claude-code"]` only; the handler calls
-    `dispatch.delegateDispatcher({ prompt: "go", harness: "gemini" }, dispatchCtx)`.  Asserts
-    `.rejects.toThrow(/gemini/u)`, `stub.calls` has length **0** (the gemini backend was never
-    invoked), and `consent.has("demo/nightly", "gemini", "automations")` is **false** afterward — a
-    real denial, not merely "the code took the deny branch".
-  - `"a manifest-pinned harness the user never authored is denied, not auto-granted"` (pre-existing,
-    line 597, unmodified by this diff, still exercised by the full suite run below) — same shape at
-    the fire level: `consentSource: "ladder"`, ladder `["claude-code"]`, fire harness `gemini`;
-    asserts `.rejects.toThrow(/gemini/u)`, `stub.calls` length 0, `consent.has(...)` false.
-  Reading the dispatch code (`run-automation-live-dispatch.ts`): a per-call harness that differs from
-  the fire's own harness is forced through `consentSource = "ladder"` regardless of the fire's own
-  `opts.consentSource` (comment: "never a live user selection ... validated exactly the way a
-  manifest `requires.harness` pin is validated"), then goes through the identical
-  `consent.recordDerived(...)` gate the manifest-pin path uses — genuinely the same fail-closed
-  mechanism, not a parallel weaker one.
-- **(c) An explicitly named harness that fails does not silently fail over** — **confirmed by
-  reading the dispatch code, not the receipt's prose.** In `startLiveDispatch`'s
-  `delegateDispatcher`, the single `try { result = await opts.runTurn(...) } catch { failure = ... }`
-  block is followed by: `if (!failure) { ...return... } const typedFailure = {...}; ...; throw
-  delegateFailureError(typedFailure)`. There is no loop, no second `harness` variable, no call to
-  `getHarness`/`HARNESSES` for an alternate kind anywhere in this function — a failure on the named
-  harness always throws `delegateFailureError` naming that exact harness and returns control to the
-  handler; it never attempts a different provider inside this call. This is corroborated by two
-  tests: the new `"an explicit per-call harness that fails never falls back to the fire's own
-  harness"` (stubs `claude-code` to fail with `failureClass: "quota"` and `codex` — the fire's own
-  harness — to a "should never run" success; asserts the codex stub's `calls` stays at length 0 and
-  the thrown error matches
-  `/centraid-delegate-failure:.*"harness":"claude-code".*"failureClass":"quota"/u`), and the
-  pre-existing whole-fire-ladder test suite (`live-automation-failover.test.ts`, unmodified,
-  confirmed still green below) which is where any ladder-walking genuinely lives — one level up in
-  `run-automation.ts`, outside this function, exactly as both the issue's Decision item 5 and the
-  receipt describe.
-- **(d) Receipt Decisions honesty — blueprint handlers and compile/publish/fire coverage** —
-  **both disclosures confirmed present and accurate; my judgment is below.** The `## Decisions`
-  section (unchanged text from the staged diff, verified present) states plainly: "The 5 blueprint
-  automation handlers were NOT re-bundled" with reasoning (already call `ctx.delegate`; standalone JS
-  with no imports from `packages/automation`/`agent-runtime` so slice (c) changes nothing in their
-  compiled output; the bundler is non-reproducible/wholesale-minifying in this sandbox; adding an
-  unrequested per-call harness to `photo-ocr.js` would itself be an out-of-scope behavior change).
-  Verified independently: `git diff --cached --name-only` contains zero paths under
-  `packages/blueprints/automations/*/handler.js` or `tools/recognition-automations/*` — the claim of
-  "not touched" is literally true for this diff. The compile/publish/fire round-trip disclosure is
-  also present and accurate: `headless-automation-compile.test.ts`'s new test only asserts that
-  `HEADLESS_COMPILE_WORK_ORDER(...)` — a string builder, no LLM call — contains specific phrases
-  (`"ctx.delegate({ harness, model, prompt, ... })"`, `"never invent a harness/model"`, etc.); nothing
-  in the staged diff drives a real coding-agent harness end to end.
+**Overall verdict for (1): PASS**, with the single most consequential caveat — (d) — surfaced above
+rather than buried: the slice satisfies the issue's Decision item 1 and the acceptance criterion's
+literal text ("connection + frame types come from the SDK... json-rpc.ts is deleted"), but
+`session/update` payload interpretation is knowingly, correctly, and disclosedly kept outside the
+SDK's own dispatch for a reason verified true against the installed SDK source.
 
-**My plain judgment on the blueprint-handler question, as asked:** the "already updated in an
-earlier slice; sources unaffected; re-bundling is non-reproducible here" reading is **legitimate,
-not a dodge** — with one caveat. The issue's own text under Scope > In bundles "Compiler work order +
-skills + 5 blueprint handlers regenerated" as one clause, but the issue's **Acceptance criteria**
-section (the actual pass/fail bar, fetched fresh) never lists "5 blueprint handlers regenerated
-through the compiler" as its own checkable line — the closest acceptance bullet is "`ctx.agent` no
-longer exists: ... blueprint handlers ... all say `ctx.delegate`", which was satisfied in the
-delegate-rail slice, confirmed already committed. The five handlers already exercise the exact
-`ctx.delegate` surface this slice adds (`prompt`/`json` calls with no harness override, which remains
-valid — `harness`/`model`/`configPins` are optional), so there is no missing capability being papered
-over; running a non-reproducible bundler purely to touch files with no semantic change would be
-diff noise for its own sake, and the receipt is explicit and specific about why, rather than silent.
-The caveat: this reading does leave the literal words "regenerated" from the issue title unmet, and
-a maintainer who wanted dogfood proof that the compiler+bundler pipeline produces byte-identical (or
-intentionally-different) output for a real per-call-harness instruction does not get that proof from
-this slice — the new `fire.test.ts` test proves the wire mechanism works through a real
-`worker_threads` boundary using a hand-written inline handler, not a compiler-generated one, which is
-adjacent but not the same evidence. On balance this is an honest, defensible scope boundary rather
-than an excuse for undone work — but it is fair to flag that a maintainer expecting literal
-regeneration should not read the checked box as "the compiler produced these five files."
+**(2) Each `- [x]` item realized; each `- [ ]` genuinely not done — PASS.** `grep -n "^\- \["` on
+the staged receipt shows lines 5–12 all `[x]` (vault schema, harness axis, delegate rail,
+docs/glossary, chat-spine dispatch, HarnessSessions, per-call harness/model/configPins, and — newly
+flipped in this diff's hunk — `@agentclientprotocol/sdk` adoption / `json-rpc.ts` deleted) and line
+13 `[ ]` ("Close #740 as absorbed by this issue") — **eight checked, exactly one unchecked**, matching
+the audit brief's expectation exactly. Item 8's checkbox flip is the only checklist change in this
+diff (`git diff --cached` hunk on the checklist touches only that line). The seven earlier items
+remain realized at the seven already-committed slices listed above, unchanged by this diff. Item 9
+("Close #740") has zero footprint in this diff — correctly left unchecked, since closing the GitHub
+issue is a repository-hosting action outside any file diff, and the receipt does not claim it done.
 
-**(2) Each checked `- [x]` item is realized; each `- [ ]` is genuinely not claimed done** —
-**PASS**.
-
-- Item 7 — `- [x] Per-call harness/model/configPins on ctx.delegate; consent fail-closed (#567
-  D13); compiler grounding + blueprint handlers regenerated` — newly flipped `[ ]` → `[x]` in this
-  staged diff (confirmed via `git diff --cached` hunk on the checklist). Realized by (1)(a)-(d)
-  above: the per-call fields exist end-to-end (worker RPC → `ctx.ts` → `DelegateCall` →
-  dispatch), consent fail-closed is real for both denial shapes, compiler grounding is real at the
-  prompt level (disclosed as not LLM-executed), and the blueprint-handler non-regeneration is
-  disclosed rather than silently skipped — "compiler grounding + blueprint handlers regenerated" is
-  a slightly generous compression of "grounding done, handlers deliberately left alone", but the
-  receipt's own prose immediately under the checklist and the Decisions section both spell out the
-  true state, so the checkbox is not misleading a reader who continues past it.
-- The six earlier checked items (1-6) remain realized at `HEAD`, unchanged by this diff: vault schema
-  (`4162072c`), harness axis (`5624e365`), delegate rail (`9a07465d`), docs/glossary write-back
-  (`6955ec4c`), slice (a) accounted-spine dispatch (`aeff86c0`), and slice (b) HarnessSessions
-  extraction (`8d328597`) — `git log --oneline -7` confirms all six commit subjects reference `#743`.
-- The two remaining unchecked items — `@agentclientprotocol/sdk` adoption + `json-rpc.ts` deletion
-  (item 8), closing #740 (item 9) — have **zero footprint in the staged diff**, confirmed by the
-  12-file `--cached` name list above: no `backends/acp/*` path, no `package.json`/`bun.lock`, no SDK
-  import, appears anywhere in `git diff --cached`. The real ACP-SDK work exists, but entirely
-  **unstaged** (see Contamination check above) — this is correct per the task's framing (a
-  concurrently-running agent's in-progress work) and not a violation of "no footprint in the staged
-  slice."
-
-**(3) `## Checklist` mirrors issue #743's `Scope > In:` bullets** — **PASS**. Fetched issue #743
-fresh via `mcp__github__issue_read` (full body, this turn). The issue's `# Scope > In:` list (every
-rename incl. vault schema/item-kind; `ctx.delegate` dispatch through the chat spine + fork deletion;
-HarnessSessions extraction + per-(conversationRef, harnessKind) settlement; metering +
-hydration-token accounting for delegate turns; per-call `harness`/`model`/`configPins` + `#567` D13
-consent + failover interplay; compiler work order + skills + 5 blueprint handlers regenerated + lint
-messages; `@agentclientprotocol/sdk` adoption; glossary/README/ARCHITECTURE/docs A1 write-back;
-closing #740) maps 1:1 onto the receipt's 9-line checklist, unchanged in shape from the prior audit
-(only item 7's checkbox flipped this round) — no added or missing scope claim.
+**(3) `## Checklist` mirrors issue #743's `Scope > In:` bullets — PASS.** Fetched issue #743 fresh
+via `mcp__github__issue_read` this turn (full body, not cached from a prior audit). The issue's
+`# Scope > In:` list — every rename incl. vault schema/item-kind; `ctx.delegate` dispatch through the
+chat spine + fork deletion; HarnessSessions extraction + settlement; metering + hydration-token
+accounting; per-call `harness`/`model`/`configPins` + `#567` D13 consent + failover interplay;
+compiler work order + skills + 5 blueprint handlers regenerated + lint messages;
+`@agentclientprotocol/sdk` adoption; glossary/README/ARCHITECTURE/docs A1 write-back; closing #740 —
+maps 1:1 onto the receipt's 9-line checklist. Read Part 2 Decision item 1 in full (quoted verbatim
+above the acceptance criteria): "adopt `@agentclientprotocol/sdk` for the JSON-RPC connection + typed
+protocol frames, replacing `json-rpc.ts` ... Keep everything the SDK does not do: launch specs, warm
+pooling, capability probe/cache, stream→`TurnStreamEvent` normalization, the loopback vault MCP
+server, usage normalization. Pin the stable entrypoint; do not use `experimental/v2`." Every clause of
+that decision item was independently checked above in (1)(a)–(e) and confirmed true against the
+staged diff and the installed SDK, not assumed from the receipt's paraphrase.
 
 **Independent verification run fresh in this audit:**
-- `bunx vitest run --root packages/automation` → **420/420 passed**, 27 test files, 0 failures
-  (9.42s).
-- `bunx vitest run --root packages/agent-runtime src/automation` → **31 passed | 1 skipped** (32
-  total), 3 test files passed, 1 skipped file (3.50s). No failures.
-- `bunx vitest run --root packages/gateway src/lifecycle/headless-automation-compile.test.ts` →
-  **14/14 passed** (5.25s).
-- `git status --porcelain` at audit time confirms the staged file set matches the 12-file list above
-  exactly, plus the unstaged ACP-SDK files noted in the Contamination check (none of which the three
-  commands above touch: automation and the automation-facing slice of agent-runtime/gateway do not
-  import `backends/acp/json-rpc.ts` or the new `connection.ts`).
+- `bunx vitest run --root packages/agent-runtime src/backends/acp` → **215 passed**, 2 failed (both
+  `launch.test.ts` `IS_SANDBOX` assertions, pre-existing and unrelated to this diff — `launch.ts` is
+  not in `git diff --cached --name-only`), 21 of 22 test files fully green. Matches the audit brief's
+  expectation exactly.
+- `bunx vitest run --root packages/agent-runtime src/backends/acp/connection.test.ts` → **9/9
+  passed**.
+- `bun run typecheck` → green, **35/35** packages (turbo cache hit on most, fresh compile on
+  `agent-runtime`/`gateway`/`desktop`/`web` which touch the changed files transitively).
+- `bun run knip` → **clean**: only the 31 pre-existing configuration hints (unrelated
+  `ignoreDependencies`/`ignoreBinaries`/entry-pattern housekeeping suggestions), zero "Unused
+  files"/"Unused dependencies"/"Unused exports" sections, exit code 0. Specifically confirms
+  `@agentclientprotocol/sdk` is not flagged as an unused dependency — it is genuinely imported by
+  `connection.ts`, `backend.ts`, `enumerate-models.ts`, `probe-capabilities.ts`, and
+  `agent-errors.ts`.
 
-**Test-quality judgment on the newly-literalized multi-harness test, and the new fail-closed /
-no-failover tests: genuinely strong, not cosmetic.** The literalization closes exactly the gap the
-prior audit flagged as the one open item ("substance-not-yet-literal, pending item (c)") — this is
-real forward progress on the issue's headline acceptance criterion, not a rename of the same test.
-The three new `run-automation-dispatch.test.ts` tests each assert a distinct, falsifiable invariant
-with concrete evidence (thrown-error message content, `stub.calls.length`, `consent.has(...)`
-booleans, `prevSessionId` values) rather than "no exception thrown" happy-path smoke checks, and the
-new `fire.test.ts` test is the only one in the diff that proves the wire shape survives a real
-`worker_threads` postMessage boundary rather than a same-process function call.
+**Independent source-reading beyond what the task asked for, done because (d) is the crux finding:**
+walked `node_modules/@agentclientprotocol/sdk/dist/acp.js` (`class ClientApp`, `SessionUpdateRouter`,
+`registerAppNotification`/`registerAppRequest`) and `dist/jsonrpc.js`
+(`ConnectionBuilder.onReceiveRequest`/`onReceiveNotification`/`withHandler`,
+`Connection.processIncomingMessage`) to trace the exact control flow a `session/update` frame would
+take if routed through `ClientApp` instead of bypassed. The trace confirms the receipt's claim
+precisely, including the subtle detail that a user handler registered *after* `ClientApp` construction
+(the only order application code can use, since `ClientApp` is constructed before user code can call
+`.onNotification`) would never even be reached for a rejected frame, because the router's exception
+aborts the whole per-message handler loop rather than falling through to the next handler.
 
-**Overall verdict: PASS.** The staged diff is what the receipt says it is: `DelegateCall` gains
-optional `harness`/`model`/`configPins`, threaded honestly through the worker RPC bridge into
-`run-automation-live-dispatch.ts`; naming a per-call harness is validated through the exact same
-`recordDerived("ladder", ...)` fail-closed gate an unauthored manifest pin uses, confirmed by reading
-both the code and two independent denial tests; an explicitly named harness that fails throws its own
-typed failure with no fallback path in the function, confirmed by reading the dispatch code (no
-loop, no second harness lookup) and by a dedicated regression test; the slice-(b) acceptance test is
-now genuinely literal — two real `ctx.delegate`-shaped calls each naming a different harness — while
-still asserting on real `conversation_harness_sessions` rows for both session ids and both
-watermarks, which is the issue's headline acceptance criterion read verbatim; and the receipt's two
-required disclosures (blueprint handlers not re-bundled; compile/publish/fire only partially covered)
-are both present, both independently verified true against the diff, and — per my judgment above —
-a legitimate scope reading rather than a dodge, with the caveat that "regenerated" in the issue's
-Scope line is not literally satisfied and a maintainer should not mistake the checked box for
-compiler-produced output. `bunx vitest run --root packages/automation` (420/420), `--root
-packages/agent-runtime src/automation` (31 passed/1 skipped), and `--root packages/gateway
-src/lifecycle/headless-automation-compile.test.ts` (14/14) all reproduce green independently, and no
-contamination from the concurrently-running ACP-SDK agent's unstaged work was found in
-`git diff --cached`.
+**Overall verdict: PASS**, with the (d) caveat stated plainly rather than smoothed over: `json-rpc.ts`
+is genuinely deleted; the SDK is pinned at exactly `1.3.0` with no caret; `experimental/v2` is
+imported nowhere; warm pooling, probes, vault MCP, and stream normalization all still exist and their
+tests are green (215/217, the 2 failures pre-existing and unrelated); malformed frames now reject a
+typed `AcpFrameError` instead of hanging, proven in both `connection.ts` and `connection.test.ts`;
+and the `session/update` SDK-dispatch bypass is real, disclosed at the length and prominence the
+finding deserves, and — verified independently against the installed SDK's source rather than taken
+on faith — factually correct that `ClientApp`'s constructor unconditionally installs a static
+`zSessionNotification.parse` handler that would silently (from the app's perspective) discard vendor
+`session/update` variants ahead of any user handler. The slice satisfies the letter of the acceptance
+criterion and the issue's Decision item 1, but "connection + frame types come from the SDK" is true
+of the JSON-RPC transport layer and not, by necessity and by design, of `session/update`'s payload
+interpretation — a distinction the receipt itself draws, which is why this is a **PASS** rather than a
+**REFUTED**, and not something a future reader should mistake for "everything is SDK-typed now."
+`bunx vitest run --root packages/agent-runtime src/backends/acp` (215/217, 2 pre-existing),
+`connection.test.ts` (9/9), `bun run typecheck` (35/35 green), and `bun run knip` (clean) all
+reproduce independently in this audit.
 
 ## Session
 

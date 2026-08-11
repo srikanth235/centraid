@@ -34,6 +34,7 @@
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.63.0",
     "@agentclientprotocol/codex-acp": "1.1.7",
+    "@agentclientprotocol/sdk": "1.3.0",
     "@centraid/app-engine": "workspace:*",
     "@centraid/automation": "workspace:*"
   },

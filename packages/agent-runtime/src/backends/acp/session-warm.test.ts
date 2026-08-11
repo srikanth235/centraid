@@ -2,7 +2,7 @@
 
 import { describe, expect, test, afterEach } from "vitest";
 
-import type { AcpConnection } from "./json-rpc.js";
+import type { HarnessConnection } from "./connection.js";
 import {
   clearWarmPool,
   disposeSlot,
@@ -13,7 +13,7 @@ import {
 import type { WarmAgentSlot } from "./session-warm.ts";
 
 function makeConn(opts?: { exited?: boolean; closeThrows?: boolean }): {
-  conn: AcpConnection;
+  conn: HarnessConnection;
   closeCalls: () => number;
   markExited: () => void;
 } {
@@ -29,8 +29,7 @@ function makeConn(opts?: { exited?: boolean; closeThrows?: boolean }): {
     exited = true;
     resolveExit?.();
   };
-  const conn: AcpConnection = {
-    send: () => undefined,
+  const conn: HarnessConnection = {
     request: async <T = unknown>(method: string): Promise<T> => {
       if (method === "session/close") {
         closeCalls += 1;
@@ -38,10 +37,9 @@ function makeConn(opts?: { exited?: boolean; closeThrows?: boolean }): {
       }
       return undefined as T;
     },
-    respond: () => undefined,
-    respondMethodNotFound: () => undefined,
-    setHandlers: () => undefined,
-    hasExited: () => exited,
+    notify: () => undefined,
+    attach: () => () => undefined,
+    isClosed: () => exited,
     exited: exitedPromise,
     spawnError: () => undefined,
     stderrTail: () => "",
