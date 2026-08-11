@@ -16,12 +16,13 @@ test("every shared engine conforms in the real tree", () => {
   }
 });
 
-test("all five engines are actually checked — no silently empty check", () => {
+test("every checked engine is actually checked — no silently empty check", () => {
   assert.deepEqual(Object.keys(scanEngineConformance()).toSorted(), [
     "A placement",
     "B custody",
     "C consent",
     "D triage",
+    "H pending-overlay",
     "refusal grammar",
   ]);
 });
