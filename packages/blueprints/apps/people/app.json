@@ -104,7 +104,12 @@
           "display_name": { "type": "string", "minLength": 1 },
           "role": { "type": "string" },
           "avatar_color": { "type": "string" },
-          "met": { "type": "string" }
+          "met": { "type": "string" },
+          "profile_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The person's people_profile row id. Not read by the command (looked up server-side from party_id) — carried so the client's pending-write overlay (issue #738) can key its optimistic upsert (role/avatar_color/met) on the same row the settled write will touch."
+          }
         },
         "required": ["party_id"],
         "additionalProperties": false
@@ -149,7 +154,12 @@
       "input": {
         "type": "object",
         "properties": {
-          "party_id": { "type": "string", "minLength": 1 }
+          "party_id": { "type": "string", "minLength": 1 },
+          "profile_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The person's people_profile row id. Not read by the command (looked up server-side from party_id) — carried so the client's pending-write overlay (issue #738) can key its optimistic upsert on the same row the settled write will touch."
+          }
         },
         "required": ["party_id"],
         "additionalProperties": false
@@ -171,7 +181,12 @@
       "input": {
         "type": "object",
         "properties": {
-          "party_id": { "type": "string", "minLength": 1 }
+          "party_id": { "type": "string", "minLength": 1 },
+          "profile_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The person's people_profile row id. Not read by the command (looked up server-side from party_id) — carried so the client's pending-write overlay (issue #738) can key its optimistic upsert on the same row the settled write will touch."
+          }
         },
         "required": ["party_id"],
         "additionalProperties": false
@@ -218,7 +233,12 @@
         "properties": {
           "party_id": { "type": "string", "minLength": 1 },
           "kind": { "type": "string", "minLength": 1 },
-          "text": { "type": "string" }
+          "text": { "type": "string" },
+          "profile_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The person's people_profile row id. Not read by the command (looked up server-side from party_id) — carried so the client's pending-write overlay (issue #738) can key its optimistic upsert (last_contacted_at) on the same row the settled write will touch."
+          }
         },
         "required": ["party_id", "kind"],
         "additionalProperties": false

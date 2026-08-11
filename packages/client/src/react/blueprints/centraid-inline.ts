@@ -200,9 +200,7 @@ export interface InlineCentraidClient {
   }) => Promise<T>;
   /** This app's unsettled writes from one scope's durable outbox (issue
    * #738) — the reload path for the pending-write overlay engine. */
-  pendingWrites: (opts?: {
-    scope?: string;
-  }) => Promise<InlinePendingWrite[]>;
+  pendingWrites: (opts?: { scope?: string }) => Promise<InlinePendingWrite[]>;
   /** Commands durably queued on this member seat while its steward is away. */
   commonsIntents: (opts?: {
     scope?: string;

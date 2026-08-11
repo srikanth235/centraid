@@ -30,6 +30,11 @@ export interface DriveDoc {
   created_at: string;
   updated_at: string;
   folder_id: string | null;
+  // The folders-scheme core.tag row's own id (issue #738, see
+  // pending-projection.ts) — null only for a wrapper the folder-tag read
+  // never covered (shouldn't happen for a live document, but the join is
+  // defensive the same way folder_id's null branch is).
+  folder_tag_id: string | null;
   starred: boolean;
   trashed: boolean;
   purge_at: string | null;
@@ -106,6 +111,10 @@ export interface AppData {
   folders: Folder[];
   documents: DriveDoc[];
   root_folder_id: string | null;
+  // The folders-scheme core.concept_scheme row id (issue #738, see
+  // pending-projection.ts) — null only on a brand-new vault with no folders
+  // scheme yet.
+  folder_scheme_id: string | null;
 }
 
 /**

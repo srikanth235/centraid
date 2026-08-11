@@ -295,7 +295,13 @@ type CentraidPendingMutation =
       purpose?: string;
       shapeId?: string;
     }
-  | { op: "delete"; entity: string; rowId: string; purpose?: string; shapeId?: string };
+  | {
+      op: "delete";
+      entity: string;
+      rowId: string;
+      purpose?: string;
+      shapeId?: string;
+    };
 
 /** One unsettled write from the durable outbox (issue #738) — what
  * `pendingWrites()` reports so the shared overlay engine can rebuild pending

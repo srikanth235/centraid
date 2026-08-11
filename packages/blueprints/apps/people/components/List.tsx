@@ -19,6 +19,7 @@ export function ListRow({
   data,
   selectedIds,
   search,
+  pending,
   onOpenDetails,
   onToggleSelect,
   onOpenMenu,
@@ -27,6 +28,8 @@ export function ListRow({
   data: AppData;
   selectedIds: Set<string>;
   search: string;
+  /** An add/edit/trash write for this row is unsettled (issue #738). */
+  pending?: boolean;
   onOpenDetails: (id: string) => void;
   onToggleSelect: (id: string) => void;
   onOpenMenu: (anchor: HTMLElement, p: Person) => void;
@@ -36,7 +39,10 @@ export function ListRow({
   const selected = selectedIds.has(p.party_id);
   const name = displayText(p.name);
   return (
-    <div className={styles.row} data-selected={String(selected)}>
+    <div
+      className={pending ? `${styles.row} kit-pending` : styles.row}
+      data-selected={String(selected)}
+    >
       {/* The whole row opens the profile. One stretched button carries that
           (issue #573) instead of a click handler on each static cell — the
           row's own controls (select, avatar, kebab) sit above it. */}
@@ -92,6 +98,7 @@ export function ListRow({
         <span className="kit-dotmini" style={{ background: st.color }} />
         {st.label}
       </span>
+      {pending ? <span className="kit-pending-chip">pending</span> : null}
       <div className={styles.rowEnd}>
         <button
           type="button"

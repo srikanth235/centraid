@@ -9,12 +9,15 @@ import styles from "./Grid.module.css";
 export function GridCard({
   p,
   selectedIds,
+  pending,
   onOpenDetails,
   onToggleSelect,
   onToggleStar,
 }: {
   p: Person;
   selectedIds: Set<string>;
+  /** An add/edit/trash write for this row is unsettled (issue #738). */
+  pending?: boolean;
   onOpenDetails: (id: string) => void;
   onToggleSelect: (id: string) => void;
   onToggleStar: (p: Person) => void;
@@ -23,7 +26,10 @@ export function GridCard({
   const st = statusOf(p);
   const selected = selectedIds.has(p.party_id);
   return (
-    <div className={styles.card} data-selected={String(selected)}>
+    <div
+      className={pending ? `${styles.card} kit-pending` : styles.card}
+      data-selected={String(selected)}
+    >
       {/* The whole card opens the profile. One stretched button carries that
           (issue #573) instead of click handlers on the static top/body blocks —
           the card's own select/star buttons sit above it. */}
@@ -82,6 +88,7 @@ export function GridCard({
           <span className="kit-dotmini" style={{ background: st.color }} />
           {metaLine(p)}
         </div>
+        {pending ? <span className="kit-pending-chip">pending</span> : null}
       </div>
     </div>
   );

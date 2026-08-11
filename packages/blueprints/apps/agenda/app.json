@@ -165,6 +165,11 @@
           "partstat": {
             "type": "string",
             "enum": ["accepted", "declined", "tentative"]
+          },
+          "attendee_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The responding attendee's own schedule.attendee row id. Not read by the command (looked up server-side from event_id+party_id) — carried so the client's pending-write overlay (issue #738) can key its optimistic upsert on the same row the settled write will touch."
           }
         },
         "required": ["event_id", "party_id", "partstat"],

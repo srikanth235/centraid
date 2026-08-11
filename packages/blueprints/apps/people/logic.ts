@@ -1,6 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit (#630) — this factory is the
 // cohesive controller for one blueprint; splitting its shared mutable app
 // closure would obscure write/outcome and undo sequencing.
+import { createPendingOverlayModel } from "../_shared/pending-overlay.ts";
 import {
   PALETTE,
   listColor,
@@ -12,14 +13,14 @@ import {
 // the kebab/move-to-list popover (stays plain DOM, built with kit's
 // `h()`/`popItem()` — no React root needed there), every person/list write,
 // the profile drawer's load/reload + "+ add" write helper, journal/activity
-// reads, and navigation state transitions. `createLogic()` is a factory
-// app.tsx calls once at boot, closing over the exact `state`/`data` objects
-// app.tsx owns (passed by reference: app.tsx mutates their properties in
-// place, never reassigns the bindings, so this module always sees the live
-// values) plus the render entry points only app.tsx can define. Everything
-// returned here is then wired into app.tsx's render functions and JSX props,
-// exactly like any other value flowing down. Same factory pattern as
-// tasks/logic.ts and notes/logic.ts.
+// reads, navigation state transitions, and the pending-write overlay (issue
+// #738). `createLogic()` is a factory app.tsx calls once at boot, closing
+// over the exact `state`/`data` objects app.tsx owns (passed by reference:
+// app.tsx mutates their properties in place, never reassigns the bindings, so
+// this module always sees the live values) plus the render entry points only
+// app.tsx can define. Everything returned here is then wired into app.tsx's
+// render functions and JSX props, exactly like any other value flowing down.
+// Same factory pattern as tasks/logic.ts and notes/logic.ts.
 import {
   closePopover,
   h,
@@ -29,6 +30,7 @@ import {
   runBulk as runBulkBase,
   statusLine,
 } from "./kit.ts";
+import { peoplePendingProjection } from "./pending-projection.ts";
 import type {
   DashboardData,
   DetailPerson,
@@ -51,6 +53,12 @@ export function createLogic({
   renderModal,
   renderNewMenu,
 }: LogicDeps) {
+  // The shared pending-write overlay (issue #738): one model, created once,
+  // that every write wraps through `act()` below. No app state carries
+  // pending rows — `model.byRowId()` is the render-time source for the
+  // list/grid pending-chip decoration app-root.tsx applies.
+  const model = createPendingOverlayModel(peoplePendingProjection);
+
   function notice(text: string) {
     const b = $("noticeBanner");
     b.textContent = text || "";
@@ -68,13 +76,56 @@ export function createLogic({
     return false;
   }
 
+  /** Row id → pending state (party ids for add-person/edit-person,
+   *  profile ids for trash/restore/log-interaction — see pending-projection.ts). */
+  function pendingByRowId() {
+    return model.byRowId();
+  }
+
+  /** The reload path (issue #738): rebuild overlay-status rows from the
+   *  durable outbox alone. Feature-detected — the visual-harness mock and
+   *  older hosts lack `pendingWrites()`. */
+  async function restorePending(): Promise<void> {
+    const durable = (await window.centraid.pendingWrites?.()) ?? [];
+    model.restore(durable);
+    render();
+  }
+
+  /** Fold one change-feed event into the pending model; true when it moved. */
+  function applyPendingChange(detail: CentraidChangeDetail): boolean {
+    return model.applyChangeDetail(detail);
+  }
+
+  // Every write goes through here, so the pending overlay tracks every write
+  // uniformly: mint the intent id, project the app's declared optimistic
+  // mutations, and fold the outcome (or the transport failure) into the
+  // model. An action absent from pending-projection.ts projects nothing —
+  // `begin()` is then a no-op and this is exactly the old fire-and-forget act().
   async function act(
     action: string,
     input: Record<string, unknown>
   ): Promise<VaultOutcome | undefined> {
+    const intentId = globalThis.crypto.randomUUID();
+    const optimistic = model.begin(action, input, intentId);
     try {
-      return await window.centraid.write({ action, input });
+      const outcome = await window.centraid.write({
+        action,
+        input,
+        intentId,
+        ...(optimistic.length > 0 ? { optimistic } : {}),
+      });
+      model.applyOutcome(outcome.invocationId ?? intentId, {
+        status: outcome.status,
+        ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+        ...(outcome.conflict === undefined
+          ? {}
+          : { conflict: outcome.conflict }),
+      });
+      return outcome;
     } catch (error) {
+      // Nothing reached the outbox — settle to `failed` instead of hanging as
+      // `queued` forever.
+      model.applyOutcome(intentId, { status: "failed" });
       notice(error instanceof Error ? error.message : String(error));
       return undefined;
     }
@@ -251,6 +302,7 @@ export function createLogic({
   ): Promise<boolean> {
     const outcome = await act("edit-person", {
       party_id: p.party_id,
+      ...(p.profile_id ? { profile_id: p.profile_id } : {}),
       ...fields,
     });
     if (!narrate(outcome)) return false;
@@ -290,7 +342,10 @@ export function createLogic({
   }
 
   async function trashPerson(p: DetailPerson): Promise<void> {
-    const outcome = await act("trash-person", { party_id: p.party_id });
+    const outcome = await act("trash-person", {
+      party_id: p.party_id,
+      ...(p.profile_id ? { profile_id: p.profile_id } : {}),
+    });
     if (!narrate(outcome)) return;
     const revisionId = String(outcome?.output?.revision_id ?? "");
     closeDetails();
@@ -305,7 +360,10 @@ export function createLogic({
   }
 
   async function restorePerson(p: Person): Promise<void> {
-    const outcome = await act("restore-person", { party_id: p.party_id });
+    const outcome = await act("restore-person", {
+      party_id: p.party_id,
+      ...(p.profile_id ? { profile_id: p.profile_id } : {}),
+    });
     if (!narrate(outcome)) return;
     statusLine(`${p.name} restored · receipt`);
     await refresh();
@@ -316,6 +374,7 @@ export function createLogic({
       party_id: p.party_id,
       kind,
       text,
+      ...(p.profile_id ? { profile_id: p.profile_id } : {}),
     });
     if (!narrate(outcome)) return;
     statusLine(`Logged · receipted.`);
@@ -640,6 +699,9 @@ export function createLogic({
     notice,
     narrate,
     act,
+    pendingByRowId,
+    restorePending,
+    applyPendingChange,
     currentRows,
     clearSelection,
     toggleSelect,

@@ -88,7 +88,13 @@ import { createLibraryStore } from "./library-store.ts";
 import { createLightbox, viewerKeyAction } from "./lightbox.tsx";
 import { createMemberPrefs, stepTileSize } from "./member-prefs.ts";
 import { buildMemories, enrichAlbums } from "./memories.ts";
-import { notice, setStatusSink, setWriteTargetResolver } from "./outcomes.ts";
+import {
+  applyPendingChange,
+  notice,
+  restorePending,
+  setStatusSink,
+  setWriteTargetResolver,
+} from "./outcomes.ts";
 import { createPeople } from "./people.ts";
 import { createPicker } from "./picker.tsx";
 import { searchGroups } from "./search-groups.ts";
@@ -520,9 +526,16 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       );
     };
 
-    /** Re-read every scope — the explicit, post-write and window-focus path. */
+    /** Re-read every scope — the explicit, post-write and window-focus path.
+     *  Also the reload path for the pending-write overlay (issue #738):
+     *  rebuilds it from the durable outbox alongside the canonical reads, so
+     *  a pending row's visibility survives exactly as long as the outbox
+     *  does. `store.refreshAll()` already repaints once on its own data
+     *  landing; the extra `renderMain()` picks up whatever `restorePending`
+     *  changed after that first paint. */
     async function refresh(): Promise<void> {
-      await store.refreshAll();
+      await Promise.all([store.refreshAll(), restorePending()]);
+      if (!disposed) renderMain();
     }
 
     function albumAssets(): Asset[] {
@@ -1548,9 +1561,12 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
 
     window.addEventListener("keydown", onKeydown);
     window.addEventListener("focus", onFocus);
-    const stopChange = window.centraid.onChange?.((detail) =>
-      store.handleChange(detail)
-    );
+    const stopChange = window.centraid.onChange?.((detail) => {
+      // The pending-write overlay (issue #738) settles off the SAME
+      // change-feed event the library store refetches on.
+      if (applyPendingChange(detail)) renderMain();
+      store.handleChange(detail);
+    });
 
     // The grid's real width drives the justified timeline (read off #grid, not
     // #scrollPane whose clientWidth includes its own padding).
@@ -1599,6 +1615,11 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
     renderOfflineBanner();
     contributeAppBar();
     void store.refreshAll();
+    // The reload path for the pending-write overlay (issue #738): rebuild it
+    // from the durable outbox on mount, same as every subsequent refresh().
+    void restorePending().then(() => {
+      if (!disposed) renderMain();
+    });
 
     return () => {
       // A read may resolve after React removes Chrome's DOM. Fence its

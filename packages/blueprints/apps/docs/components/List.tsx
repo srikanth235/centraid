@@ -26,6 +26,7 @@ export function ListRow({
   narrow,
   search,
   trashed,
+  pending,
   folderName,
   onOpenDetails,
   onOpenQuick,
@@ -39,6 +40,8 @@ export function ListRow({
   narrow: boolean;
   search: string;
   trashed: boolean;
+  /** A rename/trash/restore write for this row is unsettled (issue #738). */
+  pending?: boolean;
   folderName: (id: string | null | undefined) => string;
   onOpenDetails: (id: string) => void;
   onOpenQuick: (id: string) => void;
@@ -51,7 +54,10 @@ export function ListRow({
   const title = displayText(doc.title || "Untitled");
   const where = displayText(folderName(doc.folder_id));
   return (
-    <div className={styles.row} data-selected={String(selected)}>
+    <div
+      className={pending ? `${styles.row} kit-pending` : styles.row}
+      data-selected={String(selected)}
+    >
       {/* The row can't be a <button> (it holds the select / preview / title /
           actions buttons), so the "open details" gesture is a stretched overlay
           button laid under them. The old `closest('button, a, input')` guard is
@@ -149,6 +155,7 @@ export function ListRow({
         {trashed ? purgeCountdown(doc.purge_at) : fmtDate(doc.created_at)}
         <CustodyDot state={doc.custody_state} />
       </span>
+      {pending ? <span className="kit-pending-chip">pending</span> : null}
       <div className={styles.rowEnd}>
         {trashed ? (
           <button

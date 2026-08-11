@@ -1,8 +1,14 @@
+import { createPendingOverlayModel } from "../_shared/pending-overlay.ts";
 import type { WriteTarget } from "../_shared/write-target.ts";
 // Outcome narration + the write trampoline (shared pattern across apps). No
 // domain (asset/album) state lives here — it's generic plumbing, which is
 // exactly why every action module and every component that needs to fire a
 // command imports it directly instead of threading it through props.
+//
+// The pending-write overlay (issue #738): one model, created once, that
+// `act()` wraps every write through — batch loops included, since each call
+// mints its own intent id. An action absent from pending-projection.ts
+// projects nothing, so this is a no-op for the app's many undeclared writes.
 //
 // MULTI-SCOPE (issue #599). Mounted over N scopes, a write has to say WHICH
 // one, and there are exactly two ways to know:
@@ -22,6 +28,31 @@ import type { WriteTarget } from "../_shared/write-target.ts";
 // ambient scope — the empty id every scope-addressed transport reads as "the
 // one scope there is".
 import { outcomeMessage } from "./kit.ts";
+import { photosPendingProjection } from "./pending-projection.ts";
+
+const pendingModel = createPendingOverlayModel(photosPendingProjection);
+
+// No `pendingByRowId()` export: Tile.tsx's four overlay slots (selection,
+// vault, kind, state) are an explicit design budget ("NOT a fifth slot —
+// §4.4 says four, and means it"), so this pass declares the projections and
+// wires every write through the model — the composed read already carries a
+// pending favorite/trash optimistically — without adding chip decoration no
+// surface here has room for.
+
+/** The reload path (issue #738): rebuild overlay-status rows from the
+ *  durable outbox alone. Feature-detected — the visual-harness mock and
+ *  older hosts lack `pendingWrites()`. Unlike the per-app `logic.ts`
+ *  factories, this module has no render hook of its own — the caller
+ *  (app-root.tsx) re-renders after awaiting this. */
+export async function restorePending(): Promise<void> {
+  const durable = (await window.centraid.pendingWrites?.()) ?? [];
+  pendingModel.restore(durable);
+}
+
+/** Fold one change-feed event into the pending model; true when it moved. */
+export function applyPendingChange(detail: CentraidChangeDetail): boolean {
+  return pendingModel.applyChangeDetail(detail);
+}
 
 /**
  * Which write is being placed. `new` follows the chip selection (an upload
@@ -131,13 +162,27 @@ export async function act(
   input?: Record<string, unknown>,
   scope?: string | null
 ): Promise<VaultOutcome | undefined> {
+  const body = input ?? {};
+  const intentId = globalThis.crypto.randomUUID();
+  const optimistic = pendingModel.begin(action, body, intentId);
   try {
-    return await window.centraid.write({
+    const outcome = await window.centraid.write({
       action,
-      input,
+      input: body,
+      intentId,
       ...(scope ? { scope } : {}),
+      ...(optimistic.length > 0 ? { optimistic } : {}),
     });
+    pendingModel.applyOutcome(outcome.invocationId ?? intentId, {
+      status: outcome.status,
+      ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+      ...(outcome.conflict === undefined ? {} : { conflict: outcome.conflict }),
+    });
+    return outcome;
   } catch (error) {
+    // Nothing reached the outbox — settle to `failed` instead of hanging as
+    // `queued` forever.
+    pendingModel.applyOutcome(intentId, { status: "failed" });
     // A read-only audience is refused by the shell with a human message; that
     // is narration, not a crash, and it reads like any other refusal.
     const e = error as { message?: string };

@@ -3,7 +3,8 @@
 // at serve time (a value import of this module would 404). Grounded in the
 // query payloads (upcoming/search/parties) and app.tsx's module-level
 // `state`/`data` bags, which are mutated in place (never reassigned) so
-// logic.ts's/pending.ts's closures over them stay valid.
+// logic.ts's closures over them stay valid. Pending-write state lives in the
+// shared overlay model (issue #738, see pending-projection.ts) — never here.
 
 /** The three canvas views (also the appDefaultView knob's domain). */
 export type ViewKind = "month" | "week" | "schedule";
@@ -124,12 +125,6 @@ export interface ActivityEntry {
   receiptId: string | null;
 }
 
-/** A tracked parked/queued write, keyed by intent (see pending.ts). */
-export interface PendingRecord {
-  eventId: string;
-  kind: string;
-}
-
 /** The composer's prefilled start/end when opened from a day/slot click. */
 export interface Prefill {
   start: Date;
@@ -161,8 +156,7 @@ export interface PartyOption {
 
 /**
  * The module-level `state` bag app.tsx mutates in place (never reassigned) and
- * logic.ts/pending.ts close over. `data` is the separate last-successful-reads
- * store.
+ * logic.ts closes over. `data` is the separate last-successful-reads store.
  */
 export interface AppState {
   view: ViewKind;
@@ -174,9 +168,6 @@ export interface AppState {
   createOpen: boolean;
   createPrefill: Prefill | null;
   narrow: boolean;
-  pendingIds: Set<string>;
-  pendingCancelIds: Set<string>;
-  pendingByIntent: Map<string, PendingRecord>;
   activityLog: Map<string, ActivityEntry[]>;
   readFailedShown: boolean;
 }

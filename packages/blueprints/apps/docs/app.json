@@ -100,7 +100,12 @@
         "type": "object",
         "properties": {
           "document_id": { "type": "string", "minLength": 1 },
-          "folder_id": { "type": "string", "minLength": 1 }
+          "folder_id": { "type": "string", "minLength": 1 },
+          "folder_tag_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The document's current folders-scheme core.tag row id. Not read by the command (it replaces whichever tag exists) — carried so the client's pending-write overlay (issue #738) can delete the exact tag it is about to replace instead of leaving the document filed under two folders until settlement."
+          }
         },
         "required": ["document_id"],
         "additionalProperties": false
@@ -328,7 +333,12 @@
         "type": "object",
         "properties": {
           "name": { "type": "string", "minLength": 1 },
-          "parent_folder_id": { "type": "string", "minLength": 1 }
+          "parent_folder_id": { "type": "string", "minLength": 1 },
+          "folder_scheme_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The folders scheme's own core.concept_scheme row id. Not read by the command (it resolves/creates the scheme itself) — carried so the client's pending-write overlay (issue #738) can mint the new concept under the real scheme."
+          }
         },
         "required": ["name"],
         "additionalProperties": false

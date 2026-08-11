@@ -13,6 +13,11 @@
  */
 
 interface RawProfile {
+  // people.profile's own primary key — not otherwise surfaced to the client;
+  // carried through so drawer writes (trash-person/log-interaction) can key
+  // the pending-write overlay's optimistic upsert on the real row id
+  // (issue #738, see pending-projection.ts) instead of guessing at party_id.
+  profile_id: string;
   role?: string | null;
   avatar_color?: string | null;
   cadence_days: number;
@@ -459,6 +464,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
 
     const person = {
       party_id: partyId,
+      profile_id: profile.profile_id,
       name: party.display_name,
       role: profile.role ?? "",
       avatar_color: profile.avatar_color ?? null,

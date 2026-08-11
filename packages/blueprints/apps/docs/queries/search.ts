@@ -98,9 +98,14 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     // A document is a wrapper tagged with a folders-scheme concept.
     const folderConceptIds = new Set(schemeConcepts.map((c) => c.concept_id));
     const folderByDoc = new Map<string, string>();
+    // See drive.ts: the folder tag's own row id, for `move`'s pending-write
+    // overlay (issue #738).
+    const folderTagIdByDoc = new Map<string, string>();
     for (const t of tagRows) {
-      if (folderConceptIds.has(t.concept_id))
+      if (folderConceptIds.has(t.concept_id)) {
         folderByDoc.set(t.target_id, t.concept_id);
+        folderTagIdByDoc.set(t.target_id, t.tag_id);
+      }
     }
 
     // Starred rides the tag read already in hand (issue #274): the flags
@@ -167,6 +172,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           created_at: d.created_at,
           updated_at: d.updated_at,
           folder_id: conceptId === rootFolderId ? null : conceptId,
+          folder_tag_id: folderTagIdByDoc.get(d.document_id) ?? null,
           starred: starredIds.has(d.document_id),
           trashed: d.deleted_at != null,
           purge_at: d.purge_at ?? null,

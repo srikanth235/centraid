@@ -148,6 +148,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const state = stateRef.current;
     const data = dataRef.current;
     const logic = logicRef.current;
+    // The reload path (issue #738): every full refresh rebuilds the pending
+    // overlay from the durable outbox alongside the canonical reads, so a
+    // pending row's visibility survives exactly as long as the outbox does.
+    void logic?.restorePending();
     let next: PeoplePayload | undefined;
     let trash: TrashPayload | undefined;
     try {
@@ -333,7 +337,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
 
   // ---- chrome wiring: doorbell, focus, keys, click-outside, width ----
   useEffect(() => {
-    const stopDoorbell = onDataChange(CHANGE_TABLES, () => void refresh());
+    const stopDoorbell = onDataChange(CHANGE_TABLES, (detail) => {
+      logic.applyPendingChange(detail);
+      void refresh();
+    });
     const stopFocus = onFocusRefresh(() => void refresh());
 
     const onKey = (e: globalThis.KeyboardEvent): void => {
@@ -436,6 +443,14 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const rows = logic.currentRows();
   state.visibleRows = rows;
 
+  // The pending-write overlay's render-time index (issue #738): add/edit
+  // rows key on party_id, trash/restore/log-interaction rows key on
+  // profile_id (pending-projection.ts) — a row is pending if either matches.
+  const pendingRows = logic.pendingByRowId();
+  const isPersonPending = (person: Person): boolean =>
+    pendingRows.has(person.party_id) ||
+    (person.profile_id !== undefined && pendingRows.has(person.profile_id));
+
   const isPeople = [
     "all",
     "reconnect",
@@ -508,6 +523,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             <TrashCard
               key={person.party_id}
               person={person}
+              pending={isPersonPending(person)}
               onRestore={handleRestorePerson}
             />
           ))}
@@ -581,6 +597,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                 key={p.party_id}
                 p={p}
                 selectedIds={state.selected}
+                pending={isPersonPending(p)}
                 onOpenDetails={handleOpenDetails}
                 onToggleSelect={handleToggleSelect}
                 onToggleStar={handleToggleStar}
@@ -609,6 +626,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                   data={data}
                   selectedIds={state.selected}
                   search={state.search}
+                  pending={isPersonPending(p)}
                   onOpenDetails={handleOpenDetails}
                   onToggleSelect={handleToggleSelect}
                   onOpenMenu={handleOpenPersonMenu}

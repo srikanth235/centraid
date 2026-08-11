@@ -28,6 +28,10 @@ export interface Reminder {
 /** Secret-free decorated list row (people/search queries). */
 export interface Person {
   party_id: string;
+  // people.profile's own primary key — absent on rows list/search/dashboard
+  // queries never joined against people.profile; present on the main-list,
+  // trash, and detail reads that do (issue #738, see pending-projection.ts).
+  profile_id?: string;
   name: string;
   role?: string;
   avatar_color?: string | null;
@@ -105,6 +109,8 @@ export interface Interaction {
 
 export interface DetailPerson {
   party_id: string;
+  // people.profile's own primary key (issue #738, see pending-projection.ts).
+  profile_id?: string;
   name: string;
   role?: string;
   avatar_color?: string | null;

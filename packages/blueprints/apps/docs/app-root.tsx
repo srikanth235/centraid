@@ -63,6 +63,7 @@ interface DriveResult {
   folders?: Folder[];
   documents?: DriveDoc[];
   root_folder_id?: string | null;
+  folder_scheme_id?: string | null;
   truncated?: boolean;
   vaultDenied?: { message?: string } | null;
 }
@@ -143,6 +144,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
     folders: [],
     documents: [],
     root_folder_id: null,
+    folder_scheme_id: null,
   });
   const stateRef = useRef<AppState>(makeState(initialView(null)));
   const coreRef = useRef<Core | null>(null);
@@ -160,6 +162,11 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
     let core = undefined as unknown as Core;
 
     const refresh = async (): Promise<void> => {
+      // The reload path (issue #738): every full refresh rebuilds the
+      // pending overlay from the durable outbox alongside the canonical
+      // read, so a pending row's visibility survives exactly as long as the
+      // outbox does.
+      void core.logic.restorePending();
       let next: DriveResult;
       try {
         next = await window.centraid.read<DriveResult>({
@@ -189,6 +196,8 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       data.folders = incoming.folders ?? [];
       data.documents = incoming.documents ?? [];
       data.root_folder_id = incoming.root_folder_id ?? data.root_folder_id;
+      data.folder_scheme_id =
+        incoming.folder_scheme_id ?? data.folder_scheme_id;
       state.driveTruncated = Boolean(next?.truncated);
       state.selected = new Set(
         [...state.selected].filter((id) =>
@@ -466,7 +475,10 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
 
   // ---- chrome wiring: doorbell, focus, width, keys, drag/drop ----
   useEffect(() => {
-    const stopDoorbell = onDataChange(CHANGE_TABLES, () => void core.refresh());
+    const stopDoorbell = onDataChange(CHANGE_TABLES, (detail) => {
+      core.logic.applyPendingChange(detail);
+      void core.refresh();
+    });
     const stopFocus = onFocusRefresh(() => void core.refresh());
 
     const onKey = (e: globalThis.KeyboardEvent): void => {
@@ -584,6 +596,14 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
     state.nav = { kind: "all" };
   state.visibleRows = logic.currentRows();
   const rows = state.visibleRows;
+
+  // The pending-write overlay's render-time index (issue #738): rename/
+  // trash/restore rows key on document_id (pending-projection.ts); `move`
+  // targets the folder-tag entity, not the document row, so it is not
+  // decorated here.
+  const pendingRows = logic.pendingByRowId();
+  const isDocPending = (doc: DriveDoc): boolean =>
+    pendingRows.has(doc.document_id);
 
   const active = logic.activeFiles();
   const counts = {
@@ -758,6 +778,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
               doc={d}
               index={i}
               selectedIds={state.selected}
+              pending={isDocPending(d)}
               onOpenDetails={handleOpenDetails}
               onOpenQuick={handleOpenQuick}
               onToggleSelect={handleToggleSelect}
@@ -795,6 +816,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
                 narrow={state.narrow}
                 search={state.search}
                 trashed={trashed}
+                pending={isDocPending(d)}
                 folderName={logic.folderName}
                 onOpenDetails={handleOpenDetails}
                 onOpenQuick={handleOpenQuick}

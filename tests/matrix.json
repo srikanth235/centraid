@@ -1803,7 +1803,10 @@
             "reason": "Agenda does not consume the shared search scaffold.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" },
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
           "pending-overlay": {
             "status": "pass",
             "flow": "blueprint-pending-overlay-law"
@@ -1826,7 +1829,10 @@
             "reason": "Docs does not consume the shared search scaffold.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" },
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
           "pending-overlay": {
             "status": "pass",
             "flow": "blueprint-pending-overlay-law"
@@ -1857,7 +1863,10 @@
             "reason": "Locker does not consume the shared search scaffold.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" },
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
           "pending-overlay": {
             "status": "skip",
             "reason": "Locker's reveal posture is online-only by design; it declares no pending-projection actions to queue.",
@@ -1885,7 +1894,10 @@
             "reason": "Notes does not consume the shared search scaffold.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" },
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
           "pending-overlay": {
             "status": "pass",
             "flow": "blueprint-pending-overlay-law"
@@ -1920,7 +1932,10 @@
             "reason": "People does not consume the shared search scaffold.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" },
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
           "pending-overlay": {
             "status": "pass",
             "flow": "blueprint-pending-overlay-law"
@@ -1935,7 +1950,10 @@
           "consent": { "status": "pass", "flow": "blueprint-consent-law" },
           "triage": { "status": "pass", "flow": "blueprint-triage-law" },
           "search": { "status": "pass", "flow": "blueprint-search-law" },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" },
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
           "pending-overlay": {
             "status": "pass",
             "flow": "blueprint-pending-overlay-law"
@@ -1962,7 +1980,10 @@
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
           "search": { "status": "pass", "flow": "blueprint-search-law" },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" },
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
           "pending-overlay": {
             "status": "pass",
             "flow": "blueprint-pending-overlay-law"
@@ -1997,7 +2018,10 @@
             "reason": "Tasks does not consume the shared search scaffold.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" },
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
           "pending-overlay": {
             "status": "pass",
             "flow": "blueprint-pending-overlay-law"

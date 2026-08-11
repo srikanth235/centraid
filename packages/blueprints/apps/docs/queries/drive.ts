@@ -94,6 +94,11 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
         folders,
         documents: [],
         root_folder_id: rootFolderId,
+        // Carried through so `create-folder`'s pending-write overlay (issue
+        // #738, see pending-projection.ts) can mint its concept row under the
+        // real scheme — null only on a brand-new vault with no folders
+        // scheme yet, where the create-folder projection is a documented no-op.
+        folder_scheme_id: scheme?.scheme_id ?? null,
         truncated: false,
         window,
       };
@@ -111,12 +116,20 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
     const tagRows = (tags.rows ?? []) as unknown as TagRow[];
 
     const folderByDoc = new Map<string, string>();
-    for (const t of tagRows) folderByDoc.set(t.target_id, t.concept_id);
+    // The folder tag's OWN row id — not otherwise surfaced — carried through
+    // so `move`'s pending-write overlay (issue #738, see pending-projection.ts)
+    // can delete the exact tag `fileInto` would replace, instead of guessing.
+    const folderTagIdByDoc = new Map<string, string>();
+    for (const t of tagRows) {
+      folderByDoc.set(t.target_id, t.concept_id);
+      folderTagIdByDoc.set(t.target_id, t.tag_id);
+    }
     if (folderByDoc.size === 0) {
       return {
         folders,
         documents: [],
         root_folder_id: rootFolderId,
+        folder_scheme_id: scheme?.scheme_id ?? null,
         truncated: false,
         window,
       };
@@ -226,6 +239,7 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
           created_at: d.created_at,
           updated_at: d.updated_at,
           folder_id: conceptId === rootFolderId ? null : conceptId,
+          folder_tag_id: folderTagIdByDoc.get(d.document_id) ?? null,
           starred: starredIds.has(d.document_id),
           trashed: d.deleted_at != null,
           purge_at: d.purge_at ?? null,
@@ -244,6 +258,7 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
       folders,
       documents,
       root_folder_id: rootFolderId,
+      folder_scheme_id: scheme?.scheme_id ?? null,
       truncated,
       window,
     };

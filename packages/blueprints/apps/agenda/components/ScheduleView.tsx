@@ -65,13 +65,13 @@ function DayGroup({
   dayKey,
   segs,
   colorFor,
-  pendingCancelIds,
+  cancelAskedRowIds,
   onEventOpen,
 }: {
   dayKey: string;
   segs: DaySegment[];
   colorFor: ColorFor;
-  pendingCancelIds: Set<string>;
+  cancelAskedRowIds: Set<string>;
   onEventOpen: (ev: AgEvent) => void;
 }) {
   const d = new Date(`${dayKey}T00:00:00`);
@@ -95,7 +95,7 @@ function DayGroup({
             key={seg.ev.instance_key ?? seg.ev.event_id}
             seg={seg}
             colorFor={colorFor}
-            pending={pendingCancelIds.has(seg.ev.event_id)}
+            pending={cancelAskedRowIds.has(seg.ev.event_id)}
             onEventOpen={onEventOpen}
           />
         ))}
@@ -107,14 +107,14 @@ function DayGroup({
 export function ScheduleView({
   events,
   colorFor,
-  pendingCancelIds,
+  cancelAskedRowIds,
   search,
   onEventOpen,
   onEmptyAction,
 }: {
   events: AgEvent[];
   colorFor: ColorFor;
-  pendingCancelIds: Set<string>;
+  cancelAskedRowIds: Set<string>;
   search: string;
   onEventOpen: (ev: AgEvent) => void;
   onEmptyAction: () => void;
@@ -132,7 +132,7 @@ export function ScheduleView({
           dayKey={key}
           segs={byDay.get(key) ?? []}
           colorFor={colorFor}
-          pendingCancelIds={pendingCancelIds}
+          cancelAskedRowIds={cancelAskedRowIds}
           onEventOpen={onEventOpen}
         />
       ))}

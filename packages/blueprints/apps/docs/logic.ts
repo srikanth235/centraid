@@ -1,6 +1,8 @@
+import { createPendingOverlayModel } from "../_shared/pending-overlay.ts";
 import { fmtBytes, typeMeta } from "./format.ts";
 // Non-visual business logic: data/selection helpers, the plain-DOM popovers
-// (kebab / move-to), and every vault write (documents, folders, upload).
+// (kebab / move-to), every vault write (documents, folders, upload), and the
+// pending-write overlay (issue #738).
 //
 // This is NOT a component — no JSX, no props-in/props-out contract — but it
 // still must never own a second copy of mutable state. `createLogic()` is a
@@ -18,6 +20,7 @@ import {
   statusLine,
 } from "./kit.ts";
 import { createMetadata } from "./metadata.ts";
+import { docsPendingProjection } from "./pending-projection.ts";
 import { createPopovers } from "./popovers.ts";
 import type { AppData, AppState, DriveDoc, Folder } from "./types.ts";
 import { stageDocumentFile } from "./upload.ts";
@@ -64,6 +67,12 @@ export function createLogic({
   refresh,
   openQuick,
 }: LogicDeps) {
+  // The shared pending-write overlay (issue #738): one model, created once,
+  // that every write wraps through `act()` below. No app state carries
+  // pending rows — `model.byRowId()` is the render-time source for the
+  // grid/list pending-chip decoration app-root.tsx applies.
+  const model = createPendingOverlayModel(docsPendingProjection);
+
   function notice(text?: string) {
     const b = $("noticeBanner");
     b.textContent = text || "";
@@ -97,13 +106,57 @@ export function createLogic({
     return false;
   }
 
+  /** Row id → pending state (document ids for rename/trash/restore, tag ids
+   *  for move, concept ids for create-folder/rename-folder). */
+  function pendingByRowId() {
+    return model.byRowId();
+  }
+
+  /** The reload path (issue #738): rebuild overlay-status rows from the
+   *  durable outbox alone. Feature-detected — the visual-harness mock and
+   *  older hosts lack `pendingWrites()`. */
+  async function restorePending(): Promise<void> {
+    const durable = (await window.centraid.pendingWrites?.()) ?? [];
+    model.restore(durable);
+    render();
+  }
+
+  /** Fold one change-feed event into the pending model; true when it moved. */
+  function applyPendingChange(detail: CentraidChangeDetail): boolean {
+    return model.applyChangeDetail(detail);
+  }
+
+  // Every write goes through here, so the pending overlay tracks every write
+  // uniformly: mint the intent id, project the app's declared optimistic
+  // mutations, and fold the outcome (or the transport failure) into the
+  // model. An action absent from pending-projection.ts (star/unstar, every
+  // byte-custody action) projects nothing — `begin()` is then a no-op and
+  // this is exactly the old fire-and-forget act().
   async function act(
     action: string,
     input: Record<string, unknown>
   ): Promise<VaultOutcome | undefined> {
+    const intentId = globalThis.crypto.randomUUID();
+    const optimistic = model.begin(action, input, intentId);
     try {
-      return await window.centraid.write({ action, input });
+      const outcome = await window.centraid.write({
+        action,
+        input,
+        intentId,
+        ...(optimistic.length > 0 ? { optimistic } : {}),
+      });
+      model.applyOutcome(outcome.invocationId ?? intentId, {
+        status: outcome.status,
+        ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+        ...(outcome.conflict === undefined
+          ? {}
+          : { conflict: outcome.conflict }),
+      });
+      return outcome;
     } catch (error) {
+      // Nothing reached the outbox — settle to `failed` instead of hanging
+      // as `queued` forever.
+      model.applyOutcome(intentId, { status: "failed" });
       notice(String((error as { message?: string })?.message ?? error));
       return undefined;
     }
@@ -258,10 +311,22 @@ export function createLogic({
     folderId: string | null,
     name: string
   ) {
-    const input = (id: string): Record<string, unknown> => ({
-      document_id: id,
-      ...(folderId == null ? {} : { folder_id: folderId }),
-    });
+    // Resolved to the real root id (rather than omitted) whenever it is
+    // known — byte-identical to the command's own `folder_id ?? rootFolderId`
+    // fallback, and it is what lets the `move` pending-write overlay (issue
+    // #738, see pending-projection.ts) name the destination concept even for
+    // a "back to the top level" move.
+    const effectiveFolderId = folderId ?? data.root_folder_id;
+    const input = (id: string): Record<string, unknown> => {
+      const tagId = data.documents.find(
+        (d) => d.document_id === id
+      )?.folder_tag_id;
+      return {
+        document_id: id,
+        ...(effectiveFolderId == null ? {} : { folder_id: effectiveFolderId }),
+        ...(tagId ? { folder_tag_id: tagId } : {}),
+      };
+    };
     if (ids.length === 1) {
       const outcome = await act("move", input(ids[0]!));
       if (!narrate(outcome)) return;
@@ -341,7 +406,12 @@ export function createLogic({
   // ---------- Folder writes ----------
 
   async function createFolder(name: string) {
-    const outcome = await act("create-folder", { name });
+    const outcome = await act("create-folder", {
+      name,
+      ...(data.folder_scheme_id
+        ? { folder_scheme_id: data.folder_scheme_id }
+        : {}),
+    });
     if (narrate(outcome)) {
       state.creatingFolder = false;
       statusLine(`Folder “${name}” created · receipted.`);
@@ -491,6 +561,9 @@ export function createLogic({
     notice,
     narrate,
     act,
+    pendingByRowId,
+    restorePending,
+    applyPendingChange,
     friendlyOutcome,
     folderById,
     folderName,

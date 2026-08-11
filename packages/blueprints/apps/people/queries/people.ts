@@ -19,6 +19,10 @@
  */
 
 interface RawProfile {
+  // people.profile's own primary key — carried through so pending writes
+  // targeting this row (trash/restore/edit/log-interaction) can be found by
+  // `model.byRowId()` when decorating the list (issue #738).
+  profile_id: string;
   party_id: string;
   created_at: string;
   cadence_days: number;
@@ -158,6 +162,7 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
 
     const people = profileRows.map((pr) => ({
       party_id: pr.party_id,
+      profile_id: pr.profile_id,
       name: nameById.get(pr.party_id) ?? "—",
       role: pr.role ?? "",
       avatar_color: pr.avatar_color ?? null,

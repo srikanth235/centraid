@@ -22,6 +22,7 @@ export function GridCard({
   doc,
   index,
   selectedIds,
+  pending,
   onOpenDetails,
   onOpenQuick,
   onToggleSelect,
@@ -29,6 +30,8 @@ export function GridCard({
   doc: DriveDoc;
   index: number;
   selectedIds: Set<string>;
+  /** A rename/trash/restore write for this row is unsettled (issue #738). */
+  pending?: boolean;
   onOpenDetails: (id: string) => void;
   onOpenQuick: (id: string) => void;
   onToggleSelect: (id: string, index: number, shift: boolean) => void;
@@ -40,7 +43,10 @@ export function GridCard({
   const body = inlineText(doc);
   const excerpt = body ? textExcerpt(body) : "";
   return (
-    <div className={styles.card} data-selected={String(selected)}>
+    <div
+      className={pending ? `${styles.card} kit-pending` : styles.card}
+      data-selected={String(selected)}
+    >
       {/* The card can't be a <button> (it holds the select + thumb buttons), so
           the "open details" gesture is a stretched overlay button under them.
           The old `closest('button, a')` guard is gone: every control now sits
@@ -138,6 +144,7 @@ export function GridCard({
           {fmtBytes(doc.byte_size)} · {fmtDate(doc.created_at)}
           <CustodyDot state={doc.custody_state} />
         </div>
+        {pending ? <span className="kit-pending-chip">pending</span> : null}
       </div>
     </div>
   );

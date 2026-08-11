@@ -104,9 +104,6 @@ function makeState(view: ViewKind): AppState {
     createOpen: false,
     createPrefill: null,
     narrow: false,
-    pendingIds: new Set(),
-    pendingCancelIds: new Set(),
-    pendingByIntent: new Map(),
     activityLog: new Map(),
     readFailedShown: false,
   };
@@ -140,6 +137,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const logic = logicRef.current;
     if (!logic) return;
     const seq = ++loadSeqRef.current;
+    // The reload path (issue #738): every full refresh rebuilds the pending
+    // overlay from the durable outbox alongside the canonical read, so a
+    // pending row's visibility survives exactly as long as the outbox does.
+    void logic.restorePending();
 
     const replaceLiveReads = (reads: ReadSubscription[]): void => {
       for (const unsubscribe of liveUnsubRef.current) unsubscribe();
@@ -432,7 +433,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       });
     }
     const stopDoorbell = onDataChange(CHANGE_TABLES, (detail) => {
-      const pendingChanged = logic.reconcilePending(detail, liveOwnRef.current);
+      const pendingChanged = logic.applyPendingChange(detail);
       if (liveOwnRef.current) {
         if (pendingChanged) bump();
         return;
@@ -502,6 +503,19 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const state = stateRef.current;
   const data = dataRef.current;
 
+  // The pending-write overlay's render-time index (issue #738): cancel/
+  // propose/edit rows key on the event id, rsvp rows key on the attendee id
+  // (pending-projection.ts) — components decorate off this ONE map instead
+  // of app-owned pending state.
+  const pendingRows = logic.pendingByRowId();
+  // Derived from the engine index above, not app-owned state: a cancel ask
+  // reads differently from an ordinary pending edit, so the rows whose write
+  // is a cancellation are projected out for the accent-rail treatment.
+  const cancelAskedRowIds = new Set<string>();
+  for (const [rowId, row] of pendingRows) {
+    if (row.action === "cancel-event") cancelAskedRowIds.add(rowId);
+  }
+
   const counts = new Map<string, number>();
   {
     const seen = new Set<string>();
@@ -557,7 +571,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       <ScheduleView
         events={visibleEvents(source)}
         colorFor={logic.colorFor}
-        pendingCancelIds={state.pendingCancelIds}
+        cancelAskedRowIds={cancelAskedRowIds}
         search={state.search}
         onEventOpen={openEventDetail}
         onEmptyAction={() => {
@@ -582,8 +596,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       calendars={data.calendars}
       calendarName={data.calById.get(detailEv.calendar_id as string)?.name}
       color={logic.colorFor(detailEv.calendar_id)}
-      pending={state.pendingIds.has(detailEv.event_id)}
-      pendingCancel={state.pendingCancelIds.has(detailEv.event_id)}
+      pending={
+        pendingRows.has(detailEv.event_id) ||
+        (detailEv.attendees ?? []).some(
+          (a) => a.attendee_id !== undefined && pendingRows.has(a.attendee_id)
+        )
+      }
+      pendingCancel={cancelAskedRowIds.has(detailEv.event_id)}
       activity={state.activityLog.get(detailEv.event_id) ?? []}
       onClose={closeDrawer}
       onEdit={(payload) => logic.editEvent(payload)}

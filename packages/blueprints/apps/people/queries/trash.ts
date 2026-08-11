@@ -1,4 +1,8 @@
 interface TrashedProfile {
+  // Carried through so `restore-person`'s pending-write overlay (issue #738,
+  // see pending-projection.ts) can key its optimistic upsert on people.profile's
+  // real primary key instead of the party_id the command's own input uses.
+  profile_id: string;
   party_id: string;
   role?: string | null;
   purge_at?: string | null;
@@ -39,6 +43,7 @@ export default async function trashPeople({ ctx }: HandlerArgs) {
     return {
       people: rows.map((row) => ({
         party_id: row.party_id,
+        profile_id: row.profile_id,
         name: names.get(row.party_id) ?? "—",
         role: row.role ?? "",
         purge_at: row.purge_at ?? null,

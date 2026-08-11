@@ -48,6 +48,29 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return false;
   }
 
+  // No pending-write overlay declaration for Locker (issue #738 — decided
+  // per action, not by app-wide fiat):
+  //   - add-item/edit-item are already explicitly `onlineOnly` below —
+  //     secret fields are sealed columns (issue #293); a client-side
+  //     optimistic cache of them would be exactly the residual-plaintext
+  //     risk the sealing exists to prevent.
+  //   - purge-item is medium-risk and `confirm`-gated (irreversible) — an
+  //     owner-confirmed destructive action reads honestly only as a live
+  //     round trip, not a locally-queued row.
+  //   - star-item/unstar-item are a flags-scheme `core.tag` row keyed by a
+  //     `concept_id` the vault mints lazily and never hands to the client
+  //     (queries/items.ts only ever returns the derived `favorite` boolean)
+  //     — same structural gap as People's and Docs' stars, undeclared there
+  //     too.
+  //   - trash-item/restore-item are the one pair with no such blocker
+  //     (locker.item.deleted_at, keyed by the item_id the app already
+  //     holds), but wiring a single offline-queueable pair into a seat whose
+  //     signature invariant is "every reveal is a fresh receipted online
+  //     gesture" (selectItem below re-authenticates per open) would mix
+  //     postures without a matching product need — Locker's own list is
+  //     small and personal, so trash/restore read honestly as a live round
+  //     trip too. Every write here stays a plain `act()` call; no row is
+  //     ever shown before the vault confirms it.
   async function act(
     action: string,
     input: Record<string, unknown>,

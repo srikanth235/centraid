@@ -1,16 +1,12 @@
+import { createPendingOverlayModel } from "../_shared/pending-overlay.ts";
 import { colorForCalendar } from "./format.ts";
 // Non-visual business logic: vault IO (write/act), calendar coloring, the
-// session activity log and parked-write tracking, and search. `createLogic`
-// closes over app.tsx's own `state`/`data` (mutated in place, never
-// reassigned) plus the render/refresh entry points app.tsx defines — the
-// same factory shape tasks/logic.ts and notes/logic.ts use.
+// session activity log, the pending-write overlay (issue #738), and search.
+// `createLogic` closes over app.tsx's own `state`/`data` (mutated in place,
+// never reassigned) plus the render/refresh entry points app.tsx defines —
+// the same factory shape tasks/logic.ts and notes/logic.ts use.
 import { debounce, outcomeMessage, statusLine } from "./kit.ts";
-import {
-  clearPendingState,
-  reconcilePendingChange,
-  settlePendingChange,
-  trackPendingOutcome,
-} from "./pending.ts";
+import { agendaPendingProjection } from "./pending-projection.ts";
 import type {
   AgEvent,
   AppData,
@@ -28,6 +24,12 @@ interface LogicDeps {
 }
 
 export function createLogic({ state, data, render, refresh }: LogicDeps) {
+  // The shared pending-write overlay (issue #738): one model, created once,
+  // that every write wraps through `act()` below. `state` holds no pending
+  // fields of its own any more — `model.byRowId()` is the render-time source
+  // for the accent-rail/pending-chip decoration app-root.tsx applies.
+  const model = createPendingOverlayModel(agendaPendingProjection);
+
   function notice(text: string): void {
     const el = document.querySelector<HTMLElement>("#noticeBanner");
     if (!el) return;
@@ -68,27 +70,24 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     state.activityLog.set(eventId, list.slice(0, 20));
   }
 
-  function clearPending(): void {
-    clearPendingState(state);
+  /** Row id → pending state, for the accent-rail/pending-chip decoration
+   *  (event ids for cancel/propose/edit, attendee ids for rsvp). */
+  function pendingByRowId() {
+    return model.byRowId();
   }
 
-  function trackPending(
-    eventId: string | null | undefined,
-    kind: string,
-    outcome: VaultOutcome | undefined
-  ): boolean {
-    return trackPendingOutcome(state, eventId, kind, outcome);
+  /** The reload path (issue #738): rebuild overlay-status rows from the
+   *  durable outbox alone — never from app memory. Feature-detected because
+   *  the visual-harness mock and older hosts lack `pendingWrites()`. */
+  async function restorePending(): Promise<void> {
+    const durable = (await window.centraid.pendingWrites?.()) ?? [];
+    model.restore(durable);
+    render();
   }
 
-  function settlePending(detail: CentraidChangeDetail): boolean {
-    return settlePendingChange(state, detail);
-  }
-
-  function reconcilePending(
-    detail: CentraidChangeDetail,
-    managed: boolean
-  ): boolean {
-    return reconcilePendingChange(state, detail, managed);
+  /** Fold one change-feed event into the pending model; true when it moved. */
+  function applyPendingChange(detail: CentraidChangeDetail): boolean {
+    return model.applyChangeDetail(detail);
   }
 
   function colorFor(calendarId: string | null | undefined): string | null {
@@ -108,19 +107,42 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     );
   }
 
-  /** Like write(), but returns the raw outcome for callers that narrate + refresh themselves. */
+  /**
+   * Like write(), but returns the raw outcome for callers that narrate +
+   * refresh themselves. Every write goes through here, so the pending
+   * overlay (issue #738) tracks every write uniformly: mint the intent id,
+   * project the app's declared optimistic mutations for it, and fold
+   * whatever outcome comes back (or the transport failure) into the model.
+   * An action absent from pending-projection.ts projects nothing — `begin()`
+   * is then a no-op and this is exactly the old fire-and-forget `act()`.
+   */
   async function act(
     action: string,
-    input: Record<string, unknown>,
-    optimistic?: CentraidPendingMutation[]
+    input: Record<string, unknown>
   ): Promise<VaultOutcome | undefined> {
+    const intentId = globalThis.crypto.randomUUID();
+    const optimistic = model.begin(action, input, intentId);
     try {
-      return await window.centraid.write({
+      const outcome = await window.centraid.write({
         action,
         input,
-        ...(optimistic === undefined ? {} : { optimistic }),
+        intentId,
+        ...(optimistic.length > 0 ? { optimistic } : {}),
       });
+      model.applyOutcome(outcome.invocationId ?? intentId, {
+        status: outcome.status,
+        ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+        ...(outcome.conflict === undefined
+          ? {}
+          : { conflict: outcome.conflict }),
+      });
+      return outcome;
     } catch (error) {
+      // The write never reached (or never left) the vault — nothing is
+      // durable, so the optimistic entry settles to `failed` rather than
+      // hanging as `queued` forever (a dismissible/retryable row, same
+      // grammar as a server-reported failure).
+      model.applyOutcome(intentId, { status: "failed" });
       notice(String((error as { message?: string })?.message ?? error));
       return undefined;
     }
@@ -128,10 +150,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
 
   async function write(
     action: string,
-    input: Record<string, unknown>,
-    optimistic?: CentraidPendingMutation[]
+    input: Record<string, unknown>
   ): Promise<VaultOutcome | undefined> {
-    const outcome = await act(action, input, optimistic);
+    const outcome = await act(action, input);
     const executed = narrate(outcome);
     if (executed || outcome?.status === "denied") await refresh();
     else render();
@@ -209,25 +230,18 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     partyId: string,
     partstat: string
   ): Promise<VaultOutcome | undefined> {
-    const attendee = findEvent(eventId)?.attendees?.find(
+    // `attendee_id` rides in `input` only so pending-projection.ts's `rsvp`
+    // projection can key its optimistic upsert on the same row (the command
+    // itself re-derives it server-side from event_id+party_id).
+    const attendeeId = findEvent(eventId)?.attendees?.find(
       (item) => item.party_id === partyId
-    );
-    const optimistic: CentraidPendingMutation[] = attendee?.attendee_id
-      ? [
-          {
-            op: "upsert",
-            entity: "schedule.attendee",
-            rowId: attendee.attendee_id,
-            values: { partstat, responded_at: new Date().toISOString() },
-            purpose: "dpv:ServiceProvision",
-          },
-        ]
-      : [];
-    const outcome = await write(
-      "rsvp",
-      { event_id: eventId, party_id: partyId, partstat },
-      optimistic
-    );
+    )?.attendee_id;
+    const outcome = await write("rsvp", {
+      event_id: eventId,
+      party_id: partyId,
+      partstat,
+      ...(attendeeId ? { attendee_id: attendeeId } : {}),
+    });
     if (outcome?.status === "executed") {
       const label =
         partstat === "accepted"
@@ -242,7 +256,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       outcome?.status === "queued" ||
       outcome?.status === "in-flight"
     ) {
-      trackPending(eventId, "rsvp", outcome);
       statusLine(
         outcome.status === "parked"
           ? "Sent to the owner for confirmation."
@@ -263,7 +276,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       outcome?.status === "queued" ||
       outcome?.status === "in-flight"
     ) {
-      trackPending(eventId, "cancel", outcome);
       logActivity(
         eventId,
         outcome.status === "parked"
@@ -353,9 +365,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     colorFor,
     findEvent,
     logActivity,
-    clearPending,
-    settlePending,
-    reconcilePending,
+    pendingByRowId,
+    restorePending,
+    applyPendingChange,
     proposeEvent,
     editEvent,
     editOccurrence,
