@@ -35,6 +35,8 @@ export function ExpenseRow({
   groupSuffix = false,
   onOpen,
   onDismiss,
+  onRetry,
+  onEdit,
   onCancel,
 }: {
   row: LedgerRow;
@@ -51,6 +53,19 @@ export function ExpenseRow({
    * attention row is ever dismissible.
    */
   onDismiss?: (row: LedgerRow) => void;
+  /**
+   * Re-issue the SAME payload under a fresh intent id (issue #738's
+   * edit/retry/discard). Offered only for an attention row whose payload
+   * survived (`pendingRetryable`) — a button that would resend nothing is
+   * worse than no button.
+   */
+  onRetry?: (row: LedgerRow) => void;
+  /**
+   * Reopen the expense composer prefilled with the refused payload, so a
+   * write the vault would refuse again can be corrected before it is resent
+   * (issue #738's "edit"). Only add/edit-expense have such a composer.
+   */
+  onEdit?: (row: LedgerRow) => void;
   /**
    * Cancel a durable Commons intent that has not executed yet (issue #731
    * goal 2). Meaningful only while the row is still `parked` — once the
@@ -118,6 +133,11 @@ export function ExpenseRow({
           {sub}
           {row.receipt ? " · receipt" : ""}
           {row.pendingReason ? ` · ${displayText(row.pendingReason)}` : ""}
+          {/* A conflict says WHICH versions disagreed — the precondition's
+              whole point is lost if it degrades to a generic error. */}
+          {row.pendingConflict
+            ? ` · you were editing version ${row.pendingConflict.expectedVersion}; this device now sees version ${row.pendingConflict.actualVersion}`
+            : ""}
         </span>
       </span>
       <span className={styles.exright}>
@@ -143,6 +163,35 @@ export function ExpenseRow({
             Cancel
           </button>
         ) : null}
+        {/* The three answers a settled-but-not-executed row owes the member
+            (issue #738's status grammar): correct it, resend it as-is, or
+            let it go. Edit/Retry appear only when the payload survived the
+            settle — a refused delete, and a record the outbox scrubbed,
+            offer Discard alone rather than controls that do nothing. */}
+        {dismissible && row.pendingEditable && onEdit ? (
+          <button
+            type="button"
+            className={styles.dismiss}
+            onClick={(event) => {
+              event.stopPropagation();
+              onEdit(row);
+            }}
+          >
+            Edit
+          </button>
+        ) : null}
+        {dismissible && row.pendingRetryable && onRetry ? (
+          <button
+            type="button"
+            className={styles.dismiss}
+            onClick={(event) => {
+              event.stopPropagation();
+              onRetry(row);
+            }}
+          >
+            Retry
+          </button>
+        ) : null}
         {dismissible && onDismiss ? (
           <button
             type="button"
@@ -152,7 +201,7 @@ export function ExpenseRow({
               onDismiss(row);
             }}
           >
-            Dismiss
+            Discard
           </button>
         ) : null}
       </span>
@@ -161,8 +210,8 @@ export function ExpenseRow({
 
   // A pending/parked/denied/expired/cancelled row has no detail popover to
   // open (there is no receipt or server row yet), so it is never itself a
-  // button — the Cancel/Dismiss controls are real interactive content, and a
-  // <button> may not nest another <button>.
+  // button — the Cancel/Edit/Retry/Discard controls are real interactive
+  // content, and a <button> may not nest another <button>.
   return pending ? (
     <div className={`${styles.exrow} kit-pending`}>{inner}</div>
   ) : (

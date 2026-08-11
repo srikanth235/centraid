@@ -44,6 +44,8 @@ export function Ledger({
   onOpenDetail,
   onAddExpense,
   onDismissDenied,
+  onRetryPending,
+  onEditPending,
   onCancelIntent,
 }: {
   view: "group" | "friend";
@@ -54,6 +56,11 @@ export function Ledger({
   /** Settle a denied/expired/cancelled durable Commons intent out of the
    *  overlay (issue #731 m6, extended by goal 2). */
   onDismissDenied?: (row: LedgerRow) => void;
+  /** Resend a refused write's payload under a fresh intent (issue #738). */
+  onRetryPending?: (row: LedgerRow) => void;
+  /** Reopen the expense composer on a refused payload, to correct it before
+   *  resending (issue #738's edit/retry/discard). */
+  onEditPending?: (row: LedgerRow) => void;
   /** Cancel a still-open (pending/parked) durable Commons intent (issue #731
    *  goal 2). */
   onCancelIntent?: (row: LedgerRow) => void;
@@ -92,6 +99,8 @@ export function Ledger({
               currency={currency}
               onOpen={onOpenDetail}
               onDismiss={onDismissDenied}
+              onRetry={onRetryPending}
+              onEdit={onEditPending}
               onCancel={onCancelIntent}
             />
           ))}

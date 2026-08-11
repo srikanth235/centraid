@@ -79,6 +79,9 @@ export function createNav({
   function startCreateFolder() {
     state.newMenuOpen = false;
     state.creatingFolder = true;
+    // A fresh "New folder" is not the refused one — seeding it with a name
+    // the member already dealt with elsewhere would be a small lie.
+    state.folderNameDraft = null;
     render();
   }
 

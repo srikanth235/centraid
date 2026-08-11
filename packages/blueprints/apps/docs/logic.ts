@@ -1,4 +1,5 @@
 import { createPendingOverlayModel } from "../_shared/pending-overlay.ts";
+import type { PendingRowState } from "../_shared/pending-overlay.ts";
 import { fmtBytes, typeMeta } from "./format.ts";
 // Non-visual business logic: data/selection helpers, the plain-DOM popovers
 // (kebab / move-to), every vault write (documents, folders, upload), and the
@@ -71,7 +72,19 @@ export function createLogic({
   // that every write wraps through `act()` below. No app state carries
   // pending rows — `model.byRowId()` is the render-time source for the
   // grid/list pending-chip decoration app-root.tsx applies.
-  const model = createPendingOverlayModel(docsPendingProjection);
+  // Discarding (or taking for a retry/edit) an attention row also clears its
+  // DURABLE record through the engine's one port — a row that returns on the
+  // next reload was never really discarded. The clear is fire-and-forget by
+  // contract, so the failure is narrated here rather than swallowed.
+  const model = createPendingOverlayModel(docsPendingProjection, {
+    dismissDurable: (intentId) => {
+      const forget = window.centraid.dismissAttentionWrite;
+      if (!forget) return;
+      void forget({ intentId }).catch(() =>
+        notice("That change is gone from this view but may return on reload.")
+      );
+    },
+  });
 
   function notice(text?: string) {
     const b = $("noticeBanner");
@@ -112,13 +125,119 @@ export function createLogic({
     return model.byRowId();
   }
 
-  /** The reload path (issue #738): rebuild overlay-status rows from the
-   *  durable outbox alone. Feature-detected — the visual-harness mock and
-   *  older hosts lack `pendingWrites()`. */
+  /** The reload path (issue #738): rebuild from local truth alone. TWO
+   *  durable sources, because a settled write leaves the outbox — the outbox
+   *  for what is still in flight, the attention journal for what came back
+   *  denied/conflicted/failed. Feature-detected: the visual-harness mock and
+   *  older hosts lack both. */
   async function restorePending(): Promise<void> {
-    const durable = (await window.centraid.pendingWrites?.()) ?? [];
+    const [durable, attention] = await Promise.all([
+      window.centraid.pendingWrites?.() ?? [],
+      window.centraid.attentionWrites?.() ?? [],
+    ]);
     model.restore(durable);
+    model.restoreAttention(attention);
     render();
+  }
+
+  /** The writes that settled without executing and still need an answer —
+   *  what `components/Attention.tsx` renders above the drive. */
+  function attentionRows(): PendingRowState[] {
+    return model.attention();
+  }
+
+  /** Discard one — here and in the durable journal (the model's port). */
+  function dismissPending(intentId: string): boolean {
+    const dismissed = model.dismiss(intentId);
+    if (dismissed) render();
+    return dismissed;
+  }
+
+  /** Re-issue a refused write under a FRESH intent id: the old id's payload
+   *  hash is bound to the attempt that failed, so replaying it would dedupe
+   *  onto that failure instead of trying again. Whatever the resend settles
+   *  as lands back on its own row, so this never narrates twice. */
+  async function retryPending(
+    intentId: string
+  ): Promise<VaultOutcome | undefined> {
+    const retry = model.takeForRetry(intentId);
+    if (!retry) return undefined;
+    render();
+    const outcome = await act(retry.action, retry.input);
+    render();
+    return outcome;
+  }
+
+  /**
+   * A refused write this app can reopen on a surface that shows the REFUSED
+   * payload rather than the canonical row. The drive has three: the rename
+   * prompt, the sidebar's new-folder field, and its rename-folder field —
+   * each seeded with the name the vault would not take, so it can be
+   * corrected before it is resent.
+   *
+   * `move`/`trash`/`restore`/`delete-folder` carry no text to correct (their
+   * payload IS the row and the destination), so they offer retry and discard
+   * alone rather than a surface with nothing on it.
+   */
+  const EDITABLE_PENDING_ACTIONS = new Set([
+    "rename",
+    "create-folder",
+    "rename-folder",
+  ]);
+
+  function isEditablePending(row: PendingRowState): boolean {
+    return EDITABLE_PENDING_ACTIONS.has(row.action) && row.input !== undefined;
+  }
+
+  async function editPending(intentId: string): Promise<void> {
+    const entry = model.rows().find((row) => row.intentId === intentId);
+    if (!entry || !isEditablePending(entry)) return;
+    const refusedName = String(
+      entry.action === "rename"
+        ? (entry.input?.title ?? "")
+        : (entry.input?.name ?? "")
+    );
+    if (entry.action === "rename") {
+      // The rename surface IS a prompt (startRenameDoc) — seeding it with the
+      // refused title is a real correction step, not a decoration.
+      const documentId = entry.input?.document_id;
+      const title = window.prompt?.("Rename document", refusedName);
+      if (title == null) return; // cancelled: the row stays, untouched
+      const trimmed = title.trim();
+      if (!trimmed || typeof documentId !== "string") return;
+      if (!model.takeForRetry(intentId)) return;
+      const outcome = await act("rename", {
+        document_id: documentId,
+        title: trimmed,
+      });
+      if (narrate(outcome)) {
+        statusLine("Renamed · receipted.");
+        await refresh();
+      } else render();
+      return;
+    }
+    // The two sidebar fields: seed the draft, open the right one, and let the
+    // member commit it as an ordinary create/rename.
+    if (!model.takeForRetry(intentId)) return;
+    state.folderNameDraft = refusedName;
+    if (entry.action === "create-folder") {
+      state.creatingFolder = true;
+      state.renamingFolderId = null;
+    } else {
+      const folderId = entry.input?.folder_id;
+      if (typeof folderId !== "string") return;
+      state.renamingFolderId = folderId;
+      state.creatingFolder = false;
+    }
+    render();
+  }
+
+  /** The seeded folder name was committed or abandoned — forget it, or the
+   *  next open of either field would re-seed what the member just dealt
+   *  with. */
+  function clearFolderNameDraft(): void {
+    if (state.folderNameDraft === null) return;
+    state.folderNameDraft = null;
   }
 
   /** Fold one change-feed event into the pending model; true when it moved. */
@@ -132,6 +251,44 @@ export function createLogic({
   // model. An action absent from pending-projection.ts (star/unstar, every
   // byte-custody action) projects nothing — `begin()` is then a no-op and
   // this is exactly the old fire-and-forget act().
+  /**
+   * The optimistic-concurrency precondition for one write (issue #738 P2):
+   * the version of the row this device composed the change against, read
+   * from the local replica. Without it a conflict cannot even occur — the
+   * vault has nothing to compare — so this is what makes a `conflict`
+   * outcome, and its expected-vs-actual row, reachable at all.
+   *
+   * The row is the one the write actually changes, and it is the same row
+   * `pending-projection.ts` keys its overlay on. `create-folder` creates and
+   * so has nothing to be stale against. `move` is the one edit deliberately
+   * left unversioned: what it replaces is the document's folders-scheme
+   * `core.tag` row, whose id the client only knows as `folder_tag_id` when
+   * the read that carried it is still loaded — a precondition on the
+   * DOCUMENT would name a row this write does not touch.
+   */
+  const VERSIONED_ROW_OF: Record<string, { entity: string; key: string }> = {
+    rename: { entity: "core.document", key: "document_id" },
+    trash: { entity: "core.document", key: "document_id" },
+    restore: { entity: "core.document", key: "document_id" },
+    "rename-folder": { entity: "core.concept", key: "folder_id" },
+    "delete-folder": { entity: "core.concept", key: "folder_id" },
+  };
+
+  async function baseVersionsFor(
+    action: string,
+    input: Record<string, unknown>
+  ): Promise<CentraidBaseVersion[]> {
+    const target = VERSIONED_ROW_OF[action];
+    const rowId = target ? input[target.key] : undefined;
+    if (!target || typeof rowId !== "string" || !rowId) return [];
+    const readVersion = window.centraid.rowVersion;
+    if (!readVersion) return [];
+    const version = await readVersion({ entity: target.entity, rowId });
+    return version === undefined
+      ? []
+      : [{ entity: target.entity, rowId, version }];
+  }
+
   async function act(
     action: string,
     input: Record<string, unknown>
@@ -139,11 +296,13 @@ export function createLogic({
     const intentId = globalThis.crypto.randomUUID();
     const optimistic = model.begin(action, input, intentId);
     try {
+      const baseVersions = await baseVersionsFor(action, input);
       const outcome = await window.centraid.write({
         action,
         input,
         intentId,
         ...(optimistic.length > 0 ? { optimistic } : {}),
+        ...(baseVersions.length > 0 ? { baseVersions } : {}),
       });
       model.applyOutcome(outcome.invocationId ?? intentId, {
         status: outcome.status,
@@ -406,6 +565,7 @@ export function createLogic({
   // ---------- Folder writes ----------
 
   async function createFolder(name: string) {
+    clearFolderNameDraft();
     const outcome = await act("create-folder", {
       name,
       ...(data.folder_scheme_id
@@ -421,6 +581,7 @@ export function createLogic({
     }
   }
   async function renameFolder(folderId: string, name: string) {
+    clearFolderNameDraft();
     const outcome = await act("rename-folder", { folder_id: folderId, name });
     if (narrate(outcome)) {
       state.renamingFolderId = null;
@@ -444,14 +605,17 @@ export function createLogic({
   }
   function startRenameFolder(folderId: string) {
     state.renamingFolderId = folderId;
+    clearFolderNameDraft();
     render();
   }
   function cancelCreateFolder() {
     state.creatingFolder = false;
+    clearFolderNameDraft();
     render();
   }
   function cancelRenameFolder() {
     state.renamingFolderId = null;
+    clearFolderNameDraft();
     render();
   }
 
@@ -563,6 +727,11 @@ export function createLogic({
     act,
     pendingByRowId,
     restorePending,
+    attentionRows,
+    dismissPending,
+    retryPending,
+    editPending,
+    isEditablePending,
     applyPendingChange,
     friendlyOutcome,
     folderById,

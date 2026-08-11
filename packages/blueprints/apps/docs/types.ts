@@ -139,6 +139,10 @@ export interface AppState {
   newMenuOpen: boolean;
   creatingFolder: boolean;
   renamingFolderId: string | null;
+  /** A folder name the vault refused, taken back for correction (issue #738's
+   *  edit/retry/discard). Seeds whichever of the sidebar's two name fields is
+   *  open; null means "show the canonical name", the ordinary case. */
+  folderNameDraft: string | null;
   narrow: boolean;
   uploading: boolean;
   visibleRows: DriveDoc[];

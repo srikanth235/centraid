@@ -210,6 +210,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     deleteExpense: handleDeleteExpense,
     deleteGroup: handleDeleteGroup,
     dismissCommonsIntent: handleDismissDeniedIntent,
+    retryPendingWrite: handleRetryPendingWrite,
+    editPendingWrite: handleEditPendingWrite,
     cancelCommonsIntent: handleCancelCommonsIntent,
     addGroupMember: handleAddGroupMember,
     openAddExpense: handleOpenAddExpense,
@@ -474,6 +476,14 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
             row.commonsIntentId &&
             handleDismissDeniedIntent(row.commonsIntentId)
           }
+          onRetryPending={(row) => {
+            if (row.commonsIntentId)
+              void handleRetryPendingWrite(row.commonsIntentId);
+          }}
+          onEditPending={(row) => {
+            if (row.commonsIntentId)
+              void handleEditPendingWrite(row.commonsIntentId);
+          }}
           onCancelIntent={(row) =>
             row.commonsIntentId &&
             handleCancelCommonsIntent(row.commonsIntentId)

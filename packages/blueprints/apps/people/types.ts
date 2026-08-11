@@ -196,6 +196,16 @@ export interface AppState {
   detailAdders: Record<string, boolean>;
   newMenuOpen: boolean;
   addModalOpen: boolean;
+  /** A refused `add-person` the member chose to correct before resending
+   *  (issue #738's edit/retry/discard). `id` is the refused intent id — it
+   *  keys the modal so a second correction genuinely reseeds it. */
+  addDraft: {
+    id: string;
+    name: string;
+    role: string;
+    listId: string | null;
+    cadence: number;
+  } | null;
   creatingList: boolean;
   renamingListId: string | null;
   narrow: boolean;

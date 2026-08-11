@@ -26,18 +26,24 @@ interface AddFields {
 
 export function AddPersonModal({
   lists,
+  draft,
   onSubmit,
   onClose,
 }: {
   lists: PersonList[];
+  /** A refused `add-person` taken back for correction (issue #738). It seeds
+   *  the draft on MOUNT only — app-root.tsx keys this modal on `draft.id`, so
+   *  a second correction genuinely reseeds the fields instead of silently
+   *  losing them behind whatever the member had already typed. */
+  draft?: AddFields | null;
   onSubmit: (fields: AddFields) => Promise<boolean>;
   onClose: () => void;
 }) {
   const nameRef = useRef<HTMLInputElement>(null);
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("");
-  const [listId, setListId] = useState<string | null>(null);
-  const [cadence, setCadence] = useState(30);
+  const [name, setName] = useState(draft?.name ?? "");
+  const [role, setRole] = useState(draft?.role ?? "");
+  const [listId, setListId] = useState<string | null>(draft?.listId ?? null);
+  const [cadence, setCadence] = useState(draft?.cadence ?? 30);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {

@@ -189,6 +189,7 @@ function state(): AppState {
     editingNotebookId: null,
     creatingNotebook: false,
     readFailedShown: false,
+    quickAddDraft: null,
   };
 }
 
@@ -292,5 +293,268 @@ describe("Notes pending-write reload survival", () => {
 
     await expect(logic.restorePending()).resolves.toBeUndefined();
     expect(logic.pendingByRowId().size).toBe(0);
+  });
+});
+
+// ─── the durable attention journal (issue #738 engine H) ────────────────────
+//
+// `restorePending()` reads TWO durable sources, because a settled write leaves
+// the outbox: `pendingWrites()` for what is still in flight, and
+// `attentionWrites()` for what came back denied/conflicted/failed. Without the
+// second one a denied row lives only in this session's memory and dies on
+// reload — the exact "anchored in app memory" failure the issue exists to end.
+
+/** A stand-in for the client's durable attention journal. */
+function attentionJournal(seed: CentraidAttentionWrite[] = []) {
+  const rows = [...seed];
+  const dismissAttentionWrite = vi.fn<
+    NonNullable<typeof window.centraid.dismissAttentionWrite>
+  >(async ({ intentId }) => {
+    const at = rows.findIndex((row) => row.intentId === intentId);
+    if (at < 0) return false;
+    rows.splice(at, 1);
+    return true;
+  });
+  return { rows, dismissAttentionWrite };
+}
+
+function stubJournal(
+  journal: ReturnType<typeof attentionJournal>,
+  extra: Record<string, unknown> = {}
+) {
+  Object.defineProperty(window, "centraid", {
+    configurable: true,
+    value: {
+      pendingWrites: async () => [],
+      attentionWrites: async () => journal.rows.map((row) => ({ ...row })),
+      dismissAttentionWrite: journal.dismissAttentionWrite,
+      ...extra,
+    },
+  });
+}
+
+describe("Notes attention rows survive a reload (issue #738)", () => {
+  test("a denied create-note persists with its reason across a FRESH logic instance, then retries under a new id", async () => {
+    const journal = attentionJournal();
+    const write = vi.fn<typeof window.centraid.write>(async (opts) => {
+      journal.rows.push({
+        intentId: opts.intentId!,
+        action: opts.action,
+        status: "denied",
+        reason: "This notebook is read-only on this device.",
+        input: opts.input ?? {},
+        mutations: (opts.optimistic ?? []) as never,
+        settledAt: "2026-08-11T10:00:00.000Z",
+      });
+      return {
+        status: "denied",
+        reason: "This notebook is read-only on this device.",
+      } as never;
+    });
+    stubJournal(journal, { write });
+
+    const first = createLogic({
+      state: state(),
+      data: data(),
+      render: vi.fn<() => void>(),
+      refresh: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+    await first.submitQuickAdd({ title: "Grocery list", body: "- [ ] milk" });
+    const deniedId = write.mock.calls[0]![0].intentId!;
+    expect(first.attentionRows()).toMatchObject([
+      {
+        intentId: deniedId,
+        action: "create-note",
+        status: "denied",
+        reason: "This notebook is read-only on this device.",
+      },
+    ]);
+
+    // ---- reload: a brand-new logic instance with no memory whatsoever ----
+    const second = createLogic({
+      state: state(),
+      data: data(),
+      render: vi.fn<() => void>(),
+      refresh: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+    expect(second.attentionRows()).toStrictEqual([]);
+    await second.restorePending();
+    // Row CONTENT, never a count: the refused note is back, still saying what
+    // happened and still carrying the payload an answer needs.
+    expect(second.attentionRows()).toMatchObject([
+      {
+        intentId: deniedId,
+        action: "create-note",
+        status: "denied",
+        reason: "This notebook is read-only on this device.",
+        input: { title: "Grocery list", body_text: "- [ ] milk" },
+      },
+    ]);
+
+    // ---- retry: same payload, FRESH intent id, old record forgotten ----
+    await second.retryPending(deniedId);
+    expect(journal.dismissAttentionWrite).toHaveBeenCalledWith({
+      intentId: deniedId,
+    });
+    const retried = write.mock.calls[1]![0];
+    expect(retried.intentId).not.toBe(deniedId);
+    expect(retried.input).toMatchObject({ title: "Grocery list" });
+    expect(second.attentionRows()).toMatchObject([
+      { intentId: retried.intentId, action: "create-note", status: "denied" },
+    ]);
+  });
+
+  test("Edit seeds the quick-add composer from the refused payload; an edit-note offers retry and discard only", async () => {
+    const journal = attentionJournal([
+      {
+        intentId: "intent-create",
+        action: "create-note",
+        status: "denied",
+        reason: "This notebook is read-only on this device.",
+        input: {
+          title: "Grocery list",
+          body_text: "- [ ] milk",
+          format: "markdown",
+        },
+        mutations: [],
+        settledAt: "2026-08-11T10:00:00.000Z",
+      },
+      {
+        intentId: "intent-edit",
+        action: "edit-note",
+        status: "denied",
+        reason: "This note is read-only on this device.",
+        input: { note_id: "note-1", title: "Renamed" },
+        mutations: [],
+        settledAt: "2026-08-11T10:00:00.000Z",
+      },
+    ]);
+    stubJournal(journal);
+    const composerState = state();
+    composerState.nav = { kind: "trash" };
+    const logic = createLogic({
+      state: composerState,
+      data: data(),
+      render: vi.fn<() => void>(),
+      refresh: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+    await logic.restorePending();
+
+    const [createRow, editRow] = logic.attentionRows();
+    // The editor is bound to the canonical note and autosaves what it shows,
+    // so a refused edit offers retry and discard rather than a surface that
+    // would resend on the next keystroke.
+    expect(logic.isEditablePending(createRow!)).toBe(true);
+    expect(logic.isEditablePending(editRow!)).toBe(false);
+
+    expect(logic.editPending("intent-create")).toBe(true);
+    expect(composerState.quickAddDraft).toStrictEqual({
+      id: "intent-create",
+      title: "Grocery list",
+      body: "- [ ] milk",
+    });
+    // …and the scope moved to one where the quick-add card actually renders
+    // (`showQuickAdd` hides it in pinned/trash), so the draft is not seeded
+    // into a card the member cannot see.
+    expect(composerState.nav).toStrictEqual({ kind: "all" });
+    // Taken for correction is taken: the durable record goes with it, so the
+    // corrected resend cannot leave a duplicate behind on the next reload.
+    expect(journal.dismissAttentionWrite).toHaveBeenCalledWith({
+      intentId: "intent-create",
+    });
+    expect(logic.attentionRows()).toMatchObject([{ intentId: "intent-edit" }]);
+  });
+
+  test("a discarded attention row stays discarded across a reload", async () => {
+    const journal = attentionJournal([
+      {
+        intentId: "intent-denied",
+        action: "create-note",
+        status: "denied",
+        reason: "This notebook is read-only on this device.",
+        input: { title: "Grocery list", body_text: "- [ ] milk" },
+        mutations: [],
+        settledAt: "2026-08-11T10:00:00.000Z",
+      },
+    ]);
+    stubJournal(journal);
+
+    const before = createLogic({
+      state: state(),
+      data: data(),
+      render: vi.fn<() => void>(),
+      refresh: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+    await before.restorePending();
+    expect(before.attentionRows()).toMatchObject([
+      { intentId: "intent-denied", status: "denied" },
+    ]);
+    expect(before.dismissPending("intent-denied")).toBe(true);
+    expect(journal.rows).toStrictEqual([]);
+
+    const after = createLogic({
+      state: state(),
+      data: data(),
+      render: vi.fn<() => void>(),
+      refresh: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+    await after.restorePending();
+    expect(after.attentionRows()).toStrictEqual([]);
+  });
+
+  test("an edit-note carries the note version it was composed against, a create carries none, and a conflict states both", async () => {
+    const rowVersion = vi.fn<NonNullable<typeof window.centraid.rowVersion>>(
+      async () => 9
+    );
+    const write = vi.fn<typeof window.centraid.write>(
+      async () =>
+        ({
+          status: "conflict",
+          reason: "Someone else changed this first.",
+          conflict: {
+            entity: "knowledge.note",
+            rowId: "note-1",
+            expectedVersion: 9,
+            actualVersion: 11,
+          },
+        }) as never
+    );
+    Object.defineProperty(window, "centraid", {
+      configurable: true,
+      value: { write, rowVersion, pendingWrites: async () => [] },
+    });
+    const logic = createLogic({
+      state: state(),
+      data: data(),
+      render: vi.fn<() => void>(),
+      refresh: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+
+    await logic.editNoteAutosave("note-1", { title: "Renamed" });
+    expect(rowVersion).toHaveBeenCalledWith({
+      entity: "knowledge.note",
+      rowId: "note-1",
+    });
+    expect(write.mock.calls[0]![0].baseVersions).toStrictEqual([
+      { entity: "knowledge.note", rowId: "note-1", version: 9 },
+    ]);
+    // A conflict says WHICH versions disagreed — degrading it to a generic
+    // error would waste the entire precondition.
+    expect(logic.attentionRows()).toMatchObject([
+      {
+        action: "edit-note",
+        status: "conflict",
+        conflict: {
+          entity: "knowledge.note",
+          rowId: "note-1",
+          expectedVersion: 9,
+          actualVersion: 11,
+        },
+      },
+    ]);
+
+    // A create has no existing row to be stale against.
+    await logic.act("create-note", { title: "Fresh", body_text: "" });
+    expect(write.mock.calls[1]![0].baseVersions).toBeUndefined();
   });
 });

@@ -3,7 +3,10 @@
 // at serve time (a value import of this module would 404). Grounded in the
 // query payloads (queries/*.js) and the modal models logic.ts builds: money is
 // always INTEGER minor units, balances are derived server-side and never stored.
-import type { PendingWriteStatus } from "../_shared/pending-overlay.ts";
+import type {
+  PendingConflictDetail,
+  PendingWriteStatus,
+} from "../_shared/pending-overlay.ts";
 import type { SearchStatus } from "../_shared/search-scaffold.ts";
 
 /** A person resolved from the loaded snapshots (owner or a friend). */
@@ -128,6 +131,16 @@ export interface LedgerRow {
   commonsIntentId?: string;
   pendingReason?: string;
   stewardLabel?: string;
+  /** The refused write's payload survived, so Retry can genuinely resend it
+   *  (issue #738). False for a record whose input the outbox scrubbed. */
+  pendingRetryable?: boolean;
+  /** …and the expense composer can reopen it for correction before the
+   *  resend. Never set for a refused delete: nothing to correct. */
+  pendingEditable?: boolean;
+  /** Which versions disagreed on a `conflict` (issue #738 P2) — printed
+   *  verbatim, because a conflict that degrades to a generic error loses the
+   *  entire point of the precondition. */
+  pendingConflict?: PendingConflictDetail;
 }
 
 /** One interleaved activity entry (expense or settlement). */

@@ -10,6 +10,7 @@ import type { KeyboardEvent, ReactElement } from "react";
 
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
+import { Attention } from "./components/Attention.tsx";
 import { CreateModal } from "./components/CreateModal.tsx";
 import { EventDrawer } from "./components/EventDrawer.tsx";
 import { HeaderBar } from "./components/HeaderBar.tsx";
@@ -586,6 +587,23 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     );
   }
 
+  // Writes that settled without executing (issue #738). The replica stopped
+  // overlaying them, so the event/RSVP they projected is no longer on the
+  // canvas at all — this panel above it is the only place they still exist,
+  // and it holds them until the member answers. Restored from the durable
+  // attention journal on every mount, so a reload never loses one.
+  const attentionNode = (
+    <Attention
+      rows={logic.attentionRows()}
+      isEditable={logic.isEditablePending}
+      onEdit={(intentId) => {
+        if (logic.editPending(intentId)) bump();
+      }}
+      onRetry={(intentId) => void logic.retryPending(intentId)}
+      onDiscard={(intentId) => logic.dismissPending(intentId)}
+    />
+  );
+
   const detailEv = state.detailEventId
     ? logic.findEvent(state.detailEventId)
     : null;
@@ -673,7 +691,12 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             onSetView={setView}
           />
         }
-        canvas={canvasNode}
+        canvas={
+          <>
+            {attentionNode}
+            {canvasNode}
+          </>
+        }
         drawer={drawerNode}
       />
       {modalNode}

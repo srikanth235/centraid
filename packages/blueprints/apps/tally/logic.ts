@@ -142,6 +142,17 @@ export function decorateLedgerRow(
       stewardLabel: entry.stewardLabel,
     }),
     ...(entry.stewardLabel ? { stewardLabel: entry.stewardLabel } : {}),
+    // A refused write only offers Retry/Edit when its payload survived: the
+    // outbox scrubs a settled intent's input, and a button that would
+    // silently resend nothing is worse than no button (issue #738).
+    ...(entry.input ? { pendingRetryable: true } : {}),
+    // Edit reopens the expense composer with the refused payload — only
+    // add/edit-expense have one; a refused delete has nothing to correct.
+    ...(entry.input &&
+    (entry.action === "add-expense" || entry.action === "edit-expense")
+      ? { pendingEditable: true }
+      : {}),
+    ...(entry.conflict ? { pendingConflict: entry.conflict } : {}),
     commonsIntentId: entry.intentId,
   };
 }
@@ -159,7 +170,19 @@ export function createLogic({
   // The one pending-write model this app instance drives (issue #738). No app
   // state owns pending rows anymore — `rows()`/`byRowId()` are the read side,
   // `begin()`/`applyOutcome()`/`restore()`/`enrichCommons()` the write side.
-  const model = createPendingOverlayModel(tallyPendingProjection);
+  // Discarding (or taking for a retry/edit) an attention row also clears its
+  // DURABLE record through the engine's one port: a row that comes back on
+  // the next reload was never really discarded. The clear is fire-and-forget
+  // by contract, so the failure is narrated here rather than swallowed.
+  const model = createPendingOverlayModel(tallyPendingProjection, {
+    dismissDurable: (intentId) => {
+      const forget = window.centraid.dismissAttentionWrite;
+      if (!forget) return;
+      void forget({ intentId }).catch(() =>
+        notice("That change is gone from this view but may return on reload.")
+      );
+    },
+  });
 
   // ---------- Notice / consent narration ----------
 
@@ -191,6 +214,41 @@ export function createLogic({
     return { intentId, optimistic: model.begin(action, input, intentId) };
   }
 
+  /** Writes that change an expense row that already exists — the ones a
+   *  second device can race. A create has nothing to be stale against. */
+  const VERSIONED_ACTIONS = new Set(["edit-expense", "delete-expense"]);
+
+  /**
+   * The optimistic-concurrency precondition for one write (issue #738 P2):
+   * the version of the `tally.expense` row this device composed the change
+   * against, read from the local replica. Without it a conflict cannot even
+   * occur — the vault has nothing to compare — so this is what makes a
+   * `conflict` outcome, and its expected-vs-actual row, reachable at all.
+   *
+   * Empty is the honest answer for a create, for a host with no version
+   * surface, and for a row the replica cannot address (an unsettled
+   * `pending-*` id). `tally.expense_split` is deliberately never versioned:
+   * its wire row id is a server HMAC this client cannot mint (see
+   * pending-projection.ts), so there is no id to ask about.
+   */
+  async function baseVersionsFor(
+    action: string,
+    input: Record<string, unknown>
+  ): Promise<CentraidBaseVersion[]> {
+    const expenseId = input.expense_id;
+    if (!VERSIONED_ACTIONS.has(action) || typeof expenseId !== "string")
+      return [];
+    const readVersion = window.centraid.rowVersion;
+    if (!readVersion) return [];
+    const version = await readVersion({
+      entity: "tally.expense",
+      rowId: expenseId,
+    });
+    return version === undefined
+      ? []
+      : [{ entity: "tally.expense", rowId: expenseId, version }];
+  }
+
   async function act(
     action: string,
     input: Record<string, unknown>,
@@ -198,11 +256,13 @@ export function createLogic({
   ): Promise<VaultOutcome | undefined> {
     const { intentId, optimistic } = begun ?? beginWrite(action, input);
     try {
+      const baseVersions = await baseVersionsFor(action, input);
       const outcome = await window.centraid.write({
         action,
         input,
         intentId,
         ...(optimistic.length ? { optimistic } : {}),
+        ...(baseVersions.length > 0 ? { baseVersions } : {}),
       });
       model.applyOutcome(intentId, outcome ?? { status: "failed" });
       return outcome;
@@ -580,11 +640,19 @@ export function createLogic({
     return { owe, owed };
   }
 
-  /** Rebuild overlay-status rows from the durable outbox — the reload path
-   *  (issue #738). Feature-detected: absent on the visual-harness mock and
-   *  older hosts, in which case attention rows still persist in-session. */
+  /** Rebuild the overlay from local truth — the reload path (issue #738).
+   *  TWO durable sources, because a settled write leaves the outbox: the
+   *  outbox for what is still in flight, the attention journal for what came
+   *  back denied/conflicted/failed. Feature-detected: absent on the
+   *  visual-harness mock and older hosts, in which case attention rows
+   *  persist only in-session from `applyOutcome`. */
   async function restorePendingWrites(): Promise<void> {
-    model.restore((await window.centraid.pendingWrites?.()) ?? []);
+    const [pending, attention] = await Promise.all([
+      window.centraid.pendingWrites?.() ?? [],
+      window.centraid.attentionWrites?.() ?? [],
+    ]);
+    model.restore(pending);
+    model.restoreAttention(attention);
   }
 
   /**
@@ -617,6 +685,113 @@ export function createLogic({
   function dismissCommonsIntent(intentId: string) {
     if (!model.dismiss(intentId)) return;
     render();
+  }
+
+  /**
+   * Re-issue a refused write under a FRESH intent id (issue #738): the old
+   * id's payload hash is bound to the attempt that failed, so replaying it
+   * would dedupe onto that failure instead of trying again. `takeForRetry`
+   * drops the old entry AND its durable record, so the reload after a retry
+   * shows one row, not two.
+   */
+  async function retryPendingWrite(
+    intentId: string
+  ): Promise<VaultOutcome | undefined> {
+    const retry = model.takeForRetry(intentId);
+    if (!retry) return undefined;
+    render();
+    // No banner narration here: whatever the resend settles as lands back on
+    // the row itself, with its own reason and its own answer. Saying it twice
+    // would make one refusal look like two.
+    const outcome = await act(retry.action, retry.input);
+    render();
+    return outcome;
+  }
+
+  /**
+   * The third answer the status grammar promises beside retry and discard:
+   * open the expense composer PREFILLED with the refused payload, so a write
+   * the vault would refuse again can be corrected before it is resent. The
+   * entry is taken (record included) exactly like a retry — the modal now
+   * holds the payload, and saving it issues a fresh intent.
+   *
+   * Only add/edit-expense have a composer to reopen; `delete-expense` carries
+   * nothing to correct, so `decorateLedgerRow` marks no Edit for it rather
+   * than offering a button that would do nothing.
+   */
+  /** The group an edit-expense payload belongs to. `edit-expense` does not
+   *  carry `group_id` (the command re-derives it), so it is read off the row
+   *  the ledger already holds; null when this device cannot say, in which
+   *  case no Edit is offered rather than one that opens the wrong group. */
+  function expenseGroupOf(input: Record<string, unknown>): string | null {
+    if (typeof input.group_id === "string" && input.group_id)
+      return input.group_id;
+    const expenseId = input.expense_id;
+    if (typeof expenseId !== "string") return null;
+    const row = (state.viewData?.ledger ?? []).find(
+      (candidate) => candidate.expense_id === expenseId
+    );
+    return row?.group_id ?? (state.view === "group" ? state.groupId : null);
+  }
+
+  async function editPendingWrite(intentId: string): Promise<void> {
+    const entry = model.rows().find((row) => row.intentId === intentId);
+    if (!entry?.input) return;
+    // Resolve everything the composer needs BEFORE taking the entry: taking
+    // it clears the durable record, so a bail-out afterwards would delete the
+    // very row the member asked to correct.
+    const groupId = expenseGroupOf(entry.input);
+    if (groupId === null) {
+      notice("Open the group this expense belongs to, then edit it there.");
+      return;
+    }
+    const taken = model.takeForRetry(intentId);
+    if (!taken) return;
+    const raw = taken.input;
+    const splits = parseSplits(raw.splits);
+    const num = (value: unknown, fallback: number) =>
+      Number.isFinite(Number(value)) ? Number(value) : fallback;
+    const amountMinor = num(raw.amount_minor, 0);
+    const rateScaled = num(raw.rate_scaled, 1_000_000);
+    const rateScale = num(raw.rate_scale, 6);
+    const text = (key: string, fallback: string) =>
+      typeof raw[key] === "string" && raw[key]
+        ? (raw[key] as string)
+        : fallback;
+    closeAllModals();
+    state.expense = {
+      mode: taken.action === "edit-expense" ? "edit" : "new",
+      ...(typeof raw.expense_id === "string"
+        ? { expense_id: raw.expense_id }
+        : {}),
+      groupId,
+      desc: text("description", ""),
+      amount: (num(raw.original_amount_minor, amountMinor) / 100).toFixed(2),
+      originalCurrency: text("original_currency", dash.currency),
+      settlementCurrency: text("settlement_currency", dash.currency),
+      rate: String(rateScaled / 10 ** rateScale),
+      rateSource: text("rate_source", "identity"),
+      rateDate: text("rate_date", text("spent_on", todayKey())),
+      recurring: false,
+      rrule: "FREQ=MONTHLY",
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      paidBy: text("paid_by", dash.me ?? ""),
+      // Exact shares, so the refused split survives the round trip verbatim —
+      // re-deriving "equal" would silently rewrite the member's own numbers.
+      method: "exact",
+      category: text("category", "general"),
+      spent_on: text("spent_on", todayKey()),
+      include: new Set(splits.map((split) => split.party_id)),
+      exact: Object.fromEntries(
+        splits.map((split) => [
+          split.party_id,
+          (split.share_minor / 100).toFixed(2),
+        ])
+      ),
+      percent: {},
+    };
+    render();
+    await loadModalMembers(groupId);
   }
 
   /**
@@ -1046,6 +1221,8 @@ export function createLogic({
     pendingLedgerRowsForView,
     inflightBalance,
     dismissCommonsIntent,
+    retryPendingWrite,
+    editPendingWrite,
     cancelCommonsIntent,
     applyDenied,
     directory,

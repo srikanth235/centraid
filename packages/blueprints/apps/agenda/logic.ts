@@ -1,4 +1,5 @@
 import { createPendingOverlayModel } from "../_shared/pending-overlay.ts";
+import type { PendingRowState } from "../_shared/pending-overlay.ts";
 import { colorForCalendar } from "./format.ts";
 // Non-visual business logic: vault IO (write/act), calendar coloring, the
 // session activity log, the pending-write overlay (issue #738), and search.
@@ -28,7 +29,19 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // that every write wraps through `act()` below. `state` holds no pending
   // fields of its own any more — `model.byRowId()` is the render-time source
   // for the accent-rail/pending-chip decoration app-root.tsx applies.
-  const model = createPendingOverlayModel(agendaPendingProjection);
+  // Discarding (or taking for a retry/edit) an attention row also clears its
+  // DURABLE record through the engine's one port — a row that returns on the
+  // next reload was never really discarded. The clear is fire-and-forget by
+  // contract, so the failure is narrated here rather than swallowed.
+  const model = createPendingOverlayModel(agendaPendingProjection, {
+    dismissDurable: (intentId) => {
+      const forget = window.centraid.dismissAttentionWrite;
+      if (!forget) return;
+      void forget({ intentId }).catch(() =>
+        notice("That change is gone from this view but may return on reload.")
+      );
+    },
+  });
 
   function notice(text: string): void {
     const el = document.querySelector<HTMLElement>("#noticeBanner");
@@ -76,13 +89,85 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return model.byRowId();
   }
 
-  /** The reload path (issue #738): rebuild overlay-status rows from the
-   *  durable outbox alone — never from app memory. Feature-detected because
-   *  the visual-harness mock and older hosts lack `pendingWrites()`. */
+  /** The reload path (issue #738): rebuild from local truth alone — never
+   *  from app memory. TWO durable sources, because a settled write leaves the
+   *  outbox: the outbox for what is still in flight, the attention journal
+   *  for what came back denied/conflicted/failed. Feature-detected because
+   *  the visual-harness mock and older hosts lack both. */
   async function restorePending(): Promise<void> {
-    const durable = (await window.centraid.pendingWrites?.()) ?? [];
+    const [durable, attention] = await Promise.all([
+      window.centraid.pendingWrites?.() ?? [],
+      window.centraid.attentionWrites?.() ?? [],
+    ]);
     model.restore(durable);
+    model.restoreAttention(attention);
     render();
+  }
+
+  /** The writes that settled without executing and still need an answer —
+   *  the panel `components/Attention.tsx` renders above the canvas. */
+  function attentionRows(): PendingRowState[] {
+    return model.attention();
+  }
+
+  /** Discard one — here and in the durable journal (the model's port). */
+  function dismissPending(intentId: string): boolean {
+    const dismissed = model.dismiss(intentId);
+    if (dismissed) render();
+    return dismissed;
+  }
+
+  /** Re-issue a refused write under a FRESH intent id: the old id's payload
+   *  hash is bound to the attempt that failed, so replaying it would dedupe
+   *  onto that failure instead of trying again. Whatever the resend settles
+   *  as lands back on its own row, so this never narrates twice. */
+  async function retryPending(
+    intentId: string
+  ): Promise<VaultOutcome | undefined> {
+    const retry = model.takeForRetry(intentId);
+    if (!retry) return undefined;
+    render();
+    const outcome = await act(retry.action, retry.input);
+    render();
+    return outcome;
+  }
+
+  /**
+   * The third answer beside retry and discard: reopen the COMPOSER on the
+   * refused payload so it can be corrected before it is resent. Only
+   * `propose` has one — the create modal — and only for a record whose input
+   * survived the settle; every other action's edit surface (the event drawer)
+   * edits the canonical event, not this payload, so offering "Edit" there
+   * would open something that is not what the member refused.
+   */
+  function editPending(intentId: string): boolean {
+    const entry = model.rows().find((row) => row.intentId === intentId);
+    if (!entry || !isEditablePending(entry)) return false;
+    const taken = model.takeForRetry(intentId);
+    if (!taken) return false;
+    const raw = taken.input;
+    const text = (key: string): string | undefined =>
+      typeof raw[key] === "string" && raw[key]
+        ? (raw[key] as string)
+        : undefined;
+    const start = new Date(String(raw.dtstart ?? ""));
+    const end = new Date(String(raw.dtend ?? ""));
+    state.createPrefill = {
+      ...(Number.isNaN(start.getTime()) ? {} : { start }),
+      ...(Number.isNaN(end.getTime()) ? {} : { end }),
+      ...(text("summary") ? { summary: text("summary")! } : {}),
+      ...(text("description") ? { description: text("description")! } : {}),
+      ...(text("calendar_id") ? { calendarId: text("calendar_id")! } : {}),
+      ...(text("rrule") ? { rrule: text("rrule")! } : {}),
+    };
+    state.createOpen = true;
+    render();
+    return true;
+  }
+
+  /** A refused write the create composer can honestly reopen. */
+  function isEditablePending(row: PendingRowState): boolean {
+    return row.action === "propose" && row.input !== undefined;
   }
 
   /** Fold one change-feed event into the pending model; true when it moved. */
@@ -116,6 +201,41 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
    * An action absent from pending-projection.ts projects nothing — `begin()`
    * is then a no-op and this is exactly the old fire-and-forget `act()`.
    */
+  /**
+   * The optimistic-concurrency precondition for one write (issue #738 P2):
+   * the version of the row this device composed the change against, read
+   * from the local replica. Without it a conflict cannot even occur — the
+   * vault has nothing to compare — so this is what makes a `conflict`
+   * outcome, and its expected-vs-actual row, reachable at all.
+   *
+   * The row is whichever one the write actually edits, which is the same row
+   * `pending-projection.ts` keys its overlay on: an RSVP edits the attendee's
+   * OWN `schedule.attendee` row, everything else edits `core.event`. A
+   * `propose` creates and so has nothing to be stale against; an
+   * `edit-occurrence` outside `scope: "series"` writes a recurrence exception
+   * rather than the event, so it carries no precondition either.
+   */
+  async function baseVersionsFor(
+    action: string,
+    input: Record<string, unknown>
+  ): Promise<CentraidBaseVersion[]> {
+    let target: { entity: string; rowId: unknown } | undefined;
+    if (action === "rsvp")
+      target = { entity: "schedule.attendee", rowId: input.attendee_id };
+    else if (action === "edit-event" || action === "cancel-event")
+      target = { entity: "core.event", rowId: input.event_id };
+    else if (action === "edit-occurrence" && input.scope === "series")
+      target = { entity: "core.event", rowId: input.event_id };
+    if (!target || typeof target.rowId !== "string" || !target.rowId) return [];
+    const readVersion = window.centraid.rowVersion;
+    if (!readVersion) return [];
+    const rowId = target.rowId;
+    const version = await readVersion({ entity: target.entity, rowId });
+    return version === undefined
+      ? []
+      : [{ entity: target.entity, rowId, version }];
+  }
+
   async function act(
     action: string,
     input: Record<string, unknown>
@@ -123,11 +243,13 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     const intentId = globalThis.crypto.randomUUID();
     const optimistic = model.begin(action, input, intentId);
     try {
+      const baseVersions = await baseVersionsFor(action, input);
       const outcome = await window.centraid.write({
         action,
         input,
         intentId,
         ...(optimistic.length > 0 ? { optimistic } : {}),
+        ...(baseVersions.length > 0 ? { baseVersions } : {}),
       });
       model.applyOutcome(outcome.invocationId ?? intentId, {
         status: outcome.status,
@@ -367,6 +489,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     logActivity,
     pendingByRowId,
     restorePending,
+    attentionRows,
+    dismissPending,
+    retryPending,
+    editPending,
+    isEditablePending,
     applyPendingChange,
     proposeEvent,
     editEvent,

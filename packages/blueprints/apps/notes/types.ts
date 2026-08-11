@@ -96,6 +96,10 @@ export interface AppState {
   editingNotebookId: string | null;
   creatingNotebook: boolean;
   readFailedShown: boolean;
+  /** A refused `create-note` the member chose to correct before resending
+   *  (issue #738's edit/retry/discard). `id` is the refused intent id — it
+   *  keys the quick-add card so a second correction genuinely reseeds it. */
+  quickAddDraft: { id: string; title: string; body: string } | null;
 }
 
 /** The partial the editor's autosave sends through `edit-note`. */

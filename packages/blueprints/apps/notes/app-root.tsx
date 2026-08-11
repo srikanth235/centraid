@@ -9,6 +9,7 @@ import type { KeyboardEvent, ReactElement } from "react";
 
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
+import { Attention } from "./components/Attention.tsx";
 import { Editor } from "./components/Editor.tsx";
 import { SidebarFoot, SidebarNav } from "./components/Sidebar.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
@@ -62,6 +63,7 @@ function makeState(view: AppState["view"]): AppState {
     editingNotebookId: null,
     creatingNotebook: false,
     readFailedShown: false,
+    quickAddDraft: null,
   };
 }
 
@@ -423,35 +425,54 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           />
         }
         wall={
-          <Wall
-            view={state.view}
-            showQuickAdd={
-              state.nav.kind !== "pinned" && state.nav.kind !== "trash" && !q
-            }
-            quickAddProps={{
-              targetLabel,
-              onSubmit: (payload) => logic.submitQuickAdd(payload),
-              registerFocus: (fn) => {
-                focusQuickAddRef.current = fn;
-              },
-            }}
-            pinned={wall.pinned}
-            others={wall.others}
-            showPinnedGroup={wall.showPinnedGroup}
-            isEmpty={wall.isEmpty}
-            emptyTitle={wall.emptyTitle}
-            emptySub={wall.emptySub}
-            search={state.search}
-            pendingByRowId={pendingByRow}
-            footer={footer}
-            onShowMore={showMore}
-            onEmptyAction={() => {
-              if (state.search) clearSearchInput();
-              else focusQuickAdd();
-            }}
-            onOpenNote={(noteId) => logic.openEditor(noteId)}
-            onTogglePin={(note) => logic.togglePin(note)}
-          />
+          <>
+            {/* Writes that settled without executing (issue #738). The
+                replica stopped overlaying them, so the card they projected is
+                no longer on the wall at all — this panel above it is the only
+                place they still exist, and it holds them until the member
+                answers. Restored from the durable attention journal on every
+                mount, so a reload never loses one. */}
+            <Attention
+              rows={logic.attentionRows()}
+              isEditable={logic.isEditablePending}
+              onEdit={(intentId) => {
+                logic.editPending(intentId);
+              }}
+              onRetry={(intentId) => void logic.retryPending(intentId)}
+              onDiscard={(intentId) => logic.dismissPending(intentId)}
+            />
+            <Wall
+              view={state.view}
+              showQuickAdd={
+                state.nav.kind !== "pinned" && state.nav.kind !== "trash" && !q
+              }
+              quickAddProps={{
+                targetLabel,
+                onSubmit: (payload) => logic.submitQuickAdd(payload),
+                registerFocus: (fn) => {
+                  focusQuickAddRef.current = fn;
+                },
+                draft: state.quickAddDraft,
+                onDraftSpent: () => logic.clearQuickAddDraft(),
+              }}
+              pinned={wall.pinned}
+              others={wall.others}
+              showPinnedGroup={wall.showPinnedGroup}
+              isEmpty={wall.isEmpty}
+              emptyTitle={wall.emptyTitle}
+              emptySub={wall.emptySub}
+              search={state.search}
+              pendingByRowId={pendingByRow}
+              footer={footer}
+              onShowMore={showMore}
+              onEmptyAction={() => {
+                if (state.search) clearSearchInput();
+                else focusQuickAdd();
+              }}
+              onOpenNote={(noteId) => logic.openEditor(noteId)}
+              onTogglePin={(note) => logic.togglePin(note)}
+            />
+          </>
         }
         editor={
           editorNote ? (

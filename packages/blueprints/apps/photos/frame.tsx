@@ -172,6 +172,11 @@ export interface Outcome {
   /** The inline text action — Photos is the first route to use that slot, and
    *  it uses it for Undo (§3). */
   undo?: () => void;
+  /** …or for a NAMED action where the sentence is not an undo: issue #738's
+   *  refused-write announcement answers with "Discard", and calling that
+   *  button "Undo" would say the opposite of what it does. Wins over `undo`
+   *  when both are set; still exactly ONE action, so the §3 budget holds. */
+  action?: { label: string; run: () => void };
   /** Determinate progress with exact counts. Never a spinner (§14). */
   progress?: { done: number; total: number; unit?: string };
 }
@@ -186,7 +191,11 @@ export function publishOutcome(
     return;
   }
   frame.setStatus(outcome.text, {
-    ...(outcome.undo ? { action: { label: "Undo", run: outcome.undo } } : {}),
+    ...(outcome.action
+      ? { action: outcome.action }
+      : outcome.undo
+        ? { action: { label: "Undo", run: outcome.undo } }
+        : {}),
     ...(outcome.progress ? { progress: outcome.progress } : {}),
   });
 }

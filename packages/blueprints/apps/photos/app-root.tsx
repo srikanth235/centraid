@@ -343,6 +343,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
           : {
               text: note.text,
               ...(note.undo ? { undo: note.undo } : {}),
+              ...(note.action ? { action: note.action } : {}),
               ...(note.progress ? { progress: note.progress } : {}),
             }
       )

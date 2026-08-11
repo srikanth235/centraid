@@ -19,6 +19,7 @@ import { mountedScopes } from "../_shared/scope-kit.ts";
 import { ShareSheet } from "../_shared/ShareSheet.tsx";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
+import { Attention } from "./components/Attention.tsx";
 import { BulkBar } from "./components/BulkBar.tsx";
 import { Details } from "./components/Details.tsx";
 import { Editor } from "./components/Editor.tsx";
@@ -99,6 +100,7 @@ function makeState(view: AppState["view"]): AppState {
     newMenuOpen: false,
     creatingFolder: false,
     renamingFolderId: null,
+    folderNameDraft: null,
     narrow: false,
     uploading: false,
     visibleRows: [],
@@ -723,6 +725,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       navFolderId={state.nav.folderId}
       renamingFolderId={state.renamingFolderId}
       creatingFolder={state.creatingFolder}
+      folderNameDraft={state.folderNameDraft}
       trashCount={counts.trash}
       onSelectNav={selectNav}
       onShareFolder={setShareFolder}
@@ -948,7 +951,24 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         typeChips={typeChips}
         tagChips={tagChips}
         bulkBar={bulkBar}
-        scroll={scroll}
+        scroll={
+          <>
+            {/* Writes that settled without executing (issue #738). The
+                replica stopped overlaying them, so the row they projected is
+                no longer in the drive at all — this panel above it is the
+                only place they still exist, and it holds them until the
+                member answers. Restored from the durable attention journal
+                on every mount, so a reload never loses one. */}
+            <Attention
+              rows={logic.attentionRows()}
+              isEditable={logic.isEditablePending}
+              onEdit={(intentId) => void logic.editPending(intentId)}
+              onRetry={(intentId) => void logic.retryPending(intentId)}
+              onDiscard={(intentId) => logic.dismissPending(intentId)}
+            />
+            {scroll}
+          </>
+        }
         overlays={overlays}
       />
     </div>

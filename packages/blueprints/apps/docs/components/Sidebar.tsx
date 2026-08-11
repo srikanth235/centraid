@@ -81,9 +81,13 @@ export function SmartNav({
 // re-renders of the same tree shape, so typed text and focus both survive
 // unrelated re-renders exactly as they did under Lit.
 function FolderCreateEdit({
+  seed,
   onCommit,
   onCancel,
 }: {
+  /** A name the vault refused, taken back for correction (issue #738). The
+   *  ordinary "New folder" opens with this null and an empty field. */
+  seed: string | null;
   onCommit: (name: string) => void;
   onCancel: () => void;
 }) {
@@ -103,6 +107,7 @@ function FolderCreateEdit({
         className="kit-input bare"
         placeholder="Folder name…"
         aria-label="New folder name"
+        defaultValue={seed ?? ""}
         ref={inputRef}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
@@ -121,10 +126,14 @@ function FolderCreateEdit({
 
 function FolderRenameEdit({
   f,
+  seed,
   onCommit,
   onCancel,
 }: {
   f: Folder;
+  /** A name the vault refused, taken back for correction (issue #738); the
+   *  ordinary rename opens on the folder's canonical name. */
+  seed: string | null;
   onCommit: (folderId: string, name: string) => void;
   onCancel: () => void;
 }) {
@@ -147,7 +156,7 @@ function FolderRenameEdit({
         type="text"
         className="kit-input bare"
         aria-label="Folder name"
-        defaultValue={f.name}
+        defaultValue={seed ?? f.name}
         ref={inputRef}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
@@ -170,6 +179,7 @@ function FolderRow({
   navKind,
   navFolderId,
   renamingFolderId,
+  folderNameDraft,
   onSelectNav,
   onShareFolder,
   residentFolderIds,
@@ -184,6 +194,7 @@ function FolderRow({
   navKind: string;
   navFolderId: string | undefined;
   renamingFolderId: string | null;
+  folderNameDraft: string | null;
   onSelectNav: (nav: Nav) => void;
   onShareFolder: (folder: Folder) => void;
   residentFolderIds: ReadonlySet<string>;
@@ -197,6 +208,7 @@ function FolderRow({
     return (
       <FolderRenameEdit
         f={f}
+        seed={folderNameDraft}
         onCommit={onRenameCommit}
         onCancel={onRenameCancel}
       />
@@ -276,6 +288,7 @@ export function FolderList({
   navFolderId,
   renamingFolderId,
   creatingFolder,
+  folderNameDraft,
   trashCount,
   onSelectNav,
   onShareFolder,
@@ -294,6 +307,9 @@ export function FolderList({
   navFolderId: string | undefined;
   renamingFolderId: string | null;
   creatingFolder: boolean;
+  /** A folder name the vault refused, taken back for correction (issue
+   *  #738): it seeds whichever of the two name fields is open. */
+  folderNameDraft: string | null;
   trashCount: number;
   onSelectNav: (nav: Nav) => void;
   onShareFolder: (folder: Folder) => void;
@@ -309,7 +325,11 @@ export function FolderList({
   return (
     <>
       {creatingFolder ? (
-        <FolderCreateEdit onCommit={onCreateCommit} onCancel={onCreateCancel} />
+        <FolderCreateEdit
+          seed={folderNameDraft}
+          onCommit={onCreateCommit}
+          onCancel={onCreateCancel}
+        />
       ) : null}
       {folders.map((f) => (
         <FolderRow
@@ -319,6 +339,7 @@ export function FolderList({
           navKind={navKind}
           navFolderId={navFolderId}
           renamingFolderId={renamingFolderId}
+          folderNameDraft={folderNameDraft}
           onSelectNav={onSelectNav}
           onShareFolder={onShareFolder}
           residentFolderIds={residentFolderIds}

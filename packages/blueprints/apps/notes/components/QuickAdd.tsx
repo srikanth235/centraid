@@ -14,17 +14,30 @@ export interface QuickAddProps {
     body: string;
   }) => boolean | Promise<boolean>;
   registerFocus: (fn: () => void) => void;
+  /**
+   * A refused `create-note` the member chose to correct before resending
+   * (issue #738's edit/retry/discard). It seeds the draft on MOUNT only —
+   * Wall.tsx keys this card on `draft.id`, so a second correction genuinely
+   * reseeds the fields instead of silently losing them behind whatever the
+   * member had already typed.
+   */
+  draft?: { id: string; title: string; body: string } | null;
+  /** The seeded draft was sent, or the member cleared the card: forget it,
+   *  so the next render does not re-seed what they just dealt with. */
+  onDraftSpent?: () => void;
 }
 
 export function QuickAdd({
   targetLabel,
   onSubmit,
   registerFocus,
+  draft,
+  onDraftSpent,
 }: QuickAddProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+  const [open, setOpen] = useState(Boolean(draft));
+  const [title, setTitle] = useState(draft?.title ?? "");
+  const [body, setBody] = useState(draft?.body ?? "");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -38,6 +51,7 @@ export function QuickAdd({
     setOpen(false);
     setTitle("");
     setBody("");
+    onDraftSpent?.();
   };
 
   const submit = async () => {
@@ -49,6 +63,7 @@ export function QuickAdd({
       setTitle("");
       setBody("");
       setOpen(false);
+      onDraftSpent?.();
     }
   };
 

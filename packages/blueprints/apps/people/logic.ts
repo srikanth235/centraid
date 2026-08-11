@@ -2,6 +2,7 @@
 // cohesive controller for one blueprint; splitting its shared mutable app
 // closure would obscure write/outcome and undo sequencing.
 import { createPendingOverlayModel } from "../_shared/pending-overlay.ts";
+import type { PendingRowState } from "../_shared/pending-overlay.ts";
 import {
   PALETTE,
   listColor,
@@ -57,7 +58,19 @@ export function createLogic({
   // that every write wraps through `act()` below. No app state carries
   // pending rows — `model.byRowId()` is the render-time source for the
   // list/grid pending-chip decoration app-root.tsx applies.
-  const model = createPendingOverlayModel(peoplePendingProjection);
+  // Discarding (or taking for a retry/edit) an attention row also clears its
+  // DURABLE record through the engine's one port — a row that returns on the
+  // next reload was never really discarded. The clear is fire-and-forget by
+  // contract, so the failure is narrated here rather than swallowed.
+  const model = createPendingOverlayModel(peoplePendingProjection, {
+    dismissDurable: (intentId) => {
+      const forget = window.centraid.dismissAttentionWrite;
+      if (!forget) return;
+      void forget({ intentId }).catch(() =>
+        notice("That change is gone from this view but may return on reload.")
+      );
+    },
+  });
 
   function notice(text: string) {
     const b = $("noticeBanner");
@@ -82,13 +95,85 @@ export function createLogic({
     return model.byRowId();
   }
 
-  /** The reload path (issue #738): rebuild overlay-status rows from the
-   *  durable outbox alone. Feature-detected — the visual-harness mock and
-   *  older hosts lack `pendingWrites()`. */
+  /** The reload path (issue #738): rebuild from local truth alone. TWO
+   *  durable sources, because a settled write leaves the outbox — the outbox
+   *  for what is still in flight, the attention journal for what came back
+   *  denied/conflicted/failed. Feature-detected: the visual-harness mock and
+   *  older hosts lack both. */
   async function restorePending(): Promise<void> {
-    const durable = (await window.centraid.pendingWrites?.()) ?? [];
+    const [durable, attention] = await Promise.all([
+      window.centraid.pendingWrites?.() ?? [],
+      window.centraid.attentionWrites?.() ?? [],
+    ]);
     model.restore(durable);
+    model.restoreAttention(attention);
     render();
+  }
+
+  /** The writes that settled without executing and still need an answer —
+   *  what `components/Attention.tsx` renders above the rows. */
+  function attentionRows(): PendingRowState[] {
+    return model.attention();
+  }
+
+  /** Discard one — here and in the durable journal (the model's port). */
+  function dismissPending(intentId: string): boolean {
+    const dismissed = model.dismiss(intentId);
+    if (dismissed) render();
+    return dismissed;
+  }
+
+  /** Re-issue a refused write under a FRESH intent id: the old id's payload
+   *  hash is bound to the attempt that failed, so replaying it would dedupe
+   *  onto that failure instead of trying again. Whatever the resend settles
+   *  as lands back on its own row, so this never narrates twice. */
+  async function retryPending(
+    intentId: string
+  ): Promise<VaultOutcome | undefined> {
+    const retry = model.takeForRetry(intentId);
+    if (!retry) return undefined;
+    render();
+    const outcome = await act(retry.action, retry.input);
+    render();
+    return outcome;
+  }
+
+  /**
+   * The third answer beside retry and discard: reopen the COMPOSER on the
+   * refused payload so it can be corrected before it is resent. People's one
+   * composer is the "Add someone" modal, so only a refused `add-person` can
+   * be reopened there.
+   *
+   * `edit-person` is deliberately not editable here: its surface is the
+   * profile drawer, which is bound to the canonical person and saves field by
+   * field — seeding it with a refused patch would either resave on the next
+   * blur or quietly diverge from the row on disk. Retry and discard are the
+   * honest pair for it, and for the trash/restore/log writes that carry no
+   * text to correct at all.
+   */
+  function isEditablePending(row: PendingRowState): boolean {
+    return row.action === "add-person" && row.input !== undefined;
+  }
+
+  function editPending(intentId: string): boolean {
+    const entry = model.rows().find((row) => row.intentId === intentId);
+    if (!entry || !isEditablePending(entry)) return false;
+    const taken = model.takeForRetry(intentId);
+    if (!taken) return false;
+    const raw = taken.input;
+    const text = (key: string) =>
+      typeof raw[key] === "string" ? (raw[key] as string) : "";
+    state.addDraft = {
+      id: intentId,
+      name: text("display_name"),
+      role: text("role"),
+      listId: typeof raw.list_id === "string" ? raw.list_id : null,
+      cadence: typeof raw.cadence_days === "number" ? raw.cadence_days : 30,
+    };
+    state.addModalOpen = true;
+    renderModal();
+    render();
+    return true;
   }
 
   /** Fold one change-feed event into the pending model; true when it moved. */
@@ -101,6 +186,43 @@ export function createLogic({
   // mutations, and fold the outcome (or the transport failure) into the
   // model. An action absent from pending-projection.ts projects nothing —
   // `begin()` is then a no-op and this is exactly the old fire-and-forget act().
+  /**
+   * The optimistic-concurrency precondition for one write (issue #738 P2):
+   * the version of the row this device composed the change against, read
+   * from the local replica. Without it a conflict cannot even occur — the
+   * vault has nothing to compare — so this is what makes a `conflict`
+   * outcome, and its expected-vs-actual row, reachable at all.
+   *
+   * The row is the one the write actually changes, and it is the same row
+   * `pending-projection.ts` keys its overlay on: `edit-person` renames the
+   * `core.party`, the trash/restore/log writes flip a `people.profile`
+   * column. `add-person` creates and so has nothing to be stale against, and
+   * `star-person`/`unstar-person` target a `core.tag` row whose id the vault
+   * never hands the client — an opaque identity carries no precondition
+   * rather than a guessed one.
+   */
+  const VERSIONED_ROW_OF: Record<string, { entity: string; key: string }> = {
+    "edit-person": { entity: "core.party", key: "party_id" },
+    "trash-person": { entity: "people.profile", key: "profile_id" },
+    "restore-person": { entity: "people.profile", key: "profile_id" },
+    "log-interaction": { entity: "people.profile", key: "profile_id" },
+  };
+
+  async function baseVersionsFor(
+    action: string,
+    input: Record<string, unknown>
+  ): Promise<CentraidBaseVersion[]> {
+    const target = VERSIONED_ROW_OF[action];
+    const rowId = target ? input[target.key] : undefined;
+    if (!target || typeof rowId !== "string" || !rowId) return [];
+    const readVersion = window.centraid.rowVersion;
+    if (!readVersion) return [];
+    const version = await readVersion({ entity: target.entity, rowId });
+    return version === undefined
+      ? []
+      : [{ entity: target.entity, rowId, version }];
+  }
+
   async function act(
     action: string,
     input: Record<string, unknown>
@@ -108,11 +230,13 @@ export function createLogic({
     const intentId = globalThis.crypto.randomUUID();
     const optimistic = model.begin(action, input, intentId);
     try {
+      const baseVersions = await baseVersionsFor(action, input);
       const outcome = await window.centraid.write({
         action,
         input,
         intentId,
         ...(optimistic.length > 0 ? { optimistic } : {}),
+        ...(baseVersions.length > 0 ? { baseVersions } : {}),
       });
       model.applyOutcome(outcome.invocationId ?? intentId, {
         status: outcome.status,
@@ -604,6 +728,7 @@ export function createLogic({
     const outcome = await act("add-person", input);
     if (!narrate(outcome)) return false;
     state.addModalOpen = false;
+    state.addDraft = null;
     renderModal();
     statusLine("Added · receipted.");
     await refresh();
@@ -615,10 +740,14 @@ export function createLogic({
     state.newMenuOpen = false;
     renderNewMenu();
     state.addModalOpen = true;
+    // A fresh "Add someone" is not the refused one — seeding it with a draft
+    // the member already dealt with elsewhere would be a small lie.
+    state.addDraft = null;
     renderModal();
   }
   function closeAddModal() {
     state.addModalOpen = false;
+    state.addDraft = null;
     renderModal();
   }
   function startCreateList() {
@@ -701,6 +830,11 @@ export function createLogic({
     act,
     pendingByRowId,
     restorePending,
+    attentionRows,
+    dismissPending,
+    retryPending,
+    editPending,
+    isEditablePending,
     applyPendingChange,
     currentRows,
     clearSelection,

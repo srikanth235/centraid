@@ -21,6 +21,7 @@ import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { Activity } from "./components/Activity.tsx";
 import { AddPersonModal } from "./components/AddPersonModal.tsx";
+import { Attention } from "./components/Attention.tsx";
 import { BulkBar } from "./components/BulkBar.tsx";
 import { Details } from "./components/Details.tsx";
 import { GridCard } from "./components/Grid.tsx";
@@ -105,6 +106,7 @@ function makeState(view: "grid" | "list"): AppState {
     detailAdders: {},
     newMenuOpen: false,
     addModalOpen: false,
+    addDraft: null,
     creatingList: false,
     renamingListId: null,
     narrow: false,
@@ -736,8 +738,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   }
 
   const modal = state.addModalOpen ? (
+    // Keyed on the draft so a refused person taken back for correction (issue
+    // #738) genuinely reseeds this stateful leaf; without the key its own
+    // `useState` initialisers would never run again.
     <AddPersonModal
+      key={state.addDraft?.id ?? "add-person"}
       lists={data.lists}
+      draft={state.addDraft}
       onSubmit={handleAddPerson}
       onClose={handleCloseAddModal}
     />
@@ -836,7 +843,24 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             onClear={handleClearSelected}
           />
         }
-        board={board}
+        board={
+          <>
+            {/* Writes that settled without executing (issue #738). The
+                replica stopped overlaying them, so the row they projected is
+                no longer among the people at all — this panel above them is
+                the only place they still exist, and it holds them until the
+                member answers. Restored from the durable attention journal on
+                every mount, so a reload never loses one. */}
+            <Attention
+              rows={logic.attentionRows()}
+              isEditable={logic.isEditablePending}
+              onEdit={(intentId) => logic.editPending(intentId)}
+              onRetry={(intentId) => void logic.retryPending(intentId)}
+              onDiscard={(intentId) => logic.dismissPending(intentId)}
+            />
+            {board}
+          </>
+        }
         details={details}
         modal={modal}
       />

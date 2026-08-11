@@ -59,13 +59,28 @@ export function CreateModal({
 }) {
   const start0 = prefill?.start ?? nextHalfHour();
   const end0 = prefill?.end ?? new Date(start0.getTime() + 3600000);
-  const [summary, setSummary] = useState("");
+  // A prefill may carry a whole refused payload (issue #738: correcting a
+  // write the vault would refuse again before resending it), not just the
+  // times a day/slot click supplies. An `rrule` that is not one of the fixed
+  // choices lands in the custom field, which is where the member can see and
+  // change it — silently dropping it would resend something they never wrote.
+  const prefillRepeat =
+    prefill?.rrule && REPEAT_OPTIONS.some((o) => o.value === prefill.rrule)
+      ? prefill.rrule
+      : prefill?.rrule
+        ? "custom"
+        : "none";
+  const [summary, setSummary] = useState(prefill?.summary ?? "");
   const [startVal, setStartVal] = useState(toLocalInput(start0));
   const [endVal, setEndVal] = useState(toLocalInput(end0));
-  const [calendarId, setCalendarId] = useState(calendars[0]?.calendar_id ?? "");
-  const [description, setDescription] = useState("");
-  const [repeat, setRepeat] = useState("none");
-  const [customRepeat, setCustomRepeat] = useState("");
+  const [calendarId, setCalendarId] = useState(
+    prefill?.calendarId ?? calendars[0]?.calendar_id ?? ""
+  );
+  const [description, setDescription] = useState(prefill?.description ?? "");
+  const [repeat, setRepeat] = useState(prefillRepeat);
+  const [customRepeat, setCustomRepeat] = useState(
+    prefillRepeat === "custom" ? (prefill?.rrule ?? "") : ""
+  );
   const [semantics, setSemantics] = useState<"zoned" | "floating" | "all-day">(
     "zoned"
   );

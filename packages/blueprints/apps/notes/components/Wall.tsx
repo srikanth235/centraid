@@ -55,7 +55,15 @@ export function Wall({
 
   return (
     <div className={styles.scrollInner}>
-      {showQuickAdd ? <QuickAdd {...quickAddProps} /> : null}
+      {/* Keyed on the draft so a refused note taken for correction (issue
+          #738) genuinely reseeds this stateful leaf; without the key its own
+          `useState` initialisers would never run again. */}
+      {showQuickAdd ? (
+        <QuickAdd
+          key={quickAddProps.draft?.id ?? "quick-add"}
+          {...quickAddProps}
+        />
+      ) : null}
 
       {showPinnedGroup ? (
         <>

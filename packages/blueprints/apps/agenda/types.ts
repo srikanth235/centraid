@@ -127,8 +127,15 @@ export interface ActivityEntry {
 
 /** The composer's prefilled start/end when opened from a day/slot click. */
 export interface Prefill {
-  start: Date;
-  end: Date;
+  start?: Date;
+  end?: Date;
+  /** Issue #738: reopening the composer on a REFUSED propose payload, so a
+   *  write the vault would refuse again can be corrected before it is
+   *  resent. A day/slot click supplies only the times, as it always did. */
+  summary?: string;
+  description?: string;
+  calendarId?: string;
+  rrule?: string;
 }
 
 /** The payload the create composer hands back to `proposeEvent`. */

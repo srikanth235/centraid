@@ -556,3 +556,320 @@ describe("Tally pending-write overlay (issue #738)", () => {
     expect(decorated.your_amount_minor).toBe(3000);
   });
 });
+
+// ─── the durable attention journal (issue #738 engine H) ─────────────────────
+//
+// `restorePendingWrites()` reads TWO durable sources, because a settled write
+// leaves the outbox: `pendingWrites()` for what is still in flight, and
+// `attentionWrites()` for what came back denied/conflicted/failed. Without the
+// second one a denied row lives only in this session's memory and dies on
+// reload — the exact "anchored in app memory" failure the issue exists to end.
+
+/** A stand-in for the client's durable attention journal: `write()` files a
+ *  refused write into it, `dismissAttentionWrite()` forgets one. */
+function attentionJournal() {
+  const rows: CentraidAttentionWrite[] = [];
+  const dismissAttentionWrite = vi.fn<
+    NonNullable<CentraidClient["dismissAttentionWrite"]>
+  >(async ({ intentId }) => {
+    const at = rows.findIndex((row) => row.intentId === intentId);
+    if (at < 0) return false;
+    rows.splice(at, 1);
+    return true;
+  });
+  return {
+    rows,
+    dismissAttentionWrite,
+    reads: {
+      pendingWrites: async () => [],
+      attentionWrites: async () => rows.map((row) => ({ ...row })),
+      dismissAttentionWrite,
+    },
+  };
+}
+
+describe("Tally attention rows survive a reload (issue #738)", () => {
+  test("a denied add-expense persists in the ledger with its reason across a FRESH logic instance, then retries under a new id", async () => {
+    const journal = attentionJournal();
+    const write = vi.fn<CentraidClient["write"]>(async (opts) => {
+      journal.rows.push({
+        intentId: opts.intentId!,
+        action: opts.action,
+        status: "denied",
+        reason: "Alice's device does not allow this split.",
+        input: opts.input ?? {},
+        mutations: (opts.optimistic ?? []) as never,
+        settledAt: "2026-08-11T10:00:00.000Z",
+      });
+      return {
+        status: "denied",
+        reason: "Alice's device does not allow this split.",
+      } as never;
+    });
+    stubCentraid({ write: write as CentraidClient["write"], ...journal.reads });
+
+    const first = newLogic();
+    await first.act("add-expense", {
+      group_id: "group-trip",
+      description: "Taxi",
+      amount_minor: 1200,
+      paid_by: "party-bob",
+      category: "transport",
+      spent_on: "2026-08-10",
+      splits: [{ party_id: "party-bob", share_minor: 1200 }],
+    });
+    const deniedId = write.mock.calls[0]![0].intentId!;
+    expect(first.pendingLedgerRows()).toMatchObject([
+      {
+        description: "Taxi",
+        pendingStatus: "denied",
+        pendingReason: "Alice's device does not allow this split.",
+        pendingRetryable: true,
+        pendingEditable: true,
+        commonsIntentId: deniedId,
+      },
+    ]);
+
+    // ---- reload: a brand-new logic instance with no memory whatsoever ----
+    const groupState = state();
+    groupState.view = "group";
+    groupState.groupId = "group-trip";
+    const second = createLogic({
+      state: groupState,
+      dash: dash(),
+      render: vi.fn<() => void>(),
+      renderModals: vi.fn<() => void>(),
+      loadView: vi.fn<() => Promise<void>>(async () => undefined),
+      refreshAll: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+    expect(second.pendingLedgerRows()).toStrictEqual([]);
+    await second.restorePendingWrites();
+
+    // Row CONTENT, never a count: the refused expense is back, in the group
+    // ledger, still saying what happened and still offering an answer.
+    expect(second.pendingLedgerRowsForView()).toMatchObject([
+      {
+        expense_id: pendingRowId(deniedId),
+        group_id: "group-trip",
+        description: "Taxi",
+        amount_minor: 1200,
+        pendingStatus: "denied",
+        pendingReason: "Alice's device does not allow this split.",
+        pendingRetryable: true,
+      },
+    ]);
+
+    // ---- retry: same payload, FRESH intent id, old record forgotten ----
+    await second.retryPendingWrite(deniedId);
+    expect(journal.dismissAttentionWrite).toHaveBeenCalledWith({
+      intentId: deniedId,
+    });
+    const retried = write.mock.calls[1]![0];
+    expect(retried.intentId).not.toBe(deniedId);
+    expect(retried.input).toMatchObject({
+      description: "Taxi",
+      amount_minor: 1200,
+    });
+    // The retry was refused too, so exactly ONE row is answerable — the new
+    // attempt — and the old id is not resurrected by the journal.
+    expect(second.pendingLedgerRows()).toMatchObject([
+      { description: "Taxi", commonsIntentId: retried.intentId },
+    ]);
+  });
+
+  test("Edit reopens the expense composer prefilled from the refused payload and clears the durable record", async () => {
+    const journal = attentionJournal();
+    journal.rows.push({
+      intentId: "intent-denied",
+      action: "add-expense",
+      status: "denied",
+      reason: "Alice's device does not allow this split.",
+      input: {
+        group_id: "group-trip",
+        description: "Taxi",
+        amount_minor: 1200,
+        original_amount_minor: 1200,
+        original_currency: "USD",
+        settlement_currency: "USD",
+        rate_scaled: 1_000_000,
+        rate_scale: 6,
+        paid_by: "party-bob",
+        category: "transport",
+        spent_on: "2026-08-10",
+        splits: [
+          { party_id: "party-bob", share_minor: 900 },
+          { party_id: "party-ann", share_minor: 300 },
+        ],
+      },
+      mutations: [],
+      settledAt: "2026-08-11T10:00:00.000Z",
+    });
+    stubCentraid({
+      ...journal.reads,
+      read: (async () => ({ members: [] })) as CentraidClient["read"],
+    });
+    const composerState = state();
+    const logic = createLogic({
+      state: composerState,
+      dash: dash(),
+      render: vi.fn<() => void>(),
+      renderModals: vi.fn<() => void>(),
+      loadView: vi.fn<() => Promise<void>>(async () => undefined),
+      refreshAll: vi.fn<() => Promise<void>>(async () => undefined),
+    });
+    await logic.restorePendingWrites();
+
+    await logic.editPendingWrite("intent-denied");
+
+    // The refused payload is in the composer, verbatim — an "Edit" that
+    // opened an empty modal would be a worse lie than no Edit at all.
+    expect(composerState.expense).toMatchObject({
+      mode: "new",
+      groupId: "group-trip",
+      desc: "Taxi",
+      amount: "12.00",
+      paidBy: "party-bob",
+      category: "transport",
+      spent_on: "2026-08-10",
+      method: "exact",
+      exact: { "party-bob": "9.00", "party-ann": "3.00" },
+    });
+    expect([...composerState.expense!.include]).toStrictEqual([
+      "party-bob",
+      "party-ann",
+    ]);
+    // Taken for correction is taken: the durable record goes, so the resend
+    // (a fresh intent) cannot leave a duplicate behind on the next reload.
+    expect(journal.dismissAttentionWrite).toHaveBeenCalledWith({
+      intentId: "intent-denied",
+    });
+    expect(journal.rows).toStrictEqual([]);
+    expect(logic.pendingLedgerRows()).toStrictEqual([]);
+  });
+
+  test("an edit-expense carries the row version it was composed against; a create carries none, and a conflict states both versions", async () => {
+    const rowVersion = vi.fn<NonNullable<CentraidClient["rowVersion"]>>(
+      async () => 4
+    );
+    const write = vi.fn<CentraidClient["write"]>(
+      async () =>
+        ({
+          status: "conflict",
+          reason: "Someone else changed this first.",
+          conflict: {
+            entity: "tally.expense",
+            rowId: "expense-lunch",
+            expectedVersion: 4,
+            actualVersion: 6,
+          },
+        }) as never
+    );
+    stubCentraid({
+      write: write as CentraidClient["write"],
+      rowVersion,
+      pendingWrites: async () => [],
+    });
+    const logic = newLogic();
+
+    await logic.act("edit-expense", {
+      expense_id: "expense-lunch",
+      description: "Lunch",
+      amount_minor: 2000,
+      paid_by: "party-bob",
+      category: "food",
+      spent_on: "2026-08-09",
+      splits: [{ party_id: "party-bob", share_minor: 2000 }],
+    });
+    expect(rowVersion).toHaveBeenCalledWith({
+      entity: "tally.expense",
+      rowId: "expense-lunch",
+    });
+    expect(write.mock.calls[0]![0].baseVersions).toStrictEqual([
+      { entity: "tally.expense", rowId: "expense-lunch", version: 4 },
+    ]);
+
+    // The conflict reaches the row the ledger renders, with BOTH versions —
+    // a conflict that degrades into a generic error wastes the precondition.
+    const decorated = decorateLedgerRow(
+      {
+        expense_id: "expense-lunch",
+        group_id: "group-trip",
+        description: "Lunch",
+        amount_minor: 2000,
+        category: "food",
+        spent_on: "2026-08-09",
+        paid_by: "party-bob",
+        your_role: "lent",
+        your_amount_minor: 2000,
+        splits: [],
+      },
+      logic.pendingByRowId(),
+      "party-bob"
+    );
+    expect(decorated.pendingStatus).toBe("conflict");
+    expect(decorated.pendingConflict).toStrictEqual({
+      entity: "tally.expense",
+      rowId: "expense-lunch",
+      expectedVersion: 4,
+      actualVersion: 6,
+    });
+
+    // A create has no existing row to be stale against.
+    await logic.act("add-expense", {
+      group_id: "group-trip",
+      description: "Taxi",
+      amount_minor: 1200,
+      paid_by: "party-bob",
+      category: "transport",
+      spent_on: "2026-08-10",
+    });
+    expect(write.mock.calls[1]![0].baseVersions).toBeUndefined();
+  });
+
+  test("a discarded attention row stays discarded across a reload", async () => {
+    const journal = attentionJournal();
+    journal.rows.push({
+      intentId: "intent-denied",
+      action: "add-expense",
+      status: "denied",
+      reason: "Alice's device does not allow this split.",
+      input: {
+        group_id: "group-trip",
+        description: "Taxi",
+        amount_minor: 1200,
+        paid_by: "party-bob",
+        category: "transport",
+        spent_on: "2026-08-10",
+      },
+      mutations: [],
+      settledAt: "2026-08-11T10:00:00.000Z",
+    });
+    stubCentraid(journal.reads);
+
+    const before = newLogic();
+    await before.restorePendingWrites();
+    expect(before.pendingLedgerRows()).toMatchObject([
+      { description: "Taxi", pendingStatus: "denied" },
+    ]);
+
+    before.dismissCommonsIntent("intent-denied");
+    expect(before.pendingLedgerRows()).toStrictEqual([]);
+    // Discard reaches the DURABLE record — without this the next reload
+    // brings the row straight back, which is not discarding.
+    expect(journal.dismissAttentionWrite).toHaveBeenCalledWith({
+      intentId: "intent-denied",
+    });
+    expect(journal.rows).toStrictEqual([]);
+
+    const after = newLogic();
+    await after.restorePendingWrites();
+    expect(after.pendingLedgerRows()).toStrictEqual([]);
+  });
+
+  test("restorePendingWrites() is a safe no-op on a host with neither durable surface (the visual-harness mock)", async () => {
+    stubCentraid({});
+    const logic = newLogic();
+    await expect(logic.restorePendingWrites()).resolves.toBeUndefined();
+    expect(logic.pendingLedgerRows()).toStrictEqual([]);
+  });
+});

@@ -29,7 +29,19 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // intentId, projects it through `notesPendingProjection`, and folds the
   // outcome back in. `restorePending`/`pendingByRowId`/`applyPendingChange`
   // are the three seams app-root.tsx drives (mount/refresh, render, doorbell).
-  const pendingModel = createPendingOverlayModel(notesPendingProjection);
+  // Discarding (or taking for a retry/edit) an attention row also clears its
+  // DURABLE record through the engine's one port — a row that returns on the
+  // next reload was never really discarded. The clear is fire-and-forget by
+  // contract, so the failure is narrated here rather than swallowed.
+  const pendingModel = createPendingOverlayModel(notesPendingProjection, {
+    dismissDurable: (intentId) => {
+      const forget = window.centraid.dismissAttentionWrite;
+      if (!forget) return;
+      void forget({ intentId }).catch(() =>
+        notice("That change is gone from this view but may return on reload.")
+      );
+    },
+  });
 
   function notice(text: string) {
     const el = document.querySelector<HTMLElement>("#noticeBanner");
@@ -67,12 +79,95 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return false;
   }
 
-  /** Rebuild the overlay from the durable outbox — the reload path (issue
-   *  #738). Feature-detected: an older/mock host without `pendingWrites`
-   *  restores to empty, which is fine — attention rows still persist
+  /** Rebuild the overlay from local truth — the reload path (issue #738).
+   *  TWO durable sources, because a settled write leaves the outbox: the
+   *  outbox for what is still in flight, the attention journal for what came
+   *  back denied/conflicted/failed. Feature-detected: an older/mock host
+   *  without either restores to empty, and attention rows then persist only
    *  in-session from `applyOutcome`. */
   async function restorePending(): Promise<void> {
-    pendingModel.restore((await window.centraid.pendingWrites?.()) ?? []);
+    const [pending, attention] = await Promise.all([
+      window.centraid.pendingWrites?.() ?? [],
+      window.centraid.attentionWrites?.() ?? [],
+    ]);
+    pendingModel.restore(pending);
+    pendingModel.restoreAttention(attention);
+    render();
+  }
+
+  /** The writes that settled without executing and still need an answer —
+   *  what `components/Attention.tsx` renders above the wall. */
+  function attentionRows(): PendingRowState[] {
+    return pendingModel.attention();
+  }
+
+  /** Discard one — here and in the durable journal (the model's port). */
+  function dismissPending(intentId: string): boolean {
+    const dismissed = pendingModel.dismiss(intentId);
+    if (dismissed) render();
+    return dismissed;
+  }
+
+  /** Re-issue a refused write under a FRESH intent id: the old id's payload
+   *  hash is bound to the attempt that failed, so replaying it would dedupe
+   *  onto that failure instead of trying again. Whatever the resend settles
+   *  as lands back on its own row, so this never narrates twice. */
+  async function retryPending(
+    intentId: string
+  ): Promise<VaultOutcome | undefined> {
+    const retry = pendingModel.takeForRetry(intentId);
+    if (!retry) return undefined;
+    render();
+    const outcome = await act(retry.action, retry.input);
+    render();
+    return outcome;
+  }
+
+  /**
+   * The third answer beside retry and discard: put the refused payload back
+   * in the COMPOSER so it can be corrected before it is resent. Notes' one
+   * composer is the quick-add card, and it composes a NEW note — so only a
+   * refused `create-note` can be reopened there.
+   *
+   * `edit-note` is deliberately not editable here even though the editor
+   * exists: the editor is bound to the canonical note and autosaves what it
+   * shows, so seeding it with a refused body would either resend on the next
+   * keystroke or quietly diverge from the note on disk. Retry and discard are
+   * the honest pair for it.
+   */
+  function isEditablePending(row: PendingRowState): boolean {
+    return row.action === "create-note" && row.input !== undefined;
+  }
+
+  function editPending(intentId: string): boolean {
+    const entry = pendingModel.rows().find((row) => row.intentId === intentId);
+    if (!entry || !isEditablePending(entry)) return false;
+    const taken = pendingModel.takeForRetry(intentId);
+    if (!taken) return false;
+    state.quickAddDraft = {
+      id: intentId,
+      title: String(taken.input.title ?? ""),
+      body: String(taken.input.body_text ?? ""),
+    };
+    // The quick-add card is hidden in the pinned/trash scopes and while a
+    // search is running (app-root.tsx's `showQuickAdd`) — seeding a draft
+    // into a card the member cannot see would silently swallow it.
+    if (state.nav.kind === "pinned" || state.nav.kind === "trash")
+      state.nav = { kind: "all" };
+    if (state.search) {
+      state.search = "";
+      state.searchResults = null;
+    }
+    render();
+    return true;
+  }
+
+  /** The quick-add card seeded a draft and the member sent (or abandoned)
+   *  it — the draft is spent, and leaving it set would re-seed the card on
+   *  the next render. */
+  function clearQuickAddDraft(): void {
+    if (!state.quickAddDraft) return;
+    state.quickAddDraft = null;
     render();
   }
 
@@ -95,6 +190,43 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // this is exactly the old fire-and-forget write. Returns the raw outcome so
   // callers narrate/refresh on their own terms (write() below; kit.ts's
   // wireAttachInput via the exported `act`).
+  /**
+   * The optimistic-concurrency precondition for one write (issue #738 P2):
+   * the version of the row this device composed the change against, read
+   * from the local replica. Without it a conflict cannot even occur — the
+   * vault has nothing to compare — so this is what makes a `conflict`
+   * outcome, and its expected-vs-actual row, reachable at all.
+   *
+   * The row is the one the write actually changes, and it is the same row
+   * `pending-projection.ts` keys its overlay on. `create-note` creates and so
+   * has nothing to be stale against. `move-note` is included even though its
+   * projection carries no field changes — the filing it replaces is a join
+   * row this device cannot address, but the note itself is exactly what a
+   * second device races.
+   */
+  const VERSIONED_ROW_OF: Record<string, { entity: string; key: string }> = {
+    "edit-note": { entity: "knowledge.note", key: "note_id" },
+    "move-note": { entity: "knowledge.note", key: "note_id" },
+    "delete-note": { entity: "knowledge.note", key: "note_id" },
+    "rename-notebook": { entity: "core.collection", key: "notebook_id" },
+    "delete-notebook": { entity: "core.collection", key: "notebook_id" },
+  };
+
+  async function baseVersionsFor(
+    action: string,
+    input: Record<string, unknown>
+  ): Promise<CentraidBaseVersion[]> {
+    const target = VERSIONED_ROW_OF[action];
+    const rowId = target ? input[target.key] : undefined;
+    if (!target || typeof rowId !== "string" || !rowId) return [];
+    const readVersion = window.centraid.rowVersion;
+    if (!readVersion) return [];
+    const version = await readVersion({ entity: target.entity, rowId });
+    return version === undefined
+      ? []
+      : [{ entity: target.entity, rowId, version }];
+  }
+
   async function act(
     action: string,
     input: Record<string, unknown>
@@ -102,11 +234,13 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     const intentId = crypto.randomUUID();
     const optimistic = pendingModel.begin(action, input, intentId);
     try {
+      const baseVersions = await baseVersionsFor(action, input);
       const outcome = await window.centraid.write({
         action,
         input,
         intentId,
         ...(optimistic.length > 0 ? { optimistic } : {}),
+        ...(baseVersions.length > 0 ? { baseVersions } : {}),
       });
       pendingModel.applyOutcome(outcome.invocationId ?? intentId, {
         status: outcome.status,
@@ -560,6 +694,12 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     clearSearch,
     restorePending,
     pendingByRowId,
+    attentionRows,
+    dismissPending,
+    retryPending,
+    editPending,
+    isEditablePending,
+    clearQuickAddDraft,
     applyPendingChange,
   };
 }
