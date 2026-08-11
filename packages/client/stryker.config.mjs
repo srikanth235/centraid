@@ -11,11 +11,7 @@ export default {
     "src/replica/payload-hash-properties.test.ts",
     "src/replica/payload-hash.test.ts",
   ],
-  mutate: [
-    "src/replica/intent-replacement.ts",
-    "src/replica/intents.ts",
-    "src/replica/payload-hash.ts",
-  ],
+  mutate: ["src/replica/intents.ts", "src/replica/payload-hash.ts"],
   reporters: ["clear-text", "json"],
   jsonReporter: {
     fileName: "../../artifacts/mutation/client-replica-report.json",

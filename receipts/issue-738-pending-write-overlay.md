@@ -53,7 +53,7 @@ after reloading offline with the pending Tally, Tasks, and Agenda rows restored.
 - Added real production-route Playwright journeys for Electron and the PWA. They use the actual shell, gateway, replica store, inline bridge, blueprint query/projection modules, and row components; only transport is forced offline. The Android Maestro lane now performs the real mounted Tally airplane-mode add → OS process restart → visible queued row journey; the rendered cross-platform companion exercises the production provider/query/session stack over a real SQLite intent store.
 - Bounded the gateway test project to four workers after the exact PR gate measured eight concurrent SQLite/app fixture bootstraps exceeding the existing 30-second hook budget; assertions and timeout budgets are unchanged.
 - Recorded maintainer-approved file-size waivers on the five cohesive issue files that cross the 625-line hygiene ceiling: the mounted reader and its end-to-end fixture, the crash-ordering coordinator, the cross-tree engine-conformance scanner, and the intent lifecycle contract. The waiver changes no runtime or gate threshold.
-- Recorded the maintainer-approved 520,000 → 528,000-byte cold-shell transfer waiver after PR #745 measured 525,304 bytes. Retry/edit replacement code is lazy-loaded, and request-count, warm-shell, and app-open budgets remain unchanged.
+- Recorded the maintainer-approved 520,000 → 528,000-byte cold-shell transfer waiver after PR #745 measured 525,304 bytes. The existing safe chunk order is preserved; request-count, warm-shell, and app-open budgets remain unchanged.
 - Kept `IntentRecordStore`, IndexedDB, memory, and native SQLite outbox implementations byte-identical to `origin/main`; the overlay uses their existing add/transition/settle contract without a schema or sync-model change.
 - Added an architectural conformance tripwire with demonstrated-red coverage. It rejects known app-owned overlay vocabulary, arbitrary-named collection hooks populated from write results, inline optimistic mutations, and reach-past imports; engine/unit/journey tests own runtime projection correctness.
 
@@ -184,7 +184,6 @@ packages/client/src/react/shell/routes/InlineAppRoute.test.tsx
 packages/client/src/react/shell/routes/InlineAppRoute.tsx
 packages/client/src/replica/coordinator.test.ts
 packages/client/src/replica/coordinator.ts
-packages/client/src/replica/intent-replacement.ts
 packages/client/src/replica/intents.contract.test.ts
 packages/client/src/replica/intents.ts
 packages/client/src/replica/multi-writer.contract.test.ts
@@ -196,7 +195,6 @@ packages/client/src/replica/shell-session.test.ts
 packages/client/src/replica/shell-session.ts
 packages/client/src/replica/sqlite-store.test.ts
 packages/client/src/replica/store-core.ts
-packages/client/stryker.config.mjs
 packages/gateway/src/serve/build-gateway.ts
 packages/gateway/vitest.config.ts
 receipts/issue-738-pending-write-overlay.md
@@ -233,7 +231,7 @@ tests/skips.json
 7. A native outbox overlay augments the ordinary pushed SQL page with only its addressed canonical row ids. The fallback full read remains reserved for a genuinely saturated page whose JavaScript composition removes hits; overlay presence alone never disables filtering or limiting.
 8. `onlineOnly` is a transport policy boundary, not presentation metadata: every browser bridge bypasses the replica session before projection, and network failure cannot fall back to an outbox. Locker's remaining non-secret actions still use the ordinary overlay engine.
 9. The five `repo-hygiene file-size-limit` waivers are scoped to files whose behavior is deliberately audited as one boundary; the maintainer approved those waivers after the commit hook surfaced the limit. The repository-wide 625-line threshold remains unchanged.
-10. The maintainer approved a narrow cold-shell transfer ceiling adjustment from 520,000 to 528,000 bytes after the production PWA lane measured 525,304 bytes with the shared durable overlay engine. Replacement-only code is split behind retry/edit; request count, warm-shell ratio, and app-open ceilings are unchanged.
+10. The maintainer approved a narrow cold-shell transfer ceiling adjustment from 520,000 to 528,000 bytes after the production PWA lane measured 525,304 bytes with the shared durable overlay engine. The documented safe Vite chunk order remains intact; request count, warm-shell ratio, and app-open ceilings are unchanged.
 
 Gate-required deviation note (quality knobs, verbatim single line):
 
@@ -258,7 +256,7 @@ bun run check:diff-coverage
 Passed after the audit repair pass:
 
 - `bun run format`
-- `bun run test:mutation -- --package client-replica`: 81.4% (floor 72%).
+- `bun run test:mutation -- --package client-replica`: 82.3% (floor 72%).
 - Client focused suites: 6 files / 87 tests, including immutable replacement, concurrent replacement serialization, interrupted-handoff recovery, truthful discard, declaration-scoped and canonical-row revision identity, Tally's one-revision session route, pending-foreign-key enqueueing, exact query-row provenance, and the inline Locker secret boundary.
 - Native focused suites: 3 files / 15 tests, including the mounted-provider Tally restart, Hermes-without-`structuredClone`, multi-vault retry/replacement recovery, and driver-counted overlay pushdown.
 - Blueprint focused suites: 4 files / 16 tests, including pure settle/expire transitions, the Tally one-write pending edit path, online-only Locker calls, and non-secret Locker item projections.

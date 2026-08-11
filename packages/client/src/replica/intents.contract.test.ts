@@ -504,36 +504,36 @@ describe(IntentQueue, () => {
     ]);
   });
 
-  test("recognizes only declared synthetic revision identities", async () => {
-    await expect(
+  test("recognizes only declared synthetic revision identities", () => {
+    expect(
       pendingIntentIdFromInput("tasks", "edit", {
         task_id: "pending:intent-original:task",
         project_id: "pending:intent-project:project",
         title: "Edited locally",
       })
-    ).resolves.toStrictEqual({
+    ).toStrictEqual({
       intentId: "intent-original",
       expectedActions: ["add"],
     });
-    await expect(
+    expect(
       pendingIntentIdFromInput("tasks", "add", {
         project_id: "pending:intent-project:project",
         title: "Child of a pending project",
       })
-    ).resolves.toBeUndefined();
-    await expect(
+    ).toBeUndefined();
+    expect(
       pendingIntentIdFromInput("tally", "add-expense", {
         group_id: "pending:intent-group:group",
         description: "Lunch",
       })
-    ).resolves.toBeUndefined();
-    await expect(
+    ).toBeUndefined();
+    expect(
       pendingIntentIdFromInput("tasks", "edit", {
         task_id: "task-1",
         description: "pending:ordinary:content",
         title: "pending:also-ordinary:content",
       })
-    ).resolves.toBeUndefined();
+    ).toBeUndefined();
   });
 
   test("returns a settled transition with an explicit awaiting-change reason reset", async () => {
@@ -674,26 +674,24 @@ describe(IntentQueue, () => {
     });
   });
 
-  test("fails closed for non-object or undeclared synthetic revision probes", async () => {
-    await expect(
-      pendingIntentIdFromInput("tasks", "edit", null)
-    ).resolves.toBeUndefined();
-    await expect(
+  test("fails closed for non-object or undeclared synthetic revision probes", () => {
+    expect(pendingIntentIdFromInput("tasks", "edit", null)).toBeUndefined();
+    expect(
       pendingIntentIdFromInput("tasks", "edit", "pending:intent-x:task")
-    ).resolves.toBeUndefined();
-    await expect(
+    ).toBeUndefined();
+    expect(
       pendingIntentIdFromInput("tasks", "edit", ["pending:intent-x:task"])
-    ).resolves.toBeUndefined();
-    await expect(
+    ).toBeUndefined();
+    expect(
       pendingIntentIdFromInput("unknown-app", "edit", {
         task_id: "pending:intent-x:task",
       })
-    ).resolves.toBeUndefined();
-    await expect(
+    ).toBeUndefined();
+    expect(
       pendingIntentIdFromInput("tasks", "unknown-action", {
         task_id: "pending:intent-x:task",
       })
-    ).resolves.toBeUndefined();
+    ).toBeUndefined();
   });
 
   test("preserves the original projection and refreshed versions when an app has no declaration", async () => {

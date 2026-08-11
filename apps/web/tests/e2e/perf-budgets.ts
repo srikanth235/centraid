@@ -132,8 +132,8 @@ export const perfBudgets: PerfBudgets = {
     // deletes any sidecars a previous full build left. Measuring that way reads
     // ~1.79 MB here — uncompressed serving, not a regression. Run
     // `bun run --cwd apps/web build` first, then the spec.
-    // #738 approved deviation: measured 525_304 B in PR #745 CI; the immutable
-    // replacement implementation is additionally lazy-loaded after that run.
+    // #738 approved deviation: measured 525_304 B in PR #745 CI. Keep the
+    // documented safe common-shell chunk order; the companion budgets hold.
     maxTransferBytes: 528_000,
     // MEASURED warm/cold ratio ~0.0 (served from cache). 0.15 leaves room for
     // an unavoidable no-store fetch or two while still proving the shell cache.

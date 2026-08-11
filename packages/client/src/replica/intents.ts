@@ -2,7 +2,7 @@ import {
   decoratePendingMutation,
   projectPendingWrite,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
-import type { PendingProjectionDeclaration } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import { pendingProjectionFor } from "@centraid/blueprints/apps/_shared/pending-projections";
 
 import { webCryptoDigest, webCryptoIdFactory } from "./digest.js";
 import type { ReplicaDigest, ReplicaIdFactory } from "./digest.js";
@@ -50,6 +50,50 @@ export interface IntentQueueOptions {
 const SYNTHETIC_PENDING_ROW = /^pending:(?<intentId>[^:]+):/u;
 const PENDING_SUPERSEDES_FIELD = "__centraid_pending_supersedes";
 const REVISION_IDENTITY_PROBE = "__centraid_revision_identity_probe__";
+const replacementLocks = new Map<string, Promise<void>>();
+
+interface WebLockManager {
+  request: <T>(name: string, callback: () => Promise<T>) => Promise<T>;
+}
+
+/**
+ * Replacement is a read/add/settle transaction over an intentionally unchanged
+ * store contract. Serialize it per intent in this realm, and use the browser's
+ * Web Locks boundary when several PWA tabs share the same IndexedDB outbox.
+ * The durable successor marker is still the recovery truth after a crash.
+ */
+async function withReplacementLock<T>(
+  intentId: string,
+  task: () => Promise<T>
+): Promise<T> {
+  const local = async (): Promise<T> => {
+    const prior = replacementLocks.get(intentId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    replacementLocks.set(intentId, current);
+    await prior.catch(() => undefined);
+    try {
+      return await task();
+    } finally {
+      release();
+      if (replacementLocks.get(intentId) === current)
+        replacementLocks.delete(intentId);
+    }
+  };
+  const locks = (
+    globalThis as unknown as { navigator?: { locks?: WebLockManager } }
+  ).navigator?.locks;
+  return locks
+    ? locks.request(`centraid:replica-intent:${intentId}`, local)
+    : local();
+}
+
+function isRowIdentityField(key: string): boolean {
+  return key === "id" || key === "__rowId" || key.endsWith("_id");
+}
+
 /**
  * Replica values are JSON-shaped, but React Native 0.81/Hermes does not expose
  * the browser `structuredClone` global. Keep cloning inside the shared value
@@ -78,24 +122,15 @@ export interface PendingIntentReplacement {
   supersededIntentId: string;
 }
 
-/** Keep all eight app projection modules out of the cold shell boot chunk. */
-async function pendingProjectionForApp(
-  appId: string
-): Promise<PendingProjectionDeclaration | undefined> {
-  const { pendingProjectionFor } =
-    await import("@centraid/blueprints/apps/_shared/pending-projections");
-  return pendingProjectionFor(appId);
-}
-
 /** Resolve only an explicitly declared edit of a projected synthetic row. */
-export async function pendingIntentIdFromInput(
+export function pendingIntentIdFromInput(
   appId: string,
   action: string,
   input: ReplicaValue
-): Promise<PendingIntentRevisionTarget | undefined> {
+): PendingIntentRevisionTarget | undefined {
   if (!input || typeof input !== "object" || Array.isArray(input))
     return undefined;
-  const declaration = await pendingProjectionForApp(appId);
+  const declaration = pendingProjectionFor(appId);
   const expectedActions = declaration?.revisions?.[action];
   if (!declaration || !expectedActions || expectedActions.length === 0)
     return undefined;
@@ -114,6 +149,47 @@ export async function pendingIntentIdFromInput(
   return undefined;
 }
 
+function revisedInput(
+  existing: ReplicaValue,
+  revision: ReplicaValue,
+  intentId: string
+): ReplicaValue {
+  if (
+    !existing ||
+    typeof existing !== "object" ||
+    Array.isArray(existing) ||
+    !revision ||
+    typeof revision !== "object" ||
+    Array.isArray(revision)
+  )
+    return revision;
+  const merged = cloneReplicaValue(existing) as Record<string, ReplicaValue>;
+  for (const [key, value] of Object.entries(revision)) {
+    if (
+      isRowIdentityField(key) &&
+      typeof value === "string" &&
+      value.startsWith(`pending:${intentId}:`)
+    )
+      continue;
+    if (key.startsWith("clear_") && value === true) {
+      const field =
+        (
+          {
+            due: "due_at",
+            project: "project_id",
+            remind: "remind_before_min",
+            rrule: "rrule",
+            section: "section_id",
+          } as const
+        )[key.slice("clear_".length)] ?? key.slice("clear_".length);
+      delete merged[field];
+      continue;
+    }
+    merged[key] = cloneReplicaValue(value);
+  }
+  return merged;
+}
+
 function retainedAttention(
   intent: ReplicaIntent | undefined
 ): intent is ReplicaIntent {
@@ -128,6 +204,23 @@ function actionableAttention(
   intent: ReplicaIntent | undefined
 ): intent is ReplicaIntent {
   return intent?.state === "denied" || intent?.state === "failed";
+}
+
+function markSupersededIntent(
+  mutations: readonly OptimisticMutation[],
+  intentId: string
+): OptimisticMutation[] {
+  return mutations.map((mutation) =>
+    mutation.op === "upsert"
+      ? {
+          ...mutation,
+          values: {
+            ...mutation.values,
+            [PENDING_SUPERSEDES_FIELD]: intentId,
+          },
+        }
+      : mutation
+  );
 }
 
 function supersededIntentIds(intent: ReplicaIntent): string[] {
@@ -328,7 +421,6 @@ export class IntentQueue {
     intentId: string,
     refreshedBaseVersions?: ReplicaBaseVersion[]
   ): Promise<ReplicaIntent | undefined> {
-    const { withReplacementLock } = await import("./intent-replacement.js");
     return withReplacementLock(intentId, async () => {
       const successor = await this.successorFor(intentId);
       if (successor) {
@@ -350,8 +442,6 @@ export class IntentQueue {
     refreshedBaseVersions?: ReplicaBaseVersion[],
     expectedActions?: readonly string[]
   ): Promise<ReplicaIntent | undefined> {
-    const { revisedPendingInput, withReplacementLock } =
-      await import("./intent-replacement.js");
     return withReplacementLock(intentId, async () => {
       const successor = await this.successorFor(intentId);
       if (successor) {
@@ -366,7 +456,7 @@ export class IntentQueue {
       if (!actionableAttention(existing)) return undefined;
       if (expectedActions && !expectedActions.includes(existing.action))
         return undefined;
-      const input = revisedPendingInput(existing.input, revision, intentId);
+      const input = revisedInput(existing.input, revision, intentId);
       return this.replace(existing, input, refreshedBaseVersions);
     });
   }
@@ -426,22 +516,44 @@ export class IntentQueue {
         "A pending-write replacement requires a fresh intent id"
       );
     }
-    const [{ replacementInput }, declaration] = await Promise.all([
-      import("./intent-replacement.js"),
-      pendingProjectionForApp(existing.appId),
-    ]);
+    const projectionInput =
+      input && typeof input === "object" && !Array.isArray(input)
+        ? (input as Readonly<Record<string, unknown>>)
+        : {};
+    const projected = projectPendingWrite(
+      pendingProjectionFor(existing.appId),
+      {
+        appId: existing.appId,
+        action: existing.action,
+        input: projectionInput,
+        intentId: replacementIntentId,
+      }
+    );
+    const optimistic = projected.optimistic.flatMap((mutation) => {
+      const shapeId =
+        mutation.shapeId ??
+        existing.optimistic.find(
+          (candidate) => candidate.entity === mutation.entity
+        )?.shapeId;
+      return shapeId ? [{ ...mutation, shapeId } as OptimisticMutation] : [];
+    });
+    const baseVersions = refreshedBaseVersions ?? projected.baseVersions ?? [];
+    const replacementInput: EnqueueIntentInput = {
+      intentId: replacementIntentId,
+      appId: existing.appId,
+      action: existing.action,
+      input,
+      optimistic: markSupersededIntent(
+        optimistic.length > 0 ? optimistic : existing.optimistic,
+        existing.intentId
+      ),
+      dependencies: existing.dependencies,
+      baseVersions,
+    };
     // Add-first keeps a visible local fact across a crash. The private marker
     // lets startup finish the truthful old-outcome settlement if interruption
     // lands between these two unchanged store primitives.
-    const replacement = await this.enqueue(
-      replacementInput(
-        existing,
-        input,
-        replacementIntentId,
-        refreshedBaseVersions,
-        declaration
-      )
-    );
+    const replacement = await this.enqueue(replacementInput);
     await this.settleRetained(existing);
     return replacement;
   }

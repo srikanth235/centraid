@@ -299,7 +299,7 @@ export class ReplicaShellSession {
     this.assertOpen();
     if (!input.action)
       throw new ReplicaProtocolError("Replica action is required");
-    const retainedIntent = await pendingIntentIdFromInput(
+    const retainedIntent = pendingIntentIdFromInput(
       appId,
       input.action,
       input.input
