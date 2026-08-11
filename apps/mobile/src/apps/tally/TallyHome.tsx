@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 
+import { tallyPendingProjection } from "@centraid/blueprints/apps/tally/pending-projection";
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
@@ -19,9 +20,11 @@ import {
   combineReplicaQueryStates,
   useReplicaQuery,
 } from "../../kit/hooks/useReplicaQuery";
+import { pendingProjector } from "../../kit/replica/pending-rows";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { usePendingRows } from "../../kit/replica/usePendingRows";
 import {
   nativeWriteOutput,
   surfaceWriteFailure,
@@ -47,6 +50,8 @@ export default function TallyHome({
 }: TallyScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const { session, vaultId } = useReplica();
+  const { marks: pendingRows, refresh: refreshPending } =
+    usePendingRows("tally");
   const vault = useReplicaQuery(
     "tally",
     useMemo(() => ({ entity: "core.vault" }), [])
@@ -145,21 +150,30 @@ export default function TallyHome({
     [expenses.rows]
   );
   const renderExpense = useCallback(
-    ({ item }: ListRenderItemInfo<ReplicaRow>): React.JSX.Element => (
-      <TallyExpenseRow
-        row={item}
-        groupLabel={groupNameById.get(asString(item.group_id)) ?? "Group"}
-        currency={asString(item.settlement_currency) || baseCurrency}
-        colors={colors}
-      />
-    ),
-    [baseCurrency, colors, groupNameById]
+    ({ item }: ListRenderItemInfo<ReplicaRow>): React.JSX.Element => {
+      const pending = pendingRows.get(asString(item.expense_id));
+      return (
+        <TallyExpenseRow
+          row={item}
+          groupLabel={groupNameById.get(asString(item.group_id)) ?? "Group"}
+          currency={asString(item.settlement_currency) || baseCurrency}
+          colors={colors}
+          {...(pending ? { pending } : {})}
+        />
+      );
+    },
+    [baseCurrency, colors, groupNameById, pendingRows]
   );
 
   const write = async (action: string, input: Record<string, ReplicaValue>) => {
     if (!session) return undefined;
     try {
-      const result = await session.write("tally", { action, input });
+      const result = await session.write("tally", {
+        action,
+        input,
+        optimistic: pendingProjector(tallyPendingProjection, action, input),
+      });
+      refreshPending();
       if (
         !surfaceWriteOutcome(result, {
           onParked: () =>

@@ -28,6 +28,16 @@ export interface StoredReplicaRow {
   coverage: "partial" | "complete";
 }
 
+/** The provenance columns every mounted row carries on top of its schema. */
+export const REPLICA_PROVENANCE_COLUMNS = [
+  REPLICA_SCOPE_ID,
+  REPLICA_SCOPE_LABEL,
+  REPLICA_SCOPE_IDS,
+  REPLICA_SCOPE_LABELS,
+  REPLICA_WRITABLE_SCOPE_IDS,
+  REPLICA_CAN_WRITE,
+];
+
 export function storedSchema(
   entity: string,
   row: StoredReplicaRow
@@ -37,14 +47,21 @@ export function storedSchema(
     primaryKey: row.primary_key,
     columns: [
       ...parseStringArray(row.columns_json),
-      REPLICA_SCOPE_ID,
-      REPLICA_SCOPE_LABEL,
-      REPLICA_SCOPE_IDS,
-      REPLICA_SCOPE_LABELS,
-      REPLICA_WRITABLE_SCOPE_IDS,
-      REPLICA_CAN_WRITE,
+      ...REPLICA_PROVENANCE_COLUMNS,
     ],
     hasUnavailableFields: row.has_unavailable_fields === 1,
+  };
+}
+
+/** Which vault a row came from, and whether this member may write it there. */
+export function scopeProvenance(scope: MountedReplicaScope): ReplicaRow {
+  return {
+    [REPLICA_SCOPE_ID]: scope.vaultId,
+    [REPLICA_SCOPE_LABEL]: scope.label,
+    [REPLICA_SCOPE_IDS]: [scope.vaultId],
+    [REPLICA_SCOPE_LABELS]: [scope.label],
+    [REPLICA_WRITABLE_SCOPE_IDS]: scope.canWrite ? [scope.vaultId] : [],
+    [REPLICA_CAN_WRITE]: scope.canWrite,
   };
 }
 
@@ -58,12 +75,7 @@ export function replicaEnvelope(
     values: {
       ...(JSON.parse(row.payload_json) as ReplicaRow),
       ...extra,
-      [REPLICA_SCOPE_ID]: scope.vaultId,
-      [REPLICA_SCOPE_LABEL]: scope.label,
-      [REPLICA_SCOPE_IDS]: [scope.vaultId],
-      [REPLICA_SCOPE_LABELS]: [scope.label],
-      [REPLICA_WRITABLE_SCOPE_IDS]: scope.canWrite ? [scope.vaultId] : [],
-      [REPLICA_CAN_WRITE]: scope.canWrite,
+      ...scopeProvenance(scope),
     },
     oversizedFields: parseStringArray(row.oversized_json),
     hasUnavailableFields: row.has_unavailable_fields === 1,

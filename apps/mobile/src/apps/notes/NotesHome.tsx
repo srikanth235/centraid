@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import { parseWikiLinks } from "@centraid/blueprints/apps/notes/commonmark";
+import { notesPendingProjection } from "@centraid/blueprints/apps/notes/pending-projection";
 import type { ReplicaValue } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
@@ -18,9 +19,13 @@ import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import TopSafeArea from "../../kit/components/TopSafeArea";
+import { pendingProjector } from "../../kit/replica/pending-rows";
+import type { PendingRowMark } from "../../kit/replica/pending-rows";
+import PendingChip from "../../kit/replica/PendingChip";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { usePendingRows } from "../../kit/replica/usePendingRows";
 import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
@@ -60,9 +65,11 @@ function unresolvedLinks(note: NativeNote, body: string): WikiToken[] {
 
 function NoteRow({
   note,
+  pending,
   onOpen,
 }: {
   note: NativeNote;
+  pending?: PendingRowMark;
   onOpen: () => void;
 }): React.JSX.Element {
   const { colors } = useTheme();
@@ -98,6 +105,7 @@ function NoteRow({
         {note.references.length ? ` · ${note.references.length} links` : ""}
         {note.backlinks.length ? ` · ${note.backlinks.length} backlinks` : ""}
       </Text>
+      {pending ? <PendingChip mark={pending} /> : null}
     </Pressable>
   );
 }
@@ -107,6 +115,8 @@ export default function NotesHome({
 }: NotesScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const { session, refresh } = useReplica();
+  const { marks: pendingRows, refresh: refreshPending } =
+    usePendingRows("notes");
   const state = useNotes();
   const [showTrash, setShowTrash] = useState(false);
   const [query, setQuery] = useState("");
@@ -209,11 +219,16 @@ export default function NotesHome({
       return false;
     }
     try {
-      const request = { action, input: input as ReplicaValue };
+      const request = {
+        action,
+        input: input as ReplicaValue,
+        optimistic: pendingProjector(notesPendingProjection, action, input),
+      };
       const result =
         note?.sourceVaultId && session.writeTo
           ? await session.writeTo(note.sourceVaultId, "notes", request)
           : await session.write("notes", request);
+      refreshPending();
       return surfaceWriteOutcome(result, {
         onParked: () => {
           closeEditor();
@@ -417,9 +432,16 @@ export default function NotesHome({
               onRefresh={() => void pull()}
             />
           }
-          renderItem={({ item }) => (
-            <NoteRow note={item} onOpen={() => openNote(item)} />
-          )}
+          renderItem={({ item }) => {
+            const pending = pendingRows.get(item.rawId);
+            return (
+              <NoteRow
+                note={item}
+                {...(pending ? { pending } : {})}
+                onOpen={() => openNote(item)}
+              />
+            );
+          }}
           ListEmptyComponent={
             <View style={styles.empty}>
               <Icon

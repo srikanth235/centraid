@@ -18,6 +18,10 @@ export interface PendingChange {
   label: string;
   reason?: string;
   kind: "replica" | "placement";
+  /** Which app issued the write, so one app's list marks only its own rows. */
+  appId?: string;
+  /** The rows this unsettled write projected into (./pending-rows). */
+  rowIds?: string[];
 }
 
 /** The one method the ticker needs; the mounted session satisfies it. */

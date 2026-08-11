@@ -1,9 +1,12 @@
 import type {
+  OptimisticMutation,
   ReplicaInvalidation,
   ReplicaReadWireResult,
   ReplicaSearchWireResult,
 } from "@centraid/client/replica/native";
 
+import { composeMountedOverlay } from "./multi-vault-overlay";
+import type { ScopedOverlay } from "./multi-vault-overlay";
 import type {
   MultiVaultReplicaReader,
   MountedReplicaScope,
@@ -64,11 +67,25 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     this.#onScopePulled = options.onScopePulled;
   }
 
-  read(
+  /**
+   * The mounted read, composed with every mounted vault's unsettled writes.
+   *
+   * The reader answers from the ATTACHed databases and never passes through a
+   * coordinator, so the overlay each per-vault session applies to its own
+   * reads has to be applied here too — otherwise a queued write is durable and
+   * invisible (issue #738). Composition is pure and read-path only: nothing
+   * here can evict, settle, or reorder the outbox.
+   */
+  async read(
     appId: string,
     request: NativeReadRequest
   ): Promise<ReplicaReadWireResult> {
-    return this.#reader.read(appId, request);
+    const result = await this.#reader.read(appId, request);
+    return composeMountedOverlay(
+      result,
+      request,
+      await this.mountedOverlays(appId, request.entity)
+    );
   }
 
   search(
@@ -122,6 +139,35 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     return this.#scopes;
   }
 
+  /**
+   * Each mounted vault's unsettled writes for one entity, grouped by the shape
+   * they were admitted against. A shape id is never compared across vaults:
+   * the same app is a different shape in every vault, and an overlay only ever
+   * applies to the vault whose outbox holds it.
+   */
+  private async mountedOverlays(
+    appId: string,
+    entity: string
+  ): Promise<ScopedOverlay[]> {
+    const perVault = await Promise.all(
+      [...this.#sessions].map(async ([vaultId, session]) => {
+        const scope = this.#scopes.find((item) => item.vaultId === vaultId);
+        if (!scope) return [];
+        const byShape = new Map<string, OptimisticMutation[]>();
+        for (const mutation of await session.overlayMutations(appId, entity)) {
+          const group = byShape.get(mutation.shapeId);
+          if (group) group.push(mutation);
+          else byShape.set(mutation.shapeId, [mutation]);
+        }
+        return [...byShape].flatMap(([shapeId, mutations]) => {
+          const schema = session.entitySchema(shapeId, entity);
+          return schema ? [{ scope, schema, mutations }] : [];
+        });
+      })
+    );
+    return perVault.flat();
+  }
+
   notifyReachable(): void {
     for (const session of this.#sessions.values()) session.notifyReachable();
     void this.flushPlacements();
@@ -168,6 +214,8 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
       label: string;
       reason?: string;
       kind: "replica" | "placement";
+      appId?: string;
+      rowIds?: string[];
     }>
   > {
     const replica = (
@@ -182,6 +230,10 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
             label: `${item.appId}: ${item.action}`,
             ...(item.reason ? { reason: item.reason } : {}),
             kind: "replica" as const,
+            appId: item.appId,
+            // Present only while the write is still unsettled: the rows it put
+            // on screen, which is what a list joins its pending chip against.
+            ...("rowIds" in item ? { rowIds: item.rowIds } : {}),
           }));
         })
       )

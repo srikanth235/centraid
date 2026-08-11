@@ -17,10 +17,12 @@ import type {
   EnqueueIntentInput,
   GatewayAuth,
   IntentOutcome,
+  OptimisticMutation,
   ReplicaChangeFeedAdapter,
   ReplicaCursor,
   ReplicaBaseVersion,
   ReplicaDigest,
+  ReplicaEntitySchema,
   ReplicaFetcher,
   ReplicaIdFactory,
   ReplicaIntent,
@@ -52,10 +54,21 @@ export type NativeSearchRequest = Omit<ReplicaSearchRequest, "shapeId"> & {
 
 export type NativeOptimisticMutation = ReplicaWriteMutationInput;
 
+/**
+ * The function form of `optimistic`, for a projection whose rows are minted
+ * FROM the intent id (`pendingRowId`, packages/blueprints/apps/_shared).
+ * The session owns id minting — gesture-scoped idempotency coalesces a
+ * double tap onto one id — so the mutations have to be derived from the id it
+ * chose, not from one the caller guessed before calling.
+ */
+export type NativeOptimisticProjection = (
+  intentId: string
+) => NativeOptimisticMutation[];
+
 export interface NativeWriteInput {
   action: string;
   input: ReplicaValue;
-  optimistic?: NativeOptimisticMutation[];
+  optimistic?: NativeOptimisticMutation[] | NativeOptimisticProjection;
   intentId?: string;
   baseVersions?: ReplicaBaseVersion[];
 }
@@ -310,20 +323,23 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.assertOpen();
     if (!input.action)
       throw new ReplicaProtocolError("Replica action is required");
+    const intentId = this.#intentIds.forWrite(
+      appId,
+      input.action,
+      input.input,
+      input.intentId
+    );
     const { optimistic, dependencies } = prepareReplicaWrite(
       appId,
-      input.optimistic,
+      typeof input.optimistic === "function"
+        ? input.optimistic(intentId)
+        : input.optimistic,
       this.#catalog,
       this.resolveShapeId.bind(this),
       false
     );
     const intent = await this.#coordinator.enqueue({
-      intentId: this.#intentIds.forWrite(
-        appId,
-        input.action,
-        input.input,
-        input.intentId
-      ),
+      intentId,
       appId,
       action: input.action,
       input: input.input,
@@ -373,6 +389,34 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return this.#coordinator.status();
   }
 
+  /**
+   * The unsettled mutations this vault's outbox overlays onto reads of
+   * `entity`. `read` composes them through the coordinator; the mounted
+   * multi-vault reader queries the ATTACHed databases directly, so it asks
+   * for them here and composes them itself (./multi-vault-overlay).
+   */
+  async overlayMutations(
+    appId: string,
+    entity: string
+  ): Promise<OptimisticMutation[]> {
+    const pending = await this.#coordinator.pendingIntents();
+    return pending
+      .filter((intent) => intent.appId === appId)
+      .flatMap((intent) =>
+        intent.optimistic.filter((mutation) => mutation.entity === entity)
+      );
+  }
+
+  /** The consented schema an overlay composes against, from the live catalog. */
+  entitySchema(
+    shapeId: string,
+    entity: string
+  ): ReplicaEntitySchema | undefined {
+    return this.#catalog
+      .find((shape) => shape.shapeId === shapeId)
+      ?.entities.find((candidate) => candidate.entity === entity);
+  }
+
   async pendingChanges(): Promise<
     Array<
       | {
@@ -381,6 +425,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
           appId: string;
           action: string;
           reason?: string;
+          rowIds: string[];
         }
       | NativeIntentAttention
     >
@@ -397,6 +442,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
         appId: intent.appId,
         action: intent.action,
         ...(intent.reason ? { reason: intent.reason } : {}),
+        // The rows this write already put on screen, so a list can mark them
+        // pending without keeping any pending state of its own.
+        rowIds: intent.optimistic.map((mutation) => mutation.rowId),
       })),
       ...this.#intentStore.attention(),
     ];

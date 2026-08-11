@@ -3,14 +3,20 @@ import React, { memo, useCallback, useMemo, useState } from "react";
 import { FlatList, Pressable, ScrollView, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 
+import { agendaPendingProjection } from "@centraid/blueprints/apps/agenda/pending-projection";
+
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import TopSafeArea from "../../kit/components/TopSafeArea";
+import { pendingProjector } from "../../kit/replica/pending-rows";
+import type { PendingRowMark } from "../../kit/replica/pending-rows";
+import PendingChip from "../../kit/replica/PendingChip";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { usePendingRows } from "../../kit/replica/usePendingRows";
 import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
@@ -55,6 +61,8 @@ export default function AgendaHome({
 }: AgendaScreenProps<"AgendaHome">): React.JSX.Element {
   const { colors } = useTheme();
   const { session, refresh } = useReplica();
+  const { marks: pendingRows, refresh: refreshPending } =
+    usePendingRows("agenda");
   const [cursor, setCursor] = useState(new Date());
   const [mode, setMode] = useState<ViewMode>("agenda");
   const [createOpen, setCreateOpen] = useState(false);
@@ -108,30 +116,13 @@ export default function AgendaHome({
       );
       return false;
     }
-    const rowId = `optimistic-${Date.now()}`;
     try {
       const result = await session.write("agenda", {
         action: "propose",
         input,
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "core.event",
-            rowId,
-            values: {
-              event_id: rowId,
-              summary: String(input.summary),
-              dtstart: String(input.dtstart),
-              dtend: String(input.dtend),
-              start_tz: String(input.start_tz),
-              end_tz: String(input.end_tz),
-              recurrence_semantics: String(input.recurrence_semantics),
-              rrule: input.rrule ?? null,
-              status: "tentative",
-            },
-          },
-        ],
+        optimistic: pendingProjector(agendaPendingProjection, "propose", input),
       });
+      refreshPending();
       return surfaceWriteOutcome(result, {
         onParked: () =>
           navigation.navigate("Settings", { screen: "Approvals" }),
@@ -172,9 +163,14 @@ export default function AgendaHome({
   );
   const renderRow = useCallback(
     ({ item }: ListRenderItemInfo<AgendaDay>): React.JSX.Element => (
-      <AgendaDayRow day={item} colors={colors} onOpen={openEvent} />
+      <AgendaDayRow
+        day={item}
+        colors={colors}
+        pending={pendingRows}
+        onOpen={openEvent}
+      />
     ),
-    [colors, openEvent]
+    [colors, openEvent, pendingRows]
   );
   const listData = agenda.connection === "unavailable" ? NO_DAYS : agendaDays;
   const toggleCalendar = (id: string): void => {
@@ -389,10 +385,12 @@ const AgendaDayRow = memo(
   ({
     day,
     colors,
+    pending,
     onOpen,
   }: {
     day: AgendaDay;
     colors: ReturnType<typeof useTheme>["colors"];
+    pending: ReadonlyMap<string, PendingRowMark>;
     onOpen: (event: AgendaEventModel) => void;
   }): React.JSX.Element => {
     const isToday = day.date.toDateString() === new Date().toDateString();
@@ -420,31 +418,35 @@ const AgendaDayRow = memo(
           </Text>
         </View>
         <View style={styles.eventsCol}>
-          {day.events.map((event) => (
-            // Title ABOVE time, per the invariant — the title gets full
-            // width instead of sharing the row with a time column.
-            <Pressable
-              key={event.instanceKey}
-              onPress={() => onOpen(event)}
-              style={[styles.eventCard, { borderStartColor: colors.accent }]}
-            >
-              <Text style={[styles.eventTitle, { color: colors.text }]}>
-                {event.summary}
-              </Text>
-              <Text>
-                <Text style={[t("mono"), { color: colors.textSoft }]}>
-                  {new Intl.DateTimeFormat(undefined, {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  }).format(new Date(event.start))}
+          {day.events.map((event) => {
+            const mark = pending.get(event.id);
+            return (
+              // Title ABOVE time, per the invariant — the title gets full
+              // width instead of sharing the row with a time column.
+              <Pressable
+                key={event.instanceKey}
+                onPress={() => onOpen(event)}
+                style={[styles.eventCard, { borderStartColor: colors.accent }]}
+              >
+                <Text style={[styles.eventTitle, { color: colors.text }]}>
+                  {event.summary}
                 </Text>
-                <Text style={[t("small"), { color: colors.textSoft }]}>
-                  {event.timezone ? ` · ${event.timezone}` : ""}
-                  {event.isRecurrenceInstance ? " · repeating" : ""}
+                <Text>
+                  <Text style={[t("mono"), { color: colors.textSoft }]}>
+                    {new Intl.DateTimeFormat(undefined, {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    }).format(new Date(event.start))}
+                  </Text>
+                  <Text style={[t("small"), { color: colors.textSoft }]}>
+                    {event.timezone ? ` · ${event.timezone}` : ""}
+                    {event.isRecurrenceInstance ? " · repeating" : ""}
+                  </Text>
                 </Text>
-              </Text>
-            </Pressable>
-          ))}
+                {mark ? <PendingChip mark={mark} /> : null}
+              </Pressable>
+            );
+          })}
         </View>
       </View>
     );

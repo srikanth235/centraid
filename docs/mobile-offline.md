@@ -46,6 +46,8 @@ Ordinary writes stay in each replica's durable intent outbox. Add/Move uses a se
 
 Replay is idempotent. A crash can leave a completed target and pending source removal, but cannot delete the source before the target exists. Queued changes may be cancelled. Permission denial, terminal failure, and parked retries remain visible until dismissed.
 
+A mounted read is the composition of both durable local truths: canonical rows as of the cursor, plus every mounted vault's unsettled writes. The single-vault path composes inside the coordinator; the mounted read plane bypasses that coordinator, so `MultiVaultReplicaSession.read` applies each vault's outbox mutations to that vault's rows and then answers the request's filter, order, and limit over the composed set. Composition is per vault — mounted row ids are vault-scoped and every row carries its source — so a row minted by a write to one vault can never overwrite, delete, or appear inside another. It is also pure and read-path only: nothing on this path settles, reorders, or evicts a queued write. A row still waiting therefore survives a restart because the outbox does, and each app declares how its actions project into rows once, in `packages/blueprints/apps/<app>/pending-projection.ts`, for both seats.
+
 ### Commons writes and cursors
 
 A circle-backed commons is not mounted as a special borrowed scope. Its domain rows and blobs are real residents of each joined member vault, so the ordinary per-vault replica, backup, search, and attachment paths cover them. The phone still has exactly one physical replica cursor for that vault even when the vault participates in many commons.

@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 
+import { tasksPendingProjection } from "@centraid/blueprints/apps/tasks/pending-projection";
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
@@ -21,16 +22,19 @@ import {
   combineReplicaQueryStates,
   useReplicaQuery,
 } from "../../kit/hooks/useReplicaQuery";
+import { pendingProjector } from "../../kit/replica/pending-rows";
+import type { PendingRowMark } from "../../kit/replica/pending-rows";
+import PendingChip from "../../kit/replica/PendingChip";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { usePendingRows } from "../../kit/replica/usePendingRows";
 import {
   nativeWriteOutput,
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
 import { family, radii, useTheme } from "../../kit/theme";
-import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
 import type { TasksScreenProps } from "../../navigation";
 
 type TaskView = "inbox" | "today" | "upcoming" | `project:${string}`;
@@ -45,12 +49,14 @@ const DragTaskRow = memo(
   ({
     row,
     sectionName,
+    pending,
     onToggle,
     onMove,
     onReorder,
   }: {
     row: ReplicaRow;
     sectionName?: string;
+    pending?: PendingRowMark;
     onToggle: (row: ReplicaRow) => void;
     onMove: (row: ReplicaRow) => void;
     onReorder: (row: ReplicaRow, direction: -1 | 1) => void;
@@ -96,6 +102,7 @@ const DragTaskRow = memo(
                 ? " · repeating"
                 : ""}
           </Text>
+          {pending ? <PendingChip mark={pending} /> : null}
         </View>
         <Pressable
           accessibilityRole="button"
@@ -117,6 +124,8 @@ export default function TasksHome({
 }: TasksScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const { session } = useReplica();
+  const { marks: pendingRows, refresh: refreshPending } =
+    usePendingRows("tasks");
   const tasks = useReplicaQuery(
     "tasks",
     useMemo(() => ({ entity: "schedule.task" }), [])
@@ -173,18 +182,15 @@ export default function TasksHome({
 
   // Stable so the row callbacks built on it are stable too.
   const write = useCallback(
-    async (
-      action: string,
-      input: Record<string, ReplicaValue>,
-      optimistic?: NativeOptimisticMutation[]
-    ) => {
+    async (action: string, input: Record<string, ReplicaValue>) => {
       if (!session) return undefined;
       try {
         const result = await session.write("tasks", {
           action,
           input,
-          ...(optimistic ? { optimistic } : {}),
+          optimistic: pendingProjector(tasksPendingProjection, action, input),
         });
+        refreshPending();
         if (
           !surfaceWriteOutcome(result, {
             onParked: () =>
@@ -199,7 +205,7 @@ export default function TasksHome({
         return undefined;
       }
     },
-    [navigation, session]
+    [navigation, refreshPending, session]
   );
 
   const addTask = async (): Promise<void> => {
@@ -209,31 +215,14 @@ export default function TasksHome({
     if (due === "tomorrow") dueDate.setDate(dueDate.getDate() + 1);
     const dueAt =
       due === "none" ? undefined : dueDate.toISOString().slice(0, 10);
-    const rowId = `optimistic-${Date.now()}`;
-    const result = await write(
-      "add",
-      {
-        title: clean,
-        ...(dueAt ? { due_at: dueAt } : {}),
-        ...(repeat ? { rrule: "FREQ=WEEKLY" } : {}),
-      },
-      [
-        {
-          op: "upsert",
-          entity: "schedule.task",
-          rowId,
-          values: {
-            task_id: rowId,
-            title: clean,
-            status: "needs-action",
-            due_at: dueAt ?? null,
-            rrule: repeat ? "FREQ=WEEKLY" : null,
-            project_id: activeProjectId,
-            sort_order: visible.length,
-          },
-        },
-      ]
-    );
+    // Only what the vault's `add` command accepts: a pending row that shows a
+    // project the queued write does not carry would be a lie the moment it
+    // executes. Placement follows in `organize-task` once there is a task id.
+    const result = await write("add", {
+      title: clean,
+      ...(dueAt ? { due_at: dueAt } : {}),
+      ...(repeat ? { rrule: "FREQ=WEEKLY" } : {}),
+    });
     const taskId = String(nativeWriteOutput(result)?.task_id ?? "");
     if (taskId && (activeProjectId || completionAnchor) && result)
       await write("organize-task", {
@@ -337,17 +326,19 @@ export default function TasksHome({
   const renderTask = useCallback(
     ({ item }: ListRenderItemInfo<ReplicaRow>): React.JSX.Element => {
       const sectionName = sectionNameById.get(String(item.section_id));
+      const pending = pendingRows.get(String(item.task_id));
       return (
         <DragTaskRow
           row={item}
           {...(sectionName ? { sectionName } : {})}
+          {...(pending ? { pending } : {})}
           onToggle={completeTask}
           onMove={moveTask}
           onReorder={reorder}
         />
       );
     },
-    [completeTask, moveTask, reorder, sectionNameById]
+    [completeTask, moveTask, pendingRows, reorder, sectionNameById]
   );
 
   return (
