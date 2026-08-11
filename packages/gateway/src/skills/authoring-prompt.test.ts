@@ -25,6 +25,8 @@ describe("authoring-prompt", () => {
     expect(prompt).toContain("## Centraid automation authoring");
     expect(prompt).not.toContain("Design tokens");
     expect(prompt).not.toContain("## Centraid app authoring");
+    expect(prompt).toContain("ctx.agent({ runner?, model?, prompt, json? })");
+    expect(prompt).toContain("Do not use `requires.runner` for step routing");
   });
 
   test("buildAuthoringExtraPrompt omits an empty base preamble", () => {

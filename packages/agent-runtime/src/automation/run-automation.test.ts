@@ -207,6 +207,37 @@ describe("run-automation suite", () => {
       );
     });
 
+    it("does not replay a fire on another provider when an explicit call runner fails", async () => {
+      const failure =
+        'centraid-agent-failure:{"runner":"gemini","failureClass":"quota","message":"limit","explicitRunner":true}';
+      runFire.mockResolvedValueOnce(
+        fireResult({ ok: false, runId: "run-fire", error: failure })
+      );
+      const onFailover = vi.fn<AutomationFailover>();
+
+      const result = await runAutomation({
+        automationRef: "app/digest",
+        appsDir: "/apps",
+        journalDbFile: "/j.db",
+        runId: "run-fire",
+        runner: "codex",
+        runnerLadder: ["claude-code"],
+        onFailover,
+      });
+
+      expect(result.outcome.ok).toBe(false);
+      expect(runFire).toHaveBeenCalledOnce();
+      const deferOnFailure = runFire.mock.calls[0]![0].deferOnFailure;
+      expect(deferOnFailure).toStrictEqual(expect.any(Function));
+      if (typeof deferOnFailure !== "function") {
+        throw new Error(
+          "expected runAutomation to install a failure deferral predicate"
+        );
+      }
+      expect(deferOnFailure(result.outcome)).toBe(false);
+      expect(onFailover).not.toHaveBeenCalled();
+    });
+
     it("keeps the caller trigger note alongside the failover notice", async () => {
       const failure =
         'centraid-agent-failure:{"runner":"codex","failureClass":"quota","message":"limit"}';
@@ -308,13 +339,14 @@ describe("run-automation suite", () => {
       expect(runFire).not.toHaveBeenCalled();
     });
 
-    it("marks a manifest-pinned runner as ladder-derived consent, not a direct grant", async () => {
+    it("does not treat a manifest-pinned primary as user enrollment", async () => {
       await runAutomation({
         automationRef: "app/digest",
         appsDir: "/apps",
         journalDbFile: "/j.db",
         runner: "gemini",
         runnerSelectionSource: "manifest",
+        enrolledPrimaryRunner: "codex",
       });
       const deps = runFire.mock.calls[0]![1];
       deps.openDispatch({
@@ -324,7 +356,69 @@ describe("run-automation suite", () => {
         onLog: () => undefined,
       });
       expect(startLiveDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ runner: "gemini", consentSource: "ladder" })
+        expect.objectContaining({ runner: "gemini" })
+      );
+      const liveOpts = startLiveDispatch.mock.calls[0]?.[0];
+      expect(liveOpts?.consentSource).toBeUndefined();
+      expect(liveOpts?.consentSourceFor?.("gemini")).toBeUndefined();
+    });
+
+    it("recognizes a manifest-pinned primary that is in the user's ladder", async () => {
+      await runAutomation({
+        automationRef: "app/digest",
+        appsDir: "/apps",
+        journalDbFile: "/j.db",
+        runner: "gemini",
+        runnerSelectionSource: "manifest",
+        runnerLadder: ["codex", "gemini"],
+        enrolledPrimaryRunner: "codex",
+      });
+      const deps = runFire.mock.calls[0]![1];
+      deps.openDispatch({
+        workdir: "/w",
+        automationRef: "app/digest",
+        runId: "r",
+        onLog: () => undefined,
+      });
+      const liveOpts = startLiveDispatch.mock.calls[0]?.[0];
+      expect(liveOpts?.consentSourceFor?.("gemini")).toBe("ladder");
+    });
+
+    it("marks the user's primary direct after a manifest-selected rung fails", async () => {
+      const failure =
+        'centraid-agent-failure:{"runner":"gemini","failureClass":"quota","message":"limit"}';
+      runFire
+        .mockResolvedValueOnce(
+          fireResult({ ok: false, runId: "run-fire", error: failure })
+        )
+        .mockResolvedValueOnce(
+          fireResult({
+            ok: true,
+            runId: "run-fire:failover:1:codex",
+            value: "done",
+          })
+        );
+
+      await runAutomation({
+        automationRef: "app/digest",
+        appsDir: "/apps",
+        journalDbFile: "/j.db",
+        runId: "run-fire",
+        runner: "gemini",
+        runnerSelectionSource: "manifest",
+        runnerLadder: ["codex"],
+        enrolledPrimaryRunner: "codex",
+      });
+
+      const fallbackDeps = runFire.mock.calls[1]![1];
+      fallbackDeps.openDispatch({
+        workdir: "/w",
+        automationRef: "app/digest",
+        runId: "run-fire:failover:1:codex",
+        onLog: () => undefined,
+      });
+      expect(startLiveDispatch).toHaveBeenLastCalledWith(
+        expect.objectContaining({ runner: "codex", consentSource: "direct" })
       );
     });
   });

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#740) one billed-rail transaction owns per-call consent, breaker, binding, hydration, ACP dispatch, and settlement
 /*
  * Live `ctx.agent` dispatch for the local automation runner.
  *
@@ -41,6 +42,7 @@ import {
   compileHydrationPlan,
   ConversationStore,
   hydrationMessagesFromLedger,
+  isRunnerKind,
   makeJournalDbProvider,
 } from "@centraid/app-engine";
 import type * as TypeImport_4y0tle from "@centraid/app-engine";
@@ -79,6 +81,11 @@ export interface LiveDispatchOptions {
    * their settings — so the fire is denied unless a real grant already exists.
    */
   consentSource?: ProviderConsentSource;
+  /**
+   * Resolve user-authored consent for an explicit per-call runner. Undefined
+   * means the named harness is outside the automations primary/ladder.
+   */
+  consentSourceFor?: (runner: RunnerKind) => ProviderConsentSource | undefined;
   /** Resolve historical upload hashes into the owning automation's blob CAS. */
   hydrationAttachmentPath?: (hash: string) => string;
   onLog: (level: "info" | "warn" | "error", msg: string) => void;
@@ -100,9 +107,11 @@ export interface LiveDispatch {
 const AGENT_FAILURE_PREFIX = "centraid-agent-failure:";
 
 export interface AutomationAgentFailure {
-  runner: RunnerKind;
+  runner: string;
   failureClass: AgentFailureClass;
   message: string;
+  /** Explicit per-call runners fail here; outer fire failover must not replay. */
+  explicitRunner?: boolean;
 }
 
 /** Preserve typed runner failure metadata through the handler worker boundary. */
@@ -125,6 +134,7 @@ export function parseAutomationAgentFailure(
       runner?: unknown;
       failureClass?: unknown;
       message?: unknown;
+      explicitRunner?: unknown;
     };
     if (
       typeof parsed.runner !== "string" ||
@@ -133,7 +143,12 @@ export function parseAutomationAgentFailure(
     ) {
       return undefined;
     }
-    return parsed as AutomationAgentFailure;
+    return {
+      runner: parsed.runner,
+      failureClass: parsed.failureClass as AgentFailureClass,
+      message: parsed.message,
+      ...(parsed.explicitRunner === true ? { explicitRunner: true } : {}),
+    };
   } catch {
     return undefined;
   }
@@ -170,22 +185,16 @@ export async function startLiveDispatch(
     60_000
   );
   lockLeaseHeartbeat.unref?.();
-  let latestAdapter:
-    | {
-        kind: string;
-        sessionId?: string;
-        usageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
-        hydrated?: boolean;
-      }
-    | undefined;
-  let observedAdapter:
-    | {
-        kind: string;
-        sessionId?: string;
-        usageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
-        hydrated?: boolean;
-      }
-    | undefined;
+  type AdapterState = {
+    kind: string;
+    sessionId?: string;
+    usageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
+    hydrated?: boolean;
+  };
+  const latestAdapters = new Map<RunnerKind, AdapterState>();
+  const observedAdapters = new Map<RunnerKind, AdapterState>();
+  const successfulRunnerOrder: RunnerKind[] = [];
+  let lastObservedRunner: RunnerKind | undefined;
   let hydrationTokens = 0;
   const ensureScratch = async (): Promise<void> => {
     if (scratchReady) return;
@@ -230,29 +239,85 @@ export async function startLiveDispatch(
   //
   // Two deliberate limits. (1) ACP has no `--output-schema` equivalent, so
   // `call.json` is enforced by `coerceAgentAnswer` alone. (2) A fire carries
-  // only the runner KIND (the gateway drops binPath / extraArgs for every
-  // kind), so the backend resolves its default binary off PATH. The custom
+  // only runner KINDS (a call may override the fire kind; the gateway never
+  // carries binPath / extraArgs), so each backend resolves its binary from
+  // per-kind prefs or PATH. The custom
   // `acp` kind has no default binary and therefore surfaces a clear `error`
   // event, raised below.
   const agentDispatcher: automation.AgentDispatcher = async (
     call,
     ctx
   ): Promise<unknown> => {
-    const runner = opts.runner;
+    const explicitRunner = call.runner !== undefined;
+    if (
+      explicitRunner &&
+      (typeof call.runner !== "string" || !isRunnerKind(call.runner))
+    ) {
+      const named = String(call.runner);
+      throw agentFailureError({
+        runner: named,
+        failureClass: "unknown",
+        message: `Per-call automation runner "${named}" is not a registered harness.`,
+        explicitRunner: true,
+      });
+    }
+    const runner = explicitRunner ? (call.runner as RunnerKind) : opts.runner;
+    if (
+      call.model !== undefined &&
+      (typeof call.model !== "string" || call.model.length === 0)
+    ) {
+      throw agentFailureError({
+        runner,
+        failureClass: "unknown",
+        message: "Per-call automation model must be a non-empty string.",
+        ...(explicitRunner ? { explicitRunner: true } : {}),
+      });
+    }
+    if (
+      call.model === "centraid-mock" ||
+      call.model?.startsWith("centraid-mock/")
+    ) {
+      throw agentFailureError({
+        runner,
+        failureClass: "unknown",
+        message: `Per-call automation model "${call.model}" points at the centraid-mock provider and would recurse into the automation runtime.`,
+        ...(explicitRunner ? { explicitRunner: true } : {}),
+      });
+    }
+    const model = call.model ?? opts.model;
     // Unattended egress is never prompted (#567 D5) — it is authorized at
     // authoring time. So derive the grant honestly rather than minting one:
     // `recordDerived` refuses to resurrect a revoked provider and refuses a
     // ladder source the user's live settings do not contain. A controller
     // without the derived-consent seam denies rather than assumes.
     const consent = opts.providerEgressConsent;
-    if (consent && !consent.has(opts.automationRef, runner, "automations")) {
+    const consentSource = explicitRunner
+      ? opts.consentSourceFor
+        ? opts.consentSourceFor(runner)
+        : runner === opts.runner
+          ? opts.consentSource
+          : undefined
+      : opts.consentSource;
+    if (explicitRunner && consentSource === undefined) {
+      throw agentFailureError({
+        runner,
+        failureClass: "unknown",
+        message:
+          `Unattended egress to ${runner} is not enrolled for ${opts.automationRef}. ` +
+          `Add ${runner} to the automations agent or its failover ladder in Settings.`,
+        explicitRunner: true,
+      });
+    }
+    const hasConsent =
+      consent?.has(opts.automationRef, runner, "automations") ?? false;
+    if (consent && (explicitRunner || !hasConsent)) {
       const derived =
-        opts.consentSource === undefined
+        consentSource === undefined
           ? false
           : (consent.recordDerived?.(
               opts.automationRef,
               runner,
-              opts.consentSource,
+              consentSource,
               "automations"
             ) ?? false);
       if (!derived) {
@@ -263,6 +328,7 @@ export async function startLiveDispatch(
             `Unattended egress to ${runner} is not consented for ${opts.automationRef}. ` +
             `Add ${runner} to the automations agent or its failover ladder in Settings, ` +
             `or run this automation interactively and approve the provider.`,
+          ...(explicitRunner ? { explicitRunner: true } : {}),
         });
       }
     }
@@ -274,13 +340,26 @@ export async function startLiveDispatch(
         runner,
         failureClass: breaker.failureClass ?? "unknown",
         message: `Runner breaker is open${breaker.breakerUntil ? ` until ${new Date(breaker.breakerUntil).toISOString()}` : ""}.`,
+        ...(explicitRunner ? { explicitRunner: true } : {}),
       });
     }
     const loaded = (await opts.runnerPrefsFor?.(runner)) ?? { kind: runner };
     const prefs: RunnerPrefs =
       loaded.kind === runner ? loaded : { kind: runner };
+    const inheritedConfigPins =
+      runner === opts.runner
+        ? (opts.configPins ?? prefs.configPins)
+        : prefs.configPins;
+    // ACP resolves `configPins.model` before `input.model`. Mirror an explicit
+    // call override into the pin map so a runner/subsystem preference cannot
+    // silently win over the handler's step-level selection (#740).
+    const configPins =
+      call.model === undefined
+        ? inheritedConfigPins
+        : { ...inheritedConfigPins, model: call.model };
     let finalText = "";
     let failure: Extract<TurnStreamEvent, { type: "error" }> | undefined;
+    const latestAdapter = latestAdapters.get(runner);
     const binding =
       latestAdapter?.sessionId === undefined
         ? runsStore.getHarnessBinding(opts.automationRef, runner)
@@ -326,6 +405,7 @@ export async function startLiveDispatch(
           hydrationKind?: "handoff" | "recovery";
         }
       | undefined;
+    let observedAdapter: AdapterState | undefined;
     try {
       result = await getRunnerBackend(runner).runTurn(
         {
@@ -334,10 +414,8 @@ export async function startLiveDispatch(
           message: staged.prompt,
           ...(staged.attachments ? { attachments: staged.attachments } : {}),
           extraSystemPrompt: "",
-          ...(opts.model ? { model: opts.model } : {}),
-          ...((opts.configPins ?? prefs.configPins)
-            ? { configPins: opts.configPins ?? prefs.configPins }
-            : {}),
+          ...(model ? { model } : {}),
+          ...(configPins ? { configPins } : {}),
           abortSignal: ctx.abortSignal,
           ...(resumeSessionId ? { prevSessionId: resumeSessionId } : {}),
           ...(resumeUsage ? { prevUsageSnapshot: resumeUsage } : {}),
@@ -400,6 +478,8 @@ export async function startLiveDispatch(
           : {}),
         ...(result.hydrated ? { hydrated: true } : {}),
       };
+      observedAdapters.set(runner, observedAdapter);
+      lastObservedRunner = runner;
       if (result.hydrated) {
         hydrationTokens +=
           result.hydrationKind === "recovery"
@@ -408,8 +488,11 @@ export async function startLiveDispatch(
       }
     }
     if (!failure) {
-      if (result) {
-        latestAdapter = observedAdapter;
+      if (observedAdapter) {
+        latestAdapters.set(runner, observedAdapter);
+        const previousIndex = successfulRunnerOrder.indexOf(runner);
+        if (previousIndex >= 0) successfulRunnerOrder.splice(previousIndex, 1);
+        successfulRunnerOrder.push(runner);
       }
       opts.runnerHealth?.reportOk(scope, runner);
       return automation.coerceAgentAnswer(finalText, call.json);
@@ -418,6 +501,7 @@ export async function startLiveDispatch(
       runner,
       failureClass: failure.failureClass ?? "unknown",
       message: failure.message,
+      ...(explicitRunner ? { explicitRunner: true } : {}),
     };
     opts.runnerHealth?.reportFailure(
       scope,
@@ -435,8 +519,24 @@ export async function startLiveDispatch(
       if (hydrationTokens > 0) {
         store.setTurnHydrationTokens(turnId, hydrationTokens);
       }
-      if (ok) store.noteTurn(conversationId, "", latestAdapter);
-      else store.noteFailedTurn(conversationId, "", observedAdapter);
+      if (ok) {
+        store.noteTurnWithAdapters(
+          conversationId,
+          "",
+          successfulRunnerOrder.flatMap((runner) => {
+            const adapter = latestAdapters.get(runner);
+            return adapter ? [adapter] : [];
+          })
+        );
+      } else {
+        store.noteFailedTurn(
+          conversationId,
+          "",
+          lastObservedRunner
+            ? observedAdapters.get(lastObservedRunner)
+            : undefined
+        );
+      }
     },
     async close(): Promise<void> {
       if (closed) return;

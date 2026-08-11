@@ -97,6 +97,10 @@ export interface AgentAttachment {
 }
 
 export interface AgentCall {
+  /** Registered harness kind for this call; omitted inherits the fire runner. */
+  readonly runner?: string;
+  /** Model id/alias for this call; omitted keeps fire/config-pin resolution. */
+  readonly model?: string;
   readonly prompt: string;
   readonly json?: unknown;
   /** Vault derivatives to hand the model with the prompt (issue #299). */
@@ -379,6 +383,8 @@ type WorkerToParentMessage =
   | {
       type: "agent";
       id: number;
+      runner?: string;
+      model?: string;
       prompt: string;
       json?: unknown;
       content?: { contentId: string; variant: string; maxBytes?: number }[];
@@ -1054,6 +1060,8 @@ export async function runHandler(
           opts.agentDispatcher,
           msg.prompt,
           msg.json,
+          msg.runner,
+          msg.model,
           msg.content,
           opts.vault
         ).then((reply) => {

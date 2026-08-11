@@ -130,6 +130,8 @@ export async function handleAgentMessage(
   agentDispatcher: AgentDispatcher,
   prompt: string,
   json: unknown,
+  runner?: string,
+  model?: string,
   content?: readonly AgentContentRef[],
   vault?: VaultBridge
 ): Promise<CtxReply> {
@@ -143,7 +145,12 @@ export async function handleAgentMessage(
     ordinal,
     kind: "agent",
     name: "agent",
-    args: { prompt, ...(content?.length ? { content } : {}) },
+    args: {
+      ...(runner === undefined ? {} : { runner }),
+      ...(model === undefined ? {} : { model }),
+      prompt,
+      ...(content?.length ? { content } : {}),
+    },
     started,
   });
   // When the runner streams (issue #158, Phase 2), forward each chat event as a
@@ -251,7 +258,14 @@ export async function handleAgentMessage(
       ? await resolveContentAttachments(vault, content)
       : undefined;
     const result = await agentDispatcher(
-      { prompt, json, ...(attachments ? { attachments } : {}), onEvent },
+      {
+        ...(runner === undefined ? {} : { runner }),
+        ...(model === undefined ? {} : { model }),
+        prompt,
+        json,
+        ...(attachments ? { attachments } : {}),
+        onEvent,
+      },
       dispatchCtx
     );
     closeDanglingTools("Tool call ended without a terminal result.");

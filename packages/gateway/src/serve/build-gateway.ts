@@ -2290,10 +2290,12 @@ export async function buildGateway(
         automationRef,
         host.codeAppsDir()
       );
+      const enrolledAutomationPrimary =
+        (await prefsLoader("automations"))?.kind ?? "codex";
       const automationLadder = resolveSubsystemRunnerLadder(
         prefs.getAllPrefs(),
         "automations",
-        agent.runner
+        enrolledAutomationPrimary
       );
       const result = await runAutomation({
         automationRef,
@@ -2367,6 +2369,7 @@ export async function buildGateway(
         ...(agent.model ? { model: agent.model } : {}),
         ...(agent.configPins ? { configPins: agent.configPins } : {}),
         runnerLadder: automationLadder,
+        enrolledPrimaryRunner: enrolledAutomationPrimary,
         runnerPrefsFor: (kind) => prefsLoader("automations", kind),
         runnerHealth,
         runnerHealthContext: ws.vaultId,

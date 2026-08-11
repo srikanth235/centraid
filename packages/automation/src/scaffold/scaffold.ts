@@ -141,10 +141,10 @@ const DEFAULT_HANDLER = `/**
  *   • ctx.vault · ctx.fetch · ctx.state · ctx.runs — deterministic, in-process
  *     work. Zero model tokens, zero processes spawned. Prefer these for
  *     anything code or a vault read/write can do.
- *   • ctx.agent({ prompt }) — the ONLY billed path: one bounded model turn
- *     through the configured agent CLI (over ACP). Use it only for genuine
- *     inference (summarize / classify / extract / draft). Declare the model
- *     tier in automation.json#requires.model.
+ *   • ctx.agent({ runner?, model?, prompt, json? }) — the ONLY billed path:
+ *     one bounded model turn through an enrolled harness (over ACP). Use it
+ *     only for genuine inference (summarize / classify / extract / draft).
+ *     Per-call runner/model override the automation's compatibility defaults.
  *
  * \`ctx\` surface: ctx.vault · ctx.fetch · ctx.agent · ctx.state.get/set/delete
  * · ctx.runs.last/list · ctx.input. Return \`{ summary?, output? }\` —
@@ -186,8 +186,9 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
       ? [{ kind: "cron", expr: opts.cronExpr?.trim() || "0 9 * * *" }]
       : opts.triggers;
   // Emit the `requires` slots the builder may fill (issue #167): `model` is the
-  // ctx.agent capability tier (`provider/model-id`) — picked for the cheapest
-  // tier that does the inference (e.g. a small/cheap tier for summarization).
+  // ctx.agent compatibility default (`provider/model-id`) — picked for the
+  // cheapest model that does the inference. Step-specific choices belong on
+  // the relevant ctx.agent call in handler.js.
   // It is left out until chosen so it is never a misleading default; a handler
   // that never calls ctx.agent needs no `requires` at all.
   const requires: Record<string, unknown> = {};

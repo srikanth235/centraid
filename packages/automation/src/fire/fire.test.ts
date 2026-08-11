@@ -21,6 +21,7 @@ import {
 import type { AutomationTurnStreamEvent } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import type { AgentCall } from "../handler/runner.js";
 import type { Manifest } from "../manifest/manifest.js";
 import { runFire } from "./fire.js";
 import type { DispatchSurface, OpenDispatchArgs } from "./fire.js";
@@ -266,6 +267,51 @@ describe(runFire, () => {
     >;
     expect(agentStart.name).toBe("agent");
     expect(agentStart.args).toStrictEqual({ prompt: "summarize" });
+  });
+
+  it("forwards per-call runner and model from the worker to the host dispatcher", async () => {
+    await writeAutomation(
+      appsDir,
+      "notes",
+      "per-call-runner",
+      manifest({ name: "Per-call runner" }),
+      `export default async ({ ctx }) => ({
+         output: await ctx.agent({
+           runner: 'opencode',
+           model: 'deepseek/deepseek-ocr',
+           prompt: 'extract the text'
+         })
+       });`
+    );
+    let received: AgentCall | undefined;
+    const { outcome, record } = await runFire(
+      { automationRef: "notes/per-call-runner", appsDir, journalDbFile },
+      {
+        openDispatch: () =>
+          Promise.resolve({
+            agentDispatcher: async (call) => {
+              received = call;
+              return "text";
+            },
+            async close() {},
+          }),
+      }
+    );
+
+    expect(outcome.ok).toBe(true);
+    expect(received).toMatchObject({
+      runner: "opencode",
+      model: "deepseek/deepseek-ocr",
+      prompt: "extract the text",
+    });
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    expect(
+      store.listItems(record.runId).find((item) => item.kind === "agent")
+        ?.argsJson
+    ).toBe(
+      '{"runner":"opencode","model":"deepseek/deepseek-ocr","prompt":"extract the text"}'
+    );
+    store.close();
   });
 
   it("streams ctx.agent token deltas as item.delta and persists the usage rollup", async () => {

@@ -175,6 +175,8 @@ export const HEADLESS_COMPILE_WORK_ORDER = (
     "Compile this automation headlessly. This is a work order, not a conversation.",
     "Update automation.json only when derived requirements or vault scopes need to change.",
     "Write a complete deterministic handler.js that implements the instructions.",
+    "When the instructions name a harness and/or model for one step, encode that choice on that exact ctx.agent call as runner and/or model; different calls may select different enrolled harnesses.",
+    "Do not use requires.runner for step routing: it is the authoring/interactive harness and the compatibility default for calls that omit runner.",
     'When the instructions describe reacting to vault-data changes, declare a data trigger; when they describe a data-state window ("due in N days"), declare a condition trigger — with vault read scopes covering every watched entity — instead of approximating either with a cron poll.',
     "Leave existing cron/webhook triggers alone unless the instructions changed them.",
     "Do not change the enabled field; the gateway owns enable/disable lifecycle after validation.",

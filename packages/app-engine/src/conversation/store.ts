@@ -86,6 +86,14 @@ export interface CreateConversationInput {
   readonly adapterKind?: string;
 }
 
+/** One runner binding observed while settling a completed conversation turn. */
+interface ConversationTurnAdapter {
+  readonly kind: string;
+  readonly sessionId?: string;
+  readonly usageSnapshot?: AdapterUsageSnapshot;
+  readonly hydrated?: boolean;
+}
+
 export interface InsertTurnInput {
   readonly turnId: string;
   readonly conversationId: string;
@@ -587,30 +595,39 @@ export class ConversationStore {
   noteTurn(
     id: string,
     userId: string,
-    adapter?: {
-      kind: string;
-      sessionId?: string;
-      usageSnapshot?: AdapterUsageSnapshot;
-      hydrated?: boolean;
-    }
+    adapter?: ConversationTurnAdapter
+  ): boolean {
+    return this.noteTurnWithAdapters(id, userId, adapter ? [adapter] : []);
+  }
+
+  /**
+   * Settle one turn while persisting every runner binding it used. The final
+   * adapter remains the conversation's active binding; earlier adapters stay
+   * resumable without inflating `turn_count` for one multi-runner fire.
+   */
+  noteTurnWithAdapters(
+    id: string,
+    userId: string,
+    adapters: readonly ConversationTurnAdapter[]
   ): boolean {
     const { db, stmts } = this.ensureReady();
     const now = Date.now();
-    const hydrated = adapter?.hydrated === true ? 1 : 0;
-    let res;
-    if (adapter && adapter.sessionId !== undefined) {
-      // `turns.seq` starts at 0, so -1 — not 0 — is the "nothing hydrated yet"
-      // sentinel. A 0 here would silently exclude the first turn from every
-      // later delta hydration (`seq > afterSeq`).
-      const maxSeq = Number(
-        (
-          db
-            .prepare(
-              `SELECT COALESCE(MAX(seq), -1) AS seq FROM turns WHERE conversation_id = ?`
-            )
-            .get(id) as { seq: number }
-        ).seq
-      );
+    const finalAdapter = adapters.at(-1);
+    const finalHydrated = finalAdapter?.hydrated === true ? 1 : 0;
+    // `turns.seq` starts at 0, so -1 — not 0 — is the "nothing hydrated yet"
+    // sentinel. A 0 here would silently exclude the first turn from every
+    // later delta hydration (`seq > afterSeq`).
+    const maxSeq = Number(
+      (
+        db
+          .prepare(
+            `SELECT COALESCE(MAX(seq), -1) AS seq FROM turns WHERE conversation_id = ?`
+          )
+          .get(id) as { seq: number }
+      ).seq
+    );
+    for (const adapter of adapters) {
+      if (adapter.sessionId === undefined) continue;
       // Preserve one active + at most one warm process candidate without
       // discarding older valid resume handles. A displaced warm binding
       // becomes cold (durable but no longer process-warm); stale is reserved
@@ -674,20 +691,42 @@ export class ConversationStore {
             AND acp_session_id <> ?
             AND status <> 'stale'`
       ).run(id, adapter.kind, adapter.sessionId);
+    }
+
+    let res;
+    if (finalAdapter?.sessionId !== undefined) {
       res = stmts.noteTurnWithAdapter.run(
         now,
-        adapter.kind,
-        adapter.sessionId,
-        adapter.usageSnapshot ? JSON.stringify(adapter.usageSnapshot) : null,
-        hydrated,
-        hydrated,
+        finalAdapter.kind,
+        finalAdapter.sessionId,
+        finalAdapter.usageSnapshot
+          ? JSON.stringify(finalAdapter.usageSnapshot)
+          : null,
+        finalHydrated,
+        finalHydrated,
         now,
         id,
         userId
       );
-      // `noteTurn` is normally called from the same transaction that inserted
-      // the just-completed turn. Set the watermark after the conversation
-      // update as well, so it always observes that transaction's final seq.
+    } else if (finalAdapter) {
+      res = stmts.noteTurnKindOnly.run(
+        now,
+        finalAdapter.kind,
+        finalHydrated,
+        finalHydrated,
+        now,
+        id,
+        userId
+      );
+    } else {
+      res = stmts.noteTurnNoAdapter.run(now, id, userId);
+    }
+
+    // `noteTurnWithAdapters` is normally called from the same transaction
+    // that inserted the completed turn. Advance every used binding through
+    // that final seq so A -> B -> A only hydrates the other runners' delta.
+    for (const adapter of adapters) {
+      if (adapter.sessionId === undefined) continue;
       db.prepare(
         `UPDATE conversation_harness_sessions
             SET hydrated_through_seq = MAX(
@@ -696,18 +735,18 @@ export class ConversationStore {
             )
           WHERE conversation_id = ? AND runner_kind = ? AND acp_session_id = ?`
       ).run(id, id, adapter.kind, adapter.sessionId);
-    } else if (adapter) {
-      res = stmts.noteTurnKindOnly.run(
-        now,
-        adapter.kind,
-        hydrated,
-        hydrated,
-        now,
-        id,
-        userId
-      );
-    } else {
-      res = stmts.noteTurnNoAdapter.run(now, id, userId);
+    }
+
+    const additionalHydrations = adapters
+      .slice(0, -1)
+      .filter((adapter) => adapter.hydrated).length;
+    if (additionalHydrations > 0) {
+      db.prepare(
+        `UPDATE conversations
+            SET hydration_count = hydration_count + ?,
+                last_hydrated_at = ?
+          WHERE id = ? AND user_id = ?`
+      ).run(additionalHydrations, now, id, userId);
     }
     return Number(res.changes) > 0;
   }

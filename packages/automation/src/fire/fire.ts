@@ -83,12 +83,12 @@ export interface OpenDispatchArgs {
   /** `<appId>/<automationId>` handle being fired. */
   automationRef: string;
   runId: string;
-  /** Harness fixed to this automation conversation. */
+  /** Fire-level harness inherited by `ctx.agent` calls that omit `runner`. */
   runnerKind?: string;
   /**
-   * Manifest `requires.model` — the capability tier `ctx.agent` should route
-   * to (issue #166). The host's `agentDispatcher` picks the matching provider
-   * tier; undefined means "the host's default automation model".
+   * Manifest `requires.model` — the default capability tier for `ctx.agent`
+   * calls that omit `model` (issue #166/#740). Undefined means the host's
+   * default automation model.
    */
   model?: string;
   /** Semantic ACP configuration pins, keyed by capability category. */

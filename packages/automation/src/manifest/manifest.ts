@@ -45,14 +45,17 @@ export interface ManifestRequires {
   /** MCP server ids the handler requires (`["github", "linear"]`). */
   readonly mcps?: readonly string[];
   /**
-   * Coding-agent harness used by compile, interactive turns, and `ctx.agent`.
+   * Coding-agent harness used by compile and interactive authoring turns. It
+   * remains the compatibility fire-level default for existing handlers;
+   * step-specific runtime inference uses `ctx.agent({ runner })`.
    * This is an open registry key: manifests validate only that it is non-empty;
    * the executing gateway decides whether the key is registered and otherwise
    * falls back to the automations subsystem preference.
    */
   readonly runner?: string;
   /**
-   * Model the `ctx.agent` calls should route through. Format: `provider/model-id`
+   * Default model for `ctx.agent` calls that do not carry a per-call override.
+   * Format: `provider/model-id`
    * (`"anthropic/claude-3-5-sonnet"`, `"openai/gpt-4o"`). Must not target the
    * mock provider (`centraid-mock/*`) — that would recurse into the mock
    * StreamFn. Validation rejects it.

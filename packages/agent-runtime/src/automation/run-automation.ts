@@ -92,6 +92,8 @@ export interface RunAutomationOptions {
   configPins?: Readonly<Record<string, string>>;
   /** Ordered, pre-consented fallback runners for ctx.agent calls. */
   runnerLadder?: readonly RunnerKind[];
+  /** User-authored automations primary, when `runner` came from a manifest. */
+  enrolledPrimaryRunner?: RunnerKind;
   /** Load launch settings/default pins for each failover rung. */
   runnerPrefsFor?: (runner: RunnerKind) => Promise<RunnerPrefs | undefined>;
   runnerHealth?: RunnerHealthController;
@@ -179,6 +181,16 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
     | undefined;
   let failoverNotice: string | undefined;
   const condemned: string[] = [];
+  const enrolledRunners = opts.runnerLadder ?? [];
+  const enrolledPrimary =
+    opts.enrolledPrimaryRunner ??
+    (opts.runnerSelectionSource === "manifest" ? undefined : primary);
+  const consentSourceFor = (
+    requestedRunner: RunnerKind
+  ): "direct" | "ladder" | undefined => {
+    if (requestedRunner === enrolledPrimary) return "direct";
+    return enrolledRunners.includes(requestedRunner) ? "ladder" : undefined;
+  };
 
   const runRung = async (index: number): Promise<void> => {
     const runner = ladder[index]!;
@@ -257,10 +269,8 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         // A manifest-pinned primary is not user-authored consent; it may still
         // egress if the user's live failover ladder contains that runner, which
         // is exactly what `recordDerived('ladder', …)` verifies.
-        consentSource:
-          isPrimary && opts.runnerSelectionSource !== "manifest"
-            ? "direct"
-            : "ladder",
+        consentSource: consentSourceFor(runner),
+        consentSourceFor,
         onLog: args.onLog,
       });
 
@@ -304,16 +314,21 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         ...(opts.resolveNestedRuntime
           ? { resolveNestedRuntime: opts.resolveNestedRuntime }
           : {}),
-        deferOnFailure: (outcome) =>
-          index < ladder.length - 1 &&
-          parseAutomationAgentFailure(outcome.error) !== undefined,
+        deferOnFailure: (outcome) => {
+          const failure = parseAutomationAgentFailure(outcome.error);
+          return (
+            index < ladder.length - 1 &&
+            failure !== undefined &&
+            failure.explicitRunner !== true
+          );
+        },
       },
       { openDispatch }
     );
 
     const failure = parseAutomationAgentFailure(last.outcome.error);
     const next = ladder[index + 1];
-    if (!failure || !next) return;
+    if (!failure || failure.explicitRunner || !next) return;
     const nextRunId = `${baseRunId}:failover:${index + 1}:${next}`;
     opts.onLog?.(
       "warn",

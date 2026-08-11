@@ -265,6 +265,75 @@ describe("headless-automation-compile suite", () => {
         "Leave existing cron/webhook triggers alone unless the instructions changed them."
       );
     });
+
+    it("grounds step-specific harness and model instructions into ctx.agent call args", () => {
+      const prompt = HEADLESS_COMPILE_WORK_ORDER(
+        "Use the enrolled OCR harness and its document model for image extraction."
+      );
+      expect(prompt).toContain(
+        "encode that choice on that exact ctx.agent call as runner and/or model"
+      );
+      expect(prompt).toContain(
+        "different calls may select different enrolled harnesses"
+      );
+      expect(prompt).toContain("Do not use requires.runner for step routing");
+    });
+
+    it("compile fixture emits named harness and model on the exact handler call", async () => {
+      const dir = await tempDir("centraid-headless-call-selection-");
+      dirs.push(dir);
+      const dataDir = path.join(dir, "apps");
+      const handlerPath = path.join(dataDir, "handler.js");
+      const runner: ConversationRunner = {
+        run: async (input) => {
+          expect(input.message).toContain(
+            "For image extraction, use runner gemini with model gemini-2.5-flash."
+          );
+          expect(input.message).toContain(
+            "encode that choice on that exact ctx.agent call as runner and/or model"
+          );
+          await fs.mkdir(input.dataDir, { recursive: true });
+          await fs.writeFile(
+            handlerPath,
+            `export default async ({ ctx }) => ({
+  output: await ctx.agent({
+    runner: "gemini",
+    model: "gemini-2.5-flash",
+    prompt: "Extract text from the image."
+  })
+});\n`
+          );
+          input.onEvent({
+            type: "final",
+            text: "Files ready.",
+            stopReason: "end_turn",
+          });
+          return { adapterKind: "codex" };
+        },
+      };
+      const onSuccess = vi.fn<() => Promise<void>>(async () => {
+        const handler = await fs.readFile(handlerPath, "utf8");
+        expect(handler).toContain('runner: "gemini"');
+        expect(handler).toContain('model: "gemini-2.5-flash"');
+      });
+
+      await runHeadlessAutomationCompile({
+        runner,
+        journalDbFile: path.join(dir, "journal.db"),
+        runnerSessionDir: path.join(dir, "sessions"),
+        dataDir,
+        appId: "ocr",
+        draftSessionId: "compile-ocr-1",
+        automationRef: "ocr/extract",
+        automationName: "Extract image text",
+        instructions:
+          "For image extraction, use runner gemini with model gemini-2.5-flash.",
+        onSuccess,
+        runId: "compile-call-selection",
+      });
+
+      expect(onSuccess).toHaveBeenCalledOnce();
+    });
   });
 
   describe(recordFailedAutomationCompile, () => {

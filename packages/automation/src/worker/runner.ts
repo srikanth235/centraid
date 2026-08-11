@@ -50,6 +50,8 @@ type WorkerMessage =
   | {
       type: "agent";
       id: number;
+      runner?: string;
+      model?: string;
       prompt: string;
       json?: unknown;
       content?: { contentId: string; variant: string; maxBytes?: number }[];
@@ -314,12 +316,16 @@ const ctx = {
    * worker never holds them (issue #299 §2).
    */
   agent(args: {
+    runner?: string;
+    model?: string;
     prompt: string;
     json?: unknown;
     content?: { contentId: string; variant: string; maxBytes?: number }[];
   }): Promise<unknown> {
     return rpcCall({
       type: "agent",
+      ...(args.runner === undefined ? {} : { runner: args.runner }),
+      ...(args.model === undefined ? {} : { model: args.model }),
       prompt: args.prompt,
       ...(args.json === undefined ? {} : { json: args.json }),
       ...(args.content === undefined ? {} : { content: args.content }),
