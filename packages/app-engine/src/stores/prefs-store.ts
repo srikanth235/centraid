@@ -101,7 +101,7 @@ export class PrefsStore {
  * The chat/automation surfaces that can each carry their own model
  * override. `'ask'` is the per-app copilot register, `'builder'` the
  * per-app build register, `'assistant'` the shell-level vault assistant,
- * `'automations'` the fire pipeline's `ctx.agent` calls.
+ * `'automations'` the fire pipeline's `ctx.delegate` calls.
  */
 export type ModelSubsystem = "assistant" | "ask" | "builder" | "automations";
 

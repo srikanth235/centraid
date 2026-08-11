@@ -219,7 +219,11 @@ export function itemFromRaw(raw: RawItem): Item {
     ordinal: raw.ordinal,
     ...(raw.call_id === null ? {} : { callId: raw.call_id }),
     ...(raw.batch_id === null ? {} : { batchId: raw.batch_id }),
-    kind: raw.kind as ItemKind,
+    // #743: pre-rename journals may still hold the legacy "agent" item kind.
+    // v0 accepts mixed historical values rather than migrating them — map the
+    // old value to "delegate" here, at the one read boundary, so every typed
+    // reader downstream only ever sees the current ItemKind union.
+    kind: (raw.kind === "agent" ? "delegate" : raw.kind) as ItemKind,
     ...(raw.role === null ? {} : { role: raw.role as "user" | "assistant" }),
     ...(raw.text === null ? {} : { text: raw.text }),
     ...(raw.name === null ? {} : { name: raw.name }),
@@ -447,7 +451,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
          retry_of, idempotency_key, note, hydration_tokens, started_at, ok)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     `),
-    // Σ over this turn's own step/agent items; step/tool counts. SUM over an
+    // Σ over this turn's own step/delegate items; step/tool counts. SUM over an
     // empty set yields NULL — correct in-flight semantics.
     finishTurn: db.prepare(`
       UPDATE turns SET
@@ -455,19 +459,19 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         output_json = $outputJson,
         total_input_tokens = (
           SELECT SUM(input_tokens) FROM items
-          WHERE turn_id = $tid AND kind IN ('step','agent')),
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
         total_output_tokens = (
           SELECT SUM(output_tokens) FROM items
-          WHERE turn_id = $tid AND kind IN ('step','agent')),
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
         total_cache_read_tokens = (
           SELECT SUM(cache_read_tokens) FROM items
-          WHERE turn_id = $tid AND kind IN ('step','agent')),
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
         total_cache_write_tokens = (
           SELECT SUM(cache_write_tokens) FROM items
-          WHERE turn_id = $tid AND kind IN ('step','agent')),
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
         total_cost_usd = (
           SELECT SUM(cost_usd) FROM items
-          WHERE turn_id = $tid AND kind IN ('step','agent')),
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
         step_count = (SELECT COUNT(*) FROM items WHERE turn_id = $tid AND kind = 'step'),
         tool_count = (SELECT COUNT(*) FROM items WHERE turn_id = $tid AND kind = 'tool')
       WHERE id = $tid

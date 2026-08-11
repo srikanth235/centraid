@@ -2,7 +2,7 @@
 import { promises as fs } from "node:fs";
 /*
  * Automation fire spine (issue #147, Concern 2). The per-fire orchestration
- * lives here in app-engine; the `ctx.agent` dispatch surface is injected by
+ * lives here in app-engine; the `ctx.delegate` dispatch surface is injected by
  * the host via `openDispatch`. These tests run a real (trivial) `handler.js`
  * through `runFire` with a STUB dispatch surface, proving the spine resolves
  * the automation, opens its ledger, runs the handler, and cascades
@@ -56,13 +56,13 @@ async function writeAutomation(
 }
 
 /** A stub dispatch surface that records that it was opened + closed. The
- *  trivial handlers below never call `ctx.agent`, so the dispatcher itself is
+ *  trivial handlers below never call `ctx.delegate`, so the dispatcher itself is
  *  never invoked. */
 function stubDispatch(opened: OpenDispatchArgs[], closes: { n: number }) {
   return (args: OpenDispatchArgs): Promise<DispatchSurface> => {
     opened.push(args);
     return Promise.resolve({
-      agentDispatcher: async () => "",
+      delegateDispatcher: async () => "",
       async close() {
         closes.n += 1;
       },
@@ -205,7 +205,7 @@ describe(runFire, () => {
   });
 
   it("emits a live turn stream: turn.start → item lifecycle per ctx call → turn.end", async () => {
-    // A handler that drives one ctx.agent. The stub dispatch returns a fixed
+    // A handler that drives one ctx.delegate. The stub dispatch returns a fixed
     // answer so the node lifecycle is deterministic.
     await writeAutomation(
       appsDir,
@@ -213,7 +213,7 @@ describe(runFire, () => {
       "flow",
       manifest({ name: "Flow" }),
       `export default async ({ ctx }) => {
-         await ctx.agent({ prompt: 'summarize' });
+         await ctx.delegate({ prompt: 'summarize' });
          return { ok: true };
        };`
     );
@@ -221,7 +221,7 @@ describe(runFire, () => {
     const dispatch = (args: OpenDispatchArgs): Promise<DispatchSurface> => {
       void args;
       return Promise.resolve({
-        agentDispatcher: async () => "a summary",
+        delegateDispatcher: async () => "a summary",
         async close() {},
       });
     };
@@ -257,25 +257,25 @@ describe(runFire, () => {
         (e as { kind?: string }).kind,
       ])
     ).toStrictEqual([
-      ["item.start", 0, "agent"],
+      ["item.start", 0, "delegate"],
       ["item.end", 0, undefined],
     ]);
     const agentStart = lifecycle[0] as Extract<
       AutomationTurnStreamEvent,
       { type: "item.start" }
     >;
-    expect(agentStart.name).toBe("agent");
+    expect(agentStart.name).toBe("delegate");
     expect(agentStart.args).toStrictEqual({ prompt: "summarize" });
   });
 
-  it("streams ctx.agent token deltas as item.delta and persists the usage rollup", async () => {
+  it("streams ctx.delegate token deltas as item.delta and persists the usage rollup", async () => {
     await writeAutomation(
       appsDir,
       "notes",
       "ask",
       manifest({ name: "Ask" }),
       `export default async ({ ctx }) => {
-         const answer = await ctx.agent({ prompt: 'hi' });
+         const answer = await ctx.delegate({ prompt: 'hi' });
          return { output: answer };
        };`
     );
@@ -285,7 +285,7 @@ describe(runFire, () => {
     // return the final answer.
     const dispatch = (): Promise<DispatchSurface> =>
       Promise.resolve({
-        agentDispatcher: async (call) => {
+        delegateDispatcher: async (call) => {
           call.onEvent?.({ type: "assistant.delta", delta: "hel" });
           call.onEvent?.({ type: "assistant.delta", delta: "lo" });
           call.onEvent?.({
@@ -333,7 +333,7 @@ describe(runFire, () => {
     const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
     const agentNode = store
       .listItems(record.runId)
-      .find((n) => n.kind === "agent");
+      .find((n) => n.kind === "delegate");
     expect(agentNode).toBeTruthy();
     expect(agentNode!.model).toBe("a-capable-model");
     expect(agentNode!.inputTokens).toBe(12);
@@ -354,12 +354,12 @@ describe(runFire, () => {
       "parallel",
       manifest({ name: "Parallel" }),
       `export default async ({ ctx }) => {
-         return { output: await ctx.agent({ prompt: 'compare both files' }) };
+         return { output: await ctx.delegate({ prompt: 'compare both files' }) };
        };`
     );
     const dispatch = (): Promise<DispatchSurface> =>
       Promise.resolve({
-        agentDispatcher: async (call) => {
+        delegateDispatcher: async (call) => {
           call.onEvent?.({
             type: "tool.start",
             toolCallId: "call-a",
@@ -422,14 +422,14 @@ describe(runFire, () => {
       tools.map((item) => JSON.parse(item.rawJson ?? "{}").toolCallId)
     ).toStrictEqual(["call-a", "call-b"]);
     expect(
-      store.listItems(record.runId).find((item) => item.kind === "agent")
+      store.listItems(record.runId).find((item) => item.kind === "delegate")
         ?.rawJson
     ).toBe('{"stopReason":"end_turn"}');
     store.close();
   });
 
   it("keeps the final runner envelope when a later error carries none", async () => {
-    const handler = `export default async ({ ctx }) => ({ output: await ctx.agent({ prompt: 'go' }) });`;
+    const handler = `export default async ({ ctx }) => ({ output: await ctx.delegate({ prompt: 'go' }) });`;
     await writeAutomation(
       appsDir,
       "notes",
@@ -439,7 +439,7 @@ describe(runFire, () => {
     );
     const dispatch = (): Promise<DispatchSurface> =>
       Promise.resolve({
-        agentDispatcher: async (call) => {
+        delegateDispatcher: async (call) => {
           call.onEvent?.({
             type: "final",
             text: "done",
@@ -459,7 +459,7 @@ describe(runFire, () => {
     );
     const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
     expect(
-      store.listItems(record.runId).find((item) => item.kind === "agent")
+      store.listItems(record.runId).find((item) => item.kind === "delegate")
         ?.rawJson
     ).toBe('{"stopReason":"end_turn"}');
     store.close();
@@ -478,12 +478,12 @@ describe(runFire, () => {
       "priced",
       manifest({ name: "Priced" }),
       `export default async ({ ctx }) => ({
-         output: await ctx.agent({ prompt: 'price this' }),
+         output: await ctx.delegate({ prompt: 'price this' }),
        });`
     );
     const dispatch = (): Promise<DispatchSurface> =>
       Promise.resolve({
-        agentDispatcher: async (call) => {
+        delegateDispatcher: async (call) => {
           call.onEvent?.({ type: "usage", inputTokens: 2, outputTokens: 3 });
           call.onEvent?.({ type: "final", text: "done" });
           return "done";
@@ -504,7 +504,7 @@ describe(runFire, () => {
     const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
     const item = store
       .listItems(record.runId)
-      .find((entry) => entry.kind === "agent");
+      .find((entry) => entry.kind === "delegate");
     // The harness confirmed neither a model nor a cost, so the run books
     // "unknown" — not the configured model, and not an invented number.
     expect(item?.model).toBeUndefined();
@@ -530,12 +530,12 @@ describe(runFire, () => {
       "unmodelled",
       manifest({ name: "Unmodelled" }),
       `export default async ({ ctx }) => ({
-         output: await ctx.agent({ prompt: 'price this too' }),
+         output: await ctx.delegate({ prompt: 'price this too' }),
        });`
     );
     const dispatch = (): Promise<DispatchSurface> =>
       Promise.resolve({
-        agentDispatcher: async (call) => {
+        delegateDispatcher: async (call) => {
           call.onEvent?.({ type: "usage", inputTokens: 2, outputTokens: 3 });
           call.onEvent?.({ type: "final", text: "done" });
           return "done";
@@ -555,7 +555,7 @@ describe(runFire, () => {
     const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
     const agentItem = store
       .listItems(record.runId)
-      .find((item) => item.kind === "agent");
+      .find((item) => item.kind === "delegate");
     // Tokens without a priceable model are unknown, and unknown is NULL: a
     // catalog-wide ceiling would be indistinguishable from a real estimate.
     expect(agentItem?.costSource).toBeUndefined();
@@ -629,7 +629,7 @@ describe(runFire, () => {
     );
     const dispatch = (): Promise<DispatchSurface> =>
       Promise.resolve({
-        agentDispatcher: async () => "",
+        delegateDispatcher: async () => "",
         finalizeTurn() {
           throw new Error("harness binding write failed");
         },

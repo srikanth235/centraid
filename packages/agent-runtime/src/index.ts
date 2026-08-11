@@ -116,7 +116,7 @@ export { enumerateHarnessModels } from "./models/enumerators.js";
 
 // Local-side per-fire orchestrator for automations (issue #90 model-B).
 // Looks up the user-owned automation and runs its handler against a live
-// dispatch surface. The only billed rail is `ctx.agent` — a bounded model
+// dispatch surface. The only billed rail is `ctx.delegate` — a bounded model
 // turn routed through the harness registry (issue #479); the deterministic
 // rails (`ctx.vault` / `ctx.fetch` / `ctx.state` / `ctx.runs`) run in-process.
 export {

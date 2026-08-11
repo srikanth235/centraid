@@ -4,7 +4,7 @@
 
 - [x] Vault schema renames: `agent.agent` → `consent.agent` (`consent_agent`), `host_key` → `enrollment_key`, `journal` attribution `agent_id` → `caller_id`, `media_media_asset` → `media_asset`; replica unavailable-columns + replica-shape tests updated
 - [x] Harness axis rename (`RunnerKind` → `HarnessKind`, `RUNNER_BACKENDS` → `HARNESSES`, `adapterKind` → harness-named, `requires.runner` → `requires.harness`, …)
-- [ ] Delegate rail rename (`ctx.agent` → `ctx.delegate`, ledger item `kind:"delegate"`, worker messages, failure prefix)
+- [x] Delegate rail rename (`ctx.agent` → `ctx.delegate`, ledger item `kind:"delegate"`, worker messages, failure prefix)
 - [ ] Glossary / docs A1 write-back (forbidden synonyms, delegate step, schema-naming rule)
 - [ ] `ctx.delegate` dispatched through the accounted chat spine (metering, budgeted hydration, kind-scoped resume)
 - [ ] HarnessSessions extraction keyed `(conversationRef, harnessKind)`; per-binding settlement + multi-harness regression test
@@ -52,6 +52,29 @@
   `CENTRAID_LIVE_FAILOVER_RUNNER` → `CENTRAID_LIVE_FAILOVER_HARNESS`. Gateway `cli/runner-prefs.ts`
   and `serve/runner-prefs.ts` (+test) became `harness-prefs.ts`. UI copy still says "Agents" (the
   market word); only identifiers moved.
+
+- **Delegate rail rename (third slice).** Done in full: Delegate rail rename (`ctx.agent` →
+  `ctx.delegate`, ledger item `kind:"delegate"`, worker messages, failure prefix). The handler's
+  judgment rail is now `ctx.delegate`, leaving "agent" reserved for L2 principals. The worker
+  surface exposes `ctx.delegate(...)` over renamed worker RPC messages `{type:"delegate"}` /
+  `"delegate-reply"`; parent-side types became `DelegateDispatcher` / `DelegateCall` /
+  `DelegateAttachment` / `DelegateContentRef` / `handleDelegateMessage`; `agent-answer.ts` →
+  `delegate-answer.ts` with `coerceAgentAnswer` → `coerceDelegateAnswer` (re-exported from the
+  package barrel). The fire spine and agent-runtime live dispatch followed, including
+  `AGENT_FAILURE_PREFIX` → `DELEGATE_FAILURE_PREFIX` (wire value `centraid-agent-failure:` →
+  `centraid-delegate-failure:`), `AutomationAgentFailure` → `AutomationDelegateFailure`,
+  `parseAutomationAgentFailure` → `parseAutomationDelegateFailure`, and
+  `HandlerOutcome.agentCalls` / `RunRecord.agentCalls` → `delegateCalls`. The ledger `ItemKind`
+  union dropped `"agent"` for `"delegate"`, and every writer and reader moved with it — the
+  `openRunNode` and interactive-automation-turn writers, the client run/turn/compile message
+  readers, `hydration.ts`, and the SQL rollups in `store-sql.ts` / `reprice.ts` / `gateway-db.ts`
+  including the `items` `CHECK` constraint and the `run_summary` view. Five blueprint automation
+  handlers and the `photo-ocr` recognition-automation source now call `ctx.delegate(...)`, and the
+  `no-ctx-tool` lint message plus the gateway authoring skills say `ctx.delegate`.
+- **Regression fix.** The harness slice renamed the `conversations.adapter_kind` column to
+  `harness_kind` but missed a raw SQL string in `tests/quality/user-facing-qualities.test.ts`,
+  leaving F1 failing with `no such column: c.adapter_kind`. The query, its row type, and its loop
+  variable are corrected here; the quality suite is back to 14/14.
 
 ### Files touched (vault-schema slice)
 
@@ -450,6 +473,73 @@ Mechanical rename propagation on the harness axis; every path below changed only
 - `tests/quality/user-facing-qualities.test.ts`
 - `tests/scale/agent-sessions.scale.test.ts`
 
+### Files touched (delegate-rail slice)
+
+The delegate-rail rename plus the `harness_kind` SQL regression fix; every path below changed only for those.
+
+- `apps/desktop/scripts/screenshot-automations.mjs`
+- `packages/agent-runtime/src/automation/live-automation-failover.test.ts`
+- `packages/agent-runtime/src/automation/run-automation-dispatch.test.ts`
+- `packages/agent-runtime/src/automation/run-automation-live-dispatch.ts`
+- `packages/agent-runtime/src/automation/run-automation.test.ts`
+- `packages/agent-runtime/src/automation/run-automation.ts`
+- `packages/agent-runtime/src/index.ts`
+- `packages/app-engine/src/conversation/hydration.ts`
+- `packages/app-engine/src/conversation/reprice.ts`
+- `packages/app-engine/src/conversation/schema.ts`
+- `packages/app-engine/src/conversation/store-sql.ts`
+- `packages/app-engine/src/conversation/store.test.ts`
+- `packages/app-engine/src/stores/gateway-db.ts`
+- `packages/app-engine/src/stores/prefs-store.ts`
+- `packages/automation/README.md`
+- `packages/automation/src/fire/connector.test.ts`
+- `packages/automation/src/fire/enrich-gate.test.ts`
+- `packages/automation/src/fire/enrich-gate.ts`
+- `packages/automation/src/fire/enrich-refusal-outcome.test.ts`
+- `packages/automation/src/fire/fire-vault.test.ts`
+- `packages/automation/src/fire/fire.test.ts`
+- `packages/automation/src/fire/fire.ts`
+- `packages/automation/src/handler/ctx.ts`
+- `packages/automation/src/handler/delegate-answer.ts`
+- `packages/automation/src/handler/lint.test.ts`
+- `packages/automation/src/handler/lint.ts`
+- `packages/automation/src/handler/runner.ts`
+- `packages/automation/src/index.ts`
+- `packages/automation/src/manifest/enricher-templates.test.ts`
+- `packages/automation/src/manifest/manifest.ts`
+- `packages/automation/src/scaffold/scaffold.ts`
+- `packages/automation/src/worker/runner.ts`
+- `packages/blueprints/apps/photos/enrichment-consent.ts`
+- `packages/blueprints/automations/doc-entity-linker/automations/doc-entity-linker/handler.js`
+- `packages/blueprints/automations/doc-filer/automations/doc-filer/handler.js`
+- `packages/blueprints/automations/doc-text-extractor/automations/doc-text-extractor/handler.js`
+- `packages/blueprints/automations/obligation-extractor/automations/obligation-extractor/handler.js`
+- `packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js`
+- `packages/blueprints/automations/release-notes-drafter/automations/release-notes-drafter/handler.js`
+- `packages/blueprints/src/__snapshots__/scaffold-defaults.test.ts.snap`
+- `packages/blueprints/src/no-inference-client.test.ts`
+- `packages/blueprints/src/scaffold-defaults.ts`
+- `packages/client/src/centraid-api.d.ts`
+- `packages/client/src/react/shell/routes/automationCompileData.ts`
+- `packages/client/src/react/shell/routes/automationLiveMessages.ts`
+- `packages/client/src/react/shell/routes/automationTurnMessages.test.ts`
+- `packages/client/src/react/shell/routes/automationTurnMessages.ts`
+- `packages/client/src/react/shell/routes/builder/BuilderCloud.tsx`
+- `packages/client/src/react/shell/routes/connectorPlatform.ts`
+- `packages/client/src/react/shell/routes/runViewData.test.ts`
+- `packages/client/src/react/shell/routes/runViewData.ts`
+- `packages/gateway/skills/authoring-centraid-apps/SKILL.md`
+- `packages/gateway/skills/automation-authoring/SKILL.md`
+- `packages/gateway/src/lifecycle/interactive-automation-turn.test.ts`
+- `packages/gateway/src/lifecycle/interactive-automation-turn.ts`
+- `packages/gateway/src/lifecycle/webhook-route-over-http.test.ts`
+- `packages/gateway/src/runs/run-events-sse.test.ts`
+- `packages/vault/src/enrich/policy.ts`
+- `receipts/issue-743-one-agent-door.md`
+- `tests/perf/automation-fire.perf.test.ts`
+- `tests/quality/user-facing-qualities.test.ts`
+- `tools/recognition-automations/automation-handlers/photo-ocr.js`
+
 ## Out of scope
 
 - Renaming the `@centraid/agent-runtime` npm package (README disclaimer instead — see issue).
@@ -472,6 +562,22 @@ Mechanical rename propagation on the harness axis; every path below changed only
 - Provenance's `agent_id` / `agent_kind` and the invocation table's genuine agent reference keep
   their names — only the journal audit-attribution column (which holds any of the three caller
   kinds) became `caller_id`.
+- Legacy ledger rows with item `kind:"agent"` are accepted as mixed historical data (the issue's
+  settled default) and read-mapped to `"delegate"` at the single SQL-row → `Item` boundary in
+  `store-sql.ts`. No migration was written; journals are audit history and v0 installs are few.
+- The `items` `CHECK (kind IN (…))` constraint now lists `'delegate'`, but the table is created
+  `IF NOT EXISTS`, so a vault whose `items` table predates this change keeps its old CHECK and
+  would reject `kind:"delegate"` writes until the table is recreated. The `run_summary` view
+  self-heals (it is dropped and recreated when its stored SQL text differs). This is the same
+  class of v0 breakage for existing installs that the vault-schema and harness-axis slices already
+  accepted — called out here so it is not mistaken for an oversight.
+- `AutomationAgentSelection` / `resolveAutomationAgentSelection` keep their names: their fields
+  (`harness`, `selectionSource`, `model`, `configPins`) name the *harness choice* for an
+  automation, not the delegate rail.
+- `CostSource` (`"agent" | "estimated"`), `AppChange.source`, and `Attachment.source: "agent"` were
+  left alone — they describe "reported by the model/ACP harness", a different axis than the rail,
+  and the issue's rename list does not name them. The manifest's `agentVariant` / "agent variant"
+  → "delegate step" wording belongs to the glossary write-back slice.
 
 ## Verification
 
@@ -487,102 +593,136 @@ bun run --cwd packages/vault test
 bun run --cwd packages/blueprints test
 ```
 
+- **Delegate slice.** `bun run typecheck` green (35/35). `packages/automation` 419/419,
+  `packages/app-engine` 625/625, `packages/client` 2027/2027, `packages/blueprints` 3300/3300 green.
+  `tests/quality/user-facing-qualities.test.ts` 14/14 after the `harness_kind` SQL fix. Remaining
+  failures are pre-existing and reproduce unchanged on `origin/main`: agent-runtime
+  `launch.test.ts` (2 `IS_SANDBOX` env assertions), vault `wal-shipper.test.ts` G4, gateway
+  `gateway-db-lock.integration.test.ts` (sandbox sqlite3).
+- Reviewer replay for the delegate slice:
+
+```sh
+git grep -n 'ctx\.agent\b\|AgentDispatcher\|coerceAgentAnswer\|centraid-agent-failure' -- packages apps tools tests  # expect zero hits
+bun run typecheck
+bun run --cwd packages/automation test
+bunx vitest run --config vitest.quality.config.ts user-facing-qualities
+```
+
 - Further slices append their verification here as they land.
 
 ## Audit
 
-Independent re-attestation against the CURRENT `git diff --cached`. The previously-audited
-vault-schema slice is **already committed** — `git log --oneline -2` →
-`4162072c refactor(vault)!: consent.agent, caller_id, enrollment_key, media_asset renames (#743)`
-on top of `3f12bdea fix(recognition): refresh rewritten text embeddings (#736) (#737)` — so it is
-no longer part of the staged diff. This audit covers the **new staged slice only**: the harness-axis
-rename (`git diff --cached --stat` → 204 files changed, 2948 insertions(+), 2890 deletions(-); `git
-diff --cached -M --summary` → 3 renames, all harness-related:
-`runner-health.{test.ts,ts}` → `harness-health.{test.ts,ts}`, `cli/runner-prefs.ts` →
-`cli/harness-prefs.ts`, plus `serve/runner-prefs.{ts,test.ts}` deleted and `serve/harness-prefs.{ts,test.ts}`
-created new — git didn't detect that pair as a rename, but content-diffing the two (see below)
-shows it is one).
+Independent re-attestation against the CURRENT `git diff --cached`, fresh context, no reliance on
+the committing agent's claims. Prior slices are **already committed** — `git log --oneline -3`:
+
+```
+5624e365 refactor(harness)!: rename the installed-CLI axis to harness (#743)
+4162072c refactor(vault)!: consent.agent, caller_id, enrollment_key, media_asset renames (#743)
+3f12bdea fix(recognition): refresh rewritten text embeddings (#736) (#737)
+```
+
+So the vault-schema slice (`4162072c`) and the harness-axis slice (`5624e365`) are both in `HEAD`
+and out of scope for this audit. This audit covers the **new staged slice only**: the delegate-rail
+rename (`ctx.agent`→`ctx.delegate`, `AgentDispatcher`→`DelegateDispatcher`,
+`AgentCall`/`AgentAttachment`/`AgentContentRef`→`Delegate*`, `agent-answer.ts`→`delegate-answer.ts`,
+`coerceAgentAnswer`→`coerceDelegateAnswer`, worker messages `"agent"`/`"agent-reply"`→
+`"delegate"`/`"delegate-reply"`, ledger `ItemKind` `"agent"`→`"delegate"`,
+`AGENT_FAILURE_PREFIX`→`DELEGATE_FAILURE_PREFIX`, `AutomationAgentFailure`→
+`AutomationDelegateFailure`, `HandlerOutcome.agentCalls`→`delegateCalls`) plus a regression fix in
+`tests/quality/user-facing-qualities.test.ts` (`adapter_kind`→`harness_kind`, missed by the
+previously-committed harness slice). `git diff --cached --stat` → 62 files changed, 532
+insertions(+), 412 deletions(-); `git diff --cached -M --summary` → exactly one rename,
+`packages/automation/src/handler/{agent-answer.ts => delegate-answer.ts}` (51% similarity).
 
 1. **`## What changed` faithfully describes the staged diff, no misrepresentation, no undescribed
-   substantive change** — **PASS**.
-   - `git diff --cached --name-only | sort` (204 files) diffed byte-for-byte against the receipt's
-     "### Files touched (harness-axis slice)" list → **zero discrepancy** (`diff` exit 0). Every
-     staged file is accounted for by the receipt and nothing staged is missing from the list.
-   - Content-checked every diff hunk with an insertion/deletion count imbalance ≥ 4 lines (candidate
-     spots for a hidden behavior change, via `git diff --cached --numstat | awk` sorted by
-     `|ins-del|`): `packages/gateway/src/serve/{harness,runner}-prefs.{ts,test.ts}` (pure add/delete
-     pair, byte-identical after s/runner/harness/ token substitution — confirmed by diffing the two
-     files directly), `packages/agent-runtime/src/registry.test.ts`, `packages/app-engine/src/stores/
-     prefs-store.test.ts`, `packages/client/src/react/screens/SettingsProvidersScreen.tsx`,
-     `packages/gateway/src/routes/agents-routes.ts`, `packages/gateway/src/serve/build-gateway.ts`
-     (imbalance 4/873 diff lines). In every case the extra +/- lines are `oxfmt` re-wrapping caused by
-     `runner`→`harness` making identifiers/strings longer (e.g. `backend.kind` map body reflowing
-     from one line to a multi-line arrow function, `Object.hasOwn(patch, "agent.harness.kind")`
-     wrapping onto two lines) — not logic changes. No added/removed conditional, branch, or
-     early-return was found anywhere in this diff.
-   - **Specifically checked the claimed bug fixes** (stale `"runner.ask"` pref key;
-     `Object.hasOwn(patch, \`runner.${subsystem}\`)` logic issue in `build-gateway.ts`): **neither
-     exists in this diff.** `git diff --cached -- packages/gateway/src/serve/build-gateway.ts | sed
-     -n '822,850p'` shows `Object.hasOwn(patch, "agent.runner.kind")` → `Object.hasOwn(patch,
-     "agent.harness.kind")` and `Object.hasOwn(patch, \`runner.${subsystem}\`)` →
-     `Object.hasOwn(patch, \`harness.${subsystem}\`)` as straight token renames with no change to
-     which keys are checked or how `switches` is built. `git diff --cached | grep -n '"runner\.ask"
-     '` / grepping `HARNESS_SUBSYSTEMS`/`RUNNER_SUBSYSTEMS` in `serve/{runner,harness}-prefs.ts` shows
-     `"ask"` stays a member of the subsystem list on both sides, unchanged. `prefs-store.test.ts`'s
-     `"runner.ask"` test fixture keys become `"harness.ask"` 1:1, same behavior under test. Since no
-     such behavior change is staged, the receipt correctly does not describe one — **this claim about
-     the committing agent's report does not match what is actually staged**, but the receipt itself
-     makes no false claim (it says nothing about bug fixes), so `## What changed` is not
-     misrepresenting the diff. If the committing agent asserted these fixes landed in this commit,
-     that assertion is not supported by the staged content.
+   substantive change** — **PASS, with one disclosure gap noted below**.
+   - `git diff --cached --name-only | sort` (62 files) diffed against the receipt's "### Files
+     touched (delegate-rail slice)" list → matches (same 62 paths, only differing by the receipt
+     file itself, which is expected self-reference). Every staged file is accounted for.
+   - **(a) Legacy `kind:"agent"` read-mapping, no migration** — verified true.
+     `git diff --cached -- packages/app-engine/src/conversation/store-sql.ts` shows exactly one
+     mapping site, in `itemFromRaw`:
+     `kind: (raw.kind === "agent" ? "delegate" : raw.kind) as ItemKind,` with a comment citing #743
+     and "the one read boundary". No other `raw.kind === "agent"` translation exists anywhere in the
+     diff (`git diff --cached | grep -n 'raw.kind'` → this single hunk). No migration file, `ALTER
+     TABLE`, or backfill script is staged — `git diff --cached --stat` has no `migrat*` path, and
+     `gateway-db.ts`'s `ensureConversationLedger` stays `CREATE TABLE IF NOT EXISTS` throughout (no
+     new `ALTER TABLE items` statement was added for this rename, unlike the pre-existing
+     `effort`/`cost_source` column adds at lines 706/765 of that file). This matches the receipt's
+     "v0: straight renames, no aliases, no migrations" framing.
+   - **(b) `items` CHECK constraint + `run_summary` view updated** — verified true, but with a real
+     disclosure gap. `git diff --cached -- packages/app-engine/src/stores/gateway-db.ts` shows
+     `CHECK (kind IN ('message_in','step','tool','agent'))` → `...,'delegate'))`, the
+     `idx_items_run_rollup` partial-index `WHERE` clause, and all three `run_summary` dominant-*
+     subqueries (`model`, `provider`, `effort`) moved from `kind IN ('step','agent')` to
+     `kind IN ('step','delegate')` — real, correctly described. **However**: the `items` table is
+     still declared `CREATE TABLE IF NOT EXISTS`, so an **existing** dev/local vault whose `items`
+     table was created before this commit keeps the **old** CHECK (`...,'agent')`) — a subsequent
+     write of `kind:"delegate"` against that pre-existing table would raise a SQLite CHECK-constraint
+     violation, not "just work," until the table is dropped/recreated. The module's own header
+     comment (unchanged by this diff, `gateway-db.ts:89-96`) documents this as standing v0 policy
+     ("a ledger shape change edits the DDL in place and dev vaults are recreated... v0: no data
+     migrations"), so it is not a new landmine introduced by this slice — but the receipt's `##
+     Decisions` section (4 bullets: `hostKey`→`enrollmentKey` threading, `media.asset` logical
+     naming, two data-fixture updates, provenance `agent_id` preserved) **does not mention this
+     CHECK/IF-NOT-EXISTS caveat at all**, and I found no other line in the receipt (`## What changed`,
+     `## Verification`) that states it either — confirmed via `grep -in 'IF NOT EXISTS\|existing
+     install\|fresh table\|CHECK constraint' receipts/issue-743-one-agent-door.md` → zero hits. The
+     receipt's factual claim (CHECK/view were updated) is accurate and not misrepresented, but the
+     operational caveat the task asked me to confirm was disclosed is **not present** in the
+     receipt's Decisions section.
+   - **Regression fix described** — verified true. `git diff --cached --
+     tests/quality/user-facing-qualities.test.ts` shows `agentDispatcher`→`delegateDispatcher`,
+     `ctx.agent(...)`→`ctx.delegate(...)`, and the raw SQL `SELECT c.adapter_kind, ...`→
+     `SELECT c.harness_kind, ...` plus its row type and loop variable (`runner`→`harness`) all
+     corrected in this file only — matches the receipt's "Regression fix" paragraph exactly.
+   - No other hunk in the 62-file diff introduces a behavior change beyond the rename: skimmed every
+     non-mechanical file (`ctx.ts`, `runner.ts`, `worker/runner.ts`, `fire.ts`, `manifest.ts`,
+     `lint.ts`, both `SKILL.md` files) — all are 1:1 token substitutions (`Agent*`→`Delegate*`,
+     `agent`→`delegate` in strings/comments/prose), no added/removed conditionals or logic.
 
 2. **Each checked `- [x]` item is realized; unchecked `- [ ]` items are not claimed done** —
    **PASS**.
-   - Vault schema item (checked): realized in **`HEAD`**, not this staged diff — `git show --stat
-     HEAD` (186 files) plus spot checks: `git show HEAD -- packages/vault/src/schema/consent.ts` adds
-     `CREATE TABLE consent_agent (... enrollment_key TEXT NOT NULL UNIQUE ...)`; `schema/agent.ts`
-     drops `CREATE TABLE agent_agent`; `schema/journal.ts` renames
-     `agent_command_invocation.agent_id` → `caller_id`; `schema/tables.ts` renames the registry entry
-     to `media_asset`. `git grep -n 'agent_agent\|media_media_asset\|host_key' -- packages apps` → 0
-     hits repo-wide (working tree matches, since this slice is fully committed).
-   - Harness axis item (checked): realized in the **staged** diff — `git grep -n
-     'RUNNER_BACKENDS\|getRunnerBackend\|RunnerKind\|RunnerPrefs' -- packages apps` → **0 hits**
-     (working tree = index here; `git status --porcelain` shows every touched file as `M ` with no
-     unstaged component). `git grep -n 'runner_kind\|adapter_kind\|runner-status\|requires\.runner\b\|
-     CENTRAID_LIVE_FAILOVER_RUNNER' -- packages apps` (excluding `docs/`) → 0 hits, matching the
-     receipt's specific claims about the DB columns, route, and env var. The broader acceptance-criteria
-     regex `\brunner(Kind|Prefs|Backend|Health|Ladder)?\b` still returns ~396 hits, but every one
-     inspected is the unrelated `ConversationRunnerCore`/`runner-core.ts`/`runnerSessionDir` chat-spine
-     vocabulary (not part of Part 1's harness axis) or a generic local variable named `runner` — the
-     tolerated case the issue's own acceptance criterion anticipates, not a leftover of the renamed
-     symbols.
-   - The other 7 unchecked items (delegate rail, glossary write-back, accounted `ctx.delegate`
-     dispatch, `HarnessSessions`, per-call harness/model/configPins, SDK adoption, #740 closure) have
-     no trace in the staged diff (`ctx.agent` calls untouched, no `HarnessSessions` file added, no
-     `@agentclientprotocol/sdk` in `package.json` diffs) — correctly left unchecked.
+   - Vault schema (checked): realized in `HEAD` (commit `4162072c`) — `git show --stat 4162072c`
+     confirms it landed as its own commit, ahead of `5624e365`.
+   - Harness axis (checked): realized in `HEAD` (commit `5624e365`) — `git show --stat 5624e365`
+     confirms it landed as its own commit.
+   - Delegate rail (checked, newly flipped `[ ]`→`[x]` in this staged diff — confirmed via `git diff
+     --cached -- receipts/issue-743-one-agent-door.md`): realized in the **staged** diff — `git grep
+     -n 'ctx\.agent\b|AgentDispatcher|coerceAgentAnswer|centraid-agent-failure:|AgentCall\b|
+     agentCalls\b' -- packages apps tools tests` → **0 hits**. `git grep -n 'adapter_kind' --
+     packages apps tests` → **0 hits** (confirms the regression fix removed the last reference,
+     since the harness slice already renamed the column itself).
+   - The remaining 6 unchecked items (glossary/docs write-back, accounted `ctx.delegate` dispatch,
+     `HarnessSessions` extraction, per-call harness/model/configPins, SDK adoption, #740 closure)
+     have no trace in the staged diff — no `HarnessSessions` file, no `@agentclientprotocol/sdk` in
+     any `package.json` diff, `run-automation-live-dispatch.ts`'s diff is rename-only (still calls
+     `getHarness(...).runTurn` directly, not the chat-spine `runTurn`) — correctly left unchecked.
 
 3. **`## Checklist` mirrors the issue's `Scope > In:` bullets, no missing/contradicting entries** —
    **PASS**. Fetched issue #743 fresh via `mcp__github__issue_read` (srikanth235/centraid). Its
-   `# Scope > In:` has 9 bullets; the receipt's checklist has 9 `- [ ]`/`- [x]` lines, mapping 1:1
-   (the issue's single "every rename in the Decision tables…" bullet is split across the receipt's
-   3 rename lines — vault schema, harness axis, delegate rail — which is a faithful expansion, not
-   an omission or contradiction; the "metering + hydration-token accounting" bullet is folded into
-   the `ctx.delegate` dispatch line's parenthetical, also a faithful match). No checklist line
-   asserts something the issue text contradicts.
+   `# Scope > In:` has 9 bullets; the receipt's checklist has 9 lines, mapping 1:1 (the issue's
+   single "every rename in the Decision tables…" bullet is split across the receipt's 3 rename
+   lines — vault schema, harness axis, delegate rail — a faithful expansion; "metering +
+   hydration-token accounting" is folded into the `ctx.delegate` dispatch line's parenthetical). No
+   checklist line asserts something the issue text contradicts.
 
-**Acceptance-criteria spot checks (independent of the three verdicts above):**
-- `git grep -n 'RUNNER_BACKENDS\|getRunnerBackend\|RunnerKind\|RunnerPrefs' -- packages apps` → **0
-  hits**.
-- `bun run typecheck` → **green**, all 35 package tasks `cache hit` / full turbo, ~115ms wall
-  (nothing invalidated the cache since the diff was staged with matching lockfile/config).
+**Independent verification run fresh in this audit:**
+- `git grep -n 'ctx\.agent\b|AgentDispatcher|coerceAgentAnswer|centraid-agent-failure:|AgentCall\b|
+  agentCalls\b' -- packages apps tools tests` → **0 hits**.
+- `git grep -n 'adapter_kind' -- packages apps tests` → **0 hits**.
+- `bun run typecheck` → **green**, 35/35 package tasks (`cache hit` / full turbo).
+- `bunx vitest run --config vitest.quality.config.ts user-facing-qualities` → **14/14 passed**
+  (20.82s).
 
-**Overall verdict: PASS.** No misrepresentation in `## What changed`; the checked/unchecked
-checklist state matches the repo (vault slice in `HEAD`, harness slice staged, everything else
-absent); the checklist bullets mirror the issue's Scope > In list; the two specific claimed bug
-fixes (stale `runner.ask` key, `Object.hasOwn` logic) are **not present in this staged diff** —
-they are either already-fixed elsewhere, not yet done, or a misstatement by the committing agent
-about this commit's contents — but since the receipt does not itself claim these fixes, this does
-not make the receipt inaccurate.
+**Overall verdict: PASS.** `## What changed` accurately describes the staged delegate-rail rename
+and regression fix; the legacy `kind:"agent"` read-mapping exists at exactly one boundary with no
+migration added; the CHECK constraint and `run_summary` view updates are real, though the receipt's
+Decisions section omits the (pre-existing, codebase-standard v0) caveat that already-created `items`
+tables keep the old CHECK until recreated — a disclosure gap, not a misrepresentation. Checklist
+state matches the repo exactly (2 items realized in prior commits, 1 newly realized in this staged
+diff, 6 correctly left unchecked). The checklist mirrors the issue's Scope > In list. All four
+independent verification commands pass as expected.
 
 ## Session
 

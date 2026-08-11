@@ -1,6 +1,6 @@
 ---
 name: automation-authoring
-description: How to author a centraid automation app — the automation.json manifest, the scheduled handler.js contract (ctx.vault/agent/state/runs/fetch), cron, webhook, data and condition triggers (with their required vault block), and the draft-then-enable flow. Use whenever creating or editing the files of a UI-less automation app.
+description: How to author a centraid automation app — the automation.json manifest, the scheduled handler.js contract (ctx.vault/delegate/state/runs/fetch), cron, webhook, data and condition triggers (with their required vault block), and the draft-then-enable flow. Use whenever creating or editing the files of a UI-less automation app.
 ---
 
 ## Centraid automation authoring
@@ -100,8 +100,8 @@ Rules for editing `automation.json`:
 
 - **Which trigger?** React to a data change as it happens → **data**. A data-state time window ("due / expiring in N days") → **condition** (`within-next-days`). A wall-clock schedule ("every morning", "top of the hour") → **cron**. An inbound HTTP POST → **webhook**. Do **not** approximate data-reactivity with a cron poll that re-scans and re-diffs the vault yourself — that is exactly what data/condition triggers exist to do, with a persisted cursor and dedup the host owns. Reach for cron only when the fire is genuinely tied to the clock, not to the data.
 - Keep `prompt` current — it is the canonical record of what the user asked for.
-- **No tool allowlist.** Deterministic work goes through the built-in `ctx.vault` / `ctx.fetch` / `ctx.state` rails, which need no declaration — there is no `requires.tools` field (it was removed with the `ctx.tool` rail). Leave `requires` to just `model` unless you need an MCP for `ctx.agent`.
-- `requires.model` is the capability tier `ctx.agent` routes through (`provider/model-id`). Pick the **cheapest tier that does the inference** — a small/cheap tier for summarize/classify/extract; reserve a stronger tier for genuinely hard reasoning. `ctx.agent` is the only billed path (see _Two cost rails_ below), so the tier you declare is the per-fire cost.
+- **No tool allowlist.** Deterministic work goes through the built-in `ctx.vault` / `ctx.fetch` / `ctx.state` rails, which need no declaration — there is no `requires.tools` field (it was removed with the `ctx.tool` rail). Leave `requires` to just `model` unless you need an MCP for `ctx.delegate`.
+- `requires.model` is the capability tier `ctx.delegate` routes through (`provider/model-id`). Pick the **cheapest tier that does the inference** — a small/cheap tier for summarize/classify/extract; reserve a stronger tier for genuinely hard reasoning. `ctx.delegate` is the only billed path (see _Two cost rails_ below), so the tier you declare is the per-fire cost.
 - The runtime validates the manifest on every read; a malformed shape is rejected. Keep the structure exactly as shown.
 
 ### The handler — `handler.js`
@@ -123,7 +123,7 @@ The handler receives `{ ctx, log }` — no `db`, no `body`, no `query`, no `wind
 
 - `ctx.vault` — the consented vault surface (SQL reads, typed `invoke` writes, content reads) under this automation's grant. Deterministic and in-process — zero model tokens. This is how a handler reads and writes the owner's data.
 - `ctx.fetch(url, init?)` — the sanctioned deterministic path to reach external HTTP. Also in-process and unbilled; use it instead of a raw `fetch(...)`.
-- `ctx.agent({ prompt, json?, model? })` — one constrained, billed model turn against the user's real provider. Always pass a `json` schema when the result is consumed structurally — it both parses the result and detects a model failure.
+- `ctx.delegate({ prompt, json?, model? })` — one constrained, billed model turn against the user's real provider. Always pass a `json` schema when the result is consumed structurally — it both parses the result and detects a model failure.
 - `ctx.state.get(key)` / `ctx.state.set(key, value)` / `ctx.state.del(key)` — cross-run key/value store scoped to this automation. Use for watermarks, cursors, ETags, dedup hashes. JSON-serializable values only; survives restart.
 - `ctx.runs.last({ status })` / `ctx.runs.list({ since, limit })` — this automation's prior run records. Use for "since last successful run" and aggregation windows. The in-progress self-run is filtered out.
 - `ctx.now` — the fire-start instant as an ISO string, fixed for the whole run so lease/window checks stay deterministic on replay.
@@ -131,11 +131,11 @@ The handler receives `{ ctx, log }` — no `db`, no `body`, no `query`, no `wind
 
 Return `{ summary?, output? }`: `summary` is the one-line description shown in the run list; `output` is persisted and, if the manifest declares `outputSchema`, validated against it (a shape mismatch fails the run).
 
-There is **no runtime retry** on `ctx.fetch` or `ctx.agent` — a failed call rejects the Promise. Classify the error and write your own `try/catch` backoff when retry is warranted.
+There is **no runtime retry** on `ctx.fetch` or `ctx.delegate` — a failed call rejects the Promise. Classify the error and write your own `try/catch` backoff when retry is warranted.
 
 ### Audited rails + determinism (non-negotiable)
 
-Every outside effect **must go through the `ctx.*` surface**. `ctx.vault` / `ctx.fetch` / `ctx.agent` / `ctx.state` / `ctx.runs` calls are recorded in the run ledger (the run history you see per fire). A raw `fetch(...)` or `fs` call is **invisible to the run history** — so it never appears in a fire's trace and can't be reasoned about. Reach external HTTP with `ctx.fetch`, never a bare `fetch`.
+Every outside effect **must go through the `ctx.*` surface**. `ctx.vault` / `ctx.fetch` / `ctx.delegate` / `ctx.state` / `ctx.runs` calls are recorded in the run ledger (the run history you see per fire). A raw `fetch(...)` or `fs` call is **invisible to the run history** — so it never appears in a fire's trace and can't be reasoned about. Reach external HTTP with `ctx.fetch`, never a bare `fetch`.
 
 Keep the handler **deterministic** too. A fire has no crash-resume journal: if a fire dies partway, it simply re-runs from the top. A handler that reads the wall clock or a random value produces a _different_ result on that re-run and re-fires effects under fresh ids — non-idempotent and hard to dedup. So a handler **must not**:
 
@@ -152,10 +152,10 @@ There is no `ctx.random()` / `ctx.uuid()` — get these needs deterministically 
 
 ### Two cost rails
 
-- **Deterministic rails are free.** `ctx.vault`, `ctx.fetch`, `ctx.state`, and `ctx.runs` are serviced parent-side, in-process, by the gateway — **zero model tokens, zero child processes, zero HTTP servers**, on every harness kind. A fire whose handler never calls `ctx.agent` cannot bill anything. Prefer these (plus plain JS) for anything that doesn't need judgment: reading/writing vault data, fetching external HTTP, listing, filtering, shaping.
-- **`ctx.agent` is the only billed path.** It is a bounded one-shot turn against the user's real provider. Reserve it for genuine inference — summarize, classify, extract, draft. Don't reach for it to do work a `ctx.vault` / `ctx.fetch` call or a deterministic JS transform already covers. When you do use it, pass a `json` schema and batch (one structured call over the whole set, never a per-item `ctx.agent` loop), and declare the cheapest sufficient `requires.model` tier.
+- **Deterministic rails are free.** `ctx.vault`, `ctx.fetch`, `ctx.state`, and `ctx.runs` are serviced parent-side, in-process, by the gateway — **zero model tokens, zero child processes, zero HTTP servers**, on every harness kind. A fire whose handler never calls `ctx.delegate` cannot bill anything. Prefer these (plus plain JS) for anything that doesn't need judgment: reading/writing vault data, fetching external HTTP, listing, filtering, shaping.
+- **`ctx.delegate` is the only billed path.** It is a bounded one-shot turn against the user's real provider. Reserve it for genuine inference — summarize, classify, extract, draft. Don't reach for it to do work a `ctx.vault` / `ctx.fetch` call or a deterministic JS transform already covers. When you do use it, pass a `json` schema and batch (one structured call over the whole set, never a per-item `ctx.delegate` loop), and declare the cheapest sufficient `requires.model` tier.
 
-The publish gate lints for the removed `ctx.tool` rail: a handler that calls it fails with _"ctx.tool was removed: handlers do deterministic work with ctx.vault / ctx.fetch / ctx.state, and delegate judgment to ctx.agent."_
+The publish gate lints for the removed `ctx.tool` rail: a handler that calls it fails with _"ctx.tool was removed: handlers do deterministic work with ctx.vault / ctx.fetch / ctx.state, and delegate judgment to ctx.delegate."_
 
 Also avoid in handlers:
 

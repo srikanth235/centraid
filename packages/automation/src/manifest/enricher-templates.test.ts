@@ -160,7 +160,7 @@ async function loadWorkspacePdfJs() {
   return import(pathToFileURL(resolved).href);
 }
 
-/** A recording stub ctx: canned reads/agent turns, captured invokes. */
+/** A recording stub ctx: canned reads/delegate turns, captured invokes. */
 function stubCtx(options: {
   reads: Record<string, Record<string, unknown>[]>;
   read?: (request: Record<string, unknown>) => Record<string, unknown>[];
@@ -170,7 +170,7 @@ function stubCtx(options: {
     headers: Record<string, string>;
     text: string;
   }>;
-  agent?: (call: {
+  delegate?: (call: {
     prompt: string;
     json?: unknown;
     content?: { contentId: string; variant: string }[];
@@ -183,7 +183,7 @@ function stubCtx(options: {
   }) => unknown;
 }) {
   const invokes: { command: string; input: Record<string, unknown> }[] = [];
-  const agentCalls: {
+  const delegateCalls: {
     prompt: string;
     content?: { contentId: string; variant: string }[];
   }[] = [];
@@ -229,16 +229,16 @@ function stubCtx(options: {
               base64: "Zml4dHVyZQ==",
             }),
     },
-    agent: async (call: {
+    delegate: async (call: {
       prompt: string;
       json?: unknown;
       content?: { contentId: string; variant: string }[];
     }) => {
-      agentCalls.push({
+      delegateCalls.push({
         prompt: call.prompt,
         ...(call.content ? { content: call.content } : {}),
       });
-      return options.agent ? options.agent(call) : {};
+      return options.delegate ? options.delegate(call) : {};
     },
     state: {
       get: async (k: string) => state.get(k),
@@ -255,7 +255,7 @@ function stubCtx(options: {
     warn: (m: string) => logs.push(m),
     error: (m: string) => logs.push(m),
   };
-  return { ctx, log, invokes, agentCalls, state, logs };
+  return { ctx, log, invokes, delegateCalls, state, logs };
 }
 
 describe("enricher template hygiene", () => {
@@ -505,7 +505,7 @@ describe("recognition automation spine", () => {
       reads: {},
       input: { variant: "agent", agentModel: "owner/pin" },
       read: (request) => (request.entity === "media.asset" ? [asset] : []),
-      agent: () => ({
+      delegate: () => ({
         __centraidModel: "acp-confirmed@7",
         regions: [
           { text: "Unboxed" },
@@ -946,12 +946,12 @@ describe("doc-text-extractor behavior", () => {
         ],
         "core.content_derivative": [{ content_id: "d1", variant: "preview" }],
       },
-      agent: () => ({ text: "Warranty expires 2027-03-01" }),
+      delegate: () => ({ text: "Warranty expires 2027-03-01" }),
     });
     const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
       summary: string;
     };
-    expect(harness.agentCalls[0]!.content).toStrictEqual([
+    expect(harness.delegateCalls[0]!.content).toStrictEqual([
       { contentId: "d1", variant: "preview" },
     ]);
     expect(harness.invokes.map((i) => i.command)).toStrictEqual([
@@ -973,10 +973,10 @@ describe("doc-text-extractor behavior", () => {
         ],
         "core.content_derivative": [{ content_id: "d2", variant: "text" }],
       },
-      agent: () => ({ summary: "Home insurance policy for 2026." }),
+      delegate: () => ({ summary: "Home insurance policy for 2026." }),
     });
     await handler({ ctx: harness.ctx, log: harness.log });
-    expect(harness.agentCalls[0]!.content).toStrictEqual([
+    expect(harness.delegateCalls[0]!.content).toStrictEqual([
       { contentId: "d2", variant: "text" },
     ]);
     expect(harness.invokes.map((i) => i.command)).toStrictEqual([
@@ -990,7 +990,7 @@ describe("doc-text-extractor behavior", () => {
     expect(rows[0]!.payload.body).toContain("insurance");
   });
 
-  it("inline text items and underivable binaries are skipped without agent turns", async () => {
+  it("inline text items and underivable binaries are skipped without delegate turns", async () => {
     const handler = await loadHandler("doc-text-extractor");
     const harness = stubCtx({
       reads: {
@@ -1004,7 +1004,7 @@ describe("doc-text-extractor behavior", () => {
     const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
       summary: string;
     };
-    expect(harness.agentCalls).toHaveLength(0);
+    expect(harness.delegateCalls).toHaveLength(0);
     expect(harness.invokes).toHaveLength(0);
     expect(result.summary).toContain("skipped 1");
   });
@@ -1019,13 +1019,13 @@ describe("doc-text-extractor behavior", () => {
     };
     const harness = stubCtx({
       reads,
-      agent: () => ({
+      delegate: () => ({
         text: "Late preview exposes the albatross renewal date",
       }),
     });
     await handler({ ctx: harness.ctx, log: harness.log });
     expect(harness.state.get("cursor")).toBe("d5");
-    expect(harness.agentCalls).toHaveLength(0);
+    expect(harness.delegateCalls).toHaveLength(0);
 
     // The parent no longer appears in the new-content page. Its independently
     // ordered derivative row must pull it back into the automation.
@@ -1034,7 +1034,7 @@ describe("doc-text-extractor behavior", () => {
       { derivative_id: "dv-1", content_id: "d5", variant: "preview" },
     ];
     await handler({ ctx: harness.ctx, log: harness.log });
-    expect(harness.agentCalls.at(-1)?.content).toStrictEqual([
+    expect(harness.delegateCalls.at(-1)?.content).toStrictEqual([
       { contentId: "d5", variant: "preview" },
     ]);
     expect(harness.invokes.at(-1)).toStrictEqual({
@@ -1061,7 +1061,7 @@ describe("doc-entity-linker behavior", () => {
           { party_id: "p2", kind: "org", display_name: "Acme Corp" },
         ],
       },
-      agent: () => ({
+      delegate: () => ({
         mentions: [
           {
             name: "Rahul Mehta",
@@ -1099,7 +1099,7 @@ describe("doc-entity-linker behavior", () => {
           { party_id: "p1", kind: "person", display_name: "Rahul Mehta" },
         ],
       },
-      agent: () => ({
+      delegate: () => ({
         mentions: [{ name: "Rahul Mehta", exact: "Rahul Mehta again" }],
       }),
     });
@@ -1122,7 +1122,7 @@ describe("obligation-extractor behavior", () => {
           { derivative_id: "dv1", content_id: "d1", variant: "text" },
         ],
       },
-      agent: () => ({
+      delegate: () => ({
         obligations: [
           {
             what: "Home insurance renewal",
@@ -1174,7 +1174,7 @@ describe("renewal-reminders behavior", () => {
       output: { upcoming: { due: string }[] };
     };
     expect(harness.invokes).toHaveLength(0);
-    expect(harness.agentCalls).toHaveLength(0);
+    expect(harness.delegateCalls).toHaveLength(0);
     expect(result.summary).toContain("2 deadlines");
     expect(result.output.upcoming[0]!.due).toBe("2026-07-12"); // soonest first
   });
@@ -1203,7 +1203,7 @@ describe("doc-filer behavior", () => {
           { scheme_id: "sf", notation: "root", pref_label: "Documents" },
         ],
       },
-      agent: (call) => {
+      delegate: (call) => {
         // The existing folder labels ride into the prompt.
         expect(call.prompt).toContain("Insurance");
         expect(call.prompt).not.toContain("Documents,");
@@ -1216,7 +1216,7 @@ describe("doc-filer behavior", () => {
       },
     });
     await handler({ ctx: harness.ctx, log: harness.log });
-    expect(harness.agentCalls[0]!.content).toStrictEqual([
+    expect(harness.delegateCalls[0]!.content).toStrictEqual([
       { contentId: "d1", variant: "text" },
     ]);
     expect(harness.invokes.map((i) => i.command)).toStrictEqual([

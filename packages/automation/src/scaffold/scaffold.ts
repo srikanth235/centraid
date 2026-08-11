@@ -60,7 +60,7 @@ export interface ScaffoldOptions {
   apps?: readonly string[];
   /** Open harness-registry key to pin for this automation. */
   harness?: string;
-  /** Model `ctx.agent` calls route through (`provider/model-id`). */
+  /** Model `ctx.delegate` calls route through (`provider/model-id`). */
   model?: string;
   /** Run-retention policy. Defaults to keeping the last 100 runs. */
   historyKeep?: HistoryKeep;
@@ -141,12 +141,12 @@ const DEFAULT_HANDLER = `/**
  *   • ctx.vault · ctx.fetch · ctx.state · ctx.runs — deterministic, in-process
  *     work. Zero model tokens, zero processes spawned. Prefer these for
  *     anything code or a vault read/write can do.
- *   • ctx.agent({ prompt }) — the ONLY billed path: one bounded model turn
+ *   • ctx.delegate({ prompt }) — the ONLY billed path: one bounded model turn
  *     through the configured agent CLI (over ACP). Use it only for genuine
  *     inference (summarize / classify / extract / draft). Declare the model
  *     tier in automation.json#requires.model.
  *
- * \`ctx\` surface: ctx.vault · ctx.fetch · ctx.agent · ctx.state.get/set/delete
+ * \`ctx\` surface: ctx.vault · ctx.fetch · ctx.delegate · ctx.state.get/set/delete
  * · ctx.runs.last/list · ctx.input. Return \`{ summary?, output? }\` —
  * \`summary\` shows in the run list.
  *
@@ -171,7 +171,7 @@ export default async ({ ctx, log }) => {
 
   // BILLED rail: one constrained model turn for the part that needs judgement.
   // Pass \`json\` so the result is parsed and a model failure is detected.
-  const result = await ctx.agent({
+  const result = await ctx.delegate({
     prompt: \`Summarize these in one line:\\n\${JSON.stringify(fresh)}\`,
     json: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] },
   });
@@ -186,10 +186,10 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
       ? [{ kind: "cron", expr: opts.cronExpr?.trim() || "0 9 * * *" }]
       : opts.triggers;
   // Emit the `requires` slots the builder may fill (issue #167): `model` is the
-  // ctx.agent capability tier (`provider/model-id`) — picked for the cheapest
+  // ctx.delegate capability tier (`provider/model-id`) — picked for the cheapest
   // tier that does the inference (e.g. a small/cheap tier for summarization).
   // It is left out until chosen so it is never a misleading default; a handler
-  // that never calls ctx.agent needs no `requires` at all.
+  // that never calls ctx.delegate needs no `requires` at all.
   const requires: Record<string, unknown> = {};
   if (opts.harness?.trim()) requires.harness = opts.harness.trim();
   if (opts.model?.trim()) requires.model = opts.model.trim();

@@ -309,7 +309,7 @@ describe("issue #679 user-facing quality gates", () => {
         },
         {
           openDispatch: async () => ({
-            agentDispatcher: async () => "unused",
+            delegateDispatcher: async () => "unused",
             close: async () => undefined,
           }),
         }
@@ -515,7 +515,7 @@ describe("issue #679 user-facing quality gates", () => {
     );
     await writeFile(
       path.join(automationDir, "handler.js"),
-      "export default async ({ ctx }) => ({ output: await ctx.agent('quality ledger') });\n"
+      "export default async ({ ctx }) => ({ output: await ctx.delegate('quality ledger') });\n"
     );
     await forEachSequentially(
       [...HARNESS_KINDS.entries()],
@@ -553,7 +553,7 @@ describe("issue #679 user-facing quality gates", () => {
           },
           {
             openDispatch: async () => ({
-              agentDispatcher: async () => `handled ${triggerKind}`,
+              delegateDispatcher: async () => `handled ${triggerKind}`,
               close: async () => undefined,
             }),
           }
@@ -563,14 +563,14 @@ describe("issue #679 user-facing quality gates", () => {
     );
     const persisted = db.journal
       .prepare(
-        `SELECT c.adapter_kind, t.trigger_origin, i.name
+        `SELECT c.harness_kind, t.trigger_origin, i.name
            FROM conversations c
            JOIN turns t ON t.conversation_id = c.id
            JOIN items i ON i.turn_id = t.id
           WHERE c.id = ? OR t.id LIKE 'quality-trigger-%'`
       )
       .all(session.id) as Array<{
-      adapter_kind: string;
+      harness_kind: string;
       trigger_origin: string;
       name: string;
     }>;
@@ -585,10 +585,10 @@ describe("issue #679 user-facing quality gates", () => {
         persisted.some((row) => row.trigger_origin === triggerKind),
         triggerKind
       ).toBe(true);
-    for (const runner of HARNESS_KINDS)
+    for (const harness of HARNESS_KINDS)
       expect(
-        persisted.some((row) => row.adapter_kind === runner),
-        runner
+        persisted.some((row) => row.harness_kind === harness),
+        harness
       ).toBe(true);
   });
 

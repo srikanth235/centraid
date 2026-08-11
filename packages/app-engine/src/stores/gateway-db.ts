@@ -233,7 +233,7 @@ export const CONVERSATION_LEDGER_DDL = `
       started_at         INTEGER NOT NULL,
       ended_at           INTEGER,
       duration_ms        INTEGER,
-      CHECK (kind IN ('message_in','step','tool','agent')),
+      CHECK (kind IN ('message_in','step','tool','delegate')),
       CHECK (cost_source IS NULL OR cost_source IN ('agent','estimated'))
     ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_items_by_turn
@@ -244,7 +244,7 @@ export const CONVERSATION_LEDGER_DDL = `
       ON items(model, started_at DESC);
     /*
      * Covering index for run_summary's three dominant-* rollups (issue #659
-     * G8). Each is a correlated GROUP BY over one turn's step/agent items, run
+     * G8). Each is a correlated GROUP BY over one turn's step/delegate items, run
      * once per turn per Insights query — seven of them per dashboard load. With
      * only idx_items_by_turn the planner found the turn's items by index and
      * then fetched EVERY matching row from the table to read kind, model,
@@ -256,7 +256,7 @@ export const CONVERSATION_LEDGER_DDL = `
      */
     CREATE INDEX IF NOT EXISTS idx_items_run_rollup
       ON items(turn_id, model, provider, effort, input_tokens, output_tokens)
-      WHERE kind IN ('step','agent');
+      WHERE kind IN ('step','delegate');
 
     CREATE TABLE IF NOT EXISTS attachments (
       id         TEXT PRIMARY KEY,
@@ -521,21 +521,21 @@ CREATE VIEW run_summary AS
     t.error          AS error,
     t.retry_of       AS retry_of,
     (SELECT i.model FROM items i
-      WHERE i.turn_id = t.id AND i.model IS NOT NULL AND i.kind IN ('step','agent')
+      WHERE i.turn_id = t.id AND i.model IS NOT NULL AND i.kind IN ('step','delegate')
       GROUP BY i.model
       ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
       LIMIT 1)       AS model,
     -- Dominant harness kind (ACP stamps provider = HarnessKind) for Insights
     -- by-harness breakdown (issue #514).
     (SELECT i.provider FROM items i
-      WHERE i.turn_id = t.id AND i.provider IS NOT NULL AND i.kind IN ('step','agent')
+      WHERE i.turn_id = t.id AND i.provider IS NOT NULL AND i.kind IN ('step','delegate')
       GROUP BY i.provider
       ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
       LIMIT 1)       AS provider,
     -- Effort is recorded only after ACP confirms thought_level. Picking
     -- the dominant confirmed value mirrors the model/provider rollups.
     (SELECT i.effort FROM items i
-      WHERE i.turn_id = t.id AND i.effort IS NOT NULL AND i.kind IN ('step','agent')
+      WHERE i.turn_id = t.id AND i.effort IS NOT NULL AND i.kind IN ('step','delegate')
       GROUP BY i.effort
       ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
       LIMIT 1)       AS effort,

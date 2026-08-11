@@ -2,12 +2,12 @@
  * Harness-kind routing for the automation dispatch path (issue #479).
  *
  * A fire has its OWN dispatch surface, separate from the conversation
- * `runTurn`: `ctx.agent` is a one-shot against the user's real provider,
+ * `runTurn`: `ctx.delegate` is a one-shot against the user's real provider,
  * routed through the harness registry. Issue #484 removed the `ctx.tool` rail
  * (and the mock-LLM session it puppeted), so the dispatch surface no longer
  * accepts a tool dispatcher — a fire whose handler only touches ctx.vault /
  * ctx.state constructs nothing and spawns nothing. These tests pin the
- * `ctx.agent` routing at the one surviving seam.
+ * `ctx.delegate` routing at the one surviving seam.
  */
 
 import { describe, afterEach, expect, test } from "vitest";
@@ -110,29 +110,29 @@ describe("run-automation-dispatch suite", () => {
 
   // ---- zero-spawn seam ------------------------------------------------------
 
-  test("the dispatch surface exposes only ctx.agent — no tool dispatcher, nothing eager", async () => {
+  test("the dispatch surface exposes only ctx.delegate — no tool dispatcher, nothing eager", async () => {
     // The seam itself is the assertion: a vault-/state-only fire never touches
     // this surface, and there is no `toolDispatcher` for it to reach. Opening
     // the surface must be inert — no persistent mock session, no HTTP server.
     const dispatch = await openDispatch("codex");
     expect(dispatch).not.toHaveProperty("toolDispatcher");
-    expect(dispatch.agentDispatcher).toBeTypeOf("function");
+    expect(dispatch.delegateDispatcher).toBeTypeOf("function");
     expect(dispatch.close).toBeTypeOf("function");
   });
 
-  // ---- ctx.agent -----------------------------------------------------------
+  // ---- ctx.delegate -----------------------------------------------------------
 
   test.each(ACP_KINDS)(
-    "ctx.agent on %s drives the registered backend",
+    "ctx.delegate on %s drives the registered backend",
     async (kind) => {
       const stub = stubBackendRunTurn(kind, (input) => {
         input.onEvent({ type: "assistant.start" });
         input.onEvent({ type: "final", text: "answer from the acp agent" });
       });
 
-      const { agentDispatcher } = await openDispatch(kind, "some-model");
+      const { delegateDispatcher } = await openDispatch(kind, "some-model");
       const forwarded: TurnStreamEvent[] = [];
-      const answer = await agentDispatcher(
+      const answer = await delegateDispatcher(
         { prompt: "summarise the inbox", onEvent: (ev) => forwarded.push(ev) },
         dispatchCtx
       );
@@ -151,13 +151,13 @@ describe("run-automation-dispatch suite", () => {
     }
   );
 
-  test("ctx.agent coerces the ACP final text against the requested JSON shape", async () => {
+  test("ctx.delegate coerces the ACP final text against the requested JSON shape", async () => {
     stubBackendRunTurn("gemini", (input) => {
       input.onEvent({ type: "final", text: '{"count": 3}' });
     });
 
-    const { agentDispatcher } = await openDispatch("gemini");
-    const answer = await agentDispatcher(
+    const { delegateDispatcher } = await openDispatch("gemini");
+    const answer = await delegateDispatcher(
       {
         prompt: "count them",
         json: { type: "object", properties: { count: { type: "number" } } },
@@ -172,9 +172,9 @@ describe("run-automation-dispatch suite", () => {
     const stub = stubBackendRunTurn("gemini", (input) => {
       input.onEvent({ type: "final", text: "visible text" });
     });
-    const { agentDispatcher } = await openDispatch("gemini");
+    const { delegateDispatcher } = await openDispatch("gemini");
 
-    await agentDispatcher(
+    await delegateDispatcher(
       {
         prompt: "read the photograph",
         attachments: [
@@ -198,25 +198,25 @@ describe("run-automation-dispatch suite", () => {
     ]);
   });
 
-  test("ctx.agent surfaces an ACP backend error that produced no text", async () => {
+  test("ctx.delegate surfaces an ACP backend error that produced no text", async () => {
     stubBackendRunTurn("acp", (input) => {
       input.onEvent({ type: "error", message: "no binary configured" });
     });
 
-    const { agentDispatcher } = await openDispatch("acp");
+    const { delegateDispatcher } = await openDispatch("acp");
     await expect(
-      agentDispatcher({ prompt: "go" }, dispatchCtx)
+      delegateDispatcher({ prompt: "go" }, dispatchCtx)
     ).rejects.toThrow(
-      /centraid-agent-failure:.*"harness":"acp".*"message":"no binary configured"/u
+      /centraid-delegate-failure:.*"harness":"acp".*"message":"no binary configured"/u
     );
   });
 
   test("typed automation failures survive a handler-worker stack suffix", async () => {
-    const { parseAutomationAgentFailure } =
+    const { parseAutomationDelegateFailure } =
       await import("./run-automation-live-dispatch.ts");
     expect(
-      parseAutomationAgentFailure(
-        'Error: centraid-agent-failure:{"harness":"codex","failureClass":"spawn","message":"missing"}\n' +
+      parseAutomationDelegateFailure(
+        'Error: centraid-delegate-failure:{"harness":"codex","failureClass":"spawn","message":"missing"}\n' +
           "    at MessagePort.<anonymous> (harness.js:71:25)"
       )
     ).toStrictEqual({
@@ -226,7 +226,7 @@ describe("run-automation-dispatch suite", () => {
     });
   });
 
-  test("ctx.agent never retries another provider inside the same turn", async () => {
+  test("ctx.delegate never retries another provider inside the same turn", async () => {
     const primary = stubBackendRunTurn("codex", (input) => {
       input.onEvent({ type: "error", message: "quota", failureClass: "quota" });
     });
@@ -259,8 +259,8 @@ describe("run-automation-dispatch suite", () => {
     });
     openDispatches.push(dispatch);
     await expect(
-      dispatch.agentDispatcher({ prompt: "go" }, dispatchCtx)
-    ).rejects.toThrow(/centraid-agent-failure:.*"failureClass":"quota"/u);
+      dispatch.delegateDispatcher({ prompt: "go" }, dispatchCtx)
+    ).rejects.toThrow(/centraid-delegate-failure:.*"failureClass":"quota"/u);
     expect(primary.calls[0]!.input).toMatchObject({
       model: "gpt-primary",
       configPins: { thought_level: "xhigh" },
@@ -271,15 +271,15 @@ describe("run-automation-dispatch suite", () => {
   // Issue #479 retired the bespoke `codex exec` / claude-SDK arms: every kind
   // now enters the same registry seam, so nothing spawns a CLI from this file.
   test.each(["codex", "claude-code"] as const)(
-    "ctx.agent on %s routes through the registry like every other kind",
+    "ctx.delegate on %s routes through the registry like every other kind",
     async (kind) => {
       const stub = stubBackendRunTurn(kind, (input) => {
         input.onEvent({ type: "final", text: "answer" });
       });
 
-      const { agentDispatcher } = await openDispatch(kind, "some-model");
+      const { delegateDispatcher } = await openDispatch(kind, "some-model");
       await expect(
-        agentDispatcher({ prompt: "go" }, dispatchCtx)
+        delegateDispatcher({ prompt: "go" }, dispatchCtx)
       ).resolves.toBe("answer");
       expect(stub.calls).toHaveLength(1);
       expect(stub.calls[0]?.config.prefs.kind).toBe(kind);
@@ -330,7 +330,7 @@ describe("run-automation-dispatch suite", () => {
       triggerKind: "scheduled",
       startedAt: 3,
     });
-    await bDispatch.agentDispatcher({ prompt: "run B" }, dispatchCtx);
+    await bDispatch.delegateDispatcher({ prompt: "run B" }, dispatchCtx);
     duringB.finishTurn({
       turnId: "b-turn",
       endedAt: 4,
@@ -362,7 +362,7 @@ describe("run-automation-dispatch suite", () => {
       triggerKind: "scheduled",
       startedAt: 5,
     });
-    await aDispatch.agentDispatcher({ prompt: "return to A" }, dispatchCtx);
+    await aDispatch.delegateDispatcher({ prompt: "return to A" }, dispatchCtx);
     duringA.finishTurn({ turnId: "a-return", endedAt: 6, ok: true });
     aDispatch.finalizeTurn(duringA, ref, "a-return", true);
     duringA.close();
@@ -441,7 +441,7 @@ describe("run-automation-dispatch suite", () => {
     });
 
     await expect(
-      dispatch.agentDispatcher({ prompt: "go" }, dispatchCtx)
+      dispatch.delegateDispatcher({ prompt: "go" }, dispatchCtx)
     ).resolves.toBe("ok");
     expect(stub.calls).toHaveLength(1);
     expect(consent.has("demo/nightly", "codex", "automations")).toBe(true);
@@ -458,7 +458,7 @@ describe("run-automation-dispatch suite", () => {
     });
 
     await expect(
-      dispatch.agentDispatcher({ prompt: "go" }, dispatchCtx)
+      dispatch.delegateDispatcher({ prompt: "go" }, dispatchCtx)
     ).resolves.toBe("ok");
     expect(stub.calls).toHaveLength(1);
   });
@@ -478,7 +478,7 @@ describe("run-automation-dispatch suite", () => {
     });
 
     await expect(
-      dispatch.agentDispatcher({ prompt: "go" }, dispatchCtx)
+      dispatch.delegateDispatcher({ prompt: "go" }, dispatchCtx)
     ).rejects.toThrow(/not consented/u);
     expect(stub.calls).toHaveLength(0);
   });
@@ -496,7 +496,7 @@ describe("run-automation-dispatch suite", () => {
     });
 
     await expect(
-      dispatch.agentDispatcher({ prompt: "go" }, dispatchCtx)
+      dispatch.delegateDispatcher({ prompt: "go" }, dispatchCtx)
     ).rejects.toThrow(/gemini/u);
     expect(stub.calls).toHaveLength(0);
     expect(consent.has("demo/nightly", "gemini", "automations")).toBe(false);

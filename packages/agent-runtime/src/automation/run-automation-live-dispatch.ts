@@ -1,23 +1,24 @@
 /*
- * Live `ctx.agent` dispatch for the local automation harness.
+ * Live `ctx.delegate` dispatch for the local automation harness.
  *
  * Split out of `run-automation.ts` so that file can stay focused on the
  * per-fire lifecycle (manifest load, audit store, onFailure cascade). This
- * module owns the one billed rail — `ctx.agent`, a bounded one-shot turn
+ * module owns the one billed rail — `ctx.delegate`, a bounded one-shot turn
  * against the user's real provider.
  *
- * Issue #479 — `ctx.agent` honours every registered harness kind through ONE
- * path: `getHarness(kind).runTurn`, the same seam chat uses. Pinning
+ * Issue #479 — `ctx.delegate` honours every registered harness kind through
+ * ONE path: `getHarness(kind).runTurn`, the same seam chat uses. Pinning
  * `harness.automations` to any kind actually drives that agent.
  *
  * Issue #484 — the `ctx.tool` rail was removed. It used to dispatch tool
  * batches to a persistent mock-LLM session that puppeted the claude/codex
  * CLIs; that mock HTTP server started eagerly per fire even when unused. It
- * is gone. A fire whose handler never calls `ctx.agent` now starts ZERO child
- * processes and ZERO HTTP servers: the deterministic rails (`ctx.vault`,
- * `ctx.fetch`, `ctx.state`, `ctx.runs`) are serviced in-process, parent-side.
- * The only thing this surface allocates lazily is a scratch dir — and only
- * when a `ctx.agent` call actually carries vault-derivative attachments.
+ * is gone. A fire whose handler never calls `ctx.delegate` now starts ZERO
+ * child processes and ZERO HTTP servers: the deterministic rails
+ * (`ctx.vault`, `ctx.fetch`, `ctx.state`, `ctx.runs`) are serviced
+ * in-process, parent-side. The only thing this surface allocates lazily is a
+ * scratch dir — and only when a `ctx.delegate` call actually carries
+ * vault-derivative attachments.
  *
  * Issue #91: an automation is a standalone app — the agent runs with the app
  * directory as cwd, and the dispatch context carries the automation id (no
@@ -58,7 +59,7 @@ export interface LiveDispatchOptions {
   journalDbFile: string;
   harness: HarnessKind;
   /**
-   * Model id/alias for `ctx.agent` calls (manifest `requires.model`, or the
+   * Model id/alias for `ctx.delegate` calls (manifest `requires.model`, or the
    * caller's prefs-resolved fallback — see `RunAutomationOptions.model`).
    * Undefined means "no override" — the backend's own default applies.
    */
@@ -85,7 +86,7 @@ export interface LiveDispatchOptions {
 }
 
 export interface LiveDispatch {
-  agentDispatcher: automation.AgentDispatcher;
+  delegateDispatcher: automation.DelegateDispatcher;
   finalizeTurn: (
     store: ConversationStore,
     conversationId: string,
@@ -97,20 +98,20 @@ export interface LiveDispatch {
   close: () => Promise<void>;
 }
 
-const AGENT_FAILURE_PREFIX = "centraid-agent-failure:";
+const DELEGATE_FAILURE_PREFIX = "centraid-delegate-failure:";
 
-export interface AutomationAgentFailure {
+export interface AutomationDelegateFailure {
   harness: HarnessKind;
   failureClass: HarnessFailureClass;
   message: string;
 }
 
 /** Preserve typed harness failure metadata through the handler worker boundary. */
-export function parseAutomationAgentFailure(
+export function parseAutomationDelegateFailure(
   error: string | undefined
-): AutomationAgentFailure | undefined {
+): AutomationDelegateFailure | undefined {
   if (!error) return undefined;
-  const at = error.indexOf(AGENT_FAILURE_PREFIX);
+  const at = error.indexOf(DELEGATE_FAILURE_PREFIX);
   if (at < 0) return undefined;
   try {
     // Handler workers preserve the original error text but append their own
@@ -118,7 +119,7 @@ export function parseAutomationAgentFailure(
     // JSON-encoded line (embedded newlines in `message` are escaped), so only
     // parse that line instead of letting a worker stack suppress failover.
     const payload = error
-      .slice(at + AGENT_FAILURE_PREFIX.length)
+      .slice(at + DELEGATE_FAILURE_PREFIX.length)
       .split(/\r?\n/u, 1)[0]
       ?.trim();
     const parsed = JSON.parse(payload ?? "") as {
@@ -133,22 +134,22 @@ export function parseAutomationAgentFailure(
     ) {
       return undefined;
     }
-    return parsed as AutomationAgentFailure;
+    return parsed as AutomationDelegateFailure;
   } catch {
     return undefined;
   }
 }
 
-function agentFailureError(failure: AutomationAgentFailure): Error {
-  return new Error(`${AGENT_FAILURE_PREFIX}${JSON.stringify(failure)}`);
+function delegateFailureError(failure: AutomationDelegateFailure): Error {
+  return new Error(`${DELEGATE_FAILURE_PREFIX}${JSON.stringify(failure)}`);
 }
 
 /**
- * Stand up the live dispatch surface for the CLI harness. `ctx.agent` routes to
- * the user's REAL provider through the harness registry; everything else on the
- * `ctx.*` surface is deterministic and serviced parent-side, so this allocates
- * nothing eagerly. The scratch dir is created lazily, only when a `ctx.agent`
- * call carries vault derivatives to stage.
+ * Stand up the live dispatch surface for the CLI harness. `ctx.delegate`
+ * routes to the user's REAL provider through the harness registry; everything
+ * else on the `ctx.*` surface is deterministic and serviced parent-side, so
+ * this allocates nothing eagerly. The scratch dir is created lazily, only
+ * when a `ctx.delegate` call carries vault derivatives to stage.
  */
 export async function startLiveDispatch(
   opts: LiveDispatchOptions
@@ -198,7 +199,7 @@ export async function startLiveDispatch(
   // multimodal Read path picks up — one mechanism for every harness, no
   // per-backend wire format. The scratch dir materializes only on first use.
   const stageAttachments = async (
-    call: automation.AgentCall
+    call: automation.DelegateCall
   ): Promise<{
     prompt: string;
     attachments?: Array<{ path: string; mime: string; filename?: string }>;
@@ -222,19 +223,19 @@ export async function startLiveDispatch(
     return { prompt: call.prompt, attachments };
   };
 
-  // ctx.agent routes to the user's REAL provider through the SAME harness
+  // ctx.delegate routes to the user's REAL provider through the SAME harness
   // registry chat uses — one integration path for every kind (issue #479).
   // `runTurn` normalizes each agent's stream into TurnStreamEvents, so this
   // reads `final` / `error` and coerces the answer with no per-backend wire
   // format anywhere in this file.
   //
   // Two deliberate limits. (1) ACP has no `--output-schema` equivalent, so
-  // `call.json` is enforced by `coerceAgentAnswer` alone. (2) A fire carries
+  // `call.json` is enforced by `coerceDelegateAnswer` alone. (2) A fire carries
   // only the harness KIND (the gateway drops binPath / extraArgs for every
   // kind), so the backend resolves its default binary off PATH. The custom
   // `acp` kind has no default binary and therefore surfaces a clear `error`
   // event, raised below.
-  const agentDispatcher: automation.AgentDispatcher = async (
+  const delegateDispatcher: automation.DelegateDispatcher = async (
     call,
     ctx
   ): Promise<unknown> => {
@@ -256,7 +257,7 @@ export async function startLiveDispatch(
               "automations"
             ) ?? false);
       if (!derived) {
-        throw agentFailureError({
+        throw delegateFailureError({
           harness,
           failureClass: "unknown",
           message:
@@ -270,7 +271,7 @@ export async function startLiveDispatch(
     const scope = opts.harnessHealthContext ?? opts.workdir;
     const breaker = opts.harnessHealth?.canAttempt(scope, harness);
     if (breaker && !breaker.allowed) {
-      throw agentFailureError({
+      throw delegateFailureError({
         harness,
         failureClass: breaker.failureClass ?? "unknown",
         message: `Harness breaker is open${breaker.breakerUntil ? ` until ${new Date(breaker.breakerUntil).toISOString()}` : ""}.`,
@@ -412,9 +413,9 @@ export async function startLiveDispatch(
         latestHarness = observedHarness;
       }
       opts.harnessHealth?.reportOk(scope, harness);
-      return automation.coerceAgentAnswer(finalText, call.json);
+      return automation.coerceDelegateAnswer(finalText, call.json);
     }
-    const typedFailure: AutomationAgentFailure = {
+    const typedFailure: AutomationDelegateFailure = {
       harness,
       failureClass: failure.failureClass ?? "unknown",
       message: failure.message,
@@ -425,12 +426,12 @@ export async function startLiveDispatch(
       typedFailure.failureClass,
       typedFailure.message
     );
-    throw agentFailureError(typedFailure);
+    throw delegateFailureError(typedFailure);
   };
 
   let closed = false;
   return {
-    agentDispatcher,
+    delegateDispatcher,
     finalizeTurn(store, conversationId, turnId, ok): void {
       if (hydrationTokens > 0) {
         store.setTurnHydrationTokens(turnId, hydrationTokens);

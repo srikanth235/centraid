@@ -399,7 +399,7 @@ describe("ConversationStore — turns", () => {
     store.close();
   });
 
-  it("finishTurn rolls up step/agent tokens + step/tool counts", () => {
+  it("finishTurn rolls up step/delegate tokens + step/tool counts", () => {
     const store = newStore();
     const c = store.createConversation({
       kind: "automation",
@@ -416,8 +416,8 @@ describe("ConversationStore — turns", () => {
       turnId: "r",
       itemId: "i1",
       ordinal: 0,
-      kind: "agent",
-      name: "agent",
+      kind: "delegate",
+      name: "delegate",
       startedAt: 1,
     });
     store.closeItem({

@@ -325,7 +325,7 @@ export default async function handler({ ctx, log }) {
     }
     let regions;
     if (agentVariant) {
-      const answer = await ctx.agent({
+      const answer = await ctx.delegate({
         prompt:
           "Transcribe all visible text in reading order. Return regions with text and optional [x,y,w,h] boxes; never invent confidence.",
         json: {

@@ -72,7 +72,7 @@ describe("live-automation-failover suite", () => {
       await writeFile(
         path.join(automationDir, "handler.js"),
         `export default async ({ ctx }) => ({
-        output: await ctx.agent({
+        output: await ctx.delegate({
           prompt: 'Reply with exactly AUTOMATION_FAILOVER_OK_567. Do not use tools.'
         })
       });`
@@ -157,7 +157,7 @@ describe("live-automation-failover suite", () => {
       expect(result.outcome.ok).toBe(true);
       expect(output).toContain("AUTOMATION_FAILOVER_OK_567");
       expect(primaryTurn).toMatchObject({ turnId: baseRunId, ok: false });
-      expect(primaryTurn?.error).toContain("centraid-agent-failure:");
+      expect(primaryTurn?.error).toContain("centraid-delegate-failure:");
       expect(fallbackTurn).toMatchObject({ turnId: fallbackRunId, ok: true });
       expect(fallbackTurn?.note).toContain("spawn");
       expect(failovers).toStrictEqual([

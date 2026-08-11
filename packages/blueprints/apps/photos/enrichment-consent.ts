@@ -219,7 +219,7 @@ export type AnswerAvailability = SharedAnswerAvailability;
  * fired (`packages/automation/src/fire/fire.ts`, deciding through
  * `fire/enrich-gate.ts` on the vault tier read by
  * `packages/vault/src/enrich/policy.ts`): `off` refuses the run, `device`
- * refuses any run that would need the `gateway` lane — and seals `ctx.agent`
+ * refuses any run that would need the `gateway` lane — and seals `ctx.delegate`
  * shut for the ones it does allow — and an unreadable policy refuses too.
  * Nothing here enforces anything; withholding an answer is still the right
  * UI, but it is no longer the only thing standing between a `device` vault

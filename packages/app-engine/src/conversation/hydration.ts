@@ -104,7 +104,7 @@ export function hydrationMessagesFromLedger(
         });
         continue;
       }
-      if (item.kind === "step" || item.kind === "agent") {
+      if (item.kind === "step" || item.kind === "delegate") {
         if (item.kind === "step" && item.name?.startsWith("notice:")) continue;
         const text = outputText(item.outputJson);
         if (!text) continue;

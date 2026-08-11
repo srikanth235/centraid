@@ -5,17 +5,17 @@
  * The per-fire orchestration (resolve the automation, open its ledger, run
  * `handler.js`, cascade `onFailure`) lives in `@centraid/automation`'s `runFire`
  * — it only touches app-engine primitives. The one thing it needs from
- * agent-runtime is the `ctx.agent` dispatch surface: a bounded model turn
+ * agent-runtime is the `ctx.delegate` dispatch surface: a bounded model turn
  * against the user's real provider. This file builds that surface (capturing
  * the harness kind) and injects it as `openDispatch`, leaving the spine — and
  * the onFailure cascade — to app-engine.
  *
  * The captured kind is any registered `HarnessKind`: `startLiveDispatch` routes
- * `ctx.agent` through the `HarnessSpec` registry (issue #479). `'codex'`
+ * `ctx.delegate` through the `HarnessSpec` registry (issue #479). `'codex'`
  * remains the default only because a caller that names no harness gets the
  * historical one. Issue #484 removed the `ctx.tool` rail (and the eager
  * mock-LLM server it spawned per fire), so a fire whose handler never calls
- * `ctx.agent` starts zero child processes and zero HTTP servers.
+ * `ctx.delegate` starts zero child processes and zero HTTP servers.
  */
 
 import { randomUUID } from "node:crypto";
@@ -34,7 +34,7 @@ import * as automation from "@centraid/automation";
 
 import type { HarnessKind } from "../types.js";
 import {
-  parseAutomationAgentFailure,
+  parseAutomationDelegateFailure,
   startLiveDispatch,
 } from "./run-automation-live-dispatch.js";
 
@@ -80,7 +80,7 @@ export interface RunAutomationOptions {
    */
   harnessSelectionSource?: "prefs" | "manifest";
   /**
-   * Fallback model id/alias for this fire's `ctx.agent` calls, applied only
+   * Fallback model id/alias for this fire's `ctx.delegate` calls, applied only
    * when the automation's manifest doesn't set `requires.model` (that always
    * wins — see `runFire`'s `OpenDispatchArgs.model`). The caller resolves
    * this from prefs (`model.<harnessKind>.automations` → `model.<harnessKind>.default`)
@@ -90,7 +90,7 @@ export interface RunAutomationOptions {
   model?: string;
   /** Semantic ACP configuration pins resolved for the automation subsystem. */
   configPins?: Readonly<Record<string, string>>;
-  /** Ordered, pre-consented fallback harnesses for ctx.agent calls. */
+  /** Ordered, pre-consented fallback harnesses for ctx.delegate calls. */
   harnessLadder?: readonly HarnessKind[];
   /** Load launch settings/default pins for each failover rung. */
   harnessPrefsFor?: (harness: HarnessKind) => Promise<HarnessPrefs | undefined>;
@@ -183,7 +183,7 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
   const runRung = async (index: number): Promise<void> => {
     const harness = ladder[index]!;
     const isPrimary = index === 0;
-    // A known-open breaker is decided BEFORE the handler runs. `ctx.agent`
+    // A known-open breaker is decided BEFORE the handler runs. `ctx.delegate`
     // checks it too, but by then the handler's earlier side effects
     // (`ctx.fetch`, vault writes) have already landed and the next rung would
     // replay them. Scoped only when the caller supplied the same health
@@ -308,12 +308,12 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
           : {}),
         deferOnFailure: (outcome) =>
           index < ladder.length - 1 &&
-          parseAutomationAgentFailure(outcome.error) !== undefined,
+          parseAutomationDelegateFailure(outcome.error) !== undefined,
       },
       { openDispatch }
     );
 
-    const failure = parseAutomationAgentFailure(last.outcome.error);
+    const failure = parseAutomationDelegateFailure(last.outcome.error);
     const next = ladder[index + 1];
     if (!failure || !next) return;
     const nextRunId = `${baseRunId}:failover:${index + 1}:${next}`;

@@ -17,7 +17,7 @@
  * runs, and WHETHER it talks to a third party. The gateway is the member's
  * own infrastructure — part of their trust domain, same as their phone —
  * and running *on* it is not by itself egress. What IS egress is a harness
- * that talks to a THIRD-PARTY PROVIDER over the network. `ctx.agent`
+ * that talks to a THIRD-PARTY PROVIDER over the network. `ctx.delegate`
  * dispatches through the harness registry (`HARNESS_KINDS` in app-engine:
  * codex, claude-code, gemini, qwen, opencode, grok, kimi, copilot, cursor,
  * kilo, cline, goose, auggie, vibe, droid, pi, acp) — every harness shipped
@@ -44,7 +44,7 @@
  * So the axis reads: `off` — nothing runs. `device` — the member's phone or
  * laptop may do device-lease work; the gateway may do its own deterministic
  * work; no harness call is allowed. `gateway` — the member's own gateway may
- * additionally do whatever it is already wired to, including a `ctx.agent`
+ * additionally do whatever it is already wired to, including a `ctx.delegate`
  * turn through the harness registry — which, for every harness shipped today,
  * reaches a third-party provider. There is no separate `provider` tier:
  * provider egress is enforced per call at the dispatcher (#567) and per
@@ -61,7 +61,7 @@
  * gateway-lane enricher shipped in blueprints (doc-text-extractor,
  * doc-entity-linker, doc-filer, obligation-extractor) stops running — each of
  * them declares
- * `enrich.lane: "gateway"` because each one takes a `ctx.agent` model turn,
+ * `enrich.lane: "gateway"` because each one takes a `ctx.delegate` model turn,
  * and every harness in this build's registry routes that turn to a
  * third-party provider. `gateway` is the seeded default for a freshly
  * bootstrapped vault (`packages/vault/src/bootstrap.ts`); each of those
@@ -80,7 +80,7 @@ export type EnrichDomain = (typeof ENRICH_DOMAINS)[number];
 /**
  * Which lane an enricher's work runs in — the same two non-`off` points on
  * the tier axis, restated as what the ENRICHER needs rather than what the
- * OWNER allows. `gateway` needs a `ctx.agent` turn through the harness
+ * OWNER allows. `gateway` needs a `ctx.delegate` turn through the harness
  * registry, which every harness shipped today routes to a third-party
  * provider. `device` is deterministic and/or device-lease work that reaches
  * no provider. Manifests that omit it are read as `gateway` — assuming the
@@ -116,7 +116,7 @@ export type EnrichGateDecision =
   | {
       readonly allowed: true;
       /**
-       * True under `device`: the fire may run, but every `ctx.agent` call
+       * True under `device`: the fire may run, but every `ctx.delegate` call
        * must be refused. `runFire` wraps the dispatch surface accordingly.
        */
       readonly sealModelTurns: boolean;
@@ -159,13 +159,13 @@ export function decideEnrichmentGate(
   return { allowed: true, sealModelTurns: input.tier !== "gateway" };
 }
 
-/** What a `ctx.agent` call is told when the `device` tier sealed model turns. */
+/** What a `ctx.delegate` call is told when the `device` tier sealed model turns. */
 export function sealedModelTurnReason(
   automationRef: string,
   domain: EnrichDomain
 ): string {
   return (
-    `${automationRef}: ctx.agent is refused — enrichment for "${domain}" is set to "device" in this vault, ` +
+    `${automationRef}: ctx.delegate is refused — enrichment for "${domain}" is set to "device" in this vault, ` +
     `and a model turn in this runtime always routes to a third-party provider.`
   );
 }

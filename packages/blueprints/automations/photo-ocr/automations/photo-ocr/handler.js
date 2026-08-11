@@ -630,7 +630,7 @@ async function cK({ ctx: K, log: Q }) {
     }
     let _;
     if (Z) {
-      let N = await K.agent({
+      let N = await K.delegate({
         prompt:
           "Transcribe all visible text in reading order. Return regions with text and optional [x,y,w,h] boxes; never invent confidence.",
         json: {

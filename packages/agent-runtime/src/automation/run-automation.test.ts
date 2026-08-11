@@ -32,7 +32,7 @@ function fireResult(input: {
       ...(input.error === undefined ? {} : { error: input.error }),
       logs: [],
       toolBatches: 0,
-      agentCalls: 0,
+      delegateCalls: 0,
     },
     record: {
       automationRef: "app/a",
@@ -44,14 +44,14 @@ function fireResult(input: {
       ok: input.ok,
       ...(input.error === undefined ? {} : { error: input.error }),
       toolBatches: 0,
-      agentCalls: 0,
+      delegateCalls: 0,
     },
   };
 }
 const liveDispatch = vi.hoisted(() => ({
   start: vi.fn<(options: LiveDispatchOptions) => Promise<LiveDispatch>>(
     async () => ({
-      agentDispatcher: async () => ({ text: "ok" }),
+      delegateDispatcher: async () => ({ text: "ok" }),
       finalizeTurn: () => undefined,
       close: async () => undefined,
     })
@@ -68,8 +68,8 @@ vi.mock(
   async (importOriginal) => ({
     ...(await importOriginal()),
     startLiveDispatch: liveDispatch.start,
-    parseAutomationAgentFailure: (error: string | undefined) => {
-      const prefix = "centraid-agent-failure:";
+    parseAutomationDelegateFailure: (error: string | undefined) => {
+      const prefix = "centraid-delegate-failure:";
       if (!error?.startsWith(prefix)) return undefined;
       return JSON.parse(error.slice(prefix.length));
     },
@@ -163,7 +163,7 @@ describe("run-automation suite", () => {
 
     it("re-enters a failed automation on the next ladder rung as a new ledger turn", async () => {
       const failure =
-        'centraid-agent-failure:{"harness":"codex","failureClass":"quota","message":"limit"}';
+        'centraid-delegate-failure:{"harness":"codex","failureClass":"quota","message":"limit"}';
       runFire
         .mockResolvedValueOnce(
           fireResult({ ok: false, runId: "run-fire", error: failure })
@@ -209,7 +209,7 @@ describe("run-automation suite", () => {
 
     it("keeps the caller trigger note alongside the failover notice", async () => {
       const failure =
-        'centraid-agent-failure:{"harness":"codex","failureClass":"quota","message":"limit"}';
+        'centraid-delegate-failure:{"harness":"codex","failureClass":"quota","message":"limit"}';
       runFire
         .mockResolvedValueOnce(
           fireResult({ ok: false, runId: "run-fire", error: failure })

@@ -8,7 +8,7 @@
  * primitives (`parseRef`, `AgentRunsStore`,
  * `runHandler`). That spine used to live in
  * `agent-runtime/run-automation.ts`; the only thing it genuinely needed from
- * agent-runtime was the `ctx.agent` dispatch surface (a bounded model turn
+ * agent-runtime was the `ctx.delegate` dispatch surface (a bounded model turn
  * through the harness registry). So the spine moves down and the dispatch
  * surface is injected via `openDispatch` — the same dependency inversion the
  * `Host` / `ConversationRunner` seams already use.
@@ -16,7 +16,7 @@
  * agent-runtime's `runAutomation` is now a thin wrapper that builds the
  * `openDispatch` closure (capturing the harness kind) and calls `runFire`. A
  * future host can inject its own dispatch surface instead of reimplementing
- * the spine. A fire whose handler never calls `ctx.agent` starts zero child
+ * the spine. A fire whose handler never calls `ctx.delegate` starts zero child
  * processes and zero HTTP servers.
  */
 
@@ -32,7 +32,7 @@ import type {
 
 import { runHandler } from "../handler/runner.js";
 import type {
-  AgentDispatcher,
+  DelegateDispatcher,
   ConnectionAuth,
   HandlerOutcome,
 } from "../handler/runner.js";
@@ -62,7 +62,7 @@ export type ResolveConnection = (connector: {
  * down whatever the host allocated and is always called once, even on throw.
  */
 export interface DispatchSurface {
-  agentDispatcher: AgentDispatcher;
+  delegateDispatcher: DelegateDispatcher;
   /**
    * Optional host-owned binding/watermark finalizer. `runHandler` invokes it
    * inside the same SQLite transaction that settles the turn.
@@ -86,9 +86,9 @@ export interface OpenDispatchArgs {
   /** Harness fixed to this automation conversation. */
   harnessKind?: string;
   /**
-   * Manifest `requires.model` — the capability tier `ctx.agent` should route
-   * to (issue #166). The host's `agentDispatcher` picks the matching provider
-   * tier; undefined means "the host's default automation model".
+   * Manifest `requires.model` — the capability tier `ctx.delegate` should
+   * route to (issue #166). The host's `delegateDispatcher` picks the matching
+   * provider tier; undefined means "the host's default automation model".
    */
   model?: string;
   /** Semantic ACP configuration pins, keyed by capability category. */
@@ -244,7 +244,7 @@ export interface RunRecord {
   ok: boolean;
   error?: string;
   toolBatches: number;
-  agentCalls: number;
+  delegateCalls: number;
 }
 
 /**
@@ -321,7 +321,7 @@ export async function runFire(
       error,
       logs: [],
       toolBatches: 0,
-      agentCalls: 0,
+      delegateCalls: 0,
     };
     return {
       outcome: outcomeSkipped,
@@ -335,7 +335,7 @@ export async function runFire(
         ok: false,
         error,
         toolBatches: 0,
-        agentCalls: 0,
+        delegateCalls: 0,
       },
     };
   };
@@ -380,7 +380,7 @@ export async function runFire(
   // refuses, and an unreadable/unknown tier refuses. See `enrich-gate.ts`
   // for what `local` means in this runtime and why.
   const enrich = row.manifest.enrich;
-  /** Set under the `local` tier: the domain whose promise seals `ctx.agent`. */
+  /** Set under the `local` tier: the domain whose promise seals `ctx.delegate`. */
   let sealedDomain: EnrichDomain | undefined;
   if (enrich) {
     let tier: EnrichTier | undefined;
@@ -426,17 +426,17 @@ export async function runFire(
   });
 
   // The `local` tier's backstop: the fire may run its deterministic /
-  // device-lease work, but a model turn is provider egress, so `ctx.agent` is
-  // sealed shut rather than left to a handler's good manners. A handler that
-  // reaches for one fails loudly with the reason instead of egressing.
+  // device-lease work, but a model turn is provider egress, so `ctx.delegate`
+  // is sealed shut rather than left to a handler's good manners. A handler
+  // that reaches for one fails loudly with the reason instead of egressing.
   const sealed = sealedDomain;
-  const agentDispatcher: AgentDispatcher = sealed
+  const delegateDispatcher: DelegateDispatcher = sealed
     ? () => {
         const reason = sealedModelTurnReason(opts.automationRef, sealed);
         onLog("warn", reason);
         return Promise.reject(new Error(reason));
       }
-    : dispatch.agentDispatcher;
+    : dispatch.delegateDispatcher;
 
   // Honest liveness (issue #290 phase 4): a paused or needs-auth connection
   // never fires its connector — the skip is logged, and since connectors are
@@ -542,7 +542,7 @@ export async function runFire(
       handlerFile: handlerPath(row.dir),
       runId,
       now: new Date(startedAt).toISOString(),
-      agentDispatcher,
+      delegateDispatcher,
       runsStore,
       ...(dispatch.finalizeTurn ? { finalizeTurn: dispatch.finalizeTurn } : {}),
       ...(opts.harnessKind ? { harnessKind: opts.harnessKind } : {}),
@@ -686,7 +686,7 @@ export async function runFire(
     ok: outcome.ok,
     ...(outcome.error ? { error: outcome.error } : {}),
     toolBatches: outcome.toolBatches,
-    agentCalls: outcome.agentCalls,
+    delegateCalls: outcome.delegateCalls,
   };
   const output =
     outcome.output !== null &&

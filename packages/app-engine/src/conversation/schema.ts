@@ -51,10 +51,12 @@ export type AutomationTriggerOrigin =
  * Item discriminator. `message_in` is the inbound message — a person typing,
  * a webhook firing, a cron tick — recorded as ordinal 0 of the turn
  * (issue #190). `step` is one primary model-inference call — per-call token +
- * cost accounting lives at this grain. `tool` / `agent` are per-call audit
- * rows.
+ * cost accounting lives at this grain. `tool` / `delegate` are per-call audit
+ * rows. (`delegate` was `agent` before issue #743 — the ledger accepts mixed
+ * historical values from journals written before the rename; only the
+ * writer/reader vocabulary moved, not old rows.)
  */
-export type ItemKind = "message_in" | "step" | "tool" | "agent";
+export type ItemKind = "message_in" | "step" | "tool" | "delegate";
 
 /**
  * The durable record holding the turns of one execution. Was `chat_sessions`,
@@ -183,7 +185,7 @@ export interface Turn {
   readonly pinned: boolean;
   /**
    * Denormalized rollup, written at finish. Token sums + cost are Σ over this
-   * turn's own `kind IN ('step','agent')` items. Null on an in-flight or
+   * turn's own `kind IN ('step','delegate')` items. Null on an in-flight or
    * crashed turn.
    */
   readonly totalInputTokens?: number;
@@ -210,7 +212,7 @@ export interface Item {
   readonly role?: "user" | "assistant";
   /** `message_in` payload text. (Assistant step text stays in `outputJson`.) */
   readonly text?: string;
-  /** The tool name or `'agent'`. Absent for `kind: 'step'` / `'message_in'`. */
+  /** The tool name or `'delegate'`. Absent for `kind: 'step'` / `'message_in'`. */
   readonly name?: string;
   readonly argsJson?: string;
   readonly outputJson?: string;
@@ -221,12 +223,12 @@ export interface Item {
   readonly startedAt: number;
   readonly endedAt?: number;
   readonly durationMs?: number;
-  /** `step` / `agent` — per-call token usage. */
+  /** `step` / `delegate` — per-call token usage. */
   readonly inputTokens?: number;
   readonly outputTokens?: number;
   readonly cacheReadTokens?: number;
   readonly cacheWriteTokens?: number;
-  /** `step` / `agent` — the confirmed model, harness, and effort that served the call. */
+  /** `step` / `delegate` — the confirmed model, harness, and effort that served the call. */
   readonly model?: string;
   readonly provider?: string;
   readonly effort?: string;
@@ -234,9 +236,9 @@ export interface Item {
   readonly costUsd?: number;
   /** Issue #514 — where `costUsd` came from. */
   readonly costSource?: "agent" | "estimated";
-  /** `tool` / `agent` — the app whose data the call touched. */
+  /** `tool` / `delegate` — the app whose data the call touched. */
   readonly appId?: string;
-  /** `agent` — the turn id of a child turn this item spawned (sub-agent). */
+  /** `delegate` — the turn id of a child turn this item spawned (sub-agent). */
   readonly childTurnId?: string;
 }
 

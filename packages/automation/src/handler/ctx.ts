@@ -22,8 +22,8 @@ import {
 } from "./audit.js";
 import type { RunEventSink } from "./audit.js";
 import type {
-  AgentAttachment,
-  AgentDispatcher,
+  DelegateAttachment,
+  DelegateDispatcher,
   DispatchContext,
 } from "./runner.js";
 
@@ -46,31 +46,31 @@ export interface CtxReply {
   error?: string;
 }
 
-/** One `ctx.agent` content reference, as the worker sent it (issue #299). */
-export interface AgentContentRef {
+/** One `ctx.delegate` content reference, as the worker sent it (issue #299). */
+export interface DelegateContentRef {
   contentId: string;
   variant: string;
   maxBytes?: number;
 }
 
 /**
- * Resolve `ctx.agent` content refs into attachments through the vault
+ * Resolve `ctx.delegate` content refs into attachments through the vault
  * bridge (issue #299 §2): each fetch runs under the automation's grant and
  * is receipted host-side as its own consent event. Resolution is
- * fail-closed — a denied or missing derivative fails the agent call with
+ * fail-closed — a denied or missing derivative fails the delegate call with
  * the reason (and receipt id) in the error, never a silent partial prompt.
  */
 export async function resolveContentAttachments(
   vault: VaultBridge | undefined,
-  refs: readonly AgentContentRef[]
-): Promise<AgentAttachment[]> {
+  refs: readonly DelegateContentRef[]
+): Promise<DelegateAttachment[]> {
   // A content-free call needs no vault authority. In particular, recognition
   // capability probes use the same resolver with an empty list before the
   // reserved deterministic executor checks the addressed capability.
   if (refs.length === 0) return [];
   if (!vault) {
     throw new Error(
-      "ctx.agent content refs need a vault surface — the host mounted no vault plane"
+      "ctx.delegate content refs need a vault surface — the host mounted no vault plane"
     );
   }
   return Promise.all(
@@ -118,19 +118,19 @@ export async function resolveContentAttachments(
 }
 
 /**
- * Service one `ctx.agent` call: open an `agent` run node, dispatch, forward
- * streamed chat events as `item.delta`, and settle the item with the
+ * Service one `ctx.delegate` call: open a `delegate` run node, dispatch,
+ * forward streamed chat events as `item.delta`, and settle the item with the
  * token/model rollup. Returns the reply the runner sends back to the worker.
  * Extracted from the runner so each file stays under the repo-hygiene line
  * cap (issue #166).
  */
-export async function handleAgentMessage(
+export async function handleDelegateMessage(
   audit: AuditState,
   dispatchCtx: DispatchContext,
-  agentDispatcher: AgentDispatcher,
+  delegateDispatcher: DelegateDispatcher,
   prompt: string,
   json: unknown,
-  content?: readonly AgentContentRef[],
+  content?: readonly DelegateContentRef[],
   vault?: VaultBridge
 ): Promise<CtxReply> {
   const ordinal = nextOrdinal(audit);
@@ -141,8 +141,8 @@ export async function handleAgentMessage(
     emit: audit.emit,
     runId: audit.runId,
     ordinal,
-    kind: "agent",
-    name: "agent",
+    kind: "delegate",
+    name: "delegate",
     args: { prompt, ...(content?.length ? { content } : {}) },
     started,
   });
@@ -250,7 +250,7 @@ export async function handleAgentMessage(
     const attachments = content?.length
       ? await resolveContentAttachments(vault, content)
       : undefined;
-    const result = await agentDispatcher(
+    const result = await delegateDispatcher(
       { prompt, json, ...(attachments ? { attachments } : {}), onEvent },
       dispatchCtx
     );

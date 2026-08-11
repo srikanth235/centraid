@@ -1274,7 +1274,7 @@ export interface CentraidAutomationItem {
   ordinal: number;
   callId?: string;
   batchId?: number;
-  kind: "message_in" | "step" | "tool" | "agent";
+  kind: "message_in" | "step" | "tool" | "delegate";
   role?: "user" | "assistant";
   text?: string;
   /** Tool target. Absent for `kind: 'step'` / `message_in`. */
@@ -1291,7 +1291,7 @@ export interface CentraidAutomationItem {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
-  /** `step` / `agent` — the model + provider that served the call. */
+  /** `step` / `delegate` — the model + provider that served the call. */
   model?: string;
   provider?: string;
   /** Frozen at write time; NULL = no price known. */
@@ -1852,7 +1852,7 @@ declare global {
     ordinal: number;
     callId?: string;
     batchId?: number;
-    kind: "message_in" | "step" | "tool" | "agent";
+    kind: "message_in" | "step" | "tool" | "delegate";
     role?: "user" | "assistant";
     text?: string;
     name?: string;

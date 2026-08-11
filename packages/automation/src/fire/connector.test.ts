@@ -3,7 +3,7 @@ import type * as TypeImport_rdfcd1 from "node:http";
 // governance: allow-repo-hygiene file-size-limit one suite over the whole connector contract — manifest, secret injection (#293) and connection-credential injection (#304) share the runFire fixture
 /*
  * Connector broker invariants (issue #290 phase 4): manifest contract
- * (connector needs a vault block), ctx.agent forbidden in connector handlers,
+ * (connector needs a vault block), ctx.delegate forbidden in connector handlers,
  * and the honest-liveness fire gate (paused/needs-auth connections never run
  * their connector).
  */
@@ -120,15 +120,15 @@ describe("connector runtime gates", () => {
 
   const openDispatch = () => (_args: OpenDispatchArgs) =>
     Promise.resolve({
-      agentDispatcher: async () => "should never run",
+      delegateDispatcher: async () => "should never run",
       close: async () => undefined,
     } satisfies DispatchSurface);
 
-  it("forbids ctx.agent in connector handlers", async () => {
+  it("forbids ctx.delegate in connector handlers", async () => {
     await writeConnector(
       `export default async ({ ctx }) => {
          try {
-           await ctx.agent({ prompt: 'summarize my mail' });
+           await ctx.delegate({ prompt: 'summarize my mail' });
            return { reached: true };
          } catch (err) {
            return { reached: false, reason: err.message };
@@ -624,7 +624,7 @@ describe("connector secrets (issue #293)", () => {
 
   const noDispatch = () =>
     Promise.resolve({
-      agentDispatcher: async () => "never",
+      delegateDispatcher: async () => "never",
       close: async () => undefined,
     } satisfies DispatchSurface);
 
@@ -893,7 +893,7 @@ describe("broker-injected connection credentials (issue #304)", () => {
 
   const noDispatch = () =>
     Promise.resolve({
-      agentDispatcher: async () => "never",
+      delegateDispatcher: async () => "never",
       close: async () => undefined,
     } satisfies DispatchSurface);
 
@@ -1226,7 +1226,7 @@ describe("read-only ceiling on injected fetches (issue #304 phase 5)", () => {
 
   const noDispatch = () =>
     Promise.resolve({
-      agentDispatcher: async () => "never",
+      delegateDispatcher: async () => "never",
       close: async () => undefined,
     } satisfies DispatchSurface);
 

@@ -959,7 +959,7 @@ function AutomationRow({
         {row.manifest.requires.model && (
           <span
             className={styles.automationMetaItem}
-            title="Model used by ctx.agent calls"
+            title="Model used by ctx.delegate calls"
           >
             {row.manifest.requires.model}
           </span>

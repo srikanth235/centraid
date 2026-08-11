@@ -45,14 +45,14 @@ export interface ManifestRequires {
   /** MCP server ids the handler requires (`["github", "linear"]`). */
   readonly mcps?: readonly string[];
   /**
-   * Coding-agent harness used by compile, interactive turns, and `ctx.agent`.
+   * Coding-agent harness used by compile, interactive turns, and `ctx.delegate`.
    * This is an open registry key: manifests validate only that it is non-empty;
    * the executing gateway decides whether the key is registered and otherwise
    * falls back to the automations subsystem preference.
    */
   readonly harness?: string;
   /**
-   * Model the `ctx.agent` calls should route through. Format: `provider/model-id`
+   * Model the `ctx.delegate` calls should route through. Format: `provider/model-id`
    * (`"anthropic/claude-3-5-sonnet"`, `"openai/gpt-4o"`). Must not target the
    * mock provider (`centraid-mock/*`) — that would recurse into the mock
    * StreamFn. Validation rejects it.
@@ -95,7 +95,7 @@ export interface ManifestEnrich {
    */
   readonly capability: string;
   /**
-   * `model` = the handler takes a `ctx.agent` turn (provider egress).
+   * `model` = the handler takes a `ctx.delegate` turn (provider egress).
    * `device` = deterministic / device-lease work only. Omitted reads as
    * `model`: assuming the cheaper lane would be assuming consent.
    */
@@ -457,7 +457,7 @@ export interface HistoryConfig {
  * Connector declaration (issue #290 phase 4): this automation is a PUBLISHED
  * CONNECTOR — deterministic code syncing one external source into the vault.
  * The broker invariants hang off this block:
- *   - `ctx.agent` is forbidden at runtime (agents write code, not data —
+ *   - `ctx.delegate` is forbidden at runtime (agents write code, not data —
  *     an LLM turn inside a sync loop breaks determinism, cost and audit);
  *   - external reads ride `ctx.fetch` (broker-injected, host-pinned,
  *     read-only) and external writes are STAGED through the outbox;
@@ -481,7 +481,7 @@ export interface ConnectorSpec {
 
 /**
  * Soft binding for agent-using automations that need a vault credential
- * without becoming a published connector (which forbids `ctx.agent`).
+ * without becoming a published connector (which forbids `ctx.delegate`).
  * Distinct from `connector` — those are deterministic pull/send loops.
  */
 export interface ConnectionBinding {

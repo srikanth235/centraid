@@ -71,7 +71,7 @@ describe("enrichment tier gate", () => {
     return (args: OpenDispatchArgs): Promise<DispatchSurface> => {
       opened.push(args);
       return Promise.resolve({
-        agentDispatcher: () => Promise.resolve("a model answer"),
+        delegateDispatcher: () => Promise.resolve("a model answer"),
         close: () => Promise.resolve(),
       });
     };
@@ -153,7 +153,7 @@ describe("enrichment tier gate", () => {
     const { outcome, opened } = await fire({
       lane: "gateway",
       resolveEnrichPolicy: () => "gateway",
-      handler: `export default async ({ ctx }) => ({ output: await ctx.agent({ prompt: 'find faces' }) });`,
+      handler: `export default async ({ ctx }) => ({ output: await ctx.delegate({ prompt: 'find faces' }) });`,
     });
 
     expect(outcome.ok).toBe(true);
@@ -161,11 +161,11 @@ describe("enrichment tier gate", () => {
     expect(opened).toHaveLength(1);
   });
 
-  it("runs a device-lane enricher under device but seals ctx.agent shut", async () => {
+  it("runs a device-lane enricher under device but seals ctx.delegate shut", async () => {
     const { outcome } = await fire({
       lane: "device",
       resolveEnrichPolicy: () => "device",
-      handler: `export default async ({ ctx }) => ({ output: await ctx.agent({ prompt: 'sneak a model turn' }) });`,
+      handler: `export default async ({ ctx }) => ({ output: await ctx.delegate({ prompt: 'sneak a model turn' }) });`,
     });
 
     // The fire was allowed to start (deterministic work is device-tier
@@ -173,7 +173,7 @@ describe("enrichment tier gate", () => {
     // reaching a provider.
     expect(outcome.skipped).toBeUndefined();
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toContain("ctx.agent is refused");
+    expect(outcome.error).toContain("ctx.delegate is refused");
   });
 
   it("refuses an explicit agent variant until the owner pins a model", async () => {

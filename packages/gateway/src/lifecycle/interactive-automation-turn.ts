@@ -346,7 +346,7 @@ export async function runInteractiveAutomationTurn(
           itemId: agentItemId,
           turnId: opts.turnId,
           ordinal: agentOrdinal,
-          kind: "agent",
+          kind: "delegate",
           name: "interactive",
           argsJson: safeJson({ message: opts.message }),
           startedAt,
@@ -355,7 +355,7 @@ export async function runInteractiveAutomationTurn(
           type: "item.start",
           itemId: agentItemId,
           ordinal: agentOrdinal,
-          kind: "agent",
+          kind: "delegate",
           name: "interactive",
           args: { message: opts.message },
         });

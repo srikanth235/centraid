@@ -85,7 +85,7 @@ export function repriceLedger(
       `SELECT rowid, turn_id, model, input_tokens, output_tokens,
               cache_read_tokens, cache_write_tokens, cost_usd, cost_source
          FROM items
-        WHERE rowid > ? AND kind IN ('step','agent') AND model IS NOT NULL
+        WHERE rowid > ? AND kind IN ('step','delegate') AND model IS NOT NULL
           AND (cost_source IS NULL OR cost_source = 'estimated')
         ORDER BY rowid ASC
         LIMIT ?`
@@ -99,7 +99,7 @@ export function repriceLedger(
   const rederiveTurn = db.prepare(
     `UPDATE turns SET total_cost_usd = (
         SELECT SUM(cost_usd) FROM items
-         WHERE turn_id = ? AND kind IN ('step','agent'))
+         WHERE turn_id = ? AND kind IN ('step','delegate'))
       WHERE id = ?`
   );
 

@@ -129,15 +129,17 @@ export function buildRunSnapshot(
     },
     ...nodes.map((node): RunLogRowDTO => {
       const status = nodeRunStatus(node);
-      const isAgent = node.kind === "agent";
+      const isDelegate = node.kind === "delegate";
       return {
         error: node.error,
         input:
-          !isAgent && node.argsJson ? prettyJson(node.argsJson) : undefined,
+          !isDelegate && node.argsJson ? prettyJson(node.argsJson) : undefined,
         label: node.name ?? node.model ?? node.kind,
         output:
-          !isAgent && node.outputJson ? prettyJson(node.outputJson) : undefined,
-        response: isAgent
+          !isDelegate && node.outputJson
+            ? prettyJson(node.outputJson)
+            : undefined,
+        response: isDelegate
           ? (liveText.get(node.ordinal) ??
             (node.outputJson ? prettyJson(node.outputJson) : undefined))
           : undefined,

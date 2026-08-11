@@ -250,12 +250,12 @@ describe(buildRunSnapshot, () => {
     expect(snap.side.hasUsage).toBe(true);
   });
 
-  it("surfaces streamed live text on an in-flight agent node", () => {
+  it("surfaces streamed live text on an in-flight delegate node", () => {
     const nodes = [
       {
         runId: "r1",
         ordinal: 2,
-        kind: "agent",
+        kind: "delegate",
         startedAt: Date.now(),
         ok: true,
       },
@@ -333,7 +333,7 @@ describe(automationTurnMessages, () => {
           itemId: "agent-1",
           turnId: "turn-1",
           ordinal: 1,
-          kind: "agent",
+          kind: "delegate",
           ok: false,
           error: "harness disconnected",
           startedAt: 1,

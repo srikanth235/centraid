@@ -224,7 +224,7 @@ describe("interactive-automation-turn suite", () => {
       expect(out.store.listItems("interactive-1")).toStrictEqual([
         expect.objectContaining({ kind: "message_in", text: "What changed?" }),
         expect.objectContaining({
-          kind: "agent",
+          kind: "delegate",
           rawJson: '{"stopReason":"end_turn"}',
           inputTokens: 100,
           costSource: "agent",
@@ -441,7 +441,7 @@ describe("interactive-automation-turn suite", () => {
       const items = store.listItems("interactive-atomic");
       expect(items).toHaveLength(2);
       expect(items[0]).toMatchObject({ kind: "message_in" });
-      expect(items[1]).toMatchObject({ kind: "agent" });
+      expect(items[1]).toMatchObject({ kind: "delegate" });
       expect(items[1]?.endedAt).toBeUndefined();
       store.close();
     });

@@ -1,16 +1,16 @@
-// governance: allow-repo-hygiene file-size-limit the parent-side handler orchestrator is one message-pump — agent/fetch/state/vault dispatch plus the #293 secret and #304 connection injection all share the one worker-boundary protocol, so splitting scatters the wire contract
+// governance: allow-repo-hygiene file-size-limit the parent-side handler orchestrator is one message-pump — delegate/fetch/state/vault dispatch plus the #293 secret and #304 connection injection all share the one worker-boundary protocol, so splitting scatters the wire contract
 /**
  * Parent-side orchestrator for automation handlers.
  *
  * Issue #98: an automation is a self-contained unit that lives inside an
  * app folder (`<appCodeDir>/automations/<id>/`). The generated handler is a
  * single `handler.js` in that directory, executed in a worker thread
- * that exposes `ctx.agent` / `ctx.fetch` / `ctx.vault` / `ctx.state` /
+ * that exposes `ctx.delegate` / `ctx.fetch` / `ctx.vault` / `ctx.state` /
  * `ctx.runs`. Cross-run persistence is `ctx.state` (the `automation_state`
  * KV keyed by the automation id).
  *
  *   - Worker entry is `worker/runner.js`.
- *   - The parent supplies `agentDispatcher` (the one billed rail — a bounded
+ *   - The parent supplies `delegateDispatcher` (the one billed rail — a bounded
  *     model turn); `ctx.vault` / `ctx.fetch` / `ctx.state` / `ctx.runs` are
  *     serviced here, in-process, against the vault bridge and SQLite.
  *   - Every ctx surface call becomes one `run_nodes` audit row. There is no
@@ -49,7 +49,7 @@ import {
 } from "./audit.js";
 import type { HandlerReturnEnvelope } from "./audit.js";
 import {
-  handleAgentMessage,
+  handleDelegateMessage,
   handleRunsMessage,
   handleStateMessage,
   handleVaultMessage,
@@ -85,33 +85,33 @@ function automationWorkerPool(): WorkerPool {
 }
 
 /**
- * One resolved vault derivative riding beside a `ctx.agent` prompt (issue
+ * One resolved vault derivative riding beside a `ctx.delegate` prompt (issue
  * #299): already consent-checked and receipted by the vault bridge. `base64`
  * for binary variants (thumb/preview), `text` for the text variant.
  */
-export interface AgentAttachment {
+export interface DelegateAttachment {
   readonly name: string;
   readonly mediaType: string;
   readonly base64?: string;
   readonly text?: string;
 }
 
-export interface AgentCall {
+export interface DelegateCall {
   readonly prompt: string;
   readonly json?: unknown;
   /** Vault derivatives to hand the model with the prompt (issue #299). */
-  readonly attachments?: readonly AgentAttachment[];
+  readonly attachments?: readonly DelegateAttachment[];
   /**
    * Token-stream sink (issue #158, Phase 2). When a runner routes
-   * `ctx.agent` through its streaming chat adapter, each `TurnStreamEvent`
+   * `ctx.delegate` through its streaming chat adapter, each `TurnStreamEvent`
    * is forwarded here; the runner wraps it as an `item.delta` on the owning
-   * agent item. Absent for runners still on the collect-on-exit path.
+   * delegate item. Absent for runners still on the collect-on-exit path.
    */
   readonly onEvent?: (ev: TurnStreamEvent) => void;
 }
 
-export type AgentDispatcher = (
-  call: AgentCall,
+export type DelegateDispatcher = (
+  call: DelegateCall,
   ctx: DispatchContext
 ) => Promise<unknown>;
 
@@ -137,7 +137,7 @@ export interface RunHandlerOptions {
   runId: string;
   /** ISO fire-start instant fixed by the caller; defaults to handler admission time. */
   now?: string;
-  agentDispatcher: AgentDispatcher;
+  delegateDispatcher: DelegateDispatcher;
   /** Per-app conversation-ledger store for audit + ctx.state + ctx.runs. */
   runsStore: ConversationStore;
   /**
@@ -181,7 +181,7 @@ export interface RunHandlerOptions {
   timeoutMs?: number;
   /**
    * Connector confinement (issue #290 phase 4). When present, this run is a
-   * published connector: `ctx.agent` is forbidden entirely (agents write
+   * published connector: `ctx.delegate` is forbidden entirely (agents write
    * code, not data — the LLM appears at authoring/repair time, never in the
    * per-sync loop), and `ctx.fetch` is the connector's only external rail.
    *
@@ -359,7 +359,7 @@ export interface HandlerOutcome {
   error?: string;
   logs: Array<{ level: "info" | "warn" | "error"; msg: string }>;
   toolBatches: number;
-  agentCalls: number;
+  delegateCalls: number;
 }
 
 interface PendingState {
@@ -377,7 +377,7 @@ interface FetchSpecWire {
 
 type WorkerToParentMessage =
   | {
-      type: "agent";
+      type: "delegate";
       id: number;
       prompt: string;
       json?: unknown;
@@ -443,7 +443,7 @@ export async function runHandler(
   // No tool rail exists any more — the field stays for the run record shape,
   // pinned at 0 (a fire never dispatches a tool batch).
   const toolBatches = 0;
-  let agentCalls = 0;
+  let delegateCalls = 0;
 
   // Secret values resolved for ctx.fetch this run (issue #293). Substitution
   // is transport-level; this set powers the backstop scrub over everything
@@ -741,7 +741,7 @@ export async function runHandler(
   });
   // The trigger payload is the inbound `message_in` item (ordinal 0) — the
   // same shape a chat turn records (issue #190, criterion 4). Trace items
-  // (tool/agent) then start at ordinal 1.
+  // (tool/delegate) then start at ordinal 1.
   if (opts.input !== undefined) {
     audit.store.insertMessageIn({
       turnId: audit.runId,
@@ -1034,30 +1034,30 @@ export async function runHandler(
     };
 
     worker.on("message", (msg: WorkerToParentMessage) => {
-      if (msg.type === "agent") {
+      if (msg.type === "delegate") {
         // Connectors are deterministic code — no LLM turn ever runs inside
         // a sync loop (issue #290: agents write code, not data).
         if (opts.connector) {
           send({
-            type: "agent-reply",
+            type: "delegate-reply",
             id: msg.id,
             ok: false,
             error:
-              "ctx.agent is forbidden in connector handlers — connectors are deterministic published code; repair happens at authoring time (issue #290)",
+              "ctx.delegate is forbidden in connector handlers — connectors are deterministic published code; repair happens at authoring time (issue #290)",
           });
           return;
         }
-        agentCalls++;
-        void handleAgentMessage(
+        delegateCalls++;
+        void handleDelegateMessage(
           audit,
           dispatchCtx,
-          opts.agentDispatcher,
+          opts.delegateDispatcher,
           msg.prompt,
           msg.json,
           msg.content,
           opts.vault
         ).then((reply) => {
-          send({ type: "agent-reply", id: msg.id, ...reply });
+          send({ type: "delegate-reply", id: msg.id, ...reply });
         });
         return;
       }
@@ -1230,7 +1230,7 @@ export async function runHandler(
               ...(outcomeError === undefined ? {} : { error: outcomeError }),
               logs,
               toolBatches,
-              agentCalls,
+              delegateCalls,
             });
           } catch (error) {
             const message =
@@ -1241,7 +1241,7 @@ export async function runHandler(
               error: message,
               logs,
               toolBatches,
-              agentCalls,
+              delegateCalls,
             });
           }
         })();
@@ -1262,7 +1262,13 @@ export async function runHandler(
       void closeConnectorRun(false, {}, message)
         .catch(() => undefined)
         .finally(() =>
-          finish({ ok: false, error: message, logs, toolBatches, agentCalls })
+          finish({
+            ok: false,
+            error: message,
+            logs,
+            toolBatches,
+            delegateCalls,
+          })
         );
     });
 
@@ -1279,7 +1285,7 @@ export async function runHandler(
         void closeConnectorRun(false, {}, error)
           .catch(() => undefined)
           .finally(() =>
-            finish({ ok: false, error, logs, toolBatches, agentCalls })
+            finish({ ok: false, error, logs, toolBatches, delegateCalls })
           );
       }
     });

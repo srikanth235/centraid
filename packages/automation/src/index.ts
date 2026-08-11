@@ -170,20 +170,20 @@ export {
 
 // Automation handler runtime (issue #91). A fire executes the app's
 // generated `handler.js` in a worker thread; the host supplies the
-// tool / agent dispatchers. `runHandler` owns the ledger
+// tool / delegate dispatchers. `runHandler` owns the ledger
 // side — opening the `runs` row and recording the trace.
 export {
   runHandler,
   type RunHandlerOptions,
   type HandlerOutcome,
-  type AgentCall,
-  type AgentDispatcher,
+  type DelegateCall,
+  type DelegateDispatcher,
   type DispatchContext,
   type ConnectionAuth,
 } from "./handler/runner.js";
-// Shared `ctx.agent` answer coercion — every host ends an agent turn with a
-// blob of text and must turn it into the value the handler awaits the same way.
-export { coerceAgentAnswer } from "./handler/agent-answer.js";
+// Shared `ctx.delegate` answer coercion — every host ends a delegate turn with
+// a blob of text and must turn it into the value the handler awaits the same way.
+export { coerceDelegateAnswer } from "./handler/delegate-answer.js";
 // Authoring-time handler lint (issue #167): a static scan that flags ambient
 // I/O and nondeterminism (`Date.now`, `Math.random`, raw `fetch`/`fs`, …) in a
 // handler — effects that bypass the audited `ctx.*` rails or make a re-run

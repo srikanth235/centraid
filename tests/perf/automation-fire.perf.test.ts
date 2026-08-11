@@ -37,7 +37,7 @@ describe("automation-fire.perf", () => {
       "export default async () => ({ ok: true });"
     );
     const openDispatch: OpenDispatch = async () => ({
-      agentDispatcher: async () => "",
+      delegateDispatcher: async () => "",
       close: async () => undefined,
     });
     const journalDbFile = path.join(appsDir, "journal.db");

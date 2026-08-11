@@ -48,17 +48,17 @@ const item = (
   }) as CentraidAutomationItem;
 
 describe("automationTurnMessages cold projection", () => {
-  it("coalesces only consecutive tools and preserves later agent/tool groups", () => {
+  it("coalesces only consecutive tools and preserves later delegate/tool groups", () => {
     const messages = automationTurnMessages(turn(), [
       item(0, "message_in", { text: "Run the brief." }),
-      item(1, "agent", {
+      item(1, "delegate", {
         startedAt: 1,
         endedAt: 10,
         outputJson: '{"text":"First answer"}',
       }),
       item(2, "tool", { callId: "a", name: "mail.search", startedAt: 2 }),
       item(3, "tool", { callId: "b", name: "mail.read", startedAt: 3 }),
-      item(4, "agent", {
+      item(4, "delegate", {
         startedAt: 11,
         endedAt: 20,
         outputJson: '{"text":"Second answer"}',
@@ -87,7 +87,7 @@ describe("automationTurnMessages cold projection", () => {
 
   it("renders a durable max_tokens stop reason as a distinct error bubble", () => {
     const messages = automationTurnMessages(turn(), [
-      item(1, "agent", {
+      item(1, "delegate", {
         outputJson: '{"text":"Partial answer"}',
         rawJson: '{"stopReason":"max_tokens"}',
       }),
@@ -114,7 +114,7 @@ describe("automation turn live projection", () => {
     state = startAutomationLiveItem(state, {
       itemId: "agent-a",
       ordinal: 1,
-      kind: "agent",
+      kind: "delegate",
     });
     state = startAutomationLiveItem(state, {
       itemId: "tool-a",
@@ -138,7 +138,7 @@ describe("automation turn live projection", () => {
     state = startAutomationLiveItem(state, {
       itemId: "agent-b",
       ordinal: 4,
-      kind: "agent",
+      kind: "delegate",
     });
     state = startAutomationLiveItem(state, {
       itemId: "tool-b",
@@ -185,12 +185,12 @@ describe("automation turn live projection", () => {
     ]);
   });
 
-  it("keeps a tool started after an agent final as a standalone row", () => {
+  it("keeps a tool started after a delegate final as a standalone row", () => {
     let state = createAutomationLiveTrace("Run the brief.");
     state = startAutomationLiveItem(state, {
       itemId: "agent-a",
       ordinal: 1,
-      kind: "agent",
+      kind: "delegate",
     });
     state = reduceAutomationItemEvent(state, {
       itemId: "agent-a",
@@ -224,7 +224,7 @@ describe("automation turn live projection", () => {
   it("keeps the completed durable prefix when a second viewer joins mid-turn", () => {
     let state = createAutomationLiveTraceFromItems("Run the brief.", [
       item(0, "message_in", { text: "Run the brief." }),
-      item(1, "agent", {
+      item(1, "delegate", {
         startedAt: 1,
         endedAt: 10,
         outputJson: '{"text":"First answer"}',
@@ -235,14 +235,14 @@ describe("automation turn live projection", () => {
         startedAt: 2,
         endedAt: 4,
       }),
-      item(3, "agent", { startedAt: 11, endedAt: undefined }),
+      item(3, "delegate", { startedAt: 11, endedAt: undefined }),
     ]);
     // Durable replay repeats the already-seeded start/end pair. Both are
     // idempotent; the completed answer and tool remain visible.
     state = startAutomationLiveItem(state, {
       itemId: "item-1",
       ordinal: 1,
-      kind: "agent",
+      kind: "delegate",
       name: "run",
     });
     state = finishAutomationLiveItem(state, {
@@ -271,12 +271,12 @@ describe("automation turn live projection", () => {
   it("hydrates an item.end replay even when no ephemeral deltas were observed", () => {
     let state = createAutomationLiveTrace();
     state = startAutomationLiveItem(state, {
-      itemId: "agent",
+      itemId: "delegate",
       ordinal: 1,
-      kind: "agent",
+      kind: "delegate",
     });
     state = finishAutomationLiveItem(state, {
-      itemId: "agent",
+      itemId: "delegate",
       ordinal: 1,
       ok: true,
       result: { text: "Recovered answer", stopReason: "max_turn_requests" },
@@ -322,7 +322,7 @@ describe("compile-turn inbound bubble (#541)", () => {
   it("never renders the compiler work order as the owner’s own message", () => {
     const messages = automationTurnMessages(turn({ triggerKind: "compile" }), [
       item(0, "message_in", { text: WORK_ORDER }),
-      item(1, "agent", {
+      item(1, "delegate", {
         startedAt: 1,
         endedAt: 10,
         outputJson: '{"text":"Plan ready"}',
@@ -368,11 +368,11 @@ describe("compile-turn inbound bubble (#541)", () => {
   it("gives every projected message a stable id that survives a tool flush", () => {
     const before = automationTurnMessages(turn({ endedAt: undefined }), [
       item(0, "message_in", { text: "go" }),
-      item(1, "agent", { startedAt: 1, endedAt: undefined }),
+      item(1, "delegate", { startedAt: 1, endedAt: undefined }),
     ]);
     const after = automationTurnMessages(turn({ endedAt: undefined }), [
       item(0, "message_in", { text: "go" }),
-      item(1, "agent", { startedAt: 1, endedAt: undefined }),
+      item(1, "delegate", { startedAt: 1, endedAt: undefined }),
       item(2, "tool", {
         callId: "a",
         name: "mail.search",
@@ -380,7 +380,7 @@ describe("compile-turn inbound bubble (#541)", () => {
         endedAt: undefined,
       }),
     ]);
-    // The tools row is inserted AHEAD of the agent bubble on flush, so index 1
+    // The tools row is inserted AHEAD of the delegate bubble on flush, so index 1
     // changes identity — the ids must not.
     expect(before.map((message) => message.msgId)).toStrictEqual([
       "item-0:in",

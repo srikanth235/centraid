@@ -1,4 +1,4 @@
-/** Automation worker: isolates crashes/timeouts, not trusted app code. `ctx.agent`
+/** Automation worker: isolates crashes/timeouts, not trusted app code. `ctx.delegate`
  * is the only billed rail; every `ctx.*` call is an ordered parent RPC barrier. */
 
 import { pathToFileURL } from "node:url";
@@ -22,7 +22,7 @@ type ParentReply = {
 type ParentMessage =
   | ({
       type:
-        | "agent-reply"
+        | "delegate-reply"
         | "state-reply"
         | "runs-reply"
         | "fetch-reply"
@@ -48,7 +48,7 @@ export interface FetchSpec {
 
 type WorkerMessage =
   | {
-      type: "agent";
+      type: "delegate";
       id: number;
       prompt: string;
       json?: unknown;
@@ -141,7 +141,7 @@ port.on("message", (msg: ParentMessage) => {
     return;
   }
   if (
-    msg.type === "agent-reply" ||
+    msg.type === "delegate-reply" ||
     msg.type === "state-reply" ||
     msg.type === "runs-reply" ||
     msg.type === "fetch-reply" ||
@@ -226,7 +226,7 @@ const runs = {
 // (duaility §12). The parent resolves this automation to its enrolled
 // `consent.agent` credential host-side; the worker carries capability, never
 // a key. Same surface an app handler's `ctx.vault` exposes, plus `parked`
-// (this agent's invocations awaiting owner confirmation) and `changes`
+// (this delegate's invocations awaiting owner confirmation) and `changes`
 // (the consented journal feed data triggers ride).
 function vaultCall(
   op:
@@ -313,13 +313,13 @@ const ctx = {
    * grant, receipts each fetch, and stages the bytes for the provider; the
    * worker never holds them (issue #299 §2).
    */
-  agent(args: {
+  delegate(args: {
     prompt: string;
     json?: unknown;
     content?: { contentId: string; variant: string; maxBytes?: number }[];
   }): Promise<unknown> {
     return rpcCall({
-      type: "agent",
+      type: "delegate",
       prompt: args.prompt,
       ...(args.json === undefined ? {} : { json: args.json }),
       ...(args.content === undefined ? {} : { content: args.content }),
@@ -399,7 +399,7 @@ function cursorManager(initial: Record<string, unknown>) {
 }
 
 async function executePullSpec(spec: PullSpec): Promise<unknown> {
-  // Pull specs deliberately receive no vault/state/runs/agent rails. Run
+  // Pull specs deliberately receive no vault/state/runs/delegate rails. Run
   // identity, staging, cursor persistence and finish semantics are owned by
   // the parent engine and therefore cannot be overridden by handler code.
   const pullCtx: PullContext = {

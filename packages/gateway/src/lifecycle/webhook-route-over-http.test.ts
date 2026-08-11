@@ -87,15 +87,15 @@ async function publish(
 /**
  * Create + publish a webhook-triggered automation over the real lifecycle
  * API (`POST /centraid/_automations`), then swap the scaffolded DRAFT
- * handler for a trivial one with no `ctx.agent` call.
+ * handler for a trivial one with no `ctx.delegate` call.
  *
  * WHY: `runFire` opens the dispatch surface per fire
  * (`packages/automation/src/fire/fire.ts`), but that surface is inert until a
- * `ctx.agent` call routes a real model turn through the configured agent CLI
- * — "a fire whose handler never calls ctx.agent starts zero child processes."
- * The scaffolded DEFAULT_HANDLER calls ctx.agent, which would make this test's
+ * `ctx.delegate` call routes a real model turn through the configured agent CLI
+ * — "a fire whose handler never calls ctx.delegate starts zero child processes."
+ * The scaffolded DEFAULT_HANDLER calls ctx.delegate, which would make this test's
  * outcome depend on whatever codex/claude CLI happens to be on the test
- * runner's PATH (or hang). Swapping in a handler with no `ctx.agent` keeps the
+ * runner's PATH (or hang). Swapping in a handler with no `ctx.delegate` keeps the
  * fire hermetic while still exercising the REAL webhook auth, cross-vault
  * resolution, durable ingress, cursor advance, and asynchronous fire path
  * end to end — only the handler body is a stand-in.
