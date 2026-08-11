@@ -730,6 +730,34 @@ Markdown only; no code changed in this slice.
 - `packages/agent-runtime/src/backends/acp/session-warm.ts`
 - `receipts/issue-743-one-agent-door.md`
 
+### Files touched (closeout slice)
+
+- `packages/vault/src/gateway/portable-export.ts`
+- `tests/schema-export-fingerprint.json`
+- `receipts/issue-743-one-agent-door.md`
+
+## User impact
+
+This is a v0 breaking rename with no visual redesign: user-facing copy still says "Agents" (the
+market word is a tolerated dual-vocabulary row in the glossary), and no screen was relaid out. What
+changes for a person already running Centraid is configuration and API surface, not pixels.
+
+- **Settings keys moved.** `agent.runner.kind` → `agent.harness.kind` and `runner.*` →
+  `harness.*` (including `runner.ladder.*` → `harness.ladder.*` and the per-subsystem keys). v0
+  ships no migration, so a previously-chosen harness and failover ladder are not carried over.
+- **First-run:** after updating, open Settings → Agents and re-select the harness (and any failover
+  ladder members) once; until then the gateway falls back to its default harness, and an unattended
+  automation whose harness is not re-authored fails closed on egress consent rather than silently
+  picking a provider (#567 D13). Automation manifests pinning `requires.runner` must be re-authored
+  as `requires.harness`, and the automation create/update API field `runner` is now `harness`.
+- **Existing vaults.** Table and column renames (`agent_agent` → `consent_agent`, `host_key` →
+  `enrollment_key`, journal attribution → `caller_id`, `media_media_asset` → `media_asset`) ship
+  without migrations, and the `items` `CHECK` constraint listing the new `delegate` item kind only
+  applies to a freshly created table — see Decisions.
+- **What gets better.** Unattended `ctx.delegate` turns are now metered and priced like every other
+  turn (previously the one unmetered path), a fire touching two harnesses can no longer resume the
+  wrong harness's session, and a handler can name a harness/model per call.
+
 ## Out of scope
 
 - Renaming the `@centraid/agent-runtime` npm package (README disclaimer instead — see issue).
@@ -912,6 +940,28 @@ Markdown only; no code changed in this slice.
   trust: `ClientApp`'s constructor registers a static handler first in the chain that calls the
   THROWING `zSessionNotification.parse`, and an exception aborts the whole per-message handler
   loop in `Connection.processIncomingMessage`, so no later handler ever runs.
+- **Two gates are left FAILING on purpose, and neither was worked around.**
+  1. `lint:quality-knobs` pins a fingerprint of `packages/automation/src/manifest/manifest.ts`,
+     which this PR changed (`requires.runner` → `requires.harness` plus doc comments; the field
+     remains an open registry key with the same non-empty validation, verified by reading the
+     diff). The repo's mechanism is to re-pin the hash with an `approvedDeviation` note, but that
+     ratchet exists to force deliberate sign-off, and the author of a change self-certifying its
+     own quality-knob deviation defeats the point. **A maintainer must re-pin
+     `tests/quality/classification-ratchet.json`.** No fingerprint in that file was edited here.
+  2. `check:ui-receipt` fires because `packages/client/**` and `packages/blueprints/apps/**`
+     changed — identifier renames only, no visual change. It requires a screenshot under
+     `artifacts/e2e/ui-impact/` emitted by a changed e2e harness. Playwright/Electron cannot run in
+     this environment (`design:gallery` fails identically on `origin/main` with a missing browser),
+     so a real screenshot can be neither produced nor verified here. Writing a harness that names a
+     screenshot this PR never took would satisfy the grep and lie to the next reader, so it was not
+     done. The `## User impact` section and its `First-run:` note ARE written and are accurate.
+- **`lint:schema-export` WAS satisfied properly, not waived.** That ratchet's contract is "touch the
+  export owner in the same PR and update the fingerprint after auditing export completeness". The
+  audit was performed by reading `schema/tables.ts`, not assumed: the canonical walk is
+  `listVaultEntities`, `agent` is registered under `VAULT_TABLES.consent`, `asset` under
+  `VAULT_TABLES.media`, and the agent plane keeps `command`/`capability`/`correction`/`judgment` —
+  a pure rename, so no entity left the export and no adapter or manifest change is owed. The
+  finding is recorded as a dated audit note in `portable-export.ts` itself.
 
 ## Verification
 
@@ -996,6 +1046,17 @@ test ! -f packages/agent-runtime/src/backends/acp/json-rpc.ts && echo "wire laye
 grep '"@agentclientprotocol/sdk"' packages/agent-runtime/package.json   # expect exact 1.3.0
 bunx vitest run --root packages/agent-runtime src/backends/acp
 ```
+
+- **Full gate run (`bun run check:pr`): 34/39 passed.** Green includes typecheck:affected,
+  format:check, knip, lint, turbo:lint, test:qualities, test:ratchet, lint:acp-min-versions,
+  check:mobile-native-state, and the design/lint family. Failures:
+  - `lint:quality-knobs`, `check:ui-receipt` — left failing deliberately, see Decisions.
+  - `lint:schema-export` — FIXED in this slice (audited + re-fingerprinted).
+  - `design:gallery` — environmental: Playwright browser missing; fails identically on
+    `origin/main` (verified by checking the script out from main and re-running).
+  - `test:affected` — two failures, both verified non-regressions: agent-runtime
+    `backend.test.ts` "teardown escalates to SIGKILL" passes 15/15 in isolation (load flake under
+    concurrent turbo), and app-engine `handler-pool.test.ts` is the known pre-existing timeout.
 
 - Further slices append their verification here as they land.
 
@@ -1220,3 +1281,4 @@ reproduce independently in this audit.
 | date | harness | session |
 | --- | --- | --- |
 | 2026-08-11 | claude-code | 56e4d30a-2bce-4149-af0c-60147a8837f1 |
+| 2026-08-11 | claude-code | 124583a2-da59-591f-9619-979c6f4a31c2 |

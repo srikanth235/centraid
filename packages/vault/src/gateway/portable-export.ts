@@ -89,6 +89,20 @@
 // human-readable adapter and contain no content bytes; referenced CAS bytes
 // remain covered by the existing canonical content walk and manifest.
 
+// Schema/export audit #743: this fingerprint moved for RENAMES ONLY — no table
+// entered or left the vault. `agent.agent` became `consent.agent` (the row is an
+// enrolled caller credential, the same species as `consent.app`/`consent.device`,
+// so the caller triple now reads app/device/agent), its `host_key` column became
+// `enrollment_key`, the journal's attribution column became `caller_id`, and
+// `media.media_asset` became `media.asset` under the rule that a table never
+// repeats its schema's name. Export completeness is preserved by construction:
+// the canonical walk is `listVaultEntities`, and every renamed entity is still
+// registered there — `agent` under `VAULT_TABLES.consent`, `asset` under
+// `VAULT_TABLES.media`, with the agent plane keeping its delegation ontology
+// (`command`, `capability`, `correction`, `judgment`). Verified by reading the
+// registry rather than assuming: nothing dropped out of the walk, so no adapter,
+// content-byte, or manifest change is owed.
+
 import { createHash } from "node:crypto";
 
 import { sha256OfBytes } from "../blob/store.js";
