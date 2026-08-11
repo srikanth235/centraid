@@ -77,6 +77,18 @@ Per app, each adopting blueprint gains a `pending-projection.ts` (with a `pendin
 
 Mobile: `apps/mobile/src/lib/replica/multi-vault-overlay.ts`, `apps/mobile/src/lib/replica/multi-vault-session.ts`, `apps/mobile/src/lib/replica/multi-vault-session.test.ts`, `apps/mobile/src/lib/replica/multi-vault-provenance.ts`, `apps/mobile/src/lib/replica/native-session.ts`, `apps/mobile/src/kit/replica/PendingChip.tsx`, `apps/mobile/src/kit/replica/pending-rows.ts`, `apps/mobile/src/kit/replica/pending-rows.test.ts`, `apps/mobile/src/kit/replica/usePendingRows.ts`, `apps/mobile/src/kit/replica/pending-changes.ts`, and the four screens `apps/mobile/src/apps/tally/TallyHome.tsx`, `apps/mobile/src/apps/tally/TallyExpenseRow.tsx`, `apps/mobile/src/apps/tasks/TasksHome.tsx`, `apps/mobile/src/apps/agenda/AgendaHome.tsx` and `apps/mobile/src/apps/notes/NotesHome.tsx`.
 
+### Durable attention and the settlement affordances
+
+The audit below refuted the settlement contract, so a second pass made it real. A settled non-executed intent now journals an `IntentAttentionRecord` (`packages/client/src/replica/types.ts`, built by `packages/client/src/replica/intent-record-store.ts`) in the same transaction that scrubs the intent, so a denial cannot be lost in a crash window. Every store implements it: `packages/client/src/replica/intent-store.ts` (IndexedDB, version 3 → 4 with an additive `attention` store), `packages/client/src/replica/memory-intent-store.ts`, and `apps/mobile/src/lib/replica/sqlite-intent-store.ts` (an additive `record_json` column on the existing attention table, with legacy rows still rendering). It surfaces through `packages/client/src/replica/intents.ts`, `packages/client/src/replica/coordinator.ts`, `ReplicaShellSession` and the inline bridge as `attentionWrites()` / `dismissAttentionWrite()`, app-scoped so one app cannot dismiss another's record. Contracts updated accordingly: `packages/client/src/replica/intents.contract.test.ts`, `packages/client/src/replica/multi-writer.contract.test.ts`, `packages/client/src/replica/shell-session.test.ts`, `packages/client/src/replica/shell-session-scopes.test.ts`, `packages/client/src/replica/shell-session-admission.contract.test.ts`.
+
+The engine gained `restoreAttention()` and one I/O port (`dismissDurable`) called from both `dismiss()` and `takeForRetry()`, so a retried write cannot leave a duplicate record behind. Conflicts became reachable: `baseVersions` is forwarded by the bridge and sourced from a new `rowVersion()` that resolves an app's own shape and reads the row by its exposed primary key, returning undefined for an opaque-identity shape rather than guessing.
+
+Attention surfaces per app, each a panel plus its stylesheet: `packages/blueprints/apps/tasks/components/Attention.tsx` and `packages/blueprints/apps/tasks/components/Attention.module.css` (the reference), then `packages/blueprints/apps/agenda/components/Attention.tsx` and `packages/blueprints/apps/agenda/components/Attention.module.css`, `packages/blueprints/apps/notes/components/Attention.tsx` and `packages/blueprints/apps/notes/components/Attention.module.css`, `packages/blueprints/apps/docs/components/Attention.tsx` and `packages/blueprints/apps/docs/components/Attention.module.css`, `packages/blueprints/apps/people/components/Attention.tsx` and `packages/blueprints/apps/people/components/Attention.module.css`. Tally renders attention inline in its existing ledger instead of a new panel (`packages/blueprints/apps/tally/components/Ledger.tsx`), and Photos announces refusals on the frame's single status line (`packages/blueprints/apps/photos/frame.tsx`) with discard as its inline action. Edit-prefill reopens the payload-bound compose surfaces: `packages/blueprints/apps/agenda/components/CreateModal.tsx`, `packages/blueprints/apps/notes/components/QuickAdd.tsx`, `packages/blueprints/apps/people/components/AddPersonModal.tsx`, and Docs' rename/folder fields via `packages/blueprints/apps/docs/components/Sidebar.tsx` and `packages/blueprints/apps/docs/nav.ts`.
+
+On native, retry re-issues from the journal through `apps/mobile/src/kit/replica/attention-retry.ts` and its declaration registry `apps/mobile/src/kit/replica/pending-declarations.ts`, surfaced in `apps/mobile/src/kit/replica/ReplicaStatusBar.tsx`; `apps/mobile/src/lib/replica/mobile-intent-id.ts` gained an explicit mint so a retry escapes the double-tap coalescing window that would otherwise have resolved it back onto the failed intent's id. Covered by `apps/mobile/src/kit/replica/attention-retry.test.ts`, `apps/mobile/src/lib/replica/native-session.test.ts` and `apps/mobile/src/lib/replica/sqlite-intent-store.test.ts`.
+
+`packages/blueprints/manifest.json` is regenerated for the new app files, and `tests/quality/classification-ratchet.json` re-pins the governed matrix fingerprint (see Decisions).
+
 ### Conformance
 
 `scripts/lint-engine-conformance.mjs` gains `checkPendingOverlay`, in the same style as the placement/custody/consent/triage checks: it fails on any reintroduced hand-rolled pending-row collection in `packages/blueprints/apps`, naming the file and line and pointing at the declaration path. Its allowlist is empty and stayed empty. `scripts/lint-engine-conformance.test.mjs` registers engine H in its "no silently empty check" key list.
@@ -93,6 +105,8 @@ Mobile: `apps/mobile/src/lib/replica/multi-vault-overlay.ts`, `apps/mobile/src/l
 
 **Attention rows carry no chip on mobile.** Once an intent settles, the replica stops overlaying it, so a denied row is no longer in the list to decorate; those rows remain in the existing `ReplicaStatusBar` pending-changes sheet with dismiss and cancel. Full list-level attention persistence on native would need the model's state machine on that seat, which is beyond the direct-join approach taken here.
 
+**The governed matrix fingerprint is re-pinned.** #738 re-pins the governed matrix fingerprint after registering the pending-write overlay engine gate and its eight laws; no budget, floor, or existing gate was weakened. Registering engine H in `tests/matrix.json#appEngines` and its laws in `#laws` necessarily changes the file the classification ratchet fingerprints, so the ratchet is re-pinned rather than the registration being skipped.
+
 **Photos declares projections but decorates no tiles.** `Tile.tsx` carries an explicit four-slots-only design contract; the optimistic favorite/trash still applies to reads through the replica's own composition, but adding a fifth visual slot would violate a stated design invariant to satisfy a generic engine.
 
 ## Out of scope
@@ -103,6 +117,17 @@ Mobile: `apps/mobile/src/lib/replica/multi-vault-overlay.ts`, `apps/mobile/src/l
 - **Assistant, Insights and Automations surfaces**, which are not replica-write-bearing in this sense.
 - **Any redesign of Approvals/Notifications.** Parked rows link to the existing surface.
 - **An RNTL screen test for mobile pending rows.** `apps/mobile/vitest.projects.ts` admits exactly one React Native component test file, and widening that is shared infrastructure; a plumbing-level restart-survival test over real SQLite files is used instead.
+- **The desktop Playwright offline-reload scenario** named in the issue's Validation section. The behaviour it would cover is asserted at the layers beneath it — the engine's reload law, each app's reload test, and the client store's close-and-reopen contracts — but no browser-level scenario was written, so the seat evidence for web/desktop is unit- and contract-level rather than end to end.
+
+### Known gaps, stated rather than implied
+
+These are true of the shipped code and are not covered by an `[x]` above:
+
+- **"Edit" is not universal.** Retry and discard are offered wherever an app renders attention rows; edit only where a compose surface is bound to the refused payload. Agenda's event drawer, Notes' autosaving editor and People's profile drawer are deliberately not seeded, and delete/move/trash actions carry no correctable text. Photos offers discard alone.
+- **Tally attention rows render in the group and friend ledgers only.** The dashboard and activity views have no ledger, and `SearchResults` does not pass the attention callbacks (pre-existing for dismiss too), so a denied add made from the dashboard is narrated in the notice banner and its row appears when the member opens the group. A pending row is also not clickable, so a denied `edit-expense` row cannot be opened via its detail popover until it is discarded or corrected.
+- **Mobile retry lives in the device-global pending-changes sheet**, not inline on the row where the write happened, and an attention row journaled before this change carries no payload so it is discard-only — inherent to the additive migration.
+- **Conflicts are unreachable on native.** Every adopting blueprint now sends `baseVersions`, but no mobile screen does, and an opaque-identity shape supplies no version rather than guessing one.
+- **The friend view's hero `net_minor` still excludes in-flight writes**, so that header can disagree with the pending row beneath it the way the dashboard hero did before `inflightBalance()` compensated it.
 
 ## Verification
 
@@ -116,7 +141,7 @@ Mobile: `apps/mobile/src/lib/replica/multi-vault-overlay.ts`, `apps/mobile/src/l
 
 **Solo-vault wipe fixed:** an empty `commonsIntents()` response can no longer clear locally-queued pending rows. — Proven by construction (`enrichCommons()` has no removal path) and pinned by the engine law "never wipes local rows on an empty commons answer" plus the Tally regression test.
 
-**Settlement is honest:** executed rows swap to canonical without flicker or duplication (pending key → canonical id); parked rows persist with reason and approval affordance; denied/conflict/failed rows persist with reason and edit/retry/discard; a conflict shows expected vs actual versions. — Pinned by the engine laws covering doorbell settlement, parked persistence, `PendingConflictDetail` expected-vs-actual, dismissal and `takeForRetry`, and by the inverted boot-harness assertion.
+**Settlement is honest:** executed rows swap to canonical without flicker or duplication (pending key → canonical id); parked rows persist with reason and approval affordance; denied/conflict/failed rows persist with reason and edit/retry/discard; a conflict shows expected vs actual versions. — Pinned by the engine laws covering doorbell settlement, parked persistence, `PendingConflictDetail` expected-vs-actual, dismissal and `takeForRetry`; by the inverted boot-harness assertion; and by a per-app reload test in each adopting blueprint asserting the row's reason and conflict versions survive a fresh logic instance. An adversarial audit initially **refuted** this item — attention rows lived only in app memory and `takeForRetry` had no callers — so a durable `IntentAttentionRecord` is now journaled in the same transaction that scrubs the settled intent. Read the coverage paragraph of engine H in `docs/blueprint-seats.md` for exactly which of edit/retry/discard each seat offers: retry and discard are everywhere, edit only where a compose surface is bound to the payload rather than to the stored row, and Photos offers discard alone by design.
 
 **Blueprint-agnostic by construction:** an app adopts the engine by declaring per-action projections only — no app-owned pending state, demonstrated by at least one record-only app (Tasks) and one commons-bearing app (Tally) sharing the identical engine path. — Tasks and Tally each declare only a `pending-projection.ts` and call the same model; the conformance guard mechanically forbids app-owned pending state in either.
 
@@ -128,7 +153,7 @@ One receipt per implementing issue, per CONSTITUTION.md. — This file.
 
 ### Commands
 
-Reload survival is proven at the level it actually has to hold — the durable store — rather than by mocking the thing under test. The mobile test opens real `node:sqlite` files, queues a write offline, discards the sessions, opens fresh ones against the same files while still offline, and asserts the row still composes. Sabotage-checked: reverting `read()` to a bare `reader.read` fails all four of its cases.
+Reload survival is proven at the durable store on native: the mobile test opens real `node:sqlite` files, queues a write offline, discards the sessions, opens fresh ones against the same files while still offline, and asserts the row still composes. Sabotage-checked — reverting `read()` to a bare `reader.read` fails all four of its cases. On web and desktop the equivalent blueprint tests stub `window.centraid.pendingWrites()` and exercise the engine and app wiring above it; the durable layer beneath is covered separately by the client's own store contracts (`intents.contract.test.ts`, `multi-writer.contract.test.ts` close-and-reopen over `fake-indexeddb`), not end to end in one test. The desktop Playwright offline-reload scenario named in the issue's Validation section was **not** written — see Out of scope.
 
 ```sh
 # the engine's pure laws (27) + every blueprint suite
@@ -150,6 +175,17 @@ node --test scripts/lint-engine-conformance.test.mjs
 ```
 
 `bun run check:pr` is the full local mirror of CI and is run before merge.
+
+## Audit
+
+**Verdict: REFUTED, then resolved.** A fresh-context sub-agent audited the diff against the issue, independently re-running every command in Verification rather than trusting this receipt. It confirmed the numbers were honest and that three claims held on inspection — the solo-vault wipe is fixed by construction (`enrichCommons` has no removal path), the four hand-rolled overlays are genuinely deleted rather than renamed (`git grep` finds one comment), and mobile's per-vault overlay scoping is correct with a restart test that is not circular. It then refuted the change set on four confirmed defects, all since fixed:
+
+1. **Commons enrichment was dead, and its test had been falsified.** A durable commons intent records the vault command (`tally.add_expense`); the engine looked the name up in a table keyed by app actions (`add-expense`), so a steward-parked expense from another device rendered nothing at all. The pre-existing fixture that would have caught it had been rewritten to the app-action spelling to match the broken code. Fixed by adding the `commands` vocabulary map and `resolveDeclaredAction`, restoring the honest fixtures, and replacing the row-count assertion with a content assertion. Law `pending-overlay-vocabulary` now pins it.
+2. **A pending expense stated the wrong money.** `roleAndAmount()` existed to compensate for unprojected split rows but was never called, so a $60 expense split 50/50 rendered "you lent $60.00" while the hero total simultaneously showed the correct $30. Fixed in the decoration path, with a regression test proven to fail beforehand.
+3. **A queued expense never reached the friend ledger**, whose query filters on split rows a pending expense structurally lacks. Fixed, with the defect's premise pinned by driving the real query handler over a composed pending row.
+4. **The settlement contract had not shipped.** A denied *created* row did silently vanish, `takeForRetry` had no callers on any seat, no renderer read the conflict detail, and nothing sent `baseVersions`, so conflicts were unreachable. Fixed by journaling a durable `IntentAttentionRecord` in the same transaction that scrubs the settled intent, wiring retry/discard (and edit where a payload-bound compose surface exists) across every adopting blueprint and the native sheet, and forwarding `baseVersions`.
+
+The auditor also judged the one inverted assertion legitimate — `app-boot-harness.ts` previously required a denied Agenda chip to disappear, which is the defect class the issue names — while noting it proves less than it claims, since `cancel-event` upserts onto an existing canonical row. It named five receipt claims as inaccurate; each has been corrected above or moved into Known gaps, including the reload-survival evidence being durable-store-backed on native but stubbed on web, and the absent desktop Playwright scenario.
 
 ## Session
 

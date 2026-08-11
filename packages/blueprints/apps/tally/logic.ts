@@ -708,17 +708,6 @@ export function createLogic({
     return outcome;
   }
 
-  /**
-   * The third answer the status grammar promises beside retry and discard:
-   * open the expense composer PREFILLED with the refused payload, so a write
-   * the vault would refuse again can be corrected before it is resent. The
-   * entry is taken (record included) exactly like a retry — the modal now
-   * holds the payload, and saving it issues a fresh intent.
-   *
-   * Only add/edit-expense have a composer to reopen; `delete-expense` carries
-   * nothing to correct, so `decorateLedgerRow` marks no Edit for it rather
-   * than offering a button that would do nothing.
-   */
   /** The group an edit-expense payload belongs to. `edit-expense` does not
    *  carry `group_id` (the command re-derives it), so it is read off the row
    *  the ledger already holds; null when this device cannot say, in which
@@ -734,6 +723,17 @@ export function createLogic({
     return row?.group_id ?? (state.view === "group" ? state.groupId : null);
   }
 
+  /**
+   * The third answer the status grammar promises beside retry and discard:
+   * open the expense composer PREFILLED with the refused payload, so a write
+   * the vault would refuse again can be corrected before it is resent. The
+   * entry is taken (record included) exactly like a retry — the modal now
+   * holds the payload, and saving it issues a fresh intent.
+   *
+   * Only add/edit-expense have a composer to reopen; `delete-expense` carries
+   * nothing to correct, so `decorateLedgerRow` marks no Edit for it rather
+   * than offering a button that would do nothing.
+   */
   async function editPendingWrite(intentId: string): Promise<void> {
     const entry = model.rows().find((row) => row.intentId === intentId);
     if (!entry?.input) return;
