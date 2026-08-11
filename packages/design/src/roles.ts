@@ -17,7 +17,7 @@
 //     `--net` is a BORDER and a 2px rule; it is never a fill, and its role
 //     `meaning` says so because that is the only place the rule can live.
 
-import { DENSITY_TIERS, metrics, spacing } from "./density";
+import { DENSITY_TIERS, metrics, pageMargin, spacing } from "./density";
 import { radii } from "./radii";
 import {
   darkTheme,
@@ -263,8 +263,8 @@ const roleTable: RoleDef[] = [
   role(
     "--bg-app",
     "color",
-    "The wall behind the frame — the deepest paper the system paints.",
-    "decorative surface only",
+    "The wall behind the frame, and the frame's own chrome: the surface the app floats ON, never a surface the app works on. The desktop stem paints it so navigation and content read as two different objects.",
+    "the ink ramp is solved against this rung, so every text role clears its floor here",
     shellAndNative,
     {
       blueprint: unsupported("Blueprint content has no detached app backing."),
@@ -557,6 +557,36 @@ const roleTable: RoleDef[] = [
       blueprint: scalar(`${metrics.segmented}px`),
       native: scalar(metrics.segmented),
       shell: scalar(`${metrics.segmented}px`),
+    }
+  ),
+  role(
+    "--page-margin",
+    "component",
+    "The inset from the pane's edge to page content — 32 on desktop, 18 on the phone. One number for the shell and every app in it: an app that picks its own margin makes the product's pages start in different places, which is exactly what this token exists to stop.",
+    "geometry only",
+    allSurfaces,
+    {
+      // Native reads the mobile rung directly off `pageMargin` rather than
+      // this variable — RN has no cascade to inherit a compact override
+      // through, and every phone screen is compact by definition.
+      blueprint: scalar(`${pageMargin.desktop}px`),
+      native: scalar(pageMargin.mobile),
+      shell: scalar(`${pageMargin.desktop}px`),
+    }
+  ),
+  role(
+    "--page-margin-compact",
+    "component",
+    "The page margin at the compact rung. A companion to `--page-margin`, not a second scale: it exists so a pane that discovers it is narrow can re-point one variable instead of restating a padding rule per row.",
+    "geometry only",
+    allSurfaces,
+    {
+      // The phone HAS no wide rung, so native's `--page-margin` already IS
+      // this number; the compact name is a web affordance for panes that can
+      // change width under a cascade.
+      blueprint: scalar(`${pageMargin.mobile}px`),
+      native: scalar(pageMargin.mobile),
+      shell: scalar(`${pageMargin.mobile}px`),
     }
   ),
   role(

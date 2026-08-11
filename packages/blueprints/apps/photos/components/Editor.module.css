@@ -33,6 +33,21 @@
   display: block;
   user-select: none;
 }
+/* THE SOURCE FRAME, WHICH IS NEVER SEEN. The editor paints onto `.canvas`;
+   this element exists only so the source has a place in the DOM for the
+   shell's blob authorizer to find it (see Editor.tsx). It must stay MOUNTED
+   and it must occupy no space — `display: none` would be the obvious way to
+   say the second part, and it is exactly what to avoid: a display-none image
+   is fetched at the browser's own leisure, which turns opening the editor into
+   a wait. Zero-sized and clipped keeps the load eager and the layout unmoved. */
+.source {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .loadError {
   padding: var(--sp-6);
   margin: 0;

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, JSX } from "react";
 
-import { ICON_CHIP_TINT, iconChipRadius } from "@centraid/design";
+import { iconChipRadius } from "@centraid/design";
 
 import Icon from "../ui/Icon.js";
 import { isPinned, searchDestinations } from "./launcherModel.js";
@@ -36,7 +36,6 @@ export interface AllAppsSheetProps {
   onSelect: (destination: LauncherDestination) => void;
   onClose: () => void;
   compact?: boolean;
-  scheme?: "light" | "dark";
 }
 
 export default function AllAppsSheet({
@@ -45,12 +44,10 @@ export default function AllAppsSheet({
   onSelect,
   onClose,
   compact = false,
-  scheme = "dark",
 }: AllAppsSheetProps): JSX.Element {
   const [query, setQuery] = useState("");
   const fieldRef = useRef<HTMLInputElement | null>(null);
   const rows = searchDestinations(query);
-  const tint = ICON_CHIP_TINT[scheme];
   const pinnedCount = rows.length
     ? Object.values(pins).filter(Boolean).length
     : 0;
@@ -112,9 +109,6 @@ export default function AllAppsSheet({
           ) : null}
           {rows.map((destination) => {
             const pinned = isPinned(pins, destination.id);
-            const hue = destination.colorKey
-              ? `var(--c-${destination.colorKey})`
-              : "var(--text-soft)";
             return (
               <div key={destination.id} className={chrome.sheetRow}>
                 <button
@@ -125,11 +119,12 @@ export default function AllAppsSheet({
                 >
                   <span
                     className={chrome.sheetRowChip}
+                    /* No hue and no tint: this sheet lists FRAME destinations,
+                       and the identity wheel belongs to the apps. See the
+                       header of `launcherModel.ts`. */
                     style={
                       {
-                        "--chip-hue": hue,
                         "--chip-radius": `${iconChipRadius(ROW_ICON)}px`,
-                        "--chip-tint": `${tint * 100}%`,
                       } as CSSProperties
                     }
                     aria-hidden="true"

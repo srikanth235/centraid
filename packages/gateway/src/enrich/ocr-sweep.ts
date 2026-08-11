@@ -70,7 +70,7 @@ import type {
   CapabilitySweepSpec,
   CapabilitySweepTarget,
 } from "./capability-sweep.js";
-import { ocrReadingOrderText } from "./service-client.js";
+import { ocrReadingOrderText } from "./wire-shapes.js";
 
 /** The logical entity OCR text is keyed by — see the header. */
 const TARGET_TYPE = "content_item";

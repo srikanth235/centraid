@@ -2,6 +2,21 @@
 
 ## Open
 
+- **`react-native-maps` is dead weight and still ships.** Places on the phone
+  now draws the shared `place-map.ts` projection through `react-native-svg`
+  (see [docs/photos-places.md](docs/photos-places.md)), so nothing imports
+  `MapView` any more — but the dependency is still in `apps/mobile/package.json`
+  and still in `ios/Podfile.lock`. It is parked in `knip.json`'s
+  `ignoreDependencies` **only** because deleting it without regenerating the
+  lock leaves `Podfile.lock` pointing at a `node_modules` path that no longer
+  exists, which breaks an incremental iOS build. Removing it properly is:
+  drop the line from `package.json`, `bun install`, `cd apps/mobile/ios &&
+  pod install`, review the native diff, then `bun run --cwd apps/mobile
+  ci:native-state --write` and commit `Podfile.lock` +
+  `native-fingerprints.json` together. This could not be done where the work
+  landed: that host's CocoaPods 1.16.2 aborts under Ruby 4.0.3 with
+  `Unicode Normalization not appropriate for ASCII-8BIT`. Until it happens the
+  app bundles a native map SDK it never calls.
 - #496 — **Test infrastructure assurance** (enforcement, signal, coverage).
   Parent backlog for ruleset on `main`, nightly auto-issue + Pages main-only
   guard, floors/`minimumTests` ratchet, `requireAssertions`, affected vitest in

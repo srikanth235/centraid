@@ -109,6 +109,7 @@ const DEFAULT_MODELS: Record<EnrichCapability, string> = {
   ocr: "fake-ocr@1",
   faces: "fake-faces@1",
   transcript: "fake-asr@1",
+  "place-name": "fake-gazetteer@1",
 };
 
 /** Well-behaved answers: the shape the wire contract documents, nothing more. */
@@ -123,6 +124,13 @@ const DEFAULT_RESULTS: Record<
   ocr: () => ({ regions: [] }),
   faces: () => ({ faces: [] }),
   transcript: (item) => ({ text: `transcript of ${String(item["id"])}` }),
+  // A coordinate in, a label out. Derived FROM the coordinate so a test can
+  // tell which item an answer belongs to without threading ids by hand.
+  "place-name": (item) => ({
+    name: `place at ${Number(item["lat"]).toFixed(2)}`,
+    region: "Testshire",
+    confidence: 0.9,
+  }),
 };
 
 const ALL: EnrichCapability[] = [
@@ -131,6 +139,7 @@ const ALL: EnrichCapability[] = [
   "ocr",
   "faces",
   "transcript",
+  "place-name",
 ];
 
 /** One mebibyte of filler, reused so `oversize` costs the test no memory. */

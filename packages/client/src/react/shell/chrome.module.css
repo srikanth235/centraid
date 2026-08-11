@@ -71,7 +71,30 @@
      app, so this hairline is the only thing it declares about the surface
      beside it. */
   border-inline-end: 1px solid var(--line);
-  background: var(--bg);
+  /* THE WALL, not the page — the frame and the app are different surfaces.
+     This is the principle the handoff already states on the phone, where the
+     band's Home capsule keeps the frame's own colour "never the app's mat"
+     (`bandCapsuleStyle`). The desktop stem is the same object: navigation
+     belongs to the frame, and it should not be painted in whatever surface
+     the app is working on.
+
+     `--bg-app` is the surface the frame FLOATS on, so using it here reads the
+     stem as the wall showing beside the page rather than as a tinted panel —
+     which is why this does not break invariant 3's "the shell owns no
+     colour": the wall is a rung of the one neutral ramp, not a hue.
+
+     It also keeps the paper metaphor intact in a way a page-relative tint
+     could not. The rule is that raised paper is darker than THE PAGE in
+     light; the stem is not the page, so `--bg-elev` inside it (`.stemNew`,
+     the active launcher row) sits BETWEEN the wall and the page and reads as
+     a sheet lifted off the wall — the same relationship the frame itself has
+     to the wall. Both themes hold that order: #F0EFED < #FDFDFC < #F5F4F2 in
+     light, #060606 < #0E0E0E < #171716 in dark.
+
+     Text on this rung is not a guess: contrast.test.ts already measures every
+     text role against `--bg-app` in both themes, because the ink ramp was
+     solved against #F0EFED rather than against the page. */
+  background: var(--bg-app);
 }
 /* macOS draws the traffic lights at (16, 16) of the client area — see the
    `data-window-controls` note in ShellFrame.tsx. 44px clears the 16px inset
@@ -93,12 +116,19 @@
   padding-block: 0 var(--sp-2);
   padding-inline: var(--sp-1);
   /* The shorthand REPLACES the desktop stem's trailing hairline — a floating
-     band is bounded on four sides or on none. */
-  border: 1px solid var(--line);
+     band is bounded on four sides or on none. A control border, so it is the
+     control hairline. */
+  border: 1px solid var(--line-strong);
   border-radius: var(--r-lg);
   margin-inline: 12px;
   margin-block-end: 12px;
-  background: var(--bg);
+  /* RAISED PAPER, not the page. The band floats above the content, and a
+     floating surface painted in the page colour has to prove it is a surface
+     with its border alone — over a photograph that border is the only thing
+     separating a tab label from whatever was photographed behind it. `--bg-elev`
+     is the system's raised sheet (darker than the page in light, lighter in
+     dark), and it is opaque: no blur, no translucency, no shadow. */
+  background: var(--bg-elev);
 }
 
 .stemMark {
@@ -152,8 +182,13 @@
    that carries identity — the launcher's chips carry the APPS'. */
 .stemAvatarChip {
   flex: none;
-  inline-size: 24px;
-  block-size: 24px;
+  /* 30px — the largest chip in the band, and larger than the 26px launcher
+     chips under it. The vault outranks every destination it contains, and at
+     24px the head read as one more row in the list. Kept in step with
+     `AVATAR_SIZE` in Stem.tsx, which derives the 26% corner from the same
+     number. */
+  inline-size: 30px;
+  block-size: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -234,27 +269,51 @@
   flex: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  /* The spacer element does the distribution, not `space-between` — see the
+     comment beside it in Stem.tsx. With `space-between` the label drifted to
+     the centre of the control on every host that hides the ⌘K hint. */
   gap: var(--sp-2);
   inline-size: 100%;
   block-size: var(--h-control);
   margin-block-end: var(--sp-4);
   padding-inline: var(--sp-3);
   background: transparent;
-  border: 1px solid var(--line);
+  /* A control border, so it takes the CONTROL hairline (`--line-strong`), not
+     the separator one. `--line` is for seams between regions. */
+  border: 1px solid var(--line-strong);
   border-radius: var(--r-md);
   cursor: pointer;
   transition: border-color var(--dur-1) var(--ease);
 }
 .stemSearch:hover {
-  border-color: var(--line-strong);
+  border-color: var(--line-sel);
 }
 .stemSearch:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
+/* The magnifier rides one ink rung BELOW its own label, the placeholder
+   relationship every search field in the product draws: the mark says what the
+   control is, the label says what it reaches, and the mark is the quieter of
+   the two. It brightens with the label on hover so the control lights as one
+   thing rather than in two pieces. */
+.stemSearch > svg {
+  flex: none;
+  color: var(--text-faint);
+  transition: color var(--dur-1) var(--ease);
+}
+.stemSearch:hover > svg {
+  color: var(--text-soft);
+}
+.stemSearchSpacer {
+  flex: 1;
+  min-inline-size: 0;
+}
+/* UI, like the launcher rows below it — this is a labelled control in a 240px
+   band, not a caption under a chip. */
 .stemSearchGlyph {
-  font: var(--t-control);
+  flex: none;
+  font: var(--t-small);
   color: var(--text-soft);
   transition: color var(--dur-1) var(--ease);
 }
@@ -286,6 +345,20 @@
   flex-direction: row;
   flex: 1;
   overflow: visible;
+}
+
+/* The seam under Home. `--line` is the separator hairline — the same token the
+   foot and the ledger draw their seams with — and never `--line-strong`, which
+   is the CONTROL border: a rule between two regions is not the edge of a
+   control. It is inset from the band's padding by one rung so it sits under the
+   row's pill rather than running the full width of the column, which is what
+   made it read as the top of a new panel instead of a break in one list. */
+.launchSeam {
+  flex: none;
+  block-size: 1px;
+  margin-block: var(--sp-2);
+  margin-inline: var(--sp-3);
+  background: var(--line);
 }
 
 .launchItem {
@@ -340,11 +413,17 @@
   overflow: visible;
 }
 
-/* The chip's container styling is CONSTANT — same tint, same radius, selected
-   or not, following the iOS convention. Selection is the label weight plus the
-   2px bar below. `--chip-hue` and `--chip-tint` are written per item by
-   Stem.tsx; the tint share comes from the design package's ICON_CHIP_TINT so
-   the shell, the blueprint surface and the phone composite the same chip. */
+/* NO GROUND AND NO HUE. A launcher chip is a bare glyph: every destination in
+   this band is a place in the frame, and invariant 3 reserves both the tinted
+   chip container and the eight identity hues for APPS. A tinted square under a
+   frame destination reads as an app that is not one, and — because the tint is
+   the hue at 13% — it also spends a hue the wheel needs to keep meaning
+   something. `--chip-radius` is still written per item by Stem.tsx so the
+   focus ring and any future ground land on the 26%-of-size corner.
+
+   The container is otherwise CONSTANT, selected or not, following the iOS
+   convention: only the glyph's rung moves. Selection is the label weight plus
+   the 2px bar. */
 .launchChip {
   inline-size: 30px;
   block-size: 30px;
@@ -353,12 +432,18 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--chip-radius, var(--r-md));
-  background: color-mix(
-    in oklab,
-    var(--chip-hue, var(--text-soft)) var(--chip-tint, 13%),
-    var(--bg)
-  );
-  color: var(--chip-hue, var(--text-soft));
+  background: transparent;
+  color: var(--text-faint);
+}
+/* The desktop stem's chip is one rung down from the band's (26 vs 30, the
+   brief's size table): it stands beside a full-size label rather than carrying
+   the tab by itself. */
+.stem:not([data-compact="true"]) .launchChip {
+  inline-size: 26px;
+  block-size: 26px;
+}
+.launchItem[data-active="true"] .launchChip {
+  color: var(--text);
 }
 .launchMoreChip {
   inline-size: 30px;
@@ -371,9 +456,16 @@
   border-radius: var(--r-md);
   color: var(--text-soft);
 }
-/* A navigation label is never tertiary text: `--text-soft` is its floor. */
+/* A navigation label is never tertiary text: `--text-soft` is its floor.
+
+   MICRO IS THE BAND'S REGISTER, NOT THE STEM'S. 11px is what a caption stacked
+   under a 30px chip in a 57px-wide tab can be; a desktop row has a whole 240px
+   band to spend and takes UI (13px), which is the register every other row in
+   the product reads at. Selection moves the WEIGHT only — 400 to 500 at one
+   size — so the row never changes height or reflows its neighbours. */
 .launchLabel {
   font: var(--t-control);
+  font-weight: 400;
   color: var(--text-soft);
   max-inline-size: 100%;
   overflow: hidden;
@@ -381,9 +473,15 @@
   white-space: nowrap;
   transition: color var(--dur-1) var(--ease);
 }
+.stem:not([data-compact="true"]) .launchLabel {
+  font: var(--t-small);
+}
 .launchItem[data-active="true"] .launchLabel {
-  font: var(--t-small-strong);
+  font-weight: 500;
   color: var(--text);
+}
+.stem:not([data-compact="true"]) .launchItem[data-active="true"] .launchLabel {
+  font: var(--t-small-strong);
 }
 .launchBar {
   inline-size: 16px;
@@ -392,18 +490,24 @@
   margin-block-start: 1px;
   background: transparent;
 }
+/* INK, not a hue — the destination is a place in the frame and the frame owns
+   no colour. The hue-carrying version of this bar belongs to an app mark. */
 .launchItem[data-active="true"] .launchBar {
-  background: var(--chip-hue, var(--text-soft));
+  background: var(--text);
 }
 /* On the row form the selection bar stands the other way up, against the
-   reading edge — the same 2px in the same hue, rotated with the layout. */
+   reading edge — the same 2px, rotated with the layout. It runs the height of
+   the chip beside it (22px) rather than a length of its own, and takes the
+   sub-pixel corner the design draws rather than a pill: a 2px pill is a
+   lozenge, and at this size the rounding is all there is to see. */
 .stem:not([data-compact="true"]) .launchBar {
   position: absolute;
   inset-inline-start: 0;
   inset-block-start: 50%;
   translate: 0 -50%;
   inline-size: 2px;
-  block-size: 18px;
+  block-size: 22px;
+  border-radius: 1px;
   margin-block-start: 0;
 }
 
@@ -495,10 +599,12 @@
   color: var(--text-faint);
 }
 
-/* A navigation label is never tertiary text, in the foot as in the launcher. */
+/* A navigation label is never tertiary text, in the foot as in the launcher —
+   and it reads at the same UI register as the launcher rows above it. The foot
+   is quieter by POSITION and colour, not by being set smaller. */
 .stemFootLabel {
   flex: 1;
-  font: var(--t-control);
+  font: var(--t-small);
   max-inline-size: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -725,6 +831,16 @@
   align-items: baseline;
   gap: var(--sp-2);
   min-inline-size: 0;
+  /* THE BACKSTOP. `min-inline-size: 0` lets this box get narrower than its
+     contents, which is what we want — but on its own it only means the CONTENTS
+     keep their size and paint outside the box. The count is `flex: none`, so in
+     a 45px lockup it drew its full 97px straight over the two icon buttons that
+     follow: "19 photographs" with a gear and a grid glyph on top of the words.
+     Clipping here is never what should actually happen — the rules below shed
+     the count first — but a box that can shrink must also be a box that
+     contains, or a future addition to this lockup reintroduces the same
+     overlap. */
+  overflow: hidden;
 }
 /* A count is a numeric, so it is mono and tabular — the app passes the number,
    the frame owns the register. */
@@ -1085,6 +1201,8 @@
   outline: none;
   box-shadow: var(--focus-ring);
 }
+/* Untinted, like the launcher's: this sheet lists FRAME destinations, and the
+   tinted chip container is an app mark. See `.launchChip`. */
 .sheetRowChip {
   inline-size: 28px;
   block-size: 28px;
@@ -1093,12 +1211,8 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--chip-radius, var(--r-md));
-  background: color-mix(
-    in oklab,
-    var(--chip-hue, var(--text-soft)) var(--chip-tint, 13%),
-    var(--bg-elev)
-  );
-  color: var(--chip-hue, var(--text-soft));
+  background: transparent;
+  color: var(--text-faint);
 }
 /* Unpinned reads as a LIGHTER name, never a dimmed one — the recessive state
    is a colour token on the leaf, because container opacity composites every
@@ -1176,12 +1290,67 @@
    compact behaviour is driven by `[data-compact]` above (React owns the
    signal); this block carries the parts CSS has to answer on its own. */
 @media (max-width: 720px) {
+  /* HOW MUCH OF THE LOWER EDGE THE BAND OWNS, published so that anything
+     floating over the frame can clear it. Declared on `:root` rather than on
+     `.window` because the capture launcher renders OUTSIDE the window subtree
+     — custom properties inherit down the DOM, and a variable set on a box the
+     launcher is not inside reaches it not at all. That is why the launcher
+     carried its own `bottom: 82px` guess and sat 18px on top of the band.
+
+     The number is this band's own box, and it lives in this file because this
+     file is what draws it: 80px of tab row + the 8px `padding-block-end` and
+     12px `margin-block-end` on `.stem[data-compact="true"]`. Change either of
+     those and change this. */
+  :global(:root) {
+    --compact-band-inset: 100px;
+  }
+
   .appBar {
     padding-inline: var(--sp-4);
   }
   .appTitle {
     /* The display rung steps down on a phone, per the ramp's mobile column. */
     font-size: 26px;
+  }
+
+  /* THE COUNT IS THE FIRST THING OUT. A phone bar is already spending its whole
+     width on back, forward, the app's own two icon actions and its two buttons;
+     what is left for the lockup is less than the app's NAME. Something has to
+     go, and the count is the one item here that is stated again a few pixels
+     below — the timeline's own header reads "AUGUST 2026 · 11 photographs ·
+     1 video" — so dropping it costs the member nothing and buys the title the
+     room to be read. The app's name is the one thing in this bar that cannot be
+     recovered from anywhere else on the screen. */
+  .appCount {
+    display: none;
+  }
+
+  /* THE APP'S NAME TAKES ITS OWN ROW, which is what the v4 handoff draws for
+     the compact form factor: the mobile Photos screen is a title line reading
+     "Photos" with Select and Import beside it, over a second line of controls —
+     not one row carrying all of it.
+
+     Dropping the count alone was not enough, and the arithmetic says why. This
+     bar spends 28 + 28 on the history arrows, 28 + 26 on the app's own two icon
+     actions, and 72 + 75 on Select and Import; with 28px of gaps and 32px of
+     page margin that is 317 of a 375px phone, leaving 57px for the lockup — and
+     the mark chip is 26 of those. "Photos" was being asked to render in 11px.
+     No amount of shrinking fixes a row that is over-subscribed; the row has to
+     become two.
+
+     `order: -1` rather than reordering the markup: the DOM order is the reading
+     and tab order that the desktop bar wants (history, then identity, then
+     actions), and it stays correct on the second line here. Nothing is removed
+     — every control the wide bar carries is still on this bar, one row down. */
+  .appBar {
+    flex-wrap: wrap;
+    row-gap: var(--sp-2);
+  }
+
+  .appIdentity {
+    order: -1;
+    flex: 1 1 100%;
+    margin-inline-start: 0;
   }
   .statusLine {
     padding-inline: var(--sp-4);

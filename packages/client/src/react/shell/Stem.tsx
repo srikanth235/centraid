@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { CSSProperties, JSX, ReactNode } from "react";
 
 import {
@@ -45,11 +46,18 @@ import chrome from "./chrome.module.css";
 // The compact band does: five slots plus More, because a sixth tab puts every
 // target under 44px, and 44px is a hard constraint rather than a preference.
 
-/** Icon size in both the stem and the band, per the brief's size table. */
-const MARK_SIZE = 30;
+/** The launcher chip, per the brief's size table: 26px in the desktop stem,
+ *  30px in the compact band. One rung apart because the two forms read at
+ *  different distances — the band's chip carries the tab on its own, while the
+ *  stem's stands beside a full-size label. Both radii are emitted here because
+ *  the 26%-of-size corner cannot be written as one CSS length. */
+const MARK_SIZE_STEM = 26;
+const MARK_SIZE_BAND = 30;
 /** The head's vault chip. Its corner is a share of its own size (26%), so the
- *  silhouette holds at every rung — see `iconChipRadius`. */
-const AVATAR_SIZE = 24;
+ *  silhouette holds at every rung — see `iconChipRadius`. It is the LARGEST
+ *  chip in the band on purpose: the vault is the one identity that outranks
+ *  every destination under it, and at 24px it read as one more launcher row. */
+const AVATAR_SIZE = 30;
 /** A vault that has chosen no mark of its own. */
 const DEFAULT_VAULT_ICON: IconName = "Sparkle";
 /** The glyph inside the chip. The chip is the identity; the mark is the verb. */
@@ -145,27 +153,28 @@ export interface StemProps {
 /**
  * One launcher item.
  *
- * The chip's container styling is CONSTANT — same tint, same radius, selected
- * or not. Selection is carried by the label weight plus a 2px bar in the app's
- * own hue, following the iOS convention: a chip that changes shape when
- * selected reads as a different app rather than the same app, here.
+ * The chip's container styling is CONSTANT — same ground, same radius, selected
+ * or not, following the iOS convention: a chip that changes shape when selected
+ * reads as a different destination rather than the same one, here. Selection is
+ * the label weight plus the 2px bar, and nothing else.
+ *
+ * There is no hue on this chip and no tinted ground under it. Every destination
+ * in the launcher is a place in the FRAME, and invariant 3 reserves the eight
+ * identity hues for APPS — see the header of `launcherModel.ts` for why a
+ * shell that spends them retires the rule rather than extending it. The glyph
+ * is plain ink, one rung down while the destination is not current.
  */
 function LauncherItem({
   destination,
   active,
   compact,
-  tint,
   onSelect,
 }: {
   destination: LauncherDestination;
   active: boolean;
   compact: boolean;
-  tint: number;
   onSelect: () => void;
 }): JSX.Element {
-  const hue = destination.colorKey
-    ? `var(--c-${destination.colorKey})`
-    : "var(--text-soft)";
   return (
     <button
       className={chrome.launchItem}
@@ -178,9 +187,7 @@ function LauncherItem({
         className={chrome.launchChip}
         style={
           {
-            "--chip-hue": hue,
-            "--chip-radius": `${iconChipRadius(MARK_SIZE)}px`,
-            "--chip-tint": `${tint * 100}%`,
+            "--chip-radius": `${iconChipRadius(compact ? MARK_SIZE_BAND : MARK_SIZE_STEM)}px`,
           } as CSSProperties
         }
         aria-hidden="true"
@@ -192,11 +199,7 @@ function LauncherItem({
           ? (destination.shortLabel ?? destination.label)
           : destination.label}
       </span>
-      <span
-        className={chrome.launchBar}
-        style={{ "--chip-hue": hue } as CSSProperties}
-        aria-hidden="true"
-      />
+      <span className={chrome.launchBar} aria-hidden="true" />
     </button>
   );
 }
@@ -313,7 +316,22 @@ export default function Stem({
             type="button"
             onClick={onSearch}
           >
-            <span className={chrome.stemSearchGlyph}>Search</span>
+            {/* THE MAGNIFIER IS THE CONTROL'S ONLY UNCONDITIONAL AFFORDANCE.
+                `⌘K` below it is a hint that the web deliberately withholds —
+                an installed PWA cannot claim the chord, so `hasCommandKey` is
+                false there — which left this control with a bordered box and
+                a line of grey text and nothing at all saying "search". The
+                mark restores what the hint cannot promise. */}
+            <Icon name="Search" size={16} strokeWidth={1.8} />
+            {/* "Search everything", not "Search": this control reaches OBJECTS
+                across every app, and the shorter label reads as a filter over
+                whatever is on screen. The copy is the design's, verbatim. */}
+            <span className={chrome.stemSearchGlyph}>Search everything</span>
+            {/* Pushes the chord to the trailing edge, so the mark and the label
+                stay a pair on the reading edge whether or not the hint is
+                rendered — `justify-content: space-between` alone put the label
+                in the middle of the control the moment the chord disappeared. */}
+            <span className={chrome.stemSearchSpacer} />
             {hasCommandKey ? (
               <span className={chrome.stemSearchKbd}>⌘K</span>
             ) : null}
@@ -321,15 +339,28 @@ export default function Stem({
         </>
       )}
       <div className={chrome.launchList}>
-        {items.map((destination) => (
-          <LauncherItem
-            key={destination.id}
-            destination={destination}
-            active={destination.page === activePage}
-            compact={compact}
-            tint={tint}
-            onSelect={() => onSelect(destination)}
-          />
+        {items.map((destination, index) => (
+          <Fragment key={destination.id}>
+            <LauncherItem
+              destination={destination}
+              active={destination.page === activePage}
+              compact={compact}
+              onSelect={() => onSelect(destination)}
+            />
+            {/* HOME IS ITS OWN GROUP. Everything below it is a place inside the
+                vault; Home is the view OF the vault, and the design separates
+                the two with a hairline rather than by ordering alone. Keyed off
+                the destination id, not the index, because a member who unpins
+                Home should not hand the seam to whatever row inherited slot 0.
+                Suppressed when Home is last (nothing to separate it from) and
+                on compact, where the band is a row of tabs with no stack for a
+                horizontal rule to divide. */}
+            {!compact &&
+            destination.id === "home" &&
+            index < items.length - 1 ? (
+              <span className={chrome.launchSeam} aria-hidden="true" />
+            ) : null}
+          </Fragment>
         ))}
         {compact && band.overflow > 0 ? (
           <button

@@ -24,7 +24,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 
+import { safeMediaUrl } from "../../_shared/untrusted.ts";
 import { isPendingOffsite, stageFileBytes } from "../kit.ts";
+import { BLOB_PENDING_ATTR } from "../media-observer.ts";
 import { act, narrate, notice } from "../outcomes.ts";
 import type { Asset } from "../types.ts";
 import {
@@ -131,6 +133,10 @@ export function EditorView({
     const img = imgRef.current;
     const canvas = canvasRef.current;
     if (!img || !canvas) return;
+    // The source is a MOUNTED element now, so it exists from the first render
+    // — before it holds any pixels. `naturalWidth` is the load's own signal,
+    // and drawing without it would size the canvas from a 0×0 frame.
+    if (!img.complete || img.naturalWidth === 0) return;
     const box = rotatedBox(img.naturalWidth, img.naturalHeight, angle);
     canvas.width = box.width;
     canvas.height = box.height;
@@ -145,26 +151,6 @@ export function EditorView({
   useEffect(() => {
     drawRef.current = draw;
   }, [draw]);
-
-  // One source Image per mount — content_uri never changes under an open
-  // editor (the viewer mints a fresh EditorView per asset via its own remount
-  // contract), so this loads exactly once.
-  useEffect(() => {
-    let cancelled = false;
-    const img = new Image();
-    img.addEventListener("load", () => {
-      if (cancelled) return;
-      imgRef.current = img;
-      drawRef.current();
-    });
-    img.addEventListener("error", () => {
-      if (!cancelled) setLoadError(true);
-    });
-    img.src = asset.content_uri ?? "";
-    return () => {
-      cancelled = true;
-    };
-  }, [asset.content_uri]);
 
   useEffect(() => {
     draw();
@@ -288,6 +274,37 @@ export function EditorView({
     // component's state living somewhere it can go stale. It is what stops
     // ←/→ from stepping the viewer out from under an unsaved crop.
     <div className={styles.editor} data-editor="open">
+      {/* THE SOURCE IS PAINTED THROUGH THE DOM, NOT THROUGH `new Image()`.
+          A `/centraid/_vault/blobs/…` path carries no credential on its own.
+          Inline — the shell document, and desktop's `file://` — it is not the
+          gateway at all: it falls through to the SPA's own index.html, the
+          element receives HTML and fires `error`. What makes it load is the
+          shell's authorizer (`inline-blob-images.ts`), a MutationObserver over
+          the mounted app subtree that swaps each blob reference for an authed
+          `blob:` object URL. A detached `new Image()` is in no subtree, so no
+          observer ever saw it and every edit opened on the failure copy.
+
+          `BLOB_PENDING_ATTR` is the other half of that contract: while an
+          authorization is in flight the stamp is set, and an `error` under it
+          is not a verdict — it is the raw path failing before the swap lands.
+          The authorizer re-fires `error` once it gives up for real, with the
+          stamp cleared, which is the branch below that ends in `loadError`. */}
+      <img
+        ref={imgRef}
+        className={styles.source}
+        src={safeMediaUrl(asset.content_uri) ?? ""}
+        alt=""
+        aria-hidden="true"
+        decoding="async"
+        onLoad={() => {
+          setLoadError(false);
+          drawRef.current();
+        }}
+        onError={(e) => {
+          if (e.currentTarget.getAttribute(BLOB_PENDING_ATTR) !== "1")
+            setLoadError(true);
+        }}
+      />
       <div
         className={styles.canvasWrap}
         onPointerDown={onPointerDown}

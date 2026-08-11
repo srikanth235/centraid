@@ -1,4 +1,5 @@
-import type { ColorKey, IconName } from "@centraid/design";
+import { DESTINATION_MARKS } from "@centraid/design";
+import type { IconName } from "@centraid/design";
 
 import type { ShellRoute } from "../../app-shell-context.js";
 
@@ -17,10 +18,19 @@ import type { ShellRoute } from "../../app-shell-context.js";
 // "Data", not "Vault Atlas"; "Analytics", not "Insights". `page` still carries
 // the internal key, so route highlighting is unaffected by what the label says.
 //
-// Hues are IDENTITY, not state: they tint the icon chip and paint the 2px
-// selection bar, and they never reach a control. `Home` deliberately declares
-// none — the launcher's own root is not an app, so it renders in `--text-soft`
-// (the brief's "Home — none").
+// NOTHING IN THIS FILE CARRIES A HUE, and that is invariant 3 — "the shell owns
+// no colour". The eight identity hues belong to the eight APPS
+// (`packages/design/src/apps.ts`), and their whole value is the inference "a
+// colour on screen means an app": if the shell spends them on its own
+// destinations, the wheel stops meaning anything. Notifications wearing Photos'
+// amber and Devices wearing People's violet is not a second use of a hue, it is
+// the retirement of the rule.
+//
+// Every destination here is a place in the FRAME, so each renders as a plain
+// glyph in `--text-faint` (`--text` while current), selection carried by the
+// label weight and the 2px bar exactly as the binding layer draws it. That is
+// also why `LauncherDestination` has no `colorKey` field at all rather than an
+// optional one left unset — an optional hue is an invitation to fill it in.
 //
 // Discover is NOT in this list, and its absence is the point (issue #708). A
 // catalogue is a place you go to acquire what you do not have; every first-party
@@ -56,8 +66,6 @@ export interface LauncherDestination {
   shortLabel?: string;
   icon: IconName;
   page: ShellPage;
-  /** Identity hue slot. Absent = no hue at all (Home). */
-  colorKey?: ColorKey;
   /** Where selecting it goes. */
   route: ShellRoute;
 }
@@ -69,25 +77,28 @@ export interface LauncherDestination {
  * set, of the stem. It is deliberately stable: a launcher that reorders itself
  * by recency stops being a place you can point at from muscle memory.
  */
+/* Marks come from `DESTINATION_MARKS` (`packages/design/src/destinations.ts`),
+   never a literal here. The phone keeps its own destination list — different
+   ids, different per-entry fields — and the one thing the two lists must agree
+   on is which glyph stands for which place. Naming the icon in both files is
+   how Analytics, Data and Devices each ended up wearing the wrong mark twice. */
 export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
   {
-    icon: "Home",
+    icon: DESTINATION_MARKS.home,
     id: "home",
     label: "Home",
     page: "home",
     route: { kind: "home" },
   },
   {
-    colorKey: "rose",
-    icon: "Sparkle",
+    icon: DESTINATION_MARKS.assistant,
     id: "assistant",
     label: "Assistant",
     page: "assistant",
     route: { kind: "assistant" },
   },
   {
-    colorKey: "amber",
-    icon: "Bell",
+    icon: DESTINATION_MARKS.notifications,
     id: "approvals",
     label: "Notifications",
     page: "approvals",
@@ -95,8 +106,7 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
     shortLabel: "Alerts",
   },
   {
-    colorKey: "forest",
-    icon: "Bolt",
+    icon: DESTINATION_MARKS.automations,
     id: "automations",
     label: "Automations",
     page: "automations",
@@ -104,63 +114,56 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
     shortLabel: "Autos",
   },
   {
-    colorKey: "teal",
-    icon: "Plug",
+    icon: DESTINATION_MARKS.connectors,
     id: "connectors",
     label: "Connectors",
     page: "connectors",
     route: { kind: "connectors" },
   },
   {
-    colorKey: "ochre",
-    icon: "Star",
+    icon: DESTINATION_MARKS.starred,
     id: "starred",
     label: "Starred",
     page: "starred",
     route: { kind: "starred" },
   },
   {
-    colorKey: "indigo",
-    icon: "Activity",
+    icon: DESTINATION_MARKS.analytics,
     id: "insights",
     label: "Analytics",
     page: "insights",
     route: { kind: "insights" },
   },
   {
-    colorKey: "slate",
-    icon: "Folder",
+    icon: DESTINATION_MARKS.data,
     id: "atlas",
     label: "Data",
     page: "atlas",
     route: { kind: "atlas" },
   },
   {
-    colorKey: "violet",
-    icon: "Monitor",
+    icon: DESTINATION_MARKS.devices,
     id: "household",
     label: "Devices",
     page: "household",
     route: { kind: "household" },
   },
   {
-    colorKey: "slate",
-    icon: "Cellular",
+    icon: DESTINATION_MARKS.gateway,
     id: "gateway",
     label: "Gateway",
     page: "gateway",
     route: { kind: "gateway" },
   },
   {
-    colorKey: "teal",
-    icon: "Save",
+    icon: DESTINATION_MARKS.storage,
     id: "storage",
     label: "Storage",
     page: "storage",
     route: { kind: "storage" },
   },
   {
-    icon: "Settings",
+    icon: DESTINATION_MARKS.settings,
     id: "settings",
     label: "Settings",
     page: "settings",

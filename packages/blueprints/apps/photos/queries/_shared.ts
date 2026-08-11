@@ -37,6 +37,8 @@ interface SrcContent {
 interface RawPlace {
   place_id: string;
   name: string;
+  geo_lat?: number | null;
+  geo_lng?: number | null;
 }
 
 interface SchemeRow {
@@ -102,9 +104,15 @@ export async function readPlaces({
   purpose: string;
 }) {
   const result = await ctx.vault.read({ entity: "core.place", purpose });
+  // Coordinates ride along because the Places shelf DRAWS them (place-map.ts)
+  // — a place list without them can only be a list. They stay `null` for a
+  // place that has no geography at all (a room, a venue someone typed), which
+  // the map filters rather than plotting at 0°,0° off the coast of Africa.
   const rows = ((result.rows ?? []) as unknown as RawPlace[]).map((p) => ({
     place_id: p.place_id,
     name: p.name,
+    lat: typeof p.geo_lat === "number" ? p.geo_lat : null,
+    lng: typeof p.geo_lng === "number" ? p.geo_lng : null,
   }));
   return { rows, byId: new Map(rows.map((p) => [p.place_id, p] as const)) };
 }

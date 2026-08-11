@@ -167,6 +167,8 @@ export type {
   NativeTypeStyle,
 } from "./native";
 
+export { DESTINATION_MARKS } from "./destinations";
+export type { DestinationConcept } from "./destinations";
 export { iconPathMarkup, icons } from "./icons";
 export { ICON_CONCEPTS, iconForConcept, iconSvg, isIconName } from "./icons";
 export type { IconConcept, IconName, IconPath } from "./icons";

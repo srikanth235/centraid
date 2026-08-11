@@ -40,16 +40,13 @@
 import { scanEmbeddings } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
-import {
-  enrichBatch,
-  isEnrichFailure,
-  probeEnrichService,
-} from "./service-client.js";
+import { enrichBatch, probeEnrichService } from "./service-client.js";
 import type {
   EnrichCallOptions,
   EnrichServiceConfig,
 } from "./service-client.js";
 import { hasSqliteVec } from "./sqlite-vec.js";
+import { isEnrichFailure } from "./wire-shapes.js";
 
 const TARGET_TYPE = "media.media_asset";
 

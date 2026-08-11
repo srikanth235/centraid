@@ -12,6 +12,11 @@ import { registerMediaCommands } from "./media.js";
 
 const PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+/** A second, differently coloured 1×1 PNG — content dedupe adopts identical
+ *  bytes onto the existing asset, so a test that needs two assets needs two
+ *  payloads. */
+const OTHER_PIXEL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPgEpEDAABoAD1UCKP3AAAAAElFTkSuQmCC";
 let db: VaultDb;
 let gw: Gateway;
 let boot: BootstrapResult;
@@ -204,6 +209,133 @@ describe("media: places", () => {
     const { asset_id } = addAsset({ data_uri: PIXEL });
     expect(
       invoke("media.set_asset_place", { asset_id, place_id: "nope" }).status
+    ).not.toBe("executed");
+  });
+
+  // The inline door carries no spool metadata, so before these an asset added
+  // as a `data_uri` could never have a place — which is why a fully seeded
+  // vault still showed an empty Places shelf.
+  test("an asserted coordinate places an inline asset", () => {
+    const { asset_id } = addAsset({
+      data_uri: PIXEL,
+      latitude: 38.9542,
+      longitude: -120.1094,
+    });
+    const row = db.vault
+      .prepare(
+        `SELECT p.geo_lat AS lat, p.geo_lng AS lng FROM media_media_asset a
+           JOIN core_place p ON p.place_id = a.place_id
+          WHERE a.asset_id = ?`
+      )
+      .get(asset_id) as { lat: number; lng: number } | undefined;
+    // Field by field: a `node:sqlite` row is a null-prototype object, so a
+    // whole-object comparison fails on the prototype while reporting "no
+    // visual difference" — which is a worse test AND a worse failure message.
+    expect(row?.lat).toBe(38.9542);
+    expect(row?.lng).toBe(-120.1094);
+  });
+
+  test("two assets a few metres apart share one place", () => {
+    const first = addAsset({
+      data_uri: PIXEL,
+      latitude: 39.0021,
+      longitude: -120.1131,
+    });
+    // Same spot to 4dp — the ~11m identity rung — via a different 6dp pair,
+    // which is what a second shutter click at one overlook actually looks
+    // like. A per-photo place row would make the shelf a list of duplicates.
+    // Distinct BYTES matter here: identical content is adopted onto the first
+    // asset, and one asset cannot demonstrate two assets sharing anything.
+    const second = addAsset({
+      data_uri: OTHER_PIXEL,
+      latitude: 39.00212,
+      longitude: -120.11307,
+    });
+    const rows = db.vault
+      .prepare(
+        "SELECT place_id FROM media_media_asset WHERE asset_id IN (?, ?)"
+      )
+      .all(first.asset_id, second.asset_id) as { place_id: string }[];
+    expect(rows[0]?.place_id).toBe(rows[1]?.place_id);
+  });
+
+  // A vault holds named places from the rest of the product — a home, an
+  // office, a venue on an event. A photograph taken at one of them belongs to
+  // it, and the alternative is that a member who carefully named where they
+  // live still gets a shelf of coordinate strings.
+  test("a photograph adopts a place the member already named nearby", () => {
+    db.vault
+      .prepare(
+        `INSERT INTO core_place (place_id, name, kind, geo_lat, geo_lng, created_at)
+         VALUES ('home', 'Home', 'home', 37.4419, -122.143, datetime('now'))`
+      )
+      .run();
+    // ~90m up the garden: a different coordinate, the same place.
+    const { asset_id } = addAsset({
+      data_uri: PIXEL,
+      latitude: 37.4427,
+      longitude: -122.1432,
+    });
+    const row = db.vault
+      .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+      .get(asset_id) as { place_id: string };
+    expect(row.place_id).toBe("home");
+    // And no second row was minted beside it.
+    expect(
+      (
+        db.vault.prepare("SELECT count(*) AS n FROM core_place").get() as {
+          n: number;
+        }
+      ).n
+    ).toBe(1);
+  });
+
+  test("a coordinate-labelled place is not a name, so it is not adopted", () => {
+    // The label this command mints itself. Adopting one would smear a
+    // meaningless string across a neighbourhood and hide the row from the
+    // geocoding sweep that is looking for exactly this shape.
+    db.vault
+      .prepare(
+        `INSERT INTO core_place (place_id, name, kind, geo_lat, geo_lng, created_at)
+         VALUES ('coord', '37.4419, -122.1430', NULL, 37.4419, -122.143, datetime('now'))`
+      )
+      .run();
+    const { asset_id } = addAsset({
+      data_uri: PIXEL,
+      latitude: 37.4427,
+      longitude: -122.1432,
+    });
+    const row = db.vault
+      .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+      .get(asset_id) as { place_id: string };
+    expect(row.place_id).not.toBe("coord");
+  });
+
+  test("a named place two kilometres away is a different place", () => {
+    db.vault
+      .prepare(
+        `INSERT INTO core_place (place_id, name, kind, geo_lat, geo_lng, created_at)
+         VALUES ('home', 'Home', 'home', 37.4419, -122.143, datetime('now'))`
+      )
+      .run();
+    const { asset_id } = addAsset({
+      data_uri: PIXEL,
+      latitude: 37.46,
+      longitude: -122.143,
+    });
+    const row = db.vault
+      .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+      .get(asset_id) as { place_id: string };
+    expect(row.place_id).not.toBe("home");
+  });
+
+  test("half a coordinate is refused, not silently dropped", () => {
+    expect(
+      invoke("media.add_asset", { data_uri: PIXEL, latitude: 38.9542 }).status
+    ).not.toBe("executed");
+    expect(
+      invoke("media.add_asset", { data_uri: PIXEL, longitude: -120.1094 })
+        .status
     ).not.toBe("executed");
   });
 });

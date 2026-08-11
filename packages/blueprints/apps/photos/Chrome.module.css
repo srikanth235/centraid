@@ -44,7 +44,16 @@
 .appRoot [hidden] {
   display: none !important;
 }
-.appRoot button {
+/* `:where()` ZEROES THIS RULE'S SPECIFICITY, and that is the whole point. A
+   reset is a floor, not an opinion: at `.appRoot button` it scores (0,1,1) and
+   outranks every component that names its own type with a single class, so
+   `.tab { font: var(--t-control) }` lost to `font: inherit` and every shelf tab
+   silently rendered at the inherited Body size — while the ONE tab carrying
+   `[data-current]` scored (0,2,0), won, and came out SMALLER than its
+   neighbours. A control that shrinks when you select it is the visible end of a
+   cascade bug, not a type choice. At (0,0,1) the reset still beats the UA
+   default and still loses to anything a component says about itself. */
+:where(.appRoot) button {
   font: inherit;
   cursor: pointer;
 }
@@ -93,6 +102,17 @@
   /* Positioning context for the lightbox/slideshow/selection-bar overlays, so
      they overlay the app pane inline — never the shell chrome. */
   -webkit-font-smoothing: antialiased;
+  /* THE PAGE MARGIN IS DECLARED ONCE, HERE, AND INHERITED. Every row that
+     spans the pane — the shelf strip, the toolbar, the album bar, the
+     selection bar, the scroller — used to carry its own hardcoded `20px`,
+     which is how five files come to disagree the moment one of them is
+     edited. They now read `var(--gutter)`, so the compact rung below is a
+     one-line change instead of a five-line one.
+     20px was also not a number the system has: `--page-margin` is 32 on
+     desktop and 18 on the phone (`packages/design/src/density.ts`), the same
+     scale every native screen already insets by. The web simply had no token
+     to read, so this app guessed — and guessed a third value. */
+  --gutter: var(--page-margin);
 }
 
 /* ---------- Main ---------- */
@@ -114,7 +134,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 2px 20px var(--sp-6);
+  padding: 2px var(--gutter) var(--sp-6);
 }
 .content {
   position: relative;
@@ -361,7 +381,11 @@
    on every surface — the stem on desktop, the claimed band on the phone — so
    there is no second navigation inside the pane to slide, scrim or animate.
    What is left is the compact gutter. */
-.shell.isNarrow .scroll {
-  padding-inline-start: var(--sp-4);
-  padding-inline-end: var(--sp-4);
+/* One declaration, inherited by every row in the pane — the phone rung of the
+   same token native reads. It is set on `.shell` rather than per-component so
+   a pane that is narrow because the WINDOW is narrow and a pane that is
+   narrow because it is docked beside something else get the identical inset;
+   `.isNarrow` is the pane's own width, never the viewport (#505 trap 1). */
+.shell.isNarrow {
+  --gutter: var(--page-margin-compact);
 }

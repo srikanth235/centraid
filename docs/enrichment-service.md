@@ -30,6 +30,7 @@ POST /enrich/<cap>   {"items": [ … ]}
 | `ocr` | `{id, mediaType, bytes, originalWidth?, originalHeight?}` | `{id, regions[{text, confidence, box}]}` |
 | `faces` | same shape as `ocr` | `{id, faces[{box, confidence, embedding[]}]}` |
 | `transcript` | `{id, mediaType, bytes}` | `{id, text, confidence?}` |
+| `place-name` | `{id, lat, lng}` | `{id, name, region?, confidence?}` |
 
 Boxes are `[x, y, w, h]` integers, origin top-left, expressed in the **original** image's pixels when the item declared `originalWidth`/`originalHeight` — the service downscales for its own model and the caller never has to know by how much. `service-client.ts` validates every returned box against the declared dimensions and refuses one that runs past them.
 
@@ -62,10 +63,29 @@ OCR stamps carry the normalized region payload (`{regions: [{text, confidence, b
 | `ocr` | [`ocr-sweep.ts`](../packages/gateway/src/enrich/ocr-sweep.ts) | photos | ambient backfill at the domain's `gateway` tier | `core_content_derivative` (`variant='text'`) via `core.set_extracted_text` | `pp-ocrv4@1` |
 | `faces` | [`faces-sweep.ts`](../packages/gateway/src/enrich/faces-sweep.ts) | photos | consent-gated: only drains `enrich_request` rows tagged `capability='faces'` (per-asset or a standing vault-wide ask); a stamp from an older model is the one exception, since it is proof of past consent for that photograph | `media_face_region` (`review_state='proposed'`) + `enrich_embedding` | `yunet-sface@1` |
 | `transcript` | [`transcript-sweep.ts`](../packages/gateway/src/enrich/transcript-sweep.ts) | docs | ambient backfill at the domain's `gateway` tier | `core_content_derivative` (`variant='transcript'`) via `core.set_extracted_text` | `whisper-proxy@1` (proxy; see below) |
+| `place-name` | [`place-name-sweep.ts`](../packages/gateway/src/enrich/place-name-sweep.ts) | photos | ambient backfill at the domain's `gateway` tier | `core_place.name` (direct UPDATE — there is no rename-place command) | `gazetteer@1` (lookup, not a model; see below) |
 
 OCR and transcript both land through the `core.set_extracted_text` command rather than a raw insert, so FTS refresh triggers, receipts, and the write postcondition all apply the same way every other content-derivative writer gets them. Both specs write **honest empty**: a photograph with no legible text, or a recording the service could not transcribe, still gets its derivation stamp (so the backfill does not loop over it forever) but no text derivative — an empty string is refused by `core.set_extracted_text`'s own schema, and a placeholder would make "nothing found" indistinguishable from "derivation failed".
 
 Faces is the one capability with its own consent tag, separate from the domain-tier gate every other capability answers to alone — a face asserts an identity, which the pixels-only capabilities (OCR, embeddings) do not. See [Faces](#faces) below.
+
+## place-name: a coordinate is not bytes
+
+`place-name` is the odd item in this contract and the exception is deliberate. Every other capability hands a model part of a member's file; this one hands it two numbers the vault already computed and asks what that spot is called. It rides the seam anyway because it needs exactly what the seam provides and nothing else in the gateway does: a gazetteer far too heavy for a client bundle, a versioned model id so a better table supersedes an older one's answers through the ordinary backfill, and a consent tier deciding whether it runs at all. The alternative was a sixth mechanism with its own config and its own failure vocabulary — which is what issue #724 deleted.
+
+**Why it exists.** `findOrCreatePlaceTx` ([`packages/vault/src/commands/media.ts`](../packages/vault/src/commands/media.ts)) mints a place the moment a photograph arrives carrying GPS and labels it with its own coordinates — `39.0021, -120.1131` — because a command handler makes no network egress. That is correct and unreadable: the Places shelf rendered as a column of numbers, which looks like an unbuilt feature and is really an unanswered question. This capability answers it.
+
+**What it will not do.** Only rows still wearing a coordinate label are renamed, and the label shape is a SQL predicate in the backlog query rather than a check the sweep is trusted to make afterwards, so a place the member named is never sent to the service at all. The `UPDATE` repeats the same guard, because a member may rename a place during the round trip and the human fact wins. `null` is a real answer — no settlement reaches this coordinate — and it stamps without writing, so the backfill stops asking about the middle of the Pacific instead of retrying it forever.
+
+**The reference implementation** ([`tools/enrichment-service/src/capabilities/place-name.ts`](../tools/enrichment-service/src/capabilities/place-name.ts)) is a gazetteer lookup, not a model: no ONNX, no weights, no `runtime/` dependency. It reads a TSV at `<models>/gazetteer/places.tsv`:
+
+```
+name <TAB> region <TAB> lat <TAB> lng <TAB> population
+```
+
+Honest absence applies exactly as it does to weights — with no table installed the capability is not advertised, and the gateway leaves coordinate labels alone rather than stamping a guess. Ranking is not nearest-wins: a settlement only counts if the coordinate falls inside a reach derived from its population (`2 + sqrt(pop)/40` km, capped at 60), and among those the smallest distance-as-a-fraction-of-reach wins. That is what lets a city name the countryside around it while a village of four hundred does not claim the next valley, and it is why a fixed radius is wrong in both directions at once.
+
+**Installing a table.** Any source with the five columns works. GeoNames' `cities500`/`cities15000` extracts are the obvious ones (CC BY 4.0 — attribute if you redistribute); convert to the TSV above and drop it in the models dir. The repo ships no gazetteer: it is third-party data with its own licence, and vendoring one is a distribution decision, not a code one.
 
 ## Lane split: device lease vs. the enrichment service
 

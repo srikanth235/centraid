@@ -98,6 +98,23 @@ export interface TranscriptResult {
   confidence?: number;
 }
 
+// --- place-name --------------------------------------------------------
+
+/** The one item in this contract that carries no bytes: a coordinate the
+ *  vault already computed, and nothing of the member's file. */
+export interface PlaceItem {
+  id: string;
+  lat: number;
+  lng: number;
+}
+
+export interface PlaceNameResult {
+  /** `null` is a real answer: no settlement reaches this coordinate. */
+  name: string | null;
+  region?: string | null;
+  confidence?: number;
+}
+
 /** The `POST /enrich/<cap>` request body — validated at the route boundary in src/server.ts. */
 export interface EnrichItemsRequest {
   items?: unknown;

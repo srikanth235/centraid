@@ -87,6 +87,10 @@ function Media({
   onDims: (w: number, h: number) => void;
 }) {
   const scope = scopeAttr(asset.scope_id);
+  // Has the photograph actually painted? The stage is remounted per asset
+  // (`key={asset.asset_id}` in Lightbox), so this resets on its own — there is
+  // no stale-true to clear when stepping to the next frame.
+  const [painted, setPainted] = useState(false);
   const contentSrc = safeMediaUrl(asset.content_uri);
   const posterSrc = safeMediaUrl(asset.poster_uri);
   const ratio = assetRatio(asset);
@@ -140,35 +144,69 @@ function Media({
       displaySrc === contentSrc &&
       (asset.width == null || asset.height == null);
     return (
-      <img
-        className={`${styles.media} ${zoomed ? styles.zoomed : ""}`}
-        style={{
-          ...box,
-          ...(zoomed
-            ? {
-                transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`,
-              }
-            : {}),
-        }}
-        data-scope={scope}
-        src={displaySrc}
-        alt={displayText(asset.title ?? asset.kind ?? "Photograph")}
-        decoding="async"
-        draggable={false}
-        onLoad={(e) => {
-          if (needsProbe)
-            onDims(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight);
-        }}
-        onError={(e) => {
-          if (
-            e.currentTarget.dataset.originalFallback ||
-            displaySrc === contentSrc
-          )
-            return;
-          e.currentTarget.dataset.originalFallback = "1";
-          e.currentTarget.src = contentSrc;
-        }}
-      />
+      <>
+        {/* THE STAGE HOLDS ITS GEOMETRY FROM RECORD TO BYTES (§14) — the tile's
+            own rule, which the stage did not keep. Before it paints, an `<img>`
+            is not a neutral empty box: a `/centraid/_vault/blobs/…` path is
+            unauthorized until the shell's observer swaps it, so the FIRST load
+            reliably fails, and the element presents that failure as the broken
+            glyph plus the alt string set in prose across the stage.
+
+            The alt text is the accessible NAME, not a caption to paint, and
+            `color: transparent` only silences half of it — the glyph is
+            replaced content and survives. So the skeleton is its own element
+            and the image waits at `.loading` until it has pixels: `--skel` at
+            the exact box the photograph is about to occupy, so nothing
+            reflows when the bytes land.
+
+            Static, deliberately. `--skel` is the system's "before its bytes
+            arrive" ground and it does not shimmer — "loading is
+            determinate-only with static skeletons; a shimmer is
+            attention-seeking about work the product can simply describe"
+            (DESIGN.md). The stage's status line is where description goes. */}
+        {painted ? null : (
+          <div className={styles.skeleton} style={box} aria-hidden="true" />
+        )}
+        <img
+          className={`${styles.media} ${zoomed ? styles.zoomed : ""} ${
+            painted ? "" : styles.loading
+          }`}
+          style={
+            painted
+              ? {
+                  ...box,
+                  ...(zoomed
+                    ? {
+                        transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`,
+                      }
+                    : {}),
+                }
+              : undefined
+          }
+          data-scope={scope}
+          src={displaySrc}
+          alt={displayText(asset.title ?? asset.kind ?? "Photograph")}
+          decoding="async"
+          draggable={false}
+          onLoad={(e) => {
+            setPainted(true);
+            if (needsProbe)
+              onDims(
+                e.currentTarget.naturalWidth,
+                e.currentTarget.naturalHeight
+              );
+          }}
+          onError={(e) => {
+            if (
+              e.currentTarget.dataset.originalFallback ||
+              displaySrc === contentSrc
+            )
+              return;
+            e.currentTarget.dataset.originalFallback = "1";
+            e.currentTarget.src = contentSrc;
+          }}
+        />
+      </>
     );
   }
   // No paintable source. The box is still the right box: a tile — and a stage
@@ -197,7 +235,6 @@ function ZoomControl({
           type="button"
           className={styles.zoomBtn}
           aria-label="Zoom in"
-          title="Zoom in"
           onClick={() => onZoom(zoomIn(scale))}
         >
           +
@@ -211,7 +248,6 @@ function ZoomControl({
         type="button"
         className={styles.zoomBtn}
         aria-label="Zoom out"
-        title="Zoom out"
         onClick={() => onZoom(zoomOut(scale))}
       >
         −
@@ -220,7 +256,6 @@ function ZoomControl({
         type="button"
         className={styles.zoomBtn}
         aria-label="Zoom in"
-        title="Zoom in"
         onClick={() => onZoom(zoomIn(scale))}
       >
         +
@@ -269,12 +304,7 @@ export function Transport({ asset }: { asset: Asset }) {
   const elapsed = 0;
   return (
     <div className={styles.transport}>
-      <button
-        type="button"
-        className={styles.transportPlay}
-        aria-label="Play"
-        title="Play"
-      >
+      <button type="button" className={styles.transportPlay} aria-label="Play">
         <PlayIcon size={16} />
       </button>
       {/* DETERMINATE BY CONSTRUCTION (§14). A real `<progress>` with a value
@@ -396,7 +426,6 @@ export function ViewerStage({
         type="button"
         className={`${styles.nav} ${styles.navPrev}`}
         aria-label="Previous photograph"
-        title="Previous photograph"
         disabled={!hasPrev}
         onClick={(e) => {
           e.stopPropagation();
@@ -409,7 +438,6 @@ export function ViewerStage({
         type="button"
         className={`${styles.nav} ${styles.navNext}`}
         aria-label="Next photograph"
-        title="Next photograph"
         disabled={!hasNext}
         onClick={(e) => {
           e.stopPropagation();

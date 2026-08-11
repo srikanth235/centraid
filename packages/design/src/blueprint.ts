@@ -12,7 +12,7 @@
 // only the app's slot on the OKLCH identity wheel, and the neutrals are the
 // system's literal paper.
 
-import { DENSITY_TIERS, spacing } from "./density";
+import { DENSITY_TIERS, pageMargin, spacing } from "./density";
 import { paletteFor, paletteText } from "./palette";
 import { radii } from "./radii";
 import { emitRecipeCss } from "./recipes/css";
@@ -119,6 +119,11 @@ function lightProps(): Record<string, string> {
     "--density-row": `${DENSITY_TIERS.comfortable.row}px`,
     "--density-pad": `${DENSITY_TIERS.comfortable.pad}px`,
     "--o-disabled": "0.45",
+    // An app draws its own pages, so it needs the margin the rest of the
+    // product uses. Without it a blueprint has to invent a number, and Photos
+    // did — 20px, which is neither rung.
+    "--page-margin": `${pageMargin.desktop}px`,
+    "--page-margin-compact": `${pageMargin.mobile}px`,
     "--target-min": "44px",
     ...themeProps(lightTheme),
   };

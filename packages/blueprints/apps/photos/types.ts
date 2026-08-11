@@ -20,6 +20,10 @@ export interface AssetTag {
 export interface Place {
   place_id: string;
   name: string;
+  /** Where it is, when anything knows — the Places map plots these. Null for
+   *  a place with no geography (a room, a venue someone simply named). */
+  lat?: number | null;
+  lng?: number | null;
 }
 
 /** One decorated library/search/trash row (queries/library.js `join()`). */

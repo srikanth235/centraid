@@ -1,4 +1,3 @@
-import type { InlineScope } from "../../inline-types.ts";
 // The Places shelf (v4 handoff §5) — SECTIONS, NOT CARTOGRAPHY.
 //
 // The handoff draws a map above the place cards and says so plainly in its own
@@ -13,11 +12,16 @@ import type { InlineScope } from "../../inline-types.ts";
 // A place row with no name is not "Unknown": the record knows exactly where
 // these were taken and simply has no label to print, and `PLACE_UNNAMED` says
 // which of the two is true.
+import { useCallback, useState } from "react";
+
+import type { InlineScope } from "../../inline-types.ts";
 import { assetKey } from "../asset-key.ts";
 import { justify } from "../layout.ts";
+import { readableName } from "../place-map.ts";
 import { vaultMarker } from "../tile-state.ts";
 import type { Asset } from "../types.ts";
 import { PLACE_UNNAMED } from "../view-copy.ts";
+import { PlaceMap, placePoints } from "./PlaceMap.tsx";
 import { Tile } from "./Tile.tsx";
 
 import styles from "./Places.module.css";
@@ -28,6 +32,11 @@ export interface PlaceSection {
   key: string;
   name: string | null;
   assets: Asset[];
+  /** Where it is, when the place knows. The map above the sections plots
+   *  these; a section whose place has no geography still lists its
+   *  photographs, it simply has no pin. */
+  lat: number | null;
+  lng: number | null;
 }
 
 /**
@@ -44,12 +53,26 @@ export function placeSections(assets: readonly Asset[]): PlaceSection[] {
     const key = place.place_id ?? "";
     let section = byPlace.get(key);
     if (!section) {
-      section = { key, name: place.name || null, assets: [] };
+      section = {
+        key,
+        name: place.name || null,
+        assets: [],
+        lat: place.lat ?? null,
+        lng: place.lng ?? null,
+      };
       byPlace.set(key, section);
     }
     section.assets.push(asset);
   }
   return [...byPlace.values()];
+}
+
+/** The dom id a place's section carries, so a pin can find it. Derived on
+ *  both sides from the place key rather than stored, and prefixed because a
+ *  place key is a uuid and an id starting with a digit is not a valid CSS
+ *  selector. */
+function sectionDomId(key: string): string {
+  return `place-${key || "unnamed"}`;
 }
 
 export function PlacesShelf({
@@ -75,12 +98,51 @@ export function PlacesShelf({
   onToggleSelect: (key: string) => void;
   onEnterSelectMode: () => void;
 }) {
+  // WHICH PIN IS FILLED. The map has no route of its own to navigate to — a
+  // place is a section on this page, not a screen — so tapping a pin brings
+  // its section under the eye and marks the pin as the one being read. That
+  // also gives invariant 3's single filled element something true to mean
+  // here: "this is the place you asked about", not "this pin is special".
+  const [reading, setReading] = useState<string | null>(null);
+  const openPlace = useCallback((key: string) => {
+    setReading(key);
+    // `getElementById` rather than a ref map: the sections are rendered from
+    // the same array the pins came from, so the id is derivable on both sides
+    // and no second data structure has to be kept in step with the first.
+    document
+      .querySelector(`#${sectionDomId(key)}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   return (
     <div className={styles.shelf}>
+      {/* The map is the shelf's HEADER, not a separate destination. Both
+          halves answer "where have I been" and splitting them cost the member
+          a navigation to compare a pin against its photographs. The map sizes
+          to the same `containerWidth` the tile packer uses, so the two agree
+          about how wide the shelf is. */}
+      <PlaceMap
+        points={placePoints(sections)}
+        width={containerWidth}
+        activeKey={reading}
+        onOpen={openPlace}
+      />
       {sections.map((section) => (
-        <section key={section.key || "unnamed"} className={styles.place}>
+        <section
+          key={section.key || "unnamed"}
+          id={sectionDomId(section.key)}
+          className={styles.place}
+        >
           <h2 className={styles.head}>
-            <span className={styles.name}>{section.name ?? PLACE_UNNAMED}</span>
+            {/* A coordinate-shaped label is not a name. Until a gazetteer
+                lands, `findOrCreatePlaceTx` names a brand-new place after its
+                own coordinate, and printing "37.4419, -122.1430" as a heading
+                is the same mistake the map used to make in its margins — it
+                looks like an answer. `readableName` is the one predicate both
+                surfaces ask. */}
+            <span className={styles.name}>
+              {readableName(section.name) ?? PLACE_UNNAMED}
+            </span>
             <span className={styles.count}>{section.assets.length}</span>
           </h2>
           {justify(section.assets, containerWidth, targetHeight).map(

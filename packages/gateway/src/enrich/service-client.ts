@@ -71,16 +71,20 @@
 
 import { parseModelId } from "@centraid/vault";
 
-/** Mirrors `enrich.upsert_embedding`'s ceiling — ~16 KiB of float32 per row. */
-const MAX_VECTOR_DIM = 4096;
+import { asRecord, READERS } from "./result-readers.js";
+import type { ResultReader } from "./result-readers.js";
+import type {
+  EnrichBatchOutcome,
+  EnrichItem,
+  EnrichItemOutcome,
+} from "./wire-shapes.js";
+
 /** One batch of previews plus their JSON. Generous; a ceiling, not a budget. */
 const MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
 /** Long enough for a cold model load on a Pi, short enough to never wedge a sweep. */
 const BATCH_TIMEOUT_MS = 60_000;
 /** A probe answers from memory or not at all. */
 const PROBE_TIMEOUT_MS = 15_000;
-/** The same cap desktop's deleted on-device ASR adapter applied: a transcript, not a corpus. */
-const MAX_TRANSCRIPT_CHARS = 1_000_000;
 
 /** Items per POST. Matches the sweep batch: one round trip, one pass. */
 export const MAX_ENRICH_BATCH = 16;
@@ -92,6 +96,7 @@ export const ENRICH_CAPABILITIES = [
   "ocr",
   "faces",
   "transcript",
+  "place-name",
 ] as const;
 export type EnrichCapability = (typeof ENRICH_CAPABILITIES)[number];
 
@@ -165,112 +170,6 @@ export type EnrichCapabilityStatus =
   | { status: "ok"; model: string }
   | { status: "unavailable"; reason: string };
 
-export interface EnrichImageItem {
-  id: string;
-  mediaType: string;
-  /** Base64 of the DERIVATIVE bytes — never an owner's original (see the sweep). */
-  bytes: string;
-}
-
-export interface EnrichRegionItem extends EnrichImageItem {
-  /** Declared so returned boxes come back in the original's pixel space. */
-  originalWidth?: number;
-  originalHeight?: number;
-}
-
-export interface EnrichTextItem {
-  id: string;
-  text: string;
-}
-
-export interface EnrichVectorResult {
-  id: string;
-  vector: number[];
-}
-
-/** `[x, y, w, h]`, integers, origin top-left. */
-export type EnrichBox = [number, number, number, number];
-
-export interface EnrichOcrRegion {
-  text: string;
-  /** 0..1. A service that cannot score its own output must say so per region. */
-  confidence: number;
-  box: EnrichBox;
-}
-
-export interface EnrichOcrResult {
-  id: string;
-  regions: EnrichOcrRegion[];
-}
-
-/**
- * Sort a COPY of a service's OCR regions into reading order — top-to-bottom
- * by `box[1]` (y), then left-to-right by `box[0]` (x) — and join their text
- * with newlines. Never mutates `regions`. Shared by every consumer of the
- * `ocr` capability (the background sweep, `enrich/ocr-sweep.ts`, and the
- * capture route's live single-shot ask, `capture/capture-ocr.ts`) so reading
- * order is one rule, not two copies that can drift.
- */
-export function ocrReadingOrderText(
-  regions: readonly EnrichOcrRegion[]
-): string {
-  return [...regions]
-    .sort((a, b) => a.box[1] - b.box[1] || a.box[0] - b.box[0])
-    .map((region) => region.text)
-    .join("\n");
-}
-
-export interface EnrichFace {
-  box: EnrichBox;
-  confidence: number;
-  embedding: number[];
-}
-
-export interface EnrichFacesResult {
-  id: string;
-  faces: EnrichFace[];
-}
-
-export interface EnrichTranscriptResult {
-  id: string;
-  text: string;
-  confidence?: number;
-}
-
-/** One item the service could not derive. Counted by callers, never fatal. */
-export interface EnrichItemFailure {
-  id: string;
-  error: string;
-}
-
-/** The item/result pairing per capability — the table the generics read. */
-interface EnrichShapes {
-  "embed-image": { item: EnrichImageItem; result: EnrichVectorResult };
-  "embed-text": { item: EnrichTextItem; result: EnrichVectorResult };
-  ocr: { item: EnrichRegionItem; result: EnrichOcrResult };
-  faces: { item: EnrichRegionItem; result: EnrichFacesResult };
-  transcript: { item: EnrichImageItem; result: EnrichTranscriptResult };
-}
-
-export type EnrichItem<C extends EnrichCapability> = EnrichShapes[C]["item"];
-export type EnrichResult<C extends EnrichCapability> =
-  EnrichShapes[C]["result"];
-/** One slot of a batch answer: the payload, or this item's own failure. */
-export type EnrichItemOutcome<C extends EnrichCapability> =
-  | EnrichResult<C>
-  | EnrichItemFailure;
-
-export type EnrichBatchOutcome<C extends EnrichCapability> =
-  | { status: "ok"; model: string; results: EnrichItemOutcome<C>[] }
-  | { status: "unavailable"; reason: string };
-
-/** Narrow an outcome slot without re-reading its shape at every call site. */
-export function isEnrichFailure(
-  outcome: EnrichItemOutcome<EnrichCapability>
-): outcome is EnrichItemFailure {
-  return "error" in outcome;
-}
-
 function headers(config: EnrichServiceConfig, json: boolean): Headers {
   const value = new Headers({ accept: "application/json" });
   if (json) value.set("content-type", "application/json");
@@ -328,12 +227,6 @@ async function readCapped(response: Response): Promise<string> {
 
 function reason(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw new Error("expected a JSON object");
-  return value as Record<string, unknown>;
 }
 
 /**
@@ -403,121 +296,6 @@ export async function probeEnrichService(
   }
   return { status: "ok", model: advertised.model };
 }
-
-function finiteVector(raw: unknown, label: string): number[] {
-  if (!Array.isArray(raw)) throw new Error(`${label} is not an array`);
-  if (raw.length === 0 || raw.length > MAX_VECTOR_DIM) {
-    throw new Error(
-      `${label} has ${raw.length} dimensions; the ledger accepts 1..${MAX_VECTOR_DIM}`
-    );
-  }
-  return raw.map((value) => {
-    if (typeof value !== "number" || !Number.isFinite(value))
-      throw new Error(`${label} contains a non-finite value`);
-    return value;
-  });
-}
-
-function confidenceOf(raw: unknown): number {
-  if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0 || raw > 1)
-    throw new Error("confidence must be a number in 0..1");
-  return raw;
-}
-
-/**
- * Validate one box against the item's declared dimensions. A box outside the
- * photograph it claims to describe is worse than no box: a surface would draw
- * a face marker over empty canvas and the owner would be told the model saw
- * something it did not.
- */
-function boxOf(raw: unknown, item: EnrichRegionItem): EnrichBox {
-  if (!Array.isArray(raw) || raw.length !== 4)
-    throw new Error("box must be [x, y, w, h]");
-  const values = raw.map((value) => {
-    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
-      throw new Error("box values must be non-negative integers");
-    return value;
-  }) as EnrichBox;
-  const [x, y, width, height] = values;
-  if (width === 0 || height === 0) throw new Error("box has no area");
-  if (item.originalWidth !== undefined && x + width > item.originalWidth)
-    throw new Error("box runs past the declared width");
-  if (item.originalHeight !== undefined && y + height > item.originalHeight)
-    throw new Error("box runs past the declared height");
-  return values;
-}
-
-type ResultReader<C extends EnrichCapability> = (
-  raw: Record<string, unknown>,
-  item: EnrichItem<C>,
-  id: string
-) => EnrichResult<C>;
-
-/**
- * One reader per capability rather than a switch at the parse site: the wire
- * contract has five payload shapes and this table is where all five live, so
- * adding a sixth is one entry and one type, not an edit in three branches.
- */
-const READERS: { [C in EnrichCapability]: ResultReader<C> } = {
-  "embed-image": (raw, _item, id) => ({
-    id,
-    vector: finiteVector(raw["vector"], "vector"),
-  }),
-  "embed-text": (raw, _item, id) => ({
-    id,
-    vector: finiteVector(raw["vector"], "vector"),
-  }),
-  ocr: (raw, item, id) => {
-    const regions = raw["regions"];
-    if (!Array.isArray(regions)) throw new Error("regions is not an array");
-    return {
-      id,
-      regions: regions.map((region) => {
-        const entry = asRecord(region);
-        const text = entry["text"];
-        if (typeof text !== "string")
-          throw new Error("region text is not a string");
-        return {
-          text,
-          confidence: confidenceOf(entry["confidence"]),
-          box: boxOf(entry["box"], item),
-        };
-      }),
-    };
-  },
-  faces: (raw, item, id) => {
-    const faces = raw["faces"];
-    if (!Array.isArray(faces)) throw new Error("faces is not an array");
-    return {
-      id,
-      faces: faces.map((face) => {
-        const entry = asRecord(face);
-        return {
-          box: boxOf(entry["box"], item),
-          confidence: confidenceOf(entry["confidence"]),
-          embedding: finiteVector(entry["embedding"], "face embedding"),
-        };
-      }),
-    };
-  },
-  transcript: (raw, _item, id) => {
-    const text = raw["text"];
-    if (typeof text !== "string")
-      throw new Error("transcript text is not a string");
-    const confidence = raw["confidence"];
-    return {
-      id,
-      // Truncation rather than refusal, the same trade desktop's deleted
-      // on-device ASR adapter made: an hour of speech is still a usable
-      // transcript at a million characters, and an owner gets the
-      // recording's words either way.
-      text: text.slice(0, MAX_TRANSCRIPT_CHARS),
-      ...(confidence === undefined
-        ? {}
-        : { confidence: confidenceOf(confidence) }),
-    };
-  },
-};
 
 /**
  * Derive one batch. Never throws for anything the SERVICE did — a refusal, a

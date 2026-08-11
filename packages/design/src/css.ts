@@ -13,7 +13,7 @@
 // colour (`--bg`); see docs/traps/design-tokens.md, "There is ONE page, and
 // an app does not retune it."
 
-import { DENSITY_TIERS, metrics, spacing } from "./density";
+import { DENSITY_TIERS, metrics, pageMargin, spacing } from "./density";
 import { library } from "./library";
 import { paletteFor, paletteText } from "./palette";
 import { radii } from "./radii";
@@ -160,6 +160,17 @@ export function toCss(): string {
   staticProps["--h-row"] = `${metrics.row}px`;
   staticProps["--h-segmented"] = `${metrics.segmented}px`;
   staticProps["--w-stem"] = `${metrics.stem}px`;
+  // THE PAGE MARGIN, emitted so the web stops guessing it. Native already
+  // reads this scale (`toNativeTheme` lowers the mobile rung) and every phone
+  // screen insets by it; the web had no token at all, so blueprints hardcoded
+  // their own number — Photos used 20px, which is neither the desktop 32 nor
+  // the mobile 18. The compact rung is not a media query here because an app
+  // pane can be narrower than the viewport (#505 trap 1); a pane that knows it
+  // is narrow re-declares this property on itself and everything inside it
+  // follows, which is why the value is read through a variable rather than
+  // branched on at each use.
+  staticProps["--page-margin"] = `${pageMargin.desktop}px`;
+  staticProps["--page-margin-compact"] = `${pageMargin.mobile}px`;
   staticProps["--density-row"] = `${DENSITY_TIERS.comfortable.row}px`;
   staticProps["--density-pad"] = `${DENSITY_TIERS.comfortable.pad}px`;
   for (const [key, value] of Object.entries(fontStacks))

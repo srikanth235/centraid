@@ -24,7 +24,14 @@ function RegisteredIcon({
     <i
       aria-hidden="true"
       className={className}
-      style={{ ...style, color }}
+      // INLINE-FLEX, NOT THE DEFAULT INLINE. An inline SVG element sits on a text
+      // baseline, so an inline wrapper's line box is the glyph PLUS the font's
+      // descent — 22px around an 18px mark. Every icon here is centred by a
+      // flex parent (`.close`, `.bottomAction`, `.nav`), and that parent then
+      // centres the 22px box, leaving the glyph 2px high: 6px above, 10px
+      // below. `inline-flex` makes the wrapper exactly the glyph's box and
+      // still sits inline beside text, which `display: block` does not.
+      style={{ display: "inline-flex", ...style, color }}
       // oxlint-disable-next-line react/no-danger -- registry output is the reviewed shared icon lowering.
       dangerouslySetInnerHTML={{ __html: markup }}
     />

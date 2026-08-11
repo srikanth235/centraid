@@ -25,9 +25,13 @@ export const KINDS = [
 export type KindFilter = (typeof KINDS)[number];
 
 /** Final copy, from the handoff. `all` names the resting state out loud so the
- *  menu never shows an unlabelled row. */
+ *  menu never shows an unlabelled row — and it names it "Everything", which is
+ *  what the timeline is showing when no kind is chosen. "All kinds" described
+ *  the MENU (a list of kinds, all of them) rather than the RESULT, and a filter
+ *  control resting at its widest setting should read as the thing you are
+ *  looking at, not as the mechanism you would use to narrow it. */
 export const KIND_LABELS: Readonly<Record<KindFilter, string>> = {
-  all: "All kinds",
+  all: "Everything",
   photo: "Photographs",
   video: "Videos",
   audio: "Audio",

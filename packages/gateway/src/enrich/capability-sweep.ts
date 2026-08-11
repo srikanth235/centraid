@@ -42,16 +42,15 @@ import type { EnrichDomain, VaultDb } from "@centraid/vault";
 import {
   MAX_ENRICH_BATCH,
   enrichBatch,
-  isEnrichFailure,
   probeEnrichService,
 } from "./service-client.js";
 import type {
   EnrichCallOptions,
   EnrichCapability,
-  EnrichItem,
-  EnrichResult,
   EnrichServiceConfig,
 } from "./service-client.js";
+import { isEnrichFailure } from "./wire-shapes.js";
+import type { EnrichItem, EnrichResult } from "./wire-shapes.js";
 
 /** One entity this pass may derive, plus the asks it would answer. */
 export interface CapabilitySweepTarget {

@@ -6,6 +6,7 @@ import type {
   ItemResult,
   ModelId,
   OcrItem,
+  PlaceItem,
   TranscriptItem,
 } from "../types.js";
 import {
@@ -16,6 +17,11 @@ import {
 } from "./embed.js";
 import { FACES_MODEL_ID, faces, facesWeightsPresent } from "./faces.js";
 import { OCR_MODEL_ID, ocr, ocrWeightsPresent } from "./ocr.js";
+import {
+  gazetteerPresent,
+  PLACE_NAME_MODEL_ID,
+  placeName,
+} from "./place-name.js";
 import {
   probeTranscriptEndpoint,
   TRANSCRIPT_MODEL_ID,
@@ -169,12 +175,41 @@ const transcriptCapability: CapabilityDefinition = {
   },
 };
 
+function isPlaceItem(value: unknown): value is PlaceItem {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { id?: unknown }).id === "string" &&
+    typeof (value as { lat?: unknown }).lat === "number" &&
+    typeof (value as { lng?: unknown }).lng === "number"
+  );
+}
+
+const placeNameCapability: CapabilityDefinition = {
+  name: "place-name",
+  modelId: () => PLACE_NAME_MODEL_ID,
+  // Honest absence, same rule as weights: with no gazetteer installed this
+  // capability is not advertised, so the gateway leaves coordinate labels
+  // alone rather than stamping a guess.
+  isAvailable: (config) => Promise.resolve(gazetteerPresent(config.modelsDir)),
+  handle: async (items, config) =>
+    items.map((item) =>
+      isPlaceItem(item)
+        ? placeName(item, config.modelsDir)
+        : {
+            id: String((item as { id?: unknown })?.id ?? ""),
+            error: "malformed place-name item",
+          }
+    ),
+};
+
 export const CAPABILITIES: readonly CapabilityDefinition[] = [
   embedImageCapability,
   embedTextCapability,
   ocrCapability,
   facesCapability,
   transcriptCapability,
+  placeNameCapability,
 ];
 
 export function findCapability(name: string): CapabilityDefinition | undefined {

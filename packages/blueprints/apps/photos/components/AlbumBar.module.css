@@ -7,7 +7,7 @@
   align-items: center;
   gap: var(--sp-2);
   min-block-size: 38px;
-  padding-inline: 20px;
+  padding-inline: var(--gutter);
   border-block-end: 1px solid var(--line);
   flex-shrink: 0;
   /* The refusal line takes a row of its own under the controls, so the bar

@@ -1382,7 +1382,6 @@ export default function App(): JSX.Element {
         <AllAppsSheet
           pins={pins}
           compact={compact}
-          scheme={themes[prefs.theme]?.kind ?? "dark"}
           onTogglePin={togglePin}
           onSelect={(destination) => {
             setAllAppsOpen(false);

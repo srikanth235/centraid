@@ -62,7 +62,7 @@ import type {
   CapabilitySweepSpec,
   CapabilitySweepTarget,
 } from "./capability-sweep.js";
-import type { EnrichBox } from "./service-client.js";
+import type { EnrichBox } from "./wire-shapes.js";
 
 /** The logical entity face proposals are derived FROM. */
 const TARGET_TYPE = "media.media_asset";

@@ -17,11 +17,11 @@ import {
   MAX_ENRICH_BATCH,
   enrichBatch,
   getEnrichCapabilities,
-  isEnrichFailure,
   probeEnrichService,
   readEnrichServiceConfig,
 } from "./service-client.js";
-import type { EnrichImageItem } from "./service-client.js";
+import { isEnrichFailure } from "./wire-shapes.js";
+import type { EnrichImageItem } from "./wire-shapes.js";
 
 const services: FakeEnrichService[] = [];
 

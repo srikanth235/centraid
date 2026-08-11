@@ -23,13 +23,12 @@
 import {
   ENRICH_UNCONFIGURED_REASON,
   enrichBatch,
-  isEnrichFailure,
-  ocrReadingOrderText,
 } from "../enrich/service-client.js";
 import type {
   EnrichCallOptions,
   EnrichServiceConfig,
 } from "../enrich/service-client.js";
+import { isEnrichFailure, ocrReadingOrderText } from "../enrich/wire-shapes.js";
 
 export interface OcrExtraction {
   text: string;

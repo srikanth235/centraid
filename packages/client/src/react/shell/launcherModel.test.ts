@@ -50,14 +50,17 @@ describe("the launcher model", () => {
     );
   });
 
-  it("gives Home no identity hue — the launcher's root is not an app", () => {
-    const home = LAUNCHER_DESTINATIONS.find((d) => d.id === "home");
-    expect(home?.colorKey).toBeUndefined();
-    // Every other destination declares one, so the icon chips read as
-    // identity rather than as decoration on some rows and not others.
+  it("gives no destination an identity hue — the shell owns no colour", () => {
+    // Invariant 3. The eight identity hues belong to the eight APPS; a frame
+    // destination that borrows one (Notifications in Photos' amber, Devices in
+    // People's violet) does not extend the wheel, it retires it — a colour on
+    // screen stops meaning "an app is here". Asserted over the whole list
+    // rather than over Home alone, because the failure mode is a hue creeping
+    // back onto one row at a time.
     for (const d of LAUNCHER_DESTINATIONS) {
-      if (d.id === "home" || d.id === "settings") continue;
-      expect(d.colorKey, `${d.id} declares a hue`).toBeDefined();
+      expect(Object.hasOwn(d, "colorKey"), `${d.id} declares a hue`).toBe(
+        false
+      );
     }
   });
 

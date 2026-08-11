@@ -148,6 +148,7 @@ import { runCapabilitySweep } from "../enrich/capability-sweep.js";
 import { EMBEDDING_SWEEP_SPEC } from "../enrich/embedding-sweep.js";
 import { FACES_SWEEP_SPEC } from "../enrich/faces-sweep.js";
 import { createOcrSweepSpec } from "../enrich/ocr-sweep.js";
+import { PLACE_NAME_SWEEP_SPEC } from "../enrich/place-name-sweep.js";
 import { readEnrichServiceConfig } from "../enrich/service-client.js";
 import type { EnrichServiceConfig } from "../enrich/service-client.js";
 import { loadSqliteVec } from "../enrich/sqlite-vec.js";
@@ -590,6 +591,8 @@ export class VaultPlane {
   private ocrSweepRunning = false;
   /** The same in-flight guard for the transcript pass (issue #724 W6). */
   private transcriptSweepRunning = false;
+  /** The same in-flight guard for the place-name pass. */
+  private placeNameSweepRunning = false;
   /** Resource-actuals hooks (#528 Phase C) — accounting only, never gates. */
   private readonly onSweepPass:
     | ((info: { durationMs: number }) => void)
@@ -2755,6 +2758,13 @@ export class VaultPlane {
       // see `enrich/ocr-sweep.ts`'s header for why that is not true of faces.
       this.runOcrSweep();
       this.runTranscriptSweep();
+      // Reverse geocoding for coordinate-labelled places, on the same clock
+      // and ambient like OCR rather than request-gated like faces: naming
+      // where a photograph was taken derives nothing the photograph did not
+      // already state, and the photos tier is the consent for it. Ordered
+      // last because it is the cheapest pass here — two numbers per item, no
+      // blob read at all — so it never delays one that moves bytes.
+      this.runPlaceNameSweep();
       // Journal segment archival (issue #367 §E2): slow-cadence — at most
       // once per day per plane; the 90-day window makes it a no-op on young
       // vaults, and the segments it writes join the blob CAS, so the sweep
@@ -3080,6 +3090,43 @@ export class VaultPlane {
       })
       .finally(() => {
         this.transcriptSweepRunning = false;
+      });
+  }
+
+  /**
+   * Coordinate-labelled places → human names. Detached and stateless for the
+   * same reason every other capability pass is: what a killed pass left
+   * undone is still a place row wearing a coordinate label with no stamp from
+   * the current model, and the next pass finds it again.
+   */
+  private runPlaceNameSweep(): void {
+    if (!this.enrich || this.placeNameSweepRunning) return;
+    this.placeNameSweepRunning = true;
+    void runCapabilitySweep(this.db, PLACE_NAME_SWEEP_SPEC, {
+      config: this.enrich,
+      onFailure: (placeId, reason) => {
+        this.logger.warn(
+          `vault plane: place name failed for place ${placeId}: ${reason}`
+        );
+      },
+    })
+      .then((result) => {
+        if (result.derived + result.drained + result.failed > 0) {
+          this.logger.info(
+            `vault plane: place names model=${result.model} ` +
+              `scanned=${result.scanned} derived=${result.derived} ` +
+              `drained=${result.drained} skipped=${result.skipped} ` +
+              `failed=${result.failed}`
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `vault plane: place name sweep failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      })
+      .finally(() => {
+        this.placeNameSweepRunning = false;
       });
   }
 
