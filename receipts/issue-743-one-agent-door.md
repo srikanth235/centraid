@@ -10,7 +10,7 @@
 - [x] HarnessSessions extraction keyed `(conversationRef, harnessKind)`; per-binding settlement + multi-harness regression test
 - [x] Per-call `harness`/`model`/`configPins` on `ctx.delegate`; consent fail-closed (#567 D13); compiler grounding + blueprint handlers regenerated
 - [x] `@agentclientprotocol/sdk` adoption; `backends/acp/json-rpc.ts` deleted
-- [ ] Close #740 as absorbed by this issue (per-call harness/model is item 5 of the Decision)
+- [x] Close #740 as absorbed by this issue (per-call harness/model is item 5 of the Decision)
 
 ## What changed
 
@@ -174,6 +174,12 @@
   `TurnStreamEvent` error instead of hanging until the idle watchdog. Per the issue's design note a
   connection is owned by one session actor for its life — the handler set is fixed at connect time
   and only a turn-local sink is attached and released — so `setHandlers` was removed, not ported.
+
+- **Closeout.** Close #740 as absorbed by this issue (per-call harness/model is item 5 of the
+  Decision): a comment on #740 maps each of its sub-tasks onto where it landed here — per-call
+  `harness`/`model`/`configPins`, compiler grounding, and `requires.runner` → `requires.harness` —
+  and notes that multi-turn continuity needed no session handle because bindings key on
+  `(conversationRef, harnessKind)`. #740 is closed as completed; PR is #746.
 
 ### Files touched (vault-schema slice)
 
@@ -735,6 +741,11 @@ Markdown only; no code changed in this slice.
 - `packages/vault/src/gateway/portable-export.ts`
 - `tests/schema-export-fingerprint.json`
 - `receipts/issue-743-one-agent-door.md`
+
+- **#740 closed as absorbed.** A comment on #740 maps each of its sub-tasks onto where it landed
+  here (per-call `harness`/`model`/`configPins`, compiler grounding, and `requires.runner` →
+  `requires.harness`), and notes that multi-turn continuity needed no session handle because
+  bindings key on `(conversationRef, harnessKind)`. PR: #746.
 
 ## User impact
 
