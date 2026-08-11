@@ -32,7 +32,7 @@ import {
   onFocusRefresh,
   readFailed,
 } from "./kit.ts";
-import { createLogic } from "./logic.ts";
+import { createLogic, decorateLedgerRow } from "./logic.ts";
 import { tallySearchGroups } from "./search-groups.ts";
 import type {
   AppState,
@@ -80,8 +80,6 @@ function makeState(): AppState {
     addFriend: null,
     expenseUndo: null,
     modalMembers: [],
-    pendingExpenses: [],
-    dismissedCommonsIntentIds: new Set(),
   };
 }
 
@@ -185,7 +183,11 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     // The sidebar snapshot and the active detail view are independent reads —
     // run them together (issue #404); a final bump reconciles the tree.
     await Promise.all([refreshDashboard(), loadView()]);
-    await logicRef.current?.refreshCommonsExpenses();
+    // Mount/refresh (issue #738): rebuild the model from the durable outbox
+    // first — the ONLY source of truth for queued/sending/parked rows — then
+    // fold in the online Commons rail as enrichment, never a rebuild.
+    await logicRef.current?.restorePendingWrites();
+    await logicRef.current?.enrichCommons();
     bump();
   }, [refreshDashboard, loadView]);
 
@@ -252,7 +254,11 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
 
   // ---- chrome wiring: doorbell, focus refresh, keys, width ----
   useEffect(() => {
-    const stopDoorbell = onDataChange(CHANGE_TABLES, async () => {
+    const stopDoorbell = onDataChange(CHANGE_TABLES, async (detail) => {
+      // Fold the overlay-source event into the pending model first — a full
+      // refresh still follows, since only a real fetch replaces an executed
+      // row's optimistic stand-in with canonical truth.
+      logicRef.current?.applyChangeDetail(detail);
       await refreshAll();
       bump();
     });
@@ -310,13 +316,18 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   const state = stateRef.current;
   const dash = dashRef.current;
 
-  // The optimistic rows that belong on the currently visible ledger.
+  // The commons-enrichment-only rows (issue #738) — another device's queued
+  // write the local outbox has no record of — that belong on the currently
+  // visible ledger. A locally-queued write is already IN `viewData.ledger`
+  // (the replica composes it from the outbox), so only enrichment-only rows
+  // need appending here.
   const pendingForView = (): LedgerRow[] => {
-    if (!state.pendingExpenses.length) return [];
+    const extra = logic.pendingLedgerRows();
+    if (!extra.length) return [];
     if (state.view === "group")
-      return state.pendingExpenses.filter((r) => r.group_id === state.groupId);
+      return extra.filter((r) => r.group_id === state.groupId);
     if (state.view === "friend")
-      return state.pendingExpenses.filter(
+      return extra.filter(
         (r) =>
           r.paid_by === state.friendId ||
           (r.splits ?? []).some((s) => s.party_id === state.friendId)
@@ -327,15 +338,13 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   // The dashboard hero totals with in-flight optimistic adds folded in (parked
   // rows excluded — a parked write hasn't moved any balance yet).
   const dashWithPending = (): Dash => {
-    const inflight = state.pendingExpenses.filter((r) => !r.parked);
-    if (!inflight.length) return dash;
-    let owe = dash.owe_total_minor;
-    let owed = dash.owed_total_minor;
-    for (const r of inflight) {
-      if (r.your_role === "lent") owed += r.your_amount_minor;
-      else if (r.your_role === "borrowed") owe += r.your_amount_minor;
-    }
-    return { ...dash, owe_total_minor: owe, owed_total_minor: owed };
+    const { owe, owed } = logic.inflightBalance();
+    if (!owe && !owed) return dash;
+    return {
+      ...dash,
+      owe_total_minor: dash.owe_total_minor + owe,
+      owed_total_minor: dash.owed_total_minor + owed,
+    };
   };
 
   // ---- Topbar (mirrors app.tsx renderTopbar) ----
@@ -442,16 +451,25 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       />
     );
   } else if (state.view === "group" || state.view === "friend") {
-    // Optimistic adds render on top of the fetched ledger, newest first —
-    // never mutating state.viewData, so a refresh replaces it wholesale.
+    // Commons-enrichment-only rows render on top of the fetched ledger,
+    // newest first — never mutating state.viewData, so a refresh replaces it
+    // wholesale. The fetched rows themselves are decorated with the pending
+    // chip fields via the model's row-id index (issue #738) — a locally
+    // queued write is already IN this list, composed by the replica from
+    // the outbox.
     const pend = pendingForView();
-    const viewData: ViewData | null =
-      pend.length && state.viewData
-        ? {
-            ...state.viewData,
-            ledger: [...pend, ...(state.viewData.ledger ?? [])],
-          }
-        : state.viewData;
+    const byRowId = logic.pendingByRowId();
+    const viewData: ViewData | null = state.viewData
+      ? {
+          ...state.viewData,
+          ledger: [
+            ...pend,
+            ...(state.viewData.ledger ?? []).map((row) =>
+              decorateLedgerRow(row, byRowId)
+            ),
+          ],
+        }
+      : state.viewData;
     content = (
       <>
         {state.view === "group" && viewData?.group ? (

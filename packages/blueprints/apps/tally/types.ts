@@ -3,6 +3,7 @@
 // at serve time (a value import of this module would 404). Grounded in the
 // query payloads (queries/*.js) and the modal models logic.ts builds: money is
 // always INTEGER minor units, balances are derived server-side and never stored.
+import type { PendingWriteStatus } from "../_shared/pending-overlay.ts";
 import type { SearchStatus } from "../_shared/search-scaffold.ts";
 
 /** A person resolved from the loaded snapshots (owner or a friend). */
@@ -118,14 +119,12 @@ export interface LedgerRow {
   };
   pending?: boolean;
   parked?: boolean;
-  /** Durable Commons command state backing this optimistic row. `expired`
-   *  (a parked intent that outlived its review window) and `cancelled` (a
-   *  member-initiated cancel) are settled states like `denied` (issue #731
-   *  goal 2) — the ambient `centraid.d.ts` `CentraidCommonsIntent.status`
-   *  has not been widened to include them yet (out of this change's
-   *  ownership; see the PR notes), so `refreshCommonsExpenses` assigns into
-   *  this wider field with an explicit cast rather than narrowing here. */
-  intentStatus?: "pending" | "parked" | "denied" | "expired" | "cancelled";
+  /** The shared pending-write overlay's status grammar (issue #738) once
+   *  this row is tracked by the model — `logic.ts`'s `decorateLedgerRow`
+   *  sets it from `PendingRowState.status`, whether the row is this
+   *  device's own queued write or a Commons-enrichment-only row from
+   *  another device. */
+  pendingStatus?: PendingWriteStatus;
   commonsIntentId?: string;
   pendingReason?: string;
   stewardLabel?: string;
@@ -292,15 +291,6 @@ export interface AppState {
   addFriend: AddFriendModel | null;
   expenseUndo: ExpenseUndo | null;
   modalMembers: Member[];
-  pendingExpenses: LedgerRow[];
-  /** Denied durable Commons intents the member has cleared from the ledger
-   *  overlay (issue #731 m6) — `refreshCommonsExpenses` re-derives
-   *  `pendingExpenses` from `commonsIntents()` on every refresh, and a
-   *  denial (unlike an executed write) never ages out of that feed on its
-   *  own, so a dismissal has to be remembered client-side or it would
-   *  reappear on the next refresh. Presentation state only, like the rest of
-   *  `AppState` — a dismissal does not survive a reload. */
-  dismissedCommonsIntentIds: Set<string>;
 }
 
 /** The nav patch setNav folds into `state` (a view switch). */

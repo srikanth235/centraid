@@ -15,6 +15,15 @@
 import { BRAND, identityColor, identityInitials } from "@centraid/design";
 
 import {
+  createPendingOverlayModel,
+  pendingReasonCopy,
+  pendingRowId,
+} from "../_shared/pending-overlay.ts";
+import type {
+  PendingMutation,
+  PendingRowState,
+} from "../_shared/pending-overlay.ts";
+import {
   convertMinor,
   first,
   rateToScaled,
@@ -23,6 +32,7 @@ import {
   todayKey,
 } from "./format.ts";
 import { debounce, outcomeMessage, statusLine } from "./kit.ts";
+import { tallyPendingProjection } from "./pending-projection.ts";
 import type {
   AddFriendModel,
   ExpenseModel,
@@ -48,6 +58,33 @@ interface ExpenseBase {
   splits: SplitEntry[];
 }
 
+/**
+ * Fold one row's pending-write overlay state (issue #738) into the display
+ * fields `ExpenseRow`/`Ledger` read. `byRowId` is `logic.pendingByRowId()` —
+ * a row whose id is not tracked (settled, or never pending) is returned
+ * unchanged. Module-level and pure so app-root.tsx can map it over a fetched
+ * ledger without re-deriving the index per row.
+ */
+export function decorateLedgerRow(
+  row: LedgerRow,
+  byRowId: Map<string, PendingRowState>
+): LedgerRow {
+  const entry = byRowId.get(row.expense_id);
+  if (!entry) return row;
+  return {
+    ...row,
+    pending: true,
+    parked: entry.status === "parked",
+    pendingStatus: entry.status,
+    pendingReason: pendingReasonCopy(entry.status, {
+      reason: entry.reason,
+      stewardLabel: entry.stewardLabel,
+    }),
+    ...(entry.stewardLabel ? { stewardLabel: entry.stewardLabel } : {}),
+    commonsIntentId: entry.intentId,
+  };
+}
+
 export function createLogic({
   state,
   dash,
@@ -57,6 +94,11 @@ export function createLogic({
   refreshAll,
 }: LogicDeps) {
   const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
+
+  // The one pending-write model this app instance drives (issue #738). No app
+  // state owns pending rows anymore — `rows()`/`byRowId()` are the read side,
+  // `begin()`/`applyOutcome()`/`restore()`/`enrichCommons()` the write side.
+  const model = createPendingOverlayModel(tallyPendingProjection);
 
   // ---------- Notice / consent narration ----------
 
@@ -77,18 +119,34 @@ export function createLogic({
     return false;
   }
 
+  // Mint an intent id and project it through the app's declaration BEFORE the
+  // write is sent — the caller can close a modal / render the optimistic row
+  // immediately, then hand the result to `act()` so it is not re-projected.
+  function beginWrite(
+    action: string,
+    input: Record<string, unknown>
+  ): { intentId: string; optimistic: PendingMutation[] } {
+    const intentId = globalThis.crypto.randomUUID();
+    return { intentId, optimistic: model.begin(action, input, intentId) };
+  }
+
   async function act(
     action: string,
     input: Record<string, unknown>,
-    intentId?: string
+    begun?: { intentId: string; optimistic: PendingMutation[] }
   ): Promise<VaultOutcome | undefined> {
+    const { intentId, optimistic } = begun ?? beginWrite(action, input);
     try {
-      return await window.centraid.write({
+      const outcome = await window.centraid.write({
         action,
         input,
-        ...(intentId ? { intentId } : {}),
+        intentId,
+        ...(optimistic.length ? { optimistic } : {}),
       });
+      model.applyOutcome(intentId, outcome ?? { status: "failed" });
+      return outcome;
     } catch (error) {
+      model.applyOutcome(intentId, { status: "failed" });
       notice(String((error as { message?: string })?.message ?? error));
       return undefined;
     }
@@ -354,185 +412,180 @@ export function createLogic({
     renderModals();
   }
 
-  // Build the decorated row shape the group/friend ledger queries return, so
-  // an optimistic add renders through the exact same components (ExpenseRow)
-  // as a fetched row — plus `pending`/`parked` flags for the kit chip.
-  function pendingExpenseRow(
-    groupId: string,
-    base: ExpenseBase,
-    expenseId: string
-  ): LedgerRow {
+  // ---------- Pending-write overlay (issue #738) ----------
+
+  /** Parse a write's cached `splits` payload back into display split rows. */
+  function parseSplits(value: unknown): SplitEntry[] {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((item): SplitEntry[] => {
+      if (!item || typeof item !== "object") return [];
+      const split = item as Record<string, unknown>;
+      const partyId = typeof split.party_id === "string" ? split.party_id : "";
+      const shareMinor = Number(split.share_minor);
+      return partyId && Number.isFinite(shareMinor)
+        ? [{ party_id: partyId, share_minor: shareMinor }]
+        : [];
+    });
+  }
+
+  /**
+   * The owner's lent/borrowed stance a pending add-expense input implies —
+   * the same arithmetic `queries/dashboard.ts`'s `ledgerRow()` runs against
+   * canonical splits, restated here because a pending row's splits are not
+   * (and cannot be — `tally_expense_split`'s primary key is composite, so
+   * the client can never mint its wire row id offline) part of the local
+   * optimistic overlay the query composes over.
+   */
+  function roleAndAmount(input: Record<string, unknown>): {
+    your_role: Role;
+    your_amount_minor: number;
+  } {
+    const paidBy = typeof input.paid_by === "string" ? input.paid_by : "";
+    const amountMinor = Number(input.amount_minor);
+    const amount = Number.isFinite(amountMinor) ? amountMinor : 0;
     const myShare =
-      base.splits.find((s) => s.party_id === dash.me)?.share_minor ?? 0;
-    let your_role: Role = "none";
-    let your_amount_minor = 0;
-    if (base.paid_by === dash.me) {
-      your_role = "lent";
-      your_amount_minor = base.amount_minor - myShare;
-    } else if (myShare > 0) {
-      your_role = "borrowed";
-      your_amount_minor = myShare;
-    }
+      parseSplits(input.splits).find((s) => s.party_id === dash.me)
+        ?.share_minor ?? 0;
+    if (paidBy === dash.me)
+      return { your_role: "lent", your_amount_minor: amount - myShare };
+    if (myShare > 0)
+      return { your_role: "borrowed", your_amount_minor: myShare };
+    return { your_role: "none", your_amount_minor: 0 };
+  }
+
+  /**
+   * Synthesize the full ledger row a commons-enrichment-only entry needs
+   * (issue #738): unlike a locally-queued write, this intent has no local
+   * outbox mutation for the query to compose (a steward-parked write queued
+   * from another device), so the row is built from the entry's cached
+   * `input` — the same fields `refreshCommonsExpenses` used to decorate
+   * durable Commons rows before this migration.
+   */
+  function buildEnrichmentRow(entry: PendingRowState): LedgerRow | undefined {
+    if (entry.action !== "add-expense" || !entry.input) return undefined;
+    const raw = entry.input;
+    const groupId = typeof raw.group_id === "string" ? raw.group_id : "";
+    const description =
+      typeof raw.description === "string" ? raw.description : "";
+    const paidBy = typeof raw.paid_by === "string" ? raw.paid_by : "";
+    const amountMinor = Number(raw.amount_minor);
+    if (!groupId || !description || !paidBy || !Number.isFinite(amountMinor))
+      return undefined;
+    const { your_role, your_amount_minor } = roleAndAmount(raw);
     return {
-      expense_id: expenseId,
+      expense_id: pendingRowId(entry.intentId),
       group_id: groupId,
       group_name: dash.groups.find((g) => g.group_id === groupId)?.name ?? "",
-      description: base.description,
-      amount_minor: base.amount_minor,
-      paid_by: base.paid_by,
-      paid_by_name: displayName(base.paid_by),
-      category: base.category,
-      spent_on: base.spent_on,
-      splits: base.splits.map((s) => ({ ...s })),
+      description,
+      amount_minor: amountMinor,
+      paid_by: paidBy,
+      paid_by_name: displayName(paidBy),
+      category: typeof raw.category === "string" ? raw.category : "general",
+      spent_on: typeof raw.spent_on === "string" ? raw.spent_on : todayKey(),
+      splits: parseSplits(raw.splits),
       your_role,
       your_amount_minor,
-      pending: true,
-      parked: false,
     };
   }
 
-  function optimisticExpenseRow(
-    exp: ExpenseModel,
-    base: ExpenseBase
-  ): LedgerRow {
-    return pendingExpenseRow(
-      exp.groupId,
-      base,
-      `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-    );
+  /** Every commons-enrichment-only row (issue #738) — another device's
+   *  queued write the local outbox has no record of — decorated and ready
+   *  to append to a ledger the way durable commons rows did before. */
+  function pendingLedgerRows(): LedgerRow[] {
+    const byRowId = model.byRowId();
+    return model
+      .rows()
+      .filter((entry) => entry.enrichmentOnly)
+      .flatMap((entry) => {
+        const row = buildEnrichmentRow(entry);
+        return row ? [decorateLedgerRow(row, byRowId)] : [];
+      });
+  }
+
+  function pendingByRowId(): Map<string, PendingRowState> {
+    return model.byRowId();
   }
 
   /**
-   * Rebuild Tally's flagship optimistic overlay from vault-resident Commons
-   * intents. A reload therefore does not erase a member's expense merely
-   * because the steward is offline; executed commands disappear once server
-   * truth is queryable, while parked and denied rows keep their reason.
+   * The owe/owed delta from add-expense writes still in flight (queued or
+   * sending — a parked write hasn't moved any balance yet). The dashboard
+   * query cannot already see this itself: its balance engine reads
+   * `tally.expense_split`, and a pending row has no split rows in the
+   * overlay (see `roleAndAmount`) for it to fold in.
    */
-  async function refreshCommonsExpenses(): Promise<void> {
-    if (!window.centraid.commonsIntents) return;
-    let intents: CentraidCommonsIntent[];
-    try {
-      intents = await window.centraid.commonsIntents();
-    } catch {
-      return;
+  function inflightBalance(): { owe: number; owed: number } {
+    let owe = 0;
+    let owed = 0;
+    for (const entry of model.rows()) {
+      if (entry.action !== "add-expense") continue;
+      if (entry.status !== "queued" && entry.status !== "sending") continue;
+      if (!entry.input) continue;
+      const { your_role, your_amount_minor } = roleAndAmount(entry.input);
+      if (your_role === "lent") owed += your_amount_minor;
+      else if (your_role === "borrowed") owe += your_amount_minor;
     }
-    const durable: LedgerRow[] = [];
-    for (const intent of intents) {
-      // `LedgerRow["intentStatus"]` has no "executed" member — an executed
-      // intent never becomes a row — so the wire status is narrowed once
-      // here and the "executed" case is checked on `intent` itself below.
-      const status = intent.status as LedgerRow["intentStatus"];
-      // A settled-but-not-executed intent the member already dismissed
-      // stays gone across refreshes (issue #731 m6, extended by goal 2) —
-      // pending/parked rows are never in this set, so they keep
-      // re-appearing exactly as before.
-      const dismissibleSettled =
-        status === "denied" || status === "expired" || status === "cancelled";
-      if (
-        intent.command !== "tally.add_expense" ||
-        intent.status === "executed" ||
-        (dismissibleSettled &&
-          state.dismissedCommonsIntentIds.has(intent.intentId))
-      )
-        continue;
-      const raw = intent.input;
-      const groupId = typeof raw.group_id === "string" ? raw.group_id : "";
-      const description =
-        typeof raw.description === "string" ? raw.description : "";
-      const paidBy = typeof raw.paid_by === "string" ? raw.paid_by : "";
-      const amountMinor = Number(raw.amount_minor);
-      if (!groupId || !description || !paidBy || !Number.isFinite(amountMinor))
-        continue;
-      const splits = Array.isArray(raw.splits)
-        ? raw.splits.flatMap((entry): SplitEntry[] => {
-            if (!entry || typeof entry !== "object") return [];
-            const split = entry as Record<string, unknown>;
-            const partyId =
-              typeof split.party_id === "string" ? split.party_id : "";
-            const shareMinor = Number(split.share_minor);
-            return partyId && Number.isFinite(shareMinor)
-              ? [{ party_id: partyId, share_minor: shareMinor }]
-              : [];
-          })
-        : [];
-      const row = pendingExpenseRow(
-        groupId,
-        {
-          description,
-          amount_minor: amountMinor,
-          paid_by: paidBy,
-          category: typeof raw.category === "string" ? raw.category : "general",
-          spent_on:
-            typeof raw.spent_on === "string"
-              ? raw.spent_on
-              : new Date(intent.createdAt).toISOString().slice(0, 10),
-          splits,
-        },
-        `commons-${intent.intentId}`
-      );
-      row.commonsIntentId = intent.intentId;
-      row.intentStatus = status;
-      row.parked = true;
-      row.pendingReason = intent.reason;
-      row.stewardLabel = intent.stewardLabel;
-      durable.push(row);
-    }
-    state.pendingExpenses = durable;
+    return { owe, owed };
+  }
+
+  /** Rebuild overlay-status rows from the durable outbox — the reload path
+   *  (issue #738). Feature-detected: absent on the visual-harness mock and
+   *  older hosts, in which case attention rows still persist in-session. */
+  async function restorePendingWrites(): Promise<void> {
+    model.restore((await window.centraid.pendingWrites?.()) ?? []);
   }
 
   /**
-   * Settle a settled-but-not-executed (`denied`/`expired`/`cancelled`)
-   * durable Commons intent out of the ledger overlay for good (issue #731
-   * m6, extended by goal 2) — a no-op for anything else, so a pending/parked
-   * row (still genuinely in flight) can never be dismissed away. Removes it
-   * from `state.pendingExpenses` immediately (no round trip to wait on) and
-   * remembers the id so the next `refreshCommonsExpenses` doesn't resurrect it.
+   * Commons is enrichment only now (issue #738): steward label and
+   * per-grant status onto rows the outbox already tracks, plus
+   * enrichment-only rows for another device's parked write — never a
+   * rebuild. An offline/failed fetch is silently skipped so every row still
+   * renders from the outbox alone.
+   */
+  async function enrichCommons(): Promise<void> {
+    try {
+      model.enrichCommons((await window.centraid.commonsIntents?.()) ?? []);
+    } catch {
+      // Offline or unreachable: rows still render from the outbox alone.
+    }
+  }
+
+  /** Drive the model from one change-feed event (issue #738); the app
+   *  re-renders when it reports a change. Canonical bursts stay the
+   *  doorbell's business (a full refresh still follows). */
+  function applyChangeDetail(detail: CentraidChangeDetail): boolean {
+    return model.applyChangeDetail(detail);
+  }
+
+  /**
+   * Settle a terminal (denied/conflict/failed) pending row out of the
+   * ledger for good (issue #731 m6, extended by #738) — a no-op for a row
+   * still waiting, so nothing genuinely in flight can be dismissed away.
    */
   function dismissCommonsIntent(intentId: string) {
-    const row = state.pendingExpenses.find(
-      (r) => r.commonsIntentId === intentId
-    );
-    if (
-      !row ||
-      (row.intentStatus !== "denied" &&
-        row.intentStatus !== "expired" &&
-        row.intentStatus !== "cancelled")
-    )
-      return;
-    state.dismissedCommonsIntentIds.add(intentId);
-    state.pendingExpenses = state.pendingExpenses.filter(
-      (r) => r.commonsIntentId !== intentId
-    );
+    if (!model.dismiss(intentId)) return;
     render();
   }
 
   /**
    * Cancel a durable Commons intent that has not executed yet (issue #731
-   * goal 2) — meaningful only while it is still `pending`/`parked`; a no-op
+   * goal 2) — meaningful only while it is still `parked`; a no-op
    * otherwise. A genuine race with the steward (or the peer sweep retrying a
    * parked intent) is possible, so this never assumes the cancel won: it
-   * re-syncs from `commonsIntents()` afterward and lets the row show
-   * whatever actually settled — `cancelled`, or the steward's real answer if
-   * the race was lost.
+   * re-enriches afterward and lets the row show whatever actually settled —
+   * cancelled, or the steward's real answer if the race was lost.
    */
   async function cancelCommonsIntent(intentId: string) {
-    const row = state.pendingExpenses.find(
-      (r) => r.commonsIntentId === intentId
-    );
-    if (
-      !row ||
-      (row.intentStatus !== "pending" && row.intentStatus !== "parked")
-    )
-      return;
+    const entry = model.rows().find((row) => row.intentId === intentId);
+    if (!entry || entry.status !== "parked") return;
     const cancel = window.centraid.cancelCommonsIntent;
     if (!cancel) return;
     try {
       await cancel({ intentId });
     } catch {
-      // A transport failure leaves the row exactly as it was; the refresh
+      // A transport failure leaves the row exactly as it was; the re-enrich
       // below (or the member's next action) reconciles it either way.
     }
-    await refreshCommonsExpenses();
+    await enrichCommons();
     render();
   }
 
@@ -622,56 +675,33 @@ export function createLogic({
       await refreshAll();
       return;
     }
-    // Optimistic add — the hot path (issue #404). The row lands in local
-    // state and the modal closes BEFORE the write resolves, so the click
-    // costs zero round trips; the write itself then reconciles:
-    //   executed → the write's own change doorbell (onDataChange in app.tsx)
-    //              refetches and swaps the optimistic row for server truth;
-    //   parked   → the row stays, chip and all, exactly like tasks' parked
-    //              ghost adds, until some later change resolves it;
-    //   failed/denied/threw → the row is removed and the notice banner
-    //              carries the existing plain-language reason.
-    const intentId = globalThis.crypto.randomUUID();
-    const row = optimisticExpenseRow(exp, base);
-    row.commonsIntentId = intentId;
-    state.pendingExpenses.push(row);
+    // Optimistic add — the hot path (issue #404 → the shared pending-write
+    // overlay, issue #738). `beginWrite` projects the pending tally.expense
+    // row before the write is even sent, so the modal closes and the row
+    // renders at zero perceived round trips; there is no local row object to
+    // reconcile by hand — the query composes the row from the outbox on
+    // every read, and `render()` re-reads the model's current status:
+    //   executed        → the doorbell refetches; the model drops the entry
+    //                      and the canonical row takes over.
+    //   queued/sending/
+    //   parked/failed/
+    //   denied/conflict → the row persists with its chip and reason,
+    //                      exactly per the shared status grammar.
+    const input: Record<string, unknown> = {
+      group_id: exp.groupId,
+      ...base,
+      ...currencyFields,
+    };
+    const begun = beginWrite("add-expense", input);
     closeExpense();
     render();
-    const outcome = await act(
-      "add-expense",
-      {
-        group_id: exp.groupId,
-        ...base,
-        ...currencyFields,
-      },
-      intentId
-    );
+    const outcome = await act("add-expense", input, begun);
     if (outcome?.status === "executed") {
       notice("");
       statusLine("Expense added · receipted.");
-      return;
+    } else if (outcome) {
+      narrate(outcome);
     }
-    if (outcome?.status === "parked") {
-      row.parked = true;
-      row.intentStatus = "parked";
-      row.pendingReason = outcome.reason ?? outcome.message;
-      narrate(outcome); // the existing parked banner copy
-      render();
-      return;
-    }
-    await refreshCommonsExpenses();
-    if (
-      state.pendingExpenses.some(
-        (pending) => pending.commonsIntentId === intentId
-      )
-    ) {
-      if (outcome) narrate(outcome);
-      render();
-      return;
-    }
-    const i = state.pendingExpenses.indexOf(row);
-    if (i >= 0) state.pendingExpenses.splice(i, 1);
-    if (outcome) narrate(outcome); // a thrown transport error already hit the banner via act()
     render();
   }
 
@@ -955,7 +985,12 @@ export function createLogic({
     narrate,
     act,
     read,
-    refreshCommonsExpenses,
+    restorePendingWrites,
+    enrichCommons,
+    applyChangeDetail,
+    pendingByRowId,
+    pendingLedgerRows,
+    inflightBalance,
     dismissCommonsIntent,
     cancelCommonsIntent,
     applyDenied,

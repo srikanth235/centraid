@@ -503,9 +503,7 @@ export function createPendingOverlayModel(
           mutations,
           ...(intent.reason !== undefined ? { reason: intent.reason } : {}),
           ...(intent.input !== undefined ? { input: intent.input } : {}),
-          ...(intent.stewardLabel
-            ? { stewardLabel: intent.stewardLabel }
-            : {}),
+          ...(intent.stewardLabel ? { stewardLabel: intent.stewardLabel } : {}),
           commonsStatus: intent.status,
           enrichmentOnly: true,
         });

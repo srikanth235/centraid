@@ -111,18 +111,18 @@ describe(pendingStatusFromOutcome, () => {
 describe(pendingReasonCopy, () => {
   // [law:pending-overlay-copy] Honest copy: offline names the connection, online names the steward.
   it("prints a supplied gateway reason verbatim", () => {
-    expect(pendingReasonCopy("parked", { reason: "confirmation required" })).toBe(
-      "confirmation required"
-    );
+    expect(
+      pendingReasonCopy("parked", { reason: "confirmation required" })
+    ).toBe("confirmation required");
   });
 
   it("says a parked commons write offline is waiting for a connection, and online names the steward", () => {
     expect(pendingReasonCopy("parked", { online: false })).toBe(
       "Saved on this device; waiting for a connection."
     );
-    expect(pendingReasonCopy("parked", { online: true, stewardLabel: "Priya" })).toBe(
-      "Waiting for Priya."
-    );
+    expect(
+      pendingReasonCopy("parked", { online: true, stewardLabel: "Priya" })
+    ).toBe("Waiting for Priya.");
     expect(pendingReasonCopy("parked", { online: true })).toBe(
       "Waiting for approval."
     );

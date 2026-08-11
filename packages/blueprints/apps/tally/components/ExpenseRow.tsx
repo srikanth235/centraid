@@ -1,3 +1,4 @@
+import { pendingChipLabel } from "../../_shared/pending-overlay.ts";
 import { displayText } from "../../_shared/untrusted.ts";
 // One expense row from a decorated ledger/search row (already carries
 // splits). Shared by Ledger.tsx (group/friend view) and Search.tsx —
@@ -15,10 +16,10 @@ const TONE = {
   muted: shared.muted!,
 } as const;
 
-/** Settled states a durable Commons intent never re-enters "pending" from
- * (issue #731 goal 2's `expired`/`cancelled` join the original `denied`) —
- * only these are ever dismissible. */
-const DISMISSIBLE_INTENT_STATUSES = new Set(["denied", "expired", "cancelled"]);
+/** The shared pending-write overlay's attention grammar (issue #738): a row
+ *  in one of these statuses persists until the member explicitly dismisses
+ *  it — never auto-removed, never silently disappearing. */
+const DISMISSIBLE_PENDING_STATUSES = new Set(["denied", "conflict", "failed"]);
 
 export function ExpenseRow({
   row,
@@ -33,19 +34,19 @@ export function ExpenseRow({
   groupSuffix?: boolean;
   onOpen: (row: LedgerRow) => void;
   /**
-   * Settle a settled (`denied`/`expired`/`cancelled`) durable Commons intent
-   * out of the overlay for good (issue #731 m6, extended by goal 2) —
-   * `refreshCommonsExpenses` otherwise keeps re-showing it on every refresh
-   * forever, since none of these three age out of `commonsIntents()` on
-   * their own the way an executed write does. Omitted for `pending`/`parked`
-   * rows and every non-optimistic row — only a settled-but-not-executed row
-   * is ever dismissible.
+   * Settle an attention row (denied/conflict/failed, issue #738's status
+   * grammar) out of the model for good (issue #731 m6, extended by #738) —
+   * the model's `enrichCommons()` otherwise keeps re-showing a denied
+   * Commons row on every enrichment forever, since it never ages out of
+   * `commonsIntents()` on its own the way an executed write does. Omitted
+   * for a still-waiting row and every non-pending row — only a settled
+   * attention row is ever dismissible.
    */
   onDismiss?: (row: LedgerRow) => void;
   /**
    * Cancel a durable Commons intent that has not executed yet (issue #731
-   * goal 2). Meaningful only while the row is still `pending`/`parked` —
-   * once the steward (or the peer sweep) has settled it one way or another,
+   * goal 2). Meaningful only while the row is still `parked` — once the
+   * steward (or the peer sweep) has settled it one way or another,
    * cancelling is no longer an available choice, so the control disappears
    * rather than lingering as a no-op.
    */
@@ -84,22 +85,16 @@ export function ExpenseRow({
   // label sits — and no detail popover (there is no receipt or server row to
   // show yet; the doorbell refresh swaps in the real one).
   const pending = Boolean(row.pending);
-  // Every settled-but-not-executed state (issue #731 goal 2 adds `expired`
-  // and `cancelled` alongside the original `denied`) gets its own honest
-  // label instead of collapsing into "denied".
-  const dismissible = DISMISSIBLE_INTENT_STATUSES.has(row.intentStatus ?? "");
-  const cancellable =
-    row.intentStatus === "pending" || row.intentStatus === "parked";
-  const pendingLabel =
-    row.intentStatus === "expired"
-      ? "expired"
-      : row.intentStatus === "cancelled"
-        ? "cancelled"
-        : row.intentStatus === "denied"
-          ? "denied"
-          : row.parked
-            ? "waiting"
-            : "pending";
+  // Every attention state (issue #738's status grammar: denied/conflict/
+  // failed) gets its own honest label and stays dismissible; a still-waiting
+  // row (queued/sending/parked) is never dismissible.
+  const dismissible = DISMISSIBLE_PENDING_STATUSES.has(row.pendingStatus ?? "");
+  const cancellable = row.pendingStatus === "parked";
+  const pendingLabel = row.pendingStatus
+    ? pendingChipLabel(row.pendingStatus)
+    : row.parked
+      ? "waiting"
+      : "pending";
   const inner = (
     <>
       <span className={styles.exdate}>
