@@ -317,7 +317,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.assertOpen();
     if (!input.action)
       throw new ReplicaProtocolError("Replica action is required");
-    const retainedIntent = pendingIntentIdFromInput(
+    const retainedIntent = await pendingIntentIdFromInput(
       appId,
       input.action,
       input.input

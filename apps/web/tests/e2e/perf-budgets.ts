@@ -111,7 +111,7 @@ export interface PerfBudgets {
 // re-baseline would have needed. `maxTransferBytes` tightens 1,250,000 ->
 // 470,000 in the same edit — a genuine tightening against both measurements.
 export const approvedDeviation =
-  "Binding Layer font fan-out re-baseline in #707/#708/#709. CI web-e2e on PR #709 head 88ab442f measured cold same-origin shell requests=16 transfer=495485B (PWA WATERFALL SUMMARY). The +4 requests / +~74 KB vs the prior 12 / 470_000 ceilings are the ten self-hosted woff2 faces (Instrument Sans 400/500 × latin/latin-ext, Instrument Serif, Source Serif 4, DM Mono — each latin + latin-ext) served from /fonts by the centraid-fonts Vite plugin; they are intentional product identity, not accidental chunk bloat. Prior Vite 8 note (#565) still holds for JS chunking: going below the JS half still needs a web-host.ts source change. maxRequests widens 12 -> 17 (measured 16 + 1); maxTransferBytes widens 470_000 -> 520_000 (measured 495_485 + ~5% headroom). Tighten only if font subsets or faces are cut later.";
+  "Binding Layer font fan-out re-baseline in #707/#708/#709. CI web-e2e on PR #709 head 88ab442f measured cold same-origin shell requests=16 transfer=495485B (PWA WATERFALL SUMMARY). The +4 requests / +~74 KB vs the prior 12 / 470_000 ceilings are the ten self-hosted woff2 faces (Instrument Sans 400/500 × latin/latin-ext, Instrument Serif, Source Serif 4, DM Mono — each latin + latin-ext) served from /fonts by the centraid-fonts Vite plugin; they are intentional product identity, not accidental chunk bloat. Prior Vite 8 note (#565) still holds for JS chunking: going below the JS half still needs a web-host.ts source change. maxRequests widens 12 -> 17 (measured 16 + 1); maxTransferBytes widens 470_000 -> 520_000 (measured 495_485 + ~5% headroom). #738 adds the durable pending-write read/presentation engine to the common shell; PR #745 CI measured 525304B before its replacement path was split behind retry/edit. Maintainer-approved maxTransferBytes 520_000 -> 528_000 preserves a 2696B ceiling above that measured run while keeping request count and all app-open/warm budgets unchanged. Tighten when the shared pending metadata grammar or font payload is reduced.";
 
 export const perfBudgets: PerfBudgets = {
   shell: {
@@ -132,7 +132,9 @@ export const perfBudgets: PerfBudgets = {
     // deletes any sidecars a previous full build left. Measuring that way reads
     // ~1.79 MB here — uncompressed serving, not a regression. Run
     // `bun run --cwd apps/web build` first, then the spec.
-    maxTransferBytes: 520_000,
+    // #738 approved deviation: measured 525_304 B in PR #745 CI; the immutable
+    // replacement implementation is additionally lazy-loaded after that run.
+    maxTransferBytes: 528_000,
     // MEASURED warm/cold ratio ~0.0 (served from cache). 0.15 leaves room for
     // an unavoidable no-store fetch or two while still proving the shell cache.
     maxWarmToColdByteRatio: 0.15,

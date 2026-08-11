@@ -503,9 +503,9 @@ describe(IntentQueue, () => {
     ]);
   });
 
-  test("recognizes only declared synthetic revision identities", () => {
+  test("recognizes only declared synthetic revision identities", async () => {
     expect(
-      pendingIntentIdFromInput("tasks", "edit", {
+      await pendingIntentIdFromInput("tasks", "edit", {
         task_id: "pending:intent-original:task",
         project_id: "pending:intent-project:project",
         title: "Edited locally",
@@ -515,19 +515,19 @@ describe(IntentQueue, () => {
       expectedActions: ["add"],
     });
     expect(
-      pendingIntentIdFromInput("tasks", "add", {
+      await pendingIntentIdFromInput("tasks", "add", {
         project_id: "pending:intent-project:project",
         title: "Child of a pending project",
       })
     ).toBeUndefined();
     expect(
-      pendingIntentIdFromInput("tally", "add-expense", {
+      await pendingIntentIdFromInput("tally", "add-expense", {
         group_id: "pending:intent-group:group",
         description: "Lunch",
       })
     ).toBeUndefined();
     expect(
-      pendingIntentIdFromInput("tasks", "edit", {
+      await pendingIntentIdFromInput("tasks", "edit", {
         task_id: "task-1",
         description: "pending:ordinary:content",
         title: "pending:also-ordinary:content",
@@ -609,5 +609,293 @@ describe(IntentQueue, () => {
     queue.close();
 
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  test("merges revisions without confusing synthetic identity or clear controls for user data", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-merged",
+    });
+    await queue.enqueue({
+      intentId: "intent-original",
+      appId: "tasks",
+      action: "add",
+      input: {
+        id: "original-id",
+        __rowId: "original-row",
+        task_id: "pending:intent-original:task",
+        title: "Original",
+        due_at: "2026-08-12",
+        project_id: "project-1",
+        remind_before_min: 30,
+        rrule: "FREQ=DAILY",
+        section_id: "section-1",
+        unknown: "remove me",
+      },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "shape-tasks",
+          entity: "schedule.task",
+          rowId: "pending:intent-original:task",
+          values: {
+            task_id: "pending:intent-original:task",
+            title: "Original",
+          },
+        },
+      ],
+    });
+    await queue.applyOutcomes([
+      { intentId: "intent-original", status: "failed", reason: "revise" },
+    ]);
+
+    const revised = await queue.revise("intent-original", {
+      id: "pending:intent-original:id",
+      __rowId: "pending:intent-original:row",
+      task_id: "pending:intent-original:task",
+      title: "Revised",
+      description: "pending:intent-original:ordinary-user-text",
+      clear_due: true,
+      clear_project: true,
+      clear_remind: true,
+      clear_rrule: true,
+      clear_section: true,
+      clear_unknown: true,
+      clear_false: false,
+    });
+
+    expect(revised?.input).toStrictEqual({
+      id: "original-id",
+      __rowId: "original-row",
+      task_id: "pending:intent-original:task",
+      title: "Revised",
+      description: "pending:intent-original:ordinary-user-text",
+      clear_false: false,
+    });
+  });
+
+  test("fails closed for non-object or undeclared synthetic revision probes", async () => {
+    await expect(
+      pendingIntentIdFromInput("tasks", "edit", null)
+    ).resolves.toBeUndefined();
+    await expect(
+      pendingIntentIdFromInput("tasks", "edit", "pending:intent-x:task")
+    ).resolves.toBeUndefined();
+    await expect(
+      pendingIntentIdFromInput("tasks", "edit", ["pending:intent-x:task"])
+    ).resolves.toBeUndefined();
+    await expect(
+      pendingIntentIdFromInput("unknown-app", "edit", {
+        task_id: "pending:intent-x:task",
+      })
+    ).resolves.toBeUndefined();
+    await expect(
+      pendingIntentIdFromInput("tasks", "unknown-action", {
+        task_id: "pending:intent-x:task",
+      })
+    ).resolves.toBeUndefined();
+  });
+
+  test("preserves the original projection and refreshed versions when an app has no declaration", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-custom-replacement",
+    });
+    await queue.enqueue({
+      intentId: "intent-custom-original",
+      appId: "custom-app",
+      action: "custom-edit",
+      input: "scalar-input",
+      optimistic: [
+        {
+          op: "delete",
+          shapeId: "shape-custom",
+          entity: "custom.item",
+          rowId: "item-1",
+        },
+      ],
+    });
+    await queue.applyOutcomes([
+      {
+        intentId: "intent-custom-original",
+        status: "failed",
+        reason: "retry",
+      },
+    ]);
+
+    const replacement = await queue.retry("intent-custom-original", [
+      {
+        shapeId: "shape-custom",
+        entity: "custom.item",
+        rowId: "item-1",
+        version: 9,
+      },
+    ]);
+    expect(replacement).toMatchObject({
+      intentId: "intent-custom-replacement",
+      input: "scalar-input",
+      baseVersions: [
+        {
+          shapeId: "shape-custom",
+          entity: "custom.item",
+          rowId: "item-1",
+          version: 9,
+        },
+      ],
+      optimistic: [
+        {
+          op: "delete",
+          shapeId: "shape-custom",
+          entity: "custom.item",
+          rowId: "item-1",
+        },
+      ],
+    });
+  });
+
+  test("rejects replacement id reuse before the durable store sees a changed payload", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-same",
+    });
+    await queue.enqueue({
+      intentId: "intent-same",
+      appId: "tasks",
+      action: "add",
+      input: { title: "Original" },
+    });
+    await queue.applyOutcomes([
+      { intentId: "intent-same", status: "failed", reason: "retry" },
+    ]);
+
+    await expect(queue.retry("intent-same")).rejects.toThrow(
+      "A pending-write replacement requires a fresh intent id"
+    );
+  });
+
+  test("canonical revision matching rejects wrong state, app, action, and row candidates", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-correct-replacement",
+    });
+    const enqueueCandidate = async (
+      intentId: string,
+      appId: string,
+      action: string,
+      rowId: string,
+      terminal = true
+    ): Promise<void> => {
+      await queue.enqueue({
+        intentId,
+        appId,
+        action,
+        input: { task_id: rowId, title: intentId },
+        optimistic: [
+          {
+            op: "delete",
+            shapeId: "shape-tasks",
+            entity: "schedule.task",
+            rowId: "unrelated-row",
+          },
+          {
+            op: "upsert",
+            shapeId: "shape-tasks",
+            entity: "schedule.task",
+            rowId,
+            values: { task_id: rowId, title: intentId },
+          },
+        ],
+      });
+      if (terminal)
+        await queue.applyOutcomes([
+          { intentId, status: "failed", reason: "revise" },
+        ]);
+    };
+    await enqueueCandidate("intent-correct", "tasks", "edit", "task-1");
+    await enqueueCandidate("intent-wrong-app", "notes", "edit", "task-1");
+    await enqueueCandidate("intent-wrong-action", "tasks", "add", "task-1");
+    await enqueueCandidate("intent-wrong-row", "tasks", "edit", "task-2");
+    await enqueueCandidate("intent-queued", "tasks", "edit", "task-1", false);
+
+    await expect(
+      queue.reviseMatchingProjection(
+        "tasks",
+        "edit",
+        { task_id: "task-1", title: "Correct revision" },
+        [
+          {
+            op: "upsert",
+            shapeId: "shape-tasks",
+            entity: "schedule.task",
+            rowId: "task-1",
+            values: { task_id: "task-1", title: "Correct revision" },
+          },
+        ]
+      )
+    ).resolves.toMatchObject({
+      supersededIntentId: "intent-correct",
+      replacement: {
+        intentId: "intent-correct-replacement",
+        input: { task_id: "task-1", title: "Correct revision" },
+      },
+    });
+  });
+
+  test("uses the browser Web Lock boundary and still retries when navigator is absent", async () => {
+    const makeFailedQueue = async (
+      intentId: string,
+      replacementId: string
+    ): Promise<IntentQueue> => {
+      const queue = new IntentQueue(new MemoryIntentStore(), {
+        idFactory: () => replacementId,
+      });
+      await queue.enqueue({
+        intentId,
+        appId: "tasks",
+        action: "add",
+        input: { title: "Retry" },
+      });
+      await queue.applyOutcomes([
+        { intentId, status: "failed", reason: "retry" },
+      ]);
+      return queue;
+    };
+    const request = vi.fn(
+      async <T>(_name: string, callback: () => Promise<T>): Promise<T> =>
+        callback()
+    );
+    vi.stubGlobal("navigator", { locks: { request } });
+    const locked = await makeFailedQueue("intent-locked", "replacement-locked");
+    await expect(locked.retry("intent-locked")).resolves.toMatchObject({
+      intentId: "replacement-locked",
+    });
+    expect(request).toHaveBeenCalledWith(
+      "centraid:replica-intent:intent-locked",
+      expect.any(Function)
+    );
+
+    vi.stubGlobal("navigator", undefined);
+    const unlocked = await makeFailedQueue(
+      "intent-unlocked",
+      "replacement-unlocked"
+    );
+    await expect(unlocked.retry("intent-unlocked")).resolves.toMatchObject({
+      intentId: "replacement-unlocked",
+    });
+    vi.unstubAllGlobals();
+  });
+
+  test("parks, refuses invalid discard, and purges through the durable store", async () => {
+    const store = new MemoryIntentStore();
+    const destroy = vi.spyOn(store, "destroy");
+    const queue = new IntentQueue(store, { idFactory: () => "intent-park" });
+    await queue.enqueue({
+      appId: "tasks",
+      action: "add",
+      input: { title: "Park" },
+    });
+    await queue.claimNext();
+    await expect(
+      queue.parked("intent-park", "approval")
+    ).resolves.toMatchObject({ state: "parked", reason: "approval" });
+    await expect(queue.discard("missing")).resolves.toBe(false);
+    await queue.purge();
+    expect(destroy).toHaveBeenCalledOnce();
   });
 });
