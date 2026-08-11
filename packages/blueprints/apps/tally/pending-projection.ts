@@ -56,6 +56,15 @@ function expenseValues(
 
 export const tallyPendingProjection: PendingProjectionDeclaration = {
   appId: "tally",
+  // A Tally write against a Commons group pends on its steward, and the
+  // durable intent records the vault command rather than the app action
+  // (packages/vault/src/share/actable.ts). Both vocabularies resolve here so
+  // an enriched commons row projects the same expense a local write does.
+  commands: {
+    "tally.add_expense": "add-expense",
+    "tally.edit_expense": "edit-expense",
+    "tally.delete_expense": "delete-expense",
+  },
   actions: {
     "add-expense": (input, ctx): PendingMutation[] => [
       {

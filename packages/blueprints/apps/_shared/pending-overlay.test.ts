@@ -22,6 +22,7 @@ import type {
 
 const DECLARATION: PendingProjectionDeclaration = {
   appId: "tally",
+  commands: { "tally.add_expense": "add-expense" },
   actions: {
     "add-expense": (input, ctx) => [
       {
@@ -363,6 +364,27 @@ describe(createPendingOverlayModel, () => {
     model.begin("add-expense", { description: "Ferry" }, "intent-1");
     model.enrichCommons([]);
     expect(model.rows()).toHaveLength(1);
+  });
+
+  // [law:pending-overlay-vocabulary] A commons intent names the vault command,
+  // not the app action; an unresolved name renders no row at all.
+  it("resolves a vault command onto the declared action so an enriched commons row still projects", () => {
+    const model = createPendingOverlayModel(DECLARATION);
+    model.enrichCommons([
+      {
+        intentId: "remote-1",
+        command: "tally.add_expense",
+        status: "parked",
+        input: { description: "Groceries", amount_minor: 900 },
+      },
+    ]);
+    const [row] = model.rows();
+    expect(row).toMatchObject({
+      action: "add-expense",
+      status: "parked",
+      rowIds: ["pending-remote-1"],
+      entities: ["tally.expense"],
+    });
   });
 
   it("adds enrichment-only rows for server-side intents the outbox does not hold, and keeps them across restore", () => {

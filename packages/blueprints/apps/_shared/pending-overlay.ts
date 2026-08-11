@@ -105,6 +105,31 @@ export type PendingActionProjection = (
 export interface PendingProjectionDeclaration {
   appId: string;
   actions: Record<string, PendingActionProjection>;
+  /**
+   * Vault command name → declared action, for the commons rail only.
+   *
+   * A local write is issued by its APP ACTION name (`add-expense`), but a
+   * durable commons intent records the VAULT COMMAND it will run
+   * (`tally.add_expense`, `packages/vault/src/share/actable.ts`). The two
+   * vocabularies are genuinely different strings, so an app whose actions can
+   * pend on a steward maps them here; without the map, an enriched commons
+   * intent would project nothing and the row would silently not render.
+   */
+  commands?: Record<string, string>;
+}
+
+/**
+ * The declared action a name refers to, accepting either vocabulary: an app
+ * action as-is, or a vault command through the declaration's `commands` map.
+ * Returns undefined when the app declares no projection for it.
+ */
+export function resolveDeclaredAction(
+  declaration: PendingProjectionDeclaration,
+  name: string
+): string | undefined {
+  if (declaration.actions[name]) return name;
+  const mapped = declaration.commands?.[name];
+  return mapped && declaration.actions[mapped] ? mapped : undefined;
 }
 
 /**
@@ -486,15 +511,19 @@ export function createPendingOverlayModel(
         }
         const status = statusFromCommons(intent.status);
         if (status === undefined) continue;
+        // A commons intent names the VAULT COMMAND; the app declared APP
+        // ACTIONS. Resolve before projecting, or the row renders as nothing.
+        const action =
+          resolveDeclaredAction(declaration, intent.command) ?? intent.command;
         const mutations = projectPendingMutations(
           declaration,
-          intent.command,
+          action,
           intent.input ?? {},
           intent.intentId
         );
         entries.set(intent.intentId, {
           intentId: intent.intentId,
-          action: intent.command,
+          action,
           status,
           mutations,
           ...(intent.reason === undefined ? {} : { reason: intent.reason }),

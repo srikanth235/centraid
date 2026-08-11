@@ -177,7 +177,7 @@ describe("Tally pending-write overlay (issue #738)", () => {
       intentId: "intent-taxi",
       grantId: "grant-trip",
       actorPartyId: "party-bob",
-      command: "add-expense",
+      command: "tally.add_expense",
       input: {
         group_id: "group-trip",
         description: "Taxi",
@@ -206,7 +206,18 @@ describe("Tally pending-write overlay (issue #738)", () => {
     });
 
     await logic.enrichCommons();
-    expect(logic.pendingLedgerRows()).toHaveLength(1);
+    // Asserting the row's CONTENT, not just its count: a commons intent names
+    // the vault command (`tally.add_expense`), not the app action, so a row
+    // that renders empty — or not at all — is the failure mode this test
+    // exists to catch.
+    const [enriched] = logic.pendingLedgerRows();
+    expect(enriched).toMatchObject({
+      description: "Taxi",
+      amount_minor: 1200,
+      commonsIntentId: "intent-taxi",
+      stewardLabel: "Alice's device",
+      pendingReason: "Alice's device does not allow this split.",
+    });
 
     logic.dismissCommonsIntent("intent-taxi");
     expect(logic.pendingLedgerRows()).toStrictEqual([]);
@@ -227,7 +238,7 @@ describe("Tally pending-write overlay (issue #738)", () => {
             intentId: "intent-lunch",
             grantId: "grant-trip",
             actorPartyId: "party-bob",
-            command: "add-expense",
+            command: "tally.add_expense",
             input: {
               group_id: "group-trip",
               description: "Lunch",
