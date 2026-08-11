@@ -77,8 +77,36 @@ interface InlineChangeDetail {
 /** The replica surface one scope binding needs. */
 export type InlineScopeSession = Pick<
   ReplicaShellSession,
-  "read" | "search" | "write" | "subscribe"
+  "read" | "search" | "write" | "subscribe" | "pendingWrites"
 >;
+
+/**
+ * One optimistic mutation an app's declared projection produced (issue #738).
+ * The bridge forwards it verbatim into the replica write, which validates it
+ * against the app's catalog and persists it on the durable intent — from then
+ * on every read composes it via the coordinator's `overlayMutations` path.
+ */
+export interface InlineOptimisticMutation {
+  op: "upsert" | "delete";
+  entity: string;
+  rowId: string;
+  values?: Record<string, unknown>;
+  /** Which consented purpose's shape to resolve; defaults to the app's. */
+  purpose?: string;
+  shapeId?: string;
+}
+
+/** One unsettled write from the durable outbox, reshaped for the app (issue
+ * #738): the pending-write overlay engine rebuilds its rows from this list on
+ * mount/reload, so visibility survives exactly as long as the outbox does. */
+export interface InlinePendingWrite {
+  intentId: string;
+  action: string;
+  state: "queued" | "sending" | "awaiting-change" | "parked";
+  reason?: string;
+  input: Record<string, unknown>;
+  mutations: InlineOptimisticMutation[];
+}
 
 /** One mounted scope: its shell-resolved descriptor and its replica session. */
 export interface InlineScopeBinding {
@@ -164,9 +192,17 @@ export interface InlineCentraidClient {
     action: string;
     input?: Record<string, unknown>;
     intentId?: string;
+    /** Declared pending projection for this write (issue #738) — persisted on
+     * the durable intent and composed into every read until settlement. */
+    optimistic?: InlineOptimisticMutation[];
     signal?: AbortSignal;
     scope?: string;
   }) => Promise<T>;
+  /** This app's unsettled writes from one scope's durable outbox (issue
+   * #738) — the reload path for the pending-write overlay engine. */
+  pendingWrites: (opts?: {
+    scope?: string;
+  }) => Promise<InlinePendingWrite[]>;
   /** Commands durably queued on this member seat while its steward is away. */
   commonsIntents: (opts?: {
     scope?: string;
@@ -605,6 +641,7 @@ export function createInlineCentraidClient(
       action: string;
       input?: Record<string, unknown>;
       intentId?: string;
+      optimistic?: InlineOptimisticMutation[];
       signal?: AbortSignal;
       scope?: string;
     }) {
@@ -622,15 +659,24 @@ export function createInlineCentraidClient(
         action: opts.action,
         input: (opts.input ?? {}) as never,
         ...(opts.intentId ? { intentId: opts.intentId } : {}),
+        // The app's declared pending projection (issue #738): validated and
+        // persisted with the intent, so the queued row survives reload from
+        // the outbox alone.
+        ...(opts.optimistic && opts.optimistic.length > 0
+          ? { optimistic: opts.optimistic as never }
+          : {}),
       });
       // Shape the intent outcome into the `VaultOutcome` the kit narrates: the
       // durable intentId is the app's `invocationId` (pending-add key), and any
-      // handler output rides through unchanged.
+      // handler output rides through unchanged. A conflict's expected-vs-actual
+      // detail rides through too (issue #738 P2) — a conflict row must never
+      // degrade to a generic transport error.
       const outcome = result as {
         intentId: string;
         status: string;
         reason?: string;
         output?: unknown;
+        conflict?: unknown;
       };
       return {
         status: outcome.status,
@@ -639,7 +685,36 @@ export function createInlineCentraidClient(
           ? { reason: outcome.reason, message: outcome.reason }
           : {}),
         ...(outcome.output === undefined ? {} : { output: outcome.output }),
+        ...(outcome.conflict === undefined
+          ? {}
+          : { conflict: outcome.conflict }),
       } as T;
+    },
+
+    async pendingWrites(opts) {
+      const binding = bindingFor(opts?.scope);
+      const pending = await binding.session.pendingWrites(appId);
+      return pending.map((intent) => ({
+        intentId: intent.intentId,
+        action: intent.action,
+        state: intent.state,
+        ...(intent.reason === undefined ? {} : { reason: intent.reason }),
+        input: (intent.input ?? {}) as Record<string, unknown>,
+        mutations: intent.optimistic.map((mutation) =>
+          mutation.op === "upsert"
+            ? {
+                op: "upsert" as const,
+                entity: mutation.entity,
+                rowId: mutation.rowId,
+                values: mutation.values as Record<string, unknown>,
+              }
+            : {
+                op: "delete" as const,
+                entity: mutation.entity,
+                rowId: mutation.rowId,
+              }
+        ),
+      }));
     },
 
     async commonsIntents(opts) {

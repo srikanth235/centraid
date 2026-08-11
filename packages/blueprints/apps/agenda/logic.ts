@@ -112,12 +112,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   async function act(
     action: string,
     input: Record<string, unknown>,
-    optimistic?: unknown
+    optimistic?: CentraidPendingMutation[]
   ): Promise<VaultOutcome | undefined> {
     try {
-      // The change-bridge accepts an `optimistic` overlay-ops array that the
-      // ambient CentraidClient.write type (types/centraid.d.ts, out of scope
-      // here) does not list; spread it so the excess property rides through.
       return await window.centraid.write({
         action,
         input,
@@ -132,7 +129,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   async function write(
     action: string,
     input: Record<string, unknown>,
-    optimistic?: unknown
+    optimistic?: CentraidPendingMutation[]
   ): Promise<VaultOutcome | undefined> {
     const outcome = await act(action, input, optimistic);
     const executed = narrate(outcome);
@@ -215,7 +212,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     const attendee = findEvent(eventId)?.attendees?.find(
       (item) => item.party_id === partyId
     );
-    const optimistic = attendee?.attendee_id
+    const optimistic: CentraidPendingMutation[] = attendee?.attendee_id
       ? [
           {
             op: "upsert",

@@ -67,6 +67,7 @@ function fakeSession(overrides?: Partial<Session>): Session & {
         if (i >= 0) subscribers.splice(i, 1);
       };
     }),
+    pendingWrites: vi.fn<Session["pendingWrites"]>(async () => []),
     ...overrides,
   } as Session & {
     writes: unknown[];
@@ -123,6 +124,109 @@ describe(installInlineCentraid, () => {
     ]);
     expect(outcome.status).toBe("executed");
     expect(outcome.invocationId).toBe("intent-xyz");
+  });
+
+  it("forwards a declared pending projection into session.write and a conflict back out (issue #738)", async () => {
+    const session = fakeSession({
+      write: vi.fn<Session["write"]>(async () => ({
+        intentId: "intent-conflict",
+        status: "conflict",
+        reason: "someone else changed this first",
+        conflict: {
+          entity: "tasks.task",
+          rowId: "t1",
+          expectedVersion: 3,
+          actualVersion: 5,
+        },
+      })),
+    });
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "tasks",
+      session,
+      queries: noQueries,
+      target,
+    });
+    const mutations = [
+      {
+        op: "upsert" as const,
+        entity: "tasks.task",
+        rowId: "pending-intent-1",
+        values: { task_id: "pending-intent-1", title: "Buy milk" },
+      },
+    ];
+    const outcome = await (target.centraid as InlineCentraidClient).write<{
+      status: string;
+      conflict?: { expectedVersion: number; actualVersion: number };
+    }>({
+      action: "add",
+      input: { title: "Buy milk" },
+      intentId: "intent-1",
+      optimistic: mutations,
+    });
+    expect(session.write).toHaveBeenCalledWith(
+      "tasks",
+      expect.objectContaining({ optimistic: mutations })
+    );
+    expect(outcome.status).toBe("conflict");
+    expect(outcome.conflict).toStrictEqual({
+      entity: "tasks.task",
+      rowId: "t1",
+      expectedVersion: 3,
+      actualVersion: 5,
+    });
+  });
+
+  it("reports the durable outbox through pendingWrites so the overlay survives a reload (issue #738)", async () => {
+    const session = fakeSession({
+      pendingWrites: vi.fn<Session["pendingWrites"]>(async () => [
+        {
+          intentId: "intent-1",
+          appId: "tasks",
+          action: "add",
+          state: "queued",
+          reason: "waiting for a connection",
+          input: { title: "Buy milk" },
+          optimistic: [
+            {
+              op: "upsert",
+              shapeId: "shape-tasks",
+              entity: "tasks.task",
+              rowId: "pending-intent-1",
+              values: { task_id: "pending-intent-1", title: "Buy milk" },
+            },
+          ],
+        },
+      ]),
+    });
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "tasks",
+      session,
+      queries: noQueries,
+      target,
+    });
+    const pending = await (
+      target.centraid as InlineCentraidClient
+    ).pendingWrites();
+    expect(session.pendingWrites).toHaveBeenCalledWith("tasks");
+    expect(pending).toStrictEqual([
+      {
+        intentId: "intent-1",
+        action: "add",
+        state: "queued",
+        reason: "waiting for a connection",
+        input: { title: "Buy milk" },
+        mutations: [
+          {
+            op: "upsert",
+            entity: "tasks.task",
+            rowId: "pending-intent-1",
+            values: { task_id: "pending-intent-1", title: "Buy milk" },
+          },
+        ],
+      },
+    ]);
   });
 
   it("exposes vault-resident Commons intents as a durable app overlay", async () => {

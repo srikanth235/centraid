@@ -39,6 +39,7 @@ import { DEFAULT_REPLICA_PURPOSE } from "./types.js";
 import type {
   EnqueueIntentInput,
   IntentOutcome,
+  OptimisticMutation,
   ReplicaBootstrapHeader,
   ReplicaChangeBatch,
   ReplicaCursor,
@@ -98,6 +99,23 @@ export interface ShellReplicaWriteInput {
 export type ShellReplicaWriteResult =
   | IntentOutcome
   | { intentId: string; status: "queued" | "in-flight"; reason?: string };
+
+/**
+ * One unsettled write from the durable outbox, app-visible (issue #738). The
+ * pending-write overlay engine rebuilds its rows from this list on reload, so
+ * a queued write's visibility survives exactly as long as the outbox does.
+ * `input` stays local-only: it is the app's own payload handed back for
+ * edit/retry, never re-fetched.
+ */
+export interface ShellPendingWrite {
+  intentId: string;
+  appId: string;
+  action: string;
+  state: "queued" | "sending" | "awaiting-change" | "parked";
+  reason?: string;
+  input: ReplicaValue;
+  optimistic: OptimisticMutation[];
+}
 
 export interface ShellReplicaCoordinator {
   bootstrap: (
@@ -320,6 +338,27 @@ export class ReplicaShellSession {
     } finally {
       this.finishAdmissionRegistration();
     }
+  }
+
+  /**
+   * This app's unsettled writes from the durable outbox (issue #738) — the
+   * reload path for the pending-write overlay. Clones ride out so a caller
+   * can never mutate the stored intent.
+   */
+  async pendingWrites(appId: string): Promise<ShellPendingWrite[]> {
+    this.assertOpen();
+    const pending = await this.coordinator.pendingIntents();
+    return pending
+      .filter((intent) => intent.appId === appId)
+      .map((intent) => ({
+        intentId: intent.intentId,
+        appId: intent.appId,
+        action: intent.action,
+        state: intent.state as ShellPendingWrite["state"],
+        ...(intent.reason === undefined ? {} : { reason: intent.reason }),
+        input: structuredClone(intent.input),
+        optimistic: structuredClone(intent.optimistic),
+      }));
   }
 
   subscribe(

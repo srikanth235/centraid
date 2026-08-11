@@ -68,6 +68,7 @@ function fakeSession(): Fake {
       writes.push(input);
       return { intentId: "i-1", status: "executed" };
     }),
+    pendingWrites: vi.fn<InlineScopeSession["pendingWrites"]>(async () => []),
     subscribe: vi.fn<InlineScopeSession["subscribe"]>(
       (_appId, _deps, listener) => {
         subscribers.push(listener);

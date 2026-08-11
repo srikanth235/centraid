@@ -45,6 +45,14 @@ interface VaultOutcome {
   receiptId?: string;
   /** Machine code on a denial/error path (e.g. `VAULT_CONSENT`). */
   code?: string;
+  /** Optimistic-concurrency detail on a conflicted write (issue #738 P2):
+   *  expected vs actual versions, surfaced verbatim on the pending row. */
+  conflict?: {
+    entity: string;
+    rowId: string;
+    expectedVersion: number;
+    actualVersion: number;
+  };
 }
 
 // ---------- ctx.vault (handler side) ----------
@@ -272,6 +280,35 @@ interface CentraidCommonsIntent {
   settledAt?: string;
 }
 
+/** One optimistic mutation a declared pending projection produced (issue
+ * #738). Persisted on the durable intent and composed into every replica read
+ * until the write settles. Structurally `InlineOptimisticMutation`
+ * (centraid-inline.ts), restated here because the ambient global cannot
+ * import. */
+type CentraidPendingMutation =
+  | {
+      op: "upsert";
+      entity: string;
+      rowId: string;
+      values: Record<string, unknown>;
+      /** Which consented purpose's shape to resolve; defaults to the app's. */
+      purpose?: string;
+      shapeId?: string;
+    }
+  | { op: "delete"; entity: string; rowId: string; purpose?: string; shapeId?: string };
+
+/** One unsettled write from the durable outbox (issue #738) — what
+ * `pendingWrites()` reports so the shared overlay engine can rebuild pending
+ * rows on mount/reload, offline, from local truth alone. */
+interface CentraidPendingWrite {
+  intentId: string;
+  action: string;
+  state: "queued" | "sending" | "awaiting-change" | "parked";
+  reason?: string;
+  input: Record<string, unknown>;
+  mutations: CentraidPendingMutation[];
+}
+
 /** One scope's answer in a `readAll` fan-out. Errors are data, never throws. */
 type CentraidScopeRead<T> =
   | { scope: string; ok: true; data: T }
@@ -315,10 +352,19 @@ interface CentraidClient {
     action: string;
     input?: Record<string, unknown>;
     intentId?: string;
+    /** Declared pending projection for this write (issue #738); the replica
+     * persists it with the intent and composes it into every read. */
+    optimistic?: CentraidPendingMutation[];
     signal?: AbortSignal;
     /** Which mounted scope the write lands in; defaults to the primary. */
     scope?: string;
   }) => Promise<T>;
+  /** This app's unsettled writes from one scope's durable outbox (issue
+   * #738); absent on older/single-scope hosts — the overlay engine
+   * feature-detects it. */
+  pendingWrites?: (opts?: {
+    scope?: string;
+  }) => Promise<CentraidPendingWrite[]>;
   /** Durable member-side Commons overlay; absent on older/single-scope hosts. */
   commonsIntents?: (opts?: {
     scope?: string;
