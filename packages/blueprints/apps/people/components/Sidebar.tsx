@@ -6,6 +6,7 @@
 // app.css; the JSX-only rows moved into Sidebar.module.css.
 import { useEffect, useRef } from "react";
 
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { listColor, daysSince } from "../format.ts";
 import { I } from "../icons.ts";
 import { armConfirm } from "../kit.ts";
@@ -232,6 +233,10 @@ function ListNavRow({
         <span className={styles.lbl}>{c.name}</span>
         <span className={styles.navCount}>{count || ""}</span>
       </button>
+      <PendingWriteActions
+        row={c as unknown as Record<string, unknown>}
+        onEdit={() => onStartRename(c.list_id)}
+      />
       <span className={styles.folderTools}>
         <button
           type="button"

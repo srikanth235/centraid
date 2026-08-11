@@ -179,6 +179,91 @@ const snapshot: ReplicaSnapshot = {
 };
 
 describe(ReplicaCoordinator, () => {
+  test("captures canonical row versions and refreshes them atomically on retry", async () => {
+    const store = promisedStore(
+      new ReplicaSqliteStore(new NodeSqliteDriver(), "vault-a", "memory")
+    );
+    const intentIds = ["intent-original", "intent-retry"];
+    const intents = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => intentIds.shift()!,
+    });
+    const replica = new ReplicaCoordinator(store, intents);
+    await replica.bootstrap({
+      ...windowedHeader(),
+      cursor: { epoch: "epoch-1", seq: 4 },
+      rows: [
+        {
+          shapeId: "shape-agenda",
+          entity: "core.event",
+          rowId: "event-1",
+          values: { id: "event-1", title: "Canonical" },
+          rowVersion: 4,
+        },
+      ],
+    });
+    const optimistic: OptimisticMutation[] = [
+      {
+        op: "upsert",
+        shapeId: "shape-agenda",
+        entity: "core.event",
+        rowId: "event-1",
+        values: { id: "event-1", title: "Offline" },
+      },
+    ];
+
+    await expect(
+      replica.captureBaseVersions(optimistic)
+    ).resolves.toStrictEqual([
+      {
+        shapeId: "shape-agenda",
+        entity: "core.event",
+        rowId: "event-1",
+        version: 4,
+      },
+    ]);
+    await replica.enqueue({
+      appId: "agenda",
+      action: "unknown-edit",
+      input: { event_id: "event-1", title: "Offline" },
+      optimistic,
+      baseVersions: [
+        {
+          shapeId: "shape-agenda",
+          entity: "core.event",
+          rowId: "event-1",
+          version: 3,
+        },
+      ],
+    });
+    await replica.claimNextIntent();
+    await replica.applyIntentOutcome({
+      intentId: "intent-original",
+      status: "conflict",
+      conflict: {
+        shapeId: "shape-agenda",
+        entity: "core.event",
+        rowId: "event-1",
+        expectedVersion: 3,
+        actualVersion: 4,
+      },
+    });
+
+    await expect(replica.retryIntent("intent-original")).resolves.toMatchObject(
+      {
+        intentId: "intent-retry",
+        state: "queued",
+        baseVersions: [{ rowId: "event-1", version: 4 }],
+      }
+    );
+    await expect(intents.list()).resolves.toMatchObject([
+      { intentId: "intent-retry", state: "queued" },
+    ]);
+    await expect(intents.listSettled()).resolves.toMatchObject([
+      { intentId: "intent-original", status: "conflict" },
+    ]);
+    await replica.close();
+  });
+
   test("uses an in-memory outbox when requested persistence falls back to memory", async () => {
     const worker = new StateWorker();
     const indexedDbFactory = {
@@ -529,8 +614,19 @@ describe(ReplicaCoordinator, () => {
         { intentId: "persisted", status: "denied", reason: "grant expired" },
       ],
     });
-    await expect(intents.list()).resolves.toStrictEqual([]);
-    await expect(intents.overlayMutations()).resolves.toStrictEqual([]);
+    await expect(intents.list()).resolves.toMatchObject([
+      { intentId: "persisted", state: "denied", reason: "grant expired" },
+    ]);
+    await expect(intents.overlayMutations()).resolves.toMatchObject([
+      {
+        rowId: "task-1",
+        values: {
+          __centraid_pending_key: "persisted",
+          __centraid_pending_status: "denied",
+          __centraid_pending_reason: "grant expired",
+        },
+      },
+    ]);
     await replica.close();
   });
 

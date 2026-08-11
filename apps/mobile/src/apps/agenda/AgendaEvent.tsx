@@ -18,16 +18,6 @@ import type { AgendaScreenProps } from "../../navigation";
 import AgendaEventEditor from "./AgendaEventEditor";
 import { useAgenda } from "./useAgenda";
 
-// Rows from useReplicaQuery carry a synthetic `__rowId` key that is not a real
-// shaped column; spreading it into an optimistic mutation's values made the
-// mutation fail validation and silently not render. Strip it first.
-function withoutRowId<T extends { __rowId?: unknown }>(
-  row: T
-): Omit<T, "__rowId"> {
-  const { __rowId, ...rest } = row;
-  return rest;
-}
-
 export default function AgendaEvent({
   route,
   navigation,
@@ -88,14 +78,12 @@ export default function AgendaEvent({
   const writeEdit = async (request: {
     action: string;
     input: NativeWriteInput["input"];
-    optimistic: NonNullable<NativeWriteInput["optimistic"]>;
   }): Promise<boolean> => {
     if (!session) return false;
     try {
       const result = await session.write("agenda", {
         action: request.action,
         input: request.input,
-        optimistic: request.optimistic,
       });
       return applyOutcome(result, "Event edit");
     } catch (error) {
@@ -109,17 +97,6 @@ export default function AgendaEvent({
       const result = await session.write("agenda", {
         action: "cancel-event",
         input: { event_id: event.id },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "core.event",
-            rowId: event.id,
-            values: {
-              ...(canonical ? withoutRowId(canonical) : {}),
-              status: "cancelled",
-            },
-          },
-        ],
       });
       applyOutcome(result, "Cancellation");
     } catch (error) {
@@ -134,14 +111,6 @@ export default function AgendaEvent({
       const result = await session.write("agenda", {
         action: "rsvp",
         input: { event_id: event.id, party_id: partyId, partstat },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "schedule.attendee",
-            rowId: String(myAttendee.attendee_id),
-            values: { ...withoutRowId(myAttendee), partstat },
-          },
-        ],
       });
       applyOutcome(result, "RSVP");
     } catch (error) {

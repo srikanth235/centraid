@@ -3,6 +3,7 @@
 // asked" chip on parked-cancel events. Search results (the vault FTS hits,
 // snippet included) route here — same shape as the loaded window, so one
 // component renders either source.
+import { readPendingOverlay } from "../../_shared/pending-overlay.ts";
 import { bucketByDay, segTimeText } from "../format.ts";
 import { I } from "../icons.ts";
 import { localDayKey } from "../kit.ts";
@@ -16,15 +17,19 @@ type ColorFor = (calendarId: string | null | undefined) => string | null;
 function EventCard({
   seg,
   colorFor,
-  pending,
   onEventOpen,
 }: {
   seg: DaySegment;
   colorFor: ColorFor;
-  pending: boolean;
   onEventOpen: (ev: AgEvent) => void;
 }) {
   const ev = seg.ev;
+  const pending = readPendingOverlay(ev as unknown as Record<string, unknown>);
+  const pendingCancel =
+    pending?.action === "cancel-event" &&
+    (pending.status === "queued" ||
+      pending.status === "sending" ||
+      pending.status === "parked");
   const color = colorFor(ev.calendar_id);
   return (
     <button
@@ -56,7 +61,11 @@ function EventCard({
           <Snippet snippet={ev.snippet} className={styles.schedSnippet} />
         ) : null}
       </span>
-      {pending ? <span className="kit-pending-chip">cancel asked</span> : null}
+      {pending ? (
+        <span className="kit-pending-chip">
+          {pendingCancel ? "cancel asked" : pending.status}
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -65,13 +74,11 @@ function DayGroup({
   dayKey,
   segs,
   colorFor,
-  pendingCancelIds,
   onEventOpen,
 }: {
   dayKey: string;
   segs: DaySegment[];
   colorFor: ColorFor;
-  pendingCancelIds: Set<string>;
   onEventOpen: (ev: AgEvent) => void;
 }) {
   const d = new Date(`${dayKey}T00:00:00`);
@@ -95,7 +102,6 @@ function DayGroup({
             key={seg.ev.instance_key ?? seg.ev.event_id}
             seg={seg}
             colorFor={colorFor}
-            pending={pendingCancelIds.has(seg.ev.event_id)}
             onEventOpen={onEventOpen}
           />
         ))}
@@ -107,14 +113,12 @@ function DayGroup({
 export function ScheduleView({
   events,
   colorFor,
-  pendingCancelIds,
   search,
   onEventOpen,
   onEmptyAction,
 }: {
   events: AgEvent[];
   colorFor: ColorFor;
-  pendingCancelIds: Set<string>;
   search: string;
   onEventOpen: (ev: AgEvent) => void;
   onEmptyAction: () => void;
@@ -132,7 +136,6 @@ export function ScheduleView({
           dayKey={key}
           segs={byDay.get(key) ?? []}
           colorFor={colorFor}
-          pendingCancelIds={pendingCancelIds}
           onEventOpen={onEventOpen}
         />
       ))}

@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { KeyboardEvent, ReactElement } from "react";
 
+import { readPendingOverlay } from "../_shared/pending-overlay.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { CreateModal } from "./components/CreateModal.tsx";
@@ -104,9 +105,6 @@ function makeState(view: ViewKind): AppState {
     createOpen: false,
     createPrefill: null,
     narrow: false,
-    pendingIds: new Set(),
-    pendingCancelIds: new Set(),
-    pendingByIntent: new Map(),
     activityLog: new Map(),
     readFailedShown: false,
   };
@@ -132,7 +130,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   // stable `load` closure keeps its own persistent state across calls).
   const loadSeqRef = useRef(0);
   const liveUnsubRef = useRef<Array<() => void>>([]);
-  const liveOwnRef = useRef(false);
 
   const load = useCallback(async (): Promise<void> => {
     const state = stateRef.current;
@@ -144,8 +141,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const replaceLiveReads = (reads: ReadSubscription[]): void => {
       for (const unsubscribe of liveUnsubRef.current) unsubscribe();
       liveUnsubRef.current = reads.map((read) => read.unsubscribe);
-      liveOwnRef.current =
-        reads.length > 0 && reads.every((read) => read.managed);
     };
 
     const applyLoadedData = (
@@ -431,12 +426,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         refresh: load,
       });
     }
-    const stopDoorbell = onDataChange(CHANGE_TABLES, (detail) => {
-      const pendingChanged = logic.reconcilePending(detail, liveOwnRef.current);
-      if (liveOwnRef.current) {
-        if (pendingChanged) bump();
-        return;
-      }
+    const stopDoorbell = onDataChange(CHANGE_TABLES, () => {
       void load();
     });
     const stopFocus = onFocusRefresh(() => void load());
@@ -557,7 +547,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       <ScheduleView
         events={visibleEvents(source)}
         colorFor={logic.colorFor}
-        pendingCancelIds={state.pendingCancelIds}
         search={state.search}
         onEventOpen={openEventDetail}
         onEmptyAction={() => {
@@ -582,8 +571,20 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       calendars={data.calendars}
       calendarName={data.calById.get(detailEv.calendar_id as string)?.name}
       color={logic.colorFor(detailEv.calendar_id)}
-      pending={state.pendingIds.has(detailEv.event_id)}
-      pendingCancel={state.pendingCancelIds.has(detailEv.event_id)}
+      pending={Boolean(
+        readPendingOverlay(detailEv as unknown as Record<string, unknown>)
+      )}
+      pendingCancel={(() => {
+        const pending = readPendingOverlay(
+          detailEv as unknown as Record<string, unknown>
+        );
+        return (
+          pending?.action === "cancel-event" &&
+          (pending.status === "queued" ||
+            pending.status === "sending" ||
+            pending.status === "parked")
+        );
+      })()}
       activity={state.activityLog.get(detailEv.event_id) ?? []}
       onClose={closeDrawer}
       onEdit={(payload) => logic.editEvent(payload)}

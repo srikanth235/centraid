@@ -28,6 +28,7 @@ vi.mock(import("./routes/inlineApps.js"), () => ({
           Promise.resolve({
             default: {
               appId: "tasks",
+              pendingProjection: { appId: "tasks", actions: {} },
               changeTables: [],
               queries: {},
               Root: () => null,

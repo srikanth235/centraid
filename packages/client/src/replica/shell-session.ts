@@ -16,6 +16,8 @@ import {
 import { createReplicaCoordinator } from "./coordinator-web.js";
 import type { ReplicaWebCoordinatorOptions } from "./coordinator-web.js";
 import { ReplicaProtocolError } from "./errors.js";
+import { pendingIntentIdFromInput } from "./intents.js";
+import type { PendingIntentReplacement } from "./intents.js";
 import {
   fetchReplicaBootstrap,
   fetchReplicaChanges,
@@ -39,6 +41,7 @@ import { DEFAULT_REPLICA_PURPOSE } from "./types.js";
 import type {
   EnqueueIntentInput,
   IntentOutcome,
+  OptimisticMutation,
   ReplicaBootstrapHeader,
   ReplicaChangeBatch,
   ReplicaCursor,
@@ -119,6 +122,9 @@ export interface ShellReplicaCoordinator {
     request: ReplicaSearchRequest
   ) => Promise<ReplicaSearchWireResult>;
   enqueue: (input: EnqueueIntentInput) => Promise<ReplicaIntent>;
+  captureBaseVersions?: (
+    mutations: readonly OptimisticMutation[]
+  ) => Promise<ReplicaBaseVersion[]>;
   claimNextIntent: () => Promise<ReplicaIntent | undefined>;
   markIntentTransportFailed: (
     intentId: string,
@@ -130,6 +136,20 @@ export interface ShellReplicaCoordinator {
   ) => Promise<ReplicaIntent | undefined>;
   recoverSending: () => Promise<ReplicaIntent[]>;
   pendingIntents: () => Promise<ReplicaIntent[]>;
+  discardIntent: (intentId: string) => Promise<boolean>;
+  retryIntent: (intentId: string) => Promise<ReplicaIntent | undefined>;
+  reviseIntent?: (
+    intentId: string,
+    revision: ReplicaValue,
+    expectedActions?: readonly string[]
+  ) => Promise<ReplicaIntent | undefined>;
+  reviseIntentForProjection?: (
+    appId: string,
+    action: string,
+    revision: ReplicaValue,
+    optimistic: readonly OptimisticMutation[],
+    refreshedBaseVersions?: ReplicaBaseVersion[]
+  ) => Promise<PendingIntentReplacement | undefined>;
   subscribeInvalidations: (
     listener: (invalidations: readonly ReplicaInvalidation[]) => void
   ) => () => void;
@@ -279,6 +299,22 @@ export class ReplicaShellSession {
     this.assertOpen();
     if (!input.action)
       throw new ReplicaProtocolError("Replica action is required");
+    const retainedIntent = pendingIntentIdFromInput(
+      appId,
+      input.action,
+      input.input
+    );
+    if (retainedIntent) {
+      const revised = await this.revisePendingWrite(
+        retainedIntent.intentId,
+        input.input,
+        retainedIntent.expectedActions
+      );
+      if (revised) return revised;
+      throw new ReplicaProtocolError(
+        "The pending row is no longer available to edit"
+      );
+    }
     const { optimistic, dependencies } = prepareReplicaWrite(
       appId,
       input.optimistic,
@@ -286,6 +322,18 @@ export class ReplicaShellSession {
       this.resolveShapeId.bind(this),
       false
     );
+    const baseVersions =
+      input.baseVersions ??
+      (await this.coordinator.captureBaseVersions?.(optimistic)) ??
+      [];
+    const matched = await this.coordinator.reviseIntentForProjection?.(
+      appId,
+      input.action,
+      input.input,
+      optimistic,
+      baseVersions
+    );
+    if (matched) return this.replacementAdmission(matched.replacement);
     this.beginAdmissionRegistration();
     try {
       const intent = await this.coordinator.enqueue({
@@ -295,7 +343,7 @@ export class ReplicaShellSession {
         input: input.input,
         optimistic,
         dependencies,
-        ...(input.baseVersions ? { baseVersions: input.baseVersions } : {}),
+        ...(baseVersions.length > 0 ? { baseVersions } : {}),
       });
       this.assertOpen();
       const existingAdmission = admissionResult(intent);
@@ -320,6 +368,55 @@ export class ReplicaShellSession {
     } finally {
       this.finishAdmissionRegistration();
     }
+  }
+
+  discardPendingWrite(intentId: string): Promise<boolean> {
+    this.assertOpen();
+    return this.coordinator.discardIntent(intentId);
+  }
+
+  async revisePendingWrite(
+    intentId: string,
+    revision: ReplicaValue,
+    expectedActions?: readonly string[]
+  ): Promise<ShellReplicaWriteResult | undefined> {
+    this.assertOpen();
+    const replacement = await this.coordinator.reviseIntent?.(
+      intentId,
+      revision,
+      expectedActions
+    );
+    if (!replacement) return undefined;
+    return this.replacementAdmission(replacement);
+  }
+
+  async retryPendingWrite(
+    intentId: string
+  ): Promise<ShellReplicaWriteResult | undefined> {
+    this.assertOpen();
+    const replacement = await this.coordinator.retryIntent(intentId);
+    if (!replacement) return undefined;
+    if (!this.#isOnline())
+      return {
+        intentId: replacement.intentId,
+        status: "queued",
+        reason: "waiting for a connection",
+      };
+    void this.flushIntents();
+    return { intentId: replacement.intentId, status: "in-flight" };
+  }
+
+  private replacementAdmission(
+    replacement: ReplicaIntent
+  ): ShellReplicaWriteResult {
+    if (!this.#isOnline())
+      return {
+        intentId: replacement.intentId,
+        status: "queued",
+        reason: "waiting for a connection",
+      };
+    void this.flushIntents();
+    return { intentId: replacement.intentId, status: "in-flight" };
   }
 
   subscribe(

@@ -118,15 +118,18 @@ export interface LedgerRow {
   };
   pending?: boolean;
   parked?: boolean;
-  /** Durable Commons command state backing this optimistic row. `expired`
-   *  (a parked intent that outlived its review window) and `cancelled` (a
-   *  member-initiated cancel) are settled states like `denied` (issue #731
-   *  goal 2) — the ambient `centraid.d.ts` `CentraidCommonsIntent.status`
-   *  has not been widened to include them yet (out of this change's
-   *  ownership; see the PR notes), so `refreshCommonsExpenses` assigns into
-   *  this wider field with an explicit cast rather than narrowing here. */
-  intentStatus?: "pending" | "parked" | "denied" | "expired" | "cancelled";
+  intentStatus?:
+    | "queued"
+    | "sending"
+    | "parked"
+    | "denied"
+    | "conflict"
+    | "failed"
+    | "expired"
+    | "cancelled";
   commonsIntentId?: string;
+  /** Shell-stamped mounted scope for retry/discard on a non-primary vault. */
+  __centraidScopeId?: string;
   pendingReason?: string;
   stewardLabel?: string;
 }
@@ -209,8 +212,9 @@ export interface ViewData {
 
 /** The add/edit expense modal model (state.expense). */
 export interface ExpenseModel {
-  mode: "new" | "edit";
+  mode: "new" | "edit" | "replace-pending";
   expense_id?: string;
+  replacementRowId?: string;
   groupId: string;
   desc: string;
   amount: string;
@@ -292,15 +296,6 @@ export interface AppState {
   addFriend: AddFriendModel | null;
   expenseUndo: ExpenseUndo | null;
   modalMembers: Member[];
-  pendingExpenses: LedgerRow[];
-  /** Denied durable Commons intents the member has cleared from the ledger
-   *  overlay (issue #731 m6) — `refreshCommonsExpenses` re-derives
-   *  `pendingExpenses` from `commonsIntents()` on every refresh, and a
-   *  denial (unlike an executed write) never ages out of that feed on its
-   *  own, so a dismissal has to be remembered client-side or it would
-   *  reappear on the next refresh. Presentation state only, like the rest of
-   *  `AppState` — a dismissal does not survive a reload. */
-  dismissedCommonsIntentIds: Set<string>;
 }
 
 /** The nav patch setNav folds into `state` (a view switch). */

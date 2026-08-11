@@ -159,6 +159,40 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     this.#reader.close();
   }
 
+  async discardPendingWrite(
+    intentId: string,
+    vaultId?: string
+  ): Promise<boolean> {
+    const candidates = vaultId
+      ? [this.#sessions.get(vaultId)].filter(
+          (session): session is NativeReplicaSession => Boolean(session)
+        )
+      : [...this.#sessions.values()];
+    for (const session of candidates) {
+      // Intent ids are globally unique. Stop at the one outbox that owns it.
+      // oxlint-disable-next-line no-await-in-loop
+      if (await session.discardPendingWrite(intentId)) return true;
+    }
+    return false;
+  }
+
+  async retryPendingWrite(
+    intentId: string,
+    vaultId?: string
+  ): Promise<NativeWriteResult | undefined> {
+    const candidates = vaultId
+      ? [this.#sessions.get(vaultId)].filter(
+          (session): session is NativeReplicaSession => Boolean(session)
+        )
+      : [...this.#sessions.values()];
+    for (const session of candidates) {
+      // oxlint-disable-next-line no-await-in-loop
+      const replacement = await session.retryPendingWrite(intentId);
+      if (replacement) return replacement;
+    }
+    return undefined;
+  }
+
   async pendingChanges(): Promise<
     Array<{
       id: string;

@@ -74,6 +74,18 @@ describe("shell-session", () => {
       ],
     },
     {
+      shapeId: "shape-tasks",
+      appId: "tasks",
+      purpose: "dpv:ServiceProvision",
+      entities: [
+        {
+          entity: "schedule.task",
+          primaryKey: "task_id",
+          columns: ["task_id", "title", "project_id"],
+        },
+      ],
+    },
+    {
       shapeId: "shape-todos-billing",
       appId: "todos",
       purpose: "dpv:Billing",
@@ -141,6 +153,12 @@ describe("shell-session", () => {
       applyIntentOutcome: vi
         .fn<ShellReplicaCoordinator["applyIntentOutcome"]>()
         .mockResolvedValue(intent()),
+      discardIntent: vi
+        .fn<ShellReplicaCoordinator["discardIntent"]>()
+        .mockResolvedValue(false),
+      retryIntent: vi
+        .fn<ShellReplicaCoordinator["retryIntent"]>()
+        .mockResolvedValue(undefined),
       recoverSending: vi
         .fn<ShellReplicaCoordinator["recoverSending"]>()
         .mockResolvedValue([]),
@@ -627,6 +645,233 @@ describe("shell-session", () => {
         ],
       });
       expect(coordinator.claimNextIntent).toHaveBeenCalledTimes(0);
+      await session.close();
+    });
+
+    test("does not treat pending-shaped user copy as a synthetic row identity", async () => {
+      const coordinator = fakeCoordinator();
+      const session = new ReplicaShellSession(
+        { baseUrl: "https://gateway.example", vaultId: "vault" },
+        coordinator,
+        { eventTarget: new EventTarget(), isOnline: () => false }
+      );
+      await session.start({
+        mode: "memory",
+        cursor: { epoch: "e", seq: 1 },
+        schemaEpoch: "s",
+      });
+
+      await expect(
+        session.write("todos", {
+          action: "complete",
+          input: {
+            task_id: "task-1",
+            title: "pending:ordinary:content",
+          },
+        })
+      ).resolves.toMatchObject({ status: "queued" });
+      expect(coordinator.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: {
+            task_id: "task-1",
+            title: "pending:ordinary:content",
+          },
+        })
+      );
+      await session.close();
+    });
+
+    test("enqueues a child write whose foreign key references a pending parent", async () => {
+      const reviseIntent = vi
+        .fn<NonNullable<ShellReplicaCoordinator["reviseIntent"]>>()
+        .mockResolvedValue(undefined);
+      const coordinator = fakeCoordinator({ reviseIntent });
+      const session = new ReplicaShellSession(
+        { baseUrl: "https://gateway.example", vaultId: "vault" },
+        coordinator,
+        { eventTarget: new EventTarget(), isOnline: () => false }
+      );
+      await session.start({
+        mode: "memory",
+        cursor: { epoch: "e", seq: 1 },
+        schemaEpoch: "s",
+      });
+
+      await expect(
+        session.write("tasks", {
+          action: "add",
+          input: {
+            project_id: "pending:intent-project:project",
+            title: "Child of a pending project",
+          },
+        })
+      ).resolves.toMatchObject({ status: "queued" });
+      expect(reviseIntent).not.toHaveBeenCalled();
+      expect(coordinator.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appId: "tasks",
+          action: "add",
+          input: {
+            project_id: "pending:intent-project:project",
+            title: "Child of a pending project",
+          },
+        })
+      );
+      await session.close();
+    });
+
+    test("routes a Tally synthetic expense edit through one declared revision", async () => {
+      const replacement: ReplicaIntent = {
+        ...intent(),
+        intentId: "intent-tally-replacement",
+        appId: "tally",
+        action: "add-expense",
+        input: { description: "Edited lunch" },
+        state: "queued",
+      };
+      const reviseIntent = vi
+        .fn<NonNullable<ShellReplicaCoordinator["reviseIntent"]>>()
+        .mockResolvedValue(replacement);
+      const coordinator = fakeCoordinator({ reviseIntent });
+      const session = new ReplicaShellSession(
+        { baseUrl: "https://gateway.example", vaultId: "vault" },
+        coordinator,
+        { eventTarget: new EventTarget(), isOnline: () => false }
+      );
+      await session.start({
+        mode: "memory",
+        cursor: { epoch: "e", seq: 1 },
+        schemaEpoch: "s",
+      });
+      const revision = {
+        expense_id: "pending:intent-tally-original:expense",
+        description: "Edited lunch",
+        amount_minor: 1_250,
+        paid_by: "owner",
+        category: "food",
+        splits: [{ party_id: "owner", share_minor: 1_250 }],
+      };
+
+      await expect(
+        session.write("tally", { action: "edit-expense", input: revision })
+      ).resolves.toMatchObject({
+        intentId: "intent-tally-replacement",
+        status: "queued",
+      });
+      expect(reviseIntent).toHaveBeenCalledExactlyOnceWith(
+        "intent-tally-original",
+        revision,
+        ["add-expense", "add-receipt-expense"]
+      );
+      expect(coordinator.enqueue).not.toHaveBeenCalled();
+      await session.close();
+    });
+
+    test("replaces a retained canonical task edit instead of layering a second write", async () => {
+      const replacement: ReplicaIntent = {
+        ...intent(),
+        intentId: "intent-task-replacement",
+        appId: "tasks",
+        action: "edit",
+        input: { task_id: "task-1", title: "Correct title" },
+        state: "queued",
+      };
+      const reviseIntentForProjection = vi
+        .fn<NonNullable<ShellReplicaCoordinator["reviseIntentForProjection"]>>()
+        .mockResolvedValue({
+          replacement,
+          supersededIntentId: "intent-task-original",
+        });
+      const coordinator = fakeCoordinator({ reviseIntentForProjection });
+      const session = new ReplicaShellSession(
+        { baseUrl: "https://gateway.example", vaultId: "vault" },
+        coordinator,
+        { eventTarget: new EventTarget(), isOnline: () => false }
+      );
+      await session.start({
+        mode: "memory",
+        cursor: { epoch: "e", seq: 1 },
+        schemaEpoch: "s",
+      });
+
+      await expect(
+        session.write("tasks", {
+          action: "edit",
+          input: { task_id: "task-1", title: "Correct title" },
+          optimistic: [
+            {
+              op: "upsert",
+              entity: "schedule.task",
+              rowId: "task-1",
+              values: { task_id: "task-1", title: "Correct title" },
+            },
+          ],
+        })
+      ).resolves.toMatchObject({
+        intentId: "intent-task-replacement",
+        status: "queued",
+      });
+      expect(reviseIntentForProjection).toHaveBeenCalledWith(
+        "tasks",
+        "edit",
+        { task_id: "task-1", title: "Correct title" },
+        [
+          expect.objectContaining({
+            shapeId: "shape-tasks",
+            entity: "schedule.task",
+            rowId: "task-1",
+          }),
+        ],
+        []
+      );
+      expect(coordinator.enqueue).not.toHaveBeenCalled();
+      await session.close();
+    });
+
+    test("captures canonical base versions for an offline row edit", async () => {
+      const captureBaseVersions = vi
+        .fn<NonNullable<ShellReplicaCoordinator["captureBaseVersions"]>>()
+        .mockResolvedValue([
+          {
+            shapeId: "shape-todos",
+            entity: "core.task",
+            rowId: "task-1",
+            version: 8,
+          },
+        ]);
+      const coordinator = fakeCoordinator({ captureBaseVersions });
+      const session = new ReplicaShellSession(
+        { baseUrl: "https://gateway.example", vaultId: "vault" },
+        coordinator,
+        { eventTarget: new EventTarget(), isOnline: () => false }
+      );
+      await session.start({
+        mode: "memory",
+        cursor: { epoch: "e", seq: 1 },
+        schemaEpoch: "s",
+      });
+
+      await session.write("todos", {
+        action: "edit",
+        input: { taskId: "task-1", title: "Offline edit" },
+        optimistic: [
+          {
+            op: "upsert",
+            entity: "core.task",
+            rowId: "task-1",
+            values: { task_id: "task-1", title: "Offline edit" },
+          },
+        ],
+      });
+
+      expect(captureBaseVersions).toHaveBeenCalledOnce();
+      expect(coordinator.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseVersions: [
+            expect.objectContaining({ rowId: "task-1", version: 8 }),
+          ],
+        })
+      );
       await session.close();
     });
 

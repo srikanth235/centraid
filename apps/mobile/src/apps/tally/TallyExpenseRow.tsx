@@ -5,6 +5,7 @@ import { formatCurrencyMinor } from "@centraid/client/capture";
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
 import { Text } from "../../kit/components/NativeText";
+import PendingRowStatus from "../../kit/replica/PendingRowStatus";
 import type { ThemeColors } from "../../kit/theme";
 import { styles } from "./TallyHome.styles";
 
@@ -17,11 +18,13 @@ const TallyExpenseRow = memo(
     groupLabel,
     currency,
     colors,
+    onEditPending,
   }: {
     row: ReplicaRow;
     groupLabel: string;
     currency: string;
     colors: ThemeColors;
+    onEditPending?: (row: ReplicaRow) => void;
   }): React.JSX.Element => (
     <View
       style={[
@@ -37,6 +40,10 @@ const TallyExpenseRow = memo(
           {groupLabel} · {asString(row.spent_on)}
           {row.rate_source ? ` · ${asString(row.rate_source)}` : ""}
         </Text>
+        <PendingRowStatus
+          row={row}
+          {...(onEditPending ? { onEdit: () => onEditPending(row) } : {})}
+        />
       </View>
       <Text style={[styles.amount, { color: colors.text }]}>
         {formatCurrencyMinor(Number(row.amount_minor ?? 0), currency)}

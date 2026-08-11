@@ -177,3 +177,12 @@ test("non-test files are not scanned for tags", (t) => {
   });
   assert.deepEqual(run(root), []);
 });
+
+test("generated app-boot mirrors are not treated as second law owners", (t) => {
+  const root = fixture(t, {
+    [OWNER]: 'test("[law:backup-no-change] a")\n',
+    [`.app-boot/backup/${OWNER}`]:
+      'test("[law:backup-no-change] mirrored build product")\n',
+  });
+  assert.deepEqual(run(root), []);
+});

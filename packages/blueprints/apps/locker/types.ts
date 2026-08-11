@@ -132,7 +132,7 @@ export interface AppState {
   authSession: string | null;
   authBusy: boolean;
   authError: string;
-  pendingItemId: string | null;
+  revealItemId: string | null;
   reauthOpen: boolean;
   gen: boolean;
   genLen: number;

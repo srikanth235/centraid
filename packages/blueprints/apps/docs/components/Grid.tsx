@@ -1,6 +1,7 @@
 // Grid view row (#grid root's mapped children).
 import type { MouseEvent } from "react";
 
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import {
   fillVar,
   fmtBytes,
@@ -138,6 +139,10 @@ export function GridCard({
           {fmtBytes(doc.byte_size)} · {fmtDate(doc.created_at)}
           <CustodyDot state={doc.custody_state} />
         </div>
+        <PendingWriteActions
+          row={doc as unknown as Record<string, unknown>}
+          onEdit={() => onOpenDetails(doc.document_id)}
+        />
       </div>
     </div>
   );

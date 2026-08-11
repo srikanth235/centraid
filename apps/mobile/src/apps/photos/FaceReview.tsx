@@ -89,7 +89,6 @@ import { borders, useTheme } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import {
   ANSWER_FAILURE,
-  ANSWERED_STATE,
   CROP_PX,
   formatFirstSeen,
   safeParseBBox,
@@ -240,18 +239,6 @@ export default function FaceReview({
           answer: kind,
           ...(confirmed && partyId ? { party_id: partyId } : {}),
         },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "media.face_region",
-            rowId: current.regionId,
-            values: {
-              review_state: ANSWERED_STATE[kind],
-              party_id: confirmed ? (partyId ?? null) : null,
-              confirmed_by_party_id: confirmed ? (partyId ?? null) : null,
-            },
-          },
-        ],
       });
       surfaceWriteOutcome(result);
       return true;

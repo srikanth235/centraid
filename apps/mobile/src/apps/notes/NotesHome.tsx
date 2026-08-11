@@ -18,6 +18,7 @@ import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import TopSafeArea from "../../kit/components/TopSafeArea";
+import PendingRowStatus from "../../kit/replica/PendingRowStatus";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -98,6 +99,7 @@ function NoteRow({
         {note.references.length ? ` · ${note.references.length} links` : ""}
         {note.backlinks.length ? ` · ${note.backlinks.length} backlinks` : ""}
       </Text>
+      <PendingRowStatus row={note.raw} onEdit={onOpen} />
     </Pressable>
   );
 }

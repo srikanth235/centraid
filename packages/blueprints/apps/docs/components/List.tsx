@@ -2,6 +2,7 @@
 // children) and the truncation footer (#windowFoot root).
 import type { CSSProperties, MouseEvent } from "react";
 
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
 import {
   fmtBytes,
@@ -136,6 +137,10 @@ export function ListRow({
                 : `${fmtBytes(doc.byte_size)} · ${fmtDate(doc.created_at)}`}
           </div>
         ) : null}
+        <PendingWriteActions
+          row={doc as unknown as Record<string, unknown>}
+          onEdit={() => onOpenDetails(doc.document_id)}
+        />
       </div>
       <span className={`${styles.cell} ${styles.where}`}>
         {trashed ? `from ${where}` : where}

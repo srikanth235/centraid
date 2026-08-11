@@ -52,6 +52,11 @@
       "seed": "replace each expected production probe with its induced failure",
       "failure": "every component must report error"
     },
+    "R4": {
+      "command": "bun run scripts:test",
+      "seed": "place pendingAdds and an optimistic mutation inside a blueprint app fixture",
+      "failure": "engine conformance reports both the hand-owned store and the mutation outside the declaration door"
+    },
     "P1": {
       "command": "bun run perf:pr",
       "seed": "set a route/cold-start ceiling below the observed serial p95",
@@ -299,6 +304,17 @@
           "knob": "packages/gateway/src/serve/health-registry.ts",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "R4",
+          "name": "durable pending-write overlay parity",
+          "owner": "scripts/lint-engine-conformance.test.mjs",
+          "evidence": "demonstrated-red scanner rejects named, arbitrary write-backed, and engine reach-past app overlays; [law:pending-overlay] pins every blueprint action declaration",
+          "lane": "check:push",
+          "wallClockCost": "low",
+          "knob": "tests/matrix.json#appEngines",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-11"
         },
         {
           "id": "D3",
@@ -1670,6 +1686,11 @@
       "owner": "packages/blueprints/src/placement-registry.test.ts",
       "flow": "blueprint-placement-law"
     },
+    "pending-overlay": {
+      "statement": "Every blueprint local read is replica plus durable outbox, with per-action projection declarations and structural exclusions owned by one engine.",
+      "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts",
+      "flow": "blueprint-pending-overlay-law"
+    },
     "custody-seat-exclusion": {
       "statement": "Record-only blueprint apps never import or render byte-custody machinery.",
       "owner": "packages/blueprints/src/blueprint-seats.test.ts",
@@ -1767,6 +1788,11 @@
         "id": "enrichment",
         "label": "Enrichment boundary",
         "flow": "blueprint-enrichment-law"
+      },
+      {
+        "id": "pendingOverlay",
+        "label": "Pending-write overlay",
+        "flow": "blueprint-pending-overlay-law"
       }
     ],
     "apps": [
@@ -1798,7 +1824,14 @@
             "reason": "Agenda does not consume the shared search scaffold.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
+          "pendingOverlay": {
+            "status": "pass",
+            "flow": "blueprint-pending-overlay-law"
+          }
         }
       },
       {
@@ -1817,7 +1850,14 @@
             "reason": "Docs does not consume the shared search scaffold.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
+          "pendingOverlay": {
+            "status": "pass",
+            "flow": "blueprint-pending-overlay-law"
+          }
         }
       },
       {
@@ -1844,7 +1884,14 @@
             "reason": "Locker does not consume the shared search scaffold.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
+          "pendingOverlay": {
+            "status": "pass",
+            "flow": "blueprint-pending-overlay-law"
+          }
         }
       },
       {
@@ -1867,7 +1914,14 @@
             "reason": "Notes does not consume the shared search scaffold.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
+          "pendingOverlay": {
+            "status": "pass",
+            "flow": "blueprint-pending-overlay-law"
+          }
         }
       },
       {
@@ -1898,7 +1952,14 @@
             "reason": "People does not consume the shared search scaffold.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
+          "pendingOverlay": {
+            "status": "pass",
+            "flow": "blueprint-pending-overlay-law"
+          }
         }
       },
       {
@@ -1909,7 +1970,14 @@
           "consent": { "status": "pass", "flow": "blueprint-consent-law" },
           "triage": { "status": "pass", "flow": "blueprint-triage-law" },
           "search": { "status": "pass", "flow": "blueprint-search-law" },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
+          "pendingOverlay": {
+            "status": "pass",
+            "flow": "blueprint-pending-overlay-law"
+          }
         }
       },
       {
@@ -1932,7 +2000,14 @@
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
           "search": { "status": "pass", "flow": "blueprint-search-law" },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
+          "pendingOverlay": {
+            "status": "pass",
+            "flow": "blueprint-pending-overlay-law"
+          }
         }
       },
       {
@@ -1963,7 +2038,14 @@
             "reason": "Tasks does not consume the shared search scaffold.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+          "enrichment": {
+            "status": "pass",
+            "flow": "blueprint-enrichment-law"
+          },
+          "pendingOverlay": {
+            "status": "pass",
+            "flow": "blueprint-pending-overlay-law"
+          }
         }
       }
     ]
@@ -2022,6 +2104,15 @@
       "tier": "contract",
       "owner": "packages/blueprints/src/no-inference-client.test.ts",
       "minimumTests": 5
+    },
+    {
+      "id": "blueprint-pending-overlay-law",
+      "name": "Blueprint pending-write overlay projection and exclusion parity",
+      "surface": "blueprints",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts",
+      "minimumTests": 1
     },
     {
       "id": "blueprint-one-computation-law",

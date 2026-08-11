@@ -102,15 +102,6 @@ export interface EditPatch {
   clear_remind?: boolean;
 }
 
-/** A parked add with no task_id yet — rendered as a ghost row (logic.ts). */
-export interface PendingAdd {
-  key: string;
-  title: string;
-  due_at: string | null;
-  priority: number;
-  parent_task_id: string | null;
-}
-
 /** One session-scoped, receipted activity entry (logic.ts logActivity). */
 export interface ActivityEntry {
   text: string;
@@ -179,8 +170,6 @@ export interface AppState {
   boardReach: ScopeSearchReach[];
   detailId: string | null;
   narrow: boolean;
-  pendingIds: Set<string>;
-  pendingAdds: PendingAdd[];
   activityLog: Map<string, ActivityEntry[]>;
   readFailedShown: boolean;
 }

@@ -263,6 +263,7 @@ These suites encode product law and are cataloged by name. The matrix validator 
 6. Control/app/device session boundaries — `packages/gateway/src/serve/web-app-sessions.contract.test.ts`
 7. Scheduler no-backfill semantics — `packages/automation/src/fire/scheduler-ledger.contract.test.ts`
 8. Conversation digest → archive → custody-gated prune — `packages/app-engine/src/conversation/archive/archive.contract.test.ts`
+9. Pending-write projection, seat parity, settlement, and exclusions — `scripts/lint-engine-conformance.test.mjs`, `packages/blueprints/apps/_shared/pending-overlay.test.ts`, and `packages/client/src/replica/intents.contract.test.ts`
 
 Generated-state properties cover blob custody and replica intent idempotency. The replica admission contract owns the multi-tab/same-id writer race.
 

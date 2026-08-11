@@ -1,3 +1,4 @@
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
 // List view: each row (#list root's mapped children), the head row
 // (#listHead root) and the truncation footer (#windowFoot root).
@@ -81,6 +82,10 @@ export function ListRow({
         {search.trim() && p.snippet ? (
           <Snippet snippet={p.snippet} className={styles.rowRole} />
         ) : null}
+        <PendingWriteActions
+          row={p as unknown as Record<string, unknown>}
+          onEdit={() => onOpenDetails(p.party_id)}
+        />
       </div>
       <span className={`${styles.cell} ${styles.list}`}>
         {displayText(listName(data, p.list_id ?? null))}

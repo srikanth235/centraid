@@ -22,7 +22,6 @@ import {
 } from "../../kit/replica/write-outcome";
 import ShareSheet from "../../kit/share/ShareSheet";
 import { useTheme } from "../../kit/theme";
-import { optimisticRowId } from "../../lib/replica/optimistic";
 import {
   listCommonsResidents,
   retainCommonsItem,
@@ -295,30 +294,9 @@ export default function DocsHome({
   const createFolder = async (): Promise<void> => {
     if (!session || !folderName.trim()) return;
     try {
-      const predictedFolderId = optimisticRowId("folder");
       const result = await session.write("docs", {
         action: "create-folder",
         input: { name: folderName.trim() },
-        ...(drive.folderSchemeId && drive.rootFolderId
-          ? {
-              optimistic: [
-                {
-                  op: "upsert" as const,
-                  entity: "core.concept",
-                  rowId: predictedFolderId,
-                  values: {
-                    concept_id: predictedFolderId,
-                    scheme_id: drive.folderSchemeId,
-                    notation: predictedFolderId,
-                    pref_label: folderName.trim(),
-                    alt_labels_json: null,
-                    broader_concept_id: drive.rootFolderId,
-                    definition: null,
-                  },
-                },
-              ],
-            }
-          : {}),
       });
       setFolderName("");
       setAddOpen(false);
@@ -668,7 +646,6 @@ export default function DocsHome({
         }
         item={selectedItem}
         folders={drive.folders}
-        rootFolderId={drive.rootFolderId}
         onClose={() => setSelectedItem(undefined)}
         onParked={() =>
           navigation.navigate("Settings", { screen: "Approvals" })

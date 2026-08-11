@@ -80,6 +80,52 @@ describe("multi-writer", () => {
       await expect(tabA.list()).resolves.toHaveLength(1);
     });
 
+    test("IndexedDB reload retains a denied row until retry or discard", async () => {
+      const { factory, name, stores, tabA } = await openTabs();
+      cleanupDatabase(factory, name, stores);
+      await tabA.enqueue(payload);
+      await tabA.claimNext();
+      await tabA.applyOutcomes([
+        {
+          intentId: payload.intentId,
+          status: "denied",
+          reason: "Owner declined this change.",
+        },
+      ]);
+      tabA.close();
+
+      const reopenedStore = await IndexedDbIntentStore.open(name, factory);
+      stores.push(reopenedStore);
+      const reopened = new IntentQueue(reopenedStore, {
+        idFactory: () => "shared-tab-retry",
+      });
+      await expect(reopened.overlayMutations()).resolves.toMatchObject([
+        {
+          rowId: "task-1",
+          values: {
+            __centraid_pending_key: payload.intentId,
+            __centraid_pending_status: "denied",
+            __centraid_pending_reason: "Owner declined this change.",
+          },
+        },
+      ]);
+
+      await expect(reopened.retry(payload.intentId)).resolves.toMatchObject({
+        intentId: "shared-tab-retry",
+        state: "queued",
+        input: payload.input,
+      });
+      await expect(reopened.list()).resolves.toMatchObject([
+        { intentId: "shared-tab-retry", state: "queued" },
+      ]);
+      await expect(
+        reopenedStore.get(payload.intentId)
+      ).resolves.toBeUndefined();
+      await expect(reopened.listSettled()).resolves.toMatchObject([
+        { intentId: payload.intentId, status: "denied" },
+      ]);
+    });
+
     test("upgrading the outbox preserves a pending v2 intent and adds the outcome journal", async () => {
       const factory = new IDBFactory();
       const name = `centraid-intent-upgrade-${crypto.randomUUID()}`;

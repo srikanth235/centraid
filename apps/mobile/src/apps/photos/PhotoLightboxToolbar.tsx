@@ -30,7 +30,6 @@ import { Alert, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
 import { useTheme } from "../../kit/theme";
-import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
 import { styles } from "./PhotoLightbox.styles";
 import { ViewerChromePlate, ViewerChromeTarget } from "./PhotoLightboxChrome";
 import type { PhotoAsset } from "./timeline-model";
@@ -52,8 +51,7 @@ interface PhotoLightboxToolbarProps {
   onEdit?: () => void;
   onWrite: (
     action: string,
-    input: Record<string, string | number>,
-    optimistic?: NativeOptimisticMutation[]
+    input: Record<string, string | number>
   ) => Promise<void>;
 }
 
@@ -100,18 +98,10 @@ export function PhotoLightboxToolbar({
     edit: () => onEdit?.(),
     favorite: () => {
       void Haptics.selectionAsync();
-      void onWrite(
-        "update-asset",
-        { asset_id: asset.assetId!, favorite: asset.favorite ? 0 : 1 },
-        [
-          {
-            op: "upsert",
-            entity: "media.media_asset",
-            rowId: asset.assetId!,
-            values: { favorite: asset.favorite ? 0 : 1 },
-          },
-        ]
-      );
+      void onWrite("update-asset", {
+        asset_id: asset.assetId!,
+        favorite: asset.favorite ? 0 : 1,
+      });
     },
     info: onInfo,
     trash: () =>
@@ -124,14 +114,7 @@ export function PhotoLightboxToolbar({
             text: "Trash",
             style: "destructive",
             onPress: () =>
-              void onWrite("delete-asset", { asset_id: asset.assetId! }, [
-                {
-                  op: "upsert",
-                  entity: "media.media_asset",
-                  rowId: asset.assetId!,
-                  values: { deleted_at: new Date().toISOString() },
-                },
-              ]),
+              void onWrite("delete-asset", { asset_id: asset.assetId! }),
           },
         ]
       ),

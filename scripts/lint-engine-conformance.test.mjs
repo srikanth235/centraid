@@ -6,7 +6,10 @@ import {
   SELECTED_STATE_FLAGS,
   scanRefusalGrammar,
 } from "./lib/disabled-controls.mjs";
-import { scanEngineConformance } from "./lint-engine-conformance.mjs";
+import {
+  scanEngineConformance,
+  scanPendingOverlayFiles,
+} from "./lint-engine-conformance.mjs";
 
 // The gate over the real tree. Every engine is green today; this is the
 // assertion the sabotage runs were checked against.
@@ -16,14 +19,93 @@ test("every shared engine conforms in the real tree", () => {
   }
 });
 
-test("all five engines are actually checked — no silently empty check", () => {
+test("all shared engines are actually checked — no silently empty check", () => {
   assert.deepEqual(Object.keys(scanEngineConformance()).toSorted(), [
     "A placement",
     "B custody",
     "C consent",
     "D triage",
+    "H pending overlay",
     "refusal grammar",
   ]);
+});
+
+test("pending overlay gate rejects both a hand store and an inline mutation", () => {
+  const findings = scanPendingOverlayFiles([
+    {
+      label: "packages/blueprints/apps/tasks/Bad.tsx",
+      code: "const pendingAdds = []; write({ optimistic: [] });",
+    },
+  ]);
+  assert.equal(findings.length, 2);
+  assert.match(findings[0], /replica ⊕ outbox/u);
+  assert.match(findings[1], /one declaration door/u);
+});
+
+test("pending overlay gate rejects a newly named local row collection", () => {
+  const findings = scanPendingOverlayFiles([
+    {
+      label: "apps/mobile/src/apps/tasks/Bad.tsx",
+      code: "const [pendingRows, setPendingRows] = useState([]);",
+    },
+  ]);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0], /one row store/u);
+});
+
+test("pending overlay vocabulary tripwire covers properties and class fields", () => {
+  const findings = scanPendingOverlayFiles([
+    {
+      label: "packages/blueprints/apps/tasks/Bad.tsx",
+      code: `const queuedRows = [];
+        class Cache { localOverlayRows = []; }
+        cache.localOverlayRows.push(row);`,
+    },
+  ]);
+  assert.equal(findings.length, 2);
+  assert.match(findings[0], /queuedRows/u);
+  assert.match(findings[1], /localOverlayRows/u);
+});
+
+test("pending overlay gate permits importing the shared engine's row verb", () => {
+  const findings = scanPendingOverlayFiles([
+    {
+      label: "packages/blueprints/apps/tally/logic.ts",
+      code: `import { enrichPendingRows } from "../_shared/pending-overlay";
+        const enriched = enrichPendingRows(rows, commons);`,
+    },
+  ]);
+  assert.deepEqual(findings, []);
+});
+
+test("pending overlay boundary is independent of an app store's chosen name", () => {
+  const findings = scanPendingOverlayFiles([
+    {
+      label: "packages/blueprints/apps/tasks/Bad.tsx",
+      code: `import { IntentQueue } from "@centraid/client/replica/intents";
+        const stagedEntities = [];
+        new IntentQueue(stagedEntities);`,
+    },
+  ]);
+  assert.equal(findings.length, 2);
+  assert.match(findings[0], /IntentQueue/u);
+  assert.match(findings[1], /replica\/intents/u);
+});
+
+test("pending overlay gate rejects arbitrary hook state fed by a write result", () => {
+  const findings = scanPendingOverlayFiles([
+    {
+      label: "packages/blueprints/apps/tasks/Bad.tsx",
+      code: `const [stagedEntities, setStagedEntities] = useState([]);
+        const result = await window.centraid.write("tasks", {
+          action: "add", input: { title: "Offline" }
+        });
+        setStagedEntities([...stagedEntities, result]);`,
+    },
+  ]);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0], /stagedEntities/u);
+  assert.match(findings[0], /one row store/u);
 });
 
 // ── the refusal-grammar scanner, driven with fixtures ────────────────────────

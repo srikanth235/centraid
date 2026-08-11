@@ -7,6 +7,7 @@
 // HTML in index.html (stable, no per-render data), wired once in chrome.ts.
 import { useRef, useState } from "react";
 
+import { readPendingOverlay } from "../../_shared/pending-overlay.ts";
 import { notebookColorVar } from "../format.ts";
 import { I } from "../icons.ts";
 import type { Nav, Notebook, SidebarCounts, SidebarTag } from "../types.ts";
@@ -74,7 +75,6 @@ export function SidebarNav({
   tags,
   tagCounts,
   creatingNotebook,
-  pendingNotebookIds,
   onSelect,
   onStartCreate,
   onCancelCreate,
@@ -87,7 +87,6 @@ export function SidebarNav({
   tags: SidebarTag[];
   tagCounts: Map<string, number>;
   creatingNotebook: boolean;
-  pendingNotebookIds: Set<string>;
   onSelect: (nav: Nav) => void;
   onStartCreate: () => void;
   onCancelCreate: () => void;
@@ -145,7 +144,7 @@ export function SidebarNav({
             key={nb.notebook_id}
             type="button"
             className={
-              pendingNotebookIds.has(nb.notebook_id)
+              readPendingOverlay(nb as unknown as Record<string, unknown>)
                 ? `${styles.navItem} kit-pending`
                 : styles.navItem
             }
@@ -164,7 +163,7 @@ export function SidebarNav({
             <span className={styles.navCount}>
               {notebookCounts.get(nb.notebook_id) ?? 0}
             </span>
-            {pendingNotebookIds.has(nb.notebook_id) ? (
+            {readPendingOverlay(nb as unknown as Record<string, unknown>) ? (
               <span className="kit-pending-chip">pending</span>
             ) : null}
           </button>

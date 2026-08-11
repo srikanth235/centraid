@@ -27,6 +27,8 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 
+import { readPendingOverlay } from "../../_shared/pending-overlay.ts";
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { scopeAttr } from "../../_shared/scope-kit.ts";
 import { assetKey } from "../asset-key.ts";
 import { cls } from "../format.ts";
@@ -113,6 +115,7 @@ export function Tile({
   const kind = showsKindSlot(rung) ? kindLabel(asset) : null;
   const key = assetKey(asset);
   const name = asset.title ?? asset.kind ?? "Photograph";
+  const pending = readPendingOverlay(asset);
   return (
     <div
       className={cls(
@@ -178,7 +181,12 @@ export function Tile({
       {/* ---- slot 4: state. One line, never a fill and never a red dot. ---- */}
       {line ? <span className={styles.state}>{line}</span> : null}
 
-      {extras ? <div className={styles.extras}>{extras}</div> : null}
+      {extras || pending ? (
+        <div className={styles.extras}>
+          <PendingWriteActions row={asset} onEdit={() => onOpen(key)} />
+          {extras}
+        </div>
+      ) : null}
     </div>
   );
 }

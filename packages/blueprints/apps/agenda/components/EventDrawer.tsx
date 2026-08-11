@@ -7,6 +7,7 @@
 // their PARTSTAT.
 import { useEffect, useRef } from "react";
 
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
 import { fmtRange, initials } from "../format.ts";
 import { I } from "../icons.ts";
@@ -232,6 +233,10 @@ export function EventDrawer({
             </span>
           ) : null}
         </div>
+
+        {pending ? (
+          <PendingWriteActions row={ev as unknown as Record<string, unknown>} />
+        ) : null}
 
         <div className={styles.drawerBody}>
           {ev.description ? (

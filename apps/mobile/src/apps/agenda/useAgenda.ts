@@ -6,10 +6,13 @@ import {
   combineReplicaQueryStates,
   useReplicaQuery,
 } from "../../kit/hooks/useReplicaQuery";
+import type { AgendaEventModel } from "../../kit/schedule/recurrence";
 import { expandEvent } from "../../kit/schedule/recurrence";
 
 const value = <T>(row: ReplicaRow, key: string): T | undefined =>
   row[key] as T | undefined;
+
+export type NativeAgendaEvent = AgendaEventModel & { raw: ReplicaRow };
 
 export function useAgenda(rangeStart: Date, rangeEnd: Date) {
   const events = useReplicaQuery(
@@ -116,7 +119,7 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
                   ...override,
                 };
               })
-          );
+          ).map((event): NativeAgendaEvent => ({ ...event, raw: row }));
         })
         .sort((a, b) => a.start.localeCompare(b.start)),
     [events.rows, eventExtensions.rows, exceptions.rows, rangeEnd, rangeStart]

@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 import { MemoryIntentStore } from "./intent-store.js";
-import { IntentQueue } from "./intents.js";
+import { IntentQueue, pendingIntentIdFromInput } from "./intents.js";
 
 describe(IntentQueue, () => {
   test("uses injected digest and initializes optional collections", async () => {
@@ -74,7 +74,7 @@ describe(IntentQueue, () => {
     await expect(queue.list()).resolves.toStrictEqual([]);
   });
 
-  test("parked overlays survive reload-length waits while denial rolls them back", async () => {
+  test("parked and denied overlays survive reload-length waits until discard", async () => {
     const store = new MemoryIntentStore();
     const queue = new IntentQueue(store, { idFactory: () => "intent-parked" });
     await queue.enqueue({
@@ -108,9 +108,65 @@ describe(IntentQueue, () => {
     const [denied] = await queue.applyOutcomes([
       { intentId: "intent-parked", status: "denied", reason: "owner denied" },
     ]);
-    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
+    await expect(queue.overlayMutations()).resolves.toMatchObject([
+      {
+        values: {
+          __centraid_pending_key: "intent-parked",
+          __centraid_pending_status: "denied",
+          __centraid_pending_reason: "owner denied",
+        },
+      },
+    ]);
     expect(denied).toMatchObject({ state: "denied", reason: "owner denied" });
-    await expect(queue.list()).resolves.toStrictEqual([]);
+    await expect(queue.list()).resolves.toMatchObject([
+      { intentId: "intent-parked", state: "denied" },
+    ]);
+    await expect(queue.discard("intent-parked")).resolves.toBe(true);
+    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
+    await expect(queue.listSettled()).resolves.toMatchObject([
+      {
+        intentId: "intent-parked",
+        status: "denied",
+        reason: "owner denied",
+      },
+    ]);
+  });
+
+  test("Commons expiry dismissal may remove a locally parked row without recording execution", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore());
+    await queue.enqueue({
+      intentId: "intent-expired-commons",
+      appId: "tally",
+      action: "add-expense",
+      input: { description: "Lunch" },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "shape-tally",
+          entity: "tally.expense",
+          rowId: "pending:intent-expired-commons:expense",
+          values: { description: "Lunch" },
+        },
+      ],
+    });
+    await queue.claimNext();
+    await queue.applyOutcomes([
+      {
+        intentId: "intent-expired-commons",
+        status: "parked",
+        reason: "Waiting for the steward.",
+      },
+    ]);
+
+    await expect(queue.discard("intent-expired-commons")).resolves.toBe(true);
+    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
+    await expect(queue.listSettled()).resolves.toMatchObject([
+      {
+        intentId: "intent-expired-commons",
+        status: "parked",
+        reason: "Waiting for the steward.",
+      },
+    ]);
   });
 
   test("explicit intent ids dedupe equal payloads and reject tampered reuse", async () => {
@@ -167,7 +223,7 @@ describe(IntentQueue, () => {
     });
   });
 
-  test("retains structured terminal conflicts after scrubbing the queued input", async () => {
+  test("retains structured terminal conflicts with versions for edit/retry/discard", async () => {
     const queue = new IntentQueue(new MemoryIntentStore(), {
       idFactory: () => "intent-conflict",
     });
@@ -175,6 +231,15 @@ describe(IntentQueue, () => {
       appId: "agenda",
       action: "edit",
       input: { title: "offline" },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "shape-agenda",
+          entity: "core.event",
+          rowId: "event-1",
+          values: { title: "offline" },
+        },
+      ],
     });
     await queue.claimNext();
     const conflict = {
@@ -193,16 +258,281 @@ describe(IntentQueue, () => {
       },
     ]);
 
-    expect(settled).toMatchObject({ state: "failed" });
-    await expect(queue.list()).resolves.toStrictEqual([]);
-    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
-    await expect(queue.listSettled()).resolves.toMatchObject([
+    expect(settled).toMatchObject({ state: "failed", conflict });
+    await expect(queue.list()).resolves.toMatchObject([
+      { intentId: "intent-conflict", state: "failed", conflict },
+    ]);
+    await expect(queue.overlayMutations()).resolves.toMatchObject([
       {
-        intentId: "intent-conflict",
-        status: "conflict",
-        conflict,
+        values: {
+          __centraid_pending_status: "conflict",
+          __centraid_pending_expected_version: 4,
+          __centraid_pending_actual_version: 5,
+        },
       },
     ]);
+    await expect(queue.listSettled()).resolves.toStrictEqual([]);
+  });
+
+  test("revises a terminal add with a fresh immutable intent and settles the old result honestly", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-replacement",
+    });
+    await queue.enqueue({
+      intentId: "intent-original",
+      appId: "tasks",
+      action: "add",
+      input: { title: "Original", due_at: "2026-08-11" },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "shape-tasks",
+          entity: "schedule.task",
+          rowId: "pending:intent-original:task",
+          values: {
+            task_id: "pending:intent-original:task",
+            title: "Original",
+          },
+        },
+      ],
+    });
+    await queue.claimNext();
+    await queue.applyOutcomes([
+      {
+        intentId: "intent-original",
+        status: "failed",
+        reason: "title needs attention",
+      },
+    ]);
+
+    await expect(
+      queue.revise(
+        "intent-original",
+        { task_id: "pending:intent-original:task", title: "Wrong action" },
+        undefined,
+        ["save-project"]
+      )
+    ).resolves.toBeUndefined();
+
+    await expect(
+      queue.revise(
+        "intent-original",
+        {
+          task_id: "pending:intent-original:task",
+          title: "Edited locally",
+        },
+        undefined,
+        ["add"]
+      )
+    ).resolves.toMatchObject({
+      action: "add",
+      input: { title: "Edited locally", due_at: "2026-08-11" },
+      intentId: "intent-replacement",
+      state: "queued",
+    });
+    await expect(queue.list()).resolves.toMatchObject([
+      {
+        action: "add",
+        input: { title: "Edited locally", due_at: "2026-08-11" },
+        intentId: "intent-replacement",
+      },
+    ]);
+    await expect(queue.overlayMutations()).resolves.toMatchObject([
+      {
+        entity: "schedule.task",
+        rowId: "pending:intent-replacement:task",
+        values: {
+          __centraid_pending_key: "intent-replacement",
+          title: "Edited locally",
+        },
+      },
+    ]);
+    await expect(queue.listSettled()).resolves.toMatchObject([
+      {
+        intentId: "intent-original",
+        status: "failed",
+        reason: "title needs attention",
+      },
+    ]);
+  });
+
+  test("restart finishes an interrupted add-first replacement without duplicate overlays", async () => {
+    const store = new MemoryIntentStore();
+    const queue = new IntentQueue(store, {
+      idFactory: () => "intent-replacement",
+    });
+    await queue.enqueue({
+      intentId: "intent-original",
+      appId: "tasks",
+      action: "add",
+      input: { title: "Original" },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "shape-tasks",
+          entity: "schedule.task",
+          rowId: "pending:intent-original:task",
+          values: {
+            task_id: "pending:intent-original:task",
+            title: "Original",
+          },
+        },
+      ],
+    });
+    await queue.claimNext();
+    await queue.applyOutcomes([
+      { intentId: "intent-original", status: "failed", reason: "fix it" },
+    ]);
+    vi.spyOn(store, "settle").mockRejectedValueOnce(
+      new Error("simulated interruption after replacement add")
+    );
+
+    await expect(queue.retry("intent-original")).rejects.toThrow(
+      "simulated interruption"
+    );
+    await expect(queue.list()).resolves.toHaveLength(2);
+
+    const reopened = new IntentQueue(store);
+    await reopened.recoverSending();
+    await expect(reopened.list()).resolves.toMatchObject([
+      { intentId: "intent-replacement", state: "queued" },
+    ]);
+    await expect(reopened.overlayMutations()).resolves.toMatchObject([
+      {
+        rowId: "pending:intent-replacement:task",
+        values: { __centraid_pending_key: "intent-replacement" },
+      },
+    ]);
+    await expect(reopened.listSettled()).resolves.toMatchObject([
+      { intentId: "intent-original", status: "failed", reason: "fix it" },
+    ]);
+  });
+
+  test("serializes concurrent retry taps into one durable successor", async () => {
+    const store = new MemoryIntentStore();
+    const first = new IntentQueue(store, {
+      idFactory: () => "intent-replacement-first",
+    });
+    const second = new IntentQueue(store, {
+      idFactory: () => "intent-replacement-second",
+    });
+    await first.enqueue({
+      intentId: "intent-original",
+      appId: "tasks",
+      action: "edit",
+      input: { task_id: "task-1", title: "Edited" },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "shape-tasks",
+          entity: "schedule.task",
+          rowId: "task-1",
+          values: { task_id: "task-1", title: "Edited" },
+        },
+      ],
+    });
+    await first.claimNext();
+    await first.applyOutcomes([
+      { intentId: "intent-original", status: "failed", reason: "retry" },
+    ]);
+
+    const [left, right] = await Promise.all([
+      first.retry("intent-original"),
+      second.retry("intent-original"),
+    ]);
+
+    expect(left?.intentId).toBe("intent-replacement-first");
+    expect(right?.intentId).toBe(left?.intentId);
+    await expect(first.list()).resolves.toMatchObject([
+      { intentId: "intent-replacement-first", state: "queued" },
+    ]);
+  });
+
+  test("revises a terminal canonical-row edit by projected row identity", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-canonical-replacement",
+    });
+    await queue.enqueue({
+      intentId: "intent-canonical-original",
+      appId: "tasks",
+      action: "edit",
+      input: { task_id: "task-1", title: "Stale title" },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "shape-tasks",
+          entity: "schedule.task",
+          rowId: "task-1",
+          values: { task_id: "task-1", title: "Stale title" },
+        },
+      ],
+    });
+    await queue.claimNext();
+    await queue.applyOutcomes([
+      {
+        intentId: "intent-canonical-original",
+        status: "denied",
+        reason: "revise it",
+      },
+    ]);
+
+    await expect(
+      queue.reviseMatchingProjection(
+        "tasks",
+        "edit",
+        { task_id: "task-1", title: "Correct title" },
+        [
+          {
+            op: "upsert",
+            shapeId: "shape-tasks",
+            entity: "schedule.task",
+            rowId: "task-1",
+            values: { task_id: "task-1", title: "Correct title" },
+          },
+        ]
+      )
+    ).resolves.toMatchObject({
+      supersededIntentId: "intent-canonical-original",
+      replacement: {
+        intentId: "intent-canonical-replacement",
+        input: { task_id: "task-1", title: "Correct title" },
+      },
+    });
+    await expect(queue.list()).resolves.toMatchObject([
+      { intentId: "intent-canonical-replacement", state: "queued" },
+    ]);
+  });
+
+  test("recognizes only declared synthetic revision identities", () => {
+    expect(
+      pendingIntentIdFromInput("tasks", "edit", {
+        task_id: "pending:intent-original:task",
+        project_id: "pending:intent-project:project",
+        title: "Edited locally",
+      })
+    ).toStrictEqual({
+      intentId: "intent-original",
+      expectedActions: ["add"],
+    });
+    expect(
+      pendingIntentIdFromInput("tasks", "add", {
+        project_id: "pending:intent-project:project",
+        title: "Child of a pending project",
+      })
+    ).toBeUndefined();
+    expect(
+      pendingIntentIdFromInput("tally", "add-expense", {
+        group_id: "pending:intent-group:group",
+        description: "Lunch",
+      })
+    ).toBeUndefined();
+    expect(
+      pendingIntentIdFromInput("tasks", "edit", {
+        task_id: "task-1",
+        description: "pending:ordinary:content",
+        title: "pending:also-ordinary:content",
+      })
+    ).toBeUndefined();
   });
 
   test("returns a settled transition with an explicit awaiting-change reason reset", async () => {

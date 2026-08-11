@@ -64,7 +64,7 @@ export function isValidGatewayId(id: string): boolean {
 /**
  * Normalize a raw `connections.json` row into a populated profile, or
  * `undefined` when required fields are missing/wrong. Applies read-time
- * defaults for `displayName` and `avatarColor`.
+ * defaults for `displayName`, `avatarColor`, and legacy local persistence.
  */
 export function normalizeProfile(
   id: string,
@@ -104,7 +104,12 @@ export function normalizeProfile(
     ...(typeof parsed.relayHint === "string" && parsed.relayHint.length > 0
       ? { relayHint: parsed.relayHint }
       : {}),
-    rememberDevice: parsed.rememberDevice === true,
+    // Local profiles created before durable replica storage had no preference.
+    // Treat that legacy absence as opted in so desktop offline state survives a
+    // restart; an explicit false still honors the user's storage choice.
+    rememberDevice:
+      parsed.rememberDevice === true ||
+      (parsed.kind === "local" && parsed.rememberDevice === undefined),
     createdAt: parsed.createdAt,
   };
 }

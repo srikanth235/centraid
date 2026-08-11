@@ -21,6 +21,7 @@ import {
   combineReplicaQueryStates,
   useReplicaQuery,
 } from "../../kit/hooks/useReplicaQuery";
+import PendingRowStatus from "../../kit/replica/PendingRowStatus";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -30,7 +31,6 @@ import {
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
 import { family, radii, useTheme } from "../../kit/theme";
-import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
 import type { TasksScreenProps } from "../../navigation";
 
 type TaskView = "inbox" | "today" | "upcoming" | `project:${string}`;
@@ -46,12 +46,14 @@ const DragTaskRow = memo(
     row,
     sectionName,
     onToggle,
+    onEdit,
     onMove,
     onReorder,
   }: {
     row: ReplicaRow;
     sectionName?: string;
     onToggle: (row: ReplicaRow) => void;
+    onEdit: (row: ReplicaRow) => void;
     onMove: (row: ReplicaRow) => void;
     onReorder: (row: ReplicaRow, direction: -1 | 1) => void;
   }): React.JSX.Element => {
@@ -96,6 +98,7 @@ const DragTaskRow = memo(
                 ? " · repeating"
                 : ""}
           </Text>
+          <PendingRowStatus row={row} onEdit={() => onEdit(row)} />
         </View>
         <Pressable
           accessibilityRole="button"
@@ -139,6 +142,8 @@ export default function TasksHome({
   const [areaDraft, setAreaDraft] = useState("");
   const [sectionDraft, setSectionDraft] = useState("");
   const [movingTask, setMovingTask] = useState<ReplicaRow>();
+  const [editingTask, setEditingTask] = useState<ReplicaRow>();
+  const [editTitle, setEditTitle] = useState("");
 
   const openTasks = useMemo(
     () =>
@@ -173,17 +178,12 @@ export default function TasksHome({
 
   // Stable so the row callbacks built on it are stable too.
   const write = useCallback(
-    async (
-      action: string,
-      input: Record<string, ReplicaValue>,
-      optimistic?: NativeOptimisticMutation[]
-    ) => {
+    async (action: string, input: Record<string, ReplicaValue>) => {
       if (!session) return undefined;
       try {
         const result = await session.write("tasks", {
           action,
           input,
-          ...(optimistic ? { optimistic } : {}),
         });
         if (
           !surfaceWriteOutcome(result, {
@@ -209,31 +209,13 @@ export default function TasksHome({
     if (due === "tomorrow") dueDate.setDate(dueDate.getDate() + 1);
     const dueAt =
       due === "none" ? undefined : dueDate.toISOString().slice(0, 10);
-    const rowId = `optimistic-${Date.now()}`;
-    const result = await write(
-      "add",
-      {
-        title: clean,
-        ...(dueAt ? { due_at: dueAt } : {}),
-        ...(repeat ? { rrule: "FREQ=WEEKLY" } : {}),
-      },
-      [
-        {
-          op: "upsert",
-          entity: "schedule.task",
-          rowId,
-          values: {
-            task_id: rowId,
-            title: clean,
-            status: "needs-action",
-            due_at: dueAt ?? null,
-            rrule: repeat ? "FREQ=WEEKLY" : null,
-            project_id: activeProjectId,
-            sort_order: visible.length,
-          },
-        },
-      ]
-    );
+    const result = await write("add", {
+      title: clean,
+      ...(dueAt ? { due_at: dueAt } : {}),
+      ...(repeat ? { rrule: "FREQ=WEEKLY" } : {}),
+      ...(activeProjectId ? { project_id: activeProjectId } : {}),
+      sort_order: visible.length,
+    });
     const taskId = String(nativeWriteOutput(result)?.task_id ?? "");
     if (taskId && (activeProjectId || completionAnchor) && result)
       await write("organize-task", {
@@ -278,6 +260,18 @@ export default function TasksHome({
   const moveTask = useCallback((row: ReplicaRow): void => {
     setMovingTask(row);
   }, []);
+  const editTask = useCallback((row: ReplicaRow): void => {
+    setEditingTask(row);
+    setEditTitle(String(row.title ?? ""));
+  }, []);
+  const saveTaskEdit = async (): Promise<void> => {
+    if (!editingTask || !editTitle.trim()) return;
+    const result = await write("edit", {
+      task_id: String(editingTask.task_id),
+      title: editTitle.trim(),
+    });
+    if (result) setEditingTask(undefined);
+  };
   const moveTo = async (
     destination: { projectId?: string; sectionId?: string } = {}
   ): Promise<void> => {
@@ -342,12 +336,13 @@ export default function TasksHome({
           row={item}
           {...(sectionName ? { sectionName } : {})}
           onToggle={completeTask}
+          onEdit={editTask}
           onMove={moveTask}
           onReorder={reorder}
         />
       );
     },
-    [completeTask, moveTask, reorder, sectionNameById]
+    [completeTask, editTask, moveTask, reorder, sectionNameById]
   );
 
   return (
@@ -537,6 +532,44 @@ export default function TasksHome({
         ) : null}
       </View>
       <Modal
+        visible={Boolean(editingTask)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditingTask(undefined)}
+      >
+        <View accessibilityViewIsModal style={styles.modalBackdrop}>
+          <View style={[styles.modal, { backgroundColor: colors.bgElev }]}>
+            <Text style={[styles.taskTitle, { color: colors.text }]}>
+              Edit task
+            </Text>
+            <TextInput
+              accessibilityLabel="Task title"
+              value={editTitle}
+              onChangeText={setEditTitle}
+              onSubmitEditing={() => void saveTaskEdit()}
+              style={[
+                styles.input,
+                { borderColor: colors.line, color: colors.text },
+              ]}
+            />
+            <View style={styles.editActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setEditingTask(undefined)}
+              >
+                <Text style={{ color: colors.textSoft }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => void saveTaskEdit()}
+              >
+                <Text style={{ color: colors.accent }}>Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal
         visible={Boolean(movingTask)}
         transparent
         animationType="fade"
@@ -625,6 +658,12 @@ const styles = StyleSheet.create({
   destination: { borderBottomWidth: 1, minHeight: 42, paddingVertical: 11 },
   destinations: { paddingBottom: 8 },
   empty: { fontFamily: family.sansRegular, padding: 28, textAlign: "center" },
+  editActions: {
+    flexDirection: "row",
+    gap: 18,
+    justifyContent: "flex-end",
+    paddingTop: 14,
+  },
   header: { alignItems: "center", flexDirection: "row", gap: 12, padding: 16 },
   iconButton: { padding: 8 },
   input: {

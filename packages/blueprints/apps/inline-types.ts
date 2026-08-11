@@ -14,6 +14,8 @@
 // types only, so it type-checks under both the blueprints and client tsconfigs.
 import type { ComponentType, ReactNode } from "react";
 
+import type { PendingProjectionDeclaration } from "./_shared/pending-overlay.js";
+
 /** The `window.KIT_ASK` config each app seeds — mirrors index.html's inline block. */
 export interface InlineKitAsk {
   scope: string;
@@ -193,6 +195,8 @@ export interface InlineAppProps {
 /** The descriptor an inline app default-exports from `app-inline.tsx`. */
 export interface InlineAppModule {
   appId: string;
+  /** Pure action→replica-row projection consumed by every seat (issue #738). */
+  pendingProjection: PendingProjectionDeclaration;
   /** Vault entities this app's queries read — the change-subscription filter. */
   changeTables: string[];
   /** Local query modules by name (imported blueprint-side, run against the replica). */

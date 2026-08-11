@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
+import { lockerPendingProjection } from "@centraid/blueprints/apps/locker/pending-projection";
 
 import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
@@ -83,6 +84,7 @@ function client(target: { centraid?: unknown }): {
     action: string;
     input?: Record<string, unknown>;
     intentId?: string;
+    onlineOnly?: boolean;
   }) => Promise<T>;
   onChange: (cb: (d: { tables?: string[] }) => void) => () => void;
 } {
@@ -123,6 +125,44 @@ describe(installInlineCentraid, () => {
     ]);
     expect(outcome.status).toBe("executed");
     expect(outcome.invocationId).toBe("intent-xyz");
+  });
+
+  it("never presents an online-only Locker secret to the replica session", async () => {
+    const session = fakeSession();
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "locker",
+      session,
+      queries: noQueries,
+      target,
+      pendingProjection: lockerPendingProjection,
+    });
+    const secretInput = {
+      type: "login",
+      title: "Bank",
+      password: "do-not-persist",
+    };
+    const offline = new TypeError("gateway unreachable");
+    doFetch.mockRejectedValue(offline);
+
+    await expect(
+      client(target).write({
+        action: "add-item",
+        input: secretInput,
+        onlineOnly: true,
+      })
+    ).rejects.toBe(offline);
+
+    expect(session.write).not.toHaveBeenCalled();
+    expect(session.writes).toStrictEqual([]);
+    expect(doFetch).toHaveBeenCalledWith(
+      "https://gw.test",
+      "/centraid/locker/actions/add-item",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ input: secretInput }),
+      })
+    );
   });
 
   it("exposes vault-resident Commons intents as a durable app overlay", async () => {

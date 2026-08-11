@@ -4,21 +4,21 @@
   "sites": {
     "apps/desktop/tests/e2e/appview-templates-insights.spec.ts#1": {
       "kind": "static-skip",
-      "line": 98,
+      "line": 99,
       "snippet": "test.skip(\"7.2 — the chat FAB opens the copilot panel\", async () => {",
       "issue": 657,
       "reason": "Desktop e2e mock cannot serve blueprint apps, so the copilot FAB never mounts; the rig, not the product, is the blocker (originally #470)."
     },
     "apps/desktop/tests/e2e/appview-templates-insights.spec.ts#2": {
       "kind": "static-skip",
-      "line": 110,
+      "line": 111,
       "snippet": "test.skip(\"7.3 — a chat turn streams an assistant reply and a SQL tool result\", async () => {",
       "issue": 657,
       "reason": "Same rig hole as 7.2: no served blueprint app in the desktop e2e mock, so no copilot turn can stream (originally #470)."
     },
     "apps/desktop/tests/e2e/appview-templates-insights.spec.ts#3": {
       "kind": "static-skip",
-      "line": 178,
+      "line": 179,
       "snippet": "test.skip(\"7.4 — the copilot past-chats history lists prior sessions and filters by search\", async () => {",
       "issue": 657,
       "reason": "Same rig hole as 7.2/7.3: copilot history needs a served app the desktop e2e mock cannot provide (originally #470)."
@@ -32,14 +32,14 @@
     },
     "apps/mobile/src/lib/replica/multi-vault-reader.test.ts#1": {
       "kind": "env-gate",
-      "line": 443,
+      "line": 857,
       "snippet": "const strict = process.env.CENTRAID_PERF_EVIDENCE === \"1\";",
       "issue": 659,
       "reason": "Product latency budgets only bind on the dedicated evidence lane; the shared vitest fan-out keeps a 15x smoke ceiling so CPU contention cannot fake a regression."
     },
     "apps/web/tests/e2e/perf-waterfall.spec.ts#1": {
       "kind": "static-skip",
-      "line": 645,
+      "line": 639,
       "snippet": "test.skip(",
       "issue": 656,
       "reason": "The iroh request counter only exists in a freshly built bundle; the assertion self-skips against a stale dist instead of failing, which is why this owner cannot back a solid cell."
