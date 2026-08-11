@@ -1,7 +1,5 @@
-import {
-  projectPendingWrite,
-  type PendingProjectionDeclaration,
-} from "@centraid/blueprints/apps/_shared/pending-overlay";
+import { projectPendingWrite } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import type { PendingProjectionDeclaration } from "@centraid/blueprints/apps/_shared/pending-overlay";
 
 import type {
   EnqueueIntentInput,

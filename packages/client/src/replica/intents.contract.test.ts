@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit #738 cohesive intent lifecycle contract
 import { describe, expect, test, vi } from "vitest";
 
 import { MemoryIntentStore } from "./intent-store.js";
@@ -504,35 +505,35 @@ describe(IntentQueue, () => {
   });
 
   test("recognizes only declared synthetic revision identities", async () => {
-    expect(
-      await pendingIntentIdFromInput("tasks", "edit", {
+    await expect(
+      pendingIntentIdFromInput("tasks", "edit", {
         task_id: "pending:intent-original:task",
         project_id: "pending:intent-project:project",
         title: "Edited locally",
       })
-    ).toStrictEqual({
+    ).resolves.toStrictEqual({
       intentId: "intent-original",
       expectedActions: ["add"],
     });
-    expect(
-      await pendingIntentIdFromInput("tasks", "add", {
+    await expect(
+      pendingIntentIdFromInput("tasks", "add", {
         project_id: "pending:intent-project:project",
         title: "Child of a pending project",
       })
-    ).toBeUndefined();
-    expect(
-      await pendingIntentIdFromInput("tally", "add-expense", {
+    ).resolves.toBeUndefined();
+    await expect(
+      pendingIntentIdFromInput("tally", "add-expense", {
         group_id: "pending:intent-group:group",
         description: "Lunch",
       })
-    ).toBeUndefined();
-    expect(
-      await pendingIntentIdFromInput("tasks", "edit", {
+    ).resolves.toBeUndefined();
+    await expect(
+      pendingIntentIdFromInput("tasks", "edit", {
         task_id: "task-1",
         description: "pending:ordinary:content",
         title: "pending:also-ordinary:content",
       })
-    ).toBeUndefined();
+    ).resolves.toBeUndefined();
   });
 
   test("returns a settled transition with an explicit awaiting-change reason reset", async () => {
@@ -856,7 +857,11 @@ describe(IntentQueue, () => {
       ]);
       return queue;
     };
-    const request = vi.fn(
+    type LockRequest = <T>(
+      name: string,
+      callback: () => Promise<T>
+    ) => Promise<T>;
+    const request = vi.fn<LockRequest>(
       async <T>(_name: string, callback: () => Promise<T>): Promise<T> =>
         callback()
     );

@@ -1,8 +1,8 @@
 import {
   decoratePendingMutation,
-  type PendingProjectionDeclaration,
   projectPendingWrite,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import type { PendingProjectionDeclaration } from "@centraid/blueprints/apps/_shared/pending-overlay";
 
 import { webCryptoDigest, webCryptoIdFactory } from "./digest.js";
 import type { ReplicaDigest, ReplicaIdFactory } from "./digest.js";
