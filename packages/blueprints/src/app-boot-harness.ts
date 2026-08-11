@@ -636,10 +636,15 @@ export function describeAppBoot(
             () => writeCalls.length > 0,
             "Tally's restore click to reach the vault write path"
           );
-          expect(writeCalls).toContainEqual({
-            action: "restore-expense",
-            input: { expense_id: TALLY_TRASH_ID },
-          });
+          // Every write now carries a minted `intentId` (the #406 idempotency
+          // contract, universal since #738), so match the action and input
+          // rather than a shape that pins a random uuid.
+          expect(writeCalls).toContainEqual(
+            expect.objectContaining({
+              action: "restore-expense",
+              input: { expense_id: TALLY_TRASH_ID },
+            })
+          );
         }
 
         if (options.expectLive) {
@@ -694,13 +699,14 @@ export function describeAppBoot(
               "Agenda's cancel ask to reach the vault"
             );
             await settle();
-            expect(writeCalls).toEqual([
-              {
-                action: "cancel-event",
-                input: { event_id: AGENDA_EVENT_ID },
-                optimistic: undefined,
-              },
-            ]);
+            // Exactly one call is the point: the second click was deduped, not
+            // merely undelivered. The minted `intentId` is a random uuid, so
+            // the call's identity is asserted on action and input.
+            expect(writeCalls).toHaveLength(1);
+            expect(writeCalls[0]).toMatchObject({
+              action: "cancel-event",
+              input: { event_id: AGENDA_EVENT_ID },
+            });
             expect(
               readCalls,
               "offline interaction unexpectedly re-read the replica"
@@ -732,14 +738,17 @@ export function describeAppBoot(
               document.querySelector(".kit-pending-chip")?.textContent
             ).toBe("cancel asked");
 
-            // An exact denial is the rollback signal: only this chip settles and
-            // the unchanged canonical event remains visible.
+            // A denial does NOT silently roll the row back (issue #738): the
+            // pending row persists carrying its explanation until the member
+            // discards it, and the unchanged canonical event stays visible.
+            // Vanishing here is the defect class the overlay engine exists to
+            // end — a person must never be left guessing what happened.
             emitAgendaIntentState("denied");
-            await waitFor(
-              () => document.querySelector(".kit-pending-chip") === null,
-              "Agenda's pending chip to settle on the exact denial"
-            );
-            expect(document.querySelector(".kit-pending-chip")).toBeNull();
+            await settle();
+            expect(
+              document.querySelector(".kit-pending-chip"),
+              "a denied Agenda row silently disappeared instead of explaining itself"
+            ).not.toBeNull();
             expect(document.body.textContent).toContain(AGENDA_TITLE);
             expect(
               readCalls,
