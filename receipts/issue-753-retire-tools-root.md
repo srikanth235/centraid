@@ -237,6 +237,9 @@ bun run format
 bun run knip
 bun run lint:types
 bun run lint:workflow-pins
+git fetch --no-tags origin main && bun run test:ratchet
+bun run test:matrix
+bun run lint:quality-knobs
 bun run check:push
 bash .governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/check.sh
 ```
@@ -254,6 +257,14 @@ bash .governance/packs/srikanth235/centraid/directives/coverage-scope-reachabili
   `check:push`.
 - `bun run lint:workflow-pins` — 19 workflows clean; the only other `static`
   step outside `check:push`.
+- `bun run test:ratchet` — `ok (no decreases vs origin/main)` after a real
+  `git fetch origin main`. A stale local `origin/main` hides this gate entirely,
+  which is why the first local run of `check:push` reported it green.
+- `origin/main` in a detached worktree, `node scripts/test-report/ratchet-floors.mjs`
+  — fails against itself with the same four `unknown predecessor` errors,
+  establishing the break as pre-existing rather than introduced here.
+- `bun run test:matrix` — 15 surfaces × 11 dimensions, 94 canonical flows.
+- `bun run lint:quality-knobs` — `no silent widening` after the re-pin.
 - `coverage-scope-reachability` — passes; `GOVERNANCE_COVERAGE_SCOPE_SELFTEST=1` still demonstrates red, now emitting the `packages/__coverage_scope_selftest_unowned__` synthetic id.
 - `bun run check:push` — 37/39 gates passed in 206.6s. The two failures and
   their disposition are recorded under Decisions.
@@ -283,7 +294,26 @@ question 1 on the issue and is a security posture (the gateway installing npm
 packages onto a user's machine), not a refactor. Nothing in this change set
 depends on it.
 
-**Quality-knob deviation.** #753 re-pins the whole-file `tests/matrix.json` fingerprint after a pure one-to-one path rename (the `tools/recognition-automations` workspace became `packages/model-runtime`) in two law owners and one `workspaceSurfaces` lane key; the governed `qualities` / `demonstratedRed` payload is untouched, so `matrixGovernanceFingerprint` is unchanged and no floor, statement, flow, capability, or demonstrated-red date moved.
+**Quality-knob deviation.** #753 re-pins the whole-file `tests/matrix.json` fingerprint for two edits. First, a pure one-to-one path rename (the `tools/recognition-automations` workspace became `packages/model-runtime`) in two law owners and one `workspaceSurfaces` lane key. Second, the removal of four spent `replacesMinimumTestsFlow` markers carried in from #749, whose named predecessors no longer exist on `main` — they made `ratchet-floors` fail on the base branch against itself. The governed `qualities` / `demonstratedRed` payload is untouched by both, so `matrixGovernanceFingerprint` is unchanged and no floor, statement, flow, capability, or demonstrated-red date moved.
+
+**The base branch was already red, and this change set unblocks it.** CI's
+`static` lane failed on `bun run test:ratchet` for a defect that predates this
+work: #749 renamed four `agent-*` flows and recorded the renames with
+`replacesMinimumTestsFlow` markers, which are one-shot by design — they exist to
+account for a removal against the *merge base*. Once #749 merged, its
+predecessors left `main`, but the markers stayed. `ratchet-floors` then reports
+`flow replacement names unknown predecessor` for every branch cut after it.
+Verified by checking `origin/main` out into a detached worktree and running
+`node scripts/test-report/ratchet-floors.mjs` there: the base branch fails
+against itself, and deleting the four markers turns it green. That is the fix
+applied here.
+
+Only the markers are removed. Each is paired with an
+`approvedMinimumTestsDeviation` string that still reads "#743 vocabulary-only
+flow ID rename"; those are now dangling and would silently authorise a future
+decrease of those four floors. Removing them is a tightening of someone else's
+change rather than a fix to this break, so it is left out of scope and flagged
+here instead.
 
 **`check:push` settles at 37/39; both remaining failures are environmental.**
 An earlier run reported 36/39. The third failure then, `lint:quality-knobs`, was

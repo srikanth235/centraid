@@ -2439,7 +2439,6 @@
       "tier": "unit",
       "owner": "packages/agent-runtime/src/backends/acp/enumerate-models.test.ts",
       "minimumTests": 6,
-      "replacesMinimumTestsFlow": "agent-provider-compat",
       "approvedMinimumTestsDeviation": "#743 vocabulary-only flow ID rename; the six-test floor is unchanged."
     },
     {
@@ -2621,7 +2620,6 @@
       "tier": "integration",
       "owner": "packages/agent-runtime/src/backends/acp/journey.integration.test.ts",
       "minimumTests": 2,
-      "replacesMinimumTestsFlow": "agent-chat-journey",
       "approvedMinimumTestsDeviation": "#743 vocabulary-only flow ID rename; the two-test floor is unchanged."
     },
     {
@@ -2795,7 +2793,6 @@
       "tier": "perf",
       "owner": "tests/perf/harness-turn.perf.test.ts",
       "minimumTests": 1,
-      "replacesMinimumTestsFlow": "agent-turn-budget",
       "approvedMinimumTestsDeviation": "#743 vocabulary-only flow and file rename; the one-test floor is unchanged."
     },
     {
@@ -2806,7 +2803,6 @@
       "tier": "scale",
       "owner": "tests/scale/harness-sessions.scale.test.ts",
       "minimumTests": 1,
-      "replacesMinimumTestsFlow": "agent-sessions-volume",
       "approvedMinimumTestsDeviation": "#743 vocabulary-only flow and file rename; the one-test floor is unchanged."
     },
     {
