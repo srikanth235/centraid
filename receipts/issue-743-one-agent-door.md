@@ -52,7 +52,7 @@ the harness is present in the member-authored automation ladder. Visual evidence
 - [x] A real gateway compile → publish → fire test compiles “use opencode
   deepseek-ocr to OCR the images, then summarize with the default harness” and
   observes `opencode/deepseek-ocr` with pins followed by default `codex`.
-- [ ] Final `bun run check:pr` passes; the conventional commit and draft PR
+- [x] Final `bun run check:pr` passes; the conventional commit and draft PR
   reference #743, and this `receipts/issue-743-one-agent-door.md` receipt has
   Checklist, What changed, Out of scope, Verification, Decisions, and Audit
   sections.
@@ -143,8 +143,8 @@ the harness is present in the member-authored automation ladder. Visual evidence
 ### Changed-path manifest
 
 Every postimage path in the final diff against origin/main is enumerated below,
-including deletions and replacement destinations. The seven rename sources are
-enumerated separately after the 596 postimage paths so both endpoints remain
+including deletions and replacement destinations. The 28 rename sources are
+enumerated separately after the 574 postimage paths so both endpoints remain
 reviewable:
 
 - `.governance/packs/srikanth235/centraid/directives/handler-uses-ctx-primitives/check.sh`
@@ -153,7 +153,6 @@ reviewable:
 - `AGENTS.md`
 - `ARCHITECTURE.md`
 - `CONSTITUTION.md`
-- `QUALITY.md`
 - `README.md`
 - `TESTING.md`
 - `apps/desktop/scripts/screenshot-automations.mjs`
@@ -221,12 +220,9 @@ reviewable:
 - `docs/photos-derived-ledger.md`
 - `docs/protocol.md`
 - `docs/recognition-automations.md`
-- `docs/runners.md`
 - `oxlint.config.ts`
 - `packages/agent-runtime/package.json`
-- `packages/agent-runtime/scripts/live-adapter-smoke.ts`
 - `packages/agent-runtime/scripts/live-harness-smoke.ts`
-- `packages/agent-runtime/scripts/probe-all-adapters.ts`
 - `packages/agent-runtime/scripts/probe-all-harnesses.ts`
 - `packages/agent-runtime/src/automation/live-automation-failover.test.ts`
 - `packages/agent-runtime/src/automation/run-automation-consent.test.ts`
@@ -275,7 +271,6 @@ reviewable:
 - `packages/agent-runtime/src/backends/acp/vault-mcp-stdio-proxy.mjs`
 - `packages/agent-runtime/src/cli/centraid-cli-dir.ts`
 - `packages/agent-runtime/src/cli/centraid-cli.ts`
-- `packages/agent-runtime/src/conversation-adapter.ts`
 - `packages/agent-runtime/src/conversation-driver.ts`
 - `packages/agent-runtime/src/index.ts`
 - `packages/agent-runtime/src/low-priority.ts`
@@ -326,8 +321,6 @@ reviewable:
 - `packages/app-engine/src/conversation/runner-core.failover.test.ts`
 - `packages/app-engine/src/conversation/runner-core.test.ts`
 - `packages/app-engine/src/conversation/runner-core.ts`
-- `packages/app-engine/src/conversation/runner-health.test.ts`
-- `packages/app-engine/src/conversation/runner-health.ts`
 - `packages/app-engine/src/conversation/runner.ts`
 - `packages/app-engine/src/conversation/schema.ts`
 - `packages/app-engine/src/conversation/store-sql.test.ts`
@@ -376,7 +369,6 @@ reviewable:
 - `packages/automation/src/fire/fire-vault.test.ts`
 - `packages/automation/src/fire/fire.test.ts`
 - `packages/automation/src/fire/fire.ts`
-- `packages/automation/src/handler/agent-answer.ts`
 - `packages/automation/src/handler/audit.test.ts`
 - `packages/automation/src/handler/audit.ts`
 - `packages/automation/src/handler/ctx.ts`
@@ -461,7 +453,6 @@ reviewable:
 - `packages/client/src/react/screens/AutomationCompilePane.test.tsx`
 - `packages/client/src/react/screens/AutomationCompilePane.tsx`
 - `packages/client/src/react/screens/AutomationEditorAccountChoice.test.tsx`
-- `packages/client/src/react/screens/AutomationEditorAgentPicker.tsx`
 - `packages/client/src/react/screens/AutomationEditorHarnessPicker.tsx`
 - `packages/client/src/react/screens/AutomationEditorScreen.module.css`
 - `packages/client/src/react/screens/AutomationEditorScreen.tsx`
@@ -481,11 +472,6 @@ reviewable:
 - `packages/client/src/react/screens/SettingsHarnessesScreen.test.tsx`
 - `packages/client/src/react/screens/SettingsHarnessesScreen.tsx`
 - `packages/client/src/react/screens/SettingsHarnessesSelects.tsx`
-- `packages/client/src/react/screens/SettingsProvidersAgents.tsx`
-- `packages/client/src/react/screens/SettingsProvidersScreen.module.css`
-- `packages/client/src/react/screens/SettingsProvidersScreen.test.tsx`
-- `packages/client/src/react/screens/SettingsProvidersScreen.tsx`
-- `packages/client/src/react/screens/SettingsProvidersSelects.tsx`
 - `packages/client/src/react/screens/harnessGlyphs.tsx`
 - `packages/client/src/react/screens/localUsageView.ts`
 - `packages/client/src/react/screens/privacyStores.test.ts`
@@ -502,7 +488,6 @@ reviewable:
 - `packages/client/src/react/shell/routes/SettingsRoute.tsx`
 - `packages/client/src/react/shell/routes/assistantTranscript.ts`
 - `packages/client/src/react/shell/routes/automationCompileData.ts`
-- `packages/client/src/react/shell/routes/automationEditorAgentData.ts`
 - `packages/client/src/react/shell/routes/automationEditorCreateData.ts`
 - `packages/client/src/react/shell/routes/automationEditorData.ts`
 - `packages/client/src/react/shell/routes/automationEditorHarnessData.ts`
@@ -533,8 +518,6 @@ reviewable:
 - `packages/client/src/react/shell/routes/scopedDirectory.ts`
 - `packages/client/src/react/shell/routes/settingsHarnessesData.test.ts`
 - `packages/client/src/react/shell/routes/settingsHarnessesData.ts`
-- `packages/client/src/react/shell/routes/settingsProvidersData.test.ts`
-- `packages/client/src/react/shell/routes/settingsProvidersData.ts`
 - `packages/client/src/replica/shell-session-scopes.test.ts`
 - `packages/design/kit/elements-base.js`
 - `packages/design/kit/kit.ts`
@@ -550,12 +533,9 @@ reviewable:
 - `packages/gateway/src/cli/cli.ts`
 - `packages/gateway/src/cli/config.ts`
 - `packages/gateway/src/cli/harness-prefs.ts`
-- `packages/gateway/src/cli/runner-prefs.ts`
 - `packages/gateway/src/enrich/semantic-search.test.ts`
 - `packages/gateway/src/enrich/semantic-search.ts`
 - `packages/gateway/src/index.ts`
-- `packages/gateway/src/lifecycle/automation-agent-selection.test.ts`
-- `packages/gateway/src/lifecycle/automation-agent-selection.ts`
 - `packages/gateway/src/lifecycle/automation-harness-selection.test.ts`
 - `packages/gateway/src/lifecycle/automation-harness-selection.ts`
 - `packages/gateway/src/lifecycle/automation-revision.test.ts`
@@ -570,8 +550,6 @@ reviewable:
 - `packages/gateway/src/lifecycle/rewrite-automation-instructions.ts`
 - `packages/gateway/src/lifecycle/webhook-route-over-http.test.ts`
 - `packages/gateway/src/paths.ts`
-- `packages/gateway/src/routes/agents-routes.test.ts`
-- `packages/gateway/src/routes/agents-routes.ts`
 - `packages/gateway/src/routes/apps-store-draft-files.ts`
 - `packages/gateway/src/routes/apps-store-routes.ts`
 - `packages/gateway/src/routes/assistant-routes.test.ts`
@@ -746,11 +724,32 @@ reviewable:
 
 #### Rename source paths
 
+- `docs/runners.md`
+- `packages/agent-runtime/scripts/live-adapter-smoke.ts`
+- `packages/agent-runtime/scripts/probe-all-adapters.ts`
 - `packages/agent-runtime/src/backends/acp/blueprint-agent-parity.integration.test.ts`
 - `packages/agent-runtime/src/backends/acp/fake-acp-agent.mjs`
 - `packages/agent-runtime/src/backends/acp/agent-errors.test.ts`
 - `packages/agent-runtime/src/backends/acp/agent-errors.ts`
+- `packages/agent-runtime/src/conversation-adapter.ts`
+- `packages/app-engine/src/conversation/runner-health.test.ts`
+- `packages/app-engine/src/conversation/runner-health.ts`
+- `packages/automation/src/handler/agent-answer.ts`
+- `packages/client/src/react/screens/AutomationEditorAgentPicker.tsx`
+- `packages/client/src/react/screens/SettingsProvidersAgents.tsx`
+- `packages/client/src/react/screens/SettingsProvidersScreen.module.css`
+- `packages/client/src/react/screens/SettingsProvidersScreen.test.tsx`
+- `packages/client/src/react/screens/SettingsProvidersScreen.tsx`
+- `packages/client/src/react/screens/SettingsProvidersSelects.tsx`
 - `packages/client/src/react/screens/agentGlyphs.tsx`
+- `packages/client/src/react/shell/routes/automationEditorAgentData.ts`
+- `packages/client/src/react/shell/routes/settingsProvidersData.test.ts`
+- `packages/client/src/react/shell/routes/settingsProvidersData.ts`
+- `packages/gateway/src/cli/runner-prefs.ts`
+- `packages/gateway/src/lifecycle/automation-agent-selection.test.ts`
+- `packages/gateway/src/lifecycle/automation-agent-selection.ts`
+- `packages/gateway/src/routes/agents-routes.test.ts`
+- `packages/gateway/src/routes/agents-routes.ts`
 - `tests/perf/agent-turn.perf.test.ts`
 - `tests/scale/agent-sessions.scale.test.ts`
 
@@ -799,6 +798,10 @@ git diff --check
   the 80% gate. The final isolated run passed every gate; its concurrent
   affected test/typecheck graphs also exercise the gateway's atomic bundled-web
   publish step without racing on `dist/web`.
+- Final `bun run check:pr` passes; the conventional commit and draft PR
+  reference #743: commit `55f9aca58d8ab2386816f150d16c194af2ec6a11`
+  and draft PR https://github.com/srikanth235/centraid/pull/749. The push
+  independently replayed all 39 push gates successfully.
 - Crash-quality concurrency — all 23 tests passed inside the standard four-lane
   push gate. The recovery child reopens and integrity-checks the vault and
   journal planes directly instead of starting unrelated HTTP, scheduler,
@@ -885,7 +888,7 @@ positive provider grant; it also found one 693-line test above the unchanged
 manifest. `TurnPlane` now fails closed on a mandatory host-owned consent check;
 rewrite and capture create durable attended grants before the door rechecks
 them; the test was split below the ceiling; all 25 governance directives pass;
-and the manifest independently accounts for 596 postimage paths plus all seven
+and the manifest independently accounts for 574 postimage paths plus all 28
 rename sources. A new fresh-context audit of this postimage is required before
 publication.
 
@@ -895,9 +898,24 @@ mandatory consent proof at every `TurnPlane` caller, durable rewrite/capture FK
 semantics, exact SDK 1.3.0 wire typing, two-harness resume/settlement and shared
 hydration, the real compile → publish → fire accounting equality, the local
 seal, vocabulary/schema rules, the one-to-one matrix ratchet, unchanged
-governance ceilings, the standard four-lane quality run, and the exact 596
-postimage plus seven rename-source manifest. Criterion 12 remains honestly
+governance ceilings, the standard four-lane quality run, and the exact 574
+postimage plus 28 rename-source manifest. Criterion 12 remains honestly
 pending until the conventional commit and draft PR exist.
+
+REFUTED — the ninth fresh-context publication audit found that the changed-path
+manifest mixed 21 rename sources and unchanged `QUALITY.md` into the postimage
+block while the dedicated source block listed only seven of the 28 detected
+renames. The manifest now matches the committed diff exactly: 574 postimage
+paths and all 28 rename sources are separated, with no extras or omissions. A
+new fresh-context audit of the corrected publication receipt is required.
+
+PASS — the tenth fresh-context publication audit found no substantive gap. It
+independently matched all 574 unique postimage paths and all 28 unique rename
+sources without extras, omissions, or duplicates; revalidated acceptance
+criteria 1–11; and confirmed criterion 12 through conventional commit
+`55f9aca58d8ab2386816f150d16c194af2ec6a11`, the matching local, upstream, and
+PR heads, and open draft PR #749 targeting `main` with authoritative closing
+references for #743 and absorbed issue #740.
 
 ## Session
 
