@@ -27,7 +27,7 @@
     "@centraid/design": "workspace:*",
     "@centraid/protocol": "workspace:*",
     "@sqlite.org/sqlite-wasm": "3.53.0-build1",
-    "pdfjs-dist": "6.1.200",
+    "pdfjs-dist": "6.2.108",
     "qrcode": "^1.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
