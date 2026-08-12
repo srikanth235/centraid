@@ -97,6 +97,28 @@ re-decision. (c) `scripts/test-report/diff-coverage.mjs` still matched
 and the handler-artifact sentence above was corrected — the audit showed all
 five artifacts change three lines, not one.
 
+**Post-CI remediation — a third source-root enumeration the local gate cannot
+see.** CI's `static` lane failed on `bun run lint:types`. The cause is the same
+class of latent invariant this change set exists to remove:
+`scripts/lint-types.sh`'s `assert_workspace_coverage` walks `packages/* apps/*`
+and fails closed when a workspace has both `src/` and a `tsconfig.json` but is
+absent from its explicit `TARGETS` list. Under `tools/` the package was never
+walked, so the omission could not be observed; moving it to `packages/` made the
+script correctly notice an untargeted TypeScript workspace. `packages/model-runtime`
+is now listed in `TARGETS` and passes both type-aware passes clean, which is the
+outcome the directive intends — the package gains type-aware lint coverage it
+never had under the retired root, rather than being exempted from it.
+
+This was invisible to the pre-push gate because `lint:types` is a `check:pr`
+step, not a `check:push` step; `check:push` runs `lint:type-floor`, which is a
+different gate. `lint:workflow-pins` is the only other `static` step outside
+`check:push`, and it passes. That gap between the local push tier and the CI
+`static` lane is a standing property of the tier budgets in
+[docs/dev-environment.md](../docs/dev-environment.md#the-local-gate-loop), not
+something this change introduced — but it is the reason this defect reached CI,
+and it is worth knowing that a workspace-set change is precisely the kind of
+edit whose blast radius escapes the push tier.
+
 ### Files — moved into `packages/model-runtime`
 
 - `packages/model-runtime/.gitignore`
@@ -175,6 +197,7 @@ five artifacts change three lines, not one.
 - `packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js`
 - `packages/blueprints/automations/transcript/automations/transcript/handler.js`
 - `scripts/ci/configure-sonarcloud.mjs`
+- `scripts/lint-types.sh`
 - `scripts/mutation/run.test.mjs`
 - `scripts/mutation/seeds.mjs`
 - `scripts/test-report/diff-coverage-run.test.mjs`
@@ -212,6 +235,8 @@ bun run --cwd packages/model-runtime test
 bun run --cwd packages/model-runtime build:automations
 bun run format
 bun run knip
+bun run lint:types
+bun run lint:workflow-pins
 bun run check:push
 bash .governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/check.sh
 ```
@@ -223,9 +248,17 @@ bash .governance/packs/srikanth235/centraid/directives/coverage-scope-reachabili
 - `bun run --cwd packages/model-runtime build:automations` then `bun run format` — rebuilt artifacts differ from the committed ones only in the renamed path strings described above.
 - `bun run knip` — exit 0 (pre-existing configuration hints only).
 - `bun run lint:packages` (sherif) — no issues found.
+- `bun run lint:types` — 27 targets `ok`, including the newly listed
+  `packages/model-runtime`; exit 0. This is the gate that failed in CI before
+  `packages/model-runtime` was added to `TARGETS`, and it is not part of
+  `check:push`.
+- `bun run lint:workflow-pins` — 19 workflows clean; the only other `static`
+  step outside `check:push`.
 - `coverage-scope-reachability` — passes; `GOVERNANCE_COVERAGE_SCOPE_SELFTEST=1` still demonstrates red, now emitting the `packages/__coverage_scope_selftest_unowned__` synthetic id.
-- `bun run check:push` — 36/39 gates passed. The three failures and their
-  disposition are recorded under Decisions.
+- `bun run check:push` — 37/39 gates passed in 206.6s. The two failures and
+  their disposition are recorded under Decisions.
+- `bunx turbo run test --filter=@centraid/app-engine` — 60 files, 632 tests
+  passed, isolating the one `test:affected` failure as load-induced.
 
 ## Decisions
 
@@ -252,14 +285,27 @@ depends on it.
 
 **Quality-knob deviation.** #753 re-pins the whole-file `tests/matrix.json` fingerprint after a pure one-to-one path rename (the `tools/recognition-automations` workspace became `packages/model-runtime`) in two law owners and one `workspaceSurfaces` lane key; the governed `qualities` / `demonstratedRed` payload is untouched, so `matrixGovernanceFingerprint` is unchanged and no floor, statement, flow, capability, or demonstrated-red date moved.
 
-**Three `check:push` gates fail, two of them pre-existing and environmental.**
+**`check:push` settles at 37/39; both remaining failures are environmental.**
+An earlier run reported 36/39. The third failure then, `lint:quality-knobs`, was
+genuinely caused by this change and is resolved by the re-pin recorded above
+rather than by loosening a floor; it now passes. The two that remain do not.
+
 `design:gallery` fails because Playwright's Chromium is absent at
 `/opt/pw-browsers/chromium_headless_shell-1234/` in this container — an
-environment gap, unrelated to the diff. `test:affected` fails on one
-`packages/design` test (`src/edge-upload.test.ts`, native background-session
-multipart PUT scheduling); that package is untouched by this change set. The
-third, `lint:quality-knobs`, was genuinely caused by this change and is
-resolved by the re-pin recorded above rather than by loosening a floor.
+environment gap, unrelated to the diff. It is not a CI gate on pull requests
+either; no `static` step runs it.
+
+`test:affected` fails on a single process-lifecycle test, and *which* one moves
+between runs: `packages/design` `src/edge-upload.test.ts` on the first run,
+`packages/agent-runtime`'s SIGTERM→SIGKILL teardown on the second,
+`packages/app-engine` `src/handlers/handler-pool.test.ts > "a hung handler is
+still terminated on timeout without poisoning the pool"` on the third. Each
+passes in isolation — the app-engine package runs 632/632 green on this branch
+under `bunx turbo run test --filter=@centraid/app-engine` — and each is a
+timeout- or teardown-bounded assertion, the exact shape that goes red when a
+loaded container starves a timer. None of the three packages is touched by this
+change set. CI is the tiebreaker and agrees: the `verify` lane ran the full
+suite under coverage and passed.
 
 ## Audit
 
