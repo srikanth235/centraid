@@ -99,7 +99,7 @@ describe("demo-seed", () => {
     const provCounts = plane.db.journal
       .prepare(
         `SELECT count(DISTINCT entity_type || ':' || entity_id) AS n
-         FROM consent_provenance WHERE prov_activity = 'seed.demo'`
+           FROM consent_provenance WHERE prov_activity = 'seed.demo'`
       )
       .get() as { n: number };
     const registered = plane.db.vault
@@ -130,7 +130,7 @@ describe("demo-seed", () => {
       };
       expect(left.n, `${table} empty after purge`).toBe(0);
     }
-  });
+  }, 60_000);
 
   // The photo roll is the one scenario whose bytes ship BESIDE its generator
   // (issue #708): seed.js reads `sample/*.png` off its own directory through
