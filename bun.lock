@@ -348,6 +348,15 @@
         "typescript": "catalog:",
       },
     },
+    "packages/model-runtime": {
+      "name": "@centraid/model-runtime",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@centraid/test-kit": "workspace:*",
+        "@types/node": "^26.1.2",
+        "typescript": "catalog:",
+      },
+    },
     "packages/protocol": {
       "name": "@centraid/protocol",
       "version": "0.1.0",
@@ -400,15 +409,6 @@
         "hash-wasm": "^4.12.0",
         "uuid": "^14.0.1",
       },
-      "devDependencies": {
-        "@centraid/test-kit": "workspace:*",
-        "@types/node": "^26.1.2",
-        "typescript": "catalog:",
-      },
-    },
-    "tools/recognition-automations": {
-      "name": "@centraid/recognition-automations",
-      "version": "0.1.0",
       "devDependencies": {
         "@centraid/test-kit": "workspace:*",
         "@types/node": "^26.1.2",
@@ -708,11 +708,11 @@
 
     "@centraid/mobile": ["@centraid/mobile@workspace:apps/mobile"],
 
+    "@centraid/model-runtime": ["@centraid/model-runtime@workspace:packages/model-runtime"],
+
     "@centraid/oauth-worker": ["@centraid/oauth-worker@workspace:apps/oauth-worker"],
 
     "@centraid/protocol": ["@centraid/protocol@workspace:packages/protocol"],
-
-    "@centraid/recognition-automations": ["@centraid/recognition-automations@workspace:tools/recognition-automations"],
 
     "@centraid/test-kit": ["@centraid/test-kit@workspace:packages/test-kit"],
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Directive: coverage-scope-reachability (#532).
 #
-# Every packages/*, apps/*, or tools/* tree with non-test TS source must be:
+# Every packages/* or apps/* tree with non-test TS source must be:
 #   (a) covered by a tests/coverage-floors.json glob, OR
 #   (b) named as owner path prefix in tests/matrix.json, OR
 #   (c) listed in this directive's allowlist.txt
@@ -11,8 +11,8 @@
 # of collapsing them into `packages/blueprints`, whose `src/` floor cannot
 # instrument either tree.
 #
-# Also: every coverage-floors.json path-scope must sit under packages/, apps/,
-# or tools/.
+# Also: every coverage-floors.json path-scope must sit under packages/ or
+# apps/.
 #
 # Bash 3.2 compatible (macOS /bin/bash) — no mapfile, no associative arrays.
 #
@@ -40,7 +40,7 @@ fi
 
 # --- self-test path (output/exit wiring only) ---
 if [[ "${GOVERNANCE_COVERAGE_SCOPE_SELFTEST:-0}" == "1" ]]; then
-    synthetic="tools/__coverage_scope_selftest_unowned__"
+    synthetic="packages/__coverage_scope_selftest_unowned__"
     if grep -q "$synthetic" "$FLOORS" 2>/dev/null; then
         echo "self-test: synthetic id unexpectedly present in floors" >&2
         exit 1
@@ -73,13 +73,10 @@ PY
 )"
 
 # Vitest coverage include must still instrument the conventional source roots
-# plus tools and both non-standard blueprint runtime roots.
+# plus both non-standard blueprint runtime roots.
 if [[ -f "$VITEST_CFG" ]]; then
     if ! grep -q "packages/\*/src/\*\*" "$VITEST_CFG" && ! grep -q 'packages/*/src/**' "$VITEST_CFG"; then
         violation "vitest.config.ts coverage.include must cover packages/*/src/** (floors would be unreachable)"
-    fi
-    if ! grep -q "tools/\*/src/\*\*" "$VITEST_CFG" && ! grep -q 'tools/*/src/**' "$VITEST_CFG"; then
-        violation "vitest.config.ts coverage.include must cover tools/*/src/** (tool floors would be unreachable)"
     fi
     if ! grep -Fq "packages/blueprints/apps/**" "$VITEST_CFG"; then
         violation "vitest.config.ts coverage.include must cover packages/blueprints/apps/** (bundled app code would be invisible)"
@@ -89,13 +86,13 @@ if [[ -f "$VITEST_CFG" ]]; then
     fi
 fi
 
-# Each floor glob must target packages/, apps/, or tools/.
+# Each floor glob must target packages/ or apps/.
 while IFS= read -r glob; do
     [[ -z "$glob" ]] && continue
     case "$glob" in
-    packages/* | apps/* | tools/*) ;;
+    packages/* | apps/*) ;;
     *)
-        violation "coverage floor scope '$glob' is outside packages/*/src, apps/*/src, or tools/*/src — unreachable by default coverage include"
+        violation "coverage floor scope '$glob' is outside packages/*/src or apps/*/src — unreachable by default coverage include"
         ;;
     esac
 done <<<"$FLOOR_GLOBS"
@@ -129,9 +126,7 @@ PKG_IDS="$(
         'packages/*/src/**/*.ts' 'packages/*/src/**/*.tsx' \
         'packages/*/src/*.ts' 'packages/*/src/*.tsx' \
         'apps/*/src/**/*.ts' 'apps/*/src/**/*.tsx' \
-        'apps/*/src/*.ts' 'apps/*/src/*.tsx' \
-        'tools/*/src/**/*.ts' 'tools/*/src/**/*.tsx' \
-        'tools/*/src/*.ts' 'tools/*/src/*.tsx' 2>/dev/null \
+        'apps/*/src/*.ts' 'apps/*/src/*.tsx' 2>/dev/null \
         | grep -vE '\.(test|spec)\.(ts|tsx)$|\.d\.ts$' \
         | awk -F/ '{print $1"/"$2}' \
         | sort -u

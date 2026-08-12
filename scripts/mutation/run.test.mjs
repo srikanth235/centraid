@@ -71,15 +71,13 @@ describe("MUTATION_SEEDS", () => {
         "packages/time-engine",
         "packages/tunnel",
         "packages/vault",
-        "tools/recognition-automations",
+        "packages/model-runtime",
       ].sort()
     );
     for (const seed of MUTATION_SEEDS) {
       expect(seed.config).toBe("stryker.config.mjs");
       expect(
-        seed.cwd.startsWith("packages/") ||
-          seed.cwd.startsWith("apps/") ||
-          seed.cwd.startsWith("tools/"),
+        seed.cwd.startsWith("packages/") || seed.cwd.startsWith("apps/"),
         seed.id
       ).toBe(true);
       expect(seed.report.startsWith("artifacts/mutation/")).toBe(true);

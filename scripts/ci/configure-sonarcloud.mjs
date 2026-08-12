@@ -53,7 +53,7 @@ const SOURCE_EXCLUSIONS = [
   "packages/blueprints/.app-boot/**",
   "packages/blueprints/kit/**",
   // Release-generated recognition bundles are deployed artifacts; their
-  // source-of-truth lives under tools/recognition-automations, where the
+  // source-of-truth lives under packages/model-runtime, where the
   // local lint/typecheck/test gates own the implementation.
   "packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js",
   "packages/blueprints/automations/embed-image/automations/embed-image/handler.js",

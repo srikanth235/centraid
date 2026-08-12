@@ -133,7 +133,7 @@
       ],
       "project": ["src/**/*.{ts,tsx}", "scripts/*.{js,mjs}"]
     },
-    "tools/recognition-automations": {
+    "packages/model-runtime": {
       "entry": [
         "setup.ts",
         "build-automation-handlers.ts",

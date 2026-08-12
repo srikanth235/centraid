@@ -1,13 +1,13 @@
-# Recognition automation model sources
+# Model runtime
 
-This directory owns build-time source, optional local model assets, and live-model tests for Centraid's self-contained `photo-ocr`, `embed-image`, `embed-text`, `faces`, and `transcript` automation handlers. Nothing here listens on a port and the gateway does not call a separate inference process.
+This package owns Centraid's **local model runtime**: pinned model assets, the native inference dependencies that execute them, the shared TypeScript model plumbing (ONNX wrapper, tokenizer, CTC, NMS, geometry), build-time handler source, and live-model tests for Centraid's self-contained `photo-ocr`, `embed-image`, `embed-text`, `faces`, and `transcript` automation handlers. Nothing here listens on a port and the gateway does not call a separate inference process.
 
 ## Build the shipped handlers
 
 Source handlers live in `automation-handlers/`. Bundle them into the blueprint tree with:
 
 ```sh
-bun run --cwd tools/recognition-automations build:automations
+bun run --cwd packages/model-runtime build:automations
 ```
 
 The output is one release-managed `handler.js` per recipe under `packages/blueprints/automations/<id>/automations/<id>/`. At runtime a handler reads source material with `ctx.vault.content`, runs its own implementation, and persists through `ctx.vault.invoke`. Large third-party libraries and model assets are resolved from the shared pinned `runtime/` rather than copied into every handler. There is no service client, reserved fetch executor, `ctx.infer`, or `ctx.enrich`.
@@ -15,7 +15,7 @@ The output is one release-managed `handler.js` per recipe under `packages/bluepr
 ## Install optional local assets
 
 ```sh
-bun run --cwd tools/recognition-automations setup
+bun run --cwd packages/model-runtime setup
 ```
 
 `runtime/` is deliberately not a workspace package. Setup installs the image, PDF.js, ONNX, FFmpeg, and Transformers.js dependencies there, then downloads pinned weights and auxiliary files beneath `runtime/models/`. A root `bun install` therefore does not acquire optional native ML dependencies or weights.
@@ -34,9 +34,9 @@ See `LICENSES.md` and `models.lock.json` for model versions, hashes, upstream lo
 ## Tests
 
 ```sh
-bun run --cwd tools/recognition-automations test
-bun run --cwd tools/recognition-automations typecheck
-bun run --cwd tools/recognition-automations setup
+bun run --cwd packages/model-runtime test
+bun run --cwd packages/model-runtime typecheck
+bun run --cwd packages/model-runtime setup
 bun run test:enrich:live
 ```
 

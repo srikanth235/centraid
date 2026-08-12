@@ -80,8 +80,8 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 
 ### coverage-scope-reachability
 
-- **Directive**: Every first-party TypeScript source tree under `packages/*/src`, `apps/*/src`, or `tools/*/src`, and the co-located executable `packages/blueprints/apps` / `packages/design/kit` runtime trees, must be covered by an enforced coverage floor, own a product-matrix flow, or appear in the intentional-ungated allowlist; every floor must also be reachable from Vitest's instrumentation globs.
-- **Rationale**: Coverage ratchets cannot protect code the coverage runner never instruments. Issue #532 closed this blind spot for conventional package/app roots, #630 added the 41,821-line bundled blueprint runtime, and #725 found the recognition model and handler build sources under `tools/*` remained outside both enumeration and instrumentation ownership. The three source-tree classes now obey one reachability rule.
+- **Directive**: Every first-party TypeScript source tree under `packages/*/src` or `apps/*/src`, and the co-located executable `packages/blueprints/apps` / `packages/design/kit` runtime trees, must be covered by an enforced coverage floor, own a product-matrix flow, or appear in the intentional-ungated allowlist; every floor must also be reachable from Vitest's instrumentation globs.
+- **Rationale**: Coverage ratchets cannot protect code the coverage runner never instruments. Issue #532 closed this blind spot for conventional package/app roots, #630 added the 41,821-line bundled blueprint runtime, and #725 found the recognition model and handler build sources under the then-separate `tools/*` root remained outside both enumeration and instrumentation ownership. #753 retired that root — the model runtime is now an ordinary `packages/*` member — so the two remaining source-tree classes obey one reachability rule with one fewer glob to keep in sync.
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/check.sh`
 - **Exceptions**: Runtime trees that are intentionally journey-only may be listed by exact scope id in `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/allowlist.txt` with a matching `TESTING.md` explanation. Line waivers are not supported because the policy applies to whole coverage scopes.
 
@@ -246,6 +246,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - 2026-08-08 — @srikanth235 — Modify `coverage-scope-reachability`: enumerate `tools/*/src` executable TypeScript, require its Vitest instrumentation, and permit tool-scoped floor globs so the enrichment reference service and future first-party tools cannot land outside every coverage owner (#725).
 - 2026-08-10 — @srikanth235 — Clarify `handler-uses-ctx-primitives` after recognition handlers became self-contained: provider work uses `ctx.agent`, deterministic recognition uses `ctx.vault.content` / `ctx.vault.invoke`, and the obsolete `ctx.infer` wording is removed. The enforced provider-SDK import rule is unchanged (#731).
 - 2026-08-11 — @srikanth235 — Rename the former provider-backed handler primitive to `ctx.delegate`, reserving “agent” for autonomous principals. The enforced provider-SDK import rule is unchanged (#743).
+- 2026-08-12 — @srikanth235 — Modify `coverage-scope-reachability`: drop the `tools/*/src` source-tree class and its Vitest instrumentation requirement. The `tools/` workspace root is retired — its sole occupant became `packages/model-runtime` — so tool-scoped floor globs are no longer reachable by the default coverage include and a floor pointing there must now fail (#753).
 
 ## Escape hatches
 

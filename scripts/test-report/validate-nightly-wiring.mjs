@@ -147,8 +147,8 @@ const enrichmentLive = await readFile(enrichmentLivePath, "utf8").catch(
 for (const required of [
   "schedule:",
   "workflow_dispatch:",
-  "tools/recognition-automations/models.lock.json",
-  "bun run --cwd tools/recognition-automations setup",
+  "packages/model-runtime/models.lock.json",
+  "bun run --cwd packages/model-runtime setup",
   "bun run test:enrich:live",
   "artifacts/enrichment-live/",
   "scripts/ci/file-tracking-issue.mjs",

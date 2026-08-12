@@ -54,7 +54,7 @@ Applied to project settings by [`scripts/ci/configure-sonarcloud.mjs`](../script
 | `tests/**`, `**/*.{test,spec}.*`, `**/e2e/**`, `**/fixtures/**` | Test/fixture surface |
 | `docs/**`, `receipts/**`, `assets/**` | Non-runtime |
 | `**/dist/**`, `**/generated/**`, visual-harness, tunnel native, wasm | Generated / non-TS product |
-| The five release-generated recognition `handler.js` bundles under `packages/blueprints/automations/` | Their source of truth is `tools/recognition-automations`; local lint, typecheck, and tests own that implementation, while Sonar excludes only the deployed bundles |
+| The five release-generated recognition `handler.js` bundles under `packages/blueprints/automations/` | Their source of truth is `packages/model-runtime`; local lint, typecheck, and tests own that implementation, while Sonar excludes only the deployed bundles |
 
 If a PR only touches excluded paths, Sonar should not invent new-code BUG/VULN ratings from that diff.
 

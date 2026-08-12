@@ -7,7 +7,7 @@ export default {
   mutate: ["src/tokenizer.ts", "src/ctc.ts", "src/nms.ts"],
   reporters: ["clear-text", "json"],
   jsonReporter: {
-    fileName: "../../artifacts/mutation/recognition-automations-report.json",
+    fileName: "../../artifacts/mutation/model-runtime-report.json",
   },
   thresholds: { high: 80, low: 60, break: null },
   timeoutMS: 60_000,

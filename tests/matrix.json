@@ -642,7 +642,7 @@
     "apps/mobile": "mobile",
     "apps/oauth-worker": "oauth-worker",
     "apps/web": "web",
-    "tools/recognition-automations": "gateway"
+    "packages/model-runtime": "gateway"
   },
   "notes": {
     "web.concurrency": "Partial\u2192stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic. Tracked under #656.",
@@ -1738,12 +1738,12 @@
     },
     "enrichment-model-lock": {
       "statement": "Every live-model file and native runtime dependency is immutable by version/digest and its permissive licence is recorded in LICENSES.md.",
-      "owner": "tools/recognition-automations/src/models-lock.test.ts",
+      "owner": "packages/model-runtime/src/models-lock.test.ts",
       "flow": "enrichment-service-contract"
     },
     "enrichment-live": {
       "statement": "Pinned real weights satisfy the advertised capability/model handshake and the committed OCR, embedding, and face-geometry goldens.",
-      "owner": "tools/recognition-automations/src/model-goldens.live.test.ts",
+      "owner": "packages/model-runtime/src/model-goldens.live.test.ts",
       "flow": "enrichment-service-contract"
     },
     "backup-round-trip": {
