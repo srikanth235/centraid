@@ -250,9 +250,10 @@ Every path in this change set, so nothing lands unnamed.
 - `bun.lock`
 - `docs/platform-gating.md`
 - `docs/traps/design-tokens.md`
-**Receipts and scripts** (2)
+**Receipts and scripts** (3)
 - `receipts/issue-747-binding-layer-v4s-v7.md`
 - `scripts/lint-design-tokens.test.mjs`
+- `tests/matrix.json`
 
 ## Decisions
 
@@ -285,6 +286,22 @@ The ruling's `CTL = touch ? 44 : 34` made the old 32 literal visible as
 off-scale — smaller than `metrics.control`, and reached by a hard-coded number
 rather than the metric. Corrected rather than preserved, and called out under
 Verification as one of the deliberate pixel changes.
+
+**One unrelated repair rides along: the spent `agent-*` rename markers in
+`tests/matrix.json`.** `test:ratchet` fails on unmodified `main` — verified by
+running it in a clean worktree at `origin/main` — because #743/#749 renamed four
+matrix flows `agent-*` → `harness-*` and left their `replacesMinimumTestsFlow`
+markers in place. A marker asserts that its predecessor still exists in the base;
+once the rename merged, the predecessor left `main` forever, so the markers can
+never validate again and fail every branch cut from `main`, this one included.
+Removing them is the only way this PR reaches green. It is a drive-by against
+CONTRIBUTING's one-focused-change rule, so it is a separate commit anchored to
+#743 that a maintainer can lift out cleanly. The guarded floors — 6, 2, 1, 1 —
+are unchanged and now sit on the `harness-*` IDs, which do exist in the base; the
+`approvedMinimumTestsDeviation` prose stays as the historical record. The lesson
+belongs in `receipts/issue-743-one-agent-door.md` — **a rename marker is one-shot
+and must be deleted in the follow-up commit** — but that receipt is frozen on the
+default branch, so it is recorded here instead.
 
 **The `SURF` resolver was not added.** §C says resolve the surface once into a
 token set and read the object everywhere. There is no single surface state in
