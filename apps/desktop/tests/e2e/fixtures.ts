@@ -558,8 +558,13 @@ async function route(
     return json(res, 200, s.harnessesStatus);
 
   // ---- vault consent context used by the current automation fleet/thread ----
+  // NOT part of the agent→harness rename: `_vault/agents` lists *enrolled
+  // automation agents* (the consent-grant identity), not harnesses, and
+  // `vault-routes.ts` still answers `{ agents }`. Renaming the key here made
+  // `listAgents()` return undefined, so `loadAutomationsOverviewData` threw on
+  // `agents.find(...)` for every seeded row — the whole overview died.
   if (p === "/centraid/_vault/agents" && method === "GET")
-    return json(res, 200, { harnesses: [] });
+    return json(res, 200, { agents: [] });
   if (p === "/centraid/_vault/blocking" && method === "GET")
     return json(res, 200, {
       outbox: [],

@@ -816,6 +816,16 @@ git diff --check
   agent-runtime preflight/registry suites passed 57 tests, and gateway headless
   compile/unified runner/production graph suites passed 41 tests; all three
   packages typechecked.
+- Desktop e2e over-rename remediation — the rename sweep also renamed the
+  `GET /centraid/_vault/agents` response key to `harnesses` in the desktop e2e
+  mock gateway, but that route lists *enrolled automation agents* (the
+  consent-grant identity), not harnesses, and `vault-routes.ts` still answers
+  `{ agents }`. The drifted mock made `listAgents()` resolve `undefined`, so
+  `loadAutomationsOverviewData` threw on `agents.find(...)` once any row was
+  seeded — which is why only the no-automations case (8.3) survived. Restoring
+  the key turns the lane green: `automations.spec.ts` 12/12 passed and
+  `appview-templates-insights.spec.ts` passed 4 with 3 skipped (10.2 included),
+  against 12 failures on the same specs beforehand.
 
 ## Decisions
 
@@ -926,3 +936,4 @@ references for #743 and absorbed issue #740.
 | date | harness | session |
 | --- | --- | --- |
 | 2026-08-12 | codex | 019ff1ab-1620-76e0-93c7-fb048335b5d7 |
+| 2026-08-12 | claude-code | bc9f2bde-a828-54f6-a4a8-e5b6a0ab4ef0 |
