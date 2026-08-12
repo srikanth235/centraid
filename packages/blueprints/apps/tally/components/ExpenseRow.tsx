@@ -18,7 +18,14 @@ const TONE = {
 /** Settled states a durable Commons intent never re-enters "pending" from
  * (issue #731 goal 2's `expired`/`cancelled` join the original `denied`) —
  * only these are ever dismissible. */
-const DISMISSIBLE_INTENT_STATUSES = new Set(["denied", "expired", "cancelled"]);
+const DISMISSIBLE_INTENT_STATUSES = new Set([
+  "denied",
+  "conflict",
+  "failed",
+  "expired",
+  "cancelled",
+]);
+const RETRYABLE_INTENT_STATUSES = new Set(["denied", "conflict", "failed"]);
 
 export function ExpenseRow({
   row,
@@ -26,6 +33,8 @@ export function ExpenseRow({
   groupSuffix = false,
   onOpen,
   onDismiss,
+  onRetry,
+  onEditPending,
   onCancel,
 }: {
   row: LedgerRow;
@@ -42,6 +51,8 @@ export function ExpenseRow({
    * is ever dismissible.
    */
   onDismiss?: (row: LedgerRow) => void;
+  onRetry?: (row: LedgerRow) => void;
+  onEditPending?: (row: LedgerRow) => void;
   /**
    * Cancel a durable Commons intent that has not executed yet (issue #731
    * goal 2). Meaningful only while the row is still `pending`/`parked` —
@@ -88,15 +99,19 @@ export function ExpenseRow({
   // and `cancelled` alongside the original `denied`) gets its own honest
   // label instead of collapsing into "denied".
   const dismissible = DISMISSIBLE_INTENT_STATUSES.has(row.intentStatus ?? "");
+  const retryable = RETRYABLE_INTENT_STATUSES.has(row.intentStatus ?? "");
   const cancellable =
-    row.intentStatus === "pending" || row.intentStatus === "parked";
+    row.intentStatus === "queued" || row.intentStatus === "parked";
+  const reviewable = row.intentStatus === "parked";
   const pendingLabel =
     row.intentStatus === "expired"
       ? "expired"
       : row.intentStatus === "cancelled"
         ? "cancelled"
-        : row.intentStatus === "denied"
-          ? "denied"
+        : row.intentStatus === "denied" ||
+            row.intentStatus === "conflict" ||
+            row.intentStatus === "failed"
+          ? row.intentStatus
           : row.parked
             ? "waiting"
             : "pending";
@@ -126,6 +141,22 @@ export function ExpenseRow({
           <span className={styles.exlabel}>{rLabel}</span>
         )}
         <span className={`${styles.examt} ${TONE[cls]}`}>{amt}</span>
+        {reviewable ? (
+          window.centraid.openApprovals ? (
+            <button
+              type="button"
+              className={styles.dismiss}
+              onClick={(event) => {
+                event.stopPropagation();
+                void window.centraid.openApprovals?.();
+              }}
+            >
+              Review in Approvals
+            </button>
+          ) : (
+            <small>Review in Approvals.</small>
+          )
+        ) : null}
         {cancellable && onCancel ? (
           <button
             type="button"
@@ -150,6 +181,30 @@ export function ExpenseRow({
             }}
           >
             Dismiss
+          </button>
+        ) : null}
+        {retryable && onRetry ? (
+          <button
+            type="button"
+            className={styles.dismiss}
+            onClick={(event) => {
+              event.stopPropagation();
+              onRetry(row);
+            }}
+          >
+            Retry
+          </button>
+        ) : null}
+        {retryable && onEditPending ? (
+          <button
+            type="button"
+            className={styles.dismiss}
+            onClick={(event) => {
+              event.stopPropagation();
+              onEditPending(row);
+            }}
+          >
+            Edit
           </button>
         ) : null}
       </span>

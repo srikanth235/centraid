@@ -124,12 +124,6 @@ export interface ActivityEntry {
   receiptId: string | null;
 }
 
-/** A tracked parked/queued write, keyed by intent (see pending.ts). */
-export interface PendingRecord {
-  eventId: string;
-  kind: string;
-}
-
 /** The composer's prefilled start/end when opened from a day/slot click. */
 export interface Prefill {
   start: Date;
@@ -174,9 +168,6 @@ export interface AppState {
   createOpen: boolean;
   createPrefill: Prefill | null;
   narrow: boolean;
-  pendingIds: Set<string>;
-  pendingCancelIds: Set<string>;
-  pendingByIntent: Map<string, PendingRecord>;
   activityLog: Map<string, ActivityEntry[]>;
   readFailedShown: boolean;
 }

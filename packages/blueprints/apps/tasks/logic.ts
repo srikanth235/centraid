@@ -61,33 +61,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return false;
   }
 
-  function markPending(
-    action: string,
-    input: Record<string, unknown>,
-    outcome: VaultOutcome | undefined
-  ) {
-    if (action === "add") {
-      state.pendingAdds.push({
-        key:
-          outcome?.invocationId ??
-          `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        title: String(input.title ?? ""),
-        due_at: (input.due_at as string | null | undefined) ?? null,
-        priority: (input.priority as number | undefined) ?? 0,
-        parent_task_id:
-          (input.parent_task_id as string | null | undefined) ?? null,
-      });
-      return;
-    }
-    const id = (input.task_id ?? input.subject_id) as string | undefined;
-    if (id) state.pendingIds.add(id);
-  }
-
-  function clearPending() {
-    state.pendingIds.clear();
-    state.pendingAdds = [];
-  }
-
   function logActivity(
     taskId: string | undefined,
     text: string,
@@ -114,7 +87,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       notice(String((error as { message?: unknown })?.message ?? error));
       return undefined;
     }
-    const executed = narrate(outcome);
+    narrate(outcome);
     if (
       (outcome?.status === "executed" || outcome?.status === "queued") &&
       (action === "add" || action === "edit") &&
@@ -128,10 +101,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
         );
     }
     if (outcome?.status === "parked") {
-      markPending(action, input, outcome);
       statusLine("Sent to the owner for confirmation.");
     }
-    if (executed || outcome?.status === "denied") await refresh();
+    if (outcome) await refresh();
     else render();
     return outcome;
   }
@@ -316,7 +288,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       return true;
     }
     if (outcome?.status === "parked") {
-      markPending("set-status", { task_id: task.task_id }, outcome);
       statusLine("Sent to the owner for confirmation.");
       render();
       return false;
@@ -481,7 +452,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     removeTag,
     applySearchInput,
     clearSearch,
-    clearPending,
   };
 }
 

@@ -25,7 +25,6 @@ import {
 } from "../../kit/storage/free-up-space";
 import type { DeviceByteProbe } from "../../kit/storage/free-up-space";
 import { useTheme } from "../../kit/theme";
-import { optimisticRowId } from "../../lib/replica/optimistic";
 import { sha256OfFile } from "../../lib/upload/enqueue";
 import { expoFileSource } from "../../lib/upload/expo-native";
 import { createNativeDigest } from "../../lib/upload/native-digest";
@@ -213,34 +212,10 @@ export default function PhotosLibrary({
 
   const createAlbum = async (): Promise<void> => {
     if (!session || !title.trim()) return;
-    const albumId = optimisticRowId("album");
-    const createdAt = new Date().toISOString();
     try {
       const result = await session.write("photos", {
         action: "create-album",
         input: { title: title.trim() },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "core.collection",
-            rowId: albumId,
-            values: {
-              collection_id: albumId,
-              owner_party_id: String(
-                collections.rows[0]?.owner_party_id ?? "local-owner"
-              ),
-              name: title.trim(),
-              cover_content_id: null,
-              parent_collection_id: null,
-              sort_order:
-                Math.max(
-                  0,
-                  ...collections.rows.map((row) => Number(row.sort_order ?? 0))
-                ) + 1,
-              created_at: createdAt,
-            },
-          },
-        ],
       });
       if (surfaceWriteOutcome(result)) {
         setNewAlbum(false);

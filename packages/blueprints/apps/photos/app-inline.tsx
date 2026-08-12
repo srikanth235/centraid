@@ -7,6 +7,7 @@
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, PHOTOS_READ_TABLES_LIST } from "./app-root.tsx";
+import pendingProjection from "./pending-projection.ts";
 import duplicatesQuery from "./queries/duplicates.ts";
 import enrichmentStatusQuery from "./queries/enrichment-status.ts";
 import facesQuery from "./queries/faces.ts";
@@ -17,6 +18,7 @@ import storageQuery from "./queries/storage.ts";
 
 const photosInlineApp: InlineAppModule = {
   appId: "photos",
+  pendingProjection,
   changeTables: PHOTOS_READ_TABLES_LIST,
   // Mount over every scope this member can see (issue #599): the timeline is
   // the merge of their own library and each audience they belong to. app-root

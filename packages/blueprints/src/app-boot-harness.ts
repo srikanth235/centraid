@@ -22,6 +22,12 @@ import { createRoot } from "react-dom/client";
 import type { Root as ReactRoot } from "react-dom/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import {
+  decoratePendingMutation,
+  definePendingProjection,
+  pendingPatch,
+  projectPendingWrite,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { BRAND } from "@centraid/design";
 // Boots a blueprint app the way the v0 client does: its query-free `Root`,
 // the real kit, the workspace React runtime, and a mocked `window.centraid`
@@ -178,6 +184,14 @@ const AGENDA_TITLE = "Airplane-mode planning";
 const PHOTO_ASSET_ID = "asset-airplane";
 const PHOTO_TITLE = "Airplane-mode photo";
 const TALLY_TRASH_ID = "expense-airplane-trash";
+
+const AGENDA_PENDING_PROJECTION = definePendingProjection({
+  appId: "agenda",
+  actions: {
+    "cancel-event": ({ input }) =>
+      pendingPatch("core.event", input.event_id, input),
+  },
+});
 
 /** Populated, clone-safe rows shaped exactly like each app's local query. */
 function replicaFixture(app: string): unknown {
@@ -512,6 +526,40 @@ export function describeAppBoot(
           networkCalls.push(args[0]);
           throw new Error("synthetic airplane mode");
         };
+        const updateAgendaOverlay = (state: "queued" | "parked" | "denied") => {
+          if (app !== "agenda") return;
+          const projected = projectPendingWrite(AGENDA_PENDING_PROJECTION, {
+            appId: "agenda",
+            action: "cancel-event",
+            input: { event_id: AGENDA_EVENT_ID },
+            intentId: AGENDA_INTENT_ID,
+          });
+          const mutation = projected.optimistic[0];
+          if (!mutation || mutation.op !== "upsert") return;
+          const decorated = decoratePendingMutation(mutation, {
+            intentId: AGENDA_INTENT_ID,
+            state,
+            action: "cancel-event",
+            ...(state === "parked"
+              ? { reason: "Waiting for the owner to approve this change." }
+              : state === "denied"
+                ? { reason: "The owner denied this cancellation." }
+                : {}),
+          });
+          const current = response as {
+            events: Array<Record<string, unknown>>;
+            calendars: Array<Record<string, unknown>>;
+          };
+          response = {
+            ...current,
+            events: current.events.map((event) =>
+              event.event_id === mutation.rowId
+                ? { ...event, ...decorated.values }
+                : event
+            ),
+          };
+          for (const listener of live) listener(response);
+        };
         window.centraid = {
           appId: app,
           read: (request?: {
@@ -545,6 +593,7 @@ export function describeAppBoot(
               app === "agenda" &&
               (request as { action?: string }).action === "cancel-event"
             ) {
+              updateAgendaOverlay("queued");
               return { status: "queued", intentId: AGENDA_INTENT_ID };
             }
             return {};
@@ -556,6 +605,7 @@ export function describeAppBoot(
         };
 
         const emitAgendaIntentState = (state: "parked" | "denied") => {
+          updateAgendaOverlay(state);
           const invalidations = replicaIntentInvalidations([
             {
               intentId: AGENDA_INTENT_ID,
@@ -732,19 +782,27 @@ export function describeAppBoot(
               document.querySelector(".kit-pending-chip")?.textContent
             ).toBe("cancel asked");
 
-            // An exact denial is the rollback signal: only this chip settles and
-            // the unchanged canonical event remains visible.
+            // A denial is durable attention state: the row and explanation stay
+            // visible until the member edits, retries, or explicitly discards it.
             emitAgendaIntentState("denied");
             await waitFor(
-              () => document.querySelector(".kit-pending-chip") === null,
-              "Agenda's pending chip to settle on the exact denial"
+              () =>
+                document.querySelector(".kit-pending-chip")?.textContent ===
+                "denied",
+              "Agenda's denied chip to persist on the exact outcome"
             );
-            expect(document.querySelector(".kit-pending-chip")).toBeNull();
+            expect(
+              document.querySelector(".kit-pending-chip")?.textContent
+            ).toBe("denied");
             expect(document.body.textContent).toContain(AGENDA_TITLE);
             expect(
               readCalls,
-              "exact intent settlement unexpectedly re-read the replica"
-            ).toBe(bootReads);
+              "outbox state changes did not invalidate the composed replica read"
+            ).toBeGreaterThan(bootReads);
+            expect(
+              networkCalls,
+              "outbox state invalidation attempted a network read"
+            ).toEqual([]);
           } else if (app === "photos") {
             await waitFor(
               () =>

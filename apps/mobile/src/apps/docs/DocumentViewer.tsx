@@ -18,11 +18,6 @@ import {
 } from "../../kit/replica/write-outcome";
 import { family, useTheme } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
-import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
-import {
-  optimisticRowId,
-  optimisticValues,
-} from "../../lib/replica/optimistic";
 import {
   listCommonsResidents,
   retainCommonsItem,
@@ -126,53 +121,9 @@ export default function DocumentViewer({
     )
       return;
     try {
-      const now = new Date().toISOString();
-      const optimistic: NativeOptimisticMutation[] =
-        name === "trash" && document.raw
-          ? [
-              {
-                op: "upsert",
-                entity: "core.document",
-                rowId: document.rawId ?? document.id,
-                values: optimisticValues(document.raw, {
-                  deleted_at: now,
-                  updated_at: now,
-                }),
-              },
-            ]
-          : name === "unstar" && document.starTag
-            ? [
-                {
-                  op: "delete",
-                  entity: "core.tag",
-                  rowId: String(document.starTag.tag_id),
-                },
-              ]
-            : name === "star" && document.starredConceptId
-              ? (() => {
-                  const tagId = optimisticRowId("star");
-                  return [
-                    {
-                      op: "upsert" as const,
-                      entity: "core.tag",
-                      rowId: tagId,
-                      values: {
-                        tag_id: tagId,
-                        target_type: "core.document",
-                        target_id: document.rawId ?? document.id,
-                        concept_id: document.starredConceptId,
-                        tagged_by_party_id: null,
-                        confidence: null,
-                        tagged_at: now,
-                      },
-                    },
-                  ];
-                })()
-              : [];
       const write = {
         action: name,
         input: { document_id: document.rawId ?? document.id },
-        optimistic,
       };
       const result = await session.writeTo(
         document.sourceVaultId,

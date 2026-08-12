@@ -16,6 +16,11 @@
 import { BRAND, identityColor, identityInitials } from "@centraid/design";
 
 import { tallyGroupNet } from "../../../src/tally-balance.ts";
+import {
+  PENDING_OVERLAY_FIELDS,
+  pendingOverlayCopy,
+  readPendingOverlay,
+} from "../../_shared/pending-overlay.ts";
 
 /** A resolved person (owner or friend) the ledgers decorate rows with. */
 export interface ServerPerson {
@@ -54,6 +59,7 @@ interface ExpenseRowRaw {
   rate_source?: string | null;
   rate_date?: string | null;
   recurring_template_id?: string | null;
+  [k: string]: unknown;
 }
 
 interface RecurringRow {
@@ -457,6 +463,7 @@ export const groupNet = tallyGroupNet;
 
 /** A ledger row: the expense decorated with the owner's lent/borrowed stance. */
 export function ledgerRow(data: TallyData, e: ExpenseWithReceipt) {
+  const pending = readPendingOverlay(e);
   const me = data.me;
   const myShare = me == null ? undefined : e.splits[me];
   const yourShare = myShare ?? 0;
@@ -502,6 +509,21 @@ export function ledgerRow(data: TallyData, e: ExpenseWithReceipt) {
         share_minor: share,
       };
     }),
+    ...(pending
+      ? {
+          ...Object.fromEntries(
+            Object.values(PENDING_OVERLAY_FIELDS).flatMap((field) =>
+              field in e ? [[field, e[field]]] : []
+            )
+          ),
+          pending: true,
+          parked: pending.status === "parked",
+          intentStatus: pending.status,
+          commonsIntentId: pending.key,
+          pendingReason: pendingOverlayCopy(pending),
+          stewardLabel: pending.stewardLabel,
+        }
+      : {}),
     ...(e.receipt
       ? {
           receipt: {

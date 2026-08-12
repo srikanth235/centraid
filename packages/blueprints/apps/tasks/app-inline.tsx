@@ -7,11 +7,13 @@
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
+import pendingProjection from "./pending-projection.ts";
 import boardQuery from "./queries/board.ts";
 import searchQuery from "./queries/search.ts";
 
 const tasksInlineApp: InlineAppModule = {
   appId: "tasks",
+  pendingProjection,
   changeTables: CHANGE_TABLES,
   // Mount over every scope this member can see (issue #726 D11 task 3): the
   // board is the merge of their own open tasks and each audience they

@@ -1,4 +1,4 @@
-import { checkStats, deriveTitle, previewText } from "./format.ts";
+import { checkStats, previewText } from "./format.ts";
 // governance: allow-repo-hygiene file-size-limit cohesive non-visual notes logic module; vault IO, notebook navigation/CRUD, and note commands share the vault predicate translation and parked-write tracking
 // Non-visual business logic: vault IO (write/act), notebook navigation,
 // notebook CRUD with the vault's predicates translated to sentences, the
@@ -58,42 +58,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return false;
   }
 
-  function markPending(
-    action: string,
-    input: Record<string, unknown>,
-    outcome: VaultOutcome | undefined
-  ) {
-    if (action === "create-note") {
-      state.pendingCreates.push({
-        key:
-          outcome?.invocationId ??
-          `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        title: deriveTitle(input.title, input.body_text),
-        notebookId: (input.notebook_id ?? null) as string | null,
-      });
-      return;
-    }
-    const noteId = input.note_id ?? input.subject_id;
-    if (
-      noteId &&
-      ["edit-note", "move-note", "delete-note", "attach"].includes(action)
-    ) {
-      state.pendingNoteIds.add(String(noteId));
-    }
-    if (
-      input.notebook_id &&
-      (action === "rename-notebook" || action === "delete-notebook")
-    ) {
-      state.pendingNotebookIds.add(String(input.notebook_id));
-    }
-  }
-
-  function clearPending() {
-    state.pendingNoteIds.clear();
-    state.pendingNotebookIds.clear();
-    state.pendingCreates = [];
-  }
-
   // The generic write: narrate, mark pending on park, refresh (full re-read)
   // on anything that changed vault-visible shape. Discrete, infrequent
   // actions (pin, move, delete, notebook CRUD, attach/detach) all go through
@@ -111,12 +75,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       notice(String(e?.message ?? error));
       return undefined;
     }
-    const executed = narrate(outcome, friendly);
+    narrate(outcome, friendly);
     if (outcome?.status === "parked") {
-      markPending(action, input, outcome);
       statusLine("Sent to the owner for confirmation.");
     }
-    if (executed || outcome?.status === "denied") await refresh();
+    if (outcome) await refresh();
     else render();
     return outcome;
   }
@@ -174,7 +137,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       }
     } else if (outcome?.status === "parked") {
       notice("");
-      state.pendingNoteIds.add(noteId);
     } else {
       notice(outcomeMessage(outcome) ?? "");
     }
@@ -557,7 +519,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     linkNote,
     applySearchInput,
     clearSearch,
-    clearPending,
   };
 }
 

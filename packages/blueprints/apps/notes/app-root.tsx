@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { KeyboardEvent, ReactElement } from "react";
 
+import { readPendingOverlay } from "../_shared/pending-overlay.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { Editor } from "./components/Editor.tsx";
@@ -61,9 +62,6 @@ function makeState(view: AppState["view"]): AppState {
     narrow: false,
     editingNotebookId: null,
     creatingNotebook: false,
-    pendingNoteIds: new Set(),
-    pendingNotebookIds: new Set(),
-    pendingCreates: [],
     readFailedShown: false,
   };
 }
@@ -235,10 +233,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         refresh,
       });
     }
-    const stopDoorbell = onDataChange(CHANGE_TABLES, () => {
-      logic.clearPending();
-      void refresh();
-    });
+    const stopDoorbell = onDataChange(CHANGE_TABLES, () => void refresh());
     const stopFocus = onFocusRefresh(() => void refresh());
     const onKey = (e: globalThis.KeyboardEvent): void => {
       const typing =
@@ -374,7 +369,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             tags={data.tags}
             tagCounts={tgCounts}
             creatingNotebook={state.creatingNotebook}
-            pendingNotebookIds={state.pendingNotebookIds}
             onSelect={selectNav}
             onStartCreate={() => {
               state.creatingNotebook = true;
@@ -429,7 +423,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                 focusQuickAddRef.current = fn;
               },
             }}
-            pendingCreates={state.pendingCreates}
             pinned={wall.pinned}
             others={wall.others}
             showPinnedGroup={wall.showPinnedGroup}
@@ -437,7 +430,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             emptyTitle={wall.emptyTitle}
             emptySub={wall.emptySub}
             search={state.search}
-            pendingNoteIds={state.pendingNoteIds}
             footer={footer}
             onShowMore={showMore}
             onEmptyAction={() => {
@@ -455,7 +447,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
               note={editorNote}
               trashed={editorNote.deleted_at != null}
               notebooks={data.notebooks}
-              pending={state.pendingNoteIds.has(editorNote.note_id)}
+              pending={Boolean(
+                readPendingOverlay(
+                  editorNote as unknown as Record<string, unknown>
+                )
+              )}
               registerFlush={(fn) => {
                 editorFlushRef.current = fn;
               }}

@@ -97,7 +97,7 @@ function makeState(): AppState {
     authSession: null,
     authBusy: false,
     authError: "",
-    pendingItemId: null,
+    revealItemId: null,
     reauthOpen: false,
     gen: false,
     genLen: 20,
@@ -123,7 +123,7 @@ function wipeSecretState(state: AppState, data: AppData): void {
   state.authSession = null;
   state.authBusy = false;
   state.authError = "";
-  state.pendingItemId = null;
+  state.revealItemId = null;
   state.reauthOpen = false;
   state.selectedId = null;
   state.detail = null;
@@ -346,7 +346,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   const submitItemAuthorization = useCallback(
     async (secret: string) => {
       const state = stateRef.current;
-      const itemId = state.pendingItemId;
+      const itemId = state.revealItemId;
       const sessionToken = state.authSession;
       if (!itemId || !sessionToken) {
         lockNow();
@@ -384,7 +384,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         bump();
         return;
       }
-      state.pendingItemId = null;
+      state.revealItemId = null;
       state.reauthOpen = false;
       state.authError = "";
       bump();
@@ -667,7 +667,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
               bump();
             }}
             onSelect={(id) => {
-              state.pendingItemId = id;
+              state.revealItemId = id;
               state.reauthOpen = true;
               state.authError = "";
               bump();
@@ -700,7 +700,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
               bump();
             }}
             onSelect={(id) => {
-              state.pendingItemId = id;
+              state.revealItemId = id;
               state.reauthOpen = true;
               state.authError = "";
               bump();
@@ -731,7 +731,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
                 error={state.authError}
                 onSubmit={submitItemAuthorization}
                 onCancel={() => {
-                  state.pendingItemId = null;
+                  state.revealItemId = null;
                   state.reauthOpen = false;
                   state.authError = "";
                   bump();

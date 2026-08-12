@@ -160,7 +160,13 @@ export function ExpenseModal({
   return (
     <ModalBackdrop onClose={onClose}>
       <div className={`kit-modal ${styles.wide}`}>
-        <h2>{exp.mode === "edit" ? "Edit expense" : "Add an expense"}</h2>
+        <h2>
+          {exp.mode === "edit"
+            ? "Edit expense"
+            : exp.mode === "replace-pending"
+              ? "Edit pending expense"
+              : "Add an expense"}
+        </h2>
         <input
           className={shared.in}
           style={{ fontSize: "15px" }}

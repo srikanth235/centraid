@@ -4528,9 +4528,11 @@ export async function buildGateway(
     forRoutePrefixes(
       ["/centraid/_vault/replica", "/centraid/_vault/changes"],
       makeReplicaRouteHandler(vaultRegistry, {
-        ...(options.devicePairing
-          ? { enrollments: options.devicePairing.enrollments }
-          : {}),
+        // The embedded desktop host is enrolled in the canonical store above
+        // even though it has no remote-pairing plane. Replica access must
+        // consult that same store or the host proves an EndpointId that the
+        // route can never resolve, producing replica_device_not_enrolled.
+        enrollments: enrollmentStore,
         dispatchIntent: async (input) =>
           replicaDispatchOutcome(
             await getDispatcher().write({

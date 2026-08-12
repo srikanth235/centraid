@@ -7,12 +7,14 @@
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
+import pendingProjection from "./pending-projection.ts";
 import partiesQuery from "./queries/parties.ts";
 import searchQuery from "./queries/search.ts";
 import upcomingQuery from "./queries/upcoming.ts";
 
 const agendaInlineApp: InlineAppModule = {
   appId: "agenda",
+  pendingProjection,
   changeTables: CHANGE_TABLES,
   // The query defaults are typed against the ambient `HandlerArgs`; the inline
   // contract types `ctx` as `unknown`, so bridge the two here (the shell builds

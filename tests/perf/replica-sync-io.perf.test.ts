@@ -13,6 +13,7 @@ import { rigBudgetMs, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/perf/replica-sync-io.perf.test.ts";
 const BUDGET_MS = rigBudgetMs(OWNER);
+const OVERLAY_BUDGET_MS = BUDGET_MS / 10;
 
 describe("replica-sync-io.perf", () => {
   beforeEach(() => vi.stubGlobal("IDBKeyRange", IDBKeyRange));
@@ -46,13 +47,20 @@ describe("replica-sync-io.perf", () => {
     };
     await enqueueNext(0);
     const listed = await queue.list();
+    const overlayStarted = performance.now();
+    const overlays = await queue.overlayMutations("shape-agenda", "core.task");
+    const overlayMs = performance.now() - overlayStarted;
     const durationMs = performance.now() - started;
     store.close();
     // #659 R4 — sustained-drift gate over this rig's own 30-sample
     // nightly history. Null until the history is deep enough; a null is
     // "no opinion yet", never a pass.
     const drift = await rigDriftBudgetMs("perf", OWNER);
-    const passed = listed.length === 200 && durationMs < BUDGET_MS;
+    const passed =
+      listed.length === 200 &&
+      overlays.length === 200 &&
+      durationMs < BUDGET_MS &&
+      overlayMs < OVERLAY_BUDGET_MS;
     const withinDrift = drift === null || durationMs <= drift;
     await recordQualityResult({
       lane: "perf",
@@ -66,6 +74,12 @@ describe("replica-sync-io.perf", () => {
           unit: "ms",
           budget: BUDGET_MS,
         },
+        {
+          name: "overlay enumeration and composition",
+          value: overlayMs,
+          unit: "ms",
+          budget: OVERLAY_BUDGET_MS,
+        },
       ],
     });
     expect(
@@ -73,6 +87,8 @@ describe("replica-sync-io.perf", () => {
       `sustained drift: ${durationMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
     ).toBe(true);
     expect(listed).toHaveLength(200);
+    expect(overlays).toHaveLength(200);
+    expect(overlayMs).toBeLessThan(OVERLAY_BUDGET_MS);
     expect(durationMs).toBeLessThan(BUDGET_MS);
   });
 });

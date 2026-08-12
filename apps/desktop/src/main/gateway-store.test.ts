@@ -65,6 +65,7 @@ describe("gateway-store", () => {
       "local",
       endpointId,
     ]);
+    expect(profiles[0]?.rememberDevice).toBe(true);
 
     const entries = await fs.readdir(path.dirname(fixture.file), {
       recursive: true,
@@ -76,6 +77,9 @@ describe("gateway-store", () => {
     expect(rows.find((row) => row.id === endpointId)).toMatchObject({
       endpointId,
       relayHint: "relay-hint-a",
+    });
+    expect(rows.find((row) => row.id === "local")).toMatchObject({
+      rememberDevice: true,
     });
     expect(JSON.stringify(rows)).not.toContain('"url"');
     expect(JSON.stringify(rows)).not.toContain('"transport"');

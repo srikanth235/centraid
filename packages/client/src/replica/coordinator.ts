@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#738) coordinator ordering keeps bootstrap, feed catch-up, canonical reads, and durable intent invalidation in one crash-consistency boundary
 import type { VaultChangeMessage } from "../vault-change-sse.js";
 import {
   OnlineOnlyGuard,
@@ -5,13 +6,19 @@ import {
   ReplicaRebootstrapRequiredError,
 } from "./errors.js";
 import { replicaIntentInvalidations } from "./intent-invalidations.js";
-import type { IntentQueue, IntentQueueOptions } from "./intents.js";
+import type {
+  IntentQueue,
+  IntentQueueOptions,
+  PendingIntentReplacement,
+} from "./intents.js";
 import { LiveQueryRegistry } from "./live-query-registry.js";
 import { LiveQuery } from "./live-query.js";
 import type { ReplicaStore } from "./store.js";
 import type {
   EnqueueIntentInput,
   IntentOutcome,
+  OptimisticMutation,
+  ReplicaBaseVersion,
   ReplicaBootstrapHeader,
   ReplicaChangeBatch,
   ReplicaCursor,
@@ -26,6 +33,7 @@ import type {
   ReplicaShape,
   ReplicaSnapshot,
   ReplicaStatus,
+  ReplicaValue,
 } from "./types.js";
 
 export interface ReplicaChangeFeedAdapter {
@@ -276,6 +284,62 @@ export class ReplicaCoordinator {
     return intent;
   }
 
+  /**
+   * Capture concurrency preconditions from canonical rows only. Optimistic
+   * overlays are deliberately bypassed: a queued edit must not become its own
+   * base version, and a retry must observe the row that rejected it.
+   */
+  async captureBaseVersions(
+    mutations: readonly OptimisticMutation[]
+  ): Promise<ReplicaBaseVersion[]> {
+    const catalog = await this.worker.catalog();
+    const unique = new Map<string, OptimisticMutation>();
+    for (const mutation of mutations)
+      unique.set(
+        `${mutation.shapeId}\u0000${mutation.entity}\u0000${mutation.rowId}`,
+        mutation
+      );
+    const captured = await Promise.all(
+      [...unique.values()].map(
+        async (mutation): Promise<ReplicaBaseVersion | undefined> => {
+          const shape = catalog.find(
+            (candidate) => candidate.shapeId === mutation.shapeId
+          );
+          const schema = shape?.entities.find(
+            (candidate) => candidate.entity === mutation.entity
+          );
+          if (!schema) return undefined;
+          const result = await this.worker.readWire({
+            shapeId: mutation.shapeId,
+            entity: mutation.entity,
+            where: [
+              {
+                column: schema.primaryKey,
+                op: "eq",
+                value: mutation.rowId,
+              },
+            ],
+            limit: 1,
+          });
+          const row = result.rows.find(
+            (candidate) => candidate.rowId === mutation.rowId
+          );
+          return row?.rowVersion === undefined
+            ? undefined
+            : {
+                shapeId: mutation.shapeId,
+                entity: mutation.entity,
+                rowId: mutation.rowId,
+                version: row.rowVersion,
+              };
+        }
+      )
+    );
+    return captured.filter(
+      (version): version is ReplicaBaseVersion => version !== undefined
+    );
+  }
+
   claimNextIntent(): Promise<ReplicaIntent | undefined> {
     return this.intents.claimNext();
   }
@@ -313,6 +377,77 @@ export class ReplicaCoordinator {
 
   pendingIntents(): Promise<ReplicaIntent[]> {
     return this.intents.pending();
+  }
+
+  async discardIntent(intentId: string): Promise<boolean> {
+    const existing = (await this.intents.list()).find(
+      (intent) => intent.intentId === intentId
+    );
+    const discarded = await this.intents.discard(intentId);
+    if (discarded && existing)
+      this.emitInvalidations(replicaIntentInvalidations([existing]));
+    return discarded;
+  }
+
+  async retryIntent(intentId: string): Promise<ReplicaIntent | undefined> {
+    const previous = (await this.intents.list()).find(
+      (intent) => intent.intentId === intentId
+    );
+    const refreshedBaseVersions = previous
+      ? await this.captureBaseVersions(previous.optimistic)
+      : [];
+    const replacement = await this.intents.retry(
+      intentId,
+      refreshedBaseVersions
+    );
+    if (previous)
+      this.emitInvalidations(replicaIntentInvalidations([previous]));
+    if (replacement)
+      this.emitInvalidations(replicaIntentInvalidations([replacement]));
+    return replacement;
+  }
+
+  async reviseIntent(
+    intentId: string,
+    revision: ReplicaValue,
+    expectedActions?: readonly string[]
+  ): Promise<ReplicaIntent | undefined> {
+    const previous = (await this.intents.list()).find(
+      (intent) => intent.intentId === intentId
+    );
+    const refreshedBaseVersions = previous
+      ? await this.captureBaseVersions(previous.optimistic)
+      : [];
+    const replacement = await this.intents.revise(
+      intentId,
+      revision,
+      refreshedBaseVersions,
+      expectedActions
+    );
+    if (previous)
+      this.emitInvalidations(replicaIntentInvalidations([previous]));
+    if (replacement)
+      this.emitInvalidations(replicaIntentInvalidations([replacement]));
+    return replacement;
+  }
+
+  async reviseIntentForProjection(
+    appId: string,
+    action: string,
+    revision: ReplicaValue,
+    optimistic: readonly OptimisticMutation[],
+    refreshedBaseVersions?: ReplicaBaseVersion[]
+  ): Promise<PendingIntentReplacement | undefined> {
+    const result = await this.intents.reviseMatchingProjection(
+      appId,
+      action,
+      revision,
+      optimistic,
+      refreshedBaseVersions
+    );
+    if (!result) return undefined;
+    this.emitInvalidations(replicaIntentInvalidations([result.replacement]));
+    return result;
   }
 
   subscribeInvalidations(

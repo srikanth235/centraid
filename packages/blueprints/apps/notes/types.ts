@@ -71,13 +71,6 @@ export type Nav =
   | { kind: "notebook"; notebookId: string }
   | { kind: "tag"; conceptId: string };
 
-/** A parked create (no note_id exists yet) rendered as a ghost card. */
-export interface PendingCreate {
-  key: string;
-  title: string;
-  notebookId: string | null;
-}
-
 /**
  * The module-level `data` bag app.tsx mutates in place (never reassigned) and
  * logic.ts closes over — the last successful library read.
@@ -102,9 +95,6 @@ export interface AppState {
   narrow: boolean;
   editingNotebookId: string | null;
   creatingNotebook: boolean;
-  pendingNoteIds: Set<string>;
-  pendingNotebookIds: Set<string>;
-  pendingCreates: PendingCreate[];
   readFailedShown: boolean;
 }
 

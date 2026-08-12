@@ -1,6 +1,6 @@
 # Desktop E2E scenarios
 
-_Updated: 2026-08-01. The suite has 55 tests across seven spec files._
+_Updated: 2026-08-11. The suite has 56 tests across eight spec files._
 
 This is the current, executable coverage map for the real Electron app. A scenario is listed as covered only when a current Playwright spec proves it; older coverage claims are intentionally not carried forward.
 
@@ -13,6 +13,7 @@ This is the current, executable coverage map for the real Electron app. A scenar
 | App view / automation templates / Analytics | `appview-templates-insights.spec.ts` | 4 | System app renders inline with no iframe, automation clone survives a restart, independent drafts, Analytics hero |
 | Automations | `automations.spec.ts` | 12 | List/error/retry, create/edit, enable/disable, webhook URL, delete, run viewer, success/failure timeline, nested tool transcript, rerun |
 | Settings / gateways | `settings-gateways.spec.ts` | 12 | Theme and system mode persistence, dark restart, Agents page, pairing-only enrollment, switch/rename/remove gateway, unreachable/auth errors, Cmd+K |
+| Pending writes | `pending-overlay.spec.ts` | 1 | Production inline Tally, Tasks, and Agenda routes over the real local gateway; visible offline add/RSVP controls and replica ⊕ outbox recovery across an Electron reload |
 
 ## Current architecture assumptions
 

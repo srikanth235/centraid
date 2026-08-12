@@ -8,6 +8,7 @@ import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import TopSafeArea from "../../kit/components/TopSafeArea";
+import PendingRowStatus from "../../kit/replica/PendingRowStatus";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -15,12 +16,12 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import type { AgendaEventModel } from "../../kit/schedule/recurrence";
 import { t, useTheme } from "../../kit/theme";
 import type { AgendaScreenProps } from "../../navigation";
 import AgendaCreateModal from "./AgendaCreateModal";
 import type { AgendaCreateInput } from "./AgendaCreateModal";
 import { styles } from "./AgendaHome.styles";
+import type { NativeAgendaEvent } from "./useAgenda";
 import { useAgenda } from "./useAgenda";
 
 // Mobile has no month grid — a 7-column grid at 390px gives 42px cells, well
@@ -32,7 +33,7 @@ type ViewMode = "week" | "agenda";
 interface AgendaDay {
   key: string;
   date: Date;
-  events: AgendaEventModel[];
+  events: NativeAgendaEvent[];
 }
 const startOfWeek = (date: Date): Date => {
   const next = new Date(date);
@@ -108,29 +109,10 @@ export default function AgendaHome({
       );
       return false;
     }
-    const rowId = `optimistic-${Date.now()}`;
     try {
       const result = await session.write("agenda", {
         action: "propose",
         input,
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "core.event",
-            rowId,
-            values: {
-              event_id: rowId,
-              summary: String(input.summary),
-              dtstart: String(input.dtstart),
-              dtend: String(input.dtend),
-              start_tz: String(input.start_tz),
-              end_tz: String(input.end_tz),
-              recurrence_semantics: String(input.recurrence_semantics),
-              rrule: input.rrule ?? null,
-              status: "tentative",
-            },
-          },
-        ],
       });
       return surfaceWriteOutcome(result, {
         onParked: () =>
@@ -162,7 +144,7 @@ export default function AgendaHome({
     setCursor(new Date());
   };
   const openEvent = useCallback(
-    (event: AgendaEventModel): void => {
+    (event: NativeAgendaEvent): void => {
       navigation.navigate("AgendaEvent", {
         eventId: event.id,
         instanceKey: event.instanceKey,
@@ -393,7 +375,7 @@ const AgendaDayRow = memo(
   }: {
     day: AgendaDay;
     colors: ReturnType<typeof useTheme>["colors"];
-    onOpen: (event: AgendaEventModel) => void;
+    onOpen: (event: NativeAgendaEvent) => void;
   }): React.JSX.Element => {
     const isToday = day.date.toDateString() === new Date().toDateString();
     return (
@@ -443,6 +425,7 @@ const AgendaDayRow = memo(
                   {event.isRecurrenceInstance ? " · repeating" : ""}
                 </Text>
               </Text>
+              <PendingRowStatus row={event.raw} onEdit={() => onOpen(event)} />
             </Pressable>
           ))}
         </View>
@@ -458,7 +441,7 @@ function WeekStrip({
   colors,
 }: {
   start: Date;
-  events: AgendaEventModel[];
+  events: NativeAgendaEvent[];
   colors: ReturnType<typeof useTheme>["colors"];
 }): React.JSX.Element {
   return (

@@ -59,13 +59,26 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 // 2026-08-04 — blueprints 6 → 5: the docs "+ New" chevron's resting 0.85 fade
 // went with the hand-rolled button it decorated; the kit primary carries one
 // ink for the whole control.
+// 2026-08-11 — blueprints 5 → 4: #738 removed the duplicate app-owned pending
+// layers and their faded presentation branches; #739 concurrently added the
+// Places graticule leaf. Generated app-boot mirrors are excluded above so this
+// source budget remains stable under concurrent gates.
 const BUDGETS = {
   "packages/client/src": 21,
-  "packages/blueprints": 5,
+  "packages/blueprints": 4,
   "packages/design/kit": 12,
 };
 
-const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
+const SKIP_DIRS = new Set([
+  "node_modules",
+  "dist",
+  "build",
+  ".turbo",
+  // The blueprint boot harness mirrors source CSS here while check:push runs
+  // gates concurrently. Counting both the source and its generated mirror
+  // makes the shrink-only budget depend on scheduling rather than source.
+  ".app-boot",
+]);
 const EXTENSION = /\.css$/u;
 
 const INTERACTIVE_PSEUDO_RE =

@@ -195,6 +195,13 @@ describe("embedded-gateway-layout scenarios", () => {
             .map((vault) => vault.name)
             .sort((a, b) => String(a).localeCompare(String(b)))
         ).toStrictEqual(["Personal", "Shared"]);
+
+        const bootstrap = await fetch(
+          `${gateway.url}/centraid/_vault/replica/bootstrap?window=100`,
+          { headers: { Authorization: "Bearer desktop-autofound-token" } }
+        );
+        const bootstrapBody = await bootstrap.text();
+        expect(bootstrap.status, bootstrapBody).toBe(200);
       } finally {
         await gateway.close();
       }

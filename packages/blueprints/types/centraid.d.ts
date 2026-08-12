@@ -318,7 +318,15 @@ interface CentraidClient {
     signal?: AbortSignal;
     /** Which mounted scope the write lands in; defaults to the primary. */
     scope?: string;
+    /** Never enter a replica/outbox; a network failure rejects immediately. */
+    onlineOnly?: boolean;
   }) => Promise<T>;
+  /** Retry a retained denied/conflict/failed outbox record as a new intent. */
+  retryPendingWrite?: (intentId: string, scope?: string) => Promise<boolean>;
+  /** Permanently discard a retained denied/conflict/failed outbox record. */
+  discardPendingWrite?: (intentId: string, scope?: string) => Promise<boolean>;
+  /** Navigate to the shell-owned approval inbox when this host provides one. */
+  openApprovals?: () => void;
   /** Durable member-side Commons overlay; absent on older/single-scope hosts. */
   commonsIntents?: (opts?: {
     scope?: string;

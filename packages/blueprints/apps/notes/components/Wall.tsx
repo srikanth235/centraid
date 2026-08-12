@@ -1,5 +1,5 @@
 import { I } from "../icons.ts";
-import type { Note, PendingCreate } from "../types.ts";
+import type { Note } from "../types.ts";
 import { Card } from "./Card.tsx";
 // The scrolling wall: the quick-add card, a "pending approval" strip for
 // parked creates (no note_id exists yet, so these render as ghost cards),
@@ -10,25 +10,12 @@ import { QuickAdd } from "./QuickAdd.tsx";
 import type { QuickAddProps } from "./QuickAdd.tsx";
 import { Icon } from "./Shared.tsx";
 
-import cardStyles from "./Card.module.css";
 import styles from "./Wall.module.css";
-
-function PendingCreateCard({ item }: { item: PendingCreate }) {
-  return (
-    <article className={`${cardStyles.card} kit-pending`}>
-      <div className={cardStyles.cardHead}>
-        <div className={cardStyles.cardTitle}>{item.title || "Untitled"}</div>
-        <span className="kit-pending-chip">pending</span>
-      </div>
-    </article>
-  );
-}
 
 export function Wall({
   view,
   showQuickAdd,
   quickAddProps,
-  pendingCreates,
   pinned,
   others,
   showPinnedGroup,
@@ -36,7 +23,6 @@ export function Wall({
   emptyTitle,
   emptySub,
   search,
-  pendingNoteIds,
   footer,
   onShowMore,
   onEmptyAction,
@@ -46,7 +32,6 @@ export function Wall({
   view: "masonry" | "list";
   showQuickAdd: boolean;
   quickAddProps: QuickAddProps;
-  pendingCreates: PendingCreate[];
   pinned: Note[];
   others: Note[];
   showPinnedGroup: boolean;
@@ -54,7 +39,6 @@ export function Wall({
   emptyTitle: string;
   emptySub: string;
   search: string;
-  pendingNoteIds: Set<string>;
   footer: { windowSize: number } | null;
   onShowMore: () => void;
   onEmptyAction: () => void;
@@ -68,19 +52,6 @@ export function Wall({
     <div className={styles.scrollInner}>
       {showQuickAdd ? <QuickAdd {...quickAddProps} /> : null}
 
-      {pendingCreates.length > 0 ? (
-        <div className={styles.pendingStrip}>
-          <div className={styles.eyebrow}>
-            <Icon svg={I.receipt} /> Pending approval
-          </div>
-          <div className={wallClass}>
-            {pendingCreates.map((item) => (
-              <PendingCreateCard key={item.key} item={item} />
-            ))}
-          </div>
-        </div>
-      ) : null}
-
       {showPinnedGroup ? (
         <>
           <div className={styles.eyebrow}>
@@ -92,7 +63,6 @@ export function Wall({
                 key={note.note_id}
                 note={note}
                 search={search}
-                pending={pendingNoteIds.has(note.note_id)}
                 onOpen={onOpenNote}
                 onTogglePin={onTogglePin}
               />
@@ -112,7 +82,6 @@ export function Wall({
             key={note.note_id}
             note={note}
             search={search}
-            pending={pendingNoteIds.has(note.note_id)}
             onOpen={onOpenNote}
             onTogglePin={onTogglePin}
           />

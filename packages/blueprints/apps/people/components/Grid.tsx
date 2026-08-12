@@ -1,4 +1,5 @@
 // Grid view card (#grid root's mapped children).
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { avatarColor, metaLine, statusOf } from "../format.ts";
 import { I } from "../icons.ts";
 import type { Person } from "../types.ts";
@@ -82,6 +83,10 @@ export function GridCard({
           <span className="kit-dotmini" style={{ background: st.color }} />
           {metaLine(p)}
         </div>
+        <PendingWriteActions
+          row={p as unknown as Record<string, unknown>}
+          onEdit={() => onOpenDetails(p.party_id)}
+        />
       </div>
     </div>
   );

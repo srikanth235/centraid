@@ -6,15 +6,6 @@
 
 export const CROP_PX = 120;
 
-/** The row state each answer lands in — the same three the vault's
- *  `media_face_region.review_state` CHECK allows. A table, not a branch
- *  chain, so a fourth answer is one row here (docs/coding-standards.md). */
-export const ANSWERED_STATE = {
-  confirm: "confirmed",
-  reject: "rejected",
-  dismiss: "dismissed",
-} as const;
-
 /** What a failed answer is called on the status bar. Never a stack trace:
  *  the member asked a question of their own library and deserves a sentence. */
 export const ANSWER_FAILURE = {
