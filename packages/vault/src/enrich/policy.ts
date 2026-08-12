@@ -7,7 +7,7 @@
 // the Photos app's `enrichment-status` query — and NOTHING on the execution
 // path. That made the on-device tier's "what leaves the device → nothing"
 // claim one the backend never kept: enrichment automations fired and called
-// `ctx.agent` regardless of the tier.
+// `ctx.delegate` regardless of the tier.
 //
 // This is the tier read the enforcement choke point uses (see
 // `packages/automation/src/fire/enrich-gate.ts` for the decision and

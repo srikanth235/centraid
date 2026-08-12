@@ -260,7 +260,7 @@ describe("install-over-http scenarios", () => {
         headers: jsonAuth(),
         body: JSON.stringify({
           model: "openai/gpt-4o-mini",
-          enrichVariant: "agent",
+          recognitionStep: "delegate",
           publish: true,
         }),
       }
@@ -292,7 +292,7 @@ describe("install-over-http scenarios", () => {
         enabled: boolean;
         manifest: {
           requires: { model?: string };
-          enrich?: { agentVariant?: { selected?: string } };
+          enrich?: { delegateStep?: { selected?: string } };
         };
       }>;
     };
@@ -302,7 +302,7 @@ describe("install-over-http scenarios", () => {
       enabled: true,
       manifest: {
         requires: { model: "openai/gpt-4o-mini" },
-        enrich: { agentVariant: { selected: "agent" } },
+        enrich: { delegateStep: { selected: "delegate" } },
       },
     });
   });

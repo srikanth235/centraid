@@ -153,7 +153,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
     "photos",
     useMemo(
       (): NativeReadRequest => ({
-        entity: "media.media_asset",
+        entity: "media.asset",
         where: [{ column: "deleted_at", op: "is-null" }],
         orderBy: { column: "captured_at", dir: "desc" },
         limit: LIMITS.photos,

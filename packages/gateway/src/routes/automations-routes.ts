@@ -25,7 +25,7 @@
 // Code (manifests) resolves from the git-store materialized `main`
 // (`<active-main>/apps`); data (run ledgers, analytics) from the
 // gateway's stable `appsDir`. Turn-now executes on THIS host with the
-// gateway's own runner config — the desktop's provider key is not used
+// gateway's own harness config — the desktop's provider key is not used
 // for a remote fire.
 
 import crypto from "node:crypto";
@@ -43,10 +43,10 @@ import type {
   Turn,
   AutomationTurnStreamEvent,
   TurnStreamEvent,
-  RunnerKind,
+  HarnessKind,
 } from "@centraid/app-engine";
 import {
-  isRunnerKind,
+  isHarnessKind,
   parseTurnAttachmentRefs,
   SseStream,
 } from "@centraid/app-engine";
@@ -90,7 +90,7 @@ export interface AutomationsRouteOptions {
   insights: InsightsStore;
   /**
    * Fire an automation now (fire-and-forget). Injected so `serve()` wires the
-   * automation handler with the gateway's dirs + runner, and tests can
+   * automation handler with the gateway's directories + turn driver, and tests can
    * stub it. The turnId is minted by the route and passed in.
    */
   runAutomation: (input: { automationRef: string; turnId: string }) => void;
@@ -112,7 +112,7 @@ export interface AutomationsRouteOptions {
   /**
    * Drive a real interactive automation turn. The route owns the standard
    * `TurnStreamEvent` SSE transport; the injected lifecycle owns ledger,
-   * scoped runner dispatch, and automation-bus fanout.
+   * scoped harness dispatch, and automation-bus fanout.
    */
   runInteractiveTurn?: (input: {
     row: automation.Row;
@@ -120,8 +120,8 @@ export interface AutomationsRouteOptions {
     message: string;
     abortSignal: AbortSignal;
     onEvent: (event: TurnStreamEvent) => void;
-    providerConsent?: RunnerKind | readonly RunnerKind[];
-    runnerKind?: RunnerKind;
+    providerConsent?: HarnessKind | readonly HarnessKind[];
+    harnessKind?: HarnessKind;
     model?: string;
     thinking?: string;
     attachmentRefs?: TurnAttachmentRef[];
@@ -146,8 +146,8 @@ interface AutomationTurnJson extends Turn {
   automationId?: string;
   /** The automation's last-known display name — see `RunSummary.automationName`. */
   automationName?: string;
-  /** Active runner binding on the stable automation conversation. */
-  adapterKind?: string;
+  /** Active harness binding on the stable automation conversation. */
+  harnessKind?: string;
   /** Built-in recognition runs stay in their own history lane. */
   systemLane?: "recognition";
 }
@@ -194,13 +194,13 @@ function turnToAutomationTurn(
   turn: Turn,
   automationRef: string | undefined,
   conversationTitle: string | undefined,
-  adapterKind: string | undefined
+  harnessKind: string | undefined
 ): AutomationTurnJson {
   return {
     ...turn,
     ...(automationRef === undefined ? {} : { automationId: automationRef }),
     ...(conversationTitle ? { automationName: conversationTitle } : {}),
-    ...(adapterKind ? { adapterKind } : {}),
+    ...(harnessKind ? { harnessKind } : {}),
     ...(isSystemRecognitionRef(automationRef)
       ? { systemLane: "recognition" as const }
       : {}),
@@ -505,7 +505,7 @@ export function makeAutomationsRouteHandler(
             turn,
             conversation?.automationId,
             conversation?.title,
-            conversation?.adapterKind
+            conversation?.harnessKind
           );
         });
         return sendJson(res, 200, { turns });
@@ -524,7 +524,7 @@ export function makeAutomationsRouteHandler(
           turn,
           conversation?.automationId,
           conversation?.title,
-          conversation?.adapterKind
+          conversation?.harnessKind
         );
         return sendJson(res, 200, {
           turn: record,
@@ -573,16 +573,16 @@ export function makeAutomationsRouteHandler(
         if (providerConsent === "invalid") {
           return sendJson(res, 400, {
             error: "bad_request",
-            message: "providerConsent must name registered runners.",
+            message: "providerConsent must name registered harnesses.",
           });
         }
-        const runnerKind = isRunnerKind(body.runnerKind)
-          ? body.runnerKind
+        const harnessKind = isHarnessKind(body.harnessKind)
+          ? body.harnessKind
           : undefined;
-        if (body.runnerKind !== undefined && !runnerKind) {
+        if (body.harnessKind !== undefined && !harnessKind) {
           return sendJson(res, 400, {
             error: "bad_request",
-            message: "runnerKind must name a registered runner.",
+            message: "harnessKind must name a registered harness.",
           });
         }
         const model =
@@ -628,7 +628,7 @@ export function makeAutomationsRouteHandler(
             turnId,
             message,
             ...(providerConsent ? { providerConsent } : {}),
-            ...(runnerKind ? { runnerKind } : {}),
+            ...(harnessKind ? { harnessKind } : {}),
             ...(model ? { model } : {}),
             ...(thinking ? { thinking } : {}),
             ...(attachmentRefs.length > 0 ? { attachmentRefs } : {}),

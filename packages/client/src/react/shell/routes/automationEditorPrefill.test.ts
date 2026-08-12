@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { buildAutomationAgentEditorData } from "./automationEditorAgentData.js";
 import { buildCreateAutomationEditorData } from "./automationEditorCreateData.js";
+import { buildAutomationHarnessEditorData } from "./automationEditorHarnessData.js";
 
 // The route module transitively imports the whole gateway-client surface; we
 // only exercise the pure create-mode DTO builder, so stub the client so
@@ -79,9 +79,9 @@ describe(buildCreateAutomationEditorData, () => {
   });
 });
 
-describe(buildAutomationAgentEditorData, () => {
-  it("derives effective automations pins and runner-scoped model defaults", () => {
-    const data = buildAutomationAgentEditorData({
+describe(buildAutomationHarnessEditorData, () => {
+  it("derives effective automations pins and harness-scoped model defaults", () => {
+    const data = buildAutomationHarnessEditorData({
       anyLoading: false,
       cards: [
         {
@@ -111,14 +111,14 @@ describe(buildAutomationAgentEditorData, () => {
       diagnosticsJson: "{}",
       selectedKind: "codex",
       subsystemModelByKind: { acp: { automations: "acp-automations" } },
-      subsystemRunnerByKey: { automations: "acp" },
-      subsystemRunnerLadders: {},
+      subsystemHarnessByKey: { automations: "acp" },
+      subsystemHarnessLadders: {},
     });
 
-    expect(data.defaultRunnerKind).toBe("acp");
+    expect(data.defaultHarnessKind).toBe("acp");
     expect(data.defaultModel).toBe("acp-automations");
     expect(
-      data.agentRunners?.find((runner) => runner.kind === "acp")
+      data.harnesses?.find((harness) => harness.kind === "acp")
     ).toMatchObject({
       defaultModel: "acp-automations",
       label: "Work ACP",

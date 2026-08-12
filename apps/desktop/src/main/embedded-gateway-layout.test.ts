@@ -42,7 +42,7 @@ describe("embedded-gateway-layout scenarios", () => {
 
   /**
    * Quiet the boot warmers so this suite never depends on network or on local
-   * coding-agent CLIs being present.
+   * coding harness CLIs being present.
    *
    * - PricingWarmer (#445) refreshes LiteLLM into `model-pricing.json` when the
    *   host pins a cache path and the on-disk table is stale/absent. A fresh

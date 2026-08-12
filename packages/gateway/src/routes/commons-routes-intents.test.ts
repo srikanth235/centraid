@@ -224,7 +224,7 @@ describe("Commons intent cancel route (issue #731 goal 2)", () => {
       ownerPartyId: steward.ownerPartyId,
       ownerVaultId: steward.vaultId,
       ownerVault: steward.vault,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [{ partyId: member.ownerPartyId, capability: "read+write" }],
       now,

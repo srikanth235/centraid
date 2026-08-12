@@ -217,7 +217,7 @@ export default function PhotoLightbox({
           setResidentAssetId(
             items.some(
               (item) =>
-                item.itemType === "media.media_asset" && item.itemId === itemId
+                item.itemType === "media.asset" && item.itemId === itemId
             )
               ? itemId
               : undefined
@@ -324,7 +324,7 @@ export default function PhotoLightbox({
     if (!session || !kind || !current?.assetId || !sourceVaultId) return;
     const result = await session.place({
       kind,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: current.assetId,
       sourceVaultId,
       targetVaultId,
@@ -345,7 +345,7 @@ export default function PhotoLightbox({
     try {
       await retainCommonsItem(gatewayBase, {
         actorVaultId,
-        itemType: "media.media_asset",
+        itemType: "media.asset",
         itemId: current.assetId,
       });
       setResidentAssetId(undefined);

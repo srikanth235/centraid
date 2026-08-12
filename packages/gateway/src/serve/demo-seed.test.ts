@@ -121,7 +121,7 @@ describe("demo-seed", () => {
       "people_profile",
       "core_event",
       "core_document",
-      "media_media_asset",
+      "media_asset",
     ]) {
       const left = plane.db.vault
         .prepare(`SELECT count(*) AS n FROM ${table}`)
@@ -144,18 +144,18 @@ describe("demo-seed", () => {
 
     const count = (sql: string): number =>
       (plane.db.vault.prepare(sql).get() as { n: number }).n;
-    expect(count("SELECT count(*) AS n FROM media_media_asset")).toBe(19);
+    expect(count("SELECT count(*) AS n FROM media_asset")).toBe(19);
     expect(
-      count("SELECT count(*) AS n FROM media_media_asset WHERE kind = 'video'")
+      count("SELECT count(*) AS n FROM media_asset WHERE kind = 'video'")
     ).toBe(1);
     expect(
-      count("SELECT count(*) AS n FROM media_media_asset WHERE favorite = 1")
+      count("SELECT count(*) AS n FROM media_asset WHERE favorite = 1")
     ).toBe(2);
     // Every asset carries what the grid needs to paint without a round trip:
     // real bytes, dimensions, a capture time, and a ThumbHash placeholder.
     expect(
       count(
-        `SELECT count(*) AS n FROM media_media_asset a
+        `SELECT count(*) AS n FROM media_asset a
            JOIN core_content_item c ON c.content_id = a.content_id
            JOIN core_content_derivative d
              ON d.content_id = a.content_id AND d.variant = 'thumbhash'
@@ -167,12 +167,12 @@ describe("demo-seed", () => {
     // fresh harness vault must honestly cross both boundaries.
     expect(
       count(
-        "SELECT count(DISTINCT strftime('%Y-%m', captured_at)) AS n FROM media_media_asset"
+        "SELECT count(DISTINCT strftime('%Y-%m', captured_at)) AS n FROM media_asset"
       )
     ).toBeGreaterThanOrEqual(3);
     expect(
       count(
-        "SELECT count(DISTINCT strftime('%Y', captured_at)) AS n FROM media_media_asset"
+        "SELECT count(DISTINCT strftime('%Y', captured_at)) AS n FROM media_asset"
       )
     ).toBeGreaterThanOrEqual(2);
     // Face proposals (issue #712): the portrait frames stage regions through
@@ -201,15 +201,11 @@ describe("demo-seed", () => {
     // unlocated, since "nobody told this one where it was taken" is a real
     // state the grid has to keep handling.
     expect(
-      count(
-        "SELECT count(*) AS n FROM media_media_asset WHERE place_id IS NOT NULL"
-      )
+      count("SELECT count(*) AS n FROM media_asset WHERE place_id IS NOT NULL")
     ).toBe(16);
     expect(count("SELECT count(*) AS n FROM core_place")).toBe(9);
     expect(
-      count(
-        "SELECT count(*) AS n FROM media_media_asset WHERE place_id IS NULL"
-      )
+      count("SELECT count(*) AS n FROM media_asset WHERE place_id IS NULL")
     ).toBe(3);
     // Two people to name a confirmed face as; face review never invents one.
     expect(
@@ -229,7 +225,7 @@ describe("demo-seed", () => {
         plane.db.vault
           .prepare(
             `SELECT count(*) AS n FROM core_collection_entry
-              WHERE collection_id = ? AND target_type = 'media.media_asset'`
+              WHERE collection_id = ? AND target_type = 'media.asset'`
           )
           .get(album.collection_id) as { n: number }
       ).n

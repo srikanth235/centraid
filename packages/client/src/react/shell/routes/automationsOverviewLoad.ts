@@ -31,7 +31,7 @@ export async function loadAutomationsOverviewData(): Promise<AuOverviewData> {
   const attentionByRef = new Map<string, number>(
     rows.map((row) => {
       const consent = filterConsentForAutomation(
-        agents.find((agent) => agent.hostKey === row.ownerApp)?.agentId,
+        agents.find((agent) => agent.enrollmentKey === row.ownerApp)?.agentId,
         blocking,
         grants
       );

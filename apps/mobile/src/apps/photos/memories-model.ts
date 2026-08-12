@@ -88,7 +88,7 @@ function textOf(row: RawMemoryRow, column: string): string | null {
 
 /**
  * Every asset reachable by BOTH ids it answers to — `id` (the timeline row's
- * own key) and `assetId` (`media_media_asset.asset_id`, what
+ * own key) and `assetId` (`media_asset.asset_id`, what
  * `media_memory_member.asset_id` actually points at) — mirroring
  * `PhotosCollectionsView.tsx`'s `byId` map exactly, because a memory member
  * is looked up the same way an album entry is.

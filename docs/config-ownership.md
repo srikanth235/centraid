@@ -25,7 +25,7 @@ Code: `apps/desktop/src/main/settings.ts`.
 
 | Path | Owner | Notes |
 | --- | --- | --- |
-| `<dataDir>/gateway.db` preferences table | Gateway prefs API / Settings | Runner choice, bin path, theme-related device prefs, and Resource mode. Desktop, CLI, and OS service use the same platform-default data dir. |
+| `<dataDir>/gateway.db` preferences table | Gateway prefs API / Settings | Harness choice, bin path, theme-related device prefs, and Resource mode. Desktop, CLI, and OS service use the same platform-default data dir. |
 
 Declarative "dotfiles" for prefs are not a product feature; treat the JSON as owned by the running gateway. Daemon `config.json` may seed `resourceMode` when the pref is unset; env `CENTRAID_RESOURCE_MODE` wins over both for operators. The selected mode is applied at gateway serve boot (worker limits are process-scoped).
 
@@ -61,9 +61,9 @@ Editing `app.json` in a draft worktree does not change production grants until P
 
 ### Model catalog — runtime wins when file present
 
-| Path                                   | Owner                           |
-| -------------------------------------- | ------------------------------- |
-| `model-catalog.json` under gateway dir | Runner status / Refresh catalog |
+| Path                                   | Owner                            |
+| -------------------------------------- | -------------------------------- |
+| `model-catalog.json` under gateway dir | Harness status / Refresh catalog |
 
 Omit file → enumerate without persistence. File is rewritten on refresh.
 

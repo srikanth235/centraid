@@ -34,7 +34,7 @@ import type {
   AssistantSnapshot,
   AsstModelPickerDTO,
   AsstSlashCommand,
-  AgentRunnerKind,
+  HarnessKind,
 } from "../../screen-contracts.js";
 import AssistantScreen from "../../screens/AssistantScreen.js";
 import Icon from "../../ui/Icon.js";
@@ -69,11 +69,11 @@ import {
 import { rejectScopedDirectory } from "./scopedDirectory.js";
 import ScopePicker from "./ScopePicker.js";
 import {
-  loadProviders,
-  resolveReportedRunnerKind,
+  loadHarnesses,
+  resolveReportedHarnessKind,
   setSubsystemConfigPin,
   setSubsystemModel,
-} from "./settingsProvidersData.js";
+} from "./settingsHarnessesData.js";
 
 import mainScrollCss from "../../styles/mainScroll.module.css";
 import ledgerCss from "./AssistantConversations.module.css";
@@ -153,10 +153,10 @@ export default function AssistantRoute({
     abort: null as AbortController | null,
     disposed: false,
     context: null as { used: number; size: number } | null,
-    runnerKind: null as AgentRunnerKind | null,
-    /** A persisted conversation runner is unresolved while its transcript loads. */
-    runnerReady: conversationId === undefined,
-    /** Bumps whenever the screen must reload runner/model capabilities. */
+    harnessKind: null as HarnessKind | null,
+    /** A persisted conversation harness is unresolved while its transcript loads. */
+    harnessReady: conversationId === undefined,
+    /** Bumps whenever the screen must reload harness/model capabilities. */
     pickerRevision: 0,
     selectedModel: "",
     selectedEffort: "",
@@ -193,9 +193,9 @@ export default function AssistantRoute({
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const updateRef = useRef<((s: AssistantSnapshot) => void) | null>(null);
   const suppressSelectRef = useRef<string | null>(null);
-  const modelPickerRunnerRef = useRef<AgentRunnerKind>("codex");
-  /** Invalidates overlapping picker loads and runner switches. */
-  const runnerRequestRef = useRef(0);
+  const modelPickerHarnessRef = useRef<HarnessKind>("codex");
+  /** Invalidates overlapping picker loads and harness switches. */
+  const harnessRequestRef = useRef(0);
   /** Invalidates duplicate/stale transcript loads, including StrictMode replays. */
   const threadRequestRef = useRef(0);
   // Row identity + reference-stable DTOs for the transcript (issue #659).
@@ -234,7 +234,7 @@ export default function AssistantRoute({
         : {}),
       canLoadEarlier: m.current.hasMore,
       loadingEarlier: m.current.loadingEarlier,
-      runnerReady: m.current.runnerReady,
+      harnessReady: m.current.harnessReady,
       pickerRevision: m.current.pickerRevision,
     };
   };
@@ -294,10 +294,10 @@ export default function AssistantRoute({
       m.current.hasMore = loaded.hasMore ?? false;
       m.current.oldestSeq = loaded.oldestSeq;
       m.current.turnCount = loaded.turnCount;
-      if (loaded.adapterKind && loaded.adapterKind !== m.current.runnerKind) {
-        m.current.runnerKind = loaded.adapterKind;
+      if (loaded.harnessKind && loaded.harnessKind !== m.current.harnessKind) {
+        m.current.harnessKind = loaded.harnessKind;
         m.current.pickerRevision += 1;
-        runnerRequestRef.current += 1;
+        harnessRequestRef.current += 1;
       }
       if (loaded.workspace) {
         m.current.workspaceKind = loaded.workspace.primaryKind;
@@ -313,7 +313,7 @@ export default function AssistantRoute({
 
   const selectThread = async (id: string | null): Promise<void> => {
     const request = ++threadRequestRef.current;
-    runnerRequestRef.current += 1;
+    harnessRequestRef.current += 1;
     m.current.abort?.abort();
     setBusy(false);
     setHasThread(id !== null);
@@ -326,8 +326,8 @@ export default function AssistantRoute({
     m.current.loadingEarlier = false;
     m.current.loadedTurns = TRANSCRIPT_PAGE_TURNS;
     m.current.context = null;
-    m.current.runnerKind = null;
-    m.current.runnerReady = id === null;
+    m.current.harnessKind = null;
+    m.current.harnessReady = id === null;
     m.current.pickerRevision += 1;
     m.current.workspaceKind = "vault-data";
     m.current.additionalDirectories = [];
@@ -353,12 +353,12 @@ export default function AssistantRoute({
       m.current.hasMore = loaded.hasMore ?? false;
       m.current.oldestSeq = loaded.oldestSeq;
       m.current.turnCount = loaded.turnCount;
-      m.current.runnerKind = loaded.adapterKind ?? null;
-      m.current.runnerReady = true;
+      m.current.harnessKind = loaded.harnessKind ?? null;
+      m.current.harnessReady = true;
       m.current.pickerRevision += 1;
       // Any picker request started while the transcript was unresolved must
-      // not commit the status/default runner over this persisted binding.
-      runnerRequestRef.current += 1;
+      // not commit the status/default harness over this persisted binding.
+      harnessRequestRef.current += 1;
       if (loaded.workspace) {
         m.current.workspaceKind = loaded.workspace.primaryKind;
         m.current.additionalDirectories = [
@@ -370,7 +370,7 @@ export default function AssistantRoute({
       m.current.msgs = [
         { kind: "ai", text: `Failed to load: ${String(error)}`, error: true },
       ];
-      m.current.runnerReady = true;
+      m.current.harnessReady = true;
       m.current.pickerRevision += 1;
     }
     if (isCurrent(id, request)) pushSync();
@@ -490,18 +490,18 @@ export default function AssistantRoute({
 
   // Composer model picker — reuses the Settings → Models → Agents data path.
   const pickerFromStatus = (
-    status: Awaited<ReturnType<typeof loadProviders>>,
-    requestedRunner?: AgentRunnerKind | null,
+    status: Awaited<ReturnType<typeof loadHarnesses>>,
+    requestedHarness?: HarnessKind | null,
     commit = true
   ): AsstModelPickerDTO => {
-    const runnerKind = resolveReportedRunnerKind(
+    const harnessKind = resolveReportedHarnessKind(
       status,
-      requestedRunner,
+      requestedHarness,
       "assistant"
     );
-    const card = status.cards.find((c) => c.kind === runnerKind);
+    const card = status.cards.find((c) => c.kind === harnessKind);
     const models = card?.modelConfigurable ? card.models : [];
-    const defaultId = status.savedModelByKind[runnerKind] ?? "";
+    const defaultId = status.savedModelByKind[harnessKind] ?? "";
     const defaultModel =
       models.find((mm) => mm.id === defaultId) ??
       models.find((mm) => mm.default) ??
@@ -510,38 +510,38 @@ export default function AssistantRoute({
       (option) => option.category === "thought_level"
     );
     const defaultEffort =
-      status.defaultConfigPinsByKind[runnerKind]?.thought_level ??
+      status.defaultConfigPinsByKind[harnessKind]?.thought_level ??
       effortOption?.currentValue ??
       "";
     const selectedModel =
-      status.subsystemModelByKind[runnerKind]?.assistant ?? "";
+      status.subsystemModelByKind[harnessKind]?.assistant ?? "";
     const selectedEffort =
-      status.subsystemConfigPinsByKind[runnerKind]?.assistant?.thought_level ??
+      status.subsystemConfigPinsByKind[harnessKind]?.assistant?.thought_level ??
       "";
     if (commit) {
-      m.current.runnerKind = runnerKind;
-      modelPickerRunnerRef.current = runnerKind;
+      m.current.harnessKind = harnessKind;
+      modelPickerHarnessRef.current = harnessKind;
       m.current.selectedModel = selectedModel;
       m.current.selectedEffort = selectedEffort;
     }
     return {
-      runners: status.cards.map((runner) => ({
-        kind: runner.kind,
-        title: runner.title,
-        connected: runner.connected,
-        sessionReady: runner.sessionReady,
-        ...(runner.sessionProbePending ? { sessionProbePending: true } : {}),
+      harnesses: status.cards.map((harness) => ({
+        kind: harness.kind,
+        title: harness.title,
+        connected: harness.connected,
+        sessionReady: harness.sessionReady,
+        ...(harness.sessionProbePending ? { sessionProbePending: true } : {}),
         // Breaker health belongs in the hint on every picker — a tripped
-        // breaker is exactly what explains a runner that looks connected but
+        // breaker is exactly what explains a harness that looks connected but
         // won't take the turn (matches builder + automations).
         hint: [
-          runner.subtitle,
-          ...(runner.breakerStates ?? []).map(
+          harness.subtitle,
+          ...(harness.breakerStates ?? []).map(
             (state) => `${state.failureClass} ${state.state}`
           ),
         ].join(" · "),
       })),
-      selectedRunnerKind: runnerKind,
+      selectedHarnessKind: harnessKind,
       workspaceKinds: ["vault-data"],
       connected: card?.connected ?? false,
       models: models.map((mm) => ({
@@ -564,18 +564,18 @@ export default function AssistantRoute({
   };
 
   const loadModelPickerNow = async (): Promise<AsstModelPickerDTO> => {
-    const runnerRequest = runnerRequestRef.current;
+    const harnessRequest = harnessRequestRef.current;
     const threadRequest = threadRequestRef.current;
-    const requestedRunner = m.current.runnerKind;
-    const status = await loadProviders();
+    const requestedHarness = m.current.harnessKind;
+    const status = await loadHarnesses();
     const canCommit =
       !m.current.disposed &&
-      m.current.runnerReady &&
-      runnerRequestRef.current === runnerRequest &&
+      m.current.harnessReady &&
+      harnessRequestRef.current === harnessRequest &&
       threadRequestRef.current === threadRequest;
     return pickerFromStatus(
       status,
-      canCommit ? requestedRunner : m.current.runnerKind,
+      canCommit ? requestedHarness : m.current.harnessKind,
       canCommit
     );
   };
@@ -583,65 +583,65 @@ export default function AssistantRoute({
 
   const setModel = (modelId: string): void => {
     m.current.selectedModel = modelId;
-    setSubsystemModel(modelPickerRunnerRef.current, "assistant", modelId);
+    setSubsystemModel(modelPickerHarnessRef.current, "assistant", modelId);
   };
 
   const setEffort = (effort: string): void => {
     m.current.selectedEffort = effort;
     setSubsystemConfigPin(
-      modelPickerRunnerRef.current,
+      modelPickerHarnessRef.current,
       "assistant",
       "thought_level",
       effort
     );
   };
 
-  const setRunnerNow = async (
-    runnerKind: AgentRunnerKind
+  const setHarnessNow = async (
+    harnessKind: HarnessKind
   ): Promise<AsstModelPickerDTO> => {
-    const runnerRequest = ++runnerRequestRef.current;
+    const harnessRequest = ++harnessRequestRef.current;
     const threadRequest = threadRequestRef.current;
     const conversationAtStart = m.current.currentId;
-    const previous = m.current.runnerKind;
+    const previous = m.current.harnessKind;
     // The normal status route is backed by the gateway's capability cache. A
     // switch should use that fast path; only an unknown/not-ready target needs
-    // the expensive all-runners refresh used by Settings diagnostics.
-    let status = await loadProviders();
-    const target = status.cards.find((card) => card.kind === runnerKind);
+    // the expensive all-harnesses refresh used by Settings diagnostics.
+    let status = await loadHarnesses();
+    const target = status.cards.find((card) => card.kind === harnessKind);
     if (!target?.sessionReady) {
-      status = await loadProviders({ refresh: true });
+      status = await loadHarnesses({ refresh: true });
     }
     const current =
       !m.current.disposed &&
-      m.current.runnerReady &&
+      m.current.harnessReady &&
       m.current.currentId === conversationAtStart &&
       threadRequestRef.current === threadRequest &&
-      runnerRequestRef.current === runnerRequest;
+      harnessRequestRef.current === harnessRequest;
     if (!current) {
-      return pickerFromStatus(status, m.current.runnerKind, false);
+      return pickerFromStatus(status, m.current.harnessKind, false);
     }
     const resolvedTarget = status.cards.find(
-      (card) => card.kind === runnerKind
+      (card) => card.kind === harnessKind
     );
     if (!resolvedTarget?.sessionReady) {
       showToast(
         resolvedTarget?.subtitle ??
-          `${runnerKind} did not complete its session preflight.`
+          `${harnessKind} did not complete its session preflight.`
       );
       return pickerFromStatus(status, previous);
     }
     // Invalidate passive picker requests that began while this preflight was
     // running before committing the user's explicit choice.
-    runnerRequestRef.current += 1;
+    harnessRequestRef.current += 1;
     m.current.context = null;
     if (!resolvedTarget.supportsAttachments) {
       clearPendingAttachments();
     }
-    const next = pickerFromStatus(status, runnerKind);
+    const next = pickerFromStatus(status, harnessKind);
     push();
     return next;
   };
-  const setRunner = useStableEvent(setRunnerNow);
+  const setHarness = useStableEvent(setHarnessNow);
 
   const removePendingAttachment = (localId: string): void => {
     const gone = m.current.pendingAttachments.find(
@@ -740,7 +740,7 @@ export default function AssistantRoute({
           requiredProvider = event.provider;
           return;
         case "notice": {
-          // A non-fatal runner notice. The SSE path renders immediately and
+          // A non-fatal harness notice. The SSE path renders immediately and
           // the ledger copy restores it after reload.
           m.current.msgs.push({
             kind: "notice",
@@ -825,10 +825,10 @@ export default function AssistantRoute({
               label: location.path.split(/[\\/]/u).at(-1) ?? location.path,
               workspacePath: location.path,
             })),
-            // Keep the live chip identical to the reload path: when the runner
+            // Keep the live chip identical to the reload path: when the harness
             // reports a content hash, the chip shows `sha256 …` (#567).
             ...(event.artifacts ?? []).map((artifact) => ({
-              label: artifact.filename ?? "Agent artifact",
+              label: artifact.filename ?? "Harness artifact",
               ...(artifact.hash ? { hash: artifact.hash } : {}),
             })),
           ];
@@ -882,7 +882,9 @@ export default function AssistantRoute({
           ...(consentWire === undefined
             ? {}
             : { providerConsent: consentWire }),
-          ...(m.current.runnerKind ? { runnerKind: m.current.runnerKind } : {}),
+          ...(m.current.harnessKind
+            ? { harnessKind: m.current.harnessKind }
+            : {}),
           ...(m.current.selectedModel
             ? { model: m.current.selectedModel }
             : {}),
@@ -1209,7 +1211,7 @@ export default function AssistantRoute({
     model.disposed = false;
     return () => {
       model.disposed = true;
-      runnerRequestRef.current += 1;
+      harnessRequestRef.current += 1;
       threadRequestRef.current += 1;
       model.abort?.abort();
       for (const attachment of model.pendingAttachments) {
@@ -1377,7 +1379,7 @@ export default function AssistantRoute({
   const screenOnPagerNav = useStableEvent(pagerNav);
   const screenOnSetModel = useStableEvent(setModel);
   const screenOnSetEffort = useStableEvent(setEffort);
-  const screenOnSetRunner = setRunner;
+  const screenOnSetHarness = setHarness;
   const screenOnSetWorkspaceKind = useStableEvent(
     (workspaceKind: "vault-data" | "app" | "draft"): void => {
       m.current.workspaceKind = workspaceKind;
@@ -1462,7 +1464,7 @@ export default function AssistantRoute({
             loadModelPicker={loadModelPicker}
             onSetModel={screenOnSetModel}
             onSetEffort={screenOnSetEffort}
-            onSetRunner={screenOnSetRunner}
+            onSetHarness={screenOnSetHarness}
             onSetWorkspaceKind={screenOnSetWorkspaceKind}
           />
         </div>

@@ -168,7 +168,7 @@ const NODES = {
       nodeId: "run_001:2",
       runId: "run_001",
       ordinal: 2,
-      kind: "agent",
+      kind: "delegate",
       name: "summarize",
       model: "capability:balanced",
       ok: true,
@@ -217,7 +217,7 @@ const NODES = {
       nodeId: "run_003:2",
       runId: "run_003",
       ordinal: 2,
-      kind: "agent",
+      kind: "delegate",
       name: "review",
       model: "capability:balanced",
       ok: true,
@@ -447,7 +447,7 @@ async function main() {
     .waitFor({ state: "visible", timeout: 15000 });
   await shot(page, "detail-dark");
 
-  // Run viewer — open a run from the detail's run history. Expand the agent
+  // Run viewer — open a run from the detail's run history. Expand the delegate
   // node so the capture shows a node card's response body.
   await page.locator(".cd-au-run").first().click();
   await page.locator(".cd-au-tl").waitFor({ state: "visible", timeout: 15000 });

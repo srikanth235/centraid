@@ -31,13 +31,13 @@ function seedRun(
     automationRef?: string;
     automationName?: string;
     model?: string;
-    provider?: string;
+    harness?: string;
     effort?: string;
     inputTokens?: number;
     outputTokens?: number;
     hydrationTokens?: number;
     costUsd?: number;
-    costSource?: "agent" | "estimated";
+    costSource?: "harness" | "estimated";
     retryOf?: string;
     startedAt?: number;
     ok?: boolean;
@@ -75,7 +75,7 @@ function seedRun(
     kind: "step",
     ok: opts.ok !== false,
     ...(opts.model ? { model: opts.model } : {}),
-    ...(opts.provider ? { provider: opts.provider } : {}),
+    ...(opts.harness ? { harness: opts.harness } : {}),
     ...(opts.effort ? { effort: opts.effort } : {}),
     ...(opts.inputTokens === undefined
       ? {}
@@ -105,7 +105,7 @@ describe("InsightsStore (#514)", () => {
     expect(s.kpis.totalTokens).toBe(0);
     expect(s.kpis.hydrationTokens).toBe(0);
     expect(s.kpis.totalCostUsd).toBe(0);
-    expect(s.kpis.agentReportedCostUsd).toBe(0);
+    expect(s.kpis.harnessReportedCostUsd).toBe(0);
     expect(s.kpis.estimatedCostUsd).toBe(0);
     expect(s.kpis.appsTouched).toBe(0);
     expect(s.kpis.unpricedRuns).toBe(0);
@@ -113,7 +113,7 @@ describe("InsightsStore (#514)", () => {
     expect("quotaTokens" in s.kpis).toBe(false);
     expect(s.daily).toStrictEqual([]);
     expect(s.bySource).toStrictEqual([]);
-    expect(s.byRunner).toStrictEqual([]);
+    expect(s.byHarness).toStrictEqual([]);
     expect(s.byModel).toStrictEqual([]);
     expect(s.byEffort).toStrictEqual([]);
     expect(s.recent).toStrictEqual([]);
@@ -135,20 +135,20 @@ describe("InsightsStore (#514)", () => {
     ).toBe(40);
   });
 
-  it("splits agent-reported vs estimated cost and counts unpriced", () => {
+  it("splits harness-reported vs estimated cost and counts unpriced", () => {
     const { runs, insights } = setup();
     seedRun(runs, {
       kind: "chat",
       model: "claude-haiku-4-5",
-      provider: "claude-code",
+      harness: "claude-code",
       inputTokens: 100,
       costUsd: 0.05,
-      costSource: "agent",
+      costSource: "harness",
     });
     seedRun(runs, {
       kind: "chat",
       model: "claude-haiku-4-5",
-      provider: "claude-code",
+      harness: "claude-code",
       inputTokens: 100,
       costUsd: 0.01,
       costSource: "estimated",
@@ -156,13 +156,13 @@ describe("InsightsStore (#514)", () => {
     seedRun(runs, {
       kind: "chat",
       model: "some-unknown-model",
-      provider: "gemini",
+      harness: "gemini",
       inputTokens: 100,
     });
 
     const s = insights.summary();
     expect(s.kpis.generations).toBe(3);
-    expect(s.kpis.agentReportedCostUsd).toBeCloseTo(0.05, 4);
+    expect(s.kpis.harnessReportedCostUsd).toBeCloseTo(0.05, 4);
     expect(s.kpis.estimatedCostUsd).toBeCloseTo(0.01, 4);
     expect(s.kpis.unpricedRuns).toBe(1);
     expect(s.kpis.totalCostUsd).toBeCloseTo(0.06, 4);
@@ -173,19 +173,19 @@ describe("InsightsStore (#514)", () => {
     seedRun(runs, {
       kind: "chat",
       model: "m",
-      provider: "codex",
+      harness: "codex",
       inputTokens: 50,
       costUsd: 0.02,
-      costSource: "agent",
+      costSource: "harness",
     });
-    seedRun(runs, { kind: "chat", model: "m", provider: "codex" });
+    seedRun(runs, { kind: "chat", model: "m", harness: "codex" });
     seedRun(runs, {
       kind: "chat",
       model: "m",
-      provider: "codex",
+      harness: "codex",
       inputTokens: 10,
       costUsd: 0.03,
-      costSource: "agent",
+      costSource: "harness",
       ok: false,
     });
     const s = insights.summary();
@@ -194,53 +194,53 @@ describe("InsightsStore (#514)", () => {
     expect(s.kpis.failedCostUsd).toBeCloseTo(0.03, 4);
   });
 
-  it("ranks bySource and byRunner by cost and surfaces attention", () => {
+  it("ranks bySource and byHarness by cost and surfaces attention", () => {
     const { runs, insights } = setup();
     seedRun(runs, {
       kind: "automation",
       automationRef: "app/big",
       automationName: "Big",
-      provider: "claude-code",
+      harness: "claude-code",
       model: "m",
       inputTokens: 100,
       costUsd: 1,
-      costSource: "agent",
+      costSource: "harness",
     });
     seedRun(runs, {
       kind: "chat",
-      provider: "gemini",
+      harness: "gemini",
       model: "m",
       inputTokens: 500,
       costUsd: 0.1,
-      costSource: "agent",
+      costSource: "harness",
     });
     const s = insights.summary();
     expect(s.bySource[0]?.key).toBe("app/big");
     expect(s.bySource[0]?.costUsd).toBeCloseTo(1, 4);
-    expect(s.byRunner[0]?.provider).toBe("claude-code");
+    expect(s.byHarness[0]?.harness).toBe("claude-code");
     expect(s.attention?.key).toBe("app/big");
     expect(s.attention!.share).toBeGreaterThanOrEqual(0.4);
   });
 
-  it("groups only runner-confirmed effort and carries it into recent activity", () => {
+  it("groups only harness-confirmed effort and carries it into recent activity", () => {
     const { runs, insights } = setup();
     seedRun(runs, {
       kind: "chat",
-      provider: "codex",
+      harness: "codex",
       model: "m",
       effort: "high",
       inputTokens: 90,
       outputTokens: 10,
       costUsd: 0.2,
-      costSource: "agent",
+      costSource: "harness",
     });
     seedRun(runs, {
       kind: "chat",
-      provider: "codex",
+      harness: "codex",
       model: "m",
       inputTokens: 20,
       costUsd: 0.01,
-      costSource: "agent",
+      costSource: "harness",
     });
     const s = insights.summary();
     expect(s.byEffort).toStrictEqual([
@@ -257,19 +257,19 @@ describe("InsightsStore (#514)", () => {
       kind: "chat",
       inputTokens: 1,
       costUsd: 0.001,
-      costSource: "agent",
+      costSource: "harness",
       startedAt: t,
       model: "m",
-      provider: "p",
+      harness: "p",
     });
     seedRun(runs, {
       kind: "chat",
       inputTokens: 10,
       costUsd: 0.5,
-      costSource: "agent",
+      costSource: "harness",
       startedAt: t + 1,
       model: "m",
-      provider: "p",
+      harness: "p",
       ok: false,
     });
     const s = insights.summary();
@@ -284,18 +284,18 @@ describe("InsightsStore (#514)", () => {
       inputTokens: 999,
       startedAt: Date.now() - 60 * 86_400_000,
       model: "m",
-      provider: "p",
+      harness: "p",
       costUsd: 1,
-      costSource: "agent",
+      costSource: "harness",
     });
     seedRun(runs, {
       kind: "chat",
       inputTokens: 5,
       startedAt: Date.now(),
       model: "m",
-      provider: "p",
+      harness: "p",
       costUsd: 0.01,
-      costSource: "agent",
+      costSource: "harness",
     });
     const s = insights.summary({ windowDays: 30 });
     expect(s.kpis.totalTokens).toBe(5);
@@ -308,19 +308,19 @@ describe("InsightsStore (#514)", () => {
       kind: "chat",
       inputTokens: 100,
       costUsd: 0.1,
-      costSource: "agent",
+      costSource: "harness",
       startedAt: now,
       model: "m",
-      provider: "p",
+      harness: "p",
     });
     seedRun(runs, {
       kind: "chat",
       inputTokens: 500,
       costUsd: 0.5,
-      costSource: "agent",
+      costSource: "harness",
       startedAt: now - 86_400_000,
       model: "m",
-      provider: "p",
+      harness: "p",
     });
     const s = insights.summary();
     expect(s.daily.length).toBeGreaterThanOrEqual(1);
@@ -334,7 +334,7 @@ describe("InsightsStore (#514)", () => {
       kind: "automation",
       automationRef: "auto.todos/digest",
       model: "claude-sonnet-4-5",
-      provider: "claude-code",
+      harness: "claude-code",
       inputTokens: 1000,
       outputTokens: 500,
       costUsd: 0.02,
@@ -343,11 +343,11 @@ describe("InsightsStore (#514)", () => {
     seedRun(runs, {
       kind: "chat",
       model: "gpt-5-codex",
-      provider: "codex",
+      harness: "codex",
       inputTokens: 200,
       outputTokens: 100,
       costUsd: 0.01,
-      costSource: "agent",
+      costSource: "harness",
     });
     const s = insights.summary();
     expect(s.kpis.totalTokens).toBe(1800);
@@ -416,10 +416,10 @@ describe("InsightsStore digest union (#438 + #514)", () => {
       inputTokens: 200,
       outputTokens: 100,
       costUsd: 0.01,
-      costSource: "agent",
+      costSource: "harness",
       startedAt: now,
       model: "m",
-      provider: "p",
+      harness: "p",
     });
     const archConv = runs.createConversation({
       kind: "chat",

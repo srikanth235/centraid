@@ -2,6 +2,7 @@
 // `session/request_permission` options are read off the wire and which one the
 // headless policy picks.
 
+import type { PermissionOption } from "@agentclientprotocol/sdk";
 import { describe, expect, test } from "vitest";
 
 import {
@@ -11,40 +12,20 @@ import {
 } from "./permissions.ts";
 
 describe("permissions", () => {
-  test("readPermissionOptions returns [] for non-array / missing options", () => {
-    expect(readPermissionOptions(undefined)).toStrictEqual([]);
-    expect(readPermissionOptions({})).toStrictEqual([]);
-    expect(readPermissionOptions({ options: null })).toStrictEqual([]);
-    expect(readPermissionOptions({ options: "nope" })).toStrictEqual([]);
-  });
+  const option = (
+    optionId: string,
+    kind: PermissionOption["kind"]
+  ): PermissionOption => ({ optionId, name: optionId, kind });
 
-  test("readPermissionOptions skips non-objects and entries without a string optionId", () => {
-    const out = readPermissionOptions({
-      options: [
-        null,
-        "string-entry",
-        42,
-        { name: "no id here" },
-        { optionId: 123 },
-        { optionId: "allow" },
-      ],
-    });
-    expect(out).toStrictEqual([{ optionId: "allow" }]);
-  });
-
-  test("readPermissionOptions copies kind through only when it is a string", () => {
-    const out = readPermissionOptions({
-      options: [
-        { optionId: "a", kind: "allow_once" },
-        { optionId: "b", kind: 99 },
-        { optionId: "c" },
-      ],
-    });
-    expect(out).toStrictEqual([
-      { optionId: "a", kind: "allow_once" },
-      { optionId: "b" },
-      { optionId: "c" },
-    ]);
+  test("readPermissionOptions returns the SDK-validated option array", () => {
+    const options = [option("a", "allow_once"), option("b", "reject_once")];
+    expect(
+      readPermissionOptions({
+        sessionId: "session-1",
+        toolCall: { toolCallId: "tool-1" },
+        options,
+      })
+    ).toBe(options);
   });
 
   test("pickPermissionOption returns undefined for an empty list", () => {
@@ -53,42 +34,42 @@ describe("permissions", () => {
 
   test("pickPermissionOption prefers allow_always over everything else", () => {
     const picked = pickPermissionOption([
-      { optionId: "once", kind: "allow_once" },
-      { optionId: "reject", kind: "reject_once" },
-      { optionId: "always", kind: "allow_always" },
+      option("once", "allow_once"),
+      option("reject", "reject_once"),
+      option("always", "allow_always"),
     ]);
     expect(picked).toBe("always");
   });
 
   test("pickPermissionOption falls back to allow_once when no allow_always", () => {
     const picked = pickPermissionOption([
-      { optionId: "reject", kind: "reject_once" },
-      { optionId: "once", kind: "allow_once" },
+      option("reject", "reject_once"),
+      option("once", "allow_once"),
     ]);
     expect(picked).toBe("once");
   });
 
-  test("pickPermissionOption falls back to any non-reject (incl. kind-less) option", () => {
+  test("pickPermissionOption falls back to any non-reject option", () => {
     const picked = pickPermissionOption([
-      { optionId: "reject", kind: "reject_always" },
-      { optionId: "plain" },
+      option("reject", "reject_always"),
+      option("plain", "allow_once"),
     ]);
     expect(picked).toBe("plain");
   });
 
   test("pickPermissionOption falls back to the first option when only rejects remain", () => {
     const picked = pickPermissionOption([
-      { optionId: "reject-a", kind: "reject_once" },
-      { optionId: "reject-b", kind: "reject_always" },
+      option("reject-a", "reject_once"),
+      option("reject-b", "reject_always"),
     ]);
     expect(picked).toBe("reject-a");
   });
 
   test("pickRejectPermissionOption prefers reject_once over the sticky reject_always", () => {
     const picked = pickRejectPermissionOption([
-      { optionId: "always", kind: "allow_always" },
-      { optionId: "no-forever", kind: "reject_always" },
-      { optionId: "no-now", kind: "reject_once" },
+      option("always", "allow_always"),
+      option("no-forever", "reject_always"),
+      option("no-now", "reject_once"),
     ]);
     expect(picked).toBe("no-now");
   });
@@ -96,20 +77,20 @@ describe("permissions", () => {
   test("pickRejectPermissionOption uses reject_always when that is the only refusal", () => {
     expect(
       pickRejectPermissionOption([
-        { optionId: "ok", kind: "allow_once" },
-        { optionId: "no-forever", kind: "reject_always" },
+        option("ok", "allow_once"),
+        option("no-forever", "reject_always"),
       ])
     ).toBe("no-forever");
   });
 
-  test("pickRejectPermissionOption never repurposes an allow (or kind-less) option as a refusal", () => {
+  test("pickRejectPermissionOption never repurposes an allow as a refusal", () => {
     // No reject option means the caller has to answer `cancelled` — picking an
     // allow here would grant exactly what the policy denies.
     expect(pickRejectPermissionOption([])).toBeUndefined();
     expect(
       pickRejectPermissionOption([
-        { optionId: "ok", kind: "allow_once" },
-        { optionId: "plain" },
+        option("ok", "allow_once"),
+        option("plain", "allow_always"),
       ])
     ).toBeUndefined();
   });

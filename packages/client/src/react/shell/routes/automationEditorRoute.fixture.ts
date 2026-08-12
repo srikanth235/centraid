@@ -33,7 +33,7 @@ export function automationRow(): CentraidAutomationRow {
       triggers,
       requires: {},
       history: { keep: { count: 10 } },
-      generated: { by: "agent", at: "2026-07-25T00:00:00.000Z" },
+      generated: { by: "centraid-builder", at: "2026-07-25T00:00:00.000Z" },
     },
   };
 }

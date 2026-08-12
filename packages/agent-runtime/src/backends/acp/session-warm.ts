@@ -1,20 +1,23 @@
 /*
- * Optional warm ACP process pool — reuse a still-live agent process across
+ * Optional warm ACP process pool — reuse a still-live harness process across
  * sequential turns that share kind + cwd + sessionId.
  *
- * Each chat turn used to spawn and kill an agent, so multi-turn latency and
+ * Each conversation turn used to spawn and kill a harness, so multi-turn latency and
  * session/load effectiveness suffered. When a turn ends cleanly we keep the
  * child for a short idle window; the next turn with the same session id can
  * skip spawn + initialize and reattach via session/resume (or load).
  *
- * Vault MCP is still per-turn (fresh ToolContext); only the agent process is
+ * Vault MCP is still per-turn (fresh ToolContext); only the harness process is
  * reused. Concurrent turns never share a slot.
  */
 
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 
-import type { AcpConnection } from "./json-rpc.js";
+import { methods } from "@agentclientprotocol/sdk";
+import type { PromptCapabilities } from "@agentclientprotocol/sdk";
+
+import type { AcpConnectionOwner } from "./connection.js";
 
 const IDLE_MS = 120_000;
 const MAX_WARM_SLOTS = 8;
@@ -31,7 +34,7 @@ async function bounded<T>(promise: Promise<T>): Promise<T | undefined> {
   });
 }
 
-export interface WarmAgentSlot {
+export interface WarmHarnessSlot {
   key: string;
   kind: string;
   /** Stable ledger identity; unlike cwd, this does not alias other threads. */
@@ -39,19 +42,19 @@ export interface WarmAgentSlot {
   cwd: string;
   sessionId: string;
   child: ChildProcessByStdio<Writable, Readable, Readable>;
-  conn: AcpConnection;
+  conn: AcpConnectionOwner;
   canResume: boolean;
   canLoad: boolean;
   canClose: boolean;
   canAdditional: boolean;
-  /** Agent still has HTTP MCP capability from the original initialize. */
+  /** Harness still has HTTP MCP capability from the original initialize. */
   httpMcp: boolean;
-  promptCaps: Record<string, unknown>;
+  promptCaps: PromptCapabilities;
   lastUsed: number;
   timer: ReturnType<typeof setTimeout>;
 }
 
-const pool = new Map<string, WarmAgentSlot>();
+const pool = new Map<string, WarmHarnessSlot>();
 
 export function warmKey(
   kind: string,
@@ -67,7 +70,7 @@ export function takeWarmSlot(
   cwd: string,
   sessionId: string,
   conversationId?: string
-): WarmAgentSlot | undefined {
+): WarmHarnessSlot | undefined {
   const key = warmKey(kind, cwd, sessionId, conversationId);
   const slot = pool.get(key);
   if (!slot) return undefined;
@@ -82,7 +85,7 @@ export function takeWarmSlot(
 }
 
 export function putWarmSlot(
-  slot: Omit<WarmAgentSlot, "timer" | "key" | "lastUsed">
+  slot: Omit<WarmHarnessSlot, "timer" | "key" | "lastUsed">
 ): void {
   const conversationId = slot.conversationId ?? slot.sessionId;
   const key = warmKey(slot.kind, slot.cwd, slot.sessionId, conversationId);
@@ -105,7 +108,7 @@ export function putWarmSlot(
     clearTimeout(prev.timer);
     void disposeSlot(prev);
   }
-  const entry: WarmAgentSlot = {
+  const entry: WarmHarnessSlot = {
     ...slot,
     conversationId,
     key,
@@ -134,14 +137,16 @@ export function putWarmSlot(
 }
 
 export async function disposeSlot(
-  slot: WarmAgentSlot | Omit<WarmAgentSlot, "timer" | "key" | "lastUsed">
+  slot: WarmHarnessSlot | Omit<WarmHarnessSlot, "timer" | "key" | "lastUsed">
 ): Promise<void> {
   const conn = slot.conn;
   const child = slot.child;
   if ("canClose" in slot && slot.canClose && !conn.hasExited()) {
     try {
       await bounded(
-        conn.request("session/close", { sessionId: slot.sessionId })
+        conn.request(methods.agent.session.close, {
+          sessionId: slot.sessionId,
+        })
       );
     } catch {
       // ignore — kill path follows
@@ -160,7 +165,7 @@ export async function disposeSlot(
     )
   );
   if (!exited) {
-    // SIGTERM is a request. An agent that ignores it would leak one warm
+    // SIGTERM is a request. A harness that ignores it would leak one warm
     // child per evicted slot, so the dispose path escalates.
     child.kill("SIGKILL");
     await conn.exited.catch(() => undefined);

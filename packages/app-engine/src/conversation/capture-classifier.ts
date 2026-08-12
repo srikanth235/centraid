@@ -1,5 +1,6 @@
 import type { TurnStreamEvent } from "./runner.js";
-import type { RunTurnFn, RunnerPrefs, TurnInput } from "./turn.js";
+import { TurnPlane } from "./turn-plane.js";
+import type { RunTurnFn, HarnessPrefs, TurnInput } from "./turn.js";
 
 const CAPTURE_SYSTEM_PROMPT = [
   "Classify one universal-capture draft for a personal organizer.",
@@ -8,7 +9,7 @@ const CAPTURE_SYSTEM_PROMPT = [
   "and durationMinutes. Never add facts absent from the draft.",
 ].join(" ");
 
-export interface AgentCapturePreview {
+export interface CapturePreview {
   kind: "task" | "expense" | "note" | "event";
   title?: string;
   amountMinor?: number;
@@ -18,16 +19,16 @@ export interface AgentCapturePreview {
 
 export interface ClassifyCaptureDeps {
   runTurn: RunTurnFn;
-  runnerPrefs: RunnerPrefs;
+  harnessPrefs: HarnessPrefs;
   cwd: string;
   text: string;
   model?: string;
   timeoutMs?: number;
+  /** Host-owned provider-egress proof, rechecked at the TurnPlane door. */
+  egressConsent: () => boolean | Promise<boolean>;
 }
 
-export function parseAgentCapturePreview(
-  raw: string
-): AgentCapturePreview | undefined {
+export function parseCapturePreview(raw: string): CapturePreview | undefined {
   const unfenced = raw
     .trim()
     .replace(/^```(?:json)?\s*/iu, "")
@@ -46,7 +47,7 @@ export function parseAgentCapturePreview(
   const kind = String(row.kind ?? "");
   if (!["task", "expense", "note", "event"].includes(kind)) return undefined;
   return {
-    kind: kind as AgentCapturePreview["kind"],
+    kind: kind as CapturePreview["kind"],
     ...(typeof row.title === "string" && row.title.trim()
       ? { title: row.title.trim().slice(0, 100) }
       : {}),
@@ -67,10 +68,10 @@ export function parseAgentCapturePreview(
   };
 }
 
-/** One bounded, tool-less agent turn used only for ambiguous capture text. */
-export async function classifyCaptureWithAgent(
+/** One bounded, tool-less harness turn used only for ambiguous capture text. */
+export async function classifyCaptureWithHarness(
   deps: ClassifyCaptureDeps
-): Promise<AgentCapturePreview | undefined> {
+): Promise<CapturePreview | undefined> {
   const controller = new AbortController();
   const timer = deps.timeoutMs
     ? setTimeout(() => controller.abort(), deps.timeoutMs)
@@ -89,10 +90,18 @@ export async function classifyCaptureWithAgent(
     abortSignal: controller.signal,
     onEvent,
   };
+  const turnPlane = new TurnPlane(deps.runTurn);
   try {
-    await deps.runTurn(input, { prefs: deps.runnerPrefs });
+    await turnPlane.runTurn(input, deps.harnessPrefs, {
+      surface: "interactive",
+      egress: "attended",
+      egressConsent: deps.egressConsent,
+      failover: "none",
+      permissionPolicy: "deny",
+      artifacts: "capture",
+    });
   } finally {
     if (timer) clearTimeout(timer);
   }
-  return parseAgentCapturePreview(text);
+  return parseCapturePreview(text);
 }

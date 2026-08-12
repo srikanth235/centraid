@@ -5,18 +5,18 @@
  *
  * Resolving an automation, opening its run ledger, running the generated
  * `handler.js`, and cascading `onFailure` only ever touch app-engine
- * primitives (`parseRef`, `AgentRunsStore`,
+ * primitives (`parseRef`, `AutomationRunsStore`,
  * `runHandler`). That spine used to live in
  * `agent-runtime/run-automation.ts`; the only thing it genuinely needed from
- * agent-runtime was the `ctx.agent` dispatch surface (a bounded model turn
- * through the runner registry). So the spine moves down and the dispatch
+ * agent-runtime was the `ctx.delegate` dispatch surface (a bounded model turn
+ * through the harness registry). So the spine moves down and the dispatch
  * surface is injected via `openDispatch` — the same dependency inversion the
  * `Host` / `ConversationRunner` seams already use.
  *
  * agent-runtime's `runAutomation` is now a thin wrapper that builds the
- * `openDispatch` closure (capturing the runner kind) and calls `runFire`. A
+ * `openDispatch` closure (capturing the harness kind) and calls `runFire`. A
  * future host can inject its own dispatch surface instead of reimplementing
- * the spine. A fire whose handler never calls `ctx.agent` starts zero child
+ * the spine. A fire whose handler never calls `ctx.delegate` starts zero child
  * processes and zero HTTP servers.
  */
 
@@ -32,7 +32,7 @@ import type {
 
 import { runHandler } from "../handler/runner.js";
 import type {
-  AgentDispatcher,
+  DelegateDispatcher,
   ConnectionAuth,
   HandlerOutcome,
 } from "../handler/runner.js";
@@ -58,11 +58,11 @@ export type ResolveConnection = (connector: {
 
 /**
  * The live dispatch surface a fire runs against. Provided by the host
- * (agent-runtime stands up a mock-LLM server + CLI spawn). `close()` tears
+ * (the historical agent-runtime package stands up a mock-LLM server + harness spawn). `close()` tears
  * down whatever the host allocated and is always called once, even on throw.
  */
 export interface DispatchSurface {
-  agentDispatcher: AgentDispatcher;
+  delegateDispatcher: DelegateDispatcher;
   /**
    * Optional host-owned binding/watermark finalizer. `runHandler` invokes it
    * inside the same SQLite transaction that settles the turn.
@@ -78,16 +78,16 @@ export interface DispatchSurface {
 
 /** Args app-engine hands the host when it needs a dispatch surface for a fire. */
 export interface OpenDispatchArgs {
-  /** The automation app directory — the host's agent cwd. */
+  /** The automation app directory — the host's harness cwd. */
   workdir: string;
   /** `<appId>/<automationId>` handle being fired. */
   automationRef: string;
   runId: string;
   /** Harness fixed to this automation conversation. */
-  runnerKind?: string;
+  harnessKind?: string;
   /**
-   * Manifest `requires.model` — the capability tier `ctx.agent` should route
-   * to (issue #166). The host's `agentDispatcher` picks the matching provider
+   * Manifest `requires.model` — the capability tier `ctx.delegate` should route
+   * to (issue #166). The host's `delegateDispatcher` picks the matching provider
    * tier; undefined means "the host's default automation model".
    */
   model?: string;
@@ -100,7 +100,7 @@ export interface OpenDispatchArgs {
 export type OpenDispatch = (args: OpenDispatchArgs) => Promise<DispatchSurface>;
 
 export interface NestedAutomationRuntime {
-  runnerKind?: string;
+  harnessKind?: string;
   model?: string;
   configPins?: Readonly<Record<string, string>>;
 }
@@ -134,7 +134,7 @@ export interface RunFireOptions {
   /**
    * Host-injected `ctx.vault` executor factory, keyed by the automation's
    * app id: each fire gets a bridge bound to *that* app's enrolled
-   * `agent.agent` credential (duaility §12), so a cross-app `onFailure`
+   * `consent.agent` credential (duaility §12), so a cross-app `onFailure`
    * cascade acts as its own agent, never the parent's. The package stays
    * vault-free — the gateway builds this off its vault plane. Absent (or
    * returning undefined) → `ctx.vault` fails closed with `VAULT_UNAVAILABLE`.
@@ -148,12 +148,12 @@ export interface RunFireOptions {
   /** Optional logger. */
   onLog?: (level: "info" | "warn" | "error", msg: string) => void;
   /** Harness that owns the durable automation conversation. */
-  runnerKind?: string;
+  harnessKind?: string;
   /** Host-resolved model fallback used for dispatch and honest cost estimation. */
   model?: string;
   /**
    * False for a failover rung: provider-specific manifest pins belong only
-   * to the primary runner and must not cross the fire boundary.
+   * to the primary harness and must not cross the fire boundary.
    */
   allowManifestProviderPins?: boolean;
   /** Host-resolved semantic ACP configuration pins. */
@@ -193,8 +193,8 @@ export interface RunFireOptions {
    */
   failureDepth?: number;
   /**
-   * Suppress this attempt's onFailure cascade. The agent-runtime router uses
-   * this only while advancing a pre-consented runner ladder at the next fire
+   * Suppress this attempt's onFailure cascade. The harness runtime router uses
+   * this only while advancing a pre-consented harness ladder at the next fire
    * boundary; the final attempt still owns the ordinary onFailure cascade.
    */
   deferOnFailure?: boolean | ((outcome: HandlerOutcome) => boolean);
@@ -244,7 +244,7 @@ export interface RunRecord {
   ok: boolean;
   error?: string;
   toolBatches: number;
-  agentCalls: number;
+  delegateCalls: number;
 }
 
 /**
@@ -293,12 +293,12 @@ export async function runFire(
   const failureDepth = opts.failureDepth ?? 0;
   const vaultBridge = await opts.vaultFor?.(parsed.appId, opts.automationRef);
   // Establish the final phase-3 identity before the host acquires the durable
-  // turn lock: one automation conversation, regardless of runner rung.
+  // turn lock: one automation conversation, regardless of harness rung.
   runsStore.ensureAutomationConversation(
     opts.automationRef,
     parsed.appId,
     row.name,
-    opts.runnerKind
+    opts.harnessKind
   );
 
   const skipRun = (
@@ -321,7 +321,7 @@ export async function runFire(
       error,
       logs: [],
       toolBatches: 0,
-      agentCalls: 0,
+      delegateCalls: 0,
     };
     return {
       outcome: outcomeSkipped,
@@ -335,7 +335,7 @@ export async function runFire(
         ok: false,
         error,
         toolBatches: 0,
-        agentCalls: 0,
+        delegateCalls: 0,
       },
     };
   };
@@ -343,27 +343,27 @@ export async function runFire(
   // Recognition selection is recipe state, not a one-off fire option. Inject
   // it into every invocation so cron/data/manual fires cannot diverge, and do
   // not let a caller smuggle the billed lane through an arbitrary payload.
-  const configuredAgentVariant = row.manifest.enrich?.agentVariant;
-  const handlerInput = configuredAgentVariant
+  const configuredDelegateStep = row.manifest.enrich?.delegateStep;
+  const handlerInput = configuredDelegateStep
     ? {
         ...(opts.input !== null &&
         typeof opts.input === "object" &&
         !Array.isArray(opts.input)
           ? (opts.input as Record<string, unknown>)
           : {}),
-        variant: configuredAgentVariant.selected,
-        ...(configuredAgentVariant.selected === "agent" &&
+        variant: configuredDelegateStep.selected,
+        ...(configuredDelegateStep.selected === "delegate" &&
         row.manifest.requires.model
-          ? { agentModel: row.manifest.requires.model }
+          ? { delegateModel: row.manifest.requires.model }
           : {}),
       }
     : opts.input;
   if (
-    configuredAgentVariant?.selected === "agent" &&
+    configuredDelegateStep?.selected === "delegate" &&
     !row.manifest.requires.model
   ) {
     return skipRun(
-      `${opts.automationRef}: agent variant requires an explicit pinned model and provider-egress consent`
+      `${opts.automationRef}: delegate step requires an explicit pinned model and provider-egress consent`
     );
   }
 
@@ -372,7 +372,7 @@ export async function runFire(
   // An automation that declares `manifest.enrich` is subject to the owner's
   // per-domain tier in `enrich_policy`. This is the ONE place the tier is
   // enforced, and it sits before `openDispatch` so a refused run starts no
-  // agent process and reaches no provider. The refusal is a stated, logged
+  // harness process and reaches no provider. The refusal is a stated, logged
   // skip carrying its reason into the run ledger — never a silent drop,
   // because a member turned this off and is owed the receipt.
   //
@@ -380,7 +380,7 @@ export async function runFire(
   // refuses, and an unreadable/unknown tier refuses. See `enrich-gate.ts`
   // for what `local` means in this runtime and why.
   const enrich = row.manifest.enrich;
-  /** Set under the `local` tier: the domain whose promise seals `ctx.agent`. */
+  /** Set under the `local` tier: the domain whose promise seals `ctx.delegate`. */
   let sealedDomain: EnrichDomain | undefined;
   if (enrich) {
     let tier: EnrichTier | undefined;
@@ -419,24 +419,24 @@ export async function runFire(
     workdir: row.dir,
     automationRef: opts.automationRef,
     runId,
-    ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
+    ...(opts.harnessKind ? { harnessKind: opts.harnessKind } : {}),
     ...(effectiveModel ? { model: effectiveModel } : {}),
     ...(opts.configPins ? { configPins: opts.configPins } : {}),
     onLog,
   });
 
   // The `local` tier's backstop: the fire may run its deterministic /
-  // device-lease work, but a model turn is provider egress, so `ctx.agent` is
+  // device-lease work, but a model turn is provider egress, so `ctx.delegate` is
   // sealed shut rather than left to a handler's good manners. A handler that
   // reaches for one fails loudly with the reason instead of egressing.
   const sealed = sealedDomain;
-  const agentDispatcher: AgentDispatcher = sealed
+  const delegateDispatcher: DelegateDispatcher = sealed
     ? () => {
         const reason = sealedModelTurnReason(opts.automationRef, sealed);
         onLog("warn", reason);
         return Promise.reject(new Error(reason));
       }
-    : dispatch.agentDispatcher;
+    : dispatch.delegateDispatcher;
 
   // Honest liveness (issue #290 phase 4): a paused or needs-auth connection
   // never fires its connector — the skip is logged, and since connectors are
@@ -542,10 +542,10 @@ export async function runFire(
       handlerFile: handlerPath(row.dir),
       runId,
       now: new Date(startedAt).toISOString(),
-      agentDispatcher,
+      delegateDispatcher,
       runsStore,
       ...(dispatch.finalizeTurn ? { finalizeTurn: dispatch.finalizeTurn } : {}),
-      ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
+      ...(opts.harnessKind ? { harnessKind: opts.harnessKind } : {}),
       ...(effectiveModel ? { model: effectiveModel } : {}),
       ...(vaultBridge ? { vault: vaultBridge } : {}),
       ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
@@ -625,8 +625,10 @@ export async function runFire(
               journalDbFile: opts.journalDbFile,
               ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
               ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
-              ...((nestedRuntime?.runnerKind ?? opts.runnerKind)
-                ? { runnerKind: nestedRuntime?.runnerKind ?? opts.runnerKind }
+              ...((nestedRuntime?.harnessKind ?? opts.harnessKind)
+                ? {
+                    harnessKind: nestedRuntime?.harnessKind ?? opts.harnessKind,
+                  }
                 : {}),
               ...((nestedRuntime?.model ?? opts.model)
                 ? { model: nestedRuntime?.model ?? opts.model }
@@ -684,7 +686,7 @@ export async function runFire(
     ok: outcome.ok,
     ...(outcome.error ? { error: outcome.error } : {}),
     toolBatches: outcome.toolBatches,
-    agentCalls: outcome.agentCalls,
+    delegateCalls: outcome.delegateCalls,
   };
   const output =
     outcome.output !== null &&

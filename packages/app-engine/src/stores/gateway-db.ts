@@ -33,7 +33,7 @@
  *     items            — the ordered agentic trace, INCLUDING the inbound
  *                        message. `kind='message_in'` (ordinal 0) is the
  *                        user/trigger input as a first-class message;
- *                        `step` is one model inference call; `tool`/`agent`
+ *                        `step` is one model inference call; `tool`/`delegate`
  *                        are per-call audit rows.
  *     attachments      — universal inbound-file rows (chat upload OR
  *                        webhook/email file), FK'd to the `message_in` item
@@ -71,17 +71,17 @@
  *                        Insights/Executions union this with live run_summary
  *                        so pruning raw rows stays invisible to every
  *                        dashboard. CASCADE off `conversations`.
- *     runner_health    — workspace × runner × failure-class circuit breakers
+ *     harness_health    — workspace × harness × failure-class circuit breakers
  *                        used only at turn boundaries.
  *     conversation_provider_consent
- *                      — explicit conversation × runner egress grants.
+ *                      — explicit conversation × harness egress grants.
  *
  *     `turns.conversation_id` and `items.turn_id` and `attachments.item_id`
  *     are real same-file FKs (CASCADE): deleting a conversation drops its
  *     turns, items, and attachment rows. `turns.parent_turn_id` stays a
  *     plain column (a sub-run's parent may be recorded before this row in
  *     the same transaction batch). Runtime-owned; never reachable from
- *     handler `db` or the `vault_sql` agent tool.
+ *     handler `db` or the `vault_sql` harness tool.
  *
  * Versioning: the file's `PRAGMA user_version` belongs to the vault package's
  * audit-band ladder — this module must never stamp it. The ledger band is
@@ -137,9 +137,9 @@ export const CONVERSATION_LEDGER_DDL = `
       app_id             TEXT,
       automation_id      TEXT,
       title              TEXT NOT NULL DEFAULT '',
-      adapter_kind       TEXT,
-      adapter_session_id TEXT,
-      adapter_usage_json TEXT,
+      harness_kind       TEXT,
+      harness_session_id TEXT,
+      harness_usage_json TEXT,
       hydration_count    INTEGER NOT NULL DEFAULT 0,
       last_hydrated_at   INTEGER,
       turn_count         INTEGER NOT NULL DEFAULT 0,
@@ -215,16 +215,16 @@ export const CONVERSATION_LEDGER_DDL = `
       raw_json           TEXT,
       child_turn_id      TEXT,
       model              TEXT,
-      provider           TEXT,
+      harness            TEXT,
       -- ACP semantic thought_level confirmed for this call. NULL means the
-      -- runner did not confirm a selectable effort; never infer a default.
+      -- harness did not confirm a selectable effort; never infer a default.
       effort             TEXT,
       input_tokens       INTEGER,
       output_tokens      INTEGER,
       cache_read_tokens  INTEGER,
       cache_write_tokens INTEGER,
       cost_usd           REAL,
-      -- Provenance for cost_usd (issue #514): 'agent' = runner/ACP reported USD;
+      -- Provenance for cost_usd (issue #514): 'harness' = harness/ACP reported USD;
       -- 'estimated' = catalog (model-pricing). NULL = legacy or unpriced.
       cost_source        TEXT,
       app_id             TEXT,
@@ -233,8 +233,8 @@ export const CONVERSATION_LEDGER_DDL = `
       started_at         INTEGER NOT NULL,
       ended_at           INTEGER,
       duration_ms        INTEGER,
-      CHECK (kind IN ('message_in','step','tool','agent')),
-      CHECK (cost_source IS NULL OR cost_source IN ('agent','estimated'))
+      CHECK (kind IN ('message_in','step','tool','delegate')),
+      CHECK (cost_source IS NULL OR cost_source IN ('harness','estimated'))
     ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_items_by_turn
       ON items(turn_id, ordinal);
@@ -244,19 +244,19 @@ export const CONVERSATION_LEDGER_DDL = `
       ON items(model, started_at DESC);
     /*
      * Covering index for run_summary's three dominant-* rollups (issue #659
-     * G8). Each is a correlated GROUP BY over one turn's step/agent items, run
+     * G8). Each is a correlated GROUP BY over one turn's step/delegate items, run
      * once per turn per Insights query — seven of them per dashboard load. With
      * only idx_items_by_turn the planner found the turn's items by index and
      * then fetched EVERY matching row from the table to read kind, model,
-     * provider, effort, and the two token columns. Carrying those in the index
+     * harness, effort, and the two token columns. Carrying those in the index
      * makes each rollup an index-only scan.
      *
      * PARTIAL on the two kinds the view actually aggregates, so the hot
      * streaming inserts — message_in and tool items — do not pay to maintain it.
      */
     CREATE INDEX IF NOT EXISTS idx_items_run_rollup
-      ON items(turn_id, model, provider, effort, input_tokens, output_tokens)
-      WHERE kind IN ('step','agent');
+      ON items(turn_id, model, harness, effort, input_tokens, output_tokens)
+      WHERE kind IN ('step','delegate');
 
     CREATE TABLE IF NOT EXISTS attachments (
       id         TEXT PRIMARY KEY,
@@ -266,7 +266,7 @@ export const CONVERSATION_LEDGER_DDL = `
       size_bytes INTEGER NOT NULL,
       source     TEXT,
       filename   TEXT,
-      -- Agent-created files stay in their workspace. The hash verifies the
+      -- Harness-created files stay in their workspace. The hash verifies the
       -- referenced bytes; no duplicate is copied into the blob CAS.
       workspace_path TEXT,
       created_at INTEGER NOT NULL
@@ -278,23 +278,23 @@ export const CONVERSATION_LEDGER_DDL = `
 
     -- ACP resume handles are bindings to the canonical conversation ledger,
     -- never the ledger identity itself. Retaining one row per observed
-    -- runner/session lets A → B → A resume A and hydrate only the canonical
+    -- harness/session lets A → B → A resume A and hydrate only the canonical
     -- turn delta past A's watermark.
     CREATE TABLE IF NOT EXISTS conversation_harness_sessions (
       id                    TEXT PRIMARY KEY,
       conversation_id       TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-      runner_kind           TEXT NOT NULL,
+      harness_kind           TEXT NOT NULL,
       acp_session_id        TEXT NOT NULL,
       usage_snapshot_json   TEXT,
       hydrated_through_seq  INTEGER NOT NULL DEFAULT -1,
       status                TEXT NOT NULL DEFAULT 'warm',
       last_used_at          INTEGER NOT NULL,
       created_at            INTEGER NOT NULL,
-      UNIQUE (conversation_id, runner_kind, acp_session_id),
+      UNIQUE (conversation_id, harness_kind, acp_session_id),
       CHECK (status IN ('active','warm','cold','stale'))
     ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_conversation_harness_latest
-      ON conversation_harness_sessions(conversation_id, runner_kind, status, last_used_at DESC);
+      ON conversation_harness_sessions(conversation_id, harness_kind, status, last_used_at DESC);
 
     -- Cross-process single writer. The in-process queue improves UX; this row
     -- is the correctness boundary shared by a gateway and worker processes.
@@ -315,13 +315,13 @@ export const CONVERSATION_LEDGER_DDL = `
       CHECK (primary_kind IN ('vault-data','app','draft'))
     ) STRICT;
 
-    -- Persistent runner circuit breakers. One row per workspace context,
-    -- runner and failure class keeps an auth outage independent from a later
+    -- Persistent harness circuit breakers. One row per workspace context,
+    -- harness and failure class keeps an auth outage independent from a later
     -- transport wedge and prevents one broken project from sidelining a
-    -- runner everywhere on the device.
-    CREATE TABLE IF NOT EXISTS runner_health (
+    -- harness everywhere on the device.
+    CREATE TABLE IF NOT EXISTS harness_health (
       workspace_context    TEXT NOT NULL,
-      runner_kind          TEXT NOT NULL,
+      harness_kind          TEXT NOT NULL,
       failure_class        TEXT NOT NULL,
       consecutive_failures INTEGER NOT NULL DEFAULT 0,
       breaker_until        INTEGER,
@@ -329,24 +329,24 @@ export const CONVERSATION_LEDGER_DDL = `
       last_error           TEXT,
       last_failure_at      INTEGER,
       last_ok_at           INTEGER,
-      PRIMARY KEY (workspace_context, runner_kind, failure_class),
+      PRIMARY KEY (workspace_context, harness_kind, failure_class),
       CHECK (failure_class IN ('spawn','auth','init','timeout','quota','wedge','exit','unknown'))
     ) STRICT;
-    CREATE INDEX IF NOT EXISTS idx_runner_health_breaker
-      ON runner_health(workspace_context, runner_kind, breaker_until);
+    CREATE INDEX IF NOT EXISTS idx_harness_health_breaker
+      ON harness_health(workspace_context, harness_kind, breaker_until);
 
     -- Explicit provider-egress grants. Direct consent and ladder-derived
-    -- consent are separate rows: removing a runner from one subsystem ladder
+    -- consent are separate rows: removing a harness from one subsystem ladder
     -- revokes only that subsystem's forward grant and never erases a direct
     -- conversation × provider decision.
     CREATE TABLE IF NOT EXISTS conversation_provider_consent (
       conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-      runner_kind     TEXT NOT NULL,
+      harness_kind     TEXT NOT NULL,
       source          TEXT NOT NULL,
       subsystem       TEXT NOT NULL,
       granted_at      INTEGER NOT NULL,
       revoked_at      INTEGER,
-      PRIMARY KEY (conversation_id, runner_kind, source, subsystem),
+      PRIMARY KEY (conversation_id, harness_kind, source, subsystem),
       CHECK (
         (source = 'direct' AND subsystem = '')
         OR
@@ -354,7 +354,7 @@ export const CONVERSATION_LEDGER_DDL = `
       )
     ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_conversation_provider_consent_active
-      ON conversation_provider_consent(conversation_id, runner_kind, subsystem, revoked_at);
+      ON conversation_provider_consent(conversation_id, harness_kind, subsystem, revoked_at);
 
     CREATE TABLE IF NOT EXISTS automation_state (
       automation_id TEXT NOT NULL,
@@ -488,7 +488,7 @@ export const CONVERSATION_LEDGER_DDL = `
  * left to denormalize across, so the ledger tables above are simply THE
  * source and the view is the lens (no write path, no drift).
  * automation_ref/app_id derivation and the dominant-model / dominant-
- * provider picks mirror the old write-through exactly.
+ * harness picks mirror the old write-through exactly.
  *
  * RECREATED ONLY WHEN THE DEFINITION CHANGES (issue #659 G11). This used to be
  * an unconditional DROP+CREATE on every journal open, which is a schema write —
@@ -521,21 +521,20 @@ CREATE VIEW run_summary AS
     t.error          AS error,
     t.retry_of       AS retry_of,
     (SELECT i.model FROM items i
-      WHERE i.turn_id = t.id AND i.model IS NOT NULL AND i.kind IN ('step','agent')
+      WHERE i.turn_id = t.id AND i.model IS NOT NULL AND i.kind IN ('step','delegate')
       GROUP BY i.model
       ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
       LIMIT 1)       AS model,
-    -- Dominant runner kind (ACP stamps provider = RunnerKind) for Insights
-    -- by-runner breakdown (issue #514).
-    (SELECT i.provider FROM items i
-      WHERE i.turn_id = t.id AND i.provider IS NOT NULL AND i.kind IN ('step','agent')
-      GROUP BY i.provider
+    -- Dominant harness kind for the Insights harness breakdown (issue #514).
+    (SELECT i.harness FROM items i
+      WHERE i.turn_id = t.id AND i.harness IS NOT NULL AND i.kind IN ('step','delegate')
+      GROUP BY i.harness
       ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
-      LIMIT 1)       AS provider,
+      LIMIT 1)       AS harness,
     -- Effort is recorded only after ACP confirms thought_level. Picking
-    -- the dominant confirmed value mirrors the model/provider rollups.
+    -- the dominant confirmed value mirrors the model/harness rollups.
     (SELECT i.effort FROM items i
-      WHERE i.turn_id = t.id AND i.effort IS NOT NULL AND i.kind IN ('step','agent')
+      WHERE i.turn_id = t.id AND i.effort IS NOT NULL AND i.kind IN ('step','delegate')
       GROUP BY i.effort
       ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
       LIMIT 1)       AS effort,
@@ -772,13 +771,15 @@ export function ensureConversationLedger(db: DatabaseSync): void {
       db.exec(`ALTER TABLE attachments ADD COLUMN workspace_path TEXT`);
     }
   }
-  if (existingTable("runner_health")) {
+  if (existingTable("harness_health")) {
     const healthCols = (
-      db.prepare(`PRAGMA table_info(runner_health)`).all() as { name: string }[]
+      db.prepare(`PRAGMA table_info(harness_health)`).all() as {
+        name: string;
+      }[]
     ).map((c) => c.name);
     if (!healthCols.includes("half_open_claimed_at")) {
       db.exec(
-        `ALTER TABLE runner_health ADD COLUMN half_open_claimed_at INTEGER`
+        `ALTER TABLE harness_health ADD COLUMN half_open_claimed_at INTEGER`
       );
     }
   }
@@ -802,15 +803,15 @@ export function ensureConversationLedger(db: DatabaseSync): void {
   // conversation columns only as a read-through compatibility projection.
   db.exec(`
     INSERT OR IGNORE INTO conversation_harness_sessions (
-      id, conversation_id, runner_kind, acp_session_id,
+      id, conversation_id, harness_kind, acp_session_id,
       usage_snapshot_json, hydrated_through_seq, status, last_used_at, created_at
     )
-    SELECT lower(hex(randomblob(16))), c.id, c.adapter_kind, c.adapter_session_id,
-           c.adapter_usage_json, COALESCE(MAX(t.seq), -1), 'active',
+    SELECT lower(hex(randomblob(16))), c.id, c.harness_kind, c.harness_session_id,
+           c.harness_usage_json, COALESCE(MAX(t.seq), -1), 'active',
            c.updated_at, c.created_at
       FROM conversations c
       LEFT JOIN turns t ON t.conversation_id = c.id
-     WHERE c.adapter_kind IS NOT NULL AND c.adapter_session_id IS NOT NULL
+     WHERE c.harness_kind IS NOT NULL AND c.harness_session_id IS NOT NULL
      GROUP BY c.id
   `);
   ensureRunSummaryView(db);

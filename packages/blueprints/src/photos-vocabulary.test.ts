@@ -131,7 +131,7 @@ describe("Photos app vocabulary (#599)", () => {
   it("distinguishes code and comments from prose", () => {
     // Code: the read API is a dotted member expression, never prose.
     expect(
-      offences("await ctx.vault.read({ entity: 'media.media_asset' })")
+      offences("await ctx.vault.read({ entity: 'media.asset' })")
     ).toStrictEqual([]);
     expect(offences("const denied = data?.vaultDenied;")).toStrictEqual([]);
     expect(offences("if (e.code === 'VAULT_CONSENT') return;")).toStrictEqual(

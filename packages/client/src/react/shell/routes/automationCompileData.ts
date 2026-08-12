@@ -63,7 +63,7 @@ function stepLabel(item: CentraidAutomationItem): string {
   if (item.name) return item.name;
   if (item.kind === "step")
     return item.model ? `Model · ${item.model}` : "Model step";
-  if (item.kind === "agent") return "Agent";
+  if (item.kind === "delegate") return "Delegate";
   return "Step";
 }
 

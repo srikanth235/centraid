@@ -187,7 +187,7 @@ describe("remote give (#726 P3)", () => {
       target: "/centraid/_peer/edge/give",
       body: {
         edgeId: "x",
-        itemType: "media.media_asset",
+        itemType: "media.asset",
         closure: {},
         derivatives: [],
       },

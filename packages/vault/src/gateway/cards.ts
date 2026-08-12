@@ -85,10 +85,10 @@ const CARD_SQL: Record<string, string> = {
   "social.thread": `SELECT coalesce(subject, channel) AS title, channel AS subtitle,
                            NULL AS thumb, 0 AS trashed
                       FROM social_thread WHERE thread_id = ?`,
-  "media.media_asset": `SELECT coalesce(ci.title, a.kind) AS title,
+  "media.asset": `SELECT coalesce(ci.title, a.kind) AS title,
                                coalesce(a.captured_at, ci.created_at) AS subtitle,
                                a.content_id AS thumb, (a.deleted_at IS NOT NULL) AS trashed
-                          FROM media_media_asset a
+                          FROM media_asset a
                           JOIN core_content_item ci ON ci.content_id = a.content_id
                          WHERE a.asset_id = ?`,
   "home.asset_item": `SELECT name AS title, serial_no AS subtitle, NULL AS thumb, 0 AS trashed
@@ -120,7 +120,7 @@ export const CARD_PK: Readonly<Record<string, string>> = {
   "knowledge.note": "note_id",
   "core.collection": "collection_id",
   "social.thread": "thread_id",
-  "media.media_asset": "asset_id",
+  "media.asset": "asset_id",
   "home.asset_item": "item_id",
   "business.client": "client_id",
   "business.project": "project_id",

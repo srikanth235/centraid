@@ -16,8 +16,8 @@ import type {
 import { cx } from "../ui/cx.js";
 import { Button, Icon, IconButton } from "../ui/index.js";
 import AutomationCompilePane from "./AutomationCompilePane.js";
-import { AutomationEditorAgentPicker } from "./AutomationEditorAgentPicker.js";
 import { AutomationEditorConnectorsPicker } from "./AutomationEditorConnectorsPicker.js";
+import { AutomationEditorHarnessPicker } from "./AutomationEditorHarnessPicker.js";
 
 import au from "../styles/automation.module.css";
 import styles from "./AutomationEditorScreen.module.css";
@@ -409,7 +409,7 @@ export default function AutomationEditorScreen({
   >("loading");
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [runner, setRunner] = useState<string | null | undefined>(undefined);
+  const [harness, setHarness] = useState<string | null | undefined>(undefined);
   const [model, setModel] = useState<string | null | undefined>(undefined);
   const [triggers, setTriggers] = useState<TriggerDraft[]>([]);
   const [entityTypes, setEntityTypes] = useState<string[]>([]);
@@ -477,7 +477,7 @@ export default function AutomationEditorScreen({
       if (!resetForm) return;
       setName(d.name);
       setInstructions(d.instructions);
-      setRunner(d.runner);
+      setHarness(d.harness);
       setModel(d.model);
       setBaselineInstructions(d.instructions);
       setTriggers(d.triggers.map(loadedTrigger));
@@ -752,7 +752,7 @@ export default function AutomationEditorScreen({
         name: name.trim(),
         triggers: builtTriggers,
         connections,
-        ...(runner === undefined ? {} : { runner }),
+        ...(harness === undefined ? {} : { harness }),
         ...(model === undefined ? {} : { model }),
       });
       if (ok) {
@@ -1534,14 +1534,14 @@ export default function AutomationEditorScreen({
         </div>
       ) : null}
       <div className={styles.instrToolbar} ref={connectorsWrapRef}>
-        <AutomationEditorAgentPicker
-          runners={d.agentRunners ?? []}
-          runner={runner}
+        <AutomationEditorHarnessPicker
+          harnesses={d.harnesses ?? []}
+          harness={harness}
           model={model}
-          defaultRunnerKind={d.defaultRunnerKind}
+          defaultHarnessKind={d.defaultHarnessKind}
           defaultModel={d.defaultModel}
           onChange={(next) => {
-            setRunner(next.runner);
+            setHarness(next.harness);
             setModel(next.model);
           }}
         />

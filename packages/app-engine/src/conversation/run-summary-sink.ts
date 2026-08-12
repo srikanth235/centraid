@@ -1,5 +1,5 @@
 /*
- * `RunSummary` — one row per finished agent run (chat turn, automation fire,
+ * `RunSummary` — one row per finished harness run (conversation turn, automation fire,
  * or builder iteration), the shape the Insights/Executions surfaces read.
  *
  * Historically this file also declared a `RunSummarySink` write-through seam:
@@ -14,7 +14,7 @@
 import type { RunKind } from "./schema.js";
 
 /**
- * One summary row per agent run, as surfaced by the `run_summary` view.
+ * One summary row per harness run, as surfaced by the `run_summary` view.
  * Token totals and cost come from the turn's finish-time rollup columns;
  * `model` is the run's dominant model (most tokens) from its step items.
  */

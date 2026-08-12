@@ -1,5 +1,5 @@
 /*
- * In-memory cache of `probeAcpCapabilities` results, keyed by runner kind +
+ * In-memory cache of `probeAcpCapabilities` results, keyed by harness kind +
  * effective launch overrides. Settings reads serve the cache; `?refresh=1`
  * forces a re-probe.
  * Probes are expensive (spawn + initialize), so we never run them on every
@@ -10,16 +10,16 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import type { RunnerKind } from "@centraid/app-engine";
+import type { HarnessKind } from "@centraid/app-engine";
 
 import { acpConfigFor } from "../../registry.js";
 import { probeAcpCapabilities } from "./probe-capabilities.js";
-import type { AcpAgentCapabilities } from "./probe-capabilities.js";
+import type { AcpHarnessCapabilities } from "./probe-capabilities.js";
 
-export { type AcpAgentCapabilities } from "./probe-capabilities.js";
+export { type AcpHarnessCapabilities } from "./probe-capabilities.js";
 
-const cache = new Map<string, AcpAgentCapabilities>();
-const inflight = new Map<string, Promise<AcpAgentCapabilities>>();
+const cache = new Map<string, AcpHarnessCapabilities>();
+const inflight = new Map<string, Promise<AcpHarnessCapabilities>>();
 
 /**
  * How long a snapshot counts as evidence of the CURRENT host state. Sign-ins
@@ -30,14 +30,14 @@ const inflight = new Map<string, Promise<AcpAgentCapabilities>>();
  */
 export const CAPABILITIES_TTL_MS = 24 * 60 * 60 * 1000;
 
-function isExpired(caps: AcpAgentCapabilities, now: number): boolean {
+function isExpired(caps: AcpHarnessCapabilities, now: number): boolean {
   return (
     !Number.isFinite(caps.probedAt) || now - caps.probedAt > CAPABILITIES_TTL_MS
   );
 }
 
 function key(
-  kind: RunnerKind,
+  kind: HarnessKind,
   binPath?: string,
   extraArgs?: readonly string[]
 ): string {
@@ -54,7 +54,7 @@ function persistedPath(cacheDir: string, cacheKey: string): string {
 async function readPersisted(
   cacheDir: string | undefined,
   cacheKey: string
-): Promise<AcpAgentCapabilities | undefined> {
+): Promise<AcpHarnessCapabilities | undefined> {
   if (!cacheDir) return undefined;
   try {
     const parsed = JSON.parse(
@@ -62,7 +62,7 @@ async function readPersisted(
     ) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
       return undefined;
-    const caps = parsed as AcpAgentCapabilities;
+    const caps = parsed as AcpHarnessCapabilities;
     return typeof caps.reachable === "boolean" &&
       Array.isArray(caps.configOptions)
       ? caps
@@ -75,7 +75,7 @@ async function readPersisted(
 async function writePersisted(
   cacheDir: string | undefined,
   cacheKey: string,
-  caps: AcpAgentCapabilities
+  caps: AcpHarnessCapabilities
 ): Promise<void> {
   if (!cacheDir) return;
   await fs.mkdir(cacheDir, { recursive: true });
@@ -96,11 +96,11 @@ async function writePersisted(
  * - `probeIfMissing` lets a readiness check (preflight) probe when nothing
  *   usable is cached, WITHOUT the live prompt unless asked for.
  *
- * Never probes on a plain cold status poll: spawning every installed agent on
+ * Never probes on a plain cold status poll: spawning every installed harness on
  * every Settings open is too expensive.
  */
 export async function resolveAcpCapabilities(
-  kind: RunnerKind,
+  kind: HarnessKind,
   opts?: {
     binPath?: string;
     extraArgs?: string[];
@@ -111,7 +111,7 @@ export async function resolveAcpCapabilities(
     /** Run the probe's live diagnostic prompt (default: `refresh`). */
     probeLivePrompt?: boolean;
   }
-): Promise<AcpAgentCapabilities | undefined> {
+): Promise<AcpHarnessCapabilities | undefined> {
   const k = key(kind, opts?.binPath, opts?.extraArgs);
   const livePrompt = opts?.probeLivePrompt ?? opts?.refresh === true;
   if (!opts?.refresh) {
@@ -132,7 +132,7 @@ export async function resolveAcpCapabilities(
   const existing = inflight.get(k);
   if (existing) return existing;
 
-  const run = (async (): Promise<AcpAgentCapabilities> => {
+  const run = (async (): Promise<AcpHarnessCapabilities> => {
     try {
       const config = acpConfigFor(kind, {
         ...(opts?.binPath ? { binPath: opts.binPath } : {}),

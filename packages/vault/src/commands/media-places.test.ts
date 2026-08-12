@@ -128,7 +128,7 @@ describe("media: places", () => {
   test("add_asset with EXIF GPS finds-or-creates a core.place and links it", () => {
     const { asset_id } = stageAndAdd(exifJpegAt(37, "N", 122, "W"));
     const asset = db.vault
-      .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
       .get(asset_id) as { place_id: string | null };
     expect(asset.place_id).not.toBeNull();
     const place = db.vault
@@ -142,9 +142,7 @@ describe("media: places", () => {
     const first = stageAndAdd(exifJpegAt(37, "N", 122, "W", 1));
     const second = stageAndAdd(exifJpegAt(37, "N", 122, "W", 2));
     const places = db.vault
-      .prepare(
-        "SELECT place_id FROM media_media_asset WHERE asset_id IN (?, ?)"
-      )
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id IN (?, ?)")
       .all(first.asset_id, second.asset_id) as { place_id: string }[];
     expect(places[0]?.place_id).toBe(places[1]?.place_id);
     expect(
@@ -160,9 +158,7 @@ describe("media: places", () => {
     const first = stageAndAdd(exifJpegAt(37, "N", 122, "W", 1));
     const second = stageAndAdd(exifJpegAt(10, "N", 20, "E", 2));
     const rows = db.vault
-      .prepare(
-        "SELECT place_id FROM media_media_asset WHERE asset_id IN (?, ?)"
-      )
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id IN (?, ?)")
       .all(first.asset_id, second.asset_id) as { place_id: string }[];
     expect(rows[0]?.place_id).not.toBe(rows[1]?.place_id);
   });
@@ -170,7 +166,7 @@ describe("media: places", () => {
   test("a photo with no GPS gets no place", () => {
     const { asset_id } = addAsset({ data_uri: PIXEL });
     const asset = db.vault
-      .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
       .get(asset_id) as { place_id: string | null };
     expect(asset.place_id).toBeNull();
   });
@@ -189,7 +185,7 @@ describe("media: places", () => {
     expect(
       (
         db.vault
-          .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+          .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
           .get(asset_id) as { place_id: string }
       ).place_id
     ).toBe(placeId);
@@ -199,7 +195,7 @@ describe("media: places", () => {
     expect(
       (
         db.vault
-          .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+          .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
           .get(asset_id) as { place_id: string | null }
       ).place_id
     ).toBeNull();
@@ -223,7 +219,7 @@ describe("media: places", () => {
     });
     const row = db.vault
       .prepare(
-        `SELECT p.geo_lat AS lat, p.geo_lng AS lng FROM media_media_asset a
+        `SELECT p.geo_lat AS lat, p.geo_lng AS lng FROM media_asset a
            JOIN core_place p ON p.place_id = a.place_id
           WHERE a.asset_id = ?`
       )
@@ -252,9 +248,7 @@ describe("media: places", () => {
       longitude: -120.11307,
     });
     const rows = db.vault
-      .prepare(
-        "SELECT place_id FROM media_media_asset WHERE asset_id IN (?, ?)"
-      )
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id IN (?, ?)")
       .all(first.asset_id, second.asset_id) as { place_id: string }[];
     expect(rows[0]?.place_id).toBe(rows[1]?.place_id);
   });
@@ -277,7 +271,7 @@ describe("media: places", () => {
       longitude: -122.1432,
     });
     const row = db.vault
-      .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
       .get(asset_id) as { place_id: string };
     expect(row.place_id).toBe("home");
     // And no second row was minted beside it.
@@ -306,7 +300,7 @@ describe("media: places", () => {
       longitude: -122.1432,
     });
     const row = db.vault
-      .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
       .get(asset_id) as { place_id: string };
     expect(row.place_id).not.toBe("coord");
   });
@@ -324,7 +318,7 @@ describe("media: places", () => {
       longitude: -122.143,
     });
     const row = db.vault
-      .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
       .get(asset_id) as { place_id: string };
     expect(row.place_id).not.toBe("home");
   });

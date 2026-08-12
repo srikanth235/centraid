@@ -1,14 +1,15 @@
 /*
  * Chat-runner core — the one place the per-turn chat loop lives.
  *
- * It sits next to the `ConversationRunner` interface and the agent-turn
+ * It sits next to the `ConversationRunner` interface and the harness-turn
  * contract it wires together, both of which live here in app-engine. The
- * actual model turn is injected as a `RunTurnFn` (`runTurn`) — agent-runtime
+ * actual model turn is injected as a `RunTurnFn` (`runTurn`) — the historical
+ * `agent-runtime` package
  * passes its codex/claude `runTurn`; tests pass a stub. Every
  * `ConversationRunner` the gateway's `/_turn` route can inject does the same
  * thing around that turn: load prefs, resolve a cwd, build the system prompt,
  * thread the `centraid_*` dispatcher into a `ToolContext`, resume when the
- * prior turn used the same runner kind, drive the turn, and (optionally) run a
+ * prior turn used the same harness kind, drive the turn, and (optionally) run a
  * post-turn side effect. That spine used to be copied into both
  * `makeConversationRunner` (agent-runtime, data-only chat) and the gateway's
  * `makeUnifiedConversationRunner` (code+data builder chat); they now differ
@@ -21,10 +22,10 @@
  *                              authoring grounding (owned by the gateway's `src/skills/`).
  *   - `onTurnComplete`        — builder chat mints webhook secrets here.
  *   - `extraPath`             — builder chat puts the bundled `centraid` CLI
- *                              on the agent's PATH; data chat doesn't.
+ *                              on the harness's PATH; data chat doesn't.
  *
- * Backend-agnostic by construction: the model turn (`runTurn`) is injected, so
- * this spine never imports a concrete agent backend.
+ * Harness-agnostic by construction: the model turn (`runTurn`) is injected, so
+ * this spine never imports a concrete ACP implementation.
  */
 
 import { randomUUID } from "node:crypto";
@@ -34,15 +35,16 @@ import type {
   TurnContext,
 } from "./runner-core-types.js";
 import type {
-  AgentFailureClass,
+  HarnessFailureClass,
   ConversationRunner,
   ConversationTurnInput,
   ConversationTurnResult,
   TurnStreamEvent,
 } from "./runner.js";
+import { TurnPlane } from "./turn-plane.js";
 import type {
-  RunnerKind,
-  RunnerPrefs,
+  HarnessKind,
+  HarnessPrefs,
   ToolContext,
   TurnInput,
   TurnResult,
@@ -57,31 +59,34 @@ export type {
 export function makeConversationRunnerCore(
   opts: ConversationRunnerCoreOptions
 ): ConversationRunner {
-  const runTurn = opts.runTurn;
+  if (!opts.providerEgressConsent) {
+    throw new Error("conversation runner requires provider-egress consent");
+  }
+  const turnPlane = new TurnPlane(opts.runTurn);
 
   return {
     ...(opts.runKind ? { runKind: opts.runKind } : {}),
-    resolveRunnerKind: async (): Promise<RunnerKind | undefined> =>
+    resolveHarnessKind: async (): Promise<HarnessKind | undefined> =>
       (await opts.prefsLoader(opts.subsystem))?.kind,
     async run(input: ConversationTurnInput): Promise<ConversationTurnResult> {
-      const loadedPrefs = input.runnerKind
-        ? await opts.prefsLoader(opts.subsystem, input.runnerKind)
+      const loadedPrefs = input.harnessKind
+        ? await opts.prefsLoader(opts.subsystem, input.harnessKind)
         : await opts.prefsLoader(opts.subsystem);
       if (!loadedPrefs) {
         input.onEvent({
           type: "error",
           message:
-            "No coding agent configured. Open Settings → Agents and pick Codex or Claude Code.",
+            "No harness configured. Open Settings → Agents and pick Codex or Claude Code.",
         });
-        throw new Error("no coding agent configured");
+        throw new Error("no harness configured");
       }
-      // A host that predates the runnerKind loader argument may still return
-      // another runner's launch settings. Keep the requested kind but discard
+      // A host that predates the harnessKind loader argument may still return
+      // another harness's launch settings. Keep the requested kind but discard
       // that mismatched binary/args; registry defaults are safer than launching
-      // runner A through runner B's executable.
-      const primaryPrefs: RunnerPrefs =
-        input.runnerKind && loadedPrefs.kind !== input.runnerKind
-          ? { kind: input.runnerKind }
+      // harness A through harness B's executable.
+      const primaryPrefs: HarnessPrefs =
+        input.harnessKind && loadedPrefs.kind !== input.harnessKind
+          ? { kind: input.harnessKind }
           : loadedPrefs;
 
       const cwd = await opts.resolveCwd(input);
@@ -100,26 +105,26 @@ export function makeConversationRunnerCore(
         ...(opts.vaultInvoke ? { vaultInvoke: opts.vaultInvoke() } : {}),
         ...(opts.vaultContent ? { vaultContent: opts.vaultContent() } : {}),
       };
-      const configuredLadder = opts.runnerLadder
-        ? await opts.runnerLadder(opts.subsystem, primaryPrefs.kind)
+      const configuredLadder = opts.harnessLadder
+        ? await opts.harnessLadder(opts.subsystem, primaryPrefs.kind)
         : [primaryPrefs.kind];
-      const ladder: RunnerKind[] = [];
+      const ladder: HarnessKind[] = [];
       for (const kind of [primaryPrefs.kind, ...configuredLadder]) {
         if (!ladder.includes(kind)) ladder.push(kind);
       }
-      const healthContext = opts.runnerHealthContext?.(input, cwd) ?? cwd;
+      const healthContext = opts.harnessHealthContext?.(input, cwd) ?? cwd;
       let lastError: Extract<TurnStreamEvent, { type: "error" }> | undefined;
       let lastResult: TurnResult | undefined;
       let completedCtx: TurnContext | undefined;
       let consumedHydrationTokens: number | undefined;
-      const activeAdapterKind =
-        input.activeAdapterKind ?? input.prevAdapterKind;
+      const activeHarnessKind =
+        input.activeHarnessKind ?? input.prevHarnessKind;
       // Kinds this turn actually consulted, and why the last one was refused —
       // so an all-rungs-unavailable turn can name them instead of blaming
-      // "every configured agent" with an anonymous 'unknown' failure class.
-      const consulted: RunnerKind[] = [];
-      let lastBreakerClass: AgentFailureClass | undefined;
-      const consented: readonly RunnerKind[] =
+      // "every configured harness" with an anonymous 'unknown' failure class.
+      const consulted: HarnessKind[] = [];
+      let lastBreakerClass: HarnessFailureClass | undefined;
+      const consented: readonly HarnessKind[] =
         input.providerConsent === undefined
           ? []
           : typeof input.providerConsent === "string"
@@ -136,7 +141,6 @@ export function makeConversationRunnerCore(
         consulted.push(kind);
         const consentSource = rung === 0 ? "direct" : "ladder";
         if (
-          opts.providerEgressConsent &&
           !opts.providerEgressConsent.has(
             input.conversationId,
             kind,
@@ -145,8 +149,8 @@ export function makeConversationRunnerCore(
         ) {
           if (
             consentSource === "ladder" ||
-            activeAdapterKind === undefined ||
-            activeAdapterKind === kind ||
+            activeHarnessKind === undefined ||
+            activeHarnessKind === kind ||
             consented.includes(kind)
           ) {
             // Initial use is implicit in choosing the surface. A ladder rung
@@ -161,7 +165,6 @@ export function makeConversationRunnerCore(
           }
         }
         if (
-          opts.providerEgressConsent &&
           !opts.providerEgressConsent.has(
             input.conversationId,
             kind,
@@ -178,18 +181,18 @@ export function makeConversationRunnerCore(
                 ? `${kind} is the next failover provider. Allow this conversation to be sent to it?`
                 : `Allow this conversation to be sent to ${kind}?`,
           });
-          return { adapterKind: primaryPrefs.kind };
+          return { harnessKind: primaryPrefs.kind };
         }
-        const breaker = opts.runnerHealth?.canAttempt(healthContext, kind);
+        const breaker = opts.harnessHealth?.canAttempt(healthContext, kind);
         if (breaker && !breaker.allowed) {
           if (breaker.failureClass) lastBreakerClass = breaker.failureClass;
           input.onEvent({
             type: "notice",
             level: "warn",
-            code: "runner_breaker_open",
+            code: "harness_breaker_open",
             message:
               `${kind} is temporarily paused for this workspace after a ` +
-              `${breaker.failureClass ?? "runner"} failure; trying the next configured agent.`,
+              `${breaker.failureClass ?? "harness"} failure; trying the next configured harness.`,
           });
           return attemptRung(rung + 1);
         }
@@ -197,7 +200,7 @@ export function makeConversationRunnerCore(
           input.onEvent({
             type: "notice",
             level: "warn",
-            code: "runner_failover",
+            code: "harness_failover",
             message:
               `${ladder[0]} is unavailable at the turn boundary. Using ${kind}; ` +
               "provider-specific model and effort pins were cleared.",
@@ -214,7 +217,7 @@ export function makeConversationRunnerCore(
           kind === primaryPrefs.kind
             ? primaryPrefs
             : ((await opts.prefsLoader(opts.subsystem, kind)) ?? { kind });
-        const prefs: RunnerPrefs = loaded.kind === kind ? loaded : { kind };
+        const prefs: HarnessPrefs = loaded.kind === kind ? loaded : { kind };
         const turnCtx: TurnContext = { input, prefs, cwd };
         const extraSystemPrompt = opts.buildExtraSystemPrompt
           ? await opts.buildExtraSystemPrompt(turnCtx)
@@ -226,18 +229,18 @@ export function makeConversationRunnerCore(
         // session id and the wrong delta. Ask the driver for THIS kind's plan;
         // hosts without a conversation store keep the precomputed fields.
         const plan = input.resumeForKind?.(kind);
-        // Resume only against the backend that minted the opaque session id.
+        // Resume only against the harness that minted the opaque session id.
         const resumeId = plan
           ? plan.sessionId
-          : input.prevAdapterKind === prefs.kind
-            ? input.prevAdapterSessionId
+          : input.prevHarnessKind === prefs.kind
+            ? input.prevHarnessSessionId
             : undefined;
         const resumeUsage = plan
           ? plan.sessionId
             ? plan.usageSnapshot
             : undefined
           : resumeId
-            ? input.prevAdapterUsageSnapshot
+            ? input.prevHarnessUsageSnapshot
             : undefined;
         const hydrationContext = plan
           ? plan.hydrationContext
@@ -251,9 +254,9 @@ export function makeConversationRunnerCore(
         const recoveryHydrationAttachments = plan
           ? plan.recoveryHydrationAttachments
           : input.recoveryHydrationAttachments;
-        // The ledger may carry a delta even when this runner resumes its own
+        // The ledger may carry a delta even when this harness resumes its own
         // ACP session (A → B → A). A supplied hydration plan is therefore an
-        // explicit instruction, not merely a runner-kind mismatch heuristic.
+        // explicit instruction, not merely a harness-kind mismatch heuristic.
         const forceHydration = hydrationContext !== undefined;
 
         // Explicit model/config pins belong to the selected provider. A
@@ -313,7 +316,19 @@ export function makeConversationRunnerCore(
         };
 
         try {
-          lastResult = await runTurn(turnInput, { prefs });
+          lastResult = await turnPlane.runTurn(turnInput, prefs, {
+            surface: "interactive",
+            egress: "attended",
+            egressConsent: () =>
+              opts.providerEgressConsent.has(
+                input.conversationId,
+                kind,
+                opts.subsystem
+              ),
+            failover: "turn-boundary",
+            permissionPolicy: input.permissionPolicy ?? "auto-allow",
+            artifacts: "capture",
+          });
         } catch (error) {
           failure = {
             type: "error",
@@ -323,7 +338,7 @@ export function makeConversationRunnerCore(
         }
 
         if (!failure) {
-          opts.runnerHealth?.reportOk(healthContext, kind);
+          opts.harnessHealth?.reportOk(healthContext, kind);
           completedCtx = turnCtx;
           // Bill the hydration THIS rung was handed, not the route's original
           // plan — a failover rung carries a different prompt and cost.
@@ -336,9 +351,9 @@ export function makeConversationRunnerCore(
           return;
         }
 
-        const failureClass: AgentFailureClass =
+        const failureClass: HarnessFailureClass =
           failure.failureClass ?? "unknown";
-        opts.runnerHealth?.reportFailure(
+        opts.harnessHealth?.reportFailure(
           healthContext,
           kind,
           failureClass,
@@ -354,8 +369,8 @@ export function makeConversationRunnerCore(
       if (consentResult) return consentResult;
 
       if (!completedCtx && !lastResult) {
-        // Name the agents actually consulted and carry the breaker's own
-        // failure class. "Every configured agent" reads as a fleet-wide
+        // Name the harnesses actually consulted and carry the breaker's own
+        // failure class. "Every configured harness" reads as a fleet-wide
         // outage when the ladder was one rung, and 'unknown' hides the
         // auth/quota reason the breaker already knows.
         const unavailable: Extract<TurnStreamEvent, { type: "error" }> =
@@ -367,7 +382,7 @@ export function makeConversationRunnerCore(
             failureClass: lastBreakerClass ?? "unknown",
           };
         if (!lastError) input.onEvent(unavailable);
-        return { adapterKind: primaryPrefs.kind };
+        return { harnessKind: primaryPrefs.kind };
       }
 
       if (completedCtx && opts.onTurnComplete) {
@@ -379,17 +394,17 @@ export function makeConversationRunnerCore(
       }
 
       const result: TurnResult = lastResult ?? {
-        adapterKind: completedCtx?.prefs.kind ?? primaryPrefs.kind,
+        harnessKind: completedCtx?.prefs.kind ?? primaryPrefs.kind,
       };
       return {
-        adapterKind: result.adapterKind,
-        ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),
+        harnessKind: result.harnessKind,
+        ...(result.sessionId ? { harnessSessionId: result.sessionId } : {}),
         ...(result.usageSnapshot
-          ? { adapterUsageSnapshot: result.usageSnapshot }
+          ? { harnessUsageSnapshot: result.usageSnapshot }
           : {}),
         ...(result.hydrated ? { hydrated: true } : {}),
         // Surfaced so the driver can retire a binding whose resume handle the
-        // adapter had to abandon (`'recovery'`).
+        // harness had to abandon (`'recovery'`).
         ...(result.hydrationKind
           ? { hydrationKind: result.hydrationKind }
           : {}),

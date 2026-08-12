@@ -20,16 +20,16 @@
 //     parsers).
 //
 // Environment scrubbing: we explicitly set committer + author
-// identity to the centraid agent on every commit-producing call.
+// identity to the Centraid harness on every commit-producing call.
 // That way the host's `~/.gitconfig` user.name/email never leak
 // into the app repo's history — every commit is attributable to the
-// agent identity per the issue's "Commit authorship" decision.
+// harness identity per the issue's "Commit authorship" decision.
 
 import { spawn } from "node:child_process";
 
 /** Author + committer identity stamped on every commit. */
-export const AGENT_IDENTITY = {
-  name: "Centraid Agent",
+export const HARNESS_IDENTITY = {
+  name: "Centraid Harness",
   email: "bot@centraid",
 } as const;
 
@@ -41,7 +41,7 @@ export interface GitRunOptions {
   cwd: string;
   /**
    * Extra environment variables. Merged on top of the scrubbed
-   * default (which forces the agent identity and disables every
+   * default (which forces the harness identity and disables every
    * interactive prompt).
    */
   env?: NodeJS.ProcessEnv;
@@ -101,14 +101,14 @@ export function runRaw(
   return new Promise<GitRunResult>((resolve, reject) => {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      // Force the agent identity on every commit-producing call. The
+      // Force the harness identity on every commit-producing call. The
       // alternative — `git -c user.name=... -c user.email=...` on
       // every commit — is noisier and easier to forget on a new
       // call site.
-      GIT_AUTHOR_NAME: AGENT_IDENTITY.name,
-      GIT_AUTHOR_EMAIL: AGENT_IDENTITY.email,
-      GIT_COMMITTER_NAME: AGENT_IDENTITY.name,
-      GIT_COMMITTER_EMAIL: AGENT_IDENTITY.email,
+      GIT_AUTHOR_NAME: HARNESS_IDENTITY.name,
+      GIT_AUTHOR_EMAIL: HARNESS_IDENTITY.email,
+      GIT_COMMITTER_NAME: HARNESS_IDENTITY.name,
+      GIT_COMMITTER_EMAIL: HARNESS_IDENTITY.email,
       // No interactive prompts (askpass, credential helpers, editor)
       // — every operation has to be fully scripted.
       GIT_TERMINAL_PROMPT: "0",

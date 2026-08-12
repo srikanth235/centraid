@@ -7,7 +7,7 @@ import { ChangeBus } from "./changes/change-bus.js";
 import type { ConversationHistoryStore } from "./conversation/history.js";
 import type { ConversationRunner } from "./conversation/runner.js";
 import type { ConversationWorkspaceKind } from "./conversation/schema.js";
-import type { RunnerKind } from "./conversation/turn.js";
+import type { HarnessKind } from "./conversation/turn.js";
 import { Dispatcher, statusForToolError } from "./handlers/dispatcher.js";
 import type { ToolResult } from "./handlers/dispatcher.js";
 import type { VaultBridge } from "./handlers/vault-bridge.js";
@@ -86,22 +86,22 @@ export interface RuntimeOptions {
   conversationHistoryStore?: ConversationHistoryStore;
   /**
    * Optional per-app chat runner. When provided, `POST /centraid/<id>/_turn`
-   * drives a model turn via this runner — `@centraid/agent-runtime`'s
+   * drives a model turn via this harness — `@centraid/agent-runtime`'s
    * `makeConversationRunner` (drives codex app-server / Claude SDK locally).
    *
-   * Without a runner the chat routes 503 with `no_conversation_runner`. Hosts
+   * Without a harness the chat routes 503 with `no_conversation_runner`. Hosts
    * decide whether to inject one — single-app standalone setups, tests,
    * and worker subprocesses all run fine without it.
    */
   conversationRunner?: ConversationRunner;
   /**
-   * Scratch base dir for runner-owned chat session files — or a provider
-   * (the gateway wires the ACTIVE vault's `runner-sessions/` dir, #280).
+   * Scratch base dir for harness-owned conversation session files — or a provider
+   * (the gateway wires the ACTIVE vault's `harness-sessions/` dir, #280).
    * The `POST /centraid/<id>/_turn` route passes `<dir>/<conversationId>.jsonl`
    * as `ConversationTurnInput.sessionFile`. Defaults to an OS-tmpdir path
    * when omitted.
    */
-  conversationRunnerSessionDir?: string | (() => string);
+  conversationHarnessSessionDir?: string | (() => string);
   /**
    * Optional reader for per-app metadata (name, description). The chat
    * route uses it to populate the `extraSystemPrompt` it hands to the
@@ -114,11 +114,11 @@ export interface RuntimeOptions {
   ) => Promise<{ name?: string; description?: string }>;
   /**
    * Optional preflight reporter for the gateway-wide
-   * `GET /centraid/_turn/runner-status` route. Returns the host's view of
-   * each adapter's readiness so the chat panel can show a Setup screen
+   * `GET /centraid/_turn/harness-status` route. Returns the host's view of
+   * each harness's readiness so the chat panel can show a Setup screen
    * instead of failing per-turn when the CLI is missing or unauthenticated.
    */
-  runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
+  harnessStatus?: (opts?: HarnessStatusOptions) => Promise<HarnessStatus>;
   /**
    * Optional code-dir resolver (issue #137). When provided, the runtime
    * serves handlers + static files from whatever dir this returns for an
@@ -160,7 +160,7 @@ export interface RuntimeOptions {
   /**
    * Optional ask-model picker backing (subsystem `ask`). When provided,
    * `GET`/`PUT /centraid/<id>/_turn/model` let the kit Ask panel's inline
-   * model picker read/set the `model.<runnerKind>.ask` prefs override —
+   * model picker read/set the `model.<harnessKind>.ask` prefs override —
    * the SAME key `resolveSubsystemModel` reads at turn time, so the
    * picker and the actual turn always agree. Without it those routes 503.
    */
@@ -181,7 +181,7 @@ export type ModelTier = "smart" | "balanced" | "fast";
  * enumerate its catalog. The `id` is what the chat picker persists and
  * hands back as the chat model.
  */
-export interface RunnerModel {
+export interface HarnessModel {
   /** Stable model id passed back as the chat model (e.g. "openai-codex/gpt-5.5"). */
   id: string;
   /** Human-friendly label for the picker; falls back to `id` when absent. */
@@ -201,23 +201,23 @@ export interface RunnerModel {
  * catalog. `loading` = enumeration in flight, nothing cached yet; `ready` = a
  * cached list is available (even while a refresh re-enumerates); `empty` =
  * enumeration finished or never ran and found nothing (incl. CLI unavailable).
- * Lives here (not agent-runtime) because `RunnerStatus` carries it and
+ * Lives here (not agent-runtime) because `HarnessStatus` carries it and
  * app-engine is the lower layer; agent-runtime re-exports it.
  */
 export type SurfaceStatus = "loading" | "ready" | "empty";
 
-/** Options for the runner-status reporter (e.g. force a model reclassify). */
-export interface RunnerStatusOptions {
+/** Options for the harness-status reporter (e.g. force a model reclassify). */
+export interface HarnessStatusOptions {
   /** Force a fresh model-tier classification rather than serving the cache. */
   refresh?: boolean;
 }
 
 /**
- * Shape returned by the runner-status preflight route. Both hosts share
- * the schema, reporting the configured CLI adapter.
+ * Shape returned by the harness-status preflight route. Both hosts share
+ * the schema, reporting the configured harness.
  */
-export interface RunnerStatus {
-  kind: RunnerKind | "none";
+export interface HarnessStatus {
+  kind: HarnessKind | "none";
   ok: boolean;
   /** Adapter version string when detectable (e.g. "codex 0.20.4"). */
   version?: string;
@@ -228,7 +228,7 @@ export interface RunnerStatus {
   minVersion?: string;
   /**
    * `true` when the installed version is >= `minVersion`. `false` when
-   * the user's CLI is older than what we've tested — the adapter may
+   * the user's CLI is older than what we've tested — the harness may
    * still work but we surface the mismatch so users know. `undefined`
    * when we couldn't parse a semver from the CLI's `--version` output.
    */
@@ -242,11 +242,11 @@ export interface RunnerStatus {
    * until the catalog has been warmed (boot or Refresh enumerates and persists);
    * `modelsStatus` distinguishes "still enumerating" from "enumerated empty".
    */
-  models?: RunnerModel[];
+  models?: HarnessModel[];
   /**
    * Load state of the model list above — lets the chat picker show a loading
    * placeholder before the first warm completes, vs an empty state when the
-   * runner reports no models. Absent when the host doesn't track a catalog.
+   * harness reports no models. Absent when the host doesn't track a catalog.
    */
   modelsStatus?: SurfaceStatus;
 }
@@ -293,8 +293,10 @@ export class Runtime {
   readonly appMeta?: (
     entry: RegistryEntry
   ) => Promise<{ name?: string; description?: string }>;
-  /** Optional runner-status preflight. */
-  readonly runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
+  /** Optional harness-status preflight. */
+  readonly harnessStatus?: (
+    opts?: HarnessStatusOptions
+  ) => Promise<HarnessStatus>;
   /** Optional ask-model picker backing. See `RuntimeOptions.askModel`. */
   readonly askModel?: AskModelPrefs;
   /** Optional per-vault turn-concurrency gate. See `RuntimeOptions.turnLimiter`. */
@@ -341,12 +343,12 @@ export class Runtime {
     this.conversationHistoryStore = opts.conversationHistoryStore;
     this.conversationRunner = opts.conversationRunner;
     const sessionDir =
-      opts.conversationRunnerSessionDir ??
-      path.join(os.tmpdir(), "centraid-conversation-runner-sessions");
+      opts.conversationHarnessSessionDir ??
+      path.join(os.tmpdir(), "centraid-conversation-harness-sessions");
     this.sessionDirProvider =
       typeof sessionDir === "string" ? () => sessionDir : sessionDir;
     this.appMeta = opts.appMeta;
-    this.runnerStatus = opts.runnerStatus;
+    this.harnessStatus = opts.harnessStatus;
     this.askModel = opts.askModel;
     if (opts.turnLimiter) this.turnLimiter = opts.turnLimiter;
     if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
@@ -380,16 +382,16 @@ export class Runtime {
     return fresh;
   }
 
-  /** Scratch base dir for runner-owned chat session files (per active vault). */
-  get conversationRunnerSessionDir(): string {
+  /** Scratch base dir for harness-owned conversation session files (per active vault). */
+  get conversationHarnessSessionDir(): string {
     return this.sessionDirProvider();
   }
 
   /**
    * Build a closure that emits a change for the given app. Each caller picks
    * its provenance band — `'handler'` for app-authored action writes,
-   * `'external'` for cloud-panel SQL writes, etc. Agent writes flow through
-   * the chat runner's own emit closure (see `agentEmitForApp`).
+   * `'external'` for cloud-panel SQL writes, etc. Harness writes flow through
+   * the chat runner's own emit closure (see `assistantEmitForApp`).
    */
   private emitForApp(
     appId: string,
@@ -404,11 +406,11 @@ export class Runtime {
   }
 
   /**
-   * Build the change-emitter that the per-app chat runner uses for agent
-   * writes. The agent path needs to thread per-tool-call provenance through
+   * Build the change-emitter that the per-app chat runner uses for assistant
+   * writes. The harness path needs to thread per-tool-call provenance through
    * so the iframe can correlate refreshes with chat pills.
    */
-  agentEmitForApp(
+  assistantEmitForApp(
     appId: string
   ): (payload: {
     tables: string[];
@@ -420,7 +422,7 @@ export class Runtime {
         appId,
         tables: payload.tables,
         ts: Date.now(),
-        source: "agent",
+        source: "assistant",
         ...(payload.toolCallId ? { toolCallId: payload.toolCallId } : {}),
         ...(payload.turnId ? { turnId: payload.turnId } : {}),
       });
@@ -448,7 +450,7 @@ export class Runtime {
         : {}),
       runner: this.conversationRunner,
       conversationStore: this.conversationHistoryStore,
-      conversationRunnerSessionDir: this.conversationRunnerSessionDir,
+      conversationHarnessSessionDir: this.conversationHarnessSessionDir,
       appMeta: this.appMeta,
       conversationLocks: this.conversationLocks,
       ...(this.askModel ? { askModel: this.askModel } : {}),
@@ -875,8 +877,8 @@ export class Runtime {
           return;
         }
 
-        case "app-runner-status": {
-          if (!this.runnerStatus) {
+        case "app-harness-status": {
+          if (!this.harnessStatus) {
             sendJson(res, 200, {
               kind: "none",
               ok: false,
@@ -884,7 +886,7 @@ export class Runtime {
             });
             return;
           }
-          const status = await this.runnerStatus({ refresh: route.refresh });
+          const status = await this.harnessStatus({ refresh: route.refresh });
           sendJson(res, 200, status);
           return;
         }

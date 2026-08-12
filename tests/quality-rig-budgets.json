@@ -6,7 +6,7 @@
   "minimumDriftSamples": 30,
   "driftMultiplier": 1.5,
   "rigs": {
-    "tests/perf/agent-turn.perf.test.ts": {
+    "tests/perf/harness-turn.perf.test.ts": {
       "lane": "perf",
       "volume": "2,000 runner dispatches"
     },
@@ -62,7 +62,7 @@
       "lane": "perf",
       "volume": "250 journalled commits (p95) + 500 fsync-traced writes"
     },
-    "tests/scale/agent-sessions.scale.test.ts": {
+    "tests/scale/harness-sessions.scale.test.ts": {
       "lane": "scale",
       "volume": "256 concurrent sessions"
     },

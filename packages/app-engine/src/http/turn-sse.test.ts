@@ -170,12 +170,12 @@ function harness(): { req: IncomingMessage; res: ServerResponse } {
 }
 
 describe("driveTurnOverSse recovery hydration", () => {
-  it("includes the sequence-zero turn when an existing runner handle self-heals", async () => {
+  it("includes the sequence-zero turn when an existing harness handle self-heals", async () => {
     const dir = await tempDir("centraid-turn-recovery-");
     const appsDir = path.join(dir, "apps");
     const appDir = path.join(appsDir, "notes");
     const journalDbFile = path.join(dir, "journal.db");
-    const runnerSessionDir = path.join(dir, "runner-sessions");
+    const harnessSessionDir = path.join(dir, "harness-sessions");
     await fs.mkdir(appDir, { recursive: true });
     const journal = makeJournalDbProvider(journalDbFile);
     const history = new ConversationHistoryStore(() => ({
@@ -184,7 +184,7 @@ describe("driveTurnOverSse recovery hydration", () => {
       appsDir,
       journal,
       journalDbFile,
-      runnerSessionDir,
+      harnessSessionDir,
     }));
     const conversation = history.createSession("notes");
     history.recordTurn("notes", {
@@ -202,7 +202,7 @@ describe("driveTurnOverSse recovery hydration", () => {
           endedAt: 2,
         },
       ],
-      adapter: { kind: "codex", sessionId: "codex-session" },
+      harnessObservation: { kind: "codex", sessionId: "codex-session" },
     });
 
     // Read the plan DURING the turn: that is when the ladder resolves it, and
@@ -212,7 +212,7 @@ describe("driveTurnOverSse recovery hydration", () => {
       async run(input) {
         codex = input.resumeForKind?.("codex");
         input.onEvent({ type: "final", text: "next answer" });
-        return { adapterKind: "codex", adapterSessionId: "codex-session" };
+        return { harnessKind: "codex", harnessSessionId: "codex-session" };
       },
     };
     await driveTurnOverSse({
@@ -223,15 +223,15 @@ describe("driveTurnOverSse recovery hydration", () => {
       dataDir: appDir,
       extraSystemPrompt: "app context",
       runner,
-      runnerKind: "codex",
+      harnessKind: "codex",
       conversationStore: history,
-      conversationRunnerSessionDir: runnerSessionDir,
+      conversationHarnessSessionDir: harnessSessionDir,
       conversationLocks: new Map(),
       banner: "test",
     });
 
     // Resume + hydration are planned PER RUNG now, so the driver hands the
-    // runner a planner instead of one precomputed plan; the codex rung's own
+    // conversation driver a planner instead of one precomputed plan; the codex rung's own
     // plan is what must carry the seq-zero recovery context.
     expect(codex?.sessionId).toBe("codex-session");
     expect(codex?.hydrationContext).toBeUndefined();
@@ -245,7 +245,7 @@ describe("driveTurnOverSse recovery hydration", () => {
   });
 
   it("plans a failover rung against its OWN binding and the full ledger", async () => {
-    // Regression for the review blocker: the ladder rung the runner actually
+    // Regression for the review blocker: the ladder rung the harness actually
     // reaches may be a provider the route never targeted. Planned once against
     // the primary target, a fallback rung started with no session id AND no
     // hydration — the entire conversation silently lost.
@@ -253,7 +253,7 @@ describe("driveTurnOverSse recovery hydration", () => {
     const appsDir = path.join(dir, "apps");
     const appDir = path.join(appsDir, "notes");
     const journalDbFile = path.join(dir, "journal.db");
-    const runnerSessionDir = path.join(dir, "runner-sessions");
+    const harnessSessionDir = path.join(dir, "harness-sessions");
     await fs.mkdir(appDir, { recursive: true });
     const journal = makeJournalDbProvider(journalDbFile);
     const history = new ConversationHistoryStore(() => ({
@@ -262,7 +262,7 @@ describe("driveTurnOverSse recovery hydration", () => {
       appsDir,
       journal,
       journalDbFile,
-      runnerSessionDir,
+      harnessSessionDir,
     }));
     const conversation = history.createSession("notes");
     history.recordTurn("notes", {
@@ -275,7 +275,7 @@ describe("driveTurnOverSse recovery hydration", () => {
       nodes: [
         { kind: "step", text: "earlier answer", startedAt: 1, endedAt: 2 },
       ],
-      adapter: { kind: "codex", sessionId: "codex-session" },
+      harnessObservation: { kind: "codex", sessionId: "codex-session" },
     });
 
     // Plans must be read DURING the turn — that is when the ladder resolves
@@ -287,7 +287,7 @@ describe("driveTurnOverSse recovery hydration", () => {
         codex = input.resumeForKind?.("codex");
         claude = input.resumeForKind?.("claude-code");
         input.onEvent({ type: "final", text: "ok" });
-        return { adapterKind: "claude-code" };
+        return { harnessKind: "claude-code" };
       },
     };
     await driveTurnOverSse({
@@ -298,9 +298,9 @@ describe("driveTurnOverSse recovery hydration", () => {
       dataDir: appDir,
       extraSystemPrompt: "app context",
       runner,
-      runnerKind: "codex",
+      harnessKind: "codex",
       conversationStore: history,
-      conversationRunnerSessionDir: runnerSessionDir,
+      conversationHarnessSessionDir: harnessSessionDir,
       conversationLocks: new Map(),
       banner: "test",
     });
@@ -316,12 +316,12 @@ describe("driveTurnOverSse recovery hydration", () => {
     expect(claude?.hydrationContext?.prompt).toContain("earlier answer");
   });
 
-  it("retires a binding whose resume handle the adapter had to abandon", async () => {
+  it("retires a binding whose resume handle the harness had to abandon", async () => {
     const dir = await tempDir("centraid-turn-stale-");
     const appsDir = path.join(dir, "apps");
     const appDir = path.join(appsDir, "notes");
     const journalDbFile = path.join(dir, "journal.db");
-    const runnerSessionDir = path.join(dir, "runner-sessions");
+    const harnessSessionDir = path.join(dir, "harness-sessions");
     await fs.mkdir(appDir, { recursive: true });
     const journal = makeJournalDbProvider(journalDbFile);
     const history = new ConversationHistoryStore(() => ({
@@ -330,7 +330,7 @@ describe("driveTurnOverSse recovery hydration", () => {
       appsDir,
       journal,
       journalDbFile,
-      runnerSessionDir,
+      harnessSessionDir,
     }));
     const conversation = history.createSession("notes");
     history.recordTurn("notes", {
@@ -343,22 +343,22 @@ describe("driveTurnOverSse recovery hydration", () => {
       nodes: [
         { kind: "step", text: "earlier answer", startedAt: 1, endedAt: 2 },
       ],
-      adapter: { kind: "codex", sessionId: "dead-session" },
+      harnessObservation: { kind: "codex", sessionId: "dead-session" },
     });
-    const deadBinding = history.getAdapterResumeState(
+    const deadBinding = history.getHarnessResumeState(
       "notes",
       conversation.id,
       "codex"
     )!.bindingId;
 
-    // The adapter rejects the handle we passed and self-heals onto a fresh
+    // The harness rejects the handle we passed and self-heals onto a fresh
     // session, but the turn itself fails — so nothing else retires the row.
     const runner: ConversationRunner = {
       async run(input) {
         input.resumeForKind?.("codex");
         input.onEvent({ type: "error", message: "model overloaded" });
         return {
-          adapterKind: "codex",
+          harnessKind: "codex",
           hydrated: true,
           hydrationKind: "recovery",
         };
@@ -372,9 +372,9 @@ describe("driveTurnOverSse recovery hydration", () => {
       dataDir: appDir,
       extraSystemPrompt: "app context",
       runner,
-      runnerKind: "codex",
+      harnessKind: "codex",
       conversationStore: history,
-      conversationRunnerSessionDir: runnerSessionDir,
+      conversationHarnessSessionDir: harnessSessionDir,
       conversationLocks: new Map(),
       banner: "test",
     });
@@ -382,7 +382,7 @@ describe("driveTurnOverSse recovery hydration", () => {
     expect(deadBinding).toBeDefined();
     // The dead handle is gone, so the next turn never re-offers it.
     expect(
-      history.getAdapterResumeState("notes", conversation.id, "codex")
+      history.getHarnessResumeState("notes", conversation.id, "codex")
     ).toBeUndefined();
   });
 
@@ -391,7 +391,7 @@ describe("driveTurnOverSse recovery hydration", () => {
     const appsDir = path.join(dir, "apps");
     const appDir = path.join(appsDir, "notes");
     const journalDbFile = path.join(dir, "journal.db");
-    const runnerSessionDir = path.join(dir, "runner-sessions");
+    const harnessSessionDir = path.join(dir, "harness-sessions");
     await fs.mkdir(path.join(appDir, "subdir"), { recursive: true });
     const huge = path.join(appDir, "huge.bin");
     const handle = await fs.open(huge, "w");
@@ -404,7 +404,7 @@ describe("driveTurnOverSse recovery hydration", () => {
       appsDir,
       journal,
       journalDbFile,
-      runnerSessionDir,
+      harnessSessionDir,
     }));
     const conversation = history.createSession("notes");
 
@@ -423,7 +423,7 @@ describe("driveTurnOverSse recovery hydration", () => {
           locations: [{ path: path.join(appDir, "subdir") }, { path: huge }],
         });
         input.onEvent({ type: "final", text: "done" });
-        return { adapterKind: "codex" };
+        return { harnessKind: "codex" };
       },
     };
     await driveTurnOverSse({
@@ -434,9 +434,9 @@ describe("driveTurnOverSse recovery hydration", () => {
       dataDir: appDir,
       extraSystemPrompt: "app context",
       runner,
-      runnerKind: "codex",
+      harnessKind: "codex",
       conversationStore: history,
-      conversationRunnerSessionDir: runnerSessionDir,
+      conversationHarnessSessionDir: harnessSessionDir,
       conversationLocks: new Map(),
       banner: "test",
     });

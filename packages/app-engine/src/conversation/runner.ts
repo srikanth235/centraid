@@ -12,19 +12,19 @@
  *     draft-worktree file tools for builder chat.
  *
  * Either way, the route handler in app-engine never implements a model
- * loop itself; it just translates the runner's `TurnStreamEvent`s into SSE
+ * loop itself; it just translates the harness's `TurnStreamEvent`s into SSE
  * frames and pipes them back to the harness client.
  */
 
 import type { ConversationWorkspaceKind, RunKind } from "./schema.js";
 import type {
-  AdapterUsageSnapshot,
-  RunnerKind,
+  HarnessUsageSnapshot,
+  HarnessKind,
   TurnAttachment,
 } from "./turn.js";
 import type * as TypeImport_bjbigq from "./turn.js";
 
-export type AgentFailureClass =
+export type HarnessFailureClass =
   | "spawn"
   | "auth"
   | "init"
@@ -47,7 +47,7 @@ export type TurnStreamEvent =
   | { type: "reasoning.delta"; delta: string }
   /**
    * Latest per-ACP-session context-window snapshot. `used` may decrease after
-   * agent-side compaction; clients must render the latest value, not a max.
+   * harness-side compaction; clients must render the latest value, not a max.
    */
   | { type: "context"; used?: number; size?: number }
   | {
@@ -57,9 +57,9 @@ export type TurnStreamEvent =
       args?: unknown;
       /** When the tool is a vault_sql call, the SQL is surfaced separately for the UI. */
       sql?: string;
-      /** ACP tool kind when the agent supplied one (read/edit/delete/move/…​). */
+      /** ACP tool kind when the harness supplied one (read/edit/delete/move/…​). */
       kind?: string;
-      /** Lossless runner event envelope when the adapter exposes one. */
+      /** Lossless harness event envelope when ACP exposes one. */
       rawJson?: string;
     }
   | {
@@ -72,7 +72,7 @@ export type TurnStreamEvent =
       errorText?: string;
       /**
        * Structured file diffs extracted from ACP tool content blocks
-       * (`type: "diff"`), when the agent reported them.
+       * (`type: "diff"`), when the harness reported them.
        */
       diffs?: Array<{ path?: string; oldText?: string; newText?: string }>;
       /** Workspace files reported by ACP; the ledger stores path + hash refs. */
@@ -83,7 +83,7 @@ export type TurnStreamEvent =
         mime: string;
         filename?: string;
       }>;
-      /** Lossless runner event envelope when the adapter exposes one. */
+      /** Lossless harness event envelope when ACP exposes one. */
       rawJson?: string;
     }
   | {
@@ -96,35 +96,35 @@ export type TurnStreamEvent =
   | {
       type: "final";
       text: string;
-      /** Runner-native completion reason, preserved verbatim. */
+      /** Harness-native completion reason, preserved verbatim. */
       stopReason?: string;
-      /** Lossless runner completion envelope. */
+      /** Lossless harness completion envelope. */
       rawJson?: string;
     }
   | {
       type: "error";
       message: string;
-      /** Stable agent failure class used by breakers and turn-boundary failover. */
-      failureClass?: AgentFailureClass;
-      /** Runner-native completion reason, preserved verbatim. */
+      /** Stable harness failure class used by breakers and turn-boundary failover. */
+      failureClass?: HarnessFailureClass;
+      /** Harness-native completion reason, preserved verbatim. */
       stopReason?: string;
-      /** Lossless runner completion envelope. */
+      /** Lossless harness completion envelope. */
       rawJson?: string;
     }
   | { type: "aborted" }
   | {
       type: "consent.required";
       consentKind: "provider-egress";
-      provider: RunnerKind;
+      provider: HarnessKind;
       reason: "direct" | "ladder";
       message: string;
     }
   /**
    * A non-fatal, human-readable notice about the turn — surfaced in the
    * transcript and folded into the ledger as a notice step (issue #420).
-   * A runner that can't consume an attachment kind (e.g. Codex silently drops
+   * A harness that can't consume an attachment kind (e.g. Codex silently drops
    * PDF `document` blocks) emits `code:'attachment_unsupported'` so the user
-   * sees "this runner can't read PDF attachments" instead of nothing. Both
+   * sees "this harness can't read PDF attachments" instead of nothing. Both
    * chat surfaces render it via the shared parser.
    */
   | { type: "notice"; level: "warn" | "info"; code?: string; message: string }
@@ -132,7 +132,7 @@ export type TurnStreamEvent =
    * Webhook secrets minted as a post-turn step (issue #141, Phase 3). When
    * a unified-chat turn authors an automation with a pending webhook
    * trigger, the gateway mints the route id + shared secret after the turn
-   * settles (the agent can't generate crypto-random credentials) and
+   * settles (the harness can't generate crypto-random credentials) and
    * surfaces them here exactly once — the plaintext `secret` is never
    * persisted, so the renderer must capture it from this event. Adapters
    * that don't author code (data-only chat) never emit it.
@@ -148,7 +148,7 @@ export type TurnStreamEvent =
       }>;
     }
   /**
-   * Per-turn token usage, emitted once when the runner reports the
+   * Per-turn token usage, emitted once when the harness reports the
    * turn's totals (codex `turn/completed`, Claude SDK `result`). The
    * chat route folds this into the turn's `kind='step'` run node so the
    * unified ledger has real token + cost accounting for chat turns.
@@ -159,18 +159,18 @@ export type TurnStreamEvent =
       model?: string;
       /** Confirmed live `thought_level`; requested-but-rejected values are omitted. */
       effort?: string;
-      provider?: string;
+      harness?: string;
       inputTokens?: number;
       outputTokens?: number;
       cacheReadTokens?: number;
       cacheWriteTokens?: number;
       /**
-       * USD cost: agent/ACP-reported when present; otherwise filled at the SSE
+       * USD cost: harness/ACP-reported when present; otherwise filled at the SSE
        * seam from the catalog (issue #514). See `costSource`.
        */
       costUsd?: number;
-      /** Where `costUsd` came from — agent report vs catalog estimate. */
-      costSource?: "agent" | "estimated";
+      /** Where `costUsd` came from — harness report vs catalog estimate. */
+      costSource?: "harness" | "estimated";
     };
 
 export interface ConversationTurnInput {
@@ -185,9 +185,9 @@ export interface ConversationTurnInput {
    * Absolute path to the app's data directory — `entry.path` as resolved by
    * `appDataDir(entry)`. For uploaded apps this is `<appsDir>/<id>`; for
    * path-registered apps it's the externally-supplied folder. `data.sqlite`
-   * and the live schema live here. Adapters that spawn a subprocess agent
+   * and the live schema live here. Adapters that spawn a subprocess harness
    * (codex / claude-code) MUST use this as the spawn cwd so the workspace
-   * sandbox covers the file the agent reads/writes.
+   * sandbox covers the file the harness reads/writes.
    */
   dataDir: string;
   /**
@@ -196,8 +196,8 @@ export interface ConversationTurnInput {
    */
   conversationId: string;
   /**
-   * Absolute path to a runner-owned scratch session file (under the central
-   * `conversationRunnerSessionDir`, named `<conversationId>.jsonl`). The runner is free to
+   * Absolute path to a harness-owned scratch session file (under the central
+   * `conversationHarnessSessionDir`, named `<conversationId>.jsonl`). The harness is free to
    * use this for its own file-based session-resume mechanism, if it has one.
    * It is NOT the chat transcript — the transcript lives in the gateway DB.
    */
@@ -208,14 +208,14 @@ export interface ConversationTurnInput {
    * marks the user-facing app copilot ("operate/ask about my data") —
    * hosts may route vault-backed apps' ask turns onto the vault register
    * (vault_sql/vault_invoke with an app lens). Absent/`'build'` keeps the
-   * builder-capable unified runner. Threaded from the `_turn` POST body.
+   * builder-capable unified conversation driver. Threaded from the `_turn` POST body.
    */
   register?: "ask" | "build";
   /**
    * Files attached to this turn's inbound message — already landed in the
    * per-app blob CAS; `path` is the absolute blob path (issue #190). The
    * route resolves these from the turn POST body's attachment refs; the
-   * runner threads them into the adapter as multimodal content blocks.
+   * turn plane threads them into the harness as multimodal content blocks.
    */
   attachments?: TurnAttachment[];
   /**
@@ -224,7 +224,7 @@ export interface ConversationTurnInput {
    */
   extraSystemPrompt: string;
   /** Optional validated per-turn harness override (for automation manifests). */
-  runnerKind?: RunnerKind;
+  harnessKind?: HarnessKind;
   model?: string;
   /** Optional category-keyed ACP pins (`model`, `thought_level`, future categories). */
   configPins?: Readonly<Record<string, string>>;
@@ -234,7 +234,7 @@ export interface ConversationTurnInput {
    * a second cross-provider switch does not silently revoke the first. A bare
    * string stays wire-valid and means a one-element set.
    */
-  providerConsent?: RunnerKind | readonly RunnerKind[];
+  providerConsent?: HarnessKind | readonly HarnessKind[];
   /** Explicitly owner-selected extra workspace roots for this conversation. */
   additionalDirectories?: string[];
   /** Host-resolved Centraid workspace root selected for this conversation. */
@@ -246,35 +246,35 @@ export interface ConversationTurnInput {
    * ACP permission-request policy for this turn. Interactive automation
    * conversations set `deny`: an enrolled automation may use only the tools
    * and vault grants the host already exposed, and can never widen that set
-   * through an agent-rendered permission prompt.
+   * through a harness-rendered permission prompt.
    */
   permissionPolicy?: "auto-allow" | "deny";
   abortSignal: AbortSignal;
   /**
    * Idempotency key supplied by the harness — same turn re-tried with the
-   * same key should not be re-driven if the adapter supports it. Plumbed
+   * same key should not be re-driven if the harness supports it. Plumbed
    * through but not load-bearing (the route's `abortSignal` plus the
    * per-window queue is the primary correctness guarantee).
    */
   idempotencyKey?: string;
   /**
-   * The runner's previous resume handle, read from the `conversations` row
-   * by the route. The adapter resumes only when `prevAdapterKind` matches
-   * the kind it's about to use — a mid-session runner switch starts fresh.
+   * The harness's previous resume handle, read from the `conversations` row
+   * by the route. The harness resumes only when `prevHarnessKind` matches
+   * the kind it's about to use — a mid-session harness switch starts fresh.
    */
-  prevAdapterSessionId?: string;
-  /** Durable binding row that supplied `prevAdapterSessionId`. */
+  prevHarnessSessionId?: string;
+  /** Durable binding row that supplied `prevHarnessSessionId`. */
   prevBindingId?: string;
   /**
    * Provider that owns the conversation's currently active binding. This is
-   * deliberately separate from `prevAdapterKind`: a requested provider may
+   * deliberately separate from `prevHarnessKind`: a requested provider may
    * have an older warm binding even though another provider is active.
    * Provider-egress consent is based on this active-provider axis.
    */
-  activeAdapterKind?: string;
-  prevAdapterKind?: string;
+  activeHarnessKind?: string;
+  prevHarnessKind?: string;
   /** Cumulative counters stored with the prior ACP session id. */
-  prevAdapterUsageSnapshot?: AdapterUsageSnapshot;
+  prevHarnessUsageSnapshot?: HarnessUsageSnapshot;
   /** Bounded canonical-ledger context available if this turn starts fresh. */
   hydrationContext?: {
     prompt: string;
@@ -285,7 +285,7 @@ export interface ConversationTurnInput {
   };
   /** Historical files re-attached only if the target advertises their block type. */
   hydrationAttachments?: TypeImport_bjbigq.TurnAttachment[];
-  /** Full-ledger recovery plan used only if this runner's own resume handle expired. */
+  /** Full-ledger recovery plan used only if this harness's own resume handle expired. */
   recoveryHydrationContext?: {
     prompt: string;
     includedTurns: number;
@@ -305,21 +305,21 @@ export interface ConversationTurnInput {
    * hydration.
    *
    * Absent on hosts with no conversation store (automation dispatch paths) —
-   * the spine then falls back to the precomputed `prevAdapter*` /
+   * the spine then falls back to the precomputed `prevHarness*` /
    * `hydration*` fields above, which is exactly the pre-existing behavior.
    */
-  resumeForKind?: (kind: RunnerKind) => TurnResumePlan | undefined;
+  resumeForKind?: (kind: HarnessKind) => TurnResumePlan | undefined;
   onEvent: (event: TurnStreamEvent) => void;
 }
 
-/** One runner kind's resume handle plus the hydration it would need. */
+/** One harness kind's resume handle plus the hydration it would need. */
 export interface TurnResumePlan {
-  /** That runner's own resumable opaque session id, when it has a binding. */
+  /** That harness's own resumable opaque session id, when it has a binding. */
   sessionId?: string;
   /** Durable binding row that supplied `sessionId`. */
   bindingId?: string;
   /** Cumulative counters stored with `sessionId`. */
-  usageSnapshot?: AdapterUsageSnapshot;
+  usageSnapshot?: HarnessUsageSnapshot;
   /** Ledger delta past THIS binding's watermark (the full ledger when cold). */
   hydrationContext?: ConversationTurnInput["hydrationContext"];
   hydrationAttachments?: TypeImport_bjbigq.TurnAttachment[];
@@ -330,21 +330,21 @@ export interface TurnResumePlan {
 
 export interface ConversationTurnResult {
   /**
-   * Resumable session id assigned by the adapter (codex thread id,
-   * claude-code session id). Omitted by adapters whose resume happens via
+   * Resumable session id assigned by the harness (codex thread id,
+   * claude-code session id). Omitted by harnesses whose resume happens via
    * the on-disk `sessionFile` instead. The route handler persists this to
    * the session's `conversations` row so the next turn can resume.
    */
-  adapterSessionId?: string;
-  /** Adapter kind that wrote `adapterSessionId`. */
-  adapterKind?: string;
+  harnessSessionId?: string;
+  /** Harness kind that wrote `harnessSessionId`. */
+  harnessKind?: string;
   /** Cumulative counters to persist with the resume handle. */
-  adapterUsageSnapshot?: AdapterUsageSnapshot;
-  /** True when a fresh runner/session consumed canonical ledger hydration. */
+  harnessUsageSnapshot?: HarnessUsageSnapshot;
+  /** True when a fresh harness/session consumed canonical ledger hydration. */
   hydrated?: boolean;
   /**
-   * Which hydration the adapter actually consumed. `'recovery'` means the
-   * resume handle we supplied was rejected and the adapter self-healed onto a
+   * Which hydration the harness actually consumed. `'recovery'` means the
+   * resume handle we supplied was rejected and the harness self-healed onto a
    * fresh session — the signal the driver uses to retire the dead binding.
    */
   hydrationKind?: "handoff" | "recovery";
@@ -356,13 +356,13 @@ export interface ConversationTurnResult {
 }
 
 export interface ConversationRunner {
-  /** Resolve this surface's currently selected runner before hydration lookup. */
-  resolveRunnerKind?: () => Promise<RunnerKind | undefined>;
+  /** Resolve this surface's currently selected harness before hydration lookup. */
+  resolveHarnessKind?: () => Promise<HarnessKind | undefined>;
   /**
-   * The ledger `RunKind` a turn through this runner persists as — a property
+   * The ledger `RunKind` a turn through this harness persists as — a property
    * of the *surface*, not the individual turn. The builder-capable unified
-   * runner (draft worktree + file-edit tools + authoring prompt) reports
-   * `'build'`; the data-only runner leaves it unset (the route defaults to
+   * driver (draft worktree + file-edit tools + authoring prompt) reports
+   * `'build'`; the data-only driver leaves it unset (the route defaults to
    * `'chat'`). Read statically by the route, so the kind is recorded even
    * when a turn errors and returns no `ConversationTurnResult` (issue #181).
    */

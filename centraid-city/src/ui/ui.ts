@@ -90,7 +90,7 @@ export function createLoading(
 /* ---------------------------------------------------------------- HUD stats */
 
 // core/content.ts owns the stat ids; map them onto sim values by keyword so a content
-// agent's naming choices can't break the HUD.
+// content author's naming choices can't break the HUD.
 interface StatDisplay {
   v: number;
   dp: number;

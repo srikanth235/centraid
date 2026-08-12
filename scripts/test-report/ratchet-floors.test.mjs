@@ -115,6 +115,126 @@ describe("diffMinimumTests", () => {
     expect(diffMinimumTests(base, head)).toEqual([]);
   });
 
+  test("allows an explicitly approved ID rename without lowering the cell floor", () => {
+    const base = {
+      flows: [
+        {
+          id: "old-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+      ],
+    };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+          replacesMinimumTestsFlow: "old-name",
+          approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head)).toEqual([]);
+  });
+
+  test("rejects a prose-approved ID rename without an explicit predecessor", () => {
+    const base = {
+      flows: [
+        {
+          id: "old-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+      ],
+    };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+          approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head)).toHaveLength(1);
+  });
+
+  test("never lets one replacement satisfy two removed flow floors", () => {
+    const base = {
+      flows: [
+        {
+          id: "old-a",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+        {
+          id: "old-b",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+      ],
+    };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+          replacesMinimumTestsFlow: "old-a",
+          approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head)).toEqual([
+      'flow "old-b" removed (had minimumTests 10); add one approved replacement with replacesMinimumTestsFlow: "old-b" or restore the flow',
+    ]);
+  });
+
+  test("rejects an approved ID rename that lowers the cell floor", () => {
+    const base = {
+      flows: [
+        {
+          id: "old-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+      ],
+    };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 9,
+          replacesMinimumTestsFlow: "old-name",
+          approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head)).toHaveLength(1);
+  });
+
   test("allows increase", () => {
     const base = { flows: [{ id: "a", minimumTests: 10 }] };
     const head = { flows: [{ id: "a", minimumTests: 12 }] };

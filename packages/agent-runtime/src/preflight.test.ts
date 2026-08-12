@@ -7,7 +7,7 @@ import { describe, afterEach, expect, test } from "vitest";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-import { FAKE_AGENT } from "./backends/acp/test-fixtures.js";
+import { FAKE_HARNESS } from "./backends/acp/test-fixtures.js";
 import { writeCatalogEntry } from "./models/catalog.ts";
 import {
   compareSemver,
@@ -17,7 +17,7 @@ import {
   probeCliAvailability,
   runPreflight,
 } from "./preflight.ts";
-import { agentSpawnEnv, sanitizeAgentPath } from "./spawn-env.ts";
+import { harnessSpawnEnv, sanitizeHarnessPath } from "./spawn-env.ts";
 
 describe("preflight suite", () => {
   let savedPath: string | undefined;
@@ -101,11 +101,11 @@ describe("preflight suite", () => {
     expect(status.minVersion).toBe(minVersionString("codex"));
   });
 
-  test("session-ready preflight rejects an installed but unauthenticated ACP runner", async () => {
+  test("session-ready preflight rejects an installed but unauthenticated ACP harness", async () => {
     const status = await runPreflight(
       {
         kind: "acp",
-        binPath: FAKE_AGENT,
+        binPath: FAKE_HARNESS,
         extraArgs: ["--mode=auth"],
       },
       { requireSessionReady: true }
@@ -115,15 +115,15 @@ describe("preflight suite", () => {
     expect(status.hint).toMatch(/set|configure|install|sign/iu);
   });
 
-  test("session-ready preflight serves a warm capability cache without spawning the agent", async () => {
-    // Readiness used to force `refresh: true`, so every poll spawned the agent
+  test("session-ready preflight serves a warm capability cache without spawning the harness", async () => {
+    // Readiness used to force `refresh: true`, so every poll spawned the harness
     // AND bought a live provider turn from the diagnostic prompt.
     const dir = await tempDir("centraid-preflight-ready-");
     const pidMarker = path.join(dir, "pid");
     const promptMarker = path.join(dir, "prompt.json");
     const prefs = {
       kind: "acp" as const,
-      binPath: FAKE_AGENT,
+      binPath: FAKE_HARNESS,
       extraArgs: [
         "--mode=normal",
         `--pid-marker=${pidMarker}`,
@@ -181,7 +181,7 @@ describe("preflight suite", () => {
     expect(warm.models?.map((m) => m.id)).toStrictEqual(["gpt-x"]);
   });
 
-  // ---- pluggable runner kinds (gemini / qwen / custom acp) ----------------
+  // ---- pluggable harness kinds (gemini / qwen / custom acp) ----------------
 
   test("gemini/qwen preflight probe their bin and carry the registry min version", async () => {
     invalidatePreflightCache();
@@ -211,7 +211,7 @@ describe("preflight suite", () => {
 
   test("a missing opencode/grok/kimi binary reports unavailable with the install hint", async () => {
     // The hint IS the "why not" the providers console shows, so an unavailable
-    // runner must never come back hintless.
+    // harness must never come back hintless.
     const expected = {
       opencode: /opencode-ai/u,
       grok: /SuperGrok|X Premium/u,
@@ -262,7 +262,7 @@ describe("preflight suite", () => {
 
   test("a missing binary for any added kind reports unavailable with its install hint", async () => {
     // The hint IS the "why not" the providers console shows, so an unavailable
-    // runner must never come back hintless — and for these kinds it is often
+    // harness must never come back hintless — and for these kinds it is often
     // the only place the paid-plan / provider-config requirement appears.
     const expected = {
       copilot: /gh\.io\/copilot-install|copilot-cli/u,
@@ -320,7 +320,7 @@ describe("preflight suite", () => {
     expect(status.hint ?? "").toMatch(/Settings/u);
   });
 
-  test("custom acp kind probes a configured binPath like any other runner", async () => {
+  test("custom acp kind probes a configured binPath like any other harness", async () => {
     invalidatePreflightCache();
     const status = await runPreflight({ kind: "acp", binPath: "true" });
     expect(status.ok).toBe(true);
@@ -366,10 +366,10 @@ describe("preflight suite", () => {
   // HOME dir) happens to hold a stray npm install, a `claude`/`codex` shim
   // living there silently shadows the user's real, PATH-resolved install —
   // the app reports (and runs) whatever stale binary the shim points at.
-  // `sanitizeAgentPath`/`agentSpawnEnv` (spawn-env.ts) strip those entries
+  // `sanitizeHarnessPath`/`harnessSpawnEnv` (spawn-env.ts) strip those entries
   // before any bare-name `spawn('claude'|'codex', …)`.
 
-  test("sanitizeAgentPath strips node_modules/.bin entries, preserving order", () => {
+  test("sanitizeHarnessPath strips node_modules/.bin entries, preserving order", () => {
     const input = [
       "/usr/local/bin",
       "/Users/x/node_modules/.bin",
@@ -377,72 +377,75 @@ describe("preflight suite", () => {
       "/Users/x/project/node_modules/.bin",
       "/Users/x/.local/bin",
     ].join(path.delimiter);
-    expect(sanitizeAgentPath(input)).toBe(
+    expect(sanitizeHarnessPath(input)).toBe(
       ["/usr/local/bin", "/opt/homebrew/bin", "/Users/x/.local/bin"].join(
         path.delimiter
       )
     );
   });
 
-  test("sanitizeAgentPath preserves non-matching entries verbatim (no-op on a clean PATH)", () => {
+  test("sanitizeHarnessPath preserves non-matching entries verbatim (no-op on a clean PATH)", () => {
     const input = ["/usr/bin", "/bin", "/Users/x/.local/bin"].join(
       path.delimiter
     );
-    expect(sanitizeAgentPath(input)).toBe(input);
+    expect(sanitizeHarnessPath(input)).toBe(input);
   });
 
-  test("sanitizeAgentPath handles an empty/undefined PATH", () => {
-    expect(sanitizeAgentPath(undefined)).toBe("");
-    expect(sanitizeAgentPath("")).toBe("");
+  test("sanitizeHarnessPath handles an empty/undefined PATH", () => {
+    expect(sanitizeHarnessPath(undefined)).toBe("");
+    expect(sanitizeHarnessPath("")).toBe("");
   });
 
-  test("agentSpawnEnv strips node_modules/.bin from PATH when no binPath is given", () => {
+  test("harnessSpawnEnv strips node_modules/.bin from PATH when no binPath is given", () => {
     const baseEnv = {
       PATH: ["/Users/x/node_modules/.bin", "/Users/x/.local/bin"].join(
         path.delimiter
       ),
     };
-    const env = agentSpawnEnv({ baseEnv });
+    const env = harnessSpawnEnv({ baseEnv });
     expect(env.PATH).toBe("/Users/x/.local/bin");
   });
 
-  test("agentSpawnEnv leaves PATH untouched when an explicit binPath is given", () => {
+  test("harnessSpawnEnv leaves PATH untouched when an explicit binPath is given", () => {
     const baseEnv = {
       PATH: ["/Users/x/node_modules/.bin", "/Users/x/.local/bin"].join(
         path.delimiter
       ),
     };
-    const env = agentSpawnEnv({ baseEnv, binPath: "/some/explicit/claude" });
+    const env = harnessSpawnEnv({
+      baseEnv,
+      binPath: "/some/explicit/claude",
+    });
     expect(env.PATH).toBe(baseEnv.PATH);
   });
 
-  test("agentSpawnEnv prepends extraPath after sanitization", () => {
+  test("harnessSpawnEnv prepends extraPath after sanitization", () => {
     const baseEnv = {
       PATH: ["/Users/x/node_modules/.bin", "/Users/x/.local/bin"].join(
         path.delimiter
       ),
     };
-    const env = agentSpawnEnv({ baseEnv, extraPath: "/extra/dir" });
+    const env = harnessSpawnEnv({ baseEnv, extraPath: "/extra/dir" });
     expect(env.PATH).toBe(
       ["/extra/dir", "/Users/x/.local/bin"].join(path.delimiter)
     );
   });
 
-  test("agentSpawnEnv preserves other env vars and never mutates baseEnv", () => {
+  test("harnessSpawnEnv preserves other env vars and never mutates baseEnv", () => {
     const baseEnv = { PATH: "/Users/x/node_modules/.bin", FOO: "bar" };
-    const env = agentSpawnEnv({ baseEnv });
+    const env = harnessSpawnEnv({ baseEnv });
     expect(env.FOO).toBe("bar");
     expect(env).not.toBe(baseEnv);
     expect(baseEnv.PATH).toBe("/Users/x/node_modules/.bin"); // unmutated
   });
 
-  test("agentSpawnEnv defaults baseEnv to process.env", () => {
+  test("harnessSpawnEnv defaults baseEnv to process.env", () => {
     const savedPathLocal = process.env.PATH;
     try {
       process.env.PATH = ["/Users/x/node_modules/.bin", "/usr/bin"].join(
         path.delimiter
       );
-      const env = agentSpawnEnv();
+      const env = harnessSpawnEnv();
       expect(env.PATH).toBe("/usr/bin");
     } finally {
       process.env.PATH = savedPathLocal;

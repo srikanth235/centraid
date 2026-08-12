@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Directive: handler-uses-ctx-primitives — centraid handlers (queries/*.js
-# and actions/*.js) must not import provider SDKs directly. Inference and
-# other gateway-managed capabilities flow through ctx.infer.* / other
-# ctx primitives supplied by the handler-runner.
+# and actions/*.js) must not import provider SDKs directly. Provider-backed
+# judgment flows through ctx.delegate; other gateway-managed capabilities use
+# the ctx primitives supplied by the handler harness.
 #
 # Rationale: handler-as-source-of-truth. Extending ctx.* is the supported
 # way to grow capabilities; reaching past it (a) defeats per-profile model
@@ -51,7 +51,7 @@ while IFS=: read -r file line_no match; do
     has_waiver "$file" "$line_no" "handler-uses-ctx-primitives" && continue
     # Surface the offending SDK name in the message for easy triage.
     sdk_name=$(printf '%s' "$match" | sed -E "s/.*[\"'](.*)[\"'].*/\\1/")
-    violation "$file:$line_no — handler imports provider SDK '$sdk_name' (use ctx.infer.* / gateway-supplied primitives)"
+    violation "$file:$line_no — handler imports provider SDK '$sdk_name' (use ctx.delegate / gateway-supplied primitives)"
 done < <(git grep -nE "$PATTERN" -- '**/queries/*.js' '**/queries/*.ts' '**/actions/*.js' '**/actions/*.ts' 2>/dev/null || true)
 
 directive_end

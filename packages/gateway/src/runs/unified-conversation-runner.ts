@@ -3,15 +3,15 @@
  *
  * One chat surface, both jobs. "Builder chat" (tweak the app's code) and
  * "app chat" (operate its data) used to be two call sites on the same
- * engine; this runner merges them. A turn now runs with:
+ * engine; this harness merges them. A turn now runs with:
  *
  *   - cwd = the app's OPEN draft session worktree (`worktrees/sessions/
- *     <sessionId>/apps/<appId>/`), so the agent's native file edits stage in
+ *     <sessionId>/apps/<appId>/`), so the harness's native file edits stage in
  *     the draft. `<sessionId>` is host-provided via `sessionIdFor` (the
  *     desktop injects `desktop-<appId>` so this is the same worktree the
- *     renderer's Code tab and the local builder agent share); the core
+ *     renderer's Code tab and the local builder harness share); the core
  *     defaults to a host-neutral `chat-<appId>`;
- *   - the UNION of tools: the codex/claude adapter's native file-edit +
+ *   - the UNION of tools: the harness's native file-edit +
  *     shell tools (workspace-write against cwd) PLUS the vault register
  *     (`vault_sql` / `vault_invoke`) threaded via `toolContext`, so the
  *     same turn can author code and look at the real data it projects;
@@ -24,7 +24,7 @@
  * draft band each turn, so preview data ops stay scratch (issue #286
  * phase 2). The user clicks Publish to flip the live version + apply the
  * declared DDL diff to the live band — explicit-publish holds. Webhook
- * secrets are minted as a post-turn step (the agent can't generate
+ * secrets are minted as a post-turn step (the harness can't generate
  * crypto-random credentials) and surfaced once via a `webhooks` stream
  * event.
  *
@@ -51,10 +51,10 @@ import type {
   TurnStreamEvent,
   Dispatcher,
   ModelSubsystem,
-  RunnerKind,
-  RunnerPrefs,
+  HarnessKind,
+  HarnessPrefs,
   RunTurnFn,
-  RunnerHealthController,
+  HarnessHealthController,
   ProviderEgressConsentController,
   VaultInvokeRunner,
   VaultContentRunner,
@@ -76,16 +76,16 @@ export { type RunTurnFn } from "@centraid/app-engine";
 export interface UnifiedConversationRunnerOptions {
   /** Git store backing app code; the draft worktree lives in its sessions. */
   store: WorktreeStore;
-  /** Per-turn runner prefs (kind + provider). Loaded fresh so settings
+  /** Per-turn harness prefs (kind + provider). Loaded fresh so settings
    *  changes apply without a restart — mirrors `makeConversationRunner`.
-   *  Receives `subsystem` so a host that pins a runner per subsystem
+   *  Receives `subsystem` so a host that pins a harness per subsystem
    *  answers with THIS register's kind. */
   prefsLoader: (
     subsystem?: ModelSubsystem,
-    runnerKind?: RunnerKind
-  ) => Promise<RunnerPrefs | undefined>;
-  /** Which subsystem's runner/model prefs builder turns ride. The gateway
-   *  passes `'builder'`; unset → the host's default agent. */
+    harnessKind?: HarnessKind
+  ) => Promise<HarnessPrefs | undefined>;
+  /** Which subsystem's harness/model prefs builder turns ride. The gateway
+   *  passes `'builder'`; unset → the host's default harness. */
   subsystem?: ModelSubsystem;
   /** Resolve the shared app-engine dispatcher for the `centraid_*` tools.
    *  Called per turn so the host can cycle-break on first use. */
@@ -96,7 +96,7 @@ export interface UnifiedConversationRunnerOptions {
   publicBaseUrl: () => string;
   /** The vault plane's ext-band operations (issue #286 phase 2). When set,
    *  each turn keeps the app's DRAFT ext band in step with the draft
-   *  manifest (first access seeds it from live rows) so the agent's
+   *  manifest (first access seeds it from live rows) so the harness's
    *  preview operates on prod-shaped data without touching live. */
   ext?: ExtBandOps;
   /** The builder's vault read tool (issue #286 phase 2): the same
@@ -116,13 +116,13 @@ export interface UnifiedConversationRunnerOptions {
   sessionIdFor?: (appId: string) => string;
   /** Turn driver — defaults to `runTurn`; injected in tests. */
   runTurn?: RunTurnFn;
-  runnerLadder?: (
+  harnessLadder?: (
     subsystem: ModelSubsystem | undefined,
-    primary: RunnerKind
-  ) => Promise<readonly RunnerKind[]> | readonly RunnerKind[];
-  runnerHealth?: RunnerHealthController;
-  runnerHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
-  providerEgressConsent?: ProviderEgressConsentController;
+    primary: HarnessKind
+  ) => Promise<readonly HarnessKind[]> | readonly HarnessKind[];
+  harnessHealth?: HarnessHealthController;
+  harnessHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
+  providerEgressConsent: ProviderEgressConsentController;
   onFailover?: Parameters<typeof makeConversationRunnerCore>[0]["onFailover"];
 }
 
@@ -136,7 +136,7 @@ function defaultSessionIdFor(appId: string): string {
 }
 
 /**
- * Read the app's `kind` from the worktree `app.json` so the runner picks
+ * Read the app's `kind` from the worktree `app.json` so the harness picks
  * the right authoring prompt (an automation has no front end → skip UI
  * grounding). Defaults to `'app'` when the file is missing/unreadable.
  */
@@ -152,7 +152,7 @@ async function readAppKind(appDir: string): Promise<"app" | "automation"> {
 
 /**
  * Mint any webhook secrets the turn left pending and surface them once via a
- * `webhooks` stream event. The agent can't generate crypto-random
+ * `webhooks` stream event. The harness can't generate crypto-random
  * credentials, so an authored webhook trigger is staged `pending: true` and
  * minted here. Best-effort — a minting hiccup never fails the turn (handled
  * by the core's `onTurnComplete` try/catch).
@@ -199,14 +199,12 @@ export function makeUnifiedConversationRunner(
     // The model turn driver — the local codex/claude `runTurn` unless a
     // test injects a stub.
     runTurn: opts.runTurn ?? runTurn,
-    ...(opts.runnerLadder ? { runnerLadder: opts.runnerLadder } : {}),
-    ...(opts.runnerHealth ? { runnerHealth: opts.runnerHealth } : {}),
-    ...(opts.runnerHealthContext
-      ? { runnerHealthContext: opts.runnerHealthContext }
+    ...(opts.harnessLadder ? { harnessLadder: opts.harnessLadder } : {}),
+    ...(opts.harnessHealth ? { harnessHealth: opts.harnessHealth } : {}),
+    ...(opts.harnessHealthContext
+      ? { harnessHealthContext: opts.harnessHealthContext }
       : {}),
-    ...(opts.providerEgressConsent
-      ? { providerEgressConsent: opts.providerEgressConsent }
-      : {}),
+    providerEgressConsent: opts.providerEgressConsent,
     ...(opts.onFailover ? { onFailover: opts.onFailover } : {}),
 
     // cwd IS the draft session worktree (issue #144's draft-code framing

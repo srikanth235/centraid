@@ -101,9 +101,8 @@ export interface PersistedSettings {
 }
 
 export interface DesktopSettings {
-  /** Remote gateway base URL — e.g. http://127.0.0.1:8765. (Formerly
-   * inherited from `@centraid/agent-harness`'s `HarnessConfig`; inlined
-   * here in #141 Phase 5 so the desktop drops that dependency.) */
+  /** Remote gateway base URL — e.g. http://127.0.0.1:8765. Inlined here in
+   * #141 Phase 5 so desktop settings do not depend on the turn runtime. */
   gatewayUrl: string;
   /**
    * Bearer token sent as `Authorization: Bearer <token>` to the gateway.

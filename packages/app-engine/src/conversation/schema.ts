@@ -17,7 +17,7 @@
  * the response. **Attachments** ride that inbound message.
  */
 
-import type { AdapterUsageSnapshot } from "./turn.js";
+import type { HarnessUsageSnapshot } from "./turn.js";
 
 /** What kind of thread this conversation is. Insights groups `automation` by automation. */
 export type RunKind = "automation" | "chat" | "build";
@@ -51,16 +51,16 @@ export type AutomationTriggerOrigin =
  * Item discriminator. `message_in` is the inbound message — a person typing,
  * a webhook firing, a cron tick — recorded as ordinal 0 of the turn
  * (issue #190). `step` is one primary model-inference call — per-call token +
- * cost accounting lives at this grain. `tool` / `agent` are per-call audit
+ * cost accounting lives at this grain. `tool` / `delegate` are per-call audit
  * rows.
  */
-export type ItemKind = "message_in" | "step" | "tool" | "agent";
+export type ItemKind = "message_in" | "step" | "tool" | "delegate";
 
 /**
  * The durable record holding the turns of one execution. Was `chat_sessions`,
  * generalized: `kind` / `app_id` / `automation_id` moved UP here off the
  * per-turn row. For `kind='automation'`, the stable automation ref is the
- * conversation identity; harness ownership is the mutable adapter binding.
+ * conversation identity; harness ownership is the mutable harness binding.
  */
 export interface Conversation {
   readonly id: string;
@@ -72,12 +72,12 @@ export interface Conversation {
   /** The automation ref (`<appId>/<id>`) — set for `kind: 'automation'`. */
   readonly automationId?: string;
   readonly title: string;
-  /** Runner kind that owns `adapterSessionId` — any ACP runner kind (#479). */
-  readonly adapterKind?: string;
-  /** Opaque per-runner resume handle; absent until the first turn lands. */
-  readonly adapterSessionId?: string;
-  /** Last cumulative ACP counters paired with `adapterSessionId`. */
-  readonly adapterUsageSnapshot?: AdapterUsageSnapshot;
+  /** Harness kind that owns `harnessSessionId` — any ACP harness kind (#479). */
+  readonly harnessKind?: string;
+  /** Opaque per-harness resume handle; absent until the first turn lands. */
+  readonly harnessSessionId?: string;
+  /** Last cumulative ACP counters paired with `harnessSessionId`. */
+  readonly harnessUsageSnapshot?: HarnessUsageSnapshot;
   /** Number of fresh-session handoffs hydrated from this canonical ledger. */
   readonly hydrationCount: number;
   /** Most recent hydration boundary, when one exists. */
@@ -102,9 +102,9 @@ export interface Conversation {
 /**
  * One resumable ACP session bound to the canonical conversation ledger.
  *
- * A conversation may keep several bindings (one per runner used over its
- * lifetime), but only the conversation's selected runner is active and at
- * most one prior runner remains process-warm. Older valid handles are cold;
+ * A conversation may keep several bindings (one per harness used over its
+ * lifetime), but only the conversation's selected harness is active and at
+ * most one prior harness remains process-warm. Older valid handles are cold;
  * stale is reserved for invalid or superseded handles that cannot resume.
  * The watermark is the last canonical turn sequence whose content that ACP
  * session has observed, so A → B → A can resume A and hydrate only B's delta.
@@ -114,7 +114,7 @@ export interface ConversationHarnessSession {
   readonly conversationId: string;
   readonly kind: string;
   readonly acpSessionId: string;
-  readonly usageSnapshot?: AdapterUsageSnapshot;
+  readonly usageSnapshot?: HarnessUsageSnapshot;
   readonly hydratedThroughSeq: number;
   readonly status: "active" | "warm" | "cold" | "stale";
   readonly lastUsedAt: number;
@@ -183,7 +183,7 @@ export interface Turn {
   readonly pinned: boolean;
   /**
    * Denormalized rollup, written at finish. Token sums + cost are Σ over this
-   * turn's own `kind IN ('step','agent')` items. Null on an in-flight or
+   * turn's own `kind IN ('step','delegate')` items. Null on an in-flight or
    * crashed turn.
    */
   readonly totalInputTokens?: number;
@@ -200,7 +200,7 @@ export interface Item {
   readonly turnId: string;
   readonly ordinal: number;
   /**
-   * Runner-native call identity. ACP tool calls can overlap, so start/result
+   * Harness-native call identity. ACP tool calls can overlap, so start/result
    * correlation must use this value rather than display name or ordinal.
    */
   readonly callId?: string;
@@ -210,33 +210,33 @@ export interface Item {
   readonly role?: "user" | "assistant";
   /** `message_in` payload text. (Assistant step text stays in `outputJson`.) */
   readonly text?: string;
-  /** The tool name or `'agent'`. Absent for `kind: 'step'` / `'message_in'`. */
+  /** The tool name or `'delegate'`. Absent for `kind: 'step'` / `'message_in'`. */
   readonly name?: string;
   readonly argsJson?: string;
   readonly outputJson?: string;
-  /** Lossless runner envelope for diagnostics and future protocol fields. */
+  /** Lossless harness envelope for diagnostics and future protocol fields. */
   readonly rawJson?: string;
   readonly ok: boolean;
   readonly error?: string;
   readonly startedAt: number;
   readonly endedAt?: number;
   readonly durationMs?: number;
-  /** `step` / `agent` — per-call token usage. */
+  /** `step` / `delegate` — per-call token usage. */
   readonly inputTokens?: number;
   readonly outputTokens?: number;
   readonly cacheReadTokens?: number;
   readonly cacheWriteTokens?: number;
-  /** `step` / `agent` — the confirmed model, runner, and effort that served the call. */
+  /** `step` / `delegate` — the confirmed model, harness, and effort that served the call. */
   readonly model?: string;
-  readonly provider?: string;
+  readonly harness?: string;
   readonly effort?: string;
-  /** Frozen at write time; absent = no price known. Prefer agent-reported USD. */
+  /** Frozen at write time; absent = no price known. Prefer harness-reported USD. */
   readonly costUsd?: number;
   /** Issue #514 — where `costUsd` came from. */
-  readonly costSource?: "agent" | "estimated";
-  /** `tool` / `agent` — the app whose data the call touched. */
+  readonly costSource?: "harness" | "estimated";
+  /** `tool` / `delegate` — the app whose data the call touched. */
   readonly appId?: string;
-  /** `agent` — the turn id of a child turn this item spawned (sub-agent). */
+  /** `delegate` — the turn id of a bounded child turn this item spawned. */
   readonly childTurnId?: string;
 }
 
@@ -256,7 +256,7 @@ export interface Attachment {
   /** `'upload'` | `'webhook'` | `'email'` | … */
   readonly source?: string;
   readonly filename?: string;
-  /** Absolute agent workspace path; present means the bytes are not in CAS. */
+  /** Absolute harness workspace path; present means the bytes are not in CAS. */
   readonly workspacePath?: string;
   readonly createdAt: number;
 }

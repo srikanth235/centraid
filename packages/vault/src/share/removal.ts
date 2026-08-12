@@ -123,7 +123,7 @@ export function deleteProjectedClosure(
     contentId = document.current_content_id;
   } else {
     const asset = audience
-      .prepare("SELECT content_id FROM media_media_asset WHERE asset_id = ?")
+      .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
       .get(itemId) as { content_id: string } | undefined;
     if (!asset) return ABSENT;
     contentId = asset.content_id;
@@ -149,7 +149,7 @@ export function deleteProjectedClosure(
   // until the live FK scan proves no receiver-owned wrapper still needs it.
   if (itemType !== "core.content_item")
     scrubProjectedTarget(audience, itemType, itemId, now);
-  if (itemType === "media.media_asset") {
+  if (itemType === "media.asset") {
     const regions = audience
       .prepare("SELECT region_id FROM media_face_region WHERE asset_id = ?")
       .all(itemId) as Array<{ region_id: string }>;
@@ -174,12 +174,10 @@ export function deleteProjectedClosure(
       .run(now, itemId);
     audience
       .prepare(
-        "UPDATE media_media_asset SET source_asset_id = NULL WHERE source_asset_id = ?"
+        "UPDATE media_asset SET source_asset_id = NULL WHERE source_asset_id = ?"
       )
       .run(itemId);
-    audience
-      .prepare("DELETE FROM media_media_asset WHERE asset_id = ?")
-      .run(itemId);
+    audience.prepare("DELETE FROM media_asset WHERE asset_id = ?").run(itemId);
   } else if (itemType === "core.document") {
     audience
       .prepare("DELETE FROM core_document WHERE document_id = ?")
@@ -300,7 +298,7 @@ function deleteCollection(
   let removedContent = false;
   for (const entry of entries) {
     if (
-      entry.target_type !== "media.media_asset" &&
+      entry.target_type !== "media.asset" &&
       entry.target_type !== "core.document" &&
       entry.target_type !== "core.content_item"
     )

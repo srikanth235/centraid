@@ -153,7 +153,7 @@ export interface VaultAppEntry {
 
 export interface VaultAgentEntry {
   agentId: string;
-  hostKey: string;
+  enrollmentKey: string;
   partyId: string;
   name: string;
   modelRef: string;

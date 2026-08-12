@@ -162,12 +162,12 @@ describe("vault-plane install scopes + execution clamps", () => {
     expect(
       plane
         .listAgents()
-        .find((agent) => agent.hostKey === "anchored-automation")?.grants[0]
-        ?.scopes[0]
+        .find((agent) => agent.enrollmentKey === "anchored-automation")
+        ?.grants[0]?.scopes[0]
     ).toMatchObject({ schema: "schedule", table: "task", verbs: "read" });
     const grantId = plane
       .listAgents()
-      .find((agent) => agent.hostKey === "anchored-automation")!
+      .find((agent) => agent.enrollmentKey === "anchored-automation")!
       .grants[0]!.grantId;
     plane.revokeGrant(grantId);
     plane.ensureAgentInstallGrant("anchored-automation", {
@@ -177,7 +177,7 @@ describe("vault-plane install scopes + execution clamps", () => {
     expect(
       plane
         .listAgents()
-        .find((agent) => agent.hostKey === "anchored-automation")?.grants
+        .find((agent) => agent.enrollmentKey === "anchored-automation")?.grants
     ).toHaveLength(0);
   });
 

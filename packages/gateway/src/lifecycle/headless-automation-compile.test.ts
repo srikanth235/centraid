@@ -8,7 +8,10 @@ import {
   ProviderEgressConsentStore,
   makeJournalDbProvider,
 } from "@centraid/app-engine";
-import type { ConversationRunner } from "@centraid/app-engine";
+import type {
+  ConversationRunner,
+  ProviderEgressConsentController,
+} from "@centraid/app-engine";
 import { validateManifest } from "@centraid/automation";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
@@ -44,6 +47,12 @@ const ANCHOR: ResolvedAutomationAnchor = {
 };
 
 const dirs: string[] = [];
+const allowProviderEgress: ProviderEgressConsentController = {
+  has: () => true,
+  grant: () => undefined,
+  revoke: () => undefined,
+};
+
 describe("headless-automation-compile suite", () => {
   afterEach(async () => {
     await Promise.all(
@@ -53,8 +62,8 @@ describe("headless-automation-compile suite", () => {
 
   async function harness(
     runner: ConversationRunner,
-    agent: {
-      runnerKind?: "claude-code";
+    harnessSelection: {
+      harnessKind?: "claude-code";
       model?: string;
       preflightError?: string;
     } = {}
@@ -67,14 +76,15 @@ describe("headless-automation-compile suite", () => {
     await runHeadlessAutomationCompile({
       runner,
       journalDbFile,
-      runnerSessionDir: path.join(dir, "sessions"),
+      harnessSessionDir: path.join(dir, "sessions"),
       dataDir: path.join(dir, "apps"),
       appId: "digest",
       draftSessionId: "compile-digest-1",
       automationRef: "digest/main",
       automationName: "Daily digest",
       instructions: "Summarize mail about @[core.party/p-1].",
-      ...agent,
+      ...harnessSelection,
+      providerEgressConsent: allowProviderEgress,
       onSuccess,
       onFailure,
       runId: "compile-1",
@@ -89,12 +99,12 @@ describe("headless-automation-compile suite", () => {
   describe(runHeadlessAutomationCompile, () => {
     it("records a successful compile turn on the stable automation conversation", async () => {
       let receivedDraftSessionId: string | undefined;
-      let receivedRunnerKind: string | undefined;
+      let receivedHarnessKind: string | undefined;
       let receivedModel: string | undefined;
       const runner: ConversationRunner = {
         run: async (input) => {
           receivedDraftSessionId = input.draftSessionId;
-          receivedRunnerKind = input.runnerKind;
+          receivedHarnessKind = input.harnessKind;
           receivedModel = input.model;
           input.onEvent({
             type: "final",
@@ -108,19 +118,19 @@ describe("headless-automation-compile suite", () => {
             inputTokens: 12,
             outputTokens: 4,
             costUsd: 0.004,
-            costSource: "agent",
+            costSource: "harness",
           });
-          return { adapterKind: "codex" };
+          return { harnessKind: "codex" };
         },
       };
       const { store, onSuccess, onFailure } = await harness(runner, {
-        runnerKind: "claude-code",
+        harnessKind: "claude-code",
         model: "claude-custom",
       });
       expect(onSuccess).toHaveBeenCalledOnce();
       expect(onFailure).not.toHaveBeenCalled();
       expect(receivedDraftSessionId).toBe("compile-digest-1");
-      expect(receivedRunnerKind).toBe("claude-code");
+      expect(receivedHarnessKind).toBe("claude-code");
       expect(receivedModel).toBe("claude-custom");
       const conversationId = "digest/main";
       expect(store.getConversation(conversationId)?.title).toBe("Daily digest");
@@ -138,7 +148,7 @@ describe("headless-automation-compile suite", () => {
           kind: "step",
           model: "test-model",
           costUsd: 0.004,
-          costSource: "agent",
+          costSource: "harness",
           rawJson: '{"stopReason":"end_turn"}',
           outputJson: '{"text":"Files ready.","stopReason":"end_turn"}',
         }),
@@ -146,7 +156,7 @@ describe("headless-automation-compile suite", () => {
       store.close();
     });
 
-    it("records failure and does not publish when the runner rejects", async () => {
+    it("records failure and does not publish when the harness rejects", async () => {
       const runner: ConversationRunner = {
         run: async () => {
           throw new Error("compiler unavailable");
@@ -163,7 +173,7 @@ describe("headless-automation-compile suite", () => {
       store.close();
     });
 
-    it("preserves a failed runner terminal, raw envelope, and usage for cold replay", async () => {
+    it("preserves a failed harness terminal, raw envelope, and usage for cold replay", async () => {
       const runner: ConversationRunner = {
         run: async (input) => {
           input.onEvent({
@@ -179,7 +189,7 @@ describe("headless-automation-compile suite", () => {
             outputTokens: 0,
             costUsd: 0.001,
           });
-          return { adapterKind: "codex" };
+          return { harnessKind: "codex" };
         },
       };
       const { store, onSuccess, onFailure } = await harness(runner);
@@ -204,7 +214,7 @@ describe("headless-automation-compile suite", () => {
       store.close();
     });
 
-    it("records an anchor preflight failure without starting the runner", async () => {
+    it("records an anchor preflight failure without starting the harness", async () => {
       const runner: ConversationRunner = {
         run: vi.fn<ConversationRunner["run"]>(),
       };
@@ -279,7 +289,7 @@ describe("headless-automation-compile suite", () => {
         automationName: "Daily digest",
         runId: "compile-reserved",
         error: "Instruction revision failed: empty result",
-        runnerKind: "claude-code",
+        harnessKind: "claude-code",
       });
 
       const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
@@ -373,7 +383,7 @@ describe("headless-automation-compile suite", () => {
       ]);
     });
 
-    it("denies an unattended compile whose runner the user never authored", async () => {
+    it("denies an unattended compile whose harness the user never authored", async () => {
       const dir = await tempDir("centraid-headless-compile-consent-");
       dirs.push(dir);
       const journalDbFile = path.join(dir, "journal.db");
@@ -388,14 +398,14 @@ describe("headless-automation-compile suite", () => {
       await runHeadlessAutomationCompile({
         runner: { run },
         journalDbFile,
-        runnerSessionDir: path.join(dir, "sessions"),
+        harnessSessionDir: path.join(dir, "sessions"),
         dataDir: path.join(dir, "apps"),
         appId: "digest",
         draftSessionId: "compile-digest-consent",
         automationRef: "digest/main",
         automationName: "Daily digest",
         instructions: "Summarize mail.",
-        runnerKind: "claude-code",
+        harnessKind: "claude-code",
         providerEgressConsent: consent,
         consentSource: "ladder",
         onSuccess: vi.fn<CompileSuccess>().mockResolvedValue(undefined),
@@ -414,13 +424,49 @@ describe("headless-automation-compile suite", () => {
       store.close();
     });
 
-    it("lets a ladder-member runner compile unattended without a prompt", async () => {
+    it("fails closed before dispatch when the host omits the consent controller", async () => {
+      const dir = await tempDir("centraid-headless-compile-no-consent-");
+      dirs.push(dir);
+      const journalDbFile = path.join(dir, "journal.db");
+      const run = vi.fn<ConversationRunner["run"]>();
+      const onFailure = vi.fn<CompileFailure>().mockResolvedValue(undefined);
+
+      await runHeadlessAutomationCompile({
+        runner: { run },
+        journalDbFile,
+        harnessSessionDir: path.join(dir, "sessions"),
+        dataDir: path.join(dir, "apps"),
+        appId: "digest",
+        draftSessionId: "compile-digest-no-consent",
+        automationRef: "digest/main",
+        automationName: "Daily digest",
+        instructions: "Summarize mail.",
+        harnessKind: "codex",
+        providerEgressConsent: undefined as never,
+        consentSource: "direct",
+        onSuccess: vi.fn<CompileSuccess>().mockResolvedValue(undefined),
+        onFailure,
+        runId: "compile-no-consent-controller",
+      });
+
+      expect(run).not.toHaveBeenCalled();
+      expect(onFailure).toHaveBeenCalledWith(
+        expect.stringContaining("consent controller")
+      );
+      const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+      const turn = store.getTurn("compile-no-consent-controller");
+      expect(turn?.ok).toBe(false);
+      expect(turn?.error).toContain("consent controller");
+      store.close();
+    });
+
+    it("lets a ladder-member harness compile unattended without a prompt", async () => {
       const dir = await tempDir("centraid-headless-compile-consented-");
       dirs.push(dir);
       const journalDbFile = path.join(dir, "journal.db");
       const run = vi.fn<ConversationRunner["run"]>(async (input) => {
         input.onEvent({ type: "final", text: "Files ready." });
-        return { adapterKind: "claude-code" };
+        return { harnessKind: "claude-code" };
       });
       const consent = new ProviderEgressConsentStore(
         makeJournalDbProvider(journalDbFile),
@@ -429,14 +475,14 @@ describe("headless-automation-compile suite", () => {
       await runHeadlessAutomationCompile({
         runner: { run },
         journalDbFile,
-        runnerSessionDir: path.join(dir, "sessions"),
+        harnessSessionDir: path.join(dir, "sessions"),
         dataDir: path.join(dir, "apps"),
         appId: "digest",
         draftSessionId: "compile-digest-consented",
         automationRef: "digest/main",
         automationName: "Daily digest",
         instructions: "Summarize mail.",
-        runnerKind: "claude-code",
+        harnessKind: "claude-code",
         providerEgressConsent: consent,
         consentSource: "ladder",
         onSuccess: vi.fn<CompileSuccess>().mockResolvedValue(undefined),

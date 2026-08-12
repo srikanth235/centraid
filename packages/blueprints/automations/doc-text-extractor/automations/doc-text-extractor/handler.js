@@ -135,7 +135,7 @@ export default async function handler({ ctx, log }) {
       // OCR: transcribe what the preview shows, then write the text
       // derivative — the parent document becomes searchable in the same
       // transaction (issue #296 FTS rule).
-      const out = await ctx.agent({
+      const out = await ctx.delegate({
         prompt:
           "The attached image is a page of a document. Transcribe ALL legible text faithfully, " +
           "preserving reading order. Return an empty string if nothing is legible.",
@@ -172,7 +172,7 @@ export default async function handler({ ctx, log }) {
       if ((prior.rows ?? []).length > 0) return;
       // Summarize from the text variant — no bytes leave beyond the
       // already-extracted text, size-bounded by the content surface.
-      const out = await ctx.agent({
+      const out = await ctx.delegate({
         prompt:
           "Summarize the attached document text in ONE factual paragraph: what it is, the key " +
           "parties, amounts and dates. No speculation.",

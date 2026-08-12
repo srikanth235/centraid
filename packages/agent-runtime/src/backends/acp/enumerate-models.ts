@@ -1,24 +1,24 @@
 /*
- * Generic ACP model enumeration — the ONE way every runner kind reports its
+ * Generic ACP model enumeration — the ONE way every harness kind reports its
  * model catalog (issue #484).
  *
  * There is no bespoke claude/codex enumerator any more. ACP already carries
- * the answer: an agent advertises its model selector as a `configOptions`
+ * the answer: an harness advertises its model selector as a `configOptions`
  * entry on the `session/new` RESULT (see `./session-config.ts`), the same
  * option `pinModel` reads to switch models mid-turn. So enumeration is just a
- * probe: launch the agent exactly as a turn would, `initialize`, open a fresh
+ * probe: launch the harness exactly as a turn would, `initialize`, open a fresh
  * session in a scratch cwd, read the offered models off the returned config
  * option, then tear the process down. No prompt is ever sent — no model turn,
  * no tokens.
  *
  * This never fabricates a catalog: it only echoes the `{ value, name }` pairs
- * the agent itself offered, so the `no-hardcoded-model-ids` rule holds without
+ * the harness itself offered, so the `no-hardcoded-model-ids` rule holds without
  * this file naming a single concrete model id.
  *
  * Best-effort by contract (the `CatalogWarmer` treats an empty result as "keep
  * the prior entry"): ANY failure — no binary, adapter not installed,
- * `AUTH_REQUIRED` (-32000) from an unsigned-in agent, a probe that outruns the
- * deadline, or an agent with no model option — resolves to `[]`. It never
+ * `AUTH_REQUIRED` (-32000) from an unsigned-in harness, a probe that outruns the
+ * deadline, or a harness with no model option — resolves to `[]`. It never
  * throws, and it never leaves the child process running (the `finally` ends
  * stdin, sends SIGTERM, then SIGKILLs if the child ignores it).
  */
@@ -30,23 +30,21 @@ import os from "node:os";
 import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 
-import type { RunnerModel } from "@centraid/app-engine";
+import { methods } from "@agentclientprotocol/sdk";
+
+import type { HarnessModel } from "@centraid/app-engine";
 
 import { lowPriorityCommand } from "../../low-priority.js";
-import { ACP_PROTOCOL_VERSION, createAcpConnection } from "./json-rpc.js";
+import { ACP_PROTOCOL_VERSION, createAcpConnection } from "./connection.js";
 import { planLaunch } from "./launch.js";
 import { readConfigOptions, readOfferedModels } from "./session-config.js";
-import type {
-  InitializeResult,
-  OfferedModel,
-  SessionSetupResult,
-} from "./session-config.js";
+import type { OfferedModel } from "./session-config.js";
 import type { AcpTurnConfig } from "./types.js";
 
 /**
  * Overall probe deadline. Generous — enumeration runs only through the
  * `CatalogWarmer` (boot + Refresh), never on a hot path — but bounded so a
- * wedged agent can't leave the warm hanging. Covers spawn → initialize →
+ * wedged harness can't leave the warm hanging. Covers spawn → initialize →
  * session/new → teardown end to end.
  */
 const PROBE_TIMEOUT_MS = 12_000;
@@ -55,13 +53,13 @@ const PROBE_TIMEOUT_MS = 12_000;
 const KILL_GRACE_MS = 2_000;
 
 /**
- * Enumerate the models an ACP agent advertises, launched exactly as its turns
+ * Enumerate the models an ACP harness advertises, launched exactly as its turns
  * are (same `planLaunch` → same adapter/env/binPath). Returns `[]` on any
  * failure; never throws; never leaves a child running.
  */
 export async function enumerateAcpModels(
   config: AcpTurnConfig
-): Promise<RunnerModel[]> {
+): Promise<HarnessModel[]> {
   // Launch is impossible with no binary (or a missing adapter) — `planLaunch`
   // throws, and an unenumerable kind simply has no catalog. Notices are
   // irrelevant here (no transcript), so they are collected and dropped.
@@ -92,14 +90,7 @@ export async function enumerateAcpModels(
     return [];
   }
 
-  const conn = createAcpConnection(child, {
-    // We advertise no client capabilities during a probe, so decline any
-    // server→client request (fs/terminal/permission) politely.
-    onServerRequest: (id, method) => conn.respondMethodNotFound(id, method),
-    // A `session/load` we never issue can't fire; a stray `session/update`
-    // (some agents greet a fresh session) is irrelevant to enumeration.
-    onNotification: () => undefined,
-  });
+  const conn = createAcpConnection(child);
 
   try {
     return await withTimeout(probe(conn, cwd), PROBE_TIMEOUT_MS);
@@ -134,23 +125,23 @@ export async function enumerateAcpModels(
 async function probe(
   conn: ReturnType<typeof createAcpConnection>,
   cwd: string
-): Promise<RunnerModel[]> {
-  await conn.request<InitializeResult>("initialize", {
+): Promise<HarnessModel[]> {
+  await conn.request(methods.agent.initialize, {
     protocolVersion: ACP_PROTOCOL_VERSION,
     clientCapabilities: {
       fs: { readTextFile: false, writeTextFile: false },
       terminal: false,
     },
     clientInfo: {
-      name: "centraid-local-runner",
+      name: "centraid-local-harness",
       title: "Centraid",
       version: "0.1.0",
     },
   });
 
-  // No vault MCP servers: enumeration reads the agent's own catalog, not the
-  // vault. The scratch cwd is a throwaway the agent never writes to.
-  const created = await conn.request<SessionSetupResult>("session/new", {
+  // No vault MCP servers: enumeration reads the harness's own catalog, not the
+  // vault. The scratch cwd is a throwaway the harness never writes to.
+  const created = await conn.request(methods.agent.session.new, {
     cwd,
     mcpServers: [],
   });
@@ -162,7 +153,7 @@ async function probe(
 }
 
 /**
- * Map the agent's offered `{ value, name }` pairs to `RunnerModel[]`: `value`
+ * Map the harness's offered `{ value, name }` pairs to `HarnessModel[]`: `value`
  * → `id`, `name` → label (dropped when it merely echoes the id), and the
  * option's `currentValue` flagged as the default selection. Dedupes by id and
  * drops blanks. Exported for tests.
@@ -170,14 +161,14 @@ async function probe(
 export function mapOfferedModels(
   offered: OfferedModel[],
   currentValue?: string
-): RunnerModel[] {
+): HarnessModel[] {
   const seen = new Set<string>();
-  const models: RunnerModel[] = [];
+  const models: HarnessModel[] = [];
   for (const entry of offered) {
     const id = entry.value.trim();
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    const model: RunnerModel = { id };
+    const model: HarnessModel = { id };
     const name = entry.name?.trim();
     if (name && name !== id) model.name = name;
     if (currentValue && id === currentValue) model.default = true;

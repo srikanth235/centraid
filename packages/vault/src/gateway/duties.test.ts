@@ -191,12 +191,12 @@ describe("duties", () => {
     ]);
   });
 
-  // THE SABOTAGE TARGET (#712 P11): drop the media.media_asset entry from
+  // THE SABOTAGE TARGET (#712 P11): drop the media.asset entry from
   // RETENTION_REFUSALS in duties.ts and this goes red — the policy would fall
   // through to the missing-column skip and the refusal would lose its stated
   // reason, which is exactly the "runs and silently retains nothing" duty the
   // item exists to forbid.
-  test("retention policy on media.media_asset is refused with a stated reason, never silently skipped", () => {
+  test("retention policy on media.asset is refused with a stated reason, never silently skipped", () => {
     db.vault
       .prepare(
         `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
@@ -205,7 +205,7 @@ describe("duties", () => {
       .run();
     db.vault
       .prepare(
-        `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at)
+        `INSERT INTO media_asset (asset_id, content_id, kind, captured_at)
          VALUES ('a-ret', 'c-ret', 'photo', '2019-01-01T00:00:00Z')`
       )
       .run();
@@ -218,12 +218,10 @@ describe("duties", () => {
     const result = gw.sweep(owner);
     expect(result.retentionDeleted).toBe(0);
     expect(result.retentionRefused).toHaveLength(1);
-    expect(result.retentionRefused[0]?.entity).toBe("media.media_asset");
+    expect(result.retentionRefused[0]?.entity).toBe("media.asset");
     expect(result.retentionRefused[0]?.reason).toContain("trash lifecycle");
     // The asset outlives the policy: retention never reaches this table.
-    const kept = db.vault
-      .prepare("SELECT asset_id FROM media_media_asset")
-      .all();
+    const kept = db.vault.prepare("SELECT asset_id FROM media_asset").all();
     expect(kept.map((row) => ({ ...row }))).toStrictEqual([
       { asset_id: "a-ret" },
     ]);
@@ -479,19 +477,19 @@ describe("duties", () => {
       .run(now);
     db.vault
       .prepare(
-        `INSERT INTO media_media_asset (asset_id, content_id, kind, deleted_at, purge_at)
+        `INSERT INTO media_asset (asset_id, content_id, kind, deleted_at, purge_at)
        VALUES ('poly-a', 'poly-asset-body', 'photo', ?, ?)`
       )
       .run(past, past);
-    const deps = seedPolyDependents("media.media_asset", "poly-a");
+    const deps = seedPolyDependents("media.asset", "poly-a");
     const result = gw.sweep(owner);
     expect(result.assetsPurged).toBe(1);
     expect(
       db.vault
-        .prepare(`SELECT 1 FROM media_media_asset WHERE asset_id = 'poly-a'`)
+        .prepare(`SELECT 1 FROM media_asset WHERE asset_id = 'poly-a'`)
         .get()
     ).toBeUndefined();
-    expectPolyDependentsCleaned(deps, "media.media_asset", "poly-a");
+    expectPolyDependentsCleaned(deps, "media.asset", "poly-a");
   });
 
   // ---- edit lineage vs the sweep (issue #711 decision S8) ----
@@ -524,7 +522,7 @@ describe("duties", () => {
     seedContent(`${assetId}-body`, false);
     db.vault
       .prepare(
-        `INSERT INTO media_media_asset
+        `INSERT INTO media_asset
            (asset_id, content_id, kind, source_asset_id, deleted_at, purge_at)
          VALUES (?, ?, 'photo', ?, ?, ?)`
       )
@@ -576,13 +574,13 @@ describe("duties", () => {
     expect(result.assetsBlockedByLineage).toStrictEqual(["a-source"]);
     expect(
       db.vault
-        .prepare(`SELECT 1 FROM media_media_asset WHERE asset_id = 'a-source'`)
+        .prepare(`SELECT 1 FROM media_asset WHERE asset_id = 'a-source'`)
         .get(),
       "the source must survive rather than be force-deleted"
     ).toBeTruthy();
     expect(
       db.vault
-        .prepare(`SELECT 1 FROM media_media_asset WHERE asset_id = 'a-edit'`)
+        .prepare(`SELECT 1 FROM media_asset WHERE asset_id = 'a-edit'`)
         .get(),
       "the live edit the member never trashed must be untouched"
     ).toBeTruthy();
@@ -601,7 +599,7 @@ describe("duties", () => {
     expect(result.assetsPurged).toBe(2);
     expect(result.assetsBlockedByLineage).toStrictEqual([]);
     const remaining = db.vault
-      .prepare("SELECT count(*) AS n FROM media_media_asset")
+      .prepare("SELECT count(*) AS n FROM media_asset")
       .get() as { n: number };
     expect(
       remaining.n,

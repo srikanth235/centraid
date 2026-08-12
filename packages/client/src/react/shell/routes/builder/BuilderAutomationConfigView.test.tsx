@@ -30,7 +30,7 @@ function row(
     triggers,
     requires: {},
     history: { keep: { count: 100 } },
-    generated: { by: "agent", at: new Date().toISOString() },
+    generated: { by: "centraid-builder", at: new Date().toISOString() },
   };
   return {
     id: "invoice-watcher",

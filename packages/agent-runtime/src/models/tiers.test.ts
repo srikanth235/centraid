@@ -1,10 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { RUNNER_TIERS, resolveClaudeModel } from "./tiers.js";
+import { HARNESS_TIERS, resolveClaudeModel } from "./tiers.js";
 
 describe("tiers", () => {
   test("claude-code offers capability tiers with exactly one default", () => {
-    const tiers = RUNNER_TIERS["claude-code"];
+    const tiers = HARNESS_TIERS["claude-code"];
     expect(tiers && tiers.length > 0).toBeTruthy();
     expect(tiers!.filter((t) => t.default)).toHaveLength(1);
     const ids = tiers!.map((t) => t.id);
@@ -12,7 +12,7 @@ describe("tiers", () => {
   });
 
   test("codex is not given tiers (stays on gateway default)", () => {
-    expect(RUNNER_TIERS.codex).toBeUndefined();
+    expect(HARNESS_TIERS.codex).toBeUndefined();
   });
 
   test("resolveClaudeModel maps tiers to CLI aliases, passes others through", () => {

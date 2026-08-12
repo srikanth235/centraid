@@ -250,12 +250,12 @@ describe(buildRunSnapshot, () => {
     expect(snap.side.hasUsage).toBe(true);
   });
 
-  it("surfaces streamed live text on an in-flight agent node", () => {
+  it("surfaces streamed live text on an in-flight delegate node", () => {
     const nodes = [
       {
         runId: "r1",
         ordinal: 2,
-        kind: "agent",
+        kind: "delegate",
         startedAt: Date.now(),
         ok: true,
       },
@@ -266,7 +266,7 @@ describe(buildRunSnapshot, () => {
       nodes,
       new Map([[2, "partial…"]])
     );
-    // The live agent text reaches the reader through the projected transcript
+    // The live harness text reaches the reader through the projected transcript
     // and the log rows — the dead `nodes` payload is gone (#541).
     expect(snap.logRows[1]?.response).toBe("partial…");
     expect(snap.messages).toContainEqual(
@@ -325,7 +325,7 @@ describe(automationTurnMessages, () => {
     ]);
   });
 
-  it("renders failed agent items as shared error messages", () => {
+  it("renders failed delegate items as shared error messages", () => {
     const messages = automationTurnMessages(
       run({ turnId: "turn-1", endedAt: 3, ok: false }),
       [
@@ -333,9 +333,9 @@ describe(automationTurnMessages, () => {
           itemId: "agent-1",
           turnId: "turn-1",
           ordinal: 1,
-          kind: "agent",
+          kind: "delegate",
           ok: false,
-          error: "runner disconnected",
+          error: "harness disconnected",
           startedAt: 1,
           endedAt: 2,
           durationMs: 1,
@@ -348,7 +348,7 @@ describe(automationTurnMessages, () => {
       true
     );
     expect(answer?.kind === "ai" && !answer.streaming && answer.copyText).toBe(
-      "runner disconnected"
+      "harness disconnected"
     );
   });
 });
@@ -386,7 +386,7 @@ describe("automation live trace reducer", () => {
       inputTokens: 20,
       outputTokens: 5,
       costUsd: 0.001,
-      costSource: "agent",
+      costSource: "harness",
     });
     state = reduceAutomationTurnEvent(state, {
       type: "final",

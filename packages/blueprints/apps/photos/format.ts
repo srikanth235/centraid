@@ -62,7 +62,7 @@ export function assetBytes(asset: Asset): number | null {
 }
 
 // Human labels for the EXIF keys `packages/vault/src/blob/pipeline.ts`'s
-// `parseJpegExif`/`extractBlobMeta` may write into `media_media_asset.
+// `parseJpegExif`/`extractBlobMeta` may write into `media_asset.
 // exif_json` at upload — plus a few common camera fields (make/model/iso/
 // aperture/shutter/focal length) that infra doesn't populate YET but a
 // future codec plug-in could (see enrich.ts's own "same queries" note on

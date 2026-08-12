@@ -219,7 +219,7 @@ async function recognizeCapture(capture) {
 
 async function seedAssetCursor(ctx, model) {
   const latest = await ctx.vault.read({
-    entity: "media.media_asset",
+    entity: "media.asset",
     where: [
       { column: "kind", op: "in", value: ["photo", "scan"] },
       { column: "deleted_at", op: "is-null" },
@@ -264,18 +264,20 @@ async function deterministicRegions(ctx, asset) {
 export default async function handler({ ctx, log }) {
   const capture = captureInput(ctx.input);
   if (capture) return recognizeCapture(capture);
-  const agentVariant = ctx.input?.variant === "agent";
-  const pinnedModel = agentVariant ? ctx.input?.agentModel : modelAvailable();
+  const delegateStep = ctx.input?.variant === "delegate";
+  const pinnedModel = delegateStep
+    ? ctx.input?.delegateModel
+    : modelAvailable();
   if (!pinnedModel) {
-    if (agentVariant)
-      throw new Error("agent OCR requires an explicit pinned model");
+    if (delegateStep)
+      throw new Error("delegate OCR requires an explicit pinned model");
     return { summary: "OCR skipped — automation model assets unavailable" };
   }
-  const selection = `${agentVariant ? "agent" : "deterministic"}:${pinnedModel}:${agentVariant ? PROMPT_REV : "local"}`;
+  const selection = `${delegateStep ? "delegate" : "deterministic"}:${pinnedModel}:${delegateStep ? PROMPT_REV : "local"}`;
   const priorSelection = await ctx.state.get("selection");
   if (priorSelection !== selection) {
     const seed =
-      priorSelection === undefined && !agentVariant
+      priorSelection === undefined && !delegateStep
         ? await seedAssetCursor(ctx, pinnedModel)
         : "";
     await ctx.state.set("cursor", seed);
@@ -284,7 +286,7 @@ export default async function handler({ ctx, log }) {
   }
   const cursor = (await ctx.state.get("cursor")) ?? "";
   const read = await ctx.vault.read({
-    entity: "media.media_asset",
+    entity: "media.asset",
     where: [
       { column: "asset_id", op: "gt", value: cursor },
       { column: "deleted_at", op: "is-null" },
@@ -309,7 +311,7 @@ export default async function handler({ ctx, log }) {
       purpose: PURPOSE,
     });
     const stamp = stamps.rows?.[0];
-    let confirmedModel = agentVariant
+    let confirmedModel = delegateStep
       ? await ctx.state.get("confirmedModel")
       : pinnedModel;
     const stampedPrompt =
@@ -318,14 +320,14 @@ export default async function handler({ ctx, log }) {
         : stamp?.prompt_rev;
     if (
       stamp?.model === confirmedModel &&
-      (!agentVariant || stampedPrompt === PROMPT_REV)
+      (!delegateStep || stampedPrompt === PROMPT_REV)
     ) {
       skipped += 1;
       continue;
     }
     let regions;
-    if (agentVariant) {
-      const answer = await ctx.agent({
+    if (delegateStep) {
+      const answer = await ctx.delegate({
         prompt:
           "Transcribe all visible text in reading order. Return regions with text and optional [x,y,w,h] boxes; never invent confidence.",
         json: {
@@ -342,7 +344,9 @@ export default async function handler({ ctx, log }) {
         ],
       });
       if (typeof answer?.__centraidModel !== "string")
-        throw new Error("agent OCR returned no ACP-confirmed model identity");
+        throw new Error(
+          "delegate OCR returned no ACP-confirmed model identity"
+        );
       confirmedModel = answer.__centraidModel;
       await ctx.state.set("confirmedModel", confirmedModel);
       regions = canonicalRegions(answer, asset.width, asset.height);
@@ -371,7 +375,7 @@ export default async function handler({ ctx, log }) {
         capability: "ocr",
         model: confirmedModel,
         regions: normalizedRegions,
-        ...(agentVariant ? { prompt_rev: PROMPT_REV } : {}),
+        ...(delegateStep ? { prompt_rev: PROMPT_REV } : {}),
         ...(confidence === undefined ? {} : { confidence }),
       },
       purpose: PURPOSE,
@@ -385,7 +389,7 @@ export default async function handler({ ctx, log }) {
     output: {
       derived,
       skipped,
-      model: agentVariant
+      model: delegateStep
         ? ((await ctx.state.get("confirmedModel")) ?? pinnedModel)
         : pinnedModel,
       rearm: (read.rows?.length ?? 0) === BATCH,

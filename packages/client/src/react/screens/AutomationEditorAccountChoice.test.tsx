@@ -319,9 +319,9 @@ describe("AutomationEditorAccountChoice", () => {
     ).toContain("Connector");
   });
 
-  it("saves a dynamic per-automation runner and model pin", async () => {
+  it("saves a dynamic per-automation harness and model pin", async () => {
     const data = makeData({
-      agentRunners: [
+      harnesses: [
         {
           accent: "#556677",
           connected: true,
@@ -343,9 +343,9 @@ describe("AutomationEditorAccountChoice", () => {
         },
       ],
       defaultModel: "gpt-default",
-      defaultRunnerKind: "codex",
+      defaultHarnessKind: "codex",
       model: null,
-      runner: null,
+      harness: null,
     });
     const props = makeProps({
       loadData: vi
@@ -367,14 +367,14 @@ describe("AutomationEditorAccountChoice", () => {
     expect(el.textContent).toContain("Use default (codex)");
     expect(el.textContent).toContain("Work ACP");
 
-    // The runner/model selects are named by their wrapping <label> ("Runner"
+    // The harness/model selects are named by their wrapping <label> ("Agent"
     // / "Model") rather than a duplicate aria-label (#708 aria-label
     // discipline — a control already named by visible text doesn't also get
     // one), so they're picked up here by field order instead.
-    const agentPickerSelects = el.querySelectorAll("select");
-    setSelectValue(agentPickerSelects[0] as HTMLSelectElement, "acp");
+    const harnessPickerSelects = el.querySelectorAll("select");
+    setSelectValue(harnessPickerSelects[0] as HTMLSelectElement, "acp");
     expect(el.textContent).toContain("Use default (acp-default)");
-    setSelectValue(agentPickerSelects[1] as HTMLSelectElement, "acp-smart");
+    setSelectValue(harnessPickerSelects[1] as HTMLSelectElement, "acp-smart");
 
     await act(async () =>
       button(el, "Create automation").dispatchEvent(
@@ -382,7 +382,7 @@ describe("AutomationEditorAccountChoice", () => {
       )
     );
     expect(props.onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ model: "acp-smart", runner: "acp" })
+      expect.objectContaining({ model: "acp-smart", harness: "acp" })
     );
   });
 });

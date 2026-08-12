@@ -109,7 +109,7 @@ describe("photos-timeline.scale", () => {
        VALUES (?, 'image/jpeg', ?, ?, 4096, ?, ?)`
     );
     const insertAsset = db.vault.prepare(
-      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, favorite)
+      `INSERT INTO media_asset (asset_id, content_id, kind, captured_at, favorite)
        VALUES (?, ?, 'photo', ?, 0)`
     );
 
@@ -141,7 +141,7 @@ describe("photos-timeline.scale", () => {
     const pageStarted = performance.now();
     const page = db.vault
       .prepare(
-        `SELECT asset_id FROM media_media_asset
+        `SELECT asset_id FROM media_asset
           WHERE deleted_at IS NULL ORDER BY captured_at DESC LIMIT 200`
       )
       .all();
@@ -154,7 +154,7 @@ describe("photos-timeline.scale", () => {
     const oneDayReadStarted = performance.now();
     const oneDayPage = db.vault
       .prepare(
-        `SELECT asset_id FROM media_media_asset
+        `SELECT asset_id FROM media_asset
           WHERE deleted_at IS NULL AND captured_at LIKE '2020-06-15%'
           ORDER BY captured_at DESC LIMIT 200`
       )
@@ -169,7 +169,7 @@ describe("photos-timeline.scale", () => {
     const dayBuckets = db.vault
       .prepare(
         `SELECT substr(captured_at, 1, 10) AS day, COUNT(*) AS n
-           FROM media_media_asset
+           FROM media_asset
           WHERE deleted_at IS NULL AND captured_at IS NOT NULL
           GROUP BY day`
       )

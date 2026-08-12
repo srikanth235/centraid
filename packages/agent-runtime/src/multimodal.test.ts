@@ -18,7 +18,7 @@ const FULL: PromptCapabilities = {
   audio: true,
   embeddedContext: true,
 };
-/** A baseline agent: text and resource links only. */
+/** A baseline harness: text and resource links only. */
 const TEXT_ONLY: PromptCapabilities = {};
 
 describe(acpBlockFor, () => {
@@ -32,7 +32,7 @@ describe(acpBlockFor, () => {
     });
   });
 
-  it("skips an image when the agent did not advertise the image capability", () => {
+  it("skips an image when the harness did not advertise the image capability", () => {
     expect(
       acpBlockFor({ mime: "image/png", dataBase64: "AAAA" }, TEXT_ONLY)
     ).toBeUndefined();
@@ -58,7 +58,7 @@ describe(acpBlockFor, () => {
     });
   });
 
-  it("skips a PDF when the agent cannot take embedded context", () => {
+  it("skips a PDF when the harness cannot take embedded context", () => {
     expect(
       acpBlockFor(
         { mime: "application/pdf", dataBase64: "JVBE", filename: "spec.pdf" },
@@ -135,7 +135,7 @@ describe(acpBlockFor, () => {
     ).toBeUndefined();
   });
 
-  it("maps audio only when the agent advertised the audio capability", () => {
+  it("maps audio only when the harness advertised the audio capability", () => {
     const att = { mime: "audio/wav", dataBase64: "UklG" };
     expect(acpBlockFor(att, FULL)).toStrictEqual({
       type: "audio",
@@ -147,7 +147,7 @@ describe(acpBlockFor, () => {
 });
 
 describe(acpAttachmentBlocks, () => {
-  it("reads + encodes attachments the agent can take", () => {
+  it("reads + encodes attachments the harness can take", () => {
     const dir = tempDirSync("centraid-mm-");
     const png = path.join(dir, "p.png");
     writeFileSync(png, Buffer.from("PNGDATA"));

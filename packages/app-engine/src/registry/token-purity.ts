@@ -4,9 +4,9 @@
  * `packages/design` owns every colour, radius, spacing rung, and type face in
  * the product; app CSS is supposed to *consume* those names through
  * `var(--token)` and never restate them. Until now that rule reached
- * agent-authored apps only as prose in the system prompt
+ * harness-authored apps only as prose in the system prompt
  * (`packages/gateway/src/skills/ui-grounding.ts`) — nothing checked the CSS an
- * agent actually wrote. Checked-in blueprint apps have a vitest ratchet
+ * harness actually wrote. Checked-in blueprint apps have a vitest ratchet
  * (`packages/blueprints/src/token-purity.test.ts`); this module is the runtime
  * equivalent, run at the publish gate.
  *

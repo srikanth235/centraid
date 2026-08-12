@@ -37,7 +37,7 @@ CREATE INDEX idx_provenance_prev_prov ON consent_provenance(prev_prov_id);
 CREATE TABLE agent_command_invocation (
   invocation_id TEXT PRIMARY KEY,
   command_id    TEXT NOT NULL, -- → agent.command (vault.db); gateway-enforced
-  agent_id      TEXT NOT NULL, -- → agent.agent / consent.app / consent.device; gateway-enforced
+  caller_id     TEXT NOT NULL, -- → consent.agent / consent.app / consent.device; gateway-enforced
   grant_id      TEXT,          -- → consent.access_grant (vault.db); NULL for owner-direct
   input_json    TEXT NOT NULL CHECK (json_valid(input_json)),
   status        TEXT NOT NULL CHECK (status IN ('proposed','checked','executed','failed','rolled_back')),

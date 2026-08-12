@@ -17,7 +17,7 @@ function stamp(
   extra: { variant?: string; capability?: string; payload?: unknown } = {}
 ): void {
   stampDerivation(db.vault, {
-    targetType: "media.media_asset",
+    targetType: "media.asset",
     targetId,
     variant: extra.variant ?? "caption",
     capability: extra.capability ?? "ocr",
@@ -33,7 +33,7 @@ describe("derivation", () => {
     stamp(db, "asset-1", "tess@1", { payload: { regions: 3 } });
     expect(
       stampedModel(db.vault, {
-        targetType: "media.media_asset",
+        targetType: "media.asset",
         targetId: "asset-1",
         variant: "caption",
       })
@@ -57,7 +57,7 @@ describe("derivation", () => {
     const db = openVaultDb();
     stamp(db, "asset-1", "tess@1");
     stampDerivation(db.vault, {
-      targetType: "media.media_asset",
+      targetType: "media.asset",
       targetId: "asset-1",
       variant: "caption",
       capability: "ocr",
@@ -80,14 +80,14 @@ describe("derivation", () => {
     stamp(db, "asset-1", "asr@1", { variant: "transcript" });
     expect(
       stampedModel(db.vault, {
-        targetType: "media.media_asset",
+        targetType: "media.asset",
         targetId: "asset-1",
         variant: "transcript",
       })
     ).toBe("asr@1");
     expect(
       stampedModel(db.vault, {
-        targetType: "media.media_asset",
+        targetType: "media.asset",
         targetId: "asset-1",
         variant: "caption",
       })
@@ -99,7 +99,7 @@ describe("derivation", () => {
     const db = openVaultDb();
     expect(
       stampedModel(db.vault, {
-        targetType: "media.media_asset",
+        targetType: "media.asset",
         targetId: "never-seen",
         variant: "caption",
       })
@@ -115,7 +115,7 @@ describe("derivation", () => {
           `INSERT INTO enrich_derivation
              (derivation_id, target_type, target_id, variant, capability, model,
               payload_json, produced_at)
-           VALUES ('d1', 'media.media_asset', 'a', 'caption', 'ocr', 'tess@1', '{oops', ?)`
+           VALUES ('d1', 'media.asset', 'a', 'caption', 'ocr', 'tess@1', '{oops', ?)`
         )
         .run(T0)
     ).toThrow(/CHECK constraint failed/u);

@@ -57,7 +57,7 @@ If you are reviewing agent-authored test work, spend your attention here and let
 
 ### Opt-in live adapter smoke
 
-`bun run --cwd packages/agent-runtime test:live-adapters` launches the configured external ACP adapters and is intentionally outside CI: it needs local CLI installs and credentials. Run it monthly and before releases or ACP adapter changes; ordinary PR validation uses the deterministic adapter tests instead.
+`bun run --cwd packages/agent-runtime test:live-harnesses` launches the configured external ACP harnesses and is intentionally outside CI: it needs local CLI installs and credentials. Run it monthly and before releases or ACP adapter changes; ordinary PR validation uses the deterministic adapter tests instead.
 
 ### PR vs nightly (L1 / E2)
 
@@ -136,7 +136,7 @@ The kit path is enforced, not merely recommended. In test files, oxlint bans raw
 ```
 HIGH  vault/backup/replica contracts, handler isolation, web offline/PWA,
       pairing when nightly green, engine coverage floors, ENOSPC fault-inject,
-      agent chat journey (fake-acp integration)
+      harness conversation journey (fake ACP integration)
 MED   desktop Playwright, mobile Maestro iOS + Android home-loads, perf/scale
       (generous), tunnel native when module present, multi-writer double-write
 SOFT  desktop copilot UI e2e (blocked on #470), builder publish (punted v0),
@@ -281,7 +281,7 @@ Generated-state properties cover blob custody and replica intent idempotency. Th
 
 Do not add another local helper when the shared package already owns the seam — for `mkdtemp`, fake timers, and `Math.random` this is enforced by lint, not left to review (see [Test-kit seams](#test-kit-seams-656-layer-4)).
 
-Deterministic automation fires need no mock: their handlers run in-process against the parent-side `ctx.vault` / `ctx.fetch` / `ctx.state` rails, and only `ctx.agent` reaches a provider. In tests that provider turn is faked through the ACP fake-agent fixture (`packages/agent-runtime/src/backends/acp/fake-acp-agent.mjs`), the same seam chat turns use — there is no automation-specific mock LLM (the `@centraid/mock-llm` package was removed with the `ctx.tool` rail).
+Deterministic automation fires need no mock: their handlers run in-process against the parent-side `ctx.vault` / `ctx.fetch` / `ctx.state` rails, and only `ctx.delegate` reaches a provider. In tests that provider turn is faked through the ACP fake-harness fixture (`packages/agent-runtime/src/backends/acp/fake-acp-harness.mjs`), the same seam conversation turns use — there is no automation-specific mock LLM (the `@centraid/mock-llm` package was removed with the `ctx.tool` rail).
 
 ## Lane schedule and commands
 

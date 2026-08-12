@@ -69,7 +69,7 @@ function defineExpectedHealthGroup(
  */
 export const EXPECTED_HEALTH_COMPONENTS: readonly ExpectedHealthComponent[] = [
   ...defineExpectedHealthGroup("build-gateway", "report-error", [
-    "agent-failover",
+    "harness-failover",
     "automation-runs",
     "automations",
     "filesystem",
@@ -180,7 +180,7 @@ export interface HealthMetrics {
   resourceProfile?: StructuredResourceProfile;
   /**
    * Measured per-subsystem resource ACTUALS (#528 Phase C) — replication,
-   * backup, sweep, worker-pool, and agent-run counts/bytes/busyMs, plus
+   * backup, sweep, worker-pool, and harness-run counts/bytes/busyMs, plus
    * process CPU/RSS. Honest measured proxies only (no modeled energy).
    * Present once `buildGateway` publishes it via the metrics source.
    */

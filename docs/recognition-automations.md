@@ -50,7 +50,7 @@ The automation engine owns scheduling, policy gates, bounded fires, cursor state
 
 Faces drains only open `enrich_request(capability='faces')` rows or content carrying a prior consent stamp; it never scans the ambient library without consent. Detection and recognition use YuNet + SFace, and regions land as proposed review items. [`media.forget_person`](../packages/vault/src/commands/media.ts) removes face regions, embeddings, derivation stamps, and clusters associated with the party.
 
-Only `photo-ocr` has an optional agent variant. It uses `ctx.agent` through the existing ACP/provider-egress consent rail, canonicalizes the response into the same OCR region shape, preserves absent confidence, and stamps only ACP-confirmed model identity. That explicit agent path is not a generic inference primitive.
+Only `photo-ocr` has an optional delegate step. It uses `ctx.delegate` through the existing ACP/provider-egress consent rail, canonicalizes the response into the same OCR region shape, preserves absent confidence, and stamps only ACP-confirmed model identity. That explicit delegation path is not a generic inference primitive.
 
 ## Testing and live-model evidence
 

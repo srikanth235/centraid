@@ -21,7 +21,7 @@ import {
   withProviderConsent,
 } from "../../providerConsent.js";
 import type {
-  AgentsStatusDTO,
+  HarnessesStatusDTO,
   AsstModelPickerDTO,
   AsstMsgDTO,
   BuilderAttachmentRef,
@@ -44,29 +44,29 @@ import {
 } from "./automationThreadData.js";
 import { loadTurnTrace, watchTurnMessages } from "./automationTurnWatch.js";
 import {
-  loadProviders,
-  resolveReportedRunnerKind,
-} from "./settingsProvidersData.js";
+  loadHarnesses,
+  resolveReportedHarnessKind,
+} from "./settingsHarnessesData.js";
 
 export function automationPicker(
-  status: AgentsStatusDTO,
-  requestedRunner?: string,
-  manifestPins?: { runner?: string; model?: string; thoughtLevel?: string }
+  status: HarnessesStatusDTO,
+  requestedHarness?: string,
+  manifestPins?: { harness?: string; model?: string; thoughtLevel?: string }
 ): AsstModelPickerDTO {
-  const runnerKind = resolveReportedRunnerKind(
+  const harnessKind = resolveReportedHarnessKind(
     status,
-    requestedRunner,
+    requestedHarness,
     "automations"
   );
-  const manifestRunnerKind = resolveReportedRunnerKind(
+  const manifestHarnessKind = resolveReportedHarnessKind(
     status,
-    manifestPins?.runner,
+    manifestPins?.harness,
     "automations"
   );
-  const applyManifestPins = runnerKind === manifestRunnerKind;
-  const card = status.cards.find((entry) => entry.kind === runnerKind);
+  const applyManifestPins = harnessKind === manifestHarnessKind;
+  const card = status.cards.find((entry) => entry.kind === harnessKind);
   const models = card?.modelConfigurable ? card.models : [];
-  const defaultId = status.savedModelByKind[runnerKind] ?? "";
+  const defaultId = status.savedModelByKind[harnessKind] ?? "";
   const defaultModel =
     models.find((model) => model.id === defaultId) ??
     models.find((model) => model.default) ??
@@ -75,23 +75,23 @@ export function automationPicker(
     (option) => option.category === "thought_level"
   );
   const defaultEffort =
-    status.defaultConfigPinsByKind[runnerKind]?.thought_level ??
+    status.defaultConfigPinsByKind[harnessKind]?.thought_level ??
     effortOption?.currentValue ??
     "";
   return {
-    runners: status.cards.map((runner) => ({
-      kind: runner.kind,
-      title: runner.title,
-      connected: runner.connected,
-      sessionReady: runner.sessionReady,
+    harnesses: status.cards.map((harness) => ({
+      kind: harness.kind,
+      title: harness.title,
+      connected: harness.connected,
+      sessionReady: harness.sessionReady,
       hint: [
-        runner.subtitle,
-        ...(runner.breakerStates ?? []).map(
+        harness.subtitle,
+        ...(harness.breakerStates ?? []).map(
           (state) => `${state.failureClass} ${state.state}`
         ),
       ].join(" · "),
     })),
-    selectedRunnerKind: runnerKind,
+    selectedHarnessKind: harnessKind,
     workspaceKinds: [],
     connected: card?.connected ?? false,
     models: models.map((model) => ({
@@ -103,7 +103,7 @@ export function automationPicker(
       defaultModel?.name ?? defaultModel?.id ?? "gateway default",
     selectedModelId:
       (applyManifestPins ? manifestPins?.model : undefined) ??
-      status.subsystemModelByKind[runnerKind]?.automations ??
+      status.subsystemModelByKind[harnessKind]?.automations ??
       "",
     ...(applyManifestPins && manifestPins?.model ? { modelLocked: true } : {}),
     efforts: effortOption?.values ?? [],
@@ -112,7 +112,7 @@ export function automationPicker(
         ?.name ?? defaultEffort,
     selectedEffortId:
       (applyManifestPins ? manifestPins?.thoughtLevel : undefined) ??
-      status.subsystemConfigPinsByKind[runnerKind]?.automations
+      status.subsystemConfigPinsByKind[harnessKind]?.automations
         ?.thought_level ??
       "",
     ...(applyManifestPins && manifestPins?.thoughtLevel
@@ -124,16 +124,16 @@ export function automationPicker(
 }
 
 /**
- * The adapter the automation's MOST RECENT run actually used. `listAutomationTurns`
- * documents newest-first, but "first entry that happens to carry an adapterKind"
+ * The harness the automation's MOST RECENT run actually used. `listAutomationTurns`
+ * documents newest-first, but "first entry that happens to carry a harnessKind"
  * silently inherits that ordering — so pick the latest run explicitly (#567).
  */
-export function latestAdapterKind(
+export function latestHarnessKind(
   runs: readonly CentraidAutomationTurnRecord[]
 ): string | undefined {
   let latest: CentraidAutomationTurnRecord | undefined;
   for (const run of runs) {
-    if (!run.adapterKind) continue;
+    if (!run.harnessKind) continue;
     if (
       !latest ||
       run.startedAt > latest.startedAt ||
@@ -142,7 +142,7 @@ export function latestAdapterKind(
       latest = run;
     }
   }
-  return latest?.adapterKind;
+  return latest?.harnessKind;
 }
 
 async function askAutomationWithConsent(input: {
@@ -152,7 +152,7 @@ async function askAutomationWithConsent(input: {
   signal: AbortSignal;
   turn: {
     attachments?: BuilderAttachmentRef[];
-    runnerKind?: string;
+    harnessKind?: string;
     model?: string;
     thinking?: string;
     onContext?: (context: { used: number; size: number }) => void;
@@ -200,7 +200,9 @@ async function askAutomationWithConsent(input: {
         ...(input.turn.attachments?.length
           ? { attachments: input.turn.attachments }
           : {}),
-        ...(input.turn.runnerKind ? { runnerKind: input.turn.runnerKind } : {}),
+        ...(input.turn.harnessKind
+          ? { harnessKind: input.turn.harnessKind }
+          : {}),
         ...(input.turn.model ? { model: input.turn.model } : {}),
         ...(input.turn.thinking ? { thinking: input.turn.thinking } : {}),
       }
@@ -243,25 +245,25 @@ export default function AutomationViewRoute({
 }): JSX.Element {
   const { navigate, showToast, confirm } = useShellActions();
   const rowRef = useRef<CentraidAutomationRow | null>(null);
-  const runnerRef = useRef<string | undefined>(undefined);
+  const harnessRef = useRef<string | undefined>(undefined);
 
   return (
     <PageScroll>
       <AutomationThreadScreen
         loadData={async (): Promise<AutomationThreadDataEx | null> => {
           const { baseUrl } = await auth();
-          const [result, runs, capabilities, providers] = await Promise.all([
+          const [result, runs, capabilities, harnesses] = await Promise.all([
             loadAutomationThreadData({ automationId, gatewayOrigin: baseUrl }),
             listAutomationTurns({ automationId, limit: 100 }),
             readGatewayCapabilities().catch(() => undefined),
-            loadProviders().catch(() => undefined),
+            loadHarnesses().catch(() => undefined),
           ]);
           if (!result) {
             rowRef.current = null;
             return null;
           }
           rowRef.current = result.row;
-          runnerRef.current ??= latestAdapterKind(runs);
+          harnessRef.current ??= latestHarnessKind(runs);
           const hero = deriveAutomationHero(result.row, baseUrl);
           const runTokens: Record<string, number> = {};
           for (const r of runs) {
@@ -273,11 +275,11 @@ export default function AutomationViewRoute({
             ...result.data,
             automationTurns: capabilities?.automationTurns === true,
             runTokens,
-            ...(providers
+            ...(harnesses
               ? {
-                  runnerConfig: automationPicker(
-                    providers,
-                    runnerRef.current ?? result.row.manifest.requires?.runner,
+                  harnessConfig: automationPicker(
+                    harnesses,
+                    harnessRef.current ?? result.row.manifest.requires?.harness,
                     result.row.manifest.requires
                   ),
                 }
@@ -335,13 +337,13 @@ export default function AutomationViewRoute({
           const row = rowRef.current;
           if (!row) return null;
           try {
-            const { turnId } = row.manifest.enrich?.agentVariant
+            const { turnId } = row.manifest.enrich?.delegateStep
               ? await invokeAutomationAndAwait({
                   automationId: row.ref,
                 })
               : await runAutomationNow({ automationId: row.ref });
             showToast(
-              row.manifest.enrich?.agentVariant
+              row.manifest.enrich?.delegateStep
                 ? "Recognition completed"
                 : "Run started"
             );
@@ -353,18 +355,18 @@ export default function AutomationViewRoute({
             return null;
           }
         }}
-        onSetRecognitionVariant={async (variant) => {
+        onSetRecognitionStep={async (variant) => {
           const row = rowRef.current;
           if (!row) return false;
           try {
             const updated = await updateAutomation({
               automationId: row.ref,
-              enrichVariant: variant,
+              recognitionStep: variant,
             });
             if (updated.row) rowRef.current = updated.row;
             showToast(
-              variant === "agent"
-                ? "Agent recognition selected; future runs may incur provider cost"
+              variant === "delegate"
+                ? "Delegate recognition selected; future runs may incur provider cost"
                 : "Deterministic recognition selected"
             );
             return true;
@@ -428,15 +430,15 @@ export default function AutomationViewRoute({
             );
           return fetchAssistantAttachmentUrl(row.ownerApp, hash, mime);
         }}
-        onSetRunner={async (runnerKind) => {
-          const previous = runnerRef.current;
-          const status = await loadProviders({ refresh: true });
-          const target = status.cards.find((card) => card.kind === runnerKind);
+        onSetHarness={async (harnessKind) => {
+          const previous = harnessRef.current;
+          const status = await loadHarnesses({ refresh: true });
+          const target = status.cards.find((card) => card.kind === harnessKind);
           if (!target?.sessionReady) {
             showToast(
               [
                 target?.subtitle ??
-                  `${runnerKind} did not complete its session preflight.`,
+                  `${harnessKind} did not complete its session preflight.`,
                 ...(target?.breakerStates ?? []).map(
                   (state) => `${state.failureClass} ${state.state}`
                 ),
@@ -448,10 +450,10 @@ export default function AutomationViewRoute({
               rowRef.current?.manifest.requires
             );
           }
-          runnerRef.current = runnerKind;
+          harnessRef.current = harnessKind;
           return automationPicker(
             status,
-            runnerKind,
+            harnessKind,
             rowRef.current?.manifest.requires
           );
         }}

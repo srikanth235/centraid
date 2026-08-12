@@ -8,7 +8,7 @@
  * Surface A is now POST-only. The `conversationId` in the POST body is the
  * `conversations` row id in the per-app runtime SQLite. The desktop persists
  * the transcript itself via Surface B (`/_centraid-conversations`); this route only
- * drives the model turn and records turn completion + the runner-resume
+ * drives the model turn and records turn completion + the harness-resume
  * handle against the session row.
  *
  * The runtime delegates to a host-injected `ConversationRunner`. When no runner is
@@ -29,7 +29,7 @@ import path from "node:path";
 import type { ConversationHistoryStore } from "../conversation/history.js";
 import type { ConversationRunner } from "../conversation/runner.js";
 import type { ConversationWorkspaceKind } from "../conversation/schema.js";
-import { isRunnerKind } from "../conversation/turn.js";
+import { isHarnessKind } from "../conversation/turn.js";
 import type * as TypeImport_nu6ai6 from "../conversation/turn.js";
 import { buildExtraPrompt } from "../handlers/build-extra-prompt.js";
 import { appDataDir } from "../registry/app-paths.js";
@@ -51,7 +51,7 @@ import type { TurnAttachmentRef } from "./turn-sse.js";
 
 /**
  * Validate a chat-session id. Reject anything that could escape a
- * directory (the runner scratch dir uses the id verbatim as a filename) or
+ * directory (the harness scratch dir uses the id verbatim as a filename) or
  * exceed a sane length. Chat-session ids are caller-supplied — the renderer
  * mints a stable id per chat pane (it's the chat session UUID).
  */
@@ -63,7 +63,7 @@ export function isValidConversationId(id: string): boolean {
 }
 
 /**
- * One catalog entry the ask-model picker can offer — a trimmed `RunnerModel`
+ * One catalog entry the ask-model picker can offer — a trimmed `HarnessModel`
  * (just the id + a display label; the picker doesn't need tiers/default
  * flags, those are folded into `defaultModel` below).
  */
@@ -76,11 +76,11 @@ export interface AskModelOption {
  * Wire shape for `GET /centraid/<appId>/_turn/model` — the kit Ask panel's
  * inline model picker (subsystem `ask`). `current` is `null` when the
  * subsystem has no override (falls through to `defaultModel`, itself the
- * runner's own default when the owner hasn't set `model.<kind>.default`
- * either). `catalog` is the active runner's model list.
+ * harness's own default when the owner hasn't set `model.<kind>.default`
+ * either). `catalog` is the active harness's model list.
  */
 export interface AskModelInfo {
-  runnerKind: string;
+  harnessKind: string;
   defaultModel?: string;
   current: string | null;
   catalog: AskModelOption[];
@@ -122,16 +122,16 @@ export interface TurnRouteContext {
   runner?: ConversationRunner;
   /**
    * Optional central chat store. When set, the route reads the session's
-   * runner-resume handle from it and records turn completion back into it.
+   * harness-resume handle from it and records turn completion back into it.
    * When unset, the route still works — no resume handle is threaded, so
-   * each turn starts the adapter fresh.
+   * each turn starts the harness fresh.
    */
   conversationStore?: ConversationHistoryStore;
   /**
-   * Central scratch base dir for runner-owned session files. The route
-   * passes `<conversationRunnerSessionDir>/<conversationId>.jsonl` as `ConversationTurnInput.sessionFile`.
+   * Central scratch base dir for harness-owned session files. The route
+   * passes `<conversationHarnessSessionDir>/<conversationId>.jsonl` as `ConversationTurnInput.sessionFile`.
    */
-  conversationRunnerSessionDir: string;
+  conversationHarnessSessionDir: string;
   /**
    * Optional per-app metadata reader. Used to populate `appName` / `appDescription`
    * in the extra-system-prompt. Returns undefined when the app has no
@@ -203,7 +203,7 @@ interface PostBody {
   /** Chat register: 'ask' = the app copilot; absent/'build' = builder chat. */
   register?: string;
   model?: string;
-  runnerKind?: string;
+  harnessKind?: string;
   thinking?: string;
   idempotencyKey?: string;
   /** Regenerate: the turn id this turn re-runs (issue #420). */
@@ -358,21 +358,21 @@ async function handlePostTurn(
     : body.providerConsent === undefined
       ? []
       : [body.providerConsent];
-  if (!providerConsent.every((kind) => isRunnerKind(kind))) {
+  if (!providerConsent.every((kind) => isHarnessKind(kind))) {
     sendError(
       res,
       400,
       "bad_request",
-      "providerConsent must name registered runners."
+      "providerConsent must name registered harnesses."
     );
     return;
   }
-  if (body.runnerKind !== undefined && !isRunnerKind(body.runnerKind)) {
+  if (body.harnessKind !== undefined && !isHarnessKind(body.harnessKind)) {
     sendError(
       res,
       400,
       "bad_request",
-      "runnerKind must name a registered runner."
+      "harnessKind must name a registered harness."
     );
     return;
   }
@@ -387,13 +387,13 @@ async function handlePostTurn(
     return;
   }
 
-  // Resolve runner-resume handles from the central session row when a
+  // Resolve harness-resume handles from the central session row when a
   // chat store is wired. The chat surface is one mode — no per-session
   // mode toggle to read.
-  let prevAdapterSessionId: string | undefined;
-  let prevAdapterKind: string | undefined;
-  let prevAdapterUsageSnapshot:
-    | TypeImport_nu6ai6.AdapterUsageSnapshot
+  let prevHarnessSessionId: string | undefined;
+  let prevHarnessKind: string | undefined;
+  let prevHarnessUsageSnapshot:
+    | TypeImport_nu6ai6.HarnessUsageSnapshot
     | undefined;
   if (ctx.conversationStore) {
     const session = ctx.conversationStore.getSessionMeta(
@@ -404,19 +404,19 @@ async function handlePostTurn(
       sendError(res, 404, "not_found", "No such chat session.");
       return;
     }
-    const resume = ctx.conversationStore.getAdapterResumeState(
+    const resume = ctx.conversationStore.getHarnessResumeState(
       entry.id,
       conversationId,
-      isRunnerKind(body.runnerKind) ? body.runnerKind : undefined
+      isHarnessKind(body.harnessKind) ? body.harnessKind : undefined
     );
-    prevAdapterSessionId = resume?.sessionId;
-    prevAdapterKind = resume?.kind;
-    prevAdapterUsageSnapshot = resume?.usageSnapshot;
+    prevHarnessSessionId = resume?.sessionId;
+    prevHarnessKind = resume?.kind;
+    prevHarnessUsageSnapshot = resume?.usageSnapshot;
   }
 
   // Attachments uploaded ahead of the turn (issue #190): the bytes already
   // live in the per-app blob CAS, keyed by sha256. We resolve each to its
-  // on-disk path so the adapter can build an image/document content block, and
+  // on-disk path so the harness can build an image/document content block, and
   // keep the refs to record `attachments` rows on the turn's `message_in` item.
   const attachmentRefs: TurnAttachmentRef[] = validateTurnAttachmentRefs(
     ctx.conversationStore,
@@ -504,7 +504,7 @@ async function handlePostTurn(
     extraSystemPrompt,
     runner: ctx.runner,
     conversationStore: ctx.conversationStore,
-    conversationRunnerSessionDir: ctx.conversationRunnerSessionDir,
+    conversationHarnessSessionDir: ctx.conversationHarnessSessionDir,
     conversationLocks: ctx.conversationLocks,
     banner: `chat ${entry.id} session ${conversationId}`,
     register:
@@ -514,7 +514,9 @@ async function handlePostTurn(
           ? "build"
           : undefined,
     model: body.model,
-    ...(isRunnerKind(body.runnerKind) ? { runnerKind: body.runnerKind } : {}),
+    ...(isHarnessKind(body.harnessKind)
+      ? { harnessKind: body.harnessKind }
+      : {}),
     thinking: body.thinking,
     ...(providerConsent.length > 0 ? { providerConsent } : {}),
     ...(additionalDirectories.length ? { additionalDirectories } : {}),
@@ -523,9 +525,9 @@ async function handlePostTurn(
       ? { retryOf: body.retryOf }
       : {}),
     ...(ctx.turnLimiter ? { limiter: ctx.turnLimiter() } : {}),
-    prevAdapterSessionId,
-    prevAdapterKind,
-    prevAdapterUsageSnapshot,
+    prevHarnessSessionId,
+    prevHarnessKind,
+    prevHarnessUsageSnapshot,
     ...(attachmentRefs.length > 0 ? { attachmentRefs } : {}),
     ...(turnAttachments.length > 0 ? { turnAttachments } : {}),
   });
@@ -535,7 +537,7 @@ async function handlePostTurn(
  * Read the app's manifest from disk, returning `undefined` when the app
  * has no live code dir or the file is unreadable. The system prompt still
  * works without it — but with the manifest the prompt includes the
- * declared catalog so the agent reaches for the right handler.
+ * declared catalog so the harness reaches for the right handler.
  *
  * Resolution goes through the runtime's code-dir resolver so it honors the
  * git-store override (issue #137): the materialized `main` worktree under

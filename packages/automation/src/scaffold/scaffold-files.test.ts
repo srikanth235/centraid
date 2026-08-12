@@ -77,30 +77,30 @@ describe(scaffoldAppFiles, () => {
     ).toThrow(/manifest\.vault block/u);
   });
 
-  it("emits an empty requires slot (runner/model only when given, no tools rail)", () => {
+  it("emits an empty requires slot (harness/model only when given, no tools rail)", () => {
     const plain = byPath(scaffoldAppFiles("briefing"));
     const reqs = (
       JSON.parse(plain.get("automations/briefing/automation.json")!) as {
-        requires: { tools?: unknown; runner?: unknown; model?: unknown };
+        requires: { tools?: unknown; harness?: unknown; model?: unknown };
       }
     ).requires;
     // ctx.tool was removed (issue #484) — no tools allowlist is scaffolded.
     expect(reqs.tools).toBeUndefined();
-    expect(reqs.runner).toBeUndefined();
+    expect(reqs.harness).toBeUndefined();
     expect(reqs.model).toBeUndefined();
 
     const withModel = byPath(
       scaffoldAppFiles("briefing", {
-        runner: "claude-code",
+        harness: "claude-code",
         model: "anthropic/x",
       })
     );
     const reqs2 = (
       JSON.parse(withModel.get("automations/briefing/automation.json")!) as {
-        requires: { runner?: unknown; model?: unknown };
+        requires: { harness?: unknown; model?: unknown };
       }
     ).requires;
-    expect(reqs2.runner).toBe("claude-code");
+    expect(reqs2.harness).toBe("claude-code");
     expect(reqs2.model).toBe("anthropic/x");
   });
 });

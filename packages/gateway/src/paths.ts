@@ -11,8 +11,8 @@
  * (`vault.db` + `journal.db` — the journal carrying both the audit stream
  * and the conversation ledger + run rollup, the old `transcripts.db`
  * folded in), the per-app data dirs (`apps/`), the app code store
- * (`code/` — a bare git repo + worktrees), and the chat runner scratch
- * (`runner-sessions/`). Gateway-level mutable state is gateway.db;
+ * (`code/` — a bare git repo + worktrees), and the harness scratch
+ * (`harness-sessions/`). Gateway-level mutable state is gateway.db;
  * long-lived secrets are KeyStore envelopes under keys/; cache and logs are
  * separate disposable/diagnostic directories.
  *
@@ -29,7 +29,7 @@ export interface GatewayPaths {
    * BOTH the sovereign pair (`vault.db` + `journal.db`) and the vault's
    * workspace (`apps/`, `code/`; the conversation ledger rides the journal
    * file); exactly one vault is active at a time (pointer in
-   * `<vaultDir>/vaults.json`). The chat runner scratch (`runner-sessions/`)
+   * `<vaultDir>/vaults.json`). The harness scratch (`harness-sessions/`)
    * does NOT live here — it is disposable cache under `cacheDir`. Required —
    * post-#280 the app surface IS vault-scoped, so a gateway without vaults
    * has nothing to serve.
@@ -37,8 +37,8 @@ export interface GatewayPaths {
   vaultDir: string;
 
   /**
-   * Optional root for the per-vault DISPOSABLE runner cache
-   * (`<cacheDir>/<vaultId>/runner-sessions/`) — the embedded chat runner's
+   * Optional root for the per-vault DISPOSABLE harness cache
+   * (`<cacheDir>/<vaultId>/harness-sessions/`) — the embedded harness's
    * per-conversation resume files and scratch cwd. Kept OUTSIDE `vaultDir` so
    * the sovereign vault tree holds only `vault.db` + `journal.db`, app data,
    * and code; journal.db is the authoritative conversation ledger and this
@@ -66,8 +66,8 @@ export interface GatewayPaths {
 
   /**
    * Optional path to the gateway-owned model catalog (`model-catalog.json`,
-   * issue #188). When set, the default `runnerStatus` reporter persists the
-   * chat picker's per-runner model list here and re-enumerates it on Refresh.
+   * issue #188). When set, the default `harnessStatus` reporter persists the
+   * chat picker's per-harness model list here and re-enumerates it on Refresh.
    * Omit to enumerate without persistence; there is no hardcoded default seed.
    */
   modelCatalogFile?: string;

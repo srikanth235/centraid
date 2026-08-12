@@ -20,14 +20,14 @@ describe("resolveItemCost (#514)", () => {
       })
     ).toThrow("has no pricing catalog entry");
   });
-  it("prefers agent-reported USD over catalog", () => {
+  it("prefers harness-reported USD over catalog", () => {
     const r = resolveItemCost({
-      agentCostUsd: 0.42,
+      harnessCostUsd: 0.42,
       model: "claude-haiku-4-5",
       usage: { inputTokens: 1_000_000 },
     });
     expect(r.costUsd).toBe(0.42);
-    expect(r.costSource).toBe("agent");
+    expect(r.costSource).toBe("harness");
   });
 
   it("falls back to catalog estimate when agent cost is absent", () => {

@@ -657,7 +657,7 @@ describe(installInlineCentraid, () => {
     const result = await inlineClient.place({
       linkToken: "link-1",
       kind: "add",
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: "asset-1",
       sourceVaultId: "vault-a",
       targetVaultId: "vault-b",
@@ -674,7 +674,7 @@ describe(installInlineCentraid, () => {
           audienceVaultId: "vault-b",
           mode: "snapshot",
           kind: "add",
-          itemType: "media.media_asset",
+          itemType: "media.asset",
           itemIds: ["asset-1"],
           verbs: "read",
         }),
@@ -686,7 +686,7 @@ describe(installInlineCentraid, () => {
     expect(result).toStrictEqual({
       linkToken: "link-1",
       kind: "add",
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: "asset-1",
       sourceVaultId: "vault-a",
       targetVaultId: "vault-b",

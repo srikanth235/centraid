@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * `centraid` CLI — shipped as a binary the builder agent's shell can call
+ * `centraid` CLI — shipped as a binary the builder harness's shell can call
  * by bare name (the session injects this package's dist dir onto PATH).
  *
  * The `sql` subcommands died with the per-app data.sqlite (issue #286

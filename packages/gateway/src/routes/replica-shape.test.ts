@@ -134,7 +134,7 @@ describe("replica-shape suite", () => {
       purpose: "dpv:ServiceProvision",
       scopes: [
         { schema: "consent", table: "app", verbs: "read" },
-        { schema: "agent", table: "agent", verbs: "read" },
+        { schema: "consent", table: "agent", verbs: "read" },
         { schema: "consent", table: "device", verbs: "read" },
       ],
     });
@@ -156,8 +156,8 @@ describe("replica-shape suite", () => {
       .run();
     vault.db.vault
       .prepare(
-        `INSERT INTO agent_agent
-         (agent_id, party_id, host_key, model_ref, version, enrolled_at, status)
+        `INSERT INTO consent_agent
+         (agent_id, party_id, enrollment_key, model_ref, version, enrolled_at, status)
        VALUES ('credential-agent', 'credential-agent-party', 'host-never-replicate',
                'tier:fast', '1', '2026-07-15T00:00:00.000Z', 'active')`
       )
@@ -171,7 +171,7 @@ describe("replica-shape suite", () => {
     const wire = replicaShapesWire([shape])[0]!;
     for (const [entityName, credential] of [
       ["consent.app", "signing_key"],
-      ["agent.agent", "host_key"],
+      ["consent.agent", "enrollment_key"],
       ["consent.device", "public_key"],
     ] as const) {
       const entity = wire.entities.find(
@@ -181,7 +181,7 @@ describe("replica-shape suite", () => {
       expect(entity?.columns, entityName).not.toContain(credential);
     }
     expect(JSON.stringify(wire)).not.toMatch(
-      /signing_key|host_key|public_key/u
+      /signing_key|enrollment_key|public_key/u
     );
 
     const app = vault.db.vault
@@ -191,7 +191,7 @@ describe("replica-shape suite", () => {
       .get() as { app_id: string };
     for (const [entity, rowId, credential] of [
       ["consent.app", app.app_id, "signing_key"],
-      ["agent.agent", "credential-agent", "host_key"],
+      ["consent.agent", "credential-agent", "enrollment_key"],
       ["consent.device", "credential-device", "public_key"],
     ] as const) {
       const row = readReplicaRow(vault.db.vault, entity, rowId)!;
@@ -885,7 +885,7 @@ describe("replica-shape suite", () => {
 
     // Every entity a native Photos client needs is present in the one shape.
     for (const entity of [
-      "media.media_asset",
+      "media.asset",
       "core.content_item",
       "core.content_derivative",
       "core.collection",
@@ -897,8 +897,8 @@ describe("replica-shape suite", () => {
       expect(byEntity.has(entity), `shape is missing ${entity}`).toBe(true);
     }
 
-    // First-class asset state (issue #419) rides on media.media_asset itself.
-    const asset = byEntity.get("media.media_asset")!;
+    // First-class asset state (issue #419) rides on media.asset itself.
+    const asset = byEntity.get("media.asset")!;
     expect(asset.columns).toStrictEqual(
       expect.arrayContaining([
         "favorite",

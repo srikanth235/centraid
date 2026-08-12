@@ -1,18 +1,18 @@
 // Generated recognition automation. Source: tools/recognition-automations/automation-handlers.
 import { existsSync as c } from "node:fs";
 import V from "node:path";
-import H from "node:path";
-var S = H.resolve(import.meta.dirname, ".."),
+import F from "node:path";
+var S = F.resolve(import.meta.dirname, ".."),
   A = process.env.CENTRAID_AUTOMATION_RUNTIME_DIR
-    ? H.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR)
-    : H.join(S, "runtime"),
-  D = H.join(A, "models");
+    ? F.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR)
+    : F.join(S, "runtime"),
+  D = F.join(A, "models");
 import { existsSync as z } from "node:fs";
 import { createRequire as b } from "node:module";
 import k from "node:path";
 import { pathToFileURL as x } from "node:url";
-var F;
-class U extends Error {
+var G;
+class _ extends Error {
   constructor($, B) {
     super(
       `Automation model runtime dependency "${$}" is not installed. ` +
@@ -24,31 +24,31 @@ class U extends Error {
   }
 }
 function O($, B = A) {
-  if (!z(k.join(B, "node_modules"))) throw new U($);
+  if (!z(k.join(B, "node_modules"))) throw new _($);
   let Q = b(k.join(B, "package.json"));
   try {
     return Q.resolve($);
   } catch (v) {
-    throw new U($, v);
+    throw new _($, v);
   }
 }
 async function C() {
-  if (F) return F;
+  if (G) return G;
   let $ = O("onnxruntime-node");
-  return ((F = await import(x($).href)), F);
+  return ((G = await import(x($).href)), G);
 }
-var G;
+var U;
 async function R($) {
-  G ??= new Map();
-  let B = G.get($);
+  U ??= new Map();
+  let B = U.get($);
   if (B) return B;
-  if (!z($)) throw new U($);
+  if (!z($)) throw new _($);
   let Q = C().then((v) => v.InferenceSession.create($));
-  G.set($, Q);
+  U.set($, Q);
   try {
     return await Q;
   } catch (v) {
-    throw (G.delete($), v);
+    throw (U.delete($), v);
   }
 }
 import { pathToFileURL as g } from "node:url";
@@ -87,8 +87,8 @@ function y($) {
 var T = "clip-vit-b-32@1",
   M = V.join(D, "clip"),
   s = V.join(M, "visual.onnx"),
-  G0 = V.join(M, "textual.onnx"),
-  U0 = V.join(M, "vocab.json"),
+  U0 = V.join(M, "textual.onnx"),
+  _0 = V.join(M, "vocab.json"),
   w0 = V.join(M, "merges.txt"),
   L = 224;
 function N($ = D) {
@@ -146,7 +146,7 @@ function n() {
 async function r($, B) {
   let v = (
     await $.vault.read({
-      entity: "media.media_asset",
+      entity: "media.asset",
       where: [
         { column: "kind", op: "in", value: ["photo", "scan"] },
         { column: "deleted_at", op: "is-null" },
@@ -181,7 +181,7 @@ async function o({ ctx: $, log: B }) {
       await $.state.set("model", Q));
   let J = (await $.state.get("cursor")) ?? "",
     Y = await $.vault.read({
-      entity: "media.media_asset",
+      entity: "media.asset",
       where: [
         { column: "asset_id", op: "gt", value: J },
         { column: "deleted_at", op: "is-null" },
@@ -221,22 +221,22 @@ async function o({ ctx: $, log: B }) {
     });
     if (j?.status !== "ok" || j.kind !== "bytes")
       throw Error(`asset ${K.asset_id}: preview is unavailable`);
-    let _ = await E({
+    let H = await E({
       id: K.asset_id,
       mediaType: j.mediaType,
       bytes: j.base64,
     });
-    if (!_ || _.error || !Array.isArray(_.vector)) {
+    if (!H || H.error || !Array.isArray(H.vector)) {
       ((q += 1), B.info(`asset ${K.asset_id}: no image vector`));
       continue;
     }
     (await $.vault.invoke({
       command: "enrich.upsert_embedding",
       input: {
-        entity_type: "media.media_asset",
+        entity_type: "media.asset",
         entity_id: K.asset_id,
         model: Q,
-        vector: _.vector,
+        vector: H.vector,
         capability: "embed-image",
       },
       purpose: Z,

@@ -14,7 +14,7 @@ CREATE TABLE home_asset_item (
   serial_no           TEXT,
   purchase_price_minor INTEGER CHECK (purchase_price_minor >= 0),
   purchase_currency    TEXT CHECK (purchase_currency IS NULL OR length(purchase_currency) = 3),
-  photo_asset_id      TEXT REFERENCES media_media_asset(asset_id),
+  photo_asset_id      TEXT REFERENCES media_asset(asset_id),
   disposed_on         TEXT,
   updated_at          TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;

@@ -99,7 +99,7 @@ export interface PlacementIntent {
     | "core.content_item"
     | "docs.folder"
     | "locker.item"
-    | "media.media_asset"
+    | "media.asset"
     | "tally.group";
   itemId: string;
   sourceVaultId: string;

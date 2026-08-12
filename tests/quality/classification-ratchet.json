@@ -1,13 +1,13 @@
 {
-  "approvedDeviation": "#738 re-pins governed fingerprints after adding the additive pending-overlay reliability flow and demonstrated-red evidence; no budget or existing gate was weakened.",
-  "matrixGovernanceFingerprint": "7ca835e9c1bc1ff18e632b4b5829d264ade753825e7560a49f9249ff5d143d04",
+  "approvedDeviation": "#743 re-pins governed fingerprints after manifest harness capability, harness route security vocabulary, and explicit one-to-one matrix flow rename metadata; every floor is unchanged and the ratchet rejects many-to-one replacements.",
+  "matrixGovernanceFingerprint": "22c1e4c93f4b93bc4c58561c1c6acb8fb0f703e05faaf795ada379cfa495f3db",
   "fingerprints": {
-    "packages/agent-runtime/src/backends/acp/vault-mcp-server.ts": "e3db462d8e9ea69238ef35b240d45239afd5354530adb5c286f8e98945ce29bb",
-    "packages/automation/src/manifest/manifest.ts": "b65ceca212056e371a7790de37730b37912f29eff9290b6c61bb3ff5f79b9e2e",
-    "packages/gateway/src/routes/route-security.ts": "93778aed244883158313facdd8e847b7918852e418e8676011b459f9132859ca",
-    "packages/gateway/src/serve/health-registry.ts": "3c910652729684b84809cd486888151a86139205d07e146a44c2450154081430",
+    "packages/agent-runtime/src/backends/acp/vault-mcp-server.ts": "23bf19e215bfe3fd8a21a4dd896d06c97835d43fc3412bfcc9bb0312bd6d7ff2",
+    "packages/automation/src/manifest/manifest.ts": "e133e7233a6e3ac541f4972772aa803706b4bb7cf9590308b87c762402e5c509",
+    "packages/gateway/src/routes/route-security.ts": "47cf64c574a44bab45b78ef57ef41e84a7e830220b19dc89c514daf773246ee4",
+    "packages/gateway/src/serve/health-registry.ts": "d4483393bf09d7839ce995b1d6c698501f079e0c53d7e6031de268f7b642e4e6",
     "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
     "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
-    "tests/matrix.json": "25f58e1e338e2d9d88e38bad4ecf8a8380b66d8b167ebefd2b1f6dd8ff45fdec"
+    "tests/matrix.json": "0f67f7fdf59aeda8ec699afcb261c8535532d6c042d5a433f1ad014372fca789"
   }
 }

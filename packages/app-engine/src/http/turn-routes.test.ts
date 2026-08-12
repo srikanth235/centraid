@@ -72,7 +72,7 @@ describe("turn-routes", () => {
       appsDir: path.join(dir, "apps"),
       journal,
       journalDbFile: path.join(dir, "journal.db"),
-      runnerSessionDir: path.join(dir, "runner-sessions"),
+      harnessSessionDir: path.join(dir, "harness-sessions"),
     });
     return new ConversationHistoryStore(workspaceLocal);
   }
@@ -120,7 +120,7 @@ describe("turn-routes", () => {
     expect(res.status).toBe(404);
   });
 
-  test("POST /_turn drives the runner and streams events", async () => {
+  test("POST /_turn drives the harness and streams events", async () => {
     const runner: ConversationRunner = {
       async run(input) {
         input.onEvent({ type: "assistant.start" });
@@ -153,7 +153,7 @@ describe("turn-routes", () => {
     expect(text).toMatch(/event: end/u);
   });
 
-  test("POST /_turn passes the runner-owned session file under the scratch dir", async () => {
+  test("POST /_turn passes the harness-owned session file under the scratch dir", async () => {
     let seenSessionFile = "";
     const runner: ConversationRunner = {
       async run(input) {
@@ -173,7 +173,7 @@ describe("turn-routes", () => {
     }).then((r) => r.text());
     expect(path.basename(seenSessionFile)).toBe("w1.jsonl");
     expect(path.dirname(seenSessionFile)).toBe(
-      runtime.conversationRunnerSessionDir
+      runtime.conversationHarnessSessionDir
     );
   });
 
@@ -291,7 +291,7 @@ describe("turn-routes", () => {
       });
     const first = await (await post()).text();
     expect(first).toMatch(/event: final/u);
-    // Second POST, SAME key: the runner is NOT invoked again; the recorded final
+    // Second POST, SAME key: the harness is NOT invoked again; the recorded final
     // answer is replayed from the ledger as a fresh stream.
     const second = await (await post()).text();
     expect(runs).toBe(1);
@@ -335,7 +335,7 @@ describe("turn-routes", () => {
       });
     const p1 = post();
     const p2 = post();
-    // Wait until the runner has entered the in-flight gate (both requests queued
+    // Wait until the harness has entered the in-flight gate (both requests queued
     // on the per-conversation lock), then release so the second can replay.
     await vi.waitFor(() => {
       expect(runs).toBe(1);
@@ -486,9 +486,9 @@ describe("turn-routes", () => {
     expect(text).toMatch(/"text":"ok"/u);
   });
 
-  test('GET /centraid/_turn/runner-status returns "none" when no runner configured', async () => {
+  test('GET /centraid/_turn/harness-status returns "none" when no runner configured', async () => {
     await bootstrap();
-    const res = await fetch(`${server.url}/centraid/_turn/runner-status`, {
+    const res = await fetch(`${server.url}/centraid/_turn/harness-status`, {
       headers: { Authorization: `Bearer ${server.token}` },
     });
     expect(res.status).toBe(200);
@@ -713,7 +713,7 @@ describe("turn-routes", () => {
 
   /** An in-memory `AskModelPrefs` fake — mirrors the gateway's prefs-store + catalog wiring. */
   function fakeAskModel(opts?: {
-    runnerKind?: string;
+    harnessKind?: string;
     defaultModel?: string;
     catalog?: { id: string; label: string }[];
   }): AskModelPrefs & { current: string | null } {
@@ -726,7 +726,7 @@ describe("turn-routes", () => {
         state.current = v;
       },
       get: async (): Promise<AskModelInfo> => ({
-        runnerKind: opts?.runnerKind ?? "codex",
+        harnessKind: opts?.harnessKind ?? "codex",
         ...(opts?.defaultModel ? { defaultModel: opts.defaultModel } : {}),
         current: state.current,
         catalog: opts?.catalog ?? [],
@@ -779,7 +779,7 @@ describe("turn-routes", () => {
 
   test("GET /_turn/model returns the picker state — no override means current: null", async () => {
     const askModel = fakeAskModel({
-      runnerKind: "codex",
+      harnessKind: "codex",
       defaultModel: "gpt-5.5",
       catalog: [
         { id: "gpt-5.5", label: "GPT-5.5" },
@@ -794,7 +794,7 @@ describe("turn-routes", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as AskModelInfo;
     expect(body).toStrictEqual({
-      runnerKind: "codex",
+      harnessKind: "codex",
       defaultModel: "gpt-5.5",
       current: null,
       catalog: [
@@ -806,7 +806,7 @@ describe("turn-routes", () => {
 
   test("PUT /_turn/model sets the override and GET reflects it", async () => {
     const askModel = fakeAskModel({
-      runnerKind: "codex",
+      harnessKind: "codex",
       defaultModel: "gpt-5.5",
     });
     await bootstrapWithAskModel(askModel);
@@ -833,7 +833,7 @@ describe("turn-routes", () => {
 
   test("PUT /_turn/model with model: null clears the override back to default", async () => {
     const askModel = fakeAskModel({
-      runnerKind: "codex",
+      harnessKind: "codex",
       defaultModel: "gpt-5.5",
     });
     askModel.current = "gpt-5.5-mini"; // pre-existing override

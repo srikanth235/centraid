@@ -291,7 +291,7 @@ export function SelectionBarView({
         onClose={() => setShareOpen(false)}
         sourceScopeId={ownId}
         scopes={scopes}
-        itemType="media.media_asset"
+        itemType="media.asset"
         itemIds={[...selectedIds]}
         onDone={(outcome) => {
           notice(outcome.message);
@@ -454,7 +454,7 @@ export function SelectionBottomBar({
         onClose={() => setShareOpen(false)}
         sourceScopeId={ownId}
         scopes={scopes}
-        itemType="media.media_asset"
+        itemType="media.asset"
         itemIds={[...selectedIds]}
         onDone={(outcome) => {
           notice(outcome.message);

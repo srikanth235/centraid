@@ -11,14 +11,14 @@ import type {
 import type * as TypeImport_ffl4ji from "../../screens/SettingsConnectionsScreen.js";
 import type { ShellActions } from "../actions.js";
 import type * as TypeImport_1f3slmz from "../webhookReveal.js";
-import type * as TypeImport_fuav22 from "./automationEditorAgentData.js";
 import type * as TypeImport_1omb499 from "./automationEditorCreateData.js";
 import type * as TypeImport_vtz3vd from "./automationEditorData.js";
+import type * as TypeImport_fuav22 from "./automationEditorHarnessData.js";
 import { automationRow } from "./automationEditorRoute.fixture.js";
 import type * as TypeImport_17pturf from "./automationsData.js";
 import type * as TypeImport_14phijm from "./automationThreadData.js";
 import type * as TypeImport_buhgwd from "./settingsConnectionsData.js";
-import type * as TypeImport_ym9bw8 from "./settingsProvidersData.js";
+import type * as TypeImport_ym9bw8 from "./settingsHarnessesData.js";
 
 const captured = vi.hoisted(() => ({
   props: null as AutomationEditorBridgeProps | null,
@@ -60,7 +60,7 @@ const api = vi.hoisted(() => ({
 const helpers = vi.hoisted(() => ({
   beginAuthorize: vi.fn<typeof TypeImport_buhgwd.beginConnectionAuthorize>(),
   buildAgentData:
-    vi.fn<typeof TypeImport_fuav22.buildAutomationAgentEditorData>(),
+    vi.fn<typeof TypeImport_fuav22.buildAutomationHarnessEditorData>(),
   buildCreateData:
     vi.fn<typeof TypeImport_1omb499.buildCreateAutomationEditorData>(),
   buildFeatured: vi.fn<typeof TypeImport_ffl4ji.buildFeatured>(),
@@ -71,7 +71,7 @@ const helpers = vi.hoisted(() => ({
     vi.fn<typeof TypeImport_buhgwd.loadConnectionProvidersData>(),
   loadConnections: vi.fn<typeof TypeImport_buhgwd.loadConnectionsData>(),
   loadEditor: vi.fn<typeof TypeImport_vtz3vd.loadAutomationEditorData>(),
-  loadProviders: vi.fn<typeof TypeImport_ym9bw8.loadProviders>(),
+  loadHarnesses: vi.fn<typeof TypeImport_ym9bw8.loadHarnesses>(),
   openWebhookReveal: vi.fn<typeof TypeImport_1f3slmz.openWebhookReveal>(),
 }));
 
@@ -93,8 +93,8 @@ vi.mock(import("../../screens/AutomationEditorScreen.js"), () => ({
 vi.mock(import("./automationEditorData.js"), () => ({
   loadAutomationEditorData: helpers.loadEditor,
 }));
-vi.mock(import("./automationEditorAgentData.js"), () => ({
-  buildAutomationAgentEditorData: helpers.buildAgentData,
+vi.mock(import("./automationEditorHarnessData.js"), () => ({
+  buildAutomationHarnessEditorData: helpers.buildAgentData,
 }));
 vi.mock(import("./automationEditorCreateData.js"), () => ({
   buildCreateAutomationEditorData: helpers.buildCreateData,
@@ -111,8 +111,8 @@ vi.mock(import("./settingsConnectionsData.js"), () => ({
   loadConnectionProvidersData: helpers.loadConnectionProviders,
   loadConnectionsData: helpers.loadConnections,
 }));
-vi.mock(import("./settingsProvidersData.js"), () => ({
-  loadProviders: helpers.loadProviders,
+vi.mock(import("./settingsHarnessesData.js"), () => ({
+  loadHarnesses: helpers.loadHarnesses,
 }));
 vi.mock(import("../webhookReveal.js"), () => ({
   openWebhookReveal: helpers.openWebhookReveal,
@@ -178,7 +178,7 @@ describe("AutomationEditorRoute", () => {
     api.listAgents.mockReset().mockResolvedValue([
       {
         agentId: "agent-1",
-        hostKey: "daily",
+        enrollmentKey: "daily",
         partyId: "party-1",
         name: "Daily",
         modelRef: "gpt-5",
@@ -249,9 +249,9 @@ describe("AutomationEditorRoute", () => {
 
     helpers.beginAuthorize.mockReset().mockResolvedValue("https://auth.test");
     helpers.buildAgentData.mockReset().mockReturnValue({
-      agentRunners: [],
+      harnesses: [],
       defaultModel: null,
-      defaultRunnerKind: "codex",
+      defaultHarnessKind: "codex",
     });
     helpers.buildCreateData.mockReset().mockReturnValue({
       automationId: null,
@@ -321,7 +321,7 @@ describe("AutomationEditorRoute", () => {
         lastRunAt: null,
       },
     ]);
-    helpers.loadProviders.mockReset().mockResolvedValue({
+    helpers.loadHarnesses.mockReset().mockResolvedValue({
       selectedKind: "codex",
       cards: [],
       anyLoading: false,
@@ -330,8 +330,8 @@ describe("AutomationEditorRoute", () => {
       defaultConfigPinsByKind: {},
       subsystemConfigPinsByKind: {},
       diagnosticsJson: "{}",
-      subsystemRunnerByKey: {},
-      subsystemRunnerLadders: {},
+      subsystemHarnessByKey: {},
+      subsystemHarnessLadders: {},
     });
     helpers.openWebhookReveal.mockReset().mockResolvedValue(undefined);
     helpers.loadEditor.mockReset().mockResolvedValue({
@@ -348,7 +348,7 @@ describe("AutomationEditorRoute", () => {
       onFailure: "notify",
       row,
       rowId: "row-1",
-      runner: "codex",
+      harness: "codex",
       triggers: row.triggers,
     });
     Object.defineProperty(navigator, "clipboard", {
@@ -375,7 +375,7 @@ describe("AutomationEditorRoute", () => {
         automationId: "daily/daily",
         enabled: true,
         mode: "edit",
-        runner: "codex",
+        harness: "codex",
       });
       expect(data.triggers.map((trigger) => trigger.kind)).toStrictEqual([
         "webhook",
@@ -393,7 +393,7 @@ describe("AutomationEditorRoute", () => {
           instructions: "Run every weekday.",
           model: null,
           name: "Daily revised",
-          runner: null,
+          harness: null,
           triggers: [{ kind: "data", entities: ["business.invoice"] }],
         })
       ).resolves.toBe(true);
@@ -404,7 +404,7 @@ describe("AutomationEditorRoute", () => {
             { connectionId: "connection-1", kind: "github", label: "Work" },
           ],
           model: null,
-          runner: null,
+          harness: null,
           vault: expect.objectContaining({
             scopes: [{ schema: "business", table: "invoice", verbs: "read" }],
           }),
@@ -482,7 +482,7 @@ describe("AutomationEditorRoute", () => {
         onFailure: null,
         row: null,
         rowId: null,
-        runner: null,
+        harness: null,
         triggers: [],
       });
       const bridge = await mount({
@@ -503,7 +503,7 @@ describe("AutomationEditorRoute", () => {
           instructions: "Create it",
           model: "openai/gpt-test",
           name: "Created",
-          runner: "codex",
+          harness: "codex",
           triggers: [{ kind: "cron", expr: "0 9 * * *" }],
         })
       ).resolves.toBe(true);
@@ -512,7 +512,7 @@ describe("AutomationEditorRoute", () => {
           enabled: false,
           model: "openai/gpt-test",
           name: "Created",
-          runner: "codex",
+          harness: "codex",
         })
       );
     });

@@ -164,7 +164,7 @@
   "packages/client/src/react/screens/SettingsProfileScreen.module.css": {
     "rawFontSize": 3
   },
-  "packages/client/src/react/screens/SettingsProvidersScreen.module.css": {
+  "packages/client/src/react/screens/SettingsHarnessesScreen.module.css": {
     "rawFontSize": 1
   },
   "packages/client/src/react/screens/SettingsStorageScreen.module.css": {

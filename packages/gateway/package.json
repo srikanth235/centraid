@@ -2,7 +2,7 @@
   "name": "@centraid/gateway",
   "version": "0.1.0",
   "private": false,
-  "description": "Host-agnostic centraid gateway: wires app-engine + agent-runtime + stores + chat runner against injected paths and secrets. Consumed by the Electron desktop's in-process embed and the standalone `centraid-gateway` daemon.",
+  "description": "Host-agnostic Centraid gateway: wires app-engine + the historical agent-runtime package + stores + the conversation runner against injected paths and secrets. Consumed by the Electron desktop's in-process embed and the standalone `centraid-gateway` daemon.",
   "license": "SEE LICENSE IN REPOSITORY",
   "repository": {
     "type": "git",

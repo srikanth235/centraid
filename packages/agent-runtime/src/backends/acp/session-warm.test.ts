@@ -2,7 +2,7 @@
 
 import { describe, expect, test, afterEach } from "vitest";
 
-import type { AcpConnection } from "./json-rpc.js";
+import type { AcpConnectionOwner } from "./connection.js";
 import {
   clearWarmPool,
   disposeSlot,
@@ -10,10 +10,10 @@ import {
   takeWarmSlot,
   warmKey,
 } from "./session-warm.ts";
-import type { WarmAgentSlot } from "./session-warm.ts";
+import type { WarmHarnessSlot } from "./session-warm.ts";
 
 function makeConn(opts?: { exited?: boolean; closeThrows?: boolean }): {
-  conn: AcpConnection;
+  conn: AcpConnectionOwner;
   closeCalls: () => number;
   markExited: () => void;
 } {
@@ -29,18 +29,17 @@ function makeConn(opts?: { exited?: boolean; closeThrows?: boolean }): {
     exited = true;
     resolveExit?.();
   };
-  const conn: AcpConnection = {
-    send: () => undefined,
-    request: async <T = unknown>(method: string): Promise<T> => {
-      if (method === "session/close") {
-        closeCalls += 1;
-        if (opts?.closeThrows) throw new Error("close failed");
-      }
-      return undefined as T;
-    },
-    respond: () => undefined,
-    respondMethodNotFound: () => undefined,
-    setHandlers: () => undefined,
+  const request = async (method: string): Promise<unknown> => {
+    if (method === "session/close") {
+      closeCalls += 1;
+      if (opts?.closeThrows) throw new Error("close failed");
+    }
+    return undefined;
+  };
+  const conn: AcpConnectionOwner = {
+    request: request as AcpConnectionOwner["request"],
+    notify: (async () => undefined) as AcpConnectionOwner["notify"],
+    bindTurn: () => () => undefined,
     hasExited: () => exited,
     exited: exitedPromise,
     spawnError: () => undefined,
@@ -53,7 +52,7 @@ function makeConn(opts?: { exited?: boolean; closeThrows?: boolean }): {
   };
 }
 
-function makeChild(onKill: () => void): WarmAgentSlot["child"] {
+function makeChild(onKill: () => void): WarmHarnessSlot["child"] {
   let killed = false;
   return {
     get killed() {
@@ -66,7 +65,7 @@ function makeChild(onKill: () => void): WarmAgentSlot["child"] {
       killed = true;
       onKill();
     },
-  } as unknown as WarmAgentSlot["child"];
+  } as unknown as WarmHarnessSlot["child"];
 }
 describe("session-warm suite", () => {
   afterEach(async () => {
@@ -163,7 +162,7 @@ describe("session-warm suite", () => {
     await disposeSlot(slot!);
   });
 
-  test("a conversation keeps only its newest warm runner binding", async () => {
+  test("a conversation keeps only its newest warm harness binding", async () => {
     const codex = makeConn();
     putWarmSlot({
       kind: "codex",

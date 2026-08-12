@@ -27,6 +27,19 @@ CREATE TABLE consent_app (
   installed_at TEXT NOT NULL
 ) STRICT;
 
+CREATE TABLE consent_agent (
+  agent_id       TEXT PRIMARY KEY,
+  party_id       TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
+  -- Stable host-side enrollment identity (Centraid app id, or '_assistant').
+  -- The owner's display label remains on core_party and may change without
+  -- minting a new autonomous principal.
+  enrollment_key TEXT NOT NULL UNIQUE,
+  model_ref       TEXT NOT NULL,
+  version         TEXT NOT NULL,
+  enrolled_at     TEXT NOT NULL,
+  status          TEXT NOT NULL CHECK (status IN ('active','paused','revoked'))
+) STRICT;
+
 CREATE TABLE consent_app_view (
   view_id         TEXT PRIMARY KEY,
   app_id          TEXT NOT NULL REFERENCES consent_app(app_id),

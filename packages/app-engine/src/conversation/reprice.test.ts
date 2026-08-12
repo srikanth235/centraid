@@ -39,7 +39,7 @@ describe(repriceLedger, () => {
       appsDir: path.join(dir, "apps"),
       journal,
       journalDbFile: path.join(dir, "journal.db"),
-      runnerSessionDir: path.join(dir, "runner-sessions"),
+      harnessSessionDir: path.join(dir, "harness-sessions"),
     });
     store = new ConversationHistoryStore(workspace);
   });
@@ -147,10 +147,10 @@ describe(repriceLedger, () => {
     expect(remaining.n).toBe(0);
   });
 
-  it("never overwrites agent-reported costs (#514)", () => {
+  it("never overwrites harness-reported costs (#514)", () => {
     recordStep();
     db.prepare(
-      `UPDATE items SET cost_usd = 0.42, cost_source = 'agent' WHERE kind = 'step'`
+      `UPDATE items SET cost_usd = 0.42, cost_source = 'harness' WHERE kind = 'step'`
     ).run();
     const result = repriceLedger(db);
     expect(result.itemsRepriced).toBe(0);
@@ -161,7 +161,7 @@ describe(repriceLedger, () => {
       cost_source: string | null;
     };
     expect(item.cost_usd).toBeCloseTo(0.42, 9);
-    expect(item.cost_source).toBe("agent");
+    expect(item.cost_source).toBe("harness");
   });
 
   it("leaves conversation_digest rows untouched (frozen #438 rollups are out of scope)", () => {

@@ -34,7 +34,7 @@ function makeProps(
     onToggleGroup: vi.fn<BuilderChatBridgeProps["onToggleGroup"]>(),
     onSetView: vi.fn<BuilderChatBridgeProps["onSetView"]>(),
     onSetWorkspaceKind: vi.fn<BuilderChatBridgeProps["onSetWorkspaceKind"]>(),
-    onSetRunner: vi.fn<BuilderChatBridgeProps["onSetRunner"]>(),
+    onSetHarness: vi.fn<BuilderChatBridgeProps["onSetHarness"]>(),
     onSetModel: vi.fn<BuilderChatBridgeProps["onSetModel"]>(),
     onSetEffort: vi.fn<BuilderChatBridgeProps["onSetEffort"]>(),
     onMountHistory: vi.fn<BuilderChatBridgeProps["onMountHistory"]>(),

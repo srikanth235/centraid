@@ -6,7 +6,7 @@ import {
 } from "../_shared/pending-overlay.js";
 
 const asset = (input: Readonly<Record<string, unknown>>) =>
-  pendingPatch("media.media_asset", input.asset_id, input, [
+  pendingPatch("media.asset", input.asset_id, input, [
     "title",
     "captured_at",
     "favorite",
@@ -51,9 +51,9 @@ export const photosPendingProjection = definePendingProjection({
     // Membership is a relation, but its visible anchor is the photograph.
     // Keep that anchor on-screen until canonical collection_entry settlement.
     "add-to-album": ({ input }) =>
-      pendingPatch("media.media_asset", input.asset_id, input),
+      pendingPatch("media.asset", input.asset_id, input),
     "remove-from-album": ({ input }) =>
-      pendingPatch("media.media_asset", input.asset_id, input),
+      pendingPatch("media.asset", input.asset_id, input),
     // Changing review_state optimistically would filter the only visible row
     // out of the queue. Project status onto it without guessing settlement.
     "answer-face": ({ input }) =>
@@ -65,7 +65,7 @@ export const photosPendingProjection = definePendingProjection({
       reason: "The tag id does not identify its asset row.",
     },
     "request-enrichment": ({ input }) =>
-      pendingPatch("media.media_asset", input.entity_id, input),
+      pendingPatch("media.asset", input.entity_id, input),
   },
 });
 

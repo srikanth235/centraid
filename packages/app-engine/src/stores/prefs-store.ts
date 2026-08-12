@@ -4,7 +4,7 @@
  * Replaces the old `identity.sqlite` `users` + `user_prefs` pair. The
  * parallel gateway-side user identity is GONE — the vault owner IS the
  * user (`core_vault.owner_party_id`), so the only thing left at the
- * gateway is device-level configuration: which coding agent to run, its
+ * gateway is device-level configuration: which coding harness to run, its
  * binary path, UI theme/density for this host, etc. Those are a handful
  * of keys written from one process — a plain JSON file, not a database.
  *
@@ -20,8 +20,8 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 
-import { isRunnerKind } from "../conversation/turn.js";
-import type { RunnerKind } from "../conversation/turn.js";
+import { isHarnessKind } from "../conversation/turn.js";
+import type { HarnessKind } from "../conversation/turn.js";
 
 export interface PrefsPersistence {
   read: () => Record<string, unknown>;
@@ -95,40 +95,39 @@ export class PrefsStore {
   }
 }
 
-/* ---------- Per-subsystem runner + model resolution ---------- */
+/* ---------- Per-subsystem harness + model resolution ---------- */
 
 /**
  * The chat/automation surfaces that can each carry their own model
  * override. `'ask'` is the per-app copilot register, `'builder'` the
  * per-app build register, `'assistant'` the shell-level vault assistant,
- * `'automations'` the fire pipeline's `ctx.agent` calls.
+ * `'automations'` the fire pipeline's `ctx.delegate` calls.
  */
 export type ModelSubsystem = "assistant" | "ask" | "builder" | "automations";
 
 /**
- * Resolve which agent runner a subsystem's turn runs on, in priority order:
+ * Resolve which harness a subsystem's turn runs on, in priority order:
  *
- *   1. `runner.<subsystem>` — the per-subsystem runner override;
- *   2. `agent.runner.kind`  — the DEFAULT agent (the host-wide fallback every
+ *   1. `harness.<subsystem>` — the per-subsystem harness override;
+ *   2. `harness.kind`  — the default harness (the host-wide fallback every
  *      subsystem inherits when it hasn't been pinned);
  *   3. `'codex'` — the built-in default, matching the settings panel's
  *      "Codex preferred when both present" copy.
  *
  * Empty-string pref values are treated as unset (a cleared override), same
  * as `undefined`/`null` at the prefs-store level — so clearing a subsystem's
- * pin falls back to the default agent rather than pinning `''`.
+ * pin falls back to the default harness rather than pinning `''`.
  *
- * The `runner.` prefix is deliberate: the daemon's config seeder owns the
- * whole `agent.runner.*` namespace (it nulls every key it knows on boot), so
- * a per-subsystem key parked under that prefix would be wiped on restart.
+ * The config seeder writes only its declared launch keys; subsystem pins are
+ * user-owned preferences under the same canonical harness namespace.
  */
-export function resolveSubsystemRunner(
+export function resolveSubsystemHarness(
   prefs: Record<string, unknown>,
   subsystem: ModelSubsystem
 ): string {
-  const scoped = prefs[`runner.${subsystem}`];
+  const scoped = prefs[`harness.${subsystem}`];
   if (typeof scoped === "string" && scoped.length > 0) return scoped;
-  const fallback = prefs["agent.runner.kind"];
+  const fallback = prefs["harness.kind"];
   if (typeof fallback === "string" && fallback.length > 0) return fallback;
   return "codex";
 }
@@ -139,13 +138,13 @@ export function resolveSubsystemRunner(
  * prefs. The selected primary is always first and duplicate/unknown kinds are
  * removed.
  */
-export function resolveSubsystemRunnerLadder(
+export function resolveSubsystemHarnessLadder(
   prefs: Record<string, unknown>,
   subsystem: ModelSubsystem,
-  primary: RunnerKind
-): RunnerKind[] {
+  primary: HarnessKind
+): HarnessKind[] {
   const raw =
-    prefs[`runner.ladder.${subsystem}`] ?? prefs["runner.ladder.default"];
+    prefs[`harness.ladder.${subsystem}`] ?? prefs["harness.ladder.default"];
   let values: unknown = raw;
   if (typeof raw === "string") {
     try {
@@ -155,9 +154,9 @@ export function resolveSubsystemRunnerLadder(
     }
   }
   const candidates = Array.isArray(values) ? values : [];
-  const ladder: RunnerKind[] = [primary];
+  const ladder: HarnessKind[] = [primary];
   for (const value of candidates) {
-    if (isRunnerKind(value) && !ladder.includes(value)) ladder.push(value);
+    if (isHarnessKind(value) && !ladder.includes(value)) ladder.push(value);
   }
   return ladder;
 }
@@ -167,45 +166,45 @@ export function resolveSubsystemRunnerLadder(
  *
  *   1. `explicit` — a caller-supplied override (request body `model`, or
  *      an automation manifest's `requires.model`);
- *   2. `model.<runnerKind>.<subsystem>` — the per-subsystem prefs override;
- *   3. `model.<runnerKind>.default` — the runner-wide prefs default;
+ *   2. `model.<harnessKind>.<subsystem>` — the per-subsystem prefs override;
+ *   3. `model.<harnessKind>.default` — the harness-wide prefs default;
  *   4. `undefined` — nothing resolved; the caller sends no `model` field
- *      and the backend falls back to its own built-in default.
+ *      and the harness falls back to its own built-in default.
  *
  * Empty-string pref values are treated as unset (a cleared override), same
  * as `undefined`/`null` at the prefs-store level.
  */
 export function resolveSubsystemModel(
   prefs: Record<string, unknown>,
-  runnerKind: string,
+  harnessKind: string,
   subsystem: ModelSubsystem,
   explicit?: string
 ): string | undefined {
   if (explicit) return explicit;
-  const scoped = prefs[`model.${runnerKind}.${subsystem}`];
+  const scoped = prefs[`model.${harnessKind}.${subsystem}`];
   if (typeof scoped === "string" && scoped.length > 0) return scoped;
-  const fallback = prefs[`model.${runnerKind}.default`];
+  const fallback = prefs[`model.${harnessKind}.default`];
   if (typeof fallback === "string" && fallback.length > 0) return fallback;
   return undefined;
 }
 
 /**
- * Resolve open ACP config categories for one runner/subsystem.
+ * Resolve open ACP config categories for one harness/subsystem.
  *
- * Pref keys are `config.<runnerKind>.<slot>.<category>`, where `<slot>` is a
+ * Pref keys are `config.<harnessKind>.<slot>.<category>`, where `<slot>` is a
  * subsystem or `default`. Callers pass manifest/request pins in `explicit`;
  * those win category-by-category. Empty strings are unset. The result remains
  * a category-keyed map so adapter-specific ids never leak into policy.
  */
 export function resolveSubsystemConfigPins(
   prefs: Record<string, unknown>,
-  runnerKind: string,
+  harnessKind: string,
   subsystem: ModelSubsystem,
   explicit: Readonly<Record<string, string>> = {}
 ): Record<string, string> {
   const categories = new Set(Object.keys(explicit));
-  const scopedPrefix = `config.${runnerKind}.${subsystem}.`;
-  const defaultPrefix = `config.${runnerKind}.default.`;
+  const scopedPrefix = `config.${harnessKind}.${subsystem}.`;
+  const defaultPrefix = `config.${harnessKind}.default.`;
   for (const key of Object.keys(prefs)) {
     if (key.startsWith(scopedPrefix))
       categories.add(key.slice(scopedPrefix.length));

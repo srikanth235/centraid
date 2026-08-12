@@ -1,7 +1,7 @@
 /*
  * Reading and folding ACP usage into ONE `usage` event per turn.
  *
- * Schema-verified against `@agentclientprotocol/sdk` 1.2.1: `UsageUpdate`
+ * Schema-verified against the pinned `@agentclientprotocol/sdk` 1.3.0: `UsageUpdate`
  * (the `usage_update` session update) carries only context-window `used`/
  * `size` plus a CUMULATIVE `cost { amount, currency }`; the token breakdown
  * lives on the `session/prompt` RESULT as `PromptResponse.usage`. Both are
@@ -10,18 +10,18 @@
  * monotonic delta even across gateway process restarts.
  *
  * Everything folds into ONE event at the end of the turn, stamped with
- * `provider` and only the model identity confirmed by the live ACP session.
- * Requested configuration is not accounting evidence because an agent may
+ * the `harness` and only the model identity confirmed by the live ACP session.
+ * Requested configuration is not accounting evidence because a harness may
  * ignore it.
  */
 
+import type { Cost, Usage } from "@agentclientprotocol/sdk";
+
 import type {
-  AdapterUsageSnapshot,
-  RunnerKind,
+  HarnessUsageSnapshot,
+  HarnessKind,
   TurnStreamEvent,
 } from "@centraid/app-engine";
-
-import { isObject } from "./content.js";
 
 export interface TokenUsage {
   inputTokens?: number;
@@ -38,7 +38,7 @@ export interface UsageCost {
 export interface DeltaCumulativeUsage {
   tokens: TokenUsage;
   cost?: UsageCost;
-  snapshot?: AdapterUsageSnapshot;
+  snapshot?: HarnessUsageSnapshot;
 }
 
 /**
@@ -51,11 +51,11 @@ export interface DeltaCumulativeUsage {
 export function deltaCumulativeUsage(
   currentTokens: TokenUsage,
   currentCost: UsageCost | undefined,
-  previous: AdapterUsageSnapshot | undefined,
+  previous: HarnessUsageSnapshot | undefined,
   context?: { used?: number; size?: number }
 ): DeltaCumulativeUsage {
   const tokens: TokenUsage = {};
-  const snapshot: AdapterUsageSnapshot = { ...previous };
+  const snapshot: HarnessUsageSnapshot = { ...previous };
   const fields = [
     "inputTokens",
     "outputTokens",
@@ -107,55 +107,34 @@ export function deltaCumulativeUsage(
 }
 
 /**
- * Defensive read of an ACP token breakdown. The spec's `Usage` uses
- * `inputTokens` / `outputTokens` / `cachedReadTokens` / `cachedWriteTokens`;
- * the snake_case and `promptTokens` spellings cover agents that predate it.
+ * Project the SDK-validated ACP token breakdown into the ledger's normalized
+ * token fields.
  */
-export function readTokenUsage(source: Record<string, unknown>): TokenUsage {
-  const src = isObject(source.usage) ? source.usage : source;
-  const num = (...keys: string[]): number | undefined => {
-    for (const k of keys) {
-      const v = src[k];
-      if (typeof v === "number" && Number.isFinite(v)) return v;
-    }
-    return undefined;
+export function readTokenUsage(source: Usage): TokenUsage {
+  return {
+    inputTokens: source.inputTokens,
+    outputTokens: source.outputTokens,
+    ...(source.cachedReadTokens == null
+      ? {}
+      : { cacheReadTokens: source.cachedReadTokens }),
+    ...(source.cachedWriteTokens == null
+      ? {}
+      : { cacheWriteTokens: source.cachedWriteTokens }),
   };
-  const out: TokenUsage = {};
-  const input = num("inputTokens", "input_tokens", "promptTokens");
-  const output = num("outputTokens", "output_tokens", "completionTokens");
-  const cacheRead = num(
-    "cachedReadTokens",
-    "cacheReadTokens",
-    "cached_input_tokens"
-  );
-  const cacheWrite = num(
-    "cachedWriteTokens",
-    "cacheWriteTokens",
-    "cache_creation_input_tokens"
-  );
-  if (input !== undefined) out.inputTokens = input;
-  if (output !== undefined) out.outputTokens = output;
-  if (cacheRead !== undefined) out.cacheReadTokens = cacheRead;
-  if (cacheWrite !== undefined) out.cacheWriteTokens = cacheWrite;
-  return out;
 }
 
 /** ACP `Cost { amount, currency }` — ISO 4217, so anything non-USD isn't `costUsd`. */
-export function readCost(raw: unknown): UsageCost | undefined {
-  if (!isObject(raw)) return undefined;
-  const { amount, currency } = raw;
-  if (typeof amount !== "number" || !Number.isFinite(amount)) return undefined;
-  if (typeof currency !== "string") return undefined;
-  return { amount, currency };
+export function readCost(raw: Cost | null | undefined): UsageCost | undefined {
+  return raw ? { amount: raw.amount, currency: raw.currency } : undefined;
 }
 
 /**
- * One usage event per turn, or none when the agent reported nothing worth
+ * One usage event per turn, or none when the harness reported nothing worth
  * recording. `model` is stamped whenever we know it: the repricing pipeline
  * can only revisit ledger rows whose model is non-NULL.
  */
 export function buildUsageEvent(
-  kind: RunnerKind,
+  kind: HarnessKind,
   model: string | undefined,
   effort: string | undefined,
   tokens: TokenUsage,
@@ -172,7 +151,7 @@ export function buildUsageEvent(
   }
   return {
     type: "usage",
-    provider: kind,
+    harness: kind,
     ...(model ? { model } : {}),
     ...(effort ? { effort } : {}),
     ...tokens,

@@ -284,7 +284,7 @@ describe("screens/AutomationCompilePane", () => {
     });
 
     it("counts up while a compile is open, and shows no clock once it settles", async () => {
-      // A compile is a coding-agent run and can take minutes; without a clock,
+      // A compile is a harness run and can take minutes; without a clock,
       // "Compiling…" is indistinguishable from a hang.
       const clock = useFakeClock(60_000);
       const running: CompileAttemptDTO = {

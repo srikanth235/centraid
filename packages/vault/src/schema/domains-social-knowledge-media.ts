@@ -95,7 +95,7 @@ CREATE TABLE knowledge_note (
   -- real deletion deferred to the lifecycle sweep's purge window. The FTS
   -- spec's deletedColumn guard keeps trashed notes out of the index. The guard
   -- (issue #441 A4) makes purge_at-without-deleted_at unrepresentable, matching
-  -- core_content_item / core_document / media_media_asset.
+  -- core_content_item / core_document / media_asset.
   deleted_at      TEXT,
   purge_at        TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
 ) STRICT;
@@ -115,7 +115,7 @@ CREATE INDEX IF NOT EXISTS idx_annotation_author_party ON knowledge_annotation(a
 `;
 
 export const MEDIA_DDL = `
-CREATE TABLE media_media_asset (
+CREATE TABLE media_asset (
   asset_id         TEXT PRIMARY KEY,
   content_id       TEXT NOT NULL UNIQUE REFERENCES core_content_item(content_id),
   kind             TEXT NOT NULL CHECK (kind IN ('photo','video','audio','scan')),
@@ -142,7 +142,7 @@ CREATE TABLE media_media_asset (
   -- capture date. An asset may not be its own source (an edit of itself is
   -- not a thing the editor can produce). SQLite never auto-indexes a child FK
   -- column, and merge.ts re-points FKs by UPDATE, so it carries its own index.
-  source_asset_id  TEXT REFERENCES media_media_asset(asset_id)
+  source_asset_id  TEXT REFERENCES media_asset(asset_id)
                      CHECK (source_asset_id IS NULL OR source_asset_id <> asset_id),
   -- First-class asset state (issue #419) so the Photos replica shape is
   -- self-contained: favorite is a boolean on the asset (no more reconstructing
@@ -155,14 +155,14 @@ CREATE TABLE media_media_asset (
   deleted_at       TEXT,
   purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
 ) STRICT;
-CREATE INDEX IF NOT EXISTS idx_media_asset_place ON media_media_asset(place_id);
-CREATE INDEX IF NOT EXISTS idx_media_asset_camera_device ON media_media_asset(camera_device_id);
-CREATE INDEX IF NOT EXISTS idx_media_asset_capture_group ON media_media_asset(capture_group_id);
-CREATE INDEX IF NOT EXISTS idx_media_asset_source ON media_media_asset(source_asset_id);
+CREATE INDEX IF NOT EXISTS idx_media_asset_place ON media_asset(place_id);
+CREATE INDEX IF NOT EXISTS idx_media_asset_camera_device ON media_asset(camera_device_id);
+CREATE INDEX IF NOT EXISTS idx_media_asset_capture_group ON media_asset(capture_group_id);
+CREATE INDEX IF NOT EXISTS idx_media_asset_source ON media_asset(source_asset_id);
 
 CREATE TABLE media_face_region (
   region_id             TEXT PRIMARY KEY,
-  asset_id              TEXT NOT NULL REFERENCES media_media_asset(asset_id),
+  asset_id              TEXT NOT NULL REFERENCES media_asset(asset_id),
   bbox_json             TEXT NOT NULL CHECK (json_valid(bbox_json)),
   party_id              TEXT REFERENCES core_party(party_id),
   confidence            REAL CHECK (confidence BETWEEN 0 AND 1),

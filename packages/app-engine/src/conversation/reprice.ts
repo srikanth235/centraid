@@ -5,7 +5,7 @@
  * frozen under an old (or absent) rate goes wrong: a then-unknown model reads
  * NULL → $0 in Insights, and a since-repriced model reads a stale figure. This
  * is the ONLY sanctioned rewriter of the frozen cost: it recomputes each step/
- * agent item's cost from its FROZEN token counts against the CURRENT catalog,
+ * delegate item's cost from its FROZEN token counts against the CURRENT catalog,
  * and where the result differs it rewrites `items.cost_usd` and re-derives the
  * owning turn's `total_cost_usd` with the same SUM shape `finishTurn` uses.
  *
@@ -13,7 +13,7 @@
  * rows (issue #438 archived rollups) are frozen copies and out of scope — this
  * only sees live `items`/`turns`.
  *
- * Agent-reported costs (`cost_source = 'agent'`, issue #514) are never rewritten
+ * Harness-reported costs (`cost_source = 'harness'`, issue #514) are never rewritten
  * — only catalog estimates and NULL unknowns are revisited.
  *
  * Bounded and resumable: one pass scans at most `maxScan` items from a caller-
@@ -85,7 +85,7 @@ export function repriceLedger(
       `SELECT rowid, turn_id, model, input_tokens, output_tokens,
               cache_read_tokens, cache_write_tokens, cost_usd, cost_source
          FROM items
-        WHERE rowid > ? AND kind IN ('step','agent') AND model IS NOT NULL
+        WHERE rowid > ? AND kind IN ('step','delegate') AND model IS NOT NULL
           AND (cost_source IS NULL OR cost_source = 'estimated')
         ORDER BY rowid ASC
         LIMIT ?`
@@ -99,7 +99,7 @@ export function repriceLedger(
   const rederiveTurn = db.prepare(
     `UPDATE turns SET total_cost_usd = (
         SELECT SUM(cost_usd) FROM items
-         WHERE turn_id = ? AND kind IN ('step','agent'))
+         WHERE turn_id = ? AND kind IN ('step','delegate'))
       WHERE id = ?`
   );
 
@@ -113,8 +113,8 @@ export function repriceLedger(
   try {
     for (const row of rows) {
       lastRowid = row.rowid;
-      // Never clobber agent-reported costs (also filtered in SQL).
-      if (row.cost_source === "agent") continue;
+      // Never clobber harness-reported costs (also filtered in SQL).
+      if (row.cost_source === "harness") continue;
       const recomputed =
         costForUsage(row.model ?? undefined, {
           ...(row.input_tokens === null

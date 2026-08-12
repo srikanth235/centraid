@@ -238,7 +238,7 @@ vi.mock(
       ): { rows: unknown[] } => {
         if (query.entity === "media.face_region") return { rows: mocks.faces };
         if (query.entity === "core.party") return { rows: mocks.parties };
-        if (query.entity === "media.media_asset") return { rows: mocks.assets };
+        if (query.entity === "media.asset") return { rows: mocks.assets };
         return { rows: [] };
       },
     }) as unknown as Partial<UseReplicaQueryModule>

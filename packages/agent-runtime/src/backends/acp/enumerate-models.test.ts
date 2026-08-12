@@ -1,5 +1,5 @@
 // The generic ACP model probe (issue #484). Driven against the scripted
-// `fake-acp-agent.mjs`, the same fixture the turn backend uses — so happy
+// `fake-acp-harness.mjs`, the same fixture the turn backend uses — so happy
 // path, no-model-option, AUTH_REQUIRED, and missing-binary are all exercised
 // against a real launch → initialize → session/new exchange, not a mock.
 
@@ -14,22 +14,28 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { enumerateAcpModels, mapOfferedModels } from "./enumerate-models.js";
 import type { AcpTurnConfig } from "./types.js";
 
-const FAKE_AGENT = fileURLToPath(
-  new URL("fake-acp-agent.mjs", import.meta.url)
+const FAKE_HARNESS = fileURLToPath(
+  new URL("fake-acp-harness.mjs", import.meta.url)
 );
 
-/** An `AcpTurnConfig` that launches the fake agent (native path, no adapter). */
+/** An `AcpTurnConfig` that launches the fake harness (native path, no adapter). */
 function fakeConfig(
   extraArgs: string[],
   over: Partial<AcpTurnConfig> = {}
 ): AcpTurnConfig {
-  return { kind: "acp", acpArgs: [], binPath: FAKE_AGENT, extraArgs, ...over };
+  return {
+    kind: "acp",
+    acpArgs: [],
+    binPath: FAKE_HARNESS,
+    extraArgs,
+    ...over,
+  };
 }
 
 // ---- happy path -----------------------------------------------------------
 
 describe("enumerate-models", () => {
-  test("maps the agent’s advertised model options to RunnerModel[]", async () => {
+  test("maps the harness’s advertised model options to HarnessModel[]", async () => {
     const models = await enumerateAcpModels(fakeConfig(["--mode=normal"]));
     // The fake advertises a `model` select with a default + one more, exactly
     // the shape both real adapters emit.
@@ -41,7 +47,7 @@ describe("enumerate-models", () => {
 
   // ---- best-effort empties --------------------------------------------------
 
-  test("an agent with no model option enumerates []", async () => {
+  test("a harness with no model option enumerates []", async () => {
     const models = await enumerateAcpModels(
       fakeConfig(["--mode=normal", "--no-model-option"])
     );

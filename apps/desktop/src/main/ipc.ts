@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit ipc-hub pending split per-feature handler modules (agent, chat, apps, provider) once the surface stabilizes
+// governance: allow-repo-hygiene file-size-limit ipc-hub pending split per-feature handler modules (harness, conversation, apps, provider) once the surface stabilizes
 import { app, ipcMain, BrowserWindow, safeStorage, shell } from "electron";
 
 import { resolveAppRevealDir, resetAppSessions } from "./app-sessions.js";
@@ -408,10 +408,10 @@ export function registerIpcHandlers(): void {
   // direct HTTP client (renderer/gateway-client.ts) under the thin-client
   // pivot.
   //
-  // Coding-agent detection + the custom OpenAI-compatible endpoint config
-  // also left the main process: the gateway is colocated with the runner, so
-  // it owns both the credential probe (`GET /centraid/_agents/status`) and
-  // the runner preflight (`GET /centraid/_turn/runner-status`). The renderer
+  // Harness detection + the custom OpenAI-compatible endpoint config
+  // also left the main process: the gateway is colocated with the harness, so
+  // it owns both the credential probe (`GET /centraid/_harnesses/status`) and
+  // the harness preflight (`GET /centraid/_turn/harness-status`). The renderer
   // reads them over HTTP via `renderer/gateway-client-conversation.ts` — a remote
   // gateway reports its own host's agents.
 
@@ -419,7 +419,7 @@ export function registerIpcHandlers(): void {
   // App lifecycle (create/files/write/delete/update-meta) + publish moved to
   // the renderer's direct HTTP client (renderer/gateway-client.ts) under the
   // thin-client pivot: the renderer opens its own editing session per app
-  // (same `desktop-<id>` id the local agent uses, so they share one draft)
+  // (same `desktop-<id>` id the local harness uses, so they share one draft)
   // and the gateway owns scaffold/clone/meta/publish. APPS_OPEN stays on
   // IPC — a deliberately LOCAL-ONLY reveal-in-Finder that needs the on-disk
   // session worktree. The preview iframe now points at the gateway draft URL

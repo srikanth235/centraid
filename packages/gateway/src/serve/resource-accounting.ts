@@ -3,16 +3,16 @@
  * Resource profile (#528 Phase A/B, which says what the gateway is ALLOWED
  * to spend). This records what each background subsystem actually did:
  * replication passes and bytes, backup drains and bytes, vault + outbox
- * sweep passes, worker-pool tasks, and agent runs — each with the
+ * sweep passes, worker-pool tasks, and harness turns — each with the
  * wall-clock it occupied.
  *
  * Design constraints (issue #528 Phase C):
  *   - MEASURED PROXIES ONLY. Never a fabricated watt or a synthesized
  *     energy figure — the fields are counts, byte totals, wall-clock ms,
- *     and the OS-reported process CPU/RSS. `agentRuns.cpuSeconds` stays
+ *     and the OS-reported process CPU/RSS. `harnessRuns.cpuSeconds` stays
  *     `null`: Node cannot cheaply read a child process's rusage across
  *     platforms, so we do not guess it.
- *   - AGENT RUNS ARE ACCOUNTED, NEVER THROTTLED. This class only counts;
+ *   - HARNESS RUNS ARE ACCOUNTED, NEVER THROTTLED. This class only counts;
  *     nothing here gates or defers a run.
  *   - NEGLIGIBLE OVERHEAD. No timers of its own. CPU/RSS are read lazily
  *     inside `snapshot()` (at the health-poll cadence) and at each
@@ -22,8 +22,8 @@
  * Pure and gateway-free: the clock, the CPU reader, and the RSS reader are
  * all injectable, so this is unit-testable with a fake clock and no process
  * state. `build-gateway.ts` constructs one at boot, wires the record* hooks
- * through the vault registry / backup service / worker admission / agent
- * runners, and publishes `snapshot()` on the health metrics source.
+ * through the vault registry / backup service / worker admission / harness
+ * turns, and publishes `snapshot()` on the health metrics source.
  */
 
 /** Rolling window for `backgroundTimerFiresLastHour`. */
@@ -49,7 +49,7 @@ export interface ResourceUsageActuals {
     replication: { passes: number; bytesReplicated: number; busyMs: number };
     backup: { drains: number; bytesUploaded: number; busyMs: number };
     sweeps: { passes: number; busyMs: number };
-    agentRuns: { runs: number; busyMs: number; cpuSeconds: number | null };
+    harnessRuns: { runs: number; busyMs: number; cpuSeconds: number | null };
   };
   /** count of background timer fires (sweep/outbox/backup scheduler ticks) in the last rolling hour, or null before first window */
   backgroundTimerFiresLastHour: number | null;
@@ -104,8 +104,8 @@ export class ResourceAccounting {
   private backupDrains = 0;
   private backupBytesUploaded = 0;
   private backupBusyMs = 0;
-  private agentRuns = 0;
-  private agentBusyMs = 0;
+  private harnessRuns = 0;
+  private harnessBusyMs = 0;
 
   /** Epoch-ms timestamps of background timer fires; pruned to the last hour. */
   private readonly timerFires: number[] = [];
@@ -147,13 +147,13 @@ export class ResourceAccounting {
   }
 
   /**
-   * One agent run finished (chat/builder/ask turn). `durationMs` is
+   * One harness run finished (chat/builder/ask/delegate turn). `durationMs` is
    * wall-clock spawn→exit. Recorded on both success and failure — the host
    * consumed the wall-clock either way (the honest proxy). Never throttled.
    */
-  recordAgentRun(info: { durationMs: number }): void {
-    this.agentRuns += 1;
-    this.agentBusyMs += Math.max(0, info.durationMs);
+  recordHarnessRun(info: { durationMs: number }): void {
+    this.harnessRuns += 1;
+    this.harnessBusyMs += Math.max(0, info.durationMs);
     this.sampleRss();
   }
 
@@ -187,9 +187,9 @@ export class ResourceAccounting {
           busyMs: this.backupBusyMs,
         },
         sweeps: { passes: this.sweeps.passes, busyMs: this.sweeps.busyMs },
-        agentRuns: {
-          runs: this.agentRuns,
-          busyMs: this.agentBusyMs,
+        harnessRuns: {
+          runs: this.harnessRuns,
+          busyMs: this.harnessBusyMs,
           // Intentionally null in v1: no cheap cross-platform child rusage.
           cpuSeconds: null,
         },

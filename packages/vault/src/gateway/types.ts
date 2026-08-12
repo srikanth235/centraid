@@ -267,7 +267,7 @@ export interface ParkedSummary {
   parkedAt: string;
   callerKind: ParkedCallerKind;
   /**
-   * The caller's enrolled row id (`consent_app.app_id` / `agent_agent.agent_id`)
+   * The caller's enrolled row id (`consent_app.app_id` / `consent_agent.agent_id`)
    * — a stable identity key, unlike `caller` (a display name, which can
    * change). `ctx.vault`'s "my own parked invocations" op matches on this,
    * never on the display name.

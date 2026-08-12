@@ -8,8 +8,8 @@ import { isWebHost } from "../../host-platform.js";
 import ImportScreen from "../../screens/ImportScreen.js";
 import SettingsAppearanceScreen from "../../screens/SettingsAppearanceScreen.js";
 import SettingsDeviceScreen from "../../screens/SettingsDeviceScreen.js";
+import SettingsHarnessesScreen from "../../screens/SettingsHarnessesScreen.js";
 import SettingsProfileScreen from "../../screens/SettingsProfileScreen.js";
-import SettingsProvidersScreen from "../../screens/SettingsProvidersScreen.js";
 import SettingsStorageScreen from "../../screens/SettingsStorageScreen.js";
 import SettingsVaultScreen from "../../screens/SettingsVaultScreen.js";
 import Icon from "../../ui/Icon.js";
@@ -27,15 +27,15 @@ import {
   setOfflineCopy,
 } from "./settingsAccountData.js";
 import {
-  activateRunner,
-  loadProviders,
-  setAgentModel,
-  setAgentConfigPin,
+  activateHarness,
+  loadHarnesses,
+  setHarnessModel,
+  setHarnessConfigPin,
   setSubsystemModel,
   setSubsystemConfigPin,
-  setSubsystemRunner,
-  setSubsystemRunnerLadder,
-} from "./settingsProvidersData.js";
+  setSubsystemHarness,
+  setSubsystemHarnessLadder,
+} from "./settingsHarnessesData.js";
 import {
   attachVaultConnection,
   createStorageConnection,
@@ -52,7 +52,7 @@ import styles from "./SettingsRoute.module.css";
 // React-owned Settings — the inner-sidebar shell. Replaces the vanilla
 // renderSettings (app-settings.ts): a grouped category nav beside a content
 // pane that shows one page at a time (page head + the page's controls). The
-// Workspace + Models pages (Appearance/Layout/Providers) are native here; the
+// Workspace + Models pages (Appearance/Layout/Agents) are native here; the
 // Account pages (Vaults/Import) land in a follow-up. Pairing a phone is NOT a
 // page here: it is a one-off act, so it lives in the account menu as
 // PairDeviceModal. Component health
@@ -67,7 +67,7 @@ export type SettingsPageId =
   | "profile"
   | "device"
   | "import"
-  | "providers"
+  | "harnesses"
   | "storage";
 
 interface PageDef {
@@ -142,12 +142,12 @@ const ALL_PAGES: readonly PageDef[] = [
       "Keep this vault on this device only, or an encrypted copy hosted with your storage provider.",
   },
   {
-    id: "providers",
+    id: "harnesses",
     label: "Agents",
     section: "Models",
     icon: "Sparkle",
     subtitle:
-      "The coding-agent CLIs the gateway can drive, plus which model each one uses by default and per chat surface. Detection checks whether each CLI is runnable on the gateway’s host — Centraid is agnostic to how they authenticate.",
+      "The coding tools the gateway can drive, plus which model each one uses by default and per conversation surface. Detection checks whether each tool is runnable on the gateway’s host — Centraid is agnostic to how they authenticate.",
   },
 ];
 const HIDDEN = new Set(["workspace", "import", "storage"]);
@@ -462,17 +462,17 @@ export default function SettingsRoute({
                   onSetCards={(v) => setPrefs({ cardVariant: v })}
                   onSetThemeMode={(m) => setPrefs({ themeMode: m })}
                 />
-              ) : page === "providers" ? (
-                <SettingsProvidersScreen
-                  loadStatus={() => loadProviders()}
-                  refreshModels={() => loadProviders({ refresh: true })}
-                  activateRunner={activateRunner}
-                  setAgentModel={setAgentModel}
-                  setAgentConfigPin={setAgentConfigPin}
+              ) : page === "harnesses" ? (
+                <SettingsHarnessesScreen
+                  loadStatus={() => loadHarnesses()}
+                  refreshModels={() => loadHarnesses({ refresh: true })}
+                  activateHarness={activateHarness}
+                  setHarnessModel={setHarnessModel}
+                  setHarnessConfigPin={setHarnessConfigPin}
                   setSubsystemModel={setSubsystemModel}
                   setSubsystemConfigPin={setSubsystemConfigPin}
-                  setSubsystemRunner={setSubsystemRunner}
-                  setSubsystemRunnerLadder={setSubsystemRunnerLadder}
+                  setSubsystemHarness={setSubsystemHarness}
+                  setSubsystemHarnessLadder={setSubsystemHarnessLadder}
                 />
               ) : page === "profile" ? (
                 selfProfile.status === "loading" ? (

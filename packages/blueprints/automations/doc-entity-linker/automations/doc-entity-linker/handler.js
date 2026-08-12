@@ -82,7 +82,7 @@ export default async function handler({ ctx, log }) {
   for (const derivative of derivatives) {
     lastSeen = derivative.derivative_id;
     const contentId = derivative.content_id;
-    const out = await ctx.agent({
+    const out = await ctx.delegate({
       prompt:
         "Find mentions of PEOPLE (personal names) in the attached document text. For each, " +
         "return the name as written and the exact verbatim passage (≤200 chars) containing it, " +

@@ -116,11 +116,11 @@ describe("serve scenarios", () => {
     expect(handle.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
   });
 
-  test("runnerStatus is reachable and returns a RunnerStatus body", async () => {
-    const res = await fetch(`${handle.url}/centraid/_turn/runner-status`, {
+  test("harnessStatus is reachable and returns a HarnessStatus body", async () => {
+    const res = await fetch(`${handle.url}/centraid/_turn/harness-status`, {
       headers: { Authorization: `Bearer ${handle.token}` },
     });
-    // Whether the runner shows `ok` depends on whether codex / claude-code
+    // Whether the harness shows `ok` depends on whether codex / claude-code
     // is installed on the test host. We only assert the route is mounted
     // and returns a well-shaped status (the Electron embed has the same
     // default — prefs loader falls back to codex when no pref is set).
@@ -130,8 +130,8 @@ describe("serve scenarios", () => {
     expect(body.ok).toBeTypeOf("boolean");
   });
 
-  test("agents status is reachable and lists every registered runner", async () => {
-    const res = await fetch(`${handle.url}/centraid/_agents/status`, {
+  test("harnesses status is reachable and lists every registered harness", async () => {
+    const res = await fetch(`${handle.url}/centraid/_harnesses/status`, {
       headers: { Authorization: `Bearer ${handle.token}` },
     });
     // Which CLIs show available depends on what's on the test host's PATH — we
@@ -139,25 +139,25 @@ describe("serve scenarios", () => {
     // gateway probes its own host).
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      agents: Array<{
+      harnesses: Array<{
         kind: string;
         label: string;
         available: boolean;
         minVersion: string;
       }>;
     };
-    expect(Array.isArray(body.agents)).toBe(true);
-    expect(body.agents.length).toBeGreaterThan(0);
-    for (const agent of body.agents) {
-      expect(agent.kind).toBeTypeOf("string");
-      expect(agent.label).toBeTypeOf("string");
-      expect(agent.available).toBeTypeOf("boolean");
-      expect(agent.minVersion).toBeTypeOf("string");
+    expect(Array.isArray(body.harnesses)).toBe(true);
+    expect(body.harnesses.length).toBeGreaterThan(0);
+    for (const harness of body.harnesses) {
+      expect(harness.kind).toBeTypeOf("string");
+      expect(harness.label).toBeTypeOf("string");
+      expect(harness.available).toBeTypeOf("boolean");
+      expect(harness.minVersion).toBeTypeOf("string");
     }
   });
 
-  test("rejects /centraid/_agents/status without the bearer token", async () => {
-    const res = await fetch(`${handle.url}/centraid/_agents/status`);
+  test("rejects /centraid/_harnesses/status without the bearer token", async () => {
+    const res = await fetch(`${handle.url}/centraid/_harnesses/status`);
     expect(res.status).toBe(401);
   });
 

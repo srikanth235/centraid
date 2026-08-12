@@ -53,7 +53,7 @@ describe("circle-backed commons", () => {
     const add = origin.vault.prepare(
       `INSERT INTO core_collection_entry
          (entry_id, collection_id, target_type, target_id, position, added_at)
-       VALUES (?, ?, 'media.media_asset', ?, ?, ?)`
+       VALUES (?, ?, 'media.asset', ?, ?, ?)`
     );
     add.run(uuidv7(), collectionId, first.assetId, 0, now);
 
@@ -95,9 +95,7 @@ describe("circle-backed commons", () => {
       "invited",
     ]);
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 1 });
     expect(
       audience.vault
@@ -117,9 +115,7 @@ describe("circle-backed commons", () => {
       now,
     });
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 2 });
     expect(audience.blobs.hasSync(second.sha256)).toBe(true);
   });
@@ -132,7 +128,7 @@ describe("circle-backed commons", () => {
     const grant = createCommonsGrant({
       origin: origin.vault,
       ownerPartyId: originBoot.ownerPartyId,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [{ partyId: bob, capability: "read", vaultId: "vault-family" }],
       now,
@@ -239,9 +235,7 @@ describe("circle-backed commons", () => {
       removeCommonsFromSeat({ seat: audience, grantId: grant.grantId })
     ).toBe(1);
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 0 });
   });
 

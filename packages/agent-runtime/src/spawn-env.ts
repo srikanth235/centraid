@@ -1,7 +1,7 @@
 /*
- * Shared PATH sanitization for agent-CLI subprocess spawns.
+ * Shared PATH sanitization for harness-CLI subprocess spawns.
  *
- * Coding-agent CLIs (`claude`, `codex`) are user-level tools — installed via
+ * Coding harness CLIs (`claude`, `codex`) are user-level tools — installed via
  * `npm i -g`, a curl installer, Homebrew, etc., living somewhere like
  * `~/.local/bin` or `/opt/homebrew/bin`. They are never installed *into* a
  * project's `node_modules/.bin`.
@@ -20,7 +20,7 @@
  * indication anything is wrong.
  *
  * The fix: strip any `PATH` entry that ends in `node_modules/.bin` before
- * resolving or spawning an agent CLI. Since such entries only ever appear
+ * resolving or spawning a harness CLI. Since such entries only ever appear
  * on `PATH` via the run-script injection described above (a bare shell PATH
  * never contains one), this is safe to do unconditionally — including for
  * the repo's own `node_modules/.bin` — and is a no-op on a production
@@ -39,9 +39,9 @@ const NODE_MODULES_BIN_RE = /[\\/]node_modules[\\/]\.bin[\\/]?$/u;
 /**
  * Strip `node_modules/.bin` entries out of a `PATH`-shaped string. Other
  * entries — and their relative order — are preserved verbatim. Exported for
- * unit tests; most callers want `agentSpawnEnv` instead.
+ * unit tests; most callers want `harnessSpawnEnv` instead.
  */
-export function sanitizeAgentPath(pathValue: string | undefined): string {
+export function sanitizeHarnessPath(pathValue: string | undefined): string {
   if (!pathValue) return "";
   return pathValue
     .split(path.delimiter)
@@ -49,7 +49,7 @@ export function sanitizeAgentPath(pathValue: string | undefined): string {
     .join(path.delimiter);
 }
 
-export interface AgentSpawnEnvOptions {
+export interface HarnessSpawnEnvOptions {
   /** Env to start from. Defaults to `process.env`; never mutated. */
   baseEnv?: NodeJS.ProcessEnv;
   /**
@@ -61,23 +61,25 @@ export interface AgentSpawnEnvOptions {
   binPath?: string;
   /**
    * Extra directories to prepend to `PATH` after sanitization (e.g. so a
-   * spawned agent's shell tool can find the `centraid` CLI by bare name).
+   * spawned harness's shell tool can find the `centraid` CLI by bare name).
    */
   extraPath?: string;
 }
 
 /**
- * Build the env to spawn an agent CLI (`claude`/`codex`) subprocess with —
+ * Build the env to spawn a harness CLI (`claude`/`codex`) subprocess with —
  * `PATH` sanitized per the module doc above, unless an explicit `binPath`
  * opts out. Always returns a fresh object; never mutates `baseEnv` /
  * `process.env`, so concurrent turns can't race on `PATH`.
  */
-export function agentSpawnEnv(
-  opts: AgentSpawnEnvOptions = {}
+export function harnessSpawnEnv(
+  opts: HarnessSpawnEnvOptions = {}
 ): NodeJS.ProcessEnv {
   const base = opts.baseEnv ?? process.env;
   const currentPath = base.PATH ?? "";
-  const sanitized = opts.binPath ? currentPath : sanitizeAgentPath(currentPath);
+  const sanitized = opts.binPath
+    ? currentPath
+    : sanitizeHarnessPath(currentPath);
   const finalPath = opts.extraPath
     ? sanitized
       ? `${opts.extraPath}${path.delimiter}${sanitized}`

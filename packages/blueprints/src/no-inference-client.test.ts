@@ -1,6 +1,6 @@
 /*
  * docs/blueprint-seats.md "Enrichment doctrine" (issue #712 C5), checked
- * mechanically: provider model calls use `ctx.agent`, while recognition
+ * mechanically: provider model calls use `ctx.delegate`, while recognition
  * automations bundle local model execution and use ctx.vault content/invoke.
  * A blueprint app, automation, or mobile seat may not import a provider SDK
  * or resurrect the deleted service/generic-inference roads.
@@ -17,7 +17,7 @@
  * contains a documentation template string that MENTIONS a model id
  * (`"anthropic/claude-3-5-sonnet"`, inside `requires.model` example JSON) —
  * that is data a scaffolded `automation.json` may legitimately carry (the
- * one billed rail, `ctx.agent`'s own model pin), not a package import, so
+ * one billed rail, `ctx.delegate`'s own model pin), not a package import, so
  * this check matches only actual `import`/`require`/`import()` specifiers,
  * never arbitrary file text.
  */
@@ -155,7 +155,7 @@ describe("no blueprint imports a provider SDK directly (docs/blueprint-seats.md 
       expect(
         hits,
         `${path.relative(PACKAGE_ROOT, file)} imports ${hits.join(", ")} — ` +
-          `the only roads to a model are ctx.agent (the ACP runner registry) ` +
+          `the only roads to a model are ctx.delegate (the ACP harness registry) ` +
           `and the device work-lease lane (docs/blueprint-seats.md ` +
           `"Enrichment doctrine")`
       ).toStrictEqual([]);

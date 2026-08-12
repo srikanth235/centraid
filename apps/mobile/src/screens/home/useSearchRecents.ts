@@ -11,7 +11,7 @@
 //    the springboard's own tiles already do.
 //  - tally: `spent_on` is the closest replica column to "when this was
 //    captured" — the same column the springboard's tally tile filters on.
-//  - photos: `captured_at` on `media.media_asset`, the springboard photos
+//  - photos: `captured_at` on `media.asset`, the springboard photos
 //    tile's own ordering column. The asset has no title, so its recents
 //    label is its kind ("Photo" / "Video") — never an invented caption.
 //  - people: read only to seed suggestion chips with a real name; people
@@ -120,7 +120,7 @@ export function useSearchRecents(): SearchRecentsResult {
     "photos",
     useMemo(
       (): NativeReadRequest => ({
-        entity: "media.media_asset",
+        entity: "media.asset",
         where: [{ column: "deleted_at", op: "is-null" }],
         orderBy: { column: "captured_at", dir: "desc" },
         limit: READ_LIMIT,

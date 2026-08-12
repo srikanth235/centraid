@@ -132,7 +132,7 @@ import styles from "./Chrome.module.css";
 // The vault tables the library projection reads — the change-subscription
 // filter AND the onChange refetch gate (issue #404).
 export const PHOTOS_READ_TABLES_LIST = [
-  "media.media_asset",
+  "media.asset",
   "core.content_item",
   "core.collection",
   "core.collection_entry",

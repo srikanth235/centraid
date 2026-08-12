@@ -6,7 +6,7 @@
 // shares), its mobile twin `AudiencePlacementSheet.tsx` (retired the same
 // way, replaced by `apps/mobile/src/kit/share/ShareSheet.tsx`), and Photos'
 // own copy-to-vault wiring (`apps/photos/sharing.ts`) for
-// `media.media_asset`. A fourth copy (`core.content_item`, for
+// `media.asset`. A fourth copy (`core.content_item`, for
 // Notes attachments) never existed anywhere, so an app wanting to share a
 // note body had nothing to import. This module is the ONE place that answers
 // "what is placeable, and which app owns it" — every placement control reads
@@ -38,7 +38,7 @@ export type PlaceableItemType =
   | "core.content_item"
   | "core.document"
   | "docs.folder"
-  | "media.media_asset"
+  | "media.asset"
   | "tally.group";
 
 /** One entity the registry knows how to place, and which app it belongs to. */
@@ -59,7 +59,7 @@ export const PLACEMENT_REGISTRY: readonly PlacementEntity[] = [
   { itemType: "core.content_item", appId: "notes", label: "note" },
   { itemType: "core.document", appId: "docs", label: "document" },
   { itemType: "docs.folder", appId: "docs", label: "folder" },
-  { itemType: "media.media_asset", appId: "photos", label: "photo" },
+  { itemType: "media.asset", appId: "photos", label: "photo" },
   { itemType: "tally.group", appId: "tally", label: "group" },
 ];
 

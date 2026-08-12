@@ -1,5 +1,5 @@
 // Mobile automations client (issue #263 family). The vault's automations are
-// long-lived agent conversations that fire on a trigger; this module lists
+// long-lived automation turns that fire on a trigger; this module lists
 // them, fires one now, and toggles a row's enabled flag — all over the same
 // gateway base (paired tunnel or manual dev URL) the rest of the app uses.
 //

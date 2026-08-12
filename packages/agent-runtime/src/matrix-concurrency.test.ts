@@ -9,7 +9,7 @@ import { lowPriorityCommand } from "./low-priority.ts";
 describe("matrix-concurrency", () => {
   test("parallel lowPriorityCommand calls return independent argv arrays", () => {
     const results = Array.from({ length: 32 }, (_, i) =>
-      lowPriorityCommand("agent-bin", [`--slot=${i}`, "run"], {
+      lowPriorityCommand("harness-bin", [`--slot=${i}`, "run"], {
         platform: "linux",
         exists: (p) => p === "/usr/bin/nice" || p === "/usr/bin/ionice",
       })

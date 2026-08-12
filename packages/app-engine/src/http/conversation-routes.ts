@@ -83,7 +83,7 @@ function sendError(res: ServerResponse, status: number, message: string): void {
 /**
  * Build the conversation HTTP route handler. The store is resolved lazily
  * via `getStore()` so the SQLite connection only opens in the gateway
- * process (route handlers don't fire in agent-worker contexts), avoiding
+ * process (route handlers don't fire in harness-worker contexts), avoiding
  * stray DB handles in subprocesses that never touch chat history.
  *
  * Chat is app-scoped (issue #98): every route carries the owning `appId`,

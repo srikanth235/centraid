@@ -801,7 +801,7 @@ const notePublisher: Publisher = {
   },
 };
 
-// ── media.media_asset (photo-library import, issue #721 A1) ─────────────
+// ── media.asset (photo-library import, issue #721 A1) ─────────────
 // A photograph from a Takeout archive must become the SAME row as one
 // uploaded from a phone, so this publisher writes through `media.add_asset`'s
 // own primitives (commands/media.ts) rather than a second insert of its own:
@@ -845,7 +845,7 @@ function placeImportedAsset(
     ...addCollectionEntry(
       vault,
       placed.collectionId,
-      "media.media_asset",
+      "media.asset",
       assetId,
       now
     ),
@@ -855,7 +855,7 @@ function placeImportedAsset(
   vault
     .prepare(
       `UPDATE core_collection SET cover_content_id =
-         (SELECT content_id FROM media_media_asset WHERE asset_id = ?)
+         (SELECT content_id FROM media_asset WHERE asset_id = ?)
        WHERE collection_id = ? AND cover_content_id IS NULL`
     )
     .run(assetId, placed.collectionId);
@@ -863,7 +863,7 @@ function placeImportedAsset(
 }
 
 const mediaAssetPublisher: Publisher = {
-  entityType: "media.media_asset",
+  entityType: "media.asset",
   probe(vault, payload) {
     // Read-only lookup — see the eventPublisher note above. DEDUPE AGAINST
     // THE WHOLE VAULT, not just this connection's map: the same photograph
@@ -874,7 +874,7 @@ const mediaAssetPublisher: Publisher = {
     if (typeof p.stagedSha !== "string") return null;
     const existing = vault
       .prepare(
-        `SELECT a.asset_id FROM media_media_asset a
+        `SELECT a.asset_id FROM media_asset a
            JOIN core_content_item c ON c.content_id = a.content_id
           WHERE c.sha256 = ? AND a.deleted_at IS NULL`
       )
@@ -964,7 +964,7 @@ const mediaAssetPublisher: Publisher = {
     // additive, never re-pointed.
     vault
       .prepare(
-        `UPDATE media_media_asset
+        `UPDATE media_asset
             SET captured_at = COALESCE(?, captured_at),
                 capture_group_id = COALESCE(capture_group_id, ?)
           WHERE asset_id = ?`
@@ -974,7 +974,7 @@ const mediaAssetPublisher: Publisher = {
       vault
         .prepare(
           `UPDATE core_content_item SET title = ?
-            WHERE content_id = (SELECT content_id FROM media_media_asset WHERE asset_id = ?)`
+            WHERE content_id = (SELECT content_id FROM media_asset WHERE asset_id = ?)`
         )
         .run(p.caption, entityId);
     }
@@ -1006,10 +1006,10 @@ function applyImportedAssetFlags(
 ): void {
   if (payload.favorite !== 1) return;
   deps.vault
-    .prepare("UPDATE media_media_asset SET favorite = 1 WHERE asset_id = ?")
+    .prepare("UPDATE media_asset SET favorite = 1 WHERE asset_id = ?")
     .run(assetId);
   const row = deps.vault
-    .prepare("SELECT content_id FROM media_media_asset WHERE asset_id = ?")
+    .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
     .get(assetId) as { content_id: string } | undefined;
   if (!row) return;
   setStarredTx(

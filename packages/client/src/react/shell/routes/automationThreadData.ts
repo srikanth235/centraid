@@ -68,18 +68,18 @@ export interface AutomationThreadLoadResult {
 //     where `appId` iterates `new Set(rows.map((r) => r.ownerApp))`).
 //   - `enrollAutomationAgent` calls `ensureAgentEnrolled(db, appId, {
 //     displayName })` (packages/gateway/src/serve/vault-plane.ts:520-526),
-//     which stores `appId` as `agent_agent.host_key` and `displayName`
+//     which stores `appId` as `consent_agent.enrollment_key` and `displayName`
 //     (== the automation's manifest `name`, same value `row.name` carries)
 //     as `core_party.display_name` — self-healing on rename
 //     (packages/vault/src/host.ts:415-455).
 //
-// None of the three consent surfaces expose that `ownerApp`/host_key to the
+// None of the three consent surfaces expose that `ownerApp`/enrollment_key to the
 // renderer, and only two of them expose the enrolled agent's row id at all:
 //   - `OutboxItem` (an outbox-staged write) carries only `actor` (the
 //     resolved DISPLAY NAME) and `actorKind` — `OutboxItemSummary`
 //     (vault-plane.ts:227-242) never puts `actor_id` on the wire.
 //   - `OutboxGrant.actorId` and `VaultParkedEntry.callerId` DO carry the raw
-//     `agent_agent.agent_id` (vault-plane.ts:934-965 `listOutboxGrants`;
+//     `consent_agent.agent_id` (vault-plane.ts `listOutboxGrants`;
 //     packages/vault/src/gateway/gateway.ts:1292-1311 `listParked`), but the
 //     renderer has no lookup from a `CentraidAutomationRow` to that id — no
 //     `/centraid/_vault/agents` client fn exists in gateway-client-vault.ts
@@ -97,7 +97,7 @@ export interface AutomationThreadLoadResult {
 // collide, a very recent rename lags until the next scheduler reconcile
 // tick, and `OutboxGrant` carries no `actorKind` at all (grants are matched
 // on name alone — a coincidental app/automation name collision could leak a
-// grant here). A follow-up that exposes `agent_agent.agent_id` (e.g. a
+// grant here). A follow-up that exposes `consent_agent.agent_id` (e.g. a
 // renderer `listAgents()` client fn over the existing
 // `/centraid/_vault/agents` route) would let this become an exact id match.
 // Exported (not just used internally) so `automationEditorData.ts`'s
@@ -305,22 +305,22 @@ export async function loadAutomationThreadData(input: {
   return {
     data: {
       consent: filterConsentForAutomation(
-        agents.find((agent) => agent.hostKey === row.ownerApp)?.agentId,
+        agents.find((agent) => agent.enrollmentKey === row.ownerApp)?.agentId,
         blocking,
         grants
       ),
       header,
       plan: buildPlanStatus(compiles, executions.length > 0),
-      ...(row.manifest.enrich?.agentVariant
+      ...(row.manifest.enrich?.delegateStep
         ? {
             recognition: {
               capability: row.manifest.enrich.capability,
-              selected: row.manifest.enrich.agentVariant.selected,
+              selected: row.manifest.enrich.delegateStep.selected,
               deterministicLabel: "Deterministic service",
-              agent: {
+              delegate: {
                 model: row.manifest.requires.model ?? null,
-                latency: row.manifest.enrich.agentVariant.latency,
-                consequence: row.manifest.enrich.agentVariant.consequence,
+                latency: row.manifest.enrich.delegateStep.latency,
+                consequence: row.manifest.enrich.delegateStep.consequence,
               },
             },
           }

@@ -50,7 +50,7 @@ const COMMONS_CONTAINER_TYPES = new Set<ShareableItemType>([
   "core.content_item",
   "core.document",
   "docs.folder",
-  "media.media_asset",
+  "media.asset",
   "tally.group",
 ]);
 

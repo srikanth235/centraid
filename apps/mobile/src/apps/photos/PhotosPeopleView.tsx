@@ -118,7 +118,7 @@ export default function PhotosPeopleView({
     try {
       const result = await session.write("photos", {
         action: "request-enrichment",
-        input: { entity_type: "media.media_asset" },
+        input: { entity_type: "media.asset" },
       });
       if (
         surfaceWriteOutcome(result, { queuedMessage: ENRICHMENT_QUEUED_NOTE })

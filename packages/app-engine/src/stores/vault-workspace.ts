@@ -6,7 +6,7 @@
  * ledger (the ledger band of `journal.db`, which also carries the
  * `run_summary` rollup — the old standalone `transcripts.db` folded in),
  * the per-app state dirs (`apps/<id>/` logs + blobs), and the chat
- * runner's per-conversation scratch files. The gateway resolves the ACTIVE
+ * harness's per-conversation scratch files. The gateway resolves the ACTIVE
  * vault and hands app-engine this view of it; a vault switch makes the
  * provider return a different workspace on the next call, and every store
  * that consumes one re-resolves per call so the switch lands without any
@@ -43,11 +43,11 @@ export interface VaultWorkspace {
   /** Absolute path of `journal.db` (for hosts that spawn workers). */
   journalDbFile: string;
   /**
-   * Disposable scratch dir for the chat runner's per-conversation session
+   * Disposable scratch dir for the harness's per-conversation session
    * files (resume state). Derived cache — journal.db is the authoritative
    * ledger — so the gateway homes it OUTSIDE the vault dir; still per-vault.
    */
-  runnerSessionDir: string;
+  harnessSessionDir: string;
 }
 
 /**

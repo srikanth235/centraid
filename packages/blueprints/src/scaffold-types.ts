@@ -1,7 +1,7 @@
 /**
- * Types shared by the app scaffolders (moved here when `@centraid/agent-harness`
- * was dissolved — issue #145). `AppScaffoldError` is the renamed `HarnessError`;
- * it carries a machine-readable `code` the gateway maps to an HTTP status.
+ * Types shared by the app scaffolders (moved here when the old builder runtime
+ * was dissolved — issue #145). `AppScaffoldError` carries a machine-readable
+ * `code` the gateway maps to an HTTP status.
  */
 
 export interface AppInfo {

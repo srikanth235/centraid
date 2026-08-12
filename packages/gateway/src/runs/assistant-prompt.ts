@@ -1,7 +1,7 @@
 /*
  * The vault assistant's system-prompt preamble (the shell-level Q&A
  * register). Composition mirrors the app chat route: the route builds this
- * preamble and the runner passes it through unchanged. Three parts:
+ * preamble and the harness passes it through unchanged. Three parts:
  *
  *   1. the register — who the assistant is and how it must ground answers;
  *   2. the answer format — markdown, inline entity refs, and the typed
@@ -10,7 +10,7 @@
  *      turn by `@centraid/vault`'s buildAssistantContext (spliced in here).
  *
  * Provider-agnostic on purpose: nothing in here names a model or vendor —
- * the same text rides whichever runner backend the user configured.
+ * the same text rides whichever harness spec the user configured.
  */
 
 const REGISTER = `You are the owner's vault assistant. The vault is their personal data store — people, notes, documents, events, money, health, tasks — and you answer questions over it. You are talking to the one person whose data this is.

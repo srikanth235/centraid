@@ -85,19 +85,19 @@ describe("media: purge_asset", () => {
     db.vault
       .prepare(
         `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
-         VALUES ('tag-1', 'media.media_asset', ?, ?, NULL, NULL, '2026-01-01T00:00:00Z')`
+         VALUES ('tag-1', 'media.asset', ?, ?, NULL, NULL, '2026-01-01T00:00:00Z')`
       )
       .run(asset.asset_id, conceptId);
     db.vault
       .prepare(
         `INSERT INTO knowledge_annotation (annotation_id, author_party_id, target_type, target_id, selector_json, body_text, created_at)
-         VALUES ('anno-1', ?, 'media.media_asset', ?, NULL, 'the light here', '2026-01-01T00:00:00Z')`
+         VALUES ('anno-1', ?, 'media.asset', ?, NULL, 'the light here', '2026-01-01T00:00:00Z')`
       )
       .run(boot.ownerPartyId, asset.asset_id);
     db.vault
       .prepare(
         `INSERT INTO core_link (link_id, from_type, from_id, to_type, to_id, relation_concept_id, valid_from, valid_to, asserted_by, provenance_id)
-         VALUES ('link-1', 'media.media_asset', ?, 'core.party', ?, ?, '2026-01-01T00:00:00Z', NULL, 'owner', NULL)`
+         VALUES ('link-1', 'media.asset', ?, 'core.party', ?, ?, '2026-01-01T00:00:00Z', NULL, 'owner', NULL)`
       )
       .run(asset.asset_id, boot.ownerPartyId, conceptId);
 
@@ -106,7 +106,7 @@ describe("media: purge_asset", () => {
 
     expect(
       count(
-        "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = ?",
+        "SELECT count(*) AS n FROM media_asset WHERE asset_id = ?",
         asset.asset_id
       )
     ).toBe(0);
@@ -171,7 +171,7 @@ describe("media: purge_asset", () => {
     expect(outcome.reason).toContain("already in the trash");
     expect(
       count(
-        "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = ?",
+        "SELECT count(*) AS n FROM media_asset WHERE asset_id = ?",
         asset.asset_id
       )
     ).toBe(1);
@@ -199,7 +199,7 @@ describe("media: purge_asset", () => {
     expect(refused.reason).toContain("edited copy");
     expect(
       count(
-        "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = ?",
+        "SELECT count(*) AS n FROM media_asset WHERE asset_id = ?",
         original.asset_id
       )
     ).toBe(1);
@@ -243,7 +243,7 @@ describe("media: purge_asset", () => {
     expect(denied.status).toBe("denied");
     expect(
       count(
-        "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = ?",
+        "SELECT count(*) AS n FROM media_asset WHERE asset_id = ?",
         asset.asset_id
       )
     ).toBe(1);

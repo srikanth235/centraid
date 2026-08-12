@@ -124,7 +124,7 @@ function AutoTile({
               ) : row.recentFailover ? (
                 <span
                   className={styles.failoverBadge}
-                  title="The latest operation continued on a fallback agent"
+                  title="The latest operation continued on a fallback harness"
                 >
                   Fallback
                 </span>

@@ -14,6 +14,8 @@
  * end of the turn.
  */
 
+import type { SessionNotification, Usage } from "@agentclientprotocol/sdk";
+
 import type { TurnStreamEvent } from "@centraid/app-engine";
 
 import { firstString, textOf } from "./content.js";
@@ -22,23 +24,23 @@ import type { TokenUsage, UsageCost } from "./usage.js";
 
 export interface SessionUpdateMapper {
   /** Feed one `session/update` notification's `params`. */
-  handleSessionUpdate: (params: unknown) => void;
+  handleSessionUpdate: (params: SessionNotification) => void;
   /**
-   * Is the agent itself already streaming a tool call by this name?
+   * Is the harness itself already streaming a tool call by this name?
    *
-   * An agent that surfaces its MCP calls announces `tool_call` BEFORE it
+   * A harness that surfaces its MCP calls announces `tool_call` BEFORE it
    * dials our endpoint, and closes it with `tool_call_update` afterwards —
    * so by the time a vault tool runs, a matching open ACP tool call means
    * the transcript is already covered and our own events would double-render
-   * it. Agents that keep MCP calls private leave nothing open, and we emit.
-   * The `includes` is deliberate: namespacing agents surface the tool as
+   * it. Harnesses that keep MCP calls private leave nothing open, and we emit.
+   * The `includes` is deliberate: namespacing harnesses surface the tool as
    * `mcp__centraid__vault_sql`.
    */
-  agentStreamsTool: (toolName: string) => boolean;
+  harnessStreamsTool: (toolName: string) => boolean;
   /** Assistant text accumulated across `agent_message_chunk`s. */
   finalText: () => string;
   /** Merge a token breakdown read elsewhere (the `session/prompt` result). */
-  foldTokenUsage: (source: Record<string, unknown>) => void;
+  foldTokenUsage: (source: Usage) => void;
   /** Everything folded so far, for the single end-of-turn `usage` event. */
   usage: () => {
     tokens: TokenUsage;
@@ -248,7 +250,7 @@ export function createSessionUpdateMapper(
     emit({ type: "assistant.start" });
   };
 
-  const agentStreamsTool = (toolName: string): boolean => {
+  const harnessStreamsTool = (toolName: string): boolean => {
     const needle = toolName.toLowerCase();
     if (!needle) return false;
     for (const [id, title] of toolTitles) {
@@ -278,9 +280,9 @@ export function createSessionUpdateMapper(
             ...(renderableContent.length
               ? {
                   content: renderableContent,
-                  // The agent's own `rawOutput.content` is its payload, not
+                  // The harness's own `rawOutput.content` is its payload, not
                   // our renderable projection — overwriting the key would
-                  // silently drop tool output the agent chose to return.
+                  // silently drop tool output the harness chose to return.
                   ...((update.rawOutput as Record<string, unknown>).content ===
                   undefined
                     ? {}
@@ -357,10 +359,8 @@ export function createSessionUpdateMapper(
     }
   };
 
-  const handleSessionUpdate = (params: unknown): void => {
-    const p = params as { update?: Record<string, unknown> } | undefined;
-    const update = p?.update;
-    if (!update || typeof update !== "object") return;
+  const handleSessionUpdate = (params: SessionNotification): void => {
+    const update = params.update;
     const kind = update.sessionUpdate;
 
     if (kind === "agent_message_chunk") {
@@ -414,10 +414,8 @@ export function createSessionUpdateMapper(
       return;
     }
     if (kind === "usage_update") {
-      // Per schema, `usage_update` carries context-window used/size plus a
-      // cumulative `cost`. Some agents also hang token counts here, so we
-      // still merge whatever tokens we can read — the end-of-turn emit wins.
-      usageTokens = { ...usageTokens, ...readTokenUsage(update) };
+      // Per the SDK schema, `usage_update` carries context-window used/size
+      // plus cumulative cost; token totals come from `PromptResponse.usage`.
       const cost = readCost(update.cost);
       if (cost) usageCost = cost;
       const used =
@@ -445,12 +443,12 @@ export function createSessionUpdateMapper(
     // user_message_chunk / available_commands_update / current_mode_update /
     // config_option_update: product owns slash commands; config updates are
     // consumed by the backend's pin state.
-    // product owns slash commands; agent command lists are ignored for now.
+    // product owns slash commands; harness command lists are ignored for now.
   };
 
   return {
     handleSessionUpdate,
-    agentStreamsTool,
+    harnessStreamsTool,
     finalText: () => finalText,
     foldTokenUsage: (source) => {
       usageTokens = { ...usageTokens, ...readTokenUsage(source) };

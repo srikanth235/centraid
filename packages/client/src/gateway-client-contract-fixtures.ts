@@ -68,7 +68,7 @@ export function row(): CentraidAutomationRow {
       triggers,
       requires: {},
       history: { keep: { count: 10 } },
-      generated: { by: "agent", at: "2026-07-25T00:00:00.000Z" },
+      generated: { by: "centraid-builder", at: "2026-07-25T00:00:00.000Z" },
     },
   };
 }
@@ -131,7 +131,7 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
   if (path === "/centraid/_templates") return json([]);
   if (path === "/_centraid-user/id") return json({ id: "user-1" });
   if (path === "/_centraid-user/prefs")
-    return json({ prefs: { runner: "codex" } });
+    return json({ prefs: { harness: "codex" } });
   if (path === "/centraid/_apps/_sessions" && method === "POST") {
     const body = JSON.parse(String(init?.body)) as { sessionId: string };
     return json({ sessionId: body.sessionId });

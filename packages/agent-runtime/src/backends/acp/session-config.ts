@@ -8,53 +8,70 @@
  *     promptCapabilities }, ... }.
  *   - session: `session/new` { cwd, mcpServers } → { sessionId };
  *     `session/load` { sessionId, cwd, mcpServers } replays history via
- *     `session/update` then resolves null (only when the agent advertised
+ *     `session/update` then resolves null (only when the harness advertised
  *     `loadSession`).
  *
- * Config selection (verified against `@agentclientprotocol/sdk` 1.2.1's
- * generated schema, not guessed): ACP has no per-prompt model field. An agent
+ * Config selection (verified against the pinned `@agentclientprotocol/sdk` 1.3.0's
+ * generated schema, not guessed): ACP has no per-prompt model field. A harness
  * instead advertises `configOptions` on the `session/new` / `session/load`
  * RESULT, and the client pins one with the `session/set_config_option`
  * request `{ sessionId, configId, value }`
  * (`AGENT_METHODS.session_set_config_option`). The model selector is the
  * option whose `id` is `"model"` or whose `category` is `"model"`; its
  * `options` are `{ value, name }` pairs (or groups of them) carrying CONCRETE
- * provider model ids. We only ever echo values the agent itself offered, so
+ * provider model ids. We only ever echo values the harness itself offered, so
  * no provider ids are hardcoded here. Options are identified by semantic
  * `category`, never adapter-specific ids (`reasoning_effort` vs `effort`).
- * When the agent advertises no requested category, or offers nothing matching
+ * When the harness advertises no requested category, or offers nothing matching
  * the request, we emit a `notice` rather than silently ignoring the pin.
  */
 
+import { methods } from "@agentclientprotocol/sdk";
+import type {
+  AgentRequestMethod,
+  AgentRequestParamsByMethod,
+  AgentRequestResponsesByMethod,
+  LoadSessionResponse,
+  NewSessionResponse,
+  ResumeSessionResponse,
+  SessionCapabilities,
+  SessionConfigOption,
+  SessionConfigSelectOption,
+  SessionConfigSelectOptions,
+  SessionModeState,
+  SessionNotification,
+  SendRequestOptions,
+  SetSessionConfigOptionResponse,
+} from "@agentclientprotocol/sdk";
+
 import type { TurnStreamEvent } from "@centraid/app-engine";
 
-import { isObject } from "./content.js";
-
 /** Wire method for pinning a session config option (e.g. the model). */
-export const SET_CONFIG_OPTION = "session/set_config_option";
+export const SET_CONFIG_OPTION = methods.agent.session.setConfigOption;
 /** Wire method for selecting a session mode (e.g. claude's `bypassPermissions`). */
-export const SET_MODE = "session/set_mode";
+export const SET_MODE = methods.agent.session.setMode;
 
-/** Session lifecycle capabilities from `initialize` (ACP v1 stable extensions). */
-export interface SessionCapabilities {
-  resume?: unknown;
-  close?: unknown;
-  additionalDirectories?: unknown;
-}
+export type {
+  SessionCapabilities,
+  SessionConfigOption,
+  SessionModeState,
+} from "@agentclientprotocol/sdk";
 
-/** The slice of the `initialize` result this client reads. */
-export interface InitializeResult {
-  agentCapabilities?: {
-    loadSession?: unknown;
-    promptCapabilities?: unknown;
-    mcpCapabilities?: { http?: unknown; sse?: unknown; acp?: unknown };
-    sessionCapabilities?: SessionCapabilities;
-    auth?: { logout?: unknown };
-  };
-  authMethods?: unknown;
-}
+/** SDK response types that carry a config-option snapshot. */
+export type SessionConfigResponse =
+  | NewSessionResponse
+  | LoadSessionResponse
+  | ResumeSessionResponse
+  | SetSessionConfigOptionResponse;
 
-/** True when the agent advertises a structured session capability object. */
+/** SDK-owned built-in request pairing, usable through timeout decorators. */
+export type AcpBuiltinRequest = <Method extends AgentRequestMethod>(
+  method: Method,
+  params: AgentRequestParamsByMethod[Method],
+  options?: SendRequestOptions
+) => Promise<AgentRequestResponsesByMethod[Method]>;
+
+/** True when the harness advertises a structured session capability object. */
 export function hasSessionCapability(
   caps: SessionCapabilities | undefined,
   key: keyof SessionCapabilities
@@ -62,33 +79,13 @@ export function hasSessionCapability(
   if (!caps) return false;
   const v = caps[key];
   // Spec: `{}` means supported; omit/null means not.
-  return v !== undefined && v !== null && v !== false;
-}
-
-export interface SessionConfigOption {
-  id?: unknown;
-  category?: unknown;
-  type?: unknown;
-  currentValue?: unknown;
-  options?: unknown;
-}
-
-export interface SessionModes {
-  currentModeId?: unknown;
-  availableModes?: unknown;
-}
-
-export interface SessionSetupResult {
-  sessionId?: unknown;
-  configOptions?: unknown;
-  modes?: SessionModes | null;
+  return v !== undefined && v !== null;
 }
 
 export function readConfigOptions(
-  result: SessionSetupResult | undefined
+  result: SessionConfigResponse | undefined
 ): SessionConfigOption[] {
-  const raw = result?.configOptions;
-  return Array.isArray(raw) ? raw.filter(isObject) : [];
+  return result?.configOptions ?? [];
 }
 
 /**
@@ -102,13 +99,11 @@ export function readConfigOptions(
  * gone, not retained from an earlier snapshot.
  */
 export function readConfigOptionUpdate(
-  params: unknown
+  params: SessionNotification
 ): SessionConfigOption[] | undefined {
-  if (!isObject(params) || !isObject(params.update)) return undefined;
   const update = params.update;
   if (update.sessionUpdate !== "config_option_update") return undefined;
-  const options = update.configOptions;
-  return Array.isArray(options) ? options.filter(isObject) : undefined;
+  return update.configOptions;
 }
 
 /** The `currentValue` the session advertises for one semantic category. */
@@ -122,26 +117,21 @@ export function readCurrentConfigValue(
     : undefined;
 }
 
-/** Does the agent advertise `modeId` among its available session modes? */
+/** Does the harness advertise `modeId` among its available session modes? */
 export function modeAvailable(
-  modes: SessionModes | undefined,
+  modes: SessionModeState | undefined,
   modeId: string
 ): boolean {
   if (!modes) return false;
   if (modes.currentModeId === modeId) return true;
-  const list = modes.availableModes;
-  if (!Array.isArray(list)) return false;
-  return list.some((m) => isObject(m) && m.id === modeId);
+  return modes.availableModes.some((mode) => mode.id === modeId);
 }
 
-/** One concrete value the agent offers on a select config option. */
-export interface OfferedConfigValue {
-  value: string;
-  name?: string;
-}
+/** One concrete value the harness offers on a select config option. */
+export type OfferedConfigValue = SessionConfigSelectOption;
 
-/** Backward-compatible semantic alias for model catalog callers. */
-export type OfferedModel = OfferedConfigValue;
+/** Semantic alias for model catalog callers, sourced from the SDK schema. */
+export type OfferedModel = SessionConfigSelectOption;
 
 /** Find one config selector by ACP semantic category. */
 export function findConfigOption(
@@ -159,29 +149,24 @@ export function findConfigOption(
 }
 
 /** Flatten `SessionConfigSelectOptions` — either a flat list or groups of one. */
-export function flattenSelectOptions(raw: unknown): OfferedConfigValue[] {
-  if (!Array.isArray(raw)) return [];
+export function flattenSelectOptions(
+  raw: SessionConfigSelectOptions
+): OfferedConfigValue[] {
   const out: OfferedConfigValue[] = [];
   for (const entry of raw) {
-    if (!isObject(entry)) continue;
-    if (Array.isArray(entry.options)) {
-      out.push(...flattenSelectOptions(entry.options));
+    if ("options" in entry) {
+      out.push(...entry.options);
       continue;
     }
-    if (typeof entry.value === "string") {
-      out.push({
-        value: entry.value,
-        ...(typeof entry.name === "string" ? { name: entry.name } : {}),
-      });
-    }
+    out.push(entry);
   }
   return out;
 }
 
 /**
- * The concrete models an agent advertises on its `model` config option, plus
+ * The concrete models a harness advertises on its `model` config option, plus
  * the option's `currentValue` (its own default selection). Empty when the
- * agent exposes no model selector — which is how a kind that picks its own
+ * harness exposes no model selector — which is how a kind that picks its own
  * model per session yields an empty catalog rather than a fabricated one.
  *
  * This is the enumeration counterpart to `pinModel`: same option lookup, but
@@ -194,23 +179,21 @@ export function readOfferedModels(configOptions: SessionConfigOption[]): {
   currentValue?: string;
 } {
   const option = findConfigOption(configOptions, "model");
-  if (!option) return { models: [] };
+  if (!option || option.type !== "select") return { models: [] };
   return {
     models: flattenSelectOptions(option.options),
-    ...(typeof option.currentValue === "string"
-      ? { currentValue: option.currentValue }
-      : {}),
+    currentValue: option.currentValue,
   };
 }
 
 /**
- * Match a requested model against what the agent offers. Exact `value` wins,
+ * Match a requested model against what the harness offers. Exact `value` wins,
  * then a case-insensitive `name`, then a substring on either — so a
  * capability-tier alias like `opus` still finds `claude-opus-4-5-20251101`
  * without this module ever naming a concrete model id.
  */
 function matchModelValue(
-  offered: Array<{ value: string; name?: string }>,
+  offered: OfferedConfigValue[],
   wanted: string
 ): string | undefined {
   const needle = wanted.trim().toLowerCase();
@@ -232,10 +215,10 @@ function matchModelValue(
 /**
  * Pin the caller's model through `session/set_config_option`, and report the
  * model actually in effect (for the usage stamp). Emits a `notice` when the
- * agent exposes no model selector or offers nothing matching.
+ * harness exposes no model selector or offers nothing matching.
  */
 export async function pinModel(args: {
-  request: <T = unknown>(method: string, params: unknown) => Promise<T>;
+  request: AcpBuiltinRequest;
   emit: (event: TurnStreamEvent) => void;
   sessionId: string;
   configOptions: SessionConfigOption[];
@@ -248,14 +231,14 @@ export async function pinModel(args: {
 
   if (!args.requested) return current;
 
-  if (!option) {
+  if (!option || option.type !== "select") {
     // User explicitly picked a model — surface as warn so the composer notice
     // is hard to miss (model switch reliability).
     args.emit({
       type: "notice",
       level: "warn",
       code: "model_unsupported",
-      message: `This runner picks its own model — the selected model (${args.requested}) was ignored.`,
+      message: `This harness picks its own model — the selected model (${args.requested}) was ignored.`,
     });
     return current;
   }
@@ -270,7 +253,7 @@ export async function pinModel(args: {
       level: "warn",
       code: "model_not_offered",
       message:
-        `This runner doesn’t offer the selected model (${args.requested}) — ` +
+        `This harness doesn’t offer the selected model (${args.requested}) — ` +
         `it used its own default instead.`,
     });
     return current;
@@ -278,12 +261,12 @@ export async function pinModel(args: {
   if (value === current) return current;
 
   try {
-    const result = await args.request<SessionSetupResult>(SET_CONFIG_OPTION, {
+    const result = await args.request(SET_CONFIG_OPTION, {
       sessionId: args.sessionId,
       configId: option.id,
       value,
     });
-    // D4 confirmation: a RESOLVED `session/set_config_option` IS the agent
+    // D4 confirmation: a RESOLVED `session/set_config_option` IS the harness
     // confirming the pin — the spec's result echo is optional. Only an echo
     // that CONTRADICTS the request leaves the active value unknown.
     const echoed = readCurrentConfigValue(readConfigOptions(result), "model");
@@ -293,21 +276,21 @@ export async function pinModel(args: {
         level: "warn",
         code: "model_unconfirmed",
         message:
-          `This runner accepted the selected model (${args.requested}) but reported ` +
+          `This harness accepted the selected model (${args.requested}) but reported ` +
           `a different active model, so Centraid will record the model as unknown.`,
       });
       return undefined;
     }
     return value;
   } catch {
-    // The agent rejected the pin (stale option list, provider hiccup). The
+    // The harness rejected the pin (stale option list, provider hiccup). The
     // turn is still runnable on its default — say so instead of failing it.
     args.emit({
       type: "notice",
       level: "warn",
       code: "model_not_offered",
       message:
-        `This runner refused the selected model (${args.requested}) — ` +
+        `This harness refused the selected model (${args.requested}) — ` +
         `it used its own default instead.`,
     });
     return current;
@@ -320,7 +303,7 @@ export async function pinModel(args: {
  * aliases, effort values are never substring-translated.
  */
 export async function pinThoughtLevel(args: {
-  request: <T = unknown>(method: string, params: unknown) => Promise<T>;
+  request: AcpBuiltinRequest;
   emit: (event: TurnStreamEvent) => void;
   sessionId: string;
   configOptions: SessionConfigOption[];
@@ -330,12 +313,12 @@ export async function pinThoughtLevel(args: {
   const current =
     typeof option?.currentValue === "string" ? option.currentValue : undefined;
   if (!args.requested) return current;
-  if (!option) {
+  if (!option || option.type !== "select") {
     args.emit({
       type: "notice",
       level: "warn",
       code: "thought_level_unsupported",
-      message: `This runner does not advertise an effort control — the selected effort (${args.requested}) was ignored.`,
+      message: `This harness does not advertise an effort control — the selected effort (${args.requested}) was ignored.`,
     });
     return current;
   }
@@ -352,14 +335,14 @@ export async function pinThoughtLevel(args: {
       type: "notice",
       level: "warn",
       code: "thought_level_not_offered",
-      message: `This runner does not offer the selected effort (${args.requested}) for its active model — it used its own default instead.`,
+      message: `This harness does not offer the selected effort (${args.requested}) for its active model — it used its own default instead.`,
     });
     return current;
   }
   if (selected === current) return current;
 
   try {
-    const result = await args.request<SessionSetupResult>(SET_CONFIG_OPTION, {
+    const result = await args.request(SET_CONFIG_OPTION, {
       sessionId: args.sessionId,
       configId: option.id,
       value: selected,
@@ -375,7 +358,7 @@ export async function pinThoughtLevel(args: {
         type: "notice",
         level: "warn",
         code: "thought_level_unconfirmed",
-        message: `The runner accepted the effort request but reported a different active effort, so Centraid will record effort as unknown.`,
+        message: `The harness accepted the effort request but reported a different active effort, so Centraid will record effort as unknown.`,
       });
       return undefined;
     }
@@ -385,7 +368,7 @@ export async function pinThoughtLevel(args: {
       type: "notice",
       level: "warn",
       code: "thought_level_not_offered",
-      message: `This runner refused the selected effort (${args.requested}) — it used its own default instead.`,
+      message: `This harness refused the selected effort (${args.requested}) — it used its own default instead.`,
     });
     return current;
   }

@@ -78,7 +78,7 @@ export function createEnrichmentGate({
     busy = true;
     onData();
     const outcome = await act("request-enrichment", {
-      entity_type: "media.media_asset",
+      entity_type: "media.asset",
     });
     busy = false;
     if (narrate(outcome)) {

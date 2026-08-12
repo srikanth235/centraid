@@ -1,7 +1,7 @@
 /*
- * Standing the turn's vault tools up as an MCP server the agent can dial.
+ * Standing the turn's vault tools up as an MCP server the harness can dial.
  *
- * Prefer HTTP MCP when the agent advertises `mcpCapabilities.http` (the path
+ * Prefer HTTP MCP when the harness advertises `mcpCapabilities.http` (the path
  * first-party adapters support). When it does not, still stand up the
  * loopback HTTP endpoint and advertise a **stdio MCP** entry that runs
  * `vault-mcp-stdio-proxy.mjs` — agents MUST support stdio MCP per ACP, so
@@ -10,44 +10,36 @@
 
 import { fileURLToPath } from "node:url";
 
+import type { McpServer, McpServerStdio } from "@agentclientprotocol/sdk";
+
 import type { ToolContext, TurnStreamEvent } from "@centraid/app-engine";
 
 import {
   startVaultMcpServer,
   VAULT_MCP_SERVER_NAME,
 } from "./vault-mcp-server.js";
-import type { AcpHttpMcpServer, VaultMcpHandle } from "./vault-mcp-server.js";
+import type { VaultMcpHandle } from "./vault-mcp-server.js";
 
 const STDIO_PROXY = fileURLToPath(
   new URL("vault-mcp-stdio-proxy.mjs", import.meta.url)
 );
 
-/** ACP default (stdio) MCP server shape — no `type` field. */
-export interface AcpStdioMcpServer {
-  name: string;
-  command: string;
-  args: string[];
-  env: Array<{ name: string; value: string }>;
-}
-
-export type AcpMcpServer = AcpHttpMcpServer | AcpStdioMcpServer;
-
 export interface TurnVaultTools {
   /** What to name in `session/new` / `session/load` / `session/resume`'s `mcpServers`. */
-  mcpServers: AcpMcpServer[];
+  mcpServers: McpServer[];
   /** The live HTTP endpoint, to be closed with the turn. Absent when none was started. */
   handle?: VaultMcpHandle;
-  /** How the agent was told to reach the vault (for capability notices). */
+  /** How the harness was told to reach the vault (for capability notices). */
   transport?: "http" | "stdio";
 }
 
 export async function startTurnVaultTools(args: {
   toolContext: ToolContext | undefined;
-  /** Did the agent advertise `mcpCapabilities.http` in `initialize`? */
+  /** Did the harness advertise `mcpCapabilities.http` in `initialize`? */
   httpMcp: boolean;
   emit: (event: TurnStreamEvent) => void;
   /** The mapper's open-tool-call probe, used to avoid double-rendering. */
-  agentStreamsTool: (toolName: string) => boolean;
+  harnessStreamsTool: (toolName: string) => boolean;
 }): Promise<TurnVaultTools> {
   const toolCtx = args.toolContext;
   if (!toolCtx?.vaultSql) return { mcpServers: [] };
@@ -56,7 +48,7 @@ export async function startTurnVaultTools(args: {
   try {
     const handle = await startVaultMcpServer(toolCtx, {
       onStart: (call) => {
-        if (args.agentStreamsTool(call.toolName)) {
+        if (args.harnessStreamsTool(call.toolName)) {
           suppressed.add(call.toolCallId);
           return;
         }
@@ -85,13 +77,13 @@ export async function startTurnVaultTools(args: {
       return { mcpServers: [handle.server], handle, transport: "http" };
     }
 
-    // Stdio bridge: agent spawns proxy; proxy dials our loopback HTTP.
+    // Stdio bridge: harness spawns proxy; proxy dials our loopback HTTP.
     const bearer =
       handle.server.headers.find(
         (h) => h.name.toLowerCase() === "authorization"
       )?.value ?? "";
     const token = bearer.replace(/^Bearer\s+/iu, "");
-    const stdio: AcpStdioMcpServer = {
+    const stdio: McpServerStdio = {
       name: VAULT_MCP_SERVER_NAME,
       command: process.execPath,
       args: [STDIO_PROXY],
@@ -105,7 +97,7 @@ export async function startTurnVaultTools(args: {
       level: "info",
       code: "vault_tools_stdio",
       message:
-        "This runner doesn’t support HTTP MCP — vault tools are bridged over stdio MCP instead.",
+        "This harness doesn’t support HTTP MCP — vault tools are bridged over stdio MCP instead.",
     });
     return { mcpServers: [stdio], handle, transport: "stdio" };
   } catch (error) {

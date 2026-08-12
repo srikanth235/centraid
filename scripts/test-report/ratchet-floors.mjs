@@ -123,19 +123,66 @@ export function diffMutationFloors(base, head) {
 
 /**
  * Compare matrix flow minimumTests floors for any downward movement or removal.
- * @param {{ flows?: Array<{ id?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string }> }} base Matrix on the merge base.
- * @param {{ flows?: Array<{ id?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string }> }} head Matrix on the working tree.
+ * An ID rename must name its exact predecessor with
+ * `replacesMinimumTestsFlow`; a prose deviation alone cannot let one new flow
+ * absorb several removed floors.
+ * @param {{ flows?: Array<{ id?: string; surface?: string; dimension?: string; tier?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string; replacesMinimumTestsFlow?: string }> }} base Matrix on the merge base.
+ * @param {{ flows?: Array<{ id?: string; surface?: string; dimension?: string; tier?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string; replacesMinimumTestsFlow?: string }> }} head Matrix on the working tree.
  * @returns {string[]} Human-readable decrease errors.
  */
 export function diffMinimumTests(base, head) {
   const errors = [];
-  const headMap = new Map(
-    (head?.flows ?? []).filter((f) => f?.id).map((f) => [f.id, f])
-  );
-  for (const prev of base?.flows ?? []) {
+  const baseFlows = base?.flows ?? [];
+  const headFlows = head?.flows ?? [];
+  const baseMap = new Map(baseFlows.filter((f) => f?.id).map((f) => [f.id, f]));
+  const headMap = new Map(headFlows.filter((f) => f?.id).map((f) => [f.id, f]));
+  const replacements = new Map();
+  for (const candidate of headFlows) {
+    if (
+      typeof candidate?.replacesMinimumTestsFlow !== "string" ||
+      !candidate.replacesMinimumTestsFlow.trim()
+    ) {
+      continue;
+    }
+    const previousId = candidate.replacesMinimumTestsFlow.trim();
+    const claimed = replacements.get(previousId) ?? [];
+    claimed.push(candidate);
+    replacements.set(previousId, claimed);
+  }
+  for (const [previousId, candidates] of replacements) {
+    if (!baseMap.has(previousId)) {
+      errors.push(`flow replacement names unknown predecessor "${previousId}"`);
+    } else if (headMap.has(previousId)) {
+      errors.push(
+        `flow replacement names retained predecessor "${previousId}"`
+      );
+    }
+    if (candidates.length > 1) {
+      errors.push(
+        `flow "${previousId}" has multiple replacements (${candidates
+          .map((candidate) => `"${candidate.id ?? "<missing id>"}"`)
+          .join(", ")}); ID renames must be one-to-one`
+      );
+    }
+  }
+  for (const prev of baseFlows) {
     if (!prev?.id || prev.minimumTests === undefined) continue;
     const flow = headMap.get(prev.id);
     if (!flow || flow.minimumTests === undefined) {
+      const candidates = replacements.get(prev.id) ?? [];
+      const candidate = candidates.length === 1 ? candidates[0] : undefined;
+      const approvedReplacement =
+        candidate?.id !== undefined &&
+        candidate.id !== prev.id &&
+        !baseMap.has(candidate.id) &&
+        candidate.surface === prev.surface &&
+        candidate.dimension === prev.dimension &&
+        candidate.tier === prev.tier &&
+        typeof candidate.minimumTests === "number" &&
+        candidate.minimumTests >= prev.minimumTests &&
+        typeof candidate.approvedMinimumTestsDeviation === "string" &&
+        candidate.approvedMinimumTestsDeviation.trim();
+      if (approvedReplacement) continue;
       if (
         flow &&
         typeof flow.approvedMinimumTestsDeviation === "string" &&
@@ -149,7 +196,7 @@ export function diffMinimumTests(base, head) {
         );
       } else {
         errors.push(
-          `flow "${prev.id}" removed (had minimumTests ${prev.minimumTests}); add approvedMinimumTestsDeviation on a residual entry or restore the flow`
+          `flow "${prev.id}" removed (had minimumTests ${prev.minimumTests}); add one approved replacement with replacesMinimumTestsFlow: "${prev.id}" or restore the flow`
         );
       }
       continue;
@@ -619,7 +666,7 @@ function main() {
     );
     for (const e of errors) console.error(`  - ${e}`);
     console.error(
-      "To lower a floor or widen a budget deliberately, set approvedDeviation (coverage/mutation floors, budget source) or approvedMinimumTestsDeviation on the flow."
+      "To lower a floor or widen a budget deliberately, set approvedDeviation (coverage/mutation floors, budget source) or approvedMinimumTestsDeviation on the same flow. An ID rename also requires an exact one-to-one replacesMinimumTestsFlow mapping."
     );
     process.exitCode = 1;
     return;

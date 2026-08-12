@@ -88,7 +88,7 @@ export const SHARED_ASSET_FILES = new Set([
  * `app.json` is intentionally *not* reserved — the desktop's per-app
  * settings popover fetches it to read the manifest's `knobs` array
  * (folded in from the old `app-knobs.json` sidecar). The manifest is the
- * agent-facing tool contract; nothing in it is secret. */
+ * harness-facing tool contract; nothing in it is secret. */
 const RESERVED_FILENAMES = new Set(["data.sqlite", "_registry.json"]);
 
 /** Directories whose contents are never served as static. */

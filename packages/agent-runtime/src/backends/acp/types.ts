@@ -1,14 +1,14 @@
 /*
  * The public contract of the generic ACP backend (issue #479): what a caller
- * hands `runAcpTurn` and what a runner kind declares about itself.
+ * hands `runAcpTurn` and what a harness kind declares about itself.
  *
- * Two flavours of agent land here:
+ * Two flavours of harness land here:
  *   - CLIs that speak ACP natively (Gemini CLI, Qwen Code, a custom `acp`
  *     binary): spawned directly with their ACP flag.
  *   - CLIs that don't (Claude Code, Codex): spawned through their official
  *     first-party ACP *adapter*, declared as `AcpAdapterSpec` and resolved
  *     from node_modules by `./adapter-bin.ts`. From the backend's point of
- *     view the adapter IS the agent; per-kind differences collapse into
+ *     view the adapter IS the harness endpoint; per-kind differences collapse into
  *     launch env + an initial session mode.
  *
  * Every type here is re-exported from `./backend.ts`, which stays the single
@@ -16,8 +16,8 @@
  */
 
 import type {
-  AdapterUsageSnapshot,
-  RunnerKind,
+  HarnessUsageSnapshot,
+  HarnessKind,
   ToolContext,
   TurnAttachment,
   TurnStreamEvent,
@@ -29,21 +29,21 @@ export interface AcpTurnInput {
   cwd: string;
   message: string;
   /**
-   * Mapped to ACP prompt content blocks, gated on the capabilities the agent
+   * Mapped to ACP prompt content blocks, gated on the capabilities the harness
    * advertised in `initialize`. Anything it can't take is named in a notice.
    */
   attachments?: TurnAttachment[];
   /**
-   * The turn's vault runners. When present (and the agent supports HTTP MCP)
+   * The turn's vault executors. When present (and the harness supports HTTP MCP)
    * they are served from a per-turn loopback MCP endpoint named in
    * `mcpServers`, which is how `vault_sql` / `vault_invoke` / `vault_content`
-   * reach EVERY runner kind through one mechanism.
+   * reach EVERY harness kind through one mechanism.
    */
   toolContext?: ToolContext;
   /**
    * Prepended as a leading text block on EVERY turn (fresh, loaded, or
    * resumed). ACP has no separate system-prompt channel; re-sending keeps
-   * Centraid vault/skills policy in force even when agent session history
+   * Centraid vault/skills policy in force even when harness session history
    * is restored without our instructions. Callers keep this short.
    */
   extraSystemPrompt: string;
@@ -55,7 +55,7 @@ export interface AcpTurnInput {
   /** Session id from a prior turn; triggers resume/load when supported. */
   prevSessionId?: string;
   /** Persisted cumulative counters paired with `prevSessionId`. */
-  prevUsageSnapshot?: AdapterUsageSnapshot;
+  prevUsageSnapshot?: HarnessUsageSnapshot;
   /** Canonical ledger handoff, consumed only when a fresh session is used. */
   hydrationContext?: string;
   /** Historical files accompanying the retained handoff turns. */
@@ -64,10 +64,10 @@ export interface AcpTurnInput {
   recoveryHydrationContext?: string;
   /** Historical files accompanying full-ledger recovery. */
   recoveryHydrationAttachments?: TurnAttachment[];
-  /** A runner change already proved that this turn must hydrate. */
+  /** A harness change already proved that this turn must hydrate. */
   forceHydration?: boolean;
   /**
-   * Extra absolute workspace roots for agents that advertise
+   * Extra absolute workspace roots for harnesses that advertise
    * `sessionCapabilities.additionalDirectories`. Omitted when empty.
    */
   additionalDirectories?: string[];
@@ -87,8 +87,8 @@ export interface AcpAdapterSpec {
   /** npm package providing the adapter. Its `bin` entry is resolved from node_modules. */
   readonly packageName: string;
   /**
-   * Env var through which `RunnerPrefs.binPath` reaches the UNDERLYING CLI.
-   * With an adapter in the middle, `binPath` means "the agent CLI"
+   * Env var through which `HarnessPrefs.binPath` reaches the UNDERLYING CLI.
+   * With an adapter in the middle, `binPath` means "the harness CLI"
    * (`CLAUDE_CODE_EXECUTABLE` / `CODEX_PATH`), never the adapter itself.
    */
   readonly binPathEnvVar?: string;
@@ -109,15 +109,15 @@ export interface AcpAdapterSpec {
 }
 
 export interface AcpTurnConfig {
-  /** The runner kind this invocation represents — echoed as `adapterKind`. */
-  kind: RunnerKind;
+  /** The harness kind this invocation represents — echoed as `harnessKind`. */
+  kind: HarnessKind;
   /**
    * Human label for this kind, used only in operator-facing messages.
    * Defaults to `kind` when absent.
    */
   label?: string;
   /**
-   * The registry's install/setup hint. Surfaced verbatim when the agent
+   * The registry's install/setup hint. Surfaced verbatim when the harness
    * answers `AUTH_REQUIRED`, so the "how do I sign in" string lives with the
    * kind's other metadata instead of being branched on inside this client —
    * which is exactly the per-kind branching #479 removed.
@@ -131,7 +131,7 @@ export interface AcpTurnConfig {
   defaultBin?: string;
   /** Args that put the CLI into ACP mode (e.g. `['--acp']`). Empty with an adapter. */
   acpArgs: string[];
-  /** Override the agent CLI's location; defaults to `defaultBin` on PATH. */
+  /** Override the harness CLI's location; defaults to `defaultBin` on PATH. */
   binPath?: string;
   /** Extra args passed verbatim after the ACP flag. */
   extraArgs?: string[];
@@ -142,7 +142,7 @@ export interface AcpTurnConfig {
    * self-update suppressor (auggie's `AUGMENT_DISABLE_AUTO_UPDATE`) are the
    * same kind of fact — "this kind needs these vars at launch" — and splitting
    * them by flavour is exactly the per-kind branching #479 removed. Applied
-   * AFTER `agentSpawnEnv`, so a kind can override an inherited var but never
+   * AFTER `harnessSpawnEnv`, so a kind can override an inherited var but never
    * the sanitized PATH.
    */
   env?: Readonly<Record<string, string>>;
@@ -150,7 +150,7 @@ export interface AcpTurnConfig {
   adapter?: AcpAdapterSpec;
   /**
    * Map a capability tier (`smart`/`balanced`/`fast`) to this runtime's
-   * native model alias before matching it against the agent's offered model
+   * native model alias before matching it against the harness's offered model
    * options. Identity when the kind has no tier vocabulary.
    */
   resolveModel?: (model: string) => string;
@@ -169,7 +169,7 @@ export interface AcpTurnConfig {
 export interface AcpTurnResult {
   sessionId?: string;
   /** Current cumulative counters to persist beside `sessionId`. */
-  usageSnapshot?: AdapterUsageSnapshot;
+  usageSnapshot?: HarnessUsageSnapshot;
   /** A fresh session consumed the canonical ledger handoff. */
   hydrated?: boolean;
   /** Whether the normal delta or full resume-recovery plan was consumed. */

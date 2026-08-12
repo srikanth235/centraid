@@ -101,8 +101,8 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
       "conversation_turn_locks",
       "conversation_workspace_selection",
       "conversations",
+      "harness_health",
       "items",
-      "runner_health",
       "trigger_ingress",
       "turns",
     ]);

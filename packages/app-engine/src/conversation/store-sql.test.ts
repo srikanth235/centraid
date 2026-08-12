@@ -35,9 +35,9 @@ function rawConversation(over: Partial<RawConversation> = {}): RawConversation {
     app_id: "app",
     automation_id: null,
     title: "Hello",
-    adapter_kind: null,
-    adapter_session_id: null,
-    adapter_usage_json: null,
+    harness_kind: null,
+    harness_session_id: null,
+    harness_usage_json: null,
     turn_count: 2,
     pinned: 0,
     archived: 0,
@@ -93,7 +93,7 @@ function rawItem(over: Partial<RawItem> = {}): RawItem {
     raw_json: null,
     child_turn_id: null,
     model: null,
-    provider: null,
+    harness: null,
     effort: null,
     input_tokens: null,
     output_tokens: null,
@@ -116,8 +116,8 @@ describe("store-sql row mappers", () => {
     const full = conversationFromRaw(
       rawConversation({
         automation_id: "app/digest",
-        adapter_kind: "acp",
-        adapter_session_id: "sess",
+        harness_kind: "acp",
+        harness_session_id: "sess",
         pinned: 1,
         archived: 1,
       })
@@ -129,8 +129,8 @@ describe("store-sql row mappers", () => {
       appId: "app",
       automationId: "app/digest",
       title: "Hello",
-      adapterKind: "acp",
-      adapterSessionId: "sess",
+      harnessKind: "acp",
+      harnessSessionId: "sess",
       hydrationCount: 0,
       turnCount: 2,
       pinned: true,
@@ -169,20 +169,20 @@ describe("store-sql row mappers", () => {
     expect(turnFromRaw(rawTurn({ ok: 0 })).ok).toBe(false);
   });
 
-  it("itemFromRaw maps step usage + costSource agent|estimated only", () => {
+  it("itemFromRaw maps step usage + costSource harness|estimated only", () => {
     const step = itemFromRaw(
       rawItem({
         kind: "step",
         role: null,
         text: null,
-        name: "agent",
+        name: "delegate",
         model: "gpt",
-        provider: "openai",
+        harness: "openai",
         effort: "high",
         input_tokens: 5,
         output_tokens: 7,
         cost_usd: 0.02,
-        cost_source: "agent",
+        cost_source: "harness",
         child_turn_id: "child",
       })
     );
@@ -190,7 +190,7 @@ describe("store-sql row mappers", () => {
     expect(step.model).toBe("gpt");
     expect(step.effort).toBe("high");
     expect(step.inputTokens).toBe(5);
-    expect(step.costSource).toBe("agent");
+    expect(step.costSource).toBe("harness");
     expect(step.childTurnId).toBe("child");
     expect(
       itemFromRaw(rawItem({ cost_source: "other" })).costSource
@@ -248,8 +248,8 @@ describe("store-sql prepare()", () => {
     expect(stmts.insertItem.run).toBeTypeOf("function");
     expect(stmts.upsertState.run).toBeTypeOf("function");
 
-    // (id, kind, user_id, app_id, automation_id, title, adapter_kind,
-    //  created_at, updated_at) — adapter_session_id / adapter_usage_json /
+    // (id, kind, user_id, app_id, automation_id, title, harness_kind,
+    //  created_at, updated_at) — harness_session_id / harness_usage_json /
     //  turn_count / pinned are fixed in SQL.
     stmts.insertConversation.run(
       "c-sql",

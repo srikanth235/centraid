@@ -11,7 +11,7 @@ const summary: InsightsSummary = {
     totalTokens: 128_000,
     hydrationTokens: 1_024,
     totalCostUsd: 3.4,
-    agentReportedCostUsd: 2.1,
+    harnessReportedCostUsd: 2.1,
     estimatedCostUsd: 1.3,
     forecastCostUsd: 5.1,
     generations: 42,
@@ -45,8 +45,8 @@ const summary: InsightsSummary = {
       costUsd: 0.3,
     },
   ],
-  byRunner: [
-    { provider: "claude-code", runs: 7, tokens: 11_000, costUsd: 2.5 },
+  byHarness: [
+    { harness: "claude-code", runs: 7, tokens: 11_000, costUsd: 2.5 },
   ],
   byModel: [
     { model: "claude-opus-4-8", runs: 7, tokens: 11_000, costUsd: 1.1 },
@@ -62,7 +62,7 @@ const summary: InsightsSummary = {
       tokens: 500,
       hydrationTokens: 512,
       costUsd: 0.05,
-      provider: "claude-code",
+      harness: "claude-code",
       effort: "high",
     },
     {
@@ -108,7 +108,7 @@ const empty: InsightsSummary = {
     totalTokens: 0,
     hydrationTokens: 0,
     totalCostUsd: 0,
-    agentReportedCostUsd: 0,
+    harnessReportedCostUsd: 0,
     estimatedCostUsd: 0,
     generations: 0,
     unpricedRuns: 0,
@@ -118,7 +118,7 @@ const empty: InsightsSummary = {
   },
   daily: [],
   bySource: [],
-  byRunner: [],
+  byHarness: [],
   byModel: [],
   byEffort: [],
   recent: [],
@@ -137,7 +137,7 @@ describe("InsightsScreen (#514)", () => {
     );
     expect(html).toContain("<h1>Analytics</h1>");
     expect(html).toContain("$3.40");
-    expect(html).toContain("agent-reported");
+    expect(html).toContain("harness-reported");
     expect(html).toContain("estimated");
     expect(html).toContain("1 unpriced");
     expect(html).toContain("At least");
@@ -168,7 +168,7 @@ describe("InsightsScreen (#514)", () => {
       />
     );
     expect(html).toContain("Where it went");
-    expect(html).toContain("By agent");
+    expect(html).toContain("By harness");
     expect(html).toContain("claude-code");
     expect(html).toContain("By model");
     expect(html).toContain("claude-opus-4-8");

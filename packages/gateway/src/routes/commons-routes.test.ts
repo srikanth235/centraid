@@ -46,7 +46,7 @@ describe("Commons container registry", () => {
       ownerPartyId: steward.ownerPartyId,
       ownerVaultId: steward.vaultId,
       ownerVault: steward.vault,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [{ partyId: invitedPartyId, capability: "read" }],
       now,
@@ -63,7 +63,7 @@ describe("Commons container registry", () => {
         stewardVaultId: steward.vaultId,
         memberPartyId: invitedPartyId,
         capability: "read",
-        containerType: "media.media_asset",
+        containerType: "media.asset",
         containerId: photo.assetId,
         currentSizeBytes: initialSize,
       },
@@ -151,7 +151,7 @@ describe("Commons container registry", () => {
       );
       expect(
         member.vault.vault
-          .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
+          .prepare("SELECT COUNT(*) AS n FROM media_asset")
           .get()
       ).toMatchObject({ n: 0 });
 
@@ -160,7 +160,7 @@ describe("Commons container registry", () => {
           `UPDATE core_content_item
               SET title = 'A much longer title after invitation'
             WHERE content_id = (
-              SELECT content_id FROM media_media_asset WHERE asset_id = ?
+              SELECT content_id FROM media_asset WHERE asset_id = ?
             )`
         )
         .run(photo.assetId);
@@ -199,7 +199,7 @@ describe("Commons container registry", () => {
       });
       expect(
         member.vault.vault
-          .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
+          .prepare("SELECT COUNT(*) AS n FROM media_asset")
           .get()
       ).toMatchObject({ n: 1 });
       const resident = async (vaultId: string, deviceId: string) => {
@@ -218,7 +218,7 @@ describe("Commons container registry", () => {
         items: expect.arrayContaining([
           expect.objectContaining({
             grantId: grant.grantId,
-            itemType: "media.media_asset",
+            itemType: "media.asset",
             itemId: photo.assetId,
           }),
         ]),
@@ -248,7 +248,7 @@ describe("Commons container registry", () => {
       ownerPartyId: steward.ownerPartyId,
       ownerVaultId: steward.vaultId,
       ownerVault: steward.vault,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [{ partyId: member.ownerPartyId, capability: "read" }],
       now,
@@ -259,7 +259,7 @@ describe("Commons container registry", () => {
       memberVaultId: member.vaultId,
       memberPartyId: member.ownerPartyId,
       capability: "read" as const,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       currentSizeBytes: commonsCurrentSize(
         steward.vault.vault,
@@ -327,7 +327,7 @@ describe("Commons container registry", () => {
       });
       expect(
         member.vault.vault
-          .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
+          .prepare("SELECT COUNT(*) AS n FROM media_asset")
           .get()
       ).toMatchObject({ n: 0 });
 
@@ -349,7 +349,7 @@ describe("Commons container registry", () => {
       expect(accepted.status).toBe(200);
       expect(
         member.vault.vault
-          .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
+          .prepare("SELECT COUNT(*) AS n FROM media_asset")
           .get()
       ).toMatchObject({ n: 1 });
     } finally {

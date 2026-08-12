@@ -21,7 +21,7 @@ function modelAvailable() {
 
 async function assetById(ctx, assetId) {
   const rows = await ctx.vault.read({
-    entity: "media.media_asset",
+    entity: "media.asset",
     where: [
       { column: "asset_id", op: "eq", value: assetId },
       { column: "deleted_at", op: "is-null" },
@@ -139,7 +139,7 @@ export default async function handler({ ctx }) {
     const cursor = (await ctx.state.get(key)) ?? "";
     const capacity = remaining;
     const assets = await ctx.vault.read({
-      entity: "media.media_asset",
+      entity: "media.asset",
       where: [
         { column: "asset_id", op: "gt", value: cursor },
         { column: "kind", op: "in", value: ["photo", "scan"] },

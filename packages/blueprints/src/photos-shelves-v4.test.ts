@@ -401,10 +401,10 @@ describe("permission is a screen, not an error", () => {
   it("states what is missing in the host's own words when it gave any", () => {
     const html = renderToStaticMarkup(
       createElement(PermissionScreen, {
-        reason: "media.media_asset read was not granted",
+        reason: "media.asset read was not granted",
       })
     );
-    expect(html).toContain("media.media_asset read was not granted");
+    expect(html).toContain("media.asset read was not granted");
   });
 
   it("says what Photos can see meanwhile, and what a returning grant does", () => {

@@ -112,7 +112,7 @@ describe("backend suite", () => {
       abortOn: (e) => e.type === "assistant.delta",
     });
 
-    // The agent observed session/cancel (wrote its marker).
+    // The harness observed session/cancel (wrote its marker).
     await expect(fs.readFile(cancelMarker, "utf8")).resolves.toBe("cancelled");
     // Our side emits `aborted` and suppresses `final` once aborted.
     expect(types(events)).toContain("aborted");
@@ -167,7 +167,7 @@ describe("backend suite", () => {
     expect(err && err.type === "error" && err.failureClass).toBe("auth");
   });
 
-  test("prompt idle watchdog classifies a wedged agent", async () => {
+  test("prompt idle watchdog classifies a wedged harness", async () => {
     const { events } = await runFake({
       extraArgs: ["--mode=wedge"],
       config: { promptIdleTimeoutMs: 25 },
@@ -215,7 +215,7 @@ describe("backend suite", () => {
       text?: string;
     }>;
     expect(blocks[0]).toStrictEqual({ type: "text", text: "SYSTEM_CONTEXT" });
-    expect(blocks.some((b) => b.text === "hello agent")).toBe(true);
+    expect(blocks.some((b) => b.text === "hello harness")).toBe(true);
   });
 
   test("session/resume is preferred over session/load when advertised", async () => {
@@ -258,7 +258,7 @@ describe("backend suite", () => {
     });
     expect(notices(events)).toContain("permission_denied");
     expect(notices(events)).not.toContain("permission_auto_allowed");
-    // The refusal names the agent's own reject option — NOT `cancelled`, which
+    // The refusal names the harness's own reject option — NOT `cancelled`, which
     // means "the prompt turn was cancelled" and would unwind the whole turn.
     await expect(fs.readFile(permMarker, "utf8")).resolves.toBe("reject");
     // …so the turn keeps running on its pre-granted tools and still finishes,
@@ -267,8 +267,8 @@ describe("backend suite", () => {
     expect(deltas(events)).toBe("Hello world");
   });
 
-  test("teardown escalates to SIGKILL for an agent that ignores SIGTERM", async () => {
-    // SIGTERM is a request, not a guarantee. An agent that ignores it (and
+  test("teardown escalates to SIGKILL for a harness that ignores SIGTERM", async () => {
+    // SIGTERM is a request, not a guarantee. A harness that ignores it (and
     // stdin close) would leak one child process per turn for the lifetime of
     // the gateway, so the teardown bound has to escalate.
     const dir = await tempDir("acp-teardown-");

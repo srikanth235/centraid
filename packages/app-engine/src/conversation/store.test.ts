@@ -44,9 +44,9 @@ describe("ConversationStore — conversations", () => {
       })
     ).toBe(true);
     expect(store.getConversation(conv.id)).toMatchObject({
-      adapterKind: "codex",
-      adapterSessionId: "session-1",
-      adapterUsageSnapshot: {
+      harnessKind: "codex",
+      harnessSessionId: "session-1",
+      harnessUsageSnapshot: {
         inputTokens: 120,
         outputTokens: 30,
         cost: { amount: 0.4, currency: "USD" },
@@ -94,11 +94,11 @@ describe("ConversationStore — conversations", () => {
     expect(codex).toBe(claude);
     expect(store.getConversation(codex)).toMatchObject({
       automationId: "app/digest",
-      adapterKind: "codex",
+      harnessKind: "codex",
     });
     // Ensuring a new target does not claim it before a turn succeeds; the
-    // ledger's post-turn adapter update is the binding commit point.
-    expect(store.getConversation(claude)?.adapterKind).toBe("codex");
+    // ledger's post-turn harness update is the binding commit point.
+    expect(store.getConversation(claude)?.harnessKind).toBe("codex");
     store.close();
   });
 
@@ -399,7 +399,7 @@ describe("ConversationStore — turns", () => {
     store.close();
   });
 
-  it("finishTurn rolls up step/agent tokens + step/tool counts", () => {
+  it("finishTurn rolls up step/delegate tokens + step/tool counts", () => {
     const store = newStore();
     const c = store.createConversation({
       kind: "automation",
@@ -416,8 +416,8 @@ describe("ConversationStore — turns", () => {
       turnId: "r",
       itemId: "i1",
       ordinal: 0,
-      kind: "agent",
-      name: "agent",
+      kind: "delegate",
+      name: "delegate",
       startedAt: 1,
     });
     store.closeItem({

@@ -58,7 +58,7 @@ function workspaceFor(
     appsDir: path.join(dir, "apps"),
     journal: provider,
     journalDbFile: path.join(dir, "journal.db"),
-    runnerSessionDir: path.join(dir, "runner-sessions"),
+    harnessSessionDir: path.join(dir, "harness-sessions"),
   });
 }
 

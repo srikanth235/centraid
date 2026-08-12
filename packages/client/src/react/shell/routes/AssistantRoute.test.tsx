@@ -16,7 +16,7 @@ import type {
 } from "../../screen-contracts.js";
 import type { ShellActions } from "../actions.js";
 import type * as TypeImport_g611bp from "../prompt.js";
-import type * as TypeImport_ym9bw8 from "./settingsProvidersData.js";
+import type * as TypeImport_ym9bw8 from "./settingsHarnessesData.js";
 
 const captured = vi.hoisted(() => ({
   props: null as AssistantBridgeProps | null,
@@ -49,7 +49,7 @@ const api = vi.hoisted(() => ({
     vi.fn<typeof TypeImport_1gl5zx7.uploadConversationAttachment>(),
 }));
 const providers = vi.hoisted(() => ({
-  loadProviders: vi.fn<typeof TypeImport_ym9bw8.loadProviders>(),
+  loadHarnesses: vi.fn<typeof TypeImport_ym9bw8.loadHarnesses>(),
   setSubsystemConfigPin:
     vi.fn<typeof TypeImport_ym9bw8.setSubsystemConfigPin>(),
   setSubsystemModel: vi.fn<typeof TypeImport_ym9bw8.setSubsystemModel>(),
@@ -63,10 +63,10 @@ vi.mock(import("../prompt.js") as Promise<unknown>, () => ({
   openPrompt: vi.fn<typeof TypeImport_g611bp.openPrompt>(),
 }));
 vi.mock(
-  import("./settingsProvidersData.js") as Promise<unknown>,
+  import("./settingsHarnessesData.js") as Promise<unknown>,
   async (importOriginal) => ({
     ...(await importOriginal<typeof TypeImport_ym9bw8>()),
-    loadProviders: providers.loadProviders,
+    loadHarnesses: providers.loadHarnesses,
     setSubsystemConfigPin: providers.setSubsystemConfigPin,
     setSubsystemModel: providers.setSubsystemModel,
   })
@@ -89,14 +89,14 @@ type Stream = (
   onEvent: (event: TurnStreamEvent) => void
 ) => Promise<{ ended: boolean }>;
 
-type ProviderStatus = Awaited<
-  ReturnType<typeof TypeImport_ym9bw8.loadProviders>
+type HarnessStatus = Awaited<
+  ReturnType<typeof TypeImport_ym9bw8.loadHarnesses>
 >;
 
-function providerCard(
+function harnessCard(
   kind: string,
   title = kind
-): ProviderStatus["cards"][number] {
+): HarnessStatus["cards"][number] {
   return {
     kind,
     title,
@@ -109,7 +109,7 @@ function providerCard(
   };
 }
 
-function providerStatus(kinds: Array<[string, string?]>): ProviderStatus {
+function harnessStatus(kinds: Array<[string, string?]>): HarnessStatus {
   return {
     selectedKind: "codex",
     anyLoading: false,
@@ -118,9 +118,9 @@ function providerStatus(kinds: Array<[string, string?]>): ProviderStatus {
     defaultConfigPinsByKind: {},
     subsystemConfigPinsByKind: {},
     diagnosticsJson: "{}",
-    subsystemRunnerByKey: { assistant: "codex" },
-    subsystemRunnerLadders: {},
-    cards: kinds.map(([kind, title]) => providerCard(kind, title)),
+    subsystemHarnessByKey: { assistant: "codex" },
+    subsystemHarnessLadders: {},
+    cards: kinds.map(([kind, title]) => harnessCard(kind, title)),
   };
 }
 
@@ -165,8 +165,8 @@ function conversation(
     id: "conversation-1",
     originAppId: null,
     title: "Assistant",
-    adapterKind: null,
-    adapterSessionId: null,
+    harnessKind: null,
+    harnessSessionId: null,
     turnCount: 0,
     pinned: false,
     archived: false,
@@ -225,19 +225,19 @@ describe("AssistantRoute suite", () => {
       .mockReset()
       .mockImplementation(streamAskingFor(null));
     api.uploadConversationAttachment.mockReset();
-    providers.loadProviders.mockReset().mockResolvedValue({
-      ...providerStatus([
+    providers.loadHarnesses.mockReset().mockResolvedValue({
+      ...harnessStatus([
         ["codex", "Codex"],
         ["claude-code", "Claude Code"],
         ["copilot", "Copilot"],
       ]),
       cards: [
         {
-          ...providerCard("codex", "Codex"),
+          ...harnessCard("codex", "Codex"),
           breakerStates: [{ failureClass: "quota", state: "open" }],
         },
-        providerCard("claude-code", "Claude Code"),
-        providerCard("copilot", "Copilot"),
+        harnessCard("claude-code", "Claude Code"),
+        harnessCard("copilot", "Copilot"),
       ],
     });
   });
@@ -311,10 +311,10 @@ describe("AssistantRoute suite", () => {
   });
 
   describe("AssistantRoute picker + workspace", () => {
-    it("carries breaker health in the runner hint, like the builder and automation pickers", async () => {
+    it("carries breaker health in the harness hint, like the builder and automation pickers", async () => {
       const bridge = await mount();
       await expect(bridge.loadModelPicker()).resolves.toMatchObject({
-        runners: expect.arrayContaining([
+        harnesses: expect.arrayContaining([
           expect.objectContaining({
             kind: "codex",
             hint: "ready · quota open",
@@ -323,36 +323,36 @@ describe("AssistantRoute suite", () => {
       });
     });
 
-    it("puts the explicitly selected runner on the next turn", async () => {
+    it("puts the explicitly selected harness on the next turn", async () => {
       const bridge = await mount();
       await bridge.loadModelPicker();
-      await bridge.onSetRunner("claude-code");
+      await bridge.onSetHarness("claude-code");
 
       await act(async () => {
-        bridge.onSend("which runner handled this?");
+        bridge.onSend("which harness handled this?");
         await Promise.resolve();
       });
 
       expect(api.streamAssistantTurn).toHaveBeenCalledWith(
-        expect.objectContaining({ runnerKind: "claude-code" }),
+        expect.objectContaining({ harnessKind: "claude-code" }),
         expect.any(Function),
         expect.anything()
       );
     });
 
-    it("keeps the latest overlapping runner switch", async () => {
-      const first = deferred<ProviderStatus>();
-      const second = deferred<ProviderStatus>();
-      providers.loadProviders
+    it("keeps the latest overlapping harness switch", async () => {
+      const first = deferred<HarnessStatus>();
+      const second = deferred<HarnessStatus>();
+      providers.loadHarnesses
         .mockReset()
         .mockReturnValueOnce(first.promise)
         .mockReturnValueOnce(second.promise);
       const bridge = await mount();
 
-      const firstSwitch = bridge.onSetRunner("claude-code");
-      const secondSwitch = bridge.onSetRunner("copilot");
+      const firstSwitch = bridge.onSetHarness("claude-code");
+      const secondSwitch = bridge.onSetHarness("copilot");
       second.resolve(
-        providerStatus([
+        harnessStatus([
           ["codex", "Codex"],
           ["claude-code", "Claude Code"],
           ["copilot", "Copilot"],
@@ -360,7 +360,7 @@ describe("AssistantRoute suite", () => {
       );
       await secondSwitch;
       first.resolve(
-        providerStatus([
+        harnessStatus([
           ["codex", "Codex"],
           ["claude-code", "Claude Code"],
           ["copilot", "Copilot"],
@@ -369,18 +369,18 @@ describe("AssistantRoute suite", () => {
       await firstSwitch;
 
       await act(async () => {
-        bridge.onSend("which runner won the race?");
+        bridge.onSend("which harness won the race?");
         await Promise.resolve();
       });
 
       expect(api.streamAssistantTurn).toHaveBeenCalledWith(
-        expect.objectContaining({ runnerKind: "copilot" }),
+        expect.objectContaining({ harnessKind: "copilot" }),
         expect.any(Function),
         expect.anything()
       );
     });
 
-    it("does not let the initial picker load overwrite a persisted runner", async () => {
+    it("does not let the initial picker load overwrite a persisted harness", async () => {
       const transcript = deferred<
         ReturnType<typeof conversation> & { messages: [] }
       >();
@@ -394,7 +394,7 @@ describe("AssistantRoute suite", () => {
       // adapter binding. It must remain observational until that binding wins.
       await bridge.loadModelPicker();
       transcript.resolve({
-        ...conversation({ adapterKind: "claude-code" }),
+        ...conversation({ harnessKind: "claude-code" }),
         messages: [],
       });
       await act(async () => {
@@ -403,12 +403,12 @@ describe("AssistantRoute suite", () => {
       });
 
       await act(async () => {
-        bridge.onSend("use the persisted runner");
+        bridge.onSend("use the persisted harness");
         await Promise.resolve();
       });
 
       expect(api.streamAssistantTurn).toHaveBeenCalledWith(
-        expect.objectContaining({ runnerKind: "claude-code" }),
+        expect.objectContaining({ harnessKind: "claude-code" }),
         expect.any(Function),
         expect.anything()
       );

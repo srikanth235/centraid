@@ -43,7 +43,7 @@ describe("placement-lifecycle suite", () => {
         origin,
         originVaultId: "vault-priya",
         audience,
-        itemType: "media.media_asset",
+        itemType: "media.asset",
         itemId: photo.assetId,
         sharedBy: "member-priya",
       })
@@ -53,9 +53,7 @@ describe("placement-lifecycle suite", () => {
     // The origin is untouched — it was never written in the first place.
     expect(
       plainSqliteRow(
-        origin.vault
-          .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-          .get()
+        origin.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
       )
     ).toStrictEqual({
       n: 1,
@@ -64,9 +62,7 @@ describe("placement-lifecycle suite", () => {
     // The audience transaction rolled back whole: no half-placed item.
     expect(
       plainSqliteRow(
-        audience.vault
-          .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-          .get()
+        audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
       )
     ).toStrictEqual({
       n: 0,
@@ -130,7 +126,7 @@ describe("placement-lifecycle suite", () => {
       origin,
       originVaultId: "vault-priya",
       audience,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: photo.assetId,
       sharedBy: "member-priya",
     });
@@ -138,7 +134,7 @@ describe("placement-lifecycle suite", () => {
 
     const result = unshareFromVault({
       audience,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: shared.itemId,
     });
 
@@ -148,9 +144,7 @@ describe("placement-lifecycle suite", () => {
     );
     expect(
       plainSqliteRow(
-        audience.vault
-          .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-          .get()
+        audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
       )
     ).toStrictEqual({
       n: 0,
@@ -165,15 +159,13 @@ describe("placement-lifecycle suite", () => {
       n: 0,
     });
     expect(
-      readShareOrigin(audience.vault, "media.media_asset", shared.itemId)
+      readShareOrigin(audience.vault, "media.asset", shared.itemId)
     ).toBeUndefined();
     // The bytes are still linked here until the audience's GC runs — and the
     // origin is untouched either way.
     expect(
       plainSqliteRow(
-        origin.vault
-          .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-          .get()
+        origin.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
       )
     ).toStrictEqual({
       n: 1,
@@ -198,7 +190,7 @@ describe("placement-lifecycle suite", () => {
         origin,
         originVaultId: "vault-priya",
         audience,
-        itemType: "media.media_asset",
+        itemType: "media.asset",
         itemId: photo.assetId,
         sharedBy: "member-sid",
       });
@@ -206,7 +198,7 @@ describe("placement-lifecycle suite", () => {
     share();
     unshareFromVault({
       audience,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: photo.assetId,
     });
     reclaimOrphans(audience);
@@ -216,8 +208,7 @@ describe("placement-lifecycle suite", () => {
     expect(again.blobs.map((b) => b.mode)).toStrictEqual(["linked", "linked"]);
     expect(audience.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
     expect(
-      readShareOrigin(audience.vault, "media.media_asset", again.itemId)
-        ?.sharedBy
+      readShareOrigin(audience.vault, "media.asset", again.itemId)?.sharedBy
     ).toBe("member-sid");
   });
 
@@ -228,16 +219,14 @@ describe("placement-lifecycle suite", () => {
 
     const result = unshareFromVault({
       audience,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: own.assetId,
     });
 
     expect(result).toStrictEqual({ removed: false, orphanedShas: [] });
     expect(
       plainSqliteRow(
-        audience.vault
-          .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-          .get()
+        audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
       )
     ).toStrictEqual({
       n: 1,
@@ -251,7 +240,7 @@ describe("placement-lifecycle suite", () => {
       origin,
       originVaultId: "vault-priya",
       audience,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: photo.assetId,
       sharedBy: "member-priya",
     });
@@ -259,7 +248,7 @@ describe("placement-lifecycle suite", () => {
     // The owner trashes the photo out of their OWN library: rows gone, so the
     // origin's sweep now sees the bytes as orphaned and unlinks its entry.
     origin.vault
-      .prepare("DELETE FROM media_media_asset WHERE asset_id = ?")
+      .prepare("DELETE FROM media_asset WHERE asset_id = ?")
       .run(photo.assetId);
     origin.vault
       .prepare("DELETE FROM core_content_derivative WHERE content_id = ?")
@@ -284,7 +273,7 @@ describe("placement-lifecycle suite", () => {
     // And only after the LAST vault unlinks does the content actually go.
     unshareFromVault({
       audience,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: photo.assetId,
     });
     reclaimOrphans(audience);
@@ -304,7 +293,7 @@ describe("placement-lifecycle suite", () => {
         origin,
         originVaultId: "vault-priya",
         audience,
-        itemType: "media.media_asset",
+        itemType: "media.asset",
         itemId: "missing",
         sharedBy: "member-priya",
       })
@@ -321,7 +310,7 @@ describe("placement-lifecycle suite", () => {
         origin,
         originVaultId: "vault-priya",
         audience: origin,
-        itemType: "media.media_asset",
+        itemType: "media.asset",
         itemId: photo.assetId,
         sharedBy: "member-priya",
       })

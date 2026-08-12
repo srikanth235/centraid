@@ -17,7 +17,7 @@
  *
  *   - APP-LEVEL keys (any key shaped like `app<Capital>…`) are routed
  *     DYNAMICALLY. Each template declares which app knobs it honours in
- *     its `app.json#knobs[]`; the agent-harness can extend that list
+ *     its `app.json#knobs[]`; the harness can extend that list
  *     per app, so the runtime can't predict the universe of knob keys
  *     ahead of time. Routing is by name convention:
  *       - keys ending in `Color` or `Accent` → CSS var `--app-<kebab>`
@@ -155,7 +155,7 @@ export function buildSettingsInject(
       continue;
     }
     // Dynamic routing for the per-app `app*` namespace — keeps templates +
-    // agent-harness free to introduce new knobs without a runtime change.
+    // harness free to introduce new knobs without a runtime change.
     if (isAppKnobKey(k)) {
       const coerced = asString(raw);
       if (coerced === undefined) continue;

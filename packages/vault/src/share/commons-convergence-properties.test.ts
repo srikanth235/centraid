@@ -229,7 +229,7 @@ describe("commons ordered-convergence property", () => {
               a: createCommonsGrant({
                 origin: origin.vault,
                 ownerPartyId: originBoot.ownerPartyId,
-                containerType: "media.media_asset",
+                containerType: "media.asset",
                 containerId: photoA.assetId,
                 members: [],
                 now: NOW,
@@ -237,7 +237,7 @@ describe("commons ordered-convergence property", () => {
               b: createCommonsGrant({
                 origin: origin.vault,
                 ownerPartyId: originBoot.ownerPartyId,
-                containerType: "media.media_asset",
+                containerType: "media.asset",
                 containerId: photoB.assetId,
                 members: [],
                 now: NOW,

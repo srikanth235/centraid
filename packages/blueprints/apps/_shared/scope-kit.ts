@@ -99,7 +99,7 @@ export function scopeAttr(
  *    with nothing else to order by: its own row id (chronological already,
  *    e.g. a UUIDv7 primary key).
  *  * `mintedIdFamilies` — the vault entity kinds this app mints rows into
- *    (e.g. `"media.media_asset"`), so the closure/edge split (issue #726 §1)
+ *    (e.g. `"media.asset"`), so the closure/edge split (issue #726 §1)
  *    knows which rows are this app's to project when a share crosses a scope.
  *  * `projectionIngest` — the name of the post-ingest hook a row projected
  *    onto this app's ontology must take at the audience (issue #726 §4), so

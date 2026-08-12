@@ -198,7 +198,7 @@ describe(HealthRegistry, () => {
           replication: { passes: 2, bytesReplicated: 512, busyMs: 12 },
           backup: { drains: 1, bytesUploaded: 2_048, busyMs: 33 },
           sweeps: { passes: 5, busyMs: 9 },
-          agentRuns: { runs: 3, busyMs: 4_200, cpuSeconds: null },
+          harnessRuns: { runs: 3, busyMs: 4_200, cpuSeconds: null },
         },
         backgroundTimerFiresLastHour: 7,
       };
@@ -209,7 +209,7 @@ describe(HealthRegistry, () => {
       const snap = await withUsage.snapshot();
       expect(snap.metrics.resourceUsage).toStrictEqual(usage);
       expect(
-        snap.metrics.resourceUsage?.subsystems.agentRuns.cpuSeconds
+        snap.metrics.resourceUsage?.subsystems.harnessRuns.cpuSeconds
       ).toBeNull();
 
       const without = new HealthRegistry();

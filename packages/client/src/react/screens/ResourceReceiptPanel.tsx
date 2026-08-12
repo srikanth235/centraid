@@ -8,7 +8,7 @@ import styles from "./ResourceReceiptPanel.module.css";
 
 // Resource receipt (issue #528 Phase C): "what this vault's gateway host
 // actually used" — measured proxies (CPU time, bytes, activity), rendered
-// beside the cost transparency on Insights. Agent-run usage is included and
+// beside the cost transparency on Insights. Harness-run usage is included and
 // labelled measured-but-not-throttled, so Conserve never appears to promise
 // something it does not govern. No wattage: software can't measure it.
 //

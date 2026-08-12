@@ -28,7 +28,7 @@ function mulberry32(seed: number): () => number {
 const ROLES = [
   "request",
   "response",
-  "agent",
+  "harness",
   "result",
   "tool",
   "toolPass",
@@ -44,7 +44,7 @@ const ROLES = [
   "blobBackup",
   "automation",
   "automationWrite",
-  // --- sync path. None of these involve the agent runtime.
+  // --- sync path. None of these involve the harness runtime.
   "replica",
   "replicaDeliver",
   "devicePush",
@@ -73,12 +73,12 @@ const SCENARIOS: Record<string, ScenarioConfig> = {
     turns: 0.3,
     writes: 3.2,
     blobs: 0.2,
-    agent: 0.5,
+    harness: 0.5,
     cronEvery: 60,
   },
-  "agent-builds-app": {
+  "harness-builds-app": {
     turns: 2.2,
-    agent: 2.6,
+    harness: 2.6,
     appWork: 2.4,
     crane: 1,
     writes: 1.7,
@@ -87,9 +87,9 @@ const SCENARIOS: Record<string, ScenarioConfig> = {
   "photo-flood": { blobs: 6.5, casFill: 1, writes: 1.6, turns: 0.7 },
   "offline-mobile": { offline: true, turns: 1.1 },
   // Two paired devices hammering the direct + sync path with the runtime parked.
-  // agentOff forces every agent-path rate (and the runtime district lights) to zero.
+  // harnessOff forces every harness-path rate (and the runtime district lights) to zero.
   "multi-device": {
-    agentOff: true,
+    harnessOff: true,
     turns: 1.5,
     writes: 2.8,
     direct: 2.4,
@@ -105,7 +105,7 @@ const SCENARIOS: Record<string, ScenarioConfig> = {
   "consent-parking": {
     parkChance: 0.55,
     turns: 1.4,
-    agent: 1.8,
+    harness: 1.8,
     approveSlow: true,
   },
 };
@@ -185,10 +185,10 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
     scenarioAge += dt;
 
     const kTurn = cfg.turns ?? 1;
-    // agentOff parks the whole agent path: no runner turns, no tool calls, no parking.
+    // harnessOff parks the whole harness path: no harness turns, no tool calls, no parking.
     // The direct + sync path is deliberately untouched by it — that is the point.
-    const agentOff = !!cfg.agentOff;
-    const kAgent = agentOff ? 0 : (cfg.agent ?? 1);
+    const harnessOff = !!cfg.harnessOff;
+    const kHarness = harnessOff ? 0 : (cfg.harness ?? 1);
     const kWrite = cfg.writes ?? 1;
     const kBlob = cfg.blobs ?? 1;
     const kAuto = cfg.automation ?? 1;
@@ -203,19 +203,19 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
     bump("clients", reqRate * 0.006);
     bump("gateway", reqRate * 0.008);
 
-    // --- turns / agent runtime
-    const turnRate = agentOff
+    // --- turns / harness runtime
+    const turnRate = harnessOff
       ? 0
       : (0.55 + Math.max(0, Math.sin(elapsed * 0.17)) * 0.5) * kTurn;
     turnsWindow += turnRate * dt;
     const itemRate = turnRate * (7 + rnd() * 4);
     itemsWindow += itemRate * dt;
-    rates.agent = 2.4 * kAgent + turnRate * 2;
-    rates.result = rates.agent * 0.6;
-    bump("runtime", rates.agent * 0.01);
+    rates.harness = 2.4 * kHarness + turnRate * 2;
+    rates.result = rates.harness * 0.6;
+    bump("runtime", rates.harness * 0.01);
 
     // --- tool calls through the consent gate
-    const toolRate = 1.5 * kAgent + turnRate * 1.2;
+    const toolRate = 1.5 * kHarness + turnRate * 1.2;
     const parkChance = cfg.parkChance ?? 0.045;
     rates.tool = toolRate;
     rates.park = toolRate * parkChance;
@@ -260,8 +260,8 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
     }
 
     // --- sync harbor + replica island
-    // Note: this whole leg is gateway → WAL → harbor → device. The agent runtime has no
-    // part in it, so none of these rates read kAgent.
+    // Note: this whole leg is gateway → WAL → harbor → device. The harness runtime has no
+    // part in it, so none of these rates read kHarness.
     if (offlinePhase === 1) {
       // Device is away: the harbor keeps queueing, nothing lands on the replica.
       stats.lag += dt * (1.4 + scenarioAge * 0.05);
@@ -343,8 +343,8 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
 
     // decay district activity
     for (const k of DISTRICTS) activity[k] *= 0.9;
-    // Agent Runtime Row goes dark while the rest of the city keeps working.
-    if (agentOff) {
+    // Harness Runtime Row goes dark while the rest of the city keeps working.
+    if (harnessOff) {
       activity.runtime = 0;
       activity.consent = 0;
     }

@@ -3,7 +3,7 @@
 // Two sources, both already the shell's own:
 //
 //   1. The daily brief (`getDailyBrief`) — a real, content-minimized gateway
-//      read over core_event / schedule_task / media_media_asset / tally_expense.
+//      read over core_event / schedule_task / media_asset / tally_expense.
 //      It already backs Home, so agenda, the tally figure and the photo count
 //      cost nothing extra.
 //   2. The replica shell session — the same door `searchPaletteEntities` uses.
@@ -96,17 +96,12 @@ async function rowsOf(
  * library of ten pictures for exactly this reason. The fallback is the Photos
  * grid's own behaviour for small images (its `THUMB_EDGE` ceiling paints the
  * original directly), and it is the owner reading their own bytes on their own
- * device — not the derivatives-only agent egress surface.
+ * device — not the derivatives-only provider-egress surface.
  */
 async function photoThumbs(
   reader: HomeTileReader
 ): Promise<{ total: number; thumbs: string[] }> {
-  const assets = await rowsOf(
-    reader,
-    "photos",
-    "media.media_asset",
-    WINDOW.mosaic
-  );
+  const assets = await rowsOf(reader, "photos", "media.asset", WINDOW.mosaic);
   const contents = await rowsOf(
     reader,
     "photos",

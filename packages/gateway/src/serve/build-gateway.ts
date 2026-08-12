@@ -41,15 +41,15 @@ import {
   runTurn,
   CatalogWarmer,
   deriveStatus,
-  readRunnerModels,
-  enumerateRunnerModels,
+  readHarnessModels,
+  enumerateHarnessModels,
   probeCliAvailability,
   resolveAcpCapabilities,
 } from "@centraid/agent-runtime";
 import type {
   CatalogSurface,
-  RunnerKind,
-  RunnerPrefs,
+  HarnessKind,
+  HarnessPrefs,
   SurfaceStatus,
 } from "@centraid/agent-runtime";
 import type {
@@ -60,7 +60,7 @@ import type {
   ConversationStore,
   ModelSubsystem,
   RunTurnFn,
-  RunnerHealthController,
+  HarnessHealthController,
   RuntimeLogger,
   ToolResult,
   VaultWorkspace,
@@ -76,12 +76,12 @@ import {
   InsightsStore,
   PrefsStore,
   ProviderEgressConsentStore,
-  RunnerHealthStore,
-  RUNNER_KINDS,
+  HarnessHealthStore,
+  HARNESS_KINDS,
   Runtime,
   changesSubscriberCount,
   cleanupDeregisteredApp,
-  classifyCaptureWithAgent,
+  classifyCaptureWithHarness,
   deriveTitle,
   generateConversationTitle,
   makeConversationRouteHandler,
@@ -89,7 +89,7 @@ import {
   makeJournalDbProvider,
   makeUserStoreRouteHandler,
   resolveSubsystemModel,
-  resolveSubsystemRunnerLadder,
+  resolveSubsystemHarnessLadder,
   validateTurnAttachmentRefs,
   TurnLimiter,
   prewarmAppAssets,
@@ -137,14 +137,14 @@ import {
   journalConversationStore,
 } from "../journal-stores.js";
 import {
-  resolveAutomationAgentSelection,
-  resolveAutomationRewriteModel,
-} from "../lifecycle/automation-agent-selection.js";
-import type { AutomationAgentSelection } from "../lifecycle/automation-agent-selection.js";
-import {
   resolveAutomationAnchors,
   scopesForAutomationAnchors,
 } from "../lifecycle/automation-anchor-scopes.js";
+import {
+  resolveAutomationHarnessSelection,
+  resolveAutomationRewriteModel,
+} from "../lifecycle/automation-harness-selection.js";
+import type { AutomationHarnessSelection } from "../lifecycle/automation-harness-selection.js";
 import { reviseAutomationInstructions } from "../lifecycle/automation-revision.js";
 import { makeDraftCodeDirResolver } from "../lifecycle/ext-band.js";
 import type { ExtBandOps } from "../lifecycle/ext-band.js";
@@ -164,8 +164,6 @@ import type { LifecycleRouteOptions } from "../lifecycle/lifecycle-shared.js";
 import { rewriteAutomationInstructions } from "../lifecycle/rewrite-automation-instructions.js";
 import type { GatewayPaths } from "../paths.js";
 import { createImagePreviewCodec } from "../preview/codec.js";
-import { makeAgentsRouteHandler } from "../routes/agents-routes.js";
-import type { AgentAcpCapabilities } from "../routes/agents-routes.js";
 import { makeAppsStoreRouteHandler } from "../routes/apps-store-routes.js";
 import { makeAssistantRouteHandler } from "../routes/assistant-routes.js";
 import {
@@ -197,6 +195,8 @@ import {
   makeEnrichSearchRouteHandler,
 } from "../routes/enrich-search-routes.js";
 import { makeGatewayInfoRouteHandler } from "../routes/gateway-info-routes.js";
+import { makeHarnessesRouteHandler } from "../routes/harnesses-routes.js";
+import type { HarnessAcpCapabilities } from "../routes/harnesses-routes.js";
 import { makeHealthRouteHandler } from "../routes/health-routes.js";
 import { makeImportRouteHandler } from "../routes/import-routes.js";
 import { makeLifecycleRouteHandler } from "../routes/lifecycle-routes.js";
@@ -266,6 +266,11 @@ import {
   resolveGatewayHardwareProfile,
   toStructuredResourceProfile,
 } from "./hardware-profile.js";
+import {
+  removedHarnessLadderMembers,
+  resolveGatewayHarnessPrefs,
+  resolveStrictGatewayHarnessPrefs,
+} from "./harness-prefs.js";
 import { HealthRegistry } from "./health-registry.js";
 import { kitlessHostIdentity } from "./host-identity.js";
 import { probeHostLimits } from "./host-limits.js";
@@ -305,11 +310,6 @@ import {
 } from "./resource-mode.js";
 import type { ResourceMode } from "./resource-mode.js";
 import { RouteLatencyMetrics } from "./route-latency.js";
-import {
-  removedRunnerLadderMembers,
-  resolveGatewayRunnerPrefs,
-  resolveStrictGatewayRunnerPrefs,
-} from "./runner-prefs.js";
 import { createSchedulerHealthProbe } from "./scheduler-health.js";
 import { findSequentially, forEachSequentially } from "./sequential.js";
 import { measureStorageLatency } from "./storage-latency.js";
@@ -466,9 +466,9 @@ export interface BuildGatewayOptions {
   };
   /**
    * Turn driver for the unified builder/chat runner. Defaults to real
-   * `runTurn` (ACP agents). Tests inject a stub so HTTP lifecycle paths
+   * `runTurn` (ACP harnesses). Tests inject a stub so HTTP lifecycle paths
    * (e.g. headless automation compile) finish without spawning a coding
-   * agent — issue #504 check:pr green on agentless CI/local hosts.
+   * harness — issue #504 check:pr green on harnessless CI/local hosts.
    */
   runTurn?: RunTurnFn;
   /**
@@ -1017,7 +1017,7 @@ export async function buildGateway(
   // crash/startup correctness backstop.
   // Per-subsystem resource ACTUALS (#528 Phase C): a boot-time accounting
   // instance every background subsystem reports completions to. Honest measured
-  // proxies only — counts, bytes, wall-clock, OS-reported CPU/RSS. Agent-run
+  // proxies only — counts, bytes, wall-clock, OS-reported CPU/RSS. Harness-run
   // usage is MEASURED and labeled here, never throttled. Published on the health
   // metrics source below; the worker-pool counters are read live from the
   // app-engine admission gate (which must not depend on the gateway).
@@ -1043,7 +1043,7 @@ export async function buildGateway(
   });
   health.reportOk("power-posture", formatPowerPostureNormalDetail());
 
-  // Wrap a turn driver so every agent run's wall-clock (spawn→exit) is
+  // Wrap a turn driver so every harness turn's wall-clock (spawn→exit) is
   // MEASURED and labeled (#528 Phase C) — recorded on success and failure
   // alike, since the host consumed the time either way. This ONLY accounts;
   // it never gates, defers, or throttles a run.
@@ -1054,12 +1054,12 @@ export async function buildGateway(
       try {
         return await base(input, config);
       } finally {
-        resourceAccounting.recordAgentRun({
+        resourceAccounting.recordHarnessRun({
           durationMs: Date.now() - startedAt,
         });
       }
     };
-  const accountedRunTurn = accountRunTurn(runTurn);
+  const accountedRunTurn = accountRunTurn(options.runTurn ?? runTurn);
 
   let provenanceDoorbell: (
     vaultId: string,
@@ -1115,7 +1115,7 @@ export async function buildGateway(
     // clock sleeps when no backup destination exists, preserving the
     // low-end no-unconfigured-spool contract without reviving lease gating.
     walCaptureConfigured: () => walCaptureConfigured,
-    // Disposable runner cache lives outside the vault tree (defaults to a
+    // Disposable harness cache lives outside the vault tree (defaults to a
     // `-cache` sibling of `vaultDir` when the host doesn't pin one).
     cacheRootDir: paths.cacheDir ?? path.join(dataDir, "cache"),
     logger: health.loggerFor("vaults", logger),
@@ -1298,7 +1298,7 @@ export async function buildGateway(
       vaultRegistry.planesList().map((p) => ({
         vaultId: p.boot.vaultId,
         dir: p.dir,
-        // The runner scratch lives OUTSIDE the vault tree; bill it to the
+        // The harness scratch lives OUTSIDE the vault tree; bill it to the
         // vault it belongs to rather than to a nameless gateway bucket.
         ...(p.cacheDir && p.cacheDir !== p.dir ? { cacheDir: p.cacheDir } : {}),
       })),
@@ -1679,50 +1679,50 @@ export async function buildGateway(
   // handle opened for Resource mode so we don't re-read the same file.
   const prefs = prefsEarly;
   const journalProvider = () => currentWorkspace().journal();
-  const runnerHealthStore = new RunnerHealthStore(journalProvider);
-  // `agent-failover` is reported degraded when a rung hands off. Nothing used
+  const harnessHealthStore = new HarnessHealthStore(journalProvider);
+  // `harness-failover` is reported degraded when a rung hands off. Nothing used
   // to report it healthy again, so a single failover left `/health` degraded
-  // forever. A later runner turn that actually succeeded is the honest signal
+  // forever. A later harness turn that actually succeeded is the honest signal
   // that the component recovered, so it is cleared here — and only when it was
   // degraded, so a healthy gateway never registers the component at all.
   let failoverDegraded = false;
   const reportFailoverError = (detail: string): void => {
     failoverDegraded = true;
-    health.reportError("agent-failover", detail);
-    logger.warn(`Agent failover: ${detail}`);
+    health.reportError("harness-failover", detail);
+    logger.warn(`Harness failover: ${detail}`);
   };
-  const runnerHealth: RunnerHealthController = {
+  const harnessHealth: HarnessHealthController = {
     canAttempt: (context, kind, now) =>
-      runnerHealthStore.canAttempt(context, kind, now),
+      harnessHealthStore.canAttempt(context, kind, now),
     reportFailure: (context, kind, failureClass, error, now) =>
-      runnerHealthStore.reportFailure(context, kind, failureClass, error, now),
+      harnessHealthStore.reportFailure(context, kind, failureClass, error, now),
     reportOk: (context, kind, now) => {
-      runnerHealthStore.reportOk(context, kind, now);
+      harnessHealthStore.reportOk(context, kind, now);
       // A completed turn is stronger evidence than a capability probe: the
-      // agent authenticated and answered. Auth breakers are otherwise
-      // indefinite and only ever closed by the agents route's explicit
-      // refresh, so a working runner could stay condemned indefinitely.
-      runnerHealthStore.reportPreflightOk(context, kind, now);
+      // harness authenticated and answered. Auth breakers are otherwise
+      // indefinite and only ever closed by the harnesses route's explicit
+      // refresh, so a working harness could stay condemned indefinitely.
+      harnessHealthStore.reportPreflightOk(context, kind, now);
       if (failoverDegraded) {
         failoverDegraded = false;
         health.reportOk(
-          "agent-failover",
+          "harness-failover",
           `${kind} completed a turn in ${context}`
         );
       }
     },
     reportPreflightOk: (context, kind, now) =>
-      runnerHealthStore.reportPreflightOk(context, kind, now),
-    list: (context, now) => runnerHealthStore.list(context, now),
+      harnessHealthStore.reportPreflightOk(context, kind, now),
+    list: (context, now) => harnessHealthStore.list(context, now),
   };
   const providerEgressConsent = new ProviderEgressConsentStore(
     journalProvider,
-    (runnerKind, subsystem) => {
+    (harnessKind, subsystem) => {
       const snapshot = prefs.getAllPrefs();
-      const primary = resolveGatewayRunnerPrefs(snapshot, subsystem).kind;
-      return resolveSubsystemRunnerLadder(snapshot, subsystem, primary)
+      const primary = resolveGatewayHarnessPrefs(snapshot, subsystem).kind;
+      return resolveSubsystemHarnessLadder(snapshot, subsystem, primary)
         .slice(1)
-        .includes(runnerKind);
+        .includes(harnessKind);
     }
   );
   const analyticsStore = new AnalyticsStore(journalProvider);
@@ -1744,36 +1744,36 @@ export async function buildGateway(
   // Per-turn prefs loader. Re-reads `gateway.db` every conversation turn so a
   // settings change lands without a restart.
   //
-  // Runner selection is PER SUBSYSTEM: `runner.<subsystem>` pins one
-  // register (assistant/ask/builder/automations) to a runner; unpinned
-  // registers inherit `agent.runner.kind`, which is now "the default agent"
-  // rather than "the one active runner". Callers that don't name a
-  // subsystem get the default agent — byte-identical to the old behavior,
-  // which is what keeps a prefs file with no `runner.*` keys working
+  // Harness selection is PER SUBSYSTEM: `harness.<subsystem>` pins one
+  // register (assistant/ask/builder/automations) to a harness; unpinned
+  // registers inherit `harness.kind`, which is now "the default harness"
+  // rather than "the one active harness". Callers that don't name a
+  // subsystem get the default harness — byte-identical to the old behavior,
+  // which is what keeps a prefs file with no `harness.*` keys working
   // exactly as it did.
   const prefsLoader = async (
     subsystem?: ModelSubsystem,
-    requestedRunner?: RunnerKind
-  ): Promise<RunnerPrefs | undefined> => {
-    return resolveGatewayRunnerPrefs(
+    requestedHarness?: HarnessKind
+  ): Promise<HarnessPrefs | undefined> => {
+    return resolveGatewayHarnessPrefs(
       prefs.getAllPrefs(),
       subsystem,
-      requestedRunner
+      requestedHarness
     );
   };
-  const runnerLadder = (
+  const harnessLadder = (
     subsystem: ModelSubsystem | undefined,
-    primary: RunnerKind
-  ): readonly RunnerKind[] =>
+    primary: HarnessKind
+  ): readonly HarnessKind[] =>
     subsystem
-      ? resolveSubsystemRunnerLadder(prefs.getAllPrefs(), subsystem, primary)
+      ? resolveSubsystemHarnessLadder(prefs.getAllPrefs(), subsystem, primary)
       : [primary];
-  const runnerHealthContext = (): string => currentWorkspace().vaultId;
+  const harnessHealthContext = (): string => currentWorkspace().vaultId;
   const onConversationRunnerFailover = (event: {
     conversationId: string;
     subsystem?: ModelSubsystem;
-    from: RunnerKind;
-    to: RunnerKind;
+    from: HarnessKind;
+    to: HarnessKind;
   }): void => {
     reportFailoverError(
       `${event.subsystem ?? "conversation"} ${event.conversationId}: ` +
@@ -1782,11 +1782,11 @@ export async function buildGateway(
   };
 
   // Per-subsystem model resolution (shared prefs contract): explicit
-  // (request/manifest) → `model.<runnerKind>.<subsystem>` → `model.<runnerKind>.default`
+  // (request/manifest) → `model.<harnessKind>.<subsystem>` → `model.<harnessKind>.default`
   // → nothing (the backend's own built-in default).
   //
-  // The runner is resolved FIRST, for THIS subsystem, and that kind is what
-  // scopes the model key. Model prefs are per runner (`model.<kind>.<sub>`),
+  // The harness is resolved FIRST, for THIS subsystem, and that kind is what
+  // scopes the model key. Model prefs are per harness (`model.<kind>.<sub>`),
   // so reading them against the global kind while the subsystem actually runs
   // on a different one hands the turn a model its backend has never heard of.
   // Both halves come off the same per-turn `prefsLoader` every register reads,
@@ -1794,33 +1794,33 @@ export async function buildGateway(
   const resolveModel = async (
     subsystem: ModelSubsystem,
     explicit?: string,
-    requestedRunner?: RunnerKind
+    requestedHarness?: HarnessKind
   ): Promise<string | undefined> => {
-    const runnerPrefs = await prefsLoader(subsystem, requestedRunner);
-    if (!runnerPrefs) return explicit;
+    const harnessPrefs = await prefsLoader(subsystem, requestedHarness);
+    if (!harnessPrefs) return explicit;
     return resolveSubsystemModel(
       prefs.getAllPrefs(),
-      runnerPrefs.kind,
+      harnessPrefs.kind,
       subsystem,
       explicit
     );
   };
 
-  const resolveAutomationAgent = async (
+  const resolveAutomationHarness = async (
     requires: automation.ManifestRequires
-  ): Promise<AutomationAgentSelection> => {
-    const fallbackRunner = (await prefsLoader("automations"))?.kind ?? "codex";
-    return resolveAutomationAgentSelection(
+  ): Promise<AutomationHarnessSelection> => {
+    const fallbackHarness = (await prefsLoader("automations"))?.kind ?? "codex";
+    return resolveAutomationHarnessSelection(
       requires,
       prefs.getAllPrefs(),
-      fallbackRunner
+      fallbackHarness
     );
   };
 
-  const resolveAutomationAgentForRef = async (
+  const resolveAutomationHarnessForRef = async (
     automationRef: string,
     codeAppsDir: string
-  ): Promise<AutomationAgentSelection> => {
+  ): Promise<AutomationHarnessSelection> => {
     const parsed = automation.parseRef(automationRef);
     const row = parsed
       ? await automation.readAppOwned(
@@ -1829,13 +1829,13 @@ export async function buildGateway(
           parsed.automationId
         )
       : undefined;
-    return resolveAutomationAgent(row?.manifest.requires ?? {});
+    return resolveAutomationHarness(row?.manifest.requires ?? {});
   };
 
   // One warmer owns host-capability enumeration — the model list, for every
-  // runner — shared by the boot probe and the status routes so concurrent
+  // harness — shared by the boot probe and the status routes so concurrent
   // warms dedupe (a client Refresh mid-boot joins the boot warm). The
-  // enumerator honors the active runner's binPath/extraArgs; inactive runners
+  // enumerator honors the active harness's binPath/extraArgs; inactive harnesss
   // enumerate with defaults. (The tool surface this warmer once also tracked
   // went away with the `ctx.tool` rail — issue #484.)
   const catalogPath = paths.modelCatalogFile;
@@ -1846,15 +1846,15 @@ export async function buildGateway(
     ? new CatalogWarmer({
         catalogPath,
         enumerateModels: async (kind) => {
-          const runnerPrefs = await prefsLoader();
-          const isActive = runnerPrefs?.kind === kind;
-          return enumerateRunnerModels({
+          const harnessPrefs = await prefsLoader();
+          const isActive = harnessPrefs?.kind === kind;
+          return enumerateHarnessModels({
             kind,
-            ...(isActive && runnerPrefs?.binPath
-              ? { binPath: runnerPrefs.binPath }
+            ...(isActive && harnessPrefs?.binPath
+              ? { binPath: harnessPrefs.binPath }
               : {}),
-            ...(isActive && runnerPrefs?.extraArgs
-              ? { extraArgs: runnerPrefs.extraArgs }
+            ...(isActive && harnessPrefs?.extraArgs
+              ? { extraArgs: harnessPrefs.extraArgs }
               : {}),
           });
         },
@@ -1867,16 +1867,16 @@ export async function buildGateway(
   // whether to poll. `ready` wins over `loading`, so a Refresh over an
   // existing list keeps showing it.
   //
-  // The `hasWarmed` guard is load-bearing: a runner that self-reports no
+  // The `hasWarmed` guard is load-bearing: a harness that self-reports no
   // models (opencode, grok) leaves the cache empty forever, and re-kicking a
   // warm on every poll kept `isWarming` true at read time — `loading` that
   // never resolved. Once the question has been asked, an empty cache reports
   // `empty` and an explicit Refresh is the way to ask again.
   const resolveCatalogSurface = async <T>(
     surface: CatalogSurface,
-    kind: RunnerKind,
+    kind: HarnessKind,
     refresh: boolean,
-    read: (cp: string, k: RunnerKind) => Promise<T[]>
+    read: (cp: string, k: HarnessKind) => Promise<T[]>
   ): Promise<{ list: T[]; status: SurfaceStatus }> => {
     if (!catalogPath || !warmer) return { list: [], status: "empty" };
     const list = await read(catalogPath, kind);
@@ -1890,27 +1890,27 @@ export async function buildGateway(
   };
 
   const resolveCatalogModels = catalogPath
-    ? (kind: RunnerKind, refresh: boolean) =>
-        resolveCatalogSurface("models", kind, refresh, readRunnerModels)
+    ? (kind: HarnessKind, refresh: boolean) =>
+        resolveCatalogSurface("models", kind, refresh, readHarnessModels)
     : undefined;
   // The binary the agents route should probe for a kind. Only the kind the
-  // owner actually configured carries an override (`agent.runner.binPath` is
+  // owner actually configured carries an override (`harness.binPath` is
   // one global slot, not a per-kind map) — the same "is this the active
-  // runner" rule the catalog warmer applies. This is what makes the custom
+  // harness" rule the catalog warmer applies. This is what makes the custom
   // `acp` kind reportable: it ships no default binary, so it stays
   // unavailable until its path is configured and selected.
-  const binPathForKind = (kind: RunnerKind): string | undefined => {
+  const binPathForKind = (kind: HarnessKind): string | undefined => {
     const allPrefs = prefs.getAllPrefs();
-    if (allPrefs["agent.runner.kind"] !== kind) return undefined;
-    const binPath = allPrefs["agent.runner.binPath"];
+    if (allPrefs["harness.kind"] !== kind) return undefined;
+    const binPath = allPrefs["harness.binPath"];
     return typeof binPath === "string" && binPath.length > 0
       ? binPath
       : undefined;
   };
-  const extraArgsForKind = (kind: RunnerKind): string[] | undefined => {
+  const extraArgsForKind = (kind: HarnessKind): string[] | undefined => {
     const allPrefs = prefs.getAllPrefs();
-    if (allPrefs["agent.runner.kind"] !== kind) return undefined;
-    const extraArgs = allPrefs["agent.runner.extraArgs"];
+    if (allPrefs["harness.kind"] !== kind) return undefined;
+    const extraArgs = allPrefs["harness.extraArgs"];
     return Array.isArray(extraArgs) &&
       extraArgs.every((entry) => typeof entry === "string")
       ? extraArgs
@@ -1919,43 +1919,43 @@ export async function buildGateway(
 
   // Ask-model picker (kit Ask panel, subsystem `ask`) — GET/PUT
   // `/centraid/<appId>/_turn/model`. Reads/writes the SAME
-  // `model.<runnerKind>.ask` prefs key `resolveModel` resolves at turn
-  // time — where `<runnerKind>` is ASK's resolved runner, not the default
-  // agent, so the picker never reads one key and writes another once the
-  // owner pins `runner.ask`. Off the SAME catalog surface the desktop's Settings → Agents
+  // `model.<harnessKind>.ask` prefs key `resolveModel` resolves at turn
+  // time — where `<harnessKind>` is ASK's resolved harness, not the default
+  // harness, so the picker never reads one key and writes another once the
+  // owner pins `harness.ask`. Off the SAME catalog surface the desktop's Settings → Agents
   // picker reads (`resolveCatalogModels`) — one source of truth, no second
   // store. A cold/empty catalog just means an empty `catalog` list; the
   // picker still shows "Use default".
   const askModelPrefs = {
     get: async (): Promise<AskModelInfo> => {
-      const runnerPrefs = (await prefsLoader("ask")) ?? {
+      const harnessPrefs = (await prefsLoader("ask")) ?? {
         kind: "codex" as const,
       };
       const allPrefs = prefs.getAllPrefs();
-      const scoped = allPrefs[`model.${runnerPrefs.kind}.ask`];
+      const scoped = allPrefs[`model.${harnessPrefs.kind}.ask`];
       const current =
         typeof scoped === "string" && scoped.length > 0 ? scoped : null;
-      const savedDefault = allPrefs[`model.${runnerPrefs.kind}.default`];
+      const savedDefault = allPrefs[`model.${harnessPrefs.kind}.default`];
       const { list } = resolveCatalogModels
-        ? await resolveCatalogModels(runnerPrefs.kind, false)
+        ? await resolveCatalogModels(harnessPrefs.kind, false)
         : { list: [] };
       const defaultModel =
         typeof savedDefault === "string" && savedDefault.length > 0
           ? savedDefault
           : list.find((m) => m.default)?.id;
       return {
-        runnerKind: runnerPrefs.kind,
+        harnessKind: harnessPrefs.kind,
         ...(defaultModel ? { defaultModel } : {}),
         current,
         catalog: list.map((m) => ({ id: m.id, label: m.name ?? m.id })),
       };
     },
     set: async (model: string | null): Promise<void> => {
-      const runnerPrefs = (await prefsLoader("ask")) ?? {
+      const harnessPrefs = (await prefsLoader("ask")) ?? {
         kind: "codex" as const,
       };
       prefs.setPrefs({
-        [`model.${runnerPrefs.kind}.ask`]:
+        [`model.${harnessPrefs.kind}.ask`]:
           model && model.length > 0 ? model : null,
       });
     },
@@ -1971,7 +1971,7 @@ export async function buildGateway(
       throw new Error("chat runner invoked before runtime was constructed");
     return rt.dispatcher;
   };
-  // The runner builds webhook URLs against the live server origin, known
+  // The harness builds webhook URLs against the live server origin, known
   // only after `startRuntimeHttpServer` resolves below — a turn only ever
   // runs post-start, so this holder is populated by then.
   let serverUrl = "";
@@ -2152,7 +2152,7 @@ export async function buildGateway(
   };
 
   // The one fire path, shared by "run now" (manual) and the cron schedulers
-  // (scheduled). Runs on THIS host with the gateway's own runner pref,
+  // (scheduled). Runs on THIS host with the gateway's own harness pref,
   // against the CURRENT vault's live `main` code + its data tree, streaming
   // each run over the event bus. Scheduled fires enter their vault's scope
   // via `runWithVaultContext` (see schedulerFor); manual fires inherit the
@@ -2286,23 +2286,24 @@ export async function buildGateway(
         // invocation ids then replay already-applied effects.
         if (prior) ledger.deleteTurn(opts.runId);
       }
-      const agent = await resolveAutomationAgentForRef(
+      const harnessSelection = await resolveAutomationHarnessForRef(
         automationRef,
         host.codeAppsDir()
       );
-      const automationLadder = resolveSubsystemRunnerLadder(
+      const automationLadder = resolveSubsystemHarnessLadder(
         prefs.getAllPrefs(),
         "automations",
-        agent.runner
+        harnessSelection.harness
       );
       const result = await runAutomation({
         automationRef,
         runId,
         appsDir: ws.appsDir,
         journalDbFile: ws.journalDbFile,
+        runTurn: accountedRunTurn,
         codeAppsDir: host.codeAppsDir(),
         // Each fire's ctx.vault rides the automation's enrolled
-        // agent.agent credential, resolved per app id (duaility §12).
+        // consent.agent credential, resolved per app id (duaility §12).
         vaultFor: async (appId: string, ref: string) => {
           const parsed = automation.parseRef(ref);
           const row = parsed
@@ -2346,30 +2347,32 @@ export async function buildGateway(
           trackDetachedAutomationTask(task, `re-arm ${ref}`);
         },
         resolveNestedRuntime: async (nestedRef) => {
-          const nested = await resolveAutomationAgentForRef(
+          const nested = await resolveAutomationHarnessForRef(
             nestedRef,
             host.codeAppsDir()
           );
           return {
-            runnerKind: nested.runner,
+            harnessKind: nested.harness,
             ...(nested.model ? { model: nested.model } : {}),
             ...(nested.configPins ? { configPins: nested.configPins } : {}),
           };
         },
-        runner: agent.runner,
-        // Manifests are agent-writable, so a `requires.runner` pin that names
+        harness: harnessSelection.harness,
+        // Manifests are harness-writable, so a `requires.harness` pin that names
         // a provider the user never chose is NOT consent for egress (#567 D13).
-        runnerSelectionSource: agent.selectionSource,
+        harnessSelectionSource: harnessSelection.selectionSource,
         triggerKind: opts.triggerKind,
         triggerOrigin: opts.triggerOrigin,
         ...(opts.input === undefined ? {} : { input: opts.input }),
         ...(opts.note ? { note: opts.note } : {}),
-        ...(agent.model ? { model: agent.model } : {}),
-        ...(agent.configPins ? { configPins: agent.configPins } : {}),
-        runnerLadder: automationLadder,
-        runnerPrefsFor: (kind) => prefsLoader("automations", kind),
-        runnerHealth,
-        runnerHealthContext: ws.vaultId,
+        ...(harnessSelection.model ? { model: harnessSelection.model } : {}),
+        ...(harnessSelection.configPins
+          ? { configPins: harnessSelection.configPins }
+          : {}),
+        harnessLadder: automationLadder,
+        harnessPrefsFor: (kind) => prefsLoader("automations", kind),
+        harnessHealth,
+        harnessHealthContext: ws.vaultId,
         providerEgressConsent,
         hydrationAttachmentPath: (hash) => {
           const parsed = automation.parseRef(automationRef);
@@ -2619,17 +2622,17 @@ export async function buildGateway(
       ext,
       ...makeVaultToolRunners(vaultRegistry),
       ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
-      // Test inject: finish headless compile without spawning a coding agent.
+      // Test inject: finish headless compile without spawning a harness.
       // Either way the driver is wrapped for resource accounting (#528 Phase C).
-      runTurn: accountRunTurn(options.runTurn ?? runTurn),
-      runnerLadder,
-      runnerHealth,
-      runnerHealthContext,
+      runTurn: accountedRunTurn,
+      harnessLadder,
+      harnessHealth,
+      harnessHealthContext,
       providerEgressConsent,
       onFailover: onConversationRunnerFailover,
     });
     // Headless compilation has its own outer automations ladder. Keep the
-    // injected runner automations-scoped and single-rung so breaker selection
+    // injected conversation driver automations-scoped and single-rung so breaker selection
     // can never jump providers inside one compile ledger turn.
     const automationCompileRunner: ConversationRunner =
       makeUnifiedConversationRunner({
@@ -2641,15 +2644,15 @@ export async function buildGateway(
         ext,
         ...makeVaultToolRunners(vaultRegistry),
         ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
-        runTurn: accountRunTurn(options.runTurn ?? runTurn),
-        runnerHealth,
-        runnerHealthContext,
+        runTurn: accountedRunTurn,
+        harnessHealth,
+        harnessHealthContext,
         providerEgressConsent,
         onFailover: onConversationRunnerFailover,
       });
     // Interactive automation turns run in a scratch cwd (the route passes it
     // as `dataDir`) and through an agent-plane dispatcher. This preserves the
-    // automation's enrolled `agent.agent` grant boundary while keeping native
+    // automation's enrolled `consent.agent` grant boundary while keeping native
     // file tools away from the live automation source tree.
     const automationConversationRunnerFor = (
       block: InstallScopeBlock
@@ -2664,10 +2667,10 @@ export async function buildGateway(
         subsystem: "automations",
         getDispatcher: () => automationDispatcher,
         resolveCwd: (input) => input.dataDir,
-        runTurn: accountRunTurn(options.runTurn ?? runTurn),
-        runnerLadder,
-        runnerHealth,
-        runnerHealthContext,
+        runTurn: accountedRunTurn,
+        harnessLadder,
+        harnessHealth,
+        harnessHealthContext,
         providerEgressConsent,
         onFailover: onConversationRunnerFailover,
       });
@@ -2698,7 +2701,9 @@ export async function buildGateway(
           ok: false,
           error: `automation "${automationRef}" does not exist`,
         };
-      const agent = await resolveAutomationAgent(row.manifest.requires);
+      const harnessSelection = await resolveAutomationHarness(
+        row.manifest.requires
+      );
       const enabledBeforeCompile = row.enabled;
       // Resolve core_link_anchor tokens before the model runs. The token
       // contains only an opaque anchor id; row and field scopes come from
@@ -2723,10 +2728,10 @@ export async function buildGateway(
       // then poisons a later retry (and can conflict with UI edits).
       // The compile run id is already unique; its final UUID segment is
       // safe for WorktreeStore session ids.
-      const compileLadder = resolveSubsystemRunnerLadder(
+      const compileLadder = resolveSubsystemHarnessLadder(
         prefs.getAllPrefs(),
         "automations",
-        agent.runner
+        harnessSelection.harness
       );
       let finalFailure: string | undefined;
       let failoverNotice: string | undefined;
@@ -2735,9 +2740,9 @@ export async function buildGateway(
         async ([index, kind]) => {
           const selection =
             index === 0
-              ? agent
-              : resolveAutomationAgentSelection(
-                  { ...row.manifest.requires, runner: kind },
+              ? harnessSelection
+              : resolveAutomationHarnessSelection(
+                  { ...row.manifest.requires, harness: kind },
                   prefs.getAllPrefs(),
                   kind,
                   { includeManifestProviderPins: false }
@@ -2756,14 +2761,14 @@ export async function buildGateway(
           await runHeadlessAutomationCompile({
             runner: automationCompileRunner,
             journalDbFile: workspace.journalDbFile,
-            runnerSessionDir: workspace.runnerSessionDir,
+            harnessSessionDir: workspace.harnessSessionDir,
             dataDir: workspace.appsDir,
             appId: parsed.appId,
             draftSessionId: sessionId,
             automationRef,
             automationName: row.name,
             instructions: row.manifest.prompt,
-            runnerKind: selection.runner,
+            harnessKind: selection.harness,
             ...(selection.model ? { model: selection.model } : {}),
             ...(selection.configPins
               ? { configPins: selection.configPins }
@@ -2771,7 +2776,7 @@ export async function buildGateway(
             providerEgressConsent,
             // Rung 0 is the user's automations primary unless the manifest
             // pinned a different provider, in which case the pin only counts if
-            // that runner is a live ladder member. Later rungs ARE the ladder.
+            // that harness is a live ladder member. Later rungs ARE the ladder.
             consentSource:
               index === 0 && selection.selectionSource !== "manifest"
                 ? "direct"
@@ -2944,7 +2949,7 @@ export async function buildGateway(
       reviseAutomation: ({ row, steering, revisionTurnId, compileTurnId }) => {
         const parsed = automation.parseRef(row.ref);
         if (!parsed) return;
-        let revisionRunner: RunnerKind | undefined;
+        let revisionHarness: HarnessKind | undefined;
         const reportCompileTurn = (
           error: string,
           labels?: { note: string }
@@ -2959,7 +2964,7 @@ export async function buildGateway(
               : compileTurnId,
             error,
             ...(labels ? { note: labels.note, summary: labels.note } : {}),
-            ...(revisionRunner ? { runnerKind: revisionRunner } : {}),
+            ...(revisionHarness ? { harnessKind: revisionHarness } : {}),
           });
         };
         const task = reviseAutomationInstructions({
@@ -3003,22 +3008,27 @@ export async function buildGateway(
             });
           },
           rewrite: async (persistPrompt) => {
-            const agent = await resolveAutomationAgent(row.manifest.requires);
-            revisionRunner = agent.runner;
-            const runnerPrefs = await prefsLoader("automations", agent.runner);
-            if (!runnerPrefs)
-              throw new Error("No automation agent is configured.");
+            const harnessSelection = await resolveAutomationHarness(
+              row.manifest.requires
+            );
+            revisionHarness = harnessSelection.harness;
+            const harnessPrefs = await prefsLoader(
+              "automations",
+              harnessSelection.harness
+            );
+            if (!harnessPrefs)
+              throw new Error("No automation harness is configured.");
             const configuredRewrite =
-              prefs.getAllPrefs()[`model.${agent.runner}.rewrite`];
+              prefs.getAllPrefs()[`model.${harnessSelection.harness}.rewrite`];
             const catalog = resolveCatalogModels
-              ? await resolveCatalogModels(agent.runner, false)
+              ? await resolveCatalogModels(harnessSelection.harness, false)
               : { list: [] };
             const fastModel = catalog.list.find(
               (model) => model.tier === "fast"
             )?.id;
             const rewriteModel = resolveAutomationRewriteModel(
               row.manifest.requires,
-              agent,
+              harnessSelection,
               configuredRewrite,
               fastModel
             );
@@ -3027,9 +3037,20 @@ export async function buildGateway(
               steering,
               revisionTurnId,
               journalDbFile: workspace.journalDbFile,
-              runnerSessionDir: workspace.runnerSessionDir,
-              runTurn: accountRunTurn(options.runTurn ?? runTurn),
-              runnerPrefs,
+              harnessSessionDir: workspace.harnessSessionDir,
+              runTurn: accountedRunTurn,
+              harnessPrefs,
+              // Steering is an attended owner action. The conversation row is
+              // ensured before TurnPlane asks for this proof, so the durable
+              // direct grant is both FK-safe and rechecked at the door.
+              egressConsent: () => {
+                providerEgressConsent.grant(
+                  row.ref,
+                  harnessPrefs.kind,
+                  "direct"
+                );
+                return providerEgressConsent.has(row.ref, harnessPrefs.kind);
+              },
               ...(rewriteModel ? { model: rewriteModel } : {}),
               persistPrompt,
             });
@@ -3112,14 +3133,14 @@ export async function buildGateway(
         : undefined;
       const preservedRequires = current
         ? Object.fromEntries(
-            (["runner", "model", "thoughtLevel"] as const).flatMap((key) =>
+            (["harness", "model", "thoughtLevel"] as const).flatMap((key) =>
               current.manifest.requires[key] === undefined
                 ? []
                 : [[key, current.manifest.requires[key]]]
             )
           )
         : {};
-      const currentVariant = current?.manifest.enrich?.agentVariant?.selected;
+      const currentVariant = current?.manifest.enrich?.delegateStep?.selected;
       const merged = automation.validateManifest({
         ...desired,
         enabled: current?.enabled ?? desired.enabled,
@@ -3128,13 +3149,13 @@ export async function buildGateway(
           ? {
               enrich: {
                 ...desired.enrich,
-                ...(desired.enrich.agentVariant
+                ...(desired.enrich.delegateStep
                   ? {
-                      agentVariant: {
-                        ...desired.enrich.agentVariant,
+                      delegateStep: {
+                        ...desired.enrich.delegateStep,
                         selected:
                           currentVariant ??
-                          desired.enrich.agentVariant.selected,
+                          desired.enrich.delegateStep.selected,
                       },
                     }
                   : {}),
@@ -3265,21 +3286,21 @@ export async function buildGateway(
           turnId,
           message,
           providerConsent,
-          runnerKind,
+          harnessKind,
           model,
           thinking,
           attachmentRefs,
           abortSignal,
           onEvent,
         }) => {
-          const selected = runnerKind
-            ? resolveAutomationAgentSelection(
-                { runner: runnerKind },
+          const selected = harnessKind
+            ? resolveAutomationHarnessSelection(
+                { harness: harnessKind },
                 prefs.getAllPrefs(),
-                runnerKind,
+                harnessKind,
                 { includeManifestProviderPins: false }
               )
-            : await resolveAutomationAgent(row.manifest.requires);
+            : await resolveAutomationHarness(row.manifest.requires);
           const validatedAttachmentRefs = validateTurnAttachmentRefs(
             conversationHistoryStore,
             row.ownerApp,
@@ -3302,11 +3323,11 @@ export async function buildGateway(
             turnId,
             message,
             journalDbFile: workspace.journalDbFile,
-            runnerSessionDir: workspace.runnerSessionDir,
+            harnessSessionDir: workspace.harnessSessionDir,
             runner: automationConversationRunnerFor(
               executionScopeBlock(row.manifest.vault)
             ),
-            runnerKind: selected.runner,
+            harnessKind: selected.harness,
             ...((model ?? selected.model)
               ? { model: model ?? selected.model }
               : {}),
@@ -3764,7 +3785,7 @@ export async function buildGateway(
         const { rows } = await automation.list(
           settledHostFor(vaultId).codeAppsDir()
         );
-        // Every automation app acts through an enrolled agent.agent (duaility
+        // Every automation app acts through an enrolled consent.agent (duaility
         // §12) — enroll identities in THIS vault as the desired set settles,
         // and grant each automation's DECLARED scopes at the same moment
         // (issue #306 decision 2: installing was the consent).
@@ -3965,10 +3986,10 @@ export async function buildGateway(
         // builder chat.
         //
         // The two runners below are built once at boot, but neither PICKS a
-        // runner kind at construction: each carries only its subsystem tag
+        // harness kind at construction: each carries only its subsystem tag
         // and calls `prefsLoader(subsystem)` inside every turn. So the same
         // `input.register` fork that names the subsystem here also lands on
-        // a runner that resolves `runner.<subsystem>` fresh — the model key
+        // a harness that resolves `harness.<subsystem>` fresh — the model key
         // and the backend that receives it can't disagree, and a re-pin
         // takes effect on the next turn with no restart.
         const subsystem: ModelSubsystem =
@@ -3976,7 +3997,7 @@ export async function buildGateway(
         const model = await resolveModel(
           subsystem,
           input.model,
-          input.runnerKind
+          input.harnessKind
         );
         const resolvedInput =
           model === input.model ? input : { ...input, model };
@@ -3984,14 +4005,14 @@ export async function buildGateway(
         return (await currentVaultHost()).runner.run(resolvedInput);
       },
     },
-    conversationRunnerSessionDir: () => currentWorkspace().runnerSessionDir,
-    runnerStatus: async (statusOpts) => {
-      const runnerPrefs = await prefsLoader();
-      if (!runnerPrefs) {
+    conversationHarnessSessionDir: () => currentWorkspace().harnessSessionDir,
+    harnessStatus: async (statusOpts) => {
+      const harnessPrefs = await prefsLoader();
+      if (!harnessPrefs) {
         return {
           kind: "none" as const,
           ok: false,
-          reason: "No coding agent configured.",
+          reason: "No harness configured.",
           hint: "Open Settings → Agents and pick Codex or Claude Code.",
         };
       }
@@ -3999,16 +4020,16 @@ export async function buildGateway(
       // warmer. A Refresh (or a cold cache) kicks a warm fire-and-forget and
       // the client polls `modelsStatus` until it leaves `loading`.
       const status = await runPreflight(
-        runnerPrefs,
+        harnessPrefs,
         catalogPath ? { catalogPath } : {}
       );
       if (catalogPath && warmer && status.ok) {
         const count = status.models?.length ?? 0;
         if ((statusOpts?.refresh ?? false) || count === 0)
-          void warmer.warm(runnerPrefs.kind, "models");
+          void warmer.warm(harnessPrefs.kind, "models");
         status.modelsStatus = deriveStatus(
           count,
-          warmer.isWarming(runnerPrefs.kind, "models")
+          warmer.isWarming(harnessPrefs.kind, "models")
         );
       }
       return status;
@@ -4068,11 +4089,11 @@ export async function buildGateway(
     subsystem: "assistant",
     getDispatcher,
     vaults: vaultRegistry,
-    // Measure + label every assistant agent run (#528 Phase C); never throttled.
+    // Measure + label every assistant harness run (#528 Phase C); never throttled.
     runTurn: accountedRunTurn,
-    runnerLadder,
-    runnerHealth,
-    runnerHealthContext,
+    harnessLadder,
+    harnessHealth,
+    harnessHealthContext,
     providerEgressConsent,
     onFailover: onConversationRunnerFailover,
   });
@@ -4083,8 +4104,8 @@ export async function buildGateway(
   // this closure returns void immediately and self-schedules; any failure is
   // swallowed so a title miss never touches the turn. Provider-agnostic — the
   // titler runs at the `fast` capability TIER (never a hardcoded model id;
-  // governance no-hardcoded-model-ids), overridable per runner via the
-  // `model.<runnerKind>.title` prefs slot. "User rename wins": the generated
+  // governance no-hardcoded-model-ids), overridable per harness via the
+  // `model.<harnessKind>.title` prefs slot. "User rename wins": the generated
   // title is only applied when the stored title is STILL the exact derived
   // truncation, re-checked after the (async) generation returns.
   const generateAssistantTitle = (args: {
@@ -4098,22 +4119,36 @@ export async function buildGateway(
         // nice-to-have one-shot, so it skips generation whenever the vault is at
         // its turn ceiling rather than competing for a slot.
         if (turnLimiterForCurrentVault().atCapacity()) return;
-        const runnerPrefs = await prefsLoader();
-        if (!runnerPrefs) return;
-        const slot = prefs.getAllPrefs()[`model.${runnerPrefs.kind}.title`];
+        const harnessPrefs = await prefsLoader();
+        if (!harnessPrefs) return;
+        if (
+          !providerEgressConsent.has(
+            args.conversationId,
+            harnessPrefs.kind,
+            "assistant"
+          )
+        )
+          return;
+        const slot = prefs.getAllPrefs()[`model.${harnessPrefs.kind}.title`];
         const configured =
           typeof slot === "string" && slot.length > 0 ? slot : undefined;
-        // The `fast` tier is only meaningful on runners that understand the
+        // The `fast` tier is only meaningful on harnesses that understand the
         // tier vocabulary (claude-code); on codex a bare tier token would be
         // sent verbatim, so skip unless the owner configured an explicit slot.
-        if (!configured && runnerPrefs.kind !== "claude-code") return;
+        if (!configured && harnessPrefs.kind !== "claude-code") return;
         const title = await generateConversationTitle({
-          runTurn,
-          runnerPrefs,
+          runTurn: accountedRunTurn,
+          harnessPrefs,
           cwd: assistantCwd(vaultRegistry),
           model: configured ?? "fast",
           userMessage: args.userMessage,
           assistantText: args.assistantText,
+          egressConsent: () =>
+            providerEgressConsent.has(
+              args.conversationId,
+              harnessPrefs.kind,
+              "assistant"
+            ),
           timeoutMs: 20_000,
         });
         if (!title) return;
@@ -4137,16 +4172,40 @@ export async function buildGateway(
 
   const classifyCapture = async (
     text: string
-  ): Promise<Awaited<ReturnType<typeof classifyCaptureWithAgent>>> => {
+  ): Promise<Awaited<ReturnType<typeof classifyCaptureWithHarness>>> => {
     if (turnLimiterForCurrentVault().atCapacity()) return undefined;
-    const runnerPrefs = await prefsLoader("assistant");
-    if (!runnerPrefs) return undefined;
-    const model = await resolveModel("assistant", undefined, runnerPrefs.kind);
-    return classifyCaptureWithAgent({
+    const harnessPrefs = await prefsLoader("assistant");
+    if (!harnessPrefs) return undefined;
+    // Universal capture has no user-visible conversation, but provider
+    // consent is conversation-scoped and FK-backed. Keep one hidden build
+    // conversation per vault so the authenticated, attended classify action
+    // can leave a durable direct receipt before any text egresses.
+    const captureConversationId = "centraid:capture-classifier";
+    const captureLedger = journalConversationStore(
+      currentWorkspace().journalDbFile
+    );
+    if (!captureLedger.getConversation(captureConversationId)) {
+      captureLedger.createConversation({
+        id: captureConversationId,
+        kind: "build",
+        userId: "",
+        title: "Capture classification",
+        harnessKind: harnessPrefs.kind,
+      });
+    }
+    providerEgressConsent.grant(
+      captureConversationId,
+      harnessPrefs.kind,
+      "direct"
+    );
+    const model = await resolveModel("assistant", undefined, harnessPrefs.kind);
+    return classifyCaptureWithHarness({
       runTurn: accountedRunTurn,
-      runnerPrefs,
+      harnessPrefs,
       cwd: assistantCwd(vaultRegistry),
       text,
+      egressConsent: () =>
+        providerEgressConsent.has(captureConversationId, harnessPrefs.kind),
       ...(model ? { model } : {}),
       timeoutMs: 20_000,
     });
@@ -4189,11 +4248,11 @@ export async function buildGateway(
     subsystem: "ask",
     getDispatcher,
     vaults: vaultRegistry,
-    // Measure + label every ask-register agent run (#528 Phase C); never throttled.
+    // Measure + label every ask-register harness run (#528 Phase C); never throttled.
     runTurn: accountedRunTurn,
-    runnerLadder,
-    runnerHealth,
-    runnerHealthContext,
+    harnessLadder,
+    harnessHealth,
+    harnessHealthContext,
     providerEgressConsent,
     onFailover: onConversationRunnerFailover,
     buildPrompt: async (input) => {
@@ -4608,10 +4667,10 @@ export async function buildGateway(
         },
       })
     ),
-    // Coding-agent detection (codex/claude credentials on the gateway host).
+    // Harness detection (codex/claude credentials on the gateway host).
     forRoutePrefixes(
-      "/centraid/_agents",
-      makeAgentsRouteHandler({
+      "/centraid/_harnesses",
+      makeHarnessesRouteHandler({
         ...(resolveCatalogModels
           ? { resolveModels: resolveCatalogModels }
           : {}),
@@ -4622,13 +4681,13 @@ export async function buildGateway(
             ...(extraArgs ? { extraArgs } : {}),
             cacheDir: path.join(
               paths.cacheDir ?? path.join(dataDir, "cache"),
-              "agent-capabilities"
+              "harness-capabilities"
             ),
             // Only force a spawn on explicit refresh; otherwise serve cache.
             // `probeIfMissing` delivers the "probe once on first read when
             // cold" half of that promise — without it a cold gateway (fresh
             // start, nothing persisted yet) answered `undefined` and an
-            // installed, authed runner showed no models until the user
+            // installed, authed harness showed no models until the user
             // manually hit Refresh (#665). The in-flight de-dupe inside
             // resolveAcpCapabilities keeps concurrent cold reads to one probe.
             refresh,
@@ -4636,13 +4695,13 @@ export async function buildGateway(
           });
           if (!caps) return undefined;
           if (refresh && caps.reachable && !caps.authRequired) {
-            for (const entry of runnerHealth
+            for (const entry of harnessHealth
               .list()
-              .filter((row) => row.runnerKind === kind)) {
-              runnerHealth.reportPreflightOk(entry.workspaceContext, kind);
+              .filter((row) => row.harnessKind === kind)) {
+              harnessHealth.reportPreflightOk(entry.workspaceContext, kind);
             }
           }
-          const out: AgentAcpCapabilities = {
+          const out: HarnessAcpCapabilities = {
             reachable: caps.reachable,
             loadSession: caps.loadSession,
             resume: caps.resume,
@@ -4665,7 +4724,7 @@ export async function buildGateway(
           return out;
         },
         resolveHealth: (kind) =>
-          runnerHealth.list().filter((row) => row.runnerKind === kind),
+          harnessHealth.list().filter((row) => row.harnessKind === kind),
         binPathFor: binPathForKind,
       })
     ),
@@ -4693,7 +4752,7 @@ export async function buildGateway(
   const conversationHandler = makeConversationRouteHandler(
     () => conversationHistoryStore
   );
-  const runnerSubsystems: readonly ModelSubsystem[] = [
+  const harnessSubsystems: readonly ModelSubsystem[] = [
     "assistant",
     "ask",
     "builder",
@@ -4717,16 +4776,16 @@ export async function buildGateway(
       validatePatch: async (patch, before) => {
         const next = patchedPrefs(before, patch);
         const switches: Array<ModelSubsystem | undefined> = [];
-        if (Object.hasOwn(patch, "agent.runner.kind")) switches.push(undefined);
-        for (const subsystem of runnerSubsystems) {
-          if (Object.hasOwn(patch, `runner.${subsystem}`))
+        if (Object.hasOwn(patch, "harness.kind")) switches.push(undefined);
+        for (const subsystem of harnessSubsystems) {
+          if (Object.hasOwn(patch, `harness.${subsystem}`))
             switches.push(subsystem);
         }
         let failure: string | undefined;
         await findSequentially(switches, async (subsystem) => {
-          const candidate = resolveStrictGatewayRunnerPrefs(next, subsystem);
+          const candidate = resolveStrictGatewayHarnessPrefs(next, subsystem);
           if (!candidate) {
-            failure = `Cannot switch ${subsystem ?? "the default lane"}: no valid agent is configured.`;
+            failure = `Cannot switch ${subsystem ?? "the default lane"}: no valid harness is configured.`;
             return true;
           }
           const status = await runPreflight(candidate, {
@@ -4740,7 +4799,7 @@ export async function buildGateway(
         return failure;
       },
       afterPatch: (_patch, before, after) => {
-        for (const { kind, subsystem } of removedRunnerLadderMembers(
+        for (const { kind, subsystem } of removedHarnessLadderMembers(
           before,
           after
         )) {
@@ -5251,19 +5310,19 @@ export async function buildGateway(
     scheduleOutboxSweep(hardwareProfile.outboxIdleIntervalMs);
 
     // Warm the host-capability catalog — the model list — for each detected
-    // runner on EVERY gateway start, in the background so it never delays
+    // harness on EVERY gateway start, in the background so it never delays
     // readiness. Best-effort; the warmer dedupes, so a client Refresh mid-boot
     // joins this run.
     if (warmer) {
       const activeWarmer = warmer;
       void (async () => {
-        // Every registered runner kind, not a hardcoded pair. The probe is a
+        // Every registered harness kind, not a hardcoded pair. The probe is a
         // single `<bin> --version` per kind (concurrent, and a kind with no
         // configured binary short-circuits without spawning), and only the
         // kinds that actually resolve go on to the far more expensive warm.
         const surface: CatalogSurface = "models";
         const checks = await Promise.all(
-          RUNNER_KINDS.map(async (kind) => ({
+          HARNESS_KINDS.map(async (kind) => ({
             kind,
             present: (await probeCliAvailability(kind, binPathForKind(kind)))
               .available,

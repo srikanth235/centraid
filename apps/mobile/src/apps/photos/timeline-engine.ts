@@ -57,7 +57,7 @@ const IDLE_UPLOAD_POLL_MS = 30_000;
 const WALK_RECOMPUTE_DEBOUNCE_MS = 250;
 
 const REPLICA_ENTITIES = [
-  "media.media_asset",
+  "media.asset",
   "core.content_item",
   "core.content_derivative",
   "media.asset_phash",

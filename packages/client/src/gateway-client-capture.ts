@@ -6,7 +6,7 @@ import {
   readJson,
 } from "./gateway-client-core.js";
 
-export interface AgentCaptureCandidate {
+export interface CaptureCandidate {
   kind: "task" | "expense" | "note" | "event";
   title?: string;
   amountMinor?: number;
@@ -60,7 +60,7 @@ export async function stageCaptureFile(file: File): Promise<string> {
 
 export async function classifyAmbiguousCapture(
   text: string
-): Promise<AgentCaptureCandidate | undefined> {
+): Promise<CaptureCandidate | undefined> {
   const { baseUrl, token } = await auth();
   const response = await doFetch(
     baseUrl,
@@ -72,7 +72,7 @@ export async function classifyAmbiguousCapture(
     }
   );
   if (response.status === 503) return undefined;
-  const body = await readJson<{ preview?: AgentCaptureCandidate }>(
+  const body = await readJson<{ preview?: CaptureCandidate }>(
     response,
     "classify capture"
   );

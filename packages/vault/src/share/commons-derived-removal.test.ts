@@ -25,7 +25,7 @@ describe("Commons derived-state scrub", () => {
       ownerPartyId: originBoot.ownerPartyId,
       ownerVaultId: "vault-priya",
       ownerVault: origin,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: shared.assetId,
       members: [
         {
@@ -68,7 +68,7 @@ describe("Commons derived-state scrub", () => {
     );
     insertEmbedding.run(
       uuidv7(),
-      "media.media_asset",
+      "media.asset",
       shared.assetId,
       Buffer.from(new Float32Array([1]).buffer),
       now
@@ -89,7 +89,7 @@ describe("Commons derived-state scrub", () => {
     );
     insertEmbedding.run(
       uuidv7(),
-      "media.media_asset",
+      "media.asset",
       ownerPhoto.assetId,
       Buffer.from(new Float32Array([1]).buffer),
       now
@@ -99,7 +99,7 @@ describe("Commons derived-state scrub", () => {
         `INSERT INTO enrich_derivation
            (derivation_id, target_type, target_id, variant, capability,
             model, payload_json, produced_at)
-         VALUES (?, 'media.media_asset', ?, 'caption', 'captions',
+         VALUES (?, 'media.asset', ?, 'caption', 'captions',
                  'test@1', '{"local":true}', ?)`
       )
       .run(uuidv7(), shared.assetId, now);
@@ -107,7 +107,7 @@ describe("Commons derived-state scrub", () => {
       `INSERT INTO enrich_request
          (request_id, target_type, target_id, reason, detail,
           requested_at, drained_at)
-       VALUES (?, 'media.media_asset', ?, 'projected', 'local', ?, ?)`
+       VALUES (?, 'media.asset', ?, 'projected', 'local', ?, ?)`
     );
     insertRequest.run(uuidv7(), shared.assetId, now, null);
     insertRequest.run(uuidv7(), shared.assetId, now, now);
@@ -116,7 +116,7 @@ describe("Commons derived-state scrub", () => {
         `INSERT INTO knowledge_annotation
            (annotation_id, author_party_id, target_type, target_id,
             selector_json, body_text, created_at)
-         VALUES (?, ?, 'media.media_asset', ?, NULL, 'local caption', ?)`
+         VALUES (?, ?, 'media.asset', ?, NULL, 'local caption', ?)`
       )
       .run(uuidv7(), audienceBoot.ownerPartyId, shared.assetId, now);
     audience.vault
@@ -136,9 +136,7 @@ describe("Commons derived-state scrub", () => {
       )
       .run(audienceBoot.ownerPartyId, shared.assetId, now);
     audience.vault
-      .prepare(
-        "UPDATE media_media_asset SET source_asset_id = ? WHERE asset_id = ?"
-      )
+      .prepare("UPDATE media_asset SET source_asset_id = ? WHERE asset_id = ?")
       .run(shared.assetId, ownerPhoto.assetId);
     expect(
       audience.vault
@@ -159,9 +157,7 @@ describe("Commons derived-state scrub", () => {
 
     expect(
       audience.vault
-        .prepare(
-          "SELECT COUNT(*) AS n FROM media_media_asset WHERE asset_id = ?"
-        )
+        .prepare("SELECT COUNT(*) AS n FROM media_asset WHERE asset_id = ?")
         .get(shared.assetId)
     ).toMatchObject({ n: 0 });
     expect(
@@ -202,9 +198,7 @@ describe("Commons derived-state scrub", () => {
     ).toMatchObject({ photo_asset_id: null });
     expect(
       audience.vault
-        .prepare(
-          "SELECT source_asset_id FROM media_media_asset WHERE asset_id = ?"
-        )
+        .prepare("SELECT source_asset_id FROM media_asset WHERE asset_id = ?")
         .get(ownerPhoto.assetId)
     ).toMatchObject({ source_asset_id: null });
     expect(
@@ -236,9 +230,7 @@ describe("Commons derived-state scrub", () => {
     });
     expect(
       audience.vault
-        .prepare(
-          "SELECT COUNT(*) AS n FROM media_media_asset WHERE asset_id = ?"
-        )
+        .prepare("SELECT COUNT(*) AS n FROM media_asset WHERE asset_id = ?")
         .get(shared.assetId)
     ).toMatchObject({ n: 1 });
     expect(

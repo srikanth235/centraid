@@ -3,7 +3,7 @@
 // Phase 2 of the thin-client pivot: the deterministic builder lives in
 // the gateway, not the desktop. Scaffolding a blank app, cloning a
 // template, editing an app's name/description, and creating/toggling/
-// deleting automations were all desktop orchestration (agent-harness
+// deleting automations were all desktop orchestration (harness
 // scaffolders + app-engine webhook minting, pushed up over IPC-relayed
 // session writes). They move here so the renderer states intent and the
 // gateway does the work — identical for a local or remote gateway.

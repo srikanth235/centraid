@@ -1,7 +1,7 @@
 /*
  * Publish-time token-purity gate for authored app CSS (issue #686, item D3).
  *
- * Agent-authored apps were grounded on the design token contract by prompt
+ * Harness-authored apps were grounded on the design token contract by prompt
  * alone (`src/skills/ui-grounding.ts` tells the model "never write #hexcodes or
  * rgb() literals"), and nothing checked what the model actually wrote. Checked-in
  * blueprint apps have a vitest ratchet; runtime-authored apps had nothing.

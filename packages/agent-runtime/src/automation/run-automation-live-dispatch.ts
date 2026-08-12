@@ -1,25 +1,25 @@
 /*
- * Live `ctx.agent` dispatch for the local automation runner.
+ * Live `ctx.delegate` dispatch for the local automation harness.
  *
  * Split out of `run-automation.ts` so that file can stay focused on the
  * per-fire lifecycle (manifest load, audit store, onFailure cascade). This
- * module owns the one billed rail — `ctx.agent`, a bounded one-shot turn
+ * module owns the one billed rail — `ctx.delegate`, a bounded one-shot turn
  * against the user's real provider.
  *
- * Issue #479 — `ctx.agent` honours every registered runner kind through ONE
- * path: `getRunnerBackend(kind).runTurn`, the same seam chat uses. Pinning
- * `runner.automations` to any kind actually drives that agent.
+ * Issue #743 — `ctx.delegate` honours every registered harness kind through
+ * the same injected, accounted TurnPlane seam as chat. Pinning
+ * `harness.automations` to any kind actually drives that harness.
  *
  * Issue #484 — the `ctx.tool` rail was removed. It used to dispatch tool
  * batches to a persistent mock-LLM session that puppeted the claude/codex
  * CLIs; that mock HTTP server started eagerly per fire even when unused. It
- * is gone. A fire whose handler never calls `ctx.agent` now starts ZERO child
+ * is gone. A fire whose handler never calls `ctx.delegate` now starts ZERO child
  * processes and ZERO HTTP servers: the deterministic rails (`ctx.vault`,
  * `ctx.fetch`, `ctx.state`, `ctx.runs`) are serviced in-process, parent-side.
  * The only thing this surface allocates lazily is a scratch dir — and only
- * when a `ctx.agent` call actually carries vault-derivative attachments.
+ * when a `ctx.delegate` call actually carries vault-derivative attachments.
  *
- * Issue #91: an automation is a standalone app — the agent runs with the app
+ * Issue #91: an automation is a standalone app — the harness runs with the app
  * directory as cwd, and the dispatch context carries the automation id (no
  * owning app).
  */
@@ -29,53 +29,56 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import type {
-  AgentFailureClass,
+  HarnessFailureClass,
   ProviderConsentSource,
   ProviderEgressConsentController,
-  RunnerHealthController,
-  RunnerKind,
-  RunnerPrefs,
+  HarnessHealthController,
+  HarnessKind,
+  HarnessPrefs,
+  RunTurnFn,
   TurnStreamEvent,
 } from "@centraid/app-engine";
 import {
-  compileHydrationPlan,
   ConversationStore,
+  HarnessSessions,
   hydrationMessagesFromLedger,
+  isHarnessKind,
   makeJournalDbProvider,
+  TurnPlane,
 } from "@centraid/app-engine";
-import type * as TypeImport_4y0tle from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
 
-import { getRunnerBackend } from "../registry.js";
-
 export interface LiveDispatchOptions {
-  /** The automation app directory — also the agent's cwd. */
+  /** The automation app directory — also the harness's cwd. */
   workdir: string;
   runId: string;
   /** Stable automation conversation identity (`<appId>/<automationId>`). */
   automationRef: string;
-  /** Canonical per-vault ledger holding runner bindings and hydration watermarks. */
+  /** Canonical per-vault ledger holding harness bindings and hydration watermarks. */
   journalDbFile: string;
-  runner: RunnerKind;
+  /** Host-accounted dispatch seam. No automation may reach a harness directly. */
+  runTurn: RunTurnFn;
+  harness: HarnessKind;
   /**
-   * Model id/alias for `ctx.agent` calls (manifest `requires.model`, or the
+   * Model id/alias for `ctx.delegate` calls (manifest `requires.model`, or the
    * caller's prefs-resolved fallback — see `RunAutomationOptions.model`).
-   * Undefined means "no override" — the backend's own default applies.
+   * Undefined means "no override" — the harness's own default applies.
    */
   model?: string;
   /** Semantic ACP configuration pins, keyed by capability category. */
   configPins?: Readonly<Record<string, string>>;
-  /** Load launch settings/default config for this fire's selected runner. */
-  runnerPrefsFor?: (runner: RunnerKind) => Promise<RunnerPrefs | undefined>;
-  runnerHealth?: RunnerHealthController;
-  runnerHealthContext?: string;
-  providerEgressConsent?: ProviderEgressConsentController;
+  /** Load launch settings/default config for this fire's selected harness. */
+  harnessPrefsFor?: (harness: HarnessKind) => Promise<HarnessPrefs | undefined>;
+  harnessHealth?: HarnessHealthController;
+  harnessHealthContext?: string;
+  /** Required fail-closed controller for every unattended provider egress. */
+  providerEgressConsent: ProviderEgressConsentController;
   /**
-   * How the user authored this rung's runner: `direct` = their automations
+   * How the user authored this rung's harness: `direct` = their automations
    * primary, `ladder` = current failover membership (validated against the
    * live ladder before anything egresses). Both are user-authored consent
-   * (#567 D13). Omit when the runner came from a source the user did not
-   * author — a manifest `requires.runner` pin naming a provider absent from
+   * (#567 D13). Omit when the harness came from a source the user did not
+   * author — a manifest `requires.harness` pin naming a provider absent from
    * their settings — so the fire is denied unless a real grant already exists.
    */
   consentSource?: ProviderConsentSource;
@@ -85,7 +88,7 @@ export interface LiveDispatchOptions {
 }
 
 export interface LiveDispatch {
-  agentDispatcher: automation.AgentDispatcher;
+  delegateDispatcher: automation.DelegateDispatcher;
   finalizeTurn: (
     store: ConversationStore,
     conversationId: string,
@@ -97,20 +100,21 @@ export interface LiveDispatch {
   close: () => Promise<void>;
 }
 
-const AGENT_FAILURE_PREFIX = "centraid-agent-failure:";
+const DELEGATE_FAILURE_PREFIX = "centraid-delegate-failure:";
 
-export interface AutomationAgentFailure {
-  runner: RunnerKind;
-  failureClass: AgentFailureClass;
+export interface AutomationDelegateFailure {
+  harness: string;
+  failureClass: HarnessFailureClass;
   message: string;
+  explicitHarness?: boolean;
 }
 
-/** Preserve typed runner failure metadata through the handler worker boundary. */
-export function parseAutomationAgentFailure(
+/** Preserve typed harness failure metadata through the handler worker boundary. */
+export function parseAutomationDelegateFailure(
   error: string | undefined
-): AutomationAgentFailure | undefined {
+): AutomationDelegateFailure | undefined {
   if (!error) return undefined;
-  const at = error.indexOf(AGENT_FAILURE_PREFIX);
+  const at = error.indexOf(DELEGATE_FAILURE_PREFIX);
   if (at < 0) return undefined;
   try {
     // Handler workers preserve the original error text but append their own
@@ -118,36 +122,36 @@ export function parseAutomationAgentFailure(
     // JSON-encoded line (embedded newlines in `message` are escaped), so only
     // parse that line instead of letting a worker stack suppress failover.
     const payload = error
-      .slice(at + AGENT_FAILURE_PREFIX.length)
+      .slice(at + DELEGATE_FAILURE_PREFIX.length)
       .split(/\r?\n/u, 1)[0]
       ?.trim();
     const parsed = JSON.parse(payload ?? "") as {
-      runner?: unknown;
+      harness?: unknown;
       failureClass?: unknown;
       message?: unknown;
     };
     if (
-      typeof parsed.runner !== "string" ||
+      typeof parsed.harness !== "string" ||
       typeof parsed.failureClass !== "string" ||
       typeof parsed.message !== "string"
     ) {
       return undefined;
     }
-    return parsed as AutomationAgentFailure;
+    return parsed as AutomationDelegateFailure;
   } catch {
     return undefined;
   }
 }
 
-function agentFailureError(failure: AutomationAgentFailure): Error {
-  return new Error(`${AGENT_FAILURE_PREFIX}${JSON.stringify(failure)}`);
+function delegateFailureError(failure: AutomationDelegateFailure): Error {
+  return new Error(`${DELEGATE_FAILURE_PREFIX}${JSON.stringify(failure)}`);
 }
 
 /**
- * Stand up the live dispatch surface for the CLI runner. `ctx.agent` routes to
- * the user's REAL provider through the runner registry; everything else on the
+ * Stand up the live dispatch surface for the CLI harness. `ctx.delegate` routes to
+ * the user's REAL provider through the harness registry; everything else on the
  * `ctx.*` surface is deterministic and serviced parent-side, so this allocates
- * nothing eagerly. The scratch dir is created lazily, only when a `ctx.agent`
+ * nothing eagerly. The scratch dir is created lazily, only when a `ctx.delegate`
  * call carries vault derivatives to stage.
  */
 export async function startLiveDispatch(
@@ -170,35 +174,44 @@ export async function startLiveDispatch(
     60_000
   );
   lockLeaseHeartbeat.unref?.();
-  let latestAdapter:
-    | {
-        kind: string;
-        sessionId?: string;
-        usageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
-        hydrated?: boolean;
-      }
-    | undefined;
-  let observedAdapter:
-    | {
-        kind: string;
-        sessionId?: string;
-        usageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
-        hydrated?: boolean;
-      }
-    | undefined;
-  let hydrationTokens = 0;
+  const harnessSessions = new HarnessSessions({
+    binding: (kind) => {
+      const binding = runsStore.getHarnessBinding(opts.automationRef, kind);
+      return binding
+        ? {
+            bindingId: binding.id,
+            sessionId: binding.acpSessionId,
+            ...(binding.usageSnapshot
+              ? { usageSnapshot: binding.usageSnapshot }
+              : {}),
+            hydratedThroughSeq: binding.hydratedThroughSeq,
+          }
+        : undefined;
+    },
+    messages: (afterSeq) =>
+      hydrationMessagesFromLedger(
+        runsStore.listTurns(opts.automationRef),
+        (turnId) => runsStore.listItems(turnId),
+        (itemId) => runsStore.listAttachmentsForItem(itemId),
+        afterSeq
+      ),
+    ...(opts.hydrationAttachmentPath
+      ? { attachmentPath: opts.hydrationAttachmentPath }
+      : {}),
+  });
+  const turnPlane = new TurnPlane(opts.runTurn);
   const ensureScratch = async (): Promise<void> => {
     if (scratchReady) return;
     await fs.mkdir(scratchDir, { recursive: true });
     scratchReady = true;
   };
 
-  // Vault-derivative attachments (issue #299): the runner already resolved
-  // and receipted them; here they become scratch files the agent's native
-  // multimodal Read path picks up — one mechanism for every runner, no
-  // per-backend wire format. The scratch dir materializes only on first use.
+  // Vault-derivative attachments (issue #299): the harness already resolved
+  // and receipted them; here they become scratch files the harness's native
+  // multimodal Read path picks up — one mechanism for every harness, no
+  // per-harness wire format. The scratch dir materializes only on first use.
   const stageAttachments = async (
-    call: automation.AgentCall
+    call: automation.DelegateCall
   ): Promise<{
     prompt: string;
     attachments?: Array<{ path: string; mime: string; filename?: string }>;
@@ -222,158 +235,140 @@ export async function startLiveDispatch(
     return { prompt: call.prompt, attachments };
   };
 
-  // ctx.agent routes to the user's REAL provider through the SAME runner
-  // registry chat uses — one integration path for every kind (issue #479).
-  // `runTurn` normalizes each agent's stream into TurnStreamEvents, so this
-  // reads `final` / `error` and coerces the answer with no per-backend wire
+  // ctx.delegate routes to the user's provider through the SAME accounted
+  // TurnPlane door chat uses — one integration path for every harness.
+  // `runTurn` normalizes each harness's stream into TurnStreamEvents, so this
+  // reads `final` / `error` and coerces the answer with no per-harness wire
   // format anywhere in this file.
   //
   // Two deliberate limits. (1) ACP has no `--output-schema` equivalent, so
-  // `call.json` is enforced by `coerceAgentAnswer` alone. (2) A fire carries
-  // only the runner KIND (the gateway drops binPath / extraArgs for every
-  // kind), so the backend resolves its default binary off PATH. The custom
+  // `call.json` is enforced by `coerceDelegateAnswer` alone. (2) A fire carries
+  // only the harness KIND (the gateway drops binPath / extraArgs for every
+  // kind), so the harness resolves its default binary off PATH. The custom
   // `acp` kind has no default binary and therefore surfaces a clear `error`
   // event, raised below.
-  const agentDispatcher: automation.AgentDispatcher = async (
+  const delegateDispatcher: automation.DelegateDispatcher = async (
     call,
     ctx
   ): Promise<unknown> => {
-    const runner = opts.runner;
+    const explicitHarness = call.harness !== undefined;
+    if (call.harness !== undefined && !isHarnessKind(call.harness)) {
+      throw delegateFailureError({
+        harness: call.harness,
+        failureClass: "unknown",
+        message: `Unknown harness "${call.harness}" requested by ctx.delegate.`,
+        explicitHarness: true,
+      });
+    }
+    const harness = call.harness ?? opts.harness;
     // Unattended egress is never prompted (#567 D5) — it is authorized at
     // authoring time. So derive the grant honestly rather than minting one:
     // `recordDerived` refuses to resurrect a revoked provider and refuses a
     // ladder source the user's live settings do not contain. A controller
     // without the derived-consent seam denies rather than assumes.
     const consent = opts.providerEgressConsent;
-    if (consent && !consent.has(opts.automationRef, runner, "automations")) {
+    // Defense in depth for untyped JavaScript callers: the public TypeScript
+    // contract requires this controller, but a missing host dependency must
+    // still deny before attachments are staged or a harness is reached.
+    if (!consent) {
+      throw delegateFailureError({
+        harness,
+        failureClass: "unknown",
+        message:
+          `Unattended egress to ${harness} is unavailable for ${opts.automationRef}: ` +
+          "the host did not provide a provider-egress consent controller.",
+        ...(explicitHarness ? { explicitHarness: true } : {}),
+      });
+    }
+    if (!consent.has(opts.automationRef, harness, "automations")) {
       const derived =
-        opts.consentSource === undefined
+        (harness === opts.harness ? opts.consentSource : "ladder") === undefined
           ? false
           : (consent.recordDerived?.(
               opts.automationRef,
-              runner,
-              opts.consentSource,
+              harness,
+              harness === opts.harness ? opts.consentSource! : "ladder",
               "automations"
             ) ?? false);
       if (!derived) {
-        throw agentFailureError({
-          runner,
+        throw delegateFailureError({
+          harness,
           failureClass: "unknown",
           message:
-            `Unattended egress to ${runner} is not consented for ${opts.automationRef}. ` +
-            `Add ${runner} to the automations agent or its failover ladder in Settings, ` +
+            `Unattended egress to ${harness} is not consented for ${opts.automationRef}. ` +
+            `Add ${harness} to the automations harness or its failover ladder in Settings, ` +
             `or run this automation interactively and approve the provider.`,
+          ...(explicitHarness ? { explicitHarness: true } : {}),
         });
       }
     }
     const staged = await stageAttachments(call);
-    const scope = opts.runnerHealthContext ?? opts.workdir;
-    const breaker = opts.runnerHealth?.canAttempt(scope, runner);
+    const scope = opts.harnessHealthContext ?? opts.workdir;
+    const breaker = opts.harnessHealth?.canAttempt(scope, harness);
     if (breaker && !breaker.allowed) {
-      throw agentFailureError({
-        runner,
+      throw delegateFailureError({
+        harness,
         failureClass: breaker.failureClass ?? "unknown",
-        message: `Runner breaker is open${breaker.breakerUntil ? ` until ${new Date(breaker.breakerUntil).toISOString()}` : ""}.`,
+        message: `Harness breaker is open${breaker.breakerUntil ? ` until ${new Date(breaker.breakerUntil).toISOString()}` : ""}.`,
+        ...(explicitHarness ? { explicitHarness: true } : {}),
       });
     }
-    const loaded = (await opts.runnerPrefsFor?.(runner)) ?? { kind: runner };
-    const prefs: RunnerPrefs =
-      loaded.kind === runner ? loaded : { kind: runner };
+    const loaded = (await opts.harnessPrefsFor?.(harness)) ?? { kind: harness };
+    const prefs: HarnessPrefs =
+      loaded.kind === harness ? loaded : { kind: harness };
     let finalText = "";
     let failure: Extract<TurnStreamEvent, { type: "error" }> | undefined;
-    const binding =
-      latestAdapter?.sessionId === undefined
-        ? runsStore.getHarnessBinding(opts.automationRef, runner)
-        : undefined;
-    const resumeSessionId = latestAdapter?.sessionId ?? binding?.acpSessionId;
-    const resumeUsage = latestAdapter?.usageSnapshot ?? binding?.usageSnapshot;
-    const completedTurns = runsStore.listTurns(opts.automationRef);
-    const hydrationMessages =
-      latestAdapter === undefined
-        ? hydrationMessagesFromLedger(
-            completedTurns,
-            (turnId) => runsStore.listItems(turnId),
-            (itemId) => runsStore.listAttachmentsForItem(itemId),
-            binding?.hydratedThroughSeq ?? -1
-          )
-        : [];
-    const recoveryMessages =
-      latestAdapter === undefined && binding
-        ? hydrationMessagesFromLedger(
-            completedTurns,
-            (turnId) => runsStore.listItems(turnId),
-            (itemId) => runsStore.listAttachmentsForItem(itemId)
-          )
-        : [];
-    const hydrationPlan =
-      hydrationMessages.length > 0
-        ? compileHydrationPlan(hydrationMessages, {
-            includeAttachmentReferences: true,
-          })
-        : undefined;
-    const recoveryHydrationPlan =
-      recoveryMessages.length > 0
-        ? compileHydrationPlan(recoveryMessages, {
-            includeAttachmentReferences: true,
-          })
-        : undefined;
+    const plan = harnessSessions.plan(harness);
+    const effectiveModel =
+      call.model ?? (harness === opts.harness ? opts.model : undefined);
+    const effectiveConfigPins = {
+      ...prefs.configPins,
+      ...(harness === opts.harness ? opts.configPins : {}),
+      ...call.configPins,
+    };
     let result:
       | {
           sessionId?: string;
-          adapterKind: string;
-          usageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
+          harnessKind: string;
+          usageSnapshot?: import("@centraid/app-engine").HarnessUsageSnapshot;
           hydrated?: boolean;
           hydrationKind?: "handoff" | "recovery";
         }
       | undefined;
     try {
-      result = await getRunnerBackend(runner).runTurn(
+      result = await turnPlane.runTurn(
         {
           conversationId: opts.automationRef,
           cwd: opts.workdir,
           message: staged.prompt,
           ...(staged.attachments ? { attachments: staged.attachments } : {}),
           extraSystemPrompt: "",
-          ...(opts.model ? { model: opts.model } : {}),
-          ...((opts.configPins ?? prefs.configPins)
-            ? { configPins: opts.configPins ?? prefs.configPins }
+          ...(effectiveModel ? { model: effectiveModel } : {}),
+          ...(Object.keys(effectiveConfigPins).length > 0
+            ? { configPins: effectiveConfigPins }
             : {}),
           abortSignal: ctx.abortSignal,
-          ...(resumeSessionId ? { prevSessionId: resumeSessionId } : {}),
-          ...(resumeUsage ? { prevUsageSnapshot: resumeUsage } : {}),
-          ...(hydrationPlan
+          ...(plan.sessionId ? { prevSessionId: plan.sessionId } : {}),
+          ...(plan.usageSnapshot
+            ? { prevUsageSnapshot: plan.usageSnapshot }
+            : {}),
+          ...(plan.hydrationContext
             ? {
-                hydrationContext: hydrationPlan.prompt,
+                hydrationContext: plan.hydrationContext.prompt,
                 forceHydration: true,
               }
             : {}),
-          ...(opts.hydrationAttachmentPath && hydrationPlan?.attachments.length
+          ...(plan.hydrationAttachments?.length
+            ? { hydrationAttachments: plan.hydrationAttachments }
+            : {}),
+          ...(plan.recoveryHydrationContext
             ? {
-                hydrationAttachments: hydrationPlan.attachments.map(
-                  (attachment) => ({
-                    path: opts.hydrationAttachmentPath!(attachment.hash),
-                    mime: attachment.mime,
-                    ...(attachment.filename
-                      ? { filename: attachment.filename }
-                      : {}),
-                  })
-                ),
+                recoveryHydrationContext: plan.recoveryHydrationContext.prompt,
               }
             : {}),
-          ...(recoveryHydrationPlan
-            ? { recoveryHydrationContext: recoveryHydrationPlan.prompt }
-            : {}),
-          ...(opts.hydrationAttachmentPath &&
-          recoveryHydrationPlan?.attachments.length
+          ...(plan.recoveryHydrationAttachments?.length
             ? {
-                recoveryHydrationAttachments:
-                  recoveryHydrationPlan.attachments.map((attachment) => ({
-                    path: opts.hydrationAttachmentPath!(attachment.hash),
-                    mime: attachment.mime,
-                    ...(attachment.filename
-                      ? { filename: attachment.filename }
-                      : {}),
-                  })),
+                recoveryHydrationAttachments: plan.recoveryHydrationAttachments,
               }
             : {}),
           onEvent: (event) => {
@@ -382,7 +377,16 @@ export async function startLiveDispatch(
             call.onEvent?.(event);
           },
         },
-        { prefs }
+        prefs,
+        {
+          surface: "automation",
+          egress: "unattended",
+          egressConsent: () =>
+            consent.has(opts.automationRef, harness, "automations"),
+          failover: explicitHarness ? "none" : "fire-boundary",
+          permissionPolicy: "deny",
+          artifacts: "delegate-only",
+        }
       );
     } catch (error) {
       failure = {
@@ -392,51 +396,65 @@ export async function startLiveDispatch(
       };
     }
     if (result) {
-      observedAdapter = {
-        kind: result.adapterKind,
-        ...(result.sessionId ? { sessionId: result.sessionId } : {}),
-        ...(result.usageSnapshot
-          ? { usageSnapshot: result.usageSnapshot }
-          : {}),
-        ...(result.hydrated ? { hydrated: true } : {}),
-      };
-      if (result.hydrated) {
-        hydrationTokens +=
-          result.hydrationKind === "recovery"
-            ? (recoveryHydrationPlan?.estimatedTokens ?? 0)
-            : (hydrationPlan?.estimatedTokens ?? 0);
-      }
+      const resultKind = isHarnessKind(result.harnessKind)
+        ? result.harnessKind
+        : harness;
+      harnessSessions.observe(
+        {
+          kind: resultKind,
+          ...(result.sessionId ? { sessionId: result.sessionId } : {}),
+          ...(result.usageSnapshot
+            ? { usageSnapshot: result.usageSnapshot }
+            : {}),
+          ...(result.hydrated ? { hydrated: true } : {}),
+        },
+        result.hydrationKind
+      );
     }
     if (!failure) {
-      if (result) {
-        latestAdapter = observedAdapter;
-      }
-      opts.runnerHealth?.reportOk(scope, runner);
-      return automation.coerceAgentAnswer(finalText, call.json);
+      opts.harnessHealth?.reportOk(scope, harness);
+      return automation.coerceDelegateAnswer(finalText, call.json);
     }
-    const typedFailure: AutomationAgentFailure = {
-      runner,
+    const typedFailure: AutomationDelegateFailure = {
+      harness,
       failureClass: failure.failureClass ?? "unknown",
       message: failure.message,
+      ...(explicitHarness ? { explicitHarness: true } : {}),
     };
-    opts.runnerHealth?.reportFailure(
+    opts.harnessHealth?.reportFailure(
       scope,
-      runner,
+      harness,
       typedFailure.failureClass,
       typedFailure.message
     );
-    throw agentFailureError(typedFailure);
+    throw delegateFailureError(typedFailure);
   };
 
   let closed = false;
   return {
-    agentDispatcher,
+    delegateDispatcher,
     finalizeTurn(store, conversationId, turnId, ok): void {
+      const hydrationTokens = harnessSessions.consumedHydrationTokens();
       if (hydrationTokens > 0) {
         store.setTurnHydrationTokens(turnId, hydrationTokens);
       }
-      if (ok) store.noteTurn(conversationId, "", latestAdapter);
-      else store.noteFailedTurn(conversationId, "", observedAdapter);
+      const observations = harnessSessions.allObservations();
+      const finalObservation = harnessSessions.lastObservation();
+      if (ok) {
+        store.noteTurn(conversationId, "", finalObservation);
+        for (const observation of observations) {
+          if (observation !== finalObservation) {
+            store.settleAdditionalHarness(conversationId, observation);
+          }
+        }
+      } else {
+        store.noteFailedTurn(conversationId, "", finalObservation);
+        for (const observation of observations) {
+          if (observation !== finalObservation) {
+            store.settleAdditionalFailedHarness(conversationId, observation);
+          }
+        }
+      }
     },
     async close(): Promise<void> {
       if (closed) return;

@@ -58,8 +58,8 @@ export const coverageExclude = [
   "packages/backup/src/testing/**",
   // wasm-bindgen glue for the web iroh transport — generated, not hand-owned.
   "apps/web/src/generated/**",
-  // In-tree ACP fake used by agent-runtime tests, not product code.
-  "packages/agent-runtime/src/backends/acp/fake-acp-agent.mjs",
+  // In-tree ACP fake harness used by agent-runtime tests, not product code.
+  "packages/agent-runtime/src/backends/acp/fake-acp-harness.mjs",
 ];
 
 // Root config: aggregates every package as a Vitest project so `vitest run`

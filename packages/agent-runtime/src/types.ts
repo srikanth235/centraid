@@ -1,5 +1,5 @@
 /*
- * Shared types for the agent-runtime wrappers.
+ * Shared types for the historical agent-runtime package's harness wrappers.
  *
  * The canonical definitions now live in `@centraid/app-engine`
  * (`turn.ts`) so the backend-agnostic run engine can speak the same
@@ -8,4 +8,4 @@
  * `@centraid/agent-runtime`) keep their existing import paths.
  */
 
-export type { RunnerKind, RunnerPrefs } from "@centraid/app-engine";
+export type { HarnessKind, HarnessPrefs } from "@centraid/app-engine";

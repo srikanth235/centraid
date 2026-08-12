@@ -2,7 +2,7 @@
  * Static handler lint for automation `handler.js` (issue #167).
  *
  * An automation fire is a chat whose brain is `handler.js`. Its outside effects
- * must go through the `ctx.*` surface (`ctx.vault` / `ctx.fetch` / `ctx.agent` /
+ * must go through the `ctx.*` surface (`ctx.vault` / `ctx.fetch` / `ctx.delegate` /
  * `ctx.state` / `ctx.runs`): those calls are recorded in the run ledger
  * (`run_nodes`). A raw `fetch`/`fs` call is invisible to the run history. The
  * handler should also be deterministic: a crashed fire simply re-runs from the
@@ -66,7 +66,7 @@ const RULES: readonly LintRule[] = [
     // view so the bracketed string key isn't masked away.
     re: /\bctx\s*(?:\.\s*tool|\[\s*['"]tool['"]\s*\])\s*\(/gu,
     message:
-      "ctx.tool was removed: handlers do deterministic work with ctx.vault / ctx.fetch / ctx.state, and delegate judgment to ctx.agent.",
+      "ctx.tool was removed: handlers do deterministic work with ctx.vault / ctx.fetch / ctx.state, and delegate judgment to ctx.delegate.",
     target: "withStrings",
   },
   {

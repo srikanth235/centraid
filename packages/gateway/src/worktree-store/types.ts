@@ -24,7 +24,7 @@ export interface SessionHandle {
 }
 
 export interface PublishInput {
-  /** Session whose branch holds the agent's edits. */
+  /** Session whose branch holds the harness's edits. */
   sessionId: string;
   /** App being published. Only files under `apps/<appId>/` are staged. */
   appId: string;

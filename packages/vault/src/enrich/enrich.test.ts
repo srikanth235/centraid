@@ -167,7 +167,7 @@ describe("enrich", () => {
           entity_type: "knowledge.annotation",
           external_id: `${assetId}:caption`,
           payload: {
-            target_type: "media.media_asset",
+            target_type: "media.asset",
             target_id: assetId,
             body: "Two kids building a sandcastle at the beach",
           },
@@ -275,7 +275,7 @@ describe("enrich", () => {
             entity_type: "core.tag",
             external_id: `${assetId}:tag:beach`,
             payload: {
-              target_type: "media.media_asset",
+              target_type: "media.asset",
               target_id: assetId,
               label: "Beach",
               confidence: 0.92,
@@ -298,7 +298,7 @@ describe("enrich", () => {
             entity_type: "core.tag",
             external_id: `${assetId}:tag:beach`,
             payload: {
-              target_type: "media.media_asset",
+              target_type: "media.asset",
               target_id: assetId,
               label: "Beach",
               confidence: 0.92,
@@ -339,7 +339,7 @@ describe("enrich", () => {
             entity_type: "core.tag",
             external_id: `${assetId}:tag:beach-2`,
             payload: {
-              target_type: "media.media_asset",
+              target_type: "media.asset",
               target_id: assetId,
               label: "Beach",
               confidence: 0.5,
@@ -609,8 +609,8 @@ describe("enrich", () => {
             payload: {
               name: "Goa, June 2026",
               members: [
-                { target_type: "media.media_asset", target_id: a.assetId },
-                { target_type: "media.media_asset", target_id: b.assetId },
+                { target_type: "media.asset", target_id: a.assetId },
+                { target_type: "media.asset", target_id: b.assetId },
               ],
             },
           },
@@ -995,14 +995,14 @@ describe("enrich", () => {
     test("embeddings upsert + cosine scan; request queue records and reads back", () => {
       const { assetId } = addPhoto();
       const up = invoke(agent, "enrich.upsert_embedding", {
-        entity_type: "media.media_asset",
+        entity_type: "media.asset",
         entity_id: assetId,
         model: "stub-embedder-v1",
         vector: [1, 0, 0],
       });
       expect(up.status).toBe("executed");
       invoke(agent, "enrich.upsert_embedding", {
-        entity_type: "media.media_asset",
+        entity_type: "media.asset",
         entity_id: assetId,
         model: "stub-embedder-v1",
         vector: [0.9, 0.1, 0],
@@ -1027,7 +1027,7 @@ describe("enrich", () => {
       ).toBeCloseTo(1);
 
       const req = invoke(owner, "enrich.request_enrichment", {
-        entity_type: "media.media_asset",
+        entity_type: "media.asset",
         reason: "search-miss",
         detail: "sunset over the lake",
       });
@@ -1048,7 +1048,7 @@ describe("enrich", () => {
       // cannot see a same-model text rewrite.
       const { assetId } = addPhoto();
       invoke(agent, "enrich.upsert_embedding", {
-        entity_type: "media.media_asset",
+        entity_type: "media.asset",
         entity_id: assetId,
         model: "embed-text@1",
         vector: [1, 0, 0],
@@ -1066,7 +1066,7 @@ describe("enrich", () => {
 
       // A later upsert with a fresh source_version REPLACES the stamp.
       invoke(agent, "enrich.upsert_embedding", {
-        entity_type: "media.media_asset",
+        entity_type: "media.asset",
         entity_id: assetId,
         model: "embed-text@1",
         vector: [0, 1, 0],
@@ -1301,7 +1301,7 @@ describe("enrich", () => {
     // and broadcast — they are not consent.
     test("a manual enrichment request must name the capability it consents to", () => {
       const asked = invoke(owner, "enrich.request_enrichment", {
-        entity_type: "media.media_asset",
+        entity_type: "media.asset",
         reason: "manual",
         capability: "faces",
       });
@@ -1316,7 +1316,7 @@ describe("enrich", () => {
       // An untagged owner ask is refused: it would read as consent for every
       // enabled enricher, which is not the question the member answered.
       const refused = invoke(owner, "enrich.request_enrichment", {
-        entity_type: "media.media_asset",
+        entity_type: "media.asset",
         reason: "manual",
       });
       expect(refused.status).toBe("failed");
@@ -1330,7 +1330,7 @@ describe("enrich", () => {
 
       // A system signal is not consent, so it stays broadcast (capability NULL).
       const signal = invoke(owner, "enrich.request_enrichment", {
-        entity_type: "media.media_asset",
+        entity_type: "media.asset",
         reason: "on-view",
       });
       expect(signal.status).toBe("executed");
@@ -1355,7 +1355,7 @@ describe("enrich", () => {
             entity_type: "knowledge.annotation",
             external_id: `${assetId}:warmup`,
             payload: {
-              target_type: "media.media_asset",
+              target_type: "media.asset",
               target_id: assetId,
               body: "warmup",
             },
@@ -1381,7 +1381,7 @@ describe("enrich", () => {
             entity_type: "knowledge.annotation",
             external_id: `${assetId}:caption`,
             payload: {
-              target_type: "media.media_asset",
+              target_type: "media.asset",
               target_id: assetId,
               body: "A red bicycle",
             },
@@ -1390,7 +1390,7 @@ describe("enrich", () => {
             entity_type: "core.tag",
             external_id: `${assetId}:tag:bicycle`,
             payload: {
-              target_type: "media.media_asset",
+              target_type: "media.asset",
               target_id: assetId,
               label: "Bicycle",
               confidence: 0.9,

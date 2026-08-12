@@ -2,7 +2,7 @@ export type CaptureKind = "task" | "expense" | "note" | "event";
 
 export interface CapturePreview {
   kind: CaptureKind;
-  confidence: "deterministic" | "agent" | "needs-review";
+  confidence: "deterministic" | "delegate" | "needs-review";
   title: string;
   body: string;
   amountMinor?: number;
@@ -87,7 +87,7 @@ function parseEventStart(text: string, now: Date): string | undefined {
 /**
  * Fast, offline-first capture routing. Only high-signal phrases commit to a
  * destination automatically; everything else remains a reviewable note-shaped
- * draft while the caller asks the configured local agent for a second opinion.
+ * draft while the caller asks a bounded delegate turn for a second opinion.
  */
 export function classifyCapture(raw: string, now = new Date()): CapturePreview {
   const body = raw.replace(/\s+/gu, " ").trim();
@@ -187,8 +187,8 @@ export function formatCurrencyMinor(
   }
 }
 
-/** Validate the deliberately tiny JSON shape accepted from agent fallback. */
-export function applyAgentCaptureKind(
+/** Validate the deliberately tiny JSON shape accepted from delegate fallback. */
+export function applyDelegateCaptureKind(
   preview: CapturePreview,
   candidate: unknown
 ): CapturePreview {
@@ -212,7 +212,7 @@ export function applyAgentCaptureKind(
   return {
     ...preview,
     kind: value.kind,
-    confidence: "agent",
+    confidence: "delegate",
     ...(typeof value.title === "string" && value.title.trim()
       ? { title: cleanTitle(value.title) }
       : {}),

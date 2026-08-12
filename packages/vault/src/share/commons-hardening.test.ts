@@ -55,7 +55,7 @@ describe("commons hardening", () => {
     const grant = createCommonsGrant({
       origin: origin.vault,
       ownerPartyId: originBoot.ownerPartyId,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         { partyId: bob, capability: "read+write", vaultId: "vault-family" },
@@ -124,14 +124,14 @@ describe("commons hardening", () => {
       ownerPartyId: originBoot.ownerPartyId,
       ownerVaultId: "vault-priya",
       ownerVault: origin,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         { partyId: bob, capability: "read+write", vaultId: "vault-family" },
       ],
       now,
     });
-    // media.media_asset has no actable-registry entry, so the resolver must
+    // media.asset has no actable-registry entry, so the resolver must
     // still route the command to the commons rail (previously it fell through).
     expect(
       commonsGrantForCommand(origin.vault, "media.update_asset", {
@@ -151,8 +151,7 @@ describe("commons hardening", () => {
       })
     ).toMatchObject({
       status: "denied",
-      reason:
-        "command media.update_asset is not declared for media.media_asset",
+      reason: "command media.update_asset is not declared for media.asset",
     });
   });
 
@@ -163,7 +162,7 @@ describe("commons hardening", () => {
     const grant = createCommonsGrant({
       origin: origin.vault,
       ownerPartyId: originBoot.ownerPartyId,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [],
       now,
@@ -217,7 +216,7 @@ describe("commons hardening", () => {
     const grant = createCommonsGrant({
       origin: origin.vault,
       ownerPartyId: originBoot.ownerPartyId,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [],
       now,
@@ -243,7 +242,7 @@ describe("commons hardening", () => {
     const grant = createCommonsGrant({
       origin: origin.vault,
       ownerPartyId: originBoot.ownerPartyId,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         { partyId: bob, capability: "read+write", vaultId: "vault-family" },
@@ -272,9 +271,7 @@ describe("commons hardening", () => {
       now,
     });
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 1 });
     const wire = exportCommonsBootstrap({
       steward: origin.vault,
@@ -298,9 +295,7 @@ describe("commons hardening", () => {
     ).toThrow(/unsupported share closure format/u);
     // The prior projection survives the skew — no empty-and-re-fail loop.
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 1 });
   });
 
@@ -312,7 +307,7 @@ describe("commons hardening", () => {
     const grant = createCommonsGrant({
       origin: origin.vault,
       ownerPartyId: originBoot.ownerPartyId,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         { partyId: bob, capability: "read+write", vaultId: "vault-family" },
@@ -359,9 +354,7 @@ describe("commons hardening", () => {
     applyCommonsBootstrap({ seat: audience, wire, now });
     // Neither the projection nor the cursor moved backward.
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 1 });
     expect(
       audience.vault
@@ -382,7 +375,7 @@ describe("commons hardening", () => {
       ownerPartyId: originBoot.ownerPartyId,
       // Bob is a current member with a vault binding but has never bootstrapped,
       // so he owns no cursor row at all.
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         { partyId: bob, capability: "read+write", vaultId: "vault-family" },

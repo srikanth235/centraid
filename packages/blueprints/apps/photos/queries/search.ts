@@ -79,7 +79,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     // into a table scan, and a trashed asset over matched bytes stays out
     // (re-uploading it is the restore path, same as the library query).
     const liveAssets = await ctx.vault.read({
-      entity: "media.media_asset",
+      entity: "media.asset",
       where: [
         { column: "content_id", op: "in", value: contentIds },
         { column: "deleted_at", op: "is-null" },
@@ -100,7 +100,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       ctx.vault.read({
         entity: "core.collection_entry",
         where: [
-          { column: "target_type", op: "eq", value: "media.media_asset" },
+          { column: "target_type", op: "eq", value: "media.asset" },
           { column: "target_id", op: "in", value: assetIds },
         ],
         purpose,

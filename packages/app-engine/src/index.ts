@@ -19,9 +19,9 @@ export {
   Runtime,
   type RuntimeOptions,
   type RuntimeLogger,
-  type RunnerStatus,
-  type RunnerStatusOptions,
-  type RunnerModel,
+  type HarnessStatus,
+  type HarnessStatusOptions,
+  type HarnessModel,
   type ModelTier,
   type SurfaceStatus,
 } from "./runtime.js";
@@ -46,7 +46,7 @@ export type {
   ConversationTurnInput,
   ConversationTurnResult,
   TurnStreamEvent,
-  AgentFailureClass,
+  HarnessFailureClass,
 } from "./conversation/runner.js";
 // Chat-runner core — the per-turn chat spine, sibling to the automation fire
 // spine in `@centraid/automation`. The model turn is injected as a
@@ -62,26 +62,39 @@ export {
   type BuildExtraPromptInput,
 } from "./handlers/build-extra-prompt.js";
 
-// Agent-turn contract — the host-agnostic interface between a run spine
+// Harness-turn contract — the host-agnostic interface between a run spine
 // (chat-runner core, automation fire) and the backend that drives one model
 // turn. The codex/claude implementation (`runTurn`) lives in
 // `@centraid/agent-runtime`; hosts inject a `RunTurnFn` satisfying it.
 export type {
-  RunnerKind,
-  RunnerPrefs,
+  HarnessKind,
+  HarnessPrefs,
   ToolContext,
   TurnInput,
   TurnConfig,
   TurnResult,
   TurnAttachment,
-  AdapterUsageSnapshot,
+  HarnessUsageSnapshot,
   RunTurnFn,
   VaultInvokeRunner,
   VaultContentRunner,
   VaultSqlRunner,
   VaultSqlToolResult,
 } from "./conversation/turn.js";
-export { RUNNER_KINDS, isRunnerKind } from "./conversation/turn.js";
+export { HARNESS_KINDS, isHarnessKind } from "./conversation/turn.js";
+export {
+  TurnPlane,
+  TURN_HYDRATION_MIN_TURNS,
+  TURN_HYDRATION_TOKEN_BUDGET,
+  type TurnPlaneEgressDeniedError,
+  type TurnPosture,
+} from "./conversation/turn-plane.js";
+export {
+  HarnessSessions,
+  type HarnessSessionBinding,
+  type HarnessSessionObservation,
+  type HarnessSessionSource,
+} from "./conversation/harness-sessions.js";
 
 export {
   startRuntimeHttpServer,
@@ -281,9 +294,9 @@ export {
   type GenerateTitleDeps,
 } from "./conversation/auto-title.js";
 export {
-  classifyCaptureWithAgent,
-  parseAgentCapturePreview,
-  type AgentCapturePreview,
+  classifyCaptureWithHarness,
+  parseCapturePreview,
+  type CapturePreview,
   type ClassifyCaptureDeps,
 } from "./conversation/capture-classifier.js";
 export { makeConversationRouteHandler } from "./http/conversation-routes.js";
@@ -379,13 +392,13 @@ export {
   type HydrationPlan,
 } from "./conversation/hydration.js";
 export {
-  RunnerHealthStore,
-  RUNNER_HEALTH_POLICIES,
-  type RunnerHealthController,
-  type RunnerHealthEntry,
-  type RunnerHealthPolicy,
-  type RunnerHealthStatus,
-} from "./conversation/runner-health.js";
+  HarnessHealthStore,
+  HARNESS_HEALTH_POLICIES,
+  type HarnessHealthController,
+  type HarnessHealthEntry,
+  type HarnessHealthPolicy,
+  type HarnessHealthStatus,
+} from "./conversation/harness-health.js";
 export {
   ProviderEgressConsentStore,
   type ProviderEgressConsentController,
@@ -399,8 +412,8 @@ export {
   makeUserStoreRouteHandler,
   resolveSubsystemConfigPins,
   resolveSubsystemModel,
-  resolveSubsystemRunner,
-  resolveSubsystemRunnerLadder,
+  resolveSubsystemHarness,
+  resolveSubsystemHarnessLadder,
   type ModelSubsystem,
 } from "./stores/prefs-store.js";
 
@@ -458,7 +471,7 @@ export type {
   RunKind,
 } from "./conversation/schema.js";
 
-// Per-model token pricing. Prefer agent/ACP USD when present (`resolveItemCost`);
+// Per-model token pricing. Prefer harness/ACP USD when present (`resolveItemCost`);
 // else catalog via `costForUsage`. Unknown → NULL. See #90 / #445 / #514.
 export {
   priceForModel,

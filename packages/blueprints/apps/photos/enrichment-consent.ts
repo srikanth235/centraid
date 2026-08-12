@@ -149,7 +149,7 @@ export const ENRICHMENT_UNAVAILABLE = {
   deviceUnavailable:
     "Not available: this build has no device-side face detector. The Faces recognition recipe runs only on the gateway, which this vault’s device-only policy does not allow.",
   cloudUnavailable:
-    "Not available from here: choose the Photo OCR recipe’s agent variant under Automations → Recognition, where its model, latency, and billing consequence are shown before a run.",
+    "Not available from here: choose the Photo OCR recipe’s delegate step under Automations → Recognition, where its model, latency, and billing consequence are shown before a run.",
   offTier:
     "Not available: the vault’s enrichment policy refuses photograph recognition, so this request cannot run.",
   // KEY NAME KEPT AS `modelTier` for both clients' sake (EnrichmentConsent.tsx
@@ -202,8 +202,8 @@ export type AnswerAvailability = SharedAnswerAvailability;
  *   * `device` — the policy would permit a device producer, but this build
  *     has no device-side face detector, so the answer is withheld and names
  *     that missing producer;
- *   * `gateway` — this vault's enrichment may reach a runner that takes a
- *     model turn, and every runner shipped today routes that turn to a
+ *   * `gateway` — this vault's enrichment may reach a harness that takes a
+ *     model turn, and every harness shipped today routes that turn to a
  *     third-party provider, so `what leaves the device → nothing` would be
  *     FALSE. The answer is withheld with that reason named, rather than
  *     printed beside a live button;
@@ -219,7 +219,7 @@ export type AnswerAvailability = SharedAnswerAvailability;
  * fired (`packages/automation/src/fire/fire.ts`, deciding through
  * `fire/enrich-gate.ts` on the vault tier read by
  * `packages/vault/src/enrich/policy.ts`): `off` refuses the run, `device`
- * refuses any run that would need the `gateway` lane — and seals `ctx.agent`
+ * refuses any run that would need the `gateway` lane — and seals `ctx.delegate`
  * shut for the ones it does allow — and an unreadable policy refuses too.
  * Nothing here enforces anything; withholding an answer is still the right
  * UI, but it is no longer the only thing standing between a `device` vault

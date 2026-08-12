@@ -30,7 +30,7 @@ describe("vault-plane assistant", () => {
     });
     expect(again.status).toBe("executed");
     const agents = plane.db.vault
-      .prepare(`SELECT count(*) AS n FROM agent_agent`)
+      .prepare(`SELECT count(*) AS n FROM consent_agent`)
       .get() as {
       n: number;
     };

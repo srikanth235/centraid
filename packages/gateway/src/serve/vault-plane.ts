@@ -219,7 +219,7 @@ export interface VaultPlaneOptions {
   dir: string;
   /**
    * Per-vault DISPOSABLE cache dir, OUTSIDE the vault tree — home for the chat
-   * runner scratch (`runner-sessions/`: the embedded runner's per-conversation
+   * harness scratch (`harness-sessions/`: the embedded harness's per-conversation
    * resume files + `assistant-cwd`). journal.db is the authoritative
    * conversation ledger; this is derived cache, so it lives beside the vault,
    * not inside it (safe to wipe, never backed up with the sovereign pair).
@@ -535,7 +535,7 @@ export class VaultPlane {
   readonly notices: NoticeStore;
   /** The vault's directory — the registry deletes it on vault removal. */
   readonly dir: string;
-  /** Per-vault disposable cache dir (runner scratch), outside the vault tree. */
+  /** Per-vault disposable cache dir (harness scratch), outside the vault tree. */
   readonly cacheDir: string;
   private readonly groupCommitQueue: GroupCommitQueue;
   /**
@@ -647,7 +647,7 @@ export class VaultPlane {
     this.journalLimitBytes = options.journalLimitBytes ?? (() => null);
     this.vaultLimitBytes = options.vaultLimitBytes ?? (() => null);
     this.dir = options.dir;
-    // Runner scratch lives in a disposable cache OUTSIDE the vault tree; fall
+    // Harness scratch lives in a disposable cache OUTSIDE the vault tree; fall
     // back to the vault dir only for callers that don't supply one (tests).
     this.cacheDir = options.cacheDir ?? options.dir;
     // S3 blob-store credentials (issue #296 §2, extended #367 §C3): the
@@ -855,7 +855,7 @@ export class VaultPlane {
   /**
    * The vault's workspace (#280 — the vault is the unit): the ledger and
    * per-app data dirs that live BESIDE the sovereign pair inside this vault's
-   * directory. The runner scratch (`runner-sessions/`) is the exception — it
+   * directory. The harness scratch (`harness-sessions/`) is the exception — it
    * is disposable cache derived from journal.db, so it lives in `cacheDir`
    * OUTSIDE the vault tree. app-engine operates entirely through this view;
    * the registry hands out the active one.
@@ -867,7 +867,7 @@ export class VaultPlane {
       appsDir: path.join(this.dir, "apps"),
       journal: () => this.journalLedger(),
       journalDbFile: path.join(this.dir, "journal.db"),
-      runnerSessionDir: path.join(this.cacheDir, "runner-sessions"),
+      harnessSessionDir: path.join(this.cacheDir, "harness-sessions"),
     };
   }
 
@@ -987,7 +987,7 @@ export class VaultPlane {
   }
 
   /**
-   * Enroll an automation app's acting identity as an `agent.agent` row,
+   * Enroll an automation app's acting identity as an `consent.agent` row,
    * once (duaility §12: automation fires ride an enrolled agent, not an
    * app credential). Keyed by the Centraid app id, like `enrollApp`.
    * Identity only — authority still requires an owner-approved agent grant.
@@ -1006,7 +1006,7 @@ export class VaultPlane {
    * invocations dropped, the ext band RETAINED on the last one — the data
    * is the owner's; purge is a separate explicit act), then retire the
    * enrollment row. Covers both planes of the app's identity — its
-   * `consent.app` row and, for automation apps, its `agent.agent` row.
+   * `consent.app` row and, for automation apps, its `consent.agent` row.
    * Model rows and receipts remain — §11's success test.
    */
   revokeApp(appId: string): { grantsRevoked: number } {
@@ -1658,7 +1658,7 @@ export class VaultPlane {
     const window = this.db.journal
       .prepare(
         `SELECT r.receipt_id, r.action, r.object_type, r.object_id, r.decision, r.occurred_at,
-                r.detail_json, r.invocation_id, i.agent_id
+                r.detail_json, r.invocation_id, i.caller_id
            FROM consent_receipt r
            LEFT JOIN agent_command_invocation i ON i.invocation_id = r.invocation_id
           WHERE r.action LIKE 'act %' OR r.action = 'reveal'
@@ -1673,7 +1673,7 @@ export class VaultPlane {
       occurred_at: string;
       detail_json: string | null;
       invocation_id: string | null;
-      agent_id: string | null;
+      caller_id: string | null;
     }[];
     const riskRank: Record<string, number> = { high: 2, medium: 1, low: 0 };
     const outboxGrantLookup = this.db.vault.prepare(
@@ -1741,7 +1741,7 @@ export class VaultPlane {
           }
         }
       }
-      const actorId = r.agent_id;
+      const actorId = r.caller_id;
       const rawKind = actorId ? this.rawActorKind(actorId) : null;
       const actorKind =
         actorId && rawKind ? this.refineActorKind(actorId, rawKind) : null;
@@ -1871,15 +1871,15 @@ export class VaultPlane {
 
   /**
    * Refines a stored `ai_agent` actor into `assistant` vs `agent` the same
-   * way `Gateway.callerKind` does for parked rows (`host_key '_assistant'`),
+   * way `Gateway.callerKind` does for parked rows (`enrollment_key '_assistant'`),
    * so the Approvals surface badges assistant-staged sends honestly.
    */
   private refineActorKind(actorId: string, actorKind: string): string {
     if (actorKind !== "ai_agent") return actorKind;
     const row = this.db.vault
-      .prepare("SELECT host_key FROM agent_agent WHERE agent_id = ?")
-      .get(actorId) as { host_key: string } | undefined;
-    return row?.host_key === "_assistant" ? "assistant" : "agent";
+      .prepare("SELECT enrollment_key FROM consent_agent WHERE agent_id = ?")
+      .get(actorId) as { enrollment_key: string } | undefined;
+    return row?.enrollment_key === "_assistant" ? "assistant" : "agent";
   }
 
   /**
@@ -1889,7 +1889,7 @@ export class VaultPlane {
    */
   private rawActorKind(actorId: string): string | null {
     const agent = this.db.vault
-      .prepare("SELECT 1 AS x FROM agent_agent WHERE agent_id = ?")
+      .prepare("SELECT 1 AS x FROM consent_agent WHERE agent_id = ?")
       .get(actorId) as { x: number } | undefined;
     if (agent) return "ai_agent";
     const app = this.db.vault
@@ -1910,7 +1910,7 @@ export class VaultPlane {
       .prepare(
         actorKind === "app"
           ? "SELECT COALESCE(display_name, name) AS name FROM consent_app WHERE app_id = ?"
-          : `SELECT p.display_name AS name FROM agent_agent a
+          : `SELECT p.display_name AS name FROM consent_agent a
                JOIN core_party p ON p.party_id = a.party_id WHERE a.agent_id = ?`
       )
       .get(actorId) as { name: string } | undefined;
@@ -2318,7 +2318,7 @@ export class VaultPlane {
   /**
    * The per-automation `ctx.vault` executor — the agent-plane mirror of
    * `bridgeFor`. Fires authenticate as the automation's enrolled
-   * `agent.agent` riding the host's owner device (session binding, §12);
+   * `consent.agent` riding the host's owner device (session binding, §12);
    * Tier 3/4 confirm-gated commands (issue #306) park for owner
    * confirmation. Credential resolution happens per call so a revocation
    * lands immediately.

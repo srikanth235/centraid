@@ -74,7 +74,7 @@ import {
  * cache serving arbitrary input.
  *
  * `ok: false` entries cache a *failed* transform (syntactically broken JSX
- * mid-generation is normal for a builder agent writing files incrementally)
+ * mid-generation is normal for a builder harness writing files incrementally)
  * against the file's current `mtimeMs`, so a hot preview-reload loop doesn't
  * re-run esbuild on every request for a file that hasn't changed — it only
  * re-transforms once the mtime moves.
@@ -153,11 +153,11 @@ function loaderForExt(file: string): "jsx" | "tsx" | "ts" {
  * Transform a `.jsx`/`.tsx`/`.ts` source file to plain JS via esbuild's
  * `automatic` JSX runtime, with an mtime-and-depth-keyed cache (see
  * {@link jsxCache}). On a transform failure (normal mid-edit for a builder
- * agent), returns a 200-able JS body that logs the esbuild error to the
+ * harness), returns a 200-able JS body that logs the esbuild error to the
  * console instead of throwing — a broken source file must not 500 the whole
  * preview iframe, and there's no existing "friendly broken preview" precedent
  * elsewhere in this codebase to follow, so this keeps the iframe alive and
- * puts the error where a builder agent's own tooling (devtools) can see it.
+ * puts the error where a builder harness's own tooling (devtools) can see it.
  *
  * Returns the body alongside its content etag, computed once here and cached
  * with the transform (not re-hashed per request) — the mtime key that

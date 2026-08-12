@@ -1,4 +1,4 @@
-// Development-only fixture. The shipped app imports ./content.ts (written by the content agent).
+// Development-only fixture. The shipped app imports ./content.ts (written by the content author).
 // Shape must match SPEC.md §"content.ts schema" exactly.
 
 import type {
@@ -18,7 +18,7 @@ export const meta = {
     "Pouring the ground plane…",
     "Opening vault.db in WAL mode…",
     "Waking the gateway front desk…",
-    "Hiring ACP runners…",
+    "Hiring ACP harnesses…",
     "Painting the consent gate violet…",
     "Rolling the WAL conveyor…",
   ],
@@ -26,7 +26,7 @@ export const meta = {
 
 export const palette = {
   requests: "#39c5ea",
-  agent: "#5b7cfa",
+  harness: "#5b7cfa",
   wal: "#f5a623",
   dirty: "#e5484d",
   consent: "#8e4ec6",

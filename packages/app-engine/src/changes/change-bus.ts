@@ -2,7 +2,7 @@
  * Per-app change notification bus.
  *
  * The runtime emits an `AppChange` after an app acts — a successful
- * action handler (whose writes ride ctx.vault) or an agent write on the
+ * action handler (whose writes ride ctx.vault) or an assistant write on the
  * app's behalf. With the per-app silo gone there is no table-level
  * changeset: the event means "this app's data may have moved; re-derive
  * what you render".
@@ -26,16 +26,16 @@ export interface AppChange {
   ts: number;
   /**
    * Who initiated the write:
-   *  - `'agent'`     — an in-process agent tool call on the app's behalf.
+   *  - `'assistant'` — an in-process assistant tool call on the app's behalf.
    *  - `'handler'`   — a user-authored action / query handler.
-   *  - `'external'`  — any other path without agent or handler context.
+   *  - `'external'`  — any other path without harness or handler context.
    *
-   * Subscribers can use this to render differently (e.g. flash agent-driven
+   * Subscribers can use this to render differently (e.g. flash assistant-driven
    * rows) without needing to listen on a separate bus.
    */
-  source: "agent" | "handler" | "external";
+  source: "assistant" | "handler" | "external";
   /**
-   * When `source === 'agent'`, the tool-call id from the underlying CLI's
+   * When `source === 'assistant'`, the tool-call id from the harness's
    * dispatch (codex `callId` / Claude `tool_use_id`). Lets a renderer pin a
    * later refresh to the same chat-pill the user is looking at.
    */

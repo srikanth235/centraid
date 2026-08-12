@@ -2,12 +2,12 @@
  * governance: allow-repo-hygiene file-size-limit (#567) the generic ACP lifecycle is one ordered initialize/configure/resume/prompt/settle state machine; splitting its transaction would scatter failure cleanup and confirmed-state accounting
  *
  * Generic ACP (Agent Client Protocol) backend — the ONE integration path
- * for every runner kind (issue #479).
+ * for every harness kind (issue #479).
  *
  * Turn flow: launch (or warm reuse) → initialize → session resume|load|new →
  * pin mode/model → session/prompt → stopReason handling → warm park or kill.
  *
- * See ./stop-reason.ts, ./agent-errors.ts, ./session-warm.ts, ./turn-vault-tools.ts.
+ * See ./stop-reason.ts, ./harness-errors.ts, ./session-warm.ts, ./turn-vault-tools.ts.
  */
 
 import { spawn } from "node:child_process";
@@ -15,15 +15,28 @@ import type { ChildProcessByStdio } from "node:child_process";
 import { promises as fs } from "node:fs";
 import type { Readable, Writable } from "node:stream";
 
+import { methods } from "@agentclientprotocol/sdk";
+import type {
+  AgentRequestMethod,
+  AgentRequestParamsByMethod,
+  AgentRequestResponsesByMethod,
+  LoadSessionRequest,
+  McpServer,
+  NewSessionRequest,
+  ResumeSessionRequest,
+  SessionConfigOption,
+  SessionModeState,
+  SendRequestOptions,
+} from "@agentclientprotocol/sdk";
+
 import type { TurnStreamEvent } from "@centraid/app-engine";
 
 import { lowPriorityCommand } from "../../low-priority.js";
 import { acpAttachmentBlocks } from "../../multimodal.js";
 import type { ContentBlock, PromptCapabilities } from "../../multimodal.js";
-import { classifyAgentFailureDetail } from "./agent-errors.js";
-import { isObject } from "./content.js";
-import { ACP_PROTOCOL_VERSION, createAcpConnection } from "./json-rpc.js";
-import type { AcpConnection, AcpConnectionHandlers } from "./json-rpc.js";
+import { ACP_PROTOCOL_VERSION, createAcpConnection } from "./connection.js";
+import type { AcpConnectionOwner, AcpTurnHandlers } from "./connection.js";
+import { classifyHarnessFailureDetail } from "./harness-errors.js";
 import { planLaunch } from "./launch.js";
 import {
   permissionAutoAllowNotice,
@@ -43,12 +56,7 @@ import {
   readCurrentConfigValue,
   SET_MODE,
 } from "./session-config.js";
-import type {
-  InitializeResult,
-  SessionConfigOption,
-  SessionModes,
-  SessionSetupResult,
-} from "./session-config.js";
+import type { AcpBuiltinRequest } from "./session-config.js";
 import { putWarmSlot, takeWarmSlot } from "./session-warm.js";
 import { outcomeForStopReason } from "./stop-reason.js";
 import { createSessionUpdateMapper } from "./stream-events.js";
@@ -67,6 +75,7 @@ type Continuity = "fresh" | "resumed" | "loaded" | "warm";
 
 const DEFAULT_STAGE_TIMEOUT_MS = 20_000;
 const DEFAULT_PROMPT_IDLE_TIMEOUT_MS = 120_000;
+const EXIT_CLASSIFICATION_GRACE_MS = 250;
 
 function requestWithTimeout<T>(
   request: Promise<T>,
@@ -95,7 +104,7 @@ export async function runAcpTurn(
   try {
     launch = planLaunch(config, input.extraPath, pendingNotices);
   } catch (error) {
-    const failure = classifyAgentFailureDetail(error, "", config);
+    const failure = classifyHarnessFailureDetail(error, "", config);
     input.onEvent({
       type: "error",
       message: failure.message,
@@ -115,7 +124,8 @@ export async function runAcpTurn(
   // Assigned on warm take or fresh spawn before any use; definite assignment
   // assertion keeps the dual-path structure readable for tsc.
   let child!: ChildProcessByStdio<Writable, Readable, Readable>;
-  let conn!: AcpConnection;
+  let conn!: AcpConnectionOwner;
+  let releaseTurnOwner = (): void => undefined;
   let canClose = false;
   let canResume = false;
   let canLoad = false;
@@ -126,7 +136,7 @@ export async function runAcpTurn(
   let parkWarm = false;
   let reusedWarm = false;
   let configOptions: SessionConfigOption[] = [];
-  let modes: SessionModes | undefined;
+  let modes: SessionModeState | undefined;
   let usageSnapshot: AcpTurnResult["usageSnapshot"];
   let hydrated = false;
   let hydrationKind: "handoff" | "recovery" | undefined;
@@ -160,53 +170,42 @@ export async function runAcpTurn(
 
   const stream = createSessionUpdateMapper(emit);
 
-  const makeHandlers = (): AcpConnectionHandlers => ({
-    onServerRequest: (id, method, params) => {
+  const makeHandlers = (): AcpTurnHandlers => ({
+    requestPermission: (params) => {
       touchPromptIdleWatchdog();
-      if (method === "session/request_permission") {
-        if (input.abortSignal.aborted) {
-          conn.respond(id, { outcome: { outcome: "cancelled" } });
-          return;
-        }
-        const toolTitle = readPermissionToolTitle(params);
-        const options = readPermissionOptions(params);
-        if (input.permissionPolicy === "deny") {
-          emit(permissionDeniedNotice(toolTitle));
-          // Refuse THIS request, not the turn: `cancelled` is the wire's
-          // "the prompt turn was cancelled before an answer", and an agent
-          // that honours it unwinds everything — contradicting the notice
-          // above ("this turn may use only its pre-granted tools"). Only an
-          // agent offering no reject option leaves us with `cancelled`.
-          const rejectId = pickRejectPermissionOption(options);
-          conn.respond(
-            id,
-            rejectId
-              ? { outcome: { outcome: "selected", optionId: rejectId } }
-              : { outcome: { outcome: "cancelled" } }
-          );
-          return;
-        }
-        const optionId = pickPermissionOption(options);
-        if (optionId) {
-          emit(permissionAutoAllowNotice(optionId, options, toolTitle));
-          conn.respond(id, { outcome: { outcome: "selected", optionId } });
-        } else {
-          conn.respond(id, { outcome: { outcome: "cancelled" } });
-        }
-        return;
+      if (input.abortSignal.aborted) {
+        return { outcome: { outcome: "cancelled" } };
       }
-      conn.respondMethodNotFound(id, method);
+      const toolTitle = readPermissionToolTitle(params);
+      const options = readPermissionOptions(params);
+      if (input.permissionPolicy === "deny") {
+        emit(permissionDeniedNotice(toolTitle));
+        // Refuse THIS request, not the turn: `cancelled` is the wire's
+        // "the prompt turn was cancelled before an answer", and a harness
+        // that honours it unwinds everything — contradicting the notice
+        // above ("this turn may use only its pre-granted tools"). Only an
+        // harness offering no reject option leaves us with `cancelled`.
+        const rejectId = pickRejectPermissionOption(options);
+        return rejectId
+          ? { outcome: { outcome: "selected", optionId: rejectId } }
+          : { outcome: { outcome: "cancelled" } };
+      }
+      const optionId = pickPermissionOption(options);
+      if (optionId) {
+        emit(permissionAutoAllowNotice(optionId, options, toolTitle));
+        return { outcome: { outcome: "selected", optionId } };
+      }
+      return { outcome: { outcome: "cancelled" } };
     },
-    onNotification: (method, params) => {
+    sessionUpdate: (params) => {
       touchPromptIdleWatchdog();
-      if (method !== "session/update") return;
       const optionUpdate = readConfigOptionUpdate(params);
       if (optionUpdate) {
         // `ConfigOptionUpdate.configOptions` is "the full set" per the ACP
-        // schema — REPLACE, never merge, so an option the agent dropped stops
+        // schema — REPLACE, never merge, so an option the harness dropped stops
         // being a pin target and stops feeding accounting.
         configOptions = optionUpdate;
-        // The agent just told us what is actually in effect, which is exactly
+        // The harness just told us what is actually in effect, which is exactly
         // the D4 "ACP-confirmed" evidence the usage stamp needs. A mid-turn
         // model/effort switch has to book the rest of the turn under the new
         // identity instead of the value pinned before the prompt started.
@@ -236,9 +235,9 @@ export async function runAcpTurn(
       canLoad = warm.canLoad;
       canAdditional = warm.canAdditional;
       httpMcp = warm.httpMcp;
-      promptCaps = warm.promptCaps as PromptCapabilities;
+      promptCaps = warm.promptCaps;
       continuity = "warm";
-      conn.setHandlers(makeHandlers());
+      releaseTurnOwner = conn.bindTurn(makeHandlers());
     }
   }
 
@@ -249,18 +248,17 @@ export async function runAcpTurn(
       env: launch.env,
       stdio: ["pipe", "pipe", "pipe"],
     }) as ChildProcessByStdio<Writable, Readable, Readable>;
-    conn = createAcpConnection(child, makeHandlers());
+    conn = createAcpConnection(child);
+    releaseTurnOwner = conn.bindTurn(makeHandlers());
   }
 
   const abortHandler = (): void => {
     parkWarm = false;
     if (sessionId && !conn.hasExited()) {
       try {
-        conn.send({
-          jsonrpc: "2.0",
-          method: "session/cancel",
-          params: { sessionId },
-        });
+        void conn
+          .notify(methods.agent.session.cancel, { sessionId })
+          .catch(() => undefined);
       } catch {
         // ignore
       }
@@ -271,16 +269,39 @@ export async function runAcpTurn(
   else
     input.abortSignal.addEventListener("abort", abortHandler, { once: true });
 
-  const sessionParams = (sid?: string): Record<string, unknown> => {
-    const base: Record<string, unknown> = {
-      cwd: input.cwd,
-      ...(sid ? { sessionId: sid } : {}),
-    };
-    if (canAdditional && input.additionalDirectories?.length) {
-      base.additionalDirectories = input.additionalDirectories;
-    }
-    return base;
-  };
+  const additionalDirectories = (): string[] | undefined =>
+    canAdditional && input.additionalDirectories?.length
+      ? input.additionalDirectories
+      : undefined;
+  const newSessionRequest = (mcpServers: McpServer[]): NewSessionRequest => ({
+    cwd: input.cwd,
+    mcpServers,
+    ...(additionalDirectories()
+      ? { additionalDirectories: additionalDirectories() }
+      : {}),
+  });
+  const loadSessionRequest = (
+    requestedSessionId: string,
+    mcpServers: McpServer[]
+  ): LoadSessionRequest => ({
+    sessionId: requestedSessionId,
+    cwd: input.cwd,
+    mcpServers,
+    ...(additionalDirectories()
+      ? { additionalDirectories: additionalDirectories() }
+      : {}),
+  });
+  const resumeSessionRequest = (
+    requestedSessionId: string,
+    mcpServers: McpServer[]
+  ): ResumeSessionRequest => ({
+    sessionId: requestedSessionId,
+    cwd: input.cwd,
+    mcpServers,
+    ...(additionalDirectories()
+      ? { additionalDirectories: additionalDirectories() }
+      : {}),
+  });
 
   try {
     if (reusedWarm) {
@@ -289,7 +310,7 @@ export async function runAcpTurn(
         toolContext: input.toolContext,
         httpMcp,
         emit,
-        agentStreamsTool: stream.agentStreamsTool,
+        harnessStreamsTool: stream.harnessStreamsTool,
       });
       vaultMcp = vaultTools.handle;
       const mcpServers = vaultTools.mcpServers;
@@ -297,10 +318,10 @@ export async function runAcpTurn(
       try {
         if (canResume) {
           const resumed = await requestWithTimeout(
-            conn.request<SessionSetupResult>("session/resume", {
-              ...sessionParams(sid),
-              mcpServers,
-            }),
+            conn.request(
+              methods.agent.session.resume,
+              resumeSessionRequest(sid, mcpServers)
+            ),
             stageTimeoutMs,
             "session/resume"
           );
@@ -308,10 +329,10 @@ export async function runAcpTurn(
           modes = resumed?.modes ?? undefined;
         } else if (canLoad) {
           const loaded = await requestWithTimeout(
-            conn.request<SessionSetupResult>("session/load", {
-              ...sessionParams(sid),
-              mcpServers,
-            }),
+            conn.request(
+              methods.agent.session.load,
+              loadSessionRequest(sid, mcpServers)
+            ),
             stageTimeoutMs,
             "session/load"
           );
@@ -320,10 +341,10 @@ export async function runAcpTurn(
         }
       } catch {
         const created = await requestWithTimeout(
-          conn.request<SessionSetupResult>("session/new", {
-            ...sessionParams(),
-            mcpServers,
-          }),
+          conn.request(
+            methods.agent.session.new,
+            newSessionRequest(mcpServers)
+          ),
           stageTimeoutMs,
           "session/new after resume failure"
         );
@@ -333,7 +354,7 @@ export async function runAcpTurn(
             : undefined;
         if (!freshId)
           throw new Error(
-            "acp agent did not return a sessionId after resume failure"
+            "ACP harness did not return a sessionId after resume failure"
           );
         configOptions = readConfigOptions(created);
         modes = created?.modes ?? undefined;
@@ -345,19 +366,19 @@ export async function runAcpTurn(
           level: "warn",
           code: "session_resume_self_heal",
           message:
-            "The agent no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.",
+            "The harness no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.",
         });
       }
     } else {
       const init = await requestWithTimeout(
-        conn.request<InitializeResult>("initialize", {
+        conn.request(methods.agent.initialize, {
           protocolVersion: ACP_PROTOCOL_VERSION,
           clientCapabilities: {
             fs: { readTextFile: false, writeTextFile: false },
             terminal: false,
           },
           clientInfo: {
-            name: "centraid-local-runner",
+            name: "centraid-local-harness",
             title: "Centraid",
             version: "0.1.0",
           },
@@ -370,9 +391,7 @@ export async function runAcpTurn(
       canResume = hasSessionCapability(sc, "resume");
       canClose = hasSessionCapability(sc, "close");
       canAdditional = hasSessionCapability(sc, "additionalDirectories");
-      promptCaps = isObject(init?.agentCapabilities?.promptCapabilities)
-        ? (init.agentCapabilities.promptCapabilities as PromptCapabilities)
-        : {};
+      promptCaps = init.agentCapabilities?.promptCapabilities ?? {};
       httpMcp = init?.agentCapabilities?.mcpCapabilities?.http === true;
 
       for (const notice of pendingNotices) emit(notice);
@@ -381,22 +400,17 @@ export async function runAcpTurn(
         toolContext: input.toolContext,
         httpMcp,
         emit,
-        agentStreamsTool: stream.agentStreamsTool,
+        harnessStreamsTool: stream.harnessStreamsTool,
       });
       vaultMcp = vaultTools.handle;
       const mcpServers = vaultTools.mcpServers;
 
-      const withMcp = (sid?: string): Record<string, unknown> => ({
-        ...sessionParams(sid),
-        mcpServers,
-      });
-
       if (input.prevSessionId && canResume) {
         try {
           const resumed = await requestWithTimeout(
-            conn.request<SessionSetupResult>(
-              "session/resume",
-              withMcp(input.prevSessionId)
+            conn.request(
+              methods.agent.session.resume,
+              resumeSessionRequest(input.prevSessionId, mcpServers)
             ),
             stageTimeoutMs,
             "session/resume"
@@ -412,9 +426,9 @@ export async function runAcpTurn(
       if (!sessionId && input.prevSessionId && canLoad) {
         try {
           const loaded = await requestWithTimeout(
-            conn.request<SessionSetupResult>(
-              "session/load",
-              withMcp(input.prevSessionId)
+            conn.request(
+              methods.agent.session.load,
+              loadSessionRequest(input.prevSessionId, mcpServers)
             ),
             stageTimeoutMs,
             "session/load"
@@ -431,7 +445,10 @@ export async function runAcpTurn(
         const selfHealed =
           Boolean(input.prevSessionId) && (canResume || canLoad);
         const created = await requestWithTimeout(
-          conn.request<SessionSetupResult>("session/new", withMcp()),
+          conn.request(
+            methods.agent.session.new,
+            newSessionRequest(mcpServers)
+          ),
           stageTimeoutMs,
           "session/new"
         );
@@ -439,7 +456,7 @@ export async function runAcpTurn(
           typeof created?.sessionId === "string"
             ? created.sessionId
             : undefined;
-        if (!id) throw new Error("acp agent did not return a sessionId");
+        if (!id) throw new Error("ACP harness did not return a sessionId");
         configOptions = readConfigOptions(created);
         modes = created?.modes ?? undefined;
         sessionId = id;
@@ -452,7 +469,7 @@ export async function runAcpTurn(
             level: "warn",
             code: "session_resume_self_heal",
             message:
-              "The agent no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.",
+              "The harness no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.",
           });
         }
       }
@@ -464,17 +481,18 @@ export async function runAcpTurn(
         level: "warn",
         code: "additional_directories_unsupported",
         message:
-          "This runner does not advertise scoped additional directories, so the selected folders were not shared.",
+          "This harness does not advertise scoped additional directories, so the selected folders were not shared.",
       });
     }
 
     const wantMode = config.adapter?.sessionModeId;
-    const timedRequest = <T = unknown>(
-      method: string,
-      params: unknown
-    ): Promise<T> =>
+    const timedRequest: AcpBuiltinRequest = <Method extends AgentRequestMethod>(
+      method: Method,
+      params: AgentRequestParamsByMethod[Method],
+      options?: SendRequestOptions
+    ): Promise<AgentRequestResponsesByMethod[Method]> =>
       requestWithTimeout(
-        conn.request<T>(method, params),
+        conn.request(method, params, options),
         stageTimeoutMs,
         method
       );
@@ -489,7 +507,7 @@ export async function runAcpTurn(
           level: "warn",
           code: "permission_mode_unavailable",
           message:
-            `This runner didn’t offer its non-interactive permission mode (${wantMode}), ` +
+            `This harness didn’t offer its non-interactive permission mode (${wantMode}), ` +
             `so tool use may stall waiting for an approval this surface can’t show.`,
         });
       }
@@ -535,8 +553,8 @@ export async function runAcpTurn(
         code: "session_hydrated",
         message:
           continuity === "fresh" && input.prevSessionId
-            ? "The prior agent session could not resume. Started fresh and restored context from the conversation ledger."
-            : "Switched agents and restored context from the conversation ledger.",
+            ? "The prior harness session could not resume. Started fresh and restored context from the conversation ledger."
+            : "Switched harnesses and restored context from the conversation ledger.",
       });
       const historicalAttachments =
         hydrationKind === "recovery"
@@ -551,7 +569,7 @@ export async function runAcpTurn(
             level: "info",
             code: "hydration_attachment_described",
             message:
-              `This runner can’t re-attach ${mapped.skipped.join(", ")}. ` +
+              `This harness can’t re-attach ${mapped.skipped.join(", ")}. ` +
               "Their names and media types remain in the conversation handoff.",
           });
         }
@@ -568,7 +586,7 @@ export async function runAcpTurn(
           level: "warn",
           code: "attachment_unsupported",
           message:
-            `This runner can’t read ${mapped.skipped.length === 1 ? "this attachment" : "these attachments"}, ` +
+            `This harness can’t read ${mapped.skipped.length === 1 ? "this attachment" : "these attachments"}, ` +
             `so ${mapped.skipped.length === 1 ? "it was" : "they were"} skipped: ${mapped.skipped.join(", ")}.`,
         });
       }
@@ -594,21 +612,17 @@ export async function runAcpTurn(
       touchPromptIdleWatchdog();
     });
     const promptResult = await Promise.race([
-      conn.request<{ usage?: unknown; stopReason?: unknown }>(
-        "session/prompt",
-        {
-          sessionId,
-          prompt,
-        }
-      ),
+      conn.request(methods.agent.session.prompt, {
+        sessionId: sessionId!,
+        prompt,
+      }),
       idleWatchdog,
     ]).finally(() => {
       rejectPromptIdle = undefined;
       clearPromptIdleWatchdog();
     });
 
-    if (isObject(promptResult?.usage))
-      stream.foldTokenUsage(promptResult.usage);
+    if (promptResult.usage) stream.foldTokenUsage(promptResult.usage);
     const folded = stream.usage();
     const delta = deltaCumulativeUsage(
       folded.tokens,
@@ -636,24 +650,21 @@ export async function runAcpTurn(
     usageSnapshot = delta.snapshot;
 
     if (!input.abortSignal.aborted) {
-      const stop = outcomeForStopReason(promptResult?.stopReason);
-      const rawJson = JSON.stringify(promptResult ?? {});
-      const stopReason =
-        typeof promptResult?.stopReason === "string"
-          ? promptResult.stopReason
-          : undefined;
+      const stop = outcomeForStopReason(promptResult.stopReason);
+      const rawJson = JSON.stringify(promptResult);
+      const stopReason = promptResult.stopReason;
       if (stop.notice) emit(stop.notice);
       if (stop.error) {
         emit({
           ...stop.error,
-          ...(stopReason === undefined ? {} : { stopReason }),
+          stopReason,
           rawJson,
         });
       } else if (stop.emitFinal) {
         emit({
           type: "final",
           text: stream.finalText(),
-          ...(stopReason === undefined ? {} : { stopReason }),
+          stopReason,
           rawJson,
         });
       }
@@ -661,19 +672,49 @@ export async function runAcpTurn(
         Boolean(sessionId) &&
         (canResume || canLoad) &&
         !stop.error &&
-        (promptResult?.stopReason === "end_turn" ||
-          promptResult?.stopReason === undefined ||
-          promptResult?.stopReason === "max_tokens" ||
-          promptResult?.stopReason === "max_turn_requests");
+        (promptResult.stopReason === "end_turn" ||
+          promptResult.stopReason === "max_tokens" ||
+          promptResult.stopReason === "max_turn_requests");
     }
   } catch (error) {
     parkWarm = false;
     if (!input.abortSignal.aborted) {
-      const failure = classifyAgentFailureDetail(
+      let failure = classifyHarnessFailureDetail(
         error,
         conn.stderrTail(),
         config
       );
+      // The SDK rejects an in-flight request as soon as its NDJSON readable
+      // closes. Node may deliver the child `exit` event a tick later, so under
+      // instrumentation the generic connection rejection can otherwise win
+      // and turn a deterministic nonzero exit into `unknown`. Give only an
+      // otherwise-unknown failure a short process-event grace period, then use
+      // the stronger lifecycle evidence. Spawn errors keep their own class.
+      if (failure.failureClass === "unknown" && !conn.hasExited()) {
+        await Promise.race([
+          conn.exited,
+          new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, EXIT_CLASSIFICATION_GRACE_MS);
+            timer.unref?.();
+          }),
+        ]);
+      }
+      if (failure.failureClass === "unknown" && conn.hasExited()) {
+        const spawnError = conn.spawnError();
+        if (spawnError) {
+          const spawnFailure = classifyHarnessFailureDetail(
+            spawnError,
+            conn.stderrTail(),
+            config
+          );
+          failure =
+            spawnFailure.failureClass === "unknown"
+              ? { ...spawnFailure, failureClass: "spawn" }
+              : spawnFailure;
+        } else {
+          failure = { ...failure, failureClass: "exit" };
+        }
+      }
       emit({
         type: "error",
         message: failure.message,
@@ -684,6 +725,7 @@ export async function runAcpTurn(
     rejectPromptIdle = undefined;
     clearPromptIdleWatchdog();
     await vaultMcp?.close();
+    releaseTurnOwner();
 
     if (
       parkWarm &&
@@ -705,13 +747,13 @@ export async function runAcpTurn(
         canClose,
         canAdditional,
         httpMcp,
-        promptCaps: promptCaps as Record<string, unknown>,
+        promptCaps,
       });
     } else {
       if (canClose && sessionId && !conn.hasExited()) {
         try {
           await requestWithTimeout(
-            conn.request("session/close", { sessionId }),
+            conn.request(methods.agent.session.close, { sessionId }),
             stageTimeoutMs,
             "session/close"
           );
@@ -735,7 +777,7 @@ export async function runAcpTurn(
         "process exit"
       ).catch(() => false);
       if (!exited) {
-        // SIGTERM is a request. An agent that ignores it would otherwise leak
+        // SIGTERM is a request. A harness that ignores it would otherwise leak
         // one child per turn for the lifetime of the gateway.
         child.kill("SIGKILL");
         await conn.exited.catch(() => undefined);

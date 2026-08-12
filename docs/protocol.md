@@ -154,7 +154,7 @@ Issue #504 batch 1. **Mechanical:** route constants live in `@centraid/protocol`
 | `/centraid/_apps/*` | Apps store | List, publish, web-session mint, … |
 | `/centraid/_web/*` | Browser sessions | Control cookie proxy, redeem |
 | `/centraid/_brief/*` | Daily brief feature | Content-minimized current-vault summary |
-| `/centraid/_agents/*`, `/centraid/_automations/*`, … | Feature planes | Same underscore-plane pattern |
+| `/centraid/_harnesses/*`, `/centraid/_automations/*`, … | Feature planes | Same underscore-plane pattern |
 
 The underscore planes above are gateway-wide surfaces. A running **app** owns its own surface under `/centraid/<appId>/*` (static assets, `_changes`, `_query`, `_turn`, and the app RPC routes below); the reserved `_`-prefixed segments inside an app prefix are the app's control sub-routes.
 

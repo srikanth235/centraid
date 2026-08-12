@@ -1,5 +1,5 @@
 /*
- * Loopback MCP server exposing the vault tools to whatever ACP agent the
+ * Loopback MCP server exposing the vault tools to whatever ACP harness the
  * turn spawned (issue #479).
  *
  * Before the ACP fold, each bespoke backend reached the vault through its
@@ -21,7 +21,7 @@
  *   - bound to 127.0.0.1 on an ephemeral port, never 0.0.0.0;
  *   - every request must carry a per-turn `Authorization: Bearer <token>`
  *     of 256 random bits, compared in constant time;
- *   - the token is minted per turn, passed to the agent only through the
+ *   - the token is minted per turn, passed to the harness only through the
  *     `mcpServers` entry's headers, and never logged;
  *   - the listener is closed (with its sockets) in the turn's `finally`, so
  *     no port outlives the turn that opened it — including on abort.
@@ -41,7 +41,7 @@
  * `vault-sql-tool.ts` — the same module the retired backends used — so
  * prompts and skills that name `vault_sql` / `vault_invoke` /
  * `vault_content` keep working unchanged. The server is also still named
- * `centraid`, so a namespacing agent surfaces `mcp__centraid__vault_sql`
+ * `centraid`, so a namespacing harness surfaces `mcp__centraid__vault_sql`
  * exactly as the claude backend did.
  */
 
@@ -49,6 +49,8 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+
+import type { McpServer } from "@agentclientprotocol/sdk";
 
 import type { ToolContext } from "@centraid/app-engine";
 
@@ -77,14 +79,6 @@ const KNOWN_PROTOCOL_VERSIONS = new Set([
 /** Request bodies are three small JSON args; anything larger is not ours. */
 const MAX_BODY_BYTES = 1024 * 1024;
 
-/** The `mcpServers` entry shape from ACP's `McpServerHttp` (schema-verified). */
-export interface AcpHttpMcpServer {
-  type: "http";
-  name: string;
-  url: string;
-  headers: Array<{ name: string; value: string }>;
-}
-
 export interface VaultMcpToolStart {
   toolCallId: string;
   toolName: string;
@@ -101,7 +95,7 @@ export interface VaultMcpToolResult {
 
 /**
  * Observation hooks for the turn driver. The backend decides whether these
- * become `tool.start` / `tool.result` stream events — an agent that already
+ * become `tool.start` / `tool.result` stream events — a harness that already
  * streams the MCP call as an ACP `tool_call` would otherwise double-render.
  */
 export interface VaultMcpHooks {
@@ -110,8 +104,8 @@ export interface VaultMcpHooks {
 }
 
 export interface VaultMcpHandle {
-  /** Hand this to the agent in `session/new` / `session/load`. */
-  readonly server: AcpHttpMcpServer;
+  /** Hand this to the harness in `session/new` / `session/load`. */
+  readonly server: Extract<McpServer, { type: "http" }>;
   /** Close the listener and drop any live sockets. Idempotent. */
   close: () => Promise<void>;
 }
@@ -239,7 +233,7 @@ interface JsonRpcRequest {
 /**
  * Start the per-turn vault MCP endpoint.
  *
- * Resolves once the listener is bound, so the URL handed to the agent is
+ * Resolves once the listener is bound, so the URL handed to the harness is
  * always live by the time `session/new` mentions it.
  */
 export async function startVaultMcpServer(

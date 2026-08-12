@@ -1,7 +1,7 @@
 // Coverage for the per-turn loopback MCP endpoint: routing, the bearer gate,
 // the JSON-RPC dispatch surface (initialize / ping / tools/list / tools/call),
 // malformed-request handling, and idempotent teardown. Driven with raw fetch
-// against the real listener rather than through a spawned agent.
+// against the real listener rather than through a spawned harness.
 
 import { afterEach, describe, expect, test } from "vitest";
 

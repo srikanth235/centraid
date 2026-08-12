@@ -74,7 +74,7 @@ export interface ManifestActionEntry {
   readonly description?: string;
   /**
    * Chat-side confirmation policy. The dispatcher itself is
-   * permissionless — the chat/agent surface checks this field before
+   * permissionless — the conversation/harness surface checks this field before
    * invoking autonomously and prompts the user when `"required"`.
    * Multi-caller RBAC is a follow-up; this is the v1 lever.
    */
@@ -180,7 +180,7 @@ export interface ManifestExtBlock {
 /**
  * The seat profile block (docs/blueprint-seats.md, decision S1/S2/S5) —
  * where this app's bytes live and which way they flow, machine-readable so
- * a coding agent (or the runtime) never has to re-derive the split from
+ * a harness (or the runtime) never has to re-derive the split from
  * prose. `byteBearing: false` marks a record-only app (S2): its payloads
  * are rows, the replica gives every seat full offline for free, and it
  * must not import custody machinery (`local-only` / `remote-only` /

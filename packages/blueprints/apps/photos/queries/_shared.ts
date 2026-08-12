@@ -10,7 +10,7 @@
  *
  * Favorite USED to be joined here too (a flags-scheme starred tag on the
  * canonical content item, issue #274). Issue #419 made it a first-class
- * `favorite` column on media.media_asset — the photos replica shape has to be
+ * `favorite` column on media.asset — the photos replica shape has to be
  * self-contained, and a native client cannot reconstruct a star from a
  * three-table concept join it was never granted. The tag path is gone, not
  * dual-written: the column is the only source of truth.
@@ -148,7 +148,7 @@ export async function readAssetJoins({
   ]);
 
   // Free-form labels (issue #352): core.tag_item targets the ASSET itself
-  // (target_type 'media.media_asset'), unlike the content-item-scoped
+  // (target_type 'media.asset'), unlike the content-item-scoped
   // favorite star above — see tags.ts's SUBJECT_PK. Each entry carries the
   // tag_id too: untag-asset.js removes by tag_id (core.untag_item), not by
   // label, so the UI needs it to render a working remove control.
@@ -171,7 +171,7 @@ export async function readAssetJoins({
     const labelTags = await ctx.vault.read({
       entity: "core.tag",
       where: [
-        { column: "target_type", op: "eq", value: "media.media_asset" },
+        { column: "target_type", op: "eq", value: "media.asset" },
         { column: "target_id", op: "in", value: assetIds },
       ],
       purpose,

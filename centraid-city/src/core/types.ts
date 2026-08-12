@@ -29,7 +29,7 @@ export interface CityMeta {
 
 export interface Palette {
   requests: string;
-  agent: string;
+  harness: string;
   wal: string;
   dirty: string;
   consent: string;
@@ -116,14 +116,14 @@ export interface ScenarioConfig {
   turns?: number;
   writes?: number;
   blobs?: number;
-  agent?: number;
+  harness?: number;
   cronEvery?: number;
   appWork?: number;
   crane?: number;
   parkChance?: number;
   casFill?: number;
   offline?: boolean;
-  agentOff?: boolean;
+  harnessOff?: boolean;
   direct?: number;
   sync?: number;
   automation?: number;

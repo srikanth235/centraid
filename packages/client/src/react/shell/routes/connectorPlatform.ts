@@ -146,8 +146,8 @@ export function toolDescriptorHasNoSecrets(
 
 /**
  * Wire shape for automation create/update when the editor binds selected
- * catalog connections. Soft bindings only (agent automations) — not a
- * published `connector` block (which forbids ctx.agent).
+ * catalog connections. Soft bindings only (harness-backed automations) — not a
+ * published `connector` block (which forbids ctx.delegate).
  */
 export interface AutomationConnectionBindingPayload {
   connectionId: string;

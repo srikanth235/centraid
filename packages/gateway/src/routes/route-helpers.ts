@@ -11,8 +11,8 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { createBrotliCompress, createGzip, constants } from "node:zlib";
 
-import { isRunnerKind, negotiateEncoding } from "@centraid/app-engine";
-import type { RunnerKind } from "@centraid/app-engine";
+import { isHarnessKind, negotiateEncoding } from "@centraid/app-engine";
+import type { HarnessKind } from "@centraid/app-engine";
 import {
   DEVICE_IDENTITY_HEADER,
   DEVICE_PROOF_HEADER,
@@ -60,7 +60,7 @@ export interface FileMapEntry {
   content: string;
 }
 
-/** Text extensions a draft read/write accepts — mirrors agent-harness. */
+/** Text extensions a draft read/write accepts — mirrors the harness runtime. */
 const EDITABLE_EXT = new Set([
   ".ts",
   ".js",
@@ -104,7 +104,7 @@ export async function writeFileMap(
 /**
  * Read an app dir into a sorted `{path, content}[]` file map (text
  * files only, dotfiles skipped). The inverse of `writeFileMap`; the
- * lifecycle routes feed it to agent-harness's file-map editors
+ * lifecycle routes feed it to the harness file-map editors
  * (`updateAppMetaFiles`, `setAutomationEnabledInFiles`, …).
  */
 export async function readFileMap(appDir: string): Promise<FileMapEntry[]> {
@@ -280,19 +280,19 @@ export async function fileExists(p: string): Promise<boolean> {
 
 /**
  * Parse a turn body's `providerConsent`. Clients answer an egress prompt with
- * one runner or, when a ladder attempt names several, an array of them — both
+ * one harness or, when a ladder attempt names several, an array of them — both
  * shapes reach every gateway turn route, so both are accepted here.
  *
  * Returns `undefined` for an absent field and `'invalid'` when any entry is not
- * a registered runner, so the caller can answer 400 rather than dropping it.
+ * a registered harness, so the caller can answer 400 rather than dropping it.
  */
 export function parseProviderConsent(
   value: unknown
-): RunnerKind[] | undefined | "invalid" {
+): HarnessKind[] | undefined | "invalid" {
   if (value === undefined) return undefined;
   const values = Array.isArray(value) ? value : [value];
   if (values.length === 0) return undefined;
-  if (!values.every((entry): entry is RunnerKind => isRunnerKind(entry)))
+  if (!values.every((entry): entry is HarnessKind => isHarnessKind(entry)))
     return "invalid";
   return values;
 }

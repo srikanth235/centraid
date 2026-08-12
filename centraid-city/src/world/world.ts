@@ -356,7 +356,7 @@ function buildRoadsMesh(
 
 const DEFAULT_PALETTE: Palette = {
   requests: "#39c5ea",
-  agent: "#5b7cfa",
+  harness: "#5b7cfa",
   wal: "#f5a623",
   dirty: "#e5484d",
   consent: "#8e4ec6",
@@ -368,18 +368,18 @@ const DEFAULT_PALETTE: Palette = {
 // Engine-side routing graph. A flow is only created when both districts exist in core/content.ts.
 //
 // Two independent paths share this graph, and the colors are load-bearing:
-//   * the AGENT path (palette.agent / palette.consent — blue + violet) is OPTIONAL. It only
+//   * the HARNESS path (palette.harness / palette.consent — blue + violet) is OPTIONAL. It only
 //     lights up when a turn is actually running a runner.
 //   * the DIRECT + SYNC path (palette.requests / palette.wal / palette.sync — cyan, amber,
 //     green) is ALWAYS running and never touches the runtime. Multi-device sync lives here:
-//     gateway → vault → WAL → harbor → device, and back. Do not paint any leg of it 'agent'.
+//     gateway → vault → WAL → harbor → device, and back. Do not paint any leg of it 'harness'.
 const FLOW_PLAN: Array<[string, string, keyof Palette, string, number]> = [
   ["clients", "gateway", "requests", "request", 0.9],
-  // --- agent path (optional)
-  ["gateway", "runtime", "agent", "agent", 0.6],
+  // --- harness path (optional)
+  ["gateway", "runtime", "harness", "harness", 0.6],
   ["runtime", "consent", "consent", "tool", 0.5],
-  ["consent", "vault", "agent", "toolPass", 0.5],
-  ["vault", "gateway", "agent", "result", 0.5],
+  ["consent", "vault", "harness", "toolPass", 0.5],
+  ["vault", "gateway", "harness", "result", 0.5],
   // --- direct path (no runtime involvement)
   ["gateway", "apps", "requests", "appReq", 0.55],
   ["apps", "vault", "requests", "appWrite", 0.5],
@@ -529,7 +529,7 @@ export function createWorld(content: CityContent): WorldApi {
 
   /* ---------------- ground (with a hole punched for any "pit" district) */
   const pitDistrict = (content.districts || []).find((d) => d.id === "vault");
-  // size + centre the ground on the plan the content agent laid out
+  // size + centre the ground on the plan the content author laid out
   let gx0 = -80;
   let gx1 = 80;
   let gz0 = -80;

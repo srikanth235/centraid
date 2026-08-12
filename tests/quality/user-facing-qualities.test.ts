@@ -35,7 +35,7 @@ import {
   startVaultMcpServer,
   VAULT_MCP_TOOL_REGISTRY,
 } from "../../packages/agent-runtime/src/backends/acp/vault-mcp-server.js";
-import { RUNNER_KINDS } from "../../packages/app-engine/src/conversation/turn.js";
+import { HARNESS_KINDS } from "../../packages/app-engine/src/conversation/turn.js";
 import { runFire } from "../../packages/automation/src/fire/fire.js";
 import {
   AUTOMATION_TRIGGER_KINDS,
@@ -151,9 +151,9 @@ describe("issue #679 user-facing quality gates", () => {
     );
     expect(
       (
-        db.vault
-          .prepare("SELECT count(*) AS n FROM media_media_asset")
-          .get() as { n: number }
+        db.vault.prepare("SELECT count(*) AS n FROM media_asset").get() as {
+          n: number;
+        }
       ).n
     ).toBe(11);
     expect(
@@ -302,14 +302,14 @@ describe("issue #679 user-facing quality gates", () => {
           appsDir: plane.db.dir,
           journalDbFile: path.join(plane.db.dir, "journal.db"),
           codeAppsDir,
-          runnerKind: RUNNER_KINDS[0],
+          harnessKind: HARNESS_KINDS[0],
           triggerKind: "scheduled",
           triggerOrigin: "cron",
           vaultFor: () => plane.agentBridgeFor("quality"),
         },
         {
           openDispatch: async () => ({
-            agentDispatcher: async () => "unused",
+            delegateDispatcher: async () => "unused",
             close: async () => undefined,
           }),
         }
@@ -321,12 +321,14 @@ describe("issue #679 user-facing quality gates", () => {
           .get(automationItemId)
       ).toMatchObject({ n: 1 });
       const automationAgent = plane.db.vault
-        .prepare("SELECT agent_id FROM agent_agent WHERE host_key = 'quality'")
+        .prepare(
+          "SELECT agent_id FROM consent_agent WHERE enrollment_key = 'quality'"
+        )
         .get() as { agent_id: string };
       const proposed = plane.db.journal
         .prepare(
           `SELECT invocation_id, status FROM agent_command_invocation
-            WHERE agent_id = ?
+            WHERE caller_id = ?
             ORDER BY requested_at DESC LIMIT 1`
         )
         .get(automationAgent.agent_id) as {
@@ -392,7 +394,7 @@ describe("issue #679 user-facing quality gates", () => {
     );
   });
 
-  test("F1: every runner, agent tool, and automation trigger persists through conversation/turn/item", async () => {
+  test("F1: every harness turn, harness tool, and automation trigger persists through conversation/turn/item", async () => {
     const db = await createTestVault();
     ensureConversationLedger(db.journal);
     const owner = db.vault
@@ -404,7 +406,7 @@ describe("issue #679 user-facing quality gates", () => {
       appsDir: path.join(db.dir, "apps"),
       journal: () => db.journal,
       journalDbFile: path.join(db.dir, "journal.db"),
-      runnerSessionDir: path.join(db.dir, "runner-sessions"),
+      harnessSessionDir: path.join(db.dir, "harness-sessions"),
     }));
     const starts: Array<{
       toolCallId: string;
@@ -484,7 +486,10 @@ describe("issue #679 user-facing quality gates", () => {
         endedAt: index * 2 + 2,
       })),
       finalText: "done",
-      adapter: { kind: RUNNER_KINDS[0]!, sessionId: "quality-mcp" },
+      harnessObservation: {
+        kind: HARNESS_KINDS[0]!,
+        sessionId: "quality-mcp",
+      },
       startedAt: 1,
       endedAt: 20,
       ok: true,
@@ -513,11 +518,11 @@ describe("issue #679 user-facing quality gates", () => {
     );
     await writeFile(
       path.join(automationDir, "handler.js"),
-      "export default async ({ ctx }) => ({ output: await ctx.agent('quality ledger') });\n"
+      "export default async ({ ctx }) => ({ output: await ctx.delegate('quality ledger') });\n"
     );
     await forEachSequentially(
-      [...RUNNER_KINDS.entries()],
-      async ([index, runnerKind]) => {
+      [...HARNESS_KINDS.entries()],
+      async ([index, harnessKind]) => {
         const triggerKind =
           AUTOMATION_TRIGGER_KINDS[index % AUTOMATION_TRIGGER_KINDS.length]!;
         const automationId = `gate-${index}`;
@@ -544,14 +549,14 @@ describe("issue #679 user-facing quality gates", () => {
             appsDir: db.dir,
             journalDbFile: path.join(db.dir, "journal.db"),
             codeAppsDir,
-            runnerKind,
+            harnessKind,
             triggerKind: "scheduled",
             triggerOrigin: triggerKind,
             input: { triggerKind },
           },
           {
             openDispatch: async () => ({
-              agentDispatcher: async () => `handled ${triggerKind}`,
+              delegateDispatcher: async () => `handled ${triggerKind}`,
               close: async () => undefined,
             }),
           }
@@ -561,14 +566,14 @@ describe("issue #679 user-facing quality gates", () => {
     );
     const persisted = db.journal
       .prepare(
-        `SELECT c.adapter_kind, t.trigger_origin, i.name
+        `SELECT c.harness_kind, t.trigger_origin, i.name
            FROM conversations c
            JOIN turns t ON t.conversation_id = c.id
            JOIN items i ON i.turn_id = t.id
           WHERE c.id = ? OR t.id LIKE 'quality-trigger-%'`
       )
       .all(session.id) as Array<{
-      adapter_kind: string;
+      harness_kind: string;
       trigger_origin: string;
       name: string;
     }>;
@@ -583,10 +588,10 @@ describe("issue #679 user-facing quality gates", () => {
         persisted.some((row) => row.trigger_origin === triggerKind),
         triggerKind
       ).toBe(true);
-    for (const runner of RUNNER_KINDS)
+    for (const harness of HARNESS_KINDS)
       expect(
-        persisted.some((row) => row.adapter_kind === runner),
-        runner
+        persisted.some((row) => row.harness_kind === harness),
+        harness
       ).toBe(true);
   });
 
@@ -783,7 +788,7 @@ describe("issue #679 user-facing quality gates", () => {
       appsDir: path.join(t3Dir, "apps"),
       journal: () => db.journal,
       journalDbFile: path.join(t3Dir, "journal.db"),
-      runnerSessionDir: path.join(t3Dir, "runner-sessions"),
+      harnessSessionDir: path.join(t3Dir, "harness-sessions"),
     };
     const conversationStore = new ConversationHistoryStore(() => workspace);
     let providerEgressArtifact = "";
@@ -991,7 +996,7 @@ describe("issue #679 user-facing quality gates", () => {
       "core.event",
       "health.measurement",
       "knowledge.note",
-      "media.media_asset",
+      "media.asset",
       "schedule.task",
       "social.message",
       "tally.transaction",

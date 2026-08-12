@@ -62,7 +62,7 @@ describe("enrichment refusal, as the host receives it", () => {
 
   const dispatch = (): Promise<DispatchSurface> =>
     Promise.resolve({
-      agentDispatcher: () => Promise.resolve("a model answer"),
+      delegateDispatcher: () => Promise.resolve("a model answer"),
       close: () => Promise.resolve(),
     });
 

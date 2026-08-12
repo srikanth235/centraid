@@ -46,7 +46,7 @@ import {
   parseToolArgs,
   parseToolOutput,
 } from "./transcript.js";
-import type { AdapterUsageSnapshot } from "./turn.js";
+import type { HarnessUsageSnapshot } from "./turn.js";
 
 export { ASSISTANT_APP_ID } from "../registry/app-paths.js";
 
@@ -55,13 +55,13 @@ export interface ConversationSummary {
   /** Owner of the session — the gateway-side user UUID from `UserStore`. */
   userId: string;
   title: string;
-  /** Runner kind that owns `adapterSessionId` (codex | claude-code). */
-  adapterKind: string | null;
-  /** Opaque per-runner resume handle; `null` until the first turn lands. */
-  adapterSessionId: string | null;
+  /** Harness kind that owns `harnessSessionId` (codex | claude-code). */
+  harnessKind: string | null;
+  /** Opaque per-harness resume handle; `null` until the first turn lands. */
+  harnessSessionId: string | null;
   /** Number of completed turns on this session. */
   turnCount: number;
-  /** Number of canonical-ledger hydrations across runner/session handoffs. */
+  /** Number of canonical-ledger hydrations across harness/session handoffs. */
   hydrationCount: number;
   /** Most recent hydration boundary. */
   lastHydratedAt?: number;
@@ -140,7 +140,7 @@ export interface ConversationAttachmentPayload {
   sizeBytes: number;
   filename?: string;
   source?: string;
-  /** Workspace-backed agent artifact; no CAS URL is emitted. */
+  /** Workspace-backed harness artifact; no CAS URL is emitted. */
   workspacePath?: string;
   url?: string;
 }
@@ -182,33 +182,33 @@ export interface ConversationTurnAttachment {
   filename?: string;
   /** Defaults to `'upload'`. */
   source?: string;
-  /** Absolute agent workspace path; when set the bytes are not copied to CAS. */
+  /** Absolute harness workspace path; when set the bytes are not copied to CAS. */
   workspacePath?: string;
 }
 
 /**
  * One item of a completed chat turn, handed to `recordTurn`. The chat route
- * accumulates these from the runner's `TurnStreamEvent`s.
+ * accumulates these from the harness's `TurnStreamEvent`s.
  */
 export type TurnNode =
   | {
       kind: "step";
       /** Accumulated assistant text for the turn. */
       text: string;
-      /** True when this step carries a runner/turn error message. */
+      /** True when this step carries a harness/turn error message. */
       isError?: boolean;
-      /** Durable runner/failover/self-heal notice rather than model prose. */
+      /** Durable harness/failover/self-heal notice rather than model prose. */
       notice?: { level: "info" | "warn"; code?: string };
       model?: string;
-      provider?: string;
+      harness?: string;
       effort?: string;
       inputTokens?: number;
       outputTokens?: number;
       cacheReadTokens?: number;
       cacheWriteTokens?: number;
-      /** Agent/ACP-reported USD when present (issue #514). */
+      /** Harness/ACP-reported USD when present (issue #514). */
       costUsd?: number;
-      costSource?: "agent" | "estimated";
+      costSource?: "harness" | "estimated";
       startedAt: number;
       endedAt: number;
     }
@@ -259,18 +259,18 @@ export interface RecordTurnInput {
   hydrationTokens?: number;
   /** The turn's ordered trace (assistant steps + tool calls). */
   nodes: TurnNode[];
-  /** Successful ACP binding committed atomically with this turn + watermark. */
-  adapter?: {
+  /** Successful harness binding committed atomically with this turn + watermark. */
+  harnessObservation?: {
     kind: string;
     sessionId?: string;
-    usageSnapshot?: AdapterUsageSnapshot;
+    usageSnapshot?: HarnessUsageSnapshot;
     hydrated?: boolean;
   };
   /** Failed-turn accounting update that must not switch the active binding. */
-  failedAdapter?: {
+  failedHarnessObservation?: {
     kind: string;
     sessionId?: string;
-    usageSnapshot?: AdapterUsageSnapshot;
+    usageSnapshot?: HarnessUsageSnapshot;
     hydrated?: boolean;
   };
 }
@@ -488,7 +488,7 @@ export class ConversationHistoryStore {
     return this.blobs.read(appId, hash);
   }
 
-  /** Absolute on-disk path of a blob — the multimodal adapter reads it. */
+  /** Absolute on-disk path of a blob — the multimodal harness reads it. */
   blobPathFor(appId: string, hash: string): string {
     return this.blobs.pathFor(appId, hash);
   }
@@ -652,7 +652,7 @@ export class ConversationHistoryStore {
             hash: artifact.hash,
             mime: artifact.mime,
             sizeBytes: artifact.sizeBytes,
-            source: artifact.source ?? "agent",
+            source: artifact.source ?? "harness",
             ...(artifact.filename === undefined
               ? {}
               : { filename: artifact.filename }),
@@ -671,10 +671,14 @@ export class ConversationHistoryStore {
           ? {}
           : { outputJson: JSON.stringify({ text: input.finalText }) }),
       });
-      if (input.failedAdapter) {
-        store.noteFailedTurn(input.conversationId, userId, input.failedAdapter);
+      if (input.failedHarnessObservation) {
+        store.noteFailedTurn(
+          input.conversationId,
+          userId,
+          input.failedHarnessObservation
+        );
       } else {
-        store.noteTurn(input.conversationId, userId, input.adapter);
+        store.noteTurn(input.conversationId, userId, input.harnessObservation);
       }
       const now = Date.now();
       if (existingTitle) {
@@ -733,42 +737,42 @@ export class ConversationHistoryStore {
     };
   }
 
-  /** Bump turn_count + persist the runner-resume handle. */
+  /** Bump turn_count + persist the harness-resume handle. */
   noteTurn(
     appId: string,
     sessionId: string,
-    adapter?: {
+    harnessObservation?: {
       kind: string;
       sessionId?: string;
-      usageSnapshot?: AdapterUsageSnapshot;
+      usageSnapshot?: HarnessUsageSnapshot;
       hydrated?: boolean;
     }
   ): ConversationSummary | undefined {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, sessionId)) return undefined;
-    if (!store.noteTurn(sessionId, this.currentUserId(), adapter))
+    if (!store.noteTurn(sessionId, this.currentUserId(), harnessObservation))
       return undefined;
     return this.getSessionMeta(appId, sessionId);
   }
 
   /** Internal ACP resume state; unlike `ConversationSummary`, never crosses the client wire. */
-  getAdapterResumeState(
+  getHarnessResumeState(
     appId: string,
     sessionId: string,
-    runnerKind?: string
+    harnessKind?: string
   ):
     | {
         bindingId?: string;
         kind?: string;
         sessionId?: string;
-        usageSnapshot?: AdapterUsageSnapshot;
+        usageSnapshot?: HarnessUsageSnapshot;
         hydratedThroughSeq?: number;
       }
     | undefined {
     const meta = this.ownedMeta(appId, sessionId);
     if (!meta) return undefined;
     const { store } = this.appConversation(appId);
-    const kind = runnerKind ?? meta.adapterKind ?? undefined;
+    const kind = harnessKind ?? meta.harnessKind ?? undefined;
     const binding = kind ? store.getHarnessBinding(sessionId, kind) : undefined;
     if (binding) {
       return {
@@ -781,17 +785,17 @@ export class ConversationHistoryStore {
         hydratedThroughSeq: binding.hydratedThroughSeq,
       };
     }
-    // A targeted lookup asks only for that provider's resumable binding.
-    // Falling back to the conversation's different active provider would
-    // pair the wrong opaque session id with the requested runner. A miss is
+    // A targeted lookup asks only for that harness's resumable binding.
+    // Falling back to the conversation's different active harness would
+    // pair the wrong opaque session id with the requested harness. A miss is
     // `undefined` — an empty object reads as "state found, all fields absent"
     // at every call site that only truthiness-tests the result.
-    if (runnerKind) return undefined;
+    if (harnessKind) return undefined;
     return {
-      ...(meta.adapterKind ? { kind: meta.adapterKind } : {}),
-      ...(meta.adapterSessionId ? { sessionId: meta.adapterSessionId } : {}),
-      ...(meta.adapterUsageSnapshot
-        ? { usageSnapshot: meta.adapterUsageSnapshot }
+      ...(meta.harnessKind ? { kind: meta.harnessKind } : {}),
+      ...(meta.harnessSessionId ? { sessionId: meta.harnessSessionId } : {}),
+      ...(meta.harnessUsageSnapshot
+        ? { usageSnapshot: meta.harnessUsageSnapshot }
         : {}),
     };
   }
@@ -1073,7 +1077,7 @@ function recordNode(
 ): string {
   const itemId = randomUUID();
   if (node.kind === "step") {
-    // Prefer agent/ACP cost; else catalog estimate; else NULL (issue #514).
+    // Prefer harness/ACP cost; else catalog estimate; else NULL (issue #514).
     const usage = {
       ...(node.inputTokens === undefined
         ? {}
@@ -1089,14 +1093,14 @@ function recordNode(
         : { cacheWriteTokens: node.cacheWriteTokens }),
     };
     const resolved =
-      node.costSource === "agent" && node.costUsd !== undefined
-        ? { costUsd: node.costUsd, costSource: "agent" as const }
+      node.costSource === "harness" && node.costUsd !== undefined
+        ? { costUsd: node.costUsd, costSource: "harness" as const }
         : node.costSource === "estimated" && node.costUsd !== undefined
           ? { costUsd: node.costUsd, costSource: "estimated" as const }
           : resolveItemCost({
               ...(node.costUsd === undefined
                 ? {}
-                : { agentCostUsd: node.costUsd }),
+                : { harnessCostUsd: node.costUsd }),
               model: node.model,
               usage,
             });
@@ -1107,7 +1111,7 @@ function recordNode(
       kind: "step",
       ...(node.notice
         ? {
-            name: `notice:${node.notice.level}:${node.notice.code ?? "runner"}`,
+            name: `notice:${node.notice.level}:${node.notice.code ?? "harness"}`,
           }
         : {}),
       outputJson: JSON.stringify({
@@ -1116,7 +1120,7 @@ function recordNode(
       }),
       ok: !node.isError,
       ...(node.model === undefined ? {} : { model: node.model }),
-      ...(node.provider === undefined ? {} : { provider: node.provider }),
+      ...(node.harness === undefined ? {} : { harness: node.harness }),
       ...(node.effort === undefined ? {} : { effort: node.effort }),
       ...(node.inputTokens === undefined
         ? {}
@@ -1238,8 +1242,8 @@ function toMeta(c: ConversationMeta): ConversationSummary {
     id: c.id,
     userId: c.userId,
     title: c.title,
-    adapterKind: c.adapterKind ?? null,
-    adapterSessionId: c.adapterSessionId ?? null,
+    harnessKind: c.harnessKind ?? null,
+    harnessSessionId: c.harnessSessionId ?? null,
     turnCount: c.turnCount,
     hydrationCount: c.hydrationCount,
     ...(c.lastHydratedAt === undefined

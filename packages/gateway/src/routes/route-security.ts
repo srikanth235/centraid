@@ -102,7 +102,7 @@ export const ROUTE_SECURITY_REGISTRY: readonly RouteSecurityRegistration[] = [
     /centraid/_reminders|reminders-routes.ts
     /centraid/_brief|reminders-routes.ts
     /centraid/_vault/oauth/callback|connections-routes.ts
-    /centraid/_agents|agents-routes.ts
+    /centraid/_harnesses|harnesses-routes.ts
   `
   ),
   ...defineRouteGroup(

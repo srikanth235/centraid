@@ -97,7 +97,7 @@ export default async function handler({ ctx, log }) {
     const item = (items.rows ?? [])[0];
     if (!item) continue;
     if (String(item.media_type ?? "").startsWith("text/")) continue; // notes file themselves
-    const out = await ctx.agent({
+    const out = await ctx.delegate({
       prompt:
         "The attached text is a document in my drive. Propose how to file it: a clear human " +
         `title, a folder, and a short doctype label. Existing folders: ${

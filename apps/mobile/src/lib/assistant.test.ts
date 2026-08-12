@@ -25,14 +25,14 @@ describe("assistant suite", () => {
       if (url.endsWith("/_centraid-user/prefs")) {
         return Promise.resolve({
           prefs: {
-            "agent.runner.kind": "codex",
+            "harness.kind": "codex",
             "model.codex.default": "gpt-5",
             "config.codex.default.thought_level": "high",
           },
         });
       }
       return Promise.resolve({
-        agents: [
+        harnesses: [
           {
             kind: "codex",
             label: "Codex",
@@ -88,14 +88,14 @@ describe("assistant suite", () => {
     it("gates mobile controls and session readiness from live ACP capabilities", async () => {
       const config = await loadAssistantConfig();
       expect(config).toMatchObject({
-        runnerKind: "codex",
+        harnessKind: "codex",
         selectedModel: "gpt-5",
         selectedEffort: "high",
         supportsAttachments: true,
         supportsContext: true,
       });
       expect(
-        config.runners.find((runner) => runner.kind === "codex")
+        config.harnesses.find((harness) => harness.kind === "codex")
       ).toMatchObject({
         sessionReady: true,
         supportsAttachments: true,
@@ -103,7 +103,7 @@ describe("assistant suite", () => {
         models: [{ id: "gpt-5", name: "GPT-5" }],
       });
       expect(
-        config.runners.find((runner) => runner.kind === "claude-code")
+        config.harnesses.find((harness) => harness.kind === "claude-code")
       ).toMatchObject({
         sessionReady: false,
         supportsAttachments: false,
@@ -111,7 +111,7 @@ describe("assistant suite", () => {
         hint: expect.stringContaining("requires setup or sign-in"),
       });
       expect(
-        config.runners.find((runner) => runner.kind === "legacy")
+        config.harnesses.find((harness) => harness.kind === "legacy")
       ).toMatchObject({
         sessionReady: true,
         models: [],
@@ -121,23 +121,23 @@ describe("assistant suite", () => {
       });
     });
 
-    it("requests a fresh session probe before a runner switch", async () => {
+    it("requests a fresh session probe before a harness switch", async () => {
       await loadAssistantConfig({ refresh: true });
       expect(gateway.fetchJson).toHaveBeenCalledWith(
-        "https://gateway.test/centraid/_agents/status?refresh=1",
+        "https://gateway.test/centraid/_harnesses/status?refresh=1",
         expect.any(Object)
       );
     });
 
-    it("falls a stale runner preference back to a runner reported by the gateway", async () => {
+    it("falls a stale harness preference back to a harness reported by the gateway", async () => {
       gateway.fetchJson.mockImplementation((url: string) => {
         if (url.endsWith("/_centraid-user/prefs")) {
           return Promise.resolve({
-            prefs: { "agent.runner.kind": "removed-runner" },
+            prefs: { "harness.kind": "removed-harness" },
           });
         }
         return Promise.resolve({
-          agents: [
+          harnesses: [
             {
               kind: "codex",
               label: "Codex",
@@ -154,7 +154,7 @@ describe("assistant suite", () => {
         });
       });
       await expect(loadAssistantConfig()).resolves.toMatchObject({
-        runnerKind: "codex",
+        harnessKind: "codex",
       });
     });
   });

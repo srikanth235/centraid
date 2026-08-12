@@ -20,7 +20,7 @@ export type {
   InsightsKpis,
   InsightsDailyPoint,
   InsightsSourceRow,
-  InsightsRunnerRow,
+  InsightsHarnessRow,
   InsightsModelRow,
   InsightsActivityRow,
   InsightsPeakDay,

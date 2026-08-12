@@ -488,7 +488,7 @@ export default defineConfig({
                   "@centraid/gateway/*",
                 ],
                 message:
-                  "automation must not depend on an agent backend \u2014 execution and scheduling are injected callbacks (it depends on app-engine, never on agent-runtime/gateway). See governance: module-layering.",
+                  "automation must not depend on a harness backend \u2014 execution and scheduling are injected callbacks (it depends on app-engine, never on agent-runtime/gateway). See governance: module-layering.",
               },
               {
                 group: ["@centraid/*/src/*", "@centraid/*/dist/*"],

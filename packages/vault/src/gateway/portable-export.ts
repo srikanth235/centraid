@@ -89,6 +89,14 @@
 // human-readable adapter and contain no content bytes; referenced CAS bytes
 // remain covered by the existing canonical content walk and manifest.
 
+// Schema/export audit #743: the autonomous-principal registry is now logical
+// `consent.agent` / physical `consent_agent`, with `enrollment_key`; invocation
+// evidence names its actor through `caller_id`, and logical `media.asset`
+// continues to resolve to physical `media_asset`. The canonical registry walk
+// carries the renamed current-v0 tables and columns without an adapter. These
+// rows must survive restore because dropping enrollment or caller evidence
+// would detach automation grants from the principal that exercised them.
+
 import { createHash } from "node:crypto";
 
 import { sha256OfBytes } from "../blob/store.js";

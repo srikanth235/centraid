@@ -45,21 +45,21 @@ describe(ResourceAccounting, () => {
       busyMs: 0,
     });
     expect(snap.subsystems.sweeps).toStrictEqual({ passes: 0, busyMs: 0 });
-    expect(snap.subsystems.agentRuns).toStrictEqual({
+    expect(snap.subsystems.harnessRuns).toStrictEqual({
       runs: 0,
       busyMs: 0,
       cpuSeconds: null,
     });
   });
 
-  it("accumulates replication, backup, sweep, and agent-run counters", () => {
+  it("accumulates replication, backup, sweep, and harness-run counters", () => {
     const { acc } = makeAccounting();
     acc.recordReplicationPass({ bytesReplicated: 100, durationMs: 10 });
     acc.recordReplicationPass({ bytesReplicated: 50, durationMs: 5 });
     acc.recordBackupDrain({ bytesUploaded: 2_048, durationMs: 40 });
     acc.recordSweepPass({ durationMs: 7 });
     acc.recordSweepPass({ durationMs: 3 });
-    acc.recordAgentRun({ durationMs: 1_200 });
+    acc.recordHarnessRun({ durationMs: 1_200 });
 
     const snap = acc.snapshot();
     expect(snap.subsystems.replication).toStrictEqual({
@@ -73,31 +73,31 @@ describe(ResourceAccounting, () => {
       busyMs: 40,
     });
     expect(snap.subsystems.sweeps).toStrictEqual({ passes: 2, busyMs: 10 });
-    expect(snap.subsystems.agentRuns).toStrictEqual({
+    expect(snap.subsystems.harnessRuns).toStrictEqual({
       runs: 1,
       busyMs: 1_200,
       cpuSeconds: null,
     });
   });
 
-  it("agentRuns.cpuSeconds stays null (no fabricated child rusage)", () => {
+  it("harnessRuns.cpuSeconds stays null (no fabricated child rusage)", () => {
     const { acc } = makeAccounting();
-    acc.recordAgentRun({ durationMs: 500 });
-    acc.recordAgentRun({ durationMs: 500 });
-    expect(acc.snapshot().subsystems.agentRuns.cpuSeconds).toBeNull();
+    acc.recordHarnessRun({ durationMs: 500 });
+    acc.recordHarnessRun({ durationMs: 500 });
+    expect(acc.snapshot().subsystems.harnessRuns.cpuSeconds).toBeNull();
   });
 
   it("clamps negative byte/duration inputs to zero (honest, never negative)", () => {
     const { acc } = makeAccounting();
     acc.recordReplicationPass({ bytesReplicated: -10, durationMs: -5 });
-    acc.recordAgentRun({ durationMs: -100 });
+    acc.recordHarnessRun({ durationMs: -100 });
     const snap = acc.snapshot();
     expect(snap.subsystems.replication).toStrictEqual({
       passes: 1,
       bytesReplicated: 0,
       busyMs: 0,
     });
-    expect(snap.subsystems.agentRuns.busyMs).toBe(0);
+    expect(snap.subsystems.harnessRuns.busyMs).toBe(0);
   });
 
   it("derives cpuSecondsTotal from user+system microseconds and reports current rss", () => {
@@ -175,7 +175,7 @@ describe(ResourceAccounting, () => {
       ].sort()
     );
     expect(Object.keys(snap.subsystems).sort()).toStrictEqual(
-      ["agentRuns", "backup", "replication", "sweeps", "workerPool"].sort()
+      ["backup", "harnessRuns", "replication", "sweeps", "workerPool"].sort()
     );
   });
 });

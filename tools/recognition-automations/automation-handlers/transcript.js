@@ -27,7 +27,7 @@ function modelAvailable() {
 
 async function seedCursor(ctx, model) {
   const latest = await ctx.vault.read({
-    entity: "media.media_asset",
+    entity: "media.asset",
     where: [
       { column: "kind", op: "in", value: ["audio", "video"] },
       { column: "deleted_at", op: "is-null" },
@@ -66,7 +66,7 @@ export default async function handler({ ctx, log }) {
   }
   const cursor = (await ctx.state.get("cursor")) ?? "";
   const read = await ctx.vault.read({
-    entity: "media.media_asset",
+    entity: "media.asset",
     where: [
       { column: "asset_id", op: "gt", value: cursor },
       { column: "kind", op: "in", value: ["audio", "video"] },

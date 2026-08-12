@@ -269,7 +269,7 @@ describe("the People shelf's model", () => {
     // send them could widen its own consent, so the intent carries neither.
     expect(detectFacesIntent()).toStrictEqual({
       action: "request-enrichment",
-      input: { entity_type: "media.media_asset" },
+      input: { entity_type: "media.asset" },
     });
   });
 

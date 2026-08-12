@@ -49,7 +49,7 @@
       "line": 27,
       "snippet": "test.skipIf(process.env.CENTRAID_LIVE_AUTOMATION !== \"1\")(",
       "issue": 656,
-      "reason": "Drives real coding-agent binaries, so it is opt-in via CENTRAID_LIVE_AUTOMATION=1 and cannot run on a hermetic PR lane."
+      "reason": "Drives real harness binaries, so it is opt-in via CENTRAID_LIVE_AUTOMATION=1 and cannot run on a hermetic PR lane."
     },
     "packages/app-engine/src/http/app-bundle.test.ts#1": {
       "kind": "conditional-skip",

@@ -11,7 +11,7 @@ const REPLICA_PROTOCOL_CREDENTIAL_COLUMNS: Readonly<
   Record<string, readonly string[]>
 > = {
   "consent.app": ["signing_key"],
-  "agent.agent": ["host_key"],
+  "consent.agent": ["enrollment_key"],
   "consent.device": ["public_key"],
 };
 

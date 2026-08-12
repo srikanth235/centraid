@@ -1,6 +1,6 @@
 // The photo-library import, end to end on the staging spine (issue #721 A1):
 // a Takeout zip stages as one reviewable batch, publishes into
-// media_media_asset through media.add_asset's own primitives, and is
+// media_asset through media.add_asset's own primitives, and is
 // re-importable because the queue IS the database.
 
 import { beforeEach, describe, expect, test } from "vitest";
@@ -177,7 +177,7 @@ describe("takeout photo import", () => {
       .prepare(
         `SELECT a.asset_id, a.kind, a.captured_at, a.capture_group_id, a.favorite,
                 a.place_id, c.title, c.sha256
-           FROM media_media_asset a JOIN core_content_item c ON c.content_id = a.content_id
+           FROM media_asset a JOIN core_content_item c ON c.content_id = a.content_id
           ORDER BY c.title`
       )
       .all() as Record<string, unknown>[];
@@ -242,7 +242,7 @@ describe("takeout photo import", () => {
     const members = db.vault
       .prepare(
         `SELECT target_id FROM core_collection_entry
-          WHERE collection_id = ? AND target_type = 'media.media_asset'`
+          WHERE collection_id = ? AND target_type = 'media.asset'`
       )
       .all(album[0]!.collection_id) as { target_id: string }[];
     expect(members.map((m) => m.target_id).sort()).toStrictEqual(
@@ -252,7 +252,7 @@ describe("takeout photo import", () => {
     const prov = db.journal
       .prepare(
         `SELECT count(*) AS n FROM consent_provenance
-          WHERE prov_activity = 'import.takeout' AND entity_type = 'media.media_asset'
+          WHERE prov_activity = 'import.takeout' AND entity_type = 'media.asset'
             AND agent_kind = 'import'`
       )
       .get() as { n: number };

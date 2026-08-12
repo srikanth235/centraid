@@ -11,9 +11,9 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 
-import { resolveItemCost } from "@centraid/app-engine";
+import { resolveItemCost, TurnPlane } from "@centraid/app-engine";
 import type {
-  RunnerPrefs,
+  HarnessPrefs,
   RunTurnFn,
   TurnStreamEvent,
 } from "@centraid/app-engine";
@@ -32,13 +32,13 @@ type UsageEvent = Extract<TurnStreamEvent, { type: "usage" }>;
 
 function rewriteUsageFields(usage: UsageEvent | undefined): {
   model?: string;
-  provider?: string;
+  harness?: string;
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
   costUsd?: number;
-  costSource?: "agent" | "estimated";
+  costSource?: "harness" | "estimated";
 } {
   if (!usage) return {};
   const cost =
@@ -54,11 +54,11 @@ function rewriteUsageFields(usage: UsageEvent | undefined): {
         })
       : {
           costUsd: usage.costUsd,
-          costSource: usage.costSource ?? ("agent" as const),
+          costSource: usage.costSource ?? ("harness" as const),
         };
   return {
     ...(usage.model === undefined ? {} : { model: usage.model }),
-    ...(usage.provider === undefined ? {} : { provider: usage.provider }),
+    ...(usage.harness === undefined ? {} : { harness: usage.harness }),
     ...(usage.inputTokens === undefined
       ? {}
       : { inputTokens: usage.inputTokens }),
@@ -102,10 +102,12 @@ export interface RewriteAutomationInstructionsOptions {
   steering: string;
   revisionTurnId?: string;
   journalDbFile: string;
-  runnerSessionDir: string;
+  harnessSessionDir: string;
   runTurn: RunTurnFn;
-  runnerPrefs: RunnerPrefs;
+  harnessPrefs: HarnessPrefs;
   model?: string;
+  /** Host-owned provider-egress proof, rechecked at the TurnPlane door. */
+  egressConsent: () => boolean | Promise<boolean>;
   /** Existing lifecycle manifest-update/publish seam. */
   persistPrompt: (prompt: string) => Promise<void>;
 }
@@ -123,7 +125,7 @@ export async function rewriteAutomationInstructions(
     opts.row.ref,
     opts.row.ownerApp,
     opts.row.name,
-    opts.runnerPrefs.kind
+    opts.harnessPrefs.kind
   );
   const revisionTurnId =
     opts.revisionTurnId ?? `${opts.row.ref}:revise:${randomUUID().slice(0, 8)}`;
@@ -169,11 +171,12 @@ export async function rewriteAutomationInstructions(
 
   try {
     const cwd = path.join(
-      opts.runnerSessionDir,
+      opts.harnessSessionDir,
       "automation-rewrites",
       randomUUID()
     );
-    await opts.runTurn(
+    const turnPlane = new TurnPlane(opts.runTurn);
+    await turnPlane.runTurn(
       {
         cwd,
         message: rewriteWorkOrder(opts.row.manifest.prompt, opts.steering),
@@ -183,7 +186,15 @@ export async function rewriteAutomationInstructions(
         abortSignal: new AbortController().signal,
         onEvent,
       },
-      { prefs: opts.runnerPrefs }
+      opts.harnessPrefs,
+      {
+        surface: "interactive",
+        egress: "attended",
+        egressConsent: opts.egressConsent,
+        failover: "none",
+        permissionPolicy: "deny",
+        artifacts: "delegate-only",
+      }
     );
     if (error) throw new Error(error);
     const prompt = cleanRewrittenInstructions(text);

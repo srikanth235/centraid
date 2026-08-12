@@ -28,7 +28,7 @@ export interface ProviderSyncCapability {
   readonly scope?: string;
 }
 
-/** On-demand operation — agent tool and/or send automation. */
+/** On-demand operation — harness tool and/or send automation. */
 export interface ProviderActionCapability {
   readonly id: string;
   readonly title: string;

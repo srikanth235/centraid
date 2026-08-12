@@ -1,7 +1,8 @@
 // Coverage for the session/update → TurnStreamEvent mapper. Drives the pure
 // factory directly with hand-built ACP notifications so every update variant,
-// guard, and accumulation branch is exercised without a live agent.
+// guard, and accumulation branch is exercised without a live harness.
 
+import type { SessionNotification } from "@agentclientprotocol/sdk";
 import { describe, expect, test } from "vitest";
 
 import type { TurnStreamEvent } from "@centraid/app-engine";
@@ -14,28 +15,27 @@ function harness() {
   const types = (): string[] => events.map((e) => e.type);
   return { events, mapper, types };
 }
-describe("stream-events suite", () => {
-  test("ignores updates with missing / malformed params", () => {
-    const { mapper, events } = harness();
-    mapper.handleSessionUpdate(undefined);
-    mapper.handleSessionUpdate({});
-    mapper.handleSessionUpdate({ update: null });
-    mapper.handleSessionUpdate({ update: "not-an-object" });
-    expect(events).toStrictEqual([]);
-  });
 
+/** Exercise normalization guards below the SDK boundary with malformed fixtures. */
+function handle(
+  mapper: ReturnType<typeof createSessionUpdateMapper>,
+  params: unknown
+): void {
+  mapper.handleSessionUpdate(params as SessionNotification);
+}
+describe("stream-events suite", () => {
   test("agent_message_chunk emits assistant.start once then deltas, accumulating finalText", () => {
     const { mapper, events, types } = harness();
     // An empty chunk emits nothing (no start, no delta).
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: { sessionUpdate: "agent_message_chunk", content: "" },
     });
     expect(events).toStrictEqual([]);
 
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: { sessionUpdate: "agent_message_chunk", content: "Hello " },
     });
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: {
         sessionUpdate: "agent_message_chunk",
         content: [{ text: "world" }],
@@ -51,11 +51,11 @@ describe("stream-events suite", () => {
 
   test("agent_thought_chunk emits reasoning deltas and skips empty ones", () => {
     const { mapper, events, types } = harness();
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: { sessionUpdate: "agent_thought_chunk", content: "" },
     });
     expect(events).toStrictEqual([]);
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: { sessionUpdate: "agent_thought_chunk", content: "thinking" },
     });
     expect(types()).toStrictEqual(["assistant.start", "reasoning.delta"]);
@@ -63,13 +63,13 @@ describe("stream-events suite", () => {
 
   test("tool_call without an id is dropped", () => {
     const { mapper, events } = harness();
-    mapper.handleSessionUpdate({ update: { sessionUpdate: "tool_call" } });
+    handle(mapper, { update: { sessionUpdate: "tool_call" } });
     expect(events).toStrictEqual([]);
   });
 
   test("tool_call emits tool.start with title fallback and passes rawInput through", () => {
     const { mapper, events } = harness();
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: {
         sessionUpdate: "tool_call",
         toolCallId: "t1",
@@ -94,10 +94,10 @@ describe("stream-events suite", () => {
 
   test('tool_call falls back to kind, then "tool", for its title', () => {
     const { mapper, events } = harness();
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: { sessionUpdate: "tool_call", toolCallId: "a", kind: "edit" },
     });
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: { sessionUpdate: "tool_call", toolCallId: "b" },
     });
     const starts = events.filter((e) => e.type === "tool.start");
@@ -108,7 +108,7 @@ describe("stream-events suite", () => {
 
   test("a tool_call that arrives already completed emits both start and result", () => {
     const { mapper, events } = harness();
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: {
         sessionUpdate: "tool_call",
         toolCallId: "done",
@@ -129,12 +129,12 @@ describe("stream-events suite", () => {
     ).toMatchObject({ toolCallId: "done", status: "completed" });
   });
 
-  test("an agent’s own rawOutput.content survives the renderable-content merge", () => {
+  test("an harness’s own rawOutput.content survives the renderable-content merge", () => {
     // The merge used to spread rawOutput and then overwrite `content` with our
-    // renderable projection, silently destroying the payload the agent chose to
+    // renderable projection, silently destroying the payload the harness chose to
     // return under that key.
     const { mapper, events } = harness();
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: {
         sessionUpdate: "tool_call",
         toolCallId: "merge",
@@ -156,7 +156,7 @@ describe("stream-events suite", () => {
     expect(merged.content).toStrictEqual([
       { type: "text", text: "found 1 match" },
     ]);
-    // …and the agent's own payload is still there, not overwritten.
+    // …and the harness's own payload is still there, not overwritten.
     expect(merged.rawOutputContent).toStrictEqual([
       { path: "a.txt", score: 0.9 },
     ]);
@@ -164,10 +164,10 @@ describe("stream-events suite", () => {
 
   test("tool_call_update maps failed → ok:false with an error message, and dedupes", () => {
     const { mapper, events } = harness();
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: { sessionUpdate: "tool_call", toolCallId: "x", title: "run" },
     });
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: {
         sessionUpdate: "tool_call_update",
         toolCallId: "x",
@@ -176,7 +176,7 @@ describe("stream-events suite", () => {
       },
     });
     // A second terminal update for the same id must not emit twice.
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: {
         sessionUpdate: "tool_call_update",
         toolCallId: "x",
@@ -192,7 +192,7 @@ describe("stream-events suite", () => {
 
   test("a failed tool result with no content still carries a default error message", () => {
     const { mapper, events } = harness();
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: {
         sessionUpdate: "tool_call_update",
         toolCallId: "y",
@@ -207,10 +207,10 @@ describe("stream-events suite", () => {
 
   test("tool_call_update without an id, or with a non-terminal status, emits nothing", () => {
     const { mapper, events } = harness();
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: { sessionUpdate: "tool_call_update" },
     });
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: {
         sessionUpdate: "tool_call_update",
         toolCallId: "p",
@@ -222,13 +222,13 @@ describe("stream-events suite", () => {
 
   test("plan emits a phase event, with detail only when entries are present", () => {
     const { mapper, events } = harness();
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: {
         sessionUpdate: "plan",
         entries: [{ content: "step 1", status: "pending" }],
       },
     });
-    mapper.handleSessionUpdate({ update: { sessionUpdate: "plan" } });
+    handle(mapper, { update: { sessionUpdate: "plan" } });
     const phases = events.filter((e) => e.type === "phase");
     expect(phases).toHaveLength(2);
     const [withEntries, without] = phases;
@@ -245,7 +245,7 @@ describe("stream-events suite", () => {
 
   test("tool result extracts diff content blocks", () => {
     const { mapper, events } = harness();
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: {
         sessionUpdate: "tool_call",
         toolCallId: "d1",
@@ -266,7 +266,7 @@ describe("stream-events suite", () => {
 
   test("tool result preserves renderable content and terminal output as CAS candidates", () => {
     const { mapper, events } = harness();
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: {
         sessionUpdate: "tool_call",
         toolCallId: "terminal-1",
@@ -305,35 +305,38 @@ describe("stream-events suite", () => {
     ]);
   });
 
-  test("usage_update folds tokens and cost, surfaced via usage()", () => {
-    const { mapper } = harness();
-    mapper.handleSessionUpdate({
+  test("PromptResponse usage and usage_update context/cost fold into usage()", () => {
+    const { mapper, events } = harness();
+    mapper.foldTokenUsage({
+      inputTokens: 100,
+      outputTokens: 50,
+      totalTokens: 150,
+    });
+    handle(mapper, {
       update: {
         sessionUpdate: "usage_update",
-        inputTokens: 100,
-        outputTokens: 50,
+        used: 75,
+        size: 200,
         cost: { amount: 0.25, currency: "USD" },
       },
     });
     const usage = mapper.usage();
     expect(usage.tokens).toStrictEqual({ inputTokens: 100, outputTokens: 50 });
     expect(usage.cost).toStrictEqual({ amount: 0.25, currency: "USD" });
-  });
-
-  test("usage_update with an unreadable cost leaves cost undefined", () => {
-    const { mapper } = harness();
-    mapper.handleSessionUpdate({
-      update: { sessionUpdate: "usage_update", cost: { amount: "nope" } },
+    expect(usage.context).toStrictEqual({ used: 75, size: 200 });
+    expect(events.at(-1)).toStrictEqual({
+      type: "context",
+      used: 75,
+      size: 200,
     });
-    expect(mapper.usage().cost).toBeUndefined();
   });
 
   test("unknown session update kinds are ignored", () => {
     const { mapper, events } = harness();
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: { sessionUpdate: "current_mode_update", modeId: "x" },
     });
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: { sessionUpdate: "user_message_chunk", content: "hi" },
     });
     expect(events).toStrictEqual([]);
@@ -341,36 +344,40 @@ describe("stream-events suite", () => {
 
   test("foldTokenUsage merges a breakdown read elsewhere (last write wins)", () => {
     const { mapper } = harness();
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: { sessionUpdate: "usage_update", inputTokens: 10 },
     });
-    mapper.foldTokenUsage({ outputTokens: 5, inputTokens: 99 });
+    mapper.foldTokenUsage({
+      totalTokens: 104,
+      outputTokens: 5,
+      inputTokens: 99,
+    });
     expect(mapper.usage().tokens).toStrictEqual({
       inputTokens: 99,
       outputTokens: 5,
     });
   });
 
-  test("agentStreamsTool matches an open tool by name substring and ignores done / empty", () => {
+  test("harnessStreamsTool matches an open tool by name substring and ignores done / empty", () => {
     const { mapper } = harness();
-    expect(mapper.agentStreamsTool("")).toBe(false);
-    mapper.handleSessionUpdate({
+    expect(mapper.harnessStreamsTool("")).toBe(false);
+    handle(mapper, {
       update: {
         sessionUpdate: "tool_call",
         toolCallId: "m",
         title: "mcp__centraid__vault_sql",
       },
     });
-    expect(mapper.agentStreamsTool("vault_sql")).toBe(true);
-    expect(mapper.agentStreamsTool("other_tool")).toBe(false);
+    expect(mapper.harnessStreamsTool("vault_sql")).toBe(true);
+    expect(mapper.harnessStreamsTool("other_tool")).toBe(false);
     // Once the call closes it no longer counts as "streaming".
-    mapper.handleSessionUpdate({
+    handle(mapper, {
       update: {
         sessionUpdate: "tool_call_update",
         toolCallId: "m",
         status: "completed",
       },
     });
-    expect(mapper.agentStreamsTool("vault_sql")).toBe(false);
+    expect(mapper.harnessStreamsTool("vault_sql")).toBe(false);
   });
 });

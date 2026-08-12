@@ -229,7 +229,7 @@ describe("automations-routes suite", () => {
           turnId: string;
           endedAt?: number;
           ok: boolean;
-          adapterKind?: string;
+          harnessKind?: string;
         }>;
       }
     ).turns;
@@ -239,7 +239,7 @@ describe("automations-routes suite", () => {
     ]);
     expect(turns[0]?.endedAt).toBeUndefined(); // in-flight → renders as "running"
     expect(turns[1]?.endedAt).toBe(60);
-    expect(turns.map((turn) => turn.adapterKind)).toStrictEqual([
+    expect(turns.map((turn) => turn.harnessKind)).toStrictEqual([
       "copilot",
       "copilot",
     ]);
