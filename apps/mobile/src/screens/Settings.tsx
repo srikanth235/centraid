@@ -634,7 +634,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     title: {
       color: colors.text,
-      fontFamily: family.displayRegular,
+      fontFamily: family.serifRegular,
       fontSize: 26,
       letterSpacing: -0.3,
     },

@@ -46,7 +46,7 @@
 
 .copies {
   display: flex;
-  gap: 2px;
+  gap: var(--sp-gutter);
   overflow-x: auto;
   padding-block-end: var(--sp-1);
 }

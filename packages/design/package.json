@@ -65,9 +65,7 @@
   },
   "dependencies": {
     "@centraid/blob-format": "workspace:*",
-    "@fontsource/dm-mono": "5.2.5",
     "@fontsource/instrument-sans": "5.2.5",
-    "@fontsource/instrument-serif": "5.2.5",
     "@fontsource/source-serif-4": "5.2.5"
   },
   "devDependencies": {

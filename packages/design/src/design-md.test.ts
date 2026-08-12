@@ -288,9 +288,12 @@ describe("DESIGN.md body", () => {
     expect(body).toContain(`${metrics.stem}px`);
     expect(body).toContain("logical properties");
     expect(body).toContain("5 apps plus More");
-    // 2 — one ramp, two registers.
-    expect(body).toContain("One ramp, two registers");
-    expect(body).toContain("reading or scanning");
+    // 2 — one ramp, two faces. v4s withdrew the register axis: the face is a
+    // property of the ROLE, not of the app the text sits in, so the law has to
+    // read that way rather than offering an app a choice it no longer has.
+    expect(body).toContain("One ramp, two faces");
+    expect(body).toContain("not of the app it appears in");
+    expect(body).not.toContain("reading or scanning");
     // 3 — the ink-only control vocabulary.
     expect(body).toContain("the shell owns no colour");
     expect(body).toContain("one filled ink element per view");
@@ -316,6 +319,14 @@ describe("DESIGN.md body", () => {
     // it. The freedom table no longer offers a surface tone row, though the
     // prose may still legitimately name the retired axis while explaining it.
     expect(body).not.toContain("| Surface tone |");
+    // v4s took a second row with it. A `register` row would put the face back
+    // in the app's hands, which is the thing the ruling withdrew.
+    expect(body).not.toContain("| Primary register |");
+    // And it added one — the surface axis, marked FIXED. It sits in this table
+    // rather than beside it precisely because an app author reads this table to
+    // find out what is theirs; a fixed axis has to be visible in the same place.
+    expect(body).toContain("| Surface |");
+    expect(body).toContain("Width is a canvas, not a surface");
   });
 
   test("records the brief-to-repo mapping and the app hue table", () => {

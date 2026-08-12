@@ -7,7 +7,7 @@
 .loading,
 .loadError {
   padding: 20px 4px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .loadError {
@@ -244,7 +244,7 @@
 
 .empty {
   padding: 20px 16px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   font-style: italic;
 }

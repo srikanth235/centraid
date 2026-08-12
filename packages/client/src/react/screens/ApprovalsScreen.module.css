@@ -150,7 +150,7 @@ button.rowMain:hover {
   white-space: nowrap;
 }
 .rowSub {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -759,7 +759,7 @@ button.rowMain:hover {
 }
 .networkRow dd {
   margin: 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--text-faint);
 }

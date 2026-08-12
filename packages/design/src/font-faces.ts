@@ -1,4 +1,4 @@
-// Centraid — the four bundled faces, described without touching a filesystem.
+// Centraid — the two bundled faces, described without touching a filesystem.
 //
 // This is the half of the font seam a BROWSER may hold. `fonts.ts` owns the
 // other half: where the `.woff2` bytes live on disk, which needs `node:path`
@@ -12,15 +12,15 @@
 // browser, a renderer, or an app surface behind a strict CSP imports HERE.
 
 import { fonts } from "./typography";
-import type { FontFamily } from "./typography";
+import type { BundledFace } from "./typography";
 
-/** Filename stem of each vendored face, matching the upstream convention. */
+/** Filename stem of each vendored face, matching the upstream convention.
+ *  Only the two BUNDLED faces appear: `mono` is the platform code stack and
+ *  ships no bytes, so it has no slug and no `@font-face` rule. */
 const FONT_SLUG = {
-  display: "instrument-serif",
-  mono: "dm-mono",
   sans: "instrument-sans",
   serif: "source-serif-4",
-} as const satisfies Record<FontFamily, string>;
+} as const satisfies Record<BundledFace, string>;
 
 export type FontSubset = "latin" | "latin-ext";
 
@@ -37,7 +37,7 @@ export const FONT_SUBSET_RANGE = {
 
 export interface FontFile {
   /** The type-scale genus this file serves (`--font-<genus>`). */
-  genus: FontFamily;
+  genus: BundledFace;
   /** The CSS `font-family` name, as the type scale spells it. */
   family: string;
   weight: 400 | 500;
@@ -48,17 +48,18 @@ export interface FontFile {
 
 /**
  * Every vendored file, and only those. The ramp uses exactly two weights, and
- * only the sans carries both: the display serif, the reading serif and the
- * mono are 400-only roles, so shipping their 500s would be dead bytes on
- * every first paint.
+ * only the sans carries both: the serif draws the display and reading roles
+ * at 400 only, so shipping its 500 would be dead bytes on every first paint.
+ *
+ * Six files, down from ten. v4s withdrew `Instrument Serif` (display is the
+ * one serif now) and `DM Mono` (numerics are the sans with tabular figures),
+ * which is two font downloads removed from every first paint.
  */
 export const FONT_FILES: readonly FontFile[] = (
   [
     ["sans", 400],
     ["sans", 500],
-    ["display", 400],
     ["serif", 400],
-    ["mono", 400],
   ] as const
 ).flatMap(([genus, weight]) =>
   (["latin", "latin-ext"] as const).map((subset) => ({
@@ -74,8 +75,8 @@ export const FONT_FILES: readonly FontFile[] = (
  * The `@font-face` block for the bundled faces, pointing at `baseUrl`.
  *
  * `font-display: swap` is deliberate: the fallback stacks in `fontStacks`
- * carry the CJK coverage none of these four faces has, so a blocking swap
- * period would show nothing at all to the readers who need the fallback most.
+ * carry the CJK coverage neither bundled face has, so a blocking swap period
+ * would show nothing at all to the readers who need the fallback most.
  */
 export function toFontFaceCss(baseUrl: string): string {
   const base = baseUrl.replace(/\/+$/u, "");

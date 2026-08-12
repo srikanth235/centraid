@@ -192,7 +192,7 @@
   color: var(--text);
 }
 .tileMeta {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -270,7 +270,7 @@
 }
 .healthBlock {
   margin: 10px 0 4px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
 }
 
@@ -283,12 +283,12 @@
   border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   background: var(--bg-sunken, var(--bg-elev));
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   line-height: 1.4;
 }
 .authKindBanner strong {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text);
@@ -443,7 +443,7 @@
 }
 .sheetTag {
   margin: 2px 0 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .sheetClose {
@@ -481,7 +481,7 @@
 }
 .aboutHead {
   padding: 10px 12px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   color: var(--text-faint);
   border-bottom: 0.5px solid var(--line);
@@ -517,7 +517,7 @@
   color: var(--text);
 }
 .aboutDesc {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
@@ -553,7 +553,7 @@
 .wizardLabel {
   display: block;
   margin-bottom: 6px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 500;
   color: var(--text);
 }
@@ -604,7 +604,7 @@
   border: 0.5px solid var(--line);
   border-radius: 9px;
   color: var(--text);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   cursor: pointer;
 }
 .scopeOption input {
@@ -628,7 +628,7 @@
 .manualHandoff {
   margin-top: 12px;
   color: var(--text-faint);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
 }
 .manualHandoff summary {
   cursor: pointer;
@@ -674,7 +674,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--text-soft);
 }
@@ -712,6 +712,6 @@
   font-weight: 600;
 }
 .pickerSub {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }

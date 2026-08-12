@@ -153,7 +153,7 @@ export const makeStyles = (colors: ThemeColors) =>
     subtitle: { ...t("small"), color: colors.textSoft, marginTop: 2 },
     title: {
       color: colors.text,
-      fontFamily: family.displayRegular,
+      fontFamily: family.serifRegular,
       fontSize: 26,
       letterSpacing: -0.3,
     },

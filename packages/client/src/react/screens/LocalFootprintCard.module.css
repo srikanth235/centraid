@@ -202,14 +202,14 @@
 .legendBlurb {
   grid-column: 2 / -1;
   padding-top: 4px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--text-faint);
 }
 
 .figure {
   font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
@@ -218,7 +218,7 @@
 
 .byVault > summary {
   cursor: pointer;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   padding: 4px 0;
 }
@@ -277,7 +277,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 

@@ -1322,7 +1322,7 @@ kit-reference-strip,
   text-align: center;
   padding: 1.25rem 0 0.5rem;
   font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 
@@ -1654,7 +1654,7 @@ kit-reference-strip,
 }
 .kit-msg.ai .asstPre {
   font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.5;
   background: color-mix(in oklab, var(--accent) 6%, transparent);
   border: 0.5px solid var(--line);
@@ -1825,7 +1825,7 @@ kit-reference-strip,
 /* A refusal or failure the vault reported for this card — shown, not hidden. */
 .kit-ask-action .aa-note {
   font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--accent-text);
   margin-top: 0.5rem;
 }

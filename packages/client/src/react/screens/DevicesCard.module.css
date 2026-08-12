@@ -25,7 +25,7 @@
 }
 
 .loadError {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--danger);
   overflow-wrap: anywhere;
 }

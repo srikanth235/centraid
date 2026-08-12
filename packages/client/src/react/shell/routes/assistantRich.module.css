@@ -66,7 +66,7 @@
 }
 .asstRich code {
   font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   background: var(--bg-sunken);
   border-radius: var(--r-sm);
   padding: 1px 4px;
@@ -80,7 +80,7 @@
   border-radius: 999px;
   padding: 0 7px;
   font: inherit;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.5;
   cursor: default;
 }
@@ -137,7 +137,7 @@
   color: var(--text);
 }
 .asstStatLabel {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   margin-top: 2px;
 }

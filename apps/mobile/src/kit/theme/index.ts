@@ -12,6 +12,7 @@
 // legacy `colors` export stays light-only for callers that read it at module
 // scope; anything that needs to follow the OS theme should call `useTheme()`.
 
+import { Platform } from "react-native";
 import type { TextStyle } from "react-native";
 
 import { type as nativeType } from "./tokens.generated";
@@ -22,26 +23,42 @@ export { density, metrics, pageMargin } from "./tokens.generated";
 // One family name per (family, weight) pair. Keep in sync with the
 // imports in App.tsx — anything referenced here must be loaded there.
 //
-// The Binding Layer's ramp carries exactly four faces and two weights (400 /
-// 500): Instrument Sans for body/UI text, Instrument Serif for the display
-// role, Source Serif 4 for the reading register, and DM Mono for the numeric
-// register. There is no bold/semibold rung any more — a caller that used to
-// reach for `sansBold` now reaches for `sansMedium`, the heaviest weight the
-// ramp has.
+// The Binding Layer's ramp carries exactly TWO bundled faces and two weights
+// (400 / 500): Instrument Sans for body, UI and numerics, and Source Serif 4
+// for display and reading. v4s withdrew `Instrument Serif` (display is the one
+// serif) and `DM Mono` (numerics are the sans with tabular figures), so
+// `displayRegular` and `displayItalic` are gone — a caller that reached for
+// them reaches for `serifRegular`. There is no bold/semibold rung either: a
+// caller that used to reach for `sansBold` now reaches for `sansMedium`, the
+// heaviest weight the ramp has.
+//
+// `monoRegular` / `monoMedium` survive as the PLATFORM code face, for the
+// places that show code, a path, a ticket or a recovery key verbatim. Nothing
+// is loaded for them — RN resolves the platform's own fixed-advance family —
+// so they cost no bytes and match `--font-mono` on the web sheet. They are NOT
+// the numeric register: a number takes `t("mono")`, which is the sans.
 export const family = {
-  displayItalic: "InstrumentSerif_400Regular_Italic",
-  displayRegular: "InstrumentSerif_400Regular",
-  monoMedium: "DMMono_500Medium",
-  monoRegular: "DMMono_400Regular",
+  monoMedium: Platform.select({
+    android: "monospace",
+    default: "monospace",
+    ios: "Menlo",
+  }),
+  monoRegular: Platform.select({
+    android: "monospace",
+    default: "monospace",
+    ios: "Menlo",
+  }),
   sansMedium: "InstrumentSans_500Medium",
   sansRegular: "InstrumentSans_400Regular",
   serifRegular: "SourceSerif4_400Regular",
 } as const;
 
-type FamilyKey = "display" | "sans" | "mono" | "serif";
+// Exactly `fontStacks`'s keys in @centraid/design. A genus here that the web
+// sheet does not publish — or one it publishes that is missing here — is the
+// divergence this map exists to make impossible.
+type FamilyKey = "sans" | "mono" | "serif";
 
 const FAMILY_BY_WEIGHT: Record<FamilyKey, Record<string, string>> = {
-  display: { "400": family.displayRegular },
   mono: {
     "400": family.monoRegular,
     "500": family.monoMedium,

@@ -28,8 +28,8 @@
 
 .row {
   display: flex;
-  gap: 2px;
-  margin-bottom: 2px;
+  gap: var(--sp-gutter);
+  margin-bottom: var(--sp-gutter);
 }
 
 .tile {

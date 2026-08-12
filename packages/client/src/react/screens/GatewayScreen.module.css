@@ -492,7 +492,7 @@
   padding: 9px 10px;
   cursor: pointer;
   font-family: var(--font-sans);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 500;
   color: var(--text-soft);
   background: var(--bg-elev);
@@ -552,7 +552,7 @@
   padding: 8px 14px 8px 11px;
   cursor: pointer;
   font-family: var(--font-sans);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 500;
   color: var(--text-soft);
   background: var(--bg-elev);
@@ -721,7 +721,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: baseline;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
 }
 .resourceDetailsRow dt {
   color: var(--text-faint);
@@ -748,7 +748,7 @@
 }
 .resourceAdvancedLead {
   margin: 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.45;
   color: var(--text-faint);
 }
@@ -800,7 +800,7 @@
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text);
 }
 .resourceKnobInput:disabled {

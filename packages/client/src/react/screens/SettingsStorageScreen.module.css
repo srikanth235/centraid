@@ -114,7 +114,7 @@
   border-radius: 999px;
   border: none;
   background: none;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   cursor: pointer;
 }
@@ -137,7 +137,7 @@
 .fieldLabel {
   display: block;
   margin-bottom: 6px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 500;
   color: var(--text);
 }
@@ -233,7 +233,7 @@
 
 .gateError {
   margin: -6px 0 8px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--danger);
   overflow-wrap: anywhere;
 }

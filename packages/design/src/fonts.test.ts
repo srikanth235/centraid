@@ -19,18 +19,30 @@ describe("bundled font seam", () => {
   });
 
   it("ships every declared file, in both subsets", () => {
-    expect(FONT_FILES).toHaveLength(10);
+    // SIX, not ten. v4s withdrew `Instrument Serif` and `DM Mono`, which is
+    // two font downloads gone from every first paint — the ruling's own
+    // measured win, and it only holds while nothing re-vendors them.
+    expect(FONT_FILES).toHaveLength(6);
     for (const file of FONT_FILES) {
       expect(existsSync(fontFilePath(file)), file.fileName).toBe(true);
       expect(readFileSync(fontFilePath(file)).byteLength).toBeGreaterThan(1000);
     }
-    // Only the sans carries the ramp's second weight; the display serif, the
-    // reading serif and the mono are 400-only roles.
+    // Only the sans carries the ramp's second weight; the serif draws display
+    // and reading at 400 only.
     expect([
       ...new Set(
         FONT_FILES.filter((f) => f.weight === 500).map((f) => f.genus)
       ),
     ]).toStrictEqual(["sans"]);
+  });
+
+  it("vendors no bytes for the platform code stack", () => {
+    // `mono` is a family the stacks name, not a face this package ships. If a
+    // file ever appears for it, the two-download win has been quietly undone.
+    expect(FONT_FILES.some((f) => (f.genus as string) === "mono")).toBe(false);
+    expect(
+      existsSync(path.join(FONTS_DIR, "dm-mono-latin-400-normal.woff2"))
+    ).toBe(false);
   });
 
   it("keeps the vendored bytes identical to the pinned @fontsource copy", () => {
@@ -41,7 +53,7 @@ describe("bundled font seam", () => {
     }
   });
 
-  it("names the four genus faces the type scale declares", () => {
+  it("names the two bundled faces the type scale declares", () => {
     expect([...new Set(FONT_FILES.map((f) => f.family))].sort()).toStrictEqual(
       Object.values(fonts).sort()
     );

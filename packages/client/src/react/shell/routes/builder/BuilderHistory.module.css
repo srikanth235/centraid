@@ -62,7 +62,7 @@
 }
 .prompt {
   margin: 4px 0 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   line-height: 1.4;
   overflow: hidden;

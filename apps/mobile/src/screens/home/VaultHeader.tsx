@@ -221,7 +221,7 @@ const makeStyles = (colors: ThemeColors) =>
     // The display face at 15px, not the `display` role (27px) — the handoff's
     // `lockupMarkStyle` sets its own size, and no ramp rung already matches.
     markInitial: {
-      fontFamily: family.displayRegular,
+      fontFamily: family.serifRegular,
       fontSize: 15,
       lineHeight: 18,
     },

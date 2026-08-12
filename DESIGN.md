@@ -93,7 +93,7 @@ colors:
   dark-skel: "#1E1E1D"
 typography:
   display:
-    fontFamily: "Instrument Serif"
+    fontFamily: "Source Serif 4"
     fontSize: "31px"
     fontWeight: "400"
     lineHeight: "36px"
@@ -107,7 +107,7 @@ typography:
     fontFamily: "Source Serif 4"
     fontSize: "19px"
     fontWeight: "400"
-    lineHeight: "33px"
+    lineHeight: "31px"
   body:
     fontFamily: "Instrument Sans"
     fontSize: "15px"
@@ -141,10 +141,10 @@ typography:
     letterSpacing: "0.06em"
     textTransform: "uppercase"
   mono:
-    fontFamily: "DM Mono"
-    fontSize: "11.5px"
+    fontFamily: "Instrument Sans"
+    fontSize: "11px"
     fontWeight: "400"
-    lineHeight: "16px"
+    lineHeight: "15px"
     fontVariantNumeric: "tabular-nums"
 rounded:
   xs: "0px"
@@ -309,7 +309,7 @@ The product grammar is one semantic contract with three lowerings: shell CSS (`S
 ### The five invariants
 
 1. **Navigation is the stem.** A reserved band 240px wide on the leading edge, or the bottom band on mobile. It holds which vault you are in and on which gateway, the Search control, the launcher, and a foot of All apps and Settings — and nothing else. It is never themed by an app, never scrolls away, and never changes width. It may be reclaimed outright (⌘B, persisted), which is a different thing from shrinking: hidden or full width, never an in-between, and never a drawer — no scrim, no float over the content, and nothing dismisses it for you. The compact band ignores the preference, because a phone with no way to move is not a phone. Its promise is "always the same distance from the reading edge" — not "from the left" — so every rule that positions it uses logical properties and it mirrors under RTL. The mobile band is capped at 5 apps plus More; a tab below 44px stops being a tap target, so the cap is a constraint and not a preference.
-2. **One ramp, two registers.** Seven sizes, four faces, two weights. Every app declares its primary register — reading or scanning — and draws every role from the same ramp. Nothing falls below 11px, navigation labels never fall below `--text-soft`, and numerics are mono and tabular in every app without exception.
+2. **One ramp, two faces.** Six sizes, two bundled faces, two weights. An app does **not** declare a register: the face a piece of text takes is a property of its **role**, not of the app it appears in. Serif is the reading role only — a document, a note, empty-state prose, a conflict excerpt; sans is everything else, in every app equally. Nothing falls below 11px, navigation labels never fall below `--text-soft`, and numerics are tabular in every app without exception.
 3. **One control vocabulary, and the shell owns no colour.** Every control is ink on paper; commit is a filled ink button, never a hue. At most one filled ink element per view. Destructive is an **outlined** button in `--net`, never a fill. Actions live in bounded controls; where a control must be text it carries the ink step plus a hover ground plus a trailing arrow, because hover alone is nothing on a phone. One hue is reserved for prose links, selection and the focus ring, and it is never permitted on a control. State is never expressed with container `opacity` — a recessive state takes its own token on the leaf element.
 4. **One spatial rhythm.** 4px base, scale 4 / 8 / 12 / 16 / 24 / 32. Control 34px, row 44px, segmented 28px, stem 240px. Density tiers scale row height and content padding only. Any text in a fixed-height container is line-clamped, never `overflow: hidden` — a clipped baseline reads as a rendering bug.
 5. **One motion and feedback grammar.** Entry and settle at 280ms, a state change at 140ms, and state reported on one persistent status line rather than a toast. Never a spinner, a bounce, a parallax, a scale-on-hover, a red dot, a badge count, or a toast. `prefers-reduced-motion` is honoured in one global rule.
@@ -322,8 +322,10 @@ This list is as important as the invariants. An app that stays inside it needs n
 | --- | --- | --- |
 | Density tier | Free — comfortable, compact, or dense. Row height and content padding only. | `data-density` → `--density-row`, `--density-pad` |
 | Layout | Free. Full-bleed grid, reading measure, 7-column table, message stack. No constraint. | — |
-| Primary register | Declared, not invented: reading, scanning, or none, chosen from the ramp. | `--t-reading` / `--t-small` |
 | Colour | One identity hue, in the icon chip and as a content marker. **Never on a control.** | `--app-hue`, `--app-identity`, `--c-*` |
+| Surface | **FIXED — the one row here that is not a freedom.** One axis: pointer or touch. Width is a canvas, not a surface; a narrower stage carries no rules of its own, so there is no third set of values for an app to declare and no second word for the middle one. | `--target-min`, `--page-margin` |
+
+The table lost two rows with v4s. **Primary register** is gone: the face follows the role, not the app, so there is no reading-or-scanning choice to declare and no `register` field on a manifest. **Surface tone** is gone: there is one ground per theme, `#FDFDFC` light and `#0E0E0E` dark, and the seam between two apps is a route change rather than a colour change. Neither is a setting an app may reach for by another name.
 
 Everything else — control shape, ink ramp, hairlines, motion, the stem, the status line — belongs to the system.
 
@@ -378,20 +380,20 @@ The role registry marks values as `literal`, `scalar`, `solved`, or `wash`; only
 
 ## Typography
 
-Roles are not families. There is one face per genus, all four shipped from the repo with no network fetch: `Instrument Sans` sans, `Source Serif 4` serif, `Instrument Serif` display, and `DM Mono` mono. Every family token carries mandatory CJK fallbacks — none of the four faces has CJK coverage, and without them the display face silently drops to a UA default and the product's signature disappears in its largest markets. Mobile maps those genera to loaded faces through the same names.
+Roles are not families, and since v4s there are **two** faces, both shipped from the repo with no network fetch: `Instrument Sans` sans and `Source Serif 4` serif. `Instrument Serif` and `DM Mono` are withdrawn — display is the one serif, and numerics are the sans with `font-variant-numeric: tabular-nums` — which removes two font downloads from every first paint. A third family token, `--font-mono`, names the **platform** code stack (`ui-monospace, SFMono-Regular, Menlo, …`) and ships no bytes; it is reached only by code surfaces — the fenced-code highlighter, the builder's editor pane, a keyboard chip, a secret or a path shown verbatim — never by a numeric. Both bundled family tokens carry mandatory CJK fallbacks: neither face has CJK coverage, and without them the reading face silently drops to a UA default in the largest markets. Mobile maps those genera to loaded faces through the same names.
 
 | Role | Brief role | Face | Size / line-height | Weight | Native delta |
 | --- | --- | --- | --- | --- | --- |
-| `--t-display` | Display | Instrument Serif | 31 / 36, −0.01em | 400 | −4 / −4 |
+| `--t-display` | Display | Source Serif 4 | 31 / 36, −0.01em | 400 | −4 / −4 |
 | `--t-title` | (sanctioned intermediate) | Instrument Sans | 20 / 26 | 500 | +2 / +2 |
-| `--t-reading` | Reading | Source Serif 4 | 19 / 33 | 400 | −1.5 / −2 |
+| `--t-reading` | Reading | Source Serif 4 | 19 / 31 | 400 | −1.5 / −2 |
 | `--t-body` | Body | Instrument Sans | 15 / 22 | 400 | +2 / +2 |
 | `--t-body-strong` | Body emphasis | Instrument Sans | 15 / 22 | 500 | +2 / +2 |
 | `--t-small` | UI | Instrument Sans | 13 / 19 | 400 | +2 / +2 |
 | `--t-small-strong` | UI | Instrument Sans | 13 / 19 | 500 | +2 / +2 |
 | `--t-control` | Micro | Instrument Sans | 11 / 15 | 500 | +2 / +2 |
 | `--t-eyebrow` | Micro caps | Instrument Sans | 11 / 15, +0.06em, uppercase | 400 | +2 / +2 |
-| `--t-mono` | Numeric | DM Mono | 11.5 / 16, tabular-nums | 400 | +1 / +2 |
+| `--t-mono` | Numeric | Instrument Sans | 11 / 15, tabular-nums | 400 | +2 / +2 |
 
 `--t-title` is the one role with no slot in the brief. It is kept deliberately: a section heading between the 31px display serif and the 15px body is real, and the alternative is every surface inventing one. Everything else is the brief's seven roles, with the two-weight pairs named from the prose side (`small`) and the control side (`small-strong`, `control`).
 
@@ -399,7 +401,7 @@ Link is not a size role: it inherits, takes `--link`, and is always underlined.
 
 Every `--t-*` is a `font` shorthand, and the properties that shorthand cannot carry travel beside it as their own tokens rather than as decoration a stylesheet has to remember: `--t-display-tracking` −0.01em, `--t-eyebrow-tracking` 0.06em, `--t-eyebrow-transform` uppercase, and `--t-mono-numeric` tabular-nums. "Numerics are tabular in every app, without exception" is only true while that last one exists and is used.
 
-The numeric role also declares its own reading direction: `--t-mono-direction` `ltr` and `--t-mono-bidi` `isolate`, set once on the role, never per span. A number is not a word — under RTL the bidi algorithm reorders a mixed digit-and-word run (`30 July 2026 · 17:42` reads back to front) unless the role pins its own direction and isolates it from the surrounding paragraph. This lands on TEXT elements only: a layout container must never carry the numeric face, because its inline axis would flip along with it. The defect was shell-wide, not app-specific — it was reordering the stem's gateway line and the account handle beside every mono-set date and count in the product. The distinct composable size rungs are `--t-display-size` 31px, `--t-title-size` 20px, `--t-reading-size` 19px, `--t-body-size` 15px, `--t-small-size` 13px, `--t-control-size` 11px, and `--t-mono-size` 11.5px. `--t-body-strong-size` does not exist because it would duplicate the body rung, and the same is true of `--t-small-strong-size` and `--t-eyebrow-size`. There are no line-height rungs. The declaration order in `typography.ts` is ramp order precisely because it decides which name owns each rung.
+The numeric role also declares its own reading direction: `--t-mono-direction` `ltr` and `--t-mono-bidi` `isolate`, set once on the role, never per span. A number is not a word — under RTL the bidi algorithm reorders a mixed digit-and-word run (`30 July 2026 · 17:42` reads back to front) unless the role pins its own direction and isolates it from the surrounding paragraph. This lands on TEXT elements only: a layout container must never carry the numeric face, because its inline axis would flip along with it. The defect was shell-wide, not app-specific — it was reordering the stem's gateway line and the account handle beside every mono-set date and count in the product. The distinct composable size rungs are `--t-display-size` 31px, `--t-title-size` 20px, `--t-reading-size` 19px, `--t-body-size` 15px, `--t-small-size` 13px, and `--t-control-size` 11px — **six**, not seven. `--t-body-strong-size` does not exist because it would duplicate the body rung, and the same is true of `--t-small-strong-size`, `--t-eyebrow-size` and, since v7 folded the numeric role from 11.5 to 11, `--t-mono-size`: annotation, micro caps and numerics are one 11px rung, so they get one name. Half a pixel from 11 is not a step, and 11.5px lowers to `.71875rem`, which is where a ladder stops being a ladder. There are no line-height rungs. The declaration order in `typography.ts` is ramp order precisely because it decides which name owns each rung.
 
 Native consumes the pre-lowered `nativeDelta`; it does not parse CSS or do runtime math. Two roles step DOWN on a phone rather than up — display to 27 and reading to 17.5 — because a 31px serif title overruns a 390px screen. Text scaling and Dynamic Type may enlarge a role, never shrink it below 11px.
 

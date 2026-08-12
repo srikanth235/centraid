@@ -135,6 +135,7 @@ export const spacing = {
 
 export const metrics = {
   control: 34,
+  controlTouch: 44,
   row: 44,
   segmented: 28,
   stem: 240,
@@ -156,13 +157,6 @@ export const density = {
 } as const;
 
 export const fonts = {
-  display: {
-    regular: 'InstrumentSerif_400Regular',
-  },
-  mono: {
-    medium: 'DMMono_500Medium',
-    regular: 'DMMono_400Regular',
-  },
   sans: {
     medium: 'InstrumentSans_500Medium',
     regular: 'InstrumentSans_400Regular',
@@ -176,10 +170,10 @@ export const type = {
   body: { family: 'sans', fontSize: 17, lineHeight: 24, weight: '400' },
   bodyStrong: { family: 'sans', fontSize: 17, lineHeight: 24, weight: '500' },
   control: { family: 'sans', fontSize: 13, lineHeight: 17, weight: '500' },
-  display: { family: 'display', fontSize: 27, lineHeight: 32, weight: '400', letterSpacing: -0.27 },
+  display: { family: 'serif', fontSize: 27, lineHeight: 32, weight: '400', letterSpacing: -0.27 },
   eyebrow: { family: 'sans', fontSize: 13, lineHeight: 17, weight: '400', letterSpacing: 0.78, textTransform: 'uppercase' },
-  mono: { family: 'mono', fontSize: 12.5, lineHeight: 18, weight: '400', fontVariant: ['tabular-nums'] },
-  reading: { family: 'serif', fontSize: 17.5, lineHeight: 31, weight: '400' },
+  mono: { family: 'sans', fontSize: 13, lineHeight: 17, weight: '400', fontVariant: ['tabular-nums'] },
+  reading: { family: 'serif', fontSize: 17.5, lineHeight: 29, weight: '400' },
   small: { family: 'sans', fontSize: 15, lineHeight: 21, weight: '400' },
   smallStrong: { family: 'sans', fontSize: 15, lineHeight: 21, weight: '500' },
   title: { family: 'sans', fontSize: 22, lineHeight: 28, weight: '500' },

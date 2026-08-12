@@ -130,7 +130,7 @@
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border: 0.5px solid var(--line);
   box-shadow: var(--shadow-md);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
 }
 .buildingDot {

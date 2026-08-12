@@ -80,13 +80,13 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   margin-bottom: 11px;
 }
 .auCrumb button {
   font: inherit;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   background: none;
   border: none;
@@ -174,7 +174,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .auTrigbadgeIc {
@@ -370,7 +370,7 @@
   text-overflow: ellipsis;
 }
 .auOvRunSum {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;

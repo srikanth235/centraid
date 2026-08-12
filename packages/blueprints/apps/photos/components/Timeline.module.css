@@ -83,8 +83,8 @@
 
 .row {
   display: flex;
-  gap: 2px;
-  margin-bottom: 2px;
+  gap: var(--sp-gutter);
+  margin-bottom: var(--sp-gutter);
   /* Timeline windowing without a virtualization lib: the browser skips
      layout/paint/decode for rows that are off-screen and remembers each row's
      real height once measured (the `auto` keyword), so scrolling a deep

@@ -1,47 +1,72 @@
 // Centraid's one semantic type scale — the Binding Layer's second invariant.
 //
-// ONE RAMP, TWO REGISTERS. Seven sizes, four faces, two weights (400 and 500).
-// Every app declares its primary register — reading or scanning — and draws
-// every role from this one ramp. Numerics are mono and tabular in every app,
-// without exception, which is why `mono` carries `variantNumeric` here rather
-// than leaving it to a stylesheet.
+// ONE RAMP, TWO FACES. Six sizes, two bundled faces, two weights (400 and
+// 500). An app does NOT declare a primary register: the face a piece of text
+// takes is a property of its ROLE, not of the app it appears in (v4s). Serif
+// is the reading role only — a document, a note, empty-state prose, a conflict
+// excerpt. Sans is everything else, in every app equally.
 //
-// The brief's seven roles map onto the repo's role NAMES (no alias layer, and
-// no rename of ~400 consumer sites):
+// The nine legal pairs, and the repo role NAMES that carry them (no alias
+// layer, and no rename of ~400 consumer sites):
 //
-//   Display  → `display`      31/36 display-serif 400, −.01em
-//   Reading  → `reading`      19/33 serif 400              (new)
-//   Body     → `body`         15/22 sans 400  (+ `bodyStrong` at 500)
-//   UI       → `small`        13/19 sans 400  (+ `smallStrong` at 500)
-//   Micro    → `control`      11/15 sans 500  (+ `eyebrow` at 400, caps)
-//   Numeric  → `mono`         11.5/16 mono 400, tabular
-//   Link     → not a size role: `--link` plus an underline, inheriting.
+//   Display     → `display`      serif 400 · 31/36 · −.01em
+//   Reading     → `reading`      serif 400 · 19/31
+//   Title       → `title`        sans  500 · 20/26
+//   Section     → `body`         sans  400 · 15/22 (+ `bodyStrong` at 500)
+//   Row/tile    → `small`        sans  400 · 13/19 (+ `smallStrong` at 500)
+//   Annotation  → `eyebrow`      sans  400 · 11/15, caps +.06em
+//                 `control`      sans  500 · 11/15
+//                 `mono`         sans  400 · 11/15, tabular  ← the NUMERIC role
+//   Link        → not a size role: `--link` plus an underline, inheriting.
 //
-// `title` (20/26 sans 500) is the ONE sanctioned intermediate. It is not in
-// the brief; it is kept because ~50 sites need a section heading between the
-// 31px display serif and the 15px body, and inventing one per surface is
-// exactly the drift the ramp exists to stop.
+// v4s withdrew two faces. `Instrument Serif` is gone — display is Source Serif
+// 4, the one serif. `DM Mono` is gone — numerics are Instrument Sans with
+// `font-variant-numeric: tabular-nums`, which is why the `mono` ROLE now draws
+// in the sans and keeps its `variantNumeric` rather than leaning on a face.
+// The role name survives because ~470 sites spell it; what it means changed.
+//
+// v7 folded the ramp from sixteen weight+size pairs to nine. The numeric role
+// moved 11.5 → 11: half a pixel from 11 is not a step, and 11.5px is
+// `.71875rem`, which is where a ladder stops being a ladder. It therefore
+// shares the 11px rung with `control`, so the rung is published once and the
+// numeric role no longer owns a `-size` name of its own. Call sites that used
+// to reach for it read `--t-control-size` — one name for one number.
 //
 // Nothing falls below 11px. Emitters may adapt units (blueprint uses rem), but
 // they do not get to invent another scale. Native uses the explicit delta on
 // each role so React Native never parses CSS or does runtime arithmetic.
 
+/**
+ * The BUNDLED faces — the two this package ships `.woff2` bytes for. v4s cut
+ * this from four: two font downloads removed, and a face is no longer
+ * something an app can choose.
+ */
 export const fonts = {
-  display: "Instrument Serif",
-  mono: "DM Mono",
   sans: "Instrument Sans",
   serif: "Source Serif 4",
 } as const;
 
-export type FontFamily = keyof typeof fonts;
+/** A face with vendored bytes under `../fonts`. */
+export type BundledFace = keyof typeof fonts;
 
-// CJK fallbacks are MANDATORY, not defensive. None of the four faces has CJK
+/**
+ * Every family a stack names.
+ *
+ * `mono` is NOT a face and ships no bytes: it is the PLATFORM code stack,
+ * reached only by code surfaces (the fenced-code highlighter, the builder's
+ * editor pane, a keyboard chip, a secret or a path shown verbatim). v4s
+ * deleted the numeric face, not the ability to set code in a fixed advance —
+ * a proportional face turns an aligned diff into a ragged one. Nothing
+ * downloads for it, so the ruling's measured win (two fewer font downloads)
+ * holds exactly.
+ */
+export type FontFamily = BundledFace | "mono";
+
+// CJK fallbacks are MANDATORY, not defensive. Neither bundled face has CJK
 // coverage; without an explicit fallback the browser silently substitutes a UA
-// default and the product's signature disappears in its largest markets.
+// default and the reading face disappears in the largest markets.
 export const fontStacks = {
-  display:
-    "'Instrument Serif', Charter, 'Hiragino Mincho ProN', 'Noto Serif JP', 'Noto Serif SC', 'Songti SC', Georgia, serif",
-  mono: "'DM Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+  mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
   sans: "'Instrument Sans', 'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif",
   serif:
     "'Source Serif 4', Charter, 'Hiragino Mincho ProN', 'Noto Serif JP', 'Noto Serif SC', 'Songti SC', Georgia, serif",
@@ -80,7 +105,6 @@ export interface TypeStyle {
  * mobile value is smaller — see `NATIVE_DELTA_OVERRIDES`.
  */
 export const NATIVE_DELTA_BY_FAMILY = {
-  display: { lineHeight: 2, size: 2 },
   mono: { lineHeight: 2, size: 1 },
   sans: { lineHeight: 2, size: 2 },
   serif: { lineHeight: 2, size: 2 },
@@ -90,7 +114,8 @@ export const NATIVE_DELTA_BY_FAMILY = {
  * The two roles the brief gives an explicit mobile size for. A 31px display
  * serif overruns a 390px phone title, and 19px reading prose is one step
  * looser than a phone column wants, so both step DOWN rather than up:
- * display 31 → 27, reading 19 → 17.5.
+ * display 31 → 27, reading 19 → 17.5. Editorial sizes step down on touch and
+ * UI sizes step up; that is documented behaviour, not drift (v7 §D).
  */
 export const NATIVE_DELTA_OVERRIDES = {
   display: { lineHeight: -4, size: -4 },
@@ -115,7 +140,7 @@ const style = <T extends TypeStyleSource>(
 // rung and `--t-control-size` the 11px one.
 export const type = {
   display: style("display", {
-    family: "display",
+    family: "serif",
     letterSpacing: "-0.01em",
     lineHeight: 36,
     size: 31,
@@ -129,7 +154,7 @@ export const type = {
   }),
   reading: style("reading", {
     family: "serif",
-    lineHeight: 33,
+    lineHeight: 31,
     size: 19,
     weight: "400",
   }),
@@ -171,11 +196,16 @@ export const type = {
     textTransform: "uppercase",
     weight: "400",
   }),
+  // The NUMERIC role. Sans since v4s — "numerics are Instrument Sans with
+  // tabular figures" — and 11/15 since v7 folded 11.5 onto the 11px rung. It
+  // shares that rung with `control`, so `typeSizeRungs` publishes it once, as
+  // `--t-control-size`; the `--t-mono` shorthand and its modifiers are still
+  // this role's own, because weight, figures and direction are not the size.
   mono: style("mono", {
     direction: "ltr",
-    family: "mono",
-    lineHeight: 16,
-    size: 11.5,
+    family: "sans",
+    lineHeight: 15,
+    size: 11,
     unicodeBidi: "isolate",
     variantNumeric: "tabular-nums",
     weight: "400",

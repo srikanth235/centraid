@@ -93,7 +93,7 @@
   display: grid;
   gap: 7px;
   color: var(--text-soft);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
 }
 
@@ -168,7 +168,7 @@
 
 .participants legend {
   padding-inline: 5px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
 }
 

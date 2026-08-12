@@ -49,7 +49,7 @@
   background: transparent;
   color: var(--text-faint);
   font: inherit;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   cursor: pointer;
   padding: 4px 6px;
@@ -137,7 +137,7 @@
   background: var(--bg-sunken);
   color: var(--text);
   font: inherit;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   border-radius: 999px;
   padding: 4px 8px 4px 6px;
@@ -212,7 +212,7 @@
 .instrHint {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   white-space: nowrap;
   overflow: hidden;
@@ -250,7 +250,7 @@
 }
 .harnessPickerHint {
   margin: 4px 0 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
@@ -301,7 +301,7 @@
 }
 .connPickerHint {
   margin: 4px 0 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
@@ -493,7 +493,7 @@
 }
 .connFormLead {
   margin: 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
@@ -514,7 +514,7 @@
   background: transparent;
   color: var(--accent);
   font: inherit;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   cursor: pointer;
   padding: 0;
@@ -523,7 +523,7 @@
 .connGuideList {
   margin: 6px 0 0;
   padding-left: 18px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.45;
   color: var(--text-faint);
 }
@@ -618,7 +618,7 @@
   gap: 7px;
 }
 .fieldLabel {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-faint);
@@ -734,7 +734,7 @@
 }
 .pickerKind {
   font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text);
 }
 @keyframes mention-in {
@@ -774,7 +774,7 @@
 .sectionHint {
   margin: 4px 0 0;
   color: var(--text-ghost);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
 }
 .addTrigger {
   display: flex;
@@ -859,7 +859,7 @@
   gap: 8px;
   padding: 9px 12px;
   border-radius: var(--r-md);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--c-amber-text);
   background: color-mix(in srgb, var(--c-amber) 12%, transparent);
@@ -924,7 +924,7 @@
   color: var(--text);
 }
 .trigDesc {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .trigDetail {
@@ -952,7 +952,7 @@
 }
 .trigHint {
   margin: 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .trigHint code {
@@ -1039,7 +1039,7 @@
   align-items: center;
   gap: 9px;
   flex-wrap: wrap;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .webhookUrl {
@@ -1094,7 +1094,7 @@
   gap: 6px;
 }
 .chip {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
@@ -1125,7 +1125,7 @@
 }
 .notifLine code {
   font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
 }
 .notifMeta {
@@ -1228,7 +1228,7 @@
 .grantTarget {
   flex: 1;
   min-width: 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1279,7 +1279,7 @@
 .footerHint {
   margin: 0;
   flex: 1 1 12ch;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.45;
   color: var(--text-ghost);
   min-width: 0;
@@ -1310,7 +1310,7 @@
   user-select: none;
 }
 .enableText {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   color: var(--text-faint);
   min-width: 1.6em;
