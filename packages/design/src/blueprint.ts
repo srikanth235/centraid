@@ -12,7 +12,13 @@
 // only the app's slot on the OKLCH identity wheel, and the neutrals are the
 // system's literal paper.
 
-import { DENSITY_TIERS, pageMargin, spacing } from "./density";
+import {
+  DENSITY_TIERS,
+  metrics,
+  pageMargin,
+  spacing,
+  subBase,
+} from "./density";
 import { paletteFor, paletteText } from "./palette";
 import { radii } from "./radii";
 import { emitRecipeCss } from "./recipes/css";
@@ -113,9 +119,10 @@ function lightProps(): Record<string, string> {
     "--dur-2": "280ms",
     "--ease": EASE,
     "--ease-entry": EASE_ENTRY,
-    "--h-control": "34px",
-    "--h-row": "44px",
-    "--h-segmented": "28px",
+    // From `metrics`, never re-typed — the shell sheet reads the same three.
+    "--h-control": `${metrics.control}px`,
+    "--h-row": `${metrics.row}px`,
+    "--h-segmented": `${metrics.segmented}px`,
     "--density-row": `${DENSITY_TIERS.comfortable.row}px`,
     "--density-pad": `${DENSITY_TIERS.comfortable.pad}px`,
     "--o-disabled": "0.45",
@@ -124,13 +131,18 @@ function lightProps(): Record<string, string> {
     // did — 20px, which is neither rung.
     "--page-margin": `${pageMargin.desktop}px`,
     "--page-margin-compact": `${pageMargin.mobile}px`,
-    "--target-min": "44px",
+    "--target-min": `${metrics.controlTouch}px`,
     ...themeProps(lightTheme),
   };
   for (const [key, value] of Object.entries(radii)) {
     props[`--r-${key}`] = `${value}px`;
   }
   for (const [key, value] of Object.entries(spacing)) {
+    props[`--sp-${key}`] = `${value}px`;
+  }
+  // The two named sub-base seams (v7 §E) — same namespace, same reason as the
+  // shell sheet: an app pane may not invent a third value under the base.
+  for (const [key, value] of Object.entries(subBase)) {
     props[`--sp-${key}`] = `${value}px`;
   }
   for (const [key, value] of Object.entries(fontStacks)) {
@@ -169,7 +181,9 @@ export function toBlueprintCss(): string {
       "}",
     ].join("\n"),
     densities,
-    "@media (pointer: fine) { :root { --target-min: 32px; } }",
+    // Same one axis as the shell sheet — 44 on touch, `metrics.control` under
+    // a pointer (v7 §C). See css.ts for why 32px was not a rung.
+    `@media (pointer: fine) { :root { --target-min: ${metrics.control}px; } }`,
     [
       "@media (prefers-reduced-motion: reduce) {",
       "  :where(:root) { --dur-1: 0ms; --dur-2: 0ms; }",

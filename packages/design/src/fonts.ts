@@ -25,7 +25,7 @@
 import path from "node:path";
 
 import type { FontFile } from "./font-faces";
-import type { FontFamily } from "./typography";
+import type { BundledFace } from "./typography";
 
 // `__dirname`, not `import.meta.dirname`: this package emits CommonJS.
 const PACKAGE_ROOT = path.resolve(__dirname, "..");
@@ -45,14 +45,8 @@ export const FONTS_DIR: string = path.join(PACKAGE_ROOT, "fonts");
  * font package that nothing appears to reference gets pruned — taking the
  * provenance of the vendored bytes with it.
  */
-const fontSourceRoot = (genus: FontFamily): string => {
+const fontSourceRoot = (genus: BundledFace): string => {
   switch (genus) {
-    case "display":
-      return path.dirname(
-        require.resolve("@fontsource/instrument-serif/package.json")
-      );
-    case "mono":
-      return path.dirname(require.resolve("@fontsource/dm-mono/package.json"));
     case "sans":
       return path.dirname(
         require.resolve("@fontsource/instrument-sans/package.json")

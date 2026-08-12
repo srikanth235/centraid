@@ -266,7 +266,7 @@
   border: 0.5px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--bg-sunken);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .tools > summary {
@@ -404,7 +404,7 @@
 .acEmpty {
   padding: 8px 10px;
   color: var(--text-ghost);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
 }
 .composerRow:focus-within {
   border-color: var(--accent);
@@ -744,7 +744,7 @@
   border-radius: 999px;
   padding: 7px 14px;
   font: inherit;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   cursor: pointer;
 }
 .suggestChip:hover {
@@ -854,7 +854,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
   color: var(--text-faint);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   cursor: pointer;
 }
 

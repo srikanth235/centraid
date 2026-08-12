@@ -192,7 +192,7 @@
 }
 
 .loadError {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--danger);
 }
 
@@ -290,7 +290,7 @@
 .policyGroup h4 {
   margin: 0;
   color: var(--text);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -309,7 +309,7 @@
 .destinationGrid dd {
   margin: 2px 0 0;
   color: var(--text);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   overflow-wrap: anywhere;
 }
 .localWarning {

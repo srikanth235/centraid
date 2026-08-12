@@ -510,7 +510,7 @@ const makeStyles = (colors: ThemeColors) =>
     activeName: {
       ...t("title"),
       color: colors.text,
-      fontFamily: family.displayRegular,
+      fontFamily: family.serifRegular,
     },
     activePill: {
       borderRadius: 8,
@@ -620,7 +620,7 @@ const makeStyles = (colors: ThemeColors) =>
     scrim: { backgroundColor: "rgba(0,0,0,.42)", ...StyleSheet.absoluteFill },
     title: {
       color: colors.text,
-      fontFamily: family.displayRegular,
+      fontFamily: family.serifRegular,
       fontSize: 28,
       letterSpacing: -0.4,
       marginTop: 2,

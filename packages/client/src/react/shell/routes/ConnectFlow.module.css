@@ -178,7 +178,7 @@
    two surfaces cannot drift apart on when the OS dialog is announced. */
 .keychainNote {
   margin-top: 12px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--text-soft);
 }
@@ -197,7 +197,7 @@
   padding: 8px 12px;
   border-radius: 8px;
   font: var(--t-small);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
   color: var(--text-soft);
@@ -342,7 +342,7 @@
   background: transparent;
   border: none;
   font: var(--t-small);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   cursor: pointer;
 }

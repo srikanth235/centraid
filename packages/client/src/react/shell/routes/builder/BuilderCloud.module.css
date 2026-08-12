@@ -75,7 +75,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   padding: 6px 12px;
 }
 .refreshBtn svg {
@@ -98,7 +98,7 @@
   background: var(--bg-sunken);
   padding: 1px 6px;
   border-radius: var(--r-sm);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
 }
 .statGrid {
   margin-top: 24px;
@@ -151,7 +151,7 @@
 }
 .logsChip {
   padding: 4px 10px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   border: 1px solid var(--line);
   border-radius: 999px;
   background: transparent;
@@ -175,7 +175,7 @@
   border: 1px solid var(--line);
   background: var(--bg-sunken);
   color: var(--text);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   outline: none;
 }
 .logsList {
@@ -192,7 +192,7 @@
   align-items: baseline;
   gap: 8px;
   padding: 6px 10px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-family: var(--font-mono);
   border-bottom: 1px solid var(--line);
 }
@@ -276,7 +276,7 @@
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
 }
 .automationToggleText {

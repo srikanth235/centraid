@@ -5,17 +5,18 @@ import { toNativeTheme } from "@centraid/design";
 import type { NativeTheme } from "@centraid/design";
 
 // Direct sub-path exports (see App.tsx's import comment) fix each face's
-// weight to its own RN font-family name. The Binding Layer's four faces:
-// Instrument Sans (body/UI), Instrument Serif (display), Source Serif 4
-// (reading), DM Mono (numeric).
+// weight to its own RN font-family name.
+//
+// The Binding Layer's TWO faces since v4s: Instrument Sans (body, UI and
+// numerics) and Source Serif 4 (display and reading). The genus keys here are
+// exactly `fontStacks`'s keys in @centraid/design — that is the parity this
+// module exists to hold, so a face withdrawn on the web sheet cannot survive
+// on the phone.
+//
+// `mono` is the PLATFORM code stack, not a bundled face: nothing is loaded for
+// it and no ROLE draws in it. It is resolved on the consumer side, where
+// `Platform` is available — see kit/theme/index.ts#family.
 const FONT_ROLES = {
-  display: {
-    regular: "InstrumentSerif_400Regular",
-  },
-  mono: {
-    medium: "DMMono_500Medium",
-    regular: "DMMono_400Regular",
-  },
   sans: {
     medium: "InstrumentSans_500Medium",
     regular: "InstrumentSans_400Regular",

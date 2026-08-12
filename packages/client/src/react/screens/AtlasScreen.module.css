@@ -92,7 +92,7 @@
 .loading,
 .error {
   font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   padding: 24px 4px;
 }

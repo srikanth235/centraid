@@ -92,7 +92,7 @@
   border-radius: var(--r-md);
   background: none;
   font: inherit;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 500;
   color: var(--text-faint);
   cursor: pointer;
@@ -126,7 +126,7 @@
   border-radius: 999px;
   background: var(--bg-elev);
   font: inherit;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   cursor: pointer;
   transition: border-color 0.14s ease;

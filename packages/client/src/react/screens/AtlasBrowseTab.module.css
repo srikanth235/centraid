@@ -12,13 +12,13 @@
 
 .loading {
   font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   padding: 24px 4px;
 }
 .gridError {
   font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--danger);
   padding: 12px 14px;
   border: 0.5px solid var(--danger);
@@ -136,7 +136,7 @@
 .pickGroup {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--sp-hair);
 }
 .pickPack {
   font-family: var(--font-mono);
@@ -196,7 +196,7 @@
 .pickEmpty {
   padding: 12px 6px;
   font-family: var(--font-sans);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 
@@ -724,7 +724,7 @@
   background: color-mix(in oklab, var(--danger) 8%, transparent);
   color: var(--danger);
   font-family: var(--font-sans);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
 }
 .drawerFoot {
@@ -861,7 +861,7 @@
   background: color-mix(in oklab, var(--danger) 7%, transparent);
   color: var(--text-soft);
   font-family: var(--font-sans);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.45;
 }
 .dialogWarn {
@@ -872,7 +872,7 @@
   background: var(--bg-sunken);
   color: var(--text-faint);
   font-family: var(--font-sans);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.45;
 }
 .dialogFoot {

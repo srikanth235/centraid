@@ -117,7 +117,7 @@
 }
 .bandEmpty {
   margin: 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   padding: 10px 12px;
   border: 0.5px dashed var(--line);
@@ -177,7 +177,7 @@
    global rule, which already zeroes `.stepMark`'s spin. */
 .stepLabel {
   font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text);
   overflow: hidden;
@@ -209,7 +209,7 @@
 }
 
 .history {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .history summary {
@@ -232,7 +232,7 @@
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   text-align: left;
   padding: 5px 8px;
@@ -363,7 +363,7 @@
 .artifactEmpty {
   margin: 0;
   padding: 14px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 

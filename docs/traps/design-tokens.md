@@ -49,6 +49,34 @@ The rule now: the shell and every app share ONE page colour, `--bg` / `colors.bg
 
 - [ ] Grounding a page? Read `--bg` / `colors.bg` — never a per-app page colour, and never a new `data-tone`.
 
+## There are TWO faces, and the face follows the ROLE
+
+v4s withdrew the same freedom on the type side that the tone axis had on the colour side. An app used to declare a **primary register** — reading or scanning — and its prose took a different face depending on which app it was in. That is gone. The face a piece of text takes is a property of its **role**:
+
+- **Serif** (`Source Serif 4`) is the reading role only — a document in Docs, a note in Notes, empty-state prose, a conflict excerpt. Display is the same serif, larger.
+- **Sans** (`Instrument Sans`) is everything else, in every app equally. That includes the numeric role: `--t-mono` is the sans with `font-variant-numeric: tabular-nums`, **not** a monospace face.
+
+Two faces were deleted outright and are not coming back through a side door: `Instrument Serif` (display is the one serif) and `DM Mono` (numerics take tabular figures). `packages/design/fonts` ships **six** `.woff2` files, and `fonts.test.ts` pins that count — a seventh is the two-download win being quietly undone.
+
+`--font-mono` still exists and is still legitimate, but it now names the **platform** code stack and downloads nothing. It is for code, a path, a ticket or a recovery key shown verbatim — a fixed advance where the alignment carries meaning. A count, a date, a file size or a duration is a **number**, and a number takes `--t-mono`, which is the sans.
+
+- [ ] Setting prose? Take the role. There is no app-level face, register, or `register` field on a manifest.
+- [ ] Setting a number? `font: var(--t-mono); font-variant-numeric: var(--t-mono-numeric);` — not `font-family: var(--font-mono)`.
+- [ ] Reaching for `--font-mono`? Only if a human would notice the characters failing to line up.
+
+## Two values live under the 4px base, and they are named
+
+`4 / 8 / 12 / 16 / 24 / 32` is the gap scale. v7 measured fifteen sub-base gaps in the reference — 1, 2, 3, 5 and 6px — and folded thirteen back onto it. The two survivors are seams rather than rhythm steps, and they are tokens precisely so the difference is legible in a diff:
+
+| Token         | Value | Only use                                |
+| ------------- | ----- | --------------------------------------- |
+| `--sp-hair`   | 1px   | the rule inside a tight text stack      |
+| `--sp-gutter` | 2px   | the seam between two images in a mosaic |
+
+A loose `gap: 2px` is indistinguishable from someone eyeballing a rung; `var(--sp-gutter)` says which of the two exceptions is being claimed. Nothing else under 4px is permitted — a third sub-base value is a system change, not a call-site decision.
+
+- [ ] Under 4px? Use `--sp-hair` or `--sp-gutter`, or move onto the scale. There is no third option.
+
 ## Checklist
 
 - [ ] Change tokens in `packages/design/src`, not in a one-off CSS file under `apps/`

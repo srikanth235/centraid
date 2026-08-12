@@ -24,13 +24,46 @@ export const spacing = {
 } as const satisfies DensityScale;
 
 /**
+ * The only two values below the 4px base, and the reason they are NAMED.
+ *
+ * v7 measured fifteen sub-base gaps in the reference — 1, 2, 3, 5 and 6px —
+ * and folded thirteen of them back onto the scale. Two survive because they
+ * are not spacing at all: they are seams, and a seam is a line rather than a
+ * rhythm step. Naming them is what makes the difference enforceable. A loose
+ * `gap: 2px` is indistinguishable from someone eyeballing a rung; a
+ * `var(--sp-gutter)` says which of the two exceptions is being claimed.
+ *
+ * Nothing else under 4px is permitted. A third sub-base value is a system
+ * change, not a call-site decision.
+ */
+export const subBase = {
+  /** The seam between two images in a mosaic — a cut, not a gap. */
+  gutter: 2,
+  /** The rule inside a tight text stack. */
+  hair: 1,
+} as const;
+
+/**
  * Component metrics. These are invariants, not preferences: a control below
  * 34px stops being reliably hittable, a row below 44px stops being a tap
  * target, and the stem is the one band whose width may never change.
  */
 export const metrics = {
-  /** Every control — button, field, select — is exactly this tall. */
+  /** Every control — button, field, select — is exactly this tall UNDER A
+   *  POINTER. On touch it is `controlTouch`; see below. */
   control: 34,
+  /**
+   * A control on touch, without exception (v7 §C).
+   *
+   * The one axis the system has is pointer-or-touch, and this is the number
+   * that axis exists to carry. The audit found controls sitting at 34 on the
+   * phone because the surface was re-decided by hand at the call site — under
+   * the 44px floor, on the surface where the floor is not advisory. It is a
+   * FLOOR, not a preference: `--target-min` starts here and only a `(pointer:
+   * fine)` query lowers it to `control`, so a surface that never proves it has
+   * a pointer keeps 44.
+   */
+  controlTouch: 44,
   /** A list/table row at the comfortable tier. */
   row: 44,
   /** A segmented control, the one control allowed to sit under 34px because

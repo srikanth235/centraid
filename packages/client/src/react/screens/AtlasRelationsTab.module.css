@@ -47,7 +47,7 @@
   background: transparent;
   color: var(--text-faint);
   font-family: var(--font-sans);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   cursor: pointer;
   transition:
     color 0.15s var(--ease),
@@ -71,7 +71,7 @@
   background: var(--bg-elev);
   color: var(--text-soft);
   font-family: var(--font-sans);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   cursor: pointer;
   transition:
     border-color 0.15s var(--ease),
@@ -402,7 +402,7 @@
 }
 .sampleRow {
   font-family: var(--font-sans);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   line-height: 1.35;
   overflow: hidden;

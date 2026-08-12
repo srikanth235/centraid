@@ -1,15 +1,16 @@
 // Direct sub-path imports avoid the package's barrel index.js which
 // re-exports every weight (some of which Metro fails to resolve).
 //
-// The Binding Layer's four faces, two weights (400 / 500) each where the face
-// ships one: Instrument Sans (body/UI), Instrument Serif (display, plus its
-// italic for the home greeting), Source Serif 4 (reading), DM Mono (numeric).
-import DMMono_400Regular from "@expo-google-fonts/dm-mono/400Regular/DMMono_400Regular.ttf";
-import DMMono_500Medium from "@expo-google-fonts/dm-mono/500Medium/DMMono_500Medium.ttf";
+// The Binding Layer's TWO faces, two weights (400 / 500) where the face ships
+// both: Instrument Sans (body, UI, and — since v4s — numerics, which take
+// tabular figures rather than a face of their own) and Source Serif 4 (the one
+// serif: display and reading). `Instrument Serif` and `DM Mono` are withdrawn,
+// so this list must stay three files, not seven — a face loaded here that the
+// ramp cannot name is exactly the divergence from the web sheet that the
+// generated theme exists to prevent. Code surfaces use the PLATFORM monospace
+// (see kit/theme/index.ts#family), which loads nothing.
 import InstrumentSans_400Regular from "@expo-google-fonts/instrument-sans/400Regular/InstrumentSans_400Regular.ttf";
 import InstrumentSans_500Medium from "@expo-google-fonts/instrument-sans/500Medium/InstrumentSans_500Medium.ttf";
-import InstrumentSerif_400Regular from "@expo-google-fonts/instrument-serif/400Regular/InstrumentSerif_400Regular.ttf";
-import InstrumentSerif_400Regular_Italic from "@expo-google-fonts/instrument-serif/400Regular_Italic/InstrumentSerif_400Regular_Italic.ttf";
 import SourceSerif4_400Regular from "@expo-google-fonts/source-serif-4/400Regular/SourceSerif4_400Regular.ttf";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -399,12 +400,8 @@ export default function App(): React.JSX.Element | null {
   // the tradeoff note below the effects). `useFonts` still re-renders this
   // component when the faces land, which is what swaps the system fallback out.
   useFonts({
-    DMMono_400Regular,
-    DMMono_500Medium,
     InstrumentSans_400Regular,
     InstrumentSans_500Medium,
-    InstrumentSerif_400Regular,
-    InstrumentSerif_400Regular_Italic,
     SourceSerif4_400Regular,
   });
 
@@ -421,7 +418,7 @@ export default function App(): React.JSX.Element | null {
   }, []);
 
   // Deliberate tradeoff (#659 M3): the splash lifts as soon as the profile has
-  // hydrated, *without* waiting on the ten font faces. Text therefore paints in
+  // hydrated, *without* waiting on the three font faces. Text therefore paints in
   // the system font for the frame or two before `useFonts` resolves and
   // re-renders. The alternative — the previous `!fontsLoaded` gate — held a
   // blank screen for the whole font load on every cold start, which is a far

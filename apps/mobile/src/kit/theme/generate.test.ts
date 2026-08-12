@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { fontStacks } from "@centraid/design";
+
 import { buildTheme, renderTokensModule } from "./generate";
 
 const GENERATED = fileURLToPath(
@@ -54,12 +56,41 @@ describe("typed native lowering", () => {
     expect(theme.type.body.fontSize).toBe(17);
   });
 
-  it("spends no hue — the accent is ink, and there is no legacy display face", () => {
+  it("spends no hue — the accent is ink, and loads exactly the two bundled faces", () => {
     expect(theme.light.accent).toBe(theme.light.text);
     expect(theme.dark.accent).toBe(theme.dark.text);
     expect(theme.fonts.serif.regular).toBe("SourceSerif4_400Regular");
-    expect(theme.fonts.display.regular).toBe("InstrumentSerif_400Regular");
+    expect(theme.fonts.sans.regular).toBe("InstrumentSans_400Regular");
+    // v4s withdrew both. `display` is the one serif and numerics are the sans
+    // with tabular figures, so the phone must not go on loading two faces the
+    // web sheet no longer publishes — that divergence is the whole reason this
+    // module is generated rather than hand-written.
+    expect(theme.fonts).not.toHaveProperty("display");
+    expect(theme.fonts).not.toHaveProperty("mono");
     expect(theme.fonts).not.toHaveProperty("title");
+    // The genus keys the phone loads are exactly the BUNDLED faces the design
+    // package ships bytes for — `mono` is the platform code stack, resolved on
+    // the consumer side, and belongs in neither list.
+    expect(Object.keys(theme.fonts).sort()).toStrictEqual(["sans", "serif"]);
+  });
+
+  it("draws every role from a genus the web sheet also publishes", () => {
+    // The one invariant that keeps desktop and the phone from drifting: a role
+    // lowered here names a family, and that family has to be a key the shared
+    // `fontStacks` publishes. `display` drawing in a `display` genus the web
+    // sheet had deleted is exactly how the two surfaces diverge silently.
+    const genera = new Set(Object.keys(fontStacks));
+    for (const [role, style] of Object.entries(theme.type)) {
+      expect(genera, `${role} draws in a published genus`).toContain(
+        style.family
+      );
+    }
+    expect(theme.type.display.family).toBe("serif");
+    expect(theme.type.mono.family).toBe("sans");
+    // The numeric role gave up its FACE, not its figures: tabular travels with
+    // the role on both surfaces, or "numerics are tabular in every app" stops
+    // being true the moment the face stops carrying it for free.
+    expect(theme.type.mono.variantNumeric).toBe("tabular-nums");
   });
 
   it("carries the net and link roles, and never carries an accentThemes matrix", () => {

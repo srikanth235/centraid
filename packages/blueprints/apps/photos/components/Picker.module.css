@@ -63,8 +63,8 @@
 }
 .row {
   display: flex;
-  gap: 2px;
-  margin-block-end: 2px;
+  gap: var(--sp-gutter);
+  margin-block-end: var(--sp-gutter);
 }
 
 /* An empty picker keeps the panel's geometry and says one thing (§14). */

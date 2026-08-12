@@ -410,7 +410,7 @@
   background: transparent;
   padding: 6px 10px;
   border-radius: 999px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   cursor: pointer;
 }

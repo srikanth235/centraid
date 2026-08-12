@@ -339,7 +339,7 @@
   padding: 2px 13px 13px 34px;
 }
 .tlError {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.55;
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 9%, transparent);
@@ -540,7 +540,7 @@
   align-items: center;
   gap: 12px;
   padding: 7px 15px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
 }
 .rsideRow:last-child {
   padding-bottom: 13px;

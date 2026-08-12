@@ -5,7 +5,7 @@
 // second color or type vocabulary.  This keeps a new role visible to both
 // emitters and makes a removed role fail the contract test immediately.
 
-import { spacing } from "./density";
+import { spacing, subBase } from "./density";
 import { library } from "./library";
 import { palette } from "./palette";
 import { radii } from "./radii";
@@ -27,6 +27,9 @@ const paletteNames = Object.keys(palette).flatMap((key) => [
 const commonScale = [
   ...Object.keys(radii).map((key) => `--r-${key}`),
   ...Object.keys(spacing).map((key) => `--sp-${key}`),
+  // The two named sub-base seams share the `--sp-` namespace with the six
+  // rungs, so they are part of the same contract rather than a side door.
+  ...Object.keys(subBase).map((key) => `--sp-${key}`),
 ];
 
 const typeNames = (scale: Record<string, unknown>): string[] => [

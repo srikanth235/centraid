@@ -13,7 +13,7 @@ export const makeStyles = (colors: ThemeColors) =>
     },
     title: {
       color: colors.text,
-      fontFamily: family.displayRegular,
+      fontFamily: family.serifRegular,
       fontSize: 30,
       letterSpacing: -0.4,
     },
@@ -42,7 +42,7 @@ export const makeStyles = (colors: ThemeColors) =>
     heroDot: { borderRadius: 7, height: 14, width: 14 },
     heroStatus: {
       color: colors.text,
-      fontFamily: family.displayRegular,
+      fontFamily: family.serifRegular,
       fontSize: 20,
       letterSpacing: -0.2,
     },
