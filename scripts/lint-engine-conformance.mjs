@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#738) one cross-tree scanner owns every shared-engine reach-past rule and its demonstrated-red pending-overlay tripwire
 // ENGINE CONFORMANCE — one gate per shared engine (issue #712 E1).
 //
 // docs/blueprint-seats.md "Shared engines" says four things are built once and
@@ -399,6 +400,203 @@ function checkRefusalGrammar(root) {
   return findings;
 }
 
+// ─── ENGINE H — pending-write overlay ──────────────────────────────────────
+//
+// The durable outbox is part of every local read. Blueprint apps declare row
+// projection only; browser/native shells attach identity and status. These
+// spellings name the app-owned stores #738 removed and therefore cannot
+// return under a new component without failing the cross-tree gate.
+
+const PENDING_OVERLAY_APPS = [
+  "agenda",
+  "docs",
+  "locker",
+  "notes",
+  "people",
+  "photos",
+  "tally",
+  "tasks",
+];
+const HANDROLLED_PENDING_STORES = [
+  "pendingExpenses",
+  "pendingAdds",
+  "pendingIds",
+  "pendingByIntent",
+  "pendingNoteIds",
+  "pendingNotebookIds",
+];
+
+// This second vocabulary tripwire catches ordinary renamed variants of the
+// stores above wherever they are declared (binding, hook tuple, property, or
+// class field). The dataflow check below covers arbitrary collection names.
+const SOURCE_IDENTIFIER = /\b[A-Za-z_$][\w$]*\b/gu;
+const PENDING_COLLECTION_STATE = /(?:pending|queued|optimistic|overlay)/iu;
+const PENDING_COLLECTION_VALUE =
+  /(?:rows|adds|ids|writes|mutations|expenses|records|items|byIntent|list|map|set)$/iu;
+const SHARED_PENDING_COLLECTION_VERBS = new Set(["enrichPendingRows"]);
+
+// The architectural boundary is independent of local naming. App surfaces may
+// declare projections through apps/_shared/pending-overlay, but they may not
+// construct, read, or fold the outbox engine directly. A store called
+// `stagedEntities` is still caught when it reaches past that declaration door.
+const PENDING_ENGINE_REACH_PAST = [
+  "IntentQueue",
+  "applyOptimisticMutations",
+  "overlayMutations",
+  "evaluateReplicaRead",
+  "intent-record-store",
+  "intent-store",
+  "memory-intent-store",
+  "replica/coordinator",
+  "replica/intents",
+  "replica/store-core",
+];
+
+function isPendingCollectionIdentifier(identifier) {
+  const collection = identifier.replace(/^set(?=[A-Z])/u, "");
+  return (
+    PENDING_COLLECTION_STATE.test(collection) &&
+    PENDING_COLLECTION_VALUE.test(collection)
+  );
+}
+
+function maskStaticImports(code) {
+  return code.replace(
+    /\bimport\s+(?:type\s+)?[\s\S]*?\s+from\s+["'][^"']+["'];?/gu,
+    (statement) => statement.replace(/[^\n]/gu, " ")
+  );
+}
+
+function escapeRegularExpression(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+/**
+ * Reject an app-owned collection populated from a replica write result even
+ * when every local identifier avoids pending/queued/overlay vocabulary. This
+ * is the semantic hand-overlay shape #738 removes: durable query results are
+ * the row store, so write acknowledgements must never be folded into hook
+ * state for presentation.
+ */
+function writeBackedCollectionFindings(label, code) {
+  const findings = [];
+  const assignedWriteResults = [
+    ...code.matchAll(
+      /\b(?:const|let|var)\s+(?<result>[A-Za-z_$][\w$]*)\s*=\s*await\s+(?:window\.)?centraid\.write\s*\(/gu
+    ),
+  ].flatMap((match) => (match.groups?.result ? [match.groups.result] : []));
+  const collections = code.matchAll(
+    /\bconst\s*\[\s*(?<name>[A-Za-z_$][\w$]*)\s*,\s*(?<setter>[A-Za-z_$][\w$]*)\s*\]\s*=\s*(?:React\.)?useState(?:<[^;\n>]*>)?\s*\(\s*\[\s*\]\s*\)/gu
+  );
+  for (const collection of collections) {
+    const name = collection.groups?.name;
+    const setter = collection.groups?.setter;
+    if (!name || !setter) continue;
+    const setterCall = new RegExp(
+      `\\b${escapeRegularExpression(setter)}\\s*\\(([\\s\\S]{0,1200}?)\\)`,
+      "gu"
+    );
+    const writesCollection = [...code.matchAll(setterCall)].some((call) => {
+      const body = call[1] ?? "";
+      return (
+        /(?:window\.)?centraid\.write\s*\(/u.test(body) ||
+        assignedWriteResults.some((result) =>
+          new RegExp(`\\b${escapeRegularExpression(result)}\\b`, "u").test(body)
+        )
+      );
+    });
+    if (!writesCollection) continue;
+    findings.push(
+      `${label}:${lineOf(code, collection.index)}: stores replica write results ` +
+        `in local collection \`${name}\` — replica ⊕ outbox is the one row store`
+    );
+  }
+  return findings;
+}
+
+export function scanPendingOverlayFiles(files) {
+  const findings = [];
+  for (const { label, code } of files) {
+    const appSource =
+      label.startsWith(
+        `${path.join("packages", "blueprints", "apps")}${path.sep}`
+      ) ||
+      label.startsWith(
+        `${path.join("apps", "mobile", "src", "apps")}${path.sep}`
+      );
+    if (
+      !appSource ||
+      /(?:\.test\.|pending-projection\.ts$|_shared\/pending-(?:overlay|projections)\.ts$)/u.test(
+        label
+      )
+    )
+      continue;
+    for (const spelling of HANDROLLED_PENDING_STORES) {
+      const index = code.indexOf(spelling);
+      if (index !== -1)
+        findings.push(
+          `${label}:${lineOf(code, index)}: owns \`${spelling}\` — pending rows ` +
+            `come from replica ⊕ outbox; declare the action in pending-projection.ts`
+        );
+    }
+    const reportedCollections = new Set();
+    // Importing the shared engine's own `enrichPendingRows` verb is adoption,
+    // not ownership of a local collection. Mask only static import clauses;
+    // declarations and uses in the app body remain visible to the tripwire.
+    const declarationCode = maskStaticImports(code);
+    findings.push(...writeBackedCollectionFindings(label, declarationCode));
+    for (const match of declarationCode.matchAll(SOURCE_IDENTIFIER)) {
+      const identifier = match[0];
+      const collection = identifier.replace(/^set(?=[A-Z])/u, "");
+      const collectionKey = collection.toLowerCase();
+      if (
+        !isPendingCollectionIdentifier(identifier) ||
+        SHARED_PENDING_COLLECTION_VERBS.has(identifier) ||
+        HANDROLLED_PENDING_STORES.includes(identifier) ||
+        reportedCollections.has(collectionKey)
+      )
+        continue;
+      reportedCollections.add(collectionKey);
+      findings.push(
+        `${label}:${lineOf(code, match.index)}: owns a pending-row collection ` +
+          `(${identifier}) — replica ⊕ outbox is the one row store`
+      );
+    }
+    const optimistic = code.match(/\boptimistic\??\s*:/u);
+    if (optimistic?.index !== undefined)
+      findings.push(
+        `${label}:${lineOf(code, optimistic.index)}: supplies an app-owned ` +
+          `optimistic mutation — pending-projection.ts is the one declaration door`
+      );
+    for (const reachPast of PENDING_ENGINE_REACH_PAST) {
+      const index = code.indexOf(reachPast);
+      if (index === -1) continue;
+      findings.push(
+        `${label}:${lineOf(code, index)}: reaches into pending engine internal ` +
+          `\`${reachPast}\` — pending-projection.ts is the app declaration door`
+      );
+    }
+  }
+  return findings;
+}
+
+function checkPendingOverlay(root, files) {
+  const findings = scanPendingOverlayFiles(files);
+  for (const appId of PENDING_OVERLAY_APPS) {
+    const appDir = path.join("packages", "blueprints", "apps", appId);
+    const projection = path.join(appDir, "pending-projection.ts");
+    const inline = path.join(appDir, "app-inline.tsx");
+    if (!existsSync(path.join(root, projection))) {
+      findings.push(`${projection}: missing pending projection declaration`);
+      continue;
+    }
+    const inlineSource = readFileSync(path.join(root, inline), "utf8");
+    if (!/\bpendingProjection\b/u.test(inlineSource))
+      findings.push(`${inline}: does not register its pending projection`);
+  }
+  return findings;
+}
+
 // ─── driver ──────────────────────────────────────────────────────────────────
 
 /** Every engine's findings, keyed by engine. Exported for the test. */
@@ -414,6 +612,7 @@ export function scanEngineConformance(root = ROOT) {
     "B custody": checkCustody(root, files),
     "C consent": checkConsent(root, files),
     "D triage": checkTriage(root, files),
+    "H pending overlay": checkPendingOverlay(root, files),
     "refusal grammar": checkRefusalGrammar(root),
   };
 }
@@ -431,7 +630,7 @@ function main() {
     return;
   }
   console.log(
-    "ok   engine conformance — placement, custody, consent and triage each " +
+    "ok   engine conformance — placement, custody, consent, triage and pending overlay each " +
       "have exactly one door, and the engine surfaces explain every refusal"
   );
 }

@@ -105,8 +105,8 @@ vi.mock(
 );
 // The scope set is resolved over HTTP (issue #599); this route's suite is about
 // mounting, so it gets one ready scope rather than a gateway round-trip.
-vi.mock(import("./useAppScopes.js") as Promise<unknown>, () => ({
-  useAppScopes: () => ({
+vi.mock(import("./useAppScopes.js") as Promise<unknown>, () => {
+  const ready = {
     status: "ready",
     data: {
       scopes: [
@@ -121,10 +121,13 @@ vi.mock(import("./useAppScopes.js") as Promise<unknown>, () => ({
         },
       ],
     },
-  }),
-  scopeSetKey: (scopes: { identity: { vaultId: string } }[]) =>
-    scopes.map((entry) => entry.identity.vaultId).join(","),
-}));
+  };
+  return {
+    useAppScopes: () => ready,
+    scopeSetKey: (scopes: { identity: { vaultId: string } }[]) =>
+      scopes.map((entry) => entry.identity.vaultId).join(","),
+  };
+});
 
 const app = {
   id: "tasks",
@@ -210,6 +213,7 @@ describe("InlineAppRoute suite", () => {
   function makeApp(RootImpl: InlineAppModule["Root"]): InlineAppModule {
     return {
       appId: "tasks",
+      pendingProjection: { appId: "tasks", actions: {} },
       changeTables: ["schedule.task"],
       queries: {
         board: {
@@ -269,6 +273,22 @@ describe("InlineAppRoute suite", () => {
       act(() => root?.unmount());
       root = null;
       expect((window as { centraid?: unknown }).centraid).toBeUndefined();
+    });
+
+    it("keeps window.centraid installed across a shell re-render", async () => {
+      function Root({ rootRef }: InlineAppProps): JSX.Element {
+        return <div ref={rootRef}>ok</div>;
+      }
+      const loader = async () => ({ default: makeApp(Root) });
+      await mount(routeEl(loader, "tasks-shell-rerender"));
+      const installed = (window as { centraid?: unknown }).centraid;
+
+      await act(async () => {
+        root!.render(routeEl(loader, "tasks-shell-rerender"));
+      });
+      await flush();
+
+      expect((window as { centraid?: unknown }).centraid).toBe(installed);
     });
 
     // The blank-photo-grid bug: `rootRef` was an inline arrow, so every shell

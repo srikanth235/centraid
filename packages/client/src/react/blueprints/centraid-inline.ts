@@ -1,3 +1,5 @@
+import { projectPendingWrite } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import type { PendingProjectionDeclaration } from "@centraid/blueprints/apps/_shared/pending-overlay";
 // governance: allow-repo-hygiene file-size-limit (#731) the inline host bridge keeps query, write, sharing, Commons claim, resident-save, and replica invalidation doors in one security boundary.
 import type {
   InlineAppModule,
@@ -23,7 +25,7 @@ import type {
 // `installInlineCentraid` publishes it on `window.centraid` and returns a
 // teardown that restores whatever was there before. Only one inline app is
 // mounted at a time, so a single module-level install is still enough.
-import { appQueryPath, ROUTES } from "@centraid/protocol";
+import { appActionPath, appQueryPath, ROUTES } from "@centraid/protocol";
 
 import {
   auth,
@@ -78,7 +80,10 @@ interface InlineChangeDetail {
 export type InlineScopeSession = Pick<
   ReplicaShellSession,
   "read" | "search" | "write" | "subscribe"
->;
+> &
+  Partial<
+    Pick<ReplicaShellSession, "discardPendingWrite" | "retryPendingWrite">
+  >;
 
 /** One mounted scope: its shell-resolved descriptor and its replica session. */
 export interface InlineScopeBinding {
@@ -166,7 +171,13 @@ export interface InlineCentraidClient {
     intentId?: string;
     signal?: AbortSignal;
     scope?: string;
+    /** Bypass every replica/outbox path for sealed or otherwise non-durable input. */
+    onlineOnly?: boolean;
   }) => Promise<T>;
+  retryPendingWrite: (intentId: string, scope?: string) => Promise<boolean>;
+  discardPendingWrite: (intentId: string, scope?: string) => Promise<boolean>;
+  /** Leave the app for the shell-owned owner/steward review inbox. */
+  openApprovals?: () => void;
   /** Commands durably queued on this member seat while its steward is away. */
   commonsIntents: (opts?: {
     scope?: string;
@@ -273,6 +284,31 @@ async function gatewayRead(
     body: JSON.stringify({ input }),
   });
   return readJson<unknown>(res, `read ${query}`);
+}
+
+/**
+ * Invoke an explicitly online-only action without ever presenting its payload
+ * to a replica session. The served iframe bridge has the same policy boundary;
+ * keeping it here prevents the inline seat from durably queueing sealed input.
+ */
+async function gatewayAction(
+  appId: string,
+  action: string,
+  input: Record<string, unknown> | undefined,
+  scope: string | undefined,
+  signal: AbortSignal | undefined
+): Promise<unknown> {
+  const { baseUrl, token } = await auth();
+  const response = await doFetch(baseUrl, appActionPath(appId, action), {
+    method: "POST",
+    headers: {
+      ...authHeaders(token, "application/json"),
+      ...(scope ? { [VAULT_HEADER]: scope } : {}),
+    },
+    body: JSON.stringify({ input }),
+    ...(signal ? { signal } : {}),
+  });
+  return readJson(response, `write ${action}`);
 }
 
 /** Map one replica invalidation into the kit change-feed detail shape. */
@@ -448,12 +484,15 @@ const AMBIENT_SCOPE: InlineScope = { id: "", label: "Library", canWrite: true };
 
 export interface CreateInlineCentraidOptions {
   appId: string;
+  pendingProjection?: PendingProjectionDeclaration;
   queries: InlineAppModule["queries"];
   /** Mounted scopes, primary first. Mutually exclusive with `session`. */
   scopes?: readonly InlineScopeBinding[];
   /** Single-scope shorthand (pre-#599 callers and single-scope apps). */
   session?: InlineScopeSession;
   isOnline?: () => boolean;
+  /** Shell navigation stays injected; blueprints never import shell routing. */
+  onOpenApprovals?: () => void;
 }
 
 function bindingsOf(
@@ -497,7 +536,7 @@ export function addInlineScope(
 export function createInlineCentraidClient(
   options: CreateInlineCentraidOptions
 ): InlineCentraidClient {
-  const { appId, queries } = options;
+  const { appId, queries, pendingProjection } = options;
   const bindings = bindingsOf(options);
   const byId = new Map(bindings.map((binding) => [binding.scope.id, binding]));
   const primary = bindings[0]!;
@@ -546,6 +585,7 @@ export function createInlineCentraidClient(
         appId,
         ...(opts.input ? { input: opts.input } : {}),
         isOnline,
+        ...(binding.scope.id ? { scopeId: binding.scope.id } : {}),
         ...(opts.signal ? { signal: opts.signal } : {}),
       })) as T;
     } catch (error) {
@@ -607,6 +647,7 @@ export function createInlineCentraidClient(
       intentId?: string;
       signal?: AbortSignal;
       scope?: string;
+      onlineOnly?: boolean;
     }) {
       const binding = bindingFor(opts.scope);
       // A read-only audience is refused HERE rather than at the gateway: the
@@ -618,10 +659,34 @@ export function createInlineCentraidClient(
           `You can view ${binding.scope.label}, but not add to it.`
         );
       }
+      // Sealed inputs must never cross the durable session boundary. Network
+      // failure is returned to the app and cannot fall back to queueing.
+      if (opts.onlineOnly === true) {
+        return (await gatewayAction(
+          appId,
+          opts.action,
+          opts.input,
+          binding.scope.id,
+          opts.signal
+        )) as T;
+      }
+      const intentId = opts.intentId ?? globalThis.crypto.randomUUID();
+      const projected = projectPendingWrite(pendingProjection, {
+        appId,
+        action: opts.action,
+        input: opts.input ?? {},
+        intentId,
+      });
       const result = await binding.session.write(appId, {
         action: opts.action,
         input: (opts.input ?? {}) as never,
-        ...(opts.intentId ? { intentId: opts.intentId } : {}),
+        intentId,
+        ...(projected.optimistic.length > 0
+          ? { optimistic: projected.optimistic }
+          : {}),
+        ...(projected.baseVersions
+          ? { baseVersions: projected.baseVersions }
+          : {}),
       });
       // Shape the intent outcome into the `VaultOutcome` the kit narrates: the
       // durable intentId is the app's `invocationId` (pending-add key), and any
@@ -641,6 +706,24 @@ export function createInlineCentraidClient(
         ...(outcome.output === undefined ? {} : { output: outcome.output }),
       } as T;
     },
+
+    async retryPendingWrite(intentId, scope) {
+      const retry = bindingFor(scope).session.retryPendingWrite;
+      if (!retry) return false;
+      return (
+        (await retry.call(bindingFor(scope).session, intentId)) !== undefined
+      );
+    },
+
+    async discardPendingWrite(intentId, scope) {
+      const discard = bindingFor(scope).session.discardPendingWrite;
+      if (!discard) return false;
+      return discard.call(bindingFor(scope).session, intentId);
+    },
+
+    ...(options.onOpenApprovals
+      ? { openApprovals: options.onOpenApprovals }
+      : {}),
 
     async commonsIntents(opts) {
       const binding = bindingFor(opts?.scope);

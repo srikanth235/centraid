@@ -15,17 +15,10 @@ type Scope = "occurrence" | "future" | "series";
 interface EditorWrite {
   action: string;
   input: NativeWriteInput["input"];
-  optimistic: NonNullable<NativeWriteInput["optimistic"]>;
 }
 
 function rowValue<T>(row: ReplicaRow | undefined, key: string): T | undefined {
   return row?.[key] as T | undefined;
-}
-
-function canonicalValues(row: ReplicaRow | undefined): ReplicaRow {
-  if (!row) return {};
-  const { __rowId: _rowId, ...values } = row;
-  return values;
 }
 
 function remindersOf(row: ReplicaRow | undefined): string {
@@ -132,27 +125,6 @@ export default function AgendaEventEditor({
           summary: summary.trim(),
           description,
         },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "schedule.recurrence_exception",
-            rowId: `pending:${event.id}:${originalStart}`,
-            values: {
-              exception_id: `pending:${event.id}:${originalStart}`,
-              target_type: "core.event",
-              target_id: event.id,
-              original_start: originalStart,
-              action: "override",
-              override_json: JSON.stringify({
-                scope,
-                start,
-                end,
-                summary: summary.trim(),
-                description,
-              }),
-            },
-          },
-        ],
       };
     } else {
       request = {
@@ -177,24 +149,6 @@ export default function AgendaEventEditor({
           reminders: reminderRows,
           attendee_party_ids: [...guestIds],
         },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "core.event",
-            rowId: event.id,
-            values: {
-              ...canonicalValues(canonical),
-              summary: summary.trim(),
-              description,
-              dtstart: start,
-              dtend: end,
-              start_tz: startTz,
-              end_tz: endTz,
-              recurrence_semantics: semantics,
-              rrule: rrule || null,
-            },
-          },
-        ],
       };
     }
     const saved = await onWrite(request);
@@ -212,20 +166,6 @@ export default function AgendaEventEditor({
         scope,
         action: "skip",
       },
-      optimistic: [
-        {
-          op: "upsert",
-          entity: "schedule.recurrence_exception",
-          rowId: `pending:${event.id}:${originalStart}`,
-          values: {
-            exception_id: `pending:${event.id}:${originalStart}`,
-            target_type: "core.event",
-            target_id: event.id,
-            original_start: originalStart,
-            action: "skip",
-          },
-        },
-      ],
     });
     setSaving(false);
     if (saved) onClose();

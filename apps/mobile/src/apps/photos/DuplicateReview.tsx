@@ -87,14 +87,6 @@ export default function DuplicateReview({
       const result = await session.write("photos", {
         action: "delete-asset",
         input: { asset_id: asset.assetId },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "media.asset",
-            rowId: asset.assetId,
-            values: { deleted_at: new Date().toISOString() },
-          },
-        ],
       });
       surfaceWriteOutcome(result);
       return trashNext(index + 1);

@@ -46,7 +46,7 @@
     },
     "tests/perf/replica-sync-io.perf.test.ts": {
       "lane": "perf",
-      "volume": "IndexedDB store open + 200 serial enqueue/list",
+      "volume": "IndexedDB store open + 200 serial enqueue/list + 200-overlay enumeration/composition",
       "budgetMs": 2500
     },
     "tests/perf/tunnel-native.perf.test.ts": {

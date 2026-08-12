@@ -66,7 +66,7 @@ export default function LockerHome({
     null
   );
   const [detail, setDetail] = useState<LockerItem | null>(null);
-  const [pendingItem, setPendingItem] = useState<LockerRow | null>(null);
+  const [revealItem, setRevealItem] = useState<LockerRow | null>(null);
   const [itemPassphrase, setItemPassphrase] = useState("");
   const [itemError, setItemError] = useState<string>();
   const [masked, setMasked] = useState(false);
@@ -99,7 +99,7 @@ export default function LockerHome({
         );
       setSessionToken("");
       setDetail(null);
-      setPendingItem(null);
+      setRevealItem(null);
       setPassphrase("");
       setItemPassphrase("");
       setItemError(undefined);
@@ -356,12 +356,12 @@ export default function LockerHome({
           );
         if (!result.item) throw new Error("This Locker item no longer exists.");
         setDetail(result.item);
-        setPendingItem(null);
+        setRevealItem(null);
         setItemPassphrase("");
         setItemError(undefined);
         setActivityNonce((value) => value + 1);
       } catch (caughtError) {
-        setPendingItem(row);
+        setRevealItem(row);
         setItemPassphrase("");
         setItemError(
           caughtError instanceof Error
@@ -390,7 +390,7 @@ export default function LockerHome({
           // The explicit passphrase sheet below is the honest fallback.
         }
       }
-      setPendingItem(row);
+      setRevealItem(row);
     },
     [deviceCredentialId, revealWith]
   );
@@ -562,18 +562,18 @@ export default function LockerHome({
       {content}
       <ItemAuthModal
         error={itemError}
-        item={pendingItem}
+        item={revealItem}
         passphrase={itemPassphrase}
         placeholderColor={colors.textFaint}
         styles={styles}
         working={working}
         onChangePassphrase={setItemPassphrase}
         onClose={() => {
-          setPendingItem(null);
+          setRevealItem(null);
           setItemError(undefined);
         }}
         onReveal={() => {
-          if (pendingItem) void revealWith(pendingItem, itemPassphrase);
+          if (revealItem) void revealWith(revealItem, itemPassphrase);
         }}
       />
       {/* No placement control here — A7: Locker is structurally excluded

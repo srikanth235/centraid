@@ -47,8 +47,6 @@ import {
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
 import { useTheme } from "../../kit/theme";
-import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
-import { optimisticValues } from "../../lib/replica/optimistic";
 import {
   listCommonsResidents,
   retainCommonsItem,
@@ -276,10 +274,9 @@ export default function PhotoLightbox({
 
   const write = async (
     action: string,
-    input: Record<string, string | number>,
-    optimistic?: NativeOptimisticMutation[]
+    input: Record<string, string | number>
   ): Promise<void> => {
-    await writeReason(action, input, optimistic);
+    await writeReason(action, input);
   };
 
   /**
@@ -289,8 +286,7 @@ export default function PhotoLightbox({
    */
   const writeReason = async (
     action: string,
-    input: Record<string, string | number>,
-    optimistic?: NativeOptimisticMutation[]
+    input: Record<string, string | number>
   ): Promise<string | undefined> => {
     if (!session || !current)
       return "This photograph has no vault to write to.";
@@ -301,7 +297,6 @@ export default function PhotoLightbox({
       const result = await session.writeTo(sourceVaultId, "photos", {
         action,
         input,
-        ...(optimistic ? { optimistic } : {}),
       });
       // `surfaceWriteOutcome` returns whether the caller may carry on — false
       // is exactly the set of outcomes the member has to read about (parked or
@@ -416,7 +411,6 @@ export default function PhotoLightbox({
    */
   const makeKeyPhoto = (): void => {
     if (!session || !current?.assetId || !current.contentId) return;
-    const contentId = current.contentId;
     const setCoverFor = (albumId: string): void => {
       const album = collections.rows.find(
         (row) => String(row.collection_id) === albumId
@@ -426,14 +420,6 @@ export default function PhotoLightbox({
         .write("photos", {
           action: "set-album-cover",
           input: { album_id: albumId, asset_id: current.assetId! },
-          optimistic: [
-            {
-              op: "upsert",
-              entity: "core.collection",
-              rowId: albumId,
-              values: optimisticValues(album, { cover_content_id: contentId }),
-            },
-          ],
         })
         .then(surfaceWriteOutcome)
         .catch((error: unknown) =>
@@ -470,18 +456,10 @@ export default function PhotoLightbox({
   const hideAsset = (): void => {
     if (!current?.assetId) return;
     const hiding = !current.archived;
-    void writeReason(
-      "update-asset",
-      { asset_id: current.assetId, archived: hiding ? 1 : 0 },
-      [
-        {
-          op: "upsert",
-          entity: "media.asset",
-          rowId: current.assetId,
-          values: { archived_at: hiding ? new Date().toISOString() : null },
-        },
-      ]
-    ).then((reason) => {
+    void writeReason("update-asset", {
+      asset_id: current.assetId,
+      archived: hiding ? 1 : 0,
+    }).then((reason) => {
       if (reason) return;
       postStatus(
         hiding
@@ -508,14 +486,7 @@ export default function PhotoLightbox({
           text: "Trash",
           style: "destructive",
           onPress: () =>
-            void writeReason("delete-asset", { asset_id: assetId }, [
-              {
-                op: "upsert",
-                entity: "media.asset",
-                rowId: assetId,
-                values: { deleted_at: new Date().toISOString() },
-              },
-            ]),
+            void writeReason("delete-asset", { asset_id: assetId }),
         },
       ]
     );
@@ -795,29 +766,14 @@ export default function PhotoLightbox({
             writeReason("tag-asset", { asset_id: current.assetId!, label })
           }
           onCaption={(caption) =>
-            writeReason(
-              "update-asset",
-              { asset_id: current.assetId!, title: caption },
-              [
-                {
-                  op: "upsert",
-                  entity: "media.asset",
-                  rowId: current.assetId!,
-                  values: { title: caption },
-                },
-              ]
-            )
+            writeReason("update-asset", {
+              asset_id: current.assetId!,
+              title: caption,
+            })
           }
           onClose={() => setInfoOpen(false)}
           onRemovePlace={() =>
-            void writeReason("set-place", { asset_id: current.assetId! }, [
-              {
-                op: "upsert",
-                entity: "media.asset",
-                rowId: current.assetId!,
-                values: { place_id: null },
-              },
-            ])
+            void writeReason("set-place", { asset_id: current.assetId! })
           }
           people={people}
           placeName={

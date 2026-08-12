@@ -12,11 +12,6 @@ import {
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
 import { family, useTheme } from "../../kit/theme";
-import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
-import {
-  optimisticRowId,
-  optimisticValues,
-} from "../../lib/replica/optimistic";
 import type { NativeFolder } from "./docs-model";
 import type { DriveItem } from "./DocsLibraryItems";
 
@@ -25,7 +20,6 @@ type Mode = "menu" | "rename" | "move";
 export interface DocsItemActionsProps {
   item?: DriveItem;
   folders: NativeFolder[];
-  rootFolderId?: string;
   onClose: () => void;
   onParked: () => void;
   onChanged: () => Promise<void>;
@@ -34,7 +28,6 @@ export interface DocsItemActionsProps {
 export default function DocsItemActions({
   item,
   folders,
-  rootFolderId,
   onClose,
   onParked,
   onChanged,
@@ -71,8 +64,7 @@ export default function DocsItemActions({
 
   const write = async (
     action: string,
-    input: Record<string, unknown>,
-    optimistic: NativeOptimisticMutation[] = []
+    input: Record<string, unknown>
   ): Promise<void> => {
     if (!session || !sourceVaultId || !writable) {
       postStatus(
@@ -84,7 +76,6 @@ export default function DocsItemActions({
       const result = await session.writeTo(sourceVaultId, "docs", {
         action,
         input: input as ReplicaValue,
-        optimistic,
       });
       if (
         !surfaceWriteOutcome(result, {
@@ -108,102 +99,35 @@ export default function DocsItemActions({
   const rename = async (): Promise<void> => {
     const title = name.trim();
     if (!title) return;
-    const now = new Date().toISOString();
     if (item.kind === "folder") {
-      await write(
-        "rename-folder",
-        { folder_id: item.folder.rawId ?? item.folder.id, name: title },
-        item.folder.raw
-          ? [
-              {
-                op: "upsert",
-                entity: "core.concept",
-                rowId: item.folder.rawId ?? item.folder.id,
-                values: optimisticValues(item.folder.raw, {
-                  pref_label: title,
-                }),
-              },
-            ]
-          : []
-      );
+      await write("rename-folder", {
+        folder_id: item.folder.rawId ?? item.folder.id,
+        name: title,
+      });
       return;
     }
-    await write(
-      "rename",
-      { document_id: item.document.rawId ?? item.document.id, title },
-      item.document.raw
-        ? [
-            {
-              op: "upsert",
-              entity: "core.document",
-              rowId: item.document.rawId ?? item.document.id,
-              values: optimisticValues(item.document.raw, {
-                title,
-                updated_at: now,
-              }),
-            },
-          ]
-        : []
-    );
+    await write("rename", {
+      document_id: item.document.rawId ?? item.document.id,
+      title,
+    });
   };
 
   const move = async (folder?: NativeFolder): Promise<void> => {
     if (item.kind !== "document") return;
     const documentId = item.document.rawId ?? item.document.id;
-    const conceptId = folder?.rawId ?? rootFolderId;
-    const tagId =
-      item.document.folderTag?.tag_id === undefined
-        ? optimisticRowId("folder-tag")
-        : String(item.document.folderTag.tag_id);
-    await write(
-      "move",
-      {
-        document_id: documentId,
-        ...(folder ? { folder_id: folder.rawId ?? folder.id } : {}),
-      },
-      conceptId
-        ? [
-            {
-              op: "upsert",
-              entity: "core.tag",
-              rowId: tagId,
-              values: {
-                tag_id: tagId,
-                target_type: "core.document",
-                target_id: documentId,
-                concept_id: conceptId,
-                tagged_by_party_id: null,
-                confidence: null,
-                tagged_at: new Date().toISOString(),
-              },
-            },
-          ]
-        : []
-    );
+    await write("move", {
+      document_id: documentId,
+      ...(folder ? { folder_id: folder.rawId ?? folder.id } : {}),
+    });
   };
 
   const documentLifecycle = async (
     action: "trash" | "restore"
   ): Promise<void> => {
     if (item.kind !== "document") return;
-    const now = new Date().toISOString();
-    await write(
-      action,
-      { document_id: item.document.rawId ?? item.document.id },
-      item.document.raw
-        ? [
-            {
-              op: "upsert",
-              entity: "core.document",
-              rowId: item.document.rawId ?? item.document.id,
-              values: optimisticValues(item.document.raw, {
-                deleted_at: action === "trash" ? now : null,
-                updated_at: now,
-              }),
-            },
-          ]
-        : []
-    );
+    await write(action, {
+      document_id: item.document.rawId ?? item.document.id,
+    });
   };
 
   const deleteFolder = (): void => {
@@ -217,19 +141,9 @@ export default function DocsItemActions({
           text: "Delete empty folder",
           style: "destructive",
           onPress: () =>
-            void write(
-              "delete-folder",
-              { folder_id: item.folder.rawId ?? item.folder.id },
-              item.folder.raw
-                ? [
-                    {
-                      op: "delete",
-                      entity: "core.concept",
-                      rowId: item.folder.rawId ?? item.folder.id,
-                    },
-                  ]
-                : []
-            ),
+            void write("delete-folder", {
+              folder_id: item.folder.rawId ?? item.folder.id,
+            }),
         },
       ]
     );

@@ -42,6 +42,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { faceCropStyle } from "../../_shared/face-crop.ts";
+import { readPendingOverlay } from "../../_shared/pending-overlay.ts";
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import {
   openTriage,
   triageAnswer,
@@ -259,6 +261,15 @@ export function FaceReview({
       );
       setPickerOpen(false);
       await load();
+    } else if (
+      outcome?.status === "queued" ||
+      outcome?.status === "in-flight" ||
+      outcome?.status === "parked"
+    ) {
+      // The row stays in the queue and the reload re-reads its durable overlay;
+      // a toast is supplemental, never a substitute for the row.
+      setNote("");
+      await load();
     } else {
       setNote(copy.failed);
     }
@@ -323,6 +334,11 @@ export function FaceReview({
   const { position, total } = progress;
   const firstSeen = formatFirstSeen(current.firstSeenAt);
   const proposedName = current.person_name;
+  const pending = Boolean(
+    readPendingOverlay(current as unknown as Record<string, unknown>)
+  );
+  const unavailableReason =
+    people.length === 0 ? "No one else is named in your library yet" : null;
 
   return (
     <div className={styles.screen}>
@@ -347,6 +363,10 @@ export function FaceReview({
           Nothing is written until you confirm, and a rejection is remembered so
           the same face is not proposed twice.
         </p>
+        <PendingWriteActions
+          row={current as unknown as Record<string, unknown>}
+          onEdit={() => setPickerOpen(true)}
+        />
         <dl className={styles.facts}>
           <div className={styles.fact}>
             <dt className={styles.factLabel}>confidence</dt>
@@ -369,7 +389,7 @@ export function FaceReview({
             <button
               type="button"
               className="kit-btn primary"
-              disabled={busy}
+              disabled={busy || pending}
               onClick={() => void confirm(current.party_id!, proposedName)}
             >
               Confirm as {proposedName}
@@ -378,7 +398,7 @@ export function FaceReview({
           <button
             type="button"
             className="kit-btn"
-            disabled={busy}
+            disabled={busy || pending}
             onClick={() => void reject()}
           >
             Not this person
@@ -392,15 +412,16 @@ export function FaceReview({
           <div className={styles.rowText}>
             <span className={styles.rowLabel}>Someone else</span>
             <span className={styles.rowSub}>name this face yourself</span>
+            {unavailableReason ? (
+              <span className={styles.rowSub}>{unavailableReason}</span>
+            ) : null}
           </div>
           <button
             type="button"
             className="kit-btn"
-            disabled={busy || people.length === 0}
+            disabled={busy || pending || people.length === 0}
             title={
-              people.length === 0
-                ? "No one else is named in your library yet"
-                : undefined
+              people.length === 0 ? (unavailableReason ?? undefined) : undefined
             }
             onClick={() => setPickerOpen((v) => !v)}
           >
@@ -416,7 +437,7 @@ export function FaceReview({
                   key={p.party_id}
                   type="button"
                   className="kit-btn"
-                  disabled={busy}
+                  disabled={busy || pending}
                   onClick={() => void confirm(p.party_id, p.name)}
                 >
                   {p.name ?? "Unnamed"}
@@ -432,7 +453,7 @@ export function FaceReview({
           <button
             type="button"
             className="kit-btn"
-            disabled={busy}
+            disabled={busy || pending}
             onClick={() => void dismiss()}
           >
             Keep unnamed

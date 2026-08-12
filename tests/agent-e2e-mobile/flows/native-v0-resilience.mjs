@@ -1,4 +1,7 @@
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import {
+  DISMISS_KEYBOARD_ONBOARDING,
+  retryableTapCommands,
+} from "../lib/first-run.mjs";
 import {
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
@@ -114,6 +117,82 @@ ${openCommands}
   };
   await visitNext(0);
 
+  // Maestro's real airplane-mode control is Android-only. This is the device
+  // journey for #738: the write goes through the mounted UI, the OS process is
+  // killed while disconnected, and the production reader must recover the
+  // SQLite outbox row after relaunch. The iOS lane retains the same store/read
+  // integration companion because iOS Simulator exposes no airplane control.
+  if (ctx.state.platform === "android") {
+    const airplaneGroup = `Airplane group ${ctx.state.runId}`;
+    const airplaneExpense = `Airplane expense ${ctx.state.runId}`;
+    try {
+      await ctx.run(
+        `appId: ${ctx.state.appId}
+---
+- stopApp
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible: "${HOME_READY_MARKER}"
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+${retryableTapCommands("Open Tally.*")}
+- extendedWaitUntil:
+    visible: "New group"
+    timeout: 20000
+- tapOn: "New group"
+- inputText: "${airplaneGroup}"
+${DISMISS_KEYBOARD_ONBOARDING}
+- pressKey: Enter
+- hideKeyboard
+- extendedWaitUntil:
+    visible: "${airplaneGroup}"
+    timeout: 30000
+- setAirplaneMode: enabled
+- tapOn: "Expense description"
+- inputText: "${airplaneExpense}"
+- tapOn: "0.00"
+- inputText: "12.34"
+- assertVisible: "12.34"
+- hideKeyboard
+- tapOn: "Save expense"
+- extendedWaitUntil:
+    visible: "${airplaneExpense}"
+    timeout: 20000
+- assertVisible: "queued"
+- takeScreenshot: native-airplane-pending-before-restart
+- stopApp
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible: "${HOME_READY_MARKER}"
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+${retryableTapCommands("Open Tally.*")}
+- extendedWaitUntil:
+    visible: "${airplaneExpense}"
+    timeout: 30000
+- assertVisible: "queued"
+- takeScreenshot: native-airplane-pending-after-restart
+`,
+        "airplane-pending-restart"
+      );
+      ctx.note(
+        "Android: Tally UI add remained queued and visible after an OS process restart in airplane mode"
+      );
+    } finally {
+      await ctx.run(
+        `appId: ${ctx.state.appId}
+---
+- setAirplaneMode: disabled
+`,
+        "restore-network"
+      );
+    }
+  } else {
+    ctx.note(
+      "iOS Simulator has no Maestro airplane control; native SQLite restart parity is covered by PendingRestartJourney.test.tsx"
+    );
+  }
+
   await ctx.restart();
   await ctx.run(
     `appId: ${ctx.state.appId}
@@ -126,7 +205,7 @@ ${openCommands}
     "after-force-kill"
   );
   ctx.note(
-    "All eight native blueprint covers and Settings survived navigation and a process restart; complete the documented network matrix on this device."
+    "All eight native blueprint covers and Settings survived navigation and a process restart; Android also completed the airplane-mode pending-write restart journey."
   );
   return {
     pass: true,

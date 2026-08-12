@@ -36,6 +36,22 @@
       "volume": "50,000 replica rows (declared year-3, docs/mobile-offline.md)",
       "probe": "NONE TODAY. tests/scale/replica-bootstrap.scale.test.ts measures the windowed bootstrap in-process; the perceived number is the phone's screen showing stale data after AppState resume, which needs a device-side timestamp the app does not currently expose."
     },
+    "mountedReplicaReadWithOutbox": {
+      "status": "measured",
+      "volume": "50,000 canonical document rows across 4 mounted vaults + 200 durable pending mutations (50 per vault)",
+      "probe": "CENTRAID_PERF_EVIDENCE=1 bun run --cwd apps/mobile test -- src/lib/replica/multi-vault-reader.test.ts — production MultiVaultReplicaReader performs a 5,000-row ordered read and federated FTS search while enumerating and composing the durable SQLite outboxes",
+      "maxColdMs": 1000,
+      "maxSearchMs": 100,
+      "_provenance": {
+        "at": "2026-08-11",
+        "host": "macOS 26.2 arm64 development host, Node SQLite driver over the production reader/query plan",
+        "observedColdMs": 778.4,
+        "observedSearchMs": 4.5,
+        "observedProjectionBytes": 22622208,
+        "note": "MEASURED. The fixture includes the outbox volume in both timed requests; the read plan fetches the bounded canonical page plus only mutation-addressed canonical row ids.",
+        "headroom": "cold observed + 28%; search ceiling retained from the existing product budget"
+      }
+    },
     "appWeight": {
       "status": "measured",
       "volume": "n/a — build artifact, independent of vault size",

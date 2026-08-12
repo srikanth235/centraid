@@ -1,3 +1,5 @@
+import { readPendingOverlay } from "../../_shared/pending-overlay.ts";
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
 import { checkStats, notebookColorVar, previewText } from "../format.ts";
 import { I } from "../icons.ts";
@@ -15,16 +17,17 @@ import shared from "./shared.module.css";
 export function Card({
   note,
   search,
-  pending,
   onOpen,
   onTogglePin,
 }: {
   note: Note;
   search: string;
-  pending: boolean;
   onOpen: (noteId: string) => void;
   onTogglePin: (note: Note) => void;
 }) {
+  const pending = readPendingOverlay(
+    note as unknown as Record<string, unknown>
+  );
   const pinned = note.pinned === 1;
   const title = displayText(note.title);
   // The list projection ships a `preview` + `check` tally (issue #404); older
@@ -68,6 +71,12 @@ export function Card({
           <Icon svg={pinned ? I.pinCardFilled : I.pinCard} />
         </button>
       </div>
+      {pending ? (
+        <PendingWriteActions
+          row={note as unknown as Record<string, unknown>}
+          onEdit={() => onOpen(note.note_id)}
+        />
+      ) : null}
       <div className={styles.cardPreview}>
         <Highlighted text={preview} term={displayText(search)} />
       </div>

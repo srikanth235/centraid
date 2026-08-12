@@ -38,7 +38,6 @@ import type {
   AppState,
   Dash,
   DashboardPayload,
-  LedgerRow,
   NavPatch,
   ViewData,
 } from "./types.ts";
@@ -80,8 +79,6 @@ function makeState(): AppState {
     addFriend: null,
     expenseUndo: null,
     modalMembers: [],
-    pendingExpenses: [],
-    dismissedCommonsIntentIds: new Set(),
   };
 }
 
@@ -209,6 +206,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     deleteExpense: handleDeleteExpense,
     deleteGroup: handleDeleteGroup,
     dismissCommonsIntent: handleDismissDeniedIntent,
+    retryPendingIntent: handleRetryPendingIntent,
     cancelCommonsIntent: handleCancelCommonsIntent,
     addGroupMember: handleAddGroupMember,
     openAddExpense: handleOpenAddExpense,
@@ -310,34 +308,6 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   const state = stateRef.current;
   const dash = dashRef.current;
 
-  // The optimistic rows that belong on the currently visible ledger.
-  const pendingForView = (): LedgerRow[] => {
-    if (!state.pendingExpenses.length) return [];
-    if (state.view === "group")
-      return state.pendingExpenses.filter((r) => r.group_id === state.groupId);
-    if (state.view === "friend")
-      return state.pendingExpenses.filter(
-        (r) =>
-          r.paid_by === state.friendId ||
-          (r.splits ?? []).some((s) => s.party_id === state.friendId)
-      );
-    return [];
-  };
-
-  // The dashboard hero totals with in-flight optimistic adds folded in (parked
-  // rows excluded — a parked write hasn't moved any balance yet).
-  const dashWithPending = (): Dash => {
-    const inflight = state.pendingExpenses.filter((r) => !r.parked);
-    if (!inflight.length) return dash;
-    let owe = dash.owe_total_minor;
-    let owed = dash.owed_total_minor;
-    for (const r of inflight) {
-      if (r.your_role === "lent") owed += r.your_amount_minor;
-      else if (r.your_role === "borrowed") owe += r.your_amount_minor;
-    }
-    return { ...dash, owe_total_minor: owe, owed_total_minor: owed };
-  };
-
   // ---- Topbar (mirrors app.tsx renderTopbar) ----
   const q = state.search.trim();
   let title: string;
@@ -410,7 +380,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   } else if (state.view === "dashboard") {
     content = dashReadyRef.current ? (
       <Dashboard
-        dash={dashWithPending()}
+        dash={dash}
         onOpenFriend={(friendId) =>
           navTo({ view: "friend", friendId, search: "" })
         }
@@ -442,16 +412,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       />
     );
   } else if (state.view === "group" || state.view === "friend") {
-    // Optimistic adds render on top of the fetched ledger, newest first —
-    // never mutating state.viewData, so a refresh replaces it wholesale.
-    const pend = pendingForView();
-    const viewData: ViewData | null =
-      pend.length && state.viewData
-        ? {
-            ...state.viewData,
-            ledger: [...pend, ...(state.viewData.ledger ?? [])],
-          }
-        : state.viewData;
+    const viewData = state.viewData;
     content = (
       <>
         {state.view === "group" && viewData?.group ? (
@@ -475,8 +436,16 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
           onAddExpense={handleOpenAddExpense}
           onDismissDenied={(row) =>
             row.commonsIntentId &&
-            handleDismissDeniedIntent(row.commonsIntentId)
+            handleDismissDeniedIntent(
+              row.commonsIntentId,
+              row.__centraidScopeId
+            )
           }
+          onRetryIntent={(row) =>
+            row.commonsIntentId &&
+            handleRetryPendingIntent(row.commonsIntentId, row.__centraidScopeId)
+          }
+          onEditPending={handleOpenEditExpense}
           onCancelIntent={(row) =>
             row.commonsIntentId &&
             handleCancelCommonsIntent(row.commonsIntentId)

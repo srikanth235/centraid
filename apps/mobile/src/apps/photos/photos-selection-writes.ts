@@ -18,7 +18,6 @@ import type {
   MobileReplicaSession,
   NativeWriteResult,
 } from "../../lib/replica/native-session";
-import { optimisticRowId } from "../../lib/replica/optimistic";
 import type { PhotoAsset } from "./timeline-model";
 
 /** An asset a write can name: one that exists in a vault, not only on the
@@ -80,14 +79,6 @@ export function batchFavorite(
       session.write("photos", {
         action: "update-asset",
         input: { asset_id: asset.assetId, favorite: on ? 1 : 0 },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "media.asset",
-            rowId: asset.assetId,
-            values: { favorite: on ? 1 : 0 },
-          },
-        ],
       }),
     emit
   );
@@ -106,14 +97,6 @@ export function batchTrash(
       session.write("photos", {
         action: "delete-asset",
         input: { asset_id: asset.assetId },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "media.asset",
-            rowId: asset.assetId,
-            values: { deleted_at: new Date().toISOString() },
-          },
-        ],
       }),
     emit
   );
@@ -132,14 +115,6 @@ export function batchRestore(
       session.write("photos", {
         action: "restore",
         input: { asset_id: asset.assetId },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "media.asset",
-            rowId: asset.assetId,
-            values: { deleted_at: null, purge_at: null },
-          },
-        ],
       }),
     emit
   );
@@ -168,13 +143,6 @@ export function batchPurge(
       session.write("photos", {
         action: "purge-asset",
         input: { asset_id: asset.assetId },
-        optimistic: [
-          {
-            op: "delete",
-            entity: "media.asset",
-            rowId: asset.assetId,
-          },
-        ],
       }),
     emit
   );
@@ -192,26 +160,13 @@ export function batchAddToAlbum(
   return runSerially(
     targets,
     (asset) => {
-      const entryId = optimisticRowId("album-entry");
-      const values = {
-        entry_id: entryId,
-        collection_id: albumId,
-        target_type: "media.asset",
-        target_id: asset.assetId,
-        position: position++,
-        added_at: new Date().toISOString(),
-      };
       return session.write("photos", {
         action: "add-to-album",
-        input: { album_id: albumId, asset_id: asset.assetId },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "core.collection_entry",
-            rowId: entryId,
-            values,
-          },
-        ],
+        input: {
+          album_id: albumId,
+          asset_id: asset.assetId,
+          position: position++,
+        },
       });
     },
     emit

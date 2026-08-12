@@ -74,6 +74,12 @@ function fakeCoordinator(): ShellReplicaCoordinator {
     markIntentAwaitingChange:
       vi.fn<ShellReplicaCoordinator["markIntentAwaitingChange"]>(),
     applyIntentOutcome: vi.fn<ShellReplicaCoordinator["applyIntentOutcome"]>(),
+    discardIntent: vi
+      .fn<ShellReplicaCoordinator["discardIntent"]>()
+      .mockResolvedValue(false),
+    retryIntent: vi
+      .fn<ShellReplicaCoordinator["retryIntent"]>()
+      .mockResolvedValue(undefined),
     recoverSending: vi
       .fn<ShellReplicaCoordinator["recoverSending"]>()
       .mockResolvedValue([]),

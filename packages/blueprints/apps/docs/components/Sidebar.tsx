@@ -4,6 +4,7 @@
 // so this file exports three top-level components rather than one.
 import { useEffect, useRef } from "react";
 
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { fmtBytes } from "../format.ts";
 import { DELETE_ICON, I, RENAME_ICON, SHARE_ICON } from "../icons.ts";
 import { armConfirm } from "../kit.ts";
@@ -213,6 +214,10 @@ function FolderRow({
         active={active}
         count={count || ""}
         onClick={() => onSelectNav({ kind: "folder", folderId: f.folder_id })}
+      />
+      <PendingWriteActions
+        row={f as unknown as Record<string, unknown>}
+        onEdit={() => onStartRename(f.folder_id)}
       />
       <span className={styles.folderTools}>
         <button

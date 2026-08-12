@@ -1,6 +1,6 @@
 {
   "approvedDeviation": "#743 re-pins governed fingerprints after manifest harness capability, harness route security vocabulary, and explicit one-to-one matrix flow rename metadata; every floor is unchanged and the ratchet rejects many-to-one replacements.",
-  "matrixGovernanceFingerprint": "d9980c93d493cc2ef9176e557a5796cc51c7b215ca10062bcde9be54a6149d31",
+  "matrixGovernanceFingerprint": "22c1e4c93f4b93bc4c58561c1c6acb8fb0f703e05faaf795ada379cfa495f3db",
   "fingerprints": {
     "packages/agent-runtime/src/backends/acp/vault-mcp-server.ts": "23bf19e215bfe3fd8a21a4dd896d06c97835d43fc3412bfcc9bb0312bd6d7ff2",
     "packages/automation/src/manifest/manifest.ts": "e133e7233a6e3ac541f4972772aa803706b4bb7cf9590308b87c762402e5c509",
@@ -8,6 +8,6 @@
     "packages/gateway/src/serve/health-registry.ts": "d4483393bf09d7839ce995b1d6c698501f079e0c53d7e6031de268f7b642e4e6",
     "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
     "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
-    "tests/matrix.json": "481899e2a1712c3e1226d61af82f48764c9fb74ccaab4511c24860bd053982ca"
+    "tests/matrix.json": "0f67f7fdf59aeda8ec699afcb261c8535532d6c042d5a433f1ad014372fca789"
   }
 }

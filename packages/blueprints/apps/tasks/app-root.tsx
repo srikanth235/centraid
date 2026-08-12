@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { KeyboardEvent, ReactElement } from "react";
 
+import { readPendingOverlay } from "../_shared/pending-overlay.ts";
 import type { ScopeSearchReach } from "../_shared/search-scaffold.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
@@ -82,8 +83,6 @@ function makeState(view: View): AppState {
     boardReach: [],
     detailId: null,
     narrow: false,
-    pendingIds: new Set(),
-    pendingAdds: [],
     activityLog: new Map(),
     readFailedShown: false,
   };
@@ -265,10 +264,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         refresh,
       });
     }
-    const stopDoorbell = onDataChange(CHANGE_TABLES, () => {
-      logic.clearPending();
-      void refresh();
-    });
+    const stopDoorbell = onDataChange(CHANGE_TABLES, () => void refresh());
     const stopFocus = onFocusRefresh(() => void refresh());
     const onKey = (e: globalThis.KeyboardEvent): void => {
       const typing =
@@ -417,14 +413,12 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                 captureFocusRef.current = fn;
               },
             }}
-            pendingAdds={state.pendingAdds}
             sections={sections}
             isEmpty={isEmpty}
             emptyTitle={empty.title}
             emptySub={empty.sub}
             search={state.search}
             snippets={state.searchSnippets}
-            pendingIds={state.pendingIds}
             projects={data.projects}
             projectSections={data.sections}
             footer={footer}
@@ -471,7 +465,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             <Detail
               key={detailTask.task_id}
               task={detailTask}
-              pending={state.pendingIds.has(detailTask.task_id)}
+              pending={Boolean(
+                readPendingOverlay(
+                  detailTask as unknown as Record<string, unknown>
+                )
+              )}
               activity={state.activityLog.get(detailTask.task_id) ?? []}
               onClose={closeDetail}
               onToggleStatus={(t) => logic.toggleComplete(t)}

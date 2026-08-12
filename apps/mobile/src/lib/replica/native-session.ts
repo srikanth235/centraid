@@ -1,3 +1,5 @@
+import { projectPendingWrite } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import { pendingProjectionFor } from "@centraid/blueprints/apps/_shared/pending-projections";
 // governance: allow-repo-hygiene file-size-limit (#419) the native session is one cohesive coordinator wiring store, intent outbox, windowed bootstrap, SSE feed, and AppState drain across a single lifecycle
 import {
   DEFAULT_REPLICA_PURPOSE,
@@ -8,6 +10,7 @@ import {
   IntentQueue,
   postReplicaCheckpoint,
   postReplicaIntent,
+  pendingIntentIdFromInput,
   ReplicaCoordinator,
   ReplicaProtocolError,
   ReplicaTransportError,
@@ -75,6 +78,10 @@ export interface MobileReplicaSession {
     request: NativeSearchRequest
   ) => Promise<ReplicaSearchWireResult>;
   write: (appId: string, input: NativeWriteInput) => Promise<NativeWriteResult>;
+  revisePendingWrite?: (
+    intentId: string,
+    revision: ReplicaValue
+  ) => Promise<NativeWriteResult | undefined>;
   writeTo?: (
     vaultId: string,
     appId: string,
@@ -310,26 +317,64 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.assertOpen();
     if (!input.action)
       throw new ReplicaProtocolError("Replica action is required");
+    const retainedIntent = pendingIntentIdFromInput(
+      appId,
+      input.action,
+      input.input
+    );
+    if (retainedIntent) {
+      const revised = await this.revisePendingWrite(
+        retainedIntent.intentId,
+        input.input,
+        retainedIntent.expectedActions
+      );
+      if (revised) return revised;
+      throw new ReplicaProtocolError(
+        "The pending row is no longer available to edit"
+      );
+    }
+    const intentId = this.#intentIds.forWrite(
+      appId,
+      input.action,
+      input.input,
+      input.intentId
+    );
+    const projected = projectPendingWrite(pendingProjectionFor(appId), {
+      appId,
+      action: input.action,
+      input: input.input as Readonly<Record<string, unknown>>,
+      intentId,
+    });
     const { optimistic, dependencies } = prepareReplicaWrite(
       appId,
-      input.optimistic,
+      input.optimistic ?? projected.optimistic,
       this.#catalog,
       this.resolveShapeId.bind(this),
       false
     );
+    const baseVersions =
+      input.baseVersions ??
+      projected.baseVersions ??
+      (await this.#coordinator.captureBaseVersions(optimistic));
+    const matched = await this.#coordinator.reviseIntentForProjection(
+      appId,
+      input.action,
+      input.input,
+      optimistic,
+      baseVersions
+    );
+    if (matched) {
+      this.#intentStore.dismissAttention(matched.supersededIntentId);
+      return this.replacementAdmission(matched.replacement);
+    }
     const intent = await this.#coordinator.enqueue({
-      intentId: this.#intentIds.forWrite(
-        appId,
-        input.action,
-        input.input,
-        input.intentId
-      ),
+      intentId,
       appId,
       action: input.action,
       input: input.input,
       optimistic,
       dependencies,
-      ...(input.baseVersions ? { baseVersions: input.baseVersions } : {}),
+      ...(baseVersions.length > 0 ? { baseVersions } : {}),
     } satisfies EnqueueIntentInput);
     const settled = terminalResult(intent);
     if (settled) return settled;
@@ -377,7 +422,14 @@ export class NativeReplicaSession implements MobileReplicaSession {
     Array<
       | {
           intentId: string;
-          status: "queued" | "sending" | "awaiting-change" | "parked";
+          status:
+            | "queued"
+            | "sending"
+            | "awaiting-change"
+            | "parked"
+            | "denied"
+            | "conflict"
+            | "failed";
           appId: string;
           action: string;
           reason?: string;
@@ -386,19 +438,25 @@ export class NativeReplicaSession implements MobileReplicaSession {
     >
   > {
     const pending = await this.#coordinator.pendingIntents();
+    const retained = pending.flatMap((intent) =>
+      intent.state === "executed"
+        ? []
+        : [
+            {
+              intentId: intent.intentId,
+              status: intent.conflict ? ("conflict" as const) : intent.state,
+              appId: intent.appId,
+              action: intent.action,
+              ...(intent.reason ? { reason: intent.reason } : {}),
+            },
+          ]
+    );
+    const retainedIds = new Set(retained.map((intent) => intent.intentId));
     return [
-      ...pending.map((intent) => ({
-        intentId: intent.intentId,
-        status: intent.state as
-          | "queued"
-          | "sending"
-          | "awaiting-change"
-          | "parked",
-        appId: intent.appId,
-        action: intent.action,
-        ...(intent.reason ? { reason: intent.reason } : {}),
-      })),
-      ...this.#intentStore.attention(),
+      ...retained,
+      ...this.#intentStore
+        .attention()
+        .filter((attention) => !retainedIds.has(attention.intentId)),
     ];
   }
 
@@ -412,6 +470,47 @@ export class NativeReplicaSession implements MobileReplicaSession {
     });
     this.#intentStore.dismissAttention(intentId);
     return true;
+  }
+
+  async discardPendingWrite(intentId: string): Promise<boolean> {
+    const discarded = await this.#coordinator.discardIntent(intentId);
+    if (discarded) this.#intentStore.dismissAttention(intentId);
+    return discarded;
+  }
+
+  async revisePendingWrite(
+    intentId: string,
+    revision: ReplicaValue,
+    expectedActions?: readonly string[]
+  ): Promise<NativeWriteResult | undefined> {
+    const replacement = await this.#coordinator.reviseIntent(
+      intentId,
+      revision,
+      expectedActions
+    );
+    if (!replacement) return undefined;
+    this.#intentStore.dismissAttention(intentId);
+    return this.replacementAdmission(replacement);
+  }
+
+  private replacementAdmission(replacement: ReplicaIntent): NativeWriteResult {
+    if (!this.#isConnected())
+      return {
+        intentId: replacement.intentId,
+        status: "queued",
+        reason: "waiting for a connection",
+      };
+    void this.flushIntents();
+    return { intentId: replacement.intentId, status: "in-flight" };
+  }
+
+  async retryPendingWrite(
+    intentId: string
+  ): Promise<NativeWriteResult | undefined> {
+    const replacement = await this.#coordinator.retryIntent(intentId);
+    if (!replacement) return undefined;
+    this.#intentStore.dismissAttention(intentId);
+    return this.replacementAdmission(replacement);
   }
 
   dismissAttention(intentId: string): void {

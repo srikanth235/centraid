@@ -81,6 +81,12 @@ describe("shell-session-admission", () => {
       applyIntentOutcome: vi
         .fn<ShellReplicaCoordinator["applyIntentOutcome"]>()
         .mockResolvedValue(undefined),
+      discardIntent: vi
+        .fn<ShellReplicaCoordinator["discardIntent"]>()
+        .mockResolvedValue(false),
+      retryIntent: vi
+        .fn<ShellReplicaCoordinator["retryIntent"]>()
+        .mockResolvedValue(undefined),
       recoverSending: vi
         .fn<ShellReplicaCoordinator["recoverSending"]>()
         .mockResolvedValue([]),

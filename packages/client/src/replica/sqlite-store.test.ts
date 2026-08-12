@@ -407,6 +407,52 @@ describe("sqlite-store", () => {
       }
     });
 
+    test("searches a pending-only add and removes a pending indexed edit from stale FTS", () => {
+      const { store } = openStore();
+      try {
+        store.bootstrap(searchableSnapshot());
+        const result = store.search(
+          {
+            shapeId: "shape-search-agenda",
+            entity: "core.event",
+            query: "offline plan",
+          },
+          [
+            {
+              op: "upsert",
+              shapeId: "shape-search-agenda",
+              entity: "core.event",
+              rowId: "pending-event",
+              values: {
+                event_id: "pending-event",
+                summary: "Offline-planning session",
+                description: "Added without a canonical FTS row",
+                status: "confirmed",
+              },
+            },
+            {
+              op: "upsert",
+              shapeId: "shape-search-agenda",
+              entity: "core.event",
+              rowId: "event-search",
+              values: {
+                summary: "Pottery workshop",
+                description: "Bring an apron",
+              },
+            },
+          ]
+        );
+        expect(result.rows).toHaveLength(1);
+        expect(result.rows[0]?.values).toMatchObject({
+          event_id: "pending-event",
+          summary: "Offline-planning session",
+        });
+        expect(result.rows[0]?.values._snippet).toContain("⟦Offline⟧");
+      } finally {
+        store.close();
+      }
+    });
+
     test("keeps airplane-mode Agenda search current with incremental replica changes", () => {
       const { store } = openStore();
       try {

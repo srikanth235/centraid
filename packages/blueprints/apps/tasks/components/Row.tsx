@@ -5,6 +5,8 @@
 // instant it's clicked, reverting if the write didn't execute.
 import { useState } from "react";
 
+import { readPendingOverlay } from "../../_shared/pending-overlay.ts";
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
 import {
   flagLevel,
@@ -36,7 +38,6 @@ function Highlighted({ text, term }: { text: string; term: string }) {
 export function Row({
   task,
   closed = false,
-  pending = false,
   search = "",
   snippet,
   onOpen,
@@ -44,13 +45,15 @@ export function Row({
 }: {
   task: Task;
   closed?: boolean;
-  pending?: boolean;
   search?: string;
   snippet?: string;
   onOpen: (id: string) => void;
   onToggle: (task: Task) => Promise<boolean>;
 }) {
   const [completing, setCompleting] = useState(false);
+  const pending = readPendingOverlay(
+    task as unknown as Record<string, unknown>
+  );
   const isOpen = task.status === "needs-action" || task.status === "in-process";
   const cancelled = task.status === "cancelled";
   const isDone = task.status === "completed" || completing;
@@ -128,7 +131,12 @@ export function Row({
               ↻
             </span>
           ) : null}
-          {pending ? <span className="kit-pending-chip">pending</span> : null}
+          {pending ? (
+            <PendingWriteActions
+              row={task as unknown as Record<string, unknown>}
+              onEdit={() => onOpen(task.task_id)}
+            />
+          ) : null}
         </div>
         {snippet ? (
           <Snippet snippet={snippet} className={styles.rowNote} />

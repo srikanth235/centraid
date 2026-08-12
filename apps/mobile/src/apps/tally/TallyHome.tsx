@@ -105,6 +105,7 @@ export default function TallyHome({
     originalStart: string;
     scope: "occurrence" | "future" | "series";
   }>();
+  const [replacementRowId, setReplacementRowId] = useState<string>();
   const [editDescription, setEditDescription] = useState("");
   const [editAmount, setEditAmount] = useState("");
 
@@ -151,6 +152,26 @@ export default function TallyHome({
         groupLabel={groupNameById.get(asString(item.group_id)) ?? "Group"}
         currency={asString(item.settlement_currency) || baseCurrency}
         colors={colors}
+        onEditPending={(row) => {
+          setDescription(asString(row.description));
+          setAmount(
+            (
+              Number(row.original_amount_minor ?? row.amount_minor ?? 0) / 100
+            ).toFixed(2)
+          );
+          setOriginalCurrency(asString(row.original_currency) || baseCurrency);
+          setSettlementCurrency(
+            asString(row.settlement_currency) || baseCurrency
+          );
+          setRate(
+            row.rate_scaled && row.rate_scale != null
+              ? String(Number(row.rate_scaled) / 10 ** Number(row.rate_scale))
+              : "1"
+          );
+          setRateSource(asString(row.rate_source) || "identity");
+          setRateDate(asString(row.rate_date) || asString(row.spent_on));
+          setReplacementRowId(asString(row.expense_id));
+        }}
       />
     ),
     [baseCurrency, colors, groupNameById]
@@ -246,6 +267,20 @@ export default function TallyHome({
           template_id: templateId,
           original_start: anchor.toISOString(),
         });
+    } else if (replacementRowId) {
+      // The edit action plus a synthetic expense id is the shared queue's
+      // declared revision signal. It replaces the retained add intent with one
+      // fresh immutable add instead of submitting a second expense command.
+      await write("edit-expense", {
+        expense_id: replacementRowId,
+        description: description.trim(),
+        amount_minor: settled,
+        paid_by: ownerId,
+        spent_on: new Date().toISOString().slice(0, 10),
+        category: "general",
+        splits,
+        ...currencyFields,
+      });
     } else {
       await write("add-expense", {
         group_id: activeGroupId,
@@ -260,6 +295,7 @@ export default function TallyHome({
     }
     setDescription("");
     setAmount("");
+    setReplacementRowId(undefined);
   };
   const beginEdit = (
     template: ReplicaRow,

@@ -1,4 +1,5 @@
 import { OnlineOnlyError, ReplicaProtocolError } from "./errors.js";
+import type { ReplicaRow } from "./types.js";
 
 /** A replica-local search surface composed only from eager scalar row metadata. */
 export interface ReplicaLocalSearchSpec {
@@ -44,23 +45,108 @@ export function replicaLocalSearchSpec(entity: string): ReplicaLocalSearchSpec {
   return spec;
 }
 
-/** Mirrors the canonical gateway's fixed FTS grammar and 16-token bound. */
-export function replicaFtsMatchExpression(query: string): string {
+/** Mirrors the canonical gateway's token cleanup and 16-token bound. */
+export function replicaSearchTokens(query: string): string[] {
   if (typeof query !== "string")
     throw new ReplicaProtocolError("Search query must be a string");
   const tokens = query
     .split(/\s+/u)
     .map((token) => token.replaceAll('"', ""))
-    .filter((token) => /[\p{L}\p{N}]/u.test(token))
+    .flatMap((token) =>
+      [...token.matchAll(/[\p{L}\p{N}\p{M}]+/gu)].map((match) => match[0])
+    )
     .slice(0, 16);
   if (tokens.length === 0) {
     throw new ReplicaProtocolError("Search query has no searchable words");
   }
-  return tokens.map((token) => `"${token}"*`).join(" ");
+  return tokens;
+}
+
+/** Mirrors the canonical gateway's fixed FTS prefix grammar. */
+export function replicaFtsMatchExpression(query: string): string {
+  return replicaSearchTokens(query)
+    .map((token) => `"${token}"*`)
+    .join(" ");
 }
 
 export function replicaSearchRequiredColumns(
   spec: ReplicaLocalSearchSpec
 ): string[] {
   return [...spec.columns, ...(spec.deletedColumn ? [spec.deletedColumn] : [])];
+}
+
+const foldSearchText = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replaceAll(/\p{M}+/gu, "")
+    .toLocaleLowerCase();
+
+interface SearchWord {
+  original: string;
+  folded: string;
+  start: number;
+  end: number;
+}
+
+/** Default FTS5 unicode61 word boundaries, including punctuation splitting. */
+function searchWords(value: string): SearchWord[] {
+  return [...value.matchAll(/[\p{L}\p{N}\p{M}]+/gu)].map((match) => {
+    const start = match.index;
+    const original = match[0];
+    return {
+      original,
+      folded: foldSearchText(original),
+      start,
+      end: start + original.length,
+    };
+  });
+}
+
+/**
+ * Exact bounded matcher for an unsettled row that is not in canonical FTS yet.
+ * FTS5's contract here is an AND of word prefixes over eager scalar columns;
+ * pending rows use that same grammar and receive an explicit provisional rank.
+ * Canonical rows keep SQLite's BM25 rank. This is not a body-search guess: only
+ * columns already admitted by {@link replicaLocalSearchSpec} participate.
+ */
+export function replicaPendingSearchMatch(
+  row: ReplicaRow,
+  spec: ReplicaLocalSearchSpec,
+  query: string
+): { matches: boolean; snippet: string } {
+  if (spec.deletedColumn && row[spec.deletedColumn] != null)
+    return { matches: false, snippet: "" };
+  const tokens = replicaSearchTokens(query).map(foldSearchText);
+  const fields = spec.columns.flatMap((column) => {
+    const value = row[column];
+    return typeof value === "string" ? [value] : [];
+  });
+  const words = fields.flatMap(searchWords);
+  if (
+    !tokens.every((token) =>
+      words.some((word) => word.folded.startsWith(token))
+    )
+  )
+    return { matches: false, snippet: "" };
+  const firstToken = tokens[0]!;
+  const source = fields
+    .map((value) => ({ value, words: searchWords(value) }))
+    .find(({ words: sourceWords }) =>
+      sourceWords.some((word) => word.folded.startsWith(firstToken))
+    ) ?? { value: fields[0] ?? "", words: [] };
+  const highlightedWord = source.words.find((word) =>
+    word.folded.startsWith(firstToken)
+  );
+  const highlighted = highlightedWord
+    ? `${source.value.slice(0, highlightedWord.start)}⟦${source.value.slice(
+        highlightedWord.start,
+        highlightedWord.end
+      )}⟧${source.value.slice(highlightedWord.end)}`
+    : source.value;
+  return { matches: true, snippet: highlighted };
+}
+
+/** Pending hits sort deterministically ahead of stale canonical BM25 hits. */
+export function replicaPendingSearchRank(position: number): number {
+  return -1_000_000 + position / 1_000;
 }

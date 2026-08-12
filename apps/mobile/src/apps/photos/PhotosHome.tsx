@@ -48,10 +48,6 @@ import {
 import { useTheme } from "../../kit/theme";
 import { hydrateBackupConsent } from "../../kit/transfer/transfer-consent";
 import type { BackupConsentRecord } from "../../kit/transfer/transfer-consent";
-import {
-  optimisticRowId,
-  optimisticValues,
-} from "../../lib/replica/optimistic";
 import { refreshPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
 import type { PhotosScreenProps } from "../../navigation";
@@ -509,7 +505,6 @@ export default function PhotosHome({
               // the member's selection order. Parallel writes would race both.
               for (const [index, asset] of assets.entries()) {
                 const albumId = String(album.collection_id);
-                const entryId = optimisticRowId("album-entry");
                 const position =
                   albumEntryCount(
                     entries.rows,
@@ -519,34 +514,11 @@ export default function PhotosHome({
                 // oxlint-disable-next-line no-await-in-loop
                 const result = await session.write("photos", {
                   action: "add-to-album",
-                  input: { album_id: albumId, asset_id: asset.assetId! },
-                  optimistic: [
-                    {
-                      op: "upsert",
-                      entity: "core.collection_entry",
-                      rowId: entryId,
-                      values: {
-                        entry_id: entryId,
-                        collection_id: albumId,
-                        target_type: "media.asset",
-                        target_id: asset.assetId!,
-                        position,
-                        added_at: new Date().toISOString(),
-                      },
-                    },
-                    ...(album.cover_content_id == null && asset.contentId
-                      ? [
-                          {
-                            op: "upsert" as const,
-                            entity: "core.collection",
-                            rowId: albumId,
-                            values: optimisticValues(album, {
-                              cover_content_id: asset.contentId,
-                            }),
-                          },
-                        ]
-                      : []),
-                  ],
+                  input: {
+                    album_id: albumId,
+                    asset_id: asset.assetId!,
+                    position,
+                  },
                 });
                 surfaceWriteOutcome(result);
               }

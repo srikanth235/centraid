@@ -140,8 +140,8 @@ interface InlineAppMountProps {
   scopes: readonly ResolvedAppScope[];
   /** The frame's contribution channel — app bar, status line, compact band. */
   frame: InlineFrame;
-  onDescriptor: (descriptor: InlineAppModule) => void;
   onRootReady: (el: HTMLElement | null, descriptor: InlineAppModule) => void;
+  onOpenApprovals: () => void;
 }
 
 function InlineAppMount({
@@ -150,8 +150,8 @@ function InlineAppMount({
   descriptorPromise,
   scopes,
   frame,
-  onDescriptor,
   onRootReady,
+  onOpenApprovals,
 }: InlineAppMountProps): JSX.Element {
   // ONLY the primary scope blocks first paint (issue #599). Every audience is
   // hydrated after the app is on screen, so a household with several shared
@@ -174,7 +174,9 @@ function InlineAppMount({
     const teardown = installInlineCentraid({
       appId,
       queries: descriptor.queries,
+      pendingProjection: descriptor.pendingProjection,
       scopes: [{ scope: primary.scope, session: lease.session }],
+      onOpenApprovals,
       onInstalled: (published) => {
         client = published;
       },
@@ -185,12 +187,11 @@ function InlineAppMount({
   const installed = installation.client;
 
   useEffect(() => {
-    onDescriptor(descriptor);
     return () => {
       installation.teardown();
       lease.release();
     };
-  }, [descriptor, installation, lease, onDescriptor]);
+  }, [installation, lease]);
 
   // Secondary scopes stream in. Each is an independent replica session, so one
   // slow or failing audience never holds up the others — or the app.
@@ -499,8 +500,8 @@ export default function InlineAppRoute({
                     descriptorPromise={descriptorPromise}
                     scopes={scopes}
                     frame={contributed.frame}
-                    onDescriptor={() => {}}
                     onRootReady={onRootReady}
+                    onOpenApprovals={() => nav.navigate({ kind: "approvals" })}
                   />
                 ) : (
                   <div className={styles.fallback}>Loading {app.name}…</div>

@@ -7,6 +7,7 @@
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
+import pendingProjection from "./pending-projection.ts";
 import activityQuery from "./queries/activity.ts";
 import driveQuery from "./queries/drive.ts";
 import historyQuery from "./queries/history.ts";
@@ -14,6 +15,7 @@ import searchQuery from "./queries/search.ts";
 
 const docsInlineApp: InlineAppModule = {
   appId: "docs",
+  pendingProjection,
   changeTables: CHANGE_TABLES,
   // The query defaults are typed against the ambient `HandlerArgs`; the inline
   // contract types `ctx` as `unknown`, so bridge the two here (the shell builds a

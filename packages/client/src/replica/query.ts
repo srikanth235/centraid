@@ -1,3 +1,5 @@
+import { PENDING_OVERLAY_FIELDS } from "@centraid/blueprints/apps/_shared/pending-overlay";
+
 import type { OnlineOnlyGuard } from "./errors.js";
 import { OnlineOnlyError, ReplicaProtocolError } from "./errors.js";
 import type {
@@ -235,8 +237,10 @@ export function validateOptimisticMutation(
     );
   }
   if (mutation.op === "delete") return;
-  for (const column of Object.keys(mutation.values))
-    assertColumn(schema, column);
+  const metadataFields = new Set<string>(Object.values(PENDING_OVERLAY_FIELDS));
+  for (const column of Object.keys(mutation.values)) {
+    if (!metadataFields.has(column)) assertColumn(schema, column);
+  }
   const predictedPrimaryKey = mutation.values[schema.primaryKey];
   if (
     (!rowAlreadyExists && predictedPrimaryKey === undefined) ||

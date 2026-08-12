@@ -24,7 +24,6 @@ import {
 import ShareSheet from "../../kit/share/ShareSheet";
 import { useTheme } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
-import { optimisticValues } from "../../lib/replica/optimistic";
 import {
   listCommonsResidents,
   retainCommonsItem,
@@ -177,18 +176,11 @@ export default function AlbumDetail({
       if (!session) return;
       const result = await session.write("photos", {
         action: "remove-from-album",
-        input: { album_id: route.params.albumId, asset_id: asset.assetId! },
-        ...(entry
-          ? {
-              optimistic: [
-                {
-                  op: "delete" as const,
-                  entity: "core.collection_entry",
-                  rowId: String(entry.entry_id),
-                },
-              ],
-            }
-          : {}),
+        input: {
+          album_id: route.params.albumId,
+          asset_id: asset.assetId!,
+          ...(entry ? { entry_id: String(entry.entry_id) } : {}),
+        },
       });
       surfaceWriteOutcome(result);
       return removeNext(index + 1);
@@ -208,16 +200,6 @@ export default function AlbumDetail({
       const result = await session.write("photos", {
         action: "set-album-cover",
         input: { album_id: route.params.albumId, asset_id: selected.assetId },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "core.collection",
-            rowId: route.params.albumId,
-            values: optimisticValues(album, {
-              cover_content_id: selected.contentId,
-            }),
-          },
-        ],
       });
       if (surfaceWriteOutcome(result)) setSelection(new Set());
     } catch (error) {
@@ -237,13 +219,6 @@ export default function AlbumDetail({
             .write("photos", {
               action: "delete-album",
               input: { album_id: route.params.albumId },
-              optimistic: [
-                {
-                  op: "delete",
-                  entity: "core.collection",
-                  rowId: route.params.albumId,
-                },
-              ],
             })
             .then((result) => {
               if (surfaceWriteOutcome(result)) navigation.goBack();
@@ -261,14 +236,6 @@ export default function AlbumDetail({
       const result = await session.write("photos", {
         action: "rename-album",
         input: { album_id: route.params.albumId, title: name.trim() },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "core.collection",
-            rowId: route.params.albumId,
-            values: optimisticValues(album, { name: name.trim() }),
-          },
-        ],
       });
       if (surfaceWriteOutcome(result)) {
         setRenameOpen(false);

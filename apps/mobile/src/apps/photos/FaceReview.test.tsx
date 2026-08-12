@@ -368,7 +368,7 @@ describe("Face review (native)", () => {
     expect(container!.textContent).not.toMatch(/\d+ photos\b/u);
   });
 
-  it("Keep unnamed fires a real dismiss answer (issue 712)", async () => {
+  it("Keep unnamed delegates its dismiss projection to the replica engine", async () => {
     await renderScreen();
     const keep = Array.from(container!.querySelectorAll("button")).find(
       (b) => b.getAttribute("aria-label") === "Keep unnamed"
@@ -383,7 +383,6 @@ describe("Face review (native)", () => {
       {
         action: string;
         input: Record<string, unknown>;
-        optimistic: { op: string; values: Record<string, unknown> }[];
       },
     ];
     expect(app).toBe("photos");
@@ -392,15 +391,9 @@ describe("Face review (native)", () => {
       region_id: "r1",
       answer: "dismiss",
     });
-    // The optimistic row is an UPSERT, not a delete: an answered region
-    // survives now, so the local copy has to land in the answered state or
-    // the queue rebuilds with the face still in it.
-    expect(request.optimistic[0]!.op).toBe("upsert");
-    expect(request.optimistic[0]!.values).toStrictEqual({
-      review_state: "dismissed",
-      party_id: null,
-      confirmed_by_party_id: null,
-    });
+    // The shared Photos projection owns the local upsert. App call sites must
+    // not send a second, hand-maintained optimistic shape alongside it.
+    expect(request).not.toHaveProperty("optimistic");
   });
 
   it("an already-answered region is not in the queue", async () => {

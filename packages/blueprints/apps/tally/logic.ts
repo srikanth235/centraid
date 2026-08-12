@@ -15,6 +15,11 @@
 import { BRAND, identityColor, identityInitials } from "@centraid/design";
 
 import {
+  enrichPendingRows,
+  pendingOverlayCopy,
+  readPendingOverlay,
+} from "../_shared/pending-overlay.ts";
+import {
   convertMinor,
   first,
   rateToScaled,
@@ -31,14 +36,13 @@ import type {
   NavPatch,
   NewGroupModel,
   Person,
-  Role,
   SettleModel,
   SplitEntry,
   VaultDenied,
   ViewData,
 } from "./types.ts";
 
-/** The ground fields an optimistic row and the write share. */
+/** The ground fields the expense write shares with split calculation. */
 interface ExpenseBase {
   description: string;
   amount_minor: number;
@@ -79,15 +83,10 @@ export function createLogic({
 
   async function act(
     action: string,
-    input: Record<string, unknown>,
-    intentId?: string
+    input: Record<string, unknown>
   ): Promise<VaultOutcome | undefined> {
     try {
-      return await window.centraid.write({
-        action,
-        input,
-        ...(intentId ? { intentId } : {}),
-      });
+      return await window.centraid.write({ action, input });
     } catch (error) {
       notice(String((error as { message?: string })?.message ?? error));
       return undefined;
@@ -305,8 +304,10 @@ export function createLogic({
     for (const s of row.splits ?? [])
       exact[s.party_id] = (s.share_minor / 100).toFixed(2);
     state.expense = {
-      mode: "edit",
-      expense_id: row.expense_id,
+      mode: row.pending ? "replace-pending" : "edit",
+      ...(row.pending
+        ? { replacementRowId: row.expense_id }
+        : { expense_id: row.expense_id }),
       groupId: row.group_id,
       desc: row.description,
       amount: (row.amount_minor / 100).toFixed(2),
@@ -357,57 +358,7 @@ export function createLogic({
   // Build the decorated row shape the group/friend ledger queries return, so
   // an optimistic add renders through the exact same components (ExpenseRow)
   // as a fetched row — plus `pending`/`parked` flags for the kit chip.
-  function pendingExpenseRow(
-    groupId: string,
-    base: ExpenseBase,
-    expenseId: string
-  ): LedgerRow {
-    const myShare =
-      base.splits.find((s) => s.party_id === dash.me)?.share_minor ?? 0;
-    let your_role: Role = "none";
-    let your_amount_minor = 0;
-    if (base.paid_by === dash.me) {
-      your_role = "lent";
-      your_amount_minor = base.amount_minor - myShare;
-    } else if (myShare > 0) {
-      your_role = "borrowed";
-      your_amount_minor = myShare;
-    }
-    return {
-      expense_id: expenseId,
-      group_id: groupId,
-      group_name: dash.groups.find((g) => g.group_id === groupId)?.name ?? "",
-      description: base.description,
-      amount_minor: base.amount_minor,
-      paid_by: base.paid_by,
-      paid_by_name: displayName(base.paid_by),
-      category: base.category,
-      spent_on: base.spent_on,
-      splits: base.splits.map((s) => ({ ...s })),
-      your_role,
-      your_amount_minor,
-      pending: true,
-      parked: false,
-    };
-  }
-
-  function optimisticExpenseRow(
-    exp: ExpenseModel,
-    base: ExpenseBase
-  ): LedgerRow {
-    return pendingExpenseRow(
-      exp.groupId,
-      base,
-      `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-    );
-  }
-
-  /**
-   * Rebuild Tally's flagship optimistic overlay from vault-resident Commons
-   * intents. A reload therefore does not erase a member's expense merely
-   * because the steward is offline; executed commands disappear once server
-   * truth is queryable, while parked and denied rows keep their reason.
-   */
+  /** Add online Commons detail to rows already supplied by replica ⊕ outbox. */
   async function refreshCommonsExpenses(): Promise<void> {
     if (!window.centraid.commonsIntents) return;
     let intents: CentraidCommonsIntent[];
@@ -416,94 +367,57 @@ export function createLogic({
     } catch {
       return;
     }
-    const durable: LedgerRow[] = [];
-    for (const intent of intents) {
-      // `LedgerRow["intentStatus"]` has no "executed" member — an executed
-      // intent never becomes a row — so the wire status is narrowed once
-      // here and the "executed" case is checked on `intent` itself below.
-      const status = intent.status as LedgerRow["intentStatus"];
-      // A settled-but-not-executed intent the member already dismissed
-      // stays gone across refreshes (issue #731 m6, extended by goal 2) —
-      // pending/parked rows are never in this set, so they keep
-      // re-appearing exactly as before.
-      const dismissibleSettled =
-        status === "denied" || status === "expired" || status === "cancelled";
-      if (
-        intent.command !== "tally.add_expense" ||
-        intent.status === "executed" ||
-        (dismissibleSettled &&
-          state.dismissedCommonsIntentIds.has(intent.intentId))
-      )
-        continue;
-      const raw = intent.input;
-      const groupId = typeof raw.group_id === "string" ? raw.group_id : "";
-      const description =
-        typeof raw.description === "string" ? raw.description : "";
-      const paidBy = typeof raw.paid_by === "string" ? raw.paid_by : "";
-      const amountMinor = Number(raw.amount_minor);
-      if (!groupId || !description || !paidBy || !Number.isFinite(amountMinor))
-        continue;
-      const splits = Array.isArray(raw.splits)
-        ? raw.splits.flatMap((entry): SplitEntry[] => {
-            if (!entry || typeof entry !== "object") return [];
-            const split = entry as Record<string, unknown>;
-            const partyId =
-              typeof split.party_id === "string" ? split.party_id : "";
-            const shareMinor = Number(split.share_minor);
-            return partyId && Number.isFinite(shareMinor)
-              ? [{ party_id: partyId, share_minor: shareMinor }]
-              : [];
-          })
-        : [];
-      const row = pendingExpenseRow(
-        groupId,
-        {
-          description,
-          amount_minor: amountMinor,
-          paid_by: paidBy,
-          category: typeof raw.category === "string" ? raw.category : "general",
-          spent_on:
-            typeof raw.spent_on === "string"
-              ? raw.spent_on
-              : new Date(intent.createdAt).toISOString().slice(0, 10),
-          splits,
-        },
-        `commons-${intent.intentId}`
-      );
-      row.commonsIntentId = intent.intentId;
-      row.intentStatus = status;
-      row.parked = true;
-      row.pendingReason = intent.reason;
-      row.stewardLabel = intent.stewardLabel;
-      durable.push(row);
-    }
-    state.pendingExpenses = durable;
+    const byId = new Map(intents.map((intent) => [intent.intentId, intent]));
+    const enrich = (rows: LedgerRow[] | undefined): void => {
+      if (!rows) return;
+      for (const [index, row] of rows.entries()) {
+        if (!row.commonsIntentId) continue;
+        const intent = byId.get(row.commonsIntentId);
+        if (!intent || intent.command !== "tally.add_expense") continue;
+        if (
+          intent.status === "pending" ||
+          intent.status === "parked" ||
+          intent.status === "denied" ||
+          intent.status === "expired" ||
+          intent.status === "cancelled"
+        ) {
+          const [enriched] = enrichPendingRows(
+            [row as LedgerRow & Record<string, unknown>],
+            [
+              {
+                intentId: row.commonsIntentId,
+                status: intent.status === "pending" ? "queued" : intent.status,
+                ...(intent.reason ? { reason: intent.reason } : {}),
+                ...(intent.stewardLabel
+                  ? { stewardLabel: intent.stewardLabel }
+                  : {}),
+              },
+            ]
+          );
+          if (!enriched) continue;
+          rows[index] = enriched as LedgerRow;
+          const pending = readPendingOverlay(enriched);
+          if (!pending) continue;
+          enriched.intentStatus = pending.status;
+          enriched.pendingReason = pendingOverlayCopy(pending);
+          enriched.stewardLabel = pending.stewardLabel;
+          enriched.parked = pending.status === "parked";
+        }
+      }
+    };
+    enrich(state.viewData?.ledger);
+    enrich(state.viewData?.results);
   }
 
-  /**
-   * Settle a settled-but-not-executed (`denied`/`expired`/`cancelled`)
-   * durable Commons intent out of the ledger overlay for good (issue #731
-   * m6, extended by goal 2) — a no-op for anything else, so a pending/parked
-   * row (still genuinely in flight) can never be dismissed away. Removes it
-   * from `state.pendingExpenses` immediately (no round trip to wait on) and
-   * remembers the id so the next `refreshCommonsExpenses` doesn't resurrect it.
-   */
-  function dismissCommonsIntent(intentId: string) {
-    const row = state.pendingExpenses.find(
-      (r) => r.commonsIntentId === intentId
-    );
-    if (
-      !row ||
-      (row.intentStatus !== "denied" &&
-        row.intentStatus !== "expired" &&
-        row.intentStatus !== "cancelled")
-    )
-      return;
-    state.dismissedCommonsIntentIds.add(intentId);
-    state.pendingExpenses = state.pendingExpenses.filter(
-      (r) => r.commonsIntentId !== intentId
-    );
-    render();
+  /** Discard is durable outbox settlement, so reload cannot resurrect it. */
+  async function dismissCommonsIntent(intentId: string, scopeId?: string) {
+    await window.centraid.discardPendingWrite?.(intentId, scopeId);
+    await refreshAll();
+  }
+
+  async function retryPendingIntent(intentId: string, scopeId?: string) {
+    await window.centraid.retryPendingWrite?.(intentId, scopeId);
+    await refreshAll();
   }
 
   /**
@@ -516,18 +430,22 @@ export function createLogic({
    * the race was lost.
    */
   async function cancelCommonsIntent(intentId: string) {
-    const row = state.pendingExpenses.find(
-      (r) => r.commonsIntentId === intentId
-    );
+    const row = [
+      ...(state.viewData?.ledger ?? []),
+      ...(state.viewData?.results ?? []),
+    ].find((candidate) => candidate.commonsIntentId === intentId);
     if (
       !row ||
-      (row.intentStatus !== "pending" && row.intentStatus !== "parked")
+      (row.intentStatus !== "queued" && row.intentStatus !== "parked")
     )
       return;
     const cancel = window.centraid.cancelCommonsIntent;
     if (!cancel) return;
     try {
-      await cancel({ intentId });
+      await cancel({
+        intentId,
+        ...(row.__centraidScopeId ? { scope: row.__centraidScopeId } : {}),
+      });
     } catch {
       // A transport failure leaves the row exactly as it was; the refresh
       // below (or the member's next action) reconciles it either way.
@@ -607,11 +525,13 @@ export function createLogic({
       await refreshAll();
       return;
     }
-    if (exp.mode === "edit") {
+    if (exp.mode === "edit" || exp.mode === "replace-pending") {
       // Edit is the cold path — patching a fetched row in place is not worth
       // the divergence risk, so it keeps the plain write→narrate→refresh flow.
+      // A synthetic id deliberately enters the shell's declared revision path;
+      // the queue then replaces the original immutable add intent atomically.
       const outcome = await act("edit-expense", {
-        expense_id: exp.expense_id,
+        expense_id: exp.mode === "edit" ? exp.expense_id : exp.replacementRowId,
         ...base,
         ...currencyFields,
       });
@@ -622,57 +542,23 @@ export function createLogic({
       await refreshAll();
       return;
     }
-    // Optimistic add — the hot path (issue #404). The row lands in local
-    // state and the modal closes BEFORE the write resolves, so the click
-    // costs zero round trips; the write itself then reconciles:
-    //   executed → the write's own change doorbell (onDataChange in app.tsx)
-    //              refetches and swaps the optimistic row for server truth;
-    //   parked   → the row stays, chip and all, exactly like tasks' parked
-    //              ghost adds, until some later change resolves it;
-    //   failed/denied/threw → the row is removed and the notice banner
-    //              carries the existing plain-language reason.
-    const intentId = globalThis.crypto.randomUUID();
-    const row = optimisticExpenseRow(exp, base);
-    row.commonsIntentId = intentId;
-    state.pendingExpenses.push(row);
-    closeExpense();
-    render();
-    const outcome = await act(
-      "add-expense",
-      {
-        group_id: exp.groupId,
-        ...base,
-        ...currencyFields,
-      },
-      intentId
-    );
+    const outcome = await act("add-expense", {
+      ...(exp.replacementRowId ? { expense_id: exp.replacementRowId } : {}),
+      group_id: exp.groupId,
+      ...base,
+      ...currencyFields,
+    });
     if (outcome?.status === "executed") {
       notice("");
       statusLine("Expense added · receipted.");
-      return;
+    } else if (outcome?.status === "parked") {
+      statusLine("Sent to the owner for confirmation.");
+      narrate(outcome);
+    } else if (outcome) {
+      narrate(outcome);
     }
-    if (outcome?.status === "parked") {
-      row.parked = true;
-      row.intentStatus = "parked";
-      row.pendingReason = outcome.reason ?? outcome.message;
-      narrate(outcome); // the existing parked banner copy
-      render();
-      return;
-    }
-    await refreshCommonsExpenses();
-    if (
-      state.pendingExpenses.some(
-        (pending) => pending.commonsIntentId === intentId
-      )
-    ) {
-      if (outcome) narrate(outcome);
-      render();
-      return;
-    }
-    const i = state.pendingExpenses.indexOf(row);
-    if (i >= 0) state.pendingExpenses.splice(i, 1);
-    if (outcome) narrate(outcome); // a thrown transport error already hit the banner via act()
-    render();
+    if (outcome) closeExpense();
+    await refreshAll();
   }
 
   async function deleteExpense(expenseId: string) {
@@ -957,6 +843,7 @@ export function createLogic({
     read,
     refreshCommonsExpenses,
     dismissCommonsIntent,
+    retryPendingIntent,
     cancelCommonsIntent,
     applyDenied,
     directory,
