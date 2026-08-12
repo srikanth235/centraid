@@ -7,6 +7,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 
 import { VaultShareError } from "../errors.js";
+import type { InvokeOutcome } from "../gateway/types.js";
 import { uuidv7 } from "../ids.js";
 import { placeBlob } from "./blobs.js";
 import { CLOSURE_FORMAT_VERSION } from "./closure.js";
@@ -387,6 +388,9 @@ export function exportCommonsBootstrap(input: {
   memberVaultId: string;
   /** The steward signs every snapshot it ships, rebuilt or stored. */
   identitySeed: Buffer;
+  /** Ship checkpoint + executable tail. Callers must opt in after wiring the
+   * canonical replica-command executor; the default remains a head snapshot. */
+  incremental?: boolean;
 }): CommonsBootstrap {
   const grant = readCommonsGrant(input.steward, input.grantId);
   if (grant.revokedAt) throw new Error("commons grant is revoked");
@@ -460,17 +464,19 @@ export function exportCommonsBootstrap(input: {
         WHERE grant_id = ? AND sequence > ? ORDER BY sequence`
     )
     .all(grant.grantId, snapshotSequence) as Record<string, unknown>[];
-  // An executed domain command makes the old checkpoint's rows stale, and so
-  // does a checkpoint the steward cannot attest to. Both rebuild a complete
-  // snapshot at the head in this background/peer-sync path; refused and
-  // control-only tail entries remain cheap deterministic tail application.
+  // A signed checkpoint plus its chained command tail is the ordinary wire.
+  // Rebuilding the whole closure for every executed command made every blob
+  // chunk request an accidental full export and erased member-side derived
+  // rows. Only an explicitly incremental caller receives that shape; callers
+  // without the canonical executor retain the complete head-snapshot fallback.
   const staleSnapshot =
     attested?.sequence !== snapshotSequence ||
-    tail.some(
-      (row) =>
-        row["outcome"] === "executed" &&
-        (row["kind"] === "command" || row["kind"] === "delete")
-    );
+    (input.incremental !== true &&
+      tail.some(
+        (row) =>
+          row["outcome"] === "executed" &&
+          (row["kind"] === "command" || row["kind"] === "delete")
+      ));
   if (staleSnapshot) {
     closure = commonsClosure(input.steward, input.stewardVaultId, grant);
     snapshotSequence = grant.lastSequence;
@@ -518,6 +524,7 @@ export function exportCommonsSyncFrame(input: {
   grantId: string;
   memberVaultId: string;
   identitySeed: Buffer;
+  incremental?: boolean;
 }): CommonsSyncFrame {
   const grant = readCommonsGrant(input.steward, input.grantId);
   const bound = input.steward
@@ -765,6 +772,11 @@ export function applyCommonsBootstrap(input: {
   seat: ShareVaultRef;
   wire: CommonsBootstrap;
   now: string;
+  applyCommand?: (
+    command: string,
+    commandInput: Record<string, unknown>,
+    invocationId: string
+  ) => InvokeOutcome;
 }): void {
   const seatDb = input.seat.vault;
   const localVaultId = seatDb
@@ -813,6 +825,80 @@ export function applyCommonsBootstrap(input: {
     checkpoint: input.wire.checkpoint,
     bindings: input.wire.control.bindings,
   });
+  const executableTail = input.wire.tail.filter(
+    (row) =>
+      Number(row["sequence"]) > (cursor?.sequence ?? -1) &&
+      row["outcome"] === "executed" &&
+      (row["kind"] === "command" || row["kind"] === "delete")
+  );
+  const applyTailCommands = (): void => {
+    if (!input.applyCommand || retained) return;
+    for (const row of executableTail) {
+      const sequence = Number(row["sequence"]);
+      const command = row["command"];
+      const rawInput = row["input_json"];
+      if (typeof command !== "string" || typeof rawInput !== "string")
+        throw new Error(`commons operation ${sequence} has no command payload`);
+      const commandInput = JSON.parse(rawInput) as unknown;
+      if (!commandInput || typeof commandInput !== "object")
+        throw new Error(`commons operation ${sequence} has invalid input`);
+      const outcome = input.applyCommand(
+        command,
+        commandInput as Record<string, unknown>,
+        `commons-replica:${input.wire.grantId}:${sequence}`
+      );
+      if (outcome.status !== "executed" && outcome.status !== "replayed")
+        throw new Error(
+          `commons replica command ${sequence} ${outcome.status}`
+        );
+    }
+  };
+  const tailIsComplete =
+    cursor !== undefined &&
+    cursor.sequence >= input.wire.snapshotSequence &&
+    (cursor.sequence === input.wire.currentSequence ||
+      (input.wire.tail.find(
+        (row) => Number(row["sequence"]) > cursor.sequence
+      )?.["sequence"] ===
+        cursor.sequence + 1 &&
+        input.wire.tail.at(-1)?.["sequence"] === input.wire.currentSequence));
+  if (input.applyCommand && !retained && tailIsComplete) {
+    applyTailCommands();
+    const nested = seatDb.isTransaction;
+    seatDb.exec(nested ? "SAVEPOINT apply_commons_tail" : "BEGIN IMMEDIATE");
+    try {
+      projectControl(seatDb, input.wire);
+      projectTail(seatDb, input.wire);
+      seatDb
+        .prepare(
+          `INSERT INTO share_commons_cursor
+             (grant_id, member_vault_id, sequence, updated_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(grant_id, member_vault_id) DO UPDATE SET
+             sequence = MAX(sequence, excluded.sequence),
+             updated_at = excluded.updated_at`
+        )
+        .run(
+          input.wire.grantId,
+          input.wire.memberVaultId,
+          input.wire.currentSequence,
+          input.now
+        );
+      recordCommonsVerified({
+        db: seatDb,
+        grantId: input.wire.grantId,
+        sequence: history.verified.sequence,
+        opHash: history.verified.opHash,
+        now: input.now,
+      });
+      seatDb.exec(nested ? "RELEASE apply_commons_tail" : "COMMIT");
+      return;
+    } catch (error) {
+      seatDb.exec(nested ? "ROLLBACK TO apply_commons_tail" : "ROLLBACK");
+      if (nested) seatDb.exec("RELEASE apply_commons_tail");
+      throw error;
+    }
+  }
   // Scrub + re-project + control + tail + lineage + cursor are ONE atomic unit:
   // a crash between the scrub and the re-projection must never leave the commons
   // deleted on disk. Nest under a savepoint when a caller already owns the seat
@@ -832,6 +918,10 @@ export function applyCommonsBootstrap(input: {
           now: () => Date.parse(input.now),
         });
     projectControl(seatDb, input.wire);
+    const commandTailPending =
+      input.applyCommand !== undefined &&
+      !retained &&
+      executableTail.length > 0;
     seatDb
       .prepare(
         `INSERT INTO core_share_origin
@@ -877,7 +967,9 @@ export function applyCommonsBootstrap(input: {
       .run(
         input.wire.grantId,
         input.wire.memberVaultId,
-        input.wire.currentSequence,
+        commandTailPending
+          ? input.wire.snapshotSequence
+          : input.wire.currentSequence,
         input.now
       );
     // The digest is recomputed over what this seat STORED, inside the same
@@ -891,8 +983,12 @@ export function applyCommonsBootstrap(input: {
     recordCommonsVerified({
       db: seatDb,
       grantId: input.wire.grantId,
-      sequence: history.verified.sequence,
-      opHash: history.verified.opHash,
+      sequence: commandTailPending
+        ? input.wire.checkpoint.sequence
+        : history.verified.sequence,
+      opHash: commandTailPending
+        ? input.wire.checkpoint.opHash
+        : history.verified.opHash,
       now: input.now,
     });
     seatDb.exec(nested ? "RELEASE apply_commons_bootstrap" : "COMMIT");
@@ -900,6 +996,34 @@ export function applyCommonsBootstrap(input: {
     seatDb.exec(nested ? "ROLLBACK TO apply_commons_bootstrap" : "ROLLBACK");
     if (nested) seatDb.exec("RELEASE apply_commons_bootstrap");
     throw error;
+  }
+  if (input.applyCommand && !retained && executableTail.length > 0) {
+    applyTailCommands();
+    seatDb.exec("BEGIN IMMEDIATE");
+    try {
+      seatDb
+        .prepare(
+          `UPDATE share_commons_cursor SET sequence = MAX(sequence, ?), updated_at = ?
+            WHERE grant_id = ? AND member_vault_id = ?`
+        )
+        .run(
+          input.wire.currentSequence,
+          input.now,
+          input.wire.grantId,
+          input.wire.memberVaultId
+        );
+      recordCommonsVerified({
+        db: seatDb,
+        grantId: input.wire.grantId,
+        sequence: history.verified.sequence,
+        opHash: history.verified.opHash,
+        now: input.now,
+      });
+      seatDb.exec("COMMIT");
+    } catch (error) {
+      seatDb.exec("ROLLBACK");
+      throw error;
+    }
   }
 }
 

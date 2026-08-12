@@ -45,6 +45,7 @@ export type InvitationDecision = Invitation | InvitationRefusal;
 
 /** The *Add someone* request shape: `body.forPerson`. */
 export interface ForPerson {
+  operationId: string;
   label: string;
   vaultName?: string;
 }
@@ -55,14 +56,16 @@ export function parseForPerson(raw: unknown): ForPerson | null | undefined {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw))
     return null;
   const body = raw as Record<string, unknown>;
+  const operationId =
+    typeof body.operationId === "string" ? body.operationId.trim() : "";
   const label = typeof body.label === "string" ? body.label.trim() : "";
-  if (!label) return null;
+  if (!operationId || operationId.length > 200 || !label) return null;
   if (body.vaultName !== undefined && typeof body.vaultName !== "string")
     return null;
   const vaultName =
     typeof body.vaultName === "string" ? body.vaultName.trim() : undefined;
   if (vaultName !== undefined && vaultName.length === 0) return null;
-  return vaultName ? { label, vaultName } : { label };
+  return vaultName ? { operationId, label, vaultName } : { operationId, label };
 }
 
 /** `null` = malformed; `[]` = the caller named no explicit vault list. */
@@ -86,14 +89,6 @@ export interface ResolveInvitationInput {
   target: string;
   body: Record<string, unknown>;
   vaultIds: string[];
-  /** Parsed `body.forPerson` — the *Add someone* ceremony (#726 P1). */
-  forPerson?: ForPerson;
-  /**
-   * Create + mount a fresh vault for a newly minted person, identity keypair
-   * included (the registry mints it at creation — see `vault-identity.ts`).
-   * Wired to `VaultRegistry.create` by the route.
-   */
-  mintVaultForPerson: (name: string) => { vaultId: string };
 }
 
 function orderTargetFirst(
@@ -115,46 +110,6 @@ export function resolveInvitation(
   const callerOwner = input.callerKey
     ? input.enrollments.ownerFor(input.callerKey)
     : undefined;
-
-  if (input.forPerson !== undefined) {
-    // *Add someone* (#726 P1): create the person, mint them a vault (identity
-    // keypair included), claim it, then mint a ticket bound to that NEW
-    // owner. Any enrolled owner may run this — it costs disk on this
-    // machine, never access to anyone else's vault — and so may host
-    // custody. Mutually exclusive with the self-pair `ownerId`/`vaultIds`
-    // lane: there is no existing owner or vault to name yet.
-    if (!callerOwner && !input.hostCustody) {
-      return {
-        status: 403,
-        error: "device_identity_required",
-        message:
-          "minting a vault for a new person requires an enrolled owner device or direct host custody",
-      };
-    }
-    if (typeof input.body.ownerId === "string" || input.vaultIds.length > 0) {
-      return {
-        status: 400,
-        error: "invalid_body",
-        message: "forPerson cannot be combined with ownerId or vaultIds",
-      };
-    }
-    const forPerson = input.forPerson;
-    const created = owners.gatewayDatabase.transaction(() =>
-      owners.createWithinTransaction(forPerson.label)
-    );
-    const minted = input.mintVaultForPerson(
-      forPerson.vaultName ?? `${forPerson.label}'s vault`
-    );
-    // Claim happens right after mount (same ordering `enrollWithinTransaction`
-    // uses for founding/`vault create`): the vault exists on disk first, then
-    // the ownership row lands in one write.
-    owners.setOwner(minted.vaultId, created.ownerId);
-    return {
-      ownerId: created.ownerId,
-      ownerLabel: created.label,
-      vaultIds: [minted.vaultId],
-    };
-  }
 
   const requestedOwner =
     typeof input.body.ownerId === "string" ? input.body.ownerId : undefined;

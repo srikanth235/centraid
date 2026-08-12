@@ -1,6 +1,8 @@
 # Commons fixed-window sync: replacing ack-gated compaction
 
-**Issue:** #731 **Status:** proposed **Owner session:** none
+**Issue:** #731 **Status:** proposed for compaction only; incremental domain catch-up shipped in #750 **Owner session:** none
+
+> **#750 update (2026-08-12):** the premise below that an executed domain tail invalidates the checkpoint is no longer current. A member at/after the checkpoint executes a contiguous tail through the canonical gateway with deterministic per-sequence ids, preserving unchanged seat-local OCR/embeddings/FTS. The acknowledgement-gated compaction decision itself remains open and measurement-gated; #750 did not delete `share_commons_cursor` or change K.
 
 ## Goal
 
@@ -25,9 +27,9 @@ Compaction (`compactCommonsOperations`, `packages/vault/src/share/commons.ts:445
 5. `retentionFloor = grant.lastSequence - COMMONS_OP_RETENTION_FLOOR` (256, `commons.ts:376`) — a hard floor so one permanently-stuck laggard can't pin the tail indefinitely either.
 6. `through = min(checkpointSequence, laggards ? max(advancedFloor, retentionFloor) : advancedFloor)` — ops up to `through` get archived into `share_commons_receipt` / `share_commons_replay` and deleted from `share_commons_op`.
 
-Bootstrap / catch-up is snapshot+tail already, not full replay (`exportCommonsBootstrap`, `packages/vault/src/share/commons-bootstrap.ts:400-474`; `exportCommonsSyncFrame`, same file `:478-519`): it loads `checkpoint_json` as the base closure, then appends `share_commons_op` rows with `sequence > checkpoint_sequence` as the tail. If any tail row is an executed `command`/`delete`, it rebuilds a fresh full closure instead of trusting the stale snapshot plus tail (`commons-bootstrap.ts:441-454`) — i.e. the snapshot is not append-only safe across arbitrary domain mutations today, only control-only tails are cheaply appliable.
+Bootstrap / catch-up is signed checkpoint+tail, not full replay (`exportCommonsBootstrap` / `exportCommonsSyncFrame`). Since #750, a member with a contiguous executable tail applies those canonical commands with deterministic ids and updates control/audit state without scrubbing its closure. A member missing the executable command capability, a baseline, or a contiguous retained tail receives a full head snapshot. The checkpoint remains load-bearing for laggards and recovery even though ordinary domain catch-up no longer rebuilds it per write.
 
-So the protocol has three interacting special cases: the 256-op retention floor, the never-cursored carve-out, and the snapshot-invalidate-on-domain-tail rule. All three exist to make ack-gated compaction terminate under adversarial or absent acks; none of them exist because the ack signal itself is load-bearing for correctness (bootstrap already ignores it and rebuilds from checkpoint+tail).
+The compaction protocol still has the 256-op retention floor and never-cursored carve-out. The former snapshot-invalidate-on-domain-tail rule was deleted in #750; the ack signal remains a compaction/observability input rather than command-apply correctness.
 
 ## Proposal
 
@@ -95,6 +97,7 @@ If both measurements confirm laggards beyond 256 ops are rare and short-lived in
 | --- | --- | --- | --- |
 | 2026-08-10 | Decision document written | — | No implementation yet; awaiting dogfood instrumentation data before treating K=256 as final. |
 | 2026-08-10 | Both go/no-go measurements instrumented and wired into the gateway | #731 | `commonsObservabilityForVault` (`packages/gateway/src/serve/commons-observability.ts`) computes `opLog` (row count, last/checkpoint sequence, rows beyond checkpoint — measurement 1) and `memberLag` (max/p50 ops behind, count beyond the K=256 window — measurement 2) per grant. Read them at `GET /centraid/_gateway/diagnostics` (`config.commons`) or `GET /centraid/_gateway/commons/recovery`; see [docs/logs.md](../logs.md#commons-sync-observability-731). Still no dogfood data collected — this is the instrumentation the execution outline's step 5 needs, not the measurement itself. |
+| 2026-08-12 | Domain-tail dependency removed | #750 | Contiguous domain tails now apply incrementally through canonical commands and preserve derived rows. This removes the old full-rebaseline cost but does not answer the separate fixed-K compaction go/no-go. |
 
 ## Rejected alternatives
 

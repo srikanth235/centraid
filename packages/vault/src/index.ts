@@ -62,11 +62,9 @@ export {
 // Issue #599 decision 11: share-by-placement. The gateway's cross-vault share
 // plane calls these; they sit outside the per-vault handler path by design.
 export {
-  shareToVault,
   shareItemsToVault,
   unshareFromVault,
   moveOutOfVault,
-  readShareOrigin,
   type ShareVaultRef,
   type ShareToVaultInput,
   type ShareToVaultResult,
@@ -103,13 +101,12 @@ export {
 // Projection is ingest (D11): the audience's own door, keyed by entity type so
 // vault core never learns an app name.
 export {
-  declareProjectionIngest,
   type ProjectionIngestHook,
   type ProjectionIngestContext,
 } from "./share/projection-ingest.js";
 export {
   isCommonsCommandActable,
-  declareCommonsCommands,
+  COMMONS_COMMANDS,
   commonsCommandsFor,
 } from "./share/actable.js";
 export {
@@ -125,7 +122,6 @@ export {
   appendCommonsOperation,
   appendCommonsOperationInTransaction,
   commonsGrantForCommand,
-  authorizeCommonsCommand,
   executeCommonsCommand,
   queueCommonsIntent,
   settleCommonsIntent,
@@ -150,7 +146,6 @@ export {
 } from "./share/commons.js";
 export {
   listCommonsGrants,
-  findCommonsGrantForContainer,
   ensureCommonsGrant,
   upsertCommonsMember,
   refuseCommonsMember,
@@ -164,32 +159,25 @@ export {
 } from "./share/commons-lifecycle.js";
 export {
   readCommonsCursor,
-  advanceCommonsCursor,
   type CommonsCursor,
 } from "./share/commons-cursor.js";
 export {
-  CommonsHistoryError,
   isCommonsHistoryError,
   commonsGenesisHash,
-  commonsOpHash,
-  commonsOpChainFields,
   commonsStateDigest,
   readCommonsChainHead,
   readCommonsVerified,
-  verifyCommonsCheckpoint,
   type CommonsCheckpointAttestation,
   type CommonsHistoryFaultTag,
   type CommonsOpChainFields,
   type CommonsVerifiedPoint,
 } from "./share/commons-chain.js";
 export {
-  commonsIntentBytes,
   signCommonsIntent,
   verifyCommonsIntent,
   type CommonsMemberSignature,
 } from "./share/commons-signature.js";
 export {
-  exportCommonsBootstrap,
   exportCommonsSyncFrame,
   applyCommonsBootstrap,
   applyCommonsTombstone,
@@ -208,7 +196,6 @@ export {
 // (#731). Deliberate ceremony — see the module header.
 export {
   recoverCommonsFromReplica,
-  readCommonsRecoveryLineage,
   type CommonsRecoveryLineage,
   type CommonsRecoveryRefusal,
   type CommonsRecoveryResult,
@@ -559,6 +546,7 @@ export {
 export {
   identityKeyFileFor,
   ephemeralVaultIdentitySeed,
+  loadVaultIdentitySeed,
   loadOrCreateVaultIdentitySeed,
   vaultIdentityPublicKey,
   signWithVaultIdentity,

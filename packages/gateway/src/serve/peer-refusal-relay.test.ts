@@ -104,7 +104,11 @@ describe("D9 refusal reaches the origin (#726 P3 gap 3)", () => {
     // Durable the instant the answer returns, before any delivery attempt.
     expect(
       audience.gatewayDb.db
-        .prepare("SELECT * FROM peer_pending_refusals WHERE edge_id = ?")
+        .prepare(
+          `SELECT * FROM share_effects
+            WHERE kind = 'notify-refusal' AND edge_id = ?
+              AND state IN ('queued', 'running', 'parked')`
+        )
         .get(row.edge_id)
     ).toBeDefined();
     // The origin has not heard yet.
@@ -119,7 +123,11 @@ describe("D9 refusal reaches the origin (#726 P3 gap 3)", () => {
     expect(drained.acknowledged).toStrictEqual([row.edge_id]);
     expect(
       audience.gatewayDb.db
-        .prepare("SELECT * FROM peer_pending_refusals WHERE edge_id = ?")
+        .prepare(
+          `SELECT * FROM share_effects
+            WHERE kind = 'notify-refusal' AND edge_id = ?
+              AND state IN ('queued', 'running', 'parked')`
+        )
         .get(row.edge_id)
     ).toBeUndefined();
     const originRow = readEdgeRow(origin.gatewayDb, row.edge_id)!;
@@ -172,7 +180,11 @@ describe("D9 refusal reaches the origin (#726 P3 gap 3)", () => {
     // early.
     expect(
       audience.gatewayDb.db
-        .prepare("SELECT * FROM peer_pending_refusals WHERE edge_id = ?")
+        .prepare(
+          `SELECT * FROM share_effects
+            WHERE kind = 'notify-refusal' AND edge_id = ?
+              AND state IN ('queued', 'running', 'parked')`
+        )
         .get(row.edge_id)
     ).toBeDefined();
     expect(readEdgeRow(origin.gatewayDb, row.edge_id)!.status).toBe("parked");

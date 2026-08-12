@@ -24,6 +24,11 @@ import {
 let dataDir: string;
 let handle: GatewayServeHandle;
 
+// This contract provisions two complete app fixtures for every scenario. Under
+// the affected-suite worker fan-out, the shared gateway boot can legitimately
+// exceed Vitest's 30-second hook default even though focused runs are quick.
+const FIXTURE_SETUP_TIMEOUT_MS = 120_000;
+
 function pathsUnder(dir: string): GatewayPaths {
   return { vaultDir: path.join(dir, "vault") };
 }
@@ -75,7 +80,7 @@ describe("web-app-sessions.contract scenarios", () => {
     await seedApp(store, "alpha");
     await seedApp(store, "beta");
     await handle.syncApps();
-  }, 30_000);
+  }, FIXTURE_SETUP_TIMEOUT_MS);
 
   afterEach(async () => {
     await handle.close().catch(() => undefined);

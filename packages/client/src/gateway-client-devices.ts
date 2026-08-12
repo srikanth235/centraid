@@ -170,7 +170,7 @@ export interface GatewayDeviceTicketInput {
    *  owns, target-first. */
   vaultIds?: string[];
   /** Mint a vault for a NEW person instead of self-pairing. */
-  forPerson?: { label: string; vaultName?: string };
+  forPerson?: { operationId: string; label: string; vaultName?: string };
   ttlMinutes?: number;
 }
 

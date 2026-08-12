@@ -7,6 +7,7 @@ import {
   appEntry,
   cleanupEnv,
   closeApp,
+  gotoNav,
   launchApp,
   makeEnv,
   markUserApp,
@@ -148,6 +149,17 @@ test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands 
     });
     await page.screenshot({
       path: path.join(evidenceDir, "issue-726-vault-as-share-unit.png"),
+      fullPage: true,
+    });
+    await gotoNav(page, "Household");
+    await expect(
+      page.getByRole("heading", { name: "Devices", exact: true, level: 1 })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "People & circles", exact: true })
+    ).toBeVisible();
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-750-vault-sharing-consolidation.png"),
       fullPage: true,
     });
 

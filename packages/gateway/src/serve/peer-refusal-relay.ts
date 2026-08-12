@@ -16,14 +16,17 @@
 import type { GatewayDatabase } from "./gateway-db.js";
 import type { PeerDial } from "./peer-edge-give-client.js";
 import { denyEdgeOverPeer } from "./peer-edge-give-client.js";
+import { ShareEffectsStore } from "./share-effects.js";
 import { peerViewOf } from "./vault-link-row.js";
 import type { VaultLinksStore } from "./vault-links-store.js";
 
 interface PendingRefusalRow {
+  effect_id: string;
   edge_id: string;
   link_id: string;
   peer_vault_id: string;
   local_vault_id: string;
+  attempts: number;
 }
 
 /** Durably record "the origin must learn this edge was refused" — D9. */
@@ -36,19 +39,13 @@ export function recordPendingRefusal(
     localVaultId: string;
   }
 ): void {
-  const now = new Date().toISOString();
-  db.run(
-    `INSERT INTO peer_pending_refusals
-       (edge_id, link_id, peer_vault_id, local_vault_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT (edge_id) DO NOTHING`,
-    input.edgeId,
-    input.linkId,
-    input.peerVaultId,
-    input.localVaultId,
-    now,
-    now
-  );
+  new ShareEffectsStore(db).enqueue({
+    edgeId: input.edgeId,
+    kind: "notify-refusal",
+    localVaultId: input.localVaultId,
+    peerVaultId: input.peerVaultId,
+    payload: { linkId: input.linkId },
+  });
 }
 
 export interface DrainPeerRefusalsResult {
@@ -64,11 +61,27 @@ export async function drainPeerRefusals(input: {
   /** Rows processed this tick; unbounded when omitted (tests). */
   limit?: number;
 }): Promise<DrainPeerRefusalsResult> {
-  const rows = (input.limit === undefined
-    ? input.db.db.prepare("SELECT * FROM peer_pending_refusals").all()
-    : input.db.db
-        .prepare("SELECT * FROM peer_pending_refusals LIMIT ?")
-        .all(input.limit)) as unknown as PendingRefusalRow[];
+  const effects = new ShareEffectsStore(input.db);
+  const rows = effects
+    .list({
+      kind: "notify-refusal",
+      active: true,
+      ...(input.limit === undefined ? {} : { limit: input.limit }),
+    })
+    .flatMap((effect): PendingRefusalRow[] =>
+      effect.kind === "notify-refusal"
+        ? [
+            {
+              effect_id: effect.effectId,
+              edge_id: effect.edgeId,
+              link_id: effect.payload.linkId,
+              peer_vault_id: effect.peerVaultId,
+              local_vault_id: effect.localVaultId,
+              attempts: effect.attempts,
+            },
+          ]
+        : []
+    );
   const result: DrainPeerRefusalsResult = { acknowledged: [], pending: [] };
   // Every row names a DIFFERENT edge — independent notify-and-delete, no
   // shared ordering — so the ticks run concurrently rather than one row at a
@@ -78,6 +91,10 @@ export async function drainPeerRefusals(input: {
       const link = input.links.get(row.link_id);
       const view = link ? peerViewOf(link, row.local_vault_id) : undefined;
       if (!view) {
+        effects.transition(row.effect_id, "parked", {
+          attempted: true,
+          retryAt: retryAt(row.attempts),
+        });
         result.pending.push(row.edge_id);
         return;
       }
@@ -91,15 +108,20 @@ export async function drainPeerRefusals(input: {
       // retrying forever would never resolve it, so it is treated as
       // delivered.
       if (outcome.state === "acknowledged" || outcome.state === "not_found") {
-        input.db.run(
-          "DELETE FROM peer_pending_refusals WHERE edge_id = ?",
-          row.edge_id
-        );
+        effects.transition(row.effect_id, "executed", { attempted: true });
         result.acknowledged.push(row.edge_id);
       } else {
+        effects.transition(row.effect_id, "parked", {
+          attempted: true,
+          retryAt: retryAt(row.attempts),
+        });
         result.pending.push(row.edge_id);
       }
     })
   );
   return result;
+}
+
+function retryAt(attempts: number): number {
+  return Date.now() + Math.min(60_000 * 2 ** attempts, 15 * 60_000);
 }

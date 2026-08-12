@@ -17,12 +17,17 @@ import {
   blobUriFor,
   bootstrapVault,
   createGateway,
+  exportCommonsSyncFrame,
   openVaultDb,
   registerTaskCommands,
   signWithVaultIdentity,
   vaultIdentityPublicKey,
 } from "@centraid/vault";
-import type { Gateway as VaultGateway, VaultDb } from "@centraid/vault";
+import type {
+  CommonsBootstrap,
+  Gateway as VaultGateway,
+  VaultDb,
+} from "@centraid/vault";
 
 import { readEdgeRow } from "../routes/edges-reconcile.js";
 import type { EdgeRow } from "../routes/edges-reconcile.js";
@@ -72,6 +77,16 @@ export interface HostFixture {
   links: VaultLinksStore;
   endpointId: string;
   proof: string;
+}
+
+/** Tests that need invitation metadata unwrap the same production sync export. */
+export function exportCommonsBootstrapForTest(
+  input: Parameters<typeof exportCommonsSyncFrame>[0]
+): CommonsBootstrap {
+  const frame = exportCommonsSyncFrame(input);
+  if (frame.state !== "bootstrap")
+    throw new Error("expected an active Commons bootstrap frame");
+  return frame.wire;
 }
 
 function makeHost(name: string): HostFixture {
@@ -186,7 +201,11 @@ function wireHandler(
 }
 
 /** A peer request that lands on `side`'s real handler, as the relay would deliver it. */
-export function transportTo(side: Side, callerEndpointId: string): PeerRequest {
+export function transportTo(
+  side: Side,
+  callerEndpointId: string,
+  options: { onCommonsBootstrapExport?: (grantId: string) => void } = {}
+): PeerRequest {
   const handler = makePeerPlaneHandler({
     links: side.links,
     peerProof: side.proof,
@@ -203,6 +222,7 @@ export function transportTo(side: Side, callerEndpointId: string): PeerRequest {
       vaultId === side.vaultId ? side.gateway : undefined,
     commonsCredentialFor: (vaultId) =>
       vaultId === side.vaultId ? side.ownerCredential : undefined,
+    commonsBootstrapExported: options.onCommonsBootstrapExport,
     gatewayDatabase: side.gatewayDb,
   });
   return wireHandler(handler, callerEndpointId, side.proof);
@@ -239,9 +259,13 @@ export function transportToHost(
   return wireHandler(handler, callerEndpointId, host.proof);
 }
 
-export function dialFrom(caller: Side, callee: Side): PeerDial {
+export function dialFrom(
+  caller: Side,
+  callee: Side,
+  options: { onCommonsBootstrapExport?: (grantId: string) => void } = {}
+): PeerDial {
   return {
-    request: transportTo(callee, caller.endpointId),
+    request: transportTo(callee, caller.endpointId, options),
     endpointTicketFor: (endpointId) => `ticket-for-${endpointId}`,
   };
 }
@@ -310,8 +334,11 @@ export interface SeededPhoto {
   thumbBytes: Buffer;
 }
 
-export function seedPhoto(side: Side, label: string): SeededPhoto {
-  const bytes = Buffer.from(`original-bytes-${label}-${crypto.randomUUID()}`);
+export function seedPhoto(
+  side: Side,
+  label: string,
+  bytes = Buffer.from(`original-bytes-${label}-${crypto.randomUUID()}`)
+): SeededPhoto {
   const thumbBytes = Buffer.from(`thumb-bytes-${label}`);
   const original = side.vault.blobs.ingestSync(bytes);
   const thumb = side.vault.blobs.ingestSync(thumbBytes);

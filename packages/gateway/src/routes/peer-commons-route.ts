@@ -9,7 +9,6 @@ import {
   commonsSeats,
   claimCommonsInvitation,
   executeCommonsCommand,
-  exportCommonsBootstrap,
   exportCommonsSyncFrame,
   queueCommonsInvitation,
   readCommonsChainHead,
@@ -18,10 +17,16 @@ import {
   upsertCommonsMember,
 } from "@centraid/vault";
 import type {
+  CommonsBootstrap,
   CommonsMemberSignature,
   ExecuteCommonsCommandInput,
 } from "@centraid/vault";
 
+import type { GatewayDatabase } from "../serve/gateway-db.js";
+import {
+  beginCommonsBootstrapPages,
+  resumeCommonsBootstrapPages,
+} from "./peer-commons-pages.js";
 import type { PeerIdentity } from "./peer-plane.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
@@ -43,6 +48,37 @@ export interface PeerCommonsRouteDeps {
   credentialFor: (
     vaultId: string
   ) => ExecuteCommonsCommandInput["credential"] | undefined;
+  gatewayDatabase?: GatewayDatabase;
+  /** Observability seam: one event per fresh signed export, never per page/blob. */
+  onBootstrapExport?: (grantId: string) => void;
+}
+
+const COMMONS_BLOB_ACCESS_TTL_MS = 5 * 60 * 1000;
+
+function authorizeFrameBlobs(
+  gatewayDatabase: GatewayDatabase | undefined,
+  wire: CommonsBootstrap
+): void {
+  if (!gatewayDatabase) return;
+  const now = Date.now();
+  gatewayDatabase.db
+    .prepare("DELETE FROM commons_blob_access WHERE expires_at <= ?")
+    .run(now);
+  const insert = gatewayDatabase.db.prepare(
+    `INSERT INTO commons_blob_access
+       (grant_id, member_vault_id, sha256, size, expires_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(grant_id, member_vault_id, sha256) DO UPDATE SET
+       size = excluded.size, expires_at = excluded.expires_at`
+  );
+  for (const blob of wire.closure.blobs)
+    insert.run(
+      wire.grantId,
+      wire.memberVaultId,
+      blob.sha256,
+      blob.size,
+      now + COMMONS_BLOB_ACCESS_TTL_MS
+    );
 }
 
 function notFound(res: ServerResponse): true {
@@ -84,6 +120,17 @@ export function handlePeerCommonsBootstrap(
   const steward = linked ? deps.vaultFor(linked.stewardVaultId) : undefined;
   if (!linked || !steward) return notFound(res);
   try {
+    const frameId = query.get("frameId");
+    const pageCursor = uint(query.get("pageCursor"));
+    if (frameId && pageCursor !== undefined)
+      return resumeCommonsBootstrapPages({
+        res,
+        frameId,
+        cursor: pageCursor,
+        grantId,
+        memberVaultId: linked.memberVaultId,
+        stewardVaultId: linked.stewardVaultId,
+      });
     if (query.get("inspect") === "1") {
       const grant = readCommonsGrant(steward.vault, grantId);
       const claimed = steward.vault
@@ -152,7 +199,9 @@ export function handlePeerCommonsBootstrap(
       stewardVaultId: linked.stewardVaultId,
       grantId,
       memberVaultId: linked.memberVaultId,
+      incremental: query.get("incremental") === "1",
     });
+    deps.onBootstrapExport?.(grantId);
     const acknowledged = uint(query.get("afterSequence"));
     const currentSequence =
       frame.state === "bootstrap"
@@ -189,6 +238,10 @@ export function handlePeerCommonsBootstrap(
         // behind "you are caught up".
         headHash: readCommonsChainHead(steward.vault, grantId).hash,
       });
+    if (frame.state === "bootstrap") {
+      authorizeFrameBlobs(deps.gatewayDatabase, frame.wire);
+      return beginCommonsBootstrapPages({ res, wire: frame.wire });
+    }
     return sendJson(res, 200, frame);
   } catch {
     return notFound(res);
@@ -210,6 +263,7 @@ export function handlePeerCommonsBlob(
   if (
     !linked ||
     !steward ||
+    !deps.gatewayDatabase ||
     !grantId ||
     !/^[0-9a-f]{64}$/u.test(sha256) ||
     offset === undefined ||
@@ -218,17 +272,23 @@ export function handlePeerCommonsBlob(
   )
     return notFound(res);
   try {
-    const wire = exportCommonsBootstrap({
-      steward: steward.vault,
-      identitySeed: steward.identitySeed,
-      stewardVaultId: linked.stewardVaultId,
-      grantId,
-      memberVaultId: linked.memberVaultId,
-    });
-    if (!wire.closure.blobs.some((blob) => blob.sha256 === sha256))
-      return notFound(res);
+    const now = Date.now();
+    deps.gatewayDatabase.db
+      .prepare("DELETE FROM commons_blob_access WHERE expires_at <= ?")
+      .run(now);
+    const access = deps.gatewayDatabase.db
+      .prepare(
+        `SELECT size FROM commons_blob_access
+          WHERE grant_id = ? AND member_vault_id = ? AND sha256 = ?
+            AND expires_at > ?`
+      )
+      .get(grantId, linked.memberVaultId, sha256, now) as
+      | { size: number }
+      | undefined;
+    if (!access) return notFound(res);
     const stat = steward.blobs.local.statSync(sha256);
-    if (!stat || offset > stat.size) return notFound(res);
+    if (!stat || stat.size !== access.size || offset > stat.size)
+      return notFound(res);
     const end = Math.min(offset + length, stat.size) - 1;
     const bytes =
       offset >= stat.size
@@ -342,6 +402,22 @@ export async function handlePeerCommonsCommand(
       grantId,
       stewardVaultId,
       vaultFor: deps.vaultFor,
+      invokeFor: (vaultId, replicaCommand, commandInput, invocationId) => {
+        const replicaGateway = deps.gatewayFor(vaultId);
+        const replicaCredential = deps.credentialFor(vaultId);
+        if (!replicaGateway || !replicaCredential)
+          throw new Error(`commons replica vault ${vaultId} is not mounted`);
+        return replicaGateway.invokeCommonsCanonical(
+          replicaCredential,
+          {
+            command: replicaCommand,
+            input: commandInput,
+            purpose: "dpv:ServiceProvision",
+            invocationId,
+          },
+          { idSeed: invocationId }
+        );
+      },
     }),
     ...(typeof body.intentId === "string"
       ? { intentId: body.intentId, invocationId: body.intentId }

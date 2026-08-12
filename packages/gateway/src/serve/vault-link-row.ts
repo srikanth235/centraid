@@ -87,8 +87,14 @@ export interface VaultLinkRow {
   label_b: string | null;
   approved_by_a: string | null;
   approved_by_b: string | null;
-  route_a_json: string | null;
-  route_b_json: string | null;
+  endpoint_id_a: string | null;
+  relay_hints_json_a: string | null;
+  asserted_at_a: number | null;
+  signature_a: string | null;
+  endpoint_id_b: string | null;
+  relay_hints_json_b: string | null;
+  asserted_at_b: number | null;
+  signature_b: string | null;
   permissions_json: string;
   revoked: number;
   created_at: string;
@@ -96,15 +102,35 @@ export interface VaultLinkRow {
 
 type LinkSide = "a" | "b";
 
-function parseRoute(raw: string | null): LinkRoute | undefined {
-  if (raw === null) return undefined;
-  const parsed = JSON.parse(raw) as LinkRoute;
-  return { ...parsed, relayHints: parsed.relayHints ?? [] };
+function parseRoute(
+  endpointId: string | null,
+  relayHintsJson: string | null,
+  assertedAt: number | null,
+  signature: string | null
+): LinkRoute | undefined {
+  if (endpointId === null || relayHintsJson === null || assertedAt === null)
+    return undefined;
+  return {
+    endpointId,
+    relayHints: JSON.parse(relayHintsJson) as string[],
+    assertedAt,
+    ...(signature === null ? {} : { signature }),
+  };
 }
 
 export function toLink(row: VaultLinkRow): VaultLink {
-  const routeA = parseRoute(row.route_a_json);
-  const routeB = parseRoute(row.route_b_json);
+  const routeA = parseRoute(
+    row.endpoint_id_a,
+    row.relay_hints_json_a,
+    row.asserted_at_a,
+    row.signature_a
+  );
+  const routeB = parseRoute(
+    row.endpoint_id_b,
+    row.relay_hints_json_b,
+    row.asserted_at_b,
+    row.signature_b
+  );
   return {
     linkId: row.link_id,
     vaultA: row.vault_a,

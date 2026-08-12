@@ -63,6 +63,8 @@ import type { GatewayDatabase } from "../serve/gateway-db.js";
 import { PairingTicketStore } from "../serve/pairing-store.js";
 import { startPeerDial } from "../serve/peer-dial.js";
 import type { PeerDial } from "../serve/peer-edge-give-client.js";
+import { pushRouteAssertion } from "../serve/peer-link-client.js";
+import type { RoutePushOutcome } from "../serve/peer-link-client.js";
 import type { DeviceAccess } from "../serve/vault-context.js";
 import { VaultLinksStore } from "../serve/vault-links-store.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
@@ -80,6 +82,34 @@ import type { DaemonLayout } from "./paths.js";
  */
 export const DEVICE_HEADER = DEVICE_IDENTITY_HEADER;
 export const DEVICE_PROOF_HEADER = TUNNEL_DEVICE_PROOF_HEADER;
+
+/** Production endpoint-start/rotation hook: every mounted vault asserts the
+ * same new gateway route to every one of its live links. */
+export async function assertMountedVaultRoutes(input: {
+  links: VaultLinksStore;
+  peerDial: PeerDial;
+  vaults: Pick<VaultRegistry, "planesList" | "signAsVault">;
+  endpointId: string;
+  relayHints: string[];
+}): Promise<RoutePushOutcome[]> {
+  const outcomes = await Promise.all(
+    input.vaults.planesList().map((plane) =>
+      pushRouteAssertion({
+        links: input.links,
+        request: input.peerDial.request,
+        signAsVault: (vaultId, bytes) =>
+          input.vaults.signAsVault(vaultId, bytes),
+        route: {
+          vaultId: plane.boot.vaultId,
+          endpointId: input.endpointId,
+          relayHints: input.relayHints,
+        },
+        endpointTicketFor: input.peerDial.endpointTicketFor,
+      })
+    )
+  );
+  return outcomes.flat();
+}
 const COMPANION_MODULES = new Set([
   "locker",
   "tasks",
@@ -456,6 +486,28 @@ export function makeDaemonDevicePlane(input: {
     }
     liveEndpointId = handle.endpointId;
     liveRelayHints = relayHintsOf(handle.ticket());
+    const vaults = input.vaults();
+    if (vaults) {
+      try {
+        const outcomes = await assertMountedVaultRoutes({
+          links,
+          peerDial,
+          vaults,
+          endpointId: handle.endpointId,
+          relayHints: liveRelayHints,
+        });
+        const accepted = outcomes.filter((item) => item.state === "accepted");
+        logger.info(
+          `gateway endpoint asserted ${handle.endpointId} to ${accepted.length} linked vault route(s)`
+        );
+      } catch (error) {
+        logger.warn(
+          `gateway endpoint route assertion deferred: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
     return {
       endpointId: handle.endpointId,
       ticket: () => handle.ticket(),

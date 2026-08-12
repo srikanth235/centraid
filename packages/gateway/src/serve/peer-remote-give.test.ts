@@ -70,7 +70,13 @@ describe("remote give (#726 P3)", () => {
     expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(false);
     const pending = () =>
       audience.gatewayDb.db
-        .prepare("SELECT sha256, tmp_path FROM peer_blob_pulls")
+        .prepare(
+          `SELECT json_extract(payload_json, '$.sha256') AS sha256,
+                  json_extract(payload_json, '$.tmpPath') AS tmp_path
+             FROM share_effects
+            WHERE kind = 'pull-blob'
+              AND state IN ('queued', 'running', 'parked')`
+        )
         .all() as Array<{ sha256: string; tmp_path: string }>;
     expect(pending().map((p) => p.sha256)).toStrictEqual([photo.sha256]);
 
@@ -169,7 +175,13 @@ describe("remote give (#726 P3)", () => {
     expect(updated.status).toBe("completed");
     // No pending pull was ever queued for bytes already resident.
     expect(
-      audience.gatewayDb.db.prepare("SELECT * FROM peer_blob_pulls").all()
+      audience.gatewayDb.db
+        .prepare(
+          `SELECT * FROM share_effects
+            WHERE kind = 'pull-blob'
+              AND state IN ('queued', 'running', 'parked')`
+        )
+        .all()
     ).toHaveLength(0);
     expect(contentItemCount(audience.vault)).toBe(1);
   });
@@ -317,7 +329,11 @@ describe("remote give (#726 P3)", () => {
     expect(updated.reason).toBe("awaiting recipient decision");
     expect(contentItemCount(audience.vault)).toBe(0);
     const pendingRow = audience.gatewayDb.db
-      .prepare("SELECT * FROM peer_pending_gives WHERE edge_id = ?")
+      .prepare(
+        `SELECT * FROM share_effects
+          WHERE kind = 'await-give-decision' AND edge_id = ?
+            AND state IN ('queued', 'running', 'parked')`
+      )
       .get("edge-asked");
     expect(pendingRow).toBeDefined();
 
@@ -356,7 +372,11 @@ describe("remote give (#726 P3)", () => {
     expect(contentItemCount(audience.vault)).toBe(1);
     expect(
       audience.gatewayDb.db
-        .prepare("SELECT * FROM peer_pending_gives WHERE edge_id = ?")
+        .prepare(
+          `SELECT * FROM share_effects
+            WHERE kind = 'await-give-decision' AND edge_id = ?
+              AND state IN ('queued', 'running', 'parked')`
+        )
         .get("edge-asked")
     ).toBeUndefined();
   });

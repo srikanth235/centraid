@@ -935,6 +935,8 @@ export {
   listCommonsInvitations,
   claimCommonsInvitation,
   answerCommonsInvitation,
+  listCommonsRecovery,
+  recoverCommons,
   listPendingEdges,
   answerPendingEdge,
   type GatewayEdge,
@@ -943,4 +945,5 @@ export {
   type EdgeStatus,
   type PendingEdge,
   type CommonsInvitation,
+  type CommonsRecoveryGrant,
 } from "./gateway-client-edges.js";

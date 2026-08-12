@@ -12,7 +12,7 @@ import type { Gateway } from "../gateway/gateway.js";
 import type { Credential, InvokeOutcome } from "../gateway/types.js";
 import { uuidv7 } from "../ids.js";
 import { vaultIdentityPublicKey } from "../schema/vault-identity.js";
-import { isCommonsCommandActable } from "./actable.js";
+import { COMMONS_COMMAND_ROUTES, isCommonsCommandActable } from "./actable.js";
 import { placeBlob } from "./blobs.js";
 import type { BlobPlacement } from "./blobs.js";
 import type {
@@ -50,6 +50,12 @@ export interface CommonsMemberInput {
   capability: CommonsCapability;
   /** Invitation without this seat stays pending and compiles no data. */
   vault?: ShareVaultRef;
+  /** Host-only replica executor; never serialized or exposed to member code. */
+  applyCommand?: (
+    command: string,
+    commandInput: Record<string, unknown>,
+    invocationId: string
+  ) => InvokeOutcome;
 }
 
 export interface CreateCommonsGrantInput {
@@ -418,6 +424,9 @@ export interface CompileCommonsInput {
   grantId: string;
   seats: readonly CommonsMemberInput[];
   now: string;
+  /** Crash recovery may need to repair domain rows even when the cursor says
+   * the member has consumed the complete operation tail. */
+  forceFullProjection?: boolean;
 }
 
 export interface CompiledCommonsSeat {
@@ -846,16 +855,22 @@ export function compileCommons(
   const grant = readCommonsGrant(input.steward.vault, input.grantId);
   if (grant.revokedAt)
     throw new Error(`commons grant ${input.grantId} is revoked`);
-  const closure = commonsClosure(
-    input.steward.vault,
-    input.stewardVaultId,
-    grant
-  );
-  assertCommonsWithinMax(
-    input.steward.vault,
-    input.stewardVaultId,
-    input.grantId
-  );
+  let loadedClosure: WireClosure | undefined;
+  let usedFullProjection = false;
+  const closure = (): WireClosure => {
+    if (!loadedClosure) {
+      loadedClosure = commonsClosure(
+        input.steward.vault,
+        input.stewardVaultId,
+        grant
+      );
+      const sizeBytes = commonsClosureSizeBytes(loadedClosure);
+      const ceiling = grant.maxSizeBytes ?? COMMONS_DEFAULT_MAX_SIZE_BYTES;
+      if (sizeBytes > ceiling)
+        throw new CommonsMaxSizeError(sizeBytes, ceiling);
+    }
+    return loadedClosure;
+  };
   const results: CompiledCommonsSeat[] = [];
   for (const seat of input.seats) {
     if (!seat.vault || !seat.vaultId) {
@@ -925,10 +940,7 @@ export function compileCommons(
             deduped: true,
           },
         ],
-        blobs: closure.blobs.map((entry) => ({
-          sha256: entry.sha256,
-          mode: "present" as const,
-        })),
+        blobs: [],
       });
       continue;
     }
@@ -968,9 +980,91 @@ export function compileCommons(
         "SELECT 1 AS n FROM share_commons_lineage WHERE grant_id = ? LIMIT 1"
       )
       .get(grant.grantId);
+    const cursor = seat.vault.vault
+      .prepare(
+        `SELECT sequence FROM share_commons_cursor
+          WHERE grant_id = ? AND member_vault_id = ?`
+      )
+      .get(grant.grantId, seat.vaultId) as { sequence: number } | undefined;
+    const tail = cursor
+      ? (input.steward.vault
+          .prepare(
+            `SELECT sequence, kind, command, input_json, outcome
+               FROM share_commons_op
+              WHERE grant_id = ? AND sequence > ?
+              ORDER BY sequence`
+          )
+          .all(grant.grantId, cursor.sequence) as {
+          sequence: number;
+          kind: string;
+          command: string | null;
+          input_json: string | null;
+          outcome: "executed" | "refused";
+        }[])
+      : [];
+    const tailIsComplete =
+      cursor !== undefined &&
+      cursor.sequence >= grant.checkpointSequence &&
+      (cursor.sequence === grant.lastSequence ||
+        (tail[0]?.sequence === cursor.sequence + 1 &&
+          tail.at(-1)?.sequence === grant.lastSequence &&
+          tail.every(
+            (operation, index) =>
+              operation.sequence === cursor.sequence + index + 1
+          )));
+    if (
+      !input.forceFullProjection &&
+      hasProjection &&
+      seat.applyCommand &&
+      tailIsComplete
+    ) {
+      for (const operation of tail) {
+        if (
+          operation.outcome !== "executed" ||
+          (operation.kind !== "command" && operation.kind !== "delete")
+        )
+          continue;
+        if (!operation.command || !operation.input_json)
+          throw new Error(
+            `commons operation ${operation.sequence} has no executable payload`
+          );
+        const commandInput = JSON.parse(operation.input_json) as unknown;
+        if (!commandInput || typeof commandInput !== "object")
+          throw new Error(
+            `commons operation ${operation.sequence} has invalid command input`
+          );
+        const outcome = seat.applyCommand(
+          operation.command,
+          commandInput as Record<string, unknown>,
+          `commons-replica:${grant.grantId}:${operation.sequence}`
+        );
+        if (outcome.status !== "executed" && outcome.status !== "replayed")
+          throw new Error(
+            `commons replica command ${operation.sequence} ${outcome.status}: ${"reason" in outcome ? outcome.reason : "unknown"}`
+          );
+      }
+      projectRoster(seat.vault.vault, input.steward.vault, grant, input.now);
+      results.push({
+        partyId: seat.partyId,
+        vaultId: seat.vaultId,
+        status: "current",
+        projected: [
+          {
+            itemType: grant.containerType,
+            originItemId: grant.containerId,
+            itemId: grant.containerId,
+            deduped: true,
+          },
+        ],
+        blobs: [],
+      });
+      continue;
+    }
     // Placing CAS bytes is filesystem-idempotent and independent of the domain
     // rows, so it stays outside the DB transaction below.
-    const blobs = closure.blobs.map((entry) => ({
+    usedFullProjection = true;
+    const currentClosure = closure();
+    const blobs = currentClosure.blobs.map((entry) => ({
       sha256: entry.sha256,
       mode: placeBlob(
         input.steward.blobs.local,
@@ -1000,7 +1094,7 @@ export function compileCommons(
           preserveControlState: true,
         });
       }
-      projection = projectShareClosure(seatDb, closure, {
+      projection = projectShareClosure(seatDb, currentClosure, {
         sharedBy: `commons:${grant.grantId}`,
         now: () => Date.parse(input.now),
         keys:
@@ -1045,20 +1139,41 @@ export function compileCommons(
         sequence: grant.lastSequence,
         now: input.now,
       });
-  input.steward.vault
+  const checkpoint = input.steward.vault
     .prepare(
-      `UPDATE share_circle_grant
-          SET checkpoint_sequence = last_sequence, checkpoint_json = ?
-        WHERE grant_id = ?`
+      `SELECT checkpoint_json FROM share_circle_grant WHERE grant_id = ?`
     )
-    .run(JSON.stringify(closure), grant.grantId);
-  attestCommonsCheckpointState({
-    steward: input.steward,
-    stewardVaultId: input.stewardVaultId,
-    grantId: grant.grantId,
-    sequence: grant.lastSequence,
-    closure,
-  });
+    .get(grant.grantId) as { checkpoint_json: string | null };
+  const currentMemberCount = (
+    input.steward.vault
+      .prepare(
+        `SELECT COUNT(*) AS n FROM share_commons_member_state
+          WHERE grant_id = ? AND status = 'current'`
+      )
+      .get(grant.grantId) as { n: number }
+  ).n;
+  const refreshCheckpoint =
+    usedFullProjection ||
+    currentMemberCount <= 1 ||
+    !checkpoint.checkpoint_json ||
+    grant.lastSequence - grant.checkpointSequence >= 32;
+  if (refreshCheckpoint) {
+    const currentClosure = closure();
+    input.steward.vault
+      .prepare(
+        `UPDATE share_circle_grant
+            SET checkpoint_sequence = last_sequence, checkpoint_json = ?
+          WHERE grant_id = ?`
+      )
+      .run(JSON.stringify(currentClosure), grant.grantId);
+    attestCommonsCheckpointState({
+      steward: input.steward,
+      stewardVaultId: input.stewardVaultId,
+      grantId: grant.grantId,
+      sequence: grant.lastSequence,
+      closure: currentClosure,
+    });
+  }
   compactCommonsOperations(input.steward.vault, grant.grantId);
   return results;
 }
@@ -1188,41 +1303,41 @@ export function commonsGrantForCommand(
       .get(containerType, containerId) as { grant_id: string } | undefined;
     return row ? readCommonsGrant(db, row.grant_id) : undefined;
   };
-  if (command.startsWith("core.")) {
-    const folderId =
-      typeof commandInput["folder_id"] === "string"
-        ? commandInput["folder_id"]
-        : typeof commandInput["parent_folder_id"] === "string"
-          ? commandInput["parent_folder_id"]
-          : undefined;
-    if (
-      folderId &&
-      (command === "core.add_document" || command.includes("folder"))
-    ) {
-      const direct = activeGrant("docs.folder", folderId);
+  const inputValue = (keys: readonly string[]): string | undefined => {
+    for (const key of keys) {
+      const value = commandInput[key];
+      if (typeof value === "string" && value) return value;
+    }
+    return undefined;
+  };
+  for (const route of COMMONS_COMMAND_ROUTES) {
+    const containerId = inputValue(route.containerIdKeys);
+    // The route declaration owns both direct and descendant identifiers. It
+    // intentionally resolves undeclared commands too: once an input names a
+    // row inside a Commons, the authorization door must refuse a command not
+    // in `route.commands` instead of letting it mutate the private replica.
+    if (route.containerType === "docs.folder" && containerId) {
+      const direct = activeGrant("docs.folder", containerId);
       if (direct) return direct;
       const ancestor = db
         .prepare(
           `WITH RECURSIVE ancestors(concept_id) AS (
-             SELECT ?
-             UNION ALL
-             SELECT c.broader_concept_id FROM core_concept c
-             JOIN ancestors a ON c.concept_id = a.concept_id
-             WHERE c.broader_concept_id IS NOT NULL
-           )
-           SELECT g.grant_id FROM share_circle_grant g
-           JOIN ancestors a ON a.concept_id = g.container_id
-           WHERE g.plane = 'commons' AND g.container_type = 'docs.folder'
-             AND g.revoked_at IS NULL LIMIT 1`
+               SELECT ?
+               UNION ALL
+               SELECT c.broader_concept_id FROM core_concept c
+               JOIN ancestors a ON c.concept_id = a.concept_id
+               WHERE c.broader_concept_id IS NOT NULL
+             )
+             SELECT g.grant_id FROM share_circle_grant g
+             JOIN ancestors a ON a.concept_id = g.container_id
+             WHERE g.plane = 'commons' AND g.container_type = 'docs.folder'
+               AND g.revoked_at IS NULL LIMIT 1`
         )
-        .get(folderId) as { grant_id: string } | undefined;
+        .get(containerId) as { grant_id: string } | undefined;
       if (ancestor) return readCommonsGrant(db, ancestor.grant_id);
     }
-    const documentId =
-      typeof commandInput["document_id"] === "string"
-        ? commandInput["document_id"]
-        : undefined;
-    if (documentId) {
+    const childId = inputValue(route.childIdKeys);
+    if (route.containerType === "docs.folder" && childId) {
       const folderGrant = db
         .prepare(
           `WITH RECURSIVE folders(grant_id, concept_id) AS (
@@ -1238,64 +1353,23 @@ export function commonsGrantForCommand(
            WHERE t.target_type = 'core.document' AND t.target_id = ?
            LIMIT 1`
         )
-        .get(documentId) as { grant_id: string } | undefined;
+        .get(childId) as { grant_id: string } | undefined;
       if (folderGrant) return readCommonsGrant(db, folderGrant.grant_id);
     }
-  }
-  let containerType: ShareableItemType | undefined;
-  let containerId: string | undefined;
-  if (command.startsWith("tally.")) {
-    containerType = "tally.group";
-    containerId =
-      typeof commandInput["group_id"] === "string"
-        ? commandInput["group_id"]
-        : undefined;
-    if (!containerId && typeof commandInput["expense_id"] === "string") {
+    if (route.containerType === "tally.group" && childId) {
       const row = db
         .prepare("SELECT group_id FROM tally_expense WHERE expense_id = ?")
-        .get(commandInput["expense_id"]) as { group_id: string } | undefined;
-      containerId = row?.group_id;
-    }
-  } else if (command.startsWith("core.") && command.includes("document")) {
-    containerType = "core.document";
-    containerId =
-      typeof commandInput["document_id"] === "string"
-        ? commandInput["document_id"]
-        : undefined;
-  } else if (command.startsWith("core.") && command.includes("collection")) {
-    containerType = "core.collection";
-    containerId =
-      typeof commandInput["collection_id"] === "string"
-        ? commandInput["collection_id"]
-        : undefined;
-  }
-  if (containerType && containerId) {
-    const grant = activeGrant(containerType, containerId);
-    if (grant) return grant;
-  }
-  // Structural catch-all (issue #731 B4). The pattern branches above only name
-  // the container types with a bespoke command family. A command whose input
-  // addresses ANY active commons container — including a supported type with no
-  // actable-registry entry (media/content/locker) — must still reach the
-  // commons rail so the app/automation door refuses an undeclared write instead
-  // of falling through to a private local mutation the next compile reverts.
-  const CONTAINER_ID_KEYS: readonly [ShareableItemType, readonly string[]][] = [
-    ["tally.group", ["group_id"]],
-    ["core.document", ["document_id"]],
-    ["core.collection", ["collection_id"]],
-    ["docs.folder", ["folder_id", "parent_folder_id"]],
-    ["media.asset", ["asset_id", "media_asset_id"]],
-    ["core.content_item", ["content_id", "content_item_id"]],
-    ["locker.item", ["item_id", "locker_item_id"]],
-  ];
-  for (const [type, keys] of CONTAINER_ID_KEYS)
-    for (const key of keys) {
-      const value = commandInput[key];
-      if (typeof value === "string" && value) {
-        const grant = activeGrant(type, value);
+        .get(childId) as { group_id: string } | undefined;
+      if (row) {
+        const grant = activeGrant("tally.group", row.group_id);
         if (grant) return grant;
       }
     }
+    if (containerId) {
+      const grant = activeGrant(route.containerType, containerId);
+      if (grant) return grant;
+    }
+  }
   return undefined;
 }
 
@@ -1586,7 +1660,7 @@ function commandRefuses(input: {
       | { vault_id: string; vault_public_key: string | null }
       | undefined;
     if (!binding?.vault_public_key)
-      return "this member vault has no signing identity bound to the commons";
+      return "vault_identity_missing: this member vault has no signing identity bound to the commons";
     if (
       !verifyCommonsIntent(
         Buffer.from(binding.vault_public_key, "base64"),
@@ -1600,7 +1674,7 @@ function commandRefuses(input: {
         input.memberSignature
       )
     )
-      return "this member command has an invalid vault signature";
+      return "vault_identity_mismatch: the member signature does not match the pinned vault identity";
   }
   if (input.basedOnSequence !== undefined) {
     const stale = staleContextConflict({
@@ -1930,12 +2004,18 @@ export function executeCommonsCommand(
     };
   }
   const executeAndSequence = () => {
-    const outcome = input.gateway.invokeCommonsCanonical(input.credential, {
-      command: input.command,
-      input: input.commandInput,
-      purpose: "dpv:ServiceProvision",
-      ...(input.invocationId ? { invocationId: input.invocationId } : {}),
-    });
+    const outcome = input.gateway.invokeCommonsCanonical(
+      input.credential,
+      {
+        command: input.command,
+        input: input.commandInput,
+        purpose: "dpv:ServiceProvision",
+        ...(input.invocationId ? { invocationId: input.invocationId } : {}),
+      },
+      {
+        idSeed: `commons-replica:${input.grantId}:${grant.lastSequence + 1}`,
+      }
+    );
     const executed =
       outcome.status === "executed" || outcome.status === "replayed";
     const reason = executed ? undefined : outcome.reason;
@@ -2036,17 +2116,21 @@ export function executeCommonsCommand(
 
 /** Every state `share_commons_intent.status` can hold. `expired`/`cancelled`
  * are settled states like `denied` (issue #731 goal 2): once reached, an
- * intent is done re-appearing as pending/parked. */
+ * intent is done re-appearing as queued/parked. The vocabulary is shared with
+ * gateway delivery effects even though signed user intents remain a separate
+ * authority-bearing table. */
 export type CommonsIntentStatus =
-  | "pending"
+  | "queued"
+  | "running"
   | "parked"
-  | "denied"
   | "executed"
-  | "expired"
-  | "cancelled";
+  | "denied"
+  | "failed"
+  | "cancelled"
+  | "expired";
 
 /** How long a parked intent waits on an unreachable steward before it
- * settles as `expired` instead of staying "pending" forever (issue #731
+ * settles as `expired` instead of staying queued forever (issue #731
  * goal 2). Two weeks is generous for a genuinely offline steward — a trip
  * plus slack — while still bounding how far a member's mental model of the
  * group can drift before the protocol stops silently trusting it; a member
@@ -2089,7 +2173,7 @@ export function queueCommonsIntent(input: {
       `INSERT INTO share_commons_intent
          (intent_id, grant_id, actor_party_id, command, input_json,
           based_on_sequence, status, reason, steward_label, created_at, settled_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?, NULL)
+       VALUES (?, ?, ?, ?, ?, ?, 'queued', NULL, ?, ?, NULL)
        ON CONFLICT(intent_id) DO NOTHING`
     )
     .run(
@@ -2139,7 +2223,7 @@ export function settleCommonsIntent(input: {
 /** Bounded life for a parked intent (issue #731 goal 2). Settles every
  * `parked` intent on this seat whose `created_at` is older than the horizon
  * to `expired`, so it stops re-appearing as an in-flight write and the peer
- * sweep's `WHERE status IN ('pending','parked')` retry query naturally
+ * sweep's `WHERE status IN ('queued','parked')` retry query naturally
  * leaves it alone. Idempotent — re-running finds nothing left to settle.
  * Returns the number of intents expired. */
 export function expireParkedCommonsIntents(input: {
@@ -2167,7 +2251,7 @@ export function expireParkedCommonsIntents(input: {
  * #731 goal 2). A genuine race is possible — the peer sweep may execute a
  * parked intent at the steward between the member's decision to cancel and
  * this call landing locally. The WHERE clause IS the guard, not a prior
- * read: cancelling only ever moves a still-open row (`pending`/`parked`) to
+ * read: cancelling only ever moves a still-open row (`queued`/`parked`) to
  * `cancelled`. An already-terminal row (executed, denied, expired, or a
  * previous cancel) is left untouched, and `settleCommonsIntent`'s later,
  * unconditional update — the steward's real answer, when it arrives — always
@@ -2185,7 +2269,7 @@ export function cancelCommonsIntent(input: {
           SET status = 'cancelled',
               reason = 'cancelled by the member before it executed',
               settled_at = ?
-        WHERE intent_id = ? AND status IN ('pending','parked')`
+        WHERE intent_id = ? AND status IN ('queued','parked')`
     )
     .run(input.now, input.intentId);
   const row = input.seat

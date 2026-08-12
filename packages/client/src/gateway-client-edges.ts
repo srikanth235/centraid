@@ -27,6 +27,7 @@ import {
 
 const EDGES_PATH = "/centraid/_gateway/edges";
 const COMMONS_PATH = "/centraid/_gateway/commons";
+const COMMONS_RECOVERY_PATH = `${COMMONS_PATH}/recovery`;
 
 export type EdgeMode = "snapshot";
 export type EdgeKind = "add" | "move";
@@ -48,7 +49,9 @@ export interface GatewayEdge {
   itemType: string;
   itemIds?: string[];
   originVaultId: string;
+  originLabel: string;
   audienceVaultId: string;
+  audienceLabel: string;
   verbs: string;
   status: EdgeStatus;
   reason?: string;
@@ -182,6 +185,54 @@ export async function answerCommonsInvitation(
     "answer commons invitation"
   );
   return out.invitation;
+}
+
+export interface CommonsRecoveryGrant {
+  actorVaultId: string;
+  grantId: string;
+  containerType: string;
+  steward: {
+    presence:
+      | "unknown"
+      | "reachable"
+      | "degraded"
+      | "absent"
+      | "link-down"
+      | "parked";
+    stewardVaultId?: string;
+    silentForMs?: number;
+    fault?: string;
+  };
+}
+
+export async function listCommonsRecovery(
+  actorVaultId: string
+): Promise<CommonsRecoveryGrant[]> {
+  const { baseUrl, token } = await auth();
+  const query = new URLSearchParams({ actorVaultId });
+  const res = await doFetch(
+    baseUrl,
+    `${COMMONS_RECOVERY_PATH}?${query.toString()}`,
+    { method: "GET", headers: authHeaders(token) }
+  );
+  const out = await readJson<{ grants: CommonsRecoveryGrant[] }>(
+    res,
+    "inspect shared-space recovery"
+  );
+  return (out.grants ?? []).map((grant) => ({ ...grant, actorVaultId }));
+}
+
+export async function recoverCommons(
+  actorVaultId: string,
+  grantId: string
+): Promise<Record<string, unknown>> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, COMMONS_RECOVERY_PATH, {
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
+    body: JSON.stringify({ actorVaultId, grantId }),
+  });
+  return readJson(res, "recover shared space");
 }
 
 /** One give parked by the audience's D9 `ask` receive setting — nothing was

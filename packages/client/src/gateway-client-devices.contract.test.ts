@@ -34,13 +34,13 @@ describe("pairing-ticket mint seam", () => {
 
   it("law: Add someone sends forPerson and nothing from the self-pair lane", async () => {
     await devices.createGatewayDeviceTicket({
-      forPerson: { label: "Priya" },
+      forPerson: { operationId: "op-priya", label: "Priya" },
       ttlMinutes: 60,
     });
 
     const sent = sentJson("POST /centraid/_gateway/devices/ticket");
     expect(sent).toStrictEqual({
-      forPerson: { label: "Priya" },
+      forPerson: { operationId: "op-priya", label: "Priya" },
       ttlMinutes: 60,
     });
     // Mutually exclusive with the self-pair lane (#726 P1): no vaultId/vaultIds
@@ -51,7 +51,11 @@ describe("pairing-ticket mint seam", () => {
 
   it("law: Add someone's response carries the NEWLY MINTED owner+vault, not the caller's", async () => {
     const ticket = await devices.createGatewayDeviceTicket({
-      forPerson: { label: "Priya", vaultName: "Priya's vault" },
+      forPerson: {
+        operationId: "op-priya-vault",
+        label: "Priya",
+        vaultName: "Priya's vault",
+      },
     });
 
     expect(ticket).toMatchObject({

@@ -224,8 +224,10 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
       id: item.linkToken,
       vaultId: item.targetVaultId,
       vaultLabel:
+        item.audienceLabel ??
         this.#scopes.find((scope) => scope.vaultId === item.targetVaultId)
-          ?.label ?? "Vault",
+          ?.label ??
+        "Vault",
       status: item.status,
       label: `${item.kind === "move" ? "Move" : "Add"} ${item.itemType}`,
       ...(item.reason ? { reason: item.reason } : {}),

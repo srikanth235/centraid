@@ -120,7 +120,7 @@ describe("circle-backed commons", () => {
     expect(audience.blobs.hasSync(second.sha256)).toBe(true);
   });
 
-  test("steward serializes capability decisions, pending intent truth, transfer, and scrub", () => {
+  test("steward serializes capability decisions, queued intent truth, transfer, and scrub", () => {
     const { origin, originBoot, audience } = household();
     const now = nowIso();
     const bob = addParty(origin.vault, "Bob", now);
@@ -245,11 +245,19 @@ describe("circle-backed commons", () => {
     const bob = addParty(origin.vault, "Bob", now, audienceBoot.ownerPartyId);
     const gateway = createGateway(origin);
     registerTallyCommands(gateway);
+    const audienceGateway = createGateway(audience);
+    registerTallyCommands(audienceGateway);
     const credential: Credential = {
       kind: "device",
       deviceId: originBoot.deviceId,
       deviceKey: originBoot.deviceKey,
     };
+    const audienceCredential: Credential = {
+      kind: "device",
+      deviceId: audienceBoot.deviceId,
+      deviceKey: audienceBoot.deviceKey,
+    };
+    let replicaCommands = 0;
     const created = gateway.invoke(credential, {
       command: "tally.create_group",
       input: { name: "Trip", icon: "🧳", member_ids: [bob] },
@@ -285,6 +293,23 @@ describe("circle-backed commons", () => {
         capability: "read+write" as const,
         vaultId: "vault-family",
         vault: audience,
+        applyCommand: (
+          command: string,
+          input: Record<string, unknown>,
+          invocationId: string
+        ) => {
+          replicaCommands += 1;
+          return audienceGateway.invokeCommonsCanonical(
+            audienceCredential,
+            {
+              command,
+              input,
+              invocationId,
+              purpose: "dpv:ServiceProvision",
+            },
+            { idSeed: invocationId }
+          );
+        },
       },
     ];
     compileCommons({
@@ -342,6 +367,7 @@ describe("circle-backed commons", () => {
     const aliceWrite = write(originBoot.ownerPartyId, "Train", 1_000);
     expect(aliceWrite.decision.accepted).toBe(true);
     expect(aliceWrite.outcome?.status).toBe("executed");
+    expect(replicaCommands).toBe(1);
     expect(
       origin.vault
         .prepare("SELECT description FROM tally_expense WHERE group_id = ?")
@@ -360,6 +386,7 @@ describe("circle-backed commons", () => {
     expect(bobWrite.decision.reason).toBeUndefined();
     expect(bobWrite.decision).toMatchObject({ accepted: true });
     expect(bobWrite.outcome?.status).toBe("executed");
+    expect(replicaCommands).toBe(2);
 
     for (const db of [origin.vault, audience.vault]) {
       expect(

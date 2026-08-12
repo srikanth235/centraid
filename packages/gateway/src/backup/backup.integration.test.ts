@@ -495,8 +495,11 @@ describe("backup", () => {
     const sourceKeys = daemonKeyStore(path.join(h.dataDir, "keys"));
     const restoredSealKey = sourceKeys.export(`${h.vaultId}.sealkey`);
     if (!restoredSealKey) throw new Error("source seal key missing");
+    const restoredIdentity = sourceKeys.export(`${h.vaultId}.identity`);
+    if (!restoredIdentity) throw new Error("source identity missing");
     const adoptedKeyStore = daemonKeyStore(path.join(freshRoot, "keys"));
     adoptedKeyStore.import(`${h.vaultId}.sealkey`, restoredSealKey);
+    adoptedKeyStore.import(`${h.vaultId}.identity`, restoredIdentity);
     await fs.mkdir(path.join(adoptedDir, "code"), { recursive: true });
     await run(
       [

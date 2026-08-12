@@ -213,7 +213,10 @@ describe("DevicePairPanel suite", () => {
 
       expect(onCreateTicket).toHaveBeenCalledWith({
         ttlMinutes: 15,
-        forPerson: { label: "Priya" },
+        forPerson: {
+          operationId: expect.any(String) as string,
+          label: "Priya",
+        },
       });
       // The minted ticket names the new person, not whoever is hosting.
       expect(el.textContent).toContain("Priya");

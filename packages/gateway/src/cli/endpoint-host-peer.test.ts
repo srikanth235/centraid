@@ -20,7 +20,11 @@ import {
 } from "@centraid/tunnel";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
-import { makeDaemonDevicePlane, DEVICE_HEADER } from "./endpoint-host.js";
+import {
+  assertMountedVaultRoutes,
+  makeDaemonDevicePlane,
+  DEVICE_HEADER,
+} from "./endpoint-host.js";
 import { daemonLayoutFor } from "./paths.js";
 
 const silentLogger = {
@@ -54,6 +58,57 @@ const loopbackRequest = (headers: Record<string, string>) =>
   }) as unknown as http.IncomingMessage;
 
 describe("peer lane separation", () => {
+  it("asserts one rotated endpoint route for every mounted linked vault", async () => {
+    const { plane } = makePlane();
+    for (const [localVaultId, peerVaultId, endpointId] of [
+      ["vlt_a", "vlt_peer_a", "ep-peer-a"],
+      ["vlt_b", "vlt_peer_b", "ep-peer-b"],
+    ] as const) {
+      const ticket = plane.peerPlane.links.tickets.mint(
+        localVaultId,
+        "a".repeat(43)
+      );
+      plane.peerPlane.links.redeem({
+        ticketId: ticket.ticketId,
+        secret: ticket.secret,
+        peerVaultId,
+        peerPublicKey: "b".repeat(43),
+        route: { endpointId, relayHints: [], assertedAt: Date.now() },
+        peerLabel: peerVaultId,
+        localLabel: localVaultId,
+      });
+    }
+    const claims: Record<string, unknown>[] = [];
+    const outcomes = await assertMountedVaultRoutes({
+      links: plane.peerPlane.links,
+      peerDial: {
+        request: async (request) => {
+          claims.push(request.body as Record<string, unknown>);
+          return { status: 200, json: { state: "accepted" } };
+        },
+        endpointTicketFor: (endpointId) => endpointId,
+      },
+      vaults: {
+        planesList: () =>
+          (["vlt_a", "vlt_b"] as const).map((vaultId) => ({
+            boot: { vaultId },
+          })) as never,
+        signAsVault: () => Buffer.from("signature"),
+      },
+      endpointId: "ep-rotated",
+      relayHints: ["https://relay.example"],
+    });
+    expect(outcomes).toHaveLength(2);
+    expect(
+      claims
+        .map((claim) => String(claim.vaultId))
+        .toSorted((left, right) => left.localeCompare(right))
+    ).toStrictEqual(["vlt_a", "vlt_b"]);
+    expect(claims.every((claim) => claim.endpointId === "ep-rotated")).toBe(
+      true
+    );
+  });
+
   it("does not answer the peer question with the device answer", () => {
     const { plane } = makePlane();
     // An ENROLLED DEVICE is admitted on the device lane and refused on the

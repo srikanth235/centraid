@@ -24,6 +24,9 @@ CREATE TABLE share_commons_steward_contact (
   -- absent.
   last_contact_at      TEXT,
   last_attempt_at      TEXT,
+  -- Bounded exponential retry with deterministic jitter. Sweeps before this
+  -- instant do no network work and do not rewrite the same transport error.
+  retry_after_at       TEXT,
   -- First failed attempt of the CURRENT unreachable episode; NULL while
   -- reachable. Escalation compares this against the wall clock.
   absence_since        TEXT,

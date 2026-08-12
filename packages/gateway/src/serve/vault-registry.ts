@@ -38,6 +38,9 @@ import {
   uuidv7,
   VaultSchemaAheadError,
   applyVaultFootprint,
+  identityKeyFileFor,
+  loadOrCreateVaultIdentitySeed,
+  loadVaultIdentitySeed,
   signWithVaultIdentity,
   vaultIdentityPublicKey,
 } from "@centraid/vault";
@@ -104,6 +107,14 @@ export interface VaultRegistryOptions {
   logger: RuntimeLogger;
   /** Shared host custody store for every vault sealing key. */
   keyStore?: KeyStore;
+  /** Canonical gateway directory used to pin identity and presentation. */
+  identityDirectory?: {
+    recordLocal: (input: {
+      vaultId: string;
+      publicKey: string;
+      label: string;
+    }) => unknown;
+  };
   /** Owner display name used when bootstrapping fresh vaults. */
   ownerName?: string;
   /** Sweep cadence forwarded to every plane. */
@@ -184,12 +195,24 @@ export class VaultRegistryError extends Error {
   }
 }
 
+export class VaultMountIdentityError extends Error {
+  readonly code = "vault_identity_missing";
+
+  constructor(readonly vaultId: string) {
+    super(
+      `vault ${vaultId} has no identity seed; refusing to mint a replacement for an existing vault`
+    );
+    this.name = "VaultMountIdentityError";
+  }
+}
+
 export class VaultRegistry {
   private readonly rootDir: string;
   private readonly cacheRootDir: string;
   private readonly logger: RuntimeLogger;
   private readonly ownerName: string | undefined;
   private readonly keyStore: KeyStore | undefined;
+  private readonly identityDirectory: VaultRegistryOptions["identityDirectory"];
   private readonly sweepIntervalMs: number | undefined;
   private readonly enableWalShipper: boolean;
   private readonly walCaptureConfigured: (() => boolean) | undefined;
@@ -241,6 +264,7 @@ export class VaultRegistry {
       );
     this.logger = options.logger;
     this.keyStore = options.keyStore;
+    this.identityDirectory = options.identityDirectory;
     this.ownerName = options.ownerName;
     this.sweepIntervalMs = options.sweepIntervalMs;
     this.enableWalShipper = options.enableWalShipper ?? true;
@@ -484,13 +508,20 @@ export class VaultRegistry {
     dir: string,
     boot: { vaultId?: string; vaultName?: string }
   ): VaultPlane {
-    return openVaultPlane({
+    const vaultId = boot.vaultId ?? path.basename(dir);
+    const identityFile = identityKeyFileFor(dir);
+    const identitySeed = boot.vaultId
+      ? loadOrCreateVaultIdentitySeed(identityFile, this.keyStore)
+      : loadVaultIdentitySeed(identityFile, this.keyStore);
+    if (!identitySeed) throw new VaultMountIdentityError(vaultId);
+    const plane = openVaultPlane({
       dir,
       // Vault dir name IS the vault id (create() names it so), so the cache
       // dir keys per-vault without needing the bootstrapped id up front.
       cacheDir: path.join(this.cacheRootDir, path.basename(dir)),
       logger: this.logger,
       ...(this.keyStore ? { keyStore: this.keyStore } : {}),
+      identitySeed,
       ...(this.ownerName ? { ownerName: this.ownerName } : {}),
       ...(boot.vaultId ? { bootstrap: true } : {}),
       ...(this.sweepIntervalMs === undefined
@@ -534,6 +565,17 @@ export class VaultRegistry {
         : {}),
       ...boot,
     });
+    try {
+      this.identityDirectory?.recordLocal({
+        vaultId: plane.boot.vaultId,
+        publicKey: vaultIdentityPublicKey(identitySeed).toString("base64"),
+        label: plane.name,
+      });
+    } catch (error) {
+      plane.stop();
+      throw error;
+    }
+    return plane;
   }
 
   private info(plane: VaultPlane): VaultInfo {
@@ -689,11 +731,29 @@ export class VaultRegistry {
    * and `defaultVaultId()`); only the auto-found bootstrap passes it.
    */
   create(name?: string, options?: { personal?: boolean }): VaultInfo {
+    return this.createWithId(uuidv7(), name, options);
+  }
+
+  /** Fixed-id, idempotent create for a resumable multi-store workflow. */
+  createWithId(
+    vaultId: string,
+    name?: string,
+    options?: { personal?: boolean }
+  ): VaultInfo {
     const trimmed = name?.trim();
     if (trimmed !== undefined && trimmed.length === 0) {
       throw new VaultRegistryError("bad_name", "a vault name cannot be empty");
     }
-    const vaultId = uuidv7();
+    const existing = this.get(vaultId);
+    if (existing) {
+      if (trimmed && existing.name !== trimmed) {
+        throw new VaultRegistryError(
+          "bad_name",
+          `vault ${vaultId} already exists with another name`
+        );
+      }
+      return this.info(existing);
+    }
     const dir = path.join(this.rootDir, vaultId);
     const plane = this.openPlane(dir, {
       vaultId,
@@ -719,6 +779,11 @@ export class VaultRegistry {
     if (trimmed.length === 0)
       throw new VaultRegistryError("bad_name", "a vault name cannot be empty");
     plane.rename(trimmed);
+    this.identityDirectory?.recordLocal({
+      vaultId,
+      publicKey: this.vaultIdentity(vaultId)!.publicKey,
+      label: trimmed,
+    });
     return this.info(plane);
   }
 

@@ -67,6 +67,9 @@ export const COMMONS_STEWARD_ABSENT_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
  * summary counts members sitting past it rather than just reporting a max.
  */
 export const COMMONS_LAG_WINDOW_OPS = 256;
+/** Pull retries start quickly but never grow past fifteen minutes. */
+export const COMMONS_PULL_RETRY_BASE_MS = 5_000;
+export const COMMONS_PULL_RETRY_MAX_MS = 15 * 60 * 1000;
 
 export interface CommonsStewardStatus {
   grantId: string;
@@ -74,6 +77,7 @@ export interface CommonsStewardStatus {
   stewardVaultId?: string;
   lastContactAt?: string;
   lastAttemptAt?: string;
+  retryAfterAt?: string;
   /** Milliseconds since the last PROVEN contact; absent while reachable. */
   silentForMs?: number;
   consecutiveFailures: number;
@@ -89,6 +93,7 @@ interface ContactRow {
   steward_vault_id: string | null;
   last_contact_at: string | null;
   last_attempt_at: string | null;
+  retry_after_at: string | null;
   absence_since: string | null;
   consecutive_failures: number;
   last_outcome: CommonsPullOutcome | "unknown";
@@ -108,7 +113,7 @@ interface ContactRow {
 }
 
 const CONTACT_COLUMNS = `grant_id, steward_vault_id, last_contact_at,
-  last_attempt_at, absence_since, consecutive_failures, last_outcome,
+  last_attempt_at, retry_after_at, absence_since, consecutive_failures, last_outcome,
   last_error, fault, attempts, contacts, pull_noop, pull_tail, pull_snapshot,
   pull_tombstone, pull_parked, pull_unreachable, absence_episodes, absent_ms,
   longest_absence_ms`;
@@ -117,6 +122,29 @@ function ms(value: string | null | undefined): number | undefined {
   if (!value) return undefined;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function retryAfter(input: {
+  grantId: string;
+  memberVaultId: string;
+  failures: number;
+  nowMs: number;
+}): string {
+  let hash = 2_166_136_261;
+  for (const character of `${input.grantId}:${input.memberVaultId}`) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16_777_619);
+  }
+  // Stable 75–125% jitter prevents a fleet from sharing retry boundaries and
+  // remains deterministic enough for replay and tests.
+  const jitter = 0.75 + ((hash >>> 0) % 501) / 1000;
+  const exponential =
+    COMMONS_PULL_RETRY_BASE_MS * 2 ** Math.min(10, input.failures - 1);
+  const delay = Math.min(
+    COMMONS_PULL_RETRY_MAX_MS,
+    Math.round(exponential * jitter)
+  );
+  return new Date(input.nowMs + delay).toISOString();
 }
 
 /**
@@ -181,6 +209,7 @@ function statusFor(
     ...(row.steward_vault_id ? { stewardVaultId: row.steward_vault_id } : {}),
     ...(row.last_contact_at ? { lastContactAt: row.last_contact_at } : {}),
     ...(row.last_attempt_at ? { lastAttemptAt: row.last_attempt_at } : {}),
+    ...(row.retry_after_at ? { retryAfterAt: row.retry_after_at } : {}),
     ...(since === undefined ? {} : { silentForMs: Math.max(0, nowMs - since) }),
     consecutiveFailures: row.consecutive_failures,
     lastOutcome: row.last_outcome,
@@ -196,6 +225,7 @@ function emptyRow(grantId: string): ContactRow {
     steward_vault_id: null,
     last_contact_at: null,
     last_attempt_at: null,
+    retry_after_at: null,
     absence_since: null,
     consecutive_failures: 0,
     last_outcome: "unknown",
@@ -284,6 +314,14 @@ export function recordCommonsPull(input: {
     steward_vault_id: input.stewardVaultId ?? before.steward_vault_id,
     last_contact_at: failed ? before.last_contact_at : now,
     last_attempt_at: now,
+    retry_after_at: failed
+      ? retryAfter({
+          grantId: input.grantId,
+          memberVaultId: input.memberVaultId,
+          failures: before.consecutive_failures + 1,
+          nowMs,
+        })
+      : null,
     absence_since: failed ? (before.absence_since ?? now) : null,
     consecutive_failures: failed ? before.consecutive_failures + 1 : 0,
     last_outcome: input.outcome,
@@ -301,14 +339,15 @@ export function recordCommonsPull(input: {
     .prepare(
       `INSERT INTO share_commons_steward_contact
          (grant_id, member_vault_id, steward_vault_id, last_contact_at,
-          last_attempt_at, absence_since, consecutive_failures, last_outcome,
+          last_attempt_at, retry_after_at, absence_since, consecutive_failures, last_outcome,
           last_error, fault, faulted_at, attempts, contacts, absence_episodes,
           absent_ms, longest_absence_ms)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(grant_id, member_vault_id) DO UPDATE SET
          steward_vault_id = excluded.steward_vault_id,
          last_contact_at = excluded.last_contact_at,
          last_attempt_at = excluded.last_attempt_at,
+         retry_after_at = excluded.retry_after_at,
          absence_since = excluded.absence_since,
          consecutive_failures = excluded.consecutive_failures,
          last_outcome = excluded.last_outcome,
@@ -327,6 +366,7 @@ export function recordCommonsPull(input: {
       next.steward_vault_id,
       next.last_contact_at,
       next.last_attempt_at,
+      next.retry_after_at,
       next.absence_since,
       next.consecutive_failures,
       next.last_outcome,
@@ -558,11 +598,7 @@ export function commonsObservabilityForVault(input: {
   };
 }
 
-/**
- * Diagnostics-bundle section. `buildDiagnosticsBundle` takes an opaque,
- * caller-assembled `config` object and redacts it — this slots straight in
- * there (or into a `_gateway/logs` line) without inventing a second surface.
- */
+/** Diagnostics-bundle section; callers still own redaction. */
 export function commonsObservabilitySection(input: {
   vaults: readonly { vaultId: string; db?: VaultDb }[];
   now?: string;

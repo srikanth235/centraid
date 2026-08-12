@@ -34,7 +34,9 @@ import {
 } from "../serve/peer-closure-blobs.js";
 import type { WireDerivativeBlob } from "../serve/peer-closure-blobs.js";
 import { receiveSettingFor } from "../serve/peer-receive-settings.js";
-import { readEdgeRow, updateStatus } from "./edges-reconcile.js";
+import { parseStoredShareScope } from "../serve/share-contracts.js";
+import { ShareEffectsStore } from "../serve/share-effects.js";
+import { readEdgeRow, transitionEdge } from "./edges-reconcile.js";
 import type { PeerIdentity } from "./peer-plane.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
@@ -101,19 +103,17 @@ export async function handlePeerEdgeGive(
     });
   }
   if (setting === "ask") {
-    deps.gatewayDatabase.run(
-      `INSERT INTO peer_pending_gives
-         (edge_id, link_id, peer_vault_id, local_vault_id, item_type, item_count, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (edge_id) DO NOTHING`,
+    new ShareEffectsStore(deps.gatewayDatabase).enqueue({
       edgeId,
-      link.linkId,
-      link.peerVaultId,
-      link.localVaultId,
-      itemType,
-      closure.items.length,
-      new Date().toISOString()
-    );
+      kind: "await-give-decision",
+      localVaultId: link.localVaultId,
+      peerVaultId: link.peerVaultId,
+      payload: {
+        linkId: link.linkId,
+        itemType,
+        itemCount: closure.items.length,
+      },
+    });
     return sendJson(res, 200, { state: "asked" });
   }
   const mismatch = verifyDerivatives(closure, derivatives);
@@ -130,14 +130,21 @@ export async function handlePeerEdgeGive(
       detail: error instanceof Error ? error.message : String(error),
     });
   }
-  deps.gatewayDatabase.run(
-    "DELETE FROM peer_pending_gives WHERE edge_id = ?",
-    edgeId
-  );
+  for (const effect of new ShareEffectsStore(deps.gatewayDatabase).list({
+    edgeId,
+    kind: "await-give-decision",
+    active: true,
+  })) {
+    new ShareEffectsStore(deps.gatewayDatabase).transition(
+      effect.effectId,
+      "executed"
+    );
+  }
   recordPendingPulls(deps.gatewayDatabase, audience, {
     edgeId,
     linkId: link.linkId,
     localVaultId: link.localVaultId,
+    peerVaultId: link.peerVaultId,
     originals: closure.blobs.filter((entry) => entry.rung === "original"),
   });
   return sendJson(res, 200, { state: "given", items: result.items });
@@ -167,10 +174,13 @@ export async function handlePeerEdgeClosure(
   let closure: WireClosure;
   let derivatives: WireDerivativeBlob[];
   try {
+    const scope = parseStoredShareScope(row.mode, row.scope_json);
+    if (scope.mode !== "snapshot")
+      throw new Error("live edge rows are retired");
     closure = readShareClosure(origin.vault, {
       originVaultId: row.origin_vault_id,
       itemType: row.item_type,
-      itemIds: JSON.parse(row.scope_json ?? "[]") as string[],
+      itemIds: scope.itemIds,
       crossOwner: true,
     });
     derivatives = collectDerivativeBlobs(origin, closure);
@@ -184,7 +194,7 @@ export async function handlePeerEdgeClosure(
   // wire twice (or more); it has no way to learn whether the audience's
   // projection actually succeeds, so — same as the push path — reaching this
   // point IS this gateway's definition of "given".
-  updateStatus(deps.gatewayDatabase, edgeId, "completed", null);
+  transitionEdge(deps.gatewayDatabase, edgeId, "completed", null);
   return sendJson(res, 200, { state: "given", closure, derivatives });
 }
 
@@ -219,7 +229,7 @@ export async function handlePeerEdgeDeny(
   // Idempotent: a completed or already-denied edge is left alone rather than
   // clobbered by a late-arriving (queued, retried) denial.
   if (row.status !== "completed" && row.status !== "denied") {
-    updateStatus(
+    transitionEdge(
       deps.gatewayDatabase,
       edgeId,
       "denied",

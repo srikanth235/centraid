@@ -3,6 +3,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import type { InvokeOutcome } from "../gateway/types.js";
 import { uuidv7 } from "../ids.js";
 import { vaultIdentityPublicKey } from "../schema/vault-identity.js";
 import type { WireClosure } from "./closure.js";
@@ -408,6 +409,12 @@ export function commonsSeats(input: {
   grantId: string;
   stewardVaultId: string;
   vaultFor: (vaultId: string) => ShareVaultRef | undefined;
+  invokeFor?: (
+    vaultId: string,
+    command: string,
+    commandInput: Record<string, unknown>,
+    invocationId: string
+  ) => InvokeOutcome;
 }): CommonsMemberInput[] {
   const grant = readCommonsGrant(input.steward, input.grantId);
   return (
@@ -439,7 +446,27 @@ export function commonsSeats(input: {
     return {
       partyId: member.party_id,
       capability: member.capability,
-      ...(vaultId ? { vaultId, vault: input.vaultFor(vaultId) } : {}),
+      ...(vaultId
+        ? {
+            vaultId,
+            vault: input.vaultFor(vaultId),
+            ...(input.invokeFor
+              ? {
+                  applyCommand: (
+                    command: string,
+                    commandInput: Record<string, unknown>,
+                    invocationId: string
+                  ) =>
+                    input.invokeFor!(
+                      vaultId,
+                      command,
+                      commandInput,
+                      invocationId
+                    ),
+                }
+              : {}),
+          }
+        : {}),
     };
   });
 }
@@ -454,6 +481,12 @@ export function recompileCommonsGrants(input: {
   /** Post-command fast path; omitted on mount/restore to reconcile all grants. */
   grantId?: string;
   vaultFor: (vaultId: string) => ShareVaultRef | undefined;
+  invokeFor?: (
+    vaultId: string,
+    command: string,
+    commandInput: Record<string, unknown>,
+    invocationId: string
+  ) => InvokeOutcome;
   now: string;
 }): { grantId: string; seats: readonly CompiledCommonsSeat[] }[] {
   return listCommonsGrants(input.steward.vault)
@@ -474,6 +507,7 @@ export function recompileCommonsGrants(input: {
           grantId: grant.grantId,
           stewardVaultId: input.stewardVaultId,
           vaultFor: input.vaultFor,
+          ...(input.invokeFor ? { invokeFor: input.invokeFor } : {}),
         }),
         now: input.now,
       }),

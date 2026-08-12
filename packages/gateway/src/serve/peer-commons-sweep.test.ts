@@ -84,6 +84,35 @@ async function memberWithGrant(label: string): Promise<{
 }
 
 describe("sweepPeerCommons steward-status surfacing", () => {
+  test("transport failures back off instead of rewriting the same error every sweep", async () => {
+    const { member } = await memberWithGrant("sweep-backoff");
+    const t0 = new Date().toISOString();
+    let requests = 0;
+    const dial = unreachableDial();
+    const countingDial: PeerDial = {
+      ...dial,
+      request: async (input) => {
+        requests += 1;
+        return dial.request(input);
+      },
+    };
+    const sweepAt = (now: string) =>
+      sweepPeerCommons({
+        vaults: [{ vaultId: member.vaultId, db: member.vault }],
+        links: member.links,
+        dial: countingDial,
+        limit: 10,
+        now,
+      });
+
+    await sweepAt(t0);
+    const afterFirst = requests;
+    await sweepAt(new Date(Date.parse(t0) + 1_000).toISOString());
+    expect(requests).toBe(afterFirst);
+    await sweepAt(new Date(Date.parse(t0) + 60_000).toISOString());
+    expect(requests).toBeGreaterThan(afterFirst);
+  });
+
   test("a fresh, first-time failure stays quiet — reachable, not yet concerning", async () => {
     const { member } = await memberWithGrant("sweep-fresh");
     const warnings: string[] = [];

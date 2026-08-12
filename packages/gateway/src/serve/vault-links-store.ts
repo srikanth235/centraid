@@ -22,6 +22,7 @@ import type { SQLInputValue } from "node:sqlite";
 
 import { GatewayDatabase } from "./gateway-db.js";
 import { PeerLinkTicketStore } from "./peer-link-tickets.js";
+import { VaultDirectory } from "./vault-directory.js";
 import type {
   LinkedPeer,
   LinkRedemption,
@@ -30,13 +31,27 @@ import type {
   VaultLink,
   VaultLinkRow,
 } from "./vault-link-row.js";
-import {
-  pairOf,
-  peerViewOf,
-  routeTo,
-  sideOf,
-  toLink,
-} from "./vault-link-row.js";
+import { pairOf, peerViewOf, sideOf, toLink } from "./vault-link-row.js";
+
+const LINK_SELECT = `SELECT
+  vl.*,
+  da.public_key AS public_key_a,
+  db.public_key AS public_key_b,
+  da.label AS label_a,
+  db.label AS label_b,
+  ra.endpoint_id AS endpoint_id_a,
+  ra.relay_hints_json AS relay_hints_json_a,
+  ra.asserted_at AS asserted_at_a,
+  ra.signature AS signature_a,
+  rb.endpoint_id AS endpoint_id_b,
+  rb.relay_hints_json AS relay_hints_json_b,
+  rb.asserted_at AS asserted_at_b,
+  rb.signature AS signature_b
+FROM vault_links vl
+JOIN vault_directory da ON da.vault_id = vl.vault_a
+JOIN vault_directory db ON db.vault_id = vl.vault_b
+LEFT JOIN vault_routes ra ON ra.vault_id = vl.vault_a
+LEFT JOIN vault_routes rb ON rb.vault_id = vl.vault_b`;
 
 function databaseFor(source: string | GatewayDatabase): GatewayDatabase {
   if (source instanceof GatewayDatabase) return source;
@@ -46,10 +61,12 @@ function databaseFor(source: string | GatewayDatabase): GatewayDatabase {
 export class VaultLinksStore {
   readonly gatewayDatabase: GatewayDatabase;
   readonly tickets: PeerLinkTicketStore;
+  readonly directory: VaultDirectory;
 
   constructor(gatewayDatabase: GatewayDatabase) {
     this.gatewayDatabase = gatewayDatabase;
     this.tickets = new PeerLinkTicketStore(gatewayDatabase);
+    this.directory = new VaultDirectory(gatewayDatabase);
   }
 
   /** For hosts holding a data-dir path rather than an open handle. */
@@ -71,7 +88,7 @@ export class VaultLinksStore {
   }
 
   get(linkId: string): VaultLink | undefined {
-    return this.row("SELECT * FROM vault_links WHERE link_id = ?", linkId);
+    return this.row(`${LINK_SELECT} WHERE vl.link_id = ?`, linkId);
   }
 
   /** The link between this exact pair, in either argument order. Named
@@ -81,7 +98,7 @@ export class VaultLinksStore {
   findPair(vaultX: string, vaultY: string): VaultLink | undefined {
     const [a, b] = pairOf(vaultX, vaultY);
     return this.row(
-      "SELECT * FROM vault_links WHERE vault_a = ? AND vault_b = ?",
+      `${LINK_SELECT} WHERE vl.vault_a = ? AND vl.vault_b = ?`,
       a,
       b
     );
@@ -90,9 +107,9 @@ export class VaultLinksStore {
   /** Every link naming this vault on either side. */
   listFor(vaultId: string): VaultLink[] {
     return this.rows(
-      `SELECT * FROM vault_links
-        WHERE vault_a = ? OR vault_b = ?
-        ORDER BY created_at`,
+      `${LINK_SELECT}
+        WHERE vl.vault_a = ? OR vl.vault_b = ?
+        ORDER BY vl.created_at`,
       vaultId,
       vaultId
     );
@@ -101,7 +118,7 @@ export class VaultLinksStore {
   /** Every link naming ANY vault this owner owns, on either side. */
   listForOwner(ownerId: string): VaultLink[] {
     return this.rows(
-      `SELECT * FROM vault_links vl
+      `${LINK_SELECT}
         WHERE EXISTS (
           SELECT 1 FROM vault_owners vo
            WHERE vo.owner_id = ?
@@ -113,7 +130,7 @@ export class VaultLinksStore {
   }
 
   list(): VaultLink[] {
-    return this.rows("SELECT * FROM vault_links ORDER BY created_at");
+    return this.rows(`${LINK_SELECT} ORDER BY vl.created_at`);
   }
 
   /**
@@ -150,18 +167,26 @@ export class VaultLinksStore {
     // device whose owner owns it. The other side stays NULL until that
     // owner's device approves. Neither side carries a route: both vaults are
     // here.
+    this.directory.recordLocal({
+      vaultId: input.fromVaultId,
+      publicKey: input.fromPublicKey,
+      label: input.fromLabel ?? null,
+      ...(input.now ? { now: input.now } : {}),
+    });
+    this.directory.recordLocal({
+      vaultId: input.toVaultId,
+      publicKey: input.toPublicKey,
+      label: input.toLabel ?? null,
+      ...(input.now ? { now: input.now } : {}),
+    });
     this.gatewayDatabase.run(
       `INSERT INTO vault_links (
-         link_id, vault_a, vault_b, public_key_a, public_key_b,
-         label_a, label_b, approved_by_a, approved_by_b, permissions_json, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         link_id, vault_a, vault_b, approved_by_a, approved_by_b,
+         permissions_json, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       linkId,
       a,
       b,
-      fromIsA ? input.fromPublicKey : input.toPublicKey,
-      fromIsA ? input.toPublicKey : input.fromPublicKey,
-      (fromIsA ? input.fromLabel : input.toLabel) ?? null,
-      (fromIsA ? input.toLabel : input.fromLabel) ?? null,
       fromIsA ? createdAt : null,
       fromIsA ? null : createdAt,
       JSON.stringify(
@@ -224,35 +249,32 @@ export class VaultLinksStore {
     const now = new Date().toISOString();
     const localApproval = approvals?.local ?? now;
     const peerApproval = approvals?.peer ?? now;
-    const peerRoute = JSON.stringify(input.route);
+    this.directory.recordLocal({
+      vaultId: input.localVaultId,
+      publicKey: input.localPublicKey,
+      label: input.localLabel,
+    });
+    this.directory.recordPeer({
+      vaultId: input.peerVaultId,
+      publicKey: input.peerPublicKey,
+      label: input.peerLabel,
+      route: input.route,
+    });
     this.gatewayDatabase.run(
       `INSERT INTO vault_links (
-         link_id, vault_a, vault_b, public_key_a, public_key_b,
-         label_a, label_b, approved_by_a, approved_by_b,
-         route_a_json, route_b_json, permissions_json, revoked, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+         link_id, vault_a, vault_b, approved_by_a, approved_by_b,
+         permissions_json, revoked, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, 0, ?)
        ON CONFLICT (vault_a, vault_b) DO UPDATE SET
-         public_key_a = excluded.public_key_a,
-         public_key_b = excluded.public_key_b,
-         label_a = excluded.label_a,
-         label_b = excluded.label_b,
          approved_by_a = excluded.approved_by_a,
          approved_by_b = excluded.approved_by_b,
-         route_a_json = excluded.route_a_json,
-         route_b_json = excluded.route_b_json,
          permissions_json = excluded.permissions_json,
          revoked = 0`,
       randomUUID(),
       a,
       b,
-      localIsA ? input.localPublicKey : input.peerPublicKey,
-      localIsA ? input.peerPublicKey : input.localPublicKey,
-      localIsA ? input.localLabel : input.peerLabel,
-      localIsA ? input.peerLabel : input.localLabel,
       localIsA ? localApproval : peerApproval,
       localIsA ? peerApproval : localApproval,
-      localIsA ? null : peerRoute,
-      localIsA ? peerRoute : null,
       JSON.stringify(input.permissions ?? {}),
       now
     );
@@ -324,11 +346,9 @@ export class VaultLinksStore {
   /** The live link a proved EndpointId currently routes to. */
   linkForEndpoint(peerEndpointId: string): VaultLink | undefined {
     return this.row(
-      `SELECT * FROM vault_links
-        WHERE revoked = 0
-          AND ? IN (
-            json_extract(route_a_json, '$.endpointId'),
-            json_extract(route_b_json, '$.endpointId'))
+      `${LINK_SELECT}
+        WHERE vl.revoked = 0
+          AND ? IN (ra.endpoint_id, rb.endpoint_id)
         LIMIT 1`,
       peerEndpointId
     );
@@ -359,10 +379,10 @@ export class VaultLinksStore {
     peerVaultId: string
   ): VaultLink | undefined {
     return this.row(
-      `SELECT * FROM vault_links
-        WHERE revoked = 0
-          AND ((vault_a = ? AND json_extract(route_a_json, '$.endpointId') = ?)
-            OR (vault_b = ? AND json_extract(route_b_json, '$.endpointId') = ?))`,
+      `${LINK_SELECT}
+        WHERE vl.revoked = 0
+          AND ((vl.vault_a = ? AND ra.endpoint_id = ?)
+            OR (vl.vault_b = ? AND rb.endpoint_id = ?))`,
       peerVaultId,
       peerEndpointId,
       peerVaultId,
@@ -405,8 +425,10 @@ export class VaultLinksStore {
       this.gatewayDatabase.db
         .prepare(
           `SELECT 1 FROM vault_links
-            WHERE revoked = 0
-              AND (route_a_json IS NOT NULL OR route_b_json IS NOT NULL)
+            WHERE revoked = 0 AND EXISTS (
+              SELECT 1 FROM vault_routes r
+               WHERE r.vault_id IN (vault_links.vault_a, vault_links.vault_b)
+            )
             LIMIT 1`
         )
         .get() !== undefined
@@ -450,30 +472,21 @@ export class VaultLinksStore {
     signature?: string;
   }): boolean {
     return this.gatewayDatabase.transaction(() => {
-      const link = this.listFor(input.peerVaultId).find(
-        (candidate) =>
-          !candidate.revoked &&
-          routeTo(candidate, input.peerVaultId) !== undefined
+      const hasLiveLink = this.listFor(input.peerVaultId).some(
+        (candidate) => !candidate.revoked
       );
-      if (!link) return false;
-      const current = routeTo(link, input.peerVaultId)!;
-      if (input.assertedAt <= current.assertedAt) return false;
-      const side = sideOf(link, input.peerVaultId)!;
-      this.gatewayDatabase.run(
-        side === "a"
-          ? "UPDATE vault_links SET route_a_json = ? WHERE link_id = ?"
-          : "UPDATE vault_links SET route_b_json = ? WHERE link_id = ?",
-        JSON.stringify({
+      if (!hasLiveLink) return false;
+      return this.directory.recordRoute({
+        vaultId: input.peerVaultId,
+        route: {
           endpointId: input.peerEndpointId,
           relayHints: input.peerRelayHints,
           assertedAt: input.assertedAt,
           ...(input.signature === undefined
             ? {}
             : { signature: input.signature }),
-        } satisfies LinkRoute),
-        link.linkId
-      );
-      return true;
+        } satisfies LinkRoute,
+      });
     });
   }
 

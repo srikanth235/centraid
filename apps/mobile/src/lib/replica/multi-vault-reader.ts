@@ -109,6 +109,10 @@ export interface PlacementIntent {
 export interface PlacementRecord extends PlacementIntent {
   status: "queued" | "in-flight" | "executed" | "parked" | "denied" | "failed";
   reason?: string;
+  /** Human labels asserted by the gateway directory; never derive UI copy
+   * from opaque vault ids when one is available. */
+  originLabel?: string;
+  audienceLabel?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -36,6 +36,8 @@ interface EdgeWire {
   edgeId: string;
   status: string;
   itemIds?: string[];
+  originLabel?: string;
+  audienceLabel?: string;
   reason?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -52,6 +54,8 @@ function toPlacementRecord(
   return {
     ...input,
     status: toPlacementStatus(edge.status),
+    ...(edge.originLabel ? { originLabel: edge.originLabel } : {}),
+    ...(edge.audienceLabel ? { audienceLabel: edge.audienceLabel } : {}),
     ...(edge.reason ? { reason: edge.reason } : {}),
     createdAt: edge.createdAt ?? now,
     updatedAt: edge.updatedAt ?? now,
@@ -239,6 +243,58 @@ export async function answerCommonsInvitation(
     throw new Error(`answer commons invitation failed (${response.status})`);
   const out = (await response.json()) as { invitation: CommonsInvitation };
   return out.invitation;
+}
+
+export interface CommonsRecoveryGrant {
+  actorVaultId: string;
+  grantId: string;
+  containerType: string;
+  steward: {
+    presence:
+      | "unknown"
+      | "reachable"
+      | "degraded"
+      | "absent"
+      | "link-down"
+      | "parked";
+    silentForMs?: number;
+    fault?: string;
+  };
+}
+
+export async function listCommonsRecovery(
+  baseUrl: string,
+  actorVaultId: string
+): Promise<CommonsRecoveryGrant[]> {
+  const query = new URLSearchParams({ actorVaultId });
+  const response = await fetch(
+    new URL(`${ROUTES.gatewayCommons}/recovery?${query.toString()}`, baseUrl),
+    { headers: authHeader() }
+  );
+  if (!response.ok)
+    throw new Error(`inspect commons recovery failed (${response.status})`);
+  const out = (await response.json()) as {
+    grants?: Omit<CommonsRecoveryGrant, "actorVaultId">[];
+  };
+  return (out.grants ?? []).map((grant) => ({ ...grant, actorVaultId }));
+}
+
+export async function recoverCommons(
+  baseUrl: string,
+  actorVaultId: string,
+  grantId: string
+): Promise<Record<string, unknown>> {
+  const response = await fetch(
+    new URL(`${ROUTES.gatewayCommons}/recovery`, baseUrl),
+    {
+      method: "POST",
+      headers: { ...authHeader(), "content-type": "application/json" },
+      body: JSON.stringify({ actorVaultId, grantId }),
+    }
+  );
+  if (!response.ok)
+    throw new Error(`recover commons failed (${response.status})`);
+  return (await response.json()) as Record<string, unknown>;
 }
 
 /** Compile a shared container into each joined member's vault. */

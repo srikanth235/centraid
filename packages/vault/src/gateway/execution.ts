@@ -5,6 +5,7 @@
 // Split from gateway.ts only for file size; the Gateway is still the sole
 // caller.
 
+import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 import { promoteStagedBlob } from "../blob/promote.js";
@@ -498,6 +499,8 @@ export function runContractAndExecute(
   options: {
     deferCommitSettlement?: boolean;
     deferReplicaNotify?: boolean;
+    /** Commons replicas use the same seed to mint identical domain row ids. */
+    deterministicIdSeed?: string;
   } = {}
 ): InvokeOutcome {
   // The purpose that applies (issue #306 decision 4) — journaled even when
@@ -617,13 +620,23 @@ export function runContractAndExecute(
   // Cells this command decrypted internally (issue #293) — receipted as
   // column names, never values.
   const unsealed = new Set<string>();
+  let deterministicIdIndex = 0;
+  const newId = options.deterministicIdSeed
+    ? (): string => {
+        const hex = createHash("sha256")
+          .update(options.deterministicIdSeed!)
+          .update(`:${deterministicIdIndex++}`)
+          .digest("hex");
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-7${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+      }
+    : uuidv7;
   const ctx: HandlerCtx = {
     db: db.vault,
     identity,
     input: request.input,
     purpose,
     now: nowIso(),
-    newId: uuidv7,
+    newId,
     wrote: (entityType, entityId) => writes.push({ entityType, entityId }),
     cite: (citation) => citations.push(citation),
     unseal: (entityType, entityId, column) => {
@@ -672,7 +685,7 @@ export function runContractAndExecute(
           {
             vault: db.vault,
             now: nowIso(),
-            newId: uuidv7,
+            newId,
             wrote: (entityType, entityId) =>
               writes.push({ entityType, entityId }),
             creatorPartyId: identity.partyId,

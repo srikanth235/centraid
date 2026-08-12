@@ -21,8 +21,13 @@ import {
   answerCommonsInvitation,
   claimCommonsInvitation,
   listCommonsInvitations,
+  listCommonsRecovery,
+  recoverCommons,
 } from "../lib/replica/placement-transport";
-import type { CommonsInvitation } from "../lib/replica/placement-transport";
+import type {
+  CommonsInvitation,
+  CommonsRecoveryGrant,
+} from "../lib/replica/placement-transport";
 import type { SettingsScreenProps } from "../navigation";
 import SharingLinkRow, { LinkTicketPanel } from "./SharingLinkRow";
 
@@ -45,6 +50,9 @@ export default function SharingScreen({
   const [commonsInvitations, setCommonsInvitations] = useState<
     CommonsInvitation[]
   >([]);
+  const [commonsRecovery, setCommonsRecovery] = useState<
+    CommonsRecoveryGrant[]
+  >([]);
   const [errorMessage, setErrorMessage] = useState<string>();
   const [busyId, setBusyId] = useState<string>();
   const [commonsInviteCode, setCommonsInviteCode] = useState("");
@@ -56,14 +64,24 @@ export default function SharingScreen({
       listEdges(replica.gatewayBase),
       listPendingEdges(replica.gatewayBase),
       listCommonsInvitations(replica.gatewayBase, replica.vaultId),
+      listCommonsRecovery(replica.gatewayBase, replica.vaultId),
     ])
-      .then(([nextLinks, nextEdges, nextPending, nextCommonsInvitations]) => {
-        setLinks(nextLinks);
-        setEdges(nextEdges);
-        setPending(nextPending);
-        setCommonsInvitations(nextCommonsInvitations);
-        setErrorMessage(undefined);
-      })
+      .then(
+        ([
+          nextLinks,
+          nextEdges,
+          nextPending,
+          nextCommonsInvitations,
+          nextCommonsRecovery,
+        ]) => {
+          setLinks(nextLinks);
+          setEdges(nextEdges);
+          setPending(nextPending);
+          setCommonsInvitations(nextCommonsInvitations);
+          setCommonsRecovery(nextCommonsRecovery);
+          setErrorMessage(undefined);
+        }
+      )
       .catch((error: unknown) =>
         setErrorMessage(error instanceof Error ? error.message : String(error))
       );
@@ -86,6 +104,13 @@ export default function SharingScreen({
     }
   };
   const snapshots = edges.filter((edge) => edge.mode === "snapshot");
+  const recoveryConcerns = commonsRecovery.filter(
+    (entry) =>
+      entry.steward.presence === "degraded" ||
+      entry.steward.presence === "absent" ||
+      entry.steward.presence === "link-down" ||
+      entry.steward.presence === "parked"
+  );
 
   return (
     <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
@@ -111,6 +136,58 @@ export default function SharingScreen({
           <Text style={[t("small"), { color: colors.danger }]}>
             {errorMessage}
           </Text>
+        ) : null}
+
+        {recoveryConcerns.length ? (
+          <Section title="Shared-space recovery" colors={colors}>
+            {recoveryConcerns.map((entry) => {
+              const key = `recover:${entry.grantId}`;
+              return (
+                <View
+                  key={key}
+                  style={[
+                    styles.card,
+                    {
+                      backgroundColor: colors.bgElev,
+                      borderColor: colors.line,
+                    },
+                  ]}
+                >
+                  <Text style={[t("body"), { color: colors.text }]}>
+                    Steward {entry.steward.presence}
+                  </Text>
+                  <Text style={[t("small"), { color: colors.textSoft }]}>
+                    {entry.containerType}
+                    {entry.steward.silentForMs
+                      ? ` · unreachable for ${Math.floor(entry.steward.silentForMs / 86_400_000)} days`
+                      : ""}
+                    {entry.steward.fault ? ` · ${entry.steward.fault}` : ""}
+                  </Text>
+                  {entry.steward.presence === "parked" ? null : (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={busyId === key}
+                      onPress={() =>
+                        replica.gatewayBase &&
+                        void act(key, () =>
+                          recoverCommons(
+                            replica.gatewayBase!,
+                            entry.actorVaultId,
+                            entry.grantId
+                          )
+                        )
+                      }
+                      style={[styles.pill, { borderColor: colors.line }]}
+                    >
+                      <Text style={[t("control"), { color: colors.accent }]}>
+                        Recover from my copy
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              );
+            })}
+          </Section>
         ) : null}
 
         {pending.length ? (
@@ -298,7 +375,8 @@ export default function SharingScreen({
               >
                 <View style={styles.rowBetween}>
                   <Text style={[t("body"), { color: colors.text }]}>
-                    {vaultLabel(edge.audienceVaultId, links)}
+                    {edge.audienceLabel ||
+                      vaultLabel(edge.audienceVaultId, links)}
                   </Text>
                   <Text style={[t("control"), { color: colors.textSoft }]}>
                     {edge.status}

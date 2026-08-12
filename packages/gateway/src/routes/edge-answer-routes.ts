@@ -13,9 +13,6 @@
  * The answering UI itself is P6; this is the state machinery and the route.
  */
 
-import type { IncomingMessage } from "node:http";
-
-import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import type { ShareVaultRef } from "@centraid/vault";
 import { projectShareClosure } from "@centraid/vault";
 
@@ -31,6 +28,8 @@ import {
 import type { PeerDial } from "../serve/peer-edge-give-client.js";
 import { pullEdgeClosure } from "../serve/peer-edge-give-client.js";
 import { recordPendingRefusal } from "../serve/peer-refusal-relay.js";
+import { requestPrincipal } from "../serve/request-principal.js";
+import { ShareEffectsStore } from "../serve/share-effects.js";
 import { peerViewOf } from "../serve/vault-link-row.js";
 import type { VaultLinksStore } from "../serve/vault-links-store.js";
 import { readJson, sendJson } from "./route-helpers.js";
@@ -46,6 +45,7 @@ export interface EdgeAnswerRouteDeps {
 }
 
 interface PendingGiveRow {
+  effect_id: string;
   edge_id: string;
   link_id: string;
   peer_vault_id: string;
@@ -53,12 +53,6 @@ interface PendingGiveRow {
   item_type: string;
   item_count: number;
   created_at: string;
-}
-
-function callerDeviceId(req: IncomingMessage): string | undefined {
-  const raw = req.headers[AUTHED_DEVICE_HEADER];
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function pendingDto(row: PendingGiveRow): Record<string, unknown> {
@@ -78,19 +72,17 @@ export function makeEdgeAnswerRouteHandler(
   return async (req, res): Promise<boolean> => {
     const url = new URL(req.url ?? "/", "http://gateway.local");
     if (!url.pathname.startsWith(EDGES_PREFIX)) return false;
-    const deviceId = callerDeviceId(req);
-    const owner = deviceId ? deps.enrollments.ownerFor(deviceId) : undefined;
-    if (!deviceId || !owner)
+    const principal = requestPrincipal(req, deps.enrollments);
+    if (!principal)
       return sendJson(res, 403, { error: "device_identity_required" });
     const owners = deps.enrollments.owners;
+    const effects = new ShareEffectsStore(deps.gatewayDatabase);
 
     if (url.pathname === `${EDGES_PREFIX}/pending`) {
       if ((req.method ?? "GET") !== "GET") return false;
-      const rows = deps.gatewayDatabase.db
-        .prepare("SELECT * FROM peer_pending_gives ORDER BY created_at")
-        .all() as unknown as PendingGiveRow[];
+      const rows = pendingGives(effects);
       const mine = rows.filter(
-        (row) => owners.ownerOf(row.local_vault_id) === owner.ownerId
+        (row) => owners.ownerOf(row.local_vault_id) === principal.ownerId
       );
       return sendJson(res, 200, { pending: mine.map(pendingDto) });
     }
@@ -100,12 +92,10 @@ export function makeEdgeAnswerRouteHandler(
     if ((req.method ?? "GET") !== "POST")
       return sendJson(res, 405, { error: "method_not_allowed" });
     const edgeId = decodeURIComponent(rest[0] ?? "");
-    const row = deps.gatewayDatabase.db
-      .prepare("SELECT * FROM peer_pending_gives WHERE edge_id = ?")
-      .get(edgeId) as PendingGiveRow | undefined;
+    const row = pendingGives(effects, edgeId)[0];
     // An edge the caller cannot see at all, and one this owner does not
     // control, look identical — topology hiding, same as the edge plane.
-    if (!row || owners.ownerOf(row.local_vault_id) !== owner.ownerId) {
+    if (!row || owners.ownerOf(row.local_vault_id) !== principal.ownerId) {
       return sendJson(res, 404, { error: "not_found" });
     }
     let body: Record<string, unknown>;
@@ -127,10 +117,7 @@ export function makeEdgeAnswerRouteHandler(
       // the next `drainPeerRefusals` scheduler tick, never on this request:
       // an offline origin must never block the owner's answer.
       deps.gatewayDatabase.transaction(() => {
-        deps.gatewayDatabase.run(
-          "DELETE FROM peer_pending_gives WHERE edge_id = ?",
-          edgeId
-        );
+        effects.transition(row.effect_id, "denied");
         recordPendingRefusal(deps.gatewayDatabase, {
           edgeId,
           linkId: row.link_id,
@@ -193,14 +180,12 @@ export function makeEdgeAnswerRouteHandler(
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    deps.gatewayDatabase.run(
-      "DELETE FROM peer_pending_gives WHERE edge_id = ?",
-      edgeId
-    );
+    effects.transition(row.effect_id, "executed");
     recordPendingPulls(deps.gatewayDatabase, audience, {
       edgeId,
       linkId: row.link_id,
       localVaultId: row.local_vault_id,
+      peerVaultId: row.peer_vault_id,
       originals: pulled.closure.blobs.filter(
         (entry) => entry.rung === "original"
       ),
@@ -211,4 +196,32 @@ export function makeEdgeAnswerRouteHandler(
       items: project.items,
     });
   };
+}
+
+function pendingGives(
+  effects: ShareEffectsStore,
+  edgeId?: string
+): PendingGiveRow[] {
+  return effects
+    .list({
+      kind: "await-give-decision",
+      active: true,
+      ...(edgeId ? { edgeId } : {}),
+    })
+    .flatMap((effect): PendingGiveRow[] =>
+      effect.kind === "await-give-decision"
+        ? [
+            {
+              effect_id: effect.effectId,
+              edge_id: effect.edgeId,
+              link_id: effect.payload.linkId,
+              peer_vault_id: effect.peerVaultId,
+              local_vault_id: effect.localVaultId,
+              item_type: effect.payload.itemType,
+              item_count: effect.payload.itemCount,
+              created_at: effect.createdAt,
+            },
+          ]
+        : []
+    );
 }

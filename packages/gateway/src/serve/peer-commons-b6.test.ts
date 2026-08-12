@@ -10,7 +10,6 @@ import {
   compileCommons,
   createCommonsClaimInvitation,
   createCommonsGrant,
-  exportCommonsBootstrap,
   listCommonsInvitations,
   readCommonsGrant,
   registerTallyCommands,
@@ -18,6 +17,7 @@ import {
   signCommonsIntent,
 } from "@centraid/vault";
 
+import { COMMONS_BOOTSTRAP_PAGE_BYTES } from "../routes/peer-commons-pages.js";
 import { PEER_COMMONS_BOOTSTRAP_PATH_PREFIX } from "../routes/peer-commons-route.js";
 import {
   claimPeerCommonsInvitation,
@@ -27,6 +27,7 @@ import {
 } from "./peer-commons-client.js";
 import {
   dialFrom,
+  exportCommonsBootstrapForTest,
   link,
   makeSide,
   routeFrom,
@@ -138,6 +139,14 @@ describe("B6 Commons peer plane", () => {
     expect(member.vault.blobs.local.getSync(photo.sha256)).toStrictEqual(
       photo.bytes
     );
+    expect(
+      origin.gatewayDb.db
+        .prepare(
+          `SELECT size FROM commons_blob_access
+            WHERE grant_id = ? AND member_vault_id = ? AND sha256 = ?`
+        )
+        .get(photoGrant.grantId, member.vaultId, photo.sha256)
+    ).toMatchObject({ size: photo.bytes.length });
 
     registerTallyCommands(origin.gateway);
     // A Tally group names people, not vault addresses. The link/share
@@ -165,6 +174,14 @@ describe("B6 Commons peer plane", () => {
         `failed to create group: ${JSON.stringify(groupOutcome)}`
       );
     const groupId = (groupOutcome.output as { group_id: string }).group_id;
+    // Force a multi-page metadata frame without adding binary CAS payload.
+    // The peer client must resume it by byte cursor before atomically applying.
+    origin.vault.vault
+      .prepare(
+        `UPDATE social_circle SET name = ?
+          WHERE circle_id = (SELECT circle_id FROM tally_group WHERE group_id = ?)`
+      )
+      .run("Peer trip ".padEnd(COMMONS_BOOTSTRAP_PAGE_BYTES * 2, "x"), groupId);
     const tallyGrant = createCommonsGrant({
       origin: origin.vault.vault,
       ownerPartyId: origin.ownerPartyId,
@@ -194,7 +211,7 @@ describe("B6 Commons peer plane", () => {
       }),
       now,
     });
-    const tallyWire = exportCommonsBootstrap({
+    const tallyWire = exportCommonsBootstrapForTest({
       steward: origin.vault.vault,
       identitySeed: origin.vault.identitySeed,
       stewardVaultId: origin.vaultId,
@@ -233,6 +250,24 @@ describe("B6 Commons peer plane", () => {
       })}`,
     });
     expect(acceptedFrame).toMatchObject({ status: 200 });
+    const acceptedPage = acceptedFrame.json as {
+      state?: string;
+      cursor?: number;
+      nextCursor?: number | null;
+      totalBytes?: number;
+      bytes?: string;
+    };
+    expect(acceptedPage).toMatchObject({
+      state: "bootstrap-page",
+      cursor: 0,
+      nextCursor: COMMONS_BOOTSTRAP_PAGE_BYTES,
+    });
+    expect(acceptedPage.totalBytes).toBeGreaterThan(
+      COMMONS_BOOTSTRAP_PAGE_BYTES
+    );
+    expect(
+      Buffer.from(acceptedPage.bytes ?? "", "base64").length
+    ).toBeLessThanOrEqual(COMMONS_BOOTSTRAP_PAGE_BYTES);
     await expect(
       pullPeerCommons({
         dial: memberDial,
@@ -324,5 +359,78 @@ describe("B6 Commons peer plane", () => {
         .prepare("SELECT COUNT(*) AS n FROM tally_group WHERE group_id = ?")
         .get(groupId)
     ).toMatchObject({ n: 0 });
+  });
+
+  test("a large blob uses one steward export and bounded member chunks", async () => {
+    const origin = makeSide("commons-large-origin");
+    const member = makeSide("commons-large-member");
+    await link(origin, member);
+    const now = new Date().toISOString();
+    origin.vault.vault
+      .prepare(
+        `INSERT INTO core_party
+           (party_id, kind, display_name, sort_name, birth_date,
+            avatar_content_id, created_at, updated_at, ontology_version)
+         VALUES (?, 'person', 'Large member', 'Large member', NULL, NULL, ?, ?, '1.4')`
+      )
+      .run(member.ownerPartyId, now, now);
+    const bytes = Buffer.alloc(6 * 1024 * 1024, 0x61);
+    const photo = seedPhoto(origin, "large-stream", bytes);
+    const grant = createCommonsGrant({
+      origin: origin.vault.vault,
+      ownerPartyId: origin.ownerPartyId,
+      ownerVaultId: origin.vaultId,
+      ownerVault: origin.vault,
+      containerType: "media.asset",
+      containerId: photo.assetId,
+      members: [
+        {
+          partyId: member.ownerPartyId,
+          capability: "read",
+          vaultId: member.vaultId,
+          vaultPublicKey: member.publicKey,
+        },
+      ],
+      now,
+    });
+    compileCommons({
+      steward: origin.vault,
+      stewardVaultId: origin.vaultId,
+      grantId: grant.grantId,
+      seats: commonsSeats({
+        steward: origin.vault.vault,
+        grantId: grant.grantId,
+        stewardVaultId: origin.vaultId,
+        vaultFor: () => undefined,
+      }),
+      now,
+    });
+    let exportCount = 0;
+    let maxChunkBytes = 0;
+    let chunkCount = 0;
+    const dial = dialFrom(member, origin, {
+      onCommonsBootstrapExport: () => {
+        exportCount += 1;
+      },
+    });
+    const pulled = await pullPeerCommons({
+      dial,
+      route: routeFrom(member, origin),
+      stewardVaultId: origin.vaultId,
+      memberVaultId: member.vaultId,
+      grantId: grant.grantId,
+      seat: member.vault,
+      onBlobChunk: (length) => {
+        chunkCount += 1;
+        maxChunkBytes = Math.max(maxChunkBytes, length);
+      },
+      now,
+    });
+
+    expect(pulled).toMatchObject({ state: "current" });
+    expect(exportCount).toBe(1);
+    expect(chunkCount).toBeGreaterThanOrEqual(6);
+    expect(maxChunkBytes).toBeLessThanOrEqual(1024 * 1024);
+    expect(member.vault.blobs.local.getSync(photo.sha256)).toStrictEqual(bytes);
   });
 });

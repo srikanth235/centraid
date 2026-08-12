@@ -22,19 +22,21 @@ import type { BlobManifestEntry, ShareVaultRef } from "@centraid/vault";
 import type { GatewayDatabase } from "./gateway-db.js";
 import { PEER_BLOB_CHUNK_PATH } from "./peer-blob-route-path.js";
 import type { PeerDial, PeerDialRoute } from "./peer-edge-give-client.js";
+import { ShareEffectsStore } from "./share-effects.js";
 import { peerViewOf } from "./vault-link-row.js";
 import type { VaultLinksStore } from "./vault-links-store.js";
 
 const DEFAULT_CHUNK_BYTES = 4 * 1024 * 1024;
 
 interface PendingPullRow {
-  pull_id: string;
+  effect_id: string;
   edge_id: string;
   link_id: string;
   local_vault_id: string;
   sha256: string;
   size: number;
   tmp_path: string;
+  attempts: number;
 }
 
 /** Queue every ORIGINAL-rung blob a just-projected give still needs, sha-deduped. */
@@ -45,38 +47,41 @@ export function recordPendingPulls(
     edgeId: string;
     linkId: string;
     localVaultId: string;
+    peerVaultId: string;
     originals: readonly BlobManifestEntry[];
   }
 ): void {
+  const effects = new ShareEffectsStore(db);
   for (const entry of input.originals) {
     // Re-give short-circuits by sha: already-resident bytes need no pull row.
     if (audience.blobs.local.hasSync(entry.sha256)) continue;
-    const existing = db.db
-      .prepare(
-        "SELECT 1 FROM peer_blob_pulls WHERE local_vault_id = ? AND sha256 = ?"
-      )
-      .get(input.localVaultId, entry.sha256);
+    const existing = effects
+      .list({ kind: "pull-blob", active: true })
+      .some(
+        (effect) =>
+          effect.localVaultId === input.localVaultId &&
+          effect.kind === "pull-blob" &&
+          effect.payload.sha256 === entry.sha256
+      );
     if (existing) continue;
     const tmpPath = audience.blobs.local.promotionTempPathSync?.(entry.sha256);
     // No streaming-adoption seam (the in-memory tier) — nothing durable to
     // resume across, so there is no pull to track. Vault-package scope keeps
     // this module from doing anything about that here.
     if (!tmpPath) continue;
-    const now = new Date().toISOString();
-    db.run(
-      `INSERT INTO peer_blob_pulls
-         (pull_id, edge_id, link_id, local_vault_id, sha256, size, tmp_path, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      randomUUID(),
-      input.edgeId,
-      input.linkId,
-      input.localVaultId,
-      entry.sha256,
-      entry.size,
-      tmpPath,
-      now,
-      now
-    );
+    effects.enqueue({
+      effectId: randomUUID(),
+      edgeId: input.edgeId,
+      kind: "pull-blob",
+      localVaultId: input.localVaultId,
+      peerVaultId: input.peerVaultId,
+      payload: {
+        linkId: input.linkId,
+        sha256: entry.sha256,
+        size: entry.size,
+        tmpPath,
+      },
+    });
   }
 }
 
@@ -107,7 +112,7 @@ export type PullBlobOutcome = "done" | "pending" | "failed";
  * caller would have to turn into a 500.
  */
 async function pullOne(
-  db: GatewayDatabase,
+  effects: ShareEffectsStore,
   audience: ShareVaultRef,
   dial: PeerDial,
   route: PeerDialRoute,
@@ -116,7 +121,7 @@ async function pullOne(
 ): Promise<PullBlobOutcome> {
   const store = audience.blobs.local;
   const done = (): void => {
-    db.run("DELETE FROM peer_blob_pulls WHERE pull_id = ?", row.pull_id);
+    effects.transition(row.effect_id, "executed");
   };
   if (store.hasSync(row.sha256)) {
     done();
@@ -163,7 +168,7 @@ async function pullOne(
   if (digest !== row.sha256) {
     // Corrupt or truncated — restart clean rather than resume onto garbage.
     rmSync(row.tmp_path, { force: true });
-    done();
+    effects.transition(row.effect_id, "failed", { attempted: true });
     return "failed";
   }
   store.adoptTempSync?.(row.sha256, row.tmp_path);
@@ -182,16 +187,29 @@ function selectPendingPulls(
   edgeId: string | undefined,
   limit: number | undefined
 ): PendingPullRow[] {
-  const clause = edgeId ? "WHERE edge_id = ?" : "";
-  const args: Array<string | number> = edgeId ? [edgeId] : [];
-  if (limit !== undefined) args.push(limit);
-  return db.db
-    .prepare(
-      `SELECT * FROM peer_blob_pulls ${clause} ORDER BY created_at${
-        limit === undefined ? "" : " LIMIT ?"
-      }`
-    )
-    .all(...args) as unknown as PendingPullRow[];
+  return new ShareEffectsStore(db)
+    .list({
+      kind: "pull-blob",
+      active: true,
+      ...(edgeId ? { edgeId } : {}),
+      ...(limit === undefined ? {} : { limit }),
+    })
+    .flatMap((effect) =>
+      effect.kind === "pull-blob"
+        ? [
+            {
+              effect_id: effect.effectId,
+              edge_id: effect.edgeId,
+              link_id: effect.payload.linkId,
+              local_vault_id: effect.localVaultId,
+              sha256: effect.payload.sha256,
+              size: effect.payload.size,
+              tmp_path: effect.payload.tmpPath,
+              attempts: effect.attempts,
+            },
+          ]
+        : []
+    );
 }
 
 /** One background-worker tick: advance every (or one edge's) pending pull. */
@@ -206,6 +224,7 @@ export async function drainPeerBlobPulls(input: {
   limit?: number;
 }): Promise<DrainPeerBlobPullsResult> {
   const rows = selectPendingPulls(input.db, input.edgeId, input.limit);
+  const effects = new ShareEffectsStore(input.db);
   const result: DrainPeerBlobPullsResult = {
     done: [],
     pending: [],
@@ -219,19 +238,33 @@ export async function drainPeerBlobPulls(input: {
       const link = input.links.get(row.link_id);
       const view = link ? peerViewOf(link, row.local_vault_id) : undefined;
       if (!audience || !view) {
+        effects.transition(row.effect_id, "parked", {
+          attempted: true,
+          retryAt: retryAt(row.attempts),
+        });
         result.pending.push(row.sha256);
         return;
       }
       const outcome = await pullOne(
-        input.db,
+        effects,
         audience,
         input.dial,
         view.route,
         row,
         input.chunkBytes ?? DEFAULT_CHUNK_BYTES
       );
+      if (outcome === "pending") {
+        effects.transition(row.effect_id, "parked", {
+          attempted: true,
+          retryAt: retryAt(row.attempts),
+        });
+      }
       result[outcome].push(row.sha256);
     })
   );
   return result;
+}
+
+function retryAt(attempts: number): number {
+  return Date.now() + Math.min(60_000 * 2 ** attempts, 15 * 60_000);
 }

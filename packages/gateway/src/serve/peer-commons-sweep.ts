@@ -16,6 +16,7 @@ import type {
 } from "@centraid/vault";
 
 import type { CommonsStewardStatus } from "./commons-observability.js";
+import { readCommonsStewardStatus } from "./commons-observability.js";
 import {
   pullPeerCommons,
   sendPeerCommonsCommand,
@@ -83,6 +84,21 @@ function stewardVaultId(db: VaultDb, grantId: string): string | undefined {
   return row?.vault_id;
 }
 
+function retryIsDue(input: {
+  db: VaultDb;
+  grantId: string;
+  memberVaultId: string;
+  now: string;
+}): boolean {
+  const retryAt = readCommonsStewardStatus({
+    db: input.db.vault,
+    grantId: input.grantId,
+    memberVaultId: input.memberVaultId,
+    now: input.now,
+  }).retryAfterAt;
+  return !retryAt || Date.parse(retryAt) <= Date.parse(input.now);
+}
+
 export async function sweepPeerCommons(input: {
   vaults: readonly MountedCommonsVault[];
   links: VaultLinksStore;
@@ -112,7 +128,7 @@ export async function sweepPeerCommons(input: {
         `SELECT intent_id, grant_id, actor_party_id, command, input_json,
                 based_on_sequence
            FROM share_commons_intent
-          WHERE status IN ('pending','parked')
+          WHERE status IN ('queued','parked')
           ORDER BY created_at, intent_id LIMIT ?`
       )
       .all(input.limit - progressed) as unknown as PendingIntent[];
@@ -135,6 +151,23 @@ export async function sweepPeerCommons(input: {
           grantId: intent.grant_id,
           stewardVaultId: stewardId,
           vaultFor: (vaultId) => mountedById.get(vaultId)?.db,
+          invokeFor: (vaultId, replicaCommand, replicaInput, invocationId) => {
+            const mounted = mountedById.get(vaultId);
+            if (!mounted?.gateway || !mounted.credential)
+              throw new Error(
+                `commons replica vault ${vaultId} is not mounted`
+              );
+            return mounted.gateway.invokeCommonsCanonical(
+              mounted.credential,
+              {
+                command: replicaCommand,
+                input: replicaInput,
+                purpose: "dpv:ServiceProvision",
+                invocationId,
+              },
+              { idSeed: invocationId }
+            );
+          },
         });
         const answer = executeCommonsCommand({
           steward: mountedSteward.db,
@@ -169,6 +202,7 @@ export async function sweepPeerCommons(input: {
               grantId: intent.grant_id,
               seats,
               now,
+              forceFullProjection: true,
             });
           }
           // `executeCommonsCommand` normally settles while compiling. Repeat
@@ -208,6 +242,16 @@ export async function sweepPeerCommons(input: {
         ? input.links.peerForVault(stewardId, local.vaultId)
         : undefined;
       if (!stewardId || !link || !input.dial) continue;
+      const intentNow = input.now ?? new Date().toISOString();
+      if (
+        !retryIsDue({
+          db: local.db,
+          grantId: intent.grant_id,
+          memberVaultId: local.vaultId,
+          now: intentNow,
+        })
+      )
+        continue;
       const commandInput = JSON.parse(intent.input_json) as Record<
         string,
         unknown
@@ -234,7 +278,7 @@ export async function sweepPeerCommons(input: {
         basedOnSequence: intent.based_on_sequence,
         intentId: intent.intent_id,
       });
-      const now = input.now ?? new Date().toISOString();
+      const now = intentNow;
       if (answer.state === "executed") {
         settleCommonsIntent({
           seat: local.db.vault,
@@ -250,6 +294,9 @@ export async function sweepPeerCommons(input: {
           memberVaultId: local.vaultId,
           grantId: intent.grant_id,
           seat: local.db,
+          ...(local.gateway && local.credential
+            ? { gateway: local.gateway, credential: local.credential }
+            : {}),
           now,
         });
         logStewardConcern(input.logger, local.vaultId, catchUp.steward);
@@ -285,6 +332,16 @@ export async function sweepPeerCommons(input: {
         ? input.links.peerForVault(stewardId, local.vaultId)
         : undefined;
       if (!stewardId || !link || !input.dial) continue;
+      const pullNow = input.now ?? new Date().toISOString();
+      if (
+        !retryIsDue({
+          db: local.db,
+          grantId: grant.grantId,
+          memberVaultId: local.vaultId,
+          now: pullNow,
+        })
+      )
+        continue;
       // oxlint-disable-next-line no-await-in-loop -- serial pulls keep the shared progress limit exact and the grant order deterministic
       const result = await pullPeerCommons({
         dial: input.dial,
@@ -293,7 +350,10 @@ export async function sweepPeerCommons(input: {
         memberVaultId: local.vaultId,
         grantId: grant.grantId,
         seat: local.db,
-        now: input.now,
+        ...(local.gateway && local.credential
+          ? { gateway: local.gateway, credential: local.credential }
+          : {}),
+        now: pullNow,
       });
       logStewardConcern(input.logger, local.vaultId, result.steward);
       if (result.state === "current") progressed += 1;

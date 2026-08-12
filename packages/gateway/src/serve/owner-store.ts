@@ -92,17 +92,24 @@ export class OwnerStore {
   }
 
   createWithinTransaction(label: string): Owner {
+    return this.createKnownWithinTransaction(crypto.randomUUID(), label);
+  }
+
+  /** Idempotent fixed-id creation for crash-resumable provisioning (#750). */
+  createKnownWithinTransaction(ownerId: string, label: string): Owner {
     const trimmed = label.trim();
     if (!trimmed) throw new Error("owner label must not be empty");
-    const ownerId = crypto.randomUUID();
     this.gatewayDatabase.db
       .prepare(
-        "INSERT INTO owners (owner_id, label, created_at) VALUES (?, ?, ?)"
+        `INSERT INTO owners (owner_id, label, created_at) VALUES (?, ?, ?)
+         ON CONFLICT (owner_id) DO NOTHING`
       )
       .run(ownerId, trimmed, Date.now());
     const created = this.get(ownerId);
     if (!created)
       throw new Error("owner row vanished immediately after insert");
+    if (created.label !== trimmed)
+      throw new Error("owner id already names a different person");
     return created;
   }
 

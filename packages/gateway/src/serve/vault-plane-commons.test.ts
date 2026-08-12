@@ -315,7 +315,7 @@ describe("VaultPlane ordinary Commons commands", () => {
     member.db.vault
       .prepare(
         `UPDATE share_commons_intent
-            SET status = 'pending', settled_at = NULL WHERE intent_id = ?`
+            SET status = 'queued', settled_at = NULL WHERE intent_id = ?`
       )
       .run("same-machine-member-write");
     await sweep.runOnce();

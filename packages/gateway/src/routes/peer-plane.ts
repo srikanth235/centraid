@@ -105,6 +105,7 @@ export interface PeerPlaneDeps {
   commonsCredentialFor?: (
     vaultId: string
   ) => ExecuteCommonsCommandInput["credential"] | undefined;
+  commonsBootstrapExported?: (grantId: string) => void;
   /** This gateway's own `share_edges`/pending-give bookkeeping. */
   gatewayDatabase?: GatewayDatabase;
 }
@@ -402,6 +403,8 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
         vaultFor: deps.commonsVaultFor,
         gatewayFor: deps.commonsGatewayFor,
         credentialFor: deps.commonsCredentialFor,
+        gatewayDatabase: deps.gatewayDatabase,
+        onBootstrapExport: deps.commonsBootstrapExported,
       };
       if (
         pathname.startsWith(PEER_COMMONS_BOOTSTRAP_PATH_PREFIX) &&

@@ -9,6 +9,7 @@ import {
   cancelCommonsIntent,
   commonsSeats,
   commonsCurrentSize,
+  commonsCommandsFor,
   compileCommons,
   createCommonsClaimInvitation,
   claimCommonsInvitation,
@@ -197,8 +198,33 @@ function compileAll(
     stewardVaultId: origin.vaultId,
     stewardPartyId: origin.ownerPartyId,
     vaultFor: deps.vaultFor,
+    invokeFor: replicaInvoke(deps),
     now,
   });
+}
+
+function replicaInvoke(deps: CommonsRouteDeps) {
+  return (
+    vaultId: string,
+    command: string,
+    commandInput: Record<string, unknown>,
+    invocationId: string
+  ) => {
+    const gateway = deps.gatewayFor(vaultId);
+    const credential = deps.credentialFor(vaultId);
+    if (!gateway || !credential)
+      throw new Error(`commons replica vault ${vaultId} is not mounted`);
+    return gateway.invokeCommonsCanonical(
+      credential,
+      {
+        command,
+        input: commandInput,
+        purpose: "dpv:ServiceProvision",
+        invocationId,
+      },
+      { idSeed: invocationId }
+    );
+  };
 }
 
 function routeParts(pathname: string): string[] | undefined {
@@ -223,7 +249,10 @@ export function makeCommonsRouteHandler(deps: CommonsRouteDeps): RouteHandler {
           deps
         );
         return sendJson(res, 200, {
-          grants: listCommonsGrants(origin.vault.vault),
+          grants: listCommonsGrants(origin.vault.vault).map((entry) => ({
+            ...entry,
+            commands: commonsCommandsFor(entry.grant.containerType),
+          })),
         });
       }
       if (parts[0] === "intents" && req.method === "GET") {
@@ -562,6 +591,7 @@ export function makeCommonsRouteHandler(deps: CommonsRouteDeps): RouteHandler {
             grantId: grant.grantId,
             stewardVaultId: origin.vaultId,
             vaultFor: deps.vaultFor,
+            invokeFor: replicaInvoke(deps),
           }),
           now,
         });
@@ -744,6 +774,7 @@ export function makeCommonsRouteHandler(deps: CommonsRouteDeps): RouteHandler {
             grantId,
             stewardVaultId: originVaultId,
             vaultFor: deps.vaultFor,
+            invokeFor: replicaInvoke(deps),
           }),
           ...(memberSignature ? { memberSignature } : {}),
           ...(basedOnSequence === undefined ? {} : { basedOnSequence }),
@@ -781,6 +812,7 @@ export function makeCommonsRouteHandler(deps: CommonsRouteDeps): RouteHandler {
           grantId,
           stewardVaultId: origin.vaultId,
           vaultFor: deps.vaultFor,
+          invokeFor: replicaInvoke(deps),
         });
         const successorPartyId = transferCommonsSteward({
           steward: origin.vault.vault,

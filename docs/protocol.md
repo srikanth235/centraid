@@ -62,7 +62,19 @@ Deterministic apply rules:
 - the domain mutation and cursor advance settle atomically at the member vault;
 - derivative rows are absent from the closure and stream, so each member's local recognition pipeline remains authoritative.
 
+An executed domain operation is an increment, not an instruction to rebuild the closure. The steward and every member invoke the declared command through the canonical gateway with the deterministic id seed `commons-replica:<grant>:<sequence>`; handler call order supplies the ordinal. This keeps generated row ids identical across seats while the caller's invocation/nonce remains the replay identity. A member with a contiguous tail applies only those operations, then refreshes the grant's control and audit projection. Only a missing, compacted, mismatched, or recovery baseline uses the signed checkpoint and destructive projection path.
+
+Commons blob authorization is a separate short-lived grant/sha capability established once by an authorized bootstrap. Range requests check `commons_blob_access` for that exact peer pair and hash; they never export or sign the closure. Clients request 1 MiB ranges, hash while writing a CAS promotion temp file, `fsync`, and atomically adopt it, so original bytes are never accumulated as base64 chunks in memory.
+
+Peer bootstrap metadata is resumable and bounded independently of blob bytes. The steward caches at most four serialized frames and 64 MiB for five minutes, exposes each frame as ordered 256 KiB pages, and requires the member to resume with the exact `(frameId, page)` cursor; the final page retires the cache entry. The member validates and applies only the reassembled complete frame, so an interrupted response never projects a partial checkpoint.
+
 Commons is pre-release (v0) and carries **no** wire compatibility surface: there is exactly one frame and command shape, every chain, digest, signature, and offset field is required, and a peer presenting anything else is a hard fault that parks the grant's sync with a named state. No optional-when-absent parsing, no version negotiation, no legacy-generation migration — a replica in an older shape is re-bootstrapped, not migrated. An implementation that cannot enforce the commons command/signature contract must present the single update wall; it must not fall back to snapshot sharing or an unsigned write path.
+
+### Sharing identity, route, and receipt contracts (#750)
+
+Vault identity and route are different wire facts. A route assertion names a vault id, its current EndpointId and relay hints, and an assertion timestamp signed by that vault's stable identity. The receiver first verifies the pinned directory public key, then replaces the single `vault_routes` row only when the assertion is newer. Links never carry route copies. Identity loss or mismatch is `vault_identity_missing` / `vault_identity_mismatch`; neither permits minting a replacement.
+
+Access receipt scope is a strict discriminated value. Snapshot receipts contain `{ mode: "snapshot", itemIds: string[] }`; live parsing remains fail-closed for historical receipt validation as `{ mode: "live", containerType, containerId }`, although the live edge plane itself is retired. An object can never be cast into an item-id array. Edge DTOs also carry `originLabel` and `audienceLabel` from `vault_directory`; clients render those values and never reconstruct a person from a raw vault id.
 
 ### Pair-ticket multi-vault redemption
 

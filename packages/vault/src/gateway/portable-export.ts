@@ -89,6 +89,12 @@
 // human-readable adapter and contain no content bytes; referenced CAS bytes
 // remain covered by the existing canonical content walk and manifest.
 
+// Schema/export audit #750: `share_commons_steward_contact.retry_after_at`
+// records only the local pull circuit-breaker deadline, and the Commons intent
+// CHECK now uses the consolidated effect vocabulary. The canonical table walk
+// already carries both tables column-for-column, so restore preserves pending
+// work and retry posture without a new adapter or byte-manifest rule.
+
 // Schema/export audit #743: the autonomous-principal registry is now logical
 // `consent.agent` / physical `consent_agent`, with `enrollment_key`; invocation
 // evidence names its actor through `caller_id`, and logical `media.asset`

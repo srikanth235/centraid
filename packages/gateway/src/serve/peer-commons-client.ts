@@ -1,6 +1,7 @@
 /** Dialing half of Commons peer sync and signed member-command delivery. */
 
 import { createHash } from "node:crypto";
+import { closeSync, fsyncSync, openSync, rmSync, writeSync } from "node:fs";
 
 import {
   applyCommonsBootstrap,
@@ -16,7 +17,8 @@ import type {
   CommonsHistoryFaultTag,
   CommonsInvitationRecord,
   CommonsMemberSignature,
-  CommonsTombstone,
+  Credential,
+  Gateway as VaultGateway,
   VaultDb,
 } from "@centraid/vault";
 
@@ -36,6 +38,7 @@ import type {
   CommonsPullOutcome,
   CommonsStewardStatus,
 } from "./commons-observability.js";
+import { collectCommonsBootstrapPages } from "./peer-commons-pages-client.js";
 import type { PeerDial, PeerDialRoute } from "./peer-edge-give-client.js";
 
 const CHUNK_BYTES = 1024 * 1024;
@@ -58,10 +61,15 @@ export interface PullPeerCommonsInput {
   memberVaultId: string;
   grantId: string;
   seat: VaultDb;
+  /** Mounted production executor for incremental command tails. */
+  gateway?: VaultGateway;
+  credential?: Credential;
   /** Owner consent: atomically join at the steward before first bootstrap. */
   acceptInvitation?: boolean;
   /** The metadata footprint the owner reviewed before accepting. */
   expectedSizeBytes?: number;
+  /** Test/metrics observer proving the live allocation stays at chunk scale. */
+  onBlobChunk?: (bytes: number) => void;
   now?: string;
 }
 
@@ -156,6 +164,7 @@ async function attemptPullPeerCommons(
       }
     }
     const params = query(input);
+    if (input.gateway && input.credential) params.set("incremental", "1");
     if (input.acceptInvitation) params.set("accept", "1");
     const cursor = readCommonsCursor(
       input.seat.vault,
@@ -169,13 +178,23 @@ async function attemptPullPeerCommons(
         input.grantId
       )}?${params}`,
     });
-    const body = response.json as {
-      state?: string;
-      wire?: CommonsBootstrap;
-      tombstone?: CommonsTombstone;
-      currentSequence?: number;
-      headHash?: string;
-    };
+    const body = await collectCommonsBootstrapPages({
+      initial: response,
+      next: async (frameId, pageCursor) => {
+        const pageParams = new URLSearchParams(params);
+        pageParams.delete("accept");
+        pageParams.delete("afterSequence");
+        pageParams.set("frameId", frameId);
+        pageParams.set("pageCursor", String(pageCursor));
+        return reached({
+          method: "GET",
+          target: `${PEER_COMMONS_BOOTSTRAP_PATH_PREFIX}${encodeURIComponent(
+            input.grantId
+          )}?${pageParams}`,
+        });
+      },
+    });
+    if (!body) return { state: "unavailable" };
     if (
       response.status === 200 &&
       body.state === "tombstone" &&
@@ -210,47 +229,93 @@ async function attemptPullPeerCommons(
       return { state: "unavailable" };
     for (const blob of body.wire.closure.blobs) {
       if (input.seat.blobs.local.hasSync(blob.sha256)) continue;
-      const chunks: Buffer[] = [];
+      if (
+        !input.seat.blobs.local.promotionTempPathSync ||
+        !input.seat.blobs.local.adoptTempSync
+      )
+        throw new Error("commons CAS does not support bounded stream adoption");
+      const tempPath = input.seat.blobs.local.promotionTempPathSync(
+        blob.sha256
+      );
+      const tempFile = openSync(tempPath, "wx");
+      const digest = createHash("sha256");
       let offset = 0;
       let total = Number.POSITIVE_INFINITY;
-      while (offset < total) {
-        const chunkQuery = query(input);
-        chunkQuery.set("grantId", input.grantId);
-        chunkQuery.set("sha256", blob.sha256);
-        chunkQuery.set("offset", String(offset));
-        chunkQuery.set("length", String(CHUNK_BYTES));
-        // oxlint-disable-next-line no-await-in-loop -- each ranged request starts at the offset established by the preceding chunk
-        const chunkResponse = await reached({
-          method: "GET",
-          target: `${PEER_COMMONS_BLOB_PATH}?${chunkQuery}`,
-        });
-        const chunk = chunkResponse.json as {
-          state?: string;
-          offset?: number;
-          totalSize?: number;
-          bytes?: string;
-        };
-        if (
-          chunkResponse.status !== 200 ||
-          chunk.state !== "chunk" ||
-          chunk.offset !== offset ||
-          typeof chunk.totalSize !== "number" ||
-          typeof chunk.bytes !== "string"
-        )
-          return { state: "unavailable" };
-        const bytes = Buffer.from(chunk.bytes, "base64");
-        chunks.push(bytes);
-        offset += bytes.length;
-        total = chunk.totalSize;
-        if (bytes.length === 0 && offset < total)
-          return { state: "unavailable" };
+      try {
+        while (offset < total) {
+          const chunkQuery = query(input);
+          chunkQuery.set("grantId", input.grantId);
+          chunkQuery.set("sha256", blob.sha256);
+          chunkQuery.set("offset", String(offset));
+          chunkQuery.set("length", String(CHUNK_BYTES));
+          // oxlint-disable-next-line no-await-in-loop -- each ranged request starts at the offset established by the preceding chunk
+          const chunkResponse = await reached({
+            method: "GET",
+            target: `${PEER_COMMONS_BLOB_PATH}?${chunkQuery}`,
+          });
+          const chunk = chunkResponse.json as {
+            state?: string;
+            offset?: number;
+            totalSize?: number;
+            bytes?: string;
+          };
+          if (
+            chunkResponse.status !== 200 ||
+            chunk.state !== "chunk" ||
+            chunk.offset !== offset ||
+            typeof chunk.totalSize !== "number" ||
+            chunk.totalSize !== blob.size ||
+            typeof chunk.bytes !== "string"
+          )
+            throw new Error("commons blob chunk is invalid");
+          const bytes = Buffer.from(chunk.bytes, "base64");
+          input.onBlobChunk?.(bytes.length);
+          digest.update(bytes);
+          writeSync(tempFile, bytes);
+          offset += bytes.length;
+          total = chunk.totalSize;
+          if (bytes.length === 0 && offset < total)
+            throw new Error("commons blob chunk made no progress");
+        }
+        if (digest.digest("hex") !== blob.sha256)
+          throw new Error("commons blob failed content verification");
+        fsyncSync(tempFile);
+        closeSync(tempFile);
+        input.seat.blobs.local.adoptTempSync(blob.sha256, tempPath);
+      } catch (error) {
+        try {
+          closeSync(tempFile);
+        } catch {
+          // The successful adoption path already closed the descriptor.
+        }
+        rmSync(tempPath, { force: true });
+        throw error;
       }
-      const bytes = Buffer.concat(chunks);
-      if (createHash("sha256").update(bytes).digest("hex") !== blob.sha256)
-        return { state: "unavailable" };
-      input.seat.blobs.local.putSync(blob.sha256, bytes);
     }
-    applyCommonsBootstrap({ seat: input.seat, wire: body.wire, now });
+    applyCommonsBootstrap({
+      seat: input.seat,
+      wire: body.wire,
+      now,
+      ...(input.gateway && input.credential
+        ? {
+            applyCommand: (
+              command: string,
+              commandInput: Record<string, unknown>,
+              invocationId: string
+            ) =>
+              input.gateway!.invokeCommonsCanonical(
+                input.credential!,
+                {
+                  command,
+                  input: commandInput,
+                  purpose: "dpv:ServiceProvision",
+                  invocationId,
+                },
+                { idSeed: invocationId }
+              ),
+          }
+        : {}),
+    });
     return {
       state: "current",
       sequence: body.wire.currentSequence,

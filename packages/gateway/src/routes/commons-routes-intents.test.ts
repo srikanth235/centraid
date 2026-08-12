@@ -321,7 +321,7 @@ describe("Commons intent cancel route (issue #731 goal 2)", () => {
       // arrived. Cancel must never override that outcome — it reports the
       // true status and `cancelled: false`, matching the documented race
       // contract on `cancelCommonsIntent` (the WHERE clause only ever moves
-      // a still-open `pending`/`parked` row).
+      // a still-open `queued`/`parked` row).
       member.vault.vault
         .prepare(
           `INSERT INTO share_commons_intent

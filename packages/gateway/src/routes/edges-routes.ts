@@ -15,9 +15,6 @@
  * The retired live/lend mode is intentionally not accepted here (#731).
  */
 
-import type { IncomingMessage } from "node:http";
-
-import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import { ROUTES } from "@centraid/protocol";
 import {
   isShareableItemType,
@@ -31,10 +28,17 @@ import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
 import { judgeEdgeCrossing } from "../serve/link-crossing.js";
 import type { PeerDial } from "../serve/peer-edge-give-client.js";
+import { requestPrincipal } from "../serve/request-principal.js";
+import { parseShareScope } from "../serve/share-contracts.js";
 import type { VaultLinksStore } from "../serve/vault-links-store.js";
 import { reconcileRemoteEdge } from "./edges-reconcile-remote.js";
 import type { EdgeKind, EdgeMode, EdgeRow } from "./edges-reconcile.js";
-import { readEdgeRow, reconcileEdge } from "./edges-reconcile.js";
+import {
+  localEdgeTransport,
+  readEdgeRow,
+  reconcileEdgeWithTransport,
+  transitionEdge,
+} from "./edges-reconcile.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
 export const EDGES_PATH = ROUTES.gatewayEdges;
@@ -68,26 +72,38 @@ export interface EdgesRouteDeps {
   peerDial?: PeerDial;
 }
 
+/** Owner-scoped read: every enrolled device of one owner observes the same
+ * edge set; created_by_device remains attribution, never visibility. */
+export function listEdgesForOwner(
+  database: GatewayDatabase,
+  ownerId: string
+): EdgeRow[] {
+  return database.db
+    .prepare(
+      `SELECT * FROM share_edges
+        WHERE owner_id = ?
+        ORDER BY updated_at DESC LIMIT 200`
+    )
+    .all(ownerId) as unknown as EdgeRow[];
+}
+
 export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
   return async (req, res): Promise<boolean> => {
     const url = new URL(req.url ?? "/", "http://gateway.local");
     if (url.pathname !== EDGES_PATH) return false;
-    const deviceId = callerDeviceId(req);
-    const owner = deviceId ? deps.enrollments.ownerFor(deviceId) : undefined;
-    if (!deviceId || !owner)
+    const principal = requestPrincipal(req, deps.enrollments);
+    if (!principal)
       return sendJson(res, 403, { error: "device_identity_required" });
 
     if ((req.method ?? "GET") === "GET") {
-      const rows = deps.gatewayDatabase.db
-        .prepare(
-          `SELECT * FROM share_edges
-            WHERE created_by_device = ?
-            ORDER BY updated_at DESC LIMIT 200`
-        )
-        .all(deviceId) as unknown as EdgeRow[];
+      const rows = listEdgesForOwner(deps.gatewayDatabase, principal.ownerId);
       return sendJson(res, 200, {
         edges: rows.map((row) =>
-          edgeWire(row, receiptFor(deps.gatewayDatabase, row.edge_id))
+          edgeWire(
+            row,
+            deps.links,
+            receiptFor(deps.gatewayDatabase, row.edge_id)
+          )
         ),
       });
     }
@@ -109,7 +125,7 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
     // one answerer's question (`judgeEdgeCrossing`), same for a vault on this
     // machine and a vault across the world.
     const owners = deps.enrollments.owners;
-    if (owners.ownerOf(input.originVaultId) !== owner.ownerId)
+    if (owners.ownerOf(input.originVaultId) !== principal.ownerId)
       return sendJson(res, 404, { error: "not_found" });
     const crossing = judgeEdgeCrossing(
       { links: deps.links, ownerOf: (vaultId) => owners.ownerOf(vaultId) },
@@ -143,7 +159,12 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
 
     let row: EdgeRow;
     try {
-      row = insertOrRead(deps.gatewayDatabase, deviceId, owner.ownerId, input);
+      row = insertOrRead(
+        deps.gatewayDatabase,
+        principal.deviceId,
+        principal.ownerId,
+        input
+      );
     } catch (error) {
       return sendJson(res, 409, {
         error: "edge_token_collision",
@@ -162,12 +183,11 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
           deps.peerDial
         );
       } else {
-        row = reconcileEdge(
+        row = await reconcileEdgeWithTransport(
           deps.gatewayDatabase,
           row,
           origin,
-          audience!,
-          deps.share ?? shareItemsToVault,
+          localEdgeTransport(audience!, deps.share ?? shareItemsToVault),
           deps.move ?? moveOutOfVault,
           // Same-owner needs no row to reach `judgeEdgeCrossing`'s "linked"
           // state at all (D3) — reaching this branch as "linked" always means
@@ -178,23 +198,20 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
       return sendJson(
         res,
         200,
-        edgeWire(row, receiptFor(deps.gatewayDatabase, row.edge_id))
+        edgeWire(row, deps.links, receiptFor(deps.gatewayDatabase, row.edge_id))
       );
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      deps.gatewayDatabase.run(
-        `UPDATE share_edges
-            SET status = 'parked', reason = ?, updated_at = ?
-          WHERE edge_id = ?`,
-        reason,
-        new Date().toISOString(),
-        input.edgeId
+      row = transitionEdge(
+        deps.gatewayDatabase,
+        input.edgeId,
+        "parked",
+        reason
       );
-      row = readEdgeRow(deps.gatewayDatabase, input.edgeId)!;
       return sendJson(
         res,
         202,
-        edgeWire(row, receiptFor(deps.gatewayDatabase, row.edge_id))
+        edgeWire(row, deps.links, receiptFor(deps.gatewayDatabase, row.edge_id))
       );
     }
   };
@@ -248,16 +265,24 @@ function insertOrRead(
 
 function edgeWire(
   row: EdgeRow,
+  links: VaultLinksStore,
   accessReceiptId?: string
 ): Record<string, unknown> {
+  const scope = parseShareScope(row.mode, JSON.parse(row.scope_json ?? "null"));
+  if (scope.mode !== "snapshot") throw new Error("live edge rows are retired");
   return {
     edgeId: row.edge_id,
     kind: row.kind,
     mode: row.mode,
     itemType: row.item_type,
-    itemIds: JSON.parse(row.scope_json ?? "[]"),
+    itemIds: scope.itemIds,
     originVaultId: row.origin_vault_id,
+    originLabel:
+      links.directory.get(row.origin_vault_id)?.label ?? row.origin_vault_id,
     audienceVaultId: row.audience_vault_id,
+    audienceLabel:
+      links.directory.get(row.audience_vault_id)?.label ??
+      row.audience_vault_id,
     verbs: row.verbs,
     ...(row.target_item_ids_json
       ? { targetItemIds: JSON.parse(row.target_item_ids_json) }
@@ -305,13 +330,9 @@ function parseInput(body: Record<string, unknown>): EdgeInput {
   const rawItemIds = body.itemIds;
   if (!Array.isArray(rawItemIds) || rawItemIds.length === 0)
     throw new Error("itemIds must be a non-empty array");
-  const itemIds = dedupe(
-    rawItemIds.map((entry, index) => {
-      if (typeof entry !== "string" || entry.length === 0)
-        throw new Error(`itemIds[${index}] must be a non-empty string`);
-      return entry;
-    })
-  );
+  const scope = parseShareScope(mode, rawItemIds);
+  if (scope.mode !== "snapshot") throw new Error("live edges are retired");
+  const itemIds = dedupe(scope.itemIds);
   return {
     edgeId: string("edgeId"),
     originVaultId,
@@ -334,10 +355,4 @@ function dedupe(values: string[]): string[] {
     out.push(value);
   }
   return out;
-}
-
-function callerDeviceId(req: IncomingMessage): string | undefined {
-  const raw = req.headers[AUTHED_DEVICE_HEADER];
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  return typeof value === "string" && value.length > 0 ? value : undefined;
 }

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#750) one end-to-end Tally Commons lifecycle fixture owns incremental scale, offline writes, restore, capability downgrade, removal, and steward transfer; splitting it would duplicate the three-vault state machine and weaken the acceptance flow.
 import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
@@ -12,7 +13,7 @@ import type { VaultDb } from "../db.js";
 import { backupVault } from "../gateway/custody.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
-import { nowIso } from "../ids.js";
+import { nowIso, uuidv7 } from "../ids.js";
 import {
   applyCommonsBootstrap,
   exportCommonsBootstrap,
@@ -147,6 +148,37 @@ describe("B6 Tally Commons flagship", () => {
     expect(created.status).toBe("executed");
     const groupId = (created as { output: { group_id: string } }).output
       .group_id;
+    // A realistically large baseline makes the later k-operation catch-up
+    // prove work is tied to k, not to the 1,000 unchanged domain rows.
+    const insertExpense = priya.db.vault.prepare(
+      `INSERT INTO tally_expense
+         (expense_id, group_id, description, amount_minor, paid_by,
+          spent_on, category, created_at)
+       VALUES (?, ?, ?, 900, ?, '2030-01-01', 'travel', ?)`
+    );
+    const insertSplit = priya.db.vault.prepare(
+      `INSERT INTO tally_expense_split
+         (expense_id, party_id, share_minor) VALUES (?, ?, 300)`
+    );
+    priya.db.vault.exec("BEGIN IMMEDIATE");
+    try {
+      for (let index = 0; index < 1_000; index += 1) {
+        const expenseId = uuidv7();
+        insertExpense.run(
+          expenseId,
+          groupId,
+          `zz-scale-baseline-${String(index).padStart(4, "0")}`,
+          priya.boot.ownerPartyId,
+          now
+        );
+        for (const seat of [priya, bob, cara])
+          insertSplit.run(expenseId, seat.boot.ownerPartyId);
+      }
+      priya.db.vault.exec("COMMIT");
+    } catch (error) {
+      priya.db.vault.exec("ROLLBACK");
+      throw error;
+    }
     const grant = createCommonsGrant({
       origin: priya.db.vault,
       ownerPartyId: priya.boot.ownerPartyId,
@@ -178,12 +210,32 @@ describe("B6 Tally Commons flagship", () => {
           : vaultId === cara.vaultId
             ? cara.db
             : undefined;
+    let bobGateway = createGateway(bob.db);
+    registerTallyCommands(bobGateway);
+    const caraGateway = createGateway(cara.db);
+    registerTallyCommands(caraGateway);
+    let replicaInvocations = 0;
     const allSeats = () =>
       commonsSeats({
         steward: priya.db.vault,
         grantId: grant.grantId,
         stewardVaultId: priya.vaultId,
         vaultFor: localVaultFor,
+        invokeFor: (vaultId, command, commandInput, invocationId) => {
+          replicaInvocations += 1;
+          const target = vaultId === bob.vaultId ? bobGateway : caraGateway;
+          const seat = vaultId === bob.vaultId ? bob : cara;
+          return target.invokeCommonsCanonical(
+            credential(seat),
+            {
+              command,
+              input: commandInput,
+              purpose: "dpv:ServiceProvision",
+              invocationId,
+            },
+            { idSeed: invocationId }
+          );
+        },
       });
     compileCommons({
       steward: priya.db,
@@ -192,6 +244,7 @@ describe("B6 Tally Commons flagship", () => {
       seats: allSeats(),
       now,
     });
+    replicaInvocations = 0;
 
     const inputFor = (actor: Seat, description: string) => ({
       group_id: groupId,
@@ -255,8 +308,77 @@ describe("B6 Tally Commons flagship", () => {
     };
 
     expect(executeAtPriya(priya, "Train").decision.accepted).toBe(true);
-    const bobGateway = createGateway(bob.db);
-    registerTallyCommands(bobGateway);
+    expect(replicaInvocations).toBe(2);
+    bob.db.vault
+      .prepare(
+        `INSERT INTO enrich_embedding
+           (embedding_id, target_type, target_id, model, dim, vector, created_at)
+         VALUES (?, 'tally.group', ?, 'member-local@1', 1, ?, ?)`
+      )
+      .run(uuidv7(), groupId, Buffer.from(new Float32Array([1]).buffer), now);
+    const bobWithoutScaleTail = allSeats().filter(
+      (seat) => seat.vaultId !== bob.vaultId
+    );
+    const beforeScaleCount = (
+      bob.db.vault
+        .prepare("SELECT COUNT(*) AS n FROM tally_expense WHERE group_id = ?")
+        .get(groupId) as { n: number }
+    ).n;
+    for (let index = 0; index < 3; index += 1)
+      expect(
+        executeAtPriya(
+          cara,
+          `Scale tail ${index}`,
+          bobWithoutScaleTail,
+          `intent-scale-${index}`
+        ).decision.accepted
+      ).toBe(true);
+    const scaleFrame = exportCommonsBootstrap({
+      steward: priya.db.vault,
+      identitySeed: priya.db.identitySeed,
+      stewardVaultId: priya.vaultId,
+      grantId: grant.grantId,
+      memberVaultId: bob.vaultId,
+      incremental: true,
+    });
+    expect(
+      scaleFrame.tail.filter((operation) => operation["kind"] === "command")
+        .length
+    ).toBeLessThanOrEqual(4);
+    let scaleCommandsApplied = 0;
+    applyCommonsBootstrap({
+      seat: bob.db,
+      wire: scaleFrame,
+      now,
+      applyCommand: (command, commandInput, invocationId) => {
+        scaleCommandsApplied += 1;
+        return bobGateway.invokeCommonsCanonical(
+          credential(bob),
+          {
+            command,
+            input: commandInput,
+            purpose: "dpv:ServiceProvision",
+            invocationId,
+          },
+          { idSeed: invocationId }
+        );
+      },
+    });
+    expect(scaleCommandsApplied).toBe(3);
+    expect(
+      bob.db.vault
+        .prepare("SELECT COUNT(*) AS n FROM tally_expense WHERE group_id = ?")
+        .get(groupId)
+    ).toMatchObject({ n: beforeScaleCount + 3 });
+    expect(
+      bob.db.vault
+        .prepare(
+          `SELECT COUNT(*) AS n FROM enrich_embedding
+            WHERE target_type = 'tally.group' AND target_id = ?`
+        )
+        .get(groupId)
+    ).toMatchObject({ n: 1 });
+    replicaInvocations = 0;
     const bobInput = inputFor(bob, "Lunch");
     const offline = bobGateway.invoke(credential(bob), {
       command: "tally.add_expense",
@@ -272,10 +394,19 @@ describe("B6 Tally Commons flagship", () => {
       bob.db.vault
         .prepare("SELECT status FROM share_commons_intent WHERE intent_id = ?")
         .get("intent-Lunch")
-    ).toMatchObject({ status: "pending" });
+    ).toMatchObject({ status: "queued" });
     expect(
       executeAtPriya(bob, "Lunch", allSeats(), "intent-Lunch").decision
     ).toMatchObject({ accepted: true });
+    expect(replicaInvocations).toBe(2);
+    expect(
+      bob.db.vault
+        .prepare(
+          `SELECT COUNT(*) AS n FROM enrich_embedding
+            WHERE target_type = 'tally.group' AND target_id = ?`
+        )
+        .get(groupId)
+    ).toMatchObject({ n: 1 });
     const lunch = priya.db.vault
       .prepare(
         "SELECT expense_id FROM tally_expense WHERE description = 'Lunch'"
@@ -358,12 +489,17 @@ describe("B6 Tally Commons flagship", () => {
       stewardVaultId: priya.vaultId,
       grantId: grant.grantId,
       memberVaultId: bob.vaultId,
+      incremental: false,
     });
     applyCommonsBootstrap({ seat: bob.db, wire: catchup, now });
     expect(
       bob.db.vault
         .prepare(
-          "SELECT description FROM tally_expense WHERE group_id = ? ORDER BY description"
+          `SELECT description FROM tally_expense
+            WHERE group_id = ?
+              AND description NOT LIKE 'zz-scale-baseline-%'
+              AND description NOT LIKE 'Scale tail %'
+            ORDER BY description`
         )
         .all(groupId)
     ).toMatchObject([
@@ -450,8 +586,8 @@ describe("B6 Tally Commons flagship", () => {
         )
         .get(grant.grantId)
     ).toMatchObject({ steward_party_id: bob.boot.ownerPartyId });
-    const restoredBobGateway = createGateway(bob.db);
-    registerTallyCommands(restoredBobGateway);
+    bobGateway = createGateway(bob.db);
+    registerTallyCommands(bobGateway);
     const ferryInput = {
       ...inputFor(bob, "Ferry"),
       splits: [priya, bob].map((seat) => ({
@@ -459,7 +595,7 @@ describe("B6 Tally Commons flagship", () => {
         share_minor: 450,
       })),
     };
-    const afterTransfer = restoredBobGateway.invoke(credential(bob), {
+    const afterTransfer = bobGateway.invoke(credential(bob), {
       command: "tally.add_expense",
       input: ferryInput,
     });
@@ -479,16 +615,24 @@ describe("B6 Tally Commons flagship", () => {
       vaultFor: localVaultFor,
       now,
     });
-    expect(reconciled).toHaveLength(1);
-    expect(reconciled[0]?.seats).toStrictEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ vaultId: priya.vaultId, status: "current" }),
-      ])
-    );
+    expect(reconciled).toStrictEqual([
+      expect.objectContaining({
+        seats: expect.arrayContaining([
+          expect.objectContaining({
+            vaultId: priya.vaultId,
+            status: "current",
+          }),
+        ]),
+      }),
+    ]);
     expect(
       priya.db.vault
         .prepare(
-          "SELECT description FROM tally_expense WHERE group_id = ? ORDER BY description"
+          `SELECT description FROM tally_expense
+            WHERE group_id = ?
+              AND description NOT LIKE 'zz-scale-baseline-%'
+              AND description NOT LIKE 'Scale tail %'
+            ORDER BY description`
         )
         .all(groupId)
     ).toMatchObject([
@@ -500,5 +644,5 @@ describe("B6 Tally Commons flagship", () => {
     expect(balances(bob.db, groupId)).toStrictEqual(
       balances(priya.db, groupId)
     );
-  });
+  }, 90_000);
 });

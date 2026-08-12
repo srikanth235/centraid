@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { GatewayDatabase } from "./gateway-db.js";
+import { parseShareScope } from "./share-contracts.js";
 
 /**
  * One row per EDGE, not per item (#726 P2): three photographs placed by one
@@ -22,6 +23,10 @@ export function recordShareAccessReceipt(
   database: GatewayDatabase,
   input: ShareAccessReceiptInput
 ): string {
+  const originScope = input.originItemIds
+    ? parseShareScope("snapshot", [...input.originItemIds])
+    : undefined;
+  const audienceScope = parseShareScope("snapshot", [...input.audienceItemIds]);
   if (input.edgeId) {
     const existing = database.db
       .prepare("SELECT receipt_id FROM share_access_receipts WHERE edge_id = ?")
@@ -41,9 +46,11 @@ export function recordShareAccessReceipt(
     input.action,
     input.itemType,
     input.originVaultId ?? null,
-    input.originItemIds ? JSON.stringify(input.originItemIds) : null,
+    originScope?.mode === "snapshot"
+      ? JSON.stringify(originScope.itemIds)
+      : null,
     input.audienceVaultId,
-    JSON.stringify(input.audienceItemIds),
+    JSON.stringify(audienceScope.itemIds),
     new Date().toISOString()
   );
   return receiptId;

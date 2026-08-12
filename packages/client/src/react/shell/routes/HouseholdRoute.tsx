@@ -14,9 +14,11 @@ import {
   listGatewayLinks,
   listGatewayOwners,
   listCommonsInvitations,
+  listCommonsRecovery,
   listPendingEdges,
   proposeGatewayLink,
   renameGatewayDevice,
+  recoverCommons,
   revokeGatewayDevice,
   setGatewayDeviceCompute,
   setReceiveSetting,
@@ -109,8 +111,10 @@ export default function HouseholdRoute(): JSX.Element {
           loadPending: listPendingEdges,
           onAnswerPending: answerPendingEdge,
           loadCommonsInvitations: listCommonsInvitations,
+          loadCommonsRecovery: listCommonsRecovery,
           onClaimCommonsInvitation: claimCommonsInvitation,
           onAnswerCommonsInvitation: answerCommonsInvitation,
+          onRecoverCommons: recoverCommons,
         }}
       />
     </PageScroll>

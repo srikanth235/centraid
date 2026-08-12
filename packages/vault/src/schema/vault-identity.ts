@@ -9,12 +9,9 @@
  * that recorded its public key beforehand, that the thing on the new host is
  * the SAME vault.
  *
- * v0 scope: minted alongside the DEK on every open (a fresh vault creates
- * one; an existing vault loads its own, or mints lazily if it predates this
- * feature — no backfill migration, deliberately, since nothing reads it over
- * the wire yet). Unlike the sealed-column DEK, there is no "sealed anything
- * yet?" fingerprint gate: the seed is either present (load) or absent
- * (mint), never wrong-and-refused.
+ * A fresh vault mints the seed exactly once. Production mounts load it before
+ * opening the vault and fail closed when it is absent; silently re-minting an
+ * existing linked vault would change its wire identity (#750).
  */
 
 import {
@@ -58,6 +55,14 @@ export function loadOrCreateVaultIdentitySeed(
   keyStore?: KeyStore
 ): Buffer {
   return keyStoreForFile(file, keyStore).loadOrCreate(path.basename(file));
+}
+
+/** Load without mutation. Production registry mounts use this fail-closed seam. */
+export function loadVaultIdentitySeed(
+  file: string,
+  keyStore?: KeyStore
+): Buffer | null {
+  return keyStoreForFile(file, keyStore).load(path.basename(file));
 }
 
 function assertSeedLength(seed: Buffer): void {

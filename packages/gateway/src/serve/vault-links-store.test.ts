@@ -209,6 +209,43 @@ describe(VaultLinksStore, () => {
     expect(store.peerForEndpoint("ep-peer")).toBeUndefined();
   });
 
+  test("one route update reaches every link naming the moved vault", async () => {
+    const store = await open();
+    remoteLink(store, {
+      peerVaultId: "vault-peer",
+      localVaultId: "vault-local-a",
+    });
+    const secondTicket = store.tickets.mint("vault-local-b", keyA);
+    store.redeem({
+      ticketId: secondTicket.ticketId,
+      secret: secondTicket.secret,
+      peerVaultId: "vault-peer",
+      peerPublicKey: keyB,
+      route: { endpointId: "ep-peer", relayHints: [], assertedAt: 1 },
+      peerLabel: "Priya",
+      localLabel: "Work",
+    });
+
+    expect(
+      store.recordRoute({
+        peerVaultId: "vault-peer",
+        peerEndpointId: "ep-rotated",
+        peerRelayHints: [],
+        assertedAt: Date.now() + 10_000,
+      })
+    ).toBe(true);
+    expect(
+      store
+        .listFor("vault-peer")
+        .map((link) =>
+          link.vaultA === "vault-peer" ? link.routeA : link.routeB
+        )
+    ).toStrictEqual([
+      expect.objectContaining({ endpointId: "ep-rotated" }),
+      expect.objectContaining({ endpointId: "ep-rotated" }),
+    ]);
+  });
+
   test("an older assertion never wins the route back", async () => {
     const store = await open();
     remoteLink(store);
@@ -283,7 +320,7 @@ describe(VaultLinksStore, () => {
     ).toMatchObject({ localVaultId: "vault-local", peerVaultId: "vault-y" });
   });
 
-  test("the DDL keeps an EndpointId in the route cache and nowhere else", async () => {
+  test("the DDL keeps one canonical route per vault and none on links", async () => {
     const store = await open();
     const ddl = new Map(
       (
@@ -291,22 +328,25 @@ describe(VaultLinksStore, () => {
           .prepare(
             `SELECT name, sql FROM sqlite_schema
               WHERE type = 'table'
-                AND name IN ('vault_links', 'share_edges', 'share_access_receipts')`
+                AND name IN (
+                  'vault_directory', 'vault_routes', 'vault_links',
+                  'share_edges', 'share_access_receipts'
+                )`
           )
           .all() as unknown as Array<{ name: string; sql: string }>
       ).map((row) => [row.name, row.sql] as const)
     );
-    expect(ddl.size).toBe(3);
-    for (const sql of ddl.values()) {
+    expect(ddl.size).toBe(5);
+    for (const [name, sql] of ddl) {
+      if (name === "vault_routes") continue;
       for (const match of sql.matchAll(
         /^\s+(?<column>[a-z_]+)\s+(?:TEXT|INTEGER|REAL|BLOB)/gmu
       )) {
         expect(match.groups?.column).not.toMatch(/endpoint/u);
       }
     }
-    // The route cache is the one place an EndpointId lives, and it is JSON —
-    // replaceable data, not a column anything can join or bind against.
-    expect(ddl.get("vault_links")).toMatch(/route_a_json TEXT/u);
-    expect(ddl.get("vault_links")).toMatch(/route_b_json TEXT/u);
+    expect(ddl.get("vault_links")).not.toMatch(/public_key|label_|route_/u);
+    expect(ddl.get("vault_routes")).toMatch(/vault_id TEXT PRIMARY KEY/u);
+    expect(ddl.get("vault_routes")).toMatch(/endpoint_id TEXT NOT NULL/u);
   });
 });

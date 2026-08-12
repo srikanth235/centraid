@@ -1205,7 +1205,11 @@ export class Gateway {
       }
       return settled.value;
     }
-    const outcome = this.invokeCore(identity, rawRequest);
+    const outcome = this.invokeCore(
+      identity,
+      rawRequest,
+      `commons-replica:${grant.grantId}:${grant.lastSequence + 1}`
+    );
     const executed =
       outcome.status === "executed" || outcome.status === "replayed";
     if (executed)
@@ -1262,14 +1266,16 @@ export class Gateway {
   /** Explicit Commons rail already authorized and sequenced the command. */
   invokeCommonsCanonical(
     cred: Credential,
-    rawRequest: InvokeRequest
+    rawRequest: InvokeRequest,
+    options: { idSeed?: string } = {}
   ): InvokeOutcome {
-    return this.invokeCore(this.identify(cred), rawRequest);
+    return this.invokeCore(this.identify(cred), rawRequest, options.idSeed);
   }
 
   private invokeCore(
     identity: Identity,
-    rawRequest: InvokeRequest
+    rawRequest: InvokeRequest,
+    deterministicIdSeed?: string
   ): InvokeOutcome {
     // Purposes are off the critical path (issue #306 decision 4): a caller
     // that names none rides the default; the journal records what applied.
@@ -1471,6 +1477,7 @@ export class Gateway {
         {
           deferCommitSettlement: this.activeBatchInvocationIds !== undefined,
           deferReplicaNotify: this.activeBatchInvocationIds !== undefined,
+          ...(deterministicIdSeed ? { deterministicIdSeed } : {}),
         }
       )
     );

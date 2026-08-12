@@ -90,6 +90,50 @@ export class PairingTicketStore {
     return this.insert(ttlMs, invitation.ownerId, invitation.vaultIds);
   }
 
+  /** Fixed-id/secret insert used inside the provisioning transaction. */
+  mintKnownWithinTransaction(input: {
+    ticketId: string;
+    secret: string;
+    invitation: TicketInvitation;
+    expiresAt: number;
+    createdAt: string;
+  }): { ticketId: string; secret: string; expiresAt: number } {
+    if (input.invitation.vaultIds.length === 0)
+      throw new Error("an invitation must carry at least one vault");
+    this.gatewayDatabase.db
+      .prepare(
+        `INSERT INTO tickets (
+           ticket_id, secret_hash, owner_id, grants_json, created_at, expires_at
+         ) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (ticket_id) DO NOTHING`
+      )
+      .run(
+        input.ticketId,
+        hashSecret(input.secret),
+        input.invitation.ownerId,
+        JSON.stringify(input.invitation.vaultIds),
+        input.createdAt,
+        input.expiresAt
+      );
+    const row = this.gatewayDatabase.db
+      .prepare(`SELECT ${TICKET_COLUMNS} FROM tickets WHERE ticket_id = ?`)
+      .get(input.ticketId) as TicketRow | undefined;
+    if (
+      !row ||
+      row.secret_hash !== hashSecret(input.secret) ||
+      row.owner_id !== input.invitation.ownerId ||
+      row.grants_json !== JSON.stringify(input.invitation.vaultIds) ||
+      row.expires_at !== input.expiresAt
+    ) {
+      throw new Error("ticket id already names another invitation");
+    }
+    return {
+      ticketId: input.ticketId,
+      secret: input.secret,
+      expiresAt: input.expiresAt,
+    };
+  }
+
   redeem(ticketId: string, secret: string): TicketInvitation | undefined {
     const row = this.consume(ticketId, secret);
     return row ? invitationOf(row) : undefined;

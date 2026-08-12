@@ -107,12 +107,14 @@ export interface InlineCommonsIntent {
   command: string;
   input: Record<string, unknown>;
   status:
-    | "pending"
+    | "queued"
+    | "running"
     | "parked"
     | "executed"
     | "denied"
-    | "expired"
-    | "cancelled";
+    | "failed"
+    | "cancelled"
+    | "expired";
   reason?: string;
   stewardLabel?: string;
   createdAt: string;
@@ -764,7 +766,7 @@ export function createInlineCentraidClient(
         const stewardLabel = intent.stewardLabel ?? undefined;
         const reason =
           intent.reason ??
-          (intent.status === "pending" || intent.status === "parked"
+          (intent.status === "queued" || intent.status === "parked"
             ? `Waiting for ${stewardLabel || "the Commons steward"}.`
             : undefined);
         return {
@@ -784,7 +786,7 @@ export function createInlineCentraidClient(
 
     async cancelCommonsIntent(opts) {
       const binding = bindingFor(opts.scope);
-      if (!binding.scope.id) return { status: "pending", cancelled: false };
+      if (!binding.scope.id) return { status: "queued", cancelled: false };
       const { baseUrl, token } = await auth();
       const response = await doFetch(
         baseUrl,

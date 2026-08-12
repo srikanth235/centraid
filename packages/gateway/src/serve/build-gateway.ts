@@ -181,6 +181,7 @@ import {
   COMMONS_PATH,
   makeCommonsRouteHandler,
 } from "../routes/commons-routes.js";
+import type { CommonsRouteDeps } from "../routes/commons-routes.js";
 import { makeConnectionsRouteHandler } from "../routes/connections-routes.js";
 import { makeDataPlaneControlHandler } from "../routes/data-plane-control.js";
 import type { DataPlaneControlOptions } from "../routes/data-plane-control.js";
@@ -296,9 +297,11 @@ import {
   refusePeerCommonsInvitation,
 } from "./peer-commons-client.js";
 import type { PeerDial } from "./peer-edge-give-client.js";
+import { pushRouteAssertion } from "./peer-link-client.js";
 import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
 import { PowerContextMonitor } from "./power-context.js";
 import { PricingWarmer } from "./pricing-warmer.js";
+import { ProvisionPerson } from "./provision-person.js";
 import { ResourceAccounting } from "./resource-accounting.js";
 import {
   formatEventLoopDetail,
@@ -312,6 +315,7 @@ import type { ResourceMode } from "./resource-mode.js";
 import { RouteLatencyMetrics } from "./route-latency.js";
 import { createSchedulerHealthProbe } from "./scheduler-health.js";
 import { findSequentially, forEachSequentially } from "./sequential.js";
+import { ShareEffectsStore } from "./share-effects.js";
 import { measureStorageLatency } from "./storage-latency.js";
 import { StorageLimitsStore, evaluateStorageLimit } from "./storage-limits.js";
 import { createStorageQuotaHealthProbe } from "./storage-quota-health.js";
@@ -322,6 +326,7 @@ import {
 } from "./trigger-ingress-cursor.js";
 import { runWithVaultContext, VAULT_HEADER } from "./vault-context.js";
 import type { DeviceAccess } from "./vault-context.js";
+import { VaultDirectory } from "./vault-directory.js";
 import { createVaultIntegrityHealthProbe } from "./vault-integrity-health.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 import type { InstallScopeBlock, VaultPlane } from "./vault-plane.js";
@@ -438,9 +443,8 @@ export interface BuildGatewayOptions {
      * background-pull original bytes. Absent means this build can receive
      * peer requests but never initiate one — a remote edge or a D9 accept
      * parks rather than reaching for a dial capability that isn't wired.
-     * Production wiring of a real transport is a `packages/tunnel` concern,
-     * mirroring how `redeemLinkTicket`/`pushRouteAssertion` are unwired here
-     * too; tests inject the same in-process transport the link ceremony does.
+     * Production wiring of the transport is owned by `endpoint-host.ts`; the
+     * same dial also pushes route assertions on endpoint rotation and mount.
      */
     dial?: PeerDial;
     /**
@@ -1081,8 +1085,10 @@ export async function buildGateway(
     pendingNotificationsWakes.add(vaultId);
   };
   let nudgeCommonsSweep = (): void => undefined;
+  const vaultIdentityDirectory = new VaultDirectory(gatewayDatabase);
   const vaultRegistry: VaultRegistry = openVaultRegistry({
     rootDir: paths.vaultDir,
+    identityDirectory: vaultIdentityDirectory,
     synchronous: hardwareProfile.sqliteSynchronous,
     replicationConcurrency: hardwareProfile.replicationConcurrency,
     // One memory ceiling for ALL mounted planes, divided among them (#659 L8).
@@ -1603,6 +1609,29 @@ export async function buildGateway(
     options.devicePairing?.enrollments ?? EnrollmentStore.open(gatewayDatabase);
   // The same-machine link ceremony a cross-owner edge needs (#726 P2 §3).
   const vaultLinksStore = new VaultLinksStore(gatewayDatabase);
+  vaultRegistry.onMount((plane) => {
+    const local = options.peerPlane?.localRoute();
+    const dial = options.peerPlane?.dial;
+    if (!local?.endpointId || !dial) return;
+    void pushRouteAssertion({
+      links: vaultLinksStore,
+      request: dial.request,
+      signAsVault: (vaultId, bytes) =>
+        vaultRegistry.signAsVault(vaultId, bytes),
+      route: {
+        vaultId: plane.boot.vaultId,
+        endpointId: local.endpointId,
+        relayHints: local.relayHints,
+      },
+      endpointTicketFor: dial.endpointTicketFor,
+    }).catch((error: unknown) => {
+      logger.warn(
+        `vault ${plane.boot.vaultId} route assertion deferred: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    });
+  });
   /*
    * The host's own device identity. A gateway the owner runs on their own
    * box is reachable over loopback with no iroh pairing, so it needs a
@@ -4293,6 +4322,16 @@ export async function buildGateway(
       },
     });
 
+  const personProvisioner = options.devicePairing
+    ? new ProvisionPerson({
+        database: gatewayDatabase,
+        enrollments: options.devicePairing.enrollments,
+        tickets: options.devicePairing.tickets,
+        vaults: vaultRegistry,
+        keys: gatewayKeys,
+      })
+    : undefined;
+
   // ── Route chain ───────────────────────────────────────────────────────
   const routeEntries: RoutePrefixRegistration[] = [
     forRoutePrefixes(
@@ -4356,7 +4395,16 @@ export async function buildGateway(
               vaultName: (id) => vaultRegistry.get(id)?.name,
               // *Add someone* (#726 P1): mints the new vault (identity
               // keypair included — `VaultRegistry.create` mints it).
-              mintVaultForPerson: (name) => vaultRegistry.create(name),
+              ...(personProvisioner
+                ? {
+                    provisionPerson: (input: {
+                      operationId: string;
+                      ownerLabel: string;
+                      vaultName: string;
+                      ttlMs: number;
+                    }) => personProvisioner.run(input),
+                  }
+                : {}),
               onRevoked: (rows) => {
                 for (const row of rows) {
                   const plane = vaultRegistry.get(row.vaultId);
@@ -4393,36 +4441,33 @@ export async function buildGateway(
               enrollments: options.devicePairing.enrollments,
             })
           ),
-          // The same-machine link ceremony a cross-owner edge needs (#726
-          // P2 §3): propose a link from a vault you own, the other owner's
-          // device approves. Same-owner edges never touch this surface.
-          // `peer` (audit #726 finding 1) is the SAME `peerPlane.dial` every
-          // other outbound peer capability in this file already gates on —
-          // absent, `ticket`/`redeem` answer a typed refusal instead of
-          // reaching for a transport that isn't wired.
-          forRoutePrefixes(
-            "/centraid/_gateway/links",
-            makeVaultLinksRouteHandler({
-              enrollments: options.devicePairing.enrollments,
-              store: vaultLinksStore,
-              gatewayDatabase,
-              vaultPublicKey: (vaultId) =>
-                vaultRegistry.vaultIdentity(vaultId)?.publicKey,
-              vaultName: (vaultId) => vaultRegistry.get(vaultId)?.name,
-              ownerPartyFor: (vaultId) =>
-                vaultRegistry.get(vaultId)?.boot.ownerPartyId,
-              ...(options.peerPlane?.dial
-                ? {
-                    peer: {
-                      localRoute: options.peerPlane.localRoute,
-                      dial: options.peerPlane.dial,
-                    },
-                  }
-                : {}),
-            })
-          ),
         ]
       : []),
+    // The same-machine link ceremony is owner/enrollment state, not a
+    // transport feature. Keep its read/local half available in the
+    // loopback-only embedded host too; only remote ticket/redeem depends on
+    // `peerPlane.dial` and fails closed when that transport is absent.
+    forRoutePrefixes(
+      "/centraid/_gateway/links",
+      makeVaultLinksRouteHandler({
+        enrollments: enrollmentStore,
+        store: vaultLinksStore,
+        gatewayDatabase,
+        vaultPublicKey: (vaultId) =>
+          vaultRegistry.vaultIdentity(vaultId)?.publicKey,
+        vaultName: (vaultId) => vaultRegistry.get(vaultId)?.name,
+        ownerPartyFor: (vaultId) =>
+          vaultRegistry.get(vaultId)?.boot.ownerPartyId,
+        ...(options.peerPlane?.dial
+          ? {
+              peer: {
+                localRoute: options.peerPlane.localRoute,
+                dial: options.peerPlane.dial,
+              },
+            }
+          : {}),
+      })
+    ),
     // Component-level health + structured error tail. `_gateway/info`
     // is the liveness probe; this is the "what's actually wrong" surface.
     forRoutePrefixes(
@@ -4849,6 +4894,48 @@ export async function buildGateway(
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
     ...(options.peerPlane?.dial ? { peerDial: options.peerPlane.dial } : {}),
   });
+  type CommonsInvitationDelivery = Parameters<
+    NonNullable<CommonsRouteDeps["invitePeer"]>
+  >[0];
+  const deliverCommonsInvitation = async (
+    invitation: CommonsInvitationDelivery
+  ): Promise<boolean> => {
+    const { stewardVaultId, memberVaultId } = invitation;
+    const link = vaultLinksStore.peerForVault(memberVaultId, stewardVaultId);
+    if (!link) return false;
+    const effects = new ShareEffectsStore(gatewayDatabase);
+    const effect = effects.enqueue({
+      edgeId: invitation.grantId,
+      kind: "deliver-commons-invitation",
+      localVaultId: stewardVaultId,
+      peerVaultId: memberVaultId,
+      payload: {
+        linkId: link.linkId,
+        invitationId: `${invitation.grantId}:${memberVaultId}`,
+        ...invitation,
+      },
+    });
+    if (effect.state === "executed") return true;
+    const dial = options.peerPlane?.dial;
+    if (!dial) {
+      effects.transition(effect.effectId, "parked", {
+        attempted: true,
+        retryAt: Date.now() + 30_000,
+      });
+      return false;
+    }
+    effects.transition(effect.effectId, "running");
+    const delivered = await invitePeerToCommons({
+      dial,
+      route: link.route,
+      invitation,
+    });
+    effects.transition(effect.effectId, delivered ? "executed" : "parked", {
+      attempted: true,
+      ...(delivered ? {} : { retryAt: Date.now() + 30_000 }),
+    });
+    return delivered;
+  };
   const commonsHandler = makeCommonsRouteHandler({
     enrollments: enrollmentStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
@@ -4877,17 +4964,7 @@ export async function buildGateway(
         return undefined;
       return peerVaultId === link.vaultA ? link.publicKeyA : link.publicKeyB;
     },
-    invitePeer: async (invitation) => {
-      const { stewardVaultId, memberVaultId } = invitation;
-      const link = vaultLinksStore.peerForVault(memberVaultId, stewardVaultId);
-      const dial = options.peerPlane?.dial;
-      if (!link || !dial) return false;
-      return invitePeerToCommons({
-        dial,
-        route: link.route,
-        invitation,
-      });
-    },
+    invitePeer: deliverCommonsInvitation,
     acceptPeer: async ({
       stewardVaultId,
       memberVaultId,
@@ -4943,6 +5020,7 @@ export async function buildGateway(
   const commonsRecoveryHandler = makeCommonsRecoveryRouteHandler({
     enrollments: enrollmentStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+    invitePeer: deliverCommonsInvitation,
   });
   // The D9 answer route (#726 P3 decision 9) — a same-machine owner-tier
   // surface, mounted like any other route, distinct from the peer plane.
@@ -5146,15 +5224,18 @@ export async function buildGateway(
       return true;
     if (url.pathname === EDGES_PATH && (await edgesHandler(req, res)))
       return true;
+    // Recovery is a named sibling under the Commons prefix. Dispatch it
+    // before the generic command handler so "recovery" cannot be parsed as
+    // an origin vault id.
+    if (
+      url.pathname === COMMONS_RECOVERY_PATH &&
+      (await commonsRecoveryHandler(req, res))
+    )
+      return true;
     if (
       (url.pathname === COMMONS_PATH ||
         url.pathname.startsWith(`${COMMONS_PATH}/`)) &&
       (await commonsHandler(req, res))
-    )
-      return true;
-    if (
-      url.pathname === COMMONS_RECOVERY_PATH &&
-      (await commonsRecoveryHandler(req, res))
     )
       return true;
     // The D9 answer surface (#726 P3 decision 9): `/centraid/_gateway/edges/pending`

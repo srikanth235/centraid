@@ -15,6 +15,7 @@ import { GatewayDatabase } from "./gateway-db.js";
 import type { PeerDial } from "./peer-edge-give-client.js";
 import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
 import { recordPendingRefusal } from "./peer-refusal-relay.js";
+import { ShareEffectsStore } from "./share-effects.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 
 function seedRoutedLink(
@@ -52,9 +53,7 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
     await sweep.runOnce();
     // No throw, nothing to assert on disk — a build with no peer dial wired
     // must not touch peer-plane tables at all.
-    expect(
-      db.db.prepare("SELECT * FROM peer_pending_refusals").all()
-    ).toHaveLength(0);
+    expect(db.db.prepare("SELECT * FROM share_effects").all()).toHaveLength(0);
   });
 
   it("drains a durable refusal on a SCHEDULER TICK, not a direct call", async () => {
@@ -80,7 +79,11 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
       await vi.waitFor(
         () => {
           const row = db.db
-            .prepare("SELECT * FROM peer_pending_refusals WHERE edge_id = ?")
+            .prepare(
+              `SELECT * FROM share_effects
+                WHERE kind = 'notify-refusal' AND edge_id = ?
+                  AND state IN ('queued', 'running', 'parked')`
+            )
             .get("edge-tick");
           expect(row).toBeUndefined();
         },
@@ -89,6 +92,45 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
     } finally {
       sweep.stop();
     }
+  });
+
+  it("retries Commons invitations through the same scheduled effect runner", async () => {
+    const db = GatewayDatabase.open(tempDirSync("centraid-sweep-invite-"));
+    const links = VaultLinksStore.open(db);
+    const linkId = seedRoutedLink(links, "vlt_steward", "vlt_member");
+    const effect = new ShareEffectsStore(db).enqueue({
+      edgeId: "grant-1",
+      kind: "deliver-commons-invitation",
+      localVaultId: "vlt_steward",
+      peerVaultId: "vlt_member",
+      payload: {
+        linkId,
+        grantId: "grant-1",
+        invitationId: "grant-1:vlt_member",
+        stewardVaultId: "vlt_steward",
+        memberVaultId: "vlt_member",
+        memberPartyId: "party-member",
+        capability: "read+write",
+        containerType: "tally.group",
+        containerId: "group-1",
+        currentSizeBytes: 128,
+      },
+    });
+    const sweep = createPeerPlaneSweep({
+      db,
+      links,
+      vaultFor: () => undefined,
+      dial: () => ({
+        endpointTicketFor: () => "ticket",
+        request: async () => ({ status: 200, json: { state: "pending" } }),
+      }),
+    });
+
+    await sweep.runOnce();
+
+    expect(new ShareEffectsStore(db).get(effect.effectId)?.state).toBe(
+      "executed"
+    );
   });
 
   it("backs off after a failure instead of spinning, and recovers", async () => {
@@ -124,7 +166,11 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
     // The row is untouched — a failed tick parks, it never loses work.
     expect(
       db.db
-        .prepare("SELECT * FROM peer_pending_refusals WHERE edge_id = ?")
+        .prepare(
+          `SELECT * FROM share_effects
+            WHERE kind = 'notify-refusal' AND edge_id = ?
+              AND state IN ('queued', 'running', 'parked')`
+        )
         .get("edge-backoff")
     ).toBeDefined();
   });

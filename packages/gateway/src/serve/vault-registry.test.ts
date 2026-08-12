@@ -502,6 +502,11 @@ describe("vault-registry scenarios", () => {
         path.join(donorRoot, donorVaultId, "journal.db"),
         path.join(badDir, "journal.db")
       );
+      await fs.mkdir(path.join(root, "keys"), { recursive: true });
+      await fs.copyFile(
+        path.join(donorRoot, "keys", `${donorVaultId}.identity`),
+        path.join(root, "keys", "badvault.identity")
+      );
 
       // Past the backoff window, the next scan retries it.
       vi.advanceTimersByTime(31_000);
@@ -555,17 +560,26 @@ describe("vault-registry scenarios", () => {
         recursive: true,
       }
     );
-    const donorKey = path.join(donorRoot, "keys", `${recoveredId}.sealkey`);
-    if (existsSync(donorKey)) {
-      await fs.mkdir(path.join(root, "keys"), { recursive: true });
-      await fs.cp(donorKey, path.join(root, "keys", `${recoveredId}.sealkey`));
-    }
+    await fs.mkdir(path.join(root, "keys"), { recursive: true });
+    await Promise.all(
+      ["sealkey", "identity"].map(async (suffix) => {
+        const donorKey = path.join(
+          donorRoot,
+          "keys",
+          `${recoveredId}.${suffix}`
+        );
+        if (existsSync(donorKey))
+          await fs.cp(
+            donorKey,
+            path.join(root, "keys", `${recoveredId}.${suffix}`)
+          );
+      })
+    );
 
     const adopted = registry.adopt(recoveredId);
 
     expect(adopted.vaultId).toBe(recoveredId);
     expect(adopted.name).toBe("Recovered");
-    // The recovered vault stands alone and is the effective default.
     expect(registry.list().map((v) => v.vaultId)).toStrictEqual([recoveredId]);
     expect(registry.defaultVaultId()).toBe(recoveredId);
   });
@@ -594,6 +608,10 @@ describe("vault-registry scenarios", () => {
             if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
           });
       }
+    );
+    await fs.copyFile(
+      path.join(root, "keys", `${first.vaultId}.identity`),
+      path.join(root, "keys", "dupe-of-first.identity")
     );
 
     registry.rescan();

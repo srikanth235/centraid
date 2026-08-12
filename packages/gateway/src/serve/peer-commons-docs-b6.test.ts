@@ -7,7 +7,6 @@ import {
   createCommonsClaimInvitation,
   createCommonsGrant,
   executeCommonsCommand,
-  exportCommonsBootstrap,
   listCommonsInvitations,
   readCommonsGrant,
   registerDocumentCommands,
@@ -27,6 +26,7 @@ import {
 } from "./peer-commons-client.js";
 import {
   dialFrom,
+  exportCommonsBootstrapForTest,
   link,
   makeCoHostedSides,
   makeSide,
@@ -114,7 +114,7 @@ describe("B6 Docs folder Commons across a real peer", () => {
         now,
       });
     compileOrigin();
-    const readerWire = exportCommonsBootstrap({
+    const readerWire = exportCommonsBootstrapForTest({
       steward: origin.vault.vault,
       identitySeed: origin.vault.identitySeed,
       stewardVaultId: origin.vaultId,
@@ -326,7 +326,7 @@ describe("B6 Docs folder Commons across a real peer", () => {
       now,
     });
     compileOrigin(reinvite.grantId);
-    const reinviteWire = exportCommonsBootstrap({
+    const reinviteWire = exportCommonsBootstrapForTest({
       steward: origin.vault.vault,
       identitySeed: origin.vault.identitySeed,
       stewardVaultId: origin.vaultId,

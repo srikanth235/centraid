@@ -368,7 +368,12 @@ describe("peer transport over real iroh (#726 P3 gap 1)", () => {
     // The original crossed as a manifest entry, not yet as bytes.
     expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(false);
     const pendingBefore = audience.gatewayDb.db
-      .prepare("SELECT sha256 FROM peer_blob_pulls")
+      .prepare(
+        `SELECT json_extract(payload_json, '$.sha256') AS sha256
+           FROM share_effects
+          WHERE kind = 'pull-blob'
+            AND state IN ('queued', 'running', 'parked')`
+      )
       .all() as Array<{ sha256: string }>;
     expect(pendingBefore.map((p) => p.sha256)).toStrictEqual([photo.sha256]);
 
@@ -385,7 +390,13 @@ describe("peer transport over real iroh (#726 P3 gap 1)", () => {
       audience.vault.blobs.local.getSync(photo.sha256)?.equals(photo.bytes)
     ).toBe(true);
     expect(
-      audience.gatewayDb.db.prepare("SELECT * FROM peer_blob_pulls").all()
+      audience.gatewayDb.db
+        .prepare(
+          `SELECT * FROM share_effects
+            WHERE kind = 'pull-blob'
+              AND state IN ('queued', 'running', 'parked')`
+        )
+        .all()
     ).toHaveLength(0);
   }, 30_000);
 });

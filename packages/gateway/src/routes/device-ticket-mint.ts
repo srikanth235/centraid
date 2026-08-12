@@ -23,10 +23,6 @@ import { readJson, sendJson } from "./route-helpers.js";
 /** The canonical vault-addressing header (mirrors the client's `VAULT_HEADER`). */
 const VAULT_HEADER = "x-centraid-vault";
 
-function mintVaultForPersonUnwired(): never {
-  throw new Error("mint-for-person is not wired on this gateway");
-}
-
 export async function handleTicketMint(
   req: IncomingMessage,
   res: ServerResponse,
@@ -65,7 +61,8 @@ export async function handleTicketMint(
   if (forPerson === null) {
     return sendJson(res, 400, {
       error: "invalid_for_person",
-      message: "forPerson must be an object with a non-empty label",
+      message:
+        "forPerson must carry a stable operationId and a non-empty label",
     });
   }
   const hostVaults = hostCustody ? (deps.vaultIds?.() ?? []) : [];
@@ -106,14 +103,77 @@ export async function handleTicketMint(
       message: "vaultIds must be a list of vault ids",
     });
   }
+  const ttlMs =
+    typeof body.ttlMinutes === "number" && body.ttlMinutes > 0
+      ? body.ttlMinutes * 60_000
+      : DEFAULT_TICKET_TTL_MS;
+  // Preflight every external requirement before the Add-someone workflow
+  // creates a principal, vault, or ownership row (#750).
+  const gw = deps.endpointTicket?.();
+  if (gw === undefined) {
+    return sendJson(res, 409, {
+      error: "no_iroh_endpoint",
+      message:
+        "gateway has no iroh endpoint identity yet — start the daemon so it mints its endpoint",
+    });
+  }
+  if (forPerson) {
+    if (typeof body.ownerId === "string" || requestedVaultIds.length > 0) {
+      return sendJson(res, 400, {
+        error: "invalid_body",
+        message: "forPerson cannot be combined with ownerId or vaultIds",
+      });
+    }
+    if (!deps.provisionPerson)
+      return sendJson(res, 503, {
+        error: "provision_person_unavailable",
+        message: "resumable person provisioning is not wired on this gateway",
+      });
+    let provisioned;
+    try {
+      provisioned = deps.provisionPerson({
+        operationId: forPerson.operationId,
+        ownerLabel: forPerson.label,
+        vaultName: forPerson.vaultName ?? `${forPerson.label}'s vault`,
+        ttlMs,
+      });
+    } catch (error) {
+      return sendJson(res, 409, {
+        error: "provision_person_failed",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    const token = encodePairingTicket({
+      v: 1,
+      kind: "centraid-gw-pair",
+      gw,
+      t: provisioned.ticketId,
+      s: provisioned.secret,
+      vaultName: provisioned.vaultName,
+      exp: provisioned.expiresAt,
+    });
+    return sendJson(res, 200, {
+      ok: true,
+      ticket: token,
+      ownerId: provisioned.ownerId,
+      ownerLabel: provisioned.ownerLabel,
+      vaults: [
+        {
+          vaultId: provisioned.vaultId,
+          vaultName: provisioned.vaultName,
+        },
+      ],
+      vaultId: provisioned.vaultId,
+      vaultName: provisioned.vaultName,
+      expiresAt: new Date(provisioned.expiresAt).toISOString(),
+    });
+  }
   const invitation = resolveInvitation({
     enrollments: deps.enrollments,
     vaultName: deps.vaultName,
     callerKey,
     hostCustody,
     target: target ?? "",
-    forPerson,
-    mintVaultForPerson: deps.mintVaultForPerson ?? mintVaultForPersonUnwired,
     body,
     vaultIds: requestedVaultIds,
   });
@@ -121,20 +181,6 @@ export async function handleTicketMint(
     return sendJson(res, invitation.status, {
       error: invitation.error,
       message: invitation.message,
-    });
-  }
-  const ttlMs =
-    typeof body.ttlMinutes === "number" && body.ttlMinutes > 0
-      ? body.ttlMinutes * 60_000
-      : DEFAULT_TICKET_TTL_MS;
-  // `gw` is required in `PairingTicketPayload`; a ticket without the iroh
-  // endpoint pin can't be redeemed, so refuse rather than mint a dud.
-  const gw = deps.endpointTicket?.();
-  if (gw === undefined) {
-    return sendJson(res, 409, {
-      error: "no_iroh_endpoint",
-      message:
-        "gateway has no iroh endpoint identity yet — start the daemon so it mints its endpoint",
     });
   }
   const minted = deps.tickets.mint(

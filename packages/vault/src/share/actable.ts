@@ -4,7 +4,10 @@
 
 import type { ShareableItemType } from "./closure.js";
 
-const ACTABLE = new Map<ShareableItemType, ReadonlySet<string>>([
+export const COMMONS_COMMANDS: ReadonlyMap<
+  ShareableItemType,
+  ReadonlySet<string>
+> = new Map([
   [
     "tally.group",
     new Set([
@@ -37,40 +40,86 @@ const ACTABLE = new Map<ShareableItemType, ReadonlySet<string>>([
       "core.replace_document_content",
       "core.trash_document",
       "core.restore_document",
-      "core.delete_document",
       "core.move_document",
       "core.create_folder",
       "core.rename_folder",
     ]),
   ],
-  [
-    "core.collection",
-    new Set([
-      "core.add_collection_entry",
-      "core.remove_collection_entry",
-      "core.rename_collection",
-    ]),
-  ],
 ]);
+
+export interface CommonsCommandRoute {
+  containerType: ShareableItemType;
+  /** Exact commands routed through this container before authorization. */
+  commands: ReadonlySet<string>;
+  /** Input fields which directly identify the shared container. */
+  containerIdKeys: readonly string[];
+  /** Optional child identifier resolved to the containing shared container. */
+  childIdKeys: readonly string[];
+}
+
+const noCommands: ReadonlySet<string> = new Set();
+
+/**
+ * The single data declaration for command-to-Commons routing. Entries without
+ * commands are deliberate refusal routes: an unknown write which explicitly
+ * targets an active shared container must reach the Commons authorization
+ * door and be denied, never mutate a private replica which the next compile
+ * would silently overwrite.
+ */
+export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
+  {
+    containerType: "docs.folder",
+    commands: COMMONS_COMMANDS.get("docs.folder") ?? noCommands,
+    containerIdKeys: ["folder_id", "parent_folder_id"],
+    childIdKeys: ["document_id"],
+  },
+  {
+    containerType: "tally.group",
+    commands: COMMONS_COMMANDS.get("tally.group") ?? noCommands,
+    containerIdKeys: ["group_id"],
+    childIdKeys: ["expense_id"],
+  },
+  {
+    containerType: "core.document",
+    commands: COMMONS_COMMANDS.get("core.document") ?? noCommands,
+    containerIdKeys: ["document_id"],
+    childIdKeys: [],
+  },
+  {
+    containerType: "core.collection",
+    commands: noCommands,
+    containerIdKeys: ["collection_id"],
+    childIdKeys: [],
+  },
+  {
+    containerType: "media.asset",
+    commands: noCommands,
+    containerIdKeys: ["asset_id", "media_asset_id"],
+    childIdKeys: [],
+  },
+  {
+    containerType: "core.content_item",
+    commands: noCommands,
+    containerIdKeys: ["content_id", "content_item_id"],
+    childIdKeys: [],
+  },
+  {
+    containerType: "locker.item",
+    commands: noCommands,
+    containerIdKeys: ["item_id", "locker_item_id"],
+    childIdKeys: [],
+  },
+];
 
 export function isCommonsCommandActable(
   containerType: ShareableItemType,
   command: string
 ): boolean {
-  return ACTABLE.get(containerType)?.has(command) === true;
-}
-
-/** App-owned declarations reach one structural registry, never render-only
- * filtering. Passing an empty list deliberately closes the write surface. */
-export function declareCommonsCommands(
-  containerType: ShareableItemType,
-  commands: readonly string[]
-): void {
-  ACTABLE.set(containerType, new Set(commands));
+  return COMMONS_COMMANDS.get(containerType)?.has(command) === true;
 }
 
 export function commonsCommandsFor(
   containerType: ShareableItemType
 ): readonly string[] {
-  return [...(ACTABLE.get(containerType) ?? [])].toSorted();
+  return [...(COMMONS_COMMANDS.get(containerType) ?? [])].toSorted();
 }

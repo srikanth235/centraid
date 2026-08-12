@@ -13,6 +13,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 export function installGatewaySchema(db: DatabaseSync): void {
+  refuseLegacySharingSchema(db);
   db.exec(`
     CREATE TABLE IF NOT EXISTS gateway_meta (
       key TEXT PRIMARY KEY,
@@ -45,6 +46,32 @@ export function installGatewaySchema(db: DatabaseSync): void {
       vault_id TEXT PRIMARY KEY,
       owner_id TEXT NOT NULL REFERENCES owners(owner_id) ON DELETE CASCADE
     ) STRICT;
+    /*
+     * The stable identity directory is the only gateway-level record of what
+     * a vault id means. Links refer to ids; identity keys and human labels do
+     * not get copied into every link. A local vault has no route row. A peer
+     * vault has exactly one replaceable route, shared by every link naming it.
+     * That makes an endpoint rotation one atomic update instead of an update
+     * to whichever link a query happened to find first (#750).
+     */
+    CREATE TABLE IF NOT EXISTS vault_directory (
+      vault_id TEXT PRIMARY KEY,
+      public_key TEXT NOT NULL,
+      label TEXT,
+      locality TEXT NOT NULL CHECK (locality IN ('local', 'peer')),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS vault_routes (
+      vault_id TEXT PRIMARY KEY REFERENCES vault_directory(vault_id) ON DELETE CASCADE,
+      endpoint_id TEXT NOT NULL,
+      relay_hints_json TEXT NOT NULL,
+      asserted_at INTEGER NOT NULL,
+      signature TEXT,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS vault_routes_endpoint_idx
+      ON vault_routes(endpoint_id);
     /*
      * L1 — authentication. A device row is a pure BINDING of a proved iroh
      * EndpointId to an owner; it carries no authored authority. 'revoked' is
@@ -233,20 +260,15 @@ export function installGatewaySchema(db: DatabaseSync): void {
       link_id TEXT PRIMARY KEY,
       vault_a TEXT NOT NULL,
       vault_b TEXT NOT NULL,
-      public_key_a TEXT NOT NULL,
-      public_key_b TEXT NOT NULL,
-      label_a TEXT,
-      label_b TEXT,
       approved_by_a TEXT,
       approved_by_b TEXT,
-      route_a_json TEXT,
-      route_b_json TEXT,
       permissions_json TEXT NOT NULL DEFAULT '{}',
       revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)),
       created_at TEXT NOT NULL,
+      FOREIGN KEY (vault_a) REFERENCES vault_directory(vault_id),
+      FOREIGN KEY (vault_b) REFERENCES vault_directory(vault_id),
       UNIQUE (vault_a, vault_b),
-      CHECK (vault_a < vault_b),
-      CHECK (route_a_json IS NULL OR route_b_json IS NULL)
+      CHECK (vault_a < vault_b)
     ) STRICT;
     CREATE INDEX IF NOT EXISTS vault_links_vault_a_idx ON vault_links(vault_a);
     CREATE INDEX IF NOT EXISTS vault_links_vault_b_idx ON vault_links(vault_b);
@@ -280,61 +302,59 @@ export function installGatewaySchema(db: DatabaseSync): void {
       updated_at TEXT NOT NULL,
       PRIMARY KEY (link_id, vault_id)
     ) STRICT;
-    /*
-     * A give the audience ASKED about (D9 'ask') and has not yet answered.
-     * Deliberately carries no closure/bytes: nothing is written until the
-     * owner accepts, at which point the audience PULLS the closure fresh from
-     * the origin (peer plane's edge/closure/:edgeId route) rather than one
-     * being staged here to go stale. One row per edge; the P6 UI reads this
-     * table to list what is awaiting an answer.
-     */
-    CREATE TABLE IF NOT EXISTS peer_pending_gives (
-      edge_id TEXT PRIMARY KEY,
-      link_id TEXT NOT NULL,
-      peer_vault_id TEXT NOT NULL,
-      local_vault_id TEXT NOT NULL,
-      item_type TEXT NOT NULL,
-      item_count INTEGER NOT NULL,
-      created_at TEXT NOT NULL
-    ) STRICT;
-    /*
-     * A remote-give ORIGINAL still being pulled by sha (#726 P3 decision 7):
-     * derivatives already crossed with the closure, so what remains here is
-     * only the byte-heavy rung. tmp_path is minted ONCE (the audience
-     * vault's own promotionTempPathSync, same filesystem as its CAS) and
-     * reused across resumes — the file's on-disk length IS the resume offset,
-     * so an interrupted pull continues a Range request rather than
-     * restarting. The row is deleted the moment the sha is verified and
-     * adopted into the CAS; its mere existence means "not yet durable".
-     */
-    CREATE TABLE IF NOT EXISTS peer_blob_pulls (
-      pull_id TEXT PRIMARY KEY,
+    /* One typed queue for asks, CAS pulls, refusal notices, and Commons
+     * invitations. Payloads carry no closure bytes and terminal history is
+     * bounded by ShareEffectsStore; no workflow-specific queue survives. */
+    CREATE TABLE IF NOT EXISTS share_effects (
+      effect_id TEXT PRIMARY KEY,
       edge_id TEXT NOT NULL,
-      link_id TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN (
+        'await-give-decision', 'pull-blob', 'notify-refusal',
+        'deliver-commons-invitation'
+      )),
+      state TEXT NOT NULL CHECK (state IN (
+        'queued', 'running', 'parked', 'executed', 'denied',
+        'failed', 'cancelled', 'expired'
+      )),
       local_vault_id TEXT NOT NULL,
-      sha256 TEXT NOT NULL,
-      size INTEGER NOT NULL,
-      tmp_path TEXT NOT NULL,
+      peer_vault_id TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      UNIQUE (local_vault_id, sha256)
+      UNIQUE (edge_id, kind, payload_json)
     ) STRICT;
+    CREATE INDEX IF NOT EXISTS share_effects_drain_idx
+      ON share_effects(state, next_attempt_at, created_at);
     /*
-     * A D9 'refuse' the AUDIENCE has decided but the ORIGIN has not yet heard
-     * (#726 P3 decision 9). The owner's answer is durable the instant this
-     * row lands — before any network attempt — so a refusal is never lost to
-     * an offline peer; drainPeerRefusals (the same background tick that
-     * drains peer_blob_pulls) POSTs it to the peer plane's edge/deny route
-     * and deletes the row once the origin acknowledges. One row per edge: a
-     * second 'refuse' on the same edge is unreachable (the route that writes
-     * this row requires a live peer_pending_gives row, which the first
-     * refusal already deleted).
+     * A Commons bootstrap authorizes its closure once. Chunk reads then use a
+     * keyed, expiring authorization row instead of rebuilding and signing the
+     * entire export for every range request (#750).
      */
-    CREATE TABLE IF NOT EXISTS peer_pending_refusals (
-      edge_id TEXT PRIMARY KEY,
-      link_id TEXT NOT NULL,
-      peer_vault_id TEXT NOT NULL,
-      local_vault_id TEXT NOT NULL,
+    CREATE TABLE IF NOT EXISTS commons_blob_access (
+      grant_id TEXT NOT NULL,
+      member_vault_id TEXT NOT NULL,
+      sha256 TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      PRIMARY KEY (grant_id, member_vault_id, sha256)
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS commons_blob_access_expiry_idx
+      ON commons_blob_access(expires_at);
+    /* Durable operation ids make person provisioning resumable and replay-safe. */
+    CREATE TABLE IF NOT EXISTS provision_person_operations (
+      operation_id TEXT PRIMARY KEY,
+      request_hash TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN (
+        'planned', 'secret-ready', 'vault-ready', 'owner-ready',
+        'ownership-ready', 'ticket-ready', 'executed'
+      )),
+      owner_id TEXT NOT NULL,
+      vault_id TEXT NOT NULL,
+      ticket_id TEXT NOT NULL,
+      secret_key TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     ) STRICT;
@@ -360,4 +380,27 @@ export function installGatewaySchema(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS web_push_registrations_device_idx
       ON web_push_registrations(device_id);
   `);
+}
+
+/**
+ * Pre-1.0 sharing schemas are intentionally unsupported. Refusing them is
+ * safer than leaving old copied identity/routes and specialized drainers live
+ * beside the current single-owner state machine. Recovery is erase and
+ * re-onboard, as documented by the file header and recovery runbook.
+ */
+function refuseLegacySharingSchema(db: DatabaseSync): void {
+  const table = db
+    .prepare(
+      "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'vault_links'"
+    )
+    .get();
+  if (!table) return;
+  const columns = db.prepare("PRAGMA table_info(vault_links)").all() as Array<{
+    name: string;
+  }>;
+  if (columns.some((column) => column.name === "route_a_json")) {
+    throw new Error(
+      "unsupported pre-#750 gateway.db sharing schema; erase and re-onboard this pre-1.0 gateway"
+    );
+  }
 }

@@ -233,6 +233,8 @@ export interface VaultPlaneOptions {
   bootstrap?: boolean;
   /** Shared host custody store for this vault's sealing key. */
   keyStore?: KeyStore;
+  /** Registry-resolved stable identity; production mounts never mint here. */
+  identitySeed?: Buffer;
   /** Pre-minted vault id used only on first boot (multi-vault hosts name the dir after it). */
   vaultId?: string;
   /** Owner-facing vault name used only on first boot. */
@@ -661,6 +663,7 @@ export class VaultPlane {
     this.db = openVaultDb({
       dir: options.dir,
       ...(options.keyStore ? { keyStore: options.keyStore } : {}),
+      ...(options.identitySeed ? { identitySeed: options.identitySeed } : {}),
       s3Credentials: options.s3Credentials ?? defaultEnvS3Credentials,
       // Preview backstop codec (issue #405 §2) — forwarded only when the host
       // wired one; a codec-less open just never runs the backstop.

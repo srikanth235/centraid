@@ -521,7 +521,7 @@ function checkIntentsSettled(world: World): void {
   for (const seat of world.seats) {
     const pending = seat.db.vault
       .prepare(
-        "SELECT COUNT(*) AS n FROM share_commons_intent WHERE status = 'pending'"
+        "SELECT COUNT(*) AS n FROM share_commons_intent WHERE status = 'queued'"
       )
       .get() as { n: number };
     if (pending.n !== 0)

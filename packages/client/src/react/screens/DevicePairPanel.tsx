@@ -59,6 +59,7 @@ export default function DevicePairPanel({
 }: DevicePairPanelProps): JSX.Element {
   const [minutes, setMinutes] = useState(15);
   const [name, setName] = useState("");
+  const [operationId, setOperationId] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ticket, setTicket] = useState<GatewayDeviceTicket | null>(null);
@@ -103,12 +104,14 @@ export default function DevicePairPanel({
     setBusy(true);
     setError(null);
     try {
-      setTicket(
-        await onCreateTicket({
-          ttlMinutes: minutes,
-          ...(forPerson ? { forPerson: { label: name.trim() } } : {}),
-        })
-      );
+      const minted = await onCreateTicket({
+        ttlMinutes: minutes,
+        ...(forPerson
+          ? { forPerson: { operationId, label: name.trim() } }
+          : {}),
+      });
+      setTicket(minted);
+      if (forPerson) setOperationId(crypto.randomUUID());
     } catch (caughtError) {
       setError(pairErrorMessage(caughtError));
     } finally {

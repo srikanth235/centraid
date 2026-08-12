@@ -20,7 +20,7 @@ const roots: string[] = [];
 // these limits, while the headroom keeps full-suite worker contention from
 // turning successful boots into test-runner timeouts.
 const PARITY_TIMEOUT_MS = 120_000;
-const FOUNDING_TIMEOUT_MS = 30_000;
+const FOUNDING_TIMEOUT_MS = 60_000;
 
 describe("embedded-gateway-layout scenarios", () => {
   afterEach(async () =>

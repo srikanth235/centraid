@@ -23,7 +23,9 @@ export interface GatewayEdge {
   itemType: string;
   itemIds?: string[];
   originVaultId: string;
+  originLabel: string;
   audienceVaultId: string;
+  audienceLabel: string;
   status: EdgeStatus;
   reason?: string;
   accessReceiptId?: string;

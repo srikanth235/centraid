@@ -25,10 +25,56 @@ import type { GatewayDatabase } from "../serve/gateway-db.js";
 import { collectDerivativeBlobs } from "../serve/peer-closure-blobs.js";
 import type { PeerDial } from "../serve/peer-edge-give-client.js";
 import { giveEdgeOverPeer } from "../serve/peer-edge-give-client.js";
-import { recordShareAccessReceipt } from "../serve/share-access-receipts.js";
 import type { LinkRoute } from "../serve/vault-link-row.js";
-import type { EdgeRow } from "./edges-reconcile.js";
-import { readEdgeRow, updateStatus } from "./edges-reconcile.js";
+import type {
+  EdgeDeliveryOutcome,
+  EdgeRow,
+  EdgeTransport,
+} from "./edges-reconcile.js";
+import { reconcileEdgeWithTransport } from "./edges-reconcile.js";
+
+function remoteEdgeTransport(route: LinkRoute, dial: PeerDial): EdgeTransport {
+  return {
+    deliver: async ({ row, origin, itemIds }): Promise<EdgeDeliveryOutcome> => {
+      const closure = readShareClosure(origin.vault, {
+        originVaultId: row.origin_vault_id,
+        itemType: row.item_type,
+        itemIds,
+        crossOwner: true,
+      });
+      const derivatives = collectDerivativeBlobs(origin, closure);
+      const outcome = await giveEdgeOverPeer({
+        dial,
+        route,
+        edgeId: row.edge_id,
+        itemType: row.item_type,
+        itemCount: itemIds.length,
+        closure,
+        derivatives,
+      });
+      if (outcome.state === "given") return outcome;
+      if (outcome.state === "denied")
+        return {
+          state: "denied",
+          reason:
+            outcome.reason ?? "recipient is not accepting gives right now",
+        };
+      if (outcome.state === "asked")
+        return { state: "parked", reason: "awaiting recipient decision" };
+      if (outcome.state === "not_found")
+        return { state: "parked", reason: "peer link not reachable" };
+      if (outcome.state === "unreachable")
+        return {
+          state: "parked",
+          reason: `peer unreachable: ${outcome.detail}`,
+        };
+      return {
+        state: "parked",
+        reason: `peer refused the give: ${outcome.detail}`,
+      };
+    },
+  };
+}
 
 export async function reconcileRemoteEdge(
   db: GatewayDatabase,
@@ -37,85 +83,16 @@ export async function reconcileRemoteEdge(
   route: LinkRoute,
   dial: PeerDial
 ): Promise<EdgeRow> {
-  if (row.status === "completed") return row;
-  updateStatus(db, row.edge_id, "in-flight", null);
-  const itemIds = JSON.parse(row.scope_json ?? "[]") as string[];
-  const closure = readShareClosure(origin.vault, {
-    originVaultId: row.origin_vault_id,
-    itemType: row.item_type,
-    itemIds,
-    // A remote audience is never this gateway's own owner (P1 ownership is
-    // per-gateway) — every remote edge is cross-owner by construction.
-    crossOwner: true,
-  });
-  const derivatives = collectDerivativeBlobs(origin, closure);
-  const outcome = await giveEdgeOverPeer({
-    dial,
-    route,
-    edgeId: row.edge_id,
-    itemType: row.item_type,
-    itemCount: itemIds.length,
-    closure,
-    derivatives,
-  });
-  switch (outcome.state) {
-    case "given": {
-      const targetItemIds = outcome.items.map((item) => item.itemId);
-      db.transaction(() => {
-        db.run(
-          `UPDATE share_edges
-              SET target_state = 'executed', target_item_ids_json = ?, updated_at = ?
-            WHERE edge_id = ?`,
-          JSON.stringify(targetItemIds),
-          new Date().toISOString(),
-          row.edge_id
-        );
-        recordShareAccessReceipt(db, {
-          edgeId: row.edge_id,
-          ownerId: row.owner_id,
-          action: "share",
-          itemType: row.item_type,
-          originVaultId: row.origin_vault_id,
-          originItemIds: itemIds,
-          audienceVaultId: row.audience_vault_id,
-          audienceItemIds: targetItemIds,
-        });
-      });
-      updateStatus(db, row.edge_id, "completed", null);
-      break;
-    }
-    case "asked":
-      updateStatus(db, row.edge_id, "parked", "awaiting recipient decision");
-      break;
-    case "denied":
-      updateStatus(
-        db,
-        row.edge_id,
-        "denied",
-        outcome.reason ?? "recipient is not accepting gives right now"
-      );
-      break;
-    case "not_found":
-      // The peer no longer recognises this link (revoked, or never did) —
-      // topology hiding forward: we get no more detail than that either.
-      updateStatus(db, row.edge_id, "parked", "peer link not reachable");
-      break;
-    case "unreachable":
-      updateStatus(
-        db,
-        row.edge_id,
-        "parked",
-        `peer unreachable: ${outcome.detail}`
-      );
-      break;
-    case "bad_request":
-      updateStatus(
-        db,
-        row.edge_id,
-        "parked",
-        `peer refused the give: ${outcome.detail}`
-      );
-      break;
-  }
-  return readEdgeRow(db, row.edge_id)!;
+  if (row.kind === "move")
+    throw new Error("remote move is not an allowed edge command");
+  return reconcileEdgeWithTransport(
+    db,
+    row,
+    origin,
+    remoteEdgeTransport(route, dial),
+    () => {
+      throw new Error("remote move is not an allowed edge command");
+    },
+    true
+  );
 }

@@ -161,15 +161,15 @@ CREATE TABLE share_commons_intent (
   -- be a legacy-shape optional: every intent row states its own baseline.
   based_on_sequence INTEGER NOT NULL,
   status          TEXT NOT NULL CHECK (status IN
-    ('pending','parked','denied','executed','expired','cancelled')),
+    ('queued','running','parked','executed','denied','failed','cancelled','expired')),
   reason          TEXT,
   steward_label   TEXT,
   created_at      TEXT NOT NULL,
   settled_at      TEXT
 ) STRICT;
-CREATE INDEX share_commons_intent_pending
+CREATE INDEX share_commons_intent_open
   ON share_commons_intent(grant_id, created_at)
-  WHERE status IN ('pending','parked');
+  WHERE status IN ('queued','running','parked');
 
 -- A peer invitation is consent metadata, not a projected grant. The full
 -- authenticated consent metadata is held durably; no closure/domain row is

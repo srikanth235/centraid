@@ -51,9 +51,12 @@ export async function harness(
       | "vaultName"
       | "canMintPairingTicket"
       | "vaultIds"
-      | "mintVaultForPerson"
+      | "provisionPerson"
     >
-  > = {}
+  > & {
+    /** Narrow test seam; the route itself only accepts ProvisionPerson. */
+    mintVaultForPerson?: (name: string) => { vaultId: string };
+  } = {}
 ): Promise<DevicesHarness> {
   const dir = await tempDir("devices-routes-");
   dirs.push(dir);
@@ -63,13 +66,47 @@ export async function harness(
   const tickets = PairingTicketStore.open(database);
   const sessions = WebControlSessionStore.open(database);
   const onEndpointRevoked = vi.fn();
+  const { mintVaultForPerson, ...routeOverrides } = overrides;
+  const planned = new Map<
+    string,
+    ReturnType<NonNullable<DevicesRouteDeps["provisionPerson"]>>
+  >();
+  const provisionPerson = mintVaultForPerson
+    ? (
+        input: Parameters<NonNullable<DevicesRouteDeps["provisionPerson"]>>[0]
+      ) => {
+        const existing = planned.get(input.operationId);
+        if (existing) return existing;
+        const owner = enrollments.owners.gatewayDatabase.transaction(() =>
+          enrollments.owners.createWithinTransaction(input.ownerLabel)
+        );
+        const vault = mintVaultForPerson(input.vaultName);
+        enrollments.owners.setOwner(vault.vaultId, owner.ownerId);
+        const ticket = tickets.mint(
+          { ownerId: owner.ownerId, vaultIds: [vault.vaultId] },
+          input.ttlMs
+        );
+        const result = {
+          ownerId: owner.ownerId,
+          ownerLabel: owner.label,
+          vaultId: vault.vaultId,
+          vaultName: input.vaultName,
+          ticketId: ticket.ticketId,
+          secret: ticket.secret,
+          expiresAt: ticket.expiresAt,
+        };
+        planned.set(input.operationId, result);
+        return result;
+      }
+    : undefined;
   const handler = makeDevicesRouteHandler({
     enrollments,
     tickets,
     vaultName: (vaultId) => (vaultId === "vault-a" ? "Personal" : undefined),
     endpointTicket: () => "endpoint-ticket",
     onEndpointRevoked,
-    ...overrides,
+    ...routeOverrides,
+    ...(provisionPerson ? { provisionPerson } : {}),
   });
   const server = http.createServer((req, res) => void handler(req, res));
   servers.push(server);

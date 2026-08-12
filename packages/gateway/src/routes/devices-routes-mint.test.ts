@@ -56,7 +56,9 @@ describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
     const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: "POST",
       headers: deviceHeaders("founder-key"),
-      body: JSON.stringify({ forPerson: { label: "Kid" } }),
+      body: JSON.stringify({
+        forPerson: { operationId: "add-kid", label: "Kid" },
+      }),
     });
     expect(response.status).toBe(200);
     const payload = (await response.json()) as {
@@ -117,7 +119,11 @@ describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
       method: "POST",
       headers: deviceHeaders("founder-key"),
       body: JSON.stringify({
-        forPerson: { label: "Kid", vaultName: "Kid's Library" },
+        forPerson: {
+          operationId: "add-kid-library",
+          label: "Kid",
+          vaultName: "Kid's Library",
+        },
       }),
     });
     expect(response.status).toBe(200);
@@ -137,12 +143,41 @@ describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
     const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ forPerson: { label: "Guest" } }),
+      body: JSON.stringify({
+        forPerson: { operationId: "add-guest", label: "Guest" },
+      }),
     });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       ownerLabel: "Guest",
     });
+  });
+
+  test("missing endpoint preflight leaves no new person, vault, ownership, or ticket", async () => {
+    const stub = mintStub();
+    const f = await harness({
+      vaultName: (id) => stub.vaultNames.get(id),
+      mintVaultForPerson: stub.mintVaultForPerson,
+      endpointTicket: () => undefined,
+    });
+    f.enrollments.enroll({
+      endpointId: "founder-key",
+      vaultIds: ["vault-a"],
+      label: "Founder laptop",
+      ownerLabel: "Founder",
+    });
+    const beforeOwners = f.enrollments.owners.list();
+    const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
+      method: "POST",
+      headers: deviceHeaders("founder-key"),
+      body: JSON.stringify({
+        forPerson: { operationId: "missing-endpoint", label: "Kid" },
+      }),
+    });
+    expect(response.status).toBe(409);
+    expect(f.enrollments.owners.list()).toStrictEqual(beforeOwners);
+    expect(stub.vaultNames.size).toBe(1);
+    expect(f.tickets.listActive()).toStrictEqual([]);
   });
 
   test("forPerson is mutually exclusive with ownerId/vaultIds and rejects malformed shapes", async () => {
@@ -161,7 +196,7 @@ describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
       method: "POST",
       headers: deviceHeaders("founder-key"),
       body: JSON.stringify({
-        forPerson: { label: "Kid" },
+        forPerson: { operationId: "add-kid-conflict", label: "Kid" },
         vaultIds: ["vault-a"],
       }),
     });
@@ -175,7 +210,9 @@ describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
       {
         method: "POST",
         headers: deviceHeaders("founder-key"),
-        body: JSON.stringify({ forPerson: { label: "" } }),
+        body: JSON.stringify({
+          forPerson: { operationId: "add-empty", label: "" },
+        }),
       }
     );
     expect(malformed.status).toBe(400);

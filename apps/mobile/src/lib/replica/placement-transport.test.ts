@@ -55,6 +55,8 @@ describe(postPlacement, () => {
           edgeId: "edge-token-1",
           status: "completed",
           itemIds: ["asset-1"],
+          originLabel: "Personal",
+          audienceLabel: "Family",
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:01.000Z",
         });
@@ -74,11 +76,13 @@ describe(postPlacement, () => {
       itemIds: ["asset-1"],
       verbs: "read",
     });
-    // The outbox's PlacementRecord shape is unchanged: one item, and the
-    // edge's terminal 'completed' translates back to the old 'executed'.
+    // Human directory labels ride with the edge; native UI never has to show
+    // opaque vault ids while the terminal status is translated.
     expect(record).toStrictEqual({
       ...INTENT,
       status: "executed",
+      originLabel: "Personal",
+      audienceLabel: "Family",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:01.000Z",
     });

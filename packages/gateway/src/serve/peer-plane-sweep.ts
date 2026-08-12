@@ -9,6 +9,7 @@ import type {
 
 import type { GatewayDatabase } from "./gateway-db.js";
 import { drainPeerBlobPulls } from "./peer-blob-pull.js";
+import { drainCommonsInvitationEffects } from "./peer-commons-invitations.js";
 import { sweepPeerCommons } from "./peer-commons-sweep.js";
 import type { PeerDial } from "./peer-edge-give-client.js";
 import { drainPeerRefusals } from "./peer-refusal-relay.js";
@@ -68,7 +69,7 @@ export function createPeerPlaneSweep(
     }
     const dial = options.dial();
     try {
-      const [blobPulls, refusals, commons] = await Promise.all([
+      const [blobPulls, refusals, invitations, commons] = await Promise.all([
         dial
           ? drainPeerBlobPulls({
               db: options.db,
@@ -86,6 +87,14 @@ export function createPeerPlaneSweep(
               limit: rowLimit,
             })
           : Promise.resolve({ acknowledged: [] }),
+        dial
+          ? drainCommonsInvitationEffects({
+              db: options.db,
+              links: options.links,
+              dial,
+              limit: rowLimit,
+            })
+          : Promise.resolve({ delivered: [] }),
         options.commonsVaults
           ? sweepPeerCommons({
               vaults: options.commonsVaults(),
@@ -99,6 +108,7 @@ export function createPeerPlaneSweep(
       const progressed =
         blobPulls.done.length > 0 ||
         refusals.acknowledged.length > 0 ||
+        invitations.delivered.length > 0 ||
         commons.progressed > 0;
       schedule(progressed ? activeMs : idleMs);
     } catch (error) {

@@ -86,7 +86,21 @@ export interface DevicesRouteDeps {
    * `VaultRegistry.create`. Undefined ⇒ `forPerson` requests are refused
    * (never silently downgraded to a self-pair).
    */
-  mintVaultForPerson?: (name: string) => { vaultId: string };
+  /** Durable operation-id workflow used by the production Add someone lane. */
+  provisionPerson?: (input: {
+    operationId: string;
+    ownerLabel: string;
+    vaultName: string;
+    ttlMs: number;
+  }) => {
+    ownerId: string;
+    ownerLabel: string;
+    vaultId: string;
+    vaultName: string;
+    ticketId: string;
+    secret: string;
+    expiresAt: number;
+  };
   /**
    * The gateway's iroh EndpointTicket (identity pin + relay hint) for a minted
    * ticket's `gw` field, read lazily at mint time; undefined before the daemon

@@ -12,7 +12,6 @@ import {
   createCommonsGrant,
   createGateway,
   executeCommonsCommand,
-  exportCommonsBootstrap,
   listCommonsInvitations,
   openVaultDb,
   readCommonsGrant,
@@ -32,6 +31,7 @@ import {
 import { sweepPeerCommons } from "./peer-commons-sweep.js";
 import {
   dialFrom,
+  exportCommonsBootstrapForTest,
   link,
   makeCoHostedSides,
   makeSide,
@@ -112,7 +112,7 @@ describe("B6 Tally Commons across a real peer", () => {
 
     // The remote receives metadata first. No Tally row crosses until the
     // current-size invitation is explicitly accepted.
-    const initialWire = exportCommonsBootstrap({
+    const initialWire = exportCommonsBootstrapForTest({
       steward: origin.vault.vault,
       identitySeed: origin.vault.identitySeed,
       stewardVaultId: origin.vaultId,
