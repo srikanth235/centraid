@@ -5,7 +5,7 @@
 // WHY a hand-rolled subset instead of onnxruntime-node's own types: that
 // package is deliberately NOT a dependency of this workspace package (see
 // runtime/package.json + src/onnx.ts) — it lives only in
-// tools/recognition-automations/runtime/node_modules, installed by `bun run
+// packages/model-runtime/runtime/node_modules, installed by `bun run
 // setup`, and is loaded there via a runtime `import()` resolved with
 // `createRequire`. TypeScript has no way to see that installation from this
 // package's own module graph, so `tsc -p tsconfig.json` (run WITHOUT setup

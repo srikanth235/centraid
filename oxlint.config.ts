@@ -148,7 +148,7 @@ export default defineConfig({
     "apps/web/src/generated/**",
     // Release-generated recognition bundles carry minified/transformed module
     // imports that are not authored lint input. Their source modules are
-    // linted under tools/recognition-automations and the emitted handlers have
+    // linted under packages/model-runtime and the emitted handlers have
     // manifest, behavior, and size conformance tests.
     "packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js",
     "packages/blueprints/automations/embed-image/automations/embed-image/handler.js",

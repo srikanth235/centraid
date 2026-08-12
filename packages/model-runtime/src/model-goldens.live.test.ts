@@ -21,7 +21,7 @@ import {
 
 const ROOT = path.resolve(import.meta.dirname, "../../..");
 const SAMPLE = path.join(ROOT, "packages/blueprints/apps/photos/sample");
-const FIXTURES = path.join(ROOT, "tools/recognition-automations/fixtures");
+const FIXTURES = path.join(ROOT, "packages/model-runtime/fixtures");
 
 async function imageItem(filename: string) {
   return {

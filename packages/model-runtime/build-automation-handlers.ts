@@ -39,7 +39,7 @@ const results = await Promise.all(
       splitting: false,
       sourcemap: "none",
       minify: true,
-      banner: `${handler.entrypoint.endsWith("photo-ocr.js") ? "// governance: allow-repo-hygiene file-size-limit (#731) the self-contained OCR/PDF handler is one deployable runtime unit; splitting its bundled model/runtime rail would duplicate the content-resolution and bounded-batch invariants.\n" : ""}// Generated recognition automation. Source: tools/recognition-automations/automation-handlers.\n`,
+      banner: `${handler.entrypoint.endsWith("photo-ocr.js") ? "// governance: allow-repo-hygiene file-size-limit (#731) the self-contained OCR/PDF handler is one deployable runtime unit; splitting its bundled model/runtime rail would duplicate the content-resolution and bounded-batch invariants.\n" : ""}// Generated recognition automation. Source: packages/model-runtime/automation-handlers.\n`,
     }),
   }))
 );

@@ -44,6 +44,7 @@ TARGETS=(
   packages/client
   packages/design
   packages/gateway
+  packages/model-runtime
   packages/protocol
   packages/test-kit
   packages/time-engine

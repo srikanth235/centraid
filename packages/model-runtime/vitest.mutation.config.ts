@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 /** Fast, fixture-free mutation root for tokenizer, CTC decoding, and NMS laws. */
 export default defineConfig({
   test: {
-    name: "@centraid/recognition-automations-mutation",
+    name: "@centraid/model-runtime-mutation",
     environment: "node",
     pool: "forks",
     include: ["src/tokenizer.test.ts", "src/ctc.test.ts", "src/nms.test.ts"],

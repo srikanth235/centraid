@@ -309,8 +309,8 @@ describe("enricher template hygiene", () => {
               PACKAGE_ROOT,
               "..",
               "..",
-              "tools",
-              "recognition-automations",
+              "packages",
+              "model-runtime",
               "automation-handlers",
               `${id}.js`
             )

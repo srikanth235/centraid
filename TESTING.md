@@ -195,7 +195,7 @@ Each tier makes a different claim. A higher tier does not retroactively turn jud
 | --- | --- | --- |
 | **PR** | Injected handler-model fixtures plus pure tokenizer, CTC, NMS, PDF/OCR, DB postprocess, and geometry units | Handler contracts, typed vault content/invoke flow, consent gating, honest local-asset unavailability, image/PDF OCR behavior, and deterministic preprocessing/postprocessing without weights or native ML dependencies in the root install. |
 | **Nightly** | Handler failure injection, scale rigs, and provenance/backfill selection properties | Volume correctness, drain invariants, failure isolation, and model-upgrade-as-backfill behavior. |
-| **Weekly / release opt-in live** | `bun run --cwd tools/recognition-automations setup`, then `bun run test:enrich:live` over pinned real weights and committed goldens | Actual tensor layouts and preprocessing: exact model pins, image/PDF OCR text with confidence/box tolerance, embedding cosine tolerance, face count/geometry tolerance, and lock/licence pin integrity. Run after model or preprocessing changes and before releases. |
+| **Weekly / release opt-in live** | `bun run --cwd packages/model-runtime setup`, then `bun run test:enrich:live` over pinned real weights and committed goldens | Actual tensor layouts and preprocessing: exact model pins, image/PDF OCR text with confidence/box tolerance, embedding cosine tolerance, face count/geometry tolerance, and lock/licence pin integrity. Run after model or preprocessing changes and before releases. |
 | **Never a CI gate** | OCR recall, cluster purity, search relevance, and other model-quality judgements | Dogfood evidence, not product law. Findings belong to the D2 ritual in [`docs/photos-dogfood.md`](docs/photos-dogfood.md), not a pass/fail assertion. |
 
 The weekly artifact has its own **eight-day freshness window** in the health report. An absent artifact renders grey/missing, never green; an artifact older than eight days renders stale. Scheduled failure or cancellation opens/updates the lane's tracking issue under the same response terms as the nightly SLA.
@@ -226,7 +226,7 @@ Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and ar
 | `packages/blueprints/src/**` | 90.68 / 78.27 | **90** / **75** |
 | `packages/blueprints/apps/photos/**` | 46.82 / 42.81 | **44** / **40** |
 | `_shared` + non-graduated blueprint apps | 22.53 / 16.92 | **20** / **14** |
-| `tools/recognition-automations/src/**` | 68.01 / 51.44 | **66** / **49** |
+| `packages/model-runtime/src/**` | 68.01 / 51.44 | **66** / **49** |
 | `packages/design/kit/**` | 49.56 / 37.27 | **49** / **37** |
 | `packages/design/src/**` | 99.03 / 71.42 | **98** / **70** |
 | `packages/app-engine/src/**` | 85.45 / 74.44 | **84** / **73** |
@@ -241,7 +241,7 @@ Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and ar
 | `packages/protocol/src/**` | 100.00 / 98.59 | **98** / **96** |
 | `apps/oauth-worker/src/**` | 90.65 / 84.23 | **88** / **82** |
 
-The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/design/kit`. Issue #725 graduates Photos to its own scope; the remaining blend covers `_shared` and the seven apps without graduation tables yet. The split is measured on the complete 2026-08-08 run, with the down-only change from the old 17/12 blend documented in `tests/coverage-floors.json`. Real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here. The `tools/recognition-automations` scope covers recognition model/build sources; its live model lane is intentionally separate from PR coverage.
+The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/design/kit`. Issue #725 graduates Photos to its own scope; the remaining blend covers `_shared` and the seven apps without graduation tables yet. The split is measured on the complete 2026-08-08 run, with the down-only change from the old 17/12 blend documented in `tests/coverage-floors.json`. Real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here. The `packages/model-runtime` scope covers recognition model/build sources; its live model lane is intentionally separate from PR coverage.
 
 `bun run test` prints the active floors after package tests so the local loop never hides the CI contract; `bun run coverage` measures and enforces them. Floors move only upward (`bun run test:ratchet`).
 

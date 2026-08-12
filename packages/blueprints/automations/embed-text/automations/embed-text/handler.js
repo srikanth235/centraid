@@ -1,4 +1,4 @@
-// Generated recognition automation. Source: tools/recognition-automations/automation-handlers.
+// Generated recognition automation. Source: packages/model-runtime/automation-handlers.
 import { existsSync as qv } from "node:fs";
 import { readFile as x } from "node:fs/promises";
 import w from "node:path";
@@ -17,8 +17,8 @@ class A extends Error {
   constructor(v, B) {
     super(
       `Automation model runtime dependency "${v}" is not installed. ` +
-        'Run "bun run --cwd tools/recognition-automations setup" first — it installs ' +
-        "optional native recognition dependencies into tools/recognition-automations/runtime/ and downloads the model weights those capabilities need.",
+        'Run "bun run --cwd packages/model-runtime setup" first — it installs ' +
+        "optional native recognition dependencies into packages/model-runtime/runtime/ and downloads the model weights those capabilities need.",
       { cause: B }
     );
     this.name = "RuntimeNotInstalledError";

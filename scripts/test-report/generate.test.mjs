@@ -221,7 +221,7 @@ describe("evidence freshness", () => {
   test("keeps weekly real-model evidence fresh for eight days", () => {
     const root = makeFixtureRoot();
     const livePath = writeJson(root, "in/enrichment-live.json", {
-      owner: "tools/recognition-automations/src/model-goldens.live.test.ts",
+      owner: "packages/model-runtime/src/model-goldens.live.test.ts",
       lane: "enrichment-live",
       status: "passed",
       capturedAt: new Date(
@@ -235,7 +235,7 @@ describe("evidence freshness", () => {
   test("marks real-model evidence stale after eight days", () => {
     const root = makeFixtureRoot();
     const livePath = writeJson(root, "in/enrichment-live.json", {
-      owner: "tools/recognition-automations/src/model-goldens.live.test.ts",
+      owner: "packages/model-runtime/src/model-goldens.live.test.ts",
       lane: "enrichment-live",
       status: "passed",
       capturedAt: new Date(

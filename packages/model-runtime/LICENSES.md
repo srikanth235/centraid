@@ -16,7 +16,7 @@ The issue's brief named MobileCLIP as the preferred OpenCLIP-family model. Check
 
 ## Runtime dependencies (not models, but also worth recording here)
 
-`tools/recognition-automations/runtime/package.json` pins `onnxruntime-node` (MIT, Microsoft), `sharp` (Apache-2.0), `@napi-rs/canvas` (MIT), `pdfjs-dist` (Apache-2.0), `@huggingface/transformers` (Apache-2.0), and `@ffmpeg-installer/ffmpeg` (LGPL-2.1). These are optional local execution dependencies rather than dependencies of this workspace package itself; see `runtime/package.json` and `src/onnx.ts` for why.
+`packages/model-runtime/runtime/package.json` pins `onnxruntime-node` (MIT, Microsoft), `sharp` (Apache-2.0), `@napi-rs/canvas` (MIT), `pdfjs-dist` (Apache-2.0), `@huggingface/transformers` (Apache-2.0), and `@ffmpeg-installer/ffmpeg` (LGPL-2.1). These are optional local execution dependencies rather than dependencies of this workspace package itself; see `runtime/package.json` and `src/onnx.ts` for why.
 
 ## Live-test fixture
 

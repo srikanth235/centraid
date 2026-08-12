@@ -28,7 +28,7 @@ export const coverageProjects = [
   ...mobileVitestProjects,
   "apps/oauth-worker",
   "apps/web",
-  "tools/recognition-automations",
+  "packages/model-runtime",
 ];
 
 // What v8 instruments. Shared with the diff-coverage config so a scoped run
@@ -36,7 +36,6 @@ export const coverageProjects = [
 export const coverageInclude = [
   "packages/*/src/**/*.{ts,tsx,js,jsx,mjs,cjs}",
   "apps/*/src/**/*.{ts,tsx,js,jsx,mjs,cjs}",
-  "tools/*/src/**/*.{ts,tsx,js,jsx,mjs,cjs}",
   // Bundled apps and their shared browser runtime are production code
   // co-located outside packages/blueprints/src (issue #630 Wave 0).
   "packages/blueprints/apps/**/*.{ts,tsx}",

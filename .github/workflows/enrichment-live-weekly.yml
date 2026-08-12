@@ -25,21 +25,21 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            tools/recognition-automations/runtime/node_modules
-            tools/recognition-automations/runtime/bun.lock
-            tools/recognition-automations/runtime/models
-          key: enrichment-models-${{ runner.os }}-${{ hashFiles('tools/recognition-automations/models.lock.json', 'tools/recognition-automations/runtime/package.json') }}
+            packages/model-runtime/runtime/node_modules
+            packages/model-runtime/runtime/bun.lock
+            packages/model-runtime/runtime/models
+          key: enrichment-models-${{ runner.os }}-${{ hashFiles('packages/model-runtime/models.lock.json', 'packages/model-runtime/runtime/package.json') }}
       - name: Install and verify pinned model runtime
-        run: bun run --cwd tools/recognition-automations setup
+        run: bun run --cwd packages/model-runtime setup
       - name: Save pinned model runtime
         if: steps.model_cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            tools/recognition-automations/runtime/node_modules
-            tools/recognition-automations/runtime/bun.lock
-            tools/recognition-automations/runtime/models
-          key: enrichment-models-${{ runner.os }}-${{ hashFiles('tools/recognition-automations/models.lock.json', 'tools/recognition-automations/runtime/package.json') }}
+            packages/model-runtime/runtime/node_modules
+            packages/model-runtime/runtime/bun.lock
+            packages/model-runtime/runtime/models
+          key: enrichment-models-${{ runner.os }}-${{ hashFiles('packages/model-runtime/models.lock.json', 'packages/model-runtime/runtime/package.json') }}
       - name: Run capability handshake and real-weight goldens
         run: bun run test:enrich:live
       - name: Upload real-model evidence

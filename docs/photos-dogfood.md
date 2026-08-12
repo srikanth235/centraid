@@ -49,7 +49,7 @@ Run this motion:
    - [ ] Key photo appears on the Collection tile.
    - [ ] Offline, the cached key photo still renders.
 
-9. **Recognition automations.** Install the optional local model runtime and weights (`bun run --cwd tools/recognition-automations setup`), then run the gateway normally. Verify:
+9. **Recognition automations.** Install the optional local model runtime and weights (`bun run --cwd packages/model-runtime setup`), then run the gateway normally. Verify:
    - [ ] OCR an image of a receipt or sign, then search for a word from it — the text hit appears once the OCR automation has run.
    - [ ] OCR a PDF with embedded text and a scanned PDF; both become searchable, with rendered-page OCR used only where a text layer is absent.
    - [ ] Missing assets or an OCR model error produces a visible failed automation turn rather than a stuck spinner.

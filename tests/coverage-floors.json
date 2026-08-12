@@ -17,7 +17,7 @@
     "lines": 20,
     "branches": 14
   },
-  "tools/recognition-automations/src/**": { "lines": 66, "branches": 49 },
+  "packages/model-runtime/src/**": { "lines": 66, "branches": 49 },
   "packages/design/kit/**": { "lines": 49, "branches": 37 },
   "packages/client/src/replica/**": { "lines": 75, "branches": 62 },
   "packages/client/src/*.{ts,tsx}": { "lines": 78, "branches": 65 },

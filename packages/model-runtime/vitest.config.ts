@@ -4,7 +4,7 @@ import { nodeProject } from "@centraid/test-kit/vitest";
 // separately invoked weekly/manual vitest.live.config.ts lane.
 export default nodeProject({
   test: {
-    name: "@centraid/recognition-automations",
+    name: "@centraid/model-runtime",
     include: ["src/**/*.test.ts"],
     exclude: ["src/**/*.live.test.ts"],
   },

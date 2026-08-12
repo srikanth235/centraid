@@ -3,7 +3,7 @@ import { readFile as MK } from "node:fs/promises";
 import T from "node:path";
 import M from "node:path";
 // governance: allow-repo-hygiene file-size-limit (#731) the self-contained OCR/PDF handler is one deployable runtime unit; splitting its bundled model/runtime rail would duplicate the content-resolution and bounded-batch invariants.
-// Generated recognition automation. Source: tools/recognition-automations/automation-handlers.
+// Generated recognition automation. Source: packages/model-runtime/automation-handlers.
 import { pathToFileURL as xK } from "node:url";
 var LK = M.resolve(import.meta.dirname, ".."),
   w = process.env.CENTRAID_AUTOMATION_RUNTIME_DIR
@@ -163,8 +163,8 @@ class P extends Error {
   constructor(K, Q) {
     super(
       `Automation model runtime dependency "${K}" is not installed. ` +
-        'Run "bun run --cwd tools/recognition-automations setup" first — it installs ' +
-        "optional native recognition dependencies into tools/recognition-automations/runtime/ and downloads the model weights those capabilities need.",
+        'Run "bun run --cwd packages/model-runtime setup" first — it installs ' +
+        "optional native recognition dependencies into packages/model-runtime/runtime/ and downloads the model weights those capabilities need.",
       { cause: Q }
     );
     this.name = "RuntimeNotInstalledError";

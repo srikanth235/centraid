@@ -6,7 +6,7 @@ const root = path.resolve(import.meta.dirname, "../..");
 const started = Date.now();
 const result = spawnSync(
   "bun",
-  ["run", "--cwd", "tools/recognition-automations", "test:live"],
+  ["run", "--cwd", "packages/model-runtime", "test:live"],
   { cwd: root, stdio: "inherit" }
 );
 const passed = result.status === 0;
@@ -16,7 +16,7 @@ writeFileSync(
   path.join(artifactDir, "result.json"),
   `${JSON.stringify(
     {
-      owner: "tools/recognition-automations/src/model-goldens.live.test.ts",
+      owner: "packages/model-runtime/src/model-goldens.live.test.ts",
       lane: "enrichment-live",
       status: passed ? "passed" : "failed",
       capturedAt: new Date().toISOString(),

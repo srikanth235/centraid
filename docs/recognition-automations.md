@@ -14,7 +14,7 @@ Each recognition handler owns its complete recognition flow. It:
 
 There is no enrichment HTTP service, gateway model client, reserved `centraid://enrichment/*` fetch, `ctx.enrich`, or `ctx.infer`. `ctx.fetch` remains connector-only. Apps do not call models: they enqueue consent-scoped work when required and read the projections the automations populate.
 
-The source modules live under [`tools/recognition-automations/automation-handlers`](../tools/recognition-automations/automation-handlers) for build-time reuse. [`build-automation-handlers.ts`](../tools/recognition-automations/build-automation-handlers.ts) bundles Centraid-authored modules into each shipped blueprint handler under [`packages/blueprints/automations`](../packages/blueprints/automations). Large third-party packages such as PDF.js remain in the single version-locked recognition runtime rather than being duplicated into handler source.
+The source modules live under [`packages/model-runtime/automation-handlers`](../packages/model-runtime/automation-handlers) for build-time reuse. [`build-automation-handlers.ts`](../packages/model-runtime/build-automation-handlers.ts) bundles Centraid-authored modules into each shipped blueprint handler under [`packages/blueprints/automations`](../packages/blueprints/automations). Large third-party packages such as PDF.js remain in the single version-locked recognition runtime rather than being duplicated into handler source.
 
 ## Content and result flow
 
@@ -37,12 +37,12 @@ OCR accepts both image media types and `application/pdf`. For a PDF, the handler
 The repository does not commit model weights or native ML packages. Run:
 
 ```sh
-bun run --cwd tools/recognition-automations setup
+bun run --cwd packages/model-runtime setup
 ```
 
-The setup command installs runtime dependencies—including PDF.js and its adjacent worker—into the non-workspace `tools/recognition-automations/runtime/` directory and downloads pinned model files beneath `runtime/models/`. Generated handlers resolve assets from their local `runtime/` by default; `CENTRAID_AUTOMATION_RUNTIME_DIR` may point them at another local asset directory. This variable selects files only—nothing listens on a socket and no inference request crosses a process boundary.
+The setup command installs runtime dependencies—including PDF.js and its adjacent worker—into the non-workspace `packages/model-runtime/runtime/` directory and downloads pinned model files beneath `runtime/models/`. Generated handlers resolve assets from their local `runtime/` by default; `CENTRAID_AUTOMATION_RUNTIME_DIR` may point them at another local asset directory. This variable selects files only—nothing listens on a socket and no inference request crosses a process boundary.
 
-Model versions, hashes, licences, and sources are recorded in [`tools/recognition-automations/LICENSES.md`](../tools/recognition-automations/LICENSES.md) and `models.lock.json`. A root `bun install` does not pull the optional native dependencies.
+Model versions, hashes, licences, and sources are recorded in [`packages/model-runtime/LICENSES.md`](../packages/model-runtime/LICENSES.md) and `models.lock.json`. A root `bun install` does not pull the optional native dependencies.
 
 ## Scheduling, consent, and provenance
 
@@ -57,7 +57,7 @@ Only `photo-ocr` has an optional delegate step. It uses `ctx.delegate` through t
 PR tests inject model functions into the bundled handler sources and exercise pure tokenizer, CTC, geometry, postprocessing, cursor, consent, and typed-command behavior without installing native dependencies or weights. The weekly/release live lane uses pinned real weights and committed fixtures:
 
 ```sh
-bun run --cwd tools/recognition-automations setup
+bun run --cwd packages/model-runtime setup
 bun run test:enrich:live
 ```
 
@@ -68,4 +68,4 @@ The live suite checks OCR image and PDF behavior, embedding cosine tolerances, f
 - [`ARCHITECTURE.md`](../ARCHITECTURE.md) — runtime placement and automation lifecycle.
 - [`docs/photos-derived-ledger.md`](photos-derived-ledger.md) — vault provenance, semantic search, faces, and backfill.
 - [`docs/blueprint-seats.md`](blueprint-seats.md) — the app/automation model-access doctrine.
-- [`tools/recognition-automations/README.md`](../tools/recognition-automations/README.md) — build and asset setup commands.
+- [`packages/model-runtime/README.md`](../packages/model-runtime/README.md) — build and asset setup commands.

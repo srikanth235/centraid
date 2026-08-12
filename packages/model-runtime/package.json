@@ -1,13 +1,13 @@
 {
-  "name": "@centraid/recognition-automations",
+  "name": "@centraid/model-runtime",
   "version": "0.1.0",
   "private": true,
-  "description": "Build-time source and local model assets for Centraid's self-contained recognition automation handlers. No server or inference service.",
+  "description": "Local model runtime: pinned model assets, native inference dependencies, and the build-time sources for Centraid's self-contained recognition automation handlers. No server or inference service.",
   "license": "SEE LICENSE IN REPOSITORY",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/srikanth235/centraid.git",
-    "directory": "tools/recognition-automations"
+    "directory": "packages/model-runtime"
   },
   "type": "module",
   "scripts": {

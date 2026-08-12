@@ -1,10 +1,10 @@
 # coverage-scope-reachability — gated runtime scopes must stay visible to
-# coverage floors / matrix ownership (#532, #630, #725).
+# coverage floors / matrix ownership (#532, #630, #725, #753).
 category: Testing
 recommended: true
 summary: |
-  Every top-level package, app, or tool under packages/*/src, apps/*/src, or
-  tools/*/src that contains non-test TypeScript source, plus the non-standard executable
+  Every top-level package or app under packages/*/src or apps/*/src that
+  contains non-test TypeScript source, plus the non-standard executable
   packages/blueprints/apps and packages/design/kit roots, must either
   (a) be covered by a coverage-floors.json glob, (b) own at least one
   tests/matrix.json flow, or (c) be listed in this directive's
@@ -13,8 +13,8 @@ summary: |
   every coverage ratchet.
 
   Additionally, every coverage-floors.json glob key must still match the
-  vitest coverage include patterns (packages/*/src/**, apps/*/src/**,
-  tools/*/src/**, and both blueprint runtime roots) so a floor cannot point at a scope the coverage
+  vitest coverage include patterns (packages/*/src/**, apps/*/src/**, and both
+  blueprint runtime roots) so a floor cannot point at a scope the coverage
   tool never instruments.
 surface: repo-state
 hook: pre-commit

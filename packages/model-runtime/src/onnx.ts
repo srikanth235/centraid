@@ -8,7 +8,7 @@ import { RUNTIME_DIR } from "./config.js";
 // WHY this indirection instead of `import "onnxruntime-node"` at the top of
 // the file: onnxruntime-node is NOT a dependency of this workspace package
 // (see runtime/package.json and the file header there) — it is installed
-// only into tools/recognition-automations/runtime/node_modules by `bun run
+// only into packages/model-runtime/runtime/node_modules by `bun run
 // setup`. A static import would make onnxruntime-node resolvable from this
 // package's own module graph, which defeats the entire point of the split
 // (a root `bun install` must never need it). Every capability module goes
@@ -29,8 +29,8 @@ export class RuntimeNotInstalledError extends Error {
   constructor(specifier: string, cause?: unknown) {
     super(
       `Automation model runtime dependency "${specifier}" is not installed. ` +
-        `Run "bun run --cwd tools/recognition-automations setup" first — it installs ` +
-        `optional native recognition dependencies into tools/recognition-automations/runtime/ and ` +
+        `Run "bun run --cwd packages/model-runtime setup" first — it installs ` +
+        `optional native recognition dependencies into packages/model-runtime/runtime/ and ` +
         "downloads the model weights those capabilities need.",
       { cause }
     );
@@ -39,7 +39,7 @@ export class RuntimeNotInstalledError extends Error {
 }
 
 /**
- * Resolves a package by name from tools/recognition-automations/runtime/, the
+ * Resolves a package by name from packages/model-runtime/runtime/, the
  * non-workspace directory `bun run setup` installs into. Throws
  * RuntimeNotInstalledError (with a "run setup first" message) when the
  * runtime dependency tree or the named package isn't there yet.

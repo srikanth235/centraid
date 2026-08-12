@@ -65,15 +65,15 @@ describe("run", () => {
 });
 
 describe("workspaceDirOf", () => {
-  test("maps packages/, apps/, and tools/ sources to their workspace dir", () => {
+  test("maps packages/ and apps/ sources to their workspace dir", () => {
     expect(workspaceDirOf("packages/gateway/src/serve/build-gateway.ts")).toBe(
       "packages/gateway"
     );
     expect(workspaceDirOf("apps/mobile/src/lib/upload/enqueue.ts")).toBe(
       "apps/mobile"
     );
-    expect(workspaceDirOf("tools/recognition-automations/src/ctc.ts")).toBe(
-      "tools/recognition-automations"
+    expect(workspaceDirOf("packages/model-runtime/src/ctc.ts")).toBe(
+      "packages/model-runtime"
     );
     expect(
       workspaceDirOf("packages/blueprints/apps/tasks/handlers/create.ts")
