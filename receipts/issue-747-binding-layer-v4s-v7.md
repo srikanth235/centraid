@@ -340,6 +340,11 @@ rg -c -- '--t-mono-size' packages apps scripts DESIGN.md   # no matches
 
 # The whole push-tier gate.
 bun run check:push
+
+# The lockfile must already agree with the four withdrawn font deps. CI
+# installs with --frozen-lockfile, so drift here fails every job at setup
+# rather than in a test — which is how it was caught (PR #755, first run).
+bun install --frozen-lockfile
 ```
 
 ### Checklist crosswalk
