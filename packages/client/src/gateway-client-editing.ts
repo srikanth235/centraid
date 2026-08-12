@@ -37,8 +37,8 @@ import {
 // One open editing session per app id, opened lazily and reused across
 // reads / writes / lifecycle mutations / publish. The id scheme matches
 // the main process's `app-sessions.ts` (`desktop-<appId>`) ON PURPOSE:
-// the local-only builder agent edits the same `desktop-<appId>` worktree,
-// so the renderer and the agent share one draft. Whoever opens the session
+// the local-only builder harness edits the same `desktop-<appId>` worktree,
+// so the renderer and the harness share one draft. Whoever opens the session
 // first wins; the other reuses it (a re-open of the same id 409s, which we
 // treat as success).
 const appSessions = new Map<string, Promise<string>>();
@@ -69,7 +69,7 @@ async function openAppSession(sessionId: string): Promise<string> {
 
 /**
  * Get the open session id for an app, opening one if needed. Concurrent
- * callers share the in-flight open; a 409 (the main-side agent already
+ * callers share the in-flight open; a 409 (the main-side harness already
  * opened this id) is treated as success — the worktree exists, which is
  * all we need. A rejected cached open is evicted so the next call retries.
  */

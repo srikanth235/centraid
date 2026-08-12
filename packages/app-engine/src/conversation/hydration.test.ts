@@ -25,7 +25,7 @@ async function newHistory(): Promise<ConversationHistoryStore> {
     appsDir,
     journal,
     journalDbFile,
-    runnerSessionDir: path.join(dir, "runner-sessions"),
+    harnessSessionDir: path.join(dir, "harness-sessions"),
   }));
 }
 
@@ -144,7 +144,7 @@ describe(compileHydrationPlan, () => {
     expect(plan.prompt).not.toContain("large tool output must not cross");
   });
 
-  it("projects only completed turns past a runner watermark", () => {
+  it("projects only completed turns past a harness watermark", () => {
     const turns = [
       {
         turnId: "old",

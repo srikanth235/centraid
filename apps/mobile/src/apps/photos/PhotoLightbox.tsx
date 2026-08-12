@@ -219,7 +219,7 @@ export default function PhotoLightbox({
           setResidentAssetId(
             items.some(
               (item) =>
-                item.itemType === "media.media_asset" && item.itemId === itemId
+                item.itemType === "media.asset" && item.itemId === itemId
             )
               ? itemId
               : undefined
@@ -329,7 +329,7 @@ export default function PhotoLightbox({
     if (!session || !kind || !current?.assetId || !sourceVaultId) return;
     const result = await session.place({
       kind,
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemId: current.assetId,
       sourceVaultId,
       targetVaultId,
@@ -350,7 +350,7 @@ export default function PhotoLightbox({
     try {
       await retainCommonsItem(gatewayBase, {
         actorVaultId,
-        itemType: "media.media_asset",
+        itemType: "media.asset",
         itemId: current.assetId,
       });
       setResidentAssetId(undefined);
@@ -476,7 +476,7 @@ export default function PhotoLightbox({
       [
         {
           op: "upsert",
-          entity: "media.media_asset",
+          entity: "media.asset",
           rowId: current.assetId,
           values: { archived_at: hiding ? new Date().toISOString() : null },
         },
@@ -511,7 +511,7 @@ export default function PhotoLightbox({
             void writeReason("delete-asset", { asset_id: assetId }, [
               {
                 op: "upsert",
-                entity: "media.media_asset",
+                entity: "media.asset",
                 rowId: assetId,
                 values: { deleted_at: new Date().toISOString() },
               },
@@ -801,7 +801,7 @@ export default function PhotoLightbox({
               [
                 {
                   op: "upsert",
-                  entity: "media.media_asset",
+                  entity: "media.asset",
                   rowId: current.assetId!,
                   values: { title: caption },
                 },
@@ -813,7 +813,7 @@ export default function PhotoLightbox({
             void writeReason("set-place", { asset_id: current.assetId! }, [
               {
                 op: "upsert",
-                entity: "media.media_asset",
+                entity: "media.asset",
                 rowId: current.assetId!,
                 values: { place_id: null },
               },

@@ -1,10 +1,10 @@
 /**
  * Audit-row helpers for automation handler runs (issue #80).
  *
- * Split out of `runner.ts` so the runner stays
+ * Split out of `runner.ts` so the handler orchestrator stays
  * focused on worker/message orchestration. Everything here is
  * pure-ish — the only side-effect surface is the supplied
- * `AgentRunsStore` reference.
+ * `AutomationRunsStore` reference.
  */
 
 import { randomUUID } from "node:crypto";
@@ -157,14 +157,14 @@ export interface OpenRunNodeArgs {
   /** The turn this item belongs to. */
   runId: string;
   ordinal: number;
-  /** Stable runner-native correlation key for overlapping tool calls. */
+  /** Stable harness-native correlation key for overlapping tool calls. */
   callId?: string;
   batchId?: number;
   kind: ItemKind;
-  /** Tool name or `'agent'`. */
+  /** Tool name or `'delegate'`. */
   name?: string;
   args?: unknown;
-  /** Lossless runner event envelope, when one exists. */
+  /** Lossless harness event envelope, when one exists. */
   rawJson?: string;
   started: number;
 }
@@ -215,21 +215,21 @@ export function openRunNode(args: OpenRunNodeArgs): string {
 
 /**
  * Map a chat `usage` event (issue #158, Phase 2) onto the token/model fields
- * `closeRunNode` persists. Returns `{}` when no usage was observed (a runner
+ * `closeRunNode` persists. Returns `{}` when no usage was observed (a harness
  * still on the collect-on-exit path).
  */
 export function usageCloseFields(
   usage: Extract<TurnStreamEvent, { type: "usage" }> | undefined
 ): Partial<CloseRunNodeArgs> {
   if (!usage) return {};
-  // Prefer agent cost when present; catalog fill happens in closeRunNode when
+  // Prefer harness cost when present; catalog fill happens in closeRunNode when
   // tokens exist but cost does not (issue #514).
   const costSource =
     usage.costSource ??
-    (usage.costUsd === undefined ? undefined : ("agent" as const));
+    (usage.costUsd === undefined ? undefined : ("harness" as const));
   return {
     ...(usage.model === undefined ? {} : { model: usage.model }),
-    ...(usage.provider === undefined ? {} : { provider: usage.provider }),
+    ...(usage.harness === undefined ? {} : { harness: usage.harness }),
     ...(usage.inputTokens === undefined
       ? {}
       : { inputTokens: usage.inputTokens }),
@@ -255,25 +255,25 @@ export interface CloseRunNodeArgs {
   callId?: string;
   ok: boolean;
   result?: unknown;
-  /** Lossless runner completion envelope, when one exists. */
+  /** Lossless harness completion envelope, when one exists. */
   rawJson?: string;
   error?: string;
-  /** Child turn id for an item that spawned a sub-agent. Dormant — no current producer. */
+  /** Child turn id for an item that spawned a child turn. Dormant — no current producer. */
   childTurnId?: string;
   started: number;
   ended: number;
   /**
-   * Token/model rollup for an `agent` node (issue #158, Phase 2). Learned at
-   * end-of-turn from the chat adapter's `usage` event; feeds `runs.total_*`.
+   * Token/model rollup for a `delegate` node (issue #158, Phase 2). Learned at
+   * end-of-turn from the turn plane's `usage` event; feeds `runs.total_*`.
    */
   model?: string;
-  provider?: string;
+  harness?: string;
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
   costUsd?: number;
-  costSource?: "agent" | "estimated";
+  costSource?: "harness" | "estimated";
 }
 
 /**
@@ -303,14 +303,14 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
       : { cacheWriteTokens: args.cacheWriteTokens }),
   };
   const priced =
-    args.costSource === "agent" && args.costUsd !== undefined
-      ? { costUsd: args.costUsd, costSource: "agent" as const }
+    args.costSource === "harness" && args.costUsd !== undefined
+      ? { costUsd: args.costUsd, costSource: "harness" as const }
       : args.costSource === "estimated" && args.costUsd !== undefined
         ? { costUsd: args.costUsd, costSource: "estimated" as const }
         : resolveItemCost({
             ...(args.costUsd === undefined
               ? {}
-              : { agentCostUsd: args.costUsd }),
+              : { harnessCostUsd: args.costUsd }),
             model: args.model,
             usage,
           });
@@ -327,7 +327,7 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
       endedAt: args.ended,
       durationMs,
       ...(args.model === undefined ? {} : { model: args.model }),
-      ...(args.provider === undefined ? {} : { provider: args.provider }),
+      ...(args.harness === undefined ? {} : { harness: args.harness }),
       ...(args.inputTokens === undefined
         ? {}
         : { inputTokens: args.inputTokens }),

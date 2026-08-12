@@ -1,25 +1,31 @@
 /*
- * Runner-core: per-subsystem runner selection + session-resume gating.
+ * Runner-core: per-subsystem harness selection + session-resume gating.
  *
  * The spine resolves prefs PER TURN via the injected `prefsLoader`, and the
  * register's `subsystem` tag rides along on every call. That's what makes
- * per-subsystem runner selection work without restructuring the boot-time
- * wiring: a host builds one runner per register at boot, but neither the
- * runner kind nor the model is chosen until the turn actually runs.
+ * per-subsystem harness selection work without restructuring the boot-time
+ * wiring: a host builds one harness per register at boot, but neither the
+ * harness kind nor the model is chosen until the turn actually runs.
  */
 
 import { describe, expect, it, vi } from "vitest";
 
 import type { Dispatcher } from "../handlers/dispatcher.js";
 import type { ModelSubsystem } from "../stores/prefs-store.js";
+import type { ProviderEgressConsentController } from "./provider-egress-consent.js";
 import { makeConversationRunnerCore } from "./runner-core.js";
 import type { ConversationRunnerCoreOptions } from "./runner-core.js";
 import type { ConversationTurnInput } from "./runner.js";
-import type { RunnerPrefs, RunTurnFn, TurnInput } from "./turn.js";
+import type { HarnessPrefs, RunTurnFn, TurnInput } from "./turn.js";
 
 type PrefsLoader = ConversationRunnerCoreOptions["prefsLoader"];
 
 const dispatcher = {} as Dispatcher;
+const allowProviderEgress: ProviderEgressConsentController = {
+  has: () => true,
+  grant: () => undefined,
+  revoke: () => undefined,
+};
 
 function turnInput(
   over: Partial<ConversationTurnInput> = {}
@@ -42,17 +48,32 @@ function build(opts: { prefsLoader: PrefsLoader; subsystem?: ModelSubsystem }) {
   const seen: TurnInput[] = [];
   const runTurn = vi.fn<RunTurnFn>(async (input) => {
     seen.push(input);
-    return { adapterKind: "codex", sessionId: "new-session" };
+    return { harnessKind: "codex", sessionId: "new-session" };
   });
   const runner = makeConversationRunnerCore({
     prefsLoader: opts.prefsLoader,
     ...(opts.subsystem ? { subsystem: opts.subsystem } : {}),
     getDispatcher: () => dispatcher,
+    providerEgressConsent: allowProviderEgress,
     resolveCwd: (input) => input.dataDir,
     runTurn,
   });
   return { runner, seen, runTurn };
 }
+
+describe("makeConversationRunnerCore — provider-egress boundary", () => {
+  it("fails closed when a host omits the provider-egress controller", () => {
+    expect(() =>
+      makeConversationRunnerCore({
+        prefsLoader: async () => ({ kind: "codex" }),
+        getDispatcher: () => dispatcher,
+        providerEgressConsent: undefined as never,
+        resolveCwd: (input) => input.dataDir,
+        runTurn: async () => ({ harnessKind: "codex" }),
+      })
+    ).toThrow("requires provider-egress consent");
+  });
+});
 
 describe("makeConversationRunnerCore — per-subsystem prefs loading", () => {
   it("passes the register's subsystem to the prefs loader on every turn", async () => {
@@ -84,8 +105,8 @@ describe("makeConversationRunnerCore — per-subsystem prefs loading", () => {
     expect(prefsLoader).toHaveBeenCalledWith(undefined);
   });
 
-  it("picks up a runner re-pin mid-session, with no restart", async () => {
-    let kind: RunnerPrefs["kind"] = "codex";
+  it("picks up a harness re-pin mid-session, with no restart", async () => {
+    let kind: HarnessPrefs["kind"] = "codex";
     const { runner, runTurn } = build({
       prefsLoader: async () => ({ kind }),
       subsystem: "assistant",
@@ -96,7 +117,7 @@ describe("makeConversationRunnerCore — per-subsystem prefs loading", () => {
       prefs: { kind: "codex" },
     });
 
-    // The owner re-pins `runner.assistant` between turns.
+    // The owner re-pins `harness.assistant` between turns.
     kind = "claude-code";
     await runner.run(turnInput());
     expect(runTurn.mock.calls[1]![1]).toStrictEqual({
@@ -104,9 +125,9 @@ describe("makeConversationRunnerCore — per-subsystem prefs loading", () => {
     });
   });
 
-  it("lets a validated automation turn override only the loaded runner kind", async () => {
+  it("lets a validated automation turn override only the loaded harness kind", async () => {
     const prefsLoader = vi.fn<PrefsLoader>(
-      async (_subsystem?: ModelSubsystem, requested?: RunnerPrefs["kind"]) =>
+      async (_subsystem?: ModelSubsystem, requested?: HarnessPrefs["kind"]) =>
         requested === "claude-code"
           ? {
               kind: "claude-code" as const,
@@ -121,7 +142,7 @@ describe("makeConversationRunnerCore — per-subsystem prefs loading", () => {
     });
 
     await runner.run(
-      turnInput({ runnerKind: "claude-code", model: "claude-custom" })
+      turnInput({ harnessKind: "claude-code", model: "claude-custom" })
     );
 
     expect(runTurn.mock.calls[0]![1]).toStrictEqual({
@@ -135,7 +156,7 @@ describe("makeConversationRunnerCore — per-subsystem prefs loading", () => {
     expect(runTurn.mock.calls[0]![0].model).toBe("claude-custom");
   });
 
-  it("drops another runner's launch settings when a legacy loader ignores the override", async () => {
+  it("drops another harness's launch settings when a legacy loader ignores the override", async () => {
     const { runner, runTurn } = build({
       prefsLoader: async () => ({
         kind: "codex",
@@ -145,7 +166,7 @@ describe("makeConversationRunnerCore — per-subsystem prefs loading", () => {
       subsystem: "automations",
     });
 
-    await runner.run(turnInput({ runnerKind: "claude-code" }));
+    await runner.run(turnInput({ harnessKind: "claude-code" }));
 
     expect(runTurn.mock.calls[0]![1]).toStrictEqual({
       prefs: { kind: "claude-code" },
@@ -154,13 +175,14 @@ describe("makeConversationRunnerCore — per-subsystem prefs loading", () => {
 });
 
 describe("makeConversationRunnerCore — hydration accounting", () => {
-  it("returns the estimated tokens of the plan the backend actually consumed", async () => {
+  it("returns the estimated tokens of the plan the harness actually consumed", async () => {
     const runner = makeConversationRunnerCore({
       prefsLoader: async () => ({ kind: "codex" }),
       getDispatcher: () => dispatcher,
+      providerEgressConsent: allowProviderEgress,
       resolveCwd: (input) => input.dataDir,
       runTurn: async () => ({
-        adapterKind: "codex",
+        harnessKind: "codex",
         sessionId: "fresh",
         hydrated: true,
         hydrationKind: "recovery",
@@ -168,8 +190,8 @@ describe("makeConversationRunnerCore — hydration accounting", () => {
     });
     const result = await runner.run(
       turnInput({
-        prevAdapterKind: "codex",
-        prevAdapterSessionId: "expired",
+        prevHarnessKind: "codex",
+        prevHarnessSessionId: "expired",
         hydrationContext: {
           prompt: "delta",
           includedTurns: 1,
@@ -192,7 +214,7 @@ describe("makeConversationRunnerCore — hydration accounting", () => {
 });
 
 describe("makeConversationRunnerCore — session resume gating", () => {
-  it("resumes when the previous turn used the same runner kind", async () => {
+  it("resumes when the previous turn used the same harness kind", async () => {
     const { runner, seen } = build({
       prefsLoader: async () => ({ kind: "codex" }),
       subsystem: "assistant",
@@ -200,8 +222,8 @@ describe("makeConversationRunnerCore — session resume gating", () => {
 
     await runner.run(
       turnInput({
-        prevAdapterKind: "codex",
-        prevAdapterSessionId: "thread-abc",
+        prevHarnessKind: "codex",
+        prevHarnessSessionId: "thread-abc",
       })
     );
 
@@ -220,19 +242,19 @@ describe("makeConversationRunnerCore — session resume gating", () => {
 
     await runner.run(
       turnInput({
-        prevAdapterKind: "codex",
-        prevAdapterSessionId: "thread-abc",
-        prevAdapterUsageSnapshot: snapshot,
+        prevHarnessKind: "codex",
+        prevHarnessSessionId: "thread-abc",
+        prevHarnessUsageSnapshot: snapshot,
       })
     );
 
     expect(seen[0]!.prevUsageSnapshot).toStrictEqual(snapshot);
   });
 
-  it("invalidates the session when the subsystem's runner has changed", async () => {
+  it("invalidates the session when the subsystem's harness has changed", async () => {
     // The prior turn ran on codex and left a codex thread id; the owner has
-    // since pinned `runner.assistant` to claude-code. Resuming a codex thread
-    // against the Claude backend is meaningless — the turn must start fresh.
+    // since pinned `harness.assistant` to claude-code. Resuming a codex thread
+    // against the Claude harness is meaningless — the turn must start fresh.
     const { runner, seen } = build({
       prefsLoader: async () => ({ kind: "claude-code" }),
       subsystem: "assistant",
@@ -240,8 +262,8 @@ describe("makeConversationRunnerCore — session resume gating", () => {
 
     await runner.run(
       turnInput({
-        prevAdapterKind: "codex",
-        prevAdapterSessionId: "thread-abc",
+        prevHarnessKind: "codex",
+        prevHarnessSessionId: "thread-abc",
       })
     );
 
@@ -262,8 +284,8 @@ describe("makeConversationRunnerCore — session resume gating", () => {
       subsystem: "builder",
     });
     const prior = {
-      prevAdapterKind: "codex",
-      prevAdapterSessionId: "thread-abc",
+      prevHarnessKind: "codex",
+      prevHarnessSessionId: "thread-abc",
     };
 
     await ask.runner.run(turnInput(prior));

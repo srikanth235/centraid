@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
 /*
- * The vault assistant's shell-level surface: `_turn` drives the runner over
+ * The vault assistant's shell-level surface: `_turn` drives the harness over
  * SSE with the assistant preamble (register + live vault map) and records
  * the turn under the reserved `_assistant` ledger scope; `resolve` turns
  * answer refs into owner-resolved cards. The registry is duck-typed — the
- * routes only touch current()/currentWorkspace() — and the runner is a stub,
+ * routes only touch current()/currentWorkspace() — and the harness is a stub,
  * so the tests stay hermetic.
  */
 import { promises as fs } from "node:fs";
@@ -43,7 +43,7 @@ function fakeRegistry(): VaultRegistry {
       return journal;
     },
     journalDbFile: path.join(dir, "journal.db"),
-    runnerSessionDir: path.join(dir, "runner-sessions"),
+    harnessSessionDir: path.join(dir, "harness-sessions"),
   };
   const plane = {
     name: "Family",
@@ -108,7 +108,7 @@ describe("assistant-routes suite", () => {
     if (dir) await fs.rm(dir, { recursive: true, force: true });
   });
 
-  test("_turn streams the runner and records under the _assistant scope", async () => {
+  test("_turn streams the harness and records under the _assistant scope", async () => {
     let seenPrompt = "";
     let seenAppId = "";
     const runner: ConversationRunner = {
@@ -168,7 +168,7 @@ describe("assistant-routes suite", () => {
     expect(kinds).toStrictEqual(["user", "tool", "ai"]);
   });
 
-  test("_turn threads valid attachment refs to the runner as resolved blob paths and records them on the ledger", async () => {
+  test("_turn threads valid attachment refs to the harness as resolved blob paths and records them on the ledger", async () => {
     let seenAttachments: unknown;
     const runner: ConversationRunner = {
       async run(input) {

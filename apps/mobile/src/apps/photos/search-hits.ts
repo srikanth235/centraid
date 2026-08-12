@@ -22,7 +22,7 @@
 //
 //   THINGS is omitted. proto:4265 lists a `things` row (`beach, sea, coat ·
 //   found in 74 photographs`), but the vault has no scene/label entity at all
-//   — the media domain is `media.media_asset`, `media.face_region` and
+//   — the media domain is `media.asset`, `media.face_region` and
 //   `media.asset_phash`, and nothing else. There is nothing to count, so there
 //   is no row. Add it here the moment an enrichment publisher lands labels.
 //

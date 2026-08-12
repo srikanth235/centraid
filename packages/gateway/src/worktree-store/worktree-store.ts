@@ -1,6 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit publish/rollback/delete critical sections share private state — keeping them in one file preserves the per-store mutex invariant
 // Gateway-owned git store for centraid editing sessions — a session
-// worktree is the agent's single directory holding the app code it edits.
+// worktree is the harness's single directory holding the app code it edits.
 // Full design in receipt #137; this header sketches the layout +
 // invariants. (The branched draft data.sqlite that used to live beside the
 // code died with the per-app silo — issue #286 phase 2; draft DATA now
@@ -44,7 +44,7 @@ const EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 /**
  * Conservative slug check — matches the canonical app id rule
- * (agent-harness): leading alnum, then alnum / `_` / `-`. No dot, so a
+ * (harness): leading alnum, then alnum / `_` / `-`. No dot, so a
  * tree-traversing `..` is impossible by construction. Automation apps are
  * now marked by the manifest's `kind` field, not a dotted `auto.` id
  * prefix, so the id grammar is a plain slug again.
@@ -261,7 +261,7 @@ export class WorktreeStore {
     return dir;
   }
 
-  /** Branch `sessions/<id>` off `main` + materialize a mutable worktree the agent edits. */
+  /** Branch `sessions/<id>` off `main` + materialize a mutable worktree the harness edits. */
   async openSession(sessionId: string): Promise<SessionHandle> {
     assertSafeId(sessionId, "invalid_session_id");
     this.assertInitialized();

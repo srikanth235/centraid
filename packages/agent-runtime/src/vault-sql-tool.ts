@@ -80,7 +80,7 @@ export type VaultSqlToolOutcome =
   | { ok: true; result: unknown }
   | { ok: false; errorText: string };
 
-/** Execute one `vault_content` call through the turn's owner-side runner. */
+/** Execute one `vault_content` call through the turn's owner-side executor. */
 export async function runVaultContentTool(
   ctx: ToolContext,
   args: unknown
@@ -107,7 +107,7 @@ export async function runVaultContentTool(
   }
 }
 
-/** Execute one `vault_invoke` call through the turn's assistant-agent runner. */
+/** Execute one `vault_invoke` call through the turn's harness tool executor. */
 export async function runVaultInvokeTool(
   ctx: ToolContext,
   args: unknown
@@ -138,7 +138,7 @@ export async function runVaultInvokeTool(
   }
 }
 
-/** Execute one `vault_sql` call through the turn's owner-side runner. */
+/** Execute one `vault_sql` call through the turn's owner-side executor. */
 export async function runVaultSqlTool(
   ctx: ToolContext,
   sql: unknown

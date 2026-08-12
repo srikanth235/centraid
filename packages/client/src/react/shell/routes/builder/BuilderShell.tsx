@@ -411,7 +411,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
               onToggleGroup={(id) => vm.toggleGroup(id)}
               onSetView={(v) => vm.setChatView(v)}
               onSetWorkspaceKind={(kind) => vm.setChatWorkspaceKind(kind)}
-              onSetRunner={(kind) => vm.setChatRunner(kind)}
+              onSetHarness={(kind) => vm.setChatHarness(kind)}
               onSetModel={(model) => vm.setChatModel(model)}
               onSetEffort={(effort) => vm.setChatEffort(effort)}
               onMountHistory={(host) => {

@@ -46,6 +46,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
   ],
   consent: [
     "app",
+    "agent",
     "app_ext",
     "app_view",
     "access_grant",
@@ -57,7 +58,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "export_job",
     "seed_row",
   ],
-  agent: ["agent", "command", "capability", "correction", "judgment"],
+  agent: ["command", "capability", "correction", "judgment"],
   health: [
     "vital",
     "workout",
@@ -87,13 +88,13 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
   ],
   knowledge: ["note", "annotation"],
   media: [
-    "media_asset",
+    "asset",
     "face_region",
     "asset_phash",
     // Memories v0 (issue #724 W7): a rebuildable projection over signals the
     // vault already carries — see schema/enrich.ts's header for the shape and
     // enrich/memories.ts for the sweep that (re)derives it. Registered here
-    // (not a new column on media_media_asset) for the same reason
+    // (not a new column on media_asset) for the same reason
     // media_asset_phash is a sidecar: this is app-reachable derived data, and
     // registering it under the existing `{schema:'media', verbs:'read'}`
     // grant scope (packages/blueprints/apps/photos/app.json) means no app

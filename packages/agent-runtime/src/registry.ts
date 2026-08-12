@@ -1,21 +1,21 @@
 /*
- * Runner backend registry — the single dispatch table for every runner
+ * Harness spec registry — the single dispatch table for every harness
  * kind the runtime can drive.
  *
  * governance: allow-repo-hygiene file-size-limit — this is a per-kind
- * dispatch table; it grows one backend entry per RunnerKind by design, so it
+ * dispatch table; it grows one harness entry per HarnessKind by design, so it
  * legitimately exceeds the 500-line file cap. Split into a data module before
  * it doubles, not per added kind.
  *
  * Before this existed, three sites hardcoded a per-kind switch: `runTurn`
  * (a two-arm `if`), `preflight` (`MIN_VERSIONS` / `defaultBinFor` /
  * `hintFor`), and `models/enumerators` (a `switch`). They now all read
- * from `RUNNER_BACKENDS` below, so adding a runner kind is one entry here
- * plus its `RunnerKind` literal in `@centraid/app-engine` — nothing else
+ * from `HARNESSES` below, so adding a harness kind is one entry here
+ * plus its `HarnessKind` literal in `@centraid/app-engine` — nothing else
  * branches on the kind.
  *
  * Since issue #479 there is exactly ONE integration path: the generic ACP
- * client in `./backends/acp/backend.ts`. Every kind is a `makeAcpBackend`
+ * client in `./backends/acp/backend.ts`. Every kind is a `makeAcpHarness`
  * entry; kinds differ only in how the ACP-speaking process is launched.
  *
  *   - `gemini` / `qwen` / `opencode` / `grok` / `kimi` / `copilot` / `cursor` /
@@ -30,13 +30,13 @@
  *     that is what preflight probes and what the install hint is about.
  *
  * Adding a harness is therefore one registry entry plus, if it needs an
- * adapter, an `AcpAdapterSpec` — see docs/runners.md.
+ * adapter, an `AcpAdapterSpec` — see docs/harnesses.md.
  */
 
 import type {
   RunTurnFn,
-  RunnerKind,
-  RunnerModel,
+  HarnessKind,
+  HarnessModel,
   TurnConfig,
   TurnInput,
   TurnResult,
@@ -48,25 +48,25 @@ import { enumerateAcpModels } from "./backends/acp/enumerate-models.js";
 import { resolveClaudeModel } from "./models/tiers.js";
 
 /** A pinned semantic version — the minimum whose protocol we've verified. */
-export interface RunnerVersion {
+export interface HarnessVersion {
   major: number;
   minor: number;
   patch: number;
 }
 
-/** Prefs slice a model enumerator reads (never the whole `RunnerPrefs`). */
+/** Prefs slice a model enumerator reads (never the whole `HarnessPrefs`). */
 export interface EnumeratePrefs {
   binPath?: string;
   extraArgs?: string[];
 }
 
 /**
- * Everything the runtime needs to know about one runner kind, gathered in
+ * Everything the runtime needs to know about one harness kind, gathered in
  * one place: how to drive a turn, its default binary, the minimum verified
  * version, the install hint, and how to enumerate its models.
  */
-export interface RunnerBackend {
-  readonly kind: RunnerKind;
+export interface HarnessSpec {
+  readonly kind: HarnessKind;
   /** Human label for pickers / status surfaces. */
   readonly label: string;
   /**
@@ -79,23 +79,23 @@ export interface RunnerBackend {
    */
   readonly defaultBin?: string;
   /** Minimum CLI version whose event/flag schema we've verified. */
-  readonly minVersion: RunnerVersion;
+  readonly minVersion: HarnessVersion;
   /** Caller-facing install/setup hint (shown when the CLI is missing). */
   readonly installHint: string;
   /** Drive one model turn. Emits `TurnStreamEvent`s; resolves with the resume id. */
   readonly runTurn: RunTurnFn;
-  /** Enumerate the models this runner can serve. Best-effort, never throws. */
-  readonly enumerateModels: (prefs: EnumeratePrefs) => Promise<RunnerModel[]>;
+  /** Enumerate the models this harness can serve. Best-effort, never throws. */
+  readonly enumerateModels: (prefs: EnumeratePrefs) => Promise<HarnessModel[]>;
 }
 
-// ---- the one backend shape ----------------------------------------------
+// ---- the one harness shape ----------------------------------------------
 
-interface AcpBackendSpec {
-  kind: RunnerKind;
+interface AcpHarnessSpec {
+  kind: HarnessKind;
   label: string;
   defaultBin?: string;
   acpArgs: string[];
-  minVersion: RunnerVersion;
+  minVersion: HarnessVersion;
   installHint: string;
   /**
    * Static env for the spawned process, whichever flavour this kind is: the
@@ -107,13 +107,13 @@ interface AcpBackendSpec {
   env?: Readonly<Record<string, string>>;
   /** Launch through a first-party adapter (kinds whose CLI has no ACP mode). */
   adapter?: AcpAdapterSpec;
-  /** Tier → native-alias mapping applied before matching the agent's model options. */
+  /** Tier → native-alias mapping applied before matching the harness's model options. */
   resolveModel?: (model: string) => string;
   /**
    * Enumerate this kind's models by probing a real ACP session (launch →
    * initialize → session/new → read the model config option). Off by default:
-   * the probe spawns the agent, and the boot warmer warms EVERY detected
-   * runner, so a universal default would spawn a process per installed native
+   * the probe spawns the harness, and the boot warmer warms EVERY detected
+   * harness, so a universal default would spawn a process per installed native
    * kind at boot — many of which just answer `AUTH_REQUIRED`. The two
    * adapter-backed kinds that had bespoke enumerators before #484 (codex,
    * claude-code) opt in; every native kind stays on "Gateway default" and
@@ -130,7 +130,7 @@ interface AcpBackendSpec {
  * without spawning anything.
  */
 export function buildAcpConfig(
-  spec: AcpBackendSpec,
+  spec: AcpHarnessSpec,
   prefs: { binPath?: string; extraArgs?: string[] }
 ): AcpTurnConfig {
   return {
@@ -150,20 +150,20 @@ export function buildAcpConfig(
 }
 
 /** Every registered spec, keyed by kind — the launch-config source of truth. */
-const ACP_SPECS = new Map<RunnerKind, AcpBackendSpec>();
+const ACP_SPECS = new Map<HarnessKind, AcpHarnessSpec>();
 
 /** The launch config a kind would use for the given prefs. Test/diagnostic seam. */
 export function acpConfigFor(
-  kind: RunnerKind,
+  kind: HarnessKind,
   prefs: { binPath?: string; extraArgs?: string[] }
 ): AcpTurnConfig {
   const spec = ACP_SPECS.get(kind);
   if (!spec)
-    throw new Error(`no runner backend registered for kind "${String(kind)}"`);
+    throw new Error(`no harness spec registered for kind "${String(kind)}"`);
   return buildAcpConfig(spec, prefs);
 }
 
-function makeAcpBackend(spec: AcpBackendSpec): RunnerBackend {
+function makeAcpHarness(spec: AcpHarnessSpec): HarnessSpec {
   ACP_SPECS.set(spec.kind, spec);
   return {
     kind: spec.kind,
@@ -228,7 +228,7 @@ function makeAcpBackend(spec: AcpBackendSpec): RunnerBackend {
         acpConfig
       );
       return {
-        adapterKind: spec.kind,
+        harnessKind: spec.kind,
         ...(result.sessionId ? { sessionId: result.sessionId } : {}),
         ...(result.usageSnapshot
           ? { usageSnapshot: result.usageSnapshot }
@@ -239,22 +239,22 @@ function makeAcpBackend(spec: AcpBackendSpec): RunnerBackend {
           : {}),
       };
     },
-    // Models are an ACP *session* concern (the agent advertises its own
-    // `configOptions` at session/new, and the backend pins one from there). A
+    // Models are an ACP *session* concern (the harness advertises its own
+    // `configOptions` at session/new, and the ACP client pins one from there). A
     // kind that opts into `probeModels` enumerates via the generic ACP probe —
     // one launch → session/new → read the model option — reusing the exact
     // launch config a turn would. Everything else returns nothing and the
     // picker stays on "Gateway default".
     enumerateModels: spec.probeModels
-      ? (prefs: EnumeratePrefs): Promise<RunnerModel[]> =>
+      ? (prefs: EnumeratePrefs): Promise<HarnessModel[]> =>
           enumerateAcpModels(buildAcpConfig(spec, prefs))
-      : (): Promise<RunnerModel[]> => Promise.resolve([]),
+      : (): Promise<HarnessModel[]> => Promise.resolve([]),
   };
 }
 
 // ---- codex ---------------------------------------------------------------
 
-const codexBackend = makeAcpBackend({
+const codexHarness = makeAcpHarness({
   kind: "codex",
   label: "Codex",
   // The user-facing CLI: what preflight probes, what the hint installs. The
@@ -264,7 +264,7 @@ const codexBackend = makeAcpBackend({
   minVersion: { major: 0, minor: 128, patch: 0 },
   installHint:
     "Install Codex CLI (https://platform.openai.com/docs/codex) and run `codex login`.",
-  // Headless parity with the retired bespoke backend's `approvalPolicy:'never'`
+  // Headless parity with the retired bespoke integration's `approvalPolicy:'never'`
   // + full-access sandbox. Set at startup, so the adapter never round-trips an
   // approval this surface cannot show. Lives on the spec, not the adapter:
   // launch env is one field for native and adapter-backed kinds alike.
@@ -281,7 +281,7 @@ const codexBackend = makeAcpBackend({
 
 // ---- claude-code ---------------------------------------------------------
 
-const claudeBackend = makeAcpBackend({
+const claudeHarness = makeAcpHarness({
   kind: "claude-code",
   label: "Claude Code",
   defaultBin: "claude",
@@ -309,7 +309,7 @@ const claudeBackend = makeAcpBackend({
   probeModels: true,
 });
 
-const geminiBackend = makeAcpBackend({
+const geminiHarness = makeAcpHarness({
   kind: "gemini",
   label: "Gemini CLI",
   // Natively ACP-speaking: no adapter, just the flag.
@@ -322,7 +322,7 @@ const geminiBackend = makeAcpBackend({
     "Install Gemini CLI (`npm i -g @google/gemini-cli`) and run `gemini` once to authenticate.",
 });
 
-const qwenBackend = makeAcpBackend({
+const qwenHarness = makeAcpHarness({
   kind: "qwen",
   label: "Qwen Code",
   defaultBin: "qwen",
@@ -334,7 +334,7 @@ const qwenBackend = makeAcpBackend({
     "Install Qwen Code (`npm i -g @qwen-code/qwen-code`) and run `qwen` once to authenticate.",
 });
 
-const opencodeBackend = makeAcpBackend({
+const opencodeHarness = makeAcpHarness({
   kind: "opencode",
   label: "opencode",
   defaultBin: "opencode",
@@ -343,7 +343,7 @@ const opencodeBackend = makeAcpBackend({
   //
   // SAFETY: never add `--mdns` to these args, and be wary of a user who puts
   // it in `extraArgs`. That flag defaults opencode's listen hostname to
-  // 0.0.0.0, which would publish an unauthenticated code-execution agent to
+  // 0.0.0.0, which would publish an unauthenticated code-execution harness to
   // every host on the LAN. We launch with `acp` and nothing else of our own.
   acpArgs: ["acp"],
   // ACP landed in 0.15.10, but 1.18.4 is the floor after a client-compat
@@ -353,7 +353,7 @@ const opencodeBackend = makeAcpBackend({
     "Install opencode (`npm i -g opencode-ai`) and run `opencode auth login`.",
 });
 
-const grokBackend = makeAcpBackend({
+const grokHarness = makeAcpHarness({
   kind: "grok",
   label: "Grok",
   defaultBin: "grok",
@@ -366,7 +366,7 @@ const grokBackend = makeAcpBackend({
     "Install Grok CLI (`npm i -g @xai-official/grok`) and sign in. Requires a paid SuperGrok or X Premium+ subscription.",
 });
 
-const kimiBackend = makeAcpBackend({
+const kimiHarness = makeAcpHarness({
   kind: "kimi",
   label: "Kimi",
   defaultBin: "kimi",
@@ -388,7 +388,7 @@ const kimiBackend = makeAcpBackend({
     "Install Kimi CLI (`uv tool install kimi-cli`, or `curl -LsSf https://code.kimi.com/install.sh | bash`) and run `kimi login`.",
 });
 
-const copilotBackend = makeAcpBackend({
+const copilotHarness = makeAcpHarness({
   kind: "copilot",
   label: "GitHub Copilot CLI",
   // The npm package is `@github/copilot`, but the BINARY it installs is
@@ -397,10 +397,10 @@ const copilotBackend = makeAcpBackend({
   //
   // There is also a separate `@github/copilot-language-server` package whose
   // bin is `copilot-language-server`. That is an LSP server for editor
-  // completions, NOT this agent, and it does not speak ACP. Do not add it.
+  // completions, NOT this harness, and it does not speak ACP. Do not add it.
   defaultBin: "copilot",
   // Stdio ACP. `--acp` also accepts a `--port` for TCP mode; we speak stdio,
-  // so `--port` must never be passed — it would put the agent on a socket the
+  // so `--port` must never be passed — it would put the harness on a socket the
   // ACP client isn't reading.
   acpArgs: ["--acp"],
   minVersion: { major: 1, minor: 0, patch: 71 },
@@ -408,7 +408,7 @@ const copilotBackend = makeAcpBackend({
     "Install GitHub Copilot CLI (`curl -fsSL https://gh.io/copilot-install | bash`, or `brew install copilot-cli`) and sign in with `/login`. Requires a paid Copilot subscription.",
 });
 
-const cursorBackend = makeAcpBackend({
+const cursorHarness = makeAcpHarness({
   kind: "cursor",
   // The installer creates BOTH `agent` and `cursor-agent` symlinks. We
   // deliberately use `cursor-agent`: a bare `agent` on PATH is a dangerously
@@ -425,7 +425,7 @@ const cursorBackend = makeAcpBackend({
     "Install Cursor CLI (`curl https://cursor.com/install -fsS | bash`) and sign in with `cursor-agent login`. Requires a paid Cursor plan.",
 });
 
-const kiloBackend = makeAcpBackend({
+const kiloHarness = makeAcpHarness({
   kind: "kilo",
   label: "Kilo",
   defaultBin: "kilo",
@@ -434,7 +434,7 @@ const kiloBackend = makeAcpBackend({
   installHint: "Install Kilo (`npm i -g @kilocode/cli`) and run `kilo auth`.",
 });
 
-const clineBackend = makeAcpBackend({
+const clineHarness = makeAcpHarness({
   kind: "cline",
   label: "Cline",
   defaultBin: "cline",
@@ -443,7 +443,7 @@ const clineBackend = makeAcpBackend({
   installHint: "Install Cline (`npm i -g cline`) and run `cline auth`.",
 });
 
-const gooseBackend = makeAcpBackend({
+const gooseHarness = makeAcpHarness({
   kind: "goose",
   label: "goose",
   // Homebrew's formula is `block-goose-cli`, but the binary it installs is
@@ -460,7 +460,7 @@ const gooseBackend = makeAcpBackend({
     "Install goose (`brew install block-goose-cli`; the binary is `goose`) and run `goose configure` to set a provider before use.",
 });
 
-const auggieBackend = makeAcpBackend({
+const auggieHarness = makeAcpHarness({
   kind: "auggie",
   label: "Auggie CLI",
   defaultBin: "auggie",
@@ -473,7 +473,7 @@ const auggieBackend = makeAcpBackend({
     "Install Auggie CLI (`npm i -g @augmentcode/auggie`) and sign in from a terminal. Requires a paid Augment plan.",
 });
 
-const vibeBackend = makeAcpBackend({
+const vibeHarness = makeAcpHarness({
   kind: "vibe",
   label: "Mistral Vibe",
   // `vibe-acp` is a SEPARATE binary from `vibe` — the ACP server is its own
@@ -488,7 +488,7 @@ const vibeBackend = makeAcpBackend({
     "Install Mistral Vibe (`uv tool install mistral-vibe`, needs Python 3.12+) and set a Mistral API key.",
 });
 
-const droidBackend = makeAcpBackend({
+const droidHarness = makeAcpHarness({
   kind: "droid",
   label: "Factory Droid",
   defaultBin: "droid",
@@ -506,7 +506,7 @@ const droidBackend = makeAcpBackend({
     "Install Factory Droid (`curl -fsSL https://app.factory.ai/cli | sh`, or `brew install --cask droid`) and sign in in a browser, or set `FACTORY_API_KEY`.",
 });
 
-const piBackend = makeAcpBackend({
+const piHarness = makeAcpHarness({
   kind: "pi",
   label: "pi",
   // `pi-acp` is a SEPARATE ACP server binary, not a mode of a `pi` CLI — the
@@ -519,7 +519,7 @@ const piBackend = makeAcpBackend({
   installHint: "Install the pi ACP adapter (`npm i -g pi-acp`) and sign in.",
 });
 
-const acpBackend = makeAcpBackend({
+const acpHarness = makeAcpHarness({
   kind: "acp",
   label: "Custom ACP agent",
   // No default binary — the custom kind is unavailable until a path is set.
@@ -529,47 +529,47 @@ const acpBackend = makeAcpBackend({
     "Set the ACP CLI’s binary path in Settings → Agents, and add its ACP flag (e.g. `--acp`) under extra args.",
 });
 
-/** The dispatch table. Keyed on `RunnerKind` — TS enforces full coverage. */
-export const RUNNER_BACKENDS: Record<RunnerKind, RunnerBackend> = {
-  codex: codexBackend,
-  "claude-code": claudeBackend,
-  gemini: geminiBackend,
-  qwen: qwenBackend,
-  opencode: opencodeBackend,
-  grok: grokBackend,
-  kimi: kimiBackend,
-  copilot: copilotBackend,
-  cursor: cursorBackend,
-  kilo: kiloBackend,
-  cline: clineBackend,
-  goose: gooseBackend,
-  auggie: auggieBackend,
-  vibe: vibeBackend,
-  droid: droidBackend,
-  pi: piBackend,
-  acp: acpBackend,
+/** The dispatch table. Keyed on `HarnessKind` — TS enforces full coverage. */
+export const HARNESSES: Record<HarnessKind, HarnessSpec> = {
+  codex: codexHarness,
+  "claude-code": claudeHarness,
+  gemini: geminiHarness,
+  qwen: qwenHarness,
+  opencode: opencodeHarness,
+  grok: grokHarness,
+  kimi: kimiHarness,
+  copilot: copilotHarness,
+  cursor: cursorHarness,
+  kilo: kiloHarness,
+  cline: clineHarness,
+  goose: gooseHarness,
+  auggie: auggieHarness,
+  vibe: vibeHarness,
+  droid: droidHarness,
+  pi: piHarness,
+  acp: acpHarness,
 };
 
 /** The deliberately small v0 product roster. */
-export const SUPPORTED_RUNNER_KINDS = [
+export const SUPPORTED_HARNESS_KINDS = [
   "codex",
   "claude-code",
   "opencode",
   "grok",
   "pi",
-] as const satisfies readonly RunnerKind[];
+] as const satisfies readonly HarnessKind[];
 
-export const SUPPORTED_RUNNER_BACKENDS: readonly RunnerBackend[] =
-  SUPPORTED_RUNNER_KINDS.map((kind) => RUNNER_BACKENDS[kind]);
+export const SUPPORTED_HARNESSES: readonly HarnessSpec[] =
+  SUPPORTED_HARNESS_KINDS.map((kind) => HARNESSES[kind]);
 
 /**
- * Resolve the backend for a runner kind. Throws on an unregistered kind —
+ * Resolve the launch spec for a harness kind. Throws on an unregistered kind —
  * callers that must never throw (best-effort enumeration) index
- * `RUNNER_BACKENDS` directly and guard for `undefined`.
+ * `HARNESSES` directly and guard for `undefined`.
  */
-export function getRunnerBackend(kind: RunnerKind): RunnerBackend {
-  const backend = RUNNER_BACKENDS[kind];
-  if (!backend)
-    throw new Error(`no runner backend registered for kind "${String(kind)}"`);
-  return backend;
+export function getHarness(kind: HarnessKind): HarnessSpec {
+  const harness = HARNESSES[kind];
+  if (!harness)
+    throw new Error(`no harness spec registered for kind "${String(kind)}"`);
+  return harness;
 }

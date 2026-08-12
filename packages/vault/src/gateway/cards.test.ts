@@ -68,7 +68,7 @@ describe("cards", () => {
     const { cards, receiptId } = gw.resolveRefs(owner, {
       refs: [
         { type: "knowledge.note", id: noteId },
-        { type: "media.media_asset", id: assetId },
+        { type: "media.asset", id: assetId },
         { type: "not.an-entity", id: "x" },
         { type: "knowledge.note", id: "no-such-note" },
       ],
@@ -89,7 +89,7 @@ describe("cards", () => {
       invoke(owner, "media.delete_asset", { asset_id: assetId }).status
     ).toBe("executed");
     const { cards } = gw.resolveRefs(owner, {
-      refs: [{ type: "media.media_asset", id: assetId }],
+      refs: [{ type: "media.asset", id: assetId }],
       purpose: PURPOSE,
     });
     expect(cards[0]?.status).toBe("trashed");
@@ -117,7 +117,7 @@ describe("cards", () => {
 
     // Before any link exists, the foreign asset is a denied card.
     const before = gw.resolveRefs(appCred, {
-      refs: [{ type: "media.media_asset", id: assetId }],
+      refs: [{ type: "media.asset", id: assetId }],
       purpose: PURPOSE,
     });
     expect(before.cards[0]?.status).toBe("denied");
@@ -127,13 +127,13 @@ describe("cards", () => {
     const linked = invoke(owner, "core.link_entities", {
       from_type: "knowledge.note",
       from_id: noteId,
-      to_type: "media.media_asset",
+      to_type: "media.asset",
       to_id: assetId,
       relation: "references",
     });
     expect(linked.status).toBe("executed");
     const after = gw.resolveRefs(appCred, {
-      refs: [{ type: "media.media_asset", id: assetId }],
+      refs: [{ type: "media.asset", id: assetId }],
       purpose: PURPOSE,
     });
     expect(after.cards[0]).toMatchObject({
@@ -147,7 +147,7 @@ describe("cards", () => {
       invoke(owner, "core.unlink_entities", { link_id: linkId }).status
     ).toBe("executed");
     const ended = gw.resolveRefs(appCred, {
-      refs: [{ type: "media.media_asset", id: assetId }],
+      refs: [{ type: "media.asset", id: assetId }],
       purpose: PURPOSE,
     });
     expect(ended.cards[0]?.status).toBe("denied");
@@ -159,7 +159,7 @@ describe("cards", () => {
     invoke(owner, "core.link_entities", {
       from_type: "knowledge.note",
       from_id: noteId,
-      to_type: "media.media_asset",
+      to_type: "media.asset",
       to_id: assetId,
       relation: "references",
     });

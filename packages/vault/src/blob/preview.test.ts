@@ -131,7 +131,7 @@ describe("preview", () => {
     const row = db.vault
       .prepare(
         `SELECT p.phash FROM media_asset_phash p
-        JOIN media_media_asset a ON a.asset_id = p.asset_id
+        JOIN media_asset a ON a.asset_id = p.asset_id
        WHERE a.content_id = ?`
       )
       .get(contentId) as { phash: string } | undefined;

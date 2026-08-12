@@ -21,7 +21,7 @@ import styles from "./SettingsDiagnosticsScreen.module.css";
 // the process answers; this says which subsystem stopped working — vaults,
 // schedulers, outbox, connections — with each component's last error and
 // the gateway's recent structured warn/error tail. Prop-driven like
-// SettingsProvidersScreen: this file owns the view + load/refresh state,
+// SettingsHarnessesScreen: this file owns the view + load/refresh state,
 // the gateway I/O lives in `routes/settingsDiagnosticsData.ts`. Mounted from
 // the Gateway page's Components tab (GatewayScreen.tsx), not Settings.
 

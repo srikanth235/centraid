@@ -5,7 +5,7 @@
     "sendToFirstToken": {
       "status": "unmeasured",
       "volume": "n/a — no deterministic provider stub exists",
-      "probe": "NONE TODAY. This is the single most-felt latency in the product and the repo cannot measure it: every runner path in tests/perf/agent-turn.perf.test.ts measures DISPATCH throughput (2,000 runner dispatches), not the interval between the owner pressing send and the first token rendering. Closing it needs a stub ACP runner that emits its first token after a fixed delay, so the measurement is the gateway's + client's dead time with the provider held constant."
+      "probe": "NONE TODAY. This is the single most-felt latency in the product and the repo cannot measure it: every harness path in tests/perf/harness-turn.perf.test.ts measures DISPATCH throughput (2,000 harness dispatches), not the interval between the owner pressing send and the first token rendering. Closing it needs a stub ACP harness that emits its first token after a fixed delay, so the measurement is the gateway's + client's dead time with the provider held constant."
     },
     "reconnectToFresh": {
       "status": "unmeasured",

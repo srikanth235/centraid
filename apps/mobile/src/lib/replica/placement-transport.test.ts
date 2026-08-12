@@ -25,7 +25,7 @@ const BASE_URL = "http://gateway.local";
 const INTENT: PlacementIntent = {
   linkToken: "edge-token-1",
   kind: "add",
-  itemType: "media.media_asset",
+  itemType: "media.asset",
   itemId: "asset-1",
   sourceVaultId: "vault-a",
   targetVaultId: "vault-b",
@@ -70,7 +70,7 @@ describe(postPlacement, () => {
       audienceVaultId: "vault-b",
       mode: "snapshot",
       kind: "add",
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemIds: ["asset-1"],
       verbs: "read",
     });

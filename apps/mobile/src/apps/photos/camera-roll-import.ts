@@ -19,7 +19,7 @@
 // WHY ONE PHOTO PER BATCH, NOT ONE BATCH OF THOUSANDS. The staging spine's
 // bulk door, `sync.stage_rows`, batches up to 500 rows into one
 // `sync_import_batch` — but it is reached only through the vault's command
-// pipeline (agent/MCP callers, `commands/sync.ts`), which the mobile app has
+// pipeline (harness/MCP callers, `commands/sync.ts`), which the mobile app has
 // no HTTP door onto today, and adding one is out of this issue's scope. The
 // file-drop route mobile CAN already reach stages exactly one file per call.
 // That is less elegant (a full camera roll creates one `sync_connection` row

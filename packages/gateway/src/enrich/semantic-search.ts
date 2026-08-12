@@ -39,7 +39,7 @@ import type { VaultDb } from "@centraid/vault";
 
 import { hasSqliteVec } from "./sqlite-vec.js";
 
-const TARGET_TYPE = "media.media_asset";
+const TARGET_TYPE = "media.asset";
 
 /** Default hits returned when the caller names no limit. */
 export const DEFAULT_SEARCH_LIMIT = 20;
@@ -138,7 +138,7 @@ function rankWithVec(
       `SELECT e.target_id AS asset_id, a.content_id AS content_id,
               vec_distance_cosine(e.vector, ?) AS distance
          FROM enrich_embedding e
-         JOIN media_media_asset a ON a.asset_id = e.target_id
+         JOIN media_asset a ON a.asset_id = e.target_id
         WHERE e.target_type = ? AND e.model = ? AND e.dim = ?
           AND a.deleted_at IS NULL
         ORDER BY distance
@@ -167,7 +167,7 @@ function rankWithScan(
     limit: FALLBACK_CANDIDATES,
   });
   const liveContent = db.vault.prepare(
-    "SELECT content_id FROM media_media_asset WHERE asset_id = ? AND deleted_at IS NULL"
+    "SELECT content_id FROM media_asset WHERE asset_id = ? AND deleted_at IS NULL"
   );
   const hits: PhotoSearchHit[] = [];
   for (const hit of scanned) {

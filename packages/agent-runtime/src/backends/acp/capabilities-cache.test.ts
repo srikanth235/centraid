@@ -1,5 +1,5 @@
 // Cache + probe path for Settings capability status. Uses the real fake ACP
-// agent so the shipped resolve/probe entry points run end-to-end.
+// harness so the shipped resolve/probe entry points run end-to-end.
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -15,19 +15,19 @@ import {
   resolveAcpCapabilities,
 } from "./capabilities-cache.ts";
 import { probeAcpCapabilities } from "./probe-capabilities.ts";
-import { FAKE_AGENT } from "./test-fixtures.js";
+import { FAKE_HARNESS } from "./test-fixtures.js";
 
 describe("capabilities-cache suite", () => {
   afterEach(() => {
     clearCapabilitiesCache();
   });
 
-  test("probeAcpCapabilities reports reachable + advertised caps from fake agent", async () => {
+  test("probeAcpCapabilities reports reachable + advertised caps from fake harness", async () => {
     const caps = await probeAcpCapabilities(
       {
         kind: "acp",
         acpArgs: [],
-        binPath: FAKE_AGENT,
+        binPath: FAKE_HARNESS,
         extraArgs: [
           "--mode=normal",
           "--session-resume",
@@ -68,7 +68,7 @@ describe("capabilities-cache suite", () => {
       {
         kind: "acp",
         acpArgs: [],
-        binPath: FAKE_AGENT,
+        binPath: FAKE_HARNESS,
         extraArgs: ["--mode=normal", `--prompt-marker=${promptMarker}`],
       },
       { timeoutMs: 8_000 }
@@ -83,7 +83,7 @@ describe("capabilities-cache suite", () => {
 
   test("a snapshot past its TTL is served marked stale, and re-probed on demand", async () => {
     const first = await resolveAcpCapabilities("acp", {
-      binPath: FAKE_AGENT,
+      binPath: FAKE_HARNESS,
       refresh: true,
     });
     expect(first?.reachable).toBe(true);
@@ -92,7 +92,9 @@ describe("capabilities-cache suite", () => {
     // still spawns a real child on real timers.
     const clock = useFakeClock(undefined, { toFake: ["Date"] });
     clock.set(new Date(Date.now() + CAPABILITIES_TTL_MS + 1));
-    const stale = await resolveAcpCapabilities("acp", { binPath: FAKE_AGENT });
+    const stale = await resolveAcpCapabilities("acp", {
+      binPath: FAKE_HARNESS,
+    });
     // Still displayable…
     expect(stale?.reachable).toBe(true);
     // …but no longer presented as the current verdict.
@@ -100,7 +102,7 @@ describe("capabilities-cache suite", () => {
 
     // A caller that is allowed to probe gets fresh evidence instead.
     const refreshed = await resolveAcpCapabilities("acp", {
-      binPath: FAKE_AGENT,
+      binPath: FAKE_HARNESS,
       probeIfMissing: true,
     });
     expect(refreshed?.stale).toBeUndefined();
@@ -111,7 +113,7 @@ describe("capabilities-cache suite", () => {
     const dir = await tempDir("acp-probe-ifmissing-");
     const promptMarker = path.join(dir, "prompt.json");
     const opts = {
-      binPath: FAKE_AGENT,
+      binPath: FAKE_HARNESS,
       extraArgs: ["--mode=normal", `--prompt-marker=${promptMarker}`],
     };
     const cold = await resolveAcpCapabilities("acp", {
@@ -183,7 +185,7 @@ describe("capabilities-cache suite", () => {
     // The `*Observed` expectations are exactly what the live diagnostic prompt
     // exists to establish, so this matrix opts into it.
     const caps = await probeAcpCapabilities(
-      { kind: "acp", acpArgs: [], binPath: FAKE_AGENT, extraArgs: args },
+      { kind: "acp", acpArgs: [], binPath: FAKE_HARNESS, extraArgs: args },
       { timeoutMs: 8_000, probeLivePrompt: true }
     );
     expect(caps.reachable).toBe(true);
@@ -201,7 +203,7 @@ describe("capabilities-cache suite", () => {
       {
         kind: "acp",
         acpArgs: [],
-        binPath: FAKE_AGENT,
+        binPath: FAKE_HARNESS,
         extraArgs: ["--mode=auth"],
       },
       { timeoutMs: 8_000 }
@@ -215,10 +217,10 @@ describe("capabilities-cache suite", () => {
       {
         kind: "acp",
         acpArgs: [],
-        binPath: FAKE_AGENT,
+        binPath: FAKE_HARNESS,
         extraArgs: ["--mode=auth-prompt"],
       },
-      // An agent that only reveals its expired sign-in when prompted is the
+      // A harness that only reveals its expired sign-in when prompted is the
       // reason the live prompt exists at all.
       { timeoutMs: 8_000, probeLivePrompt: true }
     );
@@ -237,25 +239,27 @@ describe("capabilities-cache suite", () => {
   });
 
   test("resolveAcpCapabilities does not probe without refresh", async () => {
-    const cold = await resolveAcpCapabilities("acp", { binPath: FAKE_AGENT });
+    const cold = await resolveAcpCapabilities("acp", { binPath: FAKE_HARNESS });
     expect(cold).toBeUndefined();
   });
 
   test("resolveAcpCapabilities caches a refresh probe and serves it cold", async () => {
     const first = await resolveAcpCapabilities("acp", {
-      binPath: FAKE_AGENT,
+      binPath: FAKE_HARNESS,
       refresh: true,
     });
     expect(first?.reachable).toBe(true);
 
-    const cached = await resolveAcpCapabilities("acp", { binPath: FAKE_AGENT });
+    const cached = await resolveAcpCapabilities("acp", {
+      binPath: FAKE_HARNESS,
+    });
     expect(cached).toStrictEqual(first);
   });
 
   test("resolveAcpCapabilities coalesces concurrent refresh probes", async () => {
     const [a, b] = await Promise.all([
-      resolveAcpCapabilities("acp", { binPath: FAKE_AGENT, refresh: true }),
-      resolveAcpCapabilities("acp", { binPath: FAKE_AGENT, refresh: true }),
+      resolveAcpCapabilities("acp", { binPath: FAKE_HARNESS, refresh: true }),
+      resolveAcpCapabilities("acp", { binPath: FAKE_HARNESS, refresh: true }),
     ]);
     expect(a).toStrictEqual(b);
     expect(a?.reachable).toBe(true);
@@ -263,7 +267,7 @@ describe("capabilities-cache suite", () => {
 
   test("cache and probe include the configured extraArgs launch profile", async () => {
     const withoutModel = await resolveAcpCapabilities("acp", {
-      binPath: FAKE_AGENT,
+      binPath: FAKE_HARNESS,
       extraArgs: ["--mode=normal", "--no-model-option"],
       refresh: true,
     });
@@ -272,12 +276,12 @@ describe("capabilities-cache suite", () => {
     // A different profile must not collide with the first profile's cache.
     await expect(
       resolveAcpCapabilities("acp", {
-        binPath: FAKE_AGENT,
+        binPath: FAKE_HARNESS,
         extraArgs: ["--mode=normal"],
       })
     ).resolves.toBeUndefined();
     const withModel = await resolveAcpCapabilities("acp", {
-      binPath: FAKE_AGENT,
+      binPath: FAKE_HARNESS,
       extraArgs: ["--mode=normal"],
       refresh: true,
     });

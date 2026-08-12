@@ -84,7 +84,7 @@ export default function PhotoStateView({
     "photos",
     useMemo(
       () => ({
-        entity: "media.media_asset",
+        entity: "media.asset",
         where: [{ column: "deleted_at", op: "not-null" as const }],
       }),
       []

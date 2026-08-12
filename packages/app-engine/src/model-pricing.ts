@@ -2,10 +2,10 @@
  * Per-model token pricing (issue #90 open question 4; live catalog #445).
  *
  * `items.cost_usd` is frozen at write time — prices drift, so a run recorded
- * today keeps the cost it was billed at. Prefer agent/ACP-reported USD when
+ * today keeps the cost it was billed at. Prefer harness/ACP-reported USD when
  * present (`resolveItemCost`, issue #514); otherwise this module's catalog
  * estimate. The repricing backfill (#445) is the ONLY sanctioned rewriter of
- * already-frozen *estimated* costs (never `cost_source = 'agent'`).
+ * already-frozen *estimated* costs (never `cost_source = 'harness'`).
  *
  * A missing price returns `undefined`, NOT 0 — the ledger stores NULL so
  * "no price known for this model" stays distinguishable from a genuine
@@ -44,7 +44,7 @@ export interface ModelPrice {
   readonly cacheWritePerMtok: number;
 }
 
-/** Per-call token counts, as captured on a `kind='step'` / `kind='agent'` node. */
+/** Per-call token counts, captured on a `kind='step'` / `kind='delegate'` item. */
 export interface TokenUsage {
   readonly inputTokens?: number;
   readonly outputTokens?: number;
@@ -77,7 +77,7 @@ export function costForUsage(
 }
 
 /** Where a frozen `cost_usd` came from (issue #514). */
-export type CostSource = "agent" | "estimated";
+export type CostSource = "harness" | "estimated";
 
 export interface ResolvedItemCost {
   readonly costUsd?: number;
@@ -85,8 +85,8 @@ export interface ResolvedItemCost {
 }
 
 /**
- * Prefer agent/ACP-reported USD; fall back to the catalog estimate. Marks
- * provenance so Insights can be honest and reprice never clobbers agent costs.
+ * Prefer harness/ACP-reported USD; fall back to the catalog estimate. Marks
+ * provenance so Insights can be honest and reprice never clobbers harness costs.
  *
  * Returns `{}` — cost AND provenance NULL — when the model is unpriceable.
  * Every reported+priceable usage still books a real non-zero cost; an
@@ -94,12 +94,15 @@ export interface ResolvedItemCost {
  * from "estimated at some number".
  */
 export function resolveItemCost(opts: {
-  agentCostUsd?: number;
+  harnessCostUsd?: number;
   model?: string;
   usage: TokenUsage;
 }): ResolvedItemCost {
-  if (opts.agentCostUsd !== undefined && Number.isFinite(opts.agentCostUsd)) {
-    return { costUsd: opts.agentCostUsd, costSource: "agent" };
+  if (
+    opts.harnessCostUsd !== undefined &&
+    Number.isFinite(opts.harnessCostUsd)
+  ) {
+    return { costUsd: opts.harnessCostUsd, costSource: "harness" };
   }
   const estimated = costForUsage(opts.model, opts.usage);
   if (estimated !== undefined) {

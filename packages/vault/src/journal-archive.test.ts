@@ -57,7 +57,7 @@ function seedInvocationCluster(
   db.journal
     .prepare(
       `INSERT INTO agent_command_invocation
-         (invocation_id, command_id, agent_id, grant_id, input_json, status, requested_at, executed_at, receipt_id)
+         (invocation_id, command_id, caller_id, grant_id, input_json, status, requested_at, executed_at, receipt_id)
        VALUES (?, 'cmd-1', 'agent-1', NULL, '{}', 'executed', ?, ?, NULL)`
     )
     .run(invocationId, args.requestedAt, args.receiptAt);

@@ -90,7 +90,7 @@ describe("renderer gateway automation contracts", () => {
     await client.activateVersion({ id: "daily", versionId: "v2" });
     await client.getUserId();
     await client.getUserPrefs();
-    await client.saveUserPrefs({ runner: "codex" });
+    await client.saveUserPrefs({ harness: "codex" });
     await client.getInsightsSummary({ windowDays: 7 });
     await client.getInsightsSummary();
     await client.getGatewayHealth();
@@ -251,7 +251,7 @@ describe("renderer gateway automation contracts", () => {
       name: "Daily",
       prompt: "Run daily",
       triggers: [{ kind: "cron", expr: "0 9 * * *" }],
-      runner: "codex",
+      harness: "codex",
       model: "openai/gpt-test",
     });
     expect(created.webhook?.secret).toBe("secret-1");
@@ -268,7 +268,7 @@ describe("renderer gateway automation contracts", () => {
         label: "Work",
         connectionId: "connection-1",
       },
-      runner: null,
+      harness: null,
       model: null,
     });
     expect(updated.webhook?.secret).toBe("secret-2");

@@ -7,7 +7,7 @@
   "triggers": [
     {
       "kind": "data",
-      "entities": ["media.media_asset"],
+      "entities": ["media.asset"],
       "every": "*/5 * * * *"
     }
   ],
@@ -25,11 +25,11 @@
     "domain": "photos",
     "capability": "ocr",
     "lane": "gateway",
-    "agentVariant": {
+    "delegateStep": {
       "selected": "deterministic",
       "promptRev": "ocr-v1",
-      "latency": "Specialist OCR usually takes tens of milliseconds; an agent takes seconds.",
-      "consequence": "Changing variant re-derives eligible photographs; agent runs are billed."
+      "latency": "Specialist OCR usually takes tens of milliseconds; a delegate step takes seconds.",
+      "consequence": "Changing variant re-derives eligible photographs; delegate steps are billed."
     }
   },
   "history": { "keep": { "count": 100 } },

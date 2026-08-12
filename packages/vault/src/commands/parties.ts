@@ -23,7 +23,7 @@ const ADD_PARTY: CommandDefinition = {
     additionalProperties: false,
     properties: {
       display_name: { type: "string", minLength: 1 },
-      // Agents enroll through their own path (agent.agent); apps mint people
+      // Agents enroll through their own path (consent.agent); apps mint people
       // and the organisations/groups those people belong to.
       kind: { type: "string", enum: ["person", "org", "group"] },
       sort_name: { type: "string" },

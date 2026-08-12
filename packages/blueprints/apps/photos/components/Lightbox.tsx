@@ -163,7 +163,7 @@ export function LightboxShell({
           setResidentAssetId(
             items.some(
               (item) =>
-                item.itemType === "media.media_asset" &&
+                item.itemType === "media.asset" &&
                 item.itemId === asset.asset_id
             )
               ? asset.asset_id
@@ -184,7 +184,7 @@ export function LightboxShell({
     try {
       await window.centraid.retainCommonsItem({
         actorVaultId,
-        itemType: "media.media_asset",
+        itemType: "media.asset",
         itemId: asset.asset_id,
       });
       setResidentAssetId(null);
@@ -306,7 +306,7 @@ export function LightboxShell({
         onClose={() => setShareOpen(false)}
         sourceScopeId={asset.scope_id ?? mountedScopes()[0]?.id ?? ""}
         scopes={mountedScopes()}
-        itemType="media.media_asset"
+        itemType="media.asset"
         itemIds={[asset.asset_id]}
         appLabel="Photos"
         onDone={(outcome) => {

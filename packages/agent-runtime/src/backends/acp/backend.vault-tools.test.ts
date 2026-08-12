@@ -1,4 +1,4 @@
-// Vault tools over the per-turn loopback MCP server: what the agent is
+// Vault tools over the per-turn loopback MCP server: what the harness is
 // handed, what the endpoint serves, how the transcript renders it, and that
 // no port outlives the turn. Core turn behaviour is in backend.test.ts;
 // shared fixtures in test-fixtures.ts.
@@ -34,7 +34,7 @@ async function stillListening(url: string): Promise<boolean> {
 }
 
 describe("backend.vault-tools", () => {
-  test("vault tools reach the agent through the loopback MCP server", async () => {
+  test("vault tools reach the harness through the loopback MCP server", async () => {
     const dir = await tempDir("acp-vault-");
     const mcpMarker = path.join(dir, "mcp");
     const vaultMarker = path.join(dir, "vault");
@@ -50,7 +50,7 @@ describe("backend.vault-tools", () => {
       toolContext: ctx,
     });
 
-    // The agent was handed exactly one HTTP MCP server, on loopback, with a
+    // The harness was handed exactly one HTTP MCP server, on loopback, with a
     // bearer header — the ACP `McpServerHttp` wire shape.
     const advertised = JSON.parse(
       await fs.readFile(mcpMarker, "utf8")
@@ -78,7 +78,7 @@ describe("backend.vault-tools", () => {
     expect(probe.callIsError).toBe(false);
     expect(probe.callText).toBe(JSON.stringify({ rows: [{ one: 1 }] }));
 
-    // The call reached the turn's own runner.
+    // The call reached the turn's own harness.
     expect(ctx.calls).toStrictEqual([{ sql: "SELECT 1" }]);
 
     // …and the transcript rendered it.
@@ -123,7 +123,7 @@ describe("backend.vault-tools", () => {
     ]);
   });
 
-  test("an agent that streams the MCP call itself is not double-rendered", async () => {
+  test("a harness that streams the MCP call itself is not double-rendered", async () => {
     const dir = await tempDir("acp-vault-");
     const vaultMarker = path.join(dir, "vault");
     const { events } = await runFake({
@@ -135,8 +135,8 @@ describe("backend.vault-tools", () => {
       ],
       toolContext: vaultToolContext(),
     });
-    // The agent announced `mcp__centraid__vault_sql` before dialing, so exactly
-    // one tool card is emitted — the agent's, not ours on top of it.
+    // The harness announced `mcp__centraid__vault_sql` before dialing, so exactly
+    // one tool card is emitted — the harness's, not ours on top of it.
     expect(events.filter((e) => e.type === "tool.start")).toHaveLength(1);
     expect(events.filter((e) => e.type === "tool.result")).toHaveLength(1);
     const start = events.find((e) => e.type === "tool.start");
@@ -145,7 +145,7 @@ describe("backend.vault-tools", () => {
     );
   });
 
-  test("an agent with no HTTP MCP support gets a stdio vault bridge instead of silence", async () => {
+  test("a harness with no HTTP MCP support gets a stdio vault bridge instead of silence", async () => {
     const dir = await tempDir("acp-vault-");
     const mcpMarker = path.join(dir, "mcp");
     const { events } = await runFake({

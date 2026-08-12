@@ -185,8 +185,8 @@ describe("run-events-sse", () => {
       itemId: "n0",
       turnId: runId,
       ordinal: 0,
-      kind: "agent",
-      name: "agent",
+      kind: "delegate",
+      name: "delegate",
       startedAt: 2,
     });
 

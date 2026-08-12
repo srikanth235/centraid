@@ -46,7 +46,7 @@ const MEDIA_ASSET_COLUMNS = `asset_id, content_id, kind, captured_at, tz_offset_
        archived_at, deleted_at, purge_at`;
 
 const COLLECTION_ENTRY_TYPES = new Set<ShareableItemType>([
-  "media.media_asset",
+  "media.asset",
   "core.document",
   "core.content_item",
 ]);
@@ -176,10 +176,10 @@ function poolMediaAsset(
   if (into.mediaAssets.has(itemId)) return;
   const asset = origin
     .prepare(
-      `SELECT ${MEDIA_ASSET_COLUMNS} FROM media_media_asset WHERE asset_id = ?`
+      `SELECT ${MEDIA_ASSET_COLUMNS} FROM media_asset WHERE asset_id = ?`
     )
     .get(itemId) as MediaAssetRow | undefined;
-  if (!asset) throw absent("media.media_asset", itemId);
+  if (!asset) throw absent("media.asset", itemId);
   into.mediaAssets.set(
     itemId,
     redactLocation && mediaLocationPolicyForVault(origin) === "strip"
@@ -330,7 +330,7 @@ function poolItem(
     case "core.content_item":
       requireContent(origin, into, itemId);
       return;
-    case "media.media_asset":
+    case "media.asset":
       poolMediaAsset(origin, into, itemId, redactLocation);
       return;
     case "core.document":

@@ -5,7 +5,7 @@
  * asset. Risk low.
  *
  * `archived` was declared in app.json's schema and applied by the vault
- * command (which writes `media_media_asset.archived_at`) but dropped here, so
+ * command (which writes `media_asset.archived_at`) but dropped here, so
  * every hide request returned 200 and changed nothing. The archived shelf and
  * its count have existed on the client the whole time with no door that
  * worked; forwarding the field is that door.

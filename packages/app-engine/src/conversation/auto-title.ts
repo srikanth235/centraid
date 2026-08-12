@@ -8,20 +8,21 @@
  *   - fire-and-forget: this never blocks or fails the turn; every error is
  *     swallowed and the derived truncation simply stays;
  *   - provider-agnostic: the caller passes a capability TIER token (`fast`),
- *     never a concrete model id — the backend resolves the tier at turn time
+ *     never a concrete model id — the harness resolves the tier at turn time
  *     (governance directive no-hardcoded-model-ids);
  *   - tool-less: no `toolContext`, so the titler can't touch the vault — it
  *     only reads the two strings it's handed;
  *   - user-rename-wins: the caller only applies the result when the stored
  *     title is still the exact `deriveTitle` output.
  *
- * This module owns only the generation + cleanup; it drives the shared
- * `RunTurnFn` (agent-runtime's `runTurn` in production, a stub in tests) so
- * it never imports a backend.
+ * This module owns only the generation + cleanup; it enters `TurnPlane` over
+ * the shared host driver (agent-runtime's `runTurn` in production, a stub in
+ * tests) so it never imports a concrete harness runtime.
  */
 
 import type { TurnStreamEvent } from "./runner.js";
-import type { RunTurnFn, RunnerPrefs, TurnInput } from "./turn.js";
+import { TurnPlane } from "./turn-plane.js";
+import type { RunTurnFn, HarnessPrefs, TurnInput } from "./turn.js";
 
 /** Longest title we keep — matches the ledger's derived-title budget. */
 const MAX_TITLE_CHARS = 60;
@@ -34,11 +35,11 @@ const TITLE_SYSTEM_PROMPT = [
 ].join(" ");
 
 export interface GenerateTitleDeps {
-  /** The shared turn driver — agent-runtime `runTurn` in production. */
+  /** Accounted host turn driver — wrapped by `TurnPlane` before dispatch. */
   runTurn: RunTurnFn;
-  /** Active runner prefs (kind + optional binPath/extraArgs). */
-  runnerPrefs: RunnerPrefs;
-  /** Working dir for the one-shot runner (the assistant cwd). */
+  /** Active harness prefs (kind + optional binPath/extraArgs). */
+  harnessPrefs: HarnessPrefs;
+  /** Working dir for the one-shot harness turn (the assistant cwd). */
   cwd: string;
   /** Capability tier or model alias for the titler — a TIER token like `fast`. */
   model: string;
@@ -48,6 +49,8 @@ export interface GenerateTitleDeps {
   assistantText: string;
   /** Optional cap on how long the one-shot may run before it's abandoned. */
   timeoutMs?: number;
+  /** Host-owned provider-egress proof, rechecked at the TurnPlane door. */
+  egressConsent: () => boolean | Promise<boolean>;
 }
 
 /**
@@ -123,8 +126,16 @@ export async function generateConversationTitle(
     abortSignal: controller.signal,
     onEvent,
   };
+  const turnPlane = new TurnPlane(deps.runTurn);
   try {
-    await deps.runTurn(input, { prefs: deps.runnerPrefs });
+    await turnPlane.runTurn(input, deps.harnessPrefs, {
+      surface: "interactive",
+      egress: "attended",
+      egressConsent: deps.egressConsent,
+      failover: "none",
+      permissionPolicy: "deny",
+      artifacts: "delegate-only",
+    });
   } finally {
     if (timer) clearTimeout(timer);
   }

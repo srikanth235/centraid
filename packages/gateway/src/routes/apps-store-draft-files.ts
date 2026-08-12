@@ -11,7 +11,7 @@ import path from "node:path";
 import type { WorktreeStore } from "../worktree-store/index.js";
 import { WorktreeStoreError } from "../worktree-store/index.js";
 
-/** Text extensions a draft file write accepts — mirrors agent-harness. */
+/** Text extensions a draft file write accepts — mirrors the harness runtime. */
 export const EDITABLE_EXT = new Set([
   ".ts",
   ".js",

@@ -16,7 +16,7 @@ const usage: ResourceUsageDTO = {
     replication: { passes: 3, bytesReplicated: 15_728_640, busyMs: 1200 }, // 15 MB
     backup: { drains: 1, bytesUploaded: 1_048_576, busyMs: 800 }, // 1 MB
     sweeps: { passes: 12, busyMs: 450 },
-    agentRuns: { runs: 7, busyMs: 21_000, cpuSeconds: null },
+    harnessRuns: { runs: 7, busyMs: 21_000, cpuSeconds: null },
   },
   backgroundTimerFiresLastHour: 240,
 };
@@ -50,7 +50,7 @@ describe("ResourceReceiptPanel (#528 Phase C)", () => {
     expect(html).toContain("1.0 MB uploaded");
     expect(html).toContain("Sweeps");
     expect(html).toContain("12 passes");
-    expect(html).toContain("Agent runs");
+    expect(html).toContain("Harness runs");
     expect(html).toContain("7 runs");
   });
 

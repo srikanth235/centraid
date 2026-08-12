@@ -9,7 +9,7 @@ import styles from "./BuilderPreview.module.css";
 
 // The Preview tab — the sandboxed draft iframe (React port of builder.ts
 // renderPreview/makePreviewFrame/resolvePreviewSrc). The builder always
-// previews the gateway *draft* worktree, so staged agent edits show before an
+// previews the gateway *draft* worktree, so staged harness edits show before an
 // explicit Publish. While the draft has no index.html yet (fresh app
 // mid-generation) it shows the building skeleton. Theme is synced into the
 // frame the same way the running-app view does it: a `#theme=…` hash for
@@ -31,7 +31,7 @@ export interface BuilderPreviewProps {
   appId: string | undefined;
   accentColor: string;
   device: "mobile" | "tablet" | "desktop";
-  /** Bumps to force a re-resolve (agent wrote files / manual reload). */
+  /** Bumps to force a re-resolve (harness wrote files / manual reload). */
   reloadNonce: number;
   /** Report the resolved source (or null while building) for the URL pill. */
   onResolved: (info: { src: string } | null) => void;

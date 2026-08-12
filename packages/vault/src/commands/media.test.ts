@@ -64,16 +64,14 @@ describe("media", () => {
     });
     const clip = addAsset({ data_uri: CLIP });
     const photoRow = db.vault
-      .prepare(
-        "SELECT kind, captured_at FROM media_media_asset WHERE asset_id = ?"
-      )
+      .prepare("SELECT kind, captured_at FROM media_asset WHERE asset_id = ?")
       .get(photo.asset_id) as { kind: string; captured_at: string };
     expect(photoRow).toMatchObject({
       kind: "photo",
       captured_at: "2026-06-01T10:00:00Z",
     });
     const clipRow = db.vault
-      .prepare("SELECT kind FROM media_media_asset WHERE asset_id = ?")
+      .prepare("SELECT kind FROM media_asset WHERE asset_id = ?")
       .get(clip.asset_id) as { kind: string };
     expect(clipRow.kind).toBe("video");
   });
@@ -88,9 +86,7 @@ describe("media", () => {
       capture_group_id: "live:camera-42",
     });
     const groups = db.vault
-      .prepare(
-        "SELECT kind, capture_group_id FROM media_media_asset ORDER BY kind"
-      )
+      .prepare("SELECT kind, capture_group_id FROM media_asset ORDER BY kind")
       .all() as Array<{ kind: string; capture_group_id: string }>;
     expect([photo.asset_id, clip.asset_id]).toHaveLength(2);
     // node:sqlite hands back null-prototype rows; spreading compares the column
@@ -114,7 +110,7 @@ describe("media", () => {
     });
     const rows = db.vault
       .prepare(
-        "SELECT asset_id, source_asset_id FROM media_media_asset ORDER BY captured_at"
+        "SELECT asset_id, source_asset_id FROM media_asset ORDER BY captured_at"
       )
       .all() as Array<{ asset_id: string; source_asset_id: string | null }>;
     expect(rows.map((row) => ({ ...row }))).toStrictEqual([
@@ -133,7 +129,7 @@ describe("media", () => {
     // the middle of the insert — and nothing lands.
     expect(outcome.status).toBe("failed");
     const count = db.vault
-      .prepare("SELECT count(*) AS n FROM media_media_asset")
+      .prepare("SELECT count(*) AS n FROM media_asset")
       .get() as { n: number };
     expect(count.n).toBe(0);
   });
@@ -281,9 +277,9 @@ describe("media", () => {
     ).toBe("failed");
     expect(
       (
-        db.vault
-          .prepare("SELECT count(*) AS n FROM media_media_asset")
-          .get() as { n: number }
+        db.vault.prepare("SELECT count(*) AS n FROM media_asset").get() as {
+          n: number;
+        }
       ).n
     ).toBe(2);
   });
@@ -304,9 +300,9 @@ describe("media", () => {
     ).toBe(0);
     expect(
       (
-        db.vault
-          .prepare("SELECT count(*) AS n FROM media_media_asset")
-          .get() as { n: number }
+        db.vault.prepare("SELECT count(*) AS n FROM media_asset").get() as {
+          n: number;
+        }
       ).n
     ).toBe(1);
   });
@@ -337,7 +333,7 @@ describe("media", () => {
     // #274) — restore can bring it back whole.
     const asset = db.vault
       .prepare(
-        "SELECT deleted_at, purge_at FROM media_media_asset WHERE asset_id = ?"
+        "SELECT deleted_at, purge_at FROM media_asset WHERE asset_id = ?"
       )
       .get(asset_id) as { deleted_at: string | null; purge_at: string | null };
     expect(asset.deleted_at).not.toBeNull();
@@ -362,7 +358,7 @@ describe("media", () => {
     const state = () =>
       db.vault
         .prepare(
-          "SELECT favorite, archived_at FROM media_media_asset WHERE asset_id = ?"
+          "SELECT favorite, archived_at FROM media_asset WHERE asset_id = ?"
         )
         .get(asset_id) as { favorite: number; archived_at: string | null };
     // Fresh assets are unfavorited and unarchived.
@@ -440,7 +436,7 @@ describe("media", () => {
                     JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
                    WHERE t.target_type = 'core.content_item' AND t.target_id = a.content_id
                      AND s.uri = 'https://centraid.dev/schemes/flags' AND c.notation = 'starred'
-                ) AS ok FROM media_media_asset a WHERE a.asset_id = ?`
+                ) AS ok FROM media_asset a WHERE a.asset_id = ?`
         )
         .get(asset_id) as { ok: number };
       return row.ok === 1;
@@ -467,7 +463,7 @@ describe("media", () => {
       thumbhash: "1QcSHQRnh493V4dIh4eXh1h4kJUI",
     });
     const asset = db.vault
-      .prepare("SELECT tz_offset_min FROM media_media_asset WHERE asset_id = ?")
+      .prepare("SELECT tz_offset_min FROM media_asset WHERE asset_id = ?")
       .get(asset_id) as { tz_offset_min: number };
     expect(asset.tz_offset_min).toBe(330);
     const derivative = db.vault
@@ -494,7 +490,7 @@ describe("media", () => {
     expect(outcome.status).toBe("executed");
     const asset = db.vault
       .prepare(
-        "SELECT deleted_at, captured_at FROM media_media_asset WHERE asset_id = ?"
+        "SELECT deleted_at, captured_at FROM media_asset WHERE asset_id = ?"
       )
       .get(asset_id) as { deleted_at: string | null; captured_at: string };
     expect(asset.deleted_at).toBeNull();

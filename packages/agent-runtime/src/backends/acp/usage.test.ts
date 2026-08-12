@@ -48,7 +48,7 @@ describe(deltaCumulativeUsage, () => {
   });
 
   it("treats a counter regression as a reset and charges the current value in full", () => {
-    // The agent restarted its session counters behind our back. Subtracting a
+    // The harness restarted its session counters behind our back. Subtracting a
     // larger baseline would book a NEGATIVE delta and credit spend back.
     const d = deltaCumulativeUsage({ inputTokens: 10 }, undefined, {
       inputTokens: 400,
@@ -57,7 +57,7 @@ describe(deltaCumulativeUsage, () => {
     expect(d.snapshot?.inputTokens).toBe(10);
   });
 
-  it("carries prior baseline fields the agent stopped reporting", () => {
+  it("carries prior baseline fields the harness stopped reporting", () => {
     // A partial report must not invent a zero delta for the missing field, and
     // must not drop its baseline — the next full report would then double-book.
     const d = deltaCumulativeUsage({ outputTokens: 90 }, undefined, {
@@ -112,7 +112,7 @@ describe(deltaCumulativeUsage, () => {
     expect(d.cost?.amount).toBe(0.05);
   });
 
-  it("preserves the prior snapshot when the agent reports nothing at all", () => {
+  it("preserves the prior snapshot when the harness reports nothing at all", () => {
     // Returning no snapshot here would CLEAR the persisted baseline and make
     // the next turn book the whole session total a second time.
     const d = deltaCumulativeUsage({}, undefined, {
@@ -131,15 +131,14 @@ describe(deltaCumulativeUsage, () => {
 });
 
 describe("readTokenUsage / readCost", () => {
-  it("reads the spec spelling, nested under `usage` or flat", () => {
+  it("projects the SDK Usage fields into ledger token names", () => {
     expect(
       readTokenUsage({
-        usage: {
-          inputTokens: 1,
-          outputTokens: 2,
-          cachedReadTokens: 3,
-          cachedWriteTokens: 4,
-        },
+        totalTokens: 10,
+        inputTokens: 1,
+        outputTokens: 2,
+        cachedReadTokens: 3,
+        cachedWriteTokens: 4,
       })
     ).toStrictEqual({
       inputTokens: 1,
@@ -149,19 +148,19 @@ describe("readTokenUsage / readCost", () => {
     });
   });
 
-  it("accepts the snake_case / promptTokens spellings older agents emit", () => {
+  it("omits nullable SDK cache counters", () => {
     expect(
       readTokenUsage({
-        promptTokens: 1,
-        output_tokens: 2,
-        cache_creation_input_tokens: 4,
+        totalTokens: 3,
+        inputTokens: 1,
+        outputTokens: 2,
+        cachedReadTokens: null,
+        cachedWriteTokens: null,
       })
-    ).toStrictEqual({ inputTokens: 1, outputTokens: 2, cacheWriteTokens: 4 });
+    ).toStrictEqual({ inputTokens: 1, outputTokens: 2 });
   });
 
-  it("drops a cost with a missing or wrongly-typed field", () => {
-    expect(readCost({ amount: 1 })).toBeUndefined();
-    expect(readCost({ amount: "1", currency: "USD" })).toBeUndefined();
+  it("projects SDK cost and preserves an absent value", () => {
     expect(readCost(null)).toBeUndefined();
     expect(readCost({ amount: 1.5, currency: "USD" })).toStrictEqual({
       amount: 1.5,
@@ -171,7 +170,7 @@ describe("readTokenUsage / readCost", () => {
 });
 
 describe(buildUsageEvent, () => {
-  it("emits nothing when the agent reported nothing worth recording", () => {
+  it("emits nothing when the harness reported nothing worth recording", () => {
     expect(
       buildUsageEvent("acp", "m", undefined, {}, undefined)
     ).toBeUndefined();
@@ -187,7 +186,7 @@ describe(buildUsageEvent, () => {
     );
     expect(event).toMatchObject({
       type: "usage",
-      provider: "acp",
+      harness: "acp",
       model: "m",
       inputTokens: 5,
     });
@@ -197,7 +196,7 @@ describe(buildUsageEvent, () => {
 
   it("does not book a usage row for effort alone", () => {
     // Effort is a configuration label, not spend. Emitting for it wrote a
-    // zero-token, zero-cost ledger row for every turn a runner reported no
+    // zero-token, zero-cost ledger row for every turn a harness reported no
     // usage at all.
     expect(buildUsageEvent("acp", "m", "high", {}, undefined)).toBeUndefined();
     // It still rides along whenever there IS usage to book (see above).

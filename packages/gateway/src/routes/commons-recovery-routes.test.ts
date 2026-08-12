@@ -63,7 +63,7 @@ function shared(label: string): {
     ownerPartyId: steward.ownerPartyId,
     ownerVaultId: steward.vaultId,
     ownerVault: steward.vault,
-    containerType: "media.media_asset",
+    containerType: "media.asset",
     containerId: photo.assetId,
     members: [
       {
@@ -124,7 +124,7 @@ describe("commons recovery routes", () => {
     // Never pulled yet, so the seat says so rather than inventing an absence.
     expect(grant?.steward.presence).toBe("unknown");
     expect(grant?.reachableRatio).toBeNull();
-    expect(grant?.containerType).toBe("media.media_asset");
+    expect(grant?.containerType).toBe("media.asset");
     expect(grant?.opLog.lastSequence).toBe(
       readCommonsGrant(member.vault.vault, grantId).lastSequence
     );

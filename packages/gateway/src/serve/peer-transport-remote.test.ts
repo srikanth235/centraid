@@ -259,7 +259,7 @@ function seedPhoto(side: Side, label: string) {
   const assetId = crypto.randomUUID();
   side.vault.vault
     .prepare(
-      `INSERT INTO media_media_asset
+      `INSERT INTO media_asset
          (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id,
           place_id, camera_device_id, width, height, duration_s, exif_json,
           favorite, archived_at, deleted_at, purge_at)
@@ -279,7 +279,7 @@ function insertEdgeRow(
        (edge_id, created_by_device, owner_id, kind, mode, item_type,
         scope_json, origin_vault_id, audience_vault_id, verbs,
         target_state, source_state, status, created_at, updated_at)
-     VALUES (?, ?, ?, 'add', 'snapshot', 'media.media_asset', ?, ?, ?, 'read',
+     VALUES (?, ?, ?, 'add', 'snapshot', 'media.asset', ?, ?, ?, 'read',
              'queued', 'not-needed', 'queued', ?, ?)`,
     input.edgeId,
     origin.deviceId,

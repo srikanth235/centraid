@@ -219,7 +219,7 @@ describe("commons sync instrumentation", () => {
             departure_policy, implicit_circle, steward_party_id, created_at,
             last_sequence, checkpoint_sequence, chain_head_sequence,
             chain_head_hash)
-         VALUES (?, ?, 'media.media_asset', 'asset-1', 'commons',
+         VALUES (?, ?, 'media.asset', 'asset-1', 'commons',
                  'remove-member-only', 1, ?, ?, 10, 4, 10, 'head')`
       )
       .run(GRANT, "circle-1", side.ownerPartyId, now);

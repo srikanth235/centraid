@@ -191,7 +191,7 @@ export interface InlineCentraidClient {
       | "core.document"
       | "docs.folder"
       | "locker.item"
-      | "media.media_asset"
+      | "media.asset"
       | "tally.group";
     itemId: string;
     sourceVaultId: string;
@@ -205,7 +205,7 @@ export interface InlineCentraidClient {
       | "core.document"
       | "docs.folder"
       | "locker.item"
-      | "media.media_asset"
+      | "media.asset"
       | "tally.group";
     containerId: string;
     sourceVaultId: string;

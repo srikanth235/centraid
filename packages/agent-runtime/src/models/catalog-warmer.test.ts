@@ -2,7 +2,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
-import type { RunnerModel } from "@centraid/app-engine";
+import type { HarnessModel } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { CatalogWarmer, deriveStatus } from "./catalog-warmer.ts";
@@ -14,7 +14,7 @@ async function tmpCatalogPath(): Promise<string> {
   return path.join(dir, `model-catalog-${counter++}.json`);
 }
 
-const noModels = async (): Promise<RunnerModel[]> => [];
+const noModels = async (): Promise<HarnessModel[]> => [];
 
 describe("catalog-warmer", () => {
   test("warm writes a non-empty model enumeration to the catalog", async () => {
@@ -24,7 +24,7 @@ describe("catalog-warmer", () => {
       enumerateModels: async () => [{ id: "sonnet" }, { id: "haiku" }],
     });
     await warmer.warm("claude-code", "models");
-    const entry = (await readCatalog(catalogPath))?.runners["claude-code"];
+    const entry = (await readCatalog(catalogPath))?.harnesses["claude-code"];
     expect(entry?.models?.map((m) => m.id)).toStrictEqual(["sonnet", "haiku"]);
     expect(entry?.hash).toBeTruthy();
     expect(entry?.enumeratedAt).toBeTruthy();
@@ -64,7 +64,7 @@ describe("catalog-warmer", () => {
     });
     await bad.warm("claude-code", "models");
     expect(
-      (await readCatalog(catalogPath))?.runners["claude-code"]?.models?.map(
+      (await readCatalog(catalogPath))?.harnesses["claude-code"]?.models?.map(
         (m) => m.id
       )
     ).toStrictEqual(["sonnet"]);
@@ -82,7 +82,7 @@ describe("catalog-warmer", () => {
     await expect(readCatalog(catalogPath)).resolves.toBeUndefined();
   });
 
-  // A runner that self-reports no models (opencode, grok) leaves the cache
+  // A harness that self-reports no models (opencode, grok) leaves the cache
   // empty forever. The read path only re-kicks a warm while the question is
   // unanswered — otherwise every poll restarted a warm, `isWarming` was true
   // at read time, and the surface reported `loading` for good.

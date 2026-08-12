@@ -11,7 +11,10 @@ if (!root || !faultPoint) throw new Error("root and fault point required");
 const gateway = await buildGateway({
   paths: { vaultDir: path.join(root, "vault") },
 });
-await gateway.start("http://127.0.0.1");
+// Recovery only inspects the reopened vault/journal planes. Mounting code
+// hosts, schedulers, catalogs, and HTTP routes adds no crash-safety coverage
+// and can starve this 30-second fault test while the PR gate runs four lanes.
+if (mode !== "recover") await gateway.start("http://127.0.0.1");
 const vaultId = gateway.vaults.defaultVaultId();
 const plane = gateway.vaults.get(vaultId)!;
 const db = plane.db;
@@ -83,7 +86,7 @@ if (faultPoint === "journal-after-append") {
     userMessage: "acknowledged journal input",
     nodes: [],
     finalText: "acknowledged journal output",
-    adapter: { kind: "codex", sessionId: "quality-crash" },
+    harnessObservation: { kind: "codex", sessionId: "quality-crash" },
     startedAt: 1,
     endedAt: 2,
     ok: true,

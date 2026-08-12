@@ -9,7 +9,7 @@ export interface LowPriorityCommand {
 const DEFAULT_NICENESS = 10;
 
 /**
- * Wrap an agent/helper child in OS CPU/I/O priority controls (#456 A6, #528
+ * Wrap a harness/helper child in OS CPU/I/O priority controls (#456 A6, #528
  * Phase D). Per-platform mapping of what actually applies:
  *   - Linux: `nice` (CPU) + best-effort idle-class `ionice` (I/O); a child
  *     could additionally opt into `SCHED_IDLE`, but that needs a syscall wrapper

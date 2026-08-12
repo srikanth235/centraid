@@ -1,11 +1,11 @@
 /*
- * Launch planning: what process to spawn for a runner kind, and with what
+ * Launch planning: what process to spawn for a harness kind, and with what
  * environment.
  *
  * Native-ACP kinds spawn their own CLI with the ACP flag. Adapter-backed kinds
  * spawn `node <adapter entry>`; the user's `binPath` is redirected into the
  * adapter's "where is the real CLI" env var, since with an adapter in the
- * middle `binPath` names the agent CLI, not the process we launch.
+ * middle `binPath` names the harness CLI, not the process we launch.
  *
  * `config.env` is the ONE per-kind launch-env field and applies to both
  * flavours — headless presets and self-update suppressors are the same fact.
@@ -13,7 +13,7 @@
 
 import type { TurnStreamEvent } from "@centraid/app-engine";
 
-import { agentSpawnEnv } from "../../spawn-env.js";
+import { harnessSpawnEnv } from "../../spawn-env.js";
 import { resolveAdapterEntry } from "./adapter-bin.js";
 import type { AcpTurnConfig } from "./types.js";
 
@@ -29,7 +29,7 @@ export interface LaunchPlan {
  * Throws when a launch is impossible (no binary, adapter not installed).
  * Findings worth telling the owner about are pushed onto `notices` rather than
  * emitted here, so they reach the transcript in turn order — after the
- * handshake has proved the agent is actually alive.
+ * handshake has proved the harness is actually alive.
  */
 export function planLaunch(
   config: AcpTurnConfig,
@@ -43,10 +43,10 @@ export function planLaunch(
     const bin = config.binPath ?? config.defaultBin;
     if (!bin) {
       throw new Error(
-        "No binary configured for the ACP runner — set its path in Settings → Agents."
+        "No binary configured for the ACP harness — set its path in Settings → Agents."
       );
     }
-    const nativeEnv = agentSpawnEnv({
+    const nativeEnv = harnessSpawnEnv({
       ...(config.binPath ? { binPath: config.binPath } : {}),
       ...(extraPath ? { extraPath } : {}),
     });
@@ -58,7 +58,7 @@ export function planLaunch(
   }
 
   const entry = resolveAdapterEntry(adapter.packageName);
-  const env = agentSpawnEnv({
+  const env = harnessSpawnEnv({
     ...(config.binPath ? { binPath: config.binPath } : {}),
     ...(extraPath ? { extraPath } : {}),
   });
@@ -79,7 +79,7 @@ export function planLaunch(
       level: "warn",
       code: "root_bypass_optin",
       message:
-        "Running as root: the agent’s non-interactive permission mode was enabled explicitly " +
+        "Running as root: the harness’s non-interactive permission mode was enabled explicitly " +
         "(IS_SANDBOX). Tool calls run without approval prompts — prefer running the gateway as " +
         "a normal user.",
     });

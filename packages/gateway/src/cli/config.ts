@@ -7,7 +7,7 @@
  *     "dataDir": "/var/lib/centraid",
  *     "host": "0.0.0.0",
  *     "port": 8765,
- *     "runner": {
+ *     "harness": {
  *       "kind": "codex",
  *       "binPath": "/opt/homebrew/bin/codex",
  *       "extraArgs": ["--model", "<model-id>"]
@@ -15,28 +15,28 @@
  *   }
  *
  * Every field is optional except `dataDir`. CLI flags
- * (`--host`/`--port`/`--data-dir`) override file fields. The `runner`
+ * (`--host`/`--port`/`--data-dir`) override file fields. The `harness`
  * block is *seeded* into the gateway's identity DB on first boot so the
  * runtime's per-turn prefs loader picks it up unchanged.
  *
- * `runner.kind` accepts any registered `RUNNER_KIND` — this file is also the
+ * `harness.kind` accepts any registered `HarnessKind` — this file is also the
  * ONLY way to configure the custom `acp` kind, which has no default binary:
  *
- *   "runner": { "kind": "acp", "binPath": "/usr/local/bin/my-agent",
+ *   "harness": { "kind": "acp", "binPath": "/usr/local/bin/my-agent",
  *               "extraArgs": ["--acp"] }
  */
 
 import { promises as fs } from "node:fs";
 
-import { RUNNER_KINDS, isRunnerKind } from "@centraid/app-engine";
-import type { RunnerKind } from "@centraid/app-engine";
+import { HARNESS_KINDS, isHarnessKind } from "@centraid/app-engine";
+import type { HarnessKind } from "@centraid/app-engine";
 
 import { validateBackupConfig } from "../backup/backup-config.js";
 import type { BackupConfig } from "../backup/backup-config.js";
 
-export interface DaemonRunnerConfig {
-  /** Any kind the runtime registers — validated against `RUNNER_KINDS`. */
-  kind: RunnerKind;
+export interface DaemonHarnessConfig {
+  /** Any kind the runtime registers — validated against `HARNESS_KINDS`. */
+  kind: HarnessKind;
   /**
    * Override the binary location; defaults to the kind's own PATH lookup.
    * REQUIRED for the custom `acp` kind, which ships no default binary (its
@@ -56,7 +56,7 @@ export interface DaemonConfig {
   dataDir: string;
   host?: string;
   port?: number;
-  runner?: DaemonRunnerConfig;
+  harness?: DaemonHarnessConfig;
   /**
    * Whether the daemon binds its iroh endpoint (issue #289). Defaults to
    * true — the endpoint IS the remote story; set false for HTTP-only
@@ -127,8 +127,8 @@ export function validateConfig(value: unknown): DaemonConfig {
     }
     out.port = port;
   }
-  if (value.runner !== undefined) {
-    out.runner = validateRunner(value.runner);
+  if (value.harness !== undefined) {
+    out.harness = validateHarness(value.harness);
   }
   if (value.endpoint !== undefined) {
     if (typeof value.endpoint !== "boolean") {
@@ -161,19 +161,21 @@ export function validateConfig(value: unknown): DaemonConfig {
   return out;
 }
 
-function validateRunner(value: unknown): DaemonRunnerConfig {
+function validateHarness(value: unknown): DaemonHarnessConfig {
   if (!isRecord(value))
-    throw new DaemonConfigError("`runner` must be an object");
+    throw new DaemonConfigError("`harness` must be an object");
   const kind = value.kind;
-  if (!isRunnerKind(kind)) {
+  if (!isHarnessKind(kind)) {
     throw new DaemonConfigError(
-      `\`runner.kind\` must be one of ${RUNNER_KINDS.map((k) => `"${k}"`).join(", ")}`
+      `\`harness.kind\` must be one of ${HARNESS_KINDS.map((k) => `"${k}"`).join(", ")}`
     );
   }
-  const out: DaemonRunnerConfig = { kind };
+  const out: DaemonHarnessConfig = { kind };
   if (value.binPath !== undefined) {
     if (typeof value.binPath !== "string") {
-      throw new DaemonConfigError("`runner.binPath` must be a string when set");
+      throw new DaemonConfigError(
+        "`harness.binPath` must be a string when set"
+      );
     }
     out.binPath = value.binPath;
   }
@@ -183,7 +185,7 @@ function validateRunner(value: unknown): DaemonRunnerConfig {
       value.extraArgs.some((v) => typeof v !== "string")
     ) {
       throw new DaemonConfigError(
-        "`runner.extraArgs` must be an array of strings when set"
+        "`harness.extraArgs` must be an array of strings when set"
       );
     }
     out.extraArgs = value.extraArgs as string[];

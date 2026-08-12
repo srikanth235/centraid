@@ -1,6 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); media owns the whole library loop (9 commands with their contracts), so it is large by design.
 // Media domain commands (§08): the command pack the Photos projection was
-// parked on. An asset is meaning over bytes — media_media_asset decorates a
+// parked on. An asset is meaning over bytes — media_asset decorates a
 // canonical core_content_item (sha256-deduped data: URI, same custody as
 // attachments) with capture time and dimensions; an album is a surface view
 // over core_collection, the one owner-curation mechanism (issue #274) — the
@@ -34,7 +34,7 @@ import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
 // The starred flag rides the CANONICAL content item, not the asset row (issue
 // #274 kink 1 / #441 A2.1): favoriting a photo must surface it in every "what
 // I starred" query — Docs' Starred section, the agent, the briefing — exactly
-// as Docs/Locker/People/Social already do. media_media_asset.favorite stays as
+// as Docs/Locker/People/Social already do. media_asset.favorite stays as
 // the Photos replica read model but becomes a mirror with a single writer: the
 // tag is the truth, the column is a derived cache, and a postcondition asserts
 // the two agree after every toggle.
@@ -47,7 +47,7 @@ function mirrorFavoriteToTag(
   favorite: number
 ): void {
   const row = ctx.db
-    .prepare("SELECT content_id FROM media_media_asset WHERE asset_id = ?")
+    .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
     .get(assetId) as { content_id: string } | undefined;
   if (!row) return;
   setStarred(ctx, CONTENT_ITEM_TARGET_TYPE, row.content_id, favorite === 1);
@@ -228,7 +228,7 @@ export function exifJsonForMeta(meta: Record<string, unknown>): string | null {
   return Object.keys(exif).length > 0 ? JSON.stringify(exif) : null;
 }
 
-/** One row of `media_media_asset` — the shape both writers fill in. */
+/** One row of `media_asset` — the shape both writers fill in. */
 export interface MediaAssetRow {
   assetId: string;
   contentId: string;
@@ -245,7 +245,7 @@ export interface MediaAssetRow {
 }
 
 /**
- * The ONE insert into `media_media_asset`. Both doors into the library —
+ * The ONE insert into `media_asset`. Both doors into the library —
  * `media.add_asset` and the import spine's publisher — write through here, so
  * a column added to the table can never land on one path and not the other.
  */
@@ -255,7 +255,7 @@ export function insertMediaAssetTx(
 ): void {
   vault
     .prepare(
-      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id, source_asset_id, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
+      `INSERT INTO media_asset (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id, source_asset_id, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)`
     )
     .run(
@@ -275,7 +275,7 @@ export function insertMediaAssetTx(
 }
 
 /**
- * `media_media_asset.content_id` is UNIQUE — the same bytes are one asset. If
+ * `media_asset.content_id` is UNIQUE — the same bytes are one asset. If
  * an asset already owns this content item, adopt it instead of minting a
  * second: a trashed one comes back to life (re-upload = restore), and a
  * capture group learned later COALESCE-merges onto it, which is how a Live
@@ -295,7 +295,7 @@ export function adoptAssetForContentTx(
 ): string | null {
   const existing = deps.vault
     .prepare(
-      "SELECT asset_id, deleted_at, capture_group_id FROM media_media_asset WHERE content_id = ?"
+      "SELECT asset_id, deleted_at, capture_group_id FROM media_asset WHERE content_id = ?"
     )
     .get(contentId) as
     | {
@@ -311,14 +311,14 @@ export function adoptAssetForContentTx(
   ) {
     deps.vault
       .prepare(
-        `UPDATE media_media_asset
+        `UPDATE media_asset
             SET deleted_at = NULL,
                 purge_at = NULL,
                 capture_group_id = COALESCE(capture_group_id, ?)
           WHERE asset_id = ?`
       )
       .run(captureGroupId, existing.asset_id);
-    deps.wrote("media.media_asset", existing.asset_id);
+    deps.wrote("media.asset", existing.asset_id);
   }
   return existing.asset_id;
 }
@@ -348,7 +348,7 @@ const CONTENT_REFERENCES: {
   // A trashed asset is not a rental — it must not keep its bytes alive, or
   // trash could never release anything.
   {
-    table: "media_media_asset",
+    table: "media_asset",
     column: "content_id",
     onlyLive: "deleted_at IS NULL",
   },
@@ -533,7 +533,7 @@ const ADD_ASSET: CommandDefinition = {
       // raw constraint error from the middle of the insert.
       name: "source_asset_exists",
       sql: `SELECT CASE WHEN :source_asset_id IS NULL THEN 1 ELSE
-              EXISTS(SELECT 1 FROM media_media_asset WHERE asset_id = :source_asset_id) END AS n`,
+              EXISTS(SELECT 1 FROM media_asset WHERE asset_id = :source_asset_id) END AS n`,
       column: "n",
       op: "eq",
       value: 1,
@@ -542,7 +542,7 @@ const ADD_ASSET: CommandDefinition = {
   postconditions: [
     {
       name: "asset_backed_by_content",
-      sql: `SELECT count(*) AS n FROM media_media_asset a
+      sql: `SELECT count(*) AS n FROM media_asset a
              JOIN core_content_item c ON c.content_id = a.content_id
             WHERE a.asset_id = :asset_id AND c.deleted_at IS NULL`,
       column: "n",
@@ -679,10 +679,10 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
         ctx.now
       );
   }
-  ctx.wrote("media.media_asset", assetId);
+  ctx.wrote("media.asset", assetId);
   ctx.cite({
     claim: `${minted.mediaType} (${minted.byteSize} bytes) entered the library`,
-    entityType: "media.media_asset",
+    entityType: "media.asset",
     entityId: assetId,
   });
   return { asset_id: assetId, content_id: contentId, deduped: 0 };
@@ -716,7 +716,7 @@ const UPDATE_ASSET: CommandDefinition = {
   preconditions: [
     {
       name: "asset_exists",
-      sql: "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id",
+      sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id",
       column: "n",
       op: "eq",
       value: 1,
@@ -727,15 +727,15 @@ const UPDATE_ASSET: CommandDefinition = {
       name: "edits_applied",
       sql: `SELECT (
               (SELECT CASE WHEN :captured_at IS NULL THEN 1
-                           ELSE EXISTS(SELECT 1 FROM media_media_asset WHERE asset_id = :asset_id AND captured_at = :captured_at) END)
+                           ELSE EXISTS(SELECT 1 FROM media_asset WHERE asset_id = :asset_id AND captured_at = :captured_at) END)
               AND (SELECT CASE WHEN :title IS NULL THEN 1
-                           ELSE EXISTS(SELECT 1 FROM media_media_asset a JOIN core_content_item c ON c.content_id = a.content_id
+                           ELSE EXISTS(SELECT 1 FROM media_asset a JOIN core_content_item c ON c.content_id = a.content_id
                                         WHERE a.asset_id = :asset_id AND c.title = :title) END)
               AND (SELECT CASE WHEN :favorite IS NULL THEN 1
-                           ELSE EXISTS(SELECT 1 FROM media_media_asset WHERE asset_id = :asset_id AND favorite = :favorite) END)
+                           ELSE EXISTS(SELECT 1 FROM media_asset WHERE asset_id = :asset_id AND favorite = :favorite) END)
               AND (SELECT CASE WHEN :archived IS NULL THEN 1
-                           WHEN :archived = 1 THEN EXISTS(SELECT 1 FROM media_media_asset WHERE asset_id = :asset_id AND archived_at IS NOT NULL)
-                           ELSE EXISTS(SELECT 1 FROM media_media_asset WHERE asset_id = :asset_id AND archived_at IS NULL) END)
+                           WHEN :archived = 1 THEN EXISTS(SELECT 1 FROM media_asset WHERE asset_id = :asset_id AND archived_at IS NOT NULL)
+                           ELSE EXISTS(SELECT 1 FROM media_asset WHERE asset_id = :asset_id AND archived_at IS NULL) END)
             ) AS n`,
       column: "n",
       op: "eq",
@@ -746,7 +746,7 @@ const UPDATE_ASSET: CommandDefinition = {
       // tag must agree (issue #441 A2.1); a no-op when favorite was untouched.
       name: "favorite_mirrors_tag",
       sql: `SELECT (CASE WHEN :favorite IS NULL THEN 1
-                    ELSE (SELECT count(*) FROM media_media_asset a
+                    ELSE (SELECT count(*) FROM media_asset a
                            WHERE a.asset_id = :asset_id
                              AND (a.favorite = 1) = ${starredExistsSql(CONTENT_ITEM_TARGET_TYPE, "a.content_id")})
                     END) AS n`,
@@ -770,33 +770,29 @@ function updateAsset(ctx: HandlerCtx): Record<string, unknown> {
   };
   if (input.captured_at !== undefined) {
     ctx.db
-      .prepare(
-        "UPDATE media_media_asset SET captured_at = ? WHERE asset_id = ?"
-      )
+      .prepare("UPDATE media_asset SET captured_at = ? WHERE asset_id = ?")
       .run(input.captured_at, input.asset_id);
   }
   if (input.favorite !== undefined) {
     ctx.db
-      .prepare("UPDATE media_media_asset SET favorite = ? WHERE asset_id = ?")
+      .prepare("UPDATE media_asset SET favorite = ? WHERE asset_id = ?")
       .run(input.favorite, input.asset_id);
     mirrorFavoriteToTag(ctx, input.asset_id, input.favorite);
   }
   if (input.archived !== undefined) {
     ctx.db
-      .prepare(
-        "UPDATE media_media_asset SET archived_at = ? WHERE asset_id = ?"
-      )
+      .prepare("UPDATE media_asset SET archived_at = ? WHERE asset_id = ?")
       .run(input.archived === 1 ? ctx.now : null, input.asset_id);
   }
   if (input.title !== undefined) {
     ctx.db
       .prepare(
         `UPDATE core_content_item SET title = ?
-          WHERE content_id = (SELECT content_id FROM media_media_asset WHERE asset_id = ?)`
+          WHERE content_id = (SELECT content_id FROM media_asset WHERE asset_id = ?)`
       )
       .run(input.title, input.asset_id);
   }
-  ctx.wrote("media.media_asset", input.asset_id);
+  ctx.wrote("media.asset", input.asset_id);
   return { asset_id: input.asset_id };
 }
 
@@ -825,7 +821,7 @@ const SET_ASSET_PLACE: CommandDefinition = {
   preconditions: [
     {
       name: "asset_exists",
-      sql: "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id",
+      sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id",
       column: "n",
       op: "eq",
       value: 1,
@@ -842,7 +838,7 @@ const SET_ASSET_PLACE: CommandDefinition = {
   postconditions: [
     {
       name: "place_applied",
-      sql: `SELECT count(*) AS n FROM media_media_asset
+      sql: `SELECT count(*) AS n FROM media_asset
              WHERE asset_id = :asset_id
                AND ((:place_id IS NULL AND place_id IS NULL) OR place_id = :place_id)`,
       column: "n",
@@ -859,14 +855,14 @@ function setAssetPlace(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { asset_id: string; place_id?: string };
   const placeId = input.place_id ?? null;
   ctx.db
-    .prepare("UPDATE media_media_asset SET place_id = ? WHERE asset_id = ?")
+    .prepare("UPDATE media_asset SET place_id = ? WHERE asset_id = ?")
     .run(placeId, input.asset_id);
-  ctx.wrote("media.media_asset", input.asset_id);
+  ctx.wrote("media.asset", input.asset_id);
   ctx.cite({
     claim: placeId
       ? `asset ${input.asset_id} located at place ${placeId}`
       : `asset ${input.asset_id} location cleared`,
-    entityType: "media.media_asset",
+    entityType: "media.asset",
     entityId: input.asset_id,
   });
   return { asset_id: input.asset_id, place_id: placeId };
@@ -894,7 +890,7 @@ const DELETE_ASSET: CommandDefinition = {
       // Only a live asset can be trashed — a double-delete fails loudly
       // instead of silently re-stamping the trash date.
       name: "asset_exists_live",
-      sql: `SELECT count(*) AS n FROM media_media_asset
+      sql: `SELECT count(*) AS n FROM media_asset
              WHERE asset_id = :asset_id AND deleted_at IS NULL`,
       column: "n",
       op: "eq",
@@ -906,7 +902,7 @@ const DELETE_ASSET: CommandDefinition = {
       // The standard soft-delete pair (issue #274): the asset carries its
       // own grace window even when its bytes stay rented elsewhere.
       name: "asset_trashed",
-      sql: `SELECT count(*) AS n FROM media_media_asset
+      sql: `SELECT count(*) AS n FROM media_asset
              WHERE asset_id = :asset_id AND deleted_at IS NOT NULL AND purge_at IS NOT NULL`,
       column: "n",
       op: "eq",
@@ -921,7 +917,7 @@ const DELETE_ASSET: CommandDefinition = {
 function deleteAsset(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { asset_id: string };
   const asset = ctx.db
-    .prepare("SELECT content_id FROM media_media_asset WHERE asset_id = ?")
+    .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
     .get(input.asset_id) as { content_id: string } | undefined;
   if (!asset) throw new Error("asset vanished between check and execute");
   // Collections whose cover this was fall back to their next remaining
@@ -933,7 +929,7 @@ function deleteAsset(ctx: HandlerCtx): Record<string, unknown> {
     .all(asset.content_id) as { collection_id: string }[];
   ctx.db
     .prepare(
-      `DELETE FROM core_collection_entry WHERE target_type = 'media.media_asset' AND target_id = ?`
+      `DELETE FROM core_collection_entry WHERE target_type = 'media.asset' AND target_id = ?`
     )
     .run(input.asset_id);
   for (const collection of covered) {
@@ -941,8 +937,8 @@ function deleteAsset(ctx: HandlerCtx): Record<string, unknown> {
       .prepare(
         `UPDATE core_collection SET cover_content_id =
            (SELECT a.content_id FROM core_collection_entry e
-              JOIN media_media_asset a ON a.asset_id = e.target_id
-             WHERE e.collection_id = ? AND e.target_type = 'media.media_asset'
+              JOIN media_asset a ON a.asset_id = e.target_id
+             WHERE e.collection_id = ? AND e.target_type = 'media.asset'
              ORDER BY e.position LIMIT 1)
          WHERE collection_id = ?`
       )
@@ -954,14 +950,14 @@ function deleteAsset(ctx: HandlerCtx): Record<string, unknown> {
   // it alongside its content once the purge date passes.
   ctx.db
     .prepare(
-      "UPDATE media_media_asset SET deleted_at = ?, purge_at = ? WHERE asset_id = ?"
+      "UPDATE media_asset SET deleted_at = ?, purge_at = ? WHERE asset_id = ?"
     )
     .run(ctx.now, purgeAt(ctx.now), input.asset_id);
-  ctx.wrote("media.media_asset", input.asset_id);
+  ctx.wrote("media.asset", input.asset_id);
   const released = releaseContentIfUnreferenced(ctx, asset.content_id);
   ctx.cite({
     claim: `asset ${input.asset_id} moved to trash; bytes ${released ? "soft-deleted" : "still rented elsewhere"}`,
-    entityType: "media.media_asset",
+    entityType: "media.asset",
     entityId: input.asset_id,
   });
   return { asset_id: input.asset_id, content_released: released ? 1 : 0 };
@@ -985,7 +981,7 @@ const RESTORE_ASSET: CommandDefinition = {
     {
       // Restoring a live asset fails loudly — trash is the only source.
       name: "asset_is_trashed",
-      sql: `SELECT count(*) AS n FROM media_media_asset
+      sql: `SELECT count(*) AS n FROM media_asset
              WHERE asset_id = :asset_id AND deleted_at IS NOT NULL`,
       column: "n",
       op: "eq",
@@ -995,7 +991,7 @@ const RESTORE_ASSET: CommandDefinition = {
   postconditions: [
     {
       name: "asset_live_with_live_content",
-      sql: `SELECT count(*) AS n FROM media_media_asset a
+      sql: `SELECT count(*) AS n FROM media_asset a
              JOIN core_content_item c ON c.content_id = a.content_id
             WHERE a.asset_id = :asset_id AND a.deleted_at IS NULL AND a.purge_at IS NULL
               AND c.deleted_at IS NULL`,
@@ -1012,15 +1008,15 @@ const RESTORE_ASSET: CommandDefinition = {
 function restoreAsset(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { asset_id: string };
   const asset = ctx.db
-    .prepare("SELECT content_id FROM media_media_asset WHERE asset_id = ?")
+    .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
     .get(input.asset_id) as { content_id: string } | undefined;
   if (!asset) throw new Error("asset vanished between check and execute");
   ctx.db
     .prepare(
-      "UPDATE media_media_asset SET deleted_at = NULL, purge_at = NULL WHERE asset_id = ?"
+      "UPDATE media_asset SET deleted_at = NULL, purge_at = NULL WHERE asset_id = ?"
     )
     .run(input.asset_id);
-  ctx.wrote("media.media_asset", input.asset_id);
+  ctx.wrote("media.asset", input.asset_id);
   // Un-soft-delete the bytes too — same path the re-upload restore takes.
   // Album membership is not restored, matching the benchmark's trash model.
   ctx.db
@@ -1032,7 +1028,7 @@ function restoreAsset(ctx: HandlerCtx): Record<string, unknown> {
   ctx.wrote("core.content_item", asset.content_id);
   ctx.cite({
     claim: `asset ${input.asset_id} restored from trash with its bytes`,
-    entityType: "media.media_asset",
+    entityType: "media.asset",
     entityId: input.asset_id,
   });
   return { asset_id: input.asset_id };
@@ -1065,7 +1061,7 @@ function restoreAsset(ctx: HandlerCtx): Record<string, unknown> {
  *    reclaimed by the next storage sweep. Bytes still rented by an
  *    attachment, an avatar or a note body are left alone: asset meaning and
  *    byte custody have independent lifecycles (issue #274).
- *  * EDIT LINEAGE. `media_media_asset.source_asset_id` (issue #711) is a
+ *  * EDIT LINEAGE. `media_asset.source_asset_id` (issue #711) is a
  *    self-FK, and a purge that broke it would have to either forge or destroy
  *    a fact. NULLing the child's column is a forgery: the schema says NULL
  *    means "camera original or import", so a cropped copy would start
@@ -1106,7 +1102,7 @@ const PURGE_ASSET: CommandDefinition = {
   preconditions: [
     {
       name: "asset_is_trashed",
-      sql: `SELECT count(*) AS n FROM media_media_asset
+      sql: `SELECT count(*) AS n FROM media_asset
              WHERE asset_id = :asset_id AND deleted_at IS NOT NULL`,
       column: "n",
       op: "eq",
@@ -1116,7 +1112,7 @@ const PURGE_ASSET: CommandDefinition = {
     },
     {
       name: "no_derived_assets",
-      sql: `SELECT count(*) AS n FROM media_media_asset
+      sql: `SELECT count(*) AS n FROM media_asset
              WHERE source_asset_id = :asset_id`,
       column: "n",
       op: "eq",
@@ -1128,7 +1124,7 @@ const PURGE_ASSET: CommandDefinition = {
   postconditions: [
     {
       name: "asset_destroyed",
-      sql: "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id",
+      sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id",
       column: "n",
       op: "eq",
       value: 0,
@@ -1142,17 +1138,17 @@ const PURGE_ASSET: CommandDefinition = {
       sql: `SELECT (
               (SELECT count(*) FROM media_face_region WHERE asset_id = :asset_id)
             + (SELECT count(*) FROM media_asset_phash WHERE asset_id = :asset_id)
-            + (SELECT count(*) FROM media_media_asset WHERE source_asset_id = :asset_id)
+            + (SELECT count(*) FROM media_asset WHERE source_asset_id = :asset_id)
             + (SELECT count(*) FROM core_collection_entry
-                WHERE target_type = 'media.media_asset' AND target_id = :asset_id)
+                WHERE target_type = 'media.asset' AND target_id = :asset_id)
             + (SELECT count(*) FROM core_tag
-                WHERE target_type = 'media.media_asset' AND target_id = :asset_id)
+                WHERE target_type = 'media.asset' AND target_id = :asset_id)
             + (SELECT count(*) FROM knowledge_annotation
-                WHERE target_type = 'media.media_asset' AND target_id = :asset_id)
+                WHERE target_type = 'media.asset' AND target_id = :asset_id)
             + (SELECT count(*) FROM core_link
                 WHERE valid_to IS NULL
-                  AND ((from_type = 'media.media_asset' AND from_id = :asset_id)
-                    OR (to_type = 'media.media_asset' AND to_id = :asset_id)))
+                  AND ((from_type = 'media.asset' AND from_id = :asset_id)
+                    OR (to_type = 'media.asset' AND to_id = :asset_id)))
             ) AS n`,
       column: "n",
       op: "eq",
@@ -1167,7 +1163,7 @@ const PURGE_ASSET: CommandDefinition = {
 function purgeAsset(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { asset_id: string };
   const asset = ctx.db
-    .prepare("SELECT content_id FROM media_media_asset WHERE asset_id = ?")
+    .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
     .get(input.asset_id) as { content_id: string } | undefined;
   if (!asset) throw new Error("asset vanished between check and execute");
   // Album covers hand off BEFORE the entries go, exactly as delete_asset
@@ -1181,7 +1177,7 @@ function purgeAsset(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `DELETE FROM core_collection_entry
-        WHERE target_type = 'media.media_asset' AND target_id = ?`
+        WHERE target_type = 'media.asset' AND target_id = ?`
     )
     .run(input.asset_id);
   for (const collection of covered) {
@@ -1189,8 +1185,8 @@ function purgeAsset(ctx: HandlerCtx): Record<string, unknown> {
       .prepare(
         `UPDATE core_collection SET cover_content_id =
            (SELECT a.content_id FROM core_collection_entry e
-              JOIN media_media_asset a ON a.asset_id = e.target_id
-             WHERE e.collection_id = ? AND e.target_type = 'media.media_asset'
+              JOIN media_asset a ON a.asset_id = e.target_id
+             WHERE e.collection_id = ? AND e.target_type = 'media.asset'
              ORDER BY e.position LIMIT 1)
          WHERE collection_id = ?`
       )
@@ -1210,14 +1206,14 @@ function purgeAsset(ctx: HandlerCtx): Record<string, unknown> {
     .prepare("DELETE FROM media_face_region WHERE asset_id = ?")
     .run(input.asset_id);
   ctx.db
-    .prepare("DELETE FROM media_media_asset WHERE asset_id = ?")
+    .prepare("DELETE FROM media_asset WHERE asset_id = ?")
     .run(input.asset_id);
-  cleanupPolyRefs(ctx.db, ctx.now, "media.media_asset", input.asset_id);
-  ctx.wrote("media.media_asset", input.asset_id);
+  cleanupPolyRefs(ctx.db, ctx.now, "media.asset", input.asset_id);
+  ctx.wrote("media.asset", input.asset_id);
   const released = releaseContentNow(ctx, asset.content_id);
   ctx.cite({
     claim: `asset ${input.asset_id} deleted forever; bytes ${released ? "handed to the next storage sweep" : "still rented elsewhere"}`,
-    entityType: "media.media_asset",
+    entityType: "media.asset",
     entityId: input.asset_id,
   });
   return { asset_id: input.asset_id, content_released: released ? 1 : 0 };
@@ -1243,7 +1239,7 @@ const SET_FAVORITE: CommandDefinition = {
   preconditions: [
     {
       name: "asset_exists",
-      sql: "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id",
+      sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id",
       column: "n",
       op: "eq",
       value: 1,
@@ -1252,7 +1248,7 @@ const SET_FAVORITE: CommandDefinition = {
   postconditions: [
     {
       name: "favorite_applied",
-      sql: "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id AND favorite = :favorite",
+      sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id AND favorite = :favorite",
       column: "n",
       op: "eq",
       value: 1,
@@ -1261,7 +1257,7 @@ const SET_FAVORITE: CommandDefinition = {
       // The column and the canonical starred tag must never disagree — the
       // column is a mirror, the tag is the truth (issue #441 A2.1).
       name: "favorite_mirrors_tag",
-      sql: `SELECT count(*) AS n FROM media_media_asset a
+      sql: `SELECT count(*) AS n FROM media_asset a
              WHERE a.asset_id = :asset_id
                AND (a.favorite = 1) = ${starredExistsSql(CONTENT_ITEM_TARGET_TYPE, "a.content_id")}`,
       column: "n",
@@ -1277,10 +1273,10 @@ const SET_FAVORITE: CommandDefinition = {
 function setFavorite(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { asset_id: string; favorite: number };
   ctx.db
-    .prepare("UPDATE media_media_asset SET favorite = ? WHERE asset_id = ?")
+    .prepare("UPDATE media_asset SET favorite = ? WHERE asset_id = ?")
     .run(input.favorite, input.asset_id);
   mirrorFavoriteToTag(ctx, input.asset_id, input.favorite);
-  ctx.wrote("media.media_asset", input.asset_id);
+  ctx.wrote("media.asset", input.asset_id);
   return { asset_id: input.asset_id, favorite: input.favorite };
 }
 
@@ -1304,7 +1300,7 @@ const SET_ARCHIVED: CommandDefinition = {
   preconditions: [
     {
       name: "asset_exists",
-      sql: "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id",
+      sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id",
       column: "n",
       op: "eq",
       value: 1,
@@ -1313,7 +1309,7 @@ const SET_ARCHIVED: CommandDefinition = {
   postconditions: [
     {
       name: "archive_applied",
-      sql: `SELECT count(*) AS n FROM media_media_asset
+      sql: `SELECT count(*) AS n FROM media_asset
              WHERE asset_id = :asset_id
                AND ((:archived = 1 AND archived_at IS NOT NULL)
                  OR (:archived = 0 AND archived_at IS NULL))`,
@@ -1330,9 +1326,9 @@ const SET_ARCHIVED: CommandDefinition = {
 function setArchived(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { asset_id: string; archived: number };
   ctx.db
-    .prepare("UPDATE media_media_asset SET archived_at = ? WHERE asset_id = ?")
+    .prepare("UPDATE media_asset SET archived_at = ? WHERE asset_id = ?")
     .run(input.archived === 1 ? ctx.now : null, input.asset_id);
-  ctx.wrote("media.media_asset", input.asset_id);
+  ctx.wrote("media.asset", input.asset_id);
   return { asset_id: input.asset_id, archived: input.archived };
 }
 
@@ -1451,7 +1447,7 @@ const SET_ALBUM_COVER: CommandDefinition = {
     {
       name: "asset_is_album_member",
       sql: `SELECT count(*) AS n FROM core_collection_entry
-             WHERE collection_id = :album_id AND target_type = 'media.media_asset' AND target_id = :asset_id`,
+             WHERE collection_id = :album_id AND target_type = 'media.asset' AND target_id = :asset_id`,
       column: "n",
       op: "eq",
       value: 1,
@@ -1461,7 +1457,7 @@ const SET_ALBUM_COVER: CommandDefinition = {
     {
       name: "cover_applied",
       sql: `SELECT count(*) AS n FROM core_collection c
-              JOIN media_media_asset a ON a.content_id = c.cover_content_id
+              JOIN media_asset a ON a.content_id = c.cover_content_id
              WHERE c.collection_id = :album_id AND a.asset_id = :asset_id`,
       column: "n",
       op: "eq",
@@ -1478,7 +1474,7 @@ function setAlbumCover(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `UPDATE core_collection SET cover_content_id =
-         (SELECT content_id FROM media_media_asset WHERE asset_id = ?)
+         (SELECT content_id FROM media_asset WHERE asset_id = ?)
        WHERE collection_id = ?`
     )
     .run(input.asset_id, input.album_id);
@@ -1712,7 +1708,7 @@ const ADD_TO_ALBUM: CommandDefinition = {
     },
     {
       name: "asset_exists",
-      sql: "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id",
+      sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id",
       column: "n",
       op: "eq",
       value: 1,
@@ -1721,7 +1717,7 @@ const ADD_TO_ALBUM: CommandDefinition = {
       // A receipted refusal beats a UNIQUE-constraint throw.
       name: "not_already_in_album",
       sql: `SELECT count(*) AS n FROM core_collection_entry
-             WHERE collection_id = :album_id AND target_type = 'media.media_asset' AND target_id = :asset_id`,
+             WHERE collection_id = :album_id AND target_type = 'media.asset' AND target_id = :asset_id`,
       column: "n",
       op: "eq",
       value: 0,
@@ -1731,7 +1727,7 @@ const ADD_TO_ALBUM: CommandDefinition = {
     {
       name: "entry_created",
       sql: `SELECT count(*) AS n FROM core_collection_entry
-             WHERE collection_id = :album_id AND target_type = 'media.media_asset' AND target_id = :asset_id`,
+             WHERE collection_id = :album_id AND target_type = 'media.asset' AND target_id = :asset_id`,
       column: "n",
       op: "eq",
       value: 1,
@@ -1754,7 +1750,7 @@ function addToAlbum(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `INSERT INTO core_collection_entry (entry_id, collection_id, target_type, target_id, position, added_at)
-       VALUES (?, ?, 'media.media_asset', ?, ?, ?)`
+       VALUES (?, ?, 'media.asset', ?, ?, ?)`
     )
     .run(entryId, input.album_id, input.asset_id, tail.p, ctx.now);
   ctx.wrote("core.collection_entry", entryId);
@@ -1763,7 +1759,7 @@ function addToAlbum(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `UPDATE core_collection SET cover_content_id =
-         (SELECT content_id FROM media_media_asset WHERE asset_id = ?)
+         (SELECT content_id FROM media_asset WHERE asset_id = ?)
        WHERE collection_id = ? AND cover_content_id IS NULL`
     )
     .run(input.asset_id, input.album_id);
@@ -1791,7 +1787,7 @@ const REMOVE_FROM_ALBUM: CommandDefinition = {
     {
       name: "entry_exists",
       sql: `SELECT count(*) AS n FROM core_collection_entry
-             WHERE collection_id = :album_id AND target_type = 'media.media_asset' AND target_id = :asset_id`,
+             WHERE collection_id = :album_id AND target_type = 'media.asset' AND target_id = :asset_id`,
       column: "n",
       op: "eq",
       value: 1,
@@ -1801,7 +1797,7 @@ const REMOVE_FROM_ALBUM: CommandDefinition = {
     {
       name: "entry_removed",
       sql: `SELECT count(*) AS n FROM core_collection_entry
-             WHERE collection_id = :album_id AND target_type = 'media.media_asset' AND target_id = :asset_id`,
+             WHERE collection_id = :album_id AND target_type = 'media.asset' AND target_id = :asset_id`,
       column: "n",
       op: "eq",
       value: 0,
@@ -1817,7 +1813,7 @@ function removeFromAlbum(ctx: HandlerCtx): Record<string, unknown> {
   const entry = ctx.db
     .prepare(
       `SELECT entry_id FROM core_collection_entry
-        WHERE collection_id = ? AND target_type = 'media.media_asset' AND target_id = ?`
+        WHERE collection_id = ? AND target_type = 'media.asset' AND target_id = ?`
     )
     .get(input.album_id, input.asset_id) as { entry_id: string } | undefined;
   if (!entry) throw new Error("album entry vanished between check and execute");
@@ -1826,7 +1822,7 @@ function removeFromAlbum(ctx: HandlerCtx): Record<string, unknown> {
     .run(entry.entry_id);
   // A cover that just left the collection hands off to the next media entry.
   const asset = ctx.db
-    .prepare("SELECT content_id FROM media_media_asset WHERE asset_id = ?")
+    .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
     .get(input.asset_id) as { content_id: string } | undefined;
   const collection = ctx.db
     .prepare(
@@ -1838,8 +1834,8 @@ function removeFromAlbum(ctx: HandlerCtx): Record<string, unknown> {
       .prepare(
         `UPDATE core_collection SET cover_content_id =
            (SELECT a.content_id FROM core_collection_entry e
-              JOIN media_media_asset a ON a.asset_id = e.target_id
-             WHERE e.collection_id = ? AND e.target_type = 'media.media_asset'
+              JOIN media_asset a ON a.asset_id = e.target_id
+             WHERE e.collection_id = ? AND e.target_type = 'media.asset'
              ORDER BY e.position LIMIT 1)
          WHERE collection_id = ?`
       )

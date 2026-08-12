@@ -29,7 +29,7 @@ function shared(): { home: Household; grant: CommonsGrantRecord; now: string } {
     ownerPartyId: home.originBoot.ownerPartyId,
     ownerVaultId: "vault-priya",
     ownerVault: home.origin,
-    containerType: "media.media_asset",
+    containerType: "media.asset",
     containerId: photo.assetId,
     members: [
       {

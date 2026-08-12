@@ -10,10 +10,6 @@ describe("stop-reason", () => {
     expect(o.error).toBeUndefined();
   });
 
-  test("missing stopReason is treated as end_turn", () => {
-    expect(outcomeForStopReason(undefined).emitFinal).toBe(true);
-  });
-
   test("refusal is a hard error without final", () => {
     const o = outcomeForStopReason("refusal");
     expect(o.emitFinal).toBe(false);
@@ -39,11 +35,5 @@ describe("stop-reason", () => {
     const o = outcomeForStopReason("cancelled");
     expect(o.emitFinal).toBe(true);
     expect(o.notice?.code).toBe("stop_cancelled");
-  });
-
-  test("unknown stopReason is labeled", () => {
-    const o = outcomeForStopReason("something_new");
-    expect(o.emitFinal).toBe(true);
-    expect(o.notice?.code).toBe("stop_other");
   });
 });

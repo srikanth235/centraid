@@ -40,7 +40,7 @@ export const meta = {
 
 export const palette = {
   requests: "#39c5ea",
-  agent: "#5b7cfa",
+  harness: "#5b7cfa",
   wal: "#f5a623",
   dirty: "#e5484d",
   consent: "#8e4ec6",
@@ -154,9 +154,9 @@ export const districts = [
   },
   {
     id: "runtime",
-    name: "Agent Runtime Row",
+    name: "Harness Runtime Row",
     blurb:
-      "ACP runners execute turns; the Conversation Ledger records every item in order. Optional — plenty of traffic never comes here.",
+      "ACP harnesses execute turns; the Conversation Ledger records every item in order. Optional — plenty of traffic never comes here.",
     color: "#5b7cfa",
     plate: { x: -78, z: 0, w: 64, d: 55 },
     buildings: [
@@ -168,44 +168,44 @@ export const districts = [
         size: { w: 24, h: 8, d: 15 },
         blurb: "conversation ⊃ turn ⊃ item — the ordered spine of everything.",
         detail:
-          "Every conversation — typed, automation-fired, or builder — holds turns, and each turn appends an ordered trace of items, starting with the inbound message itself at ordinal 0. This ledger is the spine of everything a runner does. It is not the spine of the whole system: ordinary reads and writes, and device-to-device sync, appear to complete without a turn ever being opened here.",
+          "Every conversation — typed, automation-fired, or builder — holds turns, and each turn appends an ordered trace of items, starting with the inbound message itself at ordinal 0. This ledger is the spine of everything a harness does. It is not the spine of the whole system: ordinary reads and writes, and device-to-device sync, appear to complete without a turn ever being opened here.",
         codeRef:
           "packages/app-engine/src/stores/gateway-db.ts + packages/app-engine/src/conversation/store-sql.ts",
       },
       {
         id: "runtime-acp1",
-        name: "ACP Runner — Claude",
+        name: "ACP Harness — Claude",
         kind: "tower",
         pos: { x: -100, z: 8 },
         size: { w: 8, h: 9, d: 8 },
         blurb:
           "One ACP harness process per turn, reused warm per conversation.",
         detail:
-          "Agents run through the Agent Client Protocol: a runner spawns the backing CLI/SDK, streams its output as items, and hands it a per-turn loopback MCP endpoint as its only door back into the vault. Provider-agnostic by design — a dozen-plus runner kinds share this one seam.",
+          "Harnesses run through the Agent Client Protocol: a harness spawns the backing CLI/SDK, streams its output as items, and hands it a per-turn loopback MCP endpoint as its only door back into the vault. Provider-agnostic by design — a dozen-plus harness kinds share this one seam.",
         codeRef: "packages/agent-runtime/src/backends/acp",
       },
       {
         id: "runtime-acp2",
-        name: "ACP Runner — Automation",
+        name: "ACP Harness — Automation",
         kind: "tower",
         pos: { x: -84, z: 20 },
         size: { w: 8, h: 8, d: 8 },
-        blurb: "The same runner backend, fired by cron instead of a person.",
+        blurb: "The same harness, fired by cron instead of a person.",
         detail:
-          "Automation fires are not a special code path — they are turns on an automation-kind conversation, dispatched through the same runner backend chat uses, so cost accounting and the item ledger work identically whether a human or a cron tick started the turn.",
+          "Automation fires are not a special code path — they are turns on an automation-kind conversation, dispatched through the same harness chat uses, so cost accounting and the item ledger work identically whether a human or a cron tick started the turn.",
         codeRef:
           "packages/automation/src/fire/fire.ts + packages/agent-runtime/src/automation/run-automation-live-dispatch.ts",
       },
       {
         id: "runtime-registry",
-        name: "Runner Registry",
+        name: "Harness Registry",
         kind: "shed",
         pos: { x: -58, z: 18 },
         size: { w: 9, h: 5, d: 8 },
         blurb:
-          "Which runner kinds the runtime can drive, and at what minimum version.",
+          "Which harness kinds the runtime can drive, and at what minimum version.",
         detail:
-          "Enumerates every ACP runner kind the runtime can drive — around seventeen of them — and the minimum CLI version each has been verified against, so a harness whose event or flag schema has drifted is refused rather than half-driven. What is actually installed on this machine is probed separately, at preflight.",
+          "Enumerates every ACP harness kind the runtime can drive — around seventeen of them — and the minimum CLI version each has been verified against, so a harness whose event or flag schema has drifted is refused rather than half-driven. What is actually installed on this machine is probed separately, at preflight.",
         codeRef: "packages/agent-runtime/src/registry.ts + preflight.ts",
       },
       {
@@ -214,9 +214,9 @@ export const districts = [
         kind: "shed",
         pos: { x: -100, z: 22 },
         size: { w: 8, h: 5, d: 7 },
-        blurb: "The model catalog runners select from, enumerated live.",
+        blurb: "The model catalog harnesses select from, enumerated live.",
         detail:
-          "Holds the model catalog runners select from, enumerated live over ACP from what each harness reports rather than baked into a list here, plus the capability-tier indirection — smart, balanced, fast — which so far only the Claude Code harness declares. Pricing and per-turn metering live over in app-engine, not here.",
+          "Holds the model catalog harnesses select from, enumerated live over ACP from what each harness reports rather than baked into a list here, plus the capability-tier indirection — smart, balanced, fast — which so far only the Claude Code harness declares. Pricing and per-turn metering live over in app-engine, not here.",
         codeRef: "packages/agent-runtime/src/models",
       },
     ],
@@ -238,7 +238,7 @@ export const districts = [
         blurb:
           "vault_sql / vault_invoke / vault_content all walk through here.",
         detail:
-          "Every agent tool call — vault_sql, vault_invoke, vault_content — is checked against the caller's grants before it reaches the vault. A grant names scopes, and each scope carries a verb (read, read+act, act, reveal) plus row filters and a field mask. No grant covering the verb means the call stops here.",
+          "Every harness tool call — vault_sql, vault_invoke, vault_content — is checked against the caller's grants before it reaches the vault. A grant names scopes, and each scope carries a verb (read, read+act, act, reveal) plus row filters and a field mask. No grant covering the verb means the call stops here.",
         codeRef:
           "packages/vault/src/gateway/consent.ts, gateway.ts + packages/agent-runtime/src/backends/acp/vault-mcp-server.ts",
       },
@@ -250,7 +250,7 @@ export const districts = [
         size: { w: 12, h: 4, d: 9 },
         blurb: "High-risk calls wait here until a human approves them.",
         detail:
-          "A high-risk command from a non-owner caller is not executed outright — it parks: a pending-approval row is written and the client's Approvals screen lists it to allow or deny. The agent gets a `parked` outcome to report, not an error to retry, and approving later executes the stored invocation directly rather than resuming the turn.",
+          "A high-risk command from a non-owner caller is not executed outright — it parks: a pending-approval row is written and the client's Approvals screen lists it to allow or deny. The harness gets a `parked` outcome to report, not an error to retry, and approving later executes the stored invocation directly rather than resuming the turn.",
         codeRef:
           "packages/vault/src/gateway/gateway.ts + packages/gateway/src/serve/vault-plane.ts (confirmParked)",
       },
@@ -307,7 +307,7 @@ export const districts = [
         size: { w: 8, h: 7, d: 8 },
         blurb: "Full-text search over every text-bearing entity in the vault.",
         detail:
-          "One FTS5 shadow table per text-bearing entity — fifteen of them — mirrors searchable content, so both the client search box and agent tool calls get bounded, ranked full-text lookups instead of LIKE scans.",
+          "One FTS5 shadow table per text-bearing entity — fifteen of them — mirrors searchable content, so both the client search box and harness tool calls get bounded, ranked full-text lookups instead of LIKE scans.",
         codeRef: "packages/vault/src/schema/fts.ts",
       },
       {
@@ -374,7 +374,7 @@ export const districts = [
         size: { w: 7, h: 6, d: 7 },
         blurb: "Ships WAL segments to the backup provider.",
         detail:
-          "Bundles committed WAL frames into segments and drains them to the backup provider, so a restore lands a bounded number of frames behind the primary vault instead of needing a full copy each time. Device replicas are fed differently, over in the harbor. The shipper reads the log and nothing else — it never asks a runner what to send.",
+          "Bundles committed WAL frames into segments and drains them to the backup provider, so a restore lands a bounded number of frames behind the primary vault instead of needing a full copy each time. Device replicas are fed differently, over in the harbor. The shipper reads the log and nothing else — it never asks a harness what to send.",
         codeRef:
           "packages/vault/src/wal-shipper.ts + packages/gateway/src/backup/wal-uploader.ts",
       },
@@ -450,9 +450,9 @@ export const districts = [
         kind: "crane",
         pos: { x: 112, z: 40 },
         size: { w: 8, h: 13, d: 8 },
-        blurb: "Where an agent scaffolds a brand-new app from a blueprint.",
+        blurb: "Where a harness scaffolds a brand-new app from a blueprint.",
         detail:
-          "When an agent (or a person, via the builder UI) scaffolds a new app, the crane is the visual for that build turn: a blueprint template is copied, wired to declared handlers, and snapshotted into the vault's code store.",
+          "When a harness (or a person, via the builder UI) scaffolds a new app, the crane is the visual for that build turn: a blueprint template is copied, wired to declared handlers, and snapshotted into the vault's code store.",
         codeRef:
           "packages/blueprints/src/scaffold.ts, scaffold-files.ts + packages/gateway/src/worktree-store/worktree-store.ts",
       },
@@ -497,9 +497,9 @@ export const districts = [
         size: { w: 14, h: 6, d: 10 },
         blurb: "19 of the 27 bundled automations run with zero model tokens.",
         detail:
-          "An automation handler is ordinary JavaScript in a worker thread with five ctx rails — vault, fetch, state, runs, agent — and only ctx.agent is billed. Of the 27 bundled automations, 19 never touch it: they run for free and the same way every time. The eight that do are the ones that genuinely need judgment — captioning a photo, extracting text, drafting notes.",
+          "An automation handler is ordinary JavaScript in a worker thread with five ctx rails — vault, fetch, state, runs, delegate — and only ctx.delegate is billed. Of the 27 bundled automations, 19 never touch it: they run for free and the same way every time. The eight that do are the ones that genuinely need judgment — captioning a photo, extracting text, drafting notes.",
         codeRef:
-          "packages/automation/src/handler/runner.ts (agentDispatcher) + packages/blueprints/automations",
+          "packages/automation/src/handler/runner.ts (delegateDispatcher) + packages/blueprints/automations",
       },
       {
         id: "automation-scheduler",
@@ -576,7 +576,7 @@ export const districts = [
     id: "sync",
     name: "Sync Harbor",
     blurb:
-      "Where two devices stay one vault: change batches out, device edits back — no agent involved.",
+      "Where two devices stay one vault: change batches out, device edits back — no harness involved.",
     color: "#30a46c",
     plate: { x: -85, z: -90, w: 64, d: 40 },
     buildings: [
@@ -589,7 +589,7 @@ export const districts = [
         blurb:
           "The rendezvous every endpoint is configured with, direct dial or not.",
         detail:
-          "iroh endpoints are always configured with the n0 relays and discovery, and upgrade to a direct path when hole-punching succeeds — which is what keeps pairing working across NATs and mismatched networks without needing the gateway exposed publicly. It is pure transport: it forwards the gateway's ordinary HTTP and never consults a runner.",
+          "iroh endpoints are always configured with the n0 relays and discovery, and upgrade to a direct path when hole-punching succeeds — which is what keeps pairing working across NATs and mismatched networks without needing the gateway exposed publicly. It is pure transport: it forwards the gateway's ordinary HTTP and never consults a harness.",
         codeRef: "packages/tunnel/src/gateway-endpoint.ts, client.ts",
       },
       {
@@ -601,7 +601,7 @@ export const districts = [
         blurb:
           "Two-way: change batches out to the device, the device's local edits back in.",
         detail:
-          "Once paired, a device's ordinary HTTP replica requests are forwarded over this iroh tunnel instead of hitting an exposed port. Traffic runs both ways — row-level change batches stream out against an (epoch, seq) cursor, and edits the device made while it was away drain back as intents when it reconnects. Nothing on this bridge passes through the Agent Runtime Row; sync is a gateway/vault concern end to end.",
+          "Once paired, a device's ordinary HTTP replica requests are forwarded over this iroh tunnel instead of hitting an exposed port. Traffic runs both ways — row-level change batches stream out against an (epoch, seq) cursor, and edits the device made while it was away drain back as intents when it reconnects. Nothing on this bridge passes through the Harness Runtime Row; sync is a gateway/vault concern end to end.",
         codeRef:
           "packages/tunnel/src/protocol.ts + packages/client/src/replica/shell-transport.ts, shell-session.ts, intents.ts",
       },
@@ -613,7 +613,7 @@ export const districts = [
         size: { w: 8, h: 3, d: 8 },
         blurb: "A paired device's offline-capable SQLite replica.",
         detail:
-          "Each paired device keeps a windowed SQLite replica — WASM over OPFS in the browser, op-sqlite natively on mobile — seeded by an initial bootstrap and kept current by streamed change batches, so recent vault reads, and some writes, work offline. This is how you see the same vault on your laptop and your phone: the batches do it, not an agent.",
+          "Each paired device keeps a windowed SQLite replica — WASM over OPFS in the browser, op-sqlite natively on mobile — seeded by an initial bootstrap and kept current by streamed change batches, so recent vault reads, and some writes, work offline. This is how you see the same vault on your laptop and your phone: the batches do it, not a harness.",
         codeRef:
           "packages/client/src/replica/windowed-bootstrap.ts, sqlite-worker.ts, native.ts",
       },
@@ -747,9 +747,9 @@ export const tour = [
         buildingId: "gateway-vaultregistry",
       },
       {
-        body: "Now watch the fork at Route Tower, because the shape of it is the most load-bearing thing in the city. Route Tower itself only matches URL prefixes; the fork you see is what that traffic turns out to be. Most requests are ordinary reads and writes: they stay cyan, run straight down to the Vault Excavation, and come straight back out. Only the handful of routes that open a turn go blue and head west into Agent Runtime Row.",
+        body: "Now watch the fork at Route Tower, because the shape of it is the most load-bearing thing in the city. Route Tower itself only matches URL prefixes; the fork you see is what that traffic turns out to be. Most requests are ordinary reads and writes: they stay cyan, run straight down to the Vault Excavation, and come straight back out. Only the handful of routes that open a turn go blue and head west into Harness Runtime Row.",
         buildingId: "gateway-router",
-        flows: ["directRead", "directResult", "agent"],
+        flows: ["directRead", "directResult", "harness"],
       },
       {
         body: "The Health Board keeps score on the parts that can quietly fail — the event loop, disk, connections, the scheduler, backups, and nineteen more — so an operator sees a sick subsystem before a user does. Keep an eye on the Turns readout on the HUD as the plaza works: it stays low while requests pour through. That gap between request rate and turn rate is the architecture, not an idle moment.",
@@ -766,15 +766,15 @@ export const tour = [
     buildingId: "runtime-ledger",
     pages: [
       {
-        body: "Your message was one of the few that needed a model, so the router hands it west to Agent Runtime Row. The first building it reaches is not a runner — it is the Conversation Ledger Hall, because nothing here executes before it is recorded.",
-        flows: ["agent"],
+        body: "Your message was one of the few that needed a model, so the router hands it west to Harness Runtime Row. The first building it reaches is not a harness — it is the Conversation Ledger Hall, because nothing here executes before it is recorded.",
+        flows: ["harness"],
       },
       {
-        body: "A new turn opens under your conversation, and your message is appended to it as the item at ordinal 0. That is the whole runtime model: conversation ⊃ turn ⊃ item, ordered, and durable the moment an item opens — a long-running item is later closed in place with its result, but nothing already written is rewritten. Everything the runner does next lands in this same trace, which is what makes a turn replayable and costable after the fact rather than only observable while it runs.",
-        flows: ["agent"],
+        body: "A new turn opens under your conversation, and your message is appended to it as the item at ordinal 0. That is the whole runtime model: conversation ⊃ turn ⊃ item, ordered, and durable the moment an item opens — a long-running item is later closed in place with its result, but nothing already written is rewritten. Everything the harness does next lands in this same trace, which is what makes a turn replayable and costable after the fact rather than only observable while it runs.",
+        flows: ["harness"],
       },
       {
-        body: "The ledger is not reserved for people. The automation runner on the far side of the row writes into it identically — a cron-fired turn and a typed turn are the same shape, so accounting and replay do not need two code paths. Watch the Items appended figure on the HUD start moving; it climbs several times faster than Turns, because one turn is many items.",
+        body: "The ledger is not reserved for people. The automation harness on the far side of the row writes into it identically — a cron-fired turn and a typed turn are the same shape, so accounting and replay do not need two code paths. Watch the Items appended figure on the HUD start moving; it climbs several times faster than Turns, because one turn is many items.",
         buildingId: "runtime-acp2",
         flows: ["automation"],
       },
@@ -783,20 +783,20 @@ export const tour = [
   {
     id: "chapter-4",
     section: "walkthrough",
-    title: "An ACP runner picks it up",
+    title: "An ACP harness picks it up",
     districtId: "runtime",
     buildingId: "runtime-acp1",
     pages: [
       {
-        body: "A runner process spawns and attaches to the open turn. It speaks the Agent Client Protocol: the gateway does not embed a vendor SDK, it drives a backing CLI over a protocol and translates whatever comes back into items.",
-        flows: ["agent"],
+        body: "A harness process spawns and attaches to the open turn. It speaks the Agent Client Protocol: the gateway does not embed a vendor SDK, it drives a backing CLI over a protocol and translates whatever comes back into items.",
+        flows: ["harness"],
       },
       {
         body: "Now the blue particles start. Step and tool-call items append to the turn as they arrive and stream out over SSE to the client that opened it — which is why you watch a response assemble rather than wait for a finished one. Mostly the client is reading the write, not a copy of it. The one thing that streams without being written down is the model's reasoning: you see it pass, and then it is gone.",
         flows: ["response"],
       },
       {
-        body: "The Model Shed behind the runner holds the catalog it selects from — enumerated live from what each harness reports over ACP rather than baked into a list here — plus a capability-tier indirection, smart or balanced or fast, that so far only one harness declares. What the shed does not hold is pricing: metering a turn happens over in app-engine. That separation is the point of the ACP seam — swapping which model answers you is a registry change, not a rewrite of the runtime.",
+        body: "The Model Shed behind the harness holds the catalog it selects from — enumerated live from what each harness reports over ACP rather than baked into a list here — plus a capability-tier indirection, smart or balanced or fast, that so far only one harness declares. What the shed does not hold is pricing: metering a turn happens over in app-engine. That separation is the point of the ACP seam — swapping which model answers you is a registry change, not a rewrite of the runtime.",
         buildingId: "runtime-models",
       },
     ],
@@ -804,20 +804,20 @@ export const tour = [
   {
     id: "chapter-5",
     section: "walkthrough",
-    title: "The agent calls a tool",
+    title: "The harness requests a tool",
     districtId: "runtime",
     buildingId: "runtime-registry",
     pages: [
       {
-        body: "The Runner Registry is the shed that decides what a runner is even allowed to be: which runner kinds are installed on this machine, and which minimum version each is pinned to. Whether your words may leave for a model provider is tracked separately, per conversation, by the runtime itself — first use is implicit in your having chosen the surface, and only an unattended run or a switch to a different provider stops to ask.",
+        body: "The Harness Registry is the shed that decides what a harness is even allowed to be: which harness kinds are installed on this machine, and which minimum version each is pinned to. Whether your words may leave for a model provider is tracked separately, per conversation, by the runtime itself — first use is implicit in your having chosen the surface, and only an unattended run or a switch to a different provider stops to ask.",
       },
       {
-        body: "Past that check, the agent decides it needs your data and emits a tool call — vault_sql to query, vault_invoke to run a declared handler, vault_content to reach an attachment. Those three are the whole of what Centraid exposes into the vault. The runner is still a coding CLI with its own file and shell tools inside its working directory, but none of them is a route to your rows: there is no raw connection and no back channel.",
+        body: "Past that check, the harness decides it needs your data and emits a tool call — vault_sql to query, vault_invoke to run a declared handler, vault_content to reach an attachment. Those three are the whole of what Centraid exposes into the vault. The harness is still a coding CLI with its own file and shell tools inside its working directory, but none of them is a route to your rows: there is no raw connection and no back channel.",
         buildingId: "runtime-acp1",
         flows: ["tool"],
       },
       {
-        body: "Watch where the call goes: not south-east to the vault, but south to the Consent Gate, as a violet particle. The runner cannot address the vault directly by construction. Every particle you see leaving this row toward your data is a request for permission first and a query second.",
+        body: "Watch where the call goes: not south-east to the vault, but south to the Consent Gate, as a violet particle. The harness cannot address the vault directly by construction. Every particle you see leaving this row toward your data is a request for permission first and a query second.",
         flows: ["tool"],
       },
     ],
@@ -844,7 +844,7 @@ export const tour = [
         buildingId: "consent-ledger",
       },
       {
-        body: "The detail that makes this workable is that a parked call carries its whole sealed payload with it. The agent is told it parked and is told not to retry — parked is a final answer to it, not a pause — and it moves on. Your approval later re-runs exactly that call on your own credential, minutes or days afterwards. Nothing waits, and nothing is lost.",
+        body: "The detail that makes this workable is that a parked call carries its whole sealed payload with it. The harness is told it parked and is told not to retry — parked is a final answer to it, not a pause — and it moves on. Your approval later re-runs exactly that call on your own credential, minutes or days afterwards. Nothing waits, and nothing is lost.",
         flows: ["toolPass"],
       },
     ],
@@ -872,7 +872,7 @@ export const tour = [
         flows: ["wal"],
       },
       {
-        body: "One corner of the excavation your agent never saw: the sealed columns. OAuth tokens and connector secrets are encrypted at rest under a key the gateway custodies and are only ever unsealed server-side to complete a call. The agent can cause a connector to be used; it cannot read the credential that makes it work.",
+        body: "One corner of the excavation your harness never saw: the sealed columns. OAuth tokens and connector secrets are encrypted at rest under a key the gateway custodies and are only ever unsealed server-side to complete a call. The harness can cause a connector to be used; it cannot read the credential that makes it work.",
         buildingId: "vault-sealed",
       },
     ],
@@ -894,7 +894,7 @@ export const tour = [
         flows: ["wal"],
       },
       {
-        body: "The Segment Shipper reads the same log for a different purpose: it bundles frames into segments that the uploader seals and drains out to backup. Devices ride a different stream entirely — the replica change log back in the vault — so this belt has exactly one consumer, not two. Neither stream asks a runner what to send. From here on, your write travels without an agent anywhere in the loop.",
+        body: "The Segment Shipper reads the same log for a different purpose: it bundles frames into segments that the uploader seals and drains out to backup. Devices ride a different stream entirely — the replica change log back in the vault — so this belt has exactly one consumer, not two. Neither stream asks a harness what to send. From here on, your write travels without a harness anywhere in the loop.",
         buildingId: "wal-shipper",
         flows: ["ship", "backup"],
       },
@@ -913,7 +913,7 @@ export const tour = [
         flows: ["automation"],
       },
       {
-        body: "The gold particles running down the Deterministic Assembly Line are the fire executing. An automation handler is ordinary code, held to determinism by a lint that bans wall clocks, randomness, and raw I/O and routes everything through a fixed context surface. Most handlers never call a model at all, so most fires cost zero tokens and run the same way every time. Only a handler that reaches for judgment reaches for a runner.",
+        body: "The gold particles running down the Deterministic Assembly Line are the fire executing. An automation handler is ordinary code, held to determinism by a lint that bans wall clocks, randomness, and raw I/O and routes everything through a fixed context surface. Most handlers never call a model at all, so most fires cost zero tokens and run the same way every time. Only a handler that reaches for judgment reaches for a harness.",
         buildingId: "automation-line",
         flows: ["automation"],
       },
@@ -953,13 +953,13 @@ export const tour = [
   {
     id: "chapter-10",
     section: "walkthrough",
-    title: "Your other device catches up — with no agent at all",
+    title: "Your other device catches up — with no harness at all",
     districtId: "sync",
     buildingId: "sync-bridge",
     scenarioId: "multi-device",
     pages: [
       {
-        body: "The green stream leaving the vault for the harbor is your write on its way out — not WAL segments, which go to backup, but rows from the replica change log, projected into the shapes this device is allowed to see. The Iroh Bridge carries them: a peer-to-peer tunnel, not a fetch to a server in the middle. Everything on this bridge is transport; nothing on it consults a runner.",
+        body: "The green stream leaving the vault for the harbor is your write on its way out — not WAL segments, which go to backup, but rows from the replica change log, projected into the shapes this device is allowed to see. The Iroh Bridge carries them: a peer-to-peer tunnel, not a fetch to a server in the middle. Everything on this bridge is transport; nothing on it consults a harness.",
         flows: ["ship", "replica"],
       },
       {
@@ -973,7 +973,7 @@ export const tour = [
         flows: ["devicePush", "replicaMerge"],
       },
       {
-        body: "The loop is closed: ship, deliver, push, merge. Now look west while it runs. The city is pinned to Two Devices, One Vault, which forces every agent-path rate to exactly zero — Agent Runtime Row and the Consent Gate are dark and the Turns and Items appended readouts sit at nothing — while requests, WAL, and the harbor run hot. Device sync is gateway → vault → change log → harbor. The agent is one optional consumer of that spine, not the spine.",
+        body: "The loop is closed: ship, deliver, push, merge. Now look west while it runs. The city is pinned to Two Devices, One Vault, which forces every harness-path rate to exactly zero — Harness Runtime Row and the Consent Gate are dark and the Turns and Items appended readouts sit at nothing — while requests, WAL, and the harbor run hot. Device sync is gateway → vault → change log → harbor. The harness is one optional consumer of that spine, not the spine.",
         flows: ["ship", "replicaDeliver", "replicaMerge"],
       },
     ],
@@ -995,7 +995,7 @@ export const tour = [
         flows: ["backup"],
       },
       {
-        body: "The Recovery Office is the part that justifies the rest: restore and verify paths, plus written runbooks for vault erase, backup, and pairing recovery, because a backup nobody has restored is a hypothesis. Count what has happened to your one message — journal receipt, WAL frame, checkpointed main file, change-log row on its way to a device, encrypted snapshot. Five kinds of durable on three separate paths, none of them requiring an agent to be running.",
+        body: "The Recovery Office is the part that justifies the rest: restore and verify paths, plus written runbooks for vault erase, backup, and pairing recovery, because a backup nobody has restored is a hypothesis. Count what has happened to your one message — journal receipt, WAL frame, checkpointed main file, change-log row on its way to a device, encrypted snapshot. Five kinds of durable on three separate paths, none of them requiring a harness to be running.",
         buildingId: "backup-bunker3",
         flows: ["backup", "blobBackup"],
       },
@@ -1018,9 +1018,9 @@ export const tour = [
         flows: ["request"],
       },
       {
-        body: "Watch the split at Route Tower. Most of that traffic turns straight around as reads and writes against the vault and never reaches Agent Runtime Row; only a thin blue trickle heads west into a turn. When it does, the consent gate parks roughly one tool call in twenty, which is why Pending approvals hovers near zero instead of building.",
+        body: "Watch the split at Route Tower. Most of that traffic turns straight around as reads and writes against the vault and never reaches Harness Runtime Row; only a thin blue trickle heads west into a turn. When it does, the consent gate parks roughly one tool call in twenty, which is why Pending approvals hovers near zero instead of building.",
         buildingId: "gateway-router",
-        flows: ["directRead", "directResult", "agent"],
+        flows: ["directRead", "directResult", "harness"],
       },
       {
         body: "Underneath that, the city keeps three slow clocks: the checkpointer folding WAL frames back into vault.db, the cron tower coming round, and a CAS barge sailing for the cloud. These are the model's cadences, sped up so you can watch them — the real rollover is mostly triggered by WAL size rather than a timer, and cron fires on whatever schedule an automation declares. None of them are reacting to you; they run whether or not anyone is typing.",
@@ -1028,7 +1028,7 @@ export const tour = [
         flows: ["wal", "automation", "blob"],
       },
       {
-        body: "Use this as the baseline for everything that follows. Each of the scenarios below is this same city with one dial turned hard — more blobs, no agent, a faster clock, a stricter gate — so the useful reading is always the difference from here, not the absolute numbers.",
+        body: "Use this as the baseline for everything that follows. Each of the scenarios below is this same city with one dial turned hard — more blobs, no harness, a faster clock, a stricter gate — so the useful reading is always the difference from here, not the absolute numbers.",
         flows: ["request", "response"],
       },
     ],
@@ -1051,34 +1051,34 @@ export const tour = [
         flows: ["wal"],
       },
       {
-        body: "The takeaway is the order of operations. The vault plane exists, is journalling, and is already handing frames to the shipper before a single agent turn has ever been opened against it. Founding is a gateway and storage event; the runtime is something you add on top afterwards.",
+        body: "The takeaway is the order of operations. The vault plane exists, is journalling, and is already handing frames to the shipper before a single harness turn has ever been opened against it. Founding is a gateway and storage event; the runtime is something you add on top afterwards.",
         flows: ["wal", "ship"],
       },
     ],
   },
   {
-    id: "scenario-agent-builds-app",
+    id: "scenario-harness-builds-app",
     section: "scenarios",
-    title: "Agent Builds an App",
+    title: "Harness Builds an App",
     districtId: "apps",
     buildingId: "apps-crane",
-    scenarioId: "agent-builds-app",
+    scenarioId: "harness-builds-app",
     pages: [
       {
         body: "You have asked the assistant to build you something, and the Builder Crane holds at full swing for as long as this scenario runs. A build is not a special engine — it is an ordinary turn whose tool calls happen to write app code into the vault's code store.",
         flows: ["appReq"],
       },
       {
-        body: "The agent path is the loud one here: turns at roughly double baseline, agent particles at two and a half times, and the Apps Quarter working at nearly two and a half times its usual rate as the scaffold is written, served, and rewritten. The finished neighbours around the crane were all built through this same loop.",
+        body: "The harness path is the loud one here: turns at roughly double baseline, harness particles at two and a half times, and the Apps Quarter working at nearly two and a half times its usual rate as the scaffold is written, served, and rewritten. The finished neighbours around the crane were all built through this same loop.",
         buildingId: "apps-locker",
-        flows: ["agent", "appReq", "appWrite"],
+        flows: ["harness", "appReq", "appWrite"],
       },
       {
         body: "Because a first-time app does first-time things, about one call in six parks instead of one in twenty — a scaffold reaches for the confirm-gated commands far more often than a settled app does. Pending approvals climbs past three into amber and stays there for the run. That is the design working, not a fault: a new app doing consequential things should cost you a decision each time.",
         flows: ["tool"],
       },
       {
-        body: "This is the one scenario where the agent, the consent gate, the vault, and the app engine are all hot simultaneously. If you want a single frame that shows the full optional path lit end to end, take it here — and then compare it to Two Devices, One Vault, where the same city runs with that whole path at zero.",
+        body: "This is the one scenario where the harness, the consent gate, the vault, and the app engine are all hot simultaneously. If you want a single frame that shows the full optional path lit end to end, take it here — and then compare it to Two Devices, One Vault, where the same city runs with that whole path at zero.",
         flows: ["toolPass", "appWrite"],
       },
     ],
@@ -1134,7 +1134,7 @@ export const tour = [
         flows: ["replicaDeliver", "devicePush"],
       },
       {
-        body: "Those returning edits are applied by the gateway, each carrying the row versions it was based on so a replay is idempotent and a moved row comes back as a conflict rather than a guess. Lag drains at a fixed rate back to zero over a few seconds before the scenario settles into ordinary sync. Let it run a full cycle before judging it. And note what never moved throughout: Agent Runtime Row took no part in the outage or the recovery.",
+        body: "Those returning edits are applied by the gateway, each carrying the row versions it was based on so a replay is idempotent and a moved row comes back as a conflict rather than a guess. Lag drains at a fixed rate back to zero over a few seconds before the scenario settles into ordinary sync. Let it run a full cycle before judging it. And note what never moved throughout: Harness Runtime Row took no part in the outage or the recovery.",
         flows: ["replicaMerge"],
       },
     ],
@@ -1148,8 +1148,8 @@ export const tour = [
     scenarioId: "multi-device",
     pages: [
       {
-        body: "A laptop and a phone are both live on the same vault, and neither is talking to an assistant. This scenario forces every agent-path rate to exactly zero and holds the runtime and consent district lights at zero too — so the legs from the gateway to the runtime and on to the gate carry nothing at all while you watch.",
-        flows: ["agent", "tool"],
+        body: "A laptop and a phone are both live on the same vault, and neither is talking to an assistant. This scenario forces every harness-path rate to exactly zero and holds the runtime and consent district lights at zero too — so the legs from the gateway to the runtime and on to the gate carry nothing at all while you watch.",
+        flows: ["harness", "tool"],
       },
       {
         body: "Everything else runs hot. Requests arrive at more than three times baseline, vault writes at nearly triple, and the harbor at over two and a half times, so the change log feeds the bridge continuously. Follow the first leg: committed rows projected into shapes and out to the harbor.",
@@ -1161,7 +1161,7 @@ export const tour = [
         flows: ["replicaDeliver", "devicePush"],
       },
       {
-        body: "The returning edits are applied by the gateway, which stays the vault's only writer — no model judgment anywhere in the reconciliation, and a stale base version comes back as a conflict rather than a merge. Read the two numbers together: Turns and Items appended sit at nothing while WAL and replica figures stay busy. Device sync is gateway → vault → change log → harbor, and the agent is an optional consumer of that spine, not the spine itself.",
+        body: "The returning edits are applied by the gateway, which stays the vault's only writer — no model judgment anywhere in the reconciliation, and a stale base version comes back as a conflict rather than a merge. Read the two numbers together: Turns and Items appended sit at nothing while WAL and replica figures stay busy. Device sync is gateway → vault → change log → harbor, and the harness is an optional consumer of that spine, not the spine itself.",
         buildingId: "sync-island2",
         flows: ["replicaMerge"],
       },
@@ -1190,8 +1190,8 @@ export const tour = [
         flows: ["automationWrite", "wal"],
       },
       {
-        body: "Meanwhile conversation traffic drops to half normal, and the agent leg stays thin the whole time. If you want to see the automation engine and the agent runtime as genuinely separate machines rather than two names for one thing, this is the scenario that separates them.",
-        flows: ["agent"],
+        body: "Meanwhile conversation traffic drops to half normal, and the harness leg stays thin the whole time. If you want to see the automation engine and the harness runtime as genuinely separate machines rather than two names for one thing, this is the scenario that separates them.",
+        flows: ["harness"],
       },
     ],
   },
@@ -1204,7 +1204,7 @@ export const tour = [
     scenarioId: "consent-parking",
     pages: [
       {
-        body: "Here the gate is stopping almost everything. Roughly half of all tool calls divert violet into the Parking Lot rather than running — an agent reaching for the confirm-gated commands over and over, which is what a genuinely new task looks like. Note they cleared the arch first: these are calls a grant already allows, held back only because the command itself asks you each time.",
+        body: "Here the gate is stopping almost everything. Roughly half of all tool calls divert violet into the Parking Lot rather than running — a harness reaching for the confirm-gated commands over and over, which is what a genuinely new task looks like. Note they cleared the arch first: these are calls a grant already allows, held back only because the command itself asks you each time.",
         buildingId: "consent-arch",
         flows: ["tool"],
       },
@@ -1213,7 +1213,7 @@ export const tour = [
         flows: ["tool"],
       },
       {
-        body: "Now look at what the parked calls do downstream. They come back parked rather than executed — a final answer the agent is told not to retry — so the leg from the gate into the vault thins out to match. Fewer calls get through, so fewer rows are written. The city gets quieter in exactly the places the gate is protecting.",
+        body: "Now look at what the parked calls do downstream. They come back parked rather than executed — a final answer the harness is told not to retry — so the leg from the gate into the vault thins out to match. Fewer calls get through, so fewer rows are written. The city gets quieter in exactly the places the gate is protecting.",
         flows: ["toolPass"],
       },
       {
@@ -1236,8 +1236,8 @@ export const scenarios = [
     blurb: "A brand-new vault gets founded: the excavation fills in live.",
   },
   {
-    id: "agent-builds-app",
-    name: "Agent Builds an App",
+    id: "harness-builds-app",
+    name: "Harness Builds an App",
     blurb: "The Builder Crane swings into motion, scaffolding a new blueprint.",
   },
   {
@@ -1255,7 +1255,7 @@ export const scenarios = [
     id: "multi-device",
     name: "Two Devices, One Vault",
     blurb:
-      "Your laptop and your phone, both live on the same vault. Requests, WAL, and the harbor run hot while Agent Runtime Row sits dark — proof that device sync goes gateway → vault → change log → harbor and never through an agent.",
+      "Your laptop and your phone, both live on the same vault. Requests, WAL, and the harbor run hot while Harness Runtime Row sits dark — proof that device sync goes gateway → vault → change log → harbor and never through a harness.",
   },
   {
     id: "automation-storm",

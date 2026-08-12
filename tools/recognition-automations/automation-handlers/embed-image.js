@@ -21,7 +21,7 @@ function modelAvailable() {
 
 async function seedCursor(ctx, model) {
   const latest = await ctx.vault.read({
-    entity: "media.media_asset",
+    entity: "media.asset",
     where: [
       { column: "kind", op: "in", value: ["photo", "scan"] },
       { column: "deleted_at", op: "is-null" },
@@ -58,7 +58,7 @@ export default async function handler({ ctx, log }) {
   }
   const cursor = (await ctx.state.get("cursor")) ?? "";
   const read = await ctx.vault.read({
-    entity: "media.media_asset",
+    entity: "media.asset",
     where: [
       { column: "asset_id", op: "gt", value: cursor },
       { column: "deleted_at", op: "is-null" },
@@ -108,7 +108,7 @@ export default async function handler({ ctx, log }) {
     await ctx.vault.invoke({
       command: "enrich.upsert_embedding",
       input: {
-        entity_type: "media.media_asset",
+        entity_type: "media.asset",
         entity_id: asset.asset_id,
         model,
         vector: result.vector,

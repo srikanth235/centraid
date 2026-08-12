@@ -169,7 +169,7 @@
           "id": "T2",
           "name": "consent invariant enumeration",
           "owner": "tests/quality/user-facing-qualities.test.ts",
-          "evidence": "F1: every runner, agent tool, and automation trigger persists through conversation/turn/item",
+          "evidence": "F1: every harness turn, vault tool, and automation trigger persists through conversation/turn/item",
           "lane": "vitest",
           "wallClockCost": "low",
           "knob": "tests/matrix.json#qualities/trust",
@@ -440,7 +440,7 @@
     },
     {
       "id": "transparency",
-      "name": "Agent transparency",
+      "name": "Automation transparency",
       "weakestLink": "Tool, trigger, ledger, pricing, and approval surfaces share enumerable sources instead of hand lists.",
       "gates": [
         {
@@ -672,14 +672,14 @@
     "gateway.compat": "Skip: no gateway wire migration suite in v0; protocol judge + tunnel wire contracts own compatibility pressure.",
     "app-engine.performance": "Owned by tests/perf/app-engine-handler.perf.test.ts; records a nightly performance budget and durable numeric measurements.",
     "app-engine.offline": "Skip: app-engine runs server-side with the gateway; offline is a client-surface dimension.",
-    "app-engine.compat": "Skip: no app-engine API migration surface in v0; runner registry contracts own kind-compat pressure.",
+    "app-engine.compat": "Skip: no app-engine API migration surface in v0; harness registry contracts own kind-compat pressure.",
     "app-engine.journey": "Skip: user journeys are desktop/web/mobile copilot paths; engine is exercised via agent-runtime.journey (fake-acp).",
     "automations.performance": "Owned by tests/perf/automation-fire.perf.test.ts; records a nightly performance budget and durable numeric measurements.",
     "automations.offline": "Skip: automations schedule on the gateway host; offline client behavior is mobile/web. No offline scheduler product path.",
     "automations.compat": "Skip: no automations schema migration in v0; scheduler mutation floors cover pure compute stability.",
-    "agent-runtime.performance": "Owned by tests/perf/agent-turn.perf.test.ts; records a nightly performance budget and durable numeric measurements.",
-    "agent-runtime.scalability": "Owned by tests/scale/agent-sessions.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "agent-runtime.offline": "Skip: runners require a live CLI/ACP process; offline is not a runtime dimension (client offline owns UX).",
+    "agent-runtime.performance": "Owned by tests/perf/harness-turn.perf.test.ts; records a nightly performance budget and durable numeric measurements.",
+    "agent-runtime.scalability": "Owned by tests/scale/harness-sessions.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
+    "agent-runtime.offline": "Skip: harnesses require a live CLI/ACP process; offline is not a runtime dimension (client offline owns UX).",
     "blueprints.performance": "Partial: tests/scale/large-vault.scale.test.ts exercises the daily-use entity reads behind Photos, People, Agenda, and Notes at the #630 fixture sizes; a rendered interaction budget would strengthen this cell. Tracked under #659.",
     "blueprints.scalability": "Owned by tests/scale/blueprint-clones.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "blueprints.offline": "Partial: packages/client/src/replica/app-convergence.contract.test.ts proves deterministic replay for task/contact/expense/event blueprint writes; web/mobile journeys own the consuming offline UI. Tracked under #656.",
@@ -1032,11 +1032,11 @@
       "tier": "unit"
     },
     "agent-runtime.performance": {
-      "owner": "tests/perf/agent-turn.perf.test.ts",
+      "owner": "tests/perf/harness-turn.perf.test.ts",
       "tier": "perf"
     },
     "agent-runtime.scalability": {
-      "owner": "tests/scale/agent-sessions.scale.test.ts",
+      "owner": "tests/scale/harness-sessions.scale.test.ts",
       "tier": "scale"
     },
     "agent-runtime.security": {
@@ -1524,7 +1524,7 @@
     },
     {
       "id": "agent-runtime",
-      "label": "Agent runtime / chat",
+      "label": "Harness runtime / conversation",
       "assessment": {
         "correctness": "partial",
         "contracts": "partial",
@@ -2341,13 +2341,15 @@
       "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: removed four example tests whose property twins in the same file already own the law \u2014 'records ONE entry per automation for a gap spanning several missed fire times' (subsumed by 'property: at most one missed entry per automation per gap'), 'returns nothing for a fast-restart gap under the grace margin' (subsumed by 'property: sub-grace gaps never emit misses', whose generator was widened to seconds so the 2.5min fast restart is inside its range), and 'returns nothing for an ordinary tick-to-tick gap' + 'records nothing across ordinary consecutive ticks' (both subsumed by 'property: successive ordinary ticks accumulate zero misses'). The no-backfill contract did not shrink \u2014 only its redundant restatements did; the disabled-only-registry example was deliberately retained because its property twin never generates a zero-enabled registry."
     },
     {
-      "id": "agent-provider-compat",
-      "name": "Agent provider model configuration remains compatible",
+      "id": "harness-provider-compat",
+      "name": "Harness provider model configuration remains compatible",
       "surface": "agent-runtime",
       "dimension": "compat",
       "tier": "unit",
       "owner": "packages/agent-runtime/src/backends/acp/enumerate-models.test.ts",
-      "minimumTests": 6
+      "minimumTests": 6,
+      "replacesMinimumTestsFlow": "agent-provider-compat",
+      "approvedMinimumTestsDeviation": "#743 vocabulary-only flow ID rename; the six-test floor is unchanged."
     },
     {
       "id": "blueprint-boot",
@@ -2521,13 +2523,15 @@
       "minimumTests": 11
     },
     {
-      "id": "agent-chat-journey",
-      "name": "Chat message \u2192 vault side effect \u2192 transcript (fake-acp)",
+      "id": "harness-conversation-journey",
+      "name": "Conversation message \u2192 vault side effect \u2192 transcript (fake ACP harness)",
       "surface": "agent-runtime",
       "dimension": "journey",
       "tier": "integration",
       "owner": "packages/agent-runtime/src/backends/acp/journey.integration.test.ts",
-      "minimumTests": 2
+      "minimumTests": 2,
+      "replacesMinimumTestsFlow": "agent-chat-journey",
+      "approvedMinimumTestsDeviation": "#743 vocabulary-only flow ID rename; the two-test floor is unchanged."
     },
     {
       "id": "blank-machine-restore",
@@ -2693,22 +2697,26 @@
       "minimumTests": 14
     },
     {
-      "id": "agent-turn-budget",
-      "name": "Runner turn dispatch budget through the registry",
+      "id": "harness-turn-budget",
+      "name": "Harness turn dispatch budget through the registry",
       "surface": "agent-runtime",
       "dimension": "performance",
       "tier": "perf",
-      "owner": "tests/perf/agent-turn.perf.test.ts",
-      "minimumTests": 1
+      "owner": "tests/perf/harness-turn.perf.test.ts",
+      "minimumTests": 1,
+      "replacesMinimumTestsFlow": "agent-turn-budget",
+      "approvedMinimumTestsDeviation": "#743 vocabulary-only flow and file rename; the one-test floor is unchanged."
     },
     {
-      "id": "agent-sessions-volume",
-      "name": "Concurrent runner sessions fan out through the registry",
+      "id": "harness-sessions-volume",
+      "name": "Concurrent harness sessions fan out through the registry",
       "surface": "agent-runtime",
       "dimension": "scalability",
       "tier": "scale",
-      "owner": "tests/scale/agent-sessions.scale.test.ts",
-      "minimumTests": 1
+      "owner": "tests/scale/harness-sessions.scale.test.ts",
+      "minimumTests": 1,
+      "replacesMinimumTestsFlow": "agent-sessions-volume",
+      "approvedMinimumTestsDeviation": "#743 vocabulary-only flow and file rename; the one-test floor is unchanged."
     },
     {
       "id": "blueprint-clones-volume",

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Stdio MCP proxy for agents that only support stdio MCP transports.
+ * Stdio MCP proxy for harnesses that only support stdio MCP transports.
  *
  * Centraid's vault tools live as a loopback HTTP MCP server (per-turn bearer).
  * Agents that lack `mcpCapabilities.http` can still spawn this process via

@@ -528,7 +528,7 @@ export default function PhotosHome({
                       values: {
                         entry_id: entryId,
                         collection_id: albumId,
-                        target_type: "media.media_asset",
+                        target_type: "media.asset",
                         target_id: asset.assetId!,
                         position,
                         added_at: new Date().toISOString(),

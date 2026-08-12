@@ -212,7 +212,7 @@ export const POLY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
 /**
  * End-date / delete every polymorphic reference pointing at a just-purged
  * canonical row. `entityType` is the LOGICAL name stored in the type columns
- * (`core.content_item`, `media.media_asset`, `knowledge.note`…); `now` is the
+ * (`core.content_item`, `media.asset`, `knowledge.note`…); `now` is the
  * sweep's ISO timestamp. Operates on vault.db only — journal.db pointers are
  * excluded above and never touched.
  *

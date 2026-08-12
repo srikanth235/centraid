@@ -207,9 +207,7 @@ export function stageBlobBytes(
           );
         if (options.variant === "phash" && contribution?.textContent) {
           const assets = db.vault
-            .prepare(
-              "SELECT asset_id FROM media_media_asset WHERE content_id = ?"
-            )
+            .prepare("SELECT asset_id FROM media_asset WHERE content_id = ?")
             .all(parent.content_id) as { asset_id: string }[];
           const upsertPhash = db.vault.prepare(
             `INSERT INTO media_asset_phash (asset_id, phash, computed_at) VALUES (?, ?, ?)

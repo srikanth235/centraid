@@ -96,16 +96,17 @@ describe("rewrite-automation-instructions", () => {
           stopReason: "end_turn",
           rawJson: '{"stopReason":"end_turn"}',
         });
-        return { adapterKind: "codex" };
+        return { harnessKind: "codex" };
       };
       const result = await rewriteAutomationInstructions({
         row: row(dir),
         steering: "Only urgent mail.",
         revisionTurnId: "revision-1",
         journalDbFile,
-        runnerSessionDir: path.join(dir, "sessions"),
+        harnessSessionDir: path.join(dir, "sessions"),
         runTurn,
-        runnerPrefs: { kind: "codex" },
+        harnessPrefs: { kind: "codex" },
+        egressConsent: () => true,
         model: "fast-model",
         persistPrompt,
       });
@@ -144,9 +145,10 @@ describe("rewrite-automation-instructions", () => {
           steering: "Change it.",
           revisionTurnId: "revision-fail",
           journalDbFile,
-          runnerSessionDir: path.join(dir, "sessions"),
-          runTurn: async () => ({ adapterKind: "codex" }),
-          runnerPrefs: { kind: "codex" },
+          harnessSessionDir: path.join(dir, "sessions"),
+          runTurn: async () => ({ harnessKind: "codex" }),
+          harnessPrefs: { kind: "codex" },
+          egressConsent: () => true,
           persistPrompt,
         })
       ).rejects.toThrow(/empty/iu);
@@ -170,7 +172,7 @@ describe("rewrite-automation-instructions", () => {
           steering: "Change it.",
           revisionTurnId: "revision-terminal-fail",
           journalDbFile,
-          runnerSessionDir: path.join(dir, "sessions"),
+          harnessSessionDir: path.join(dir, "sessions"),
           runTurn: async (input) => {
             input.onEvent({
               type: "error",
@@ -185,9 +187,10 @@ describe("rewrite-automation-instructions", () => {
               outputTokens: 0,
               costUsd: 0.001,
             });
-            return { adapterKind: "codex" };
+            return { harnessKind: "codex" };
           },
-          runnerPrefs: { kind: "codex" },
+          harnessPrefs: { kind: "codex" },
+          egressConsent: () => true,
           persistPrompt,
         })
       ).rejects.toThrow("The rewriter refused.");

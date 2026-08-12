@@ -128,7 +128,7 @@ function MixBar({ pct }: { pct: number }): JSX.Element {
 }
 
 /**
- * Insights v0 (#514) — transparency + control over agent usage.
+ * Insights v0 (#514) — transparency + control over harness usage.
  * Narrative hero (honest spend), breakdowns sorted by $, working window chips.
  */
 export default function InsightsScreen({
@@ -150,7 +150,7 @@ export default function InsightsScreen({
   );
   const runnerMax = Math.max(
     1,
-    ...summary.byRunner.map((r) => r.costUsd || r.tokens)
+    ...summary.byHarness.map((r) => r.costUsd || r.tokens)
   );
   const modelTotal = Math.max(
     1,
@@ -162,8 +162,10 @@ export default function InsightsScreen({
   );
 
   const honestyParts: string[] = [];
-  if (kpis.agentReportedCostUsd > 0) {
-    honestyParts.push(`${insUsd(kpis.agentReportedCostUsd)} agent-reported`);
+  if (kpis.harnessReportedCostUsd > 0) {
+    honestyParts.push(
+      `${insUsd(kpis.harnessReportedCostUsd)} harness-reported`
+    );
   }
   if (kpis.estimatedCostUsd > 0) {
     honestyParts.push(`${insUsd(kpis.estimatedCostUsd)} estimated`);
@@ -268,8 +270,8 @@ export default function InsightsScreen({
       {!hasSpend && kpis.generations === 0 ? (
         <div className={styles.firstUse}>
           Run a chat, build, or automation — usage shows up here. Costs are
-          agent-reported when the runner provides them, otherwise estimated from
-          public rates.
+          harness-reported when the harness provides them, otherwise estimated
+          from public rates.
         </div>
       ) : null}
 
@@ -358,15 +360,15 @@ export default function InsightsScreen({
         </div>
 
         <div className={styles.col}>
-          <Panel title="By agent" meta="runner · sorted by $">
+          <Panel title="By harness" meta="harness · sorted by $">
             <div className={styles.models}>
-              {summary.byRunner.map((r) => {
+              {summary.byHarness.map((r) => {
                 const pct = Math.round(
                   ((r.costUsd || r.tokens) / runnerMax) * 100
                 );
                 return (
-                  <div key={r.provider} className={styles.model}>
-                    <div className={styles.modelName}>{r.provider}</div>
+                  <div key={r.harness} className={styles.model}>
+                    <div className={styles.modelName}>{r.harness}</div>
                     <div className={styles.bar}>
                       <div
                         className={styles.barFill}
@@ -382,8 +384,8 @@ export default function InsightsScreen({
                   </div>
                 );
               })}
-              {summary.byRunner.length === 0 ? (
-                <PanelEmpty message="No agent usage recorded yet." />
+              {summary.byHarness.length === 0 ? (
+                <PanelEmpty message="No harness usage recorded yet." />
               ) : null}
             </div>
           </Panel>
@@ -418,7 +420,7 @@ export default function InsightsScreen({
             </div>
           </Panel>
 
-          <Panel title="By effort" meta="runner-confirmed thought level">
+          <Panel title="By effort" meta="harness-confirmed thought level">
             <div className={styles.models}>
               {summary.byEffort.map((e) => {
                 const pct = Math.round(
@@ -463,11 +465,8 @@ export default function InsightsScreen({
                           {insKindLabel(a.kind)}
                         </span>
                         <span>{a.ok ? "" : " · failed"}</span>
-                        {a.provider ? (
-                          <span className={styles.actProv}>
-                            {" "}
-                            · {a.provider}
-                          </span>
+                        {a.harness ? (
+                          <span className={styles.actProv}> · {a.harness}</span>
                         ) : null}
                         {a.effort ? (
                           <span className={styles.actProv}> · {a.effort}</span>
@@ -509,8 +508,8 @@ export default function InsightsScreen({
       <ResourceReceiptPanel usage={resourceUsage} />
 
       <p className={styles.footnote}>
-        Completed runs in this vault only. Agent-reported costs come from the
-        runner; estimates use public model rates. Incomplete data is never
+        Completed runs in this vault only. Harness-reported costs come from the
+        harness; estimates use public model rates. Incomplete data is never
         treated as free.
       </p>
     </div>

@@ -81,9 +81,7 @@ describe("flow", () => {
     expect(content.title).toBe("pixel.png"); // original filename as default title
     // Spool EXIF landed on the asset row without the caller supplying it.
     const asset = db.vault
-      .prepare(
-        "SELECT width, height, kind FROM media_media_asset WHERE asset_id = ?"
-      )
+      .prepare("SELECT width, height, kind FROM media_asset WHERE asset_id = ?")
       .get(out.asset_id) as Record<string, unknown>;
     expect(asset.width).toBe(1);
     expect(asset.height).toBe(1);

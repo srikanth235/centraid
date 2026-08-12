@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { applyAgentCaptureKind, classifyCapture } from "../../capture.js";
+import { applyDelegateCaptureKind, classifyCapture } from "../../capture.js";
 import type { CaptureKind, CapturePreview } from "../../capture.js";
 import {
   classifyAmbiguousCapture,
@@ -118,10 +118,10 @@ export function CaptureOverlay({
       const candidate = await classifyAmbiguousCapture(text).catch(
         () => undefined
       );
-      if (candidate) setPreview(applyAgentCaptureKind(local, candidate));
+      if (candidate) setPreview(applyDelegateCaptureKind(local, candidate));
       else
         setStatus(
-          "The local agent is unavailable. Choose the destination before saving."
+          "The local harness is unavailable. Choose the destination before saving."
         );
     }
     setBusy(false);

@@ -18,7 +18,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  compileHydrationPlan,
+  HarnessSessions,
   hydrationMessagesFromLedger,
   resolveItemCost,
   withConversationLock,
@@ -27,7 +27,7 @@ import type {
   AutomationTurnStreamEvent,
   ConversationRunner,
   ConversationTurnAttachment,
-  RunnerKind,
+  HarnessKind,
   TurnAttachment,
   TurnStreamEvent,
 } from "@centraid/app-engine";
@@ -46,7 +46,7 @@ type UsageEvent = Extract<TurnStreamEvent, { type: "usage" }>;
 
 function pricedUsage(event: UsageEvent): UsageEvent {
   if (event.costUsd !== undefined) {
-    return event.costSource ? event : { ...event, costSource: "agent" };
+    return event.costSource ? event : { ...event, costSource: "harness" };
   }
   const priced = resolveItemCost({
     model: event.model,
@@ -68,19 +68,19 @@ function pricedUsage(event: UsageEvent): UsageEvent {
 
 function usageFields(usage: UsageEvent | undefined): {
   model?: string;
-  provider?: string;
+  harness?: string;
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
   costUsd?: number;
-  costSource?: "agent" | "estimated";
+  costSource?: "harness" | "estimated";
   effort?: string;
 } {
   if (!usage) return {};
   return {
     ...(usage.model === undefined ? {} : { model: usage.model }),
-    ...(usage.provider === undefined ? {} : { provider: usage.provider }),
+    ...(usage.harness === undefined ? {} : { harness: usage.harness }),
     ...(usage.inputTokens === undefined
       ? {}
       : { inputTokens: usage.inputTokens }),
@@ -108,19 +108,19 @@ export interface InteractiveAutomationTurnOptions {
   turnId: string;
   message: string;
   journalDbFile: string;
-  runnerSessionDir: string;
+  harnessSessionDir: string;
   runner: ConversationRunner;
-  runnerKind: RunnerKind;
+  harnessKind: HarnessKind;
   model?: string;
   configPins?: Readonly<Record<string, string>>;
-  /** Egress consent answered by the user for this turn — one runner, or the
+  /** Egress consent answered by the user for this turn — one harness, or the
    *  set a ladder attempt asked about. */
-  providerConsent?: RunnerKind | readonly RunnerKind[];
+  providerConsent?: HarnessKind | readonly HarnessKind[];
   attachmentRefs?: ConversationTurnAttachment[];
   turnAttachments?: TurnAttachment[];
   /** Resolve historical upload hashes into this automation app's blob CAS. */
   hydrationAttachmentPath?: (hash: string) => string;
-  /** Trusted roots for agent-reported file locations. */
+  /** Trusted roots for harness-reported file locations. */
   artifactRoots?: string[];
   /** Persist homeless inline terminal/content artifacts in the app CAS. */
   uploadInlineArtifact?: (
@@ -155,7 +155,7 @@ function pathInside(candidate: string, root: string): boolean {
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 
 /**
- * Resolve one agent-reported file location into a durable attachment.
+ * Resolve one harness-reported file location into a durable attachment.
  *
  * A path that does not resolve, resolves outside the trusted roots, or is not
  * a regular file is a normal negative — agents name build outputs and scratch
@@ -207,13 +207,13 @@ async function workspaceArtifact(
     // separate concern; the generic type is the honest answer here.
     mime: "application/octet-stream",
     sizeBytes: stat.size,
-    source: "agent",
+    source: "harness",
     filename: path.basename(candidate),
     workspacePath: candidate,
   };
 }
 
-/** `file:` URLs from a runner are foreign input and may be malformed. */
+/** `file:` URLs from a harness are foreign input and may be malformed. */
 function decodeReportedPath(reportedPath: string): string | undefined {
   if (!reportedPath.startsWith("file:")) return reportedPath;
   try {
@@ -238,7 +238,7 @@ export async function runInteractiveAutomationTurn(
     ref,
     opts.row.ownerApp,
     opts.row.name,
-    opts.runnerKind
+    opts.harnessKind
   );
 
   return withConversationLock(
@@ -264,36 +264,32 @@ export async function runInteractiveAutomationTurn(
             `automation conversation "${conversationId}" was not created`
           );
         }
-        const binding = store.getHarnessBinding(
-          conversationId,
-          opts.runnerKind
-        );
-        const turnsBeforeCurrent = store.listTurns(conversationId);
-        const hydrationMessages = hydrationMessagesFromLedger(
-          turnsBeforeCurrent,
-          (turnId) => store.listItems(turnId),
-          (itemIdLocal) => store.listAttachmentsForItem(itemIdLocal),
-          binding?.hydratedThroughSeq ?? -1
-        );
-        const recoveryMessages = binding
-          ? hydrationMessagesFromLedger(
-              turnsBeforeCurrent,
+        const harnessSessions = new HarnessSessions({
+          binding: (kind) => {
+            const current = store.getHarnessBinding(conversationId, kind);
+            return current
+              ? {
+                  bindingId: current.id,
+                  sessionId: current.acpSessionId,
+                  ...(current.usageSnapshot
+                    ? { usageSnapshot: current.usageSnapshot }
+                    : {}),
+                  hydratedThroughSeq: current.hydratedThroughSeq,
+                }
+              : undefined;
+          },
+          messages: (afterSeq) =>
+            hydrationMessagesFromLedger(
+              store.listTurns(conversationId),
               (turnId) => store.listItems(turnId),
-              (itemIdLocal) => store.listAttachmentsForItem(itemIdLocal)
-            )
-          : [];
-        const hydrationPlan =
-          hydrationMessages.length > 0
-            ? compileHydrationPlan(hydrationMessages, {
-                includeAttachmentReferences: true,
-              })
-            : undefined;
-        const recoveryHydrationPlan =
-          recoveryMessages.length > 0
-            ? compileHydrationPlan(recoveryMessages, {
-                includeAttachmentReferences: true,
-              })
-            : undefined;
+              (itemIdLocal) => store.listAttachmentsForItem(itemIdLocal),
+              afterSeq
+            ),
+          ...(opts.hydrationAttachmentPath
+            ? { attachmentPath: opts.hydrationAttachmentPath }
+            : {}),
+        });
+        const resume = harnessSessions.plan(opts.harnessKind);
 
         const recentTurns = store
           .listTurns(conversationId)
@@ -340,22 +336,22 @@ export async function runInteractiveAutomationTurn(
         emitTurn({ type: "turn.start", turnId: opts.turnId });
 
         let nextOrdinal = 1;
-        const agentOrdinal = nextOrdinal++;
-        const agentItemId = itemId(opts.turnId, agentOrdinal);
+        const delegateOrdinal = nextOrdinal++;
+        const delegateItemId = itemId(opts.turnId, delegateOrdinal);
         store.openItem({
-          itemId: agentItemId,
+          itemId: delegateItemId,
           turnId: opts.turnId,
-          ordinal: agentOrdinal,
-          kind: "agent",
+          ordinal: delegateOrdinal,
+          kind: "delegate",
           name: "interactive",
           argsJson: safeJson({ message: opts.message }),
           startedAt,
         });
         emitTurn({
           type: "item.start",
-          itemId: agentItemId,
-          ordinal: agentOrdinal,
-          kind: "agent",
+          itemId: delegateItemId,
+          ordinal: delegateOrdinal,
+          kind: "delegate",
           name: "interactive",
           args: { message: opts.message },
         });
@@ -525,16 +521,16 @@ export async function runInteractiveAutomationTurn(
             } else {
               emitTurn({
                 type: "item.delta",
-                itemId: agentItemId,
-                ordinal: agentOrdinal,
+                itemId: delegateItemId,
+                ordinal: delegateOrdinal,
                 event,
               });
             }
           } else {
             emitTurn({
               type: "item.delta",
-              itemId: agentItemId,
-              ordinal: agentOrdinal,
+              itemId: delegateItemId,
+              ordinal: delegateOrdinal,
               event,
             });
           }
@@ -550,18 +546,18 @@ export async function runInteractiveAutomationTurn(
           .digest("hex")
           .slice(0, 24);
         const scratchDir = path.join(
-          opts.runnerSessionDir,
+          opts.harnessSessionDir,
           "automation-turns",
           digest
         );
         await fs.mkdir(scratchDir, { recursive: true });
         const sessionFile = path.join(scratchDir, "session.jsonl");
 
-        let adapter:
+        let harnessObservation:
           | {
-              adapterSessionId?: string;
-              adapterKind?: string;
-              adapterUsageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
+              harnessSessionId?: string;
+              harnessKind?: string;
+              harnessUsageSnapshot?: TypeImport_4y0tle.HarnessUsageSnapshot;
               hydrated?: boolean;
               hydrationTokens?: number;
             }
@@ -577,77 +573,47 @@ export async function runInteractiveAutomationTurn(
               ? { attachments: opts.turnAttachments }
               : {}),
             extraSystemPrompt: preamble,
-            runnerKind: opts.runnerKind,
+            harnessKind: opts.harnessKind,
             ...(opts.model ? { model: opts.model } : {}),
             ...(opts.configPins ? { configPins: opts.configPins } : {}),
             ...(opts.providerConsent
               ? { providerConsent: opts.providerConsent }
               : {}),
-            ...(conversation.adapterKind
-              ? { activeAdapterKind: conversation.adapterKind }
+            ...(conversation.harnessKind
+              ? { activeHarnessKind: conversation.harnessKind }
               : {}),
             permissionPolicy: "deny",
             abortSignal: opts.abortSignal,
-            ...(binding?.acpSessionId
+            ...(resume.sessionId
               ? {
-                  prevAdapterSessionId: binding.acpSessionId,
-                  prevBindingId: binding.id,
+                  prevHarnessSessionId: resume.sessionId,
+                  ...(resume.bindingId
+                    ? { prevBindingId: resume.bindingId }
+                    : {}),
                 }
               : {}),
-            ...(binding ? { prevAdapterKind: binding.kind } : {}),
-            ...(binding?.usageSnapshot
-              ? { prevAdapterUsageSnapshot: binding.usageSnapshot }
+            ...(resume.sessionId ? { prevHarnessKind: opts.harnessKind } : {}),
+            ...(resume.usageSnapshot
+              ? { prevHarnessUsageSnapshot: resume.usageSnapshot }
               : {}),
-            ...(hydrationPlan
-              ? {
-                  hydrationContext: {
-                    prompt: hydrationPlan.prompt,
-                    includedTurns: hydrationPlan.includedTurns,
-                    omittedTurns: hydrationPlan.omittedTurns,
-                    estimatedTokens: hydrationPlan.estimatedTokens,
-                  },
-                }
+            ...(resume.hydrationContext
+              ? { hydrationContext: resume.hydrationContext }
               : {}),
-            ...(opts.hydrationAttachmentPath &&
-            hydrationPlan?.attachments.length
-              ? {
-                  hydrationAttachments: hydrationPlan.attachments.map(
-                    (attachment) => ({
-                      path: opts.hydrationAttachmentPath!(attachment.hash),
-                      mime: attachment.mime,
-                      ...(attachment.filename
-                        ? { filename: attachment.filename }
-                        : {}),
-                    })
-                  ),
-                }
+            ...(resume.hydrationAttachments?.length
+              ? { hydrationAttachments: resume.hydrationAttachments }
               : {}),
-            ...(recoveryHydrationPlan
-              ? {
-                  recoveryHydrationContext: {
-                    prompt: recoveryHydrationPlan.prompt,
-                    includedTurns: recoveryHydrationPlan.includedTurns,
-                    omittedTurns: recoveryHydrationPlan.omittedTurns,
-                    estimatedTokens: recoveryHydrationPlan.estimatedTokens,
-                  },
-                }
+            ...(resume.recoveryHydrationContext
+              ? { recoveryHydrationContext: resume.recoveryHydrationContext }
               : {}),
-            ...(opts.hydrationAttachmentPath &&
-            recoveryHydrationPlan?.attachments.length
+            ...(resume.recoveryHydrationAttachments?.length
               ? {
                   recoveryHydrationAttachments:
-                    recoveryHydrationPlan.attachments.map((attachment) => ({
-                      path: opts.hydrationAttachmentPath!(attachment.hash),
-                      mime: attachment.mime,
-                      ...(attachment.filename
-                        ? { filename: attachment.filename }
-                        : {}),
-                    })),
+                    resume.recoveryHydrationAttachments,
                 }
               : {}),
             onEvent,
           });
-          adapter = result ?? undefined;
+          harnessObservation = result ?? undefined;
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
@@ -666,7 +632,7 @@ export async function runInteractiveAutomationTurn(
           const consentOutput = { stopReason: "consent_required" };
           store.runInTransaction(() => {
             store.closeItem({
-              itemId: agentItemId,
+              itemId: delegateItemId,
               ok: false,
               error: "consent_required",
               outputJson: safeJson(consentOutput),
@@ -685,8 +651,8 @@ export async function runInteractiveAutomationTurn(
           });
           emitTurn({
             type: "item.end",
-            itemId: agentItemId,
-            ordinal: agentOrdinal,
+            itemId: delegateItemId,
+            ordinal: delegateOrdinal,
             ok: false,
             result: consentOutput,
             error: "consent_required",
@@ -760,8 +726,8 @@ export async function runInteractiveAutomationTurn(
                   hash: stored.hash,
                   mime: inline.mime,
                   sizeBytes: stored.sizeBytes,
-                  source: "agent",
-                  filename: inline.filename ?? "agent-artifact",
+                  source: "harness",
+                  filename: inline.filename ?? "harness-artifact",
                 });
               } catch {
                 // A malformed optional ACP artifact never fails the turn.
@@ -787,7 +753,7 @@ export async function runInteractiveAutomationTurn(
                 hash: artifact.hash,
                 mime: artifact.mime,
                 sizeBytes: artifact.sizeBytes,
-                source: artifact.source ?? "agent",
+                source: artifact.source ?? "harness",
                 ...(artifact.filename ? { filename: artifact.filename } : {}),
                 ...(artifact.workspacePath
                   ? { workspacePath: artifact.workspacePath }
@@ -801,7 +767,7 @@ export async function runInteractiveAutomationTurn(
               turnId: opts.turnId,
               ordinal: notice.ordinal,
               kind: "step",
-              name: `notice:${notice.level}:${notice.code ?? "runner"}`,
+              name: `notice:${notice.level}:${notice.code ?? "harness"}`,
               outputJson: safeJson({ text: notice.message }),
               ok: true,
               startedAt: notice.at,
@@ -810,7 +776,7 @@ export async function runInteractiveAutomationTurn(
             });
           }
           store.closeItem({
-            itemId: agentItemId,
+            itemId: delegateItemId,
             ok,
             ...(Object.keys(output).length > 0
               ? { outputJson: safeJson(output) }
@@ -831,28 +797,31 @@ export async function runInteractiveAutomationTurn(
               ? { outputJson: safeJson(output) }
               : {}),
           });
-          if (adapter?.hydrationTokens !== undefined) {
-            store.setTurnHydrationTokens(opts.turnId, adapter.hydrationTokens);
+          if (harnessObservation?.hydrationTokens !== undefined) {
+            store.setTurnHydrationTokens(
+              opts.turnId,
+              harnessObservation.hydrationTokens
+            );
           }
-          const observedAdapter = adapter?.adapterKind
+          const observedHarness = harnessObservation?.harnessKind
             ? {
-                kind: adapter.adapterKind,
-                ...(adapter.adapterSessionId
-                  ? { sessionId: adapter.adapterSessionId }
+                kind: harnessObservation.harnessKind,
+                ...(harnessObservation.harnessSessionId
+                  ? { sessionId: harnessObservation.harnessSessionId }
                   : {}),
-                ...(adapter.adapterUsageSnapshot
-                  ? { usageSnapshot: adapter.adapterUsageSnapshot }
+                ...(harnessObservation.harnessUsageSnapshot
+                  ? { usageSnapshot: harnessObservation.harnessUsageSnapshot }
                   : {}),
-                ...(adapter.hydrated ? { hydrated: true } : {}),
+                ...(harnessObservation.hydrated ? { hydrated: true } : {}),
               }
             : undefined;
-          if (ok) store.noteTurn(conversationId, "", observedAdapter);
-          else store.noteFailedTurn(conversationId, "", observedAdapter);
+          if (ok) store.noteTurn(conversationId, "", observedHarness);
+          else store.noteFailedTurn(conversationId, "", observedHarness);
         });
         emitTurn({
           type: "item.end",
-          itemId: agentItemId,
-          ordinal: agentOrdinal,
+          itemId: delegateItemId,
+          ordinal: delegateOrdinal,
           ok,
           ...(Object.keys(output).length > 0 ? { result: output } : {}),
           ...(failure === undefined ? {} : { error: failure }),

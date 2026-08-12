@@ -1,5 +1,5 @@
 /*
- * Multimodal content-block construction for the chat adapters (issue #190).
+ * Multimodal content-block construction for harness turns (issue #190).
  *
  * A conversation turn can carry attachments (images, PDFs, text/code files)
  * that landed in the per-app blob CAS before the turn. The route resolves
@@ -13,7 +13,7 @@
  * mimeType }` (NOT Anthropic's nested `source.media_type`) and
  * `EmbeddedResource { resource: { uri, mimeType, blob } }`.
  *
- * What we may send is gated on what the agent advertised in `initialize`:
+ * What we may send is gated on what the harness advertised in `initialize`:
  * text is baseline and always allowed, images need
  * `promptCapabilities.image`, audio needs `.audio`, and any other binary
  * (PDFs, archives) rides an embedded resource, which needs
@@ -21,7 +21,7 @@
  * `{ image: true, embeddedContext: true }`, so images AND PDFs reach codex
  * and claude-code again.
  *
- * Anything the agent genuinely can't accept is reported by name in
+ * Anything the harness genuinely can't accept is reported by name in
  * `skipped` so the turn can say what it dropped instead of silently losing
  * it. Textual attachments (source, config, notes) are inlined as a
  * delimited text block so the model actually sees their contents. The
@@ -31,24 +31,17 @@
 
 import { readFileSync } from "node:fs";
 
+import type {
+  ContentBlock,
+  PromptCapabilities,
+} from "@agentclientprotocol/sdk";
+
 import type { TurnAttachment } from "@centraid/app-engine";
 
-/** The ACP prompt content blocks we can produce (`ContentBlock` subset). */
-export type ContentBlock =
-  | { type: "text"; text: string }
-  | { type: "image"; data: string; mimeType: string }
-  | { type: "audio"; data: string; mimeType: string }
-  | {
-      type: "resource";
-      resource: { uri: string; mimeType: string; blob: string };
-    };
-
-/** `agentCapabilities.promptCapabilities` from the `initialize` result. */
-export interface PromptCapabilities {
-  image?: boolean;
-  audio?: boolean;
-  embeddedContext?: boolean;
-}
+export type {
+  ContentBlock,
+  PromptCapabilities,
+} from "@agentclientprotocol/sdk";
 
 const IMAGE_MIME = /^image\/(?:png|jpe?g|gif|webp)$/iu;
 const AUDIO_MIME = /^audio\//iu;
@@ -135,10 +128,10 @@ function looksBinary(text: string): boolean {
 
 /**
  * Shape one attachment (pre-read as base64) into an ACP content block, or
- * `undefined` when the agent can't accept it (caller reports it as skipped).
+ * `undefined` when the harness can't accept it (caller reports it as skipped).
  *
  * Text is baseline ACP and never gated. Everything else is gated on what the
- * agent advertised, because sending an un-advertised block type is a protocol
+ * harness advertised, because sending an un-advertised block type is a protocol
  * violation, not a graceful degradation.
  */
 export function acpBlockFor(
@@ -192,7 +185,7 @@ export function acpBlockFor(
 export interface AcpAttachmentBlocks {
   /** Blocks to append after the message text, in attachment order. */
   blocks: ContentBlock[];
-  /** Display names of attachments the agent can't accept (or we can't read). */
+  /** Display names of attachments the harness can't accept (or we can't read). */
   skipped: string[];
 }
 

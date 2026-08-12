@@ -38,7 +38,7 @@ vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
       kpis: {
         totalTokens: 0,
         totalCostUsd: 0,
-        agentReportedCostUsd: 0,
+        harnessReportedCostUsd: 0,
         estimatedCostUsd: 0,
         forecastCostUsd: 0,
         generations: 0,
@@ -51,7 +51,7 @@ vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
       },
       daily: [],
       bySource: [],
-      byRunner: [],
+      byHarness: [],
       byModel: [],
       byEffort: [],
       recent: [],

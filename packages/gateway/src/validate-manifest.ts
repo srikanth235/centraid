@@ -1,4 +1,4 @@
-// Gateway-side app-manifest validation (issue #137; was the agent-harness).
+// Gateway-side app-manifest validation (issue #137; was the harness runtime).
 // The publish gate (`publishAndReconcile`) and the apps-store publish route both
 // call `validateManifestAt` before a draft goes live, so a structurally-broken
 // or replay-unsafe app is rejected at publish time rather than at run/fire time.

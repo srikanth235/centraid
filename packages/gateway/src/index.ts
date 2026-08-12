@@ -2,7 +2,7 @@
  * @centraid/gateway
  *
  * Host-agnostic centraid gateway. `serve()` wires `app-engine` +
- * `agent-runtime` + stores + chat runner against injected paths and
+ * the historical `agent-runtime` package + stores + conversation runner against injected paths and
  * secrets, and starts an HTTP server in front of it. Two callers ship
  * today:
  *
@@ -93,10 +93,10 @@ export {
 } from "./serve/gateway-log-store.js";
 export type { GatewayPaths } from "./paths.js";
 export {
-  readAgentsStatus,
-  type AgentsStatus,
-  type AgentStatusEntry,
-} from "./routes/agents-routes.js";
+  readHarnessesStatus,
+  type HarnessesStatus,
+  type HarnessStatusEntry,
+} from "./routes/harnesses-routes.js";
 export {
   openVaultPlane,
   VaultPlane,
@@ -149,7 +149,7 @@ export {
 } from "./routes/push-wake-routes.js";
 // The vault-register tool runners, giving chat turns `vault_sql` /
 // `vault_invoke` / `vault_content` capability through the same
-// consent/receipt pipeline the codex/claude runners use (issue #319).
+// consent/receipt pipeline the Codex/Claude harnesses use (issue #319).
 export {
   makeVaultToolRunners,
   assistantCwd,

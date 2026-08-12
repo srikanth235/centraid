@@ -100,7 +100,7 @@ describe("enrich-search-routes", () => {
         .prepare(
           `INSERT INTO enrich_embedding
              (embedding_id, target_type, target_id, model, dim, vector, created_at)
-           VALUES (?, 'media.media_asset', ?, ?, ?, ?, ?)`
+           VALUES (?, 'media.asset', ?, ?, ?, ?, ?)`
         )
         .run(
           uuidv7(),

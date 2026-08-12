@@ -1,6 +1,6 @@
 # Centraid City
 
-An explorable 3D model of how the Centraid gateway works, in the spirit of [PGSimCity](https://nikolays.github.io/PGSimCity/). Eleven districts map the real architecture — Client Approach → Gateway Plaza → Agent Runtime Row → Consent Gate → Vault Excavation + WAL Works → App Blueprint Quarter, Automation Yard, Blob CAS Warehouse, Sync Harbor (with a detached replica island), Backup Vaults — with animated particle flows, a live simulated HUD, a clickable inspector (with real `codeRef` pointers into `packages/`), a 10-chapter guided tour following one user message end-to-end, 7 scenarios, and a day/night toggle.
+An explorable 3D model of how the Centraid gateway works, in the spirit of [PGSimCity](https://nikolays.github.io/PGSimCity/). Eleven districts map the real architecture — Client Approach → Gateway Plaza → Harness Runtime Row → Consent Gate → Vault Excavation + WAL Works → App Blueprint Quarter, Automation Yard, Blob CAS Warehouse, Sync Harbor (with a detached replica island), Backup Vaults — with animated particle flows, a live simulated HUD, a clickable inspector (with real `codeRef` pointers into `packages/`), a 10-chapter guided tour following one user message end-to-end, 7 scenarios, and a day/night toggle.
 
 ## Run
 

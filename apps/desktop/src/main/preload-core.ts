@@ -204,7 +204,7 @@ export function createCentraidApi(bridge: PreloadBridge) {
     onVaultMetadataChanged: (cb: () => void) =>
       subscribe(bridge, Channel.VAULT_METADATA_PUSH, () => cb()),
 
-    // Templates, app chat, gateway-side user identity + prefs, coding-agent
+    // Templates, app conversation, gateway-side user identity + prefs, harness
     // detection, and the whole automations surface all moved to the
     // renderer's direct HTTP clients under the thin-client pivot — see
     // `renderer/gateway-client.ts` and `gateway-client-conversation.ts`.

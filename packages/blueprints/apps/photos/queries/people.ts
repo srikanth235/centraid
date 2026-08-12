@@ -182,7 +182,7 @@ export default async function people({ ctx }: HandlerArgs) {
     ];
     const assetsResult = coverAssetIds.length
       ? await ctx.vault.read({
-          entity: "media.media_asset",
+          entity: "media.asset",
           where: [{ column: "asset_id", op: "in", value: coverAssetIds }],
           limit: coverAssetIds.length,
           purpose,

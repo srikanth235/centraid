@@ -152,7 +152,7 @@ describe("large-vault.scale", () => {
     const readStarted = performance.now();
     const recentPhotos = db.vault
       .prepare(
-        `SELECT asset_id FROM media_media_asset
+        `SELECT asset_id FROM media_asset
           WHERE deleted_at IS NULL ORDER BY captured_at DESC LIMIT 200`
       )
       .all();

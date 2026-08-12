@@ -6,6 +6,8 @@ import path from "node:path";
 
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
+import { ASSISTANT_APP_ID } from "@centraid/app-engine";
+import type { RunTurnFn } from "@centraid/app-engine";
 import { scaffoldAppFiles } from "@centraid/automation";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
@@ -132,6 +134,61 @@ describe("build-gateway scenarios", () => {
     expect(
       (gateway as unknown as Record<string, unknown>).token
     ).toBeUndefined();
+  });
+
+  test("the assistant turn and its auto-title both cross the one accounted harness seam", async () => {
+    await gateway.stop();
+    const harnessPrompts: string[] = [];
+    const injectedRunTurn: RunTurnFn = async (input, config) => {
+      harnessPrompts.push(input.message);
+      const titleTurn = input.message.includes("First user message:");
+      input.onEvent({
+        type: "final",
+        text: titleTurn ? "Accounted title" : "Primary answer",
+      });
+      return { harnessKind: config.prefs.kind };
+    };
+    gateway = await buildGateway({
+      paths: pathsUnder(dataDir),
+      runTurn: injectedRunTurn,
+    });
+    gateway.prefs.setPrefs({
+      "harness.kind": "codex",
+      "model.codex.title": "fast",
+    });
+    await gateway.start("http://127.0.0.1:0");
+    const session =
+      gateway.conversationHistoryStore.createSession(ASSISTANT_APP_ID);
+    const mounted = await mountUnauthed(gateway.composedHandler);
+    try {
+      const response = await fetch(
+        `${mounted.url}/centraid/_vault/assistant/_turn`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            conversationId: session.id,
+            message: "account every harness turn",
+          }),
+        }
+      );
+      expect(response.status).toBe(200);
+      await response.text();
+      await waitForAsync(async () => {
+        const runs = (await gateway.health.snapshot()).metrics.resourceUsage
+          ?.subsystems.harnessRuns.runs;
+        return runs === 2;
+      });
+
+      expect(harnessPrompts).toHaveLength(2);
+      expect(harnessPrompts[1]).toContain("First user message:");
+      expect(
+        (await gateway.health.snapshot()).metrics.resourceUsage?.subsystems
+          .harnessRuns.runs
+      ).toBe(harnessPrompts.length);
+    } finally {
+      await mounted.close();
+    }
   });
 
   /** Publish one automation app into the gateway's live code store. */
@@ -724,11 +781,11 @@ describe("build-gateway scenarios", () => {
       const before = (await (
         await fetch(`${srv.url}/centraid/demo/_turn/model`)
       ).json()) as {
-        runnerKind: string;
+        harnessKind: string;
         current: string | null;
         catalog: unknown[];
       };
-      expect(before.runnerKind).toBe("codex"); // prefsLoader's default when unset
+      expect(before.harnessKind).toBe("codex"); // prefsLoader's default when unset
       expect(before.current).toBeNull();
       expect(before.catalog).toStrictEqual([]);
 
@@ -766,27 +823,27 @@ describe("build-gateway scenarios", () => {
     }
   });
 
-  test("the ask model picker follows ask’s OWN runner pin, not the default agent", async () => {
+  test("the ask model picker follows ask’s OWN harness pin, not the default harness", async () => {
     await gateway.start("http://127.0.0.1:0");
     await gateway.runtime.registry.ensureUploaded("demo");
     const srv = await mountUnauthed(gateway.composedHandler);
     try {
-      // The default agent stays codex; only the `ask` register is re-pinned.
+      // The default harness stays codex; only the `ask` register is re-pinned.
       gateway.prefs.setPrefs({
-        "agent.runner.kind": "codex",
-        "runner.ask": "claude-code",
+        "harness.kind": "codex",
+        "harness.ask": "claude-code",
       });
 
-      // GET reports ask's resolved runner — the picker must offer the models of
+      // GET reports ask's resolved harness — the picker must offer the models of
       // the backend the ask turn will actually run on.
       const info = (await (
         await fetch(`${srv.url}/centraid/demo/_turn/model`)
       ).json()) as {
-        runnerKind: string;
+        harnessKind: string;
       };
-      expect(info.runnerKind).toBe("claude-code");
+      expect(info.harnessKind).toBe("claude-code");
 
-      // ...and PUT writes THAT runner's key. Reading one key while writing
+      // ...and PUT writes THAT harness's key. Reading one key while writing
       // another is the exact bug per-subsystem resolution has to avoid.
       const putRes = await fetch(`${srv.url}/centraid/demo/_turn/model`, {
         method: "PUT",
@@ -797,7 +854,7 @@ describe("build-gateway scenarios", () => {
       expect(gateway.prefs.getAllPrefs()["model.claude-code.ask"]).toBe(
         "claude-sonnet-4-6"
       );
-      // The default agent's key is untouched — no cross-runner bleed.
+      // The default harness's key is untouched — no cross-harness bleed.
       expect(gateway.prefs.getAllPrefs()["model.codex.ask"]).toBeUndefined();
 
       // The round-trip agrees: GET reads back what PUT wrote.
@@ -812,22 +869,22 @@ describe("build-gateway scenarios", () => {
     }
   });
 
-  test("with no runner.* pins the ask picker still rides the default agent (back-compat)", async () => {
+  test("with no harness.* pins the ask picker still rides the default harness (back-compat)", async () => {
     await gateway.start("http://127.0.0.1:0");
     await gateway.runtime.registry.ensureUploaded("demo");
     const srv = await mountUnauthed(gateway.composedHandler);
     try {
       // Back-compat is the hard requirement: a prefs file that predates
-      // per-subsystem selection carries only `agent.runner.kind`, and every
+      // per-subsystem selection carries only `harness.kind`, and every
       // register must resolve to it exactly as it did before.
-      gateway.prefs.setPrefs({ "agent.runner.kind": "claude-code" });
+      gateway.prefs.setPrefs({ "harness.kind": "claude-code" });
 
       const info = (await (
         await fetch(`${srv.url}/centraid/demo/_turn/model`)
       ).json()) as {
-        runnerKind: string;
+        harnessKind: string;
       };
-      expect(info.runnerKind).toBe("claude-code");
+      expect(info.harnessKind).toBe("claude-code");
     } finally {
       await srv.close();
     }

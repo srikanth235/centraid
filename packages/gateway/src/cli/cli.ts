@@ -56,6 +56,7 @@ import type { ParsedServe } from "./cli-serve-args.js";
 import type { DaemonConfig } from "./config.js";
 import { commandDevices, commandPair } from "./device-admin.js";
 import { makeDaemonDevicePlane } from "./endpoint-host.js";
+import { seedHarnessPrefs } from "./harness-prefs.js";
 import { commandKey } from "./key-admin.js";
 import { daemonKeyStore } from "./key-store.js";
 import { landlordBearerForEndpointSecret } from "./landlord-auth.js";
@@ -64,7 +65,6 @@ import { commandOwners } from "./owner-admin.js";
 import { daemonLayoutFor } from "./paths.js";
 import { commandRecover } from "./recover-admin.js";
 import { resolveDaemonConfig } from "./resolve-config.js";
-import { seedRunnerPrefs } from "./runner-prefs.js";
 import { commandService } from "./service-admin.js";
 import { commandStatus } from "./status-admin.js";
 import { commandVault } from "./vault-admin.js";
@@ -332,13 +332,13 @@ async function commandServe(args: string[]): Promise<void> {
     );
   }
 
-  // Seed runner prefs *after* serve(). The write is an atomic JSON
+  // Seed harness prefs *after* serve(). The write is an atomic JSON
   // replace, so re-seed on every boot is safe.
   try {
-    seedRunnerPrefs(handle.prefs, config);
+    seedHarnessPrefs(handle.prefs, config);
   } catch (error) {
     process.stderr.write(
-      `[centraid-gateway] warning: failed to seed runner prefs: ${error instanceof Error ? error.message : String(error)}\n`
+      `[centraid-gateway] warning: failed to seed harness prefs: ${error instanceof Error ? error.message : String(error)}\n`
     );
   }
 

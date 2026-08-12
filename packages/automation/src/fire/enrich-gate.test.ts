@@ -71,7 +71,7 @@ describe("enrichment tier gate", () => {
     return (args: OpenDispatchArgs): Promise<DispatchSurface> => {
       opened.push(args);
       return Promise.resolve({
-        agentDispatcher: () => Promise.resolve("a model answer"),
+        delegateDispatcher: () => Promise.resolve("a model answer"),
         close: () => Promise.resolve(),
       });
     };
@@ -114,11 +114,11 @@ describe("enrichment tier gate", () => {
     expect(outcome.error).toContain("photos");
     // The reason reaches the run record the ledger/notice is built from.
     expect(record.error).toStrictEqual(outcome.error);
-    // Nothing was started: no dispatch surface, no agent process.
+    // Nothing was started: no dispatch surface, no harness process.
     expect(opened).toStrictEqual([]);
   });
 
-  it("refuses a gateway-lane enricher when the tier is device, because every runner is remote", async () => {
+  it("refuses a gateway-lane enricher when the tier is device, because every harness is remote", async () => {
     const { outcome, opened } = await fire({
       lane: "gateway",
       resolveEnrichPolicy: () => "device",
@@ -153,7 +153,7 @@ describe("enrichment tier gate", () => {
     const { outcome, opened } = await fire({
       lane: "gateway",
       resolveEnrichPolicy: () => "gateway",
-      handler: `export default async ({ ctx }) => ({ output: await ctx.agent({ prompt: 'find faces' }) });`,
+      handler: `export default async ({ ctx }) => ({ output: await ctx.delegate({ prompt: 'find faces' }) });`,
     });
 
     expect(outcome.ok).toBe(true);
@@ -161,11 +161,11 @@ describe("enrichment tier gate", () => {
     expect(opened).toHaveLength(1);
   });
 
-  it("runs a device-lane enricher under device but seals ctx.agent shut", async () => {
+  it("runs a device-lane enricher under device but seals ctx.delegate shut", async () => {
     const { outcome } = await fire({
       lane: "device",
       resolveEnrichPolicy: () => "device",
-      handler: `export default async ({ ctx }) => ({ output: await ctx.agent({ prompt: 'sneak a model turn' }) });`,
+      handler: `export default async ({ ctx }) => ({ output: await ctx.delegate({ prompt: 'sneak a model turn' }) });`,
     });
 
     // The fire was allowed to start (deterministic work is device-tier
@@ -173,18 +173,18 @@ describe("enrichment tier gate", () => {
     // reaching a provider.
     expect(outcome.skipped).toBeUndefined();
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toContain("ctx.agent is refused");
+    expect(outcome.error).toContain("ctx.delegate is refused");
   });
 
-  it("refuses an explicit agent variant until the owner pins a model", async () => {
+  it("refuses an explicit delegate step until the owner pins a model", async () => {
     await writeAutomation(appsDir, {
       ...enricherManifest("device"),
       enrich: {
         domain: "photos",
         capability: "ocr",
         lane: "device",
-        agentVariant: {
-          selected: "agent",
+        delegateStep: {
+          selected: "delegate",
           promptRev: "ocr-v1",
           latency: "seconds instead of milliseconds",
           consequence: "billed and re-derives eligible photographs",

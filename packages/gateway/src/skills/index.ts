@@ -1,9 +1,8 @@
 /*
- * Skills — gateway agent grounding (`src/skills/`)
+ * Skills — gateway harness grounding (`src/skills/`)
  *
- * Agent grounding for the centraid app builder, modeled as a `skills/`
- * directory of `SKILL.md` units (the home of the grounding half of the retired
- * `@centraid/agent-harness`).
+ * Harness grounding for the Centraid app builder, modeled as a `skills/`
+ * directory of `SKILL.md` units.
  *
  * - `composeSkills(names)` concatenates the named static skills' bodies — the
  *   authoring contracts that used to be `CENTRAID_APPEND_PROMPT` /

@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import type { AgentCapturePreview } from "@centraid/app-engine";
+import type { CapturePreview } from "@centraid/app-engine";
 
 import type { OcrExtraction } from "../capture/capture-ocr.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
@@ -11,11 +11,11 @@ export const CAPTURE_OCR_PATH = "/centraid/_gateway/capture/ocr";
 const MAX_OCR_BYTES = 25 * 1024 * 1024;
 
 export interface CaptureRouteOptions {
-  classify: (text: string) => Promise<AgentCapturePreview | undefined>;
+  classify: (text: string) => Promise<CapturePreview | undefined>;
   recognizeOcr?: (input: Buffer, mediaType: string) => Promise<OcrExtraction>;
 }
 
-/** Agent fallback for ambiguous quick-capture text; deterministic cases stay local. */
+/** Harness fallback for ambiguous quick-capture text; deterministic cases stay local. */
 export function makeCaptureRouteHandler(
   options: CaptureRouteOptions
 ): RouteHandler {

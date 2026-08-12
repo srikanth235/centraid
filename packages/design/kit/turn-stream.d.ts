@@ -84,9 +84,9 @@ export type TurnStreamEvent =
       outputTokens?: number;
       cacheReadTokens?: number;
       cacheWriteTokens?: number;
-      /** Agent-reported or catalog-estimated USD (see costSource). */
+      /** Harness-reported or catalog-estimated USD (see costSource). */
       costUsd?: number;
-      costSource?: "agent" | "estimated";
+      costSource?: "harness" | "estimated";
     }
   /** COMPAT additive (#567): live context-window usage may move non-monotonically. */
   | { type: "context"; used?: number; size?: number }

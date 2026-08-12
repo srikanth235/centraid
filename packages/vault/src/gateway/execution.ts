@@ -294,7 +294,7 @@ export function insertInvocation(
   const invocationId = fixedId ?? request.invocationId ?? uuidv7();
   db.journal
     .prepare(
-      `INSERT INTO agent_command_invocation (invocation_id, command_id, agent_id, grant_id, input_json, status, requested_at)
+      `INSERT INTO agent_command_invocation (invocation_id, command_id, caller_id, grant_id, input_json, status, requested_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
@@ -330,22 +330,22 @@ export function assertInvocationIdentity(
   db: VaultDb,
   invocationId: string,
   commandId: string,
-  agentId: string,
+  callerId: string,
   grantId: string | null
 ): boolean {
   const existing = db.journal
     .prepare(
-      `SELECT command_id, agent_id, grant_id
+      `SELECT command_id, caller_id, grant_id
          FROM agent_command_invocation
         WHERE invocation_id = ?`
     )
     .get(invocationId) as
-    | { command_id: string; agent_id: string; grant_id: string | null }
+    | { command_id: string; caller_id: string; grant_id: string | null }
     | undefined;
   if (!existing) return false;
   if (
     existing.command_id !== commandId ||
-    existing.agent_id !== agentId ||
+    existing.caller_id !== callerId ||
     existing.grant_id !== grantId
   ) {
     throw new GatewayError(

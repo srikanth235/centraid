@@ -47,7 +47,7 @@ describe("B6 Commons peer plane", () => {
       ownerPartyId: origin.ownerPartyId,
       ownerVaultId: origin.vaultId,
       ownerVault: origin.vault,
-      containerType: "media.media_asset",
+      containerType: "media.asset",
       containerId: photo.assetId,
       members: [
         {
@@ -76,7 +76,7 @@ describe("B6 Commons peer plane", () => {
         stewardVaultId: origin.vaultId,
         memberPartyId: invitedPartyId,
         capability: "read",
-        containerType: "media.media_asset",
+        containerType: "media.asset",
         containerId: photo.assetId,
         containerLabel: "Photo before install",
         currentSizeBytes: photo.bytes.length,
@@ -105,9 +105,7 @@ describe("B6 Commons peer plane", () => {
       memberPartyId: invitedPartyId,
     });
     expect(
-      member.vault.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      member.vault.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 0 });
     expect(
       origin.vault.vault

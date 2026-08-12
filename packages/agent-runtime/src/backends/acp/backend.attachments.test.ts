@@ -1,5 +1,5 @@
 // Attachments on an ACP turn: mapped to real content blocks, gated on the
-// `promptCapabilities` the agent advertised, with a notice naming anything it
+// `promptCapabilities` the harness advertised, with a notice naming anything it
 // genuinely can't take. Core turn behaviour is in backend.test.ts; shared
 // fixtures in test-fixtures.ts.
 
@@ -30,7 +30,7 @@ async function promptBlocksFor(
 }
 describe("backend.attachments suite", () => {
   describe("backend.attachments", () => {
-    test("an image reaches an image-capable agent as an ACP image content block", async () => {
+    test("an image reaches an image-capable harness as an ACP image content block", async () => {
       const dir = await tempDir("acp-att-");
       const png = path.join(dir, "shot.png");
       await fs.writeFile(png, Buffer.from("PNGBYTES"));
@@ -57,7 +57,7 @@ describe("backend.attachments suite", () => {
       expect(notices(events)).not.toContain("attachment_unsupported");
     });
 
-    test("an agent without the image capability gets a notice naming what was skipped", async () => {
+    test("a harness without the image capability gets a notice naming what was skipped", async () => {
       const dir = await tempDir("acp-att-");
       const png = path.join(dir, "shot.png");
       await fs.writeFile(png, Buffer.from("PNGBYTES"));
@@ -78,7 +78,7 @@ describe("backend.attachments suite", () => {
       );
     });
 
-    test("a PDF rides an embedded resource when the agent takes embedded context", async () => {
+    test("a PDF rides an embedded resource when the harness takes embedded context", async () => {
       const dir = await tempDir("acp-att-");
       const pdf = path.join(dir, "spec.pdf");
       await fs.writeFile(pdf, Buffer.from("%PDF-1.7"));

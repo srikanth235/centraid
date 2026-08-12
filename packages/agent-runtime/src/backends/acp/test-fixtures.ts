@@ -1,5 +1,5 @@
 // Shared fixtures for the ACP backend suite: one helper that drives a real
-// `runAcpTurn` against the scripted `fake-acp-agent.mjs`, plus the event
+// `runAcpTurn` against the scripted `fake-acp-harness.mjs`, plus the event
 // selectors every feature file asserts through. Split across
 // backend.test.ts (core turn), backend.attachments.test.ts,
 // backend.model-usage.test.ts, and backend.vault-tools.test.ts.
@@ -7,7 +7,7 @@
 import { fileURLToPath } from "node:url";
 
 import type {
-  AdapterUsageSnapshot,
+  HarnessUsageSnapshot,
   ToolContext,
   TurnStreamEvent,
 } from "@centraid/app-engine";
@@ -16,14 +16,14 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { runAcpTurn } from "./backend.js";
 import type { AcpTurnConfig } from "./backend.js";
 
-export const FAKE_AGENT = fileURLToPath(
-  new URL("fake-acp-agent.mjs", import.meta.url)
+export const FAKE_HARNESS = fileURLToPath(
+  new URL("fake-acp-harness.mjs", import.meta.url)
 );
 
 export interface RunOptions {
   extraArgs: string[];
   prevSessionId?: string;
-  prevUsageSnapshot?: AdapterUsageSnapshot;
+  prevUsageSnapshot?: HarnessUsageSnapshot;
   hydrationContext?: string;
   hydrationAttachments?: { path: string; mime: string; filename?: string }[];
   recoveryHydrationContext?: string;
@@ -49,7 +49,7 @@ export async function runFake(opts: RunOptions): Promise<{
   events: TurnStreamEvent[];
   result: {
     sessionId?: string;
-    usageSnapshot?: AdapterUsageSnapshot;
+    usageSnapshot?: HarnessUsageSnapshot;
     hydrated?: boolean;
   };
 }> {
@@ -59,7 +59,7 @@ export async function runFake(opts: RunOptions): Promise<{
   const config: AcpTurnConfig = {
     kind: "acp",
     acpArgs: [],
-    binPath: FAKE_AGENT,
+    binPath: FAKE_HARNESS,
     extraArgs: opts.extraArgs,
     ...(opts.label ? { label: opts.label } : {}),
     ...(opts.installHint ? { installHint: opts.installHint } : {}),
@@ -69,7 +69,7 @@ export async function runFake(opts: RunOptions): Promise<{
   const result = await runAcpTurn(
     {
       cwd,
-      message: "hello agent",
+      message: "hello harness",
       extraSystemPrompt: "SYSTEM_CONTEXT",
       ...(opts.prevSessionId ? { prevSessionId: opts.prevSessionId } : {}),
       ...(opts.prevUsageSnapshot

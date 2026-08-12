@@ -53,14 +53,14 @@ function num(v: unknown): number {
 
 /**
  * The run's dominant model — the SAME pick `run_summary.model` computes
- * (the step/agent model with the most input+output tokens). Insights' byModel
+ * (the step/delegate model with the most input+output tokens). Insights' byModel
  * union depends on this exact contract (see the SQL comment in insights-store).
  */
 function dominantModelOf(journal: DatabaseSync, turnId: string): string | null {
   const row = journal
     .prepare(
       `SELECT i.model AS model FROM items i
-        WHERE i.turn_id = ? AND i.model IS NOT NULL AND i.kind IN ('step','agent')
+        WHERE i.turn_id = ? AND i.model IS NOT NULL AND i.kind IN ('step','delegate')
         GROUP BY i.model
         ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
         LIMIT 1`
@@ -77,7 +77,7 @@ function dominantEffortOf(
   const row = journal
     .prepare(
       `SELECT i.effort AS effort FROM items i
-        WHERE i.turn_id = ? AND i.effort IS NOT NULL AND i.kind IN ('step','agent')
+        WHERE i.turn_id = ? AND i.effort IS NOT NULL AND i.kind IN ('step','delegate')
         GROUP BY i.effort
         ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
         LIMIT 1`
@@ -139,7 +139,7 @@ function computeDelta(
     )
       delta.lastEndedAt = endedAt;
     // byModel keys off the run's dominant model (matching run_summary); a run
-    // with no step/agent model contributes to KPIs but not to byModel.
+    // with no step/delegate model contributes to KPIs but not to byModel.
     const model = dominantModelOf(journal, t.id as string);
     if (model !== null) {
       const roll = delta.models.get(model) ?? {
@@ -153,7 +153,7 @@ function computeDelta(
       roll.cost += num(t.total_cost_usd);
       delta.models.set(model, roll);
     }
-    // No "default" bucket: only a runner-confirmed thought_level is durable.
+    // No "default" bucket: only a harness-confirmed thought_level is durable.
     const effort = dominantEffortOf(journal, t.id as string);
     if (effort !== null) {
       const roll = delta.efforts.get(effort) ?? {

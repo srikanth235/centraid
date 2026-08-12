@@ -39,10 +39,10 @@ describe("vault-plane cross-references", () => {
     expect(
       searched.cards.some((c) => c.type === "knowledge.note" && c.id === noteId)
     ).toBe(true);
-    const browsed = plane.pickEntities({ kinds: ["media.media_asset"] });
+    const browsed = plane.pickEntities({ kinds: ["media.asset"] });
     expect(browsed.cards).toHaveLength(1);
     expect(browsed.cards[0]).toMatchObject({
-      type: "media.media_asset",
+      type: "media.asset",
       id: assetId,
       status: "live",
     });
@@ -51,7 +51,7 @@ describe("vault-plane cross-references", () => {
     const linked = await plane.linkAsOwner({
       from_type: "knowledge.note",
       from_id: noteId,
-      to_type: "media.media_asset",
+      to_type: "media.asset",
       to_id: assetId,
       selector: { exact: "camera", prefix: "pack the ", suffix: "", start: 9 },
     });
@@ -84,7 +84,7 @@ describe("vault-plane cross-references", () => {
     const bridge = plane.bridgeFor("notes");
     const resolved = await bridge({
       op: "resolve",
-      payload: { refs: [{ type: "media.media_asset", id: assetId }], purpose },
+      payload: { refs: [{ type: "media.asset", id: assetId }], purpose },
     });
     expect(resolved.ok).toBe(true);
     const cards = (resolved.result as { cards: Array<Record<string, unknown>> })
@@ -100,7 +100,7 @@ describe("vault-plane cross-references", () => {
     plane.revokeGrant(grants[0]!.grantId);
     const revoked = await bridge({
       op: "resolve",
-      payload: { refs: [{ type: "media.media_asset", id: assetId }], purpose },
+      payload: { refs: [{ type: "media.asset", id: assetId }], purpose },
     });
     expect(revoked.ok).toBe(true);
     expect(
@@ -115,7 +115,7 @@ describe("vault-plane cross-references", () => {
     const survivors = plane.db.vault
       .prepare(
         `SELECT (SELECT count(*) FROM knowledge_note WHERE note_id = ?)
-            + (SELECT count(*) FROM media_media_asset WHERE asset_id = ?)
+            + (SELECT count(*) FROM media_asset WHERE asset_id = ?)
             + (SELECT count(*) FROM core_link WHERE link_id = ? AND valid_to IS NULL) AS n`
       )
       .get(noteId, assetId, linkId) as { n: number };
@@ -133,7 +133,7 @@ describe("vault-plane cross-references", () => {
     expect(unlinked.status).toBe("executed");
     const dark = await bridge({
       op: "resolve",
-      payload: { refs: [{ type: "media.media_asset", id: assetId }], purpose },
+      payload: { refs: [{ type: "media.asset", id: assetId }], purpose },
     });
     expect(dark.ok).toBe(true);
     expect(

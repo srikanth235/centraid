@@ -23,20 +23,18 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { HarnessSessions } from "../conversation/harness-sessions.js";
 import type {
   ConversationHistoryStore,
   ConversationTurnAttachment,
   TurnNode,
 } from "../conversation/history.js";
-import { compileHydrationPlan } from "../conversation/hydration.js";
 import type {
   ConversationTurnInput,
   ConversationRunner,
-  TurnResumePlan,
   TurnStreamEvent,
 } from "../conversation/runner.js";
 import type * as TypeImport_wkgbyq from "../conversation/schema.js";
-import type { TurnAttachment } from "../conversation/turn.js";
 import type * as TypeImport_nu6ai6 from "../conversation/turn.js";
 import { costForUsage } from "../model-pricing.js";
 import { SseStream } from "./sse-stream.js";
@@ -56,7 +54,7 @@ function pathInside(candidate: string, root: string): boolean {
   );
 }
 
-/** Same ceiling the inline-artifact path enforces — an agent-reported
+/** Same ceiling the inline-artifact path enforces — a harness-reported
  *  workspace file is no more trusted than an inline one. */
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 
@@ -69,7 +67,7 @@ async function workspaceArtifact(
       hash: string;
       mime: string;
       sizeBytes: number;
-      source: "agent";
+      source: "harness";
       filename: string;
       workspacePath: string;
     }
@@ -114,7 +112,7 @@ async function workspaceArtifact(
       hash: createHash("sha256").update(bytes).digest("hex"),
       mime: "application/octet-stream",
       sizeBytes: stat.size,
-      source: "agent",
+      source: "harness",
       filename: path.basename(candidate),
       workspacePath: candidate,
     };
@@ -144,7 +142,7 @@ export interface DriveTurnOptions {
   appId: string;
   conversationId: string;
   message: string;
-  /** Working dir handed to the runner as `dataDir`. */
+  /** Working dir handed to the harness as `dataDir`. */
   dataDir: string;
   /** Canonical host-resolved root chosen from the Centraid workspace selector. */
   workspaceDirectory?: string;
@@ -153,8 +151,8 @@ export interface DriveTurnOptions {
   extraSystemPrompt: string;
   runner: ConversationRunner;
   conversationStore?: ConversationHistoryStore | undefined;
-  /** Central scratch dir for runner-owned `<conversationId>.jsonl` files. */
-  conversationRunnerSessionDir: string;
+  /** Central scratch dir for harness-owned `<conversationId>.jsonl` files. */
+  conversationHarnessSessionDir: string;
   conversationLocks: Map<string, Promise<void>>;
   /** Leading SSE comment, e.g. `chat <appId> session <id>`. */
   banner: string;
@@ -162,11 +160,11 @@ export interface DriveTurnOptions {
   register?: "ask" | "build" | undefined;
   model?: string | undefined;
   thinking?: string | undefined;
-  runnerKind?: TypeImport_nu6ai6.RunnerKind | undefined;
+  harnessKind?: TypeImport_nu6ai6.HarnessKind | undefined;
   /** One provider, or the whole set the client has accumulated (issue #567). */
   providerConsent?:
-    | TypeImport_nu6ai6.RunnerKind
-    | readonly TypeImport_nu6ai6.RunnerKind[]
+    | TypeImport_nu6ai6.HarnessKind
+    | readonly TypeImport_nu6ai6.HarnessKind[]
     | undefined;
   additionalDirectories?: string[];
   idempotencyKey?: string | undefined;
@@ -181,12 +179,12 @@ export interface DriveTurnOptions {
    *  `turns.retry_of` so the transcript collapses it into a sibling pager
    *  (issue #420). */
   retryOf?: string | undefined;
-  prevAdapterSessionId?: string | undefined;
-  prevAdapterKind?: string | undefined;
-  prevAdapterUsageSnapshot?: TypeImport_nu6ai6.AdapterUsageSnapshot | undefined;
+  prevHarnessSessionId?: string | undefined;
+  prevHarnessKind?: string | undefined;
+  prevHarnessUsageSnapshot?: TypeImport_nu6ai6.HarnessUsageSnapshot | undefined;
   /** CAS refs recorded on the turn's `message_in` item. */
   attachmentRefs?: TurnAttachmentRef[];
-  /** Resolved blob paths handed to the runner for multimodal blocks. */
+  /** Resolved blob paths handed to the harness for multimodal blocks. */
   turnAttachments?: { path: string; mime: string; filename?: string }[];
   /**
    * Fire-and-forget LLM auto-title hook (issue #420). Invoked once, ONLY after
@@ -239,7 +237,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
   } = opts;
 
   // Start the SSE stream up-front so the harness sees `connected` even if
-  // the runner takes a while to spin up. Heartbeats every 30s keep proxies
+  // the harness takes a while to spin up. Heartbeats every 30s keep proxies
   // from timing out a long quiet stretch (model thinking, big tool call).
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -262,8 +260,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
     stream.event(event.type, JSON.stringify(event));
   };
 
-  // Turn accumulator — folds the runner's `TurnStreamEvent`s into the
-  // `runs` / `run_nodes` audit trace (issue #90). The runner's `usage`
+  // Turn accumulator — folds the harness's `TurnStreamEvent`s into the
+  // `runs` / `run_nodes` audit trace (issue #90). The harness's `usage`
   // event (when emitted) is folded into the turn's `step` node so the
   // ledger carries real token + cost accounting for chat turns.
   const turnStartedAt = Date.now();
@@ -285,14 +283,14 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
     usage: undefined as
       | {
           model?: string;
-          provider?: string;
+          harness?: string;
           effort?: string;
           inputTokens?: number;
           outputTokens?: number;
           cacheReadTokens?: number;
           cacheWriteTokens?: number;
           costUsd?: number;
-          costSource?: "agent" | "estimated";
+          costSource?: "harness" | "estimated";
         }
       | undefined,
   };
@@ -341,7 +339,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         // Keep cost + provenance for the ledger (issue #514) — do not strip.
         acc.usage = {
           ...(event.model === undefined ? {} : { model: event.model }),
-          ...(event.provider === undefined ? {} : { provider: event.provider }),
+          ...(event.harness === undefined ? {} : { harness: event.harness }),
           ...(event.effort === undefined ? {} : { effort: event.effort }),
           ...(event.inputTokens === undefined
             ? {}
@@ -394,11 +392,11 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
     }
   };
   const onEvent = (event: TurnStreamEvent): void => {
-    // Prefer agent/ACP cost; fill catalog estimate only when missing (#514).
+    // Prefer harness/ACP cost; fill catalog estimate only when missing (#514).
     let priced = event;
     if (priced.type === "usage") {
       if (priced.costUsd !== undefined && priced.costSource === undefined) {
-        priced = { ...priced, costSource: "agent" };
+        priced = { ...priced, costSource: "harness" };
       } else if (priced.costUsd === undefined) {
         const costUsd = costForUsage(priced.model, priced);
         if (costUsd !== undefined) {
@@ -417,14 +415,14 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
   req.on("close", onClientClose);
   req.on("error", onClientClose);
 
-  // Runner-owned scratch file in the central scratch dir. Make sure the
-  // parent dir exists before any runner writes to it.
+  // Harness-owned scratch file in the central scratch dir. Make sure the
+  // parent dir exists before any harness writes to it.
   const sessionFile = path.join(
-    opts.conversationRunnerSessionDir,
+    opts.conversationHarnessSessionDir,
     `${conversationId}.jsonl`
   );
   await fs
-    .mkdir(opts.conversationRunnerSessionDir, { recursive: true })
+    .mkdir(opts.conversationHarnessSessionDir, { recursive: true })
     .catch(() => undefined);
   await withConversationLock(
     opts.conversationLocks,
@@ -467,7 +465,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         // fall out for free — a duplicate that arrives while the first turn is still
         // running QUEUES behind this same lock, so by the time it acquires the lock
         // the first turn has recorded and this branch replays it (no 409 needed, no
-        // double-run). Replay skips the runner AND recordTurn, so no duplicate row.
+        // double-run). Replay skips the harness AND recordTurn, so no duplicate row.
         if (opts.idempotencyKey && conversationStore) {
           const recorded = conversationStore.findRecordedTurn(
             appId,
@@ -488,9 +486,9 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           appId,
           conversationId
         );
-        const targetRunnerKind =
-          opts.runnerKind ?? (await runner.resolveRunnerKind?.());
-        // The runner's failover ladder can land on a provider this route never
+        const targetHarnessKind =
+          opts.harnessKind ?? (await runner.resolveHarnessKind?.());
+        // The harness's failover ladder can land on a provider this route never
         // targeted, and every provider has its OWN binding and its OWN hydration
         // watermark. So resume + hydration are resolved PER RUNG, on demand,
         // through `resumeForKind` — one planned-once-per-kind memo. Resolving it
@@ -498,99 +496,48 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         // ladder silently dropped the whole conversation whenever rung 0 was
         // skipped (breaker open), and folded the full ledger on every turn even
         // when no rung ever needed it.
-        const resumeStates = new Map<
-          string,
-          ReturnType<ConversationHistoryStore["getAdapterResumeState"]>
-        >();
-        const resumeStateFor = (
-          kind: string | undefined
-        ): ReturnType<ConversationHistoryStore["getAdapterResumeState"]> => {
-          if (!conversationStore) return undefined;
-          const key = kind ?? "";
-          if (resumeStates.has(key)) return resumeStates.get(key);
-          const state = kind
-            ? conversationStore.getAdapterResumeState(
-                appId,
-                conversationId,
-                kind
-              )
-            : conversationStore.getAdapterResumeState(appId, conversationId);
-          resumeStates.set(key, state);
-          return state;
-        };
-        const resume = resumeStateFor(targetRunnerKind);
-        const plans = new Map<string, TurnResumePlan>();
-        const planFor = (kind: string): TurnResumePlan => {
-          const cached = plans.get(kind);
-          if (cached) return cached;
-          const store = conversationStore!;
-          const state = resumeStateFor(kind);
-          const compile = (
-            afterSeq: number
-          ): {
-            context?: TurnResumePlan["hydrationContext"];
-            attachments: TurnAttachment[];
-          } => {
-            const delta = store.getHydrationDelta(
-              appId,
-              conversationId,
-              afterSeq
-            );
-            if (!delta || delta.messages.length === 0)
-              return { attachments: [] };
-            const compiled = compileHydrationPlan(delta.messages, {
-              tokenBudget: 8_000,
-              minTurns: 2,
-              includeAttachmentReferences: true,
-            });
-            if (compiled.includedTurns === 0) return { attachments: [] };
-            return {
-              context: {
-                prompt: compiled.prompt,
-                includedTurns: compiled.includedTurns,
-                omittedTurns: compiled.omittedTurns,
-                estimatedTokens: compiled.estimatedTokens,
+        const harnessSessions = conversationStore
+          ? new HarnessSessions({
+              binding: (kind) => {
+                const state = conversationStore.getHarnessResumeState(
+                  appId,
+                  conversationId,
+                  kind
+                );
+                return state?.sessionId
+                  ? {
+                      sessionId: state.sessionId,
+                      ...(state.bindingId
+                        ? { bindingId: state.bindingId }
+                        : {}),
+                      ...(state.usageSnapshot
+                        ? { usageSnapshot: state.usageSnapshot }
+                        : {}),
+                      ...(state.hydratedThroughSeq === undefined
+                        ? {}
+                        : { hydratedThroughSeq: state.hydratedThroughSeq }),
+                    }
+                  : undefined;
               },
-              attachments: compiled.attachments.map((attachment) => ({
-                path: store.blobPathFor(appId, attachment.hash),
-                mime: attachment.mime,
-                ...(attachment.filename
-                  ? { filename: attachment.filename }
-                  : {}),
-              })),
-            };
-          };
-          // Without a resumable session id this rung starts cold, so its delta is
-          // the whole ledger — and the recovery plan would be that same fold.
-          const watermark = state?.sessionId
-            ? (state.hydratedThroughSeq ?? -1)
-            : -1;
-          const handoff = compile(watermark);
-          const recovery = state?.sessionId
-            ? watermark === -1
-              ? handoff
-              : compile(-1)
+              messages: (afterSeq) =>
+                conversationStore.getHydrationDelta(
+                  appId,
+                  conversationId,
+                  afterSeq
+                )?.messages ?? [],
+              attachmentPath: (hash) =>
+                conversationStore.blobPathFor(appId, hash),
+            })
+          : undefined;
+        const legacyResume =
+          !targetHarnessKind && conversationStore
+            ? conversationStore.getHarnessResumeState(appId, conversationId)
             : undefined;
-          const plan: TurnResumePlan = {
-            ...(state?.sessionId ? { sessionId: state.sessionId } : {}),
-            ...(state?.bindingId ? { bindingId: state.bindingId } : {}),
-            ...(state?.usageSnapshot
-              ? { usageSnapshot: state.usageSnapshot }
-              : {}),
-            ...(handoff.context ? { hydrationContext: handoff.context } : {}),
-            ...(handoff.attachments.length > 0
-              ? { hydrationAttachments: handoff.attachments }
-              : {}),
-            ...(recovery?.context
-              ? { recoveryHydrationContext: recovery.context }
-              : {}),
-            ...(recovery && recovery.attachments.length > 0
-              ? { recoveryHydrationAttachments: recovery.attachments }
-              : {}),
-          };
-          plans.set(kind, plan);
-          return plan;
-        };
+        const resume = targetHarnessKind
+          ? harnessSessions?.plan(targetHarnessKind)
+          : legacyResume;
+        const planFor = (kind: TypeImport_nu6ai6.HarnessKind) =>
+          harnessSessions?.plan(kind);
         const input: ConversationTurnInput = {
           appId,
           dataDir: opts.dataDir,
@@ -604,7 +551,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           extraSystemPrompt: opts.extraSystemPrompt,
           abortSignal: abortController.signal,
           onEvent,
-          ...(targetRunnerKind ? { runnerKind: targetRunnerKind } : {}),
+          ...(targetHarnessKind ? { harnessKind: targetHarnessKind } : {}),
           ...(opts.model ? { model: opts.model } : {}),
           ...(opts.thinking ? { thinking: opts.thinking } : {}),
           ...(opts.providerConsent && opts.providerConsent.length > 0
@@ -620,34 +567,34 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           ...(opts.idempotencyKey
             ? { idempotencyKey: opts.idempotencyKey }
             : {}),
-          ...(conversationMeta?.adapterKind
-            ? { activeAdapterKind: conversationMeta.adapterKind }
+          ...(conversationMeta?.harnessKind
+            ? { activeHarnessKind: conversationMeta.harnessKind }
             : {}),
           ...(resume?.sessionId
             ? {
-                prevAdapterSessionId: resume.sessionId,
+                prevHarnessSessionId: resume.sessionId,
                 prevBindingId: resume.bindingId,
               }
-            : opts.prevAdapterSessionId
-              ? { prevAdapterSessionId: opts.prevAdapterSessionId }
+            : opts.prevHarnessSessionId
+              ? { prevHarnessSessionId: opts.prevHarnessSessionId }
               : {}),
-          ...(resume?.kind
-            ? { prevAdapterKind: resume.kind }
-            : opts.prevAdapterKind
-              ? { prevAdapterKind: opts.prevAdapterKind }
+          ...((targetHarnessKind ?? legacyResume?.kind)
+            ? { prevHarnessKind: targetHarnessKind ?? legacyResume?.kind }
+            : opts.prevHarnessKind
+              ? { prevHarnessKind: opts.prevHarnessKind }
               : {}),
           ...(resume?.usageSnapshot
-            ? { prevAdapterUsageSnapshot: resume.usageSnapshot }
-            : opts.prevAdapterUsageSnapshot
-              ? { prevAdapterUsageSnapshot: opts.prevAdapterUsageSnapshot }
+            ? { prevHarnessUsageSnapshot: resume.usageSnapshot }
+            : opts.prevHarnessUsageSnapshot
+              ? { prevHarnessUsageSnapshot: opts.prevHarnessUsageSnapshot }
               : {}),
           ...(conversationStore ? { resumeForKind: planFor } : {}),
         };
         let runResult:
           | {
-              adapterSessionId?: string;
-              adapterKind?: string;
-              adapterUsageSnapshot?: TypeImport_nu6ai6.AdapterUsageSnapshot;
+              harnessSessionId?: string;
+              harnessKind?: string;
+              harnessUsageSnapshot?: TypeImport_nu6ai6.HarnessUsageSnapshot;
               hydrated?: boolean;
               hydrationKind?: "handoff" | "recovery";
               hydrationTokens?: number;
@@ -664,19 +611,21 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           req.off("close", onClientClose);
           req.off("error", onClientClose);
           if (conversationStore && !acc.consentRequired) {
-            // Retire a binding the adapter had to abandon (D9). `hydrationKind:
-            // 'recovery'` means the resume handle we handed this runner was
+            // Retire a binding the harness had to abandon (D9). `hydrationKind:
+            // 'recovery'` means the resume handle we handed this harness was
             // rejected and it self-healed onto a fresh session. Left `active`,
             // that dead handle would be re-offered on every subsequent turn,
             // paying a failed resume + a full-ledger recovery fold each time.
             if (
               runResult?.hydrationKind === "recovery" &&
-              runResult.adapterKind
+              runResult.harnessKind
             ) {
-              const dead = plans.get(runResult.adapterKind);
+              const dead = harnessSessions?.plan(
+                runResult.harnessKind as TypeImport_nu6ai6.HarnessKind
+              );
               if (
                 dead?.bindingId &&
-                dead.sessionId !== runResult.adapterSessionId
+                dead.sessionId !== runResult.harnessSessionId
               ) {
                 conversationStore.markAdapterBindingStale(
                   appId,
@@ -747,8 +696,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
                       hash: stored.hash,
                       mime: inline.mime,
                       sizeBytes: stored.sizeBytes,
-                      source: "agent",
-                      filename: inline.filename ?? "agent-artifact",
+                      source: "harness",
+                      filename: inline.filename ?? "harness-artifact",
                     });
                   } catch {
                     // A malformed optional ACP artifact never fails the turn.
@@ -784,7 +733,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
               }
               conversationStore.recordTurn(appId, {
                 conversationId,
-                // The runner's surface decides the ledger kind: the builder-capable
+                // The harness's surface decides the ledger kind: the builder-capable
                 // unified runner reports `'build'`, the data-only runner leaves it
                 // unset → recorded as `'chat'` (issue #181). Read statically off the
                 // runner so an errored turn (no `ConversationTurnResult`) is still tagged.
@@ -821,29 +770,29 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
                 ...(runResult?.hydrationTokens === undefined
                   ? {}
                   : { hydrationTokens: runResult.hydrationTokens }),
-                ...(acc.errorMessage === undefined && runResult?.adapterKind
+                ...(acc.errorMessage === undefined && runResult?.harnessKind
                   ? {
-                      adapter: {
-                        kind: runResult.adapterKind,
-                        ...(runResult.adapterSessionId
-                          ? { sessionId: runResult.adapterSessionId }
+                      harnessObservation: {
+                        kind: runResult.harnessKind,
+                        ...(runResult.harnessSessionId
+                          ? { sessionId: runResult.harnessSessionId }
                           : {}),
-                        ...(runResult.adapterUsageSnapshot
-                          ? { usageSnapshot: runResult.adapterUsageSnapshot }
+                        ...(runResult.harnessUsageSnapshot
+                          ? { usageSnapshot: runResult.harnessUsageSnapshot }
                           : {}),
                         ...(runResult.hydrated ? { hydrated: true } : {}),
                       },
                     }
                   : {}),
-                ...(acc.errorMessage !== undefined && runResult?.adapterKind
+                ...(acc.errorMessage !== undefined && runResult?.harnessKind
                   ? {
-                      failedAdapter: {
-                        kind: runResult.adapterKind,
-                        ...(runResult.adapterSessionId
-                          ? { sessionId: runResult.adapterSessionId }
+                      failedHarnessObservation: {
+                        kind: runResult.harnessKind,
+                        ...(runResult.harnessSessionId
+                          ? { sessionId: runResult.harnessSessionId }
                           : {}),
-                        ...(runResult.adapterUsageSnapshot
-                          ? { usageSnapshot: runResult.adapterUsageSnapshot }
+                        ...(runResult.harnessUsageSnapshot
+                          ? { usageSnapshot: runResult.harnessUsageSnapshot }
                           : {}),
                         ...(runResult.hydrated ? { hydrated: true } : {}),
                       },

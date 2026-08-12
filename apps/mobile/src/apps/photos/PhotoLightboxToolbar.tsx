@@ -106,7 +106,7 @@ export function PhotoLightboxToolbar({
         [
           {
             op: "upsert",
-            entity: "media.media_asset",
+            entity: "media.asset",
             rowId: asset.assetId!,
             values: { favorite: asset.favorite ? 0 : 1 },
           },
@@ -127,7 +127,7 @@ export function PhotoLightboxToolbar({
               void onWrite("delete-asset", { asset_id: asset.assetId! }, [
                 {
                   op: "upsert",
-                  entity: "media.media_asset",
+                  entity: "media.asset",
                   rowId: asset.assetId!,
                   values: { deleted_at: new Date().toISOString() },
                 },

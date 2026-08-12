@@ -10,7 +10,7 @@
  *    payloads (webhook bodies, Gmail/GitHub events) — attacker-influenced. It
  *    is flattened, clipped, fence-delimited, and explicitly labelled as data,
  *    so an instruction hidden in a payload reads as a quoted observation
- *    rather than as system-prompt text. Note the residual risk: the runner
+ *    rather than as system-prompt text. Note the residual risk: the harness
  *    itself still launches with host-level permissions, so this hardening
  *    reduces the injection surface, it does not close it.
  *
@@ -55,7 +55,7 @@ export function safeJson(value: unknown): string {
 }
 
 /**
- * Runner-supplied `rawJson` is already a JSON string, so it never passed
+ * Harness-supplied `rawJson` is already a JSON string, so it never passed
  * through `safeJson`'s budget — a large file-read envelope wrote an unbounded
  * blob into `journal.db` AND serialized it to every connected SSE viewer.
  * Apply the same audit budget here.

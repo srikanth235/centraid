@@ -94,7 +94,7 @@ export interface VaultRegistryOptions {
   /** Root directory: one subdirectory per vault. */
   rootDir: string;
   /**
-   * Root for per-vault DISPOSABLE runner cache (`<cacheRootDir>/<vaultId>/`),
+   * Root for per-vault DISPOSABLE harness cache (`<cacheRootDir>/<vaultId>/`),
    * kept OUTSIDE `rootDir` so the sovereign vault tree holds only the
    * `vault.db` + `journal.db` pair, app data, and code. Defaults to a sibling
    * of `rootDir` (`<rootDir>-cache`). journal.db is the source of truth; this
@@ -231,7 +231,7 @@ export class VaultRegistry {
 
   constructor(options: VaultRegistryOptions) {
     this.rootDir = options.rootDir;
-    // Runner cache lives OUTSIDE the vault tree — default to a `-cache` sibling
+    // Harness cache lives OUTSIDE the vault tree — default to a `-cache` sibling
     // of the vault root so a vault dir carries only sovereign + code state.
     this.cacheRootDir =
       options.cacheRootDir ??
@@ -759,7 +759,7 @@ export class VaultRegistry {
     this.scannedDirs.delete(plane.dir);
     this.failedMountsByDir.delete(plane.dir);
     rmSync(plane.dir, { recursive: true, force: true });
-    // Drop the vault's disposable runner cache too (it lives outside the
+    // Drop the vault's disposable harness cache too (it lives outside the
     // vault dir, so the rmSync above doesn't reach it).
     rmSync(plane.cacheDir, { recursive: true, force: true });
     if (existsSync(this.rootDir) && readdirSync(this.rootDir).length === 0) {

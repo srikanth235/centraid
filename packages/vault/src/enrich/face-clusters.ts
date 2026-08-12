@@ -260,7 +260,7 @@ export function rebuildFaceClusters(
               e.model         AS model,
               e.vector        AS vector
          FROM media_face_region r
-         JOIN media_media_asset a ON a.asset_id = r.asset_id
+         JOIN media_asset a ON a.asset_id = r.asset_id
          JOIN enrich_embedding e
            ON e.target_type = ? AND e.target_id = r.region_id
         WHERE a.deleted_at IS NULL

@@ -40,7 +40,7 @@ const SUBJECT_PK: Record<string, string> = {
   "business.project": "project_id",
   "business.invoice": "invoice_id",
   "home.asset_item": "item_id",
-  "media.media_asset": "asset_id",
+  "media.asset": "asset_id",
 };
 
 const ROLES = [

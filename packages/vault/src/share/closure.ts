@@ -18,7 +18,7 @@
 // Sharing projects a MINIMAL closure — the item, whatever it structurally
 // cannot exist without, and nothing else:
 //
-//   media.media_asset  →  the asset row + its core_content_item + every
+//   media.asset  →  the asset row + its core_content_item + every
 //                         core_content_derivative of that content item
 //   core.content_item  →  the content item + its derivatives
 //   core.document      →  the document wrapper + current content + derivatives
@@ -58,7 +58,7 @@ export type ShareableItemType =
   | "docs.folder"
   | "locker.item"
   | "tally.group"
-  | "media.media_asset";
+  | "media.asset";
 
 const SHAREABLE_ITEM_TYPES: readonly ShareableItemType[] = [
   "core.collection",
@@ -67,7 +67,7 @@ const SHAREABLE_ITEM_TYPES: readonly ShareableItemType[] = [
   "docs.folder",
   "locker.item",
   "tally.group",
-  "media.media_asset",
+  "media.asset",
 ];
 
 /** True for a logical entity name this module knows how to project. */

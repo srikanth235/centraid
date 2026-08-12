@@ -3,7 +3,7 @@ import type { InlineKitAsk } from "@centraid/blueprints/apps/inline-types";
 // The inline "Ask your <app>" panel — the shell-side replacement for the served
 // kit.ts ask IIFE (which is suppressed inline; see suppress-served-ask.ts). It
 // mounts against the gateway conversation surface: turns stream through
-// `streamTurn(appId, …, register:'ask')`. Any write the agent parks belongs to
+// `streamTurn(appId, …, register:'ask')`. Any write the harness parks belongs to
 // the canonical Notifications; this conversational surface never forks decision state.
 //
 // Strictly online-only and lazy: `installInlineAsk` performs NO network on the

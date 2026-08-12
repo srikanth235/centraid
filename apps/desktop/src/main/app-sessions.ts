@@ -120,7 +120,7 @@ export async function assertActiveGatewayLocal(action: string): Promise<void> {
  * binary). Requires the active gateway to be local — remote gateways don't
  * expose their worktrees over the filesystem.
  *
- * Caller must ensure the dir exists (the agent creates it as a side effect
+ * Caller must ensure the dir exists (the harness creates it as a side effect
  * of writing into it).
  */
 export async function ensureAppSessionDir(appId: string): Promise<string> {

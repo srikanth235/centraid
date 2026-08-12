@@ -2,7 +2,7 @@
  * The library projection as bounded recent windows: the newest live assets
  * by captured_at (caller-sized, default 500 — a photo grid wants a deep
  * first page) and the newest 200 trashed ones — never the whole
- * media.media_asset table, and crucially never the whole core.content_item
+ * media.asset table, and crucially never the whole core.content_item
  * table, because every photo's bytes ride inline as a data: URI and a full
  * content read ships the entire library on every refresh (issue #264).
  * Content items and album entries are joined only for the windowed rows;
@@ -103,7 +103,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         // NULLs last, so camera-dated photos lead and undated imports trail
         // the window — acceptable semantics for a recency slice.
         ctx.vault.read({
-          entity: "media.media_asset",
+          entity: "media.asset",
           // Live timeline excludes archived assets (issue #419): archive hides
           // from the timeline without trashing, so an archived photo is neither
           // here nor in the trash shelf. `liveWhere` also carries the optional
@@ -117,7 +117,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         // the lifecycle sweep keeps short, so a fixed cap of 200 covers any
         // plausible shelf without a knob.
         ctx.vault.read({
-          entity: "media.media_asset",
+          entity: "media.asset",
           where: [{ column: "deleted_at", op: "not-null" }],
           orderBy: { column: "deleted_at", dir: "desc" },
           limit: 200,
@@ -148,7 +148,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         ? ctx.vault.read({
             entity: "core.collection_entry",
             where: [
-              { column: "target_type", op: "eq", value: "media.media_asset" },
+              { column: "target_type", op: "eq", value: "media.asset" },
               { column: "target_id", op: "in", value: assetIds },
             ],
             purpose,

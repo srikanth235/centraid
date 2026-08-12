@@ -78,7 +78,7 @@ export function parseWorkspaceKind(
 }
 
 /**
- * Resolve validated attachment refs to on-disk blob paths for the runner's
+ * Resolve validated attachment refs to on-disk blob paths for the harness's
  * multimodal content blocks — the shape `ConversationTurnInput.attachments`
  * expects. `appId` scopes the blob CAS lookup (an app id, or `_assistant`).
  */
@@ -100,7 +100,7 @@ export function resolveTurnAttachments(
 /**
  * Keep only refs that name a real file in this app's CAS. When the sender
  * supplies a size receipt it must match the stored bytes, so a forged or
- * stale ref can neither enter the ledger nor reach an agent process.
+ * stale ref can neither enter the ledger nor reach a harness process.
  */
 export function validateTurnAttachmentRefs(
   conversationStore: ConversationHistoryStore | undefined,

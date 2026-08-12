@@ -2,13 +2,13 @@
  *  `onTurnComplete` seams once prefs are loaded and the cwd is resolved. */
 import type { Dispatcher } from "../handlers/dispatcher.js";
 import type { ModelSubsystem } from "../stores/prefs-store.js";
+import type { HarnessHealthController } from "./harness-health.js";
 import type { ProviderEgressConsentController } from "./provider-egress-consent.js";
-import type { RunnerHealthController } from "./runner-health.js";
 import type { ConversationTurnInput } from "./runner.js";
 import type { RunKind } from "./schema.js";
 import type {
-  RunnerKind,
-  RunnerPrefs,
+  HarnessKind,
+  HarnessPrefs,
   RunTurnFn,
   VaultContentRunner,
   VaultInvokeRunner,
@@ -17,37 +17,37 @@ import type {
 
 export interface TurnContext {
   input: ConversationTurnInput;
-  prefs: RunnerPrefs;
+  prefs: HarnessPrefs;
   /** The working dir this turn runs in (data dir, or draft worktree). */
   cwd: string;
 }
 
 export interface ConversationRunnerCoreOptions {
   /**
-   * Loader for the user's persisted runner prefs. Called per turn so the
-   * runner picks up settings changes without a runtime restart — including a
-   * change to WHICH runner this register rides, since the loader resolves
-   * `runner.<subsystem>` fresh on every call.
+   * Loader for the user's persisted harness prefs. Called per turn so the
+   * harness picks up settings changes without a runtime restart — including a
+   * change to WHICH harness this register rides, since the loader resolves
+   * `harness.<subsystem>` fresh on every call.
    *
    * The `subsystem` argument is this register's identity (`opts.subsystem`),
-   * so a host that scopes runner selection per subsystem can answer with the
-   * right kind. Optional on both sides: hosts with one global runner ignore
-   * it, and a runner built without `subsystem` calls the loader bare — which
+   * so a host that scopes harness selection per subsystem can answer with the
+   * right kind. Optional on both sides: hosts with one global harness ignore
+   * it, and a harness built without `subsystem` calls the loader bare — which
    * is exactly the pre-existing behavior.
    */
   prefsLoader: (
     subsystem?: ModelSubsystem,
-    runnerKind?: RunnerKind
-  ) => Promise<RunnerPrefs | undefined>;
+    harnessKind?: HarnessKind
+  ) => Promise<HarnessPrefs | undefined>;
   /**
-   * Which subsystem's prefs this runner rides — passed to `prefsLoader` on
+   * Which subsystem's prefs this harness rides — passed to `prefsLoader` on
    * every turn. Left unset by registers with no per-subsystem identity
-   * (the data-only chat adapter), which then inherit the host default.
+   * (the data-only conversation driver), which then inherit the host default.
    */
   subsystem?: ModelSubsystem;
   /**
    * Resolve the shared app-engine dispatcher. Threaded into the per-turn
-   * `ToolContext` so the agent's structured tools dispatch through the same
+   * `ToolContext` so the harness's structured tools dispatch through the same
    * code path as HTTP callers. Hosts typically return `runtime.dispatcher`.
    * Called per turn so a host can cycle-break on first use.
    */
@@ -71,14 +71,14 @@ export interface ConversationRunnerCoreOptions {
    */
   onTurnComplete?: (ctx: TurnContext) => Promise<void> | void;
   /** Extra PATH entry (the bundled `centraid` CLI dir) for the spawned
-   *  agent. Builder chat sets it; data chat leaves it unset. */
+   *  harness. Builder chat sets it; data chat leaves it unset. */
   extraPath?: string;
   /**
    * When true, `resolveCwd` returns a draft session worktree (code + its
    * branched `data.sqlite`), so the turn's `ToolContext.overrideCodeDir` is
-   * pinned to it: the agent's `centraid_*` tools then hit the draft's
+   * pinned to it: the harness's `centraid_*` tools then hit the draft's
    * handlers and branched data, not live (issue #144). Builder chat sets it;
-   * the data-only backend leaves it false (cwd is the live data dir, no
+   * the data-only conversation driver leaves it false (cwd is the live data dir, no
    * draft to override to).
    */
   cwdIsDraftWorktree?:
@@ -86,7 +86,7 @@ export interface ConversationRunnerCoreOptions {
     | ((input: ConversationTurnInput, cwd: string) => boolean);
   /**
    * The vault-assistant register (issue: shell-level vault Q&A). When set,
-   * each turn's `ToolContext` carries this owner-side `vault_sql` runner and
+   * each turn's `ToolContext` carries this owner-side `vault_sql` callback and
    * the adapters swap the app-scoped `centraid_*` trio for the one vault
    * tool. Resolved per turn so it always rides the ACTIVE vault.
    */
@@ -96,36 +96,36 @@ export interface ConversationRunnerCoreOptions {
   /** Document-text access (issue #299) — resolved per turn like `vaultSql`. */
   vaultContent?: () => VaultContentRunner;
   /**
-   * The model turn driver. agent-runtime injects its codex/claude
-   * `runTurn`; tests inject a stub. Required — this spine is
-   * backend-agnostic and never imports a concrete backend.
+   * The model turn driver. The historical agent-runtime package injects its
+   * harness transport `runTurn`; tests inject a stub. Required — this spine is
+   * harness-agnostic and never imports a concrete harness runtime.
    */
   runTurn: RunTurnFn;
   /**
-   * The ledger `RunKind` turns through this runner persist as, surfaced on
+   * The ledger `RunKind` turns through this harness persist as, surfaced on
    * the built `ConversationRunner` for the route to read. Builder chat sets `'build'`;
    * data chat leaves it unset (the route defaults to `'chat'`) — issue #181.
    */
   runKind?: RunKind;
   /**
-   * Ordered turn-boundary failover candidates. The selected runner remains
-   * first; hosts commonly resolve this from `runner.ladder.<subsystem>`.
+   * Ordered turn-boundary failover candidates. The selected harness remains
+   * first; hosts commonly resolve this from `harness.ladder.<subsystem>`.
    */
-  runnerLadder?: (
+  harnessLadder?: (
     subsystem: ModelSubsystem | undefined,
-    primary: RunnerKind
-  ) => Promise<readonly RunnerKind[]> | readonly RunnerKind[];
+    primary: HarnessKind
+  ) => Promise<readonly HarnessKind[]> | readonly HarnessKind[];
   /** Persistent workspace-scoped breaker controller. */
-  runnerHealth?: RunnerHealthController;
+  harnessHealth?: HarnessHealthController;
   /** Stable health scope. Defaults to the resolved cwd. */
-  runnerHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
+  harnessHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
   /** Hard conversation × provider egress gate. */
-  providerEgressConsent?: ProviderEgressConsentController;
+  providerEgressConsent: ProviderEgressConsentController;
   /** Host alert seam for unattended/manual boundary failover selection. */
   onFailover?: (event: {
     conversationId: string;
     subsystem?: ModelSubsystem;
-    from: RunnerKind;
-    to: RunnerKind;
+    from: HarnessKind;
+    to: HarnessKind;
   }) => void;
 }

@@ -22,11 +22,11 @@ describe("backend.model-usage suite", () => {
       model: "fake-opus-9-1",
     });
 
-    // The agent saw the pin on its own `model` config option.
+    // The harness saw the pin on its own `model` config option.
     await expect(fs.readFile(configMarker, "utf8")).resolves.toBe(
       "model=fake-opus-9-1"
     );
-    // A successful pin is silent — no "runner picks its own model" notice.
+    // A successful pin is silent — no "harness picks its own model" notice.
     expect(notices(events)).not.toContain("model_unsupported");
     expect(notices(events)).not.toContain("model_not_offered");
   });
@@ -38,7 +38,7 @@ describe("backend.model-usage suite", () => {
       extraArgs: ["--mode=normal", `--config-marker=${configMarker}`],
       model: "smart",
       // Stands in for `resolveClaudeModel`: tier → CLI alias, which then
-      // substring-matches the concrete id the agent advertises.
+      // substring-matches the concrete id the harness advertises.
       resolveModel: (m) => (m === "smart" ? "opus" : m),
     });
     await expect(fs.readFile(configMarker, "utf8")).resolves.toBe(
@@ -46,7 +46,7 @@ describe("backend.model-usage suite", () => {
     );
   });
 
-  test("an agent with no model option gets a notice, not a silent drop", async () => {
+  test("a harness with no model option gets a notice, not a silent drop", async () => {
     const { events } = await runFake({
       extraArgs: ["--mode=normal", "--no-model-option"],
       model: "fake-opus-9-1",
@@ -54,7 +54,7 @@ describe("backend.model-usage suite", () => {
     expect(notices(events)).toContain("model_unsupported");
   });
 
-  test("a model the agent does not offer gets its own notice", async () => {
+  test("a model the harness does not offer gets its own notice", async () => {
     const { events } = await runFake({
       extraArgs: ["--mode=normal"],
       model: "some-model-nobody-offers",
@@ -64,7 +64,7 @@ describe("backend.model-usage suite", () => {
 
   // ---- usage ---------------------------------------------------------------
 
-  test("usage comes from the prompt result and is stamped with model + provider", async () => {
+  test("usage comes from the prompt result and is stamped with model + harness", async () => {
     const { events } = await runFake({
       extraArgs: ["--mode=normal"],
       model: "fake-opus-9-1",
@@ -74,7 +74,7 @@ describe("backend.model-usage suite", () => {
     expect(events.filter((e) => e.type === "usage")).toHaveLength(1);
     const usage = usageOf(events);
     expect(usage).toMatchObject({
-      provider: "acp",
+      harness: "acp",
       // Stamping the model is what makes the ledger row repriceable.
       model: "fake-opus-9-1",
       inputTokens: 100,
@@ -84,7 +84,7 @@ describe("backend.model-usage suite", () => {
     });
   });
 
-  test("with no model pinned, usage is stamped with the agent’s current model", async () => {
+  test("with no model pinned, usage is stamped with the harness’s current model", async () => {
     const { events } = await runFake({ extraArgs: ["--mode=normal"] });
     expect(usageOf(events)?.model).toBe("fake-model-default");
   });
@@ -117,7 +117,7 @@ describe("backend.model-usage suite", () => {
   // ---- mid-turn config_option_update ---------------------------------------
 
   test("a mid-turn model switch is what the usage event is stamped with", async () => {
-    // The agent switched models after the pin, and said so on the wire. Booking
+    // The harness switched models after the pin, and said so on the wire. Booking
     // the tokens under the model pinned at the start of the turn would reprice
     // the whole turn at the wrong rate.
     const { events } = await runFake({
@@ -127,11 +127,11 @@ describe("backend.model-usage suite", () => {
   });
 
   test("an option withdrawn by a config_option_update stops being tracked", async () => {
-    // Baseline: the agent's advertised effort reaches the usage stamp…
+    // Baseline: the harness's advertised effort reaches the usage stamp…
     const before = await runFake({ extraArgs: ["--mode=normal"] });
     expect(usageOf(before.events)?.effort).toBe("default");
 
-    // …and once the agent's full-set update no longer carries a thought_level
+    // …and once the harness's full-set update no longer carries a thought_level
     // option, the stale value must not survive as a pin target or a stamp.
     const after = await runFake({
       extraArgs: ["--mode=normal", "--midturn-drop-effort"],

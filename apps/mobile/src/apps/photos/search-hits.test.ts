@@ -179,7 +179,7 @@ describe("grouped hits", () => {
 
   it("emits NO things row — the vault has no label entity to count", () => {
     // proto:4265 draws `beach, sea, coat · found in 74 photographs`. There is
-    // no scene/label table in the vault (media.media_asset, media.face_region,
+    // no scene/label table in the vault (media.asset, media.face_region,
     // media.asset_phash and nothing else), so there is nothing to count and
     // the row is omitted rather than invented.
     const hits = groupedSearchHits(sources({ query: "beach sea coat" }));

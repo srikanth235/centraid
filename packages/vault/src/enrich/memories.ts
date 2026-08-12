@@ -423,7 +423,7 @@ export function rebuildMemories(
   const assets = vault
     .prepare(
       `SELECT asset_id, captured_at, tz_offset_min, place_id, capture_group_id
-         FROM media_media_asset
+         FROM media_asset
         WHERE deleted_at IS NULL
         ORDER BY asset_id`
     )

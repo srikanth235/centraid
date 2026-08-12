@@ -55,7 +55,7 @@ async function writeAutomation(
 
 const stubDispatch = (): Promise<DispatchSurface> =>
   Promise.resolve({
-    agentDispatcher: async () => "",
+    delegateDispatcher: async () => "",
     close: async () => undefined,
   });
 

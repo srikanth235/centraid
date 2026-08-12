@@ -62,7 +62,7 @@ export default async function handler({ ctx, log }) {
   for (const derivative of derivatives) {
     lastSeen = derivative.derivative_id;
     const contentId = derivative.content_id;
-    const out = await ctx.agent({
+    const out = await ctx.delegate({
       prompt:
         "Find dated obligations in the attached document text: expiry dates, renewal " +
         "deadlines, payment due dates. Return each with what it is, its kind, and the date " +

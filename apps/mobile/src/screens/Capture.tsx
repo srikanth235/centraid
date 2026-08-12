@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import {
-  applyAgentCaptureKind,
+  applyDelegateCaptureKind,
   classifyCapture,
 } from "@centraid/client/capture";
 import type { CaptureKind, CapturePreview } from "@centraid/client/capture";
@@ -71,7 +71,7 @@ export default function CaptureScreen({
         );
         if (response.ok) {
           const body = (await response.json()) as { preview?: unknown };
-          setPreview(applyAgentCaptureKind(local, body.preview));
+          setPreview(applyDelegateCaptureKind(local, body.preview));
         }
       } catch {
         // The deterministic preview and explicit destination picker remain.
@@ -182,7 +182,7 @@ export default function CaptureScreen({
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[styles.help, { color: colors.textSoft }]}>
           Type naturally. Centraid routes obvious captures offline and asks the
-          configured local agent only when the destination is ambiguous.
+          configured local harness only when the destination is ambiguous.
         </Text>
         <TextInput
           autoFocus

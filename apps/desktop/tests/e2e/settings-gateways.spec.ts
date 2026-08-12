@@ -203,14 +203,23 @@ test("12.4 — the Agents (providers) settings page renders", async () => {
       page.getByTestId("settings-dialog").getByRole("heading", { level: 1 })
     ).toHaveText("Agents");
     // Realigned: the exclusive "active agent" switch no longer exists. Per
-    // SettingsProvidersScreen.tsx:103-113 the exclusive radio was retired by
-    // per-subsystem runners and became the *default* lane of the Routing
+    // SettingsHarnessesScreen.tsx:103-113 the exclusive radio was retired by
+    // per-subsystem harnesses and became the *default* lane of the Routing
     // table — so the page's primary control is now the "Default agent" select
-    // (SettingsProvidersScreen.tsx:268).
+    // (SettingsHarnessesScreen.tsx:268).
     await expect(
       page.getByRole("combobox", { name: "Default agent" })
     ).toBeVisible({
       timeout: 10_000,
+    });
+    const evidenceDir = path.resolve(
+      import.meta.dirname,
+      "../../../../artifacts/e2e/ui-impact"
+    );
+    await fs.mkdir(evidenceDir, { recursive: true });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-743-one-agent-door.png"),
+      fullPage: true,
     });
   } finally {
     await closeApp(app);

@@ -30,7 +30,7 @@
 //
 // Publish validates the manifest against the *session worktree* before
 // the merge — the validation that used to run client-side in
-// agent-harness's publish.ts now runs gateway-side, since the
+// the harness publish path now runs gateway-side, since the
 // gateway owns the data.
 
 import { promises as fs } from "node:fs";
@@ -289,7 +289,7 @@ async function handlePublish(
     return true;
   }
 
-  // Manifest validation moved gateway-side (was agent-harness's
+  // Manifest validation moved gateway-side (was the harness runtime's
   // assertManifestValid). Validate the session worktree's app.json +
   // handler files BEFORE the merge so an invalid manifest fails the
   // publish instead of producing a dead live version.

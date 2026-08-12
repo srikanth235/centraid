@@ -135,8 +135,8 @@ describe("change-log", () => {
       .run(now);
     vault
       .prepare(
-        `INSERT INTO agent_agent
-         (agent_id, party_id, host_key, model_ref, version, enrolled_at, status)
+        `INSERT INTO consent_agent
+         (agent_id, party_id, enrollment_key, model_ref, version, enrolled_at, status)
        VALUES ('credential-agent', 'credential-party', 'host-never-log',
                'tier:fast', '1', ?, 'active')`
       )
@@ -158,7 +158,7 @@ describe("change-log", () => {
       .run();
     vault
       .prepare(
-        `UPDATE agent_agent SET model_ref = 'tier:smart' WHERE agent_id = 'credential-agent'`
+        `UPDATE consent_agent SET model_ref = 'tier:smart' WHERE agent_id = 'credential-agent'`
       )
       .run();
     vault
@@ -178,8 +178,8 @@ describe("change-log", () => {
       display_name: "Before app",
     });
     expect(old.get("consent.app")).not.toHaveProperty("signing_key");
-    expect(old.get("agent.agent")).toMatchObject({ model_ref: "tier:fast" });
-    expect(old.get("agent.agent")).not.toHaveProperty("host_key");
+    expect(old.get("consent.agent")).toMatchObject({ model_ref: "tier:fast" });
+    expect(old.get("consent.agent")).not.toHaveProperty("enrollment_key");
     expect(old.get("consent.device")).toMatchObject({ name: "Before device" });
     expect(old.get("consent.device")).not.toHaveProperty("public_key");
     expect(JSON.stringify(changes)).not.toMatch(

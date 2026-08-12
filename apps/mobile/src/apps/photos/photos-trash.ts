@@ -2,7 +2,7 @@
 //
 // The two facts worth their own module, both pure and both tested:
 //
-//  1. ORDER. `media_media_asset.source_asset_id` (issue #711) is a real FK, so
+//  1. ORDER. `media_asset.source_asset_id` (issue #711) is a real FK, so
 //     the vault REFUSES to delete a photograph forever while an edited copy
 //     still names it as its source — NULLing the copy's lineage would forge
 //     "camera original", and cascading would destroy something the member
@@ -23,7 +23,7 @@ import type { VaultAsset } from "./photos-selection-writes";
 /**
  * The trash, ordered so an edited copy always precedes the source it names.
  * `sourceOf` answers "which asset were these bytes derived from?" — read off
- * the replica's own `media.media_asset` rows, since the timeline model does
+ * the replica's own `media.asset` rows, since the timeline model does
  * not carry lineage.
  *
  * Stable for everything with no lineage in the set, and total: a two-row

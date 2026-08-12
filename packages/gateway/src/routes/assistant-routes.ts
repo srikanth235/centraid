@@ -24,7 +24,7 @@ import {
   ASSISTANT_APP_ID,
   driveTurnOverSse,
   isValidConversationId,
-  isRunnerKind,
+  isHarnessKind,
   parseAdditionalDirectories,
   parseWorkspaceKind,
   parseTurnAttachmentRefs,
@@ -35,7 +35,7 @@ import type {
   ConversationHistoryStore,
   ConversationRunner,
   ModelSubsystem,
-  RunnerKind,
+  HarnessKind,
   TurnAttachmentRef,
   TurnLimiter,
 } from "@centraid/app-engine";
@@ -57,14 +57,14 @@ export interface AssistantRouteOptions {
   /**
    * Model resolution (prefs plumbing): given the subsystem and the request
    * body's explicit `model` (if any), resolve the model id/alias per the
-   * shared order — explicit → `model.<runnerKind>.<subsystem>` prefs →
-   * `model.<runnerKind>.default` prefs → nothing. Optional so hermetic
+   * shared order — explicit → `model.<harnessKind>.<subsystem>` prefs →
+   * `model.<harnessKind>.default` prefs → nothing. Optional so hermetic
    * tests can omit it (falls through to the raw body value).
    */
   resolveModel?: (
     subsystem: ModelSubsystem,
     explicit?: string,
-    requestedRunner?: RunnerKind
+    requestedHarness?: HarnessKind
   ) => Promise<string | undefined>;
   /**
    * Fire-and-forget LLM auto-title hook (issue #420). Wired by the gateway to a
@@ -169,20 +169,20 @@ export function makeAssistantRouteHandler(
 
         const explicitModel =
           typeof body.model === "string" ? body.model : undefined;
-        const runnerKind = isRunnerKind(body.runnerKind)
-          ? body.runnerKind
+        const harnessKind = isHarnessKind(body.harnessKind)
+          ? body.harnessKind
           : undefined;
-        if (body.runnerKind !== undefined && !runnerKind) {
+        if (body.harnessKind !== undefined && !harnessKind) {
           return sendJson(res, 400, {
             error: "bad_request",
-            message: "runnerKind must name a registered runner.",
+            message: "harnessKind must name a registered harness.",
           });
         }
         const providerConsent = parseProviderConsent(body.providerConsent);
         if (providerConsent === "invalid") {
           return sendJson(res, 400, {
             error: "bad_request",
-            message: "providerConsent must name registered runners.",
+            message: "providerConsent must name registered harnesses.",
           });
         }
         const requestedWorkspaceKind = parseWorkspaceKind(body.workspaceKind);
@@ -242,13 +242,13 @@ export function makeAssistantRouteHandler(
           );
         }
         const model = opts.resolveModel
-          ? await opts.resolveModel("assistant", explicitModel, runnerKind)
+          ? await opts.resolveModel("assistant", explicitModel, harnessKind)
           : explicitModel;
 
-        const resume = opts.conversationStore.getAdapterResumeState(
+        const resume = opts.conversationStore.getHarnessResumeState(
           ASSISTANT_APP_ID,
           conversationId,
-          runnerKind
+          harnessKind
         );
         await driveTurnOverSse({
           req,
@@ -267,12 +267,12 @@ export function makeAssistantRouteHandler(
           runner: opts.runner,
           ...(opts.limiter ? { limiter: opts.limiter() } : {}),
           conversationStore: opts.conversationStore,
-          conversationRunnerSessionDir:
-            opts.vaults.currentWorkspace().runnerSessionDir,
+          conversationHarnessSessionDir:
+            opts.vaults.currentWorkspace().harnessSessionDir,
           conversationLocks: opts.conversationLocks,
           banner: `assistant vault ${plane.boot.vaultId} session ${conversationId}`,
           model,
-          ...(runnerKind ? { runnerKind } : {}),
+          ...(harnessKind ? { harnessKind } : {}),
           thinking:
             typeof body.thinking === "string" ? body.thinking : undefined,
           ...(providerConsent ? { providerConsent } : {}),
@@ -280,9 +280,9 @@ export function makeAssistantRouteHandler(
           ...(typeof body.retryOf === "string" && body.retryOf
             ? { retryOf: body.retryOf }
             : {}),
-          prevAdapterSessionId: resume?.sessionId,
-          prevAdapterKind: resume?.kind,
-          prevAdapterUsageSnapshot: resume?.usageSnapshot,
+          prevHarnessSessionId: resume?.sessionId,
+          prevHarnessKind: resume?.kind,
+          prevHarnessUsageSnapshot: resume?.usageSnapshot,
           ...(attachmentRefs.length > 0 ? { attachmentRefs } : {}),
           ...(turnAttachments.length > 0 ? { turnAttachments } : {}),
           ...(opts.generateTitle ? { generateTitle: opts.generateTitle } : {}),

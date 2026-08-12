@@ -40,7 +40,7 @@ interface CreatedAutomation {
       name: string;
       prompt: string;
       triggers: unknown[];
-      requires?: { runner?: string; model?: string };
+      requires?: { harness?: string; model?: string };
     };
   };
   webhook?: { id: string; secret: string; url: string };
@@ -88,8 +88,8 @@ async function update(
 describe("lifecycle-automation-routes scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-autoupdate-${crypto.randomUUID()}-`);
-    // Headless compile (and any builder turn) would spawn a real coding agent
-    // and hang on agentless CI/local hosts. Inject a failing runTurn so the
+    // Headless compile (and any builder turn) would spawn a real harness
+    // and hang on harnessless CI/local hosts. Inject a failing runTurn so the
     // compile path still exercises ledger finish + HTTP 202 without ACP.
     handle = await serve({
       paths: pathsUnder(dataDir),
@@ -155,28 +155,28 @@ describe("lifecycle-automation-routes scenarios", () => {
     ]);
   });
 
-  test("create/update persist runner and model pins, and null clears both", async () => {
+  test("create/update persist harness and model pins, and null clears both", async () => {
     const created = await createAutomation("pinned-agent", {
-      runner: "claude-code",
+      harness: "claude-code",
       model: "claude-custom",
     });
     expect(created.row.manifest.requires).toStrictEqual({
-      runner: "claude-code",
+      harness: "claude-code",
       model: "claude-custom",
     });
 
     const changed = await update(created.row.ref, {
-      runner: "codex",
+      harness: "codex",
       model: "gpt-custom",
     });
     expect(changed.status).toBe(200);
     expect(
       (changed.json.row as { manifest: { requires: Record<string, unknown> } })
         .manifest.requires
-    ).toStrictEqual({ runner: "codex", model: "gpt-custom" });
+    ).toStrictEqual({ harness: "codex", model: "gpt-custom" });
 
     const cleared = await update(created.row.ref, {
-      runner: null,
+      harness: null,
       model: null,
     });
     expect(cleared.status).toBe(200);
@@ -395,7 +395,7 @@ describe("lifecycle-automation-routes scenarios", () => {
 
     // Wait on a wall-clock deadline, not an iteration count. A compile spawns a
     // real app-server subprocess; the old 20x25ms budget was 500ms, which a
-    // loaded CI runner blows through routinely. When it expired the loop simply
+    // loaded CI harness blows through routinely. When it expired the loop simply
     // fell through and the assertions below still passed against a run row that
     // had not ended yet — so the test proved nothing it claimed, and afterEach
     // then deleted the data dir while the compile was still writing objects into
@@ -439,9 +439,9 @@ describe("lifecycle-automation-routes scenarios", () => {
     handle = await serve({
       paths: pathsUnder(dataDir),
       runTurn: async (input, config) => {
-        const runner = config.prefs.kind;
-        attempted.push(runner);
-        if (runner === "codex") {
+        const harness = config.prefs.kind;
+        attempted.push(harness);
+        if (harness === "codex") {
           input.onEvent({
             type: "error",
             message: "codex failed to spawn",
@@ -450,12 +450,12 @@ describe("lifecycle-automation-routes scenarios", () => {
         } else {
           input.onEvent({ type: "final", text: "Plan ready" });
         }
-        return { adapterKind: runner };
+        return { harnessKind: harness };
       },
     });
     handle.prefs.setPrefs({
-      "runner.automations": "codex",
-      "runner.ladder.automations": ["codex", "claude-code"],
+      "harness.automations": "codex",
+      "harness.ladder.automations": ["codex", "claude-code"],
     });
 
     const created = await createAutomation("compile-failover", {
@@ -509,6 +509,204 @@ describe("lifecycle-automation-routes scenarios", () => {
     );
     expect(attempted).toStrictEqual(["codex", "claude-code"]);
   }, 35_000);
+
+  test("compile → publish → fire preserves a per-call OCR harness and returns to the default", async () => {
+    await handle.close();
+    await fs.rm(dataDir, { recursive: true, force: true });
+    dataDir = await tempDir(`gw-compile-fire-${crypto.randomUUID()}-`);
+    const compilePrompts: string[] = [];
+    const delegateCalls: Array<{
+      harness: string;
+      model?: string;
+      configPins?: Readonly<Record<string, string>>;
+    }> = [];
+    let sessionSequence = 0;
+    handle = await serve({
+      paths: pathsUnder(dataDir),
+      runTurn: async (input, config) => {
+        if (input.message.startsWith("Compile this automation headlessly.")) {
+          compilePrompts.push(input.message);
+          const automationDir = path.join(
+            input.cwd,
+            "automations",
+            "two-harness-ocr"
+          );
+          const handler = [
+            "export default async function handler({ ctx }) {",
+            "  const ocr = await ctx.delegate({",
+            '    harness: "opencode",',
+            '    model: "deepseek-ocr",',
+            '    configPins: { thought_level: "high" },',
+            '    prompt: "OCR the images"',
+            "  });",
+            "  const summary = await ctx.delegate({",
+            `    prompt: \`Summarize the OCR result: \${String(ocr)}\``,
+            "  });",
+            "  return { summary: String(summary), output: { ocr, summary } };",
+            "}",
+            "",
+          ].join("\n");
+          await fs.writeFile(path.join(automationDir, "handler.js"), handler);
+          input.onEvent({ type: "final", text: "Files ready." });
+          return {
+            harnessKind: config.prefs.kind,
+            sessionId: `compile-${config.prefs.kind}`,
+          };
+        }
+        delegateCalls.push({
+          harness: config.prefs.kind,
+          ...(input.model ? { model: input.model } : {}),
+          ...(input.configPins ? { configPins: input.configPins } : {}),
+        });
+        input.onEvent({
+          type: "usage",
+          harness: config.prefs.kind,
+          model: input.model ?? `${config.prefs.kind}-default`,
+          inputTokens: 10,
+          outputTokens: 2,
+          costUsd: 0.001,
+          costSource: "harness",
+        });
+        input.onEvent({
+          type: "final",
+          text:
+            config.prefs.kind === "opencode"
+              ? "recognized text"
+              : "concise summary",
+        });
+        sessionSequence += 1;
+        return {
+          harnessKind: config.prefs.kind,
+          sessionId: `${config.prefs.kind}-${sessionSequence}`,
+        };
+      },
+    });
+    handle.prefs.setPrefs({
+      "harness.automations": "codex",
+      "harness.ladder.automations": ["codex", "opencode"],
+    });
+    const harnessRunsBefore = (await handle.health.snapshot()).metrics
+      .resourceUsage?.subsystems.harnessRuns.runs;
+    expect(harnessRunsBefore).toBe(0);
+
+    const instruction =
+      "use opencode deepseek-ocr to OCR the images, then summarize with the default harness";
+    const created = await createAutomation("two-harness-ocr", {
+      enabled: false,
+      prompt: instruction,
+    });
+    const compile = await fetch(
+      `${handle.url}/centraid/_automations/compile?ref=${encodeURIComponent(created.row.ref)}`,
+      {
+        method: "POST",
+        headers: { ...auth(), "Content-Type": "application/json" },
+        body: JSON.stringify({ enableOnSuccess: true }),
+      }
+    );
+    expect(compile.status).toBe(202);
+    const { compileTurnId } = (await compile.json()) as {
+      compileTurnId: string;
+    };
+    await vi.waitFor(
+      async () => {
+        const feed = await fetch(
+          `${handle.url}/centraid/_automations/turns?ref=${encodeURIComponent(created.row.ref)}`,
+          { headers: auth() }
+        );
+        const body = (await feed.json()) as {
+          turns: Array<{ turnId: string; ok: boolean; endedAt?: number }>;
+        };
+        expect(
+          body.turns.find((turn) => turn.turnId === compileTurnId)
+        ).toMatchObject({ ok: true, endedAt: expect.any(Number) });
+      },
+      { timeout: 30_000, interval: 100 }
+    );
+
+    const fire = await fetch(
+      `${handle.url}/centraid/_automations/turn-now?ref=${encodeURIComponent(created.row.ref)}`,
+      { method: "POST", headers: auth() }
+    );
+    expect(fire.status).toBe(202);
+    const { turnId } = (await fire.json()) as { turnId: string };
+    await vi.waitFor(
+      async () => {
+        const turn = await fetch(
+          `${handle.url}/centraid/_automations/turn?turnId=${encodeURIComponent(turnId)}`,
+          { headers: auth() }
+        );
+        const body = (await turn.json()) as {
+          turn?: { ok: boolean; endedAt?: number; error?: string };
+        };
+        if (body.turn?.ok === false && body.turn.endedAt !== undefined) {
+          throw new Error(
+            `two-harness fire failed: ${JSON.stringify(body.turn)}`
+          );
+        }
+        expect(body.turn).toMatchObject({
+          ok: true,
+          endedAt: expect.any(Number),
+        });
+      },
+      { timeout: 30_000, interval: 100 }
+    );
+
+    expect(compilePrompts).toHaveLength(1);
+    expect(compilePrompts[0]).toContain(instruction);
+    expect(delegateCalls).toStrictEqual([
+      {
+        harness: "opencode",
+        model: "deepseek-ocr",
+        configPins: { thought_level: "high" },
+      },
+      { harness: "codex" },
+    ]);
+    const expanded = await fetch(
+      `${handle.url}/centraid/_automations/turn?turnId=${encodeURIComponent(turnId)}&expand=items`,
+      { headers: auth() }
+    );
+    expect(expanded.status).toBe(200);
+    const expandedBody = (await expanded.json()) as {
+      items: Array<{
+        kind: string;
+        harness?: string;
+        model?: string;
+        costUsd?: number;
+        costSource?: string;
+      }>;
+    };
+    expect(
+      expandedBody.items
+        .filter((item) => item.kind === "delegate")
+        .map(({ harness, model, costUsd, costSource }) => ({
+          harness,
+          model,
+          costUsd,
+          costSource,
+        }))
+    ).toStrictEqual([
+      {
+        harness: "opencode",
+        model: "deepseek-ocr",
+        costUsd: 0.001,
+        costSource: "harness",
+      },
+      {
+        harness: "codex",
+        model: "codex-default",
+        costUsd: 0.001,
+        costSource: "harness",
+      },
+    ]);
+
+    // This reads the production ResourceAccounting instance around the
+    // host-injected runTurn. Every observed compile/delegate harness call must
+    // increment the same counter; a direct registry/backend bypass would make
+    // the two sides diverge even though the handler itself still succeeded.
+    const harnessRunsAfter = (await handle.health.snapshot()).metrics
+      .resourceUsage?.subsystems.harnessRuns.runs;
+    expect(harnessRunsAfter).toBe(compilePrompts.length + delegateCalls.length);
+  }, 40_000);
 
   test("headless revision validates steering and returns the compile turn id immediately", async () => {
     const created = await createAutomation("revise-ledger", { enabled: false });

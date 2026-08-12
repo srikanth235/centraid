@@ -1,27 +1,27 @@
 /*
  * @centraid/agent-runtime
  *
- * Engine layer for centraid's agent surfaces. Every coding-agent kind runs
+ * Engine layer for Centraid's harness surfaces. Every harness kind runs
  * through ONE integration path — the Agent Client Protocol (ACP): JSON-RPC
  * 2.0 over stdio, spoken natively by most kinds and via a first-party adapter
  * for claude-code and codex (issue #479). A single backend normalizes every
  * kind's stream into the same `TurnStreamEvent` shape, so downstream surfaces
- * don't need to know which agent ran a given turn.
+ * don't need to know which harness ran a given turn.
  *
  * Where this package fits in the bigger picture:
  *
  *   - `runTurn` is the mode-agnostic engine primitive. The builder
- *     (`@centraid/agent-harness`) calls it directly with its own cwd /
+ *     (the gateway's unified conversation runner) calls it directly with its own cwd /
  *     preamble / resume plumbing.
  *
- *   - `makeConversationRunner` is the chat-side adapter (see ./conversation-adapter.ts)
+ *   - `makeConversationRunner` is the data-chat driver (see ./conversation-driver.ts)
  *     that wraps `runTurn` into a `ConversationRunner` the gateway's
  *     `/_turn` route can inject. It's one of two `ConversationRunner`
  *     implementations in the repo — the other is the gateway's
  *     `makeUnifiedConversationRunner`.
  *
  * The package also ships a tiny `centraid` CLI bin (subcommands:
- * `sql describe/read/write`, `preview snapshot`) that agent shell tools
+ * `sql describe/read/write`, `preview snapshot`) that harness shell tools
  * can invoke when they need host-side capabilities (reading the
  * per-app sqlite or checking the preview snapshot's freshness).
  */
@@ -29,19 +29,19 @@
 export {
   makeConversationRunner,
   type MakeConversationRunnerOptions,
-} from "./conversation-adapter.js";
+} from "./conversation-driver.js";
 
 // The shared per-turn chat spine (`makeConversationRunnerCore`) lives in
 // `@centraid/app-engine`, next to the `ConversationRunner` interface and the
-// agent-turn contract it wires together. `makeConversationRunner` (above) is
+// harness-turn contract it wires together. `makeConversationRunner` (above) is
 // this backend's thin config over it, injecting `runTurn` as the `RunTurnFn`;
 // the gateway's `makeUnifiedConversationRunner` configures the same core.
 
-// Builder agent sessions still want the `centraid` CLI on PATH for the
+// Builder harness sessions still want the `centraid` CLI on PATH for the
 // `centraid preview snapshot` flow; expose the dist-dir resolver.
 export { defaultCentraidCliDir } from "./cli/centraid-cli-dir.js";
 
-export type { RunnerKind, RunnerPrefs } from "./types.js";
+export type { HarnessKind, HarnessPrefs } from "./types.js";
 
 export {
   runTurn,
@@ -52,7 +52,7 @@ export {
 } from "./runtime.js";
 
 // The backend-neutral vault-register tool specs (name / description /
-// inputSchema). Both coding-agent backends declare their tools from these.
+// inputSchema). Every harness backend declares its tools from these.
 export {
   VAULT_SQL_TOOL,
   VAULT_INVOKE_TOOL,
@@ -73,19 +73,19 @@ export {
 export {
   resolveAcpCapabilities,
   clearCapabilitiesCache,
-  type AcpAgentCapabilities,
+  type AcpHarnessCapabilities,
 } from "./backends/acp/capabilities-cache.js";
 
-// Runner-backend registry — the single dispatch table every runner kind
+// Harness-spec registry — the single dispatch table every harness kind
 // registers with. `runTurn`, preflight, and model enumeration all read from
-// it; the gateway can enumerate `RUNNER_BACKENDS` for labels / defaults.
+// it; the gateway can enumerate `HARNESSES` for labels / defaults.
 export {
-  RUNNER_BACKENDS,
-  SUPPORTED_RUNNER_BACKENDS,
-  SUPPORTED_RUNNER_KINDS,
-  getRunnerBackend,
-  type RunnerBackend,
-  type RunnerVersion,
+  HARNESSES,
+  SUPPORTED_HARNESSES,
+  SUPPORTED_HARNESS_KINDS,
+  getHarness,
+  type HarnessSpec,
+  type HarnessVersion,
 } from "./registry.js";
 
 export {
@@ -99,12 +99,12 @@ export {
   compareSemver,
 } from "./preflight.js";
 
-// Per-runner model catalog (issue #188). The pure read (`readRunnerModels`) is
-// exposed so the gateway can surface each agent's models for the per-agent
-// picker in Settings → Agents and the active runner via runner-status; the
+// Per-harness model catalog (issue #188). The pure read (`readHarnessModels`) is
+// exposed so the gateway can surface each harness's models for the per-harness
+// picker in Settings → Agents and the active harness via harness-status; the
 // `CatalogWarmer` owns enumeration (boot + Refresh) and `deriveStatus` turns
 // the cache into the picker's loading/ready/empty tri-state.
-export { readRunnerModels } from "./models/catalog.js";
+export { readHarnessModels } from "./models/catalog.js";
 export {
   CatalogWarmer,
   deriveStatus,
@@ -112,12 +112,12 @@ export {
   type CatalogWarmerOptions,
   type SurfaceStatus,
 } from "./models/catalog-warmer.js";
-export { enumerateRunnerModels } from "./models/enumerators.js";
+export { enumerateHarnessModels } from "./models/enumerators.js";
 
 // Local-side per-fire orchestrator for automations (issue #90 model-B).
 // Looks up the user-owned automation and runs its handler against a live
-// dispatch surface. The only billed rail is `ctx.agent` — a bounded model
-// turn routed through the runner registry (issue #479); the deterministic
+// dispatch surface. The only billed rail is `ctx.delegate` — a bounded model
+// turn routed through the harness registry (issue #479); the deterministic
 // rails (`ctx.vault` / `ctx.fetch` / `ctx.state` / `ctx.runs`) run in-process.
 export {
   runAutomation,

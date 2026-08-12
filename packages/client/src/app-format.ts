@@ -186,7 +186,7 @@ export function nodeRunStatus(
 
 /**
  * Translate a 5-field cron expression into a small-caps display
- * string. Covers the patterns the builder agent actually emits
+ * string. Covers the patterns the builder harness actually emits
  * (`0 20 * * 0`, `0 17 * * 1-5`, `*[asterisk-slash]N * * * *`, …);
  * unrecognized expressions fall back to the raw text so the
  * end-user at least sees something stable.

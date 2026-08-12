@@ -7,8 +7,8 @@ Authoritative product vocabulary. Prefer these terms in code, docs, commits, and
 | Term | Meaning | Code |
 | --- | --- | --- |
 | **conversation** | Durable thread. Single-kind: `kind ∈ {chat, build, automation}`. | `packages/app-engine/src/conversation/schema.ts`; tables in `gateway-db.ts` |
-| **turn** | One execution under a conversation (`conversation_id` NOT NULL, FK, CASCADE). One reply round for chat; one compile/fire / `ctx.agent` round for automation. | same |
-| **item** | Ordered trace element under a turn. `kind ∈ {message_in, step, tool, agent}`. Inbound is `message_in` ordinal 0. | same |
+| **turn** | One execution under a conversation (`conversation_id` NOT NULL, FK, CASCADE). One reply round for chat; one compile/fire / `ctx.delegate` round for automation. | same |
+| **item** | Ordered trace element under a turn. `kind ∈ {message_in, step, tool, delegate}`. Inbound is `message_in` ordinal 0. | same |
 | **run_summary** | Derived VIEW over the ledger for Insights — not a separate write path. | `packages/app-engine/src/stores/gateway-db.ts` |
 
 There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automation is a conversation whose other side is a deterministic script; its transcript is the same ledger.
@@ -18,24 +18,33 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | Avoid | Use instead | Why |
 | --- | --- | --- |
 | "chat" for the ledger / schema | **conversation** / **turn** / **item** | Chat is one `conversation.kind`, not the model name |
-| "session" for durable agent history | **conversation** | Session often means runner scratch or HTTP session |
+| "session" for durable agent history | **conversation** | Session means an opaque harness resume handle or an HTTP session, never ledger identity |
 | "message" as the unit of agent work | **item** (or `message_in` item) | Messages are one item kind |
 | "run" / "run node" as a ledger layer | **turn** / **item** | Pre-#190 vocabulary |
 | "thread" as a table name | **conversation** | Informal synonym only |
+| runner / backend / provider / adapter for an installed agentic CLI | **harness** | One axis has one word; adapter is reserved for a first-party ACP shim and provider for the egress vendor |
+| agent for a model-turn rail or ledger item | **delegate** / `ctx.delegate` | Agent is reserved exclusively for autonomous principals |
 
 "Chat" remains fine in **UI copy** ("Ask your vault") and when `conversation.kind === 'chat'`.
+
+Schema names follow the same one-axis rule: **a table never repeats its schema name**. The plane's central table is named for what one row represents (`consent.agent` → `consent_agent`, `media.asset` → `media_asset`), not by stuttering the plane (`agent.agent` → `agent_agent`, `media.media_asset` → `media_media_asset`).
 
 ## Core product nouns
 
 | Term | Meaning | Code |
 | --- | --- | --- |
 | **vault** | Sovereign personal ontology for one owner. Unit of custody: `vault.db` + `journal.db` (+ apps/, code/, …). | `packages/vault`; on-disk under `vault/<vaultId>/` |
-| **gateway** | Host-agnostic backend that mounts vaults, serves HTTP, runs automation and agent turns. The same core runs under the desktop-controlled local daemon or as the standalone `centraid-gateway` daemon. | `packages/gateway` — `buildGateway()`, `serve()` |
+| **gateway** | Host-agnostic backend that mounts vaults, serves HTTP, runs automations and harness turns. The same core runs under the desktop-controlled local daemon or as the standalone `centraid-gateway` daemon. | `packages/gateway` — `buildGateway()`, `serve()` |
 | **app** | Installed projection over the vault. Code serves from the release (UI blueprints) or cloned automation sources. Declared handlers in `app.json`. | `packages/app-engine`, `packages/blueprints` |
 | **inline app** | An app rendered as a React route **inside the shell** — no iframe, no bridge, replica-backed, offline-capable. The default for the 8 bundled system apps (#505). | `packages/client/src/react/shell/routes/InlineAppRoute.tsx`; registry `inlineApps.ts`; `packages/blueprints/apps/<app>/app-inline.tsx` |
 | **served app** | An app rendered as an **opaque, same-origin iframe document** the gateway bakes and serves, under the blueprint CSP. Builder preview + mobile WebViews only since #505. | `packages/app-engine/src/http/static-server.ts`; `AppFrame.tsx` |
 | **blueprint** | Shipped template: UI app under `packages/blueprints/apps/` (install-in-place) or automation under `automations/` (clone). | `packages/blueprints` |
 | **automation** | Headless conversation + manifest + handler that fires on schedule, webhook, condition, or vault data change. | `packages/automation` |
+| **harness** | An installed model-capable CLI Centraid can drive for a turn, such as `codex`, `claude-code`, or `opencode`. Code and wire identifiers use `Harness*`; Settings keeps the market-facing label **Agents**. | `packages/agent-runtime/src/registry.ts`; `docs/harnesses.md` |
+| **delegate** | A bounded judgment step requested by a handler through `ctx.delegate`; recorded as an item with `kind='delegate'`. It is an act, not a principal. | `packages/automation/src/handler/ctx.ts`; `packages/agent-runtime/src/automation/run-automation-live-dispatch.ts` |
+| **agent** | An autonomous L2 principal with an enrolled credential. Never a harness, model call, handler rail, or ledger item kind. | `consent_agent`; `packages/vault/src/schema/consent.ts` |
+| **adapter** | A first-party npm shim that makes a CLI without a native ACP mode speak ACP. No other integration or persistence field uses this word. | `AcpAdapterSpec`; `packages/agent-runtime/src/backends/acp/adapter-bin.ts` |
+| **provider** | The external vendor that receives egress. Use only in egress/consent/model-vendor language, never as the installed CLI's name. | `ProviderEgressConsentController` |
 | **Notifications** | The owner-facing projection that unifies open **decisions** with informational **notices**. It owns no second copy of decision state. | `GET /centraid/_vault/notifications`; `VaultPlane.notificationsSummary()` |
 | **decision** | An item that needs the owner to act. Outbox, needs-auth, parked invocation, and scope-request tables remain canonical; Notifications projects them and only these count in its badge. | `VaultPlane.blocking()` |
 | **notice** | A durable, non-decision Notifications update. Repeats collapse by `(kind, source_ref)` and carry read/archive state. | `notifications_notice`; `NoticeStore` |
@@ -54,13 +63,13 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **host** | The gateway whose disk and process a vault currently sits on. Hosting is a location, not an authority: the host can read a hosted vault's plaintext and signs unattended on its behalf, but cannot erase it, form or revoke its links, enroll a device to it, or back it up — those require being its **owner** (#726 D2). See [Owners](#owners-gateway-726). | `owner_id` on `vault_owners`; no schema column names a host |
 | **tunnel / relay** | Iroh QUIC device path; browsers are relay-only (no UDP). | `packages/tunnel`, `packages/tunnel/data-plane` |
 | **CAS / custody** | Content-addressed blob store; local-only vs remote-primary lifecycle. | `packages/vault` blob; backup package |
-| **skill** | Agent grounding unit (`SKILL.md`) loaded by the agent runtime. | `packages/gateway/src/skills` |
+| **skill** | Harness grounding unit (`SKILL.md`) loaded by the harness runtime. | `packages/gateway/src/skills` |
 | **recognition automation** | Bundled handler that owns its ML implementation, reads bytes/text with `ctx.vault.content`, and writes model-versioned derivatives with `ctx.vault.invoke`. Model assets may live in the local automation runtime; there is no separate enrichment service or generic inference context. | `packages/blueprints/automations/{photo-ocr,transcript,embed-image,embed-text,faces}` |
-| **deterministic step** | The self-contained, non-agent branch of a recognition automation: same input + pinned local specialist model gives the same canonical result without provider egress. | `tools/recognition-automations/automation-handlers`; generated handlers under `packages/blueprints/automations` |
-| **agent variant** | An optional alternate step in the same template using `ctx.agent`, the pinned-runner and provider-egress-consent rails. Only OCR declares one; it is not a provider kind or second engine. | `packages/automation/src/manifest/manifest.ts`; `packages/agent-runtime/src/automation/run-automation.ts` |
+| **deterministic step** | The self-contained, non-delegate branch of a recognition automation: same input + pinned local specialist model gives the same canonical result without provider egress. | `tools/recognition-automations/automation-handlers`; generated handlers under `packages/blueprints/automations` |
+| **delegate step** | An optional alternate step in the same recognition template using `ctx.delegate`, a per-call harness/model pin, and provider-egress consent. Only OCR declares one; it is not a provider kind or second engine. | `packages/automation/src/manifest/manifest.ts`; `packages/agent-runtime/src/automation/run-automation.ts` |
 | **design tokens** | Shared colors, type, spacing, icons across desktop/web/mobile. | `packages/design` |
 | **receipt** | (1) Vault write receipt id from consent pipeline; (2) repo `receipts/issue-N-*.md` for issue work. | context-dependent |
-| **prefs** | Device-level gateway preferences in `gateway.db` — runner, theme, etc. Not the vault owner identity. | `GatewayDatabase.prefRows()` / `setPref()` |
+| **prefs** | Device-level gateway preferences in `gateway.db` — harness, theme, etc. Not the vault owner identity. | `GatewayDatabase.prefRows()` / `setPref()` |
 
 ## Hosts and clients
 

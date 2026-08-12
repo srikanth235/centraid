@@ -28,7 +28,7 @@ import type {
   ItemKind,
   RunKind,
 } from "./schema.js";
-import type { AdapterUsageSnapshot } from "./turn.js";
+import type { HarnessUsageSnapshot } from "./turn.js";
 
 export interface RawConversation {
   id: string;
@@ -37,9 +37,9 @@ export interface RawConversation {
   app_id: string | null;
   automation_id: string | null;
   title: string;
-  adapter_kind: string | null;
-  adapter_session_id: string | null;
-  adapter_usage_json: string | null;
+  harness_kind: string | null;
+  harness_session_id: string | null;
+  harness_usage_json: string | null;
   hydration_count?: number;
   last_hydrated_at?: number | null;
   turn_count: number;
@@ -92,7 +92,7 @@ export interface RawItem {
   raw_json: string | null;
   child_turn_id: string | null;
   model: string | null;
-  provider: string | null;
+  harness: string | null;
   effort: string | null;
   input_tokens: number | null;
   output_tokens: number | null;
@@ -128,12 +128,12 @@ export interface RawState {
 }
 
 export function conversationFromRaw(raw: RawConversation): Conversation {
-  let adapterUsageSnapshot: AdapterUsageSnapshot | undefined;
-  if (raw.adapter_usage_json !== null) {
+  let harnessUsageSnapshot: HarnessUsageSnapshot | undefined;
+  if (raw.harness_usage_json !== null) {
     try {
-      adapterUsageSnapshot = JSON.parse(
-        raw.adapter_usage_json
-      ) as AdapterUsageSnapshot;
+      harnessUsageSnapshot = JSON.parse(
+        raw.harness_usage_json
+      ) as HarnessUsageSnapshot;
     } catch {
       // A corrupt optional accounting snapshot must not hide the conversation.
     }
@@ -145,11 +145,11 @@ export function conversationFromRaw(raw: RawConversation): Conversation {
     ...(raw.app_id === null ? {} : { appId: raw.app_id }),
     ...(raw.automation_id === null ? {} : { automationId: raw.automation_id }),
     title: raw.title,
-    ...(raw.adapter_kind === null ? {} : { adapterKind: raw.adapter_kind }),
-    ...(raw.adapter_session_id === null
+    ...(raw.harness_kind === null ? {} : { harnessKind: raw.harness_kind }),
+    ...(raw.harness_session_id === null
       ? {}
-      : { adapterSessionId: raw.adapter_session_id }),
-    ...(adapterUsageSnapshot ? { adapterUsageSnapshot } : {}),
+      : { harnessSessionId: raw.harness_session_id }),
+    ...(harnessUsageSnapshot ? { harnessUsageSnapshot } : {}),
     hydrationCount: Number(raw.hydration_count ?? 0),
     ...(raw.last_hydrated_at == null
       ? {}
@@ -240,10 +240,10 @@ export function itemFromRaw(raw: RawItem): Item {
       ? {}
       : { cacheWriteTokens: raw.cache_write_tokens }),
     ...(raw.model === null ? {} : { model: raw.model }),
-    ...(raw.provider === null ? {} : { provider: raw.provider }),
+    ...(raw.harness === null ? {} : { harness: raw.harness }),
     ...(raw.effort === null ? {} : { effort: raw.effort }),
     ...(raw.cost_usd === null ? {} : { costUsd: raw.cost_usd }),
-    ...(raw.cost_source === "agent" || raw.cost_source === "estimated"
+    ...(raw.cost_source === "harness" || raw.cost_source === "estimated"
       ? { costSource: raw.cost_source }
       : {}),
     ...(raw.app_id === null ? {} : { appId: raw.app_id }),
@@ -293,9 +293,9 @@ export interface PreparedStatements {
   setTitle: StatementSync;
   setKind: StatementSync;
   touchConversation: StatementSync;
-  noteTurnWithAdapter: StatementSync;
+  noteTurnWithHarness: StatementSync;
   noteTurnKindOnly: StatementSync;
-  noteTurnNoAdapter: StatementSync;
+  noteTurnNoHarness: StatementSync;
   maxSeq: StatementSync;
   insertTurn: StatementSync;
   finishTurn: StatementSync;
@@ -333,7 +333,7 @@ export interface PreparedStatements {
 // Reconstructed transcript length = total items across the conversation's
 // turns (one `message_in` per turn + each step/tool item).
 const CONV_COLS = `c.id, c.kind, c.user_id, c.app_id, c.automation_id, c.title,
-        c.adapter_kind, c.adapter_session_id, c.adapter_usage_json,
+        c.harness_kind, c.harness_session_id, c.harness_usage_json,
         c.hydration_count, c.last_hydrated_at, c.turn_count, c.pinned, c.archived,
         c.created_at, c.updated_at`;
 
@@ -342,7 +342,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     insertConversation: db.prepare(`
       INSERT INTO conversations
         (id, kind, user_id, app_id, automation_id, title,
-         adapter_kind, adapter_session_id, adapter_usage_json,
+         harness_kind, harness_session_id, harness_usage_json,
          turn_count, pinned, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, 0, ?, ?)
     `),
@@ -418,22 +418,22 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     touchConversation: db.prepare(
       `UPDATE conversations SET updated_at = ? WHERE id = ? AND user_id = ?`
     ),
-    noteTurnWithAdapter: db.prepare(`
+    noteTurnWithHarness: db.prepare(`
       UPDATE conversations
-      SET turn_count = turn_count + 1, updated_at = ?, adapter_kind = ?,
-          adapter_session_id = ?, adapter_usage_json = ?,
+      SET turn_count = turn_count + 1, updated_at = ?, harness_kind = ?,
+          harness_session_id = ?, harness_usage_json = ?,
           hydration_count = hydration_count + ?,
           last_hydrated_at = CASE WHEN ? = 1 THEN ? ELSE last_hydrated_at END
       WHERE id = ? AND user_id = ?
     `),
     noteTurnKindOnly: db.prepare(`
       UPDATE conversations
-      SET turn_count = turn_count + 1, updated_at = ?, adapter_kind = ?,
+      SET turn_count = turn_count + 1, updated_at = ?, harness_kind = ?,
           hydration_count = hydration_count + ?,
           last_hydrated_at = CASE WHEN ? = 1 THEN ? ELSE last_hydrated_at END
       WHERE id = ? AND user_id = ?
     `),
-    noteTurnNoAdapter: db.prepare(`
+    noteTurnNoHarness: db.prepare(`
       UPDATE conversations
       SET turn_count = turn_count + 1, updated_at = ?
       WHERE id = ? AND user_id = ?
@@ -447,7 +447,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
          retry_of, idempotency_key, note, hydration_tokens, started_at, ok)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     `),
-    // Σ over this turn's own step/agent items; step/tool counts. SUM over an
+    // Σ over this turn's own step/delegate items; step/tool counts. SUM over an
     // empty set yields NULL — correct in-flight semantics.
     finishTurn: db.prepare(`
       UPDATE turns SET
@@ -455,19 +455,19 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         output_json = $outputJson,
         total_input_tokens = (
           SELECT SUM(input_tokens) FROM items
-          WHERE turn_id = $tid AND kind IN ('step','agent')),
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
         total_output_tokens = (
           SELECT SUM(output_tokens) FROM items
-          WHERE turn_id = $tid AND kind IN ('step','agent')),
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
         total_cache_read_tokens = (
           SELECT SUM(cache_read_tokens) FROM items
-          WHERE turn_id = $tid AND kind IN ('step','agent')),
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
         total_cache_write_tokens = (
           SELECT SUM(cache_write_tokens) FROM items
-          WHERE turn_id = $tid AND kind IN ('step','agent')),
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
         total_cost_usd = (
           SELECT SUM(cost_usd) FROM items
-          WHERE turn_id = $tid AND kind IN ('step','agent')),
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
         step_count = (SELECT COUNT(*) FROM items WHERE turn_id = $tid AND kind = 'step'),
         tool_count = (SELECT COUNT(*) FROM items WHERE turn_id = $tid AND kind = 'tool')
       WHERE id = $tid
@@ -570,7 +570,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     `),
     insertItem: db.prepare(`
       INSERT INTO items (
-        id, turn_id, ordinal, call_id, batch_id, kind, role, text, model, provider, effort,
+        id, turn_id, ordinal, call_id, batch_id, kind, role, text, model, harness, effort,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd,
         cost_source,
         app_id, name, args_json, output_json, raw_json, child_turn_id,
@@ -597,7 +597,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         child_turn_id = $childTurnId,
         input_tokens = $inputTokens, output_tokens = $outputTokens,
         cache_read_tokens = $cacheReadTokens, cache_write_tokens = $cacheWriteTokens,
-        model = $model, provider = $provider, effort = $effort, cost_usd = $costUsd,
+        model = $model, harness = $harness, effort = $effort, cost_usd = $costUsd,
         cost_source = $costSource,
         ended_at = $endedAt, duration_ms = $durationMs
       WHERE id = $itemId

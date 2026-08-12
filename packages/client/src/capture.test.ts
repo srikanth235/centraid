@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { applyAgentCaptureKind, classifyCapture } from "./capture";
+import { applyDelegateCaptureKind, classifyCapture } from "./capture";
 
 const NOW = new Date("2026-07-29T06:30:00.000Z");
 
@@ -40,14 +40,14 @@ describe("universal capture routing", () => {
     });
   });
 
-  it("keeps ambiguous text uncommitted until review or agent fallback", () => {
+  it("keeps ambiguous text uncommitted until review or delegate fallback", () => {
     const preview = classifyCapture("Maybe discuss the launch", NOW);
     expect(preview.confidence).toBe("needs-review");
-    expect(applyAgentCaptureKind(preview, { kind: "task" })).toMatchObject({
+    expect(applyDelegateCaptureKind(preview, { kind: "task" })).toMatchObject({
       kind: "task",
-      confidence: "agent",
+      confidence: "delegate",
     });
-    expect(applyAgentCaptureKind(preview, { kind: "secret" })).toStrictEqual(
+    expect(applyDelegateCaptureKind(preview, { kind: "secret" })).toStrictEqual(
       preview
     );
   });

@@ -56,7 +56,7 @@ async function savePathsInOrder(
 
 export interface BuilderCodeProps {
   appId: string;
-  /** Bumps when the agent writes files (turn finished) — refetch the tree/file. */
+  /** Bumps when the harness writes files (turn finished) — refetch the tree/file. */
   reloadNonce: number;
 }
 
@@ -263,7 +263,7 @@ export default function BuilderCode({
     [openFile]
   );
 
-  // Fetch the file list on mount, app switch, and each agent-write nonce bump.
+  // Fetch the file list on mount, app switch, and each harness-write nonce bump.
   useEffect(() => {
     if (!appId) return;
     let cancelled = false;

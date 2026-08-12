@@ -263,7 +263,7 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
       appsDir: `${db.dir}/apps`,
       journal: () => db.journal,
       journalDbFile: `${db.dir}/journal.db`,
-      runnerSessionDir: `${db.dir}/runner-sessions`,
+      harnessSessionDir: `${db.dir}/harness-sessions`,
     });
     const store = new ConversationHistoryStore(workspace);
     const conversation = db.journal

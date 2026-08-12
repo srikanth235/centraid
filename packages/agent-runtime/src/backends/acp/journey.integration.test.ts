@@ -4,10 +4,10 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 /**
- * Agent chat journey (#496 P1): message → side effect → transcript.
+ * Harness-turn journey (#496 P1): message → side effect → transcript.
  *
  * Owns `agent-runtime.journey`. Drives the real `runAcpTurn` against
- * `fake-acp-agent.mjs` (same seam as backend tests) so the primary loop is
+ * `fake-acp-harness.mjs` (same seam as backend tests) so the primary loop is
  * exercised on every default CI run without Electron/Playwright. Desktop
  * copilot UI e2e remains blocked on mock blueprint serving (#470); this
  * integration journey is the product-risk owner until that unblocks.
@@ -55,12 +55,12 @@ describe("journey", () => {
       toolResult && toolResult.type === "tool.result" && toolResult.ok
     ).toBe(true);
 
-    // Assistant text accumulated (fake agent streams in vault mode too).
+    // Assistant text accumulated (fake harness streams in vault mode too).
     const probe = JSON.parse(await fs.readFile(vaultMarker, "utf8")) as {
       callIsError?: boolean | null;
     };
     expect(probe.callIsError).toBe(false);
-    // At least one assistant delta or a non-empty final when the agent speaks.
+    // At least one assistant delta or a non-empty final when the harness speaks.
     const final = events.find((e) => e.type === "final");
     const spoken =
       deltas(events) || (final && final.type === "final" ? final.text : "");

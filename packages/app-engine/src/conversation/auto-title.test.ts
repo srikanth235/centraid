@@ -5,6 +5,7 @@ import type { RunTurnFn } from "./turn.js";
 
 interface Capture {
   model?: string;
+  permissionPolicy?: string;
   toolContext?: unknown;
   prefsKind?: string;
 }
@@ -14,12 +15,13 @@ function stubRunTurn(text: string, capture?: Capture): RunTurnFn {
   return async (input, config) => {
     if (capture) {
       capture.model = input.model;
+      capture.permissionPolicy = input.permissionPolicy;
       capture.toolContext = input.toolContext;
       capture.prefsKind = config.prefs.kind;
     }
     input.onEvent({ type: "assistant.delta", delta: text });
     input.onEvent({ type: "final", text });
-    return { adapterKind: config.prefs.kind };
+    return { harnessKind: config.prefs.kind };
   };
 }
 
@@ -55,28 +57,31 @@ describe(generateConversationTitle, () => {
     const runTurn = stubRunTurn('  "Budget planning"  ', capture);
     const title = await generateConversationTitle({
       runTurn,
-      runnerPrefs: { kind: "claude-code" },
+      harnessPrefs: { kind: "claude-code" },
       cwd: "/tmp/x",
       model: "fast",
       userMessage: "help me plan a budget",
       assistantText: "Sure, here is a plan…",
+      egressConsent: () => true,
     });
     expect(title).toBe("Budget planning");
     // Provider-agnostic tier token flows straight through as the model.
     expect(capture.model).toBe("fast");
-    // Tool-less: no toolContext handed to the runner.
+    // Tool-less: no toolContext handed to the harness.
     expect(capture.toolContext).toBeUndefined();
+    expect(capture.permissionPolicy).toBe("deny");
     expect(capture.prefsKind).toBe("claude-code");
   });
 
   it("returns undefined when the model produced nothing usable", async () => {
     const title = await generateConversationTitle({
       runTurn: stubRunTurn("   "),
-      runnerPrefs: { kind: "claude-code" },
+      harnessPrefs: { kind: "claude-code" },
       cwd: "/tmp/x",
       model: "fast",
       userMessage: "hi",
       assistantText: "hello",
+      egressConsent: () => true,
     });
     expect(title).toBeUndefined();
   });
@@ -88,11 +93,12 @@ describe(generateConversationTitle, () => {
     await expect(
       generateConversationTitle({
         runTurn,
-        runnerPrefs: { kind: "claude-code" },
+        harnessPrefs: { kind: "claude-code" },
         cwd: "/tmp/x",
         model: "fast",
         userMessage: "hi",
         assistantText: "hello",
+        egressConsent: () => true,
       })
     ).rejects.toThrow("spawn failed");
   });

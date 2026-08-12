@@ -15,14 +15,14 @@
  * Backend-agnostic by construction: the model turn (`runTurn`), execution
  * (`openDispatch`), and scheduling (`fire`) are injected callbacks, so this
  * package depends on `@centraid/app-engine` (the per-app engine, the shared
- * agent-run ledger, and the turn-driver contract) but never on any agent
- * backend. `agent-runtime` provides the local codex/claude backend;
+ * delegate-run ledger, and the turn-driver contract) but never on any harness
+ * implementation. `agent-runtime` provides the local codex/claude harnesses;
  * `gateway` wires it.
  */
 
 // Manifest — the source of truth for an automation app, shared between
 // producers (scaffolding / re-prompt) and consumers (the local automation
-// runner in `@centraid/agent-runtime`, the gateway's reconciliation pass,
+// harness runtime in `@centraid/agent-runtime`, the gateway's reconciliation pass,
 // and the desktop UI). See issue #91.
 export {
   ManifestError,
@@ -170,20 +170,20 @@ export {
 
 // Automation handler runtime (issue #91). A fire executes the app's
 // generated `handler.js` in a worker thread; the host supplies the
-// tool / agent dispatchers. `runHandler` owns the ledger
+// tool / delegate dispatchers. `runHandler` owns the ledger
 // side — opening the `runs` row and recording the trace.
 export {
   runHandler,
   type RunHandlerOptions,
   type HandlerOutcome,
-  type AgentCall,
-  type AgentDispatcher,
+  type DelegateCall,
+  type DelegateDispatcher,
   type DispatchContext,
   type ConnectionAuth,
 } from "./handler/runner.js";
-// Shared `ctx.agent` answer coercion — every host ends an agent turn with a
+// Shared `ctx.delegate` answer coercion — every host ends a delegate turn with a
 // blob of text and must turn it into the value the handler awaits the same way.
-export { coerceAgentAnswer } from "./handler/agent-answer.js";
+export { coerceDelegateAnswer } from "./handler/delegate-answer.js";
 // Authoring-time handler lint (issue #167): a static scan that flags ambient
 // I/O and nondeterminism (`Date.now`, `Math.random`, raw `fetch`/`fs`, …) in a
 // handler — effects that bypass the audited `ctx.*` rails or make a re-run
@@ -197,7 +197,7 @@ export {
 // The per-fire orchestration spine (issue #147, Concern 2): resolve the
 // automation, open its ledger, run the handler against a host-injected
 // dispatch surface, cascade `onFailure`. agent-runtime's `runAutomation`
-// is a thin wrapper that injects a mock-LLM + host-agent dispatch surface.
+// is a thin wrapper that injects a mock-LLM + host-delegate dispatch surface.
 export {
   runFire,
   type RunFireOptions,

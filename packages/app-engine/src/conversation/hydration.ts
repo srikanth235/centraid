@@ -57,7 +57,7 @@ function outputText(outputJson: string | undefined): string | undefined {
 /**
  * Project completed live-ledger rows into the hydrator's custody-safe input.
  * Tool outputs are intentionally excluded; workspace/CAS references survive
- * as labels so the next runner can re-read them without replaying vault data.
+ * as labels so the next harness can re-read them without replaying vault data.
  */
 export function hydrationMessagesFromLedger(
   turns: readonly Turn[],
@@ -104,7 +104,7 @@ export function hydrationMessagesFromLedger(
         });
         continue;
       }
-      if (item.kind === "step" || item.kind === "agent") {
+      if (item.kind === "step" || item.kind === "delegate") {
         if (item.kind === "step" && item.name?.startsWith("notice:")) continue;
         const text = outputText(item.outputJson);
         if (!text) continue;
@@ -243,7 +243,7 @@ function compileTurns(
           return [`${label}${hash}`];
         });
         if (references.length > 0) {
-          lines.push(`Agent touched or produced: ${references.join(", ")}`);
+          lines.push(`Harness touched or produced: ${references.join(", ")}`);
         }
       }
       continue;
@@ -276,7 +276,7 @@ export function compileHydrationPlan(
   const headerFor = (omittedTurns: number): string =>
     [
       "[Centraid session handoff]",
-      "The canonical ledger below is another agent's trusted conversation context. Continue from it without impersonating or repeating that agent.",
+      "The canonical ledger below is another harness's trusted conversation context. Continue from it without impersonating or repeating that harness.",
       omittedTurns > 0
         ? `${omittedTurns} older turn(s) omitted to fit the context budget.`
         : "",

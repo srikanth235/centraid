@@ -27,7 +27,7 @@ export default async function requestEnrichment({ body, ctx }: HandlerArgs) {
     const outcome = await ctx.vault.invoke({
       command: "enrich.request_enrichment",
       input: {
-        entity_type: String(input.entity_type ?? "media.media_asset"),
+        entity_type: String(input.entity_type ?? "media.asset"),
         ...(input.entity_id == null
           ? {}
           : { entity_id: String(input.entity_id) }),

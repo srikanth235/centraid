@@ -25,7 +25,7 @@ import styles from "./BuilderAutomationPane.module.css";
 // Config / Flow / Runs / Code (see builder.ts `renderConfig` /
 // `renderAutomationFlow` / `renderRuns` / `renderAutomationCode`). Flow and
 // Code are pure renders of the latest `automation.json` snapshot the shell
-// re-reads after each agent turn; Config (BuilderAutomationConfigView.tsx)
+// re-reads after each harness turn; Config (BuilderAutomationConfigView.tsx)
 // also owns the trigger add/edit/remove UI (GAP 1); Runs owns its own fetch
 // + run-now. Every class name matches the vanilla markup so the existing
 // global styles in styles.css apply unchanged.
@@ -33,7 +33,7 @@ import styles from "./BuilderAutomationPane.module.css";
 export interface BuilderAutomationPaneProps {
   tab: "config" | "flow" | "runs" | "code";
   appId: string;
-  /** Latest automation.json snapshot the shell re-reads after each agent turn. */
+  /** Latest automation.json snapshot the shell re-reads after each harness turn. */
   automationRow: CentraidAutomationRow | undefined;
   /** Config sections the last turn changed — flash a one-shot diff ribbon on each. */
   flashSections: ReadonlySet<string>;
@@ -172,10 +172,10 @@ function FlowView({
       title: trigTitle,
       sub: trigSub,
     },
-    // Agent.
+    // Harness.
     {
       svg: iconSvg("Sparkle", 16),
-      kind: "Agent",
+      kind: "Delegate",
       title: m.requires.model || "Workspace default",
       sub: m.prompt || "Not described yet.",
     }

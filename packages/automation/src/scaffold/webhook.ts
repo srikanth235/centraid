@@ -104,8 +104,8 @@ export interface ProvisionedWebhook {
 /**
  * Provision a pending webhook trigger in the automation app at
  * `dir`. A pending trigger — `{ kind: 'webhook', pending: true }` — is
- * what the builder agent writes when the user asks for a webhook: the
- * agent cannot mint crypto-random credentials. This pass mints a route
+ * what the builder harness writes when the user asks for a webhook: the
+ * harness cannot mint crypto-random credentials. This pass mints a route
  * id + secret, rewrites the trigger to its provisioned form, and
  * persists the manifest. Returns the minted secret (to be shown once)
  * or `undefined` when the app has no pending webhook.

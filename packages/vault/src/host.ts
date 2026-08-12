@@ -491,7 +491,7 @@ export interface EnrolledAgent {
  * Find an active enrolled agent by its host-side key. Automations enroll
  * under their Centraid app id, the same way `lookupAppByName` keys apps;
  * the assistant enrolls under the literal `_assistant` key. The key lives
- * on `agent_agent.host_key` — decoupled from `core_party.display_name`,
+ * on `consent_agent.enrollment_key` — decoupled from `core_party.display_name`,
  * which is free to hold a pretty name without breaking this lookup.
  */
 export function lookupAgentByName(
@@ -501,8 +501,8 @@ export function lookupAgentByName(
   const row = db.vault
     .prepare(
       `SELECT a.agent_id, a.party_id, p.display_name, a.status
-         FROM agent_agent a JOIN core_party p ON p.party_id = a.party_id
-        WHERE a.host_key = ? AND p.kind = 'agent' AND a.status = 'active'
+         FROM consent_agent a JOIN core_party p ON p.party_id = a.party_id
+        WHERE a.enrollment_key = ? AND p.kind = 'agent' AND a.status = 'active'
         ORDER BY a.enrolled_at LIMIT 1`
     )
     .get(name) as
@@ -524,7 +524,7 @@ export function lookupAgentByName(
 
 /**
  * Enroll an agent under a host-side key, once (duaility §12: "the
- * conversation runner and automation fires act as an enrolled agent.agent").
+ * conversation runner and automation fires act as an enrolled consent.agent").
  * Re-enrolling an active key returns the existing row. Identity only —
  * authority still requires an owner-approved grant on the agent's party.
  *
@@ -587,14 +587,14 @@ export function ensureAgentEnrolled(
  */
 export function markAgentRevoked(db: VaultDb, agentId: string): void {
   db.vault
-    .prepare(`UPDATE agent_agent SET status = 'revoked' WHERE agent_id = ?`)
+    .prepare(`UPDATE consent_agent SET status = 'revoked' WHERE agent_id = ?`)
     .run(agentId);
 }
 
 /** Key-free agent summary — safe to serialize onto an owner-facing surface. */
 export interface AgentSummary {
   agentId: string;
-  hostKey: string;
+  enrollmentKey: string;
   partyId: string;
   name: string;
   modelRef: string;
@@ -605,13 +605,13 @@ export interface AgentSummary {
 export function listEnrolledAgents(db: VaultDb): AgentSummary[] {
   const rows = db.vault
     .prepare(
-      `SELECT a.agent_id, a.host_key, a.party_id, p.display_name, a.model_ref, a.enrolled_at
-         FROM agent_agent a JOIN core_party p ON p.party_id = a.party_id
+      `SELECT a.agent_id, a.enrollment_key, a.party_id, p.display_name, a.model_ref, a.enrolled_at
+         FROM consent_agent a JOIN core_party p ON p.party_id = a.party_id
         WHERE a.status = 'active' ORDER BY a.enrolled_at`
     )
     .all() as {
     agent_id: string;
-    host_key: string;
+    enrollment_key: string;
     party_id: string;
     display_name: string;
     model_ref: string;
@@ -619,7 +619,7 @@ export function listEnrolledAgents(db: VaultDb): AgentSummary[] {
   }[];
   return rows.map((r) => ({
     agentId: r.agent_id,
-    hostKey: r.host_key,
+    enrollmentKey: r.enrollment_key,
     partyId: r.party_id,
     name: r.display_name,
     modelRef: r.model_ref,

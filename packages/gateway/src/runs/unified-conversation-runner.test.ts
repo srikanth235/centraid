@@ -3,7 +3,7 @@ import crypto from "node:crypto";
  * Unified chat runner (issue #141, Phase 3). One chat surface, both jobs:
  * a turn runs in the app's draft session worktree (native file edits stage
  * there) with the union of tools (the `centraid_*` dispatcher threaded via
- * `toolContext` alongside the adapter's native file tools), the unified
+ * `toolContext` alongside the harness's native file tools), the unified
  * system prompt (data preamble + builder authoring blocks), and post-turn
  * webhook minting surfaced once via a `webhooks` event.
  *
@@ -24,6 +24,7 @@ import type {
 import type {
   Dispatcher,
   ConversationTurnInput,
+  ProviderEgressConsentController,
   TurnStreamEvent,
 } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -35,6 +36,11 @@ let root: string;
 let store: WorktreeStore;
 
 const dispatcher = { describe: 0 } as unknown as Dispatcher;
+const allowProviderEgress: ProviderEgressConsentController = {
+  has: () => true,
+  grant: () => undefined,
+  revoke: () => undefined,
+};
 
 function baseInput(
   over: Partial<ConversationTurnInput>,
@@ -72,12 +78,13 @@ describe("unified-conversation-runner", () => {
       store,
       prefsLoader: async () => ({ kind: "codex" }),
       getDispatcher: () => dispatcher,
+      providerEgressConsent: allowProviderEgress,
       publicBaseUrl: () => "http://127.0.0.1:9999",
       runTurn: async (input, config): Promise<TurnResult> => {
         captured = { input, config };
         input.onEvent({ type: "assistant.delta", delta: "ok" });
         input.onEvent({ type: "final", text: "done" });
-        return { adapterKind: "codex", sessionId: "thread-1" };
+        return { harnessKind: "codex", sessionId: "thread-1" };
       },
     });
 
@@ -107,8 +114,8 @@ describe("unified-conversation-runner", () => {
     expect(runner.runKind).toBe("build");
 
     // Resume handle round-trips back to the route.
-    expect(result?.adapterKind).toBe("codex");
-    expect(result?.adapterSessionId).toBe("thread-1");
+    expect(result?.harnessKind).toBe("codex");
+    expect(result?.harnessSessionId).toBe("thread-1");
 
     // Stream events flowed through.
     expect(events.some((e) => e.type === "final")).toBeTruthy();
@@ -120,10 +127,11 @@ describe("unified-conversation-runner", () => {
       store,
       prefsLoader: async () => ({ kind: "codex" }),
       getDispatcher: () => dispatcher,
+      providerEgressConsent: allowProviderEgress,
       publicBaseUrl: () => "http://127.0.0.1:9999",
       runTurn: async (input): Promise<TurnResult> => {
         cwd = input.cwd;
-        return { adapterKind: "codex" };
+        return { harnessKind: "codex" };
       },
     });
 
@@ -148,6 +156,7 @@ describe("unified-conversation-runner", () => {
       store,
       prefsLoader: async () => ({ kind: "codex" }),
       getDispatcher: () => dispatcher,
+      providerEgressConsent: allowProviderEgress,
       publicBaseUrl: () => "http://127.0.0.1:9999",
       runTurn: async (input): Promise<TurnResult> => {
         // The agent authors an automation with a PENDING webhook trigger —
@@ -177,7 +186,7 @@ describe("unified-conversation-runner", () => {
           "export default async () => ({});",
           "utf8"
         );
-        return { adapterKind: "codex", sessionId: "thread-2" };
+        return { harnessKind: "codex", sessionId: "thread-2" };
       },
     });
 
@@ -213,12 +222,13 @@ describe("unified-conversation-runner", () => {
     expect(!trig.pending).toBeTruthy();
   });
 
-  test("errors when no coding agent is configured", async () => {
+  test("errors when no harness is configured", async () => {
     const events: TurnStreamEvent[] = [];
     const runner = makeUnifiedConversationRunner({
       store,
       prefsLoader: async () => undefined,
       getDispatcher: () => dispatcher,
+      providerEgressConsent: allowProviderEgress,
       publicBaseUrl: () => "http://127.0.0.1:9999",
       runTurn: async (): Promise<TurnResult> => {
         throw new Error("should not be called");
@@ -227,7 +237,7 @@ describe("unified-conversation-runner", () => {
 
     await expect(
       (() => runner.run(baseInput({}, (e) => events.push(e))))()
-    ).rejects.toThrow("no coding agent configured");
+    ).rejects.toThrow("no harness configured");
     expect(events.some((e) => e.type === "error")).toBeTruthy();
   });
 });

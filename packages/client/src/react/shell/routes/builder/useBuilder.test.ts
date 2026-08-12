@@ -46,7 +46,7 @@ describe("useBuilder module", () => {
     ).toThrow(/Cannot read properties of null \(reading 'useState'\)/u);
   });
 
-  it("restores a persisted conversation runner ahead of the builder default", () => {
+  it("restores a persisted conversation harness ahead of the builder default", () => {
     const picker = builderPickerForConversation(
       {
         selectedKind: "codex",
@@ -56,8 +56,8 @@ describe("useBuilder module", () => {
         defaultConfigPinsByKind: {},
         subsystemConfigPinsByKind: {},
         diagnosticsJson: "{}",
-        subsystemRunnerByKey: { builder: "codex" },
-        subsystemRunnerLadders: {},
+        subsystemHarnessByKey: { builder: "codex" },
+        subsystemHarnessLadders: {},
         cards: [
           {
             kind: "codex",
@@ -84,6 +84,6 @@ describe("useBuilder module", () => {
       "copilot",
       "codex"
     );
-    expect(picker.selectedRunnerKind).toBe("copilot");
+    expect(picker.selectedHarnessKind).toBe("copilot");
   });
 });

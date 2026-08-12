@@ -1,7 +1,7 @@
 /*
  * CLI preflight — runs `<bin> --version` once on settings change or
  * gateway boot. Result cached in memory and exposed via
- * `GET /centraid/_turn/runner-status` so the chat panel can show a
+ * `GET /centraid/_turn/harness-status` so the chat panel can show a
  * Setup screen when the binary is missing, unauthenticated, or too old.
  *
  * Minimum versions are empirically-verified — see `MIN_VERSIONS` below.
@@ -13,14 +13,14 @@
 
 import { spawn } from "node:child_process";
 
-import type { RunnerStatus } from "@centraid/app-engine";
+import type { HarnessStatus } from "@centraid/app-engine";
 
 import { resolveAcpCapabilities } from "./backends/acp/capabilities-cache.js";
 import { lowPriorityCommand } from "./low-priority.js";
-import { readRunnerModels } from "./models/catalog.js";
-import { getRunnerBackend } from "./registry.js";
-import { agentSpawnEnv } from "./spawn-env.js";
-import type { RunnerKind, RunnerPrefs } from "./types.js";
+import { readHarnessModels } from "./models/catalog.js";
+import { getHarness } from "./registry.js";
+import { harnessSpawnEnv } from "./spawn-env.js";
+import type { HarnessKind, HarnessPrefs } from "./types.js";
 
 const VERSION_TIMEOUT_MS = 5_000;
 export const CLI_AVAILABILITY_TTL_MS = 24 * 60 * 60 * 1_000;
@@ -33,18 +33,18 @@ interface SemVer {
 
 /**
  * Minimum CLI versions whose event/flag schemas we've verified live in the
- * runner-backend registry (`registry.ts`), alongside each kind's default
+ * harness-spec registry (`registry.ts`), alongside each kind's default
  * binary and install hint. codex/claude-code are empirically captured; the
  * ACP-native kinds are pinned to the oldest release whose ACP surface we
  * rely on (see each entry's comment in `registry.ts`).
  */
-export function minVersionString(kind: RunnerKind): string {
-  const v = getRunnerBackend(kind).minVersion;
+export function minVersionString(kind: HarnessKind): string {
+  const v = getHarness(kind).minVersion;
   return `${v.major}.${v.minor}.${v.patch}`;
 }
 
 interface CachedStatus {
-  status: RunnerStatus;
+  status: HarnessStatus;
   cacheKey: string;
 }
 
@@ -55,7 +55,7 @@ const availabilityCache = new Map<
 >();
 const availabilityInFlight = new Map<string, Promise<CliAvailability>>();
 
-function cacheKey(prefs: RunnerPrefs): string {
+function cacheKey(prefs: HarnessPrefs): string {
   return `${prefs.kind}::${prefs.binPath ?? ""}::${JSON.stringify(prefs.extraArgs ?? [])}`;
 }
 
@@ -73,18 +73,18 @@ export interface CliAvailability {
 }
 
 /**
- * Is a coding-agent CLI available on PATH? Runs `<bin> --version` and
+ * Is a coding harness CLI available on PATH? Runs `<bin> --version` and
  * reports success — Centraid is agnostic to how the CLI authenticates, so
  * this checks only that the command runs, not for any auth file/keychain/env.
- * Used by the gateway's `GET /centraid/_agents/status` to report which
+ * Used by the gateway's `GET /centraid/_harnesses/status` to report which
  * agents its host can drive.
  */
 export async function probeCliAvailability(
-  kind: RunnerKind,
+  kind: HarnessKind,
   binPath?: string,
   opts: { refresh?: boolean; now?: number } = {}
 ): Promise<CliAvailability> {
-  const bin = binPath ?? getRunnerBackend(kind).defaultBin;
+  const bin = binPath ?? getHarness(kind).defaultBin;
   // The custom `acp` kind has no default binary — unavailable until configured.
   if (!bin) return { available: false };
   const key = `${kind}::${bin}`;
@@ -101,7 +101,7 @@ export async function probeCliAvailability(
   if (!opts.refresh && pending) return pending;
   const probeLocal = (async (): Promise<CliAvailability> => {
     try {
-      const raw = await execVersion(bin, agentSpawnEnv({ binPath }));
+      const raw = await execVersion(bin, harnessSpawnEnv({ binPath }));
       return { available: true, version: raw.trim().slice(0, 200) };
     } catch {
       return { available: false };
@@ -124,24 +124,24 @@ export async function probeCliAvailability(
  * read from the gateway-owned catalog — enumeration and warming are owned by
  * the `CatalogWarmer`, driven on boot and Refresh. Without a `catalogPath`
  * there's no list (the picker shows a loading/empty state). The caller (the
- * gateway's `runnerStatus` override) attaches `modelsStatus` and kicks a warm,
+ * gateway's `harnessStatus` override) attaches `modelsStatus` and kicks a warm,
  * since this module has no warmer handle.
  */
 export async function runPreflight(
-  prefs: RunnerPrefs,
+  prefs: HarnessPrefs,
   opts: {
     catalogPath?: string;
     refresh?: boolean;
     requireSessionReady?: boolean;
   } = {}
-): Promise<RunnerStatus> {
+): Promise<HarnessStatus> {
   const key = cacheKey(prefs);
   const status =
     cached && cached.cacheKey === key ? cached.status : await probe(prefs);
   cached = { status, cacheKey: key };
 
   if (status.ok && opts.requireSessionReady) {
-    // Readiness only needs "does this agent reach initialize + session/new,
+    // Readiness only needs "does this harness reach initialize + session/new,
     // and is it signed in". A fresh cached snapshot answers that, so this
     // never spawns on a warm cache — and when it does have to spawn it skips
     // the probe's live diagnostic prompt, which would bill the owner a real
@@ -157,24 +157,24 @@ export async function runPreflight(
         ...status,
         ok: false,
         reason: caps?.authRequired
-          ? `agent session is not authenticated${caps.reason ? `: ${caps.reason}` : ""}`
+          ? `harness session is not authenticated${caps.reason ? `: ${caps.reason}` : ""}`
           : (caps?.reason ??
-            "agent did not complete ACP initialize/session readiness"),
-        hint: getRunnerBackend(prefs.kind).installHint,
+            "harness did not complete ACP initialize/session readiness"),
+        hint: getHarness(prefs.kind).installHint,
       };
     }
   }
   if (status.ok) {
     status.models = opts.catalogPath
-      ? await readRunnerModels(opts.catalogPath, prefs.kind)
+      ? await readHarnessModels(opts.catalogPath, prefs.kind)
       : [];
   }
   return status;
 }
 
-async function probe(prefs: RunnerPrefs): Promise<RunnerStatus> {
-  const backend = getRunnerBackend(prefs.kind);
-  const bin = prefs.binPath ?? backend.defaultBin;
+async function probe(prefs: HarnessPrefs): Promise<HarnessStatus> {
+  const harness = getHarness(prefs.kind);
+  const bin = prefs.binPath ?? harness.defaultBin;
   // The custom `acp` kind has no default binary: report unavailable (with the
   // configuration hint) rather than spawning `undefined --version`.
   if (!bin) {
@@ -182,23 +182,23 @@ async function probe(prefs: RunnerPrefs): Promise<RunnerStatus> {
       kind: prefs.kind,
       ok: false,
       reason:
-        "no binary configured for this runner — set its path in Settings → Agents",
-      hint: backend.installHint,
+        "no binary configured for this harness — set its path in Settings → Agents",
+      hint: harness.installHint,
       minVersion: minVersionString(prefs.kind),
     };
   }
   try {
     const raw = await execVersion(
       bin,
-      agentSpawnEnv({ binPath: prefs.binPath })
+      harnessSpawnEnv({ binPath: prefs.binPath })
     );
     const trimmed = raw.trim().slice(0, 200);
     const parsed = parseSemver(trimmed);
-    const minV = backend.minVersion;
+    const minV = harness.minVersion;
     const versionAtLeast = parsed
       ? compareSemver(parsed, minV) >= 0
       : undefined;
-    const status: RunnerStatus = {
+    const status: HarnessStatus = {
       kind: prefs.kind,
       ok: true,
       version: trimmed,
@@ -217,7 +217,7 @@ async function probe(prefs: RunnerPrefs): Promise<RunnerStatus> {
         kind: prefs.kind,
         ok: false,
         reason: `${bin} not found on PATH`,
-        hint: backend.installHint,
+        hint: harness.installHint,
         minVersion: minVersionString(prefs.kind),
       };
     }
@@ -226,7 +226,7 @@ async function probe(prefs: RunnerPrefs): Promise<RunnerStatus> {
       kind: prefs.kind,
       ok: false,
       reason: message,
-      hint: backend.installHint,
+      hint: harness.installHint,
       minVersion: minVersionString(prefs.kind),
     };
   }

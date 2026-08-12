@@ -5,14 +5,14 @@
  * `appsDir`, an *automation app*: a folder whose `app.json` declares
  * `kind: 'automation'` and which holds exactly one automation under
  * `automations/<id>/`. It carries no UI assets. This module writes the
- * minimal layout the builder agent then fills in:
+ * minimal layout the builder harness then fills in:
  *
  *   <appsDir>/<appId>/app.json                              — app metadata
  *   <appsDir>/<appId>/automations/<autoId>/automation.json  — the manifest
  *   <appsDir>/<appId>/automations/<autoId>/handler.js       — the handler
  *
  * The automation's globally-unique handle is `<appId>/<autoId>`. The
- * builder agent rewrites `automation.json` (prompt / schedule / requires
+ * builder harness rewrites `automation.json` (prompt / schedule / requires
  * / apps) and `handler.js` during the build conversation.
  */
 
@@ -43,7 +43,7 @@ export interface ScaffoldOptions {
   /** Display name. Defaults to the app id. */
   name?: string;
   description?: string;
-  /** The human intent the builder agent translates into `handler.js`. */
+  /** The human intent the builder harness translates into `handler.js`. */
   prompt?: string;
   /**
    * 5-field cron expression for a single cron trigger. Ignored when
@@ -58,9 +58,9 @@ export interface ScaffoldOptions {
   triggers?: readonly Trigger[];
   /** App ids this automation is associated with. */
   apps?: readonly string[];
-  /** Open runner-registry key to pin for this automation. */
-  runner?: string;
-  /** Model `ctx.agent` calls route through (`provider/model-id`). */
+  /** Open harness-registry key to pin for this automation. */
+  harness?: string;
+  /** Model `ctx.delegate` calls route through (`provider/model-id`). */
   model?: string;
   /** Run-retention policy. Defaults to keeping the last 100 runs. */
   historyKeep?: HistoryKeep;
@@ -76,7 +76,7 @@ export interface ScaffoldOptions {
   vault?: ManifestVault;
   /** Published connector block (deterministic pull/send). */
   connector?: ConnectorSpec;
-  /** Soft credential bindings for agent-using automations. */
+  /** Soft credential bindings for delegate-using automations. */
   connections?: readonly ConnectionBinding[];
   /**
    * Initial `enabled` flag. Defaults to `true`. The conversational
@@ -141,12 +141,12 @@ const DEFAULT_HANDLER = `/**
  *   • ctx.vault · ctx.fetch · ctx.state · ctx.runs — deterministic, in-process
  *     work. Zero model tokens, zero processes spawned. Prefer these for
  *     anything code or a vault read/write can do.
- *   • ctx.agent({ prompt }) — the ONLY billed path: one bounded model turn
- *     through the configured agent CLI (over ACP). Use it only for genuine
+ *   • ctx.delegate({ prompt }) — the ONLY billed path: one bounded model turn
+ *     through the configured harness (over ACP). Use it only for genuine
  *     inference (summarize / classify / extract / draft). Declare the model
  *     tier in automation.json#requires.model.
  *
- * \`ctx\` surface: ctx.vault · ctx.fetch · ctx.agent · ctx.state.get/set/delete
+ * \`ctx\` surface: ctx.vault · ctx.fetch · ctx.delegate · ctx.state.get/set/delete
  * · ctx.runs.last/list · ctx.input. Return \`{ summary?, output? }\` —
  * \`summary\` shows in the run list.
  *
@@ -171,7 +171,7 @@ export default async ({ ctx, log }) => {
 
   // BILLED rail: one constrained model turn for the part that needs judgement.
   // Pass \`json\` so the result is parsed and a model failure is detected.
-  const result = await ctx.agent({
+  const result = await ctx.delegate({
     prompt: \`Summarize these in one line:\\n\${JSON.stringify(fresh)}\`,
     json: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] },
   });
@@ -186,12 +186,12 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
       ? [{ kind: "cron", expr: opts.cronExpr?.trim() || "0 9 * * *" }]
       : opts.triggers;
   // Emit the `requires` slots the builder may fill (issue #167): `model` is the
-  // ctx.agent capability tier (`provider/model-id`) — picked for the cheapest
+  // ctx.delegate capability tier (`provider/model-id`) — picked for the cheapest
   // tier that does the inference (e.g. a small/cheap tier for summarization).
   // It is left out until chosen so it is never a misleading default; a handler
-  // that never calls ctx.agent needs no `requires` at all.
+  // that never calls ctx.delegate needs no `requires` at all.
   const requires: Record<string, unknown> = {};
-  if (opts.runner?.trim()) requires.runner = opts.runner.trim();
+  if (opts.harness?.trim()) requires.harness = opts.harness.trim();
   if (opts.model?.trim()) requires.model = opts.model.trim();
   const raw: Record<string, unknown> = {
     name,

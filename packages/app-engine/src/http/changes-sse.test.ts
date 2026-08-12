@@ -174,7 +174,7 @@ describe("changes-sse", () => {
     expect(res.status).toBe(401);
   });
 
-  test("SSE: agent-sourced events carry source, toolCallId, and turnId", async () => {
+  test("SSE: assistant-sourced events carry source, toolCallId, and turnId", async () => {
     const res = await fetch(`${server.url}/centraid/myapp/_changes`, {
       headers: { Authorization: `Bearer ${server.token}` },
     });
@@ -185,7 +185,7 @@ describe("changes-sse", () => {
         appId: "myapp",
         tables: ["todos"],
         ts: 5,
-        source: "agent",
+        source: "assistant",
         toolCallId: "call-abc",
         turnId: "turn-xyz",
       });
@@ -193,7 +193,7 @@ describe("changes-sse", () => {
 
     const events = await readChangeEvents(res, (e) => e.length >= 1);
     expect(events).toHaveLength(1);
-    expect(events[0]!.source).toBe("agent");
+    expect(events[0]!.source).toBe("assistant");
     expect(events[0]!.toolCallId).toBe("call-abc");
     expect(events[0]!.turnId).toBe("turn-xyz");
   });

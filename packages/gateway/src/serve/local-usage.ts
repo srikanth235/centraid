@@ -44,7 +44,7 @@ import path from "node:path";
  *   apps         — `apps/`: per-app data directories.
  *   code         — `code/`: the app code store (a bare git repo + worktrees).
  *   logs         — `logsDir`: rotated JSONL gateway logs.
- *   cache        — runner scratch and reusable backup code bundles. Derived;
+ *   cache        — harness scratch and reusable backup code bundles. Derived;
  *                  safe to wipe.
  *   templates    — `templatesCacheDir`: the pulled template cache.
  */

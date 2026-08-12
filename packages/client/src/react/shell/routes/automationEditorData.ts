@@ -24,9 +24,9 @@ export interface AutomationEditorLoadResult {
   connectors: AuEditorConnectorsDTO | null;
   /** Manifest `onFailure`, `null` when unset or in create mode. */
   onFailure: string | null;
-  /** Explicit manifest `requires.runner`; `null` inherits subsystem prefs. */
-  runner: string | null;
-  /** Explicit manifest `requires.model`; `null` inherits runner prefs. */
+  /** Explicit manifest `requires.harness`; `null` inherits subsystem prefs. */
+  harness: string | null;
+  /** Explicit manifest `requires.model`; `null` inherits harness prefs. */
   model: string | null;
 }
 
@@ -38,7 +38,7 @@ const DEFAULT_EDITOR_LOAD: AutomationEditorLoadResult = {
   onFailure: null,
   row: null,
   rowId: null,
-  runner: null,
+  harness: null,
   triggers: [],
 };
 
@@ -51,7 +51,7 @@ const DEFAULT_EDITOR_LOAD: AutomationEditorLoadResult = {
  *  pattern as the `prompt` cast below; drop once the ambient type catches
  *  up. */
 interface ManifestConnectorExtra {
-  requires: { secrets?: readonly string[]; runner?: string };
+  requires: { secrets?: readonly string[]; harness?: string };
   connector?: {
     kind: string;
     label: string;
@@ -156,7 +156,7 @@ export async function loadAutomationEditorData(input: {
     onFailure: row.manifest.onFailure ?? null,
     row,
     rowId: row.id,
-    runner: row.manifest.requires.runner ?? null,
+    harness: row.manifest.requires.harness ?? null,
     triggers: row.triggers,
   };
 }

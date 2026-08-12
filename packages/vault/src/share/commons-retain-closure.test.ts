@@ -160,7 +160,7 @@ describe("Commons whole-container retain", () => {
     const add = origin.vault.prepare(
       `INSERT INTO core_collection_entry
          (entry_id, collection_id, target_type, target_id, position, added_at)
-       VALUES (?, ?, 'media.media_asset', ?, ?, ?)`
+       VALUES (?, ?, 'media.asset', ?, ?, ?)`
     );
     add.run(uuidv7(), collectionId, first.assetId, 0, now);
     add.run(uuidv7(), collectionId, second.assetId, 1, now);
@@ -235,9 +235,7 @@ describe("Commons whole-container retain", () => {
         .get(collectionId)
     ).toMatchObject({ n: 2 });
     expect(
-      audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-        .get()
+      audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 2 });
     expect(audience.blobs.local.hasSync(first.sha256)).toBe(true);
     expect(audience.blobs.local.hasSync(second.sha256)).toBe(true);

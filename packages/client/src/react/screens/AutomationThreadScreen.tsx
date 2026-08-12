@@ -24,7 +24,7 @@ import { cx } from "../ui/cx.js";
 import { Icon } from "../ui/index.js";
 import Message from "./AssistantMessage.js";
 import type { MessageCallbacks } from "./AssistantMessage.js";
-import { EffortPicker, ModelPicker, RunnerPicker } from "./AssistantScreen.js";
+import { EffortPicker, ModelPicker, HarnessPicker } from "./AssistantScreen.js";
 import ChatComposer from "./ChatComposer.js";
 
 import au from "../styles/automation.module.css";
@@ -85,8 +85,8 @@ export interface AutomationThreadDataEx extends AutomationThreadData {
     } | null;
   };
   runTokens?: Record<string, number>;
-  /** Capability-backed attended runner controls for the Q&A conversation. */
-  runnerConfig?: AsstModelPickerDTO;
+  /** Capability-backed attended harness controls for the Q&A conversation. */
+  harnessConfig?: AsstModelPickerDTO;
 }
 
 export interface AutomationThreadScreenProps extends Omit<
@@ -856,15 +856,15 @@ function Composer({
   picker,
   context,
   onUploadAttachment,
-  onSetRunner,
-  onRunnerSwitch,
+  onSetHarness,
+  onHarnessSwitch,
 }: {
   busy: boolean;
   onSend: (
     text: string,
     options: {
       attachments?: BuilderAttachmentRef[];
-      runnerKind?: string;
+      harnessKind?: string;
       model?: string;
       thinking?: string;
     }
@@ -874,8 +874,8 @@ function Composer({
   picker?: AsstModelPickerDTO;
   context?: { used: number; size: number };
   onUploadAttachment?: (file: File) => Promise<BuilderAttachmentRef>;
-  onSetRunner?: (runnerKind: string) => Promise<AsstModelPickerDTO>;
-  onRunnerSwitch?: () => void;
+  onSetHarness?: (harnessKind: string) => Promise<AsstModelPickerDTO>;
+  onHarnessSwitch?: () => void;
 }): JSX.Element {
   const [draft, setDraft] = useState("");
   const [pickerOverride, setPickerOverride] = useState<
@@ -902,8 +902,8 @@ function Composer({
     if (pending.some((attachment) => attachment.state === "uploading")) return;
     onSend(trimmed, {
       ...(ready.length ? { attachments: ready } : {}),
-      ...(activePicker?.selectedRunnerKind
-        ? { runnerKind: activePicker.selectedRunnerKind }
+      ...(activePicker?.selectedHarnessKind
+        ? { harnessKind: activePicker.selectedHarnessKind }
         : {}),
       ...(activePicker?.selectedModelId
         ? { model: activePicker.selectedModelId }
@@ -948,18 +948,18 @@ function Composer({
       );
     }
   };
-  const selectRunner = (runnerKind: string): void => {
-    const setRunner = onSetRunner;
-    if (!setRunner) return;
+  const selectHarness = (harnessKind: string): void => {
+    const setHarness = onSetHarness;
+    if (!setHarness) return;
     setPickerLoaded(false);
     void (async () => {
       try {
-        const next = await setRunner(runnerKind);
+        const next = await setHarness(harnessKind);
         const changed =
-          next.selectedRunnerKind === runnerKind &&
-          activePicker?.selectedRunnerKind !== next.selectedRunnerKind;
+          next.selectedHarnessKind === harnessKind &&
+          activePicker?.selectedHarnessKind !== next.selectedHarnessKind;
         setPickerOverride(next);
-        if (changed) onRunnerSwitch?.();
+        if (changed) onHarnessSwitch?.();
         if (!next.supportsAttachments) setPending([]);
       } finally {
         setPickerLoaded(true);
@@ -1042,11 +1042,11 @@ function Composer({
         model={
           activePicker ? (
             <>
-              <RunnerPicker
+              <HarnessPicker
                 picker={activePicker}
                 loaded={pickerLoaded}
                 busy={busy}
-                onSelect={selectRunner}
+                onSelect={selectHarness}
               />
               <ModelPicker
                 picker={activePicker}
@@ -1106,13 +1106,13 @@ export default function AutomationThreadScreen({
   onOpenCompiler,
   onOpenRun,
   onRunNow,
-  onSetRecognitionVariant,
+  onSetRecognitionStep,
   onToggleEnabled,
   onDecideConsent,
   onAskAboutRuns,
   onUploadAttachment,
   loadAttachmentImage,
-  onSetRunner,
+  onSetHarness,
   onCopyWebhook,
   onRotateWebhook,
   onDelete,
@@ -1122,8 +1122,8 @@ export default function AutomationThreadScreen({
   >("loading");
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
-  const [recognitionVariant, setRecognitionVariant] = useState<
-    "deterministic" | "agent"
+  const [recognitionStep, setRecognitionStep] = useState<
+    "deterministic" | "delegate"
   >("deterministic");
   const [recognitionSaving, setRecognitionSaving] = useState(false);
   const [sending, setSending] = useState(false);
@@ -1158,7 +1158,7 @@ export default function AutomationThreadScreen({
     (): Promise<void> =>
       loadData()
         .then((d) => {
-          if (d?.recognition) setRecognitionVariant(d.recognition.selected);
+          if (d?.recognition) setRecognitionStep(d.recognition.selected);
           setState(d ?? "missing");
         })
         .catch(() => setState("error")),
@@ -1351,16 +1351,16 @@ export default function AutomationThreadScreen({
     setRegenBusy(true);
     void onRotateWebhook().finally(() => setRegenBusy(false));
   };
-  const doSetRecognitionVariant = async (
-    next: "deterministic" | "agent"
+  const doSetRecognitionStep = async (
+    next: "deterministic" | "delegate"
   ): Promise<void> => {
-    if (!onSetRecognitionVariant) {
-      setRecognitionVariant(next);
+    if (!onSetRecognitionStep) {
+      setRecognitionStep(next);
       return;
     }
     setRecognitionSaving(true);
-    const saved = await onSetRecognitionVariant(next);
-    if (saved) setRecognitionVariant(next);
+    const saved = await onSetRecognitionStep(next);
+    if (saved) setRecognitionStep(next);
     setRecognitionSaving(false);
   };
   const doDecide = (
@@ -1379,7 +1379,7 @@ export default function AutomationThreadScreen({
     text: string,
     options: {
       attachments?: BuilderAttachmentRef[];
-      runnerKind?: string;
+      harnessKind?: string;
       model?: string;
       thinking?: string;
     }
@@ -1580,62 +1580,64 @@ export default function AutomationThreadScreen({
             </div>
             <select
               aria-label="Recognition method"
-              value={recognitionVariant}
+              value={recognitionStep}
               disabled={recognitionSaving}
               onChange={(event) => {
                 const next =
-                  event.target.value === "agent" ? "agent" : "deterministic";
-                void doSetRecognitionVariant(next);
+                  event.target.value === "delegate"
+                    ? "delegate"
+                    : "deterministic";
+                void doSetRecognitionStep(next);
               }}
             >
               <option value="deterministic">
                 {d.recognition.deterministicLabel}
               </option>
-              <option value="agent" disabled={!d.recognition.agent.model}>
-                Agent
-                {d.recognition.agent.model ? "" : " — choose a model first"}
+              <option value="delegate" disabled={!d.recognition.delegate.model}>
+                Delegate
+                {d.recognition.delegate.model ? "" : " — choose a model first"}
               </option>
             </select>
           </div>
-          {recognitionVariant === "agent" ? (
+          {recognitionStep === "delegate" ? (
             <div className={styles.recognitionChoiceDetail}>
               <label>
                 Pinned model
                 <select
-                  aria-label="Pinned agent model"
-                  value={d.recognition.agent.model ?? ""}
+                  aria-label="Pinned delegate model"
+                  value={d.recognition.delegate.model ?? ""}
                   disabled
                 >
-                  <option value={d.recognition.agent.model ?? ""}>
-                    {d.recognition.agent.model ?? "Choose in Compiler"}
+                  <option value={d.recognition.delegate.model ?? ""}>
+                    {d.recognition.delegate.model ?? "Choose in Compiler"}
                   </option>
                 </select>
               </label>
-              <p>{d.recognition.agent.latency}</p>
-              <p>{d.recognition.agent.consequence}</p>
+              <p>{d.recognition.delegate.latency}</p>
+              <p>{d.recognition.delegate.consequence}</p>
               <p>Provider egress still requires explicit consent.</p>
             </div>
           ) : (
             <div className={styles.recognitionChoiceDetail}>
               <p>
                 Uses the configured deterministic service. No provider model is
-                called and no billed agent step runs.
+                called and no billed delegate step runs.
               </p>
-              <p>Agent option: {d.recognition.agent.latency}</p>
-              <p>{d.recognition.agent.consequence}</p>
+              <p>Delegate option: {d.recognition.delegate.latency}</p>
+              <p>{d.recognition.delegate.consequence}</p>
               <p>
-                Agent runs require a pinned model and explicit provider-egress
-                consent.
+                Delegate steps require a pinned model and explicit
+                provider-egress consent.
               </p>
             </div>
           )}
-          {d.recognition.agent.model ? null : (
+          {d.recognition.delegate.model ? null : (
             <button
               type="button"
               className={styles.recognitionCompilerLink}
               onClick={onOpenCompiler}
             >
-              Choose an agent model in Compiler
+              Choose a delegate model in Compiler
             </button>
           )}
         </section>
@@ -1750,11 +1752,11 @@ export default function AutomationThreadScreen({
           onSend={doSend}
           onStop={() => streamControllersRef.current.get("composer")?.abort()}
           onOpenCompiler={onOpenCompiler}
-          picker={d.runnerConfig}
+          picker={d.harnessConfig}
           context={composerContext}
           onUploadAttachment={onUploadAttachment}
-          onSetRunner={onSetRunner}
-          onRunnerSwitch={() => setComposerContext(undefined)}
+          onSetHarness={onSetHarness}
+          onHarnessSwitch={() => setComposerContext(undefined)}
         />
       ) : null}
     </div>

@@ -124,7 +124,7 @@ describe("applyRetention / usageCloseFields / open+closeRunNode", () => {
     expect(
       usageCloseFields({
         type: "usage",
-        provider: "codex",
+        harness: "codex",
         model: "m",
         inputTokens: 1,
         outputTokens: 2,
@@ -132,11 +132,11 @@ describe("applyRetention / usageCloseFields / open+closeRunNode", () => {
       })
     ).toMatchObject({
       model: "m",
-      provider: "codex",
+      harness: "codex",
       inputTokens: 1,
       outputTokens: 2,
       costUsd: 0.5,
-      costSource: "agent",
+      costSource: "harness",
     });
   });
 

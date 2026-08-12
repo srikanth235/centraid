@@ -149,7 +149,7 @@ There is **no `db`** — apps have no private database. `ctx.vault` is the only 
 
 Every call is consent-checked host-side and receipted. A denial throws with the receipt id in the message — do not retry in a loop; surface the denial. Until the owner approves the manifest's requested scopes, calls fail closed.
 
-### Capture, OCR, and agent parity
+### Capture, OCR, and harness parity
 
 Treat text, files, OCR, share-target payloads, and connector results as untrusted input. Preview extracted or classified fields before committing them; never render recognized text as HTML. The gateway exposes discovered commands through `ctx.vault.describe()` and the assistant invokes the same commands through `vault_invoke`, so a UI-only mutation is incomplete: every committed capture path must end in a manifested, schema-described vault command with the same consent and receipt behavior.
 
@@ -270,9 +270,9 @@ Two equivalent APIs:
 ```js
 // 1) Imperative API — what new templates should use. Returns an unsubscribe fn.
 const off = window.centraid.onChange((detail) => {
-  // detail.source : "agent" | "handler" | "external"
-  // detail.toolCallId? : string — only when source === "agent"
-  // detail.turnId? : string — only when source === "agent"
+  // detail.source : "assistant" | "handler" | "external"
+  // detail.toolCallId? : string — only when source === "assistant"
+  // detail.turnId? : string — only when source === "assistant"
   // detail.ts     : number — ms since epoch
   void refresh();
 });
@@ -289,14 +289,14 @@ Call this once at startup, after `refresh()` (or your initial-load function) is 
 What fires the bus:
 
 - A **successful action handler** under `actions/` — `source: "handler"`. Query handlers never fire it.
-- The chat agent writing on the app's behalf — `source: "agent"`. Carries a stable `turnId` for the whole chat turn and a per-tool-call `toolCallId` matching the tool pill the user is looking at.
-- Any other write path without agent or handler context — `source: "external"`.
+- The assistant writing on the app's behalf — `source: "assistant"`. Carries a stable `turnId` for the whole conversation turn and a per-tool-call `toolCallId` matching the tool pill the user is looking at.
+- Any other write path without assistant or handler context — `source: "external"`.
 
 The event carries **no table-level changeset** — with the app's data living in the shared vault, it simply means "this app acted; re-derive what you render". On any event, refetch the queries the page renders; don't try to diff which table moved.
 
 Practical patterns:
 
-- **Flash agent writes.** When `source === "agent"`, optionally pulse the affected rows to make the AI's edit visible. Other writes can stay silent.
+- **Flash assistant writes.** When `source === "assistant"`, optionally pulse the affected rows to make the assistant's edit visible. Other writes can stay silent.
 - **One sink, not many.** Apps usually subscribe once at startup; render loops read from the resulting derived state rather than each component opening its own `EventSource`.
 
 ### Automations — scheduled background work inside an app
@@ -337,7 +337,7 @@ When one automation references another — e.g. `onFailure` — use the sibling'
 - `triggers` is an array. A cron trigger is `{ "kind": "cron", "expr": "<5-field UTC cron>" }`. Translate the user's schedule into a cron expression yourself: "every evening at 8" → `0 20 * * *`, "every 30 minutes" → `*/30 * * * *`, "weekdays at 9" → `0 9 * * MON-FRI`. `"triggers": []` is a legal manual-only automation.
 - `enabled` — set `true`. An automation authored because the user asked for that behaviour is part of the app and runs once the app is published.
 - **Webhook triggers.** When the app needs to react to an inbound HTTP POST, declare the trigger as `{ "kind": "webhook", "pending": true }` — nothing else. You cannot mint the route `id` or `secretHash`; that is a privileged server step, so never invent them. After your turn the builder provisions the webhook (mints the id + secret, rewrites the trigger to its final form) and shows the user the endpoint URL + secret once. An automation may carry at most one webhook trigger.
-- `requires.model` is the model `ctx.agent` routes through — the one billed rail. Deterministic work (`ctx.vault` / `ctx.fetch` / `ctx.state`) needs no tool declaration; there is no `requires.tools` field.
+- `requires.model` is the model `ctx.delegate` routes through — the one billed rail. Deterministic work (`ctx.vault` / `ctx.fetch` / `ctx.state`) needs no tool declaration; there is no `requires.tools` field.
 - The runtime validates the manifest on every read; keep the shape exactly as shown.
 
 #### handler.js
@@ -349,7 +349,7 @@ A plain `.js` ES module — same JS-only discipline as `queries/` and `actions/`
 export default async ({ ctx, log }) => {
   // ctx.vault                    — consented vault reads/writes, deterministic + unbilled
   // ctx.fetch(url, init)         — external HTTP, deterministic + unbilled
-  // ctx.agent({ prompt, json })  — one constrained, billed model turn (pass json when consumed structurally)
+  // ctx.delegate({ prompt, json, harness?, model?, configPins?, content? }) — one constrained, billed turn; per-call harness/model pins never expose sessions
   // ctx.state.get/set/del(key)   — cross-run KV scoped to this automation (cursors, watermarks)
   // ctx.runs.last/list(...)      — this automation's prior run records
   log.info("automation fired");
@@ -357,7 +357,7 @@ export default async ({ ctx, log }) => {
 };
 ```
 
-Return `{ summary?, output? }` — `summary` shows in the run list. There is no runtime retry on `ctx.fetch` / `ctx.agent`; classify the error and write your own `try/catch` backoff when warranted.
+Return `{ summary?, output? }` — `summary` shows in the run list. There is no runtime retry on `ctx.fetch` / `ctx.delegate`; classify the error and write your own `try/catch` backoff when warranted.
 
 #### Authoring flow
 

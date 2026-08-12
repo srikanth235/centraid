@@ -99,15 +99,15 @@ export interface ResourceUsageDTO {
     replication: { passes: number; bytesReplicated: number; busyMs: number };
     backup: { drains: number; bytesUploaded: number; busyMs: number };
     sweeps: { passes: number; busyMs: number };
-    /** `cpuSeconds` is `null` in v1 — agent runs aren't separately CPU-accounted. */
-    agentRuns: { runs: number; busyMs: number; cpuSeconds: number | null };
+    /** `cpuSeconds` is `null` in v1 — harness runs aren't separately CPU-accounted. */
+    harnessRuns: { runs: number; busyMs: number; cpuSeconds: number | null };
   };
   backgroundTimerFiresLastHour: number | null;
 }
 
 /**
  * One measured subsystem row for the resource receipt. `note` carries a
- * clarifying caveat (e.g. the agent-runs "measured, not limited by Conserve"
+ * clarifying caveat (e.g. the harness-runs "measured, not limited by Conserve"
  * label the issue mandates).
  */
 export interface ResourceUsageRow {
@@ -320,7 +320,7 @@ export function processUsageRows(usage: ResourceUsageDTO): ResourceUsageRow[] {
 }
 
 /**
- * Per-subsystem actuals in the order the receipt renders them. Agent runs
+ * Per-subsystem actuals in the order the receipt renders them. Harness runs
  * carry the explicit "measured, not limited by Conserve" caveat plus the
  * v1 null-CPU note, so Conserve never appears to promise what it can't govern.
  */
@@ -346,9 +346,9 @@ export function subsystemUsageRows(
       value: `${s.sweeps.passes} passes · ${formatBusyMs(s.sweeps.busyMs)} active`,
     },
     {
-      label: "Agent runs",
-      value: `${s.agentRuns.runs} runs · ${formatBusyMs(s.agentRuns.busyMs)} active`,
-      note: "Measured, not limited by Conserve. CPU time for agent runs isn’t separately measurable yet.",
+      label: "Harness runs",
+      value: `${s.harnessRuns.runs} runs · ${formatBusyMs(s.harnessRuns.busyMs)} active`,
+      note: "Measured, not limited by Conserve. CPU time for harness runs isn’t separately measurable yet.",
     },
   ];
 }

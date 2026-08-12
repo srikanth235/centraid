@@ -68,7 +68,7 @@ describe("InsightsRoute suite", () => {
       totalTokens: 128_000,
       hydrationTokens: 0,
       totalCostUsd: 3.4,
-      agentReportedCostUsd: 2,
+      harnessReportedCostUsd: 2,
       estimatedCostUsd: 1.4,
       forecastCostUsd: 5.1,
       generations: 42,
@@ -89,7 +89,7 @@ describe("InsightsRoute suite", () => {
       costUsd: number;
       automationName?: string;
     }>,
-    byRunner: [],
+    byHarness: [],
     byModel: [],
     byEffort: [],
     recent: [],
@@ -230,7 +230,7 @@ describe("InsightsRoute suite", () => {
               replication: { passes: 1, bytesReplicated: 1024, busyMs: 100 },
               backup: { drains: 0, bytesUploaded: 0, busyMs: 0 },
               sweeps: { passes: 2, busyMs: 50 },
-              agentRuns: { runs: 3, busyMs: 9000, cpuSeconds: null },
+              harnessRuns: { runs: 3, busyMs: 9000, cpuSeconds: null },
             },
             backgroundTimerFiresLastHour: 12,
           },

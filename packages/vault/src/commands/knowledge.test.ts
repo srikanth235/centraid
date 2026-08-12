@@ -531,7 +531,7 @@ describe("knowledge", () => {
       )
       .all(collectionId) as { target_type: string; position: number }[];
     expect(members.map((m) => m.target_type)).toStrictEqual([
-      "media.media_asset",
+      "media.asset",
       "knowledge.note",
     ]);
     // One ordered list across types.

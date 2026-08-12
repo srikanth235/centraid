@@ -31,7 +31,7 @@ console.log(handle.url, handle.token);
 
 There is no bootstrap option to pass (issue #603 removed `initVaultName`). If `vaultDir` holds no vault, `buildGateway()` **auto-founds** two — `Shared` (created first) and `Personal` (marked as the registry default) — synchronously at construction, and enrols the host device as `admin` on both. If it already holds vault directories, nothing is created and the data dir is left exactly as found; a directory that fails to mount still counts, so corruption can never make an existing gateway look fresh.
 
-`paths` is the only required option (see `GatewayPaths` in `src/paths.ts`); `vaultDir` is its required field. Post-#280 the vault is the unit — everything personal (apps, code, conversation ledger, run history) lives inside `<vaultDir>/<vaultId>/`; gateway-level preferences, enrollments, tickets, and backup/storage state live in `gateway.db`, while disposable catalogs live under `cache/`. There is no `identity.sqlite` or `analytics.sqlite`: the vault owner IS the user, and the run rollup is now the `run_summary` view inside each vault's `journal.db`. There is no `secrets` injection: the gateway is auth-agnostic about the coding agent — codex and Claude Code each own their own auth (`codex login` / `claude login` on the gateway host). Supply `appsStoreRoot` to opt into the git store backend (the desktop does); omit it for the legacy tarball-upload backend (what the standalone CLI below uses).
+`paths` is the only required option (see `GatewayPaths` in `src/paths.ts`); `vaultDir` is its required field. Post-#280 the vault is the unit — everything personal (apps, code, conversation ledger, run history) lives inside `<vaultDir>/<vaultId>/`; gateway-level preferences, enrollments, tickets, and backup/storage state live in `gateway.db`, while disposable catalogs live under `cache/`. There is no `identity.sqlite` or `analytics.sqlite`: the vault owner IS the user, and the run rollup is now the `run_summary` view inside each vault's `journal.db`. There is no `secrets` injection: the gateway is auth-agnostic about the harness — codex and Claude Code each own their own auth (`codex login` / `claude login` on the gateway host). Supply `appsStoreRoot` to opt into the git store backend (the desktop does); omit it for the legacy tarball-upload backend (what the standalone CLI below uses).
 
 ## `centraid-gateway` CLI — standalone daemon
 
@@ -58,7 +58,7 @@ There is **no** URL + admin-token paste and no direct transport tier. In **Setti
 
 Switch to that gateway. The home shelf, chat panel, automations, and Insights screen all work — the daemon is just another host behind its own per-device enrollment.
 
-Mobile is identical: pair with a ticket. The phone never needs codex / Claude Code installed locally — the runner runs on the daemon host.
+Mobile is identical: pair with a ticket. The phone never needs codex / Claude Code installed locally — the harness runs on the daemon host.
 
 ### Config file
 
@@ -67,7 +67,7 @@ Mobile is identical: pair with a ticket. The phone never needs codex / Claude Co
   "dataDir": "/var/lib/centraid",
   "host": "127.0.0.1",
   "port": 8765,
-  "runner": {
+  "harness": {
     "kind": "codex",
     "binPath": "/opt/homebrew/bin/codex",
     "extraArgs": ["--model", "<model-id>"]
@@ -79,7 +79,7 @@ Mobile is identical: pair with a ticket. The phone never needs codex / Claude Co
 centraid-gateway serve --config /etc/centraid-gateway.json
 ```
 
-Every field is optional except `dataDir` (see `validateConfig` in `src/cli/config.ts`). The `runner` block seeds the `prefs` table in `gateway.db` (`agent.runner.kind` / `binPath` / `extraArgs`), so the per-turn prefs loader inside `serve()` reads it unchanged; removing the block on a later boot clears those prefs. (#280 killed the old `identity.sqlite` — the vault owner is the user, so what's left at the gateway level is device configuration.) There is **no** `provider` block and no provider-key file — model/provider routing is the coding agent CLI's own config.
+Every field is optional except `dataDir` (see `validateConfig` in `src/cli/config.ts`). The `harness` block seeds the `prefs` table in `gateway.db` (`harness.kind` / `binPath` / `extraArgs`), so the per-turn prefs loader inside `serve()` reads it unchanged; removing the block on a later boot clears those prefs. (#280 killed the old `identity.sqlite` — the vault owner is the user, so what's left at the gateway level is device configuration.) There is **no** `provider` block and no provider-key file — model/provider routing is the coding harness CLI's own config.
 
 ## Daemon `<dataDir>` layout
 
@@ -89,7 +89,7 @@ Desktop, the CLI, and the OS service use this identical shape (see `daemonLayout
 <dataDir>/
   gateway.db             — control state and the kernel-held exclusive process lock
   keys/                  — wrapped KeyStore envelopes (endpoint, keyring, credentials, DEKs)
-  cache/                 — disposable model/template/code-bundle/runner cache
+  cache/                 — disposable model/template/code-bundle/harness cache
   gateway-logs/          — diagnostic JSONL logs
   vault/                 — vault registry root: one subdirectory per vault
     <vaultId>/
@@ -110,7 +110,7 @@ Per [centraid#131](https://github.com/srikanth235/centraid/issues/131), the daem
 - No mDNS / Bonjour discovery; pair with a one-time ticket.
 - Single user. Multi-user identity is a larger design and lands separately.
 - No daemon auto-update. Bumping the gateway is `git pull` + `bun install` + restart, by design.
-- The CLI daemon runs the **legacy tarball-upload** code backend (no `appsStoreRoot`), so it has no draft worktree and uses the data-only chat runner rather than the unified builder chat the desktop gets.
+- The CLI daemon runs the **legacy tarball-upload** code backend (no `appsStoreRoot`), so it has no draft worktree and uses the data-only chat harness rather than the unified builder chat the desktop gets.
 
 ## Tests
 
@@ -120,6 +120,6 @@ bun run test
 
 Covers:
 
-- `serve.test.ts` — boot, loopback bind + derived bearer auth, the `GET /centraid/_turn/runner-status` and `GET /centraid/_agents/status` routes.
+- `serve.test.ts` — boot, loopback bind + derived bearer auth, the `GET /centraid/_turn/harness-status` and `GET /centraid/_harnesses/status` routes.
 - `cli.test.ts` — config validation, prefs-patch shape, and an end-to-end CLI spawn that authenticates with a parent-supplied `CENTRAID_GATEWAY_TOKEN` loopback secret (never printed), then SIGTERM.
 - `serve-multiclient.test.ts` — two HTTP clients against the same daemon: one publishes an app, the other lists + static-serves it.

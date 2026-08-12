@@ -242,7 +242,7 @@ function mediaCandidates(
   stagedShas.push(staged.sha256);
   return [
     {
-      entityType: "media.media_asset",
+      entityType: "media.asset",
       // The in-archive path is the honest stable key: the same archive
       // imported twice maps to the same asset, and no two photos in one
       // export can share it.

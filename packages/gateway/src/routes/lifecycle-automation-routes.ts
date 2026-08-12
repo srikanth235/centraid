@@ -60,7 +60,7 @@ export async function handleAutomationCompile(
   if (!opts.compileAutomation) {
     return sendJson(res, 503, {
       error: "unavailable",
-      message: "compile runner unavailable",
+      message: "compile harness unavailable",
     });
   }
   const body = await readJson(req);
@@ -102,7 +102,7 @@ export async function handleAutomationRevise(
   if (!opts.reviseAutomation) {
     return sendJson(res, 503, {
       error: "unavailable",
-      message: "revision runner unavailable",
+      message: "revision harness unavailable",
     });
   }
   const body = await readJson(req);
@@ -262,8 +262,8 @@ export async function handleAutomationCreate(
     ...(Array.isArray(body.apps)
       ? { apps: body.apps.filter((a) => typeof a === "string") }
       : {}),
-    ...(typeof body.runner === "string" && body.runner
-      ? { runner: body.runner }
+    ...(typeof body.harness === "string" && body.harness
+      ? { harness: body.harness }
       : {}),
     ...(typeof body.model === "string" && body.model
       ? { model: body.model }
@@ -422,9 +422,9 @@ export async function handleAutomationUpdate(
       ? (body.connections as automation.ConnectionBinding[])
       : undefined
     : undefined;
-  const hasRunnerKey = Object.hasOwn(body, "runner");
+  const hasHarnessKey = Object.hasOwn(body, "harness");
   const hasModelKey = Object.hasOwn(body, "model");
-  const hasEnrichVariantKey = Object.hasOwn(body, "enrichVariant");
+  const hasEnrichVariantKey = Object.hasOwn(body, "recognitionStep");
   if (
     opts.isSystemManagedAutomation?.(`${ref.appId}/${ref.automationId}`) &&
     (nameInput !== undefined ||
@@ -449,14 +449,14 @@ export async function handleAutomationUpdate(
     vaultInput === undefined &&
     !hasConnectorKey &&
     !hasConnectionsKey &&
-    !hasRunnerKey &&
+    !hasHarnessKey &&
     !hasModelKey &&
     !hasEnrichVariantKey
   ) {
     return sendJson(res, 400, {
       error: "bad_request",
       message:
-        "update needs at least one of { name, prompt, triggers, connections, connector, runner, model, enrichVariant }",
+        "update needs at least one of { name, prompt, triggers, connections, connector, harness, model, recognitionStep }",
     });
   }
 
@@ -585,11 +585,11 @@ export async function handleAutomationUpdate(
     if (connectorInput === null) delete patched.connector;
     else if (connectorInput !== undefined) patched.connector = connectorInput;
   }
-  if (hasRunnerKey || hasModelKey) {
+  if (hasHarnessKey || hasModelKey) {
     const requires = { ...existing.requires } as Record<string, unknown>;
-    if (hasRunnerKey) {
-      if (body.runner === null) delete requires.runner;
-      else requires.runner = body.runner;
+    if (hasHarnessKey) {
+      if (body.harness === null) delete requires.harness;
+      else requires.harness = body.harness;
     }
     if (hasModelKey) {
       if (body.model === null) delete requires.model;
@@ -599,36 +599,36 @@ export async function handleAutomationUpdate(
   }
   if (hasEnrichVariantKey) {
     if (
-      body.enrichVariant !== "deterministic" &&
-      body.enrichVariant !== "agent"
+      body.recognitionStep !== "deterministic" &&
+      body.recognitionStep !== "delegate"
     ) {
       if (ephemeralSession) await opts.store.closeSession(sessionId);
       return sendJson(res, 400, {
         error: "bad_request",
-        message: "enrichVariant must be deterministic or agent",
+        message: "recognitionStep must be deterministic or delegate",
       });
     }
     const enrich = existing.enrich;
-    if (!enrich?.agentVariant) {
+    if (!enrich?.delegateStep) {
       if (ephemeralSession) await opts.store.closeSession(sessionId);
       return sendJson(res, 400, {
         error: "bad_request",
         message:
-          "enrichVariant is only valid for a recognition recipe with an agent variant",
+          "recognitionStep is only valid for a recognition recipe with a delegate step",
       });
     }
     const requires = patched.requires as Record<string, unknown>;
-    if (body.enrichVariant === "agent" && !requires.model) {
+    if (body.recognitionStep === "delegate" && !requires.model) {
       if (ephemeralSession) await opts.store.closeSession(sessionId);
       return sendJson(res, 400, {
         error: "bad_request",
         message:
-          "agent recognition requires an explicit pinned model before provider egress can be consented",
+          "delegate recognition requires an explicit pinned model before provider egress can be consented",
       });
     }
     patched.enrich = {
       ...enrich,
-      agentVariant: { ...enrich.agentVariant, selected: body.enrichVariant },
+      delegateStep: { ...enrich.delegateStep, selected: body.recognitionStep },
     };
   }
   const manifest = automation.validateManifest(patched);

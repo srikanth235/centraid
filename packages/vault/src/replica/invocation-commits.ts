@@ -116,7 +116,7 @@ interface InvocationCommitRow {
 
 interface InvocationRow {
   command_id: string;
-  agent_id: string;
+  caller_id: string;
   grant_id: string | null;
   status: string;
   receipt_id: string | null;
@@ -249,7 +249,7 @@ export function finalizeInvocationJournal(
   try {
     const invocation = db.journal
       .prepare(
-        `SELECT command_id, agent_id, grant_id, status, receipt_id
+        `SELECT command_id, caller_id, grant_id, status, receipt_id
            FROM agent_command_invocation WHERE invocation_id = ?`
       )
       .get(invocationId) as InvocationRow | undefined;
@@ -257,7 +257,7 @@ export function finalizeInvocationJournal(
       throw new Error(`journal invocation ${invocationId} is missing`);
     if (
       invocation.command_id !== commandId ||
-      invocation.agent_id !== audit.agentId ||
+      invocation.caller_id !== audit.agentId ||
       invocation.grant_id !== audit.grantId
     ) {
       throw new Error(

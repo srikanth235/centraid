@@ -1,9 +1,9 @@
 /*
- * Probe an ACP agent for the capabilities Settings and pre-send checks need.
+ * Probe an ACP harness for the capabilities Settings and pre-send checks need.
  *
- * Launches the agent the same way a turn would, runs `initialize` (+ a
+ * Launches the harness the same way a turn would, runs `initialize` (+ a
  * session/new when possible), then tears down. Results are pure data —
- * no stream events. Used by the agents-status route and vault preflight.
+ * no stream events. Used by the harness-status route and vault preflight.
  */
 
 import { spawn } from "node:child_process";
@@ -13,9 +13,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 
+import { methods } from "@agentclientprotocol/sdk";
+
 import { lowPriorityCommand } from "../../low-priority.js";
-import { classifyAgentFailureDetail } from "./agent-errors.js";
-import { ACP_PROTOCOL_VERSION, createAcpConnection } from "./json-rpc.js";
+import { ACP_PROTOCOL_VERSION, createAcpConnection } from "./connection.js";
+import { classifyHarnessFailureDetail } from "./harness-errors.js";
 import { planLaunch } from "./launch.js";
 import {
   findConfigOption,
@@ -23,7 +25,6 @@ import {
   readConfigOptions,
   readOfferedModels,
 } from "./session-config.js";
-import type { InitializeResult, SessionSetupResult } from "./session-config.js";
 import type { AcpTurnConfig } from "./types.js";
 
 /** Persistable, adapter-neutral view of one ACP session config option. */
@@ -35,8 +36,8 @@ export interface AcpConfigOptionSnapshot {
   currentValue?: string;
 }
 
-/** Wire-stable capability snapshot for one runner kind on this host. */
-export interface AcpAgentCapabilities {
+/** Wire-stable capability snapshot for one harness kind on this host. */
+export interface AcpHarnessCapabilities {
   /** CLI spawned and answered `initialize`. */
   reachable: boolean;
   loadSession: boolean;
@@ -46,7 +47,7 @@ export interface AcpAgentCapabilities {
   mcpHttp: boolean;
   mcpSse: boolean;
   mcpAcp: boolean;
-  /** Agent exposes a model config option we can pin. */
+  /** Harness exposes a model config option we can pin. */
   modelConfigurable: boolean;
   /** Full config option surface observed on session/new. */
   configOptions: AcpConfigOptionSnapshot[];
@@ -79,8 +80,8 @@ export interface AcpAgentCapabilities {
 }
 
 const emptyCaps = (
-  over: Partial<AcpAgentCapabilities> = {}
-): AcpAgentCapabilities => ({
+  over: Partial<AcpHarnessCapabilities> = {}
+): AcpHarnessCapabilities => ({
   reachable: false,
   loadSession: false,
   resume: false,
@@ -115,30 +116,31 @@ function snapshotConfigOptions(
       return [];
     }
     const offered =
-      option.category === "model"
+      option.category === "model" && option.type === "select"
         ? readOfferedModels(options).models
-        : (() => {
-            const selected = option.options;
-            if (!Array.isArray(selected)) return [];
-            const values: Array<{ value: string; name?: string }> = [];
-            const visit = (entries: unknown[]): void => {
-              for (const entry of entries) {
-                if (!entry || typeof entry !== "object") continue;
-                const record = entry as Record<string, unknown>;
-                if (Array.isArray(record.options)) visit(record.options);
-                else if (typeof record.value === "string") {
-                  values.push({
-                    value: record.value,
-                    ...(typeof record.name === "string"
-                      ? { name: record.name }
-                      : {}),
-                  });
+        : option.type === "select"
+          ? (() => {
+              const selected = option.options;
+              const values: Array<{ value: string; name?: string }> = [];
+              const visit = (entries: unknown[]): void => {
+                for (const entry of entries) {
+                  if (!entry || typeof entry !== "object") continue;
+                  const record = entry as Record<string, unknown>;
+                  if (Array.isArray(record.options)) visit(record.options);
+                  else if (typeof record.value === "string") {
+                    values.push({
+                      value: record.value,
+                      ...(typeof record.name === "string"
+                        ? { name: record.name }
+                        : {}),
+                    });
+                  }
                 }
-              }
-            };
-            visit(selected);
-            return values;
-          })();
+              };
+              visit(selected);
+              return values;
+            })()
+          : [];
     return [
       {
         id: option.id,
@@ -155,12 +157,12 @@ function snapshotConfigOptions(
 
 /**
  * Spawn → initialize → optional session/new → teardown. Bounded so a wedged
- * agent can't hang Settings forever.
+ * harness can't hang Settings forever.
  */
 export async function probeAcpCapabilities(
   config: AcpTurnConfig,
   opts?: { cwd?: string; timeoutMs?: number; probeLivePrompt?: boolean }
-): Promise<AcpAgentCapabilities> {
+): Promise<AcpHarnessCapabilities> {
   const timeoutMs = opts?.timeoutMs ?? 12_000;
   const cwd =
     opts?.cwd ?? (await fs.mkdtemp(path.join(tmpdir(), "centraid-acp-cap-")));
@@ -185,15 +187,11 @@ export async function probeAcpCapabilities(
   let usageUpdateObserved = false;
   let configOptionUpdateObserved = false;
   let locationsObserved = false;
-  const conn = createAcpConnection(child, {
-    onServerRequest: (id, method) => {
-      conn.respondMethodNotFound(id, method);
-    },
-    onNotification: (method, params) => {
-      if (method !== "session/update" || !params || typeof params !== "object")
-        return;
-      const update = (params as { update?: Record<string, unknown> }).update;
-      if (!update) return;
+  const conn = createAcpConnection(child);
+  const releaseTurnOwner = conn.bindTurn({
+    requestPermission: () => ({ outcome: { outcome: "cancelled" } }),
+    sessionUpdate: (params) => {
+      const update = params.update;
       if (update.sessionUpdate === "usage_update") usageUpdateObserved = true;
       if (update.sessionUpdate === "config_option_update")
         configOptionUpdateObserved = true;
@@ -217,7 +215,7 @@ export async function probeAcpCapabilities(
   }, timeoutMs);
 
   try {
-    const init = await conn.request<InitializeResult>("initialize", {
+    const init = await conn.request(methods.agent.initialize, {
       protocolVersion: ACP_PROTOCOL_VERSION,
       clientCapabilities: {
         fs: { readTextFile: false, writeTextFile: false },
@@ -233,9 +231,7 @@ export async function probeAcpCapabilities(
     const ac = init?.agentCapabilities;
     const sc = ac?.sessionCapabilities;
     const mcp = ac?.mcpCapabilities;
-    const prompt = ac?.promptCapabilities as
-      | { image?: unknown; audio?: unknown; embeddedContext?: unknown }
-      | undefined;
+    const prompt = ac?.promptCapabilities;
 
     const caps = emptyCaps({
       reachable: true,
@@ -252,7 +248,7 @@ export async function probeAcpCapabilities(
     });
 
     try {
-      const created = await conn.request<SessionSetupResult>("session/new", {
+      const created = await conn.request(methods.agent.session.new, {
         cwd,
         mcpServers: [],
       });
@@ -266,7 +262,7 @@ export async function probeAcpCapabilities(
       // observe them is to run a real turn, which costs the owner a live
       // provider request. So this diagnostic prompt is OPT-IN
       // (`probeLivePrompt`): the explicit Settings refresh and the
-      // `probe-all-adapters` evidence dump ask for it; readiness checks that
+      // `probe-all-harnesses` evidence dump ask for it; readiness checks that
       // only need reachability/auth never do. Without it the three
       // `*Observed` flags stay false, which reads as "not observed", not
       // "unsupported".
@@ -277,13 +273,13 @@ export async function probeAcpCapabilities(
         const current = offered.models.find(
           (entry) => entry.value === offered.currentValue
         );
-        if (model && typeof model.id === "string" && current) {
+        if (model?.type === "select" && current) {
           // Re-apply the observed value rather than selecting an arbitrary
           // alternative. Some native agents persist config-option changes
           // globally, so a diagnostics refresh must never move the owner's
           // default model or choose a provider for which they have no key.
           await conn
-            .request("session/set_config_option", {
+            .request(methods.agent.session.setConfigOption, {
               sessionId,
               configId: model.id,
               value: current.value,
@@ -291,7 +287,7 @@ export async function probeAcpCapabilities(
             .catch(() => undefined);
         }
         await conn
-          .request("session/prompt", {
+          .request(methods.agent.session.prompt, {
             sessionId,
             prompt: [
               {
@@ -301,7 +297,7 @@ export async function probeAcpCapabilities(
             ],
           })
           .catch((error: unknown) => {
-            const classified = classifyAgentFailureDetail(
+            const classified = classifyHarnessFailureDetail(
               error,
               conn.stderrTail(),
               config
@@ -317,7 +313,7 @@ export async function probeAcpCapabilities(
       caps.configOptionUpdateObserved = configOptionUpdateObserved;
       caps.locationsObserved = locationsObserved;
     } catch (error) {
-      const classified = classifyAgentFailureDetail(
+      const classified = classifyHarnessFailureDetail(
         error,
         conn.stderrTail(),
         config
@@ -335,6 +331,7 @@ export async function probeAcpCapabilities(
     });
   } finally {
     clearTimeout(timer);
+    releaseTurnOwner();
     try {
       child.stdin.end();
     } catch {

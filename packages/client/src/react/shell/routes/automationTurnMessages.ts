@@ -51,14 +51,15 @@ export function stopReasonForItem(
 function stopReasonText(reason: string): string | undefined {
   if (reason === "end_turn") return undefined;
   if (reason === "max_tokens") {
-    return "The agent hit its output token limit before finishing — the reply may be incomplete.";
+    return "The harness hit its output token limit before finishing — the reply may be incomplete.";
   }
   if (reason === "max_turn_requests") {
-    return "The agent hit its max turn/request limit before finishing — the reply may be incomplete.";
+    return "The harness hit its max turn/request limit before finishing — the reply may be incomplete.";
   }
-  if (reason === "refusal") return "The agent refused to complete this turn.";
-  if (reason === "cancelled") return "The agent stopped this turn (cancelled).";
-  return `The agent ended the turn with stopReason “${reason}”.`;
+  if (reason === "refusal") return "The harness refused to complete this turn.";
+  if (reason === "cancelled")
+    return "The harness stopped this turn (cancelled).";
+  return `The harness ended the turn with stopReason “${reason}”.`;
 }
 
 export function stopReasonBubble(
@@ -141,7 +142,7 @@ export function toolLabel(calls: readonly AsstToolCallDTO[]): string {
  * remain distinct while start/result updates for one call stay one row.
  *
  * Ledger order is authoritative. Only consecutive tool items coalesce; an
- * agent/step item flushes the current tool row so a later call group cannot
+ * delegate/step item flushes the current tool row so a later call group cannot
  * be pulled ahead of an earlier answer.
  */
 export function automationTurnMessages(
@@ -168,12 +169,12 @@ export function automationTurnMessages(
     callIndex = new Map();
     callsAnchor = undefined;
   };
-  let pendingAgent: CentraidAutomationItem | undefined;
+  let pendingDelegate: CentraidAutomationItem | undefined;
   let answers = 0;
-  const flushAgent = (): void => {
-    const item = pendingAgent;
+  const flushDelegate = (): void => {
+    const item = pendingDelegate;
     if (!item) return;
-    pendingAgent = undefined;
+    pendingDelegate = undefined;
     answers++;
     const live = liveText.get(item.ordinal) ?? "";
     if (item.endedAt === undefined) {
@@ -187,7 +188,7 @@ export function automationTurnMessages(
     }
     const text = item.ok
       ? itemText(item.outputJson, live)
-      : (item.error ?? itemText(item.outputJson, "The agent call failed."));
+      : (item.error ?? itemText(item.outputJson, "The delegation failed."));
     const usage = usageForItem(item);
     messages.push({
       kind: "ai",
@@ -210,9 +211,9 @@ export function automationTurnMessages(
       messages.push({ ...stop, msgId: `${item.itemId}:stop` });
     }
   };
-  const flushToolsThenAgent = (): void => {
+  const flushToolsThenDelegate = (): void => {
     flushTools();
-    flushAgent();
+    flushDelegate();
   };
   const ordered = items.toSorted(
     (left, right) =>
@@ -220,7 +221,7 @@ export function automationTurnMessages(
   );
   for (const item of ordered) {
     if (item.kind === "message_in") {
-      flushToolsThenAgent();
+      flushToolsThenDelegate();
       messages.push({
         kind: "user",
         // A compile turn's inbound item is the compiler's own work order, not
@@ -234,22 +235,22 @@ export function automationTurnMessages(
       });
       continue;
     }
-    if (item.kind === "agent") {
-      flushToolsThenAgent();
-      // Production opens the parent agent item before allocating later
+    if (item.kind === "delegate") {
+      flushToolsThenDelegate();
+      // Production opens the parent delegate item before allocating later
       // ordinals to its nested ACP tool items. Hold the parent until those
       // children have been projected, then emit tools → final answer.
-      pendingAgent = item;
+      pendingDelegate = item;
       continue;
     }
     if (item.kind === "tool") {
       if (
-        pendingAgent?.endedAt !== undefined &&
-        item.startedAt > pendingAgent.endedAt
+        pendingDelegate?.endedAt !== undefined &&
+        item.startedAt > pendingDelegate.endedAt
       ) {
-        // This tool began after the agent closed, so it is the handler's next
+        // This tool began after the delegate closed, so it is the handler's next
         // standalone action rather than a nested ACP child.
-        flushToolsThenAgent();
+        flushToolsThenDelegate();
       }
       const key = item.callId ?? item.itemId;
       const state =
@@ -275,7 +276,7 @@ export function automationTurnMessages(
       }
       continue;
     }
-    flushToolsThenAgent();
+    flushToolsThenDelegate();
     if (item.kind !== "step") continue;
     answers++;
     const live = liveText.get(item.ordinal) ?? "";
@@ -290,7 +291,7 @@ export function automationTurnMessages(
     }
     const text = item.ok
       ? itemText(item.outputJson, live)
-      : (item.error ?? itemText(item.outputJson, "The agent call failed."));
+      : (item.error ?? itemText(item.outputJson, "The delegation failed."));
     const usage = usageForItem(item);
     messages.push({
       kind: "ai",
@@ -313,7 +314,7 @@ export function automationTurnMessages(
       messages.push({ ...stop, msgId: `${item.itemId}:stop` });
     }
   }
-  flushToolsThenAgent();
+  flushToolsThenDelegate();
 
   if (answers === 0 && turn.endedAt !== undefined) {
     const text = turn.ok

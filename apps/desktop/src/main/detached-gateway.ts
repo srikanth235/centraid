@@ -232,7 +232,7 @@ const STOP_POLL_MS = 100;
 /**
  * Send `signal` to the detached child's whole process group, falling back to
  * the bare pid. Detached children are their own group leaders (H2), so the
- * group signal takes grandchildren (agent runs, workers) down with the gateway.
+ * group signal takes grandchildren (harness processes, workers) down with the gateway.
  */
 function signalGatewayGroup(pid: number, signal: NodeJS.Signals): void {
   try {

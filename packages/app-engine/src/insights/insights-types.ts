@@ -10,11 +10,11 @@ export interface InsightsKpis {
   hydrationTokens: number;
   /**
    * Sum of known costs — a floor when unpricedRuns > 0.
-   * agentReportedCostUsd + estimatedCostUsd (+ digest totals).
+   * harnessReportedCostUsd + estimatedCostUsd (+ digest totals).
    */
   totalCostUsd: number;
-  /** USD from items with cost_source = 'agent' (live). */
-  agentReportedCostUsd: number;
+  /** USD from items with cost_source = 'harness' (live). */
+  harnessReportedCostUsd: number;
   /** USD from catalog estimates (live). */
   estimatedCostUsd: number;
   /** Window run-rate projected to a 30-day month (priced totals only). */
@@ -50,9 +50,9 @@ export interface InsightsSourceRow {
   automationName?: string;
 }
 
-export interface InsightsRunnerRow {
-  /** ACP stamps provider = RunnerKind; "unknown" when missing. */
-  provider: string;
+export interface InsightsHarnessRow {
+  /** ACP stamps harness = HarnessKind; "unknown" when missing. */
+  harness: string;
   runs: number;
   tokens: number;
   costUsd: number;
@@ -66,7 +66,7 @@ export interface InsightsModelRow {
 }
 
 export interface InsightsEffortRow {
-  /** ACP semantic thought_level confirmed by the runner. */
+  /** ACP semantic thought_level confirmed by the harness. */
   effort: string;
   runs: number;
   tokens: number;
@@ -85,7 +85,7 @@ export interface InsightsActivityRow {
   /** Estimated canonical-ledger prompt tokens injected for this run. */
   hydrationTokens: number;
   costUsd: number;
-  provider?: string;
+  harness?: string;
   model?: string;
   effort?: string;
 }
@@ -118,7 +118,7 @@ export interface InsightsSummary {
   kpis: InsightsKpis;
   daily: InsightsDailyPoint[];
   bySource: InsightsSourceRow[];
-  byRunner: InsightsRunnerRow[];
+  byHarness: InsightsHarnessRow[];
   byModel: InsightsModelRow[];
   byEffort: InsightsEffortRow[];
   recent: InsightsActivityRow[];

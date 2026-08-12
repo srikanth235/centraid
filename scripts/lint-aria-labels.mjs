@@ -216,7 +216,7 @@ function stripTags(src) {
 
 /** Blank out `//` and `/* *\/` comment bodies (keep length/newlines so line
  *  numbers stay accurate) so an example tag mentioned in prose — e.g. this
- *  file's own header, or `agentGlyphs.tsx`'s "without the outer `<svg>`
+ *  file's own header, or `harnessGlyphs.tsx`'s "without the outer `<svg>`
  *  element" comment — is never mistaken for real markup. */
 function blankComments(src) {
   // `(?<!:)` excludes `https://` etc. inside string literals — a real line

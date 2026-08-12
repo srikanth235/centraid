@@ -172,6 +172,16 @@
             "type": ["integer", "null"],
             "minimum": 0,
             "description": "The contract floor for this law. null opts a rig out of the floor and makes the cell it backs uncomputable as solid."
+          },
+          "approvedMinimumTestsDeviation": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Issue-anchored explanation for an intentional floor change or flow-ID rename."
+          },
+          "replacesMinimumTestsFlow": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Exact predecessor ID for a one-to-one flow rename; valid only with approvedMinimumTestsDeviation and an unchanged-or-higher minimumTests floor."
           }
         }
       }

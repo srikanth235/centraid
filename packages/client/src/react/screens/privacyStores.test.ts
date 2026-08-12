@@ -85,7 +85,7 @@ describe(groupGrantsByStore, () => {
     ]);
     const agent: VaultAgentEntry = {
       agentId: "agent-1",
-      hostKey: "k",
+      enrollmentKey: "k",
       partyId: "p",
       name: "Aardvark automation",
       modelRef: "test",

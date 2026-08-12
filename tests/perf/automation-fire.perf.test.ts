@@ -15,7 +15,7 @@ const OWNER = "tests/perf/automation-fire.perf.test.ts";
 const FIRES = 10;
 
 describe("automation-fire.perf", () => {
-  test("fires a real no-agent automation through its ledger", async () => {
+  test("fires a real no-delegate automation through its ledger", async () => {
     const appsDir = await tempDir("automation-fire-perf-");
     const automationDir = path.join(appsDir, "notes", "automations", "digest");
     await mkdir(automationDir, { recursive: true });
@@ -37,7 +37,7 @@ describe("automation-fire.perf", () => {
       "export default async () => ({ ok: true });"
     );
     const openDispatch: OpenDispatch = async () => ({
-      agentDispatcher: async () => "",
+      delegateDispatcher: async () => "",
       close: async () => undefined,
     });
     const journalDbFile = path.join(appsDir, "journal.db");

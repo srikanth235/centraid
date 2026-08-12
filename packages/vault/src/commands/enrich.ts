@@ -162,7 +162,7 @@ function dropOutOfBoundsRegions(
   regions: ExtractedTextRegion[]
 ): ExtractedTextRegion[] {
   const asset = ctx.db
-    .prepare("SELECT width, height FROM media_media_asset WHERE content_id = ?")
+    .prepare("SELECT width, height FROM media_asset WHERE content_id = ?")
     .get(contentId) as
     | { width: number | null; height: number | null }
     | undefined;
@@ -782,7 +782,7 @@ const UPSERT_FACES: CommandDefinition = {
   preconditions: [
     {
       name: "asset_live",
-      sql: "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id AND deleted_at IS NULL",
+      sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id AND deleted_at IS NULL",
       column: "n",
       op: "eq",
       value: 1,
@@ -802,7 +802,7 @@ const UPSERT_FACES: CommandDefinition = {
       }[];
     };
     const asset = ctx.db
-      .prepare("SELECT width, height FROM media_media_asset WHERE asset_id = ?")
+      .prepare("SELECT width, height FROM media_asset WHERE asset_id = ?")
       .get(input.asset_id) as { width: number | null; height: number | null };
     for (const face of input.faces) {
       const [x, y, width, height] = face.box;
@@ -861,7 +861,7 @@ const UPSERT_FACES: CommandDefinition = {
       ctx.wrote("enrich.embedding", embeddingId);
     }
     stampDerivation(ctx.db, {
-      targetType: "media.media_asset",
+      targetType: "media.asset",
       targetId: input.asset_id,
       variant: "faces",
       capability: "faces",

@@ -8,7 +8,7 @@
 //
 // The control always opens the Commons ShareSheet: one destination list holds
 // people, invitations, and deliberate reusable named circles. The sheet sends
-// the selected assets as real `media.media_asset` containers; there is no
+// the selected assets as real `media.asset` containers; there is no
 // Photos-only copy override or silent legacy batch path.
 
 import { useState } from "react";
@@ -66,7 +66,7 @@ export function useCopyToVault(
     sheetProps: {
       sourceVaultId,
       noun: "Photos",
-      itemType: "media.media_asset",
+      itemType: "media.asset",
       itemIds: targets.map((asset) => asset.assetId),
       onDone: (outcome) => {
         postStatus(outcome.message);

@@ -45,21 +45,21 @@ export interface ManifestRequires {
   /** MCP server ids the handler requires (`["github", "linear"]`). */
   readonly mcps?: readonly string[];
   /**
-   * Coding-agent harness used by compile, interactive turns, and `ctx.agent`.
+   * Harness used by compile, interactive turns, and `ctx.delegate`.
    * This is an open registry key: manifests validate only that it is non-empty;
    * the executing gateway decides whether the key is registered and otherwise
    * falls back to the automations subsystem preference.
    */
-  readonly runner?: string;
+  readonly harness?: string;
   /**
-   * Model the `ctx.agent` calls should route through. Format: `provider/model-id`
+   * Model the `ctx.delegate` calls should route through. Format: `provider/model-id`
    * (`"anthropic/claude-3-5-sonnet"`, `"openai/gpt-4o"`). Must not target the
    * mock provider (`centraid-mock/*`) — that would recurse into the mock
    * StreamFn. Validation rejects it.
    */
   readonly model?: string;
   /**
-   * ACP semantic `thought_level` pin. Open string by design: each runner
+   * ACP semantic `thought_level` pin. Open string by design: each harness
    * advertises its own values and the runtime never translates across rungs.
    */
   readonly thoughtLevel?: string;
@@ -95,15 +95,15 @@ export interface ManifestEnrich {
    */
   readonly capability: string;
   /**
-   * `model` = the handler takes a `ctx.agent` turn (provider egress).
+   * `model` = the handler takes a `ctx.delegate` turn (provider egress).
    * `device` = deterministic / device-lease work only. Omitted reads as
    * `model`: assuming the cheaper lane would be assuming consent.
    */
   readonly lane: EnrichLane;
   /** Optional billed ACP step offered by this template instead of deterministic fetch. */
-  readonly agentVariant?: {
+  readonly delegateStep?: {
     /** Persisted capability choice. Scheduled and manual fires use the same path. */
-    readonly selected: "deterministic" | "agent";
+    readonly selected: "deterministic" | "delegate";
     readonly promptRev: string;
     readonly latency: string;
     readonly consequence: string;
@@ -150,7 +150,7 @@ export interface ManifestVaultScope {
 
 /**
  * The automation's requested vault access (duaility §12). Fires authenticate
- * as an enrolled `agent.agent`; this block is a *request* the owner approves
+ * as an enrolled `consent.agent`; this block is a *request* the owner approves
  * into a grant on the agent's party — never a grant by itself. Until
  * approval every `ctx.vault` call is a receipted deny.
  */
@@ -197,10 +197,10 @@ export type WebhookTrigger = {
   readonly secretHash: string;
 };
 /**
- * A webhook trigger the builder agent declared but cannot provision —
+ * A webhook trigger the builder harness declared but cannot provision —
  * minting the route `id` + `secret` is a privileged server step. The
  * desktop's `provisionPendingWebhookAt` pass rewrites it to a
- * `WebhookTrigger`; this is the agent→builder handoff form.
+ * `WebhookTrigger`; this is the harness→builder handoff form.
  */
 export type PendingWebhookTrigger = {
   readonly kind: "webhook";
@@ -449,7 +449,7 @@ export interface HistoryConfig {
  * `name` / `version` / `description` mirror `app.json`. `enabled` is the
  * user's on/off toggle — it lives in the manifest because the directory
  * is the only source of truth. `prompt` is the human intent the builder
- * agent translated into `handler.js`; `apps` lists the app ids this
+ * harness translated into `handler.js`; `apps` lists the app ids this
  * automation is associated with (reverse-looked-up by the app Settings
  * screen).
  */
@@ -457,7 +457,7 @@ export interface HistoryConfig {
  * Connector declaration (issue #290 phase 4): this automation is a PUBLISHED
  * CONNECTOR — deterministic code syncing one external source into the vault.
  * The broker invariants hang off this block:
- *   - `ctx.agent` is forbidden at runtime (agents write code, not data —
+ *   - `ctx.delegate` is forbidden at runtime (agents write code, not data —
  *     an LLM turn inside a sync loop breaks determinism, cost and audit);
  *   - external reads ride `ctx.fetch` (broker-injected, host-pinned,
  *     read-only) and external writes are STAGED through the outbox;
@@ -480,8 +480,8 @@ export interface ConnectorSpec {
 }
 
 /**
- * Soft binding for agent-using automations that need a vault credential
- * without becoming a published connector (which forbids `ctx.agent`).
+ * Soft binding for delegate-using automations that need a vault credential
+ * without becoming a published connector (which forbids `ctx.delegate`).
  * Distinct from `connector` — those are deterministic pull/send loops.
  */
 export interface ConnectionBinding {
@@ -622,7 +622,7 @@ function parseWebhookTrigger(
   field: string
 ): WebhookTrigger | PendingWebhookTrigger {
   // A pending webhook (`{ kind: 'webhook', pending: true }`) the
-  // builder agent declared but cannot provision — accepted here so
+  // builder harness declared but cannot provision — accepted here so
   // the manifest round-trips until the builder mints id + secret.
   if (t.id === undefined && t.secretHash === undefined) {
     if (t.pending !== true) {
@@ -963,16 +963,16 @@ function validateRequires(raw: unknown): ManifestRequires {
   }
   const req = (raw ?? {}) as Record<string, unknown>;
   const mcps = optionalStringArray(req.mcps, "requires.mcps");
-  let runner: string | undefined;
-  if (req.runner !== undefined) {
-    if (typeof req.runner !== "string" || req.runner.length === 0) {
+  let harness: string | undefined;
+  if (req.harness !== undefined) {
+    if (typeof req.harness !== "string" || req.harness.length === 0) {
       throw new ManifestError(
         "invalid_field",
-        "manifest.requires.runner must be a non-empty string",
-        "requires.runner"
+        "manifest.requires.harness must be a non-empty string",
+        "requires.harness"
       );
     }
-    runner = req.runner;
+    harness = req.harness;
   }
   let model: string | undefined;
   if (req.model !== undefined) {
@@ -1023,7 +1023,8 @@ function validateRequires(raw: unknown): ManifestRequires {
   }
   const requires: ManifestRequires = {};
   if (mcps) (requires as { mcps: readonly string[] }).mcps = mcps;
-  if (runner !== undefined) (requires as { runner: string }).runner = runner;
+  if (harness !== undefined)
+    (requires as { harness: string }).harness = harness;
   if (model !== undefined) (requires as { model: string }).model = model;
   if (thoughtLevel !== undefined)
     (requires as { thoughtLevel: string }).thoughtLevel = thoughtLevel;
@@ -1237,7 +1238,7 @@ function validateVault(raw: unknown): ManifestVault | undefined {
 
 /**
  * The `enrich` block. Every field is required except `lane`, which defaults
- * to the EXPENSIVE reading (`gateway`) — a manifest is agent-writable, so an
+ * to the EXPENSIVE reading (`gateway`) — a manifest is harness-writable, so an
  * omitted lane must never be the one that escapes the gate.
  */
 function validateEnrich(raw: unknown): ManifestEnrich | undefined {
@@ -1271,41 +1272,41 @@ function validateEnrich(raw: unknown): ManifestEnrich | undefined {
       "enrich.lane"
     );
   }
-  let agentVariant: ManifestEnrich["agentVariant"];
-  if (e.agentVariant !== undefined) {
+  let delegateStep: ManifestEnrich["delegateStep"];
+  if (e.delegateStep !== undefined) {
     if (
-      e.agentVariant === null ||
-      typeof e.agentVariant !== "object" ||
-      Array.isArray(e.agentVariant)
+      e.delegateStep === null ||
+      typeof e.delegateStep !== "object" ||
+      Array.isArray(e.delegateStep)
     ) {
       throw new ManifestError(
         "invalid_field",
-        "manifest.enrich.agentVariant must be an object",
-        "enrich.agentVariant"
+        "manifest.enrich.delegateStep must be an object",
+        "enrich.delegateStep"
       );
     }
-    const variant = e.agentVariant as Record<string, unknown>;
+    const variant = e.delegateStep as Record<string, unknown>;
     if (
       variant.selected !== undefined &&
       variant.selected !== "deterministic" &&
-      variant.selected !== "agent"
+      variant.selected !== "delegate"
     ) {
       throw new ManifestError(
         "invalid_field",
-        "manifest.enrich.agentVariant.selected must be deterministic or agent",
-        "enrich.agentVariant.selected"
+        "manifest.enrich.delegateStep.selected must be deterministic or delegate",
+        "enrich.delegateStep.selected"
       );
     }
-    agentVariant = {
-      selected: variant.selected === "agent" ? "agent" : "deterministic",
+    delegateStep = {
+      selected: variant.selected === "delegate" ? "delegate" : "deterministic",
       promptRev: requireString(
         variant.promptRev,
-        "enrich.agentVariant.promptRev"
+        "enrich.delegateStep.promptRev"
       ),
-      latency: requireString(variant.latency, "enrich.agentVariant.latency"),
+      latency: requireString(variant.latency, "enrich.delegateStep.latency"),
       consequence: requireString(
         variant.consequence,
-        "enrich.agentVariant.consequence"
+        "enrich.delegateStep.consequence"
       ),
     };
   }
@@ -1313,7 +1314,7 @@ function validateEnrich(raw: unknown): ManifestEnrich | undefined {
     domain: e.domain as EnrichDomain,
     capability,
     lane: (e.lane as EnrichLane | undefined) ?? "gateway",
-    ...(agentVariant ? { agentVariant } : {}),
+    ...(delegateStep ? { delegateStep } : {}),
   };
 }
 

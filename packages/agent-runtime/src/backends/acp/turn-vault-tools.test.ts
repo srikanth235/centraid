@@ -64,7 +64,7 @@ describe("turn-vault-tools", () => {
       toolContext: undefined,
       httpMcp: true,
       emit: (e) => events.push(e),
-      agentStreamsTool: () => false,
+      harnessStreamsTool: () => false,
     });
     expect(out).toStrictEqual({ mcpServers: [] });
     expect(events).toStrictEqual([]);
@@ -76,7 +76,7 @@ describe("turn-vault-tools", () => {
       toolContext: toolContext() as never,
       httpMcp: true,
       emit: (e) => events.push(e),
-      agentStreamsTool: () => false,
+      harnessStreamsTool: () => false,
     });
     if (out.handle) handles.push(out.handle);
     expect(out.transport).toBe("http");
@@ -91,7 +91,7 @@ describe("turn-vault-tools", () => {
       toolContext: toolContext() as never,
       httpMcp: false,
       emit: (e) => events.push(e),
-      agentStreamsTool: () => false,
+      harnessStreamsTool: () => false,
     });
     if (out.handle) handles.push(out.handle);
     expect(out.transport).toBe("stdio");
@@ -124,7 +124,7 @@ describe("turn-vault-tools", () => {
       toolContext: toolContext() as never,
       httpMcp: true,
       emit: (e) => events.push(e),
-      agentStreamsTool: () => false,
+      harnessStreamsTool: () => false,
     });
     expect(out).toStrictEqual({ mcpServers: [] });
     expect(events).toStrictEqual([

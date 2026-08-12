@@ -9,7 +9,7 @@ import type {
 } from "../screen-contracts.js";
 import { cx } from "../ui/cx.js";
 import { Icon } from "../ui/index.js";
-import { EffortPicker, ModelPicker, RunnerPicker } from "./AssistantScreen.js";
+import { EffortPicker, ModelPicker, HarnessPicker } from "./AssistantScreen.js";
 import { BuilderChatMessage } from "./BuilderChatMessages.js";
 import ChatComposer from "./ChatComposer.js";
 import { workspaceKindLabel } from "./workspaceKindLabel.js";
@@ -21,9 +21,9 @@ import styles from "./BuilderChatPane.module.css";
 /**
  * Builder chat pane, ported to React (issue #325, Phase 3 — the plan's named
  * starting point for builder.ts). The vanilla `openBuilder` closure keeps the
- * SSE agent stream, the message model, and all turn state, pushing a snapshot
+ * SSE harness stream, the message model, and all turn state, pushing a snapshot
  * on every `renderChat()`. React renders the transcript, the determinate
- * agent-progress strip, and the composer. The version-history view stays a
+ * harness-progress strip, and the composer. The version-history view stays a
  * vanilla async renderer injected via `onMountHistory`.
  */
 // One composer attachment while it uploads / after it's ready (issue #420).
@@ -44,7 +44,7 @@ export default function BuilderChatPane({
   onToggleGroup,
   onSetView,
   onSetWorkspaceKind,
-  onSetRunner,
+  onSetHarness,
   onSetModel,
   onSetEffort,
   onMountHistory,
@@ -243,7 +243,7 @@ export default function BuilderChatPane({
           placeholder="Describe a change…"
           ariaLabel="Describe a builder change"
           context={
-            snap.runnerConfig?.supportsContext ? snap.context : undefined
+            snap.harnessConfig?.supportsContext ? snap.context : undefined
           }
           above={
             pending.length > 0 ? (
@@ -286,7 +286,7 @@ export default function BuilderChatPane({
           }
           leading={
             <>
-              {onUploadAttachment && snap.runnerConfig?.supportsAttachments ? (
+              {onUploadAttachment && snap.harnessConfig?.supportsAttachments ? (
                 <>
                   <button
                     type="button"
@@ -329,15 +329,15 @@ export default function BuilderChatPane({
             </>
           }
           model={
-            snap.runnerConfig ? (
+            snap.harnessConfig ? (
               <>
-                <RunnerPicker
-                  picker={snap.runnerConfig}
+                <HarnessPicker
+                  picker={snap.harnessConfig}
                   loaded={pickerLoaded}
                   busy={snap.generating}
-                  onSelect={(runnerKind) => {
+                  onSelect={(harnessKind) => {
                     setPickerLoaded(false);
-                    void onSetRunner(runnerKind)
+                    void onSetHarness(harnessKind)
                       .then((next) => {
                         if (!next.supportsAttachments) setPending([]);
                       })
@@ -349,7 +349,7 @@ export default function BuilderChatPane({
                   }}
                 />
                 <ModelPicker
-                  picker={snap.runnerConfig}
+                  picker={snap.harnessConfig}
                   loaded={pickerLoaded}
                   busy={snap.generating}
                   onSelect={onSetModel}
@@ -358,18 +358,18 @@ export default function BuilderChatPane({
             ) : undefined
           }
           effort={
-            snap.runnerConfig ? (
+            snap.harnessConfig ? (
               <EffortPicker
-                picker={snap.runnerConfig}
+                picker={snap.harnessConfig}
                 loaded={pickerLoaded}
                 busy={snap.generating}
                 onSelect={onSetEffort}
               />
             ) : undefined
           }
-          // The hint explains the runner picker, so it only makes sense once
-          // that picker exists (the runner config arrives with the snapshot).
-          {...(snap.runnerConfig
+          // The hint explains the harness picker, so it only makes sense once
+          // that picker exists (the harness config arrives with the snapshot).
+          {...(snap.harnessConfig
             ? {
                 hint: "Switching agents creates a bounded context handoff and may require provider consent.",
               }

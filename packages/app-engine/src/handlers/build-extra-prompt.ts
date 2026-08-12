@@ -5,7 +5,7 @@
  * The codex/claude-code adapters splice this verbatim into their own CLI
  * system-prompt flag.
  *
- * Lives in app-engine so all hosts see identical app context. The runner
+ * Lives in app-engine so all hosts see identical app context. The harness
  * never assembles app-specific content itself.
  *
  * Post-silo (issue #286 phase 2) there is no per-app database to describe:

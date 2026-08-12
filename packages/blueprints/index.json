@@ -376,7 +376,7 @@
     {
       "id": "photo-ocr",
       "name": "Photo OCR",
-      "desc": "Makes text in photographs searchable through deterministic OCR, with an optional billed agent variant.",
+      "desc": "Makes text in photographs searchable through deterministic OCR, with an optional billed delegate step.",
       "colorKey": "amber",
       "iconKey": "Search",
       "version": "0.1.0",

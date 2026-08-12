@@ -116,13 +116,13 @@ describe("automation-revision", () => {
   test("a rewrite that fails BEFORE publishing reports the failure and publishes nothing", async () => {
     const { deps: input, out } = deps({
       rewrite: async () => {
-        throw new Error("No automation agent is configured.");
+        throw new Error("No automation harness is configured.");
       },
     });
     await reviseAutomationInstructions(input);
     expect(out.published).toStrictEqual([]);
     expect(out.rolledBack).toStrictEqual([]);
-    expect(out.failed).toStrictEqual(["No automation agent is configured."]);
+    expect(out.failed).toStrictEqual(["No automation harness is configured."]);
   });
 
   test("a roll-back that ALSO fails is reported as a divergence, not silently dropped", async () => {
@@ -139,7 +139,7 @@ describe("automation-revision", () => {
       rewrite: async (persistPrompt) => {
         await persistPrompt("Revised: only customer messages.");
       },
-      compile: async () => ({ ok: false, error: "compile agent errored" }),
+      compile: async () => ({ ok: false, error: "compile harness errored" }),
       onRolledBack: (detail) => out.rolledBack.push(detail),
       onFailed: (message) => out.failed.push(message),
     });

@@ -77,7 +77,7 @@ describe(manifestHasVault, () => {
     triggers: [],
     requires: {},
     history: { keep: { count: 100 } },
-    generated: { by: "agent", at: new Date().toISOString() },
+    generated: { by: "centraid-builder", at: new Date().toISOString() },
   };
 
   it("is false when the manifest carries no vault block", () => {
@@ -104,7 +104,7 @@ describe(getVaultBlock, () => {
     triggers: [],
     requires: {},
     history: { keep: { count: 100 } },
-    generated: { by: "agent", at: new Date().toISOString() },
+    generated: { by: "centraid-builder", at: new Date().toISOString() },
   };
 
   it("is undefined when the manifest carries no vault block", () => {

@@ -13,7 +13,7 @@ SQLite has no namespaces, so logical `core.party` is physical `core_party`; `res
 
 **The gateway (§10)** — sole holder of connections. Every request walks:
 
-1. **Identity** — callers authenticate as rows (`consent.app`, `agent.agent`, `consent.device`); unknown callers are dropped at transport, no receipt.
+1. **Identity** — callers authenticate as rows (`consent.app`, `consent.agent`, `consent.device`); unknown callers are dropped at transport, no receipt.
 2. **Consent** — active grant, scope covers schema+verb, row filters, field masks, purpose policy, command risk vs `risk_ceiling`. A deny is a receipted outcome, not an exception.
 3. **Contract** — JSON-Schema input validation, preconditions evaluated as real queries and recorded as `invocation_check` rows _before_ anything mutates, `agent.judgment` consulted as constraints.
 4. **Execution** — journal invocation → vault rows write order, idempotent replay off caller invocation ids, postconditions verified with rollback on failure.

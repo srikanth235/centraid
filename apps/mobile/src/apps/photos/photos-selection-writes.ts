@@ -83,7 +83,7 @@ export function batchFavorite(
         optimistic: [
           {
             op: "upsert",
-            entity: "media.media_asset",
+            entity: "media.asset",
             rowId: asset.assetId,
             values: { favorite: on ? 1 : 0 },
           },
@@ -109,7 +109,7 @@ export function batchTrash(
         optimistic: [
           {
             op: "upsert",
-            entity: "media.media_asset",
+            entity: "media.asset",
             rowId: asset.assetId,
             values: { deleted_at: new Date().toISOString() },
           },
@@ -135,7 +135,7 @@ export function batchRestore(
         optimistic: [
           {
             op: "upsert",
-            entity: "media.media_asset",
+            entity: "media.asset",
             rowId: asset.assetId,
             values: { deleted_at: null, purge_at: null },
           },
@@ -171,7 +171,7 @@ export function batchPurge(
         optimistic: [
           {
             op: "delete",
-            entity: "media.media_asset",
+            entity: "media.asset",
             rowId: asset.assetId,
           },
         ],
@@ -196,7 +196,7 @@ export function batchAddToAlbum(
       const values = {
         entry_id: entryId,
         collection_id: albumId,
-        target_type: "media.media_asset",
+        target_type: "media.asset",
         target_id: asset.assetId,
         position: position++,
         added_at: new Date().toISOString(),

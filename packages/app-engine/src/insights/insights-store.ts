@@ -7,10 +7,10 @@
  *
  * Sources in the vault's `journal.db`:
  *   · LIVE — `run_summary` (VIEW: finished turns ⋈ conversations)
- *   · COST PROVENANCE — `items.cost_source` ('agent' | 'estimated')
+ *   · COST PROVENANCE — `items.cost_source` ('harness' | 'estimated')
  *   · ARCHIVED — `conversation_digest` rollups after prune (#438)
  *
- * Digests carry totals only (no agent/estimated split); provenance KPIs are
+ * Digests carry totals only (no harness/estimated split); provenance KPIs are
  * live-arm only. `recent` is live-only (archived runs are ≥90d idle).
  */
 
@@ -27,7 +27,7 @@ import type {
   InsightsKpis,
   InsightsModelRow,
   InsightsPeakDay,
-  InsightsRunnerRow,
+  InsightsHarnessRow,
   InsightsSourceRow,
   InsightsSummary,
 } from "./insights-types.js";
@@ -78,7 +78,7 @@ export class InsightsStore {
       unreported: number | null;
     };
     const split = stmts.costSplit.get(since) as {
-      agent_cost: number | null;
+      harness_cost: number | null;
       estimated_cost: number | null;
     };
     const kd = stmts.kpisDigest.get(since) as {
@@ -99,7 +99,7 @@ export class InsightsStore {
     }>)
       if (r.app_id !== null) apps.add(r.app_id);
 
-    const agentReportedCostUsd = round(split.agent_cost ?? 0);
+    const harnessReportedCostUsd = round(split.harness_cost ?? 0);
     const estimatedCostUsd = round(split.estimated_cost ?? 0);
     const totalCostUsd = round((k.cost ?? 0) + (kd.cost ?? 0));
 
@@ -107,7 +107,7 @@ export class InsightsStore {
       totalTokens: (k.tokens ?? 0) + (kd.tokens ?? 0),
       hydrationTokens: (k.hydration_tokens ?? 0) + (kd.hydration_tokens ?? 0),
       totalCostUsd,
-      agentReportedCostUsd,
+      harnessReportedCostUsd,
       estimatedCostUsd,
       forecastCostUsd: round((totalCostUsd / windowDays) * 30),
       generations: (k.generations ?? 0) + (kd.generations ?? 0),
@@ -121,15 +121,15 @@ export class InsightsStore {
 
     const daily = foldDaily(stmts, since);
     const bySource = foldBySource(stmts, since);
-    const byRunner: InsightsRunnerRow[] = (
-      stmts.byRunner.all(since) as Array<{
-        provider: string;
+    const byHarness: InsightsHarnessRow[] = (
+      stmts.byHarness.all(since) as Array<{
+        harness: string;
         runs: number;
         tokens: number | null;
         cost: number | null;
       }>
     ).map((r) => ({
-      provider: r.provider,
+      harness: r.harness,
       runs: r.runs,
       tokens: r.tokens ?? 0,
       costUsd: round(r.cost ?? 0),
@@ -146,7 +146,7 @@ export class InsightsStore {
       kpis,
       daily,
       bySource,
-      byRunner,
+      byHarness,
       byModel,
       byEffort,
       recent,
@@ -371,7 +371,7 @@ function foldRecent(
       name: string | null;
       automation_ref: string | null;
       model: string | null;
-      provider: string | null;
+      harness: string | null;
       effort: string | null;
       tokens: number | null;
       hydration_tokens: number | null;
@@ -388,7 +388,7 @@ function foldRecent(
     tokens: r.tokens ?? 0,
     hydrationTokens: r.hydration_tokens ?? 0,
     costUsd: round(r.cost ?? 0),
-    ...(r.provider ? { provider: r.provider } : {}),
+    ...(r.harness ? { harness: r.harness } : {}),
     ...(r.model ? { model: r.model } : {}),
     ...(r.effort ? { effort: r.effort } : {}),
   }));

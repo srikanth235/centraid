@@ -18,7 +18,7 @@ export interface InsightsPreparedStatements {
   appsTouched: StatementSync;
   daily: StatementSync;
   bySource: StatementSync;
-  byRunner: StatementSync;
+  byHarness: StatementSync;
   byModel: StatementSync;
   byEffort: StatementSync;
   recent: StatementSync;
@@ -51,7 +51,7 @@ export function prepareInsightsStatements(
       `),
     costSplit: db.prepare(`
         SELECT
-          COALESCE(SUM(CASE WHEN i.cost_source = 'agent' THEN i.cost_usd ELSE 0 END), 0) AS agent_cost,
+          COALESCE(SUM(CASE WHEN i.cost_source = 'harness' THEN i.cost_usd ELSE 0 END), 0) AS harness_cost,
           COALESCE(SUM(CASE
             WHEN i.cost_source = 'estimated' THEN i.cost_usd
             WHEN i.cost_source IS NULL AND i.cost_usd IS NOT NULL THEN i.cost_usd
@@ -60,7 +60,7 @@ export function prepareInsightsStatements(
         FROM items i
         JOIN turns t ON t.id = i.turn_id
         WHERE t.ended_at IS NOT NULL AND t.started_at >= ?
-          AND i.kind IN ('step','agent')
+          AND i.kind IN ('step','delegate')
       `),
     appsTouched: db.prepare(`
         SELECT DISTINCT app_id AS app_id
@@ -90,15 +90,15 @@ export function prepareInsightsStatements(
         GROUP BY kind, automation_ref
         ORDER BY cost DESC, tokens DESC
       `),
-    byRunner: db.prepare(`
+    byHarness: db.prepare(`
         SELECT
-          COALESCE(provider, 'unknown') AS provider,
+          COALESCE(harness, 'unknown') AS harness,
           COUNT(*) AS runs,
           SUM(${TOKEN_SUM}) AS tokens,
           SUM(COALESCE(total_cost_usd, 0)) AS cost
         FROM run_summary
         WHERE started_at >= ?
-        GROUP BY COALESCE(provider, 'unknown')
+        GROUP BY COALESCE(harness, 'unknown')
         ORDER BY cost DESC, tokens DESC
       `),
     byModel: db.prepare(`
@@ -126,7 +126,7 @@ export function prepareInsightsStatements(
           run_id AS id, kind AS kind, ok AS ok, started_at AS started_at,
           summary AS summary, note AS note, automation_name AS name,
           automation_ref AS automation_ref,
-          model AS model, provider AS provider, effort AS effort,
+          model AS model, harness AS harness, effort AS effort,
           ${TOKEN_SUM} AS tokens,
           COALESCE(hydration_tokens, 0) AS hydration_tokens,
           COALESCE(total_cost_usd, 0) AS cost

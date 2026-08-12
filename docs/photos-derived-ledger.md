@@ -8,7 +8,7 @@ Enrichment outputs land in tables the ontology already has — `enrich_embedding
 
 | Table | Key | Example |
 | --- | --- | --- |
-| `enrich_embedding` | `UNIQUE(target_type, target_id, model)` | `('media.media_asset', '<asset>', 'clip-vit-b-32@1')` |
+| `enrich_embedding` | `UNIQUE(target_type, target_id, model)` | `('media.asset', '<asset>', 'clip-vit-b-32@1')` |
 
 **Upgrade is backfill, never migration.** The `model` column is a `"<name>@<version>"` id ([`packages/vault/src/enrich/model-id.ts`](../packages/vault/src/enrich/model-id.ts) owns make/parse/compare — never compare the raw strings). A version bump re-derives rows whose parsed version is older, and old rows keep serving until the new ones land. There is deliberately no separate `model_version` column (SQLite `ADD COLUMN` cannot be written re-runnably against this schema's migration ladder — the reasoning lives in [`packages/vault/src/schema/enrich.ts`](../packages/vault/src/schema/enrich.ts)'s header), and no separate content-hash column: `core_content_item.sha256` already dedupes re-imported bytes onto the same content row, so derivation is content-stable for free.
 

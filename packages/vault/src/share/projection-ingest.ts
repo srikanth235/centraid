@@ -11,7 +11,7 @@
 // Hooks run inside the projection's transaction (project-closure.ts), so a
 // replicating device never sees the row before its registration.
 //
-// KEYED BY ENTITY TYPE, NEVER BY APP. `media.media_asset` is vault ontology;
+// KEYED BY ENTITY TYPE, NEVER BY APP. `media.asset` is vault ontology;
 // "Photos" is an app that happens to read it. The per-app declaration of which
 // hook an app's items want lives with the scope kit, and reaches this table
 // only as an entity name — so no app id is representable here, let alone
@@ -59,9 +59,7 @@ function linkProjectedPlace(
 ): void {
   if (mediaLocationPolicyForVault(audience) === "strip") return;
   const row = audience
-    .prepare(
-      "SELECT exif_json, place_id FROM media_media_asset WHERE asset_id = ?"
-    )
+    .prepare("SELECT exif_json, place_id FROM media_asset WHERE asset_id = ?")
     .get(assetId) as
     | { exif_json: string | null; place_id: string | null }
     | undefined;
@@ -89,7 +87,7 @@ function linkProjectedPlace(
     longitude
   );
   audience
-    .prepare("UPDATE media_media_asset SET place_id = ? WHERE asset_id = ?")
+    .prepare("UPDATE media_asset SET place_id = ? WHERE asset_id = ?")
     .run(placeId, assetId);
 }
 
@@ -113,7 +111,7 @@ function requestProjectedEnrichment(
   const open = audience
     .prepare(
       `SELECT 1 AS present FROM enrich_request
-        WHERE target_type = 'media.media_asset' AND target_id = ?
+        WHERE target_type = 'media.asset' AND target_id = ?
           AND contribution_variant = 'embedding' AND drained_at IS NULL`
     )
     .get(assetId);
@@ -123,7 +121,7 @@ function requestProjectedEnrichment(
       `INSERT INTO enrich_request
          (request_id, target_type, target_id, reason, detail, required_capability,
           contribution_variant, capability, requested_at, drained_at)
-       VALUES (?, 'media.media_asset', ?, 'projected', NULL, NULL,
+       VALUES (?, 'media.asset', ?, 'projected', NULL, NULL,
                'embedding', NULL, ?, NULL)`
     )
     .run(uuidv7(), assetId, ctx.now);
@@ -135,7 +133,7 @@ const projectedAsset: ProjectionIngestHook = (audience, item, ctx) => {
 };
 
 const HOOKS = new Map<ShareableItemType, ProjectionIngestHook>([
-  ["media.media_asset", projectedAsset],
+  ["media.asset", projectedAsset],
 ]);
 
 /** The ingest door an item type takes at the audience, if it declares one. */

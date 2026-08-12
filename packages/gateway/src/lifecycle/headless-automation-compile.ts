@@ -3,15 +3,16 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 
 import {
-  compileHydrationPlan,
+  HarnessSessions,
   hydrationMessagesFromLedger,
+  isHarnessKind,
   resolveItemCost,
 } from "@centraid/app-engine";
 import type {
   ConversationRunner,
   ProviderConsentSource,
   ProviderEgressConsentController,
-  RunnerKind,
+  HarnessKind,
   TurnStreamEvent,
 } from "@centraid/app-engine";
 import type * as TypeImport_4y0tle from "@centraid/app-engine";
@@ -25,7 +26,7 @@ import type { ResolvedAutomationAnchor } from "./automation-anchor-scopes.js";
 export interface HeadlessCompileOptions {
   runner: ConversationRunner;
   journalDbFile: string;
-  runnerSessionDir: string;
+  harnessSessionDir: string;
   dataDir: string;
   appId: string;
   /** A fresh, one-shot worktree session for this compile. */
@@ -34,16 +35,16 @@ export interface HeadlessCompileOptions {
   automationName: string;
   instructions: string;
   /** Validated manifest harness override. */
-  runnerKind?: RunnerKind;
+  harnessKind?: HarnessKind;
   /** Explicit manifest/prefs-resolved model for this compile. */
   model?: string;
   /** Semantic ACP configuration pins for this compile. */
   configPins?: Readonly<Record<string, string>>;
   /** Durable egress grant controller; compile attempts are unattended. */
-  providerEgressConsent?: ProviderEgressConsentController;
+  providerEgressConsent: ProviderEgressConsentController;
   /**
-   * How the user authored this attempt's runner: `direct` = their automations
-   * primary, `ladder` = current failover membership. Omit when the runner came
+   * How the user authored this attempt's harness: `direct` = their automations
+   * primary, `ladder` = current failover membership. Omit when the harness came
    * from a manifest pin the user never authored — the compile is then denied
    * unless a real grant already exists (#567 D13).
    */
@@ -71,7 +72,7 @@ export interface RecordFailedAutomationCompileOptions {
   automationName: string;
   runId: string;
   error: string;
-  runnerKind?: RunnerKind;
+  harnessKind?: HarnessKind;
   /** Turn note. Defaults to the "reserved id never started" wording. */
   note?: string;
   /** Turn summary shown in the thread. Defaults to `Compile failed`. */
@@ -82,13 +83,13 @@ type UsageEvent = Extract<TurnStreamEvent, { type: "usage" }>;
 
 function compileUsageFields(usage: UsageEvent | undefined): {
   model?: string;
-  provider?: string;
+  harness?: string;
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
   costUsd?: number;
-  costSource?: "agent" | "estimated";
+  costSource?: "harness" | "estimated";
   effort?: string;
 } {
   if (!usage) return {};
@@ -105,11 +106,11 @@ function compileUsageFields(usage: UsageEvent | undefined): {
         })
       : {
           costUsd: usage.costUsd,
-          costSource: usage.costSource ?? ("agent" as const),
+          costSource: usage.costSource ?? ("harness" as const),
         };
   return {
     ...(usage.model === undefined ? {} : { model: usage.model }),
-    ...(usage.provider === undefined ? {} : { provider: usage.provider }),
+    ...(usage.harness === undefined ? {} : { harness: usage.harness }),
     ...(usage.inputTokens === undefined
       ? {}
       : { inputTokens: usage.inputTokens }),
@@ -140,7 +141,7 @@ export function recordFailedAutomationCompile(
       opts.automationRef,
       opts.appId,
       opts.automationName,
-      opts.runnerKind
+      opts.harnessKind
     );
     store.insertTurn({
       turnId: opts.runId,
@@ -178,6 +179,9 @@ export const HEADLESS_COMPILE_WORK_ORDER = (
     'When the instructions describe reacting to vault-data changes, declare a data trigger; when they describe a data-state window ("due in N days"), declare a condition trigger — with vault read scopes covering every watched entity — instead of approximating either with a cron poll.',
     "Leave existing cron/webhook triggers alone unless the instructions changed them.",
     "Do not change the enabled field; the gateway owns enable/disable lifecycle after validation.",
+    "Use ctx.delegate({ prompt, json?, harness?, model?, configPins?, content? }) for each bounded judgment step. A named harness/model/configPins applies to that call only; repeat the harness name to resume its own binding, and omit harness to return to the automation default.",
+    "When instructions name a harness or model for one step, preserve that exact name on the matching ctx.delegate call rather than pinning the whole automation. Never spawn a CLI, construct an ACP client, pass session handles, or silently substitute another harness.",
+    "Example shape for a two-harness plan: await ctx.delegate({ harness: 'requested-ocr-harness', model: 'requested-ocr-model', prompt: 'Extract text…', json: schema }); then await ctx.delegate({ prompt: 'Summarize…', json: summarySchema }) to use the default harness.",
     "Use generated.by = 'centraid-compiler'. Do not ask questions. Stop after the files are ready.",
     "",
     "Instructions:",
@@ -206,7 +210,7 @@ export const HEADLESS_COMPILE_WORK_ORDER = (
   ].join("\n");
 };
 
-/** Apply gateway-owned lifecycle/provenance after the agent has written its draft. */
+/** Apply gateway-owned lifecycle/provenance after the harness has written its draft. */
 export function finalizeCompiledManifest(
   manifest: Manifest,
   options: {
@@ -294,7 +298,7 @@ export async function runHeadlessAutomationCompile(
     opts.automationRef,
     opts.appId,
     opts.automationName,
-    opts.runnerKind
+    opts.harnessKind
   );
   const lockToken = randomUUID();
   if (!store.acquireTurnLock(conversationId, lockToken)) {
@@ -313,35 +317,37 @@ export async function runHeadlessAutomationCompile(
       throw new Error(
         `automation conversation "${conversationId}" was not created`
       );
-    const binding = opts.runnerKind
-      ? store.getHarnessBinding(conversationId, opts.runnerKind)
-      : undefined;
-    const turnsBeforeCurrent = store.listTurns(conversationId);
-    const hydrationMessages = hydrationMessagesFromLedger(
-      turnsBeforeCurrent,
-      (turnId) => store.listItems(turnId),
-      (itemId) => store.listAttachmentsForItem(itemId),
-      binding?.hydratedThroughSeq ?? -1
-    );
-    const recoveryMessages = binding
-      ? hydrationMessagesFromLedger(
-          turnsBeforeCurrent,
+    const resumeHarness =
+      opts.harnessKind ??
+      (isHarnessKind(conversation.harnessKind)
+        ? conversation.harnessKind
+        : "codex");
+    const harnessSessions = new HarnessSessions({
+      binding: (kind) => {
+        const current = store.getHarnessBinding(conversationId, kind);
+        return current
+          ? {
+              bindingId: current.id,
+              sessionId: current.acpSessionId,
+              ...(current.usageSnapshot
+                ? { usageSnapshot: current.usageSnapshot }
+                : {}),
+              hydratedThroughSeq: current.hydratedThroughSeq,
+            }
+          : undefined;
+      },
+      messages: (afterSeq) =>
+        hydrationMessagesFromLedger(
+          store.listTurns(conversationId),
           (turnId) => store.listItems(turnId),
-          (itemId) => store.listAttachmentsForItem(itemId)
-        )
-      : [];
-    const hydrationPlan =
-      hydrationMessages.length > 0
-        ? compileHydrationPlan(hydrationMessages, {
-            includeAttachmentReferences: true,
-          })
-        : undefined;
-    const recoveryHydrationPlan =
-      recoveryMessages.length > 0
-        ? compileHydrationPlan(recoveryMessages, {
-            includeAttachmentReferences: true,
-          })
-        : undefined;
+          (itemId) => store.listAttachmentsForItem(itemId),
+          afterSeq
+        ),
+      ...(opts.hydrationAttachmentPath
+        ? { attachmentPath: opts.hydrationAttachmentPath }
+        : {}),
+    });
+    const resume = harnessSessions.plan(resumeHarness);
     const startedAt = Date.now();
     const message = HEADLESS_COMPILE_WORK_ORDER(
       opts.instructions,
@@ -353,8 +359,8 @@ export async function runHeadlessAutomationCompile(
       triggerKind: "compile",
       note:
         opts.failoverNotice ??
-        (opts.runnerKind
-          ? `Compiling plan with ${opts.runnerKind}`
+        (opts.harnessKind
+          ? `Compiling plan with ${opts.harnessKind}`
           : "Compiling plan"),
       startedAt,
     });
@@ -390,11 +396,11 @@ export async function runHeadlessAutomationCompile(
     let rawJson: string | undefined;
     let stopReason: string | undefined;
     let usage: UsageEvent | undefined;
-    let adapter:
+    let harnessObservation:
       | {
-          adapterSessionId?: string;
-          adapterKind?: string;
-          adapterUsageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
+          harnessSessionId?: string;
+          harnessKind?: string;
+          harnessUsageSnapshot?: TypeImport_4y0tle.HarnessUsageSnapshot;
           hydrated?: boolean;
           hydrationTokens?: number;
         }
@@ -432,106 +438,78 @@ export async function runHeadlessAutomationCompile(
       // user authored in Settings. Deriving must never resurrect a revocation
       // or invent a lane for a provider absent from the ladder (#567 D5/D13).
       const consent = opts.providerEgressConsent;
-      if (
-        opts.runnerKind &&
-        consent &&
-        !consent.has(conversationId, opts.runnerKind, "automations")
-      ) {
+      if (!consent) {
+        throw new Error(
+          "Unattended compile cannot send automation content: the provider-egress consent controller is unavailable."
+        );
+      }
+      if (!consent.has(conversationId, resumeHarness, "automations")) {
         const derived =
           opts.consentSource === undefined
             ? false
             : (consent.recordDerived?.(
                 conversationId,
-                opts.runnerKind,
+                resumeHarness,
                 opts.consentSource,
                 "automations"
               ) ?? false);
         if (!derived) {
           throw new Error(
-            `Unattended compile cannot send this automation to ${opts.runnerKind}: ` +
-              `no consent is recorded for it. Add ${opts.runnerKind} to the automations ` +
-              `agent or its failover ladder in Settings, or approve the provider in a ` +
+            `Unattended compile cannot send this automation to ${resumeHarness}: ` +
+              `no consent is recorded for it. Add ${resumeHarness} to the automations ` +
+              `harness or its failover ladder in Settings, or approve the provider in a ` +
               `conversation with this automation.`
           );
         }
       }
       // The injected unified gateway runner is intrinsically headless: its
-      // Claude adapter pins bypassPermissions and its Codex adapter pins
+      // Claude ACP adapter pins bypassPermissions and its Codex ACP adapter pins
       // approvalPolicy=never + workspace-write. There is deliberately no
       // per-turn escape hatch on ConversationRunner that can weaken this.
-      adapter =
+      harnessObservation =
         (await opts.runner.run({
           appId: opts.appId,
           draftSessionId: opts.draftSessionId,
           dataDir: opts.dataDir,
           conversationId,
           sessionFile: path.join(
-            opts.runnerSessionDir,
+            opts.harnessSessionDir,
             `${encodeURIComponent(conversationId)}.jsonl`
           ),
           message,
           register: "build",
           extraSystemPrompt: "",
-          ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
+          ...(opts.harnessKind ? { harnessKind: opts.harnessKind } : {}),
           ...(opts.model ? { model: opts.model } : {}),
           ...(opts.configPins ? { configPins: opts.configPins } : {}),
-          ...(conversation.adapterKind
-            ? { activeAdapterKind: conversation.adapterKind }
+          ...(conversation.harnessKind
+            ? { activeHarnessKind: conversation.harnessKind }
             : {}),
-          ...(binding?.acpSessionId
+          ...(resume.sessionId
             ? {
-                prevAdapterSessionId: binding.acpSessionId,
-                prevBindingId: binding.id,
+                prevHarnessSessionId: resume.sessionId,
+                ...(resume.bindingId
+                  ? { prevBindingId: resume.bindingId }
+                  : {}),
               }
             : {}),
-          ...(binding ? { prevAdapterKind: binding.kind } : {}),
-          ...(binding?.usageSnapshot
-            ? { prevAdapterUsageSnapshot: binding.usageSnapshot }
+          ...(resume.sessionId ? { prevHarnessKind: resumeHarness } : {}),
+          ...(resume.usageSnapshot
+            ? { prevHarnessUsageSnapshot: resume.usageSnapshot }
             : {}),
-          ...(hydrationPlan
-            ? {
-                hydrationContext: {
-                  prompt: hydrationPlan.prompt,
-                  includedTurns: hydrationPlan.includedTurns,
-                  omittedTurns: hydrationPlan.omittedTurns,
-                  estimatedTokens: hydrationPlan.estimatedTokens,
-                },
-              }
+          ...(resume.hydrationContext
+            ? { hydrationContext: resume.hydrationContext }
             : {}),
-          ...(opts.hydrationAttachmentPath && hydrationPlan?.attachments.length
-            ? {
-                hydrationAttachments: hydrationPlan.attachments.map(
-                  (attachment) => ({
-                    path: opts.hydrationAttachmentPath!(attachment.hash),
-                    mime: attachment.mime,
-                    ...(attachment.filename
-                      ? { filename: attachment.filename }
-                      : {}),
-                  })
-                ),
-              }
+          ...(resume.hydrationAttachments?.length
+            ? { hydrationAttachments: resume.hydrationAttachments }
             : {}),
-          ...(recoveryHydrationPlan
-            ? {
-                recoveryHydrationContext: {
-                  prompt: recoveryHydrationPlan.prompt,
-                  includedTurns: recoveryHydrationPlan.includedTurns,
-                  omittedTurns: recoveryHydrationPlan.omittedTurns,
-                  estimatedTokens: recoveryHydrationPlan.estimatedTokens,
-                },
-              }
+          ...(resume.recoveryHydrationContext
+            ? { recoveryHydrationContext: resume.recoveryHydrationContext }
             : {}),
-          ...(opts.hydrationAttachmentPath &&
-          recoveryHydrationPlan?.attachments.length
+          ...(resume.recoveryHydrationAttachments?.length
             ? {
                 recoveryHydrationAttachments:
-                  recoveryHydrationPlan.attachments.map((attachment) => ({
-                    path: opts.hydrationAttachmentPath!(attachment.hash),
-                    mime: attachment.mime,
-                    ...(attachment.filename
-                      ? { filename: attachment.filename }
-                      : {}),
-                  })),
+                  resume.recoveryHydrationAttachments,
               }
             : {}),
           abortSignal: new AbortController().signal,
@@ -573,22 +551,25 @@ export async function runHeadlessAutomationCompile(
                 }),
               }),
         });
-        if (adapter?.hydrationTokens !== undefined) {
-          store.setTurnHydrationTokens(runId, adapter.hydrationTokens);
+        if (harnessObservation?.hydrationTokens !== undefined) {
+          store.setTurnHydrationTokens(
+            runId,
+            harnessObservation.hydrationTokens
+          );
         }
         store.noteTurn(
           conversationId,
           "",
-          adapter?.adapterKind
+          harnessObservation?.harnessKind
             ? {
-                kind: adapter.adapterKind,
-                ...(adapter.adapterSessionId
-                  ? { sessionId: adapter.adapterSessionId }
+                kind: harnessObservation.harnessKind,
+                ...(harnessObservation.harnessSessionId
+                  ? { sessionId: harnessObservation.harnessSessionId }
                   : {}),
-                ...(adapter.adapterUsageSnapshot
-                  ? { usageSnapshot: adapter.adapterUsageSnapshot }
+                ...(harnessObservation.harnessUsageSnapshot
+                  ? { usageSnapshot: harnessObservation.harnessUsageSnapshot }
                   : {}),
-                ...(adapter.hydrated ? { hydrated: true } : {}),
+                ...(harnessObservation.hydrated ? { hydrated: true } : {}),
               }
             : undefined
         );
@@ -628,22 +609,25 @@ export async function runHeadlessAutomationCompile(
                 outputJson: JSON.stringify({ stopReason, error: messageLocal }),
               }),
         });
-        if (adapter?.hydrationTokens !== undefined) {
-          store.setTurnHydrationTokens(runId, adapter.hydrationTokens);
+        if (harnessObservation?.hydrationTokens !== undefined) {
+          store.setTurnHydrationTokens(
+            runId,
+            harnessObservation.hydrationTokens
+          );
         }
-        const observedAdapter = adapter?.adapterKind
+        const observedHarness = harnessObservation?.harnessKind
           ? {
-              kind: adapter.adapterKind,
-              ...(adapter.adapterSessionId
-                ? { sessionId: adapter.adapterSessionId }
+              kind: harnessObservation.harnessKind,
+              ...(harnessObservation.harnessSessionId
+                ? { sessionId: harnessObservation.harnessSessionId }
                 : {}),
-              ...(adapter.adapterUsageSnapshot
-                ? { usageSnapshot: adapter.adapterUsageSnapshot }
+              ...(harnessObservation.harnessUsageSnapshot
+                ? { usageSnapshot: harnessObservation.harnessUsageSnapshot }
                 : {}),
-              ...(adapter.hydrated ? { hydrated: true } : {}),
+              ...(harnessObservation.hydrated ? { hydrated: true } : {}),
             }
           : undefined;
-        store.noteFailedTurn(conversationId, "", observedAdapter);
+        store.noteFailedTurn(conversationId, "", observedHarness);
       });
       if (failureClass === undefined) {
         await opts.onFailure?.(messageLocal);

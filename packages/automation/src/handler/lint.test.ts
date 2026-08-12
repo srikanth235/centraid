@@ -8,7 +8,7 @@ export default async ({ ctx, log }) => {
   const since = await ctx.runs.last({ status: 'ok' });
   const prs = await ctx.vault.search({ entity: 'core.thread', text: 'foo/bar' });
   const fresh = prs.filter((p) => p.createdAt > (since?.startedAt ?? 0));
-  const digest = await ctx.agent({
+  const digest = await ctx.delegate({
     prompt: 'Summarize: ' + JSON.stringify(fresh),
     json: { type: 'object', properties: { summary: { type: 'string' } } },
   });
@@ -151,7 +151,7 @@ describe(lintHandlerSource, () => {
     // The message steers to the surviving rails.
     const msg = lintHandlerSource('ctx.tool("x", {});')[0]!.message;
     expect(msg).toContain("ctx.tool was removed");
-    expect(msg).toContain("ctx.agent");
+    expect(msg).toContain("ctx.delegate");
   });
 
   it("reports accurate line/column and sorts by position", () => {

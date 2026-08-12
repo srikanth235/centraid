@@ -105,7 +105,7 @@ export function seedPhoto(
   const assetId = uuidv7();
   db.vault
     .prepare(
-      `INSERT INTO media_media_asset
+      `INSERT INTO media_asset
          (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id,
           place_id, camera_device_id, width, height, duration_s, exif_json,
           favorite, archived_at, deleted_at, purge_at)

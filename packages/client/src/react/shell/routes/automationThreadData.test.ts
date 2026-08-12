@@ -205,7 +205,7 @@ describe(loadAutomationThreadData, () => {
     vi.mocked(listAgents).mockResolvedValue([
       {
         agentId: "agent-1",
-        hostKey: "digest",
+        enrollmentKey: "digest",
         partyId: "party-1",
         name: "Daily Digest",
         modelRef: "centraid-automation",
@@ -233,7 +233,7 @@ describe(loadAutomationThreadData, () => {
     expect(result?.data.runs.every((r) => r.entryKind === "run")).toBe(true);
   });
 
-  it("surfaces the declared agent alternative and its explicit model pin", async () => {
+  it("surfaces the declared delegate step and its explicit model pin", async () => {
     vi.mocked(readAutomation).mockResolvedValue(
       row({
         manifest: {
@@ -242,10 +242,10 @@ describe(loadAutomationThreadData, () => {
             domain: "photos",
             capability: "ocr",
             lane: "device",
-            agentVariant: {
-              selected: "agent",
+            delegateStep: {
+              selected: "delegate",
               promptRev: "ocr-v1",
-              latency: "Agent OCR takes seconds.",
+              latency: "Delegate OCR takes seconds.",
               consequence: "Billed and re-derives eligible photographs.",
             },
           },
@@ -264,11 +264,11 @@ describe(loadAutomationThreadData, () => {
 
     expect(result?.data.recognition).toStrictEqual({
       capability: "ocr",
-      selected: "agent",
+      selected: "delegate",
       deterministicLabel: "Deterministic service",
-      agent: {
+      delegate: {
         model: "provider/member-selected-model",
-        latency: "Agent OCR takes seconds.",
+        latency: "Delegate OCR takes seconds.",
         consequence: "Billed and re-derives eligible photographs.",
       },
     });

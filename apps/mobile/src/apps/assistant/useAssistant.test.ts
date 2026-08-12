@@ -15,12 +15,12 @@ vi.mock(import("../../lib/assistant"), () => ({
 const {
   nextProviderConsent,
   persistAssistantSelection,
-  preflightedRunnerSelection,
+  preflightedHarnessSelection,
 } = await import("./useAssistant");
 
 function config(over: Partial<AssistantConfig> = {}): AssistantConfig {
   return {
-    runners: [
+    harnesses: [
       {
         kind: "codex",
         label: "Codex",
@@ -34,7 +34,7 @@ function config(over: Partial<AssistantConfig> = {}): AssistantConfig {
         sessionReady: true,
       },
     ],
-    runnerKind: "codex",
+    harnessKind: "codex",
     models: [],
     selectedModel: "",
     efforts: [],
@@ -60,12 +60,12 @@ describe("nextProviderConsent", () => {
   });
 });
 
-describe("preflightedRunnerSelection", () => {
-  it("retains the prior runner when refreshed session setup or sign-in is incomplete", () => {
+describe("preflightedHarnessSelection", () => {
+  it("retains the prior harness when refreshed session setup or sign-in is incomplete", () => {
     const current = config();
     const fresh = config({
-      runners: [
-        ...current.runners,
+      harnesses: [
+        ...current.harnesses,
         {
           kind: "claude-code",
           label: "Claude Code",
@@ -81,7 +81,7 @@ describe("preflightedRunnerSelection", () => {
         },
       ],
     });
-    const result = preflightedRunnerSelection(current, fresh, "claude-code");
+    const result = preflightedHarnessSelection(current, fresh, "claude-code");
     expect(result.config).toBe(current);
     expect(result.error).toBe("Sign in to Claude Code.");
   });

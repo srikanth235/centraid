@@ -90,7 +90,7 @@ export default function DuplicateReview({
         optimistic: [
           {
             op: "upsert",
-            entity: "media.media_asset",
+            entity: "media.asset",
             rowId: asset.assetId,
             values: { deleted_at: new Date().toISOString() },
           },

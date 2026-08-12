@@ -275,14 +275,14 @@ export default function AutomationCompilePane({
   // `phase` only knows about compiles THIS mount started. A compile that was
   // already running when the rail loaded (reload mid-compile, or the compile
   // the editor kicks off on create) shows up in `latest` instead — and a
-  // coding-agent compile runs for minutes, so that window is wide. Keying
+  // harness compile runs for minutes, so that window is wide. Keying
   // "busy" off `phase` alone left Compile clickable during one, which starts a
   // second concurrent compile of the same automation.
   const attemptRunning = latest?.status === "running";
   const busy = phase !== "idle" || attemptRunning;
   const failure =
     latest?.status === "fail" ? (latest.error ?? "Compile failed.") : null;
-  // A compile is a real coding-agent run and routinely takes minutes, not
+  // A compile is a real harness run and routinely takes minutes, not
   // seconds. Without a clock, "Compiling…" over an indeterminate spinner is
   // indistinguishable from a hang, and the honest answer ("it has been 4
   // minutes, that is normal") is the one thing the rail can offer while it

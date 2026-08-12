@@ -12,8 +12,8 @@ import {
   makeUserStoreRouteHandler,
   resolveSubsystemConfigPins,
   resolveSubsystemModel,
-  resolveSubsystemRunner,
-  resolveSubsystemRunnerLadder,
+  resolveSubsystemHarness,
+  resolveSubsystemHarnessLadder,
 } from "./prefs-store.js";
 
 function freshFile(): string {
@@ -72,17 +72,17 @@ describe(PrefsStore, () => {
   it("merges a patch and persists atomically (survives a reload)", () => {
     const f = freshFile();
     const store = new PrefsStore(f);
-    const after = store.setPrefs({ runner: "codex", theme: "night" });
-    expect(after).toStrictEqual({ runner: "codex", theme: "night" });
+    const after = store.setPrefs({ harness: "codex", theme: "night" });
+    expect(after).toStrictEqual({ harness: "codex", theme: "night" });
     // A fresh instance reads the same bytes off disk (tmp + rename landed).
     expect(new PrefsStore(f).getAllPrefs()).toStrictEqual({
-      runner: "codex",
+      harness: "codex",
       theme: "night",
     });
     // getAllPrefs returns a defensive copy, not the live cache.
     const copy = store.getAllPrefs();
-    copy.runner = "mutated";
-    expect(store.getAllPrefs().runner).toBe("codex");
+    copy.harness = "mutated";
+    expect(store.getAllPrefs().harness).toBe("codex");
   });
 
   it("treats null / undefined values as key deletions", () => {
@@ -122,7 +122,7 @@ describe(resolveSubsystemModel, () => {
     );
   });
 
-  it("falls through to the runner-wide default when the subsystem pref is unset", () => {
+  it("falls through to the harness-wide default when the subsystem pref is unset", () => {
     const prefs = { "model.claude-code.default": "from-default-pref" };
     expect(resolveSubsystemModel(prefs, "claude-code", "assistant")).toBe(
       "from-default-pref"
@@ -139,13 +139,13 @@ describe(resolveSubsystemModel, () => {
     );
   });
 
-  it("resolves to undefined when nothing is configured — the backend uses its own default", () => {
+  it("resolves to undefined when nothing is configured — the harness uses its own default", () => {
     expect(
       resolveSubsystemModel({}, "claude-code", "assistant")
     ).toBeUndefined();
   });
 
-  it("scopes prefs by runner kind — a codex pref does not leak into claude-code resolution", () => {
+  it("scopes prefs by harness kind — a codex pref does not leak into claude-code resolution", () => {
     const prefs = { "model.codex.assistant": "codex-only-model" };
     expect(
       resolveSubsystemModel(prefs, "claude-code", "assistant")
@@ -173,7 +173,7 @@ describe(resolveSubsystemConfigPins, () => {
     "config.codex.assistant.thought_level": "low",
   };
 
-  it("uses explicit category pins before subsystem and runner defaults", () => {
+  it("uses explicit category pins before subsystem and harness defaults", () => {
     expect(
       resolveSubsystemConfigPins(prefs, "claude-code", "assistant", {
         thought_level: "max",
@@ -181,7 +181,7 @@ describe(resolveSubsystemConfigPins, () => {
     ).toStrictEqual({ thought_level: "max", mode: "plan" });
   });
 
-  it("keeps categories scoped to the selected runner and subsystem", () => {
+  it("keeps categories scoped to the selected harness and subsystem", () => {
     expect(
       resolveSubsystemConfigPins(prefs, "claude-code", "assistant")
     ).toStrictEqual({
@@ -202,68 +202,68 @@ describe(resolveSubsystemConfigPins, () => {
   });
 });
 
-describe(resolveSubsystemRunner, () => {
-  it("prefers the per-subsystem pin over the default agent", () => {
+describe(resolveSubsystemHarness, () => {
+  it("prefers the per-subsystem pin over the default harness", () => {
     const prefs = {
-      "runner.assistant": "claude-code",
-      "agent.runner.kind": "codex",
+      "harness.assistant": "claude-code",
+      "harness.kind": "codex",
     };
-    expect(resolveSubsystemRunner(prefs, "assistant")).toBe("claude-code");
+    expect(resolveSubsystemHarness(prefs, "assistant")).toBe("claude-code");
   });
 
-  it("falls back to the default agent when the subsystem is unpinned", () => {
-    const prefs = { "agent.runner.kind": "claude-code" };
-    expect(resolveSubsystemRunner(prefs, "assistant")).toBe("claude-code");
+  it("falls back to the default harness when the subsystem is unpinned", () => {
+    const prefs = { "harness.kind": "claude-code" };
+    expect(resolveSubsystemHarness(prefs, "assistant")).toBe("claude-code");
   });
 
   it("falls back to 'codex' when nothing is configured at all", () => {
-    expect(resolveSubsystemRunner({}, "assistant")).toBe("codex");
+    expect(resolveSubsystemHarness({}, "assistant")).toBe("codex");
   });
 
   it("scopes pins by subsystem — an ask pin does not leak into builder resolution", () => {
-    const prefs = { "runner.ask": "claude-code", "agent.runner.kind": "codex" };
-    expect(resolveSubsystemRunner(prefs, "ask")).toBe("claude-code");
-    // Every other subsystem still inherits the default agent.
-    expect(resolveSubsystemRunner(prefs, "builder")).toBe("codex");
-    expect(resolveSubsystemRunner(prefs, "assistant")).toBe("codex");
-    expect(resolveSubsystemRunner(prefs, "automations")).toBe("codex");
+    const prefs = { "harness.ask": "claude-code", "harness.kind": "codex" };
+    expect(resolveSubsystemHarness(prefs, "ask")).toBe("claude-code");
+    // Every other subsystem still inherits the default harness.
+    expect(resolveSubsystemHarness(prefs, "builder")).toBe("codex");
+    expect(resolveSubsystemHarness(prefs, "assistant")).toBe("codex");
+    expect(resolveSubsystemHarness(prefs, "automations")).toBe("codex");
   });
 
   it("treats an empty-string pin as unset and keeps falling through", () => {
-    const prefs = { "runner.builder": "", "agent.runner.kind": "claude-code" };
-    expect(resolveSubsystemRunner(prefs, "builder")).toBe("claude-code");
-    // ...all the way to the built-in default when there's no default agent either.
-    expect(resolveSubsystemRunner({ "runner.builder": "" }, "builder")).toBe(
+    const prefs = { "harness.builder": "", "harness.kind": "claude-code" };
+    expect(resolveSubsystemHarness(prefs, "builder")).toBe("claude-code");
+    // ...all the way to the built-in default when there's no default harness either.
+    expect(resolveSubsystemHarness({ "harness.builder": "" }, "builder")).toBe(
       "codex"
     );
   });
 
-  it("treats an empty-string default agent as unset (falls through to codex)", () => {
-    expect(
-      resolveSubsystemRunner({ "agent.runner.kind": "" }, "automations")
-    ).toBe("codex");
+  it("treats an empty-string default harness as unset (falls through to codex)", () => {
+    expect(resolveSubsystemHarness({ "harness.kind": "" }, "automations")).toBe(
+      "codex"
+    );
   });
 
-  it("each subsystem can pin a different runner independently", () => {
+  it("each subsystem can pin a different harness independently", () => {
     const prefs = {
-      "runner.assistant": "claude-code",
-      "runner.automations": "codex",
-      "agent.runner.kind": "claude-code",
+      "harness.assistant": "claude-code",
+      "harness.automations": "codex",
+      "harness.kind": "claude-code",
     };
-    expect(resolveSubsystemRunner(prefs, "assistant")).toBe("claude-code");
-    expect(resolveSubsystemRunner(prefs, "automations")).toBe("codex");
-    // Unpinned subsystems still inherit the default agent.
-    expect(resolveSubsystemRunner(prefs, "ask")).toBe("claude-code");
+    expect(resolveSubsystemHarness(prefs, "assistant")).toBe("claude-code");
+    expect(resolveSubsystemHarness(prefs, "automations")).toBe("codex");
+    // Unpinned subsystems still inherit the default harness.
+    expect(resolveSubsystemHarness(prefs, "ask")).toBe("claude-code");
   });
 
-  it("is byte-identical to the old global behavior when no runner.* key is set", () => {
-    // Back-compat is the hard requirement: with only `agent.runner.kind`
+  it("is byte-identical to the old global behavior when no harness.* key is set", () => {
+    // Back-compat is the hard requirement: with only `harness.kind`
     // present, EVERY subsystem resolves to it — exactly what the single
-    // global active runner did before per-subsystem selection existed.
+    // global active harness did before per-subsystem selection existed.
     for (const kind of ["codex", "claude-code"] as const) {
-      const prefs = { "agent.runner.kind": kind };
+      const prefs = { "harness.kind": kind };
       for (const s of ["assistant", "ask", "builder", "automations"] as const) {
-        expect(resolveSubsystemRunner(prefs, s)).toBe(kind);
+        expect(resolveSubsystemHarness(prefs, s)).toBe(kind);
       }
     }
   });
@@ -271,38 +271,38 @@ describe(resolveSubsystemRunner, () => {
 
 /**
  * The two resolvers compose the way the gateway's `resolveModel` uses them:
- * resolve the RUNNER for the subsystem first, then scope the model key by
+ * resolve the HARNESS for the subsystem first, then scope the model key by
  * THAT kind. Reading the model against the global kind instead is the bug
  * this pairing exists to prevent.
  */
-describe("resolveSubsystemRunner + resolveSubsystemModel compose", () => {
-  it("reads the model key of the subsystem's OWN runner, not the default agent's", () => {
+describe("resolveSubsystemHarness + resolveSubsystemModel compose", () => {
+  it("reads the model key of the subsystem's OWN harness, not the default harness's", () => {
     const prefs = {
-      "agent.runner.kind": "codex",
-      "runner.ask": "claude-code",
+      "harness.kind": "codex",
+      "harness.ask": "claude-code",
       "model.codex.ask": "codex-ask-model",
       "model.claude-code.ask": "claude-ask-model",
     };
-    const kind = resolveSubsystemRunner(prefs, "ask");
+    const kind = resolveSubsystemHarness(prefs, "ask");
     expect(kind).toBe("claude-code");
     expect(resolveSubsystemModel(prefs, kind, "ask")).toBe("claude-ask-model");
-    // The builder, still unpinned, keeps reading the default agent's keys.
+    // The builder, still unpinned, keeps reading the default harness's keys.
     expect(
       resolveSubsystemModel(
         prefs,
-        resolveSubsystemRunner(prefs, "builder"),
+        resolveSubsystemHarness(prefs, "builder"),
         "ask"
       )
     ).toBe("codex-ask-model");
   });
 });
 
-describe(resolveSubsystemRunnerLadder, () => {
+describe(resolveSubsystemHarnessLadder, () => {
   it("keeps the primary first and removes unknown and duplicate kinds", () => {
     expect(
-      resolveSubsystemRunnerLadder(
+      resolveSubsystemHarnessLadder(
         {
-          "runner.ladder.assistant": [
+          "harness.ladder.assistant": [
             "claude-code",
             "codex",
             "bogus",
@@ -317,8 +317,8 @@ describe(resolveSubsystemRunnerLadder, () => {
 
   it("accepts the CLI-friendly JSON representation and default ladder", () => {
     expect(
-      resolveSubsystemRunnerLadder(
-        { "runner.ladder.default": '["gemini","claude-code"]' },
+      resolveSubsystemHarnessLadder(
+        { "harness.ladder.default": '["gemini","claude-code"]' },
         "builder",
         "codex"
       )
@@ -382,19 +382,19 @@ describe(makeUserStoreRouteHandler, () => {
 
   it("rejects a preflight-failed patch without changing prefs", async () => {
     const store = new PrefsStore(freshFile());
-    store.setPrefs({ "agent.runner.kind": "codex" });
+    store.setPrefs({ "harness.kind": "codex" });
     const handler = makeUserStoreRouteHandler(() => store, undefined, {
       validatePatch: async () => "agent is unavailable",
     });
     const { res, out } = mockRes();
     await handler(
       mockReq("PUT", "/_centraid-user/prefs", {
-        patch: { "agent.runner.kind": "claude-code" },
+        patch: { "harness.kind": "claude-code" },
       }),
       res
     );
     expect(out.statusCode).toBe(409);
-    expect(store.getAllPrefs()["agent.runner.kind"]).toBe("codex");
+    expect(store.getAllPrefs()["harness.kind"]).toBe("codex");
   });
 
   it("runs post-commit hooks with before and after snapshots", async () => {

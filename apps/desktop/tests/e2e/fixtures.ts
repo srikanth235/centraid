@@ -83,10 +83,10 @@ export interface MockState {
   insights: Record<string, unknown>;
   /** GET /centraid/_brief/today (legacy alias: /daily) */
   dailyBrief: Record<string, unknown>;
-  /** GET /centraid/_turn/runner-status */
-  runnerStatus: Record<string, unknown>;
-  /** GET /centraid/_agents/status */
-  agentsStatus: Record<string, unknown>;
+  /** GET /centraid/_turn/harness-status */
+  harnessStatus: Record<string, unknown>;
+  /** GET /centraid/_harnesses/status */
+  harnessesStatus: Record<string, unknown>;
   /** GET /_centraid-conversations/apps/:appId/sessions → { sessions } */
   conversations: Array<Record<string, unknown>>;
   /** GET /_centraid-conversations/apps/:appId/sessions/:id → messages */
@@ -162,13 +162,13 @@ function defaultState(): MockState {
       balanceMinor: 0,
       currency: "USD",
     },
-    runnerStatus: {
+    harnessStatus: {
       ok: true,
       kind: "local",
       version: "test",
       models: ["tier-fast", "tier-deep"],
     },
-    agentsStatus: { agents: [], models: [] },
+    harnessesStatus: { harnesses: [], models: [] },
     conversations: [],
     conversationMessages: [],
     draftAvailable: true,
@@ -551,15 +551,15 @@ async function route(
   )
     return json(res, 200, s.dailyBrief);
 
-  // ---- runner / agents ----
-  if (p === "/centraid/_turn/runner-status" && method === "GET")
-    return json(res, 200, s.runnerStatus);
-  if (p === "/centraid/_agents/status" && method === "GET")
-    return json(res, 200, s.agentsStatus);
+  // ---- harness / agents ----
+  if (p === "/centraid/_turn/harness-status" && method === "GET")
+    return json(res, 200, s.harnessStatus);
+  if (p === "/centraid/_harnesses/status" && method === "GET")
+    return json(res, 200, s.harnessesStatus);
 
   // ---- vault consent context used by the current automation fleet/thread ----
   if (p === "/centraid/_vault/agents" && method === "GET")
-    return json(res, 200, { agents: [] });
+    return json(res, 200, { harnesses: [] });
   if (p === "/centraid/_vault/blocking" && method === "GET")
     return json(res, 200, {
       outbox: [],
@@ -953,7 +953,7 @@ export function automationTurnItem(over: {
     inputTokens: 100,
     outputTokens: 50,
     model: "tier-deep",
-    provider: "test",
+    harness: "test",
   };
 }
 

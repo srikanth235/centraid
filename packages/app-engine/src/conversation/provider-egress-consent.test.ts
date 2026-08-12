@@ -46,7 +46,7 @@ describe("provider-egress-consent suite", () => {
           .prepare(
             `SELECT source, subsystem, revoked_at
            FROM conversation_provider_consent
-          WHERE conversation_id = ? AND runner_kind = ?
+          WHERE conversation_id = ? AND harness_kind = ?
           ORDER BY source, subsystem`
           )
           .all(first.id, "codex")
@@ -147,7 +147,7 @@ describe("provider-egress-consent suite", () => {
     ).toBe(false);
   });
 
-  test("ladder-membership removal is re-derivable once the user re-adds the runner", () => {
+  test("ladder-membership removal is re-derivable once the user re-adds the harness", () => {
     const provider = newProvider();
     const conversations = new ConversationStore(provider);
     const conversation = conversations.createConversation({
@@ -185,7 +185,7 @@ describe("provider-egress-consent suite", () => {
     expect(consent.has(conversation.id, "codex", "automations")).toBe(true);
   });
 
-  test("a stale ladder row cannot authorize a runner removed while its vault was dormant", () => {
+  test("a stale ladder row cannot authorize a harness removed while its vault was dormant", () => {
     const provider = newProvider();
     const conversations = new ConversationStore(provider);
     const conversation = conversations.createConversation({

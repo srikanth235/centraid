@@ -7,7 +7,7 @@ import type { RegistryEntry } from "../types.js";
  * (that is now the manifest's `kind` field), so the id grammar is a plain
  * slug again and `..` is impossible by construction.
  *
- * This is general app-identity — shared by the agent-run ledger
+ * This is general app-identity — shared by the harness-run ledger
  * (`chat-history`), the automation domain (`automation-ref`,
  * `scaffold-automation`), and anything else that keys on an app folder.
  */
