@@ -294,3 +294,13 @@ The only row in the steering table is the correction identified above. The user'
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | claude-code-34260aef-a04-1785139802-1 | claude-code | 34260aef-a04c-4150-b588-1d4957351e0d | #576 | claude-opus-5 | 44 | 33851 | 4780204 | 26185 | 60080 | 3.2565 | 3050 | 2547879 | 360000237 | 910126 | build(gates): tier the local gate loop by measured cost (#576) |
 | claude-code-34260aef-a04-1785140351-1 | claude-code | 34260aef-a04c-4150-b588-1d4957351e0d | #576 | claude-opus-5 | 38 | 35968 | 4469547 | 12498 | 48504 | 2.7722 | 3088 | 2583847 | 364469784 | 922624 | build(gates): tier the local gate loop by measured cost (#576) |
+
+## Session
+
+<!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
+
+### Identifiers
+
+| date | harness | session |
+| --- | --- | --- |
+| 2026-08-13 | cursor-agent | - |
