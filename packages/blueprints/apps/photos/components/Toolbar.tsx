@@ -86,7 +86,7 @@ export function ToolbarView(props: ToolbarProps) {
 
       {props.tileSize === undefined ||
       props.onStepTileSize === undefined ? null : (
-        <TileSizeStepper
+        <TileSizeControl
           tileSize={props.tileSize}
           onStep={props.onStepTileSize}
         />
@@ -95,9 +95,29 @@ export function ToolbarView(props: ToolbarProps) {
   );
 }
 
-/** Four rungs, XS–L (§4.2). Both controls are labelled: an icon-only control
- *  without a name is not a control (§18). */
-function TileSizeStepper({
+/**
+ * Tile size: ONE property with four rungs, XS–L (§4.2), drawn as four segments.
+ *
+ * WHY FOUR SEGMENTS AND NOT − / + (issue #765). The stepper made a member
+ * press twice to cross the range and never showed them where the range ended;
+ * the four rungs are named, few and fixed, so every one of them can be a
+ * target. The MODEL is unchanged: this is still one member preference walked
+ * by a delta — `onStep(target - tileSize)` — which is the same clamp
+ * (`stepTileSize`) that pinch takes on the phone (§4.2, `pinch.ts`). Two ways
+ * in, one preference, one clamp.
+ *
+ * WHAT IT IS NOT: four named views. The system file is explicit that this is
+ * "one property with four rungs", so the GROUP is named once, by the property
+ * and the member's position in it — `Tile size 3 of 4` — and each segment is
+ * `aria-pressed`, not a tab and not a radio implying four destinations.
+ *
+ * The segments carry no `aria-label`: `XS`/`S`/`M`/`L` is visible text, and a
+ * control that renders its own name and also overrides it is the drift the
+ * repo's aria gate exists to stop (`scripts/lint-aria-labels.mjs`). The group
+ * name is the one place the property is spelled out, which is exactly what a
+ * group name is for.
+ */
+function TileSizeControl({
   tileSize,
   onStep,
 }: {
@@ -105,29 +125,30 @@ function TileSizeStepper({
   onStep: (delta: number) => void;
 }) {
   return (
-    <fieldset className={styles.stepper}>
-      <legend className="kit-sr-only">Tile size</legend>
-      <button
-        type="button"
-        className="kit-icon-btn"
-        aria-label="Smaller tiles"
-        disabled={tileSize === 0}
-        onClick={() => onStep(-1)}
-      >
-        −
-      </button>
-      <span className={styles.rung} aria-live="off">
-        {RUNG_LABELS[tileSize]}
-      </span>
-      <button
-        type="button"
-        className="kit-icon-btn"
-        aria-label="Larger tiles"
-        disabled={tileSize === RUNG_LABELS.length - 1}
-        onClick={() => onStep(1)}
-      >
-        +
-      </button>
+    // A <fieldset> rather than a `role="group"` div: the semantic element is
+    // the one the repo's a11y rules ask for, and the vault filter beside it is
+    // already one. It carries `aria-label` instead of a screen-reader-only
+    // <legend> because the name has to change with the held rung, and two
+    // sources for one accessible name is how they drift apart.
+    <fieldset
+      className={styles.stepper}
+      aria-label={`Tile size ${tileSize + 1} of ${RUNG_LABELS.length}`}
+    >
+      {RUNG_LABELS.map((label, index) => (
+        <button
+          key={label}
+          type="button"
+          className={styles.rung}
+          // A segment is a state a member holds, not a place they navigate to
+          // — and `aria-pressed` is the whole state, read by the tree AND by
+          // the stylesheet, so the held rung can never look one way and
+          // announce another.
+          aria-pressed={index === tileSize}
+          onClick={() => onStep(index - tileSize)}
+        >
+          {label}
+        </button>
+      ))}
     </fieldset>
   );
 }

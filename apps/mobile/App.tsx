@@ -27,6 +27,49 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+// Every screen here is reached only through a `component=` prop on a
+// navigator, and each one's module body is evaluated on first navigation
+// rather than at app start — see `lazy-screens.tsx` for why.
+import {
+  AgendaEvent,
+  AgendaHome,
+  AssistantScreen,
+  AutomationsScreen,
+  DocsHome,
+  DocumentViewer,
+  InsightsScreen,
+  LockerHome,
+  NotesHome,
+  PeopleHome,
+  AlbumDetail,
+  DuplicateReview,
+  DuplicatesShelf,
+  FaceReview,
+  MemoriesView,
+  PhotosPeopleView,
+  PhotoPicker,
+  PhotoLightbox,
+  PhotosHome,
+  PhotosLibrary,
+  PhotosSearch,
+  PhotoStateView,
+  PlacesMap,
+  PlacesView,
+  PlaceDetail,
+  TallyHome,
+  TasksHome,
+  AppDetailScreen,
+  ApprovalsScreen,
+  BackupHealthScreen,
+  CaptureScreen,
+  ConnectorsScreen,
+  DataScreen,
+  DevicesScreen,
+  PhoneStorageScreen,
+  ScanScreen,
+  SettingsScreen,
+  SharingScreen,
+} from "./lazy-screens";
 import { configurePhotoImageCache } from "./src/apps/photos/image-cache";
 import { LINKING } from "./src/deep-links";
 import ErrorBoundary from "./src/ErrorBoundary";
@@ -67,92 +110,6 @@ import type {
 // tree renders instead when the profile says the user has not been through it.
 import HomeScreen from "./src/screens/Home";
 import OnboardingScreen from "./src/screens/Onboarding";
-
-/**
- * Defer a screen module's *evaluation* until the first navigation to it.
- *
- * Metro has no code splitting, so the bytes still ship in the launch bundle —
- * what this buys is that `react-native-maps`, `expo-camera`,
- * `react-native-webview` and `expo-video` no longer run their module bodies
- * (and therefore their `requireNativeComponent` / TurboModule registration) as
- * part of app start. That native-module init is the measurable cold-start cost,
- * not the parse.
- *
- * The wrapper exists so the result stays a plain `ComponentType<P>`:
- * `React.lazy` returns a `LazyExoticComponent`, which react-navigation's
- * `component=` prop does not accept.
- */
-function lazyScreen<P extends object>(
-  load: () => Promise<{ default: React.ComponentType<P> }>
-): React.ComponentType<P> {
-  const Lazy = React.lazy(load);
-  function LazyScreen(props: P): React.JSX.Element {
-    return <Lazy {...props} />;
-  }
-  return LazyScreen;
-}
-
-// Every screen below is reachable only through a `component=` prop on a
-// navigator, so nothing else in this file may reference these bindings — that
-// is what keeps the deferral honest.
-const AgendaEvent = lazyScreen(() => import("./src/apps/agenda/AgendaEvent"));
-const AgendaHome = lazyScreen(() => import("./src/apps/agenda/AgendaHome"));
-const AssistantScreen = lazyScreen(
-  () => import("./src/apps/assistant/Assistant")
-);
-const AutomationsScreen = lazyScreen(
-  () => import("./src/apps/automations/Automations")
-);
-const DocsHome = lazyScreen(() => import("./src/apps/docs/DocsHome"));
-const DocumentViewer = lazyScreen(
-  () => import("./src/apps/docs/DocumentViewer")
-);
-const InsightsScreen = lazyScreen(() => import("./src/apps/insights/Insights"));
-const LockerHome = lazyScreen(() => import("./src/apps/locker/LockerHome"));
-const NotesHome = lazyScreen(() => import("./src/apps/notes/NotesHome"));
-const PeopleHome = lazyScreen(() => import("./src/apps/people/PeopleHome"));
-const AlbumDetail = lazyScreen(() => import("./src/apps/photos/AlbumDetail"));
-const DuplicateReview = lazyScreen(
-  () => import("./src/apps/photos/DuplicateReview")
-);
-const DuplicatesShelf = lazyScreen(
-  () => import("./src/apps/photos/DuplicatesShelf")
-);
-const FaceReview = lazyScreen(() => import("./src/apps/photos/FaceReview"));
-const MemoriesView = lazyScreen(() => import("./src/apps/photos/MemoriesView"));
-const PhotosPeopleView = lazyScreen(
-  () => import("./src/apps/photos/PhotosPeopleView")
-);
-const PhotoPicker = lazyScreen(() => import("./src/apps/photos/PhotoPicker"));
-const PhotoLightbox = lazyScreen(
-  () => import("./src/apps/photos/PhotoLightbox")
-);
-const PhotosHome = lazyScreen(() => import("./src/apps/photos/PhotosHome"));
-const PhotosLibrary = lazyScreen(
-  () => import("./src/apps/photos/PhotosLibrary")
-);
-const PhotosSearch = lazyScreen(() => import("./src/apps/photos/PhotosSearch"));
-const PhotoStateView = lazyScreen(
-  () => import("./src/apps/photos/PhotoStateView")
-);
-const PlacesMap = lazyScreen(() => import("./src/apps/photos/PlacesMap"));
-const PlacesView = lazyScreen(() => import("./src/apps/photos/PlacesView"));
-const PlaceDetail = lazyScreen(() => import("./src/apps/photos/PlaceDetail"));
-const TallyHome = lazyScreen(() => import("./src/apps/tally/TallyHome"));
-const TasksHome = lazyScreen(() => import("./src/apps/tasks/TasksHome"));
-const AppDetailScreen = lazyScreen(() => import("./src/screens/AppDetail"));
-const ApprovalsScreen = lazyScreen(() => import("./src/screens/Approvals"));
-// A FRAME screen since issue #712 B2 — it moved out of the Photos stack whole.
-const BackupHealthScreen = lazyScreen(
-  () => import("./src/screens/BackupHealth")
-);
-const CaptureScreen = lazyScreen(() => import("./src/screens/Capture"));
-const PhoneStorageScreen = lazyScreen(
-  () => import("./src/screens/PhoneStorage")
-);
-const ScanScreen = lazyScreen(() => import("./src/screens/Scan"));
-const SettingsScreen = lazyScreen(() => import("./src/screens/Settings"));
-const SharingScreen = lazyScreen(() => import("./src/screens/Sharing"));
 
 // Held until the profile prefs say onboarding vs app — see the comment on the
 // `onboarded === null` gate in App() for why fonts are deliberately *not* part
@@ -568,6 +525,21 @@ export default function App(): React.JSX.Element | null {
                             <RootStack.Screen
                               name="Insights"
                               component={InsightsScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Connectors"
+                              component={ConnectorsScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Data"
+                              component={DataScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Devices"
+                              component={DevicesScreen}
                               options={COVER_OPTIONS}
                             />
                             <RootStack.Screen

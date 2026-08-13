@@ -101,10 +101,26 @@
   color: var(--text);
 }
 
+/* Destructive is the one exception to the no-hue rule, and it is an OUTLINE:
+   `--net` as border and label over a transparent ground, never a fill (v9,
+   DESIGN.md "net is a border or a 2px rule, never a fill"). The raised paper
+   it used to sit on made it read as a filled control at a glance, which is
+   the read a delete verb must not have.
+
+   Hover steps the border and the label AWAY from the paper (`--net-hover`)
+   and lays the one permitted tint of net underneath — a wash, matching the
+   `--bg-hover` grammar every other variant hovers with, rather than a second
+   mechanism. */
 .destructive {
-  background: var(--bg-elev);
-  border-color: var(--danger);
-  color: var(--danger);
+  background: transparent;
+  border-color: var(--net);
+  color: var(--net);
+}
+
+.destructive:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--net-wash);
+  border-color: var(--net-hover);
+  color: var(--net-hover);
 }
 
 .icon {

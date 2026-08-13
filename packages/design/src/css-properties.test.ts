@@ -91,11 +91,15 @@ describe("generated stylesheet values", () => {
       "--t-reading-size",
       "--t-body-size",
       "--t-body-strong-size",
+      "--t-label-on-size",
       "--t-small-size",
       "--t-small-strong-size",
       "--t-control-size",
       "--t-eyebrow-size",
       "--t-mono-size",
+      "--t-annot-label-size",
+      "--t-annot-label-on-size",
+      "--t-band-size",
     ]);
     // rem = px / 16 — the shell now emits host-relative units (issue #708)
     // so 200% OS text scale, which moves the ROOT font-size, actually reaches
@@ -110,6 +114,10 @@ describe("generated stylesheet values", () => {
       "0.8125rem",
       "0.8125rem",
       "0.8125rem",
+      "0.8125rem",
+      "0.6875rem",
+      "0.6875rem",
+      "0.6875rem",
       "0.6875rem",
       "0.6875rem",
       "0.6875rem",
@@ -155,6 +163,7 @@ describe("generated stylesheet values", () => {
       });
     }
     expect(Object.keys(NATIVE_DELTA_OVERRIDES)).toStrictEqual([
+      "band",
       "bodyStrong",
       "control",
       "display",
@@ -164,6 +173,27 @@ describe("generated stylesheet values", () => {
     ]);
     expect(type.display.size + type.display.nativeDelta.size).toBe(27);
     expect(type.reading.size + type.reading.nativeDelta.size).toBe(17);
+    // A HELD pair has to resolve identically on BOTH surfaces or the row
+    // re-flows exactly where the finger is. The band pair holds at 11/15 on
+    // touch — invariant 1's five-plus-More cap does not fit at the annotation
+    // rung in a 390px band — and the body pair steps together to 15/22.
+    for (const [key, expected] of [
+      ["band", { lineHeight: 15, size: 11 }],
+      ["control", { lineHeight: 15, size: 11 }],
+      ["body", { lineHeight: 22, size: 15 }],
+      ["labelOn", { lineHeight: 22, size: 15 }],
+      ["annotLabel", { lineHeight: 18, size: 13 }],
+      ["annotLabelOn", { lineHeight: 18, size: 13 }],
+    ] as const) {
+      const lowered = nativeTypeStyle(type[key]);
+      expect(
+        { lineHeight: lowered.lineHeight, size: lowered.size },
+        key
+      ).toStrictEqual(expected);
+    }
+    // `bodyStrong` is why `labelOn` exists rather than being reused: it holds
+    // at 13/19 on touch while `body` steps, so it cannot be a held half.
+    expect(nativeTypeStyle(type.bodyStrong).size).toBe(13);
   });
 
   test("every theme publishes exactly the same role set", () => {

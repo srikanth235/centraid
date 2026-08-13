@@ -94,3 +94,16 @@
   unicode-bidi: var(--t-mono-bidi);
   color: var(--text-faint);
 }
+
+/* WAITING IS NOT FAILING (issue #765). Two figures on this screen describe
+   bytes that are on their way rather than bytes that arrived: the Backup
+   verdict `pending`, and the "Queued to be copied elsewhere" row. `--seam` is
+   the role for that exact state — "not yet, and not wrong: pending, expiring,
+   invited" — and using it here is what keeps the screen from having to choose
+   between calling a queue healthy and calling it an alarm. Ink only: the
+   figure stays in the same numeric register, at the same size, in the same
+   place. */
+.headMeta.pending,
+.rowValue.pending {
+  color: var(--seam);
+}

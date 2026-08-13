@@ -59,6 +59,8 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/photos-places.md](docs/photos-places.md) | Places on both surfaces: member-named locations, one shared projection, and why there is no basemap |
 | [docs/photos-dogfood.md](docs/photos-dogfood.md) | Discovery ritual (D2): maintainer real-library import checklist, known stuck-state regression classes, cadence, findings log |
 | [docs/photos-switcher-walkthrough.md](docs/photos-switcher-walkthrough.md) | Day-one switcher script (D3): Google Photos refugee walkthrough (import → timeline → search → share → offload → key photo), honest shipped/partial/gap status per step |
+| [docs/photos-design-notes.md](docs/photos-design-notes.md) | Sanctioned v9 design divergences (copy, mobile band, colour-role and control decisions) and the verified metric-perfect do-not-improve list |
+| [docs/docs-app-design-notes.md](docs/docs-app-design-notes.md) | What the Docs app ships against the v9 handoff, the withholding table (which facts and verbs the seat cannot honestly serve, and where each is enforced), and the known duplications left in place |
 | [docs/recognition-automations.md](docs/recognition-automations.md) | Self-contained recognition handlers: vault content/invoke flow, local model assets, provenance/backfill, OCR (images and PDFs), faces, and live-model evidence |
 | [docs/release/oauth-assist-google.md](docs/release/oauth-assist-google.md) | Google/Cloudflare production and verification evidence gates |
 | [docs/identifiers.md](docs/identifiers.md) | `dev.centraid.*` table (J5) |

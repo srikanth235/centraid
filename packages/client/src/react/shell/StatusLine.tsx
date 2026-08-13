@@ -1,7 +1,11 @@
 import { useSyncExternalStore } from "react";
 import type { CSSProperties, JSX } from "react";
 
-import { readStatus, subscribeStatus } from "./statusChannel.js";
+import {
+  readRouteHealth,
+  readStatus,
+  subscribeStatus,
+} from "./statusChannel.js";
 
 import chrome from "./chrome.module.css";
 
@@ -18,7 +22,12 @@ import chrome from "./chrome.module.css";
 //                 because a tooltip has no mobile.
 //   2. a note   — whatever `statusLine.ts` was last told, optionally with a
 //                 determinate bar and exact counts, or one bounded action.
-//   3. ambient  — the standing sentence for the current route.
+//   3. health   — the standing condition of the route you are on (#765), set
+//                 by the route's own loader through `setRouteHealth`. It sits
+//                 UNDER a transient note because a note is news and health is
+//                 a condition: the news passes, and the condition is still
+//                 there when it does.
+//   4. ambient  — the standing sentence for the shell as a whole.
 //
 // The whole line is `role="status"` / `aria-live="polite"`: it is the shell's
 // announcement channel, so a screen reader hears what a sighted reader sees,
@@ -46,9 +55,21 @@ export default function StatusLine({
   offlineAction,
 }: StatusLineProps): JSX.Element {
   const note = useSyncExternalStore(subscribeStatus, readStatus, readStatus);
+  const health = useSyncExternalStore(
+    subscribeStatus,
+    readRouteHealth,
+    readRouteHealth
+  );
   const progress = note?.progress;
-  const text = offline ? (offlineReason ?? ambient) : (note?.text ?? ambient);
-  const action = offline ? offlineAction : note?.action;
+  // The standing line, when there is no news to put over it.
+  const standing = note ?? health;
+  const text = offline
+    ? (offlineReason ?? ambient)
+    : (standing?.text ?? ambient);
+  const action = offline ? offlineAction : standing?.action;
+  // Only the ROUTE's own verb takes the page tone and the inline rule; an undo
+  // or an offline check is a shell control and keeps the bounded shape.
+  const inline = !offline && !note && Boolean(health?.action);
 
   return (
     <output
@@ -85,6 +106,8 @@ export default function StatusLine({
         <button
           className={chrome.statusAction}
           type="button"
+          data-inline={inline ? "true" : undefined}
+          data-tone={inline ? health?.tone : undefined}
           onClick={() => action.run()}
         >
           {action.label}

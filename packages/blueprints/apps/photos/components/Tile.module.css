@@ -11,10 +11,11 @@
        one place a hue appears is the 2px vault rule, which §2.1 sanctions as a
        CONTENT marker.
 
-   `--net`, `--skel` and `--on-stage` are real roles in `packages/design`
-   (blueprint.ts `themeProps`) but are not in `BLUEPRINT_TOKEN_CONTRACT` yet,
-   so each carries a contract-name fallback rather than silently dropping its
-   declaration where the contract is all that is injected. */
+   `--net`, `--skel`, `--on-stage` and `--seam` are real roles in
+   `packages/design` and are now in `BLUEPRINT_TOKEN_CONTRACT` (contract.ts),
+   so a host that injects only the contract still carries them. The older
+   declarations keep their contract-name fallbacks — harmless, and cheaper to
+   leave than to churn — while new ones name the role alone. */
 
 .tile {
   position: relative;
@@ -167,6 +168,16 @@
 }
 .tile.failed .state {
   color: var(--net, var(--danger));
+}
+/* THE EXPIRING REGISTER (issue #765). Trash's countdown is the one line this
+   slot carries that is neither a failure nor a steady fact: it is a deadline
+   that has not arrived. `--seam` is that role by name — "not yet, and not
+   wrong: pending, expiring, invited" — and it is why the countdown does not
+   have to borrow `--net`, which would paint a whole shelf of perfectly
+   ordinary trashed photographs as an alarm. Still one line of mono on the page
+   colour: only the ink changes. */
+.state.expiring {
+  color: var(--seam);
 }
 
 /* ---- album detail's own Remove — see TileProps.extras ---- */

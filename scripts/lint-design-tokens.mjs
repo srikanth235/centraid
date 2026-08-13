@@ -84,10 +84,20 @@ const declarations = (css, property) => [
 
 const isTokened = (value) => value.includes("var(--");
 
-const TYPE_ROLE =
-  /var\(\s*--t-(?:display|title|reading|body|body-strong|small|small-strong|control|eyebrow|mono)\s*\)/u;
-const TYPE_SIZE_ROLE =
-  /var\(\s*--t-(?:display|title|reading|body|body-strong|small|small-strong|control|eyebrow|mono)-size\s*\)/u;
+/** The ramp's role names, in `typography.ts` order. The four v9 additions
+ * (#765) — the held `label-on` pair, the `annot-label` pair and `band` — are
+ * ramp roles like any other; a `font:` naming one is the tokened form, and
+ * leaving them out of this list counted every correct use as debt. */
+const TYPE_ROLE_NAMES =
+  "display|title|reading|body|body-strong|label-on|small|small-strong|control|eyebrow|mono|annot-label|annot-label-on|band";
+const TYPE_ROLE = new RegExp(
+  String.raw`var\(\s*--t-(?:${TYPE_ROLE_NAMES})\s*\)`,
+  "u"
+);
+const TYPE_SIZE_ROLE = new RegExp(
+  String.raw`var\(\s*--t-(?:${TYPE_ROLE_NAMES})-size\s*\)`,
+  "u"
+);
 
 /** A `--t-<key>` is a `font` **shorthand** — family, weight, size and
  * line-height at once — so it cannot serve a rule that wants only the size.

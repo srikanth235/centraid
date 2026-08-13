@@ -15,6 +15,8 @@ import { palette, paletteDark } from "../palette";
 import {
   ACCENT_HOVER,
   ACCENT_HOVER_DARK,
+  ACCENT_INK_HOVER,
+  ACCENT_INK_HOVER_DARK,
   ACCENT_LIGHT,
   ACCENT_LIGHT_DARK,
   BRAND,
@@ -26,9 +28,15 @@ import {
   LINK_DARK,
   NET,
   NET_DARK,
+  NET_HOVER,
+  NET_HOVER_DARK,
+  NET_WASH,
+  NET_WASH_DARK,
   PAGE,
   RING,
   RING_DARK,
+  SEAM,
+  SEAM_DARK,
   SUCCESS,
   SUCCESS_LIGHT,
   WALL,
@@ -42,6 +50,7 @@ export const lightTheme: Theme = {
   accent: BRAND,
   accentDeep: BRAND,
   accentHover: ACCENT_HOVER,
+  accentInkHover: ACCENT_INK_HOVER,
   accentLight: ACCENT_LIGHT,
   accentText: BRAND,
   // ONE PAGE. The shell and every app in it share this one colour — see
@@ -66,9 +75,11 @@ export const lightTheme: Theme = {
   // `--bg-elev` (a card) because an absence is not a card.
   skel: "#E4E3E0",
   // Measured against the page: text 18.1:1, soft 6.8:1, faint 5.2:1,
-  // ghost 3.5:1 — and against the `mat` tone, the hardest surface in the
-  // system: 16.0 / 6.0 / 4.6 / 3.1. `contrast.test.ts` re-measures both off
-  // the emitted CSS.
+  // ghost 3.5:1 — and against `WALL` (`--bg-app`), the deepest paper and so
+  // the hardest surface in the system: 16.0 / 6.0 / 4.6 / 3.1. The retired
+  // `mat` tone this used to name was one of five per-app surface tones; there
+  // is one page now, and `WALL` is what replaced it as the worst case.
+  // `contrast.test.ts` re-measures both off the emitted CSS.
   text: INK_RAMP.light.text,
   textSoft: INK_RAMP.light.soft,
   textFaint: INK_RAMP.light.faint,
@@ -82,7 +93,10 @@ export const lightTheme: Theme = {
   lineStrong: "#E5E4E1",
   link: LINK,
   net: NET,
+  netHover: NET_HOVER,
+  netWash: NET_WASH,
   ring: RING,
+  seam: SEAM,
   // The veil, at the handoff's own strength (v4 line 5101,
   // `dark?'rgba(0,0,0,.62)':'rgba(26,24,21,.3)'`). Two corrections in one:
   // the ALPHA was 0.48, half again as heavy as specified, and the TINT was
@@ -109,6 +123,7 @@ export const darkTheme: Theme = {
   accent: BRAND_DARK,
   accentDeep: BRAND_DARK,
   accentHover: ACCENT_HOVER_DARK,
+  accentInkHover: ACCENT_INK_HOVER_DARK,
   accentLight: ACCENT_LIGHT_DARK,
   accentText: BRAND_DARK,
   bg: PAGE.dark,
@@ -133,7 +148,10 @@ export const darkTheme: Theme = {
   lineStrong: "#232322",
   link: LINK_DARK,
   net: NET_DARK,
+  netHover: NET_HOVER_DARK,
+  netWash: NET_WASH_DARK,
   ring: RING_DARK,
+  seam: SEAM_DARK,
   // 0.62, the handoff's dark value (v4 line 5101) — was 0.72, which on an
   // already near-black page left almost nothing of the surface behind it.
   scrim: "rgba(0,0,0,0.62)",

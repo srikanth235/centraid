@@ -5,9 +5,10 @@ import Icon from "../ui/Icon.js";
 import { mechanismLabel } from "./atlasBrowseData.js";
 import type { DeleteState } from "./atlasBrowseData.js";
 
-import styles from "./AtlasBrowseTab.module.css";
+import styles from "./AtlasRecordsSection.module.css";
 
-// The delete-confirmation dialog (issue #441 B3), split out of AtlasBrowseTab.
+// The delete-confirmation dialog (issue #441 B3), split out of the records
+// section.
 // Lists the rows that depend on the target (engine FK + polymorphic), badges
 // each mechanism, and blocks the delete outright when an engine FK still points
 // at the row — the database would refuse it anyway.

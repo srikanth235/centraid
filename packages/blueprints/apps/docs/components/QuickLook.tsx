@@ -33,12 +33,18 @@ import styles from "./QuickLook.module.css";
 export function QuickLook({
   doc,
   rows,
+  narrow,
   folderName,
   onClose,
   onStep,
 }: {
   doc: DriveDoc;
   rows: DriveDoc[];
+  /** The compact form factor — the stage loses its side padding and the
+   *  Download label collapses to its glyph. Carried as a prop and stamped on
+   *  this component's own dialog, never read off a global state class another
+   *  module owns (trap #5). */
+  narrow: boolean;
   folderName: (id: string | null | undefined) => string;
   onClose: () => void;
   onStep: (delta: number) => void;
@@ -138,6 +144,7 @@ export function QuickLook({
     <dialog
       open
       className={styles.quick}
+      data-narrow={String(narrow)}
       aria-modal="true"
       aria-label="Quick look"
     >

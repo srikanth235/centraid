@@ -1,0 +1,119 @@
+/* The filter row (Docs spec §4.2).
+
+   Pills are CONTROLS, so they take the control radius and the control height;
+   a set pill is marked by ink weight and a stronger hairline, never by a fill
+   — the view's one filled element belongs to its commit. */
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-inline: var(--sp-4);
+  padding-block: var(--sp-3) 0;
+}
+
+.pill {
+  position: relative;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-block-size: var(--h-control);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  font: var(--t-control);
+  color: var(--text-soft);
+  cursor: pointer;
+  list-style: none;
+}
+.summary::-webkit-details-marker {
+  display: none;
+}
+.summary:hover {
+  background: var(--bg-hover);
+}
+.summary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.summary[data-set="true"] {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.pillLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-inline-size: 24ch;
+}
+.chev {
+  color: var(--text-faint);
+}
+
+.menu {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: calc(100% + var(--sp-1));
+  z-index: 20;
+  min-inline-size: 15em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-md);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--target-min);
+  padding-inline: var(--sp-2);
+  border-radius: var(--r-sm);
+  font: var(--t-small);
+  color: var(--text);
+  cursor: pointer;
+}
+.option:hover {
+  background: var(--bg-hover);
+}
+
+.clearOne,
+.clearAll {
+  font: var(--t-small);
+  color: var(--text-soft);
+  text-decoration: underline;
+}
+.clearOne {
+  align-self: flex-start;
+  padding-inline: var(--sp-2);
+  min-block-size: var(--target-min);
+}
+.clearAll:hover,
+.clearOne:hover {
+  color: var(--text);
+}
+.clearAll:focus-visible,
+.clearOne:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
+}

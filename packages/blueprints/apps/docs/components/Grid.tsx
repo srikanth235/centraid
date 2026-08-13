@@ -14,6 +14,7 @@ import {
   typeMeta,
 } from "../format.ts";
 import type { DriveDoc } from "../types.ts";
+import { RowStateSlot, rowStateFor } from "./RowStateSlot.tsx";
 import { Checkbox, CustodyDot } from "./Shared.tsx";
 
 import styles from "./Grid.module.css";
@@ -22,6 +23,8 @@ import shared from "./shared.module.css";
 export function GridCard({
   doc,
   index,
+  offline,
+  trashed,
   selectedIds,
   onOpenDetails,
   onOpenQuick,
@@ -29,6 +32,10 @@ export function GridCard({
 }: {
   doc: DriveDoc;
   index: number;
+  /** The gateway is out of reach — rung 4 of the row state ladder (§4.1). */
+  offline: boolean;
+  /** This card is in Trash, where the slot carries the purge date. */
+  trashed: boolean;
   selectedIds: Set<string>;
   onOpenDetails: (id: string) => void;
   onOpenQuick: (id: string) => void;
@@ -38,6 +45,7 @@ export function GridCard({
   const selected = selectedIds.has(doc.document_id);
   // The document's real first words, when its bytes rode along inline. A
   // decorative mock of a page is only honest when there is nothing to show.
+  const rowState = rowStateFor(doc, { trashed, offline });
   const body = inlineText(doc);
   const excerpt = body ? textExcerpt(body) : "";
   return (
@@ -137,7 +145,13 @@ export function GridCard({
         </div>
         <div className={styles.cardMeta}>
           {fmtBytes(doc.byte_size)} · {fmtDate(doc.created_at)}
-          <CustodyDot state={doc.custody_state} />
+          {/* The same one-mark slot the list row carries (§4.1): the card is
+              a different layout of the same row, not a different set of
+              facts about it. */}
+          <RowStateSlot
+            input={rowState}
+            fallback={<CustodyDot state={doc.custody_state} />}
+          />
         </div>
         <PendingWriteActions
           row={doc as unknown as Record<string, unknown>}

@@ -5,6 +5,7 @@ import type { MouseEvent } from "react";
 import { custodyRowMark } from "../format.ts";
 import { I } from "../icons.ts";
 import type { CustodyTone } from "../types.ts";
+import { OFFLINE_BANNER, OFFLINE_BANNER_ACTION } from "../view-copy.ts";
 
 import styles from "./shared.module.css";
 
@@ -100,5 +101,19 @@ export function Snippet({ snippet }: { snippet: string }) {
         part ? i % 2 === 1 ? <mark key={i}>{part}</mark> : part : null
       )}
     </div>
+  );
+}
+
+// §11's offline banner — ONE paragraph, ONE action, drawn above every route
+// body (app-root.tsx) because it changes what all of them can promise: counts
+// read from this device, documents that cannot be opened, search unavailable.
+export function OfflineBanner({ onRetry }: { onRetry: () => void }) {
+  return (
+    <output className={styles.offline}>
+      <p className={styles.offlineText}>{OFFLINE_BANNER}</p>
+      <button type="button" className="kit-btn" onClick={onRetry}>
+        {OFFLINE_BANNER_ACTION}
+      </button>
+    </output>
   );
 }

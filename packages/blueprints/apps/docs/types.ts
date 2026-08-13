@@ -6,6 +6,8 @@
 // search, `snippet` present only on a search hit); `Folder` is the folders-scheme
 // concept projected as a nav row; `VersionEntry`/`ActivityEvent` are what the
 // `history`/`activity` reads hand the History/Activity panels.
+import type { DriveFilters } from "./filters.ts";
+import type { ShelfId } from "./shelves.ts";
 
 /** One free-form label on a document (core.tag_item over the shared Tags scheme). */
 export interface DocTag {
@@ -44,18 +46,6 @@ export interface Folder {
   folder_id: string;
   name: string;
   parent_id: string | null;
-}
-
-/**
- * The current sidebar navigation selection. `folderId` is optional (present
- * only when `kind === 'folder'`) — kept flat rather than a discriminated union
- * because the sidebar render threads `nav.folderId` down unconditionally, and
- * the JS this ports read it as `undefined` for every non-folder view.
- */
-export type NavKind = "all" | "recent" | "starred" | "folder" | "trash";
-export interface Nav {
-  kind: NavKind;
-  folderId?: string;
 }
 
 /** One entry in a document's version chain (the `history` read). */
@@ -114,10 +104,26 @@ export interface AppData {
  */
 export interface AppState {
   view: "grid" | "list";
-  nav: Nav;
+  /**
+   * The current shelf (shelves.ts). This replaced the flat
+   * `NavKind = all|recent|starred|folder|trash` bag: a shelf is a value the
+   * strip, the band, the app bar, the breadcrumb and the row set all read, so
+   * expressing it as one id — with `null` for All and `folder:<id>` for one
+   * folder — is what keeps those five surfaces from disagreeing about where
+   * the member is. Nothing persists it, so the migration needed no upgrade
+   * path.
+   */
+  shelf: ShelfId;
+  /**
+   * The filter row's selections (§4.2), one per axis. Separate from the older
+   * `type`/`tag` chips because they are a different control with a different
+   * rule: the four axes COMPOSE, and §4.6's fourth empty variant is "a filter
+   * with no matches", which is only answerable if "is anything set" has one
+   * home (`filtersActive`).
+   */
+  filters: DriveFilters;
   sortKey: "added" | "name" | "size";
   sortDir: 1 | -1;
-  type: string;
   tag: string;
   search: string;
   searchResults: DriveDoc[] | null;
@@ -126,6 +132,15 @@ export interface AppState {
   anchorIndex: number | null;
   detailsId: string | null;
   quickId: string | null;
+  /**
+   * The document open in the READING view (§6.1) — a route, not an overlay:
+   * text renders on paper at a 34em measure, and paper is a screen. Quick Look
+   * (`quickId`) stays the interim viewer for the kinds that belong on the
+   * stage, which has not landed yet.
+   */
+  readingId: string | null;
+  /** The document whose version history (§6.2) is open, as its own route. */
+  versionsId: string | null;
   editingId: string | null;
   newMenuOpen: boolean;
   creatingFolder: boolean;
@@ -135,12 +150,4 @@ export interface AppState {
   visibleRows: DriveDoc[];
   driveWindow: number;
   driveTruncated: boolean;
-}
-
-/** The empty-state copy (format.ts's `emptyStateFor`). */
-export interface EmptyStateCfg {
-  icon: string;
-  title: string;
-  sub: string;
-  needsUpload?: string;
 }

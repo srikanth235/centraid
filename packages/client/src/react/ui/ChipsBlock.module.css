@@ -1,0 +1,62 @@
+/* Filter chips (v9 §8).
+
+   HEIGHT: the brief draws the chip at the segmented rung (28 under a pointer).
+   In page CONTENT that is under the hit-target floor, and the floor is not
+   advisory — so the pill takes `--target-min`, which the token layer already
+   lowers to the control rung under `(pointer: fine)` and holds at 44 on touch.
+   `Button.module.css` `.chrome` is the one sanctioned exception to that floor
+   and it is window furniture, which a filter chip is not. */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding-block-end: var(--sp-3);
+}
+
+.chip {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  color: var(--text);
+  display: inline-flex;
+  flex: none;
+  font: var(--t-body);
+  min-block-size: var(--target-min);
+  padding-inline: var(--sp-3);
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+  white-space: nowrap;
+}
+
+.chip:hover {
+  background: var(--bg-hover);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+/* The HELD pair: `--t-body` → `--t-label-on` changes the weight and nothing
+   else, so a row of chips cannot re-flow the moment one of them is chosen. */
+.chip[aria-pressed="true"] {
+  background: var(--bg-sunken);
+  border-color: var(--text);
+  font: var(--t-label-on);
+}
+
+/* The numeric register — Analytics' window picker. Same held rule, one rung
+   down, plus the tabular/isolate/ltr triad. */
+.chips[data-mono="true"] .chip {
+  direction: var(--t-mono-direction);
+  font: var(--t-annot-label);
+  font-variant-numeric: var(--t-mono-numeric);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+.chips[data-mono="true"] .chip[aria-pressed="true"] {
+  font: var(--t-annot-label-on);
+}

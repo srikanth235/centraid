@@ -60,6 +60,8 @@ function themeProps(theme: Theme): Record<string, string> {
     "--accent-deep": theme.accentDeep,
     "--accent-fill": theme.accentDeep,
     "--accent-deep-hover": theme.accentHover,
+    // The OUTLINE's hover, which steps the other way — see roles.ts.
+    "--accent-hover": theme.accentInkHover,
     "--accent-light": theme.accentLight,
     "--accent-soft": `color-mix(in oklab, ${theme.accent} 8%, transparent)`,
     "--accent-text": theme.accentText,
@@ -87,7 +89,12 @@ function themeProps(theme: Theme): Record<string, string> {
     "--line-sel": "color-mix(in oklab, var(--link) 42%, var(--line))",
     "--link": theme.link,
     "--net": theme.net,
+    "--net-hover": theme.netHover,
+    // A concrete `rgba()`, not a `color-mix()`: this is the one wash whose
+    // alpha differs per theme, and it is built from `--net` in the registry.
+    "--net-wash": theme.netWash,
     "--on-accent": theme.textInv,
+    "--seam": theme.seam,
     // The stage is the media ground for viewer/slideshow/editor — deliberately
     // the SAME literal in both themes (Photos handoff v4 §B), unlike every
     // other role in this block.
@@ -173,6 +180,9 @@ export function toCss(): string {
   staticProps["--h-row"] = `${metrics.row}px`;
   staticProps["--h-segmented"] = `${metrics.segmented}px`;
   staticProps["--w-stem"] = `${metrics.stem}px`;
+  // Touch-first like `--page-margin`: the touch column at :root, the pointer
+  // column under `(pointer: fine)` below.
+  staticProps["--w-key-col"] = `${metrics.keyColTouch}px`;
   // THE PAGE MARGIN, emitted so the web stops guessing it. Native already
   // reads this scale (`toNativeTheme` lowers the mobile rung) and every phone
   // screen insets by it; the web had no token at all, so blueprints hardcoded
@@ -199,6 +209,7 @@ export function toCss(): string {
   const pointerProps: Record<string, string> = {
     "--page-margin": `${pageMargin.desktop}px`,
     "--target-min": `${metrics.control}px`,
+    "--w-key-col": `${metrics.keyCol}px`,
   };
   for (const [key, value] of Object.entries(type)) {
     pointerProps[`--t-${typeKeyToKebab(key)}`] = typeShorthand(value);

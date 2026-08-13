@@ -14,6 +14,8 @@ colors:
   accent-deep-dark: "#EDEDEC"
   accent-hover: "#000000"
   accent-hover-dark: "#FFFFFF"
+  accent-ink-hover: "#2E2E2D"
+  accent-ink-hover-dark: "#D2D2D1"
   accent-text: "#141414"
   accent-text-dark: "#EDEDEC"
   accent-soft: "rgba(20,20,20,.08)"
@@ -21,6 +23,12 @@ colors:
   link-dark: "#9DB0F0"
   net: "#9A3B2E"
   net-dark: "#E08878"
+  net-hover: "#7F3026"
+  net-hover-dark: "#EC9C8D"
+  net-wash: "rgba(154,59,46,.07)"
+  net-wash-dark: "rgba(224,136,120,.11)"
+  seam: "#B4441F"
+  seam-dark: "#E0864F"
   stage: "#0B0B0B"
   on-stage: "#EDEDEC"
   stage-line: "#2A2A29"
@@ -70,9 +78,9 @@ colors:
   light-bg-elev: "#F5F4F2"
   light-bg-sunken: "#F9F8F6"
   light-text: "#141414"
-  light-text-soft: "#4A4A48"
-  light-text-faint: "#5A5A58"
-  light-text-ghost: "#6C6C69"
+  light-text-soft: "#5A5A58"
+  light-text-faint: "#6C6C69"
+  light-text-ghost: "#888885"
   light-text-disabled: "#9C9C99"
   light-text-inv: "#FDFDFC"
   light-line: "#EFEEEB"
@@ -82,9 +90,9 @@ colors:
   dark-bg-elev: "#171716"
   dark-bg-sunken: "#121211"
   dark-text: "#EDEDEC"
-  dark-text-soft: "#ADADAB"
-  dark-text-faint: "#9A9A98"
-  dark-text-ghost: "#878785"
+  dark-text-soft: "#9A9A98"
+  dark-text-faint: "#878785"
+  dark-text-ghost: "#656563"
   dark-text-disabled: "#565654"
   dark-text-inv: "#0E0E0E"
   dark-line: "#1B1B1A"
@@ -119,6 +127,11 @@ typography:
     fontSize: "13px"
     fontWeight: "600"
     lineHeight: "19px"
+  label-on:
+    fontFamily: "Instrument Sans"
+    fontSize: "13px"
+    fontWeight: "600"
+    lineHeight: "19px"
   small:
     fontFamily: "Instrument Sans"
     fontSize: "13px"
@@ -147,6 +160,21 @@ typography:
     fontWeight: "400"
     lineHeight: "15px"
     fontVariantNumeric: "tabular-nums"
+  annot-label:
+    fontFamily: "Instrument Sans"
+    fontSize: "11px"
+    fontWeight: "400"
+    lineHeight: "15px"
+  annot-label-on:
+    fontFamily: "Instrument Sans"
+    fontSize: "11px"
+    fontWeight: "600"
+    lineHeight: "15px"
+  band:
+    fontFamily: "Instrument Sans"
+    fontSize: "11px"
+    fontWeight: "400"
+    lineHeight: "15px"
 rounded:
   xs: "0px"
   sm: "4px"
@@ -346,6 +374,15 @@ The Binding Layer brief names its roles differently from this repo. The values p
 | `link` | `--link` | New role. Prose links and selection only. |
 | `ring` | `--focus-ring-color` | New value. 2px at a 2px offset via `--focus-ring`. |
 | `net` | `--net` | New role. Borders and 2px rules only, never a fill. |
+| `netHover` | `--net-hover` | The outlined destructive control under hover — border and label together, stepped AWAY from the paper. |
+| `netWash` | `--net-wash` | The one permitted tint of `--net`: 7% light, 11% dark, built from `--net` itself. |
+| `seam` | `--seam` | "Not yet, and not wrong" — pending, expiring, invited. |
+| `accentHover` | `--accent-hover` | The ink under hover when it is the LINE and the LABEL. Distinct from `--accent-deep-hover`, which is the FILL's hover and steps the other way. |
+| `ghost` | `--text-ghost` | The faintest rung. Placeholders and unavailable glyphs; forbidden in body copy, so its floor is 3:1, not 4.5. |
+| `label` / `band-on` | `--t-body` / `--t-control` | **No new role.** Each is value-identical to an existing rung at BOTH surfaces and carries no modifier the other lacks; a second name for one value is the defect this table exists to prevent. |
+| `label-on` | `--t-label-on` | New role. `--t-body-strong` could not serve: it holds at 13/19 on touch while `--t-body` steps to 15/22, so the pair would break where the finger is. |
+| `annot-label` / `annot-label-on` | `--t-annot-label` / `--t-annot-label-on` | New roles. Same rung as `--t-mono`, different contract: `--t-mono` is the NUMERIC register and pins `ltr`/`isolate`, which is exactly wrong for a word. |
+| `band` | `--t-band` | New role, and the only one in the ramp that does not step up on touch. |
 
 Retired with the flip: the teal brand hue, the five-accent `ACCENT_PALETTE` and the native `accentKey` parameter, the `--bg-l` dark-ramp anchor, `--t-hero`, `--t-greeting`, and the 48px spacing rung.
 
@@ -368,11 +405,17 @@ Home takes no hue: it renders in `--text-soft`. Colour is never the only channel
 
 Three hues are reserved and named. `--link` is prose links and text selection, and is never permitted on a control; `--bg-sel` and `--line-sel` are washes of it. `--focus-ring-color` is the ring. `--net` is "this leaves the device" — a border or a 2px rule, never a fill, because nothing alarming should be a large filled surface. `--danger` is solved from the same base as `--net` so a destructive action and a network egress read as one consequence.
 
+`--net` carries two rungs of its own. `--net-hover` (`#7F3026` / `#EC9C8D`) is the outlined destructive control under the pointer — the border and the label together, since there is no ground to move — and it steps AWAY from the paper, because a warning that gets quieter under the pointer is the wrong answer. `--net-wash` (`rgba(154,59,46,.07)` / `rgba(224,136,120,.11)`) is the ONE tint of `--net` the system permits, and it is the exception that states the rule rather than breaking it: it is faint enough that `--net` and the whole ink ramp still clear AA painted on top of it, which is precisely what keeps it from becoming the large alarming surface `--net` forbids. It is built from `--net` rather than typed beside it, and it is the one wash whose alpha differs per theme — a tint on near-black has to work harder to be seen — so it lowers as a concrete `rgba()` in all three syntaxes instead of the shared `color-mix(… N%, transparent)` that `--accent-soft` and `--bg-sel` use.
+
+`--seam` (`#B4441F` / `#E0864F`) is the state the system otherwise had no word for: **not yet, and not wrong** — pending, expiring, invited. `--warning` says a reading is degraded and `--net` says bytes leave the device, and neither is true of an invitation nobody has accepted. It is a border, a status chip, and status text, on the same terms as `--net`: never a large filled surface.
+
+`--accent-hover` (`#2E2E2D` / `#D2D2D1`) is the ink under hover when the ink is the LINE and the LABEL rather than a fill — the outlined and quiet controls. It steps TOWARD the paper, the opposite way from `--accent-deep-hover`, and the asymmetry is forced rather than chosen: a fill's hover must move away from the ink it carries, the accent already sits at the end of its own ramp, and an outline carries nothing on top of itself, so the only direction left costs contrast against the page and nothing else.
+
 `--stage` and `--on-stage` are the opaque media ground and its ink for a viewer, a slideshow, and an editor (the Photos v4 handoff, §2.2/§B) — `#0B0B0B` / `#EDEDEC`, **the same literal in both themes**, because the media ground does not follow the theme: a viewer that lightened under "light mode" would blow out the photograph it is framing. `--stage-line` (`#2A2A29`) is the hairline between chrome and media ON the stage, because `--line` is invisible against near-black. `--stage-sunken` (`#1A1A19`) is the recess cut INTO the stage — the media transport's unplayed track and any other trough whose fill is `--on-stage` — because `--bg-sunken` follows the PAGE and would punch a near-white hole in the media ground, while `--stage-line` is tuned to be seen as an edge where a trough is tuned to recede. `--skel` (`#E4E3E0` / `#1E1E1D`) is the ground a tile paints before its bytes arrive; `--bg-elev` reads as a card, and an absence is not a card, so a loading tile gets its own rung rather than borrowing one that implies content already landed. None of the three moves a token that existed before it, and none is a new hue.
 
 The surface roles are `--bg`, `--bg-app`, `--bg-elev`, `--bg-sunken`, `--bg-wall`, `--bg-chrome`, `--bg-hud`, `--bg-hover`, `--bg-press`, and `--bg-sel`. **There is one page, and an app does not retune it.** A per-app surface-tone axis (`data-tone` → `--bg-tone-*`, five tones) shipped and was retired for two reasons, both measured: retuning `--bg` alone while `--bg-elev`/`--bg-sunken`/`--skel` stayed pinned inverted the paper metaphor — Photos drew cards LIGHTER than its page in light mode, where the system's rule is that raised paper is darker-in-light and lighter-in-dark — and, on device, four of the five tones sat within 0.7 L* of neutral while dark mode's whole spread was 2.4 L*, an axis nobody could perceive. If a page tone ever returns, it must carry its whole surface SET — page, elev, sunken, and skel together — never `--bg` alone. Surfaces are PAPER, not elevation: in light the raised surface is darker than the page, in dark it is lighter — a tile is a sheet laid on the page, not a plane floating above it.
 
-The ink roles are `--text`, `--text-soft`, `--text-faint`, `--text-ghost`, `--text-inv`, `--on-accent`, and `--text-disabled`. **`--text-faint` is validated against the deepest surface in the system, not against `--bg`** — in dark every raised surface is lighter than the page, and in light `--bg-wall` is deeper than both, so measuring on the page alone guarantees a failure the moment text lands on a card. Lines are `--line` (hairline separators, tile borders), `--line-strong` (control borders, section rules), and `--line-sel`. Focus is `--focus-ring` plus `--focus-ring-color` on web and blueprint; native owns its platform focus treatment.
+The ink roles are `--text`, `--text-soft`, `--text-faint`, `--text-ghost`, `--text-inv`, `--on-accent`, and `--text-disabled`. **`--text-faint` is validated against the deepest surface in the system, not against `--bg`** — in dark every raised surface is lighter than the page, and in light `--bg-wall` is deeper than both, so measuring on the page alone guarantees a failure the moment text lands on a card. The ladder is four levels — `#141414` / `#5A5A58` / `#6C6C69` / `#888885` in light and `#EDEDEC` / `#9A9A98` / `#878785` / `#656563` in dark — and its obligations are not all the same: `--text`, `--text-soft`, and `--text-faint` owe AA on every surface (measured against `--bg-app`, the worst of them: 6.02:1 and 4.58:1 for the two secondary rungs), while `--text-ghost` owes 3:1, because its own role forbids it from carrying body copy at all. Deepening the secondary rungs past their floors is not free — the ramp is only a ramp while its rungs are tellable apart, which is why the floors are paired with an ordering assertion rather than trusted alone. Lines are `--line` (hairline separators, tile borders), `--line-strong` (control borders, section rules), and `--line-sel`. Focus is `--focus-ring` plus `--focus-ring-color` on web and blueprint; native owns its platform focus treatment.
 
 The semantic states are `--success`, `--warning`, and `--danger`. Each is solved per theme against the hardest surface it lands on AND against a 12% wash of itself; hue separation is measured in Oklab, so a merely legible grey is not a status colour. Disabled text uses `--text-disabled`; non-text disabled affordances use `--o-disabled: 0.45` once, on the LEAF, never on a container — opacity composites every descendant and silently invalidates token-level contrast.
 
@@ -394,6 +437,14 @@ There is **one** bundled face, shipped from the repo with no network fetch: `Ins
 | `--t-control` | Micro | Instrument Sans | 11 / 15 | 600 | 0 / 0 |
 | `--t-eyebrow` | Micro caps | Instrument Sans | 11 / 15, +0.06em, uppercase | 600 | 0 / 0 |
 | `--t-mono` | Numeric annotation | Instrument Sans | 11 / 15, tabular-nums | 400 | +2 / +3 |
+| `--t-label-on` | Held label, active | Instrument Sans | 13 / 19 | 600 | +2 / +3 |
+| `--t-annot-label` | Held annotation label | Instrument Sans | 11 / 15 | 400 | +2 / +3 |
+| `--t-annot-label-on` | Held annotation label, active | Instrument Sans | 11 / 15 | 600 | +2 / +3 |
+| `--t-band` | Compact band label | Instrument Sans | 11 / 15 | 400 | 0 / 0 |
+
+A **held pair** is a label that bolds when it becomes active: the `-on` half changes the weight and keeps the size and the leading, so a row of chips or a band of tabs cannot re-flow the moment one of them is chosen. A pair only holds if both halves resolve the same way on BOTH surfaces. There are three, and only four of the six halves are new roles: `--t-body`/`--t-label-on` at the body rung, `--t-annot-label`/`--t-annot-label-on` at the annotation rung, and `--t-band`/`--t-control` in the compact band. `--t-body-strong` is not a held half — it holds at 13 / 19 on touch while `--t-body` steps to 15 / 22 — and `--t-mono` is not the annotation label, because the numeric register binds tabular figures and its own `ltr`/`isolate` direction, which is exactly wrong for a word.
+
+`--t-band` is the one role in the ramp that does not step up on touch, and the exception is arithmetic rather than editorial: invariant 1 caps the compact band at five destinations plus More, and at 390px those six labels come to 338px inside a 358px band at 11 / 15 — 386px at the annotation rung, which does not fit at any padding. Its active half is `--t-control`, which already holds on the same rung, so the pair stays held on both surfaces.
 
 The legacy `mono` role name survives for consumer compatibility, but its meaning is numeric annotation in Instrument Sans. Fixed advance belongs to `--font-code`, not to that role.
 
@@ -401,15 +452,15 @@ Link is not a size role: it inherits, takes `--link`, and is always underlined.
 
 Every `--t-*` is a `font` shorthand, and the properties that shorthand cannot carry travel beside it as their own tokens rather than as decoration a stylesheet has to remember: `--t-display-tracking` −0.02em, `--t-title-tracking` −0.01em, `--t-eyebrow-tracking` 0.06em, `--t-eyebrow-transform` uppercase, and `--t-mono-numeric` tabular-nums. "Numerics are tabular in every app, without exception" is only true while that last one exists and is used.
 
-The numeric role also declares its own reading direction: `--t-mono-direction` `ltr` and `--t-mono-bidi` `isolate`, set once on the role, never per span. A number is not a word — under RTL the bidi algorithm reorders a mixed digit-and-word run unless the role pins its direction and isolates it; a layout container must never carry the numeric face. Every role publishes a composable size token: `--t-display-size` 32px, `--t-title-size` 20px, `--t-reading-size` 17px, `--t-body-size` 13px, `--t-body-strong-size` 13px, `--t-small-size` 13px, `--t-small-strong-size` 13px, `--t-control-size` 11px, `--t-eyebrow-size` 11px, and `--t-mono-size` 11px. Duplicate values keep semantic names because pointer/touch moves roles onto different rungs; deduplicating by value would make a token change meaning across the surface boundary. There are no line-height rungs.
+The numeric role also declares its own reading direction: `--t-mono-direction` `ltr` and `--t-mono-bidi` `isolate`, set once on the role, never per span. A number is not a word — under RTL the bidi algorithm reorders a mixed digit-and-word run unless the role pins its direction and isolates it; a layout container must never carry the numeric face. Every role publishes a composable size token: `--t-display-size` 32px, `--t-title-size` 20px, `--t-reading-size` 17px, `--t-body-size` 13px, `--t-body-strong-size` 13px, `--t-small-size` 13px, `--t-small-strong-size` 13px, `--t-control-size` 11px, `--t-eyebrow-size` 11px, `--t-mono-size` 11px, `--t-label-on-size` 13px, `--t-annot-label-size` 11px, `--t-annot-label-on-size` 11px, and `--t-band-size` 11px. Duplicate values keep semantic names because pointer/touch moves roles onto different rungs; deduplicating by value would make a token change meaning across the surface boundary. There are no line-height rungs.
 
-The pointer/touch axis resolves once per renderer. On touch, display steps down to 27 / 31; title and reading hold; body and section roles step up; annotation becomes 13 / 18; micro holds at 11 / 15. The generated shell and blueprint sheets default to touch and override once under `(pointer: fine)`; native consumes the same pre-lowered values without parsing CSS. Width changes measure and column count, never type.
+The pointer/touch axis resolves once per renderer. On touch, display steps down to 27 / 31; title and reading hold; body and section roles step up; annotation becomes 13 / 18; micro and the compact band hold at 11 / 15. The generated shell and blueprint sheets default to touch and override once under `(pointer: fine)`; native consumes the same pre-lowered values without parsing CSS. Width changes measure and column count, never type.
 
 ## Layout
 
 `--sp-1` 4px, `--sp-2` 8px, `--sp-3` 12px, `--sp-4` 16px, `--sp-5` 24px, and `--sp-6` 32px are the one spacing scale; the 48px rung retired because the system's largest rhythm step is the 32px desktop content margin. Content margin is its own scale beside the gaps — 32px desktop, 18px mobile — because a page margin is the distance from the paper's edge to the text block, not a gap between two things; the mobile value deliberately does not sit on the 4px ladder, and native lowers it as `pageMargin`.
 
-The component metrics are tokens, not conventions: `--h-control` 34px, `--h-row` 44px, `--h-segmented` 28px, and `--w-stem` 240px. Density tiers move `--density-row` and `--density-pad` only — comfortable 44/16, compact 38/12, dense 34/8 — and never control size, because a control below 34px stops being reliably hittable. Mobile renders one tier looser than declared.
+The component metrics are tokens, not conventions: `--h-control` 34px, `--h-row` 44px, `--h-segmented` 28px, `--w-stem` 240px, and `--w-key-col` — the fact-list key column, 150px under a pointer and 110px on touch, narrowing rather than wrapping so the value edge stays aligned. Density tiers move `--density-row` and `--density-pad` only — comfortable 44/16, compact 38/12, dense 34/8 — and never control size, because a control below 34px stops being reliably hittable. Mobile renders one tier looser than declared.
 
 Radii are `--r-xs` 0px (content), `--r-sm` 4px (the one sub-control rung), `--r-md` 7px (controls), `--r-lg` 12px (containers), and `--r-pill` 999px. An app icon container is 26% of its own size, which no static token can carry — `iconChipRadius()` in [packages/design/src/radii.ts](packages/design/src/radii.ts) is the one source for it.
 

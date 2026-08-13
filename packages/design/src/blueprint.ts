@@ -61,6 +61,7 @@ function themeProps(theme: Theme): Record<string, string> {
     "--accent-deep": theme.accentDeep,
     "--accent-fill": theme.accentDeep,
     "--accent-deep-hover": theme.accentHover,
+    "--accent-hover": theme.accentInkHover,
     "--accent-light": theme.accentLight,
     "--accent-soft": "color-mix(in oklab, var(--accent) 8%, transparent)",
     "--accent-text": theme.accentText,
@@ -80,7 +81,10 @@ function themeProps(theme: Theme): Record<string, string> {
     "--line-sel": "color-mix(in oklab, var(--link) 42%, var(--line))",
     "--link": theme.link,
     "--net": theme.net,
+    "--net-hover": theme.netHover,
+    "--net-wash": theme.netWash,
     "--on-accent": theme.textInv,
+    "--seam": theme.seam,
     // The media stage is fixed across themes; its foreground is too.
     "--on-stage": ON_STAGE,
     "--on-stage-soft": ON_STAGE_SOFT,

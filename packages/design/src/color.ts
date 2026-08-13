@@ -122,6 +122,20 @@ export function parseColor(value: string): ParsedColor {
   throw new Error(`unparseable colour: ${value}`);
 }
 
+/**
+ * A hex at an alpha, as `rgba()`.
+ *
+ * This is the one place a WASH is built from an opaque rung, so a tint of a
+ * role can never drift from the role it tints: change `NET` and `--net-wash`
+ * moves with it. The leading zero of the alpha is stripped to match the
+ * Binding Layer's own spelling (`rgba(154,59,46,.07)`), which is what the
+ * emitted sheets are compared against.
+ */
+export function rgbaHex(hex: string, alpha: number): string {
+  const { rgb } = parseColor(hex);
+  return `rgba(${rgb.join(",")},${alpha.toString().replace(/^0(?=\.)/u, "")})`;
+}
+
 /** Flatten a translucent foreground onto an opaque background. */
 export function composite(fg: ParsedColor, bg: Rgb): Rgb {
   return [

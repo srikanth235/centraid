@@ -1,4 +1,5 @@
 import { completeAssistReturnLink as completeAssistReturnLinkFromClient } from "../../../assist-oauth-handoff.js";
+import { describeCron, resolveCronTimezone } from "../../../cron.js";
 import {
   beginConnectionAuthorization,
   cloneTemplate as gwCloneTemplate,
@@ -18,6 +19,7 @@ import type {
   AssistOAuthAvailability,
 } from "../../../gateway-client.js";
 import type {
+  AttachedSyncDTO,
   ConnectionFormInput,
   ConnectionHealth,
   ConnectionRowDTO,
@@ -199,6 +201,57 @@ export async function loadLinkedSyncsForConnection(
       installedEnabled: installed?.enabled ?? false,
     };
   });
+}
+
+/**
+ * The syncs actually ATTACHED to the connections on this page — the installed
+ * pull automations, joined back to the connection each one rides.
+ *
+ * The per-connection `loadLinkedSyncsForConnection` above answers a different
+ * question (what a connector COULD sync, installed or not) and re-reads the
+ * catalog every call; the page's own second section is about what is already
+ * running, so it starts from the automation list and takes the connections it
+ * was handed rather than re-listing them.
+ *
+ * An automation whose connector binding matches no live connection is dropped:
+ * a sync row that named a connection the page is not showing would be a row
+ * with nothing above it to explain it.
+ */
+export async function loadAttachedSyncsData(
+  connections: readonly ConnectionRowDTO[]
+): Promise<AttachedSyncDTO[]> {
+  const automations = await listAutomations().catch(() => []);
+  const byId = new Map(connections.map((c) => [c.connectionId, c]));
+  const byKind = new Map(connections.map((c) => [c.kind, c]));
+  const out: AttachedSyncDTO[] = [];
+  for (const row of automations) {
+    const binding = (
+      row.manifest as {
+        connector?: { kind?: string; connectionId?: string; label?: string };
+      }
+    ).connector;
+    if (!binding) continue;
+    const connection =
+      (binding.connectionId ? byId.get(binding.connectionId) : undefined) ??
+      (binding.kind ? byKind.get(binding.kind) : undefined);
+    if (!connection) continue;
+    const cron = row.triggers.find(
+      (t): t is { kind: "cron"; expr: string; tz?: string } => t.kind === "cron"
+    );
+    out.push({
+      // A schedule is what makes a sync a sync; one without a cron trigger runs
+      // when something else asks it to, and says so rather than reading blank.
+      cadence: cron
+        ? describeCron(cron.expr, resolveCronTimezone(cron.tz))
+        : "On demand",
+      connectionId: connection.connectionId,
+      connectionLabel: connection.label,
+      enabled: row.enabled,
+      id: row.ref,
+      name: row.name,
+    });
+  }
+  return out;
 }
 
 /** Clone a pull blueprint and bind it to the vault connection id. */

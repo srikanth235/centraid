@@ -172,12 +172,56 @@ const roleTable: RoleDef[] = [
     4.5
   ),
   role(
+    "--accent-hover",
+    "color",
+    "The ink under hover/press when it is the LINE and the LABEL rather than a fill — the outlined and quiet controls. It steps TOWARD the paper, the opposite way from --accent-deep-hover, because the accent already sits at the end of its own ramp and an outline carries nothing on top of it.",
+    "AA as text and 3:1 as a border on every surface it can land on",
+    allSurfaces,
+    everywhere(lightTheme.accentInkHover),
+    4.5
+  ),
+  role(
     "--net",
     "color",
     "This leaves the device. A BORDER or a 2px rule only — never a fill, because nothing alarming is ever a large filled surface.",
     "AA as text and 3:1 as a rule on every surface it can land on",
     allSurfaces,
     everywhere(lightTheme.net),
+    4.5
+  ),
+  role(
+    "--net-hover",
+    "color",
+    "--net under hover on the outlined destructive control — the border and the label together, since there is no ground to move. It steps AWAY from the paper: a warning that gets quieter under the pointer is the wrong answer.",
+    "AA as text and 3:1 as a border on every surface it can land on",
+    allSurfaces,
+    everywhere(lightTheme.netHover),
+    4.5
+  ),
+  role(
+    "--net-wash",
+    "color",
+    "The ONE tint of --net the system permits — the ground of an egress or destructive panel. Faint enough (7% light, 11% dark) that the ink ramp still clears AA on it, which is what keeps it from becoming the large alarming surface --net forbids.",
+    "the ink ramp and --net itself clear their floors ON this wash",
+    allSurfaces,
+    {
+      // The one wash whose ALPHA differs per theme, so it cannot be a static
+      // `color-mix(… N%, transparent)` shared by both ramps the way
+      // `--accent-soft` and `--bg-sel` are. It lowers as a concrete `rgba()`
+      // in all three syntaxes instead — built from `NET` by `rgbaHex`, so
+      // there is still exactly one place the colour lives.
+      blueprint: wash(lightTheme.netWash),
+      native: wash(lightTheme.netWash),
+      shell: wash(lightTheme.netWash),
+    }
+  ),
+  role(
+    "--seam",
+    "color",
+    "Not yet, and not wrong: pending, expiring, invited. The state between having happened and having failed — --warning says a reading is degraded and --net says bytes leave the device, and neither is true of an invitation nobody has accepted.",
+    "AA as text and 3:1 as a border on every surface it can land on",
+    allSurfaces,
+    everywhere(lightTheme.seam),
     4.5
   ),
   role(
@@ -587,6 +631,20 @@ const roleTable: RoleDef[] = [
     }
   ),
   role(
+    "--w-key-col",
+    "component",
+    "The fact-list key column — a fixed inline-start column holding a micro uppercase key beside its value. 150 under a pointer, 110 on touch; the phone narrows the column rather than wrapping the key, so the value edge stays aligned down the list.",
+    "geometry only",
+    shellAndNative,
+    {
+      blueprint: unsupported(
+        "No blueprint app draws a fact list yet; lower it there when one does."
+      ),
+      native: scalar(metrics.keyColTouch),
+      shell: scalar(`${metrics.keyCol}px`),
+    }
+  ),
+  role(
     "--density-row",
     "component",
     "The row height for the declared density tier. Tiers scale row height and content padding ONLY.",
@@ -839,6 +897,7 @@ export const DARK_THEME_ROLE_VALUES: Readonly<Record<string, string>> = {
   "--accent-deep": darkTheme.accentDeep,
   "--accent-deep-hover": darkTheme.accentHover,
   "--accent-fill": darkTheme.accentDeep,
+  "--accent-hover": darkTheme.accentInkHover,
   "--accent-light": darkTheme.accentLight,
   "--accent-text": darkTheme.accentText,
   "--bg": darkTheme.bg,
@@ -848,7 +907,10 @@ export const DARK_THEME_ROLE_VALUES: Readonly<Record<string, string>> = {
   "--line-strong": darkTheme.lineStrong,
   "--link": darkTheme.link,
   "--net": darkTheme.net,
+  "--net-hover": darkTheme.netHover,
+  "--net-wash": darkTheme.netWash,
   "--on-accent": darkTheme.textInv,
+  "--seam": darkTheme.seam,
   "--skel": darkTheme.skel,
   "--success": darkTheme.success,
   "--text": darkTheme.text,
@@ -862,6 +924,7 @@ export const NATIVE_COLOR_ROLE_MAP = {
   accentDeep: "--accent-deep",
   accentFill: "--accent-fill",
   accentDeepHover: "--accent-deep-hover",
+  accentInkHover: "--accent-hover",
   accentLight: "--accent-light",
   accentSoft: "--accent-soft",
   accentText: "--accent-text",
@@ -879,10 +942,13 @@ export const NATIVE_COLOR_ROLE_MAP = {
   lineSel: "--line-sel",
   link: "--link",
   net: "--net",
+  netHover: "--net-hover",
+  netWash: "--net-wash",
   onAccent: "--on-accent",
   onStage: "--on-stage",
   focusRingColor: "--focus-ring-color",
   scrim: "--scrim",
+  seam: "--seam",
   shadowLg: "--shadow-lg",
   shadowMd: "--shadow-md",
   shadowSm: "--shadow-sm",

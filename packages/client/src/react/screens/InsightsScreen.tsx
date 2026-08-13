@@ -1,135 +1,240 @@
-import type { JSX, ReactNode } from "react";
+import type { JSX } from "react";
 
 import { insK, insKindLabel, insUsd, relativeTime } from "../format.js";
-import type { InsightsBridgeProps } from "../screen-contracts.js";
-import { cx } from "../ui/cx.js";
-import { Icon } from "../ui/index.js";
-import ResourceReceiptPanel from "./ResourceReceiptPanel.js";
+import type {
+  InsightsActivityRow,
+  InsightsBridgeProps,
+  InsightsSummary,
+} from "../screen-contracts.js";
+import { useCompactLayout } from "../shell/useCompactLayout.js";
+import BarsBlock from "../ui/BarsBlock.js";
+import type { BarDatum } from "../ui/BarsBlock.js";
+import ChipsBlock from "../ui/ChipsBlock.js";
+import EmptyBlock from "../ui/EmptyBlock.js";
+import NoteBlock from "../ui/NoteBlock.js";
+import PanelBlock from "../ui/PanelBlock.js";
+import type { PanelFact } from "../ui/PanelBlock.js";
+import RowsBlock from "../ui/RowsBlock.js";
+import type { RowDef } from "../ui/RowsBlock.js";
+import SectionBlock from "../ui/SectionBlock.js";
+import { processUsageRows, subsystemUsageRows } from "./resource-summary.js";
+import type { ResourceUsageDTO } from "./resource-summary.js";
 
 import styles from "./InsightsScreen.module.css";
 
-const WINDOW_OPTIONS = [7, 30, 90] as const;
+// Analytics (v9, issue #765) — one column of blocks over the run rollup.
+//
+// The page has ONE parameter (the window) and no commit: it counts what
+// already happened. The old shape — a spend hero, a five-tile KPI strip, an
+// SVG area chart with a gradient fill, and five breakdown panels — is gone;
+// what survives is the data, re-said in the block vocabulary.
+//
+// TWO HONEST GAPS, both visible in the code below rather than papered over:
+//   1. The rollup (`insights-sql.ts`, `daily`) counts runs per day but does
+//      NOT split them by outcome, so the bars carry one segment (runs) and no
+//      legend. The window's failure count is stated in the app-bar count line
+//      and the section meta instead of being invented per column.
+//   2. No run duration is recorded anywhere, so the spec's "median duration"
+//      fact cannot be served. Spend takes that slot — the fact this page has
+//      always been able to prove.
 
-function LineChart({ values }: { values: readonly number[] }): JSX.Element {
-  const W = 760;
-  const H = 200;
-  const PAD = 14;
-  const n = values.length;
-  const max = Math.max(...values);
-  const min = Math.min(...values);
-  const span = max - min || 1;
-  const px = (i: number): number => (n <= 1 ? 0 : (i / (n - 1)) * W);
-  const py = (v: number): number =>
-    H - PAD - ((v - min) / span) * (H - PAD * 2);
-  const pts = values.map((v, i) => [px(i), py(v)] as const);
-  const line = pts
-    .map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`)
-    .join(" ");
-  const area = `${line} L${W} ${H} L0 ${H} Z`;
-  const peakIdx = values.indexOf(max);
-  const peak = pts[peakIdx] ?? ([0, 0] as const);
-  return (
-    <div className={styles.chartPlot}>
-      <div className={styles.chartSvgWrap}>
-        <svg
-          aria-hidden="true"
-          viewBox={`0 0 ${W} ${H}`}
-          preserveAspectRatio="none"
-          className={styles.chartSvg}
-        >
-          <defs>
-            <linearGradient id="insArea" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.32" />
-              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <path d={area} fill="url(#insArea)" />
-          <path
-            d={line}
-            fill="none"
-            stroke="var(--accent)"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            vectorEffect="non-scaling-stroke"
-          />
-          <circle
-            cx={peak[0].toFixed(1)}
-            cy={peak[1].toFixed(1)}
-            r={4}
-            fill="var(--bg-elev)"
-            stroke="var(--accent)"
-            strokeWidth={2}
-          />
-        </svg>
-      </div>
-      <div
-        className={styles.chartPeak}
-        style={{ left: `${((peak[0] / W) * 100).toFixed(2)}%` }}
-      >
-        {insK(max)}
-      </div>
-    </div>
-  );
+/** The three windows. The page's one parameter, and its whole state. */
+export const WINDOW_OPTIONS = [7, 30, 90] as const;
+
+const DAY_MS = 86_400_000;
+
+/** Columns in the chart: 7 for the short window, 14 otherwise, 10 on a phone
+ *  regardless — a sampled view, not one column per day. */
+function columnCount(windowDays: number, compact: boolean): number {
+  if (compact) return 10;
+  return windowDays <= 7 ? 7 : 14;
 }
 
-function Panel({
-  title,
-  meta,
-  children,
-}: {
-  title: string;
-  meta: string;
-  children: ReactNode;
-}): JSX.Element {
-  return (
-    <section className={styles.panel}>
-      <header className={styles.panelHead}>
-        <h2>{title}</h2>
-        {meta ? <span className={styles.panelMeta}>{meta}</span> : null}
-      </header>
-      {children}
-    </section>
-  );
-}
-
-function PanelEmpty({
-  message,
-  compact,
-}: {
-  message: string;
-  compact?: boolean;
-}): JSX.Element {
-  return (
-    <div className={compact ? styles.panelEmptyCompact : styles.panelEmpty}>
-      {message}
-    </div>
-  );
-}
-
-function ChartEmpty({ message }: { message: string }): JSX.Element {
-  return (
-    <div className={styles.chartEmpty} aria-hidden={false}>
-      <div className={styles.chartEmptyGrid} aria-hidden="true" />
-      <span className={styles.chartEmptyNote}>{message}</span>
-    </div>
-  );
-}
-
-function MixBar({ pct }: { pct: number }): JSX.Element {
-  return (
-    <span className={styles.mixbar}>
-      <span
-        className={styles.mixbarFill}
-        style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
-      />
-    </span>
-  );
+function dayLabel(daysAgo: number): string {
+  if (daysAgo <= 0) return "today";
+  if (daysAgo === 1) return "yesterday";
+  return `${daysAgo} days ago`;
 }
 
 /**
- * Insights v0 (#514) — transparency + control over harness usage.
- * Narrative hero (honest spend), breakdowns sorted by $, working window chips.
+ * Fold the daily rollup into N columns.
+ *
+ * Days with no runs are absent from `daily` (the rollup groups by day), so the
+ * fold is by CALENDAR OFFSET from the window's first day, never by position in
+ * the array — otherwise a quiet week would slide the busy days left.
+ */
+export function buildBars(
+  summary: InsightsSummary,
+  windowDays: number,
+  compact: boolean
+): BarDatum[] {
+  const n = columnCount(windowDays, compact);
+  // The rollup's own clock, not the reader's: a summary rendered an hour later
+  // must still say the same thing about the same days.
+  const anchor = summary.generatedAt > 0 ? summary.generatedAt : Date.now();
+  const firstDay = Math.floor(anchor / DAY_MS) - (windowDays - 1);
+  const runs = Array.from({ length: n }, () => 0);
+  for (const point of summary.daily) {
+    const ms = Date.parse(`${point.date}T00:00:00Z`);
+    if (Number.isNaN(ms)) continue;
+    const offset = Math.floor(ms / DAY_MS) - firstDay;
+    const index = Math.floor((offset * n) / windowDays);
+    if (index < 0 || index >= n) continue;
+    runs[index] = (runs[index] ?? 0) + point.runs;
+  }
+  const peak = Math.max(1, ...runs);
+  return runs.map((count, index) => {
+    const from = Math.round((index * windowDays) / n);
+    const to = Math.round(((index + 1) * windowDays) / n) - 1;
+    const span =
+      from === to
+        ? dayLabel(windowDays - 1 - from)
+        : `${dayLabel(windowDays - 1 - from)} – ${dayLabel(windowDays - 1 - to)}`;
+    return {
+      id: `col-${index}`,
+      label: `${count} ${count === 1 ? "run" : "runs"} · ${span}`,
+      ok: Math.round((count / peak) * 100),
+    };
+  });
+}
+
+/** The three source buckets the page reports, in the spec's order. */
+function sourceBucket(kind: string): "automations" | "the assistant" | "apps" {
+  if (kind === "automation") return "automations";
+  if (kind === "chat") return "the assistant";
+  return "apps";
+}
+
+/** By-source facts: runs, share of the window, and what they cost. Failures
+ *  are not attributed per source by the rollup, so they are not claimed. */
+export function sourceFacts(summary: InsightsSummary): PanelFact[] {
+  const totals = new Map<string, { runs: number; cost: number }>();
+  for (const row of summary.bySource) {
+    const bucket = sourceBucket(row.kind);
+    const seen = totals.get(bucket) ?? { cost: 0, runs: 0 };
+    totals.set(bucket, {
+      cost: seen.cost + row.costUsd,
+      runs: seen.runs + row.runs,
+    });
+  }
+  const totalRuns = [...totals.values()].reduce((sum, t) => sum + t.runs, 0);
+  const facts: PanelFact[] = [];
+  for (const bucket of ["automations", "the assistant", "apps"] as const) {
+    const totalsForBucket = totals.get(bucket);
+    // A source with no runs in this window is omitted, not zeroed: a row of
+    // zeroes reads as a measurement, and this one is an absence.
+    if (!totalsForBucket) continue;
+    const share = totalRuns
+      ? `${Math.round((totalsForBucket.runs / totalRuns) * 100)}%`
+      : "—";
+    facts.push({
+      key: bucket,
+      mono: true,
+      value: `${totalsForBucket.runs} · ${share} · ${insUsd(totalsForBucket.cost)}`,
+    });
+  }
+  const { kpis } = summary;
+  const incomplete = kpis.unpricedRuns > 0 || kpis.unreportedRuns > 0;
+  facts.push(
+    {
+      key: "spend",
+      mono: true,
+      // "At least" is the honest verb when runs are unpriced: the figure is a
+      // floor, and a floor that calls itself a total is a lie.
+      value: `${incomplete ? "at least " : ""}${insUsd(kpis.totalCostUsd)} · ${insUsd(kpis.forecastCostUsd)} forecast`,
+    },
+    {
+      key: "tokens",
+      mono: true,
+      value: kpis.hydrationTokens
+        ? `${insK(kpis.totalTokens)} · ${insK(kpis.hydrationTokens)} hydration`
+        : insK(kpis.totalTokens),
+    }
+  );
+  if (summary.attention) {
+    facts.push({
+      key: "most of it",
+      value: `${summary.attention.label} · ${Math.round(summary.attention.share * 100)}% of spend`,
+    });
+  }
+  return facts;
+}
+
+/** Where the money came from, said plainly. Never "free" for what we could
+ *  not price — an unpriced run is unknown, not zero. */
+export function pricingLine(summary: InsightsSummary): string {
+  const { kpis } = summary;
+  const parts: string[] = [];
+  if (kpis.harnessReportedCostUsd > 0)
+    parts.push(`${insUsd(kpis.harnessReportedCostUsd)} harness-reported`);
+  if (kpis.estimatedCostUsd > 0)
+    parts.push(`${insUsd(kpis.estimatedCostUsd)} estimated`);
+  if (kpis.unpricedRuns > 0) parts.push(`${kpis.unpricedRuns} unpriced`);
+  if (kpis.unreportedRuns > 0)
+    parts.push(`${kpis.unreportedRuns} no usage reported`);
+  if (parts.length === 0) {
+    return kpis.generations === 0
+      ? "No completed runs in this window."
+      : "All priced runs included.";
+  }
+  return `${parts.join(" · ")}.`;
+}
+
+function recentRow(
+  run: InsightsActivityRow,
+  onOpenRun: InsightsBridgeProps["onOpenRun"]
+): RowDef {
+  const detail = [
+    run.ok ? "Succeeded" : "Failed",
+    insKindLabel(run.kind),
+    run.harness,
+    run.effort,
+    insUsd(run.costUsd),
+    `${insK(run.tokens)} tokens`,
+  ].filter((part): part is string => Boolean(part));
+  const openable = Boolean(run.automationRef && onOpenRun);
+  return {
+    id: run.runId,
+    ...(openable
+      ? {
+          action: {
+            label: "Open",
+            onClick: () => onOpenRun?.(run.automationRef ?? "", run.runId),
+          },
+        }
+      : {}),
+    meta: relativeTime(new Date(run.startedAt).toISOString()),
+    ...(run.ok ? {} : { net: true }),
+    sub: detail.join(" · "),
+    title: run.label,
+  };
+}
+
+/** The gateway's own measured numbers. Every row is something the gateway
+ *  actually reports — no disk figure and no shared-compute figure appear,
+ *  because this gateway serves neither. */
+export function gatewayFacts(usage: ResourceUsageDTO): PanelFact[] {
+  const facts: PanelFact[] = [
+    ...processUsageRows(usage),
+    ...subsystemUsageRows(usage),
+  ].map((row) => ({
+    key: row.label.toLowerCase(),
+    mono: true,
+    value: row.value,
+  }));
+  if (usage.backgroundTimerFiresLastHour !== null) {
+    facts.push({
+      key: "wakeups, last hour",
+      mono: true,
+      value: String(usage.backgroundTimerFiresLastHour),
+    });
+  }
+  return facts;
+}
+
+/**
+ * Analytics — the run rollup as blocks. The window picker, the runs chart,
+ * the source facts, the recent runs, and the gateway's own numbers.
  */
 export default function InsightsScreen({
   summary,
@@ -138,380 +243,89 @@ export default function InsightsScreen({
   onOpenRun,
   resourceUsage,
 }: InsightsBridgeProps): JSX.Element {
+  const compact = useCompactLayout();
   const { kpis } = summary;
-  const incomplete = kpis.unpricedRuns > 0 || kpis.unreportedRuns > 0;
-  const hasSpend = kpis.totalCostUsd > 0 || incomplete;
+  const nothingRan = kpis.generations === 0 && summary.recent.length === 0;
 
-  const series = summary.daily.map((d) => d.tokens);
-  const hasDaily = series.length > 0;
-  const sourceMax = Math.max(
-    1,
-    ...summary.bySource.map((r) => r.costUsd || r.tokens)
-  );
-  const runnerMax = Math.max(
-    1,
-    ...summary.byHarness.map((r) => r.costUsd || r.tokens)
-  );
-  const modelTotal = Math.max(
-    1,
-    summary.byModel.reduce((s, m) => s + (m.costUsd || m.tokens), 0)
-  );
-  const effortTotal = Math.max(
-    1,
-    summary.byEffort.reduce((s, e) => s + (e.costUsd || e.tokens), 0)
+  const chips = (
+    <ChipsBlock
+      ariaLabel="Time window"
+      chips={WINDOW_OPTIONS.map((days) => ({
+        id: String(days),
+        label: `${days} days`,
+        on: days === windowDays,
+      }))}
+      mono
+      onPick={(id) => onWindowDays(Number(id))}
+    />
   );
 
-  const honestyParts: string[] = [];
-  if (kpis.harnessReportedCostUsd > 0) {
-    honestyParts.push(
-      `${insUsd(kpis.harnessReportedCostUsd)} harness-reported`
+  if (nothingRan) {
+    return (
+      <div className={styles.page}>
+        {chips}
+        <EmptyBlock
+          body="Once automations and the assistant start doing work, their volume and outcomes appear here."
+          routine
+          title="Nothing has run yet"
+        />
+      </div>
     );
-  }
-  if (kpis.estimatedCostUsd > 0) {
-    honestyParts.push(`${insUsd(kpis.estimatedCostUsd)} estimated`);
-  }
-  if (kpis.unpricedRuns > 0) {
-    honestyParts.push(`${kpis.unpricedRuns} unpriced`);
-  }
-  if (kpis.unreportedRuns > 0) {
-    honestyParts.push(`${kpis.unreportedRuns} no usage reported`);
-  }
-  if (honestyParts.length === 0 && kpis.generations === 0) {
-    honestyParts.push("no completed runs in this window");
-  } else if (honestyParts.length === 0) {
-    honestyParts.push("all priced runs included");
   }
 
   return (
     <div className={styles.page}>
-      <div className={styles.head}>
-        <div className={styles.title}>
-          <span className={styles.titleIcon}>
-            <Icon name="Activity" size={18} strokeWidth={2} />
-          </span>
-          <h1>Analytics</h1>
-        </div>
-        <fieldset className={styles.filters} aria-label="Time window">
-          {WINDOW_OPTIONS.map((d) => (
-            <button
-              key={d}
-              type="button"
-              className={cx(
-                styles.filter,
-                windowDays === d && styles.filterActive
-              )}
-              onClick={() => onWindowDays(d)}
-              aria-pressed={windowDays === d}
-            >
-              {d}d
-            </button>
-          ))}
-        </fieldset>
-      </div>
+      {chips}
 
-      <div className={styles.hero} data-testid="insights-hero">
-        <div className={styles.heroSpend}>
-          <div className={styles.heroLabel}>
-            {incomplete ? "At least" : "Spend"} · {windowDays} days
-          </div>
-          <div className={styles.heroValue}>{insUsd(kpis.totalCostUsd)}</div>
-          <div className={styles.heroHonesty}>{honestyParts.join(" · ")}</div>
-        </div>
-        <div className={styles.heroMeta}>
-          <div className={styles.heroStat}>
-            <span className={styles.heroStatLabel}>Tokens</span>
-            <span className={styles.heroStatValue}>
-              {insK(kpis.totalTokens)}
-            </span>
-            {kpis.hydrationTokens > 0 ? (
-              <span className={styles.heroStatSub}>
-                {insK(kpis.hydrationTokens)} hydration
-              </span>
-            ) : null}
-          </div>
-          <div className={styles.heroStat}>
-            <span className={styles.heroStatLabel}>Runs</span>
-            <span className={styles.heroStatValue}>{kpis.generations}</span>
-            {kpis.retries > 0 ? (
-              <span className={styles.heroStatSub}>{kpis.retries} retries</span>
-            ) : null}
-          </div>
-          <div className={styles.heroStat}>
-            <span className={styles.heroStatLabel}>Forecast</span>
-            <span className={styles.heroStatValue}>
-              {insUsd(kpis.forecastCostUsd)}
-            </span>
-            <span className={styles.heroStatSub}>30-day run rate</span>
-          </div>
-          {kpis.failedRuns > 0 ? (
-            <div className={styles.heroStat}>
-              <span className={styles.heroStatLabel}>Failed</span>
-              <span className={styles.heroStatValue}>{kpis.failedRuns}</span>
-              <span className={styles.heroStatSub}>
-                {insUsd(kpis.failedCostUsd)} spent
-              </span>
-            </div>
-          ) : null}
-        </div>
-      </div>
+      <SectionBlock
+        label="Runs"
+        meta={`${kpis.generations.toLocaleString()} runs${kpis.failedRuns ? ` · ${kpis.failedRuns} failed` : ""}`}
+      />
+      <BarsBlock
+        ariaLabel={`Runs per day over the last ${windowDays} days`}
+        axis={[`${windowDays} days ago`, "halfway", "today"]}
+        bars={buildBars(summary, windowDays, compact)}
+        {...(compact ? { compact: true } : {})}
+      />
 
-      {summary.attention ? (
-        <div className={styles.attention} data-testid="insights-attention">
-          <Icon name="Sparkle" size={14} />
-          <span>
-            <strong>{summary.attention.label}</strong> (
-            {summary.attention.kindLabel}) is{" "}
-            {Math.round(summary.attention.share * 100)}% of spend (
-            {insUsd(summary.attention.costUsd)})
-          </span>
-        </div>
+      <SectionBlock
+        label="By source"
+        meta={`${kpis.generations.toLocaleString()} runs`}
+      />
+      <PanelBlock
+        body={`${pricingLine(summary)} Completed runs in this vault only; estimates use public model rates.`}
+        facts={sourceFacts(summary)}
+      />
+
+      {summary.recent.length > 0 ? (
+        <>
+          <SectionBlock
+            label="Recent runs"
+            meta={String(summary.recent.length)}
+          />
+          <RowsBlock
+            rows={summary.recent.map((run) => recentRow(run, onOpenRun))}
+          />
+        </>
       ) : null}
 
-      {!hasSpend && kpis.generations === 0 ? (
-        <div className={styles.firstUse}>
-          Run a chat, build, or automation — usage shows up here. Costs are
-          harness-reported when the harness provides them, otherwise estimated
-          from public rates.
-        </div>
-      ) : null}
-
-      {kpis.generations > 0 && kpis.unreportedRuns === kpis.generations ? (
-        <div className={styles.firstUse}>
-          Agents ran, but none reported token usage yet. Cost may be incomplete.
-        </div>
-      ) : null}
-
-      <div className={styles.grid}>
-        <div className={styles.col}>
-          <Panel
-            title="Where it went"
-            meta={`${summary.bySource.length} · sorted by $`}
-          >
-            <div className={styles.table}>
-              <div className={cx(styles.tr, styles.trHead)}>
-                <span className={cx(styles.th, styles.cApp)}>Source</span>
-                <span className={cx(styles.th, styles.cNum)}>USD</span>
-                <span className={cx(styles.th, styles.cNum)}>Tokens</span>
-                <span className={styles.th}>Mix</span>
-                <span className={cx(styles.th, styles.cRuns)}>Runs</span>
-              </div>
-              {summary.bySource.map((r) => (
-                <div key={`${r.kind}:${r.key}`} className={styles.tr}>
-                  <span className={cx(styles.td, styles.cApp)}>
-                    <span className={styles.tag}>{insKindLabel(r.kind)}</span>
-                    <span className={styles.appName}>{r.label}</span>
-                  </span>
-                  <span className={cx(styles.td, styles.cNum, styles.mono)}>
-                    {insUsd(r.costUsd)}
-                  </span>
-                  <span className={cx(styles.td, styles.cNum, styles.mono)}>
-                    {insK(r.tokens)}
-                  </span>
-                  <span className={styles.td}>
-                    <MixBar
-                      pct={Math.round(
-                        ((r.costUsd || r.tokens) / sourceMax) * 100
-                      )}
-                    />
-                  </span>
-                  <span className={cx(styles.td, styles.cRuns, styles.mono)}>
-                    {String(r.runs)}
-                  </span>
-                </div>
-              ))}
-              {summary.bySource.length === 0 ? (
-                <PanelEmpty compact message="No runs yet." />
-              ) : null}
-            </div>
-          </Panel>
-
-          <Panel
-            title="Daily activity"
-            meta={`${summary.windowDays} days · tokens`}
-          >
-            {hasDaily ? (
-              <div className={styles.chart}>
-                {summary.peakDay ? (
-                  <div className={styles.peakNote}>
-                    Peak {summary.peakDay.date}:{" "}
-                    {insUsd(summary.peakDay.costUsd)} ·{" "}
-                    {insK(summary.peakDay.tokens)} tokens
-                    {summary.peakDay.topSources[0]
-                      ? ` · top: ${summary.peakDay.topSources[0].label}`
-                      : ""}
-                  </div>
-                ) : null}
-                <LineChart
-                  values={
-                    series.length === 1
-                      ? [series[0] ?? 0, series[0] ?? 0]
-                      : series
-                  }
-                />
-                <div className={styles.chartAxis}>
-                  <span>{summary.daily[0]?.date}</span>
-                  <span>{summary.daily[summary.daily.length - 1]?.date}</span>
-                </div>
-              </div>
-            ) : (
-              <ChartEmpty message="No activity in this window yet." />
-            )}
-          </Panel>
-        </div>
-
-        <div className={styles.col}>
-          <Panel title="By harness" meta="harness · sorted by $">
-            <div className={styles.models}>
-              {summary.byHarness.map((r) => {
-                const pct = Math.round(
-                  ((r.costUsd || r.tokens) / runnerMax) * 100
-                );
-                return (
-                  <div key={r.harness} className={styles.model}>
-                    <div className={styles.modelName}>{r.harness}</div>
-                    <div className={styles.bar}>
-                      <div
-                        className={styles.barFill}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <div className={styles.modelFoot}>
-                      <span className={styles.mono}>
-                        {insUsd(r.costUsd)} · {insK(r.tokens)}
-                      </span>
-                      <span className={styles.mono}>{r.runs} runs</span>
-                    </div>
-                  </div>
-                );
-              })}
-              {summary.byHarness.length === 0 ? (
-                <PanelEmpty message="No harness usage recorded yet." />
-              ) : null}
-            </div>
-          </Panel>
-
-          <Panel title="By model" meta="last window">
-            <div className={styles.models}>
-              {summary.byModel.map((m) => {
-                const pct = Math.round(
-                  ((m.costUsd || m.tokens) / modelTotal) * 100
-                );
-                return (
-                  <div key={m.model} className={styles.model}>
-                    <div className={styles.modelName}>{m.model}</div>
-                    <div className={styles.bar}>
-                      <div
-                        className={styles.barFill}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <div className={styles.modelFoot}>
-                      <span className={styles.mono}>
-                        {pct}% · {insK(m.tokens)}
-                      </span>
-                      <span className={styles.mono}>{insUsd(m.costUsd)}</span>
-                    </div>
-                  </div>
-                );
-              })}
-              {summary.byModel.length === 0 ? (
-                <PanelEmpty message="No model usage recorded yet." />
-              ) : null}
-            </div>
-          </Panel>
-
-          <Panel title="By effort" meta="harness-confirmed thought level">
-            <div className={styles.models}>
-              {summary.byEffort.map((e) => {
-                const pct = Math.round(
-                  ((e.costUsd || e.tokens) / effortTotal) * 100
-                );
-                return (
-                  <div key={e.effort} className={styles.model}>
-                    <div className={styles.modelName}>{e.effort}</div>
-                    <div className={styles.bar}>
-                      <div
-                        className={styles.barFill}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <div className={styles.modelFoot}>
-                      <span className={styles.mono}>
-                        {insK(e.tokens)} · {insUsd(e.costUsd)}
-                      </span>
-                      <span className={styles.mono}>{e.runs} runs</span>
-                    </div>
-                  </div>
-                );
-              })}
-              {summary.byEffort.length === 0 ? (
-                <PanelEmpty message="No confirmed effort usage recorded yet." />
-              ) : null}
-            </div>
-          </Panel>
-
-          <Panel title="Needs attention" meta={`${summary.recent.length} runs`}>
-            <div className={styles.activity}>
-              {summary.recent.map((a) => {
-                const clickable = Boolean(a.automationRef && onOpenRun);
-                const body = (
-                  <>
-                    <span className={cx(styles.actAgo, styles.mono)}>
-                      {relativeTime(new Date(a.startedAt).toISOString())}
-                    </span>
-                    <div className={styles.actBody}>
-                      <div className={styles.actApp}>
-                        <span className={styles.tag}>
-                          {insKindLabel(a.kind)}
-                        </span>
-                        <span>{a.ok ? "" : " · failed"}</span>
-                        {a.harness ? (
-                          <span className={styles.actProv}> · {a.harness}</span>
-                        ) : null}
-                        {a.effort ? (
-                          <span className={styles.actProv}> · {a.effort}</span>
-                        ) : null}
-                      </div>
-                      <div className={styles.actNote}>{a.label}</div>
-                    </div>
-                    <div className={styles.actCost}>
-                      <span className={styles.mono}>{insUsd(a.costUsd)}</span>
-                      <span className={cx(styles.mono, styles.actUsd)}>
-                        {insK(a.tokens)}
-                      </span>
-                    </div>
-                  </>
-                );
-                return clickable ? (
-                  <button
-                    key={a.runId}
-                    type="button"
-                    className={cx(styles.act, styles.actBtn)}
-                    onClick={() => onOpenRun!(a.automationRef!, a.runId)}
-                  >
-                    {body}
-                  </button>
-                ) : (
-                  <div key={a.runId} className={styles.act}>
-                    {body}
-                  </div>
-                );
-              })}
-              {summary.recent.length === 0 ? (
-                <PanelEmpty message="No activity yet." />
-              ) : null}
-            </div>
-          </Panel>
-        </div>
-      </div>
-
-      <ResourceReceiptPanel usage={resourceUsage} />
-
-      <p className={styles.footnote}>
-        Completed runs in this vault only. Harness-reported costs come from the
-        harness; estimates use public model rates. Incomplete data is never
-        treated as free.
-      </p>
+      <SectionBlock label="Gateway" meta="your own machine" />
+      {resourceUsage ? (
+        <PanelBlock
+          body="What this vault’s gateway host actually used — measured, not the browser or phone you’re reading this on."
+          facts={gatewayFacts(resourceUsage)}
+        />
+      ) : (
+        <PanelBlock body="Not available from this gateway. Update the gateway host to see what it actually used." />
+      )}
+      <NoteBlock>
+        Measured proxies only — CPU time, bytes moved, and time spent active.
+        Harness runs are measured but not limited by Conserve, and no wattage
+        appears because software alone cannot measure power draw.
+      </NoteBlock>
+      <NoteBlock>
+        The gateway is your own machine. These are its numbers, not a service’s.
+      </NoteBlock>
     </div>
   );
 }

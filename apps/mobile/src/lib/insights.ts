@@ -75,20 +75,58 @@ export interface GatewayHealth {
 export interface InsightsKpis {
   totalTokens: number;
   hydrationTokens: number;
+  /** Sum of KNOWN costs — a floor while `unpricedRuns` is above zero. */
   totalCostUsd: number;
+  /** USD the harness itself reported (live runs). */
+  harnessReportedCostUsd: number;
+  /** USD from catalog estimates. */
+  estimatedCostUsd: number;
   forecastCostUsd: number;
   generations: number;
   retries: number;
+  /** Runs in the window that finished badly. Window-wide only: the daily
+   *  rollup carries no per-day outcome split (see `InsightsDailyPoint`). */
+  failedRuns: number;
   appsTouched: number;
+  /** NOT served by the current gateway rollup (`InsightsKpis` in
+   *  `packages/app-engine/src/insights/insights-types.ts` has no quota at
+   *  all). Left in the mirror because removing a field is not this screen's
+   *  call; nothing reads it, and nothing should until a gateway sends one. */
   quotaTokens: number;
   unpricedRuns: number;
+  /** Finished runs that reported no token usage at all. */
+  unreportedRuns: number;
 }
 
+/** One day of the rollup. It counts RUNS and nothing about their outcome —
+ *  there is no per-day failure split to draw, on any surface. */
 export interface InsightsDailyPoint {
   date: string;
   tokens: number;
   costUsd: number;
   runs: number;
+}
+
+/** One bucket of "where the work came from" — an automation handle, or the
+ *  `chat` / `build` buckets. */
+export interface InsightsSourceRow {
+  key: string;
+  label: string;
+  kind: string;
+  runs: number;
+  tokens: number;
+  costUsd: number;
+  automationName?: string;
+}
+
+/** The one source that took most of the window's spend, when there is one. */
+export interface InsightsAttention {
+  kind: "top_source";
+  key: string;
+  label: string;
+  kindLabel: string;
+  share: number;
+  costUsd: number;
 }
 
 export interface InsightsModelRow {
@@ -109,11 +147,16 @@ export interface InsightsActivityRow {
   runId: string;
   kind: string;
   label: string;
+  /** The automation this run belongs to, when it belongs to one. */
+  automationRef?: string;
+  automationName?: string;
   ok: boolean;
   startedAt: number;
   tokens: number;
   hydrationTokens: number;
   costUsd: number;
+  harness?: string;
+  model?: string;
   effort?: string;
 }
 
@@ -122,9 +165,11 @@ export interface InsightsSummary {
   generatedAt: number;
   kpis: InsightsKpis;
   daily: InsightsDailyPoint[];
+  bySource: InsightsSourceRow[];
   byModel: InsightsModelRow[];
   byEffort: InsightsEffortRow[];
   recent: InsightsActivityRow[];
+  attention?: InsightsAttention;
 }
 
 /** Gateway-wide component health + coarse metrics. Host-bearer only, no vault. */

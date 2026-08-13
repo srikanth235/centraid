@@ -62,6 +62,26 @@
   --app-drawer-width: 274px;
 }
 
+/* ---------- Identity (two knobs; everything else is contract) ---------- */
+
+/* Docs' identity is TEAL — hue 210, `--c-teal` — which is the slot `apps.ts`
+   assigns it on the Binding Layer's identity wheel, what `app.json`'s
+   `colorKey` already says, and what the shell's launcher tile already paints.
+   Until now this file declared neither knob, so the app rendered under
+   whatever identity the shell's injected layer last carried: the launcher
+   promised teal and the app itself answered in the host neutral.
+
+   Since the Binding Layer flip `--app-hue` is ONLY the wheel slot — the
+   neutrals are the system's literal paper and no longer read it
+   (packages/design/src/blueprint.ts) — so the identity declaration is these
+   two lines and nothing else. The rule doubles the class (`.shell.shell` →
+   0,2,0) to beat the shell's injected `.centraid-inline-scope` block (0,1,0),
+   which is appended to <head> at runtime and would otherwise win the tie. */
+.shell.shell {
+  --app-hue: 210;
+  --app-identity: var(--c-teal);
+}
+
 /* ---------- Sidebar (static chrome; nav rows/folders/storage → *.module.css) ---------- */
 
 .side {
@@ -121,11 +141,9 @@
   animation: kit-rise var(--dur-2) var(--ease-entry);
 }
 
-.nav {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
+/* `.nav` (the sidebar's smart-nav column) is gone with `SmartNav`: the shelf
+   strip carries All / Recently changed / Starred, and an unused rule is a
+   claim about a region that no longer exists. */
 /* The eyebrow role, taken whole from the ramp — `--t-eyebrow` already carries
    the caps + tracking as their own tokens, so a local 0.09em/uppercase pair is
    a second, unmeasured copy of a role that exists. */

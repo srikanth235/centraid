@@ -122,14 +122,27 @@ describe("ApprovalsRoute", () => {
   describe("ApprovalsRoute", () => {
     it("shows a loading state, then the empty state once the blocking notifications resolves empty", async () => {
       const el = await render();
-      expect(el.textContent).toContain("Nothing waiting on you.");
+      expect(el.textContent).toContain("Nothing is waiting on you");
       expect(enableWebPushWake).toHaveBeenCalledWith(true);
     });
 
     it("surfaces a fetch error", async () => {
       getNotifications.mockRejectedValue(new Error("offline"));
       const el = await render();
-      expect(el.querySelector(".pageEmpty")?.textContent).toContain("offline");
+      // The error state is the net-bordered panel every one of the six routes
+      // takes: what failed, what is still safe, one way forward — with the
+      // gateway's own words carried as a fact rather than swallowed.
+      const panel = el.querySelector('[data-tone="net"]');
+      expect(panel?.textContent).toContain("Could not reach the consent store");
+      expect(panel?.textContent).toContain(
+        "Nothing has been approved or denied in the meantime"
+      );
+      expect(panel?.textContent).toContain("offline");
+      expect(
+        [...el.querySelectorAll("button")].some(
+          (button) => button.textContent === "Try again"
+        )
+      ).toBe(true);
     });
 
     it("opens Connectors from a needs-auth decision", async () => {
@@ -214,12 +227,10 @@ describe("ApprovalsRoute", () => {
         output: { item_id: "item1", status: "approved" },
       });
       const el = await render();
-      const subjectBtn = [...el.querySelectorAll("button")].find((b) =>
-        b.textContent?.includes("Hi")
-      ) as HTMLButtonElement;
-      await act(async () => subjectBtn.click());
+      // The staged write is already the panel — there is nothing to expand.
+      expect(el.textContent).toContain("See you at 6.");
       const approveBtn = [...el.querySelectorAll("button")].find(
-        (b) => b.textContent === "Approve"
+        (b) => b.textContent === "Approve and send"
       ) as HTMLButtonElement;
       await act(async () => {
         approveBtn.click();
@@ -291,12 +302,7 @@ describe("ApprovalsRoute", () => {
           (b) => b.textContent === text
         ) as HTMLButtonElement;
       await act(async () => {
-        [...el.querySelectorAll("button")]
-          .find((b) => b.textContent?.includes("Hi"))!
-          .click();
-      });
-      await act(async () => {
-        findButton("Edit").click();
+        findButton("Edit and approve").click();
       });
       const subjectInput = el.querySelector(
         'input[aria-label="Subject"]'
@@ -444,48 +450,45 @@ describe("ApprovalsRoute", () => {
         unreadNoticeCount: 5,
       });
       const el = await render();
-      const clickHeadline = (headline: string): void => {
-        const button = [...el.querySelectorAll("button")].find((candidate) =>
-          candidate.textContent?.includes(headline)
+      // Every notice is a row now — no chip gates any of them — so opening one
+      // means pressing the Open action in the row that carries its headline.
+      const openNotice = (headline: string): void => {
+        const title = [...el.querySelectorAll(".title")].find((node) =>
+          node.textContent?.includes(headline)
         );
+        expect(title).toBeDefined();
+        const button = title
+          ?.closest(".rowShell")
+          ?.querySelector<HTMLButtonElement>("button");
         expect(button).toBeDefined();
         act(() => button?.click());
       };
 
-      // Info-severity notices sit under their source chip, not "Needs me"
-      // (#665) — the deep links still work from there.
-      clickHeadline("Automations");
-      clickHeadline("Digest finished");
+      openNotice("Digest finished");
       expect(navigate).toHaveBeenLastCalledWith({
         kind: "automation-view",
         automationId: "daily/digest",
       });
-      clickHeadline("Needs me");
-      clickHeadline("Gateway degraded");
+      openNotice("Gateway degraded");
       expect(navigate).toHaveBeenLastCalledWith({
         kind: "gateway",
         tab: "alerts",
       });
       // Steward absence is only actionable where the ceremony lives: the
       // People & circles panel on Household (issue #750).
-      clickHeadline("A shared space's owner device");
+      openNotice("A shared space's owner device");
       expect(navigate).toHaveBeenLastCalledWith({ kind: "household" });
-      clickHeadline("Apps");
-      clickHeadline("Tasks imported");
+      openNotice("Tasks imported");
       expect(navigate).toHaveBeenLastCalledWith({ kind: "app", id: "tasks" });
-      clickHeadline("Needs me");
       // An outbox notice must NOT self-navigate to the page we are already
       // on — it puts the staged decision it names in front of the owner.
       const navigationsBefore = navigate.mock.calls.length;
-      clickHeadline("Message needs approval again");
+      openNotice("Message needs approval again");
       expect(navigate).toHaveBeenCalledTimes(navigationsBefore);
       expect(
-        (
-          el.querySelector(
-            '[data-testid="outbox-row-item-1"]'
-          ) as HTMLElement | null
-        )?.dataset.focused
-      ).toBe("true");
+        el.querySelector<HTMLElement>('[data-testid="staged-write"]')?.dataset
+          .itemId
+      ).toBe("item-1");
       expect(el.textContent).toContain("See you at 6.");
     });
 
@@ -533,12 +536,7 @@ describe("ApprovalsRoute", () => {
       // Put the owner mid-flight: row expanded, edit form open.
       await act(async () => {
         [...el.querySelectorAll("button")]
-          .find((b) => b.textContent?.includes("Hi"))!
-          .click();
-      });
-      await act(async () => {
-        [...el.querySelectorAll("button")]
-          .find((b) => b.textContent === "Edit")!
+          .find((b) => b.textContent === "Edit and approve")!
           .click();
       });
       expect(el.querySelector('input[aria-label="Subject"]')).not.toBeNull();

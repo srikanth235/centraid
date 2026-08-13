@@ -57,7 +57,6 @@ export const DuplicatesIcon = make("Copy");
 export const TrashIcon = make("Trash");
 export const CloseIcon = make("X");
 export const MenuIcon = make("Menu");
-export const SearchIcon = make("Search");
 export const ZoomOutIcon = make("Grid");
 export const ZoomInIcon = make("Grid");
 export const InfoIcon = make("AlertCircle");

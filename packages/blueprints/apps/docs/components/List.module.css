@@ -173,13 +173,25 @@
 /* Kebab: kit.css's .kit-icon-btn, dialed down via --icon-button-size inline
    for this dense row. Window footer: kit.css's .kit-foot. */
 
-/* Narrow (phone): hide the trailing columns; the head is hidden wholesale by
-   app.css's `.docs.is-narrow .d-list-head`. */
-:global(.docs.is-narrow) .col.where,
-:global(.docs.is-narrow) .col.size,
-:global(.docs.is-narrow) .col.added,
-:global(.docs.is-narrow) .cell.where,
-:global(.docs.is-narrow) .cell.size,
-:global(.docs.is-narrow) .cell.added {
+/* Narrow (phone): hide the trailing columns. The compact form factor is
+   carried as DATA on this module's own row element (`ListRow` already takes a
+   `narrow` prop and folds those three values into its snippet line), not by
+   reaching for a global state class another module stamps — that global
+   `.docs.is-narrow` trio was trap #5, and it is gone.
+
+   The head has no narrow rule at all any more: it is not rendered on the
+   compact form factor, so a rule that hid its columns was describing a state
+   that could not occur. */
+.row[data-narrow="true"] .cell.where,
+.row[data-narrow="true"] .cell.size,
+.row[data-narrow="true"] .cell.added {
   display: none;
+}
+
+/* The fetched window's own refusal (Docs spec §4.1 rung 1). `--net` because
+   it is a refusal rather than a status: the rows beyond the window are not
+   coming until the member asks again. */
+.windowFailed {
+  font: var(--t-small);
+  color: var(--net);
 }

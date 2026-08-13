@@ -1,4 +1,5 @@
-import { fmtBytes, typeMeta } from "./format.ts";
+import { applyFilters } from "./filters.ts";
+import { fmtBytes } from "./format.ts";
 // Non-visual business logic: data/selection helpers, the plain-DOM popovers
 // (kebab / move-to), and every vault write (documents, folders, upload).
 //
@@ -19,6 +20,7 @@ import {
 } from "./kit.ts";
 import { createMetadata } from "./metadata.ts";
 import { createPopovers } from "./popovers.ts";
+import { FOLDERS, RECENT, STARRED, TRASH, folderIdFrom } from "./shelves.ts";
 import type { AppData, AppState, DriveDoc, Folder } from "./types.ts";
 import { stageDocumentFile } from "./upload.ts";
 import { createVersions } from "./versions.ts";
@@ -147,27 +149,30 @@ export function createLogic({
   // The rows for the current view: nav (or search) → type filter → tag
   // filter → sort.
   function currentRows(): DriveDoc[] {
-    const { nav, type, tag, search } = state;
+    const { shelf, tag, search } = state;
+    const folderId = folderIdFrom(shelf);
     let list: DriveDoc[];
     if (search.trim()) {
       list = state.searchResults ?? []; // flat vault FTS matches across every folder
-    } else if (nav.kind === "trash") {
+    } else if (shelf === TRASH) {
       list = trashedFiles();
     } else {
       list = activeFiles();
-      if (nav.kind === "starred") list = list.filter((f) => f.starred);
-      if (nav.kind === "folder")
-        list = list.filter((f) => (f.folder_id ?? null) === nav.folderId);
+      if (shelf === STARRED) list = list.filter((f) => f.starred);
+      if (folderId)
+        list = list.filter((f) => (f.folder_id ?? null) === folderId);
     }
-    if (type !== "all")
-      list = list.filter((f) => typeMeta(f.media_type).cat === type);
+    // §4.2's filter row, composed after the chips and before the sort: each
+    // axis narrows what the last one left, which is exactly a chain of
+    // predicates and deliberately not a score (filters.ts).
+    list = applyFilters(list, state.filters);
     // Free-form label filter (issue #352 phase 4) — same "all" escape hatch
     // and same idiom as the type chips above, alongside them rather than
     // replacing them (a document can be one type AND carry several labels).
     if (tag && tag !== "all")
       list = list.filter((f) => (f.tags ?? []).some((t) => t.label === tag));
     if (search.trim()) return list; // keep the vault's rank order for search
-    if (nav.kind === "recent") {
+    if (shelf === RECENT) {
       return [...list]
         .sort((a, b) =>
           String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))
@@ -363,11 +368,11 @@ export function createLogic({
   async function deleteFolder(folder: Folder) {
     const outcome = await act("delete-folder", { folder_id: folder.folder_id });
     if (narrate(outcome)) {
-      if (
-        state.nav.kind === "folder" &&
-        state.nav.folderId === folder.folder_id
-      )
-        state.nav = { kind: "all" };
+      // The shelf the member was on has just ceased to exist. They fall back
+      // to FOLDERS, not All: the folder was reached from there, and a silent
+      // jump to the drive's root would drop them somewhere they did not ask
+      // to be (view-state.ts, rule 2).
+      if (folderIdFrom(state.shelf) === folder.folder_id) state.shelf = FOLDERS;
       statusLine("Folder deleted · receipted.");
       await refresh();
     }
@@ -394,8 +399,7 @@ export function createLogic({
     if (state.uploading) return;
     const files = [...fileList];
     if (files.length === 0) return;
-    const folderId =
-      state.nav.kind === "folder" ? (state.nav.folderId ?? null) : null;
+    const folderId = folderIdFrom(state.shelf);
     const skipped = files.filter((f) => f.size > MAX_UPLOAD_BYTES);
     const accepted = files.filter((f) => f.size <= MAX_UPLOAD_BYTES);
     const failures: string[] = [];

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import {
@@ -24,11 +24,21 @@ import {
 import ApprovalsScreen from "../../screens/ApprovalsScreen.js";
 import { groupGrantsByStore } from "../../screens/privacyStores.js";
 import type { StoreHolderDTO } from "../../screens/privacyStores.js";
+import NoteBlock from "../../ui/NoteBlock.js";
+import PanelBlock from "../../ui/PanelBlock.js";
 import { useShellActions } from "../actions.js";
 import PageScroll from "../PageScroll.js";
 import { useCachedQuery } from "../queryCache.js";
-import { PageEmpty, PageSkeleton } from "../status.js";
 import {
+  clearRouteSignals,
+  publishRouteSignals,
+  publishRouteVerbs,
+} from "../routeVitals.js";
+import { PageSkeleton } from "../status.js";
+import {
+  approvalsCountLine,
+  approvalsHealth,
+  approvalsState,
   buildGrantRow,
   buildActivityRow,
   collapseAdjacentActivity,
@@ -78,6 +88,10 @@ export default function ApprovalsRoute(): JSX.Element {
   const { confirm, showToast, navigate } = useShellActions();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [reviewLimit, setReviewLimit] = useState(REVIEW_LIMIT_DEFAULT);
+  // The app bar's "Review all" verb, as a nonce rather than a callback into
+  // the screen: the bar renders above the outlet, so the route is the only
+  // place both can see, and a nonce makes a repeat press a fresh request.
+  const [reviewAll, setReviewAll] = useState<{ nonce: number } | null>(null);
 
   // The outbox decision an `outbox` notice deep-links to (#647 D10). The
   // nonce makes a repeat tap a fresh request; the screen owns the resulting
@@ -114,6 +128,63 @@ export default function ApprovalsRoute(): JSX.Element {
       .catch(() => undefined);
     return () => controller.abort();
   }, [reload]);
+
+  // The frame's two verbs. "History" is the durable alert record, which lives
+  // on the Gateway page's Alerts tab (`AlertHistoryPanel`) — one implementation,
+  // reached from both places, rather than a second copy of it here.
+  useEffect(() => {
+    publishRouteVerbs("approvals", {
+      onCommit: () =>
+        setReviewAll((prev) => ({ nonce: (prev?.nonce ?? 0) + 1 })),
+      onSecondary: () => navigate({ kind: "gateway", tab: "alerts" }),
+    });
+    return () => clearRouteSignals("approvals");
+  }, [navigate]);
+
+  // The count line and the status line, from the one query resolution that
+  // knows them — never from a render, which would let the bar and the body
+  // disagree about which state the page is in.
+  const pending =
+    state.status === "ready" ? state.data.notifications.decisions : null;
+  // Waiting = every decision, plus the notices that are a demand rather than
+  // news (an info-severity notice is an FYI and never blocks anyone, #665).
+  const waiting =
+    pending === null || state.status !== "ready"
+      ? -1
+      : pending.outbox.length +
+        pending.needsAuth.length +
+        pending.parked.length +
+        pending.scopeRequests.length +
+        state.data.notifications.notices.filter(
+          (notice) => notice.archivedAt === null && notice.severity !== "info"
+        ).length;
+  const standing =
+    state.status === "ready"
+      ? state.data.grants.filter((grant) => grant.revokedAt === null).length
+      : -1;
+  const lastReadAt = useRef<number | null>(null);
+  useEffect(() => {
+    if (state.status === "loading") {
+      publishRouteSignals("approvals", { state: "loading" });
+      return;
+    }
+    if (state.status === "error") {
+      publishRouteSignals("approvals", {
+        state: "error",
+        ...(lastReadAt.current === null
+          ? {}
+          : { lastReadAt: lastReadAt.current }),
+      });
+      return;
+    }
+    lastReadAt.current = Date.now();
+    const tally = { grants: standing, waiting };
+    publishRouteSignals("approvals", {
+      count: approvalsCountLine(tally),
+      health: approvalsHealth(tally),
+      state: approvalsState(tally),
+    });
+  }, [standing, state.status, waiting]);
 
   /**
    * Run one decision. The row leaves the page the moment the owner decides
@@ -385,14 +456,28 @@ export default function ApprovalsRoute(): JSX.Element {
   if (state.status === "loading") {
     return (
       <PageScroll>
-        <PageSkeleton rows={4} label="Loading Notifications…" />
+        <PageSkeleton rows={6} label="Loading Notifications…" />
+        <NoteBlock>
+          A row knows its shape before its content arrives, so nothing reflows
+          when it does.
+        </NoteBlock>
       </PageScroll>
     );
   }
   if (state.status === "error") {
+    // What failed, what is still safe, one way forward — the error shape every
+    // one of the six operational routes takes. The gateway's own words ride
+    // along as a fact, because "it didn't work" is not a diagnosis.
     return (
       <PageScroll>
-        <PageEmpty message={`Couldn’t load Notifications: ${state.error}`} />
+        <PanelBlock
+          action={{ label: "Try again", onClick: reload }}
+          body="The gateway answered, but the queue that holds staged writes did not. Nothing has been approved or denied in the meantime, and nothing expired."
+          eyebrow="Could not reach the consent store"
+          facts={[{ key: "what it said", value: state.error }]}
+          tone="net"
+          wide
+        />
       </PageScroll>
     );
   }
@@ -487,6 +572,7 @@ export default function ApprovalsRoute(): JSX.Element {
         }}
         onSeeAllActivity={() => setReviewLimit(REVIEW_LIMIT_SEE_ALL)}
         focusOutbox={focusOutbox}
+        reviewAll={reviewAll}
       />
     </PageScroll>
   );

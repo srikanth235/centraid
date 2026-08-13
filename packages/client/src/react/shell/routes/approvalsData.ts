@@ -16,6 +16,62 @@ import type {
   ApprovalsActivityRowDTO,
 } from "../../screens/ApprovalsScreen.js";
 
+// ── What the frame says about this page (issue #765) ──────────────────────
+// The count line under the title, the state that decides which verbs the bar
+// offers, and the one persistent status sentence. They live here, beside the
+// DTO builders, because all three are derived from the same fetch the builders
+// map — a screen that computed them separately could disagree with the bar it
+// is rendering under.
+
+/** What the page has to say about, counted. */
+export interface ApprovalsTally {
+  /** Decisions plus the notices that are a demand rather than news. */
+  waiting: number;
+  /** Standing grants still in force. */
+  grants: number;
+}
+
+/**
+ * Above this many waiting items the queue stops being scannable and earns its
+ * filter chips. It is the `full` state — not a different page, just the same
+ * one admitting it is long.
+ */
+export const APPROVALS_FULL_AT = 4;
+
+export function approvalsState(
+  tally: ApprovalsTally
+): "ready" | "full" | "empty" {
+  if (tally.waiting === 0) return "empty";
+  return tally.waiting > APPROVALS_FULL_AT ? "full" : "ready";
+}
+
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** The app bar's count line. Empty says what is still true, not what is
+ *  missing — there is no zero here, only "nothing waiting". */
+export function approvalsCountLine(tally: ApprovalsTally): string {
+  const standing = plural(tally.grants, "standing grant", "standing grants");
+  if (tally.waiting === 0) return `Nothing waiting · ${standing}`;
+  return `${plural(tally.waiting, "decision waiting", "decisions waiting")} · ${standing}`;
+}
+
+/**
+ * The status line in ready/full. No inline action: every verb this page offers
+ * is attached to the thing it acts on, and a status line that offered a
+ * shortcut past that would be offering to decide for you.
+ */
+export function approvalsHealth(tally: ApprovalsTally): {
+  label: string;
+  detail: string;
+} {
+  return {
+    detail: "Nothing here has happened yet. Approving is the act.",
+    label: `${tally.waiting} waiting on you`,
+  };
+}
+
 /** Titlecase a snake/dot-separated key for the detail panel's field labels. */
 function labelFor(key: string): string {
   return key.replace(/[_.]/gu, " ").replace(/\b\w/gu, (c) => c.toUpperCase());

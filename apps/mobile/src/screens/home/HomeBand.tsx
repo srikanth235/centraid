@@ -11,9 +11,9 @@
 // if the shell spends no colour, every colour on screen belongs to an app.
 //
 // No active bar, either (handoff :5176-5179 — the compact band's `bandLabelCss`
-// carries the whole state: weight 500 + full ink when active, weight 400 +
-// the softer `textSoft` when not, and the icon itself steps down to the
-// faintest `textFaint` rather than `textSoft`). The desktop launcher still
+// carries the whole state: the HELD PAIR `band` (400) → `control` (600) plus
+// full ink when active, the softer `textSoft` when not, and the icon itself
+// steps down to the faintest `textFaint` rather than `textSoft`). The desktop launcher still
 // draws a 2px ink bar for its row-shaped rows; the compact band never did,
 // and this used to draw one anyway, which is the bug this fixes.
 //
@@ -139,9 +139,10 @@ function Tab({
           color={active ? colors.text : colors.textFaint}
         />
       </View>
-      {/* Selection is carried by the label's own weight and colour — 500 +
-          full ink when active, 400 + `textSoft` when not — and nothing else.
-          The compact band draws no active bar (see the file header). */}
+      {/* Selection is carried by the label's own weight and colour — the
+          `band` → `control` held pair (400 → 600) plus full ink when active,
+          `textSoft` when not — and nothing else. The compact band draws no
+          active bar (see the file header). */}
       <Text
         style={[styles.label, active ? styles.labelActive : undefined]}
         numberOfLines={1}
@@ -155,26 +156,32 @@ function Tab({
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     label: {
+      // The INACTIVE half of the ramp's own band pair. `band` is 11/15/400 and
+      // is the one role held at zero native delta (`NATIVE_DELTA_OVERRIDES`),
+      // so it measures identically to `control`, the ACTIVE half at the same
+      // 11/15 rung in 600.
+      //
+      // NO `fontFamily` OVERRIDE either way: the roles carry their own faces.
+      // The argument this comment used to make — that weight must not be a
+      // second channel, because a label that changes width on tap reflows a
+      // band a member is looking straight at — was right about the reflow and
+      // wrong about the remedy. The ramp now owns the pair, and a held pair is
+      // precisely a weight change with the metrics pinned: same size, same
+      // leading, no reflow. The tab is a flex cell with `numberOfLines={1}`
+      // besides, so even the glyph-advance delta cannot reach a neighbour.
+      ...t("band"),
       // `stretch` is what makes `numberOfLines={1}` ellipsize INSIDE the tab
       // (handoff :5178 — `width:100%;min-width:0;text-overflow:ellipsis`).
       // Without it the label's box is its intrinsic width, a React Native view
       // does not clip by default, and a long name simply ran into its
       // neighbour: "Connectors" and "Analytics" sat with no gap between them.
       // The handoff truncates to "Connect…" for exactly this reason.
-      ...t("control"),
       alignSelf: "stretch",
       color: colors.textSoft,
-      // NO `fontFamily` OVERRIDE. `t("control")` already resolves to
-      // sansMedium — 13/17/500 — and re-pinning sansRegular here put the two
-      // bands back to 400, which is the deviation the ramp exists to prevent.
-      // The active state lives in the COLOUR (`textSoft` → `text`) and in the
-      // 2pt ink rule above the tab; weight is not a third channel saying the
-      // same thing, and a band whose labels change width on tap is a band that
-      // reflows when a member is looking straight at it.
       marginTop: 3,
       textAlign: "center",
     },
-    labelActive: { color: colors.text },
+    labelActive: { ...t("control"), color: colors.text },
     // The handoff's band icon sits in `glyph(30)` — a 30×30 square with
     // `border-radius: round(30 * 0.26) = 8` (:5156-5157, :5165), NOT the 26pt
     // launcher-row glyph and not a bare 24-tall line box. The wrap is what
@@ -205,7 +212,9 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: t("mono").fontSize,
     },
     moreLabel: {
-      ...t("control"),
+      // More is never "current" — it opens a sheet — so it draws the inactive
+      // half of the pair, permanently.
+      ...t("band"),
       alignSelf: "stretch",
       color: colors.textSoft,
       marginTop: 3,

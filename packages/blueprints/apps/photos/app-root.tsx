@@ -35,6 +35,7 @@ import {
 } from "react";
 import type { FC, ReactElement, ReactNode } from "react";
 
+import { publishOutcome } from "../_shared/app-frame.tsx";
 import {
   mountedScopes,
   ownScopeId,
@@ -76,7 +77,7 @@ import { createDuplicates } from "./duplicates.tsx";
 import { createEnrichmentGate } from "./enrichment-gate.ts";
 import { filterByKind, scopeIsOn, writeScopeFor } from "./filters.ts";
 import type { KindFilter } from "./filters.ts";
-import { appBar, bandClaim, publishOutcome } from "./frame.tsx";
+import { appBar, bandClaim } from "./frame.tsx";
 import { debounce, observeWidth } from "./kit.ts";
 import { gridWidthFallback, RAIL_WIDTH, rungHeight } from "./layout.ts";
 import {

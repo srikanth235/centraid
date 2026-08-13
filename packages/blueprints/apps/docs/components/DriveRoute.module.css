@@ -1,0 +1,13 @@
+/* The drive screen's own block (Docs spec §4.1): the caption that closes a row
+   set. The offline banner is shared (shared.module.css `.offline`). */
+
+/* The caption is where the PROSE lives, once — so it is the only sentence in
+   the drive that is allowed to be a sentence, and it sits under the set it is
+   about rather than floating over it. */
+.caption {
+  margin: var(--sp-2) 0 0;
+  padding-inline: var(--sp-4);
+  max-inline-size: 72ch;
+  font: var(--t-small);
+  color: var(--text-soft);
+}

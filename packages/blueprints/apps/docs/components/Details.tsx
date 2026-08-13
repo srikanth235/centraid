@@ -1,32 +1,37 @@
-// Details drawer (#detailsRoot root).
+// The DETAILS RAIL (Docs spec §8) — one rail, three tabs.
+//
+// "One rail, three former screens: properties, the people a document names,
+// and the facts about a kind Docs cannot render. All three answer 'what is
+// this row', so they belong beside the row and not three screens away from
+// it." (§8, verbatim.) The tab bodies are in `DetailsTabs.tsx`; this file is
+// the rail: head, tabs, the document's own verbs, and the footer.
+//
+// TWO THINGS LEFT THIS FILE. Version history is a ROUTE now (§6.2) rather
+// than a disclosure inside a drawer, and Activity went with it — "what
+// happened to a document and which version it produced are one spine" — so
+// the rail's footer sends the member to that screen instead of unfolding a
+// second copy of it here.
 import { useEffect, useRef, useState } from "react";
 
 import { mountedScopes } from "../../_shared/scope-kit.ts";
 import { ShareSheet } from "../../_shared/ShareSheet.tsx";
+import { RAIL_NOTES, RAIL_TABS } from "../document-copy.ts";
+import type { RailTabId } from "../document-copy.ts";
 import {
   custodyMeta,
   extOf,
   fmtBytes,
-  fmtFull,
   isImage,
   isVideo,
   isTextEditable,
-  purgeCountdown,
   tintBg,
   typeMeta,
 } from "../format.ts";
 import { I, RENAME_ICON } from "../icons.ts";
 import { armConfirm } from "../kit.ts";
-import type {
-  ActivityEvent,
-  CustodyTone,
-  DriveDoc,
-  VersionEntry,
-} from "../types.ts";
-import { Activity } from "./Activity.tsx";
-import { History } from "./History.tsx";
+import type { CustodyTone, DriveDoc, VersionEntry } from "../types.ts";
+import { FactsTab, NamesTab, PropsTab } from "./DetailsTabs.tsx";
 import { Icon } from "./Shared.tsx";
-import { Tags } from "./Tags.tsx";
 
 import styles from "./Details.module.css";
 import shared from "./shared.module.css";
@@ -90,10 +95,9 @@ export function Details({
   onEdit,
   onReplace,
   loadHistory,
-  onRestoreVersion,
+  onOpenVersions,
   onAddTag,
   onRemoveTag,
-  loadActivity,
 }: {
   doc: DriveDoc;
   folderName: (id: string | null | undefined) => string;
@@ -108,16 +112,15 @@ export function Details({
   loadHistory: (
     documentId: string
   ) => Promise<{ versions?: VersionEntry[]; vaultDenied?: unknown }>;
-  onRestoreVersion: (doc: DriveDoc, contentId: string) => void;
+  /** §6.2's route. The rail SENDS the member to the spine; it no longer
+   *  unfolds a second copy of it inside a drawer. */
+  onOpenVersions: (documentId: string) => void;
   onAddTag: (doc: DriveDoc, label: string) => void;
   onRemoveTag: (doc: DriveDoc, tagId: string) => void;
-  loadActivity: (
-    documentId: string
-  ) => Promise<{ events?: ActivityEvent[]; vaultDenied?: unknown }>;
 }) {
   const m = typeMeta(doc.media_type);
   const trashed = doc.trashed;
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [tab, setTab] = useState<RailTabId>("props");
   // Documents use the same ceremony-free commons sheet as every container.
   const [shareOpen, setShareOpen] = useState(false);
   const [shareStatus, setShareStatus] = useState("");
@@ -237,8 +240,6 @@ export function Details({
               </span>
             </div>
           ) : null}
-          <div className={styles.detailLabel}>Tags</div>
-          <Tags doc={doc} onAddTag={onAddTag} onRemoveTag={onRemoveTag} />
           <div className={shared.detailActions}>
             {/* Exactly one primary in this sheet (DESIGN.md: at most one
                 filled ink element per view) — opening the document is the
@@ -318,45 +319,47 @@ export function Details({
               ) : null}
             </>
           )}
-          <div className={styles.detailLabel}>Properties</div>
-          <dl className={styles.detailGrid}>
-            <dt>Type</dt>
-            <dd>{m.name}</dd>
-            <dt>Size</dt>
-            <dd>{fmtBytes(doc.byte_size)}</dd>
-            <dt>{trashed ? "Was in" : "Folder"}</dt>
-            <dd>{folderName(doc.folder_id)}</dd>
-            <dt>{trashed ? "Purges" : "Added"}</dt>
-            <dd>
-              {trashed ? purgeCountdown(doc.purge_at) : fmtFull(doc.created_at)}
-            </dd>
-          </dl>
-          <div className={styles.detailLabel}>Activity</div>
-          <Activity
-            key={doc.document_id}
-            documentId={doc.document_id}
-            loadActivity={loadActivity}
-          />
+          {/* §8's tab strip. Three tabs, one underline — the same 2px ink
+              bar the shelf strip uses, so "which of these am I looking at"
+              means the same thing everywhere in the app. */}
+          <div className={styles.tabs} role="tablist" aria-label="Details">
+            {RAIL_TABS.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                role="tab"
+                aria-selected={tab === entry.id}
+                className={styles.tab}
+                data-current={String(tab === entry.id)}
+                onClick={() => setTab(entry.id)}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
+          {tab === "props" ? (
+            <PropsTab
+              doc={doc}
+              folderName={folderName}
+              onAddTag={onAddTag}
+              onRemoveTag={onRemoveTag}
+            />
+          ) : tab === "facts" ? (
+            <FactsTab doc={doc} loadHistory={loadHistory} />
+          ) : (
+            <NamesTab doc={doc} />
+          )}
           <button
             type="button"
-            className={`kit-plain-btn ${styles.detailLabel} ${styles.versionToggle}`}
-            aria-expanded={historyOpen}
-            onClick={() => setHistoryOpen((o) => !o)}
+            className={`kit-btn quiet ${shared.detailBtn}`}
+            onClick={() => onOpenVersions(doc.document_id)}
           >
             Version history
-            <Icon svg={historyOpen ? I.chevDown! : I.chevRSmall!} />
           </button>
-          {historyOpen ? (
-            <History
-              key={doc.content_id}
-              documentId={doc.document_id}
-              readOnly={trashed}
-              loadVersions={loadHistory}
-              onRestoreVersion={(_documentId, contentId) =>
-                onRestoreVersion(doc, contentId)
-              }
-            />
-          ) : null}
+          {/* §8's own closing sentence: the rail is about ONE row, and it
+              follows the selection rather than pinning itself to a document
+              the member has moved on from. */}
+          <p className={styles.railFoot}>{RAIL_NOTES.footer}</p>
         </div>
         <div className={styles.detailsFoot}>
           {trashed ? (

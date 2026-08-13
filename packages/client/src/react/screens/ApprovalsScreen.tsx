@@ -1,32 +1,40 @@
-// governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component (list + detail + action rows for one surface); splitting would fragment one visual unit
+// governance: allow-repo-hygiene file-size-limit (#765) single cohesive screen component (one consent surface: staged write, waiting queue, standing grants, store ledger, history); splitting would fragment one block list
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { JSX } from "react";
-
-import type { IconName } from "@centraid/design";
+import type { JSX, ReactNode } from "react";
 
 import Button from "../ui/Button.js";
-import { cx } from "../ui/cx.js";
-import Icon from "../ui/Icon.js";
-import KindBadge from "../ui/KindBadge.js";
+import ChipsBlock from "../ui/ChipsBlock.js";
+import EmptyBlock from "../ui/EmptyBlock.js";
+import NoteBlock from "../ui/NoteBlock.js";
+import PanelBlock from "../ui/PanelBlock.js";
+import type { PanelFact } from "../ui/PanelBlock.js";
+import RowsBlock from "../ui/RowsBlock.js";
+import type { RowDef } from "../ui/RowsBlock.js";
+import SectionBlock from "../ui/SectionBlock.js";
 import { NETWORK_CALLS } from "./networkCalls.js";
 import type { StoreGroup, StoreHolderDTO } from "./privacyStores.js";
 
-import emptyCss from "../styles/pageEmpty.module.css";
 import styles from "./ApprovalsScreen.module.css";
 
-// The Approvals screen (issues #306/#308) — the desktop UI for the vault's
-// consent surface that shipped with no renderer: agents stage external
-// writes (outbox), connections lapse and need reconnection, Tier 3/4 acts
-// park, and republished manifests ask for wider scopes. This screen is the
-// one place an owner sees all four and decides. Standing grants (the
-// "always allow" bypass an outbox approval can mint) live here too — a
-// list + revoke, not a Settings page (Settings is another surface's own).
+// The Notifications screen (issues #306/#308/#552/#647/#708, revamped for the
+// v9 binding layer in #765) — the desktop UI for the vault's consent surface.
+// Agents stage external writes (outbox), connections lapse, Tier 3/4 acts park,
+// republished manifests ask for wider scopes, and automations file notices.
+// This screen is the one place an owner sees all of it and decides.
 //
-// Purely presentational: ApprovalsRoute fetches `GET /_vault/blocking` +
-// `GET /_vault/outbox-grants`, maps the wire shapes to the DTOs below, and
-// wires the callbacks to `gateway-client-outbox.ts` (confirm/prompt
-// overlays live at the route, not here — see HomeRoute's delete/rename
-// flows for the same split).
+// The v9 shape is a single BLOCK LIST, not a set of chip-gated tabs: one staged
+// write is promoted to a panel (the words are somebody else's, so they are
+// quoted, and every fact about where they are going is stated before the
+// commit), everything else that is waiting is a row, and the reference material
+// underneath it — standing grants, the store ledger, the history — is sections
+// of rows in the same list rather than views hidden behind a filter.
+//
+// Identity (title, count line, the two app-bar verbs) is the FRAME's, published
+// by `ApprovalsRoute` through `routeVitals.ts`; this screen draws no header.
+//
+// Purely presentational: ApprovalsRoute fetches, maps the wire shapes to the
+// DTOs below, and wires the callbacks to `gateway-client-outbox.ts` (confirm /
+// prompt overlays live at the route, not here).
 
 export interface ApprovalsOutboxRowDTO {
   itemId: string;
@@ -38,28 +46,27 @@ export interface ApprovalsOutboxRowDTO {
   recipient: string;
   subject: string | null;
   bodyPreview: string | null;
-  /** Every artifact key/value, readably stringified, for the detail panel. */
+  /** Every artifact key/value, readably stringified, for the panel's facts. */
   fields: readonly { key: string; label: string; value: string }[];
   stagedAgo: string;
   note: string | null;
   /**
-   * WHO staged this write — the sibling gap to the parked-row requester-
-   * identity fix (issue: parked-invocation trust legibility applies just as
-   * much to an outbound external send, arguably more). Never null: falls
-   * back to the raw kind string when no display name is known. The gateway
-   * refines the stored `ai_agent` into `'agent' | 'assistant'` on the wire
-   * (VaultPlane.refineActorKind, matching the parked plane's vocabulary), so
-   * the badge distinguishes App vs Automation vs Assistant like parked rows.
+   * WHO staged this write — the sibling of the parked-row requester identity.
+   * Never null: falls back to the raw kind string when no display name is
+   * known. The gateway refines the stored `ai_agent` into `'agent' |
+   * 'assistant'` on the wire (VaultPlane.refineActorKind), so the eyebrow can
+   * name an app, an automation and the assistant apart.
    */
   caller: string;
   callerKind: string;
   /**
-   * Whether the gateway has a request rebuilder for this item's verb
-   * (issue #308 A5 UI slice) — gates the "Edit" affordance. `false` keeps
-   * the honest "can't be edited yet" copy.
+   * Whether the gateway has a request rebuilder for this item's verb (issue
+   * #308 A5) — gates the "Edit and approve" verb. `false` keeps the honest
+   * "cannot be edited" fact instead.
    */
   canEdit: boolean;
-  /** Raw artifact, keyed exactly as staged — seeds the edit form and lets non-editable fields ride through unchanged. */
+  /** Raw artifact, keyed exactly as staged — seeds the edit form and lets
+   *  non-editable fields ride through unchanged. */
   artifact: Record<string, unknown>;
 }
 
@@ -74,13 +81,8 @@ export interface ApprovalsParkedRowDTO {
   invocationId: string;
   command: string;
   caller: string;
-  /**
-   * WHO is asking — refines a raw 'agent' credential into 'assistant' when
-   * it's the vault assistant's own identity, not an automation's (issue:
-   * parked-invocation trust legibility — the owner deciding whether to
-   * approve a destructive command couldn't tell app vs automation vs
-   * assistant apart before this field existed).
-   */
+  /** Refines a raw 'agent' credential into 'assistant' when it is the vault
+   *  assistant's own identity, not an automation's. */
   callerKind: "app" | "agent" | "assistant" | "owner-device";
   parkedAgo: string;
   inputPreview: string;
@@ -116,7 +118,7 @@ export interface ApprovalsActivityRowDTO {
   objectId: string | null;
   objectType: string;
   occurredAgo: string;
-  /** Absolute ISO timestamp for `title` + expanded detail. */
+  /** Absolute ISO timestamp for the expanded detail. */
   occurredAt: string;
   /** Wire decision: `allow` | `deny` (schema); rendered as Allowed / Denied. */
   decision: string;
@@ -124,14 +126,12 @@ export interface ApprovalsActivityRowDTO {
   risk: string | null;
   /** Acting identity display name; falls back to kind when null. */
   actor: string | null;
-  /** Refined kind for KindBadge (`app` / `agent` / `assistant` / `owner`). */
+  /** Refined kind (`app` / `agent` / `assistant` / `owner`). */
   actorKind: string | null;
   /** Standing outbox grant when this receipt was auto-allowed. */
   grantId: string | null;
-  /**
-   * How the allow decision was made — grant auto-allow vs owner approval.
-   * Null on denies and rows with no attribution signal.
-   */
+  /** How the allow decision was made — grant auto-allow vs owner approval.
+   *  Null on denies and rows with no attribution signal. */
   attribution: "grant" | "owner" | null;
   /** Adjacent-collapse multiplicity (1 when not collapsed). */
   count: number;
@@ -163,27 +163,20 @@ export interface ApprovalsScreenProps {
   scopeRequests: readonly ApprovalsScopeRequestRowDTO[];
   grants: readonly ApprovalsGrantRowDTO[];
   /**
-   * The store-centric ledger (issue #708 A2) — "who can see my photos?"
-   * rather than "what does this app do?". Every declared store is present,
-   * even with zero holders (the caller renders that as "reachable by
-   * nothing"). Pure reshape of the same `vaultApps()`/`listAgents()` grants
-   * data `grants` above draws from a different angle of — see
-   * `privacyStores.ts`.
+   * The store-centric ledger (issue #708 A2) — "who can see my photos?" rather
+   * than "what does this app do?". Every declared store is present, even with
+   * zero holders (rendered as "reachable by nothing").
    */
   storeGrants: readonly StoreGroup[];
   activity: readonly ApprovalsActivityRowDTO[];
   notices?: readonly NoticeRowDTO[];
-  /**
-   * Whether the review feed was truncated at the current limit — drives the
-   * in-place "See all" affordance (issue #552; no separate audit screen).
-   */
+  /** Whether the review feed was truncated at the current limit — drives the
+   *  in-place "See all" affordance (issue #552). */
   activityTruncated?: boolean;
-  /** The itemId/invocationId/requestId/grantId currently mid-flight — disables its row's actions. */
+  /** The itemId/invocationId/requestId/grantId currently mid-flight. */
   busyId: string | null;
-  /**
-   * `artifact` is present only for an edit-then-approve (issue #308 A5 UI
-   * slice) — the gateway rebuilds the wire request server-side from it.
-   */
+  /** `artifact` is present only for an edit-then-approve (issue #308 A5) — the
+   *  gateway rebuilds the wire request server-side from it. */
   onApproveOutbox: (
     itemId: string,
     alwaysAllow: boolean,
@@ -194,8 +187,8 @@ export interface ApprovalsScreenProps {
   onConfirmParked: (invocationId: string, approve: boolean) => void;
   onDecideScopeRequest: (requestId: string, approve: boolean) => void;
   onRevokeGrant: (grantId: string) => void;
-  /** Revoke one store-ledger holder's grant — the switch strikes the row
-   *  through locally rather than removing it (issue #708 A2). */
+  /** Revoke one store-ledger holder's grant — the row stays, switched off,
+   *  rather than vanishing (issue #708 A2). */
   onRevokeStoreGrant: (holder: StoreHolderDTO) => void;
   onReadNotice?: (noticeId: string) => void;
   onArchiveNotice?: (noticeId: string) => void;
@@ -203,34 +196,71 @@ export interface ApprovalsScreenProps {
   /** Raise the review-feed limit in place when the list is truncated. */
   onSeeAllActivity?: () => void;
   /**
-   * A request to bring one outbox decision into view — what tapping an
-   * `outbox` notice means (#647 D10). `nonce` makes a repeat tap on the SAME
-   * item a new request; the screen switches to "Needs me", expands that row
-   * and scrolls it into view. A null itemId — or one that is no longer open
-   * (already decided, drained) — lands on "Needs me" with nothing focused.
+   * A request to bring one staged write into view — what tapping an `outbox`
+   * notice means (#647 D10). `nonce` makes a repeat tap on the SAME item a new
+   * request; the screen promotes that item into the panel and scrolls to it. A
+   * null itemId — or one that is no longer open — clears any filter and leaves
+   * the queue as it is, rather than pointing at a row that isn't there.
    */
   focusOutbox?: { itemId: string | null; nonce: number } | null;
+  /**
+   * The app bar's "Review all" verb (#765). It is not a navigation: it drops
+   * whatever filter is in force and puts the first staged write back in the
+   * panel, which is what "review all of it" means on a page whose content is
+   * already all here.
+   */
+  reviewAll?: { nonce: number } | null;
 }
 
-function GroupHead({
-  icon,
-  label,
-  count,
-}: {
-  icon: JSX.Element;
-  label: string;
-  count: number;
-}): JSX.Element {
-  return (
-    <div className={styles.groupHead}>
-      <span className={styles.groupIcon}>{icon}</span>
-      <h2>{label}</h2>
-      <span className={styles.groupCount}>{count}</span>
-    </div>
-  );
+// ── Copy that states a rule ────────────────────────────────────────────────
+// Verbatim from the v9 brief. These sentences are the product's promises about
+// what a decision does, so they are constants rather than inline strings: a
+// promise that drifts between two call sites is a promise broken in one of
+// them.
+
+const EMPTY_TITLE = "Nothing is waiting on you";
+const EMPTY_BODY =
+  "Staged writes, lapsed connections and requests for wider access appear here. This page is empty most of the time, and that is the healthy state.";
+const EMPTY_ACTION = "Review standing grants";
+const DENY_TITLE = "Deny this write";
+const DENY_SUB =
+  "Nothing is sent. The automation is told it was refused, and remembers.";
+const SENDING_FACT_KEY = "nothing has been sent";
+const SENDING_FACT_VALUE =
+  "approving sends it immediately and cannot be undone";
+const GRANTS_NOTE =
+  "A standing grant skips this page for one narrow thing. Revoking one takes effect on the next run.";
+const NO_GRANTS_NOTE =
+  "No standing grants yet — “always allow” on an approval mints one.";
+const LEDGER_NOTE =
+  "Everything an app can reach, and nothing it cannot. Revoking takes effect at once — the app keeps no copy of what it read.";
+const CANNOT_EDIT_KEY = "cannot be edited";
+const CANNOT_EDIT_VALUE =
+  "the gateway has no rebuilder for this verb, so approving sends exactly what is quoted above";
+
+/** The waiting-queue filter, shown only when the queue is full enough to need
+ *  one. Ids are the v9 chip set; the labels are its copy. */
+const WAITING_CHIPS = [
+  { id: "all", label: "Everything" },
+  { id: "risk", label: "High risk" },
+  { id: "auth", label: "Authorization" },
+  { id: "staged", label: "Staged writes" },
+] as const;
+
+type WaitingFilter = (typeof WAITING_CHIPS)[number]["id"];
+
+/** Which chip a waiting item answers to. One kind, one chip — an item that
+ *  matched two would make "showing 3 of 12" a lie in one of them. */
+type WaitingKind = "staged" | "auth" | "risk";
+
+function matchesFilter(filter: WaitingFilter, kind: WaitingKind): boolean {
+  return filter === "all" || filter === kind;
 }
 
-/** `artifact[key]` is editable (string or a list of strings) — the shape the gateway's shape-drift guard accepts. */
+// ── Small honest phrasings ────────────────────────────────────────────────
+
+/** `artifact[key]` is editable (string or a list of strings) — the shape the
+ *  gateway's shape-drift guard accepts. */
 function isEditableKey(
   artifact: Record<string, unknown>,
   key: string
@@ -242,7 +272,8 @@ function isEditableKey(
   );
 }
 
-/** A textarea reads better than a single-line input for body-like or already-multi-line text. */
+/** A textarea reads better than a single-line input for body-like or already
+ *  multi-line text. */
 function wantsTextarea(key: string, value: string): boolean {
   return (
     key.toLowerCase().includes("body") ||
@@ -251,785 +282,52 @@ function wantsTextarea(key: string, value: string): boolean {
   );
 }
 
-/** The requester badge an outbox row shows next to its actor name — mirrors `parkedKindBadge`. */
-function outboxKindBadge(kind: string): JSX.Element | null {
+/**
+ * WHO staged or asked, as words rather than a coloured chip. The kind badge
+ * was a classifier pill in a system whose one chromatic ink means "this leaves
+ * the device"; the same fact reads better as English in the line that already
+ * names the actor.
+ */
+export function callerPhrase(kind: string, caller: string): string {
   switch (kind) {
     case "app":
-      return <KindBadge kind="app">App</KindBadge>;
+      return `the app ${caller}`;
     case "agent":
-      return <KindBadge kind="automation">Automation</KindBadge>;
+      return `the automation ${caller}`;
     case "assistant":
-      return <KindBadge kind="assistant">Assistant</KindBadge>;
+      return "the assistant";
     default:
-      return null;
+      return caller;
   }
-}
-
-function OutboxRow({
-  row,
-  busy,
-  expanded,
-  focused = false,
-  onToggle,
-  onApprove,
-  onDeny,
-}: {
-  row: ApprovalsOutboxRowDTO;
-  busy: boolean;
-  expanded: boolean;
-  /** Deep-link target from an outbox notice — highlight and scroll into view. */
-  focused?: boolean;
-  onToggle: () => void;
-  onApprove: (alwaysAllow: boolean, artifact?: Record<string, unknown>) => void;
-  onDeny: () => void;
-}): JSX.Element {
-  const [alwaysAllow, setAlwaysAllow] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const el = rootRef.current;
-    // `scrollIntoView` is absent under jsdom — the highlight is the assertable
-    // half of the behaviour, the scroll is the browser-only nicety.
-    if (focused && el && typeof el.scrollIntoView === "function") {
-      el.scrollIntoView({ block: "nearest" });
-    }
-  }, [focused]);
-  const [editing, setEditing] = useState(false);
-  const [editText, setEditText] = useState<Record<string, string>>({});
-
-  const editableKeys = useMemo(
-    () =>
-      row.fields
-        .map((f) => f.key)
-        .filter((key) => isEditableKey(row.artifact, key)),
-    [row.artifact, row.fields]
-  );
-  const isListKey = (key: string): boolean => Array.isArray(row.artifact[key]);
-
-  const startEdit = (): void => {
-    const seed: Record<string, string> = {};
-    for (const key of editableKeys) {
-      const v = row.artifact[key];
-      seed[key] = Array.isArray(v) ? v.join(", ") : String(v);
-    }
-    setEditText(seed);
-    setEditing(true);
-  };
-  const cancelEdit = (): void => setEditing(false);
-  const submitEdit = (): void => {
-    const artifact: Record<string, unknown> = { ...row.artifact };
-    for (const key of editableKeys) {
-      const raw = editText[key] ?? "";
-      artifact[key] = isListKey(key)
-        ? raw
-            .split(",")
-            .map((s) => s.trim())
-            .filter((s) => s.length > 0)
-        : raw;
-    }
-    onApprove(alwaysAllow, artifact);
-    setEditing(false);
-  };
-
-  return (
-    <div
-      ref={rootRef}
-      className={styles.row}
-      data-expanded={expanded ? "true" : undefined}
-      data-focused={focused ? "true" : undefined}
-      data-testid={`outbox-row-${row.itemId}`}
-    >
-      <button type="button" className={styles.rowMain} onClick={onToggle}>
-        <span className={styles.rowIcon}>
-          <Icon name="Send" size={14} />
-        </span>
-        <span className={styles.rowBody}>
-          <span className={styles.rowTitle}>{row.subject ?? row.target}</span>
-          <span className={styles.rowSub}>
-            {row.recipient} · {row.connectionLabel}
-          </span>
-          <span className={cx(styles.rowSub, styles.rowSubCaller)}>
-            {outboxKindBadge(row.callerKind)}
-            <span>{row.caller}</span>
-          </span>
-        </span>
-        <span className={styles.rowMeta}>{row.stagedAgo}</span>
-        <Icon name="ChevronRight" size={14} />
-      </button>
-      {expanded ? (
-        <div className={styles.detail}>
-          <dl className={styles.fields}>
-            {row.fields.map((f) => {
-              const editableHere = editing && editableKeys.includes(f.key);
-              return (
-                <div key={f.key} className={styles.field}>
-                  <dt>{f.label}</dt>
-                  {editableHere ? (
-                    isListKey(f.key) ||
-                    !wantsTextarea(f.key, editText[f.key] ?? "") ? (
-                      <input
-                        type="text"
-                        className={styles.editInput}
-                        aria-label={f.label}
-                        value={editText[f.key] ?? ""}
-                        onChange={(e) =>
-                          setEditText((prev) => ({
-                            ...prev,
-                            [f.key]: e.target.value,
-                          }))
-                        }
-                      />
-                    ) : (
-                      <textarea
-                        className={styles.editTextarea}
-                        aria-label={f.label}
-                        value={editText[f.key] ?? ""}
-                        onChange={(e) =>
-                          setEditText((prev) => ({
-                            ...prev,
-                            [f.key]: e.target.value,
-                          }))
-                        }
-                      />
-                    )
-                  ) : (
-                    <dd>{f.value}</dd>
-                  )}
-                </div>
-              );
-            })}
-          </dl>
-          {row.note ? (
-            <p className={styles.detailNote}>Note: {row.note}</p>
-          ) : null}
-          <label className={styles.alwaysAllow}>
-            <input
-              type="checkbox"
-              checked={alwaysAllow}
-              onChange={(e) => setAlwaysAllow(e.target.checked)}
-            />
-            Always allow {row.verb} → {row.target}
-          </label>
-          {row.canEdit ? null : (
-            <p className={styles.editNote}>
-              This preview can’t be edited yet — approving sends exactly what’s
-              shown above.
-            </p>
-          )}
-          <div className={styles.actions}>
-            {row.canEdit && !editing ? (
-              <Button
-                label="Edit"
-                variant="quiet"
-                size="sm"
-                disabled={busy}
-                onClick={startEdit}
-              />
-            ) : null}
-            <Button
-              label="Deny"
-              variant="quiet"
-              size="sm"
-              disabled={busy}
-              onClick={onDeny}
-              className={styles.denyBtn}
-            />
-            {editing ? (
-              <Button
-                label="Cancel"
-                variant="quiet"
-                size="sm"
-                disabled={busy}
-                onClick={cancelEdit}
-              />
-            ) : null}
-            <Button
-              label={editing ? "Approve with edits" : "Approve"}
-              variant="primary"
-              size="sm"
-              disabled={busy}
-              onClick={() => (editing ? submitEdit() : onApprove(alwaysAllow))}
-            />
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function NeedsAuthRow({
-  row,
-  onOpenSettings,
-}: {
-  row: ApprovalsNeedsAuthRowDTO;
-  onOpenSettings: () => void;
-}): JSX.Element {
-  return (
-    <div className={styles.row}>
-      <div className={styles.rowMain}>
-        <span className={cx(styles.rowIcon, styles.warnIcon)}>
-          <Icon name="AlertTriangle" size={14} />
-        </span>
-        <span className={styles.rowBody}>
-          <span className={styles.rowTitle}>{row.label}</span>
-          <span className={styles.rowSub}>
-            {row.note ?? `${row.kind} needs reconnecting`}
-          </span>
-        </span>
-        <Button
-          label="Reconnect"
-          variant="secondary"
-          size="sm"
-          onClick={onOpenSettings}
-        />
-      </div>
-    </div>
-  );
-}
-
-/** The requester badge a parked row shows next to its display name. */
-function parkedKindBadge(
-  kind: ApprovalsParkedRowDTO["callerKind"]
-): JSX.Element | null {
-  switch (kind) {
-    case "app":
-      return <KindBadge kind="app">App</KindBadge>;
-    case "agent":
-      return <KindBadge kind="automation">Automation</KindBadge>;
-    case "assistant":
-      return <KindBadge kind="assistant">Assistant</KindBadge>;
-    case "owner-device":
-      return null;
-    default:
-      return null;
-  }
-}
-
-function ParkedRow({
-  row,
-  busy,
-  expanded,
-  onToggle,
-  onConfirm,
-}: {
-  row: ApprovalsParkedRowDTO;
-  busy: boolean;
-  expanded: boolean;
-  onToggle: () => void;
-  onConfirm: (approve: boolean) => void;
-}): JSX.Element {
-  return (
-    <div className={styles.row} data-expanded={expanded ? "true" : undefined}>
-      <button type="button" className={styles.rowMain} onClick={onToggle}>
-        <span className={styles.rowIcon}>
-          <Icon name="Clock" size={14} />
-        </span>
-        <span className={styles.rowBody}>
-          <span className={styles.rowTitle}>{row.command}</span>
-          <span className={cx(styles.rowSub, styles.rowSubCaller)}>
-            {parkedKindBadge(row.callerKind)}
-            <span>{row.caller}</span>
-          </span>
-        </span>
-        <span className={styles.rowMeta}>{row.parkedAgo}</span>
-        <Icon name="ChevronRight" size={14} />
-      </button>
-      {expanded ? (
-        <div className={styles.detail}>
-          <pre className={styles.inputPreview}>{row.inputPreview}</pre>
-          <div className={styles.actions}>
-            <Button
-              label="Deny"
-              variant="quiet"
-              size="sm"
-              disabled={busy}
-              onClick={() => onConfirm(false)}
-              className={styles.denyBtn}
-            />
-            <Button
-              label="Approve"
-              variant="primary"
-              size="sm"
-              disabled={busy}
-              onClick={() => onConfirm(true)}
-            />
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ScopeRequestRow({
-  row,
-  busy,
-  onDecide,
-}: {
-  row: ApprovalsScopeRequestRowDTO;
-  busy: boolean;
-  onDecide: (approve: boolean) => void;
-}): JSX.Element {
-  return (
-    <div className={styles.row}>
-      <div className={styles.rowMain}>
-        <span className={styles.rowIcon}>
-          <Icon name="Key" size={14} />
-        </span>
-        <span className={styles.rowBody}>
-          <span className={styles.rowTitle}>{row.appId}</span>
-          <span className={styles.rowSub}>
-            {row.purpose} · {row.scopeSummary}
-          </span>
-        </span>
-        <span className={styles.rowMeta}>{row.requestedAgo}</span>
-        <div className={styles.inlineActions}>
-          <Button
-            label="Deny"
-            variant="quiet"
-            size="sm"
-            disabled={busy}
-            onClick={() => onDecide(false)}
-            className={styles.denyBtn}
-          />
-          <Button
-            label="Approve"
-            variant="primary"
-            size="sm"
-            disabled={busy}
-            onClick={() => onDecide(true)}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// No kind badge here: `OutboxGrant` (gateway-client-outbox.ts) carries
-// `actor`/`actorId` but no `actorKind` — the wire data this screen would
-// need to mirror the App/Automation badge treatment doesn't exist yet for
-// standing grants. Left as plain text rather than guessing at a kind.
-function GrantRow({
-  row,
-  busy,
-  onRevoke,
-}: {
-  row: ApprovalsGrantRowDTO;
-  busy: boolean;
-  onRevoke: () => void;
-}): JSX.Element {
-  return (
-    <div className={styles.grantRow}>
-      <span className={styles.grantActor}>{row.actorLabel}</span>
-      <span className={styles.grantVerb}>{row.verb}</span>
-      <Icon name="ArrowRight" size={12} />
-      <span className={styles.grantTarget}>{row.target}</span>
-      <span className={styles.grantMeta}>{row.createdAgo}</span>
-      <Button
-        label="Revoke"
-        variant="quiet"
-        size="sm"
-        disabled={busy}
-        onClick={onRevoke}
-        className={styles.denyBtn}
-      />
-    </div>
-  );
-}
-
-// ── Privacy ledger, by store (issue #708 A2) ────────────────────────────
-// "Who can see my photos?" instead of "what does this app do?" — one
-// section per store, holders listed underneath. A held-then-revoked holder
-// stays in the list with its mode struck through: the switch is a toggle,
-// not a delete, so the history of who once had access stays legible.
-
-function StoreHolderRow({
-  holder,
-  revoked,
-  busy,
-  onToggle,
-}: {
-  holder: StoreHolderDTO;
-  revoked: boolean;
-  busy: boolean;
-  onToggle: (nextChecked: boolean) => void;
-}): JSX.Element {
-  return (
-    <div className={styles.storeHolderRow} data-revoked={revoked || undefined}>
-      {holder.holderKind === "agent" ? (
-        <KindBadge kind="automation">Automation</KindBadge>
-      ) : (
-        <KindBadge kind="app">App</KindBadge>
-      )}
-      <span className={styles.storeHolderLabel}>{holder.holderLabel}</span>
-      <span
-        className={styles.storeHolderMode}
-        data-struck={revoked || undefined}
-      >
-        {holder.mode}
-      </span>
-      <label className={styles.storeHolderSwitch}>
-        <input
-          type="checkbox"
-          checked={!revoked}
-          disabled={busy}
-          aria-label={`${holder.mode} access to ${holder.holderLabel}`}
-          onChange={(event) => onToggle(event.target.checked)}
-        />
-        <span className={styles.storeHolderSwitchTrack} aria-hidden="true" />
-      </label>
-    </div>
-  );
-}
-
-/** `${storeId}:${grantId}` — a grant is only unique to a store when both are
- *  present, since the same underlying grant can span several stores'
- *  scopes and each store's row needs its own independent revoked state. */
-export function revokedHolderKey(storeId: string, grantId: string): string {
-  return `${storeId}:${grantId}`;
 }
 
 /**
- * Re-attach any revoked-this-session snapshot whose grant is no longer in
- * the live group (the revoke call deleted it server-side) — pure so it's
- * unit-testable independent of the screen's rendering.
+ * What KIND of outbound write this is, from the connection and verb the
+ * gateway staged it under. Never guesses beyond what those two say: an
+ * unrecognised verb is "Outbound write", which is true of every item here.
  */
-export function mergeRevokedHolders(
-  group: StoreGroup,
-  revoked: ReadonlyMap<string, StoreHolderDTO>
-): StoreGroup {
-  const liveIds = new Set(group.holders.map((h) => h.grantId));
-  const reattached: StoreHolderDTO[] = [];
-  for (const [key, holder] of revoked) {
-    if (key !== revokedHolderKey(group.storeId, holder.grantId)) continue;
-    if (liveIds.has(holder.grantId)) continue;
-    reattached.push(holder);
+export function outboundLabel(row: {
+  verb: string;
+  connectionKind: string;
+}): string {
+  const signal = `${row.verb} ${row.connectionKind}`.toLowerCase();
+  if (signal.includes("mail") || signal.includes("smtp")) {
+    return "Outbound email";
   }
-  return { ...group, holders: [...group.holders, ...reattached] };
-}
-
-function StoreSection({
-  group,
-  revokedIds,
-  storeId,
-  busyId,
-  onRevoke,
-}: {
-  group: StoreGroup;
-  revokedIds: ReadonlyMap<string, StoreHolderDTO>;
-  storeId: string;
-  busyId: string | null;
-  onRevoke: (holder: StoreHolderDTO) => void;
-}): JSX.Element {
-  const count = group.holders.length;
-  return (
-    <section className={styles.storeSection} data-testid="privacy-store">
-      <h3 className={styles.storeSectionTitle}>{group.label}</h3>
-      <p className={styles.storeCount}>
-        {count > 0
-          ? `${count} app${count === 1 ? "" : "s"}`
-          : "reachable by nothing"}
-      </p>
-      {count > 0 ? (
-        <div className={styles.storeHolderList}>
-          {group.holders.map((holder) => (
-            <StoreHolderRow
-              key={`${holder.holderKind}-${holder.holderId}-${storeId}`}
-              holder={holder}
-              revoked={revokedIds.has(
-                revokedHolderKey(storeId, holder.grantId)
-              )}
-              busy={busyId === holder.grantId}
-              onToggle={(nextChecked) => {
-                if (!nextChecked) onRevoke(holder);
-              }}
-            />
-          ))}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function PrivacyNetworkFooter(): JSX.Element {
-  return (
-    <footer className={styles.networkFooter}>
-      <h3 className={styles.storeSectionTitle}>
-        Every network call this product makes
-      </h3>
-      <dl className={styles.networkList}>
-        {NETWORK_CALLS.map((call) => (
-          <div key={call.label} className={styles.networkRow}>
-            <dt>{call.label}</dt>
-            <dd>{call.detail}</dd>
-          </div>
-        ))}
-      </dl>
-    </footer>
-  );
-}
-
-/** Decision → icon + accent class for Recent activity (issue #552). */
-function activityDecisionVisual(decision: string): {
-  icon: "CheckCircle" | "X" | "Clock";
-  accentClass: string;
-  badge: string;
-} {
-  // CSS-module class names are `string | undefined` under noUncheckedIndexedAccess.
-  const allow = styles.decisionAllow ?? "";
-  const deny = styles.decisionDeny ?? "";
-  const parked = styles.decisionParked ?? "";
-  switch (decision) {
-    case "allow":
-      return { icon: "CheckCircle", accentClass: allow, badge: "Allowed" };
-    case "deny":
-      return { icon: "X", accentClass: deny, badge: "Denied" };
-    case "parked":
-      return { icon: "Clock", accentClass: parked, badge: "Parked" };
-    default:
-      return { icon: "Clock", accentClass: parked, badge: decision };
+  if (
+    signal.includes("message") ||
+    signal.includes("chat") ||
+    signal.includes("slack") ||
+    signal.includes("sms")
+  ) {
+    return "Outbound message";
   }
-}
-
-/** Absolute local timestamp for title/expanded detail (issue #552). */
-function formatAbsoluteTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
-function ActivityRow({
-  row,
-  busy,
-  expanded,
-  onToggle,
-  onRevokeGrant,
-}: {
-  row: ApprovalsActivityRowDTO;
-  busy: boolean;
-  expanded: boolean;
-  onToggle: () => void;
-  onRevokeGrant: (grantId: string) => void;
-}): JSX.Element {
-  const visual = activityDecisionVisual(row.decision);
-  const absolute = formatAbsoluteTime(row.occurredAt);
-  return (
-    <div
-      className={cx(styles.row, styles.activityRow, visual.accentClass)}
-      data-expanded={expanded ? "true" : undefined}
-      data-decision={row.decision}
-      data-risk={row.risk ?? undefined}
-    >
-      {row.risk ? (
-        <span
-          className={styles.riskMarker}
-          data-testid="activity-risk-marker"
-          title={`Risk: ${row.risk}`}
-          aria-label={`Risk ${row.risk}`}
-        />
-      ) : null}
-      <button
-        type="button"
-        className={styles.rowMain}
-        onClick={onToggle}
-        title={absolute}
-        aria-expanded={expanded}
-      >
-        <span
-          className={cx(styles.rowIcon, styles.activityIcon)}
-          data-testid="activity-decision-icon"
-        >
-          <Icon name={visual.icon} size={14} />
-        </span>
-        <span className={styles.rowBody}>
-          <span className={styles.rowTitle}>
-            {row.label}
-            {row.count > 1 ? (
-              <span className={styles.countMarker} data-testid="activity-count">
-                ×{row.count}
-              </span>
-            ) : null}
-            <span
-              className={styles.decisionBadge}
-              data-testid="activity-decision-badge"
-            >
-              {visual.badge}
-            </span>
-          </span>
-          <span className={styles.rowSub}>{row.detail}</span>
-          {row.actor || row.actorKind ? (
-            <span
-              className={cx(styles.rowSub, styles.rowSubCaller)}
-              data-testid="activity-actor"
-            >
-              {outboxKindBadge(row.actorKind ?? "")}
-              <span>{row.actor ?? row.actorKind}</span>
-            </span>
-          ) : null}
-          {row.attribution === "grant" ? (
-            <span
-              className={styles.attribution}
-              data-testid="activity-attribution-grant"
-            >
-              Auto-allowed by standing grant
-            </span>
-          ) : null}
-          {row.attribution === "owner" ? (
-            <span
-              className={styles.attribution}
-              data-testid="activity-attribution-owner"
-            >
-              Approved by the owner
-            </span>
-          ) : null}
-        </span>
-        <span className={styles.rowMeta}>{row.occurredAgo}</span>
-        <Icon name="ChevronRight" size={14} />
-      </button>
-      {expanded ? (
-        <div className={styles.detail} data-testid="activity-detail">
-          <dl className={styles.fields}>
-            <div className={styles.field}>
-              <dt>Decision</dt>
-              <dd>{visual.badge}</dd>
-            </div>
-            <div className={styles.field}>
-              <dt>When</dt>
-              <dd>{absolute}</dd>
-            </div>
-            <div className={styles.field}>
-              <dt>Object</dt>
-              <dd>
-                {row.objectType}
-                {row.objectId ? ` · ${row.objectId}` : ""}
-              </dd>
-            </div>
-            {row.risk ? (
-              <div className={styles.field}>
-                <dt>Risk</dt>
-                <dd>{row.risk}</dd>
-              </div>
-            ) : null}
-            {row.actor || row.actorKind ? (
-              <div className={styles.field}>
-                <dt>Actor</dt>
-                <dd>
-                  {row.actor ?? row.actorKind}
-                  {row.actorKind ? ` (${row.actorKind})` : ""}
-                </dd>
-              </div>
-            ) : null}
-            {row.count > 1 ? (
-              <div className={styles.field}>
-                <dt>Repeats</dt>
-                <dd>×{row.count} consecutive</dd>
-              </div>
-            ) : null}
-            <div className={styles.field}>
-              <dt>Receipt</dt>
-              <dd className={styles.monoId}>{row.receiptId}</dd>
-            </div>
-          </dl>
-          {row.grantId ? (
-            <div className={styles.actions} data-testid="activity-revoke-grant">
-              <Button
-                label="Revoke grant"
-                variant="quiet"
-                size="sm"
-                disabled={busy}
-                onClick={() => onRevokeGrant(row.grantId!)}
-                className={styles.denyBtn}
-              />
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
+  return "Outbound write";
 }
 
 /**
- * Empty state for the Notifications groups — the grants section renders
- * regardless. `text` defaults to the nothing-waiting claim, which is only
- * honest when NOTHING
- * is waiting; a chip that filters the notice stream passes neutral copy so an
- * empty notice list never implies the pinned decisions are gone too.
- */
-function NotificationsEmpty({
-  text = "Nothing waiting on you.",
-}: {
-  text?: string;
-}): JSX.Element {
-  return (
-    <div className={emptyCss.pageEmpty}>
-      <div className={emptyCss.pageEmptyIcon}>
-        <Icon name="CheckCircle" size={22} />
-      </div>
-      <div className={emptyCss.pageEmptyText}>{text}</div>
-    </div>
-  );
-}
-
-/**
- * The eight app-icon palette hues (`--c-<hue>` in design-tokens). A notice's
- * correspondent tile borrows one so the same source always looks the same —
- * scan-level "who is talking" identity, the way an app icon works.
- */
-const NOTICE_HUES = [
-  "amber",
-  "forest",
-  "indigo",
-  "ochre",
-  "rose",
-  "slate",
-  "teal",
-  "violet",
-] as const;
-
-export type NoticeHue = (typeof NOTICE_HUES)[number];
-
-/** Deterministic hue for a correspondent — stable across renders and reloads. */
-export function noticeHue(source: string): NoticeHue {
-  let h = 0;
-  for (let i = 0; i < source.length; i += 1) {
-    h = (h * 31 + source.charCodeAt(i)) % 100003;
-  }
-  return NOTICE_HUES[h % NOTICE_HUES.length] ?? "slate";
-}
-
-/**
- * Correspondent glyph — kind wins (gateway health isn't an "app"), else source
- * type.
- *
- * Nothing WRITES `gateway-health` notices any more (issue #665 retired the
- * desktop's dual-write; health lives on the Gateway page). The branch stays
- * because rows already persisted in `vault.db` by an earlier build are still
- * listed until their owner archives them — deleting it would render real,
- * still-visible cards as generic "app" news the owner can't place.
- */
-function noticeIcon(
-  kind: string,
-  sourceType: NoticeRowDTO["sourceType"]
-): IconName {
-  if (kind === "gateway-health") return "Cpu";
-  switch (sourceType) {
-    case "automation":
-      return "Bolt";
-    case "agent":
-      return "Sparkle";
-    case "app":
-      return "Command";
-  }
-}
-
-/**
- * Severity as a WORD, not a coloured rail — the pill replaces the off-system
- * `border-left` treatment. `info` gets nothing: a quiet update needs no label.
+ * Severity as a WORD, not a coloured rail. `info` gets nothing: a quiet update
+ * needs no label.
  */
 export function noticeSeverityLabel(
   kind: string,
@@ -1082,110 +380,203 @@ export function noticeSpanPhrase(
   return `×${row.count} over ${spanWords(span)}`;
 }
 
-/** Attempt-strip bars are capped; the remainder becomes a leading "+N". */
-export const NOTICE_BAR_MAX = 8;
-
-export function noticeBarCount(count: number): number {
-  if (!Number.isFinite(count) || count <= 1) return 0;
-  return Math.min(Math.floor(count), NOTICE_BAR_MAX);
+/** Absolute local timestamp for the expanded activity detail (issue #552). */
+function formatAbsoluteTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
-function NoticeRow({
+/** Decision → the row's one state word (issue #552). */
+function decisionWord(decision: string): string {
+  switch (decision) {
+    case "allow":
+      return "Allowed";
+    case "deny":
+      return "Denied";
+    case "parked":
+      return "Parked";
+    default:
+      return decision;
+  }
+}
+
+/** Join the parts of a row's sub line, dropping the ones with nothing to say —
+ *  a sub that renders " ·  · yesterday" is a bug that reads as a typo. */
+function subLine(parts: readonly (string | null | undefined)[]): string {
+  return parts.filter((p): p is string => !!p && p.length > 0).join(" · ");
+}
+
+/** `${storeId}:${grantId}` — a grant is only unique to a store when both are
+ *  present, since the same underlying grant can span several stores' scopes
+ *  and each store's row needs its own independent revoked state. */
+export function revokedHolderKey(storeId: string, grantId: string): string {
+  return `${storeId}:${grantId}`;
+}
+
+/**
+ * Re-attach any revoked-this-session snapshot whose grant is no longer in the
+ * live group (the revoke call deleted it server-side) — pure so it is
+ * unit-testable independent of the screen's rendering.
+ */
+export function mergeRevokedHolders(
+  group: StoreGroup,
+  revoked: ReadonlyMap<string, StoreHolderDTO>
+): StoreGroup {
+  const liveIds = new Set(group.holders.map((h) => h.grantId));
+  const reattached: StoreHolderDTO[] = [];
+  for (const [key, holder] of revoked) {
+    if (key !== revokedHolderKey(group.storeId, holder.grantId)) continue;
+    if (liveIds.has(holder.grantId)) continue;
+    reattached.push(holder);
+  }
+  return { ...group, holders: [...group.holders, ...reattached] };
+}
+
+// ── The staged write's own controls ───────────────────────────────────────
+
+/**
+ * The edit form, rendered in a ROW's detail slot rather than as a peer block:
+ * an edit of the quoted draft is that decision's own detail, and `RowsBlock`
+ * carries one escape hatch for exactly this (plan-client §1b).
+ */
+function EditForm({
   row,
   busy,
-  onRead,
-  onArchive,
-  onOpen,
+  onCancel,
+  onSubmit,
 }: {
-  row: NoticeRowDTO;
+  row: ApprovalsOutboxRowDTO;
   busy: boolean;
-  onRead: () => void;
-  onArchive: () => void;
-  onOpen: () => void;
+  onCancel: () => void;
+  onSubmit: (artifact: Record<string, unknown>) => void;
 }): JSX.Element {
-  const hue = noticeHue(row.sourceRef || row.sourceLabel || row.kind);
-  const severityLabel = noticeSeverityLabel(row.kind, row.severity);
-  const spanPhrase = noticeSpanPhrase(row);
-  const bars = noticeBarCount(row.count);
-  const overflow = row.count - NOTICE_BAR_MAX;
+  const editableKeys = useMemo(
+    () =>
+      row.fields
+        .map((f) => f.key)
+        .filter((key) => isEditableKey(row.artifact, key)),
+    [row.artifact, row.fields]
+  );
+  const [text, setText] = useState<Record<string, string>>(() => {
+    const seed: Record<string, string> = {};
+    for (const key of editableKeys) {
+      const v = row.artifact[key];
+      seed[key] = Array.isArray(v) ? v.join(", ") : String(v);
+    }
+    return seed;
+  });
+  const isListKey = (key: string): boolean => Array.isArray(row.artifact[key]);
+  const submit = (): void => {
+    const artifact: Record<string, unknown> = { ...row.artifact };
+    for (const key of editableKeys) {
+      const raw = text[key] ?? "";
+      artifact[key] = isListKey(key)
+        ? raw
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0)
+        : raw;
+    }
+    onSubmit(artifact);
+  };
   return (
-    <article
-      className={styles.noticeRow}
-      data-severity={row.severity}
-      data-unread={row.readAt === null ? "true" : undefined}
-    >
-      <span
-        className={styles.noticeTile}
-        data-hue={hue}
-        data-testid="notice-tile"
-        aria-hidden="true"
-      >
-        <Icon name={noticeIcon(row.kind, row.sourceType)} size={14} />
-      </span>
-      <button type="button" className={styles.noticeBody} onClick={onOpen}>
-        <span className={styles.noticeHeadline}>
-          {row.readAt === null ? (
-            <span
-              className={styles.unreadDot}
-              data-testid="notice-unread-dot"
-              aria-hidden="true"
-            />
-          ) : null}
-          <span className={styles.noticeHeadlineText}>{row.headline}</span>
-        </span>
-        <span className={styles.noticeMeta}>
-          {severityLabel ? (
-            <span
-              className={styles.severityPill}
-              data-testid="notice-severity-pill"
-            >
-              {severityLabel}
-            </span>
-          ) : null}
-          {row.kind.replaceAll("-", " ")}
-          {row.sourceLabel ? ` · ${row.sourceLabel}` : ""} ·{" "}
-          {new Date(row.lastAt).toLocaleString()}
-          {spanPhrase ? ` · ${spanPhrase}` : ""}
-        </span>
-        {bars > 0 ? (
-          <span className={styles.streak} data-testid="notice-streak">
-            {overflow > 0 ? (
-              <span className={styles.streakOverflow}>+{overflow}</span>
-            ) : null}
-            <span className={styles.streakBars} aria-hidden="true">
-              {Array.from({ length: bars }, (_, i) => (
-                <span key={i} className={styles.streakBar} />
-              ))}
-            </span>
-          </span>
-        ) : null}
-        {row.detailText ? (
-          <span className={styles.noticeDetail}>{row.detailText}</span>
-        ) : null}
-      </button>
-      <div className={styles.noticeActions}>
-        {row.readAt === null && row.archivedAt === null ? (
-          <Button
-            label="Mark read"
-            variant="quiet"
-            size="sm"
-            disabled={busy}
-            onClick={onRead}
-          />
-        ) : null}
-        {row.archivedAt === null ? (
-          <Button
-            label="Archive"
-            variant="quiet"
-            size="sm"
-            disabled={busy}
-            onClick={onArchive}
-          />
-        ) : null}
+    <div className={styles.editForm}>
+      {row.fields
+        .filter((field) => editableKeys.includes(field.key))
+        .map((field) => {
+          const value = text[field.key] ?? "";
+          const multiline =
+            !isListKey(field.key) && wantsTextarea(field.key, value);
+          return (
+            <div className={styles.editField} key={field.key}>
+              <span className={styles.editLabel}>{field.label}</span>
+              {multiline ? (
+                <textarea
+                  aria-label={field.label}
+                  className={styles.editTextarea}
+                  onChange={(e) =>
+                    setText((prev) => ({
+                      ...prev,
+                      [field.key]: e.target.value,
+                    }))
+                  }
+                  value={value}
+                />
+              ) : (
+                <input
+                  aria-label={field.label}
+                  className={styles.editInput}
+                  onChange={(e) =>
+                    setText((prev) => ({
+                      ...prev,
+                      [field.key]: e.target.value,
+                    }))
+                  }
+                  type="text"
+                  value={value}
+                />
+              )}
+            </div>
+          );
+        })}
+      <div className={styles.detailActions}>
+        <Button
+          disabled={busy}
+          label="Approve with edits"
+          onClick={submit}
+          size="sm"
+          variant="primary"
+        />
+        <Button
+          commit={false}
+          disabled={busy}
+          label="Cancel"
+          onClick={onCancel}
+          size="sm"
+          variant="secondary"
+        />
       </div>
-    </article>
+    </div>
   );
 }
+
+/** The always-allow switch. It mints a standing grant, which is the one
+ *  decision on this page that outlives the decision, so it says so. */
+function AlwaysAllow({
+  row,
+  checked,
+  disabled,
+  onChange,
+}: {
+  row: ApprovalsOutboxRowDTO;
+  checked: boolean;
+  disabled: boolean;
+  onChange: (next: boolean) => void;
+}): JSX.Element {
+  return (
+    <label className={styles.alwaysAllow}>
+      <input
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        type="checkbox"
+      />
+      <span>
+        Mint a standing grant for {row.verb} → {row.target}
+      </span>
+    </label>
+  );
+}
+
+// ── The screen ────────────────────────────────────────────────────────────
 
 export default function ApprovalsScreen(
   props: ApprovalsScreenProps
@@ -1213,357 +604,747 @@ export default function ApprovalsScreen(
     onOpenNotice = () => undefined,
     onSeeAllActivity,
     focusOutbox = null,
+    reviewAll = null,
   } = props;
-  const [expandedOutbox, setExpandedOutbox] = useState<string | null>(null);
-  const [expandedParked, setExpandedParked] = useState<string | null>(null);
+
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [alwaysAllow, setAlwaysAllow] = useState(false);
+  const [expandedWaiting, setExpandedWaiting] = useState<string | null>(null);
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
+  const [waitingFilter, setWaitingFilter] = useState<WaitingFilter>("all");
   const [activityFilter, setActivityFilter] = useState<"all" | "denied">("all");
-  const [notificationsFilter, setNotificationsFilter] = useState<
-    "needs" | "automations" | "agents" | "apps" | "privacy" | "archived"
-  >("needs");
-  const [focusedOutbox, setFocusedOutbox] = useState<string | null>(null);
   const [seenFocusNonce, setSeenFocusNonce] = useState<number | null>(null);
-  // Snapshots of grants the owner has switched off THIS session, keyed by
-  // grantId. The revoke API call deletes the grant row outright, so the next
-  // fetch would simply drop it from `storeGrants` — keeping a copy of the row
-  // as it looked at the moment of revoke is what lets it stay visible with
-  // its mode struck through instead of vanishing (issue #708 A2: "the
-  // history of the grant stays legible").
+  const [seenReviewNonce, setSeenReviewNonce] = useState<number | null>(null);
+  // Snapshots of grants the owner has switched off THIS session. The revoke
+  // call deletes the grant row outright, so the next fetch would simply drop it
+  // from `storeGrants` — keeping a copy of the row as it looked at the moment
+  // of revoke is what lets it stay visible, switched off, instead of vanishing
+  // (issue #708 A2: "the history of the grant stays legible").
   const [revokedStoreHolders, setRevokedStoreHolders] = useState<
     ReadonlyMap<string, StoreHolderDTO>
   >(new Map());
 
-  // Honor a deep link from an outbox notice (#647 D10). Adjusting state while
-  // rendering (React's documented "derived from props" escape) rather than in
-  // an effect: the move must be part of the same paint as the tap, and a
-  // nonce-keyed effect would cascade an extra render. Keyed on the nonce so
-  // tapping the same notice twice re-focuses; an item that is no longer open
-  // (decided or drained since the notice) lands on "Needs me" with nothing
-  // highlighted rather than pointing at a row that isn't there.
+  const stagedRef = useRef<HTMLDivElement | null>(null);
+  const grantsRef = useRef<HTMLDivElement | null>(null);
+
+  // Honor a deep link from an outbox notice (#647 D10) and the bar's "Review
+  // all" verb (#765). Adjusting state while rendering (React's documented
+  // "derived from props" escape) rather than in an effect: the move must be
+  // part of the same paint as the tap, and a nonce-keyed effect would cascade
+  // an extra render.
   if (focusOutbox && focusOutbox.nonce !== seenFocusNonce) {
     const { itemId } = focusOutbox;
     const stillOpen =
       itemId !== null && outbox.some((row) => row.itemId === itemId);
     setSeenFocusNonce(focusOutbox.nonce);
-    setNotificationsFilter("needs");
-    setFocusedOutbox(stillOpen ? itemId : null);
-    setExpandedOutbox(stillOpen ? itemId : null);
+    setWaitingFilter("all");
+    setEditing(false);
+    if (stillOpen) setSelectedItemId(itemId);
+  }
+  if (reviewAll && reviewAll.nonce !== seenReviewNonce) {
+    setSeenReviewNonce(reviewAll.nonce);
+    setWaitingFilter("all");
+    setSelectedItemId(null);
+    setEditing(false);
   }
 
-  const filteredActivity = useMemo(() => {
-    if (activityFilter === "denied") {
-      return activity.filter((r) => r.decision === "deny");
+  // The panel shows the selected staged write, or the oldest one — a queue's
+  // head is the honest default, and a selection that has since been decided
+  // falls back to it rather than leaving the panel empty.
+  const staged =
+    outbox.find((row) => row.itemId === selectedItemId) ?? outbox[0] ?? null;
+  const stagedBusy = staged !== null && busyId === staged.itemId;
+
+  useEffect(() => {
+    const el = stagedRef.current;
+    // `scrollIntoView` is absent under jsdom — the promotion into the panel is
+    // the assertable half of the behaviour, the scroll is the browser nicety.
+    if (
+      focusOutbox?.itemId &&
+      focusOutbox.itemId === staged?.itemId &&
+      el &&
+      typeof el.scrollIntoView === "function"
+    ) {
+      el.scrollIntoView({ block: "nearest" });
     }
-    return activity;
-  }, [activity, activityFilter]);
+  }, [focusOutbox, staged]);
 
   const activeNotices = notices.filter((notice) => notice.archivedAt === null);
   const archivedNotices = notices.filter(
     (notice) => notice.archivedAt !== null
   );
-  const filteredNotices =
-    notificationsFilter === "privacy"
-      ? // Privacy is the store ledger, not a notice filter — it renders its
-        // own section below instead of the shared notices list.
-        []
-      : notificationsFilter === "archived"
-        ? archivedNotices
-        : notificationsFilter === "needs"
-          ? // "Needs me" means "requires my attention": an info-severity notice
-            // (a gateway recovering, an FYI) is news, not a demand — it stays
-            // reachable under its source-type chip and in Archived, but doesn't
-            // sit in the default view as an unread obligation (#665). Warning
-            // and high keep their place.
-            activeNotices.filter((notice) => notice.severity !== "info")
-          : activeNotices.filter(
-              (notice) =>
-                notice.sourceType ===
-                (notificationsFilter === "automations"
-                  ? "automation"
-                  : notificationsFilter === "agents"
-                    ? "agent"
-                    : "app")
-            );
-  const totalCount =
-    outbox.length + needsAuth.length + parked.length + scopeRequests.length;
-  // Open decisions are pinned at the top under EVERY chip (Archived
-  // included): the chips filter the notice stream, they never hide something
-  // that is blocking the owner. Hiding them behind "Needs me" made a decision
-  // vanish the moment the owner tapped any other chip (#647 D3).
-  const showDecisions = totalCount > 0;
-  const notificationsEmpty =
-    outbox.length === 0 &&
-    needsAuth.length === 0 &&
-    parked.length === 0 &&
-    scopeRequests.length === 0 &&
-    activeNotices.length === 0;
+  // "Waiting" means "requires a decision or an intervention": an info-severity
+  // notice (a gateway recovering, an FYI) is news, not a demand, so it sits in
+  // Updates rather than the queue (#665).
+  const attentionNotices = activeNotices.filter(
+    (notice) => notice.severity !== "info"
+  );
+  const infoNotices = activeNotices.filter(
+    (notice) => notice.severity === "info"
+  );
 
-  return (
-    <div className={styles.page}>
-      <div className={styles.head}>
-        <div className={styles.title}>
-          <span className={styles.titleIcon}>
-            <Icon name="CheckCircle" size={18} strokeWidth={2} />
-          </span>
-          <h1>Notifications</h1>
+  const totalWaiting =
+    outbox.length +
+    needsAuth.length +
+    parked.length +
+    scopeRequests.length +
+    attentionNotices.length;
+  const isEmpty = totalWaiting === 0;
+
+  const noticeSub = (notice: NoticeRowDTO): string =>
+    subLine([
+      notice.kind.replaceAll("-", " "),
+      notice.sourceLabel,
+      new Date(notice.lastAt).toLocaleString(),
+      noticeSpanPhrase(notice),
+      notice.detailText,
+    ]);
+
+  /** The two disposal verbs a notice keeps once it is a row: the row's own
+   *  action opens it, and these are what is left to DO with it. */
+  const noticeDetail = (notice: NoticeRowDTO): ReactNode => {
+    const canRead = notice.readAt === null && notice.archivedAt === null;
+    const canArchive = notice.archivedAt === null;
+    if (!canRead && !canArchive) return undefined;
+    return (
+      <div className={styles.detailActions}>
+        {canRead ? (
+          <Button
+            commit={false}
+            disabled={busyId === notice.noticeId}
+            label="Mark read"
+            onClick={() => onReadNotice(notice.noticeId)}
+            size="sm"
+            variant="secondary"
+          />
+        ) : null}
+        {canArchive ? (
+          <Button
+            commit={false}
+            disabled={busyId === notice.noticeId}
+            label="Archive"
+            onClick={() => onArchiveNotice(notice.noticeId)}
+            size="sm"
+            variant="secondary"
+          />
+        ) : null}
+      </div>
+    );
+  };
+
+  const toggleWaiting = (id: string): void =>
+    setExpandedWaiting((prev) => (prev === id ? null : id));
+
+  // ── The waiting rows ────────────────────────────────────────────────────
+  const waitingRows: RowDef[] = [];
+
+  for (const row of outbox) {
+    if (staged && row.itemId === staged.itemId) continue;
+    if (!matchesFilter(waitingFilter, "staged")) continue;
+    waitingRows.push({
+      action: {
+        label: "Review",
+        onClick: () => {
+          setSelectedItemId(row.itemId);
+          setEditing(false);
+        },
+      },
+      id: row.itemId,
+      meta: "Staged",
+      off: busyId === row.itemId,
+      sub: subLine([
+        row.recipient,
+        row.connectionLabel,
+        `staged by ${callerPhrase(row.callerKind, row.caller)}`,
+        row.stagedAgo,
+      ]),
+      title: row.subject ?? row.target,
+    });
+  }
+
+  for (const row of needsAuth) {
+    if (!matchesFilter(waitingFilter, "auth")) continue;
+    waitingRows.push({
+      action: { label: "Reconnect", onClick: () => onOpenSettings() },
+      id: row.connectionId,
+      meta: "Lapsed",
+      net: true,
+      sub: row.note ?? `${row.kind} needs reconnecting`,
+      title: row.label,
+    });
+  }
+
+  for (const row of parked) {
+    if (!matchesFilter(waitingFilter, "risk")) continue;
+    const open = expandedWaiting === row.invocationId;
+    const busy = busyId === row.invocationId;
+    waitingRows.push({
+      action: {
+        label: open ? "Hide" : "Review",
+        onClick: () => toggleWaiting(row.invocationId),
+      },
+      children: open ? (
+        <div className={styles.detailBody}>
+          <pre className={styles.inputPreview}>{row.inputPreview}</pre>
+          <div className={styles.detailActions}>
+            <Button
+              disabled={busy}
+              label="Approve"
+              onClick={() => onConfirmParked(row.invocationId, true)}
+              size="sm"
+              variant="primary"
+            />
+            <Button
+              commit={false}
+              disabled={busy}
+              label="Deny"
+              onClick={() => onConfirmParked(row.invocationId, false)}
+              size="sm"
+              variant="destructive"
+            />
+          </div>
         </div>
-        <p className={styles.subtitle}>
-          {totalCount > 0
-            ? `${totalCount} waiting on you`
-            : activeNotices.length > 0
-              ? `${activeNotices.length} recent update${activeNotices.length === 1 ? "" : "s"}`
-              : "Decisions and updates from your automations, agents, and apps."}
-        </p>
+      ) : undefined,
+      id: row.invocationId,
+      meta: "High risk",
+      net: true,
+      sub: subLine([
+        `asked by ${callerPhrase(row.callerKind, row.caller)}`,
+        `parked ${row.parkedAgo}`,
+      ]),
+      title: row.command,
+    });
+  }
+
+  for (const row of scopeRequests) {
+    if (!matchesFilter(waitingFilter, "auth")) continue;
+    const open = expandedWaiting === row.requestId;
+    const busy = busyId === row.requestId;
+    waitingRows.push({
+      action: {
+        label: open ? "Hide" : "Review",
+        onClick: () => toggleWaiting(row.requestId),
+      },
+      children: open ? (
+        <div className={styles.detailBody}>
+          <dl className={styles.facts}>
+            <div className={styles.fact}>
+              <dt className={styles.factKey}>purpose</dt>
+              <dd className={styles.factValue}>{row.purpose}</dd>
+            </div>
+            <div className={styles.fact}>
+              <dt className={styles.factKey}>scopes</dt>
+              <dd className={styles.factValue}>{row.scopeSummary}</dd>
+            </div>
+          </dl>
+          <div className={styles.detailActions}>
+            <Button
+              disabled={busy}
+              label="Approve"
+              onClick={() => onDecideScopeRequest(row.requestId, true)}
+              size="sm"
+              variant="primary"
+            />
+            <Button
+              commit={false}
+              disabled={busy}
+              label="Deny"
+              onClick={() => onDecideScopeRequest(row.requestId, false)}
+              size="sm"
+              variant="destructive"
+            />
+          </div>
+        </div>
+      ) : undefined,
+      id: row.requestId,
+      meta: "New scope",
+      sub: subLine([row.purpose, row.scopeSummary, row.requestedAgo]),
+      title: `${row.appId} is asking for wider access`,
+    });
+  }
+
+  for (const notice of attentionNotices) {
+    if (!matchesFilter(waitingFilter, "risk")) continue;
+    waitingRows.push({
+      action: { label: "Open", onClick: () => onOpenNotice(notice) },
+      children: noticeDetail(notice),
+      id: notice.noticeId,
+      meta: noticeSeverityLabel(notice.kind, notice.severity) ?? "",
+      net: notice.severity === "high",
+      sub: noticeSub(notice),
+      title: notice.headline,
+    });
+  }
+
+  const showStaged = staged !== null && matchesFilter(waitingFilter, "staged");
+  const shownWaiting = waitingRows.length + (showStaged ? 1 : 0);
+  const waitingMeta =
+    shownWaiting < totalWaiting
+      ? `showing ${shownWaiting} of ${totalWaiting}`
+      : `${totalWaiting} waiting`;
+  // The chip row earns its place only when the queue is long enough that the
+  // owner would otherwise scroll to find the one they care about.
+  const showChips = totalWaiting > WAITING_CHIPS.length;
+
+  // ── Standing grants ─────────────────────────────────────────────────────
+  const grantRows: RowDef[] = grants.map((row) => ({
+    action: {
+      label: "Revoke",
+      onClick: () => onRevokeGrant(row.grantId),
+    },
+    id: row.grantId,
+    meta: row.createdAgo,
+    off: busyId === row.grantId,
+    sub: `${row.verb} → ${row.target}`,
+    title: `${row.actorLabel} may always ${row.verb}`,
+  }));
+
+  // ── Recent activity ─────────────────────────────────────────────────────
+  const filteredActivity = useMemo(
+    () =>
+      activityFilter === "denied"
+        ? activity.filter((r) => r.decision === "deny")
+        : activity,
+    [activity, activityFilter]
+  );
+
+  const activityRows: RowDef[] = filteredActivity.map((row) => {
+    const open = expandedActivity === row.receiptId;
+    const absolute = formatAbsoluteTime(row.occurredAt);
+    return {
+      action: {
+        label: open ? "Hide" : "Details",
+        onClick: () =>
+          setExpandedActivity((prev) =>
+            prev === row.receiptId ? null : row.receiptId
+          ),
+      },
+      children: open ? (
+        <div className={styles.detailBody} data-testid="activity-detail">
+          <dl className={styles.facts}>
+            <div className={styles.fact}>
+              <dt className={styles.factKey}>decision</dt>
+              <dd className={styles.factValue}>{decisionWord(row.decision)}</dd>
+            </div>
+            <div className={styles.fact}>
+              <dt className={styles.factKey}>when</dt>
+              <dd className={styles.factValue}>{absolute}</dd>
+            </div>
+            <div className={styles.fact}>
+              <dt className={styles.factKey}>object</dt>
+              <dd className={styles.factValue}>
+                {row.objectType}
+                {row.objectId ? ` · ${row.objectId}` : ""}
+              </dd>
+            </div>
+            {row.risk ? (
+              <div className={styles.fact}>
+                <dt className={styles.factKey}>risk</dt>
+                <dd className={styles.factValue}>{row.risk}</dd>
+              </div>
+            ) : null}
+            {row.actor || row.actorKind ? (
+              <div className={styles.fact}>
+                <dt className={styles.factKey}>actor</dt>
+                <dd className={styles.factValue}>
+                  {callerPhrase(row.actorKind ?? "", row.actor ?? "")}
+                </dd>
+              </div>
+            ) : null}
+            <div className={styles.fact}>
+              <dt className={styles.factKey}>receipt</dt>
+              <dd className={styles.factValue} data-mono="true">
+                {row.receiptId}
+              </dd>
+            </div>
+          </dl>
+          {row.grantId ? (
+            <div className={styles.detailActions}>
+              <Button
+                commit={false}
+                disabled={busyId === row.grantId}
+                label="Revoke grant"
+                onClick={() => onRevokeGrant(row.grantId ?? "")}
+                size="sm"
+                variant="destructive"
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : undefined,
+      id: row.receiptId,
+      meta: subLine([
+        decisionWord(row.decision),
+        row.risk ? `${row.risk} risk` : null,
+      ]),
+      net: row.decision === "deny",
+      sub: subLine([
+        row.detail,
+        row.occurredAgo,
+        row.actor || row.actorKind
+          ? `by ${callerPhrase(row.actorKind ?? "", row.actor ?? "")}`
+          : null,
+        row.attribution === "grant"
+          ? "auto-allowed by a standing grant"
+          : row.attribution === "owner"
+            ? "approved by the owner"
+            : null,
+      ]),
+      title: row.count > 1 ? `${row.label} ×${row.count}` : row.label,
+    };
+  });
+
+  // ── The staged write's facts ────────────────────────────────────────────
+  const stagedFacts = (row: ApprovalsOutboxRowDTO): PanelFact[] => {
+    const facts: PanelFact[] = [];
+    // Address facts first, in the order an envelope is read; then anything
+    // else the artifact carries, so nothing staged is hidden from the person
+    // approving it. `body`/`subject` are already the panel's quote and title.
+    const addressed = ["to", "cc", "bcc", "from"];
+    for (const key of addressed) {
+      const field = row.fields.find((f) => f.key === key);
+      if (field) facts.push({ key, mono: true, value: field.value });
+    }
+    for (const field of row.fields) {
+      if (addressed.includes(field.key)) continue;
+      if (field.key === "body" || field.key === "subject") continue;
+      facts.push({ key: field.key, mono: true, value: field.value });
+    }
+    facts.push({
+      key: "connection",
+      value: `${row.connectionLabel} · ${row.connectionKind}`,
+    });
+    if (row.note) facts.push({ key: "note", value: row.note });
+    if (!row.canEdit) {
+      facts.push({ key: CANNOT_EDIT_KEY, value: CANNOT_EDIT_VALUE });
+    }
+    facts.push({
+      key: SENDING_FACT_KEY,
+      net: true,
+      value: SENDING_FACT_VALUE,
+    });
+    return facts;
+  };
+
+  const stagedBody = (row: ApprovalsOutboxRowDTO): string =>
+    row.fields.find((f) => f.key === "body")?.value ??
+    row.bodyPreview ??
+    row.target;
+
+  // The controls that belong to the staged write, each on its own row: a deny
+  // is not a smaller approve, and the v9 brief keeps it out of the panel's
+  // action row for exactly that reason.
+  const stagedControlRows: RowDef[] = [];
+  if (showStaged && staged) {
+    if (editing) {
+      stagedControlRows.push({
+        children: (
+          <EditForm
+            busy={stagedBusy}
+            onCancel={() => setEditing(false)}
+            onSubmit={(artifact) => {
+              setEditing(false);
+              onApproveOutbox(staged.itemId, alwaysAllow, artifact);
+            }}
+            row={staged}
+          />
+        ),
+        id: "staged-edit",
+        sub: "Your changes replace the draft above. Nothing is sent until you approve.",
+        title: "Edit before sending",
+      });
+    }
+    stagedControlRows.push(
+      {
+        children: (
+          <AlwaysAllow
+            checked={alwaysAllow}
+            disabled={stagedBusy}
+            onChange={setAlwaysAllow}
+            row={staged}
+          />
+        ),
+        id: "staged-always",
+        title: "Approve without asking again",
+      },
+      {
+        action: stagedBusy
+          ? undefined
+          : { label: "Deny", onClick: () => onDenyOutbox(staged.itemId) },
+        dangerous: true,
+        id: "staged-deny",
+        sub: DENY_SUB,
+        title: DENY_TITLE,
+      }
+    );
+  }
+
+  // ── The reference tail ──────────────────────────────────────────────────
+  // Standing grants, the store ledger, the network-call list and the history
+  // are not a queue: they are the page's reference material, and they render
+  // in every state, including empty. A consent surface that hides the record
+  // of what it already consented to is not a record.
+  const tail = (
+    <>
+      <div ref={grantsRef}>
+        <SectionBlock label="Standing grants" meta={String(grants.length)} />
+        {grantRows.length > 0 ? (
+          <RowsBlock ariaLabel="Standing grants" rows={grantRows} />
+        ) : (
+          <NoteBlock>{NO_GRANTS_NOTE}</NoteBlock>
+        )}
+        <NoteBlock>{GRANTS_NOTE}</NoteBlock>
       </div>
 
-      <fieldset
-        className={styles.notificationsFilters}
-        aria-label="Notifications filter"
-      >
-        {(
-          [
-            ["needs", "Needs me"],
-            ["automations", "Automations"],
-            ["agents", "Agents"],
-            ["apps", "Apps"],
-            ["privacy", "Privacy"],
-            ["archived", "Archived"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            className={styles.filterChip}
-            data-active={notificationsFilter === value ? "true" : undefined}
-            onClick={() => setNotificationsFilter(value)}
-          >
-            {label}
-          </button>
-        ))}
-      </fieldset>
-
-      {notificationsEmpty && notificationsFilter === "needs" ? (
-        <NotificationsEmpty />
-      ) : (
-        <div className={styles.groups}>
-          {showDecisions && totalCount > 0 ? (
-            <section>
-              <GroupHead
-                icon={<Icon name="CheckCircle" size={13} />}
-                label="Needs me"
-                count={totalCount}
-              />
-              <div className={styles.list}>
-                {outbox.map((row) => (
-                  <OutboxRow
-                    key={row.itemId}
-                    row={row}
-                    busy={busyId === row.itemId}
-                    expanded={expandedOutbox === row.itemId}
-                    focused={focusedOutbox === row.itemId}
-                    onToggle={() =>
-                      setExpandedOutbox(
-                        expandedOutbox === row.itemId ? null : row.itemId
-                      )
-                    }
-                    onApprove={(alwaysAllow, artifact) =>
-                      artifact === undefined
-                        ? onApproveOutbox(row.itemId, alwaysAllow)
-                        : onApproveOutbox(row.itemId, alwaysAllow, artifact)
-                    }
-                    onDeny={() => onDenyOutbox(row.itemId)}
-                  />
-                ))}
-                {needsAuth.map((row) => (
-                  <NeedsAuthRow
-                    key={row.connectionId}
-                    row={row}
-                    onOpenSettings={onOpenSettings}
-                  />
-                ))}
-                {parked.map((row) => (
-                  <ParkedRow
-                    key={row.invocationId}
-                    row={row}
-                    busy={busyId === row.invocationId}
-                    expanded={expandedParked === row.invocationId}
-                    onToggle={() =>
-                      setExpandedParked(
-                        expandedParked === row.invocationId
-                          ? null
-                          : row.invocationId
-                      )
-                    }
-                    onConfirm={(approve) =>
-                      onConfirmParked(row.invocationId, approve)
-                    }
-                  />
-                ))}
-                {scopeRequests.map((row) => (
-                  <ScopeRequestRow
-                    key={row.requestId}
-                    row={row}
-                    busy={busyId === row.requestId}
-                    onDecide={(approve) =>
-                      onDecideScopeRequest(row.requestId, approve)
-                    }
-                  />
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {filteredNotices.length > 0 ? (
-            <section>
-              <GroupHead
-                icon={<Icon name="Bell" size={13} />}
-                label={
-                  notificationsFilter === "archived" ? "Archived" : "Updates"
-                }
-                count={filteredNotices.length}
-              />
-              <div className={styles.list}>
-                {filteredNotices.map((notice) => (
-                  <NoticeRow
-                    key={notice.noticeId}
-                    row={notice}
-                    busy={busyId === notice.noticeId}
-                    onRead={() => onReadNotice(notice.noticeId)}
-                    onArchive={() => onArchiveNotice(notice.noticeId)}
-                    onOpen={() => onOpenNotice(notice)}
-                  />
-                ))}
-              </div>
-            </section>
-          ) : notificationsFilter === "needs" ||
-            notificationsFilter === "privacy" ? null : (
-            // A notice-filtering chip with no matches says only that: the
-            // pinned decisions above are still waiting.
-            <NotificationsEmpty text="No notices here." />
-          )}
-        </div>
-      )}
-
-      {notificationsFilter === "privacy" ? (
-        <div className={styles.groups} data-testid="privacy-ledger">
-          <p className={styles.privacyLead}>
-            Everything an app can reach, and nothing it cannot. Revoking takes
-            effect at once — the app keeps no copy of what it read.
-          </p>
-          {storeGrants.map((group) => (
-            <StoreSection
-              key={group.storeId}
-              group={mergeRevokedHolders(group, revokedStoreHolders)}
-              revokedIds={revokedStoreHolders}
-              storeId={group.storeId}
-              busyId={busyId}
-              onRevoke={(holder) => {
-                setRevokedStoreHolders(
-                  (previous) =>
-                    new Map([
-                      ...previous,
-                      [revokedHolderKey(group.storeId, holder.grantId), holder],
-                    ])
-                );
-                onRevokeStoreGrant(holder);
-              }}
-            />
-          ))}
-          <PrivacyNetworkFooter />
-        </div>
-      ) : null}
-
-      {notificationsFilter === "archived" ? (
-        <section className={styles.grantsSection}>
-          <GroupHead
-            icon={<Icon name="Key" size={13} />}
-            label="Standing grants"
-            count={grants.length}
+      {infoNotices.length > 0 ? (
+        <div>
+          <SectionBlock label="Updates" meta={String(infoNotices.length)} />
+          <RowsBlock
+            ariaLabel="Updates"
+            rows={infoNotices.map((notice) => ({
+              action: { label: "Open", onClick: () => onOpenNotice(notice) },
+              children: noticeDetail(notice),
+              id: notice.noticeId,
+              sub: noticeSub(notice),
+              title: notice.headline,
+            }))}
           />
-          {grants.length > 0 ? (
-            <div className={styles.grantsList}>
-              {grants.map((row) => (
-                <GrantRow
-                  key={row.grantId}
-                  row={row}
-                  busy={busyId === row.grantId}
-                  onRevoke={() => onRevokeGrant(row.grantId)}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className={styles.grantsEmpty}>
-              No standing grants yet — “always allow” on an outbox approval
-              mints one.
-            </p>
-          )}
-        </section>
+        </div>
       ) : null}
 
-      {notificationsFilter === "archived" && activity.length > 0 ? (
-        <section className={styles.grantsSection} data-testid="recent-activity">
-          <div className={styles.activityHead}>
-            <GroupHead
-              icon={<Icon name="History" size={13} />}
-              label="Recent activity"
-              count={filteredActivity.length}
-            />
-            <fieldset
-              className={styles.activityFilters}
-              aria-label="Activity filter"
-            >
-              <button
-                type="button"
-                className={styles.filterChip}
-                data-active={activityFilter === "all" ? "true" : undefined}
-                onClick={() => setActivityFilter("all")}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                className={styles.filterChip}
-                data-active={activityFilter === "denied" ? "true" : undefined}
-                onClick={() => setActivityFilter("denied")}
-                data-testid="activity-filter-denied"
-              >
-                Denied
-              </button>
-            </fieldset>
-          </div>
-          <div className={styles.grantsList}>
-            {filteredActivity.map((row) => (
-              <ActivityRow
-                key={row.receiptId}
-                row={row}
-                busy={busyId === row.grantId || busyId === row.receiptId}
-                expanded={expandedActivity === row.receiptId}
-                onToggle={() =>
-                  setExpandedActivity(
-                    expandedActivity === row.receiptId ? null : row.receiptId
-                  )
-                }
-                onRevokeGrant={onRevokeGrant}
-              />
-            ))}
-          </div>
-          {filteredActivity.length === 0 ? (
-            <p className={styles.grantsEmpty}>
-              No denied activity in this window.
-            </p>
-          ) : null}
+      {archivedNotices.length > 0 ? (
+        <div>
+          <SectionBlock
+            label="Archived"
+            meta={String(archivedNotices.length)}
+          />
+          <RowsBlock
+            ariaLabel="Archived notices"
+            rows={archivedNotices.map((notice) => ({
+              action: { label: "Open", onClick: () => onOpenNotice(notice) },
+              id: notice.noticeId,
+              sub: noticeSub(notice),
+              title: notice.headline,
+            }))}
+          />
+        </div>
+      ) : null}
+
+      {storeGrants.length > 0 ? (
+        <div data-testid="privacy-ledger">
+          <SectionBlock
+            label="Who can reach your stores"
+            meta={`${storeGrants.length} stores`}
+          />
+          <NoteBlock>{LEDGER_NOTE}</NoteBlock>
+          {storeGrants.map((group) => {
+            const merged = mergeRevokedHolders(group, revokedStoreHolders);
+            const count = merged.holders.length;
+            return (
+              <div data-testid="privacy-store" key={group.storeId}>
+                <SectionBlock
+                  label={group.label}
+                  meta={
+                    count > 0
+                      ? `${count} app${count === 1 ? "" : "s"}`
+                      : "reachable by nothing"
+                  }
+                />
+                {count > 0 ? (
+                  <RowsBlock
+                    ariaLabel={`${group.label} holders`}
+                    rows={merged.holders.map((holder) => {
+                      const revoked = revokedStoreHolders.has(
+                        revokedHolderKey(group.storeId, holder.grantId)
+                      );
+                      return {
+                        action: {
+                          label: "Revoke",
+                          onClick: () => {
+                            setRevokedStoreHolders(
+                              (previous) =>
+                                new Map([
+                                  ...previous,
+                                  [
+                                    revokedHolderKey(
+                                      group.storeId,
+                                      holder.grantId
+                                    ),
+                                    holder,
+                                  ],
+                                ])
+                            );
+                            onRevokeStoreGrant(holder);
+                          },
+                          title: `Revoke ${holder.mode} access to ${group.label} from ${holder.holderLabel}`,
+                        },
+                        dangerous: true,
+                        id: `${holder.holderKind}-${holder.holderId}-${holder.grantId}`,
+                        meta: revoked ? "revoked" : holder.mode,
+                        off: revoked || busyId === holder.grantId,
+                        sub: `${holder.holderKind === "agent" ? "automation" : "app"} · ${holder.mode} access`,
+                        title: holder.holderLabel,
+                      };
+                    })}
+                  />
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div>
+        <SectionBlock label="Every network call this product makes" />
+        <RowsBlock
+          ariaLabel="Network calls"
+          rows={NETWORK_CALLS.map((call) => ({
+            id: call.label,
+            sub: call.detail,
+            title: call.label,
+          }))}
+        />
+      </div>
+
+      {activity.length > 0 ? (
+        <div data-testid="recent-activity">
+          <SectionBlock
+            label="Recent activity"
+            meta={
+              filteredActivity.length === activity.length
+                ? String(activity.length)
+                : `showing ${filteredActivity.length} of ${activity.length}`
+            }
+          />
+          <ChipsBlock
+            ariaLabel="Activity filter"
+            chips={[
+              { id: "all", label: "All", on: activityFilter === "all" },
+              {
+                id: "denied",
+                label: "Denied",
+                on: activityFilter === "denied",
+              },
+            ]}
+            onPick={(id) =>
+              setActivityFilter(id === "denied" ? "denied" : "all")
+            }
+          />
+          {activityRows.length > 0 ? (
+            <RowsBlock ariaLabel="Recent activity" rows={activityRows} />
+          ) : (
+            <NoteBlock>No denied activity in this window.</NoteBlock>
+          )}
           {activityTruncated && onSeeAllActivity ? (
             <div className={styles.seeAllRow} data-testid="activity-see-all">
               <Button
+                commit={false}
                 label="See all"
-                variant="quiet"
+                onClick={() => onSeeAllActivity()}
                 size="sm"
-                onClick={onSeeAllActivity}
+                variant="secondary"
               />
             </div>
           ) : null}
-        </section>
+        </div>
       ) : null}
+    </>
+  );
+
+  if (isEmpty) {
+    return (
+      <div className={styles.page}>
+        <EmptyBlock
+          action={{
+            label: EMPTY_ACTION,
+            onClick: () => {
+              const el = grantsRef.current;
+              if (el && typeof el.scrollIntoView === "function") {
+                el.scrollIntoView({ block: "start" });
+              }
+            },
+          }}
+          body={EMPTY_BODY}
+          routine
+          title={EMPTY_TITLE}
+        />
+        {tail}
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.page}>
+      {showChips ? (
+        <ChipsBlock
+          ariaLabel="Waiting filter"
+          chips={WAITING_CHIPS.map((chip) => ({
+            id: chip.id,
+            label: chip.label,
+            on: waitingFilter === chip.id,
+          }))}
+          onPick={(id) => setWaitingFilter(id as WaitingFilter)}
+        />
+      ) : null}
+
+      <SectionBlock label="Waiting on you" meta={waitingMeta} />
+
+      {showStaged && staged ? (
+        <div
+          data-item-id={staged.itemId}
+          data-testid="staged-write"
+          ref={stagedRef}
+        >
+          <PanelBlock
+            {...(stagedBusy
+              ? {}
+              : {
+                  action: {
+                    filled: true,
+                    label: "Approve and send",
+                    onClick: () => onApproveOutbox(staged.itemId, alwaysAllow),
+                  },
+                  ...(staged.canEdit
+                    ? {
+                        action2: {
+                          label: "Edit and approve",
+                          onClick: () => setEditing(true),
+                        },
+                      }
+                    : {}),
+                })}
+            body={stagedBody(staged)}
+            eyebrow={subLine([
+              outboundLabel(staged),
+              `staged by ${callerPhrase(staged.callerKind, staged.caller)}`,
+              staged.stagedAgo,
+            ])}
+            facts={stagedFacts(staged)}
+            quote
+            title={staged.subject ?? staged.target}
+            wide
+          />
+        </div>
+      ) : null}
+
+      {stagedControlRows.length > 0 ? (
+        <RowsBlock ariaLabel="This staged write" rows={stagedControlRows} />
+      ) : null}
+
+      {waitingRows.length > 0 ? (
+        <>
+          {showStaged && staged ? (
+            <SectionBlock
+              label="Also waiting"
+              meta={String(waitingRows.length)}
+            />
+          ) : null}
+          <RowsBlock ariaLabel="Waiting on you" rows={waitingRows} />
+        </>
+      ) : null}
+
+      {tail}
     </div>
   );
 }

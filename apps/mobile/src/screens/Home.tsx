@@ -385,21 +385,23 @@ export default function HomeScreen({
    * different destinations for the same place.
    *
    * `notifs` is the Approvals inbox, which is what "waiting on a decision"
-   * means here; `autos` is Automations; `conn` and `settings` both land on
-   * Settings (accounts and the account itself are one screen on mobile);
-   * `stats` and `gateway` both land on Insights, which the nav tree's own
-   * comment already scopes as "gateway health + limited usage insights" — one
-   * screen legitimately holding both facts, not two labels hiding behind one
-   * wrong page. `storage` is `PhoneStorage`, the existing local-replica-usage
-   * screen.
+   * means here; `autos` is Automations; `conn` is Connectors, its own cover
+   * since issue #765 (it used to share `settings`, which was the same lie the
+   * paragraph below warns about — "What is allowed to reach outside" is not
+   * the account screen); `settings` is Settings; `stats` and `gateway` both
+   * land on Insights, which the nav tree's own comment already scopes as
+   * "gateway health + limited usage insights" — one screen legitimately
+   * holding both facts, not two labels hiding behind one wrong page.
+   * `storage` is `PhoneStorage`, the existing local-replica-usage screen.
+   * `data` and `devices` are the two net-new covers from the same issue.
    *
-   * `data`, `devices` and `starred` have NO mobile screen yet — no store
-   * browser, no device list, no cross-app favourites view — so they are a
-   * STATED no-op rather than a guess at the nearest existing screen. Routing
-   * them to a page that does not hold what the row promised would be exactly
-   * the class of bug fixed elsewhere in Photos right now (labelled rows that
-   * all silently opened the same wrong page); a place with nowhere to go
-   * should fail loudly (by doing visibly nothing) rather than lie.
+   * `starred` has NO mobile screen — there is no cross-app favourites view —
+   * so it stays a STATED no-op rather than a guess at the nearest existing
+   * screen. Routing it to a page that does not hold what the row promised
+   * would be exactly the class of bug fixed elsewhere in Photos right now
+   * (labelled rows that all silently opened the same wrong page); a place with
+   * nowhere to go should fail loudly (by doing visibly nothing) rather than
+   * lie.
    *
    * The `default` arm asserts `never` on the narrowed remainder, so a twelfth
    * place added to ./places without a case here is a typecheck failure, not a
@@ -417,6 +419,8 @@ export default function HomeScreen({
           navigation.navigate("Automations");
           break;
         case "conn":
+          navigation.navigate("Connectors");
+          break;
         case "settings":
           openSettings();
           break;
@@ -428,7 +432,11 @@ export default function HomeScreen({
           navigation.navigate("Settings", { screen: "PhoneStorage" });
           break;
         case "data":
+          navigation.navigate("Data");
+          break;
         case "devices":
+          navigation.navigate("Devices");
+          break;
         case "starred":
           // No mobile screen for this place yet — see the function comment.
           break;

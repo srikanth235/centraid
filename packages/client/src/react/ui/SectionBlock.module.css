@@ -1,0 +1,36 @@
+/* Section head (v9 §8). Logical properties only — the rule is a block-start
+   edge and the label leads from the READING edge, not the left one. */
+
+.section {
+  align-items: baseline;
+  border-block-start: 1px solid var(--line);
+  display: flex;
+  gap: var(--sp-3);
+  margin-block-start: var(--sp-3);
+  padding-block: var(--sp-4) var(--sp-2);
+}
+
+/* `--t-eyebrow` IS the brief's `micro` rung: 11/15 600, uppercase, .06em
+   tracking — the transform and the tracking come with the role, so this rule
+   never restates them. */
+.label {
+  color: var(--text);
+  flex: none;
+  font: var(--t-eyebrow);
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* The count truncates; the label above does not. */
+.meta {
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  flex: 1;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  unicode-bidi: var(--t-mono-bidi);
+  white-space: nowrap;
+}
