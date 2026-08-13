@@ -51,6 +51,8 @@ interface InlineLinkDestination {
   vaultId: string;
   partyId: string;
   approved: boolean;
+  /** The linked vault's own name from the vault directory (#750), or null. */
+  label: string | null;
 }
 
 interface InlineCommonsResident {
@@ -106,13 +108,7 @@ export interface InlineCommonsIntent {
   actorPartyId: string;
   command: string;
   input: Record<string, unknown>;
-  status:
-    | "pending"
-    | "parked"
-    | "executed"
-    | "denied"
-    | "expired"
-    | "cancelled";
+  status: "queued" | "parked" | "executed" | "denied" | "expired" | "cancelled";
   reason?: string;
   stewardLabel?: string;
   createdAt: string;
@@ -185,7 +181,7 @@ export interface InlineCentraidClient {
   }) => Promise<InlineCommonsIntent[]>;
   /** Cancel a durable Commons intent that has not executed yet (issue #731
    * goal 2). Idempotent and safe to race with the steward — the vault-side
-   * guard only ever moves a still-open (`pending`/`parked`) intent to
+   * guard only ever moves a still-open (`queued`/`parked`) intent to
    * `cancelled`; an intent the steward already settled comes back
    * unchanged, so the caller reads the real outcome off the result rather
    * than assuming the cancel won. */
@@ -380,7 +376,10 @@ async function loadShareTargets(
     targets.set(link.partyId, {
       partyId: link.partyId,
       vaultId: link.vaultId,
-      label: `Linked person ${link.vaultId.length > 10 ? `${link.vaultId.slice(0, 8)}…` : link.vaultId}`,
+      // The directory's own name for that vault (#750). When it truly has
+      // none, say so honestly — a truncated vault id is not a person's name
+      // and never read as one.
+      label: link.label ?? "Linked person",
     });
   }
   return [...targets.values()];
@@ -764,7 +763,7 @@ export function createInlineCentraidClient(
         const stewardLabel = intent.stewardLabel ?? undefined;
         const reason =
           intent.reason ??
-          (intent.status === "pending" || intent.status === "parked"
+          (intent.status === "queued" || intent.status === "parked"
             ? `Waiting for ${stewardLabel || "the Commons steward"}.`
             : undefined);
         return {
@@ -784,7 +783,7 @@ export function createInlineCentraidClient(
 
     async cancelCommonsIntent(opts) {
       const binding = bindingFor(opts.scope);
-      if (!binding.scope.id) return { status: "pending", cancelled: false };
+      if (!binding.scope.id) return { status: "queued", cancelled: false };
       const { baseUrl, token } = await auth();
       const response = await doFetch(
         baseUrl,

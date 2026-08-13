@@ -118,7 +118,11 @@ import {
   jitterDelayMs,
   DEFAULT_VAULT_FOOTPRINT,
 } from "@centraid/vault";
-import type { FilterClause, PreviewCodec } from "@centraid/vault";
+import type {
+  FilterClause,
+  InvokeOutcome,
+  PreviewCodec,
+} from "@centraid/vault";
 
 import type { BackupConfig } from "../backup/backup-config.js";
 import { BackupService } from "../backup/backup-service.js";
@@ -297,6 +301,7 @@ import {
 } from "./peer-commons-client.js";
 import type { PeerDial } from "./peer-edge-give-client.js";
 import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
+import { announceLocalRoutes } from "./peer-route-announce.js";
 import { PowerContextMonitor } from "./power-context.js";
 import { PricingWarmer } from "./pricing-warmer.js";
 import { ResourceAccounting } from "./resource-accounting.js";
@@ -1081,6 +1086,29 @@ export async function buildGateway(
     pendingNotificationsWakes.add(vaultId);
   };
   let nudgeCommonsSweep = (): void => undefined;
+  /**
+   * The replica executor a co-hosted Commons seat catches up through (#750
+   * invariant 7): the SEAT's own gateway on the canonical rail, seeded so a
+   * replayed command mints exactly the ids the steward minted. Host-only —
+   * assembled from locally mounted material, never reachable from member or
+   * app code, and never serialized. A vault that is not mounted cannot
+   * replay, which the caller answers by re-projecting from the closure.
+   */
+  const commonsReplicaInvoke = (
+    vaultId: string,
+    command: string,
+    input: Record<string, unknown>,
+    invocationId: string
+  ): InvokeOutcome => {
+    const mounted = vaultRegistry.get(vaultId);
+    if (!mounted?.gateway || !mounted.ownerCredential)
+      throw new Error(`commons replica vault ${vaultId} is not mounted`);
+    return mounted.gateway.invokeCommonsCanonical(
+      mounted.ownerCredential,
+      { command, input, purpose: "dpv:ServiceProvision", invocationId },
+      { idSeed: invocationId }
+    );
+  };
   const vaultRegistry: VaultRegistry = openVaultRegistry({
     rootDir: paths.vaultDir,
     synchronous: hardwareProfile.sqliteSynchronous,
@@ -1139,6 +1167,7 @@ export async function buildGateway(
         stewardPartyId: steward.boot.ownerPartyId,
         grantId,
         vaultFor: (memberVaultId) => vaultRegistry.get(memberVaultId)?.db,
+        invokeFor: commonsReplicaInvoke,
         now: new Date().toISOString(),
       });
     },
@@ -4357,6 +4386,9 @@ export async function buildGateway(
               // *Add someone* (#726 P1): mints the new vault (identity
               // keypair included — `VaultRegistry.create` mints it).
               mintVaultForPerson: (name) => vaultRegistry.create(name),
+              // Cleanup twin (#750): a failed provision removes the vault it
+              // minted (dir + keys + mount), leaving zero durable state.
+              unmintVaultForPerson: (vaultId) => vaultRegistry.delete(vaultId),
               onRevoked: (rows) => {
                 for (const row of rows) {
                   const plane = vaultRegistry.get(row.vaultId);
@@ -4875,7 +4907,8 @@ export async function buildGateway(
         link.approvedByB === null
       )
         return undefined;
-      return peerVaultId === link.vaultA ? link.publicKeyA : link.publicKeyB;
+      // #750 invariant 1: identity lives in the vault directory, not the link.
+      return vaultLinksStore.directoryEntry(peerVaultId)?.publicKey;
     },
     invitePeer: async (invitation) => {
       const { stewardVaultId, memberVaultId } = invitation;
@@ -4907,6 +4940,9 @@ export async function buildGateway(
         seat: member.db,
         acceptInvitation: true,
         expectedSizeBytes,
+        ...(member.gateway && member.ownerCredential
+          ? { gateway: member.gateway, credential: member.ownerCredential }
+          : {}),
       });
       return result.state === "current";
     },
@@ -4943,6 +4979,18 @@ export async function buildGateway(
   const commonsRecoveryHandler = makeCommonsRecoveryRouteHandler({
     enrollments: enrollmentStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+    // Successor invitations ride the same peer push the ordinary commons
+    // door uses (issue #750), so the ceremony ends with members invited
+    // rather than with a steward of one.
+    invitePeer: async (invitation) => {
+      const link = vaultLinksStore.peerForVault(
+        invitation.memberVaultId,
+        invitation.stewardVaultId
+      );
+      const dial = options.peerPlane?.dial;
+      if (!link || !dial) return false;
+      return invitePeerToCommons({ dial, route: link.route, invitation });
+    },
   });
   // The D9 answer route (#726 P3 decision 9) — a same-machine owner-tier
   // surface, mounted like any other route, distinct from the peer plane.
@@ -4990,8 +5038,9 @@ export async function buildGateway(
     : undefined;
   /*
    * Peer-plane background delivery (#726 P3 gaps 2 & 3): drains
-   * `peer_blob_pulls` (a give's ORIGINAL bytes) and `peer_pending_refusals`
-   * (a D9 'refuse' the origin has not heard yet) on the gateway's own clock
+   * the ONE share outbox (`share_effects`: a give's ORIGINAL bytes, a D9
+   * 'refuse' the origin has not heard yet, a give the peer was offline for)
+   * on the gateway's own clock
    * rather than never — same posture as the outbox sweep below (bounded rows
    * per tick, backs off on failure, never throws out of the timer). `dial`
    * is read LIVE so a build that wires it after this point (or never) still
@@ -5009,6 +5058,32 @@ export async function buildGateway(
         credential: plane.ownerCredential,
       })),
     dial: () => options.peerPlane?.dial,
+    /*
+     * Route re-assertion retry (issue #750 invariant 3). The eager push runs
+     * where the EndpointId is first learned (the daemon's endpoint host);
+     * this tick is the RETRY path — `announceLocalRoutes` is a no-op until
+     * the endpoint changes, and stays armed while any linked peer has not
+     * heard the change (the `gateway_meta` pin is only written on full
+     * delivery). Signed per LOCAL vault with its own identity seed.
+     */
+    announceRoutes: async () => {
+      const dial = options.peerPlane?.dial;
+      const localRoute = options.peerPlane?.localRoute;
+      if (!dial || !localRoute) return;
+      await announceLocalRoutes({
+        links: vaultLinksStore,
+        dial,
+        signAsVault: (vaultId, bytes) =>
+          vaultRegistry.signAsVault(vaultId, bytes),
+        localVaultIds: () =>
+          vaultRegistry.planesList().map((plane) => plane.boot.vaultId),
+        route: localRoute,
+        log: {
+          info: (message) => logger.info(message),
+          warn: (message) => logger.warn(message),
+        },
+      });
+    },
     ...(options.peerPlane?.blobPullIntervalMs === undefined
       ? {}
       : { idleIntervalMs: options.peerPlane.blobPullIntervalMs }),
@@ -5245,6 +5320,7 @@ export async function buildGateway(
         stewardVaultId: steward.boot.vaultId,
         stewardPartyId: steward.boot.ownerPartyId,
         vaultFor: (memberVaultId) => vaultRegistry.get(memberVaultId)?.db,
+        invokeFor: commonsReplicaInvoke,
         now,
       });
   };

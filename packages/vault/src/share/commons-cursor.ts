@@ -39,27 +39,3 @@ export function readCommonsCursor(
       }
     : undefined;
 }
-
-/** Monotonic advance: delayed or replayed tails cannot move a seat backward. */
-export function advanceCommonsCursor(input: {
-  db: DatabaseSync;
-  grantId: string;
-  memberVaultId: string;
-  sequence: number;
-  now: string;
-}): CommonsCursor {
-  input.db
-    .prepare(
-      `INSERT INTO share_commons_cursor
-         (grant_id, member_vault_id, sequence, updated_at)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(grant_id, member_vault_id) DO UPDATE SET
-         sequence = MAX(sequence, excluded.sequence),
-         updated_at = CASE
-           WHEN excluded.sequence >= sequence THEN excluded.updated_at
-           ELSE updated_at
-         END`
-    )
-    .run(input.grantId, input.memberVaultId, input.sequence, input.now);
-  return readCommonsCursor(input.db, input.grantId, input.memberVaultId)!;
-}

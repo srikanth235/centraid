@@ -6,6 +6,8 @@ import { rmSync } from "node:fs";
 
 import { afterEach, describe, expect, test } from "vitest";
 
+import { REPLICA_DDL } from "../schema/replica.js";
+import { SHARE_COMMONS_DDL } from "../schema/share-commons.js";
 import { opened, roots, setup } from "./commons-intent.test-fixtures.js";
 import {
   cancelCommonsIntent,
@@ -21,6 +23,40 @@ describe("issue #731: parked-intent expiry and cancel", () => {
     }
     for (const root of roots.splice(0))
       rmSync(root, { recursive: true, force: true });
+  });
+
+  // Issue #750: two of the three optimistic-write lifecycles are rendered to
+  // the same person in the same list, so they speak ONE grammar. The commons
+  // intent vocabulary is the pending-write outbox's own words (see
+  // `PendingOverlayStatus` in blueprints' `_shared/pending-overlay.ts`) —
+  // never a third set of names for the same states.
+  test("commons intent states are the pending-write outbox's states", () => {
+    const statesIn = (ddl: string, table: string): string[] => {
+      const check = new RegExp(
+        `CREATE TABLE (?:IF NOT EXISTS )?${table}[\\s\\S]*?status\\s+TEXT NOT NULL CHECK \\([\\s\\S]*?status IN\\s*\\((?<states>[^)]*)\\)`,
+        "u"
+      ).exec(ddl);
+      const states = check?.groups?.["states"];
+      if (!states) throw new Error(`no status CHECK for ${table}`);
+      return [...states.matchAll(/'(?<state>[a-z-]+)'/gu)]
+        .map((match) => match.groups!["state"]!)
+        .toSorted();
+    };
+    const commons = statesIn(SHARE_COMMONS_DDL, "share_commons_intent");
+    expect(commons).toStrictEqual([
+      "cancelled",
+      "denied",
+      "executed",
+      "expired",
+      "parked",
+      "queued",
+    ]);
+    // Every state the two lifecycles genuinely share is spelled the same way.
+    const outbox = new Set(statesIn(REPLICA_DDL, "replica_intent_outcome"));
+    for (const state of ["queued", "parked", "denied", "executed"])
+      expect(outbox.has(state)).toBe(true);
+    // `pending` was the third vocabulary; it is gone from the DDL entirely.
+    expect(SHARE_COMMONS_DDL).not.toMatch(/'pending','parked'/u);
   });
 
   test("expireParkedCommonsIntents settles a long-parked intent and leaves a fresh one alone", () => {

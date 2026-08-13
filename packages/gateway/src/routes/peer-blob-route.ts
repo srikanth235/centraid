@@ -17,7 +17,7 @@ import type { LocalBlobStore } from "@centraid/vault";
 
 import type { GatewayDatabase } from "../serve/gateway-db.js";
 import { hasGivenEdge } from "../serve/peer-give-authorization.js";
-import { readEdgeRow } from "./edges-reconcile.js";
+import { readEdgeRow } from "../serve/share-edge-row.js";
 import type { PeerIdentity } from "./peer-plane.js";
 import { sendJson } from "./route-helpers.js";
 

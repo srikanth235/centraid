@@ -136,7 +136,7 @@
     },
     "tests/scale/replica-bootstrap.scale.test.ts": {
       "lane": "scale",
-      "volume": "50,000 rows — windowed bootstrap with an in-flight deletion"
+      "volume": "50,000 rows — client windowed bootstrap with an in-flight deletion, plus the gateway windowed-page walk resumed across a vault-plane restart (#750)"
     },
     "tests/scale/tunnel-pairs.scale.test.ts": {
       "lane": "scale",

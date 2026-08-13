@@ -11,6 +11,7 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   currentReplicaLogState,
+  pruneReplicaChanges,
   recordReplicaIntentOutcome,
 } from "@centraid/vault";
 
@@ -437,6 +438,48 @@ describe("replica-routes", () => {
     );
     expect(conflicted.status).toBe(409);
     expect(conflicted.page.reason).toBe("shape-changed");
+  });
+
+  test("compaction past the pinned page-1 cursor forces a 409 snapshot-retention, and a fresh walk recovers", async () => {
+    const { plane, handler } = await fixture();
+    for (const id of ["task-01", "task-02", "task-03"]) task(plane, id, id);
+    const first = await bootstrapDirect(handler, "?window=1");
+    expect(first.status).toBe(200);
+    expect(first.page.next).toBeTruthy();
+
+    // High churn after page 1 — the change-log entries the token's pinned
+    // delta floor would need are then compacted away by retention pressure,
+    // exactly the long-lived lagging-device shape.
+    const update = plane.db.vault.prepare(
+      "UPDATE schedule_task SET title = ? WHERE task_id = ?"
+    );
+    for (let index = 0; index < 40; index += 1)
+      update.run(`churn-${index}`, "task-01");
+    const pruned = pruneReplicaChanges(plane.db.vault, { maxEntries: 4 });
+    expect(pruned.floor.seq).toBeGreaterThan(first.page.cursor.seq);
+
+    const lagging = await bootstrapDirect(
+      handler,
+      `?window=1&after=${encodeURIComponent(first.page.next!)}`
+    );
+    expect(lagging.status).toBe(409);
+    expect(lagging.page).toMatchObject({
+      error: "replica_rebootstrap_required",
+      reason: "snapshot-retention",
+    });
+
+    // The defined recovery path: a FRESH page-1 walk pins a new (post-floor)
+    // delta cursor and pages the whole library again.
+    const recovered = await bootstrapDirect(handler, "?window=10000");
+    expect(recovered.status).toBe(200);
+    expect(recovered.page.complete).toBe(true);
+    expect(recovered.page.cursor.seq).toBeGreaterThanOrEqual(pruned.floor.seq);
+    expect(
+      recovered.page.rows
+        .filter((row) => row.entity === "schedule.task")
+        .map((row) => row.rowId)
+        .sort()
+    ).toStrictEqual(["task-01", "task-02", "task-03"]);
   });
 
   test("windowed mode bypasses the maxBootstrapRows 413 cap", async () => {

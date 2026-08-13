@@ -455,7 +455,12 @@ export default function ApprovalsRoute(): JSX.Element {
           // Recognition controls are the built-in automation recipes. A
           // refusal therefore opens its recipe when the notice identifies
           // one, and otherwise opens the collapsed Recognition fleet.
-          if (typeof ref === "string") {
+          if (notice.kind.startsWith("commons-")) {
+            // Steward absence, commons growth and the identity fault
+            // (commons-notices.ts) are all acted on from People & circles on
+            // Household — the surface that offers the recovery ceremony.
+            navigate({ kind: "household" });
+          } else if (typeof ref === "string") {
             navigate({ kind: "automation-view", automationId: ref });
           } else if (typeof notice.detail.enrichDomain === "string") {
             navigate({ kind: "automations" });

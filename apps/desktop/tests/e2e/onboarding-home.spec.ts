@@ -154,6 +154,15 @@ test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands 
       path: path.join(evidenceDir, "issue-726-vault-as-share-unit.png"),
       fullPage: true,
     });
+    // #750 continues #726 on the same surface. Household — where the sharing
+    // card and its steward-recovery rows live — does not render against this
+    // mock gateway, so a Household frame here would evidence an error state
+    // rather than the change; first-run Home is the frame this file has used
+    // for every sharing-plane issue before it.
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-750-vault-sharing.png"),
+      fullPage: true,
+    });
 
     // Persisted flag means a relaunch would skip onboarding, and the local
     // gateway is now really running.

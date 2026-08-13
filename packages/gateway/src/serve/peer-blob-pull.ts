@@ -2,19 +2,21 @@
  * The AUDIENCE-side half of a remote give's byte custody (#726 P3 decision
  * 7): derivatives already crossed with the closure, so what remains is the
  * ORIGINAL, pulled by sha — RANGED, resumable across interruption, sha256
- * verified before the row becomes durable. Runs entirely off the request
- * path: `recordPendingPulls` is called once, synchronously, inside the give
- * handler; `drainPeerBlobPulls` is the background worker's tick, called as
- * many times as it takes.
+ * verified before the bytes become durable.
  *
- * Resumability needs no extra state beyond what's on disk: `tmp_path` is
+ * Since #750 the queue is not a table of its own: `recordPendingPulls` writes
+ * `pull-blob` effects into the ONE share outbox, and `runBlobPull` is what
+ * `share-effect-executor.ts` calls for each. The mechanics below are
+ * unchanged, because they were never the problem.
+ *
+ * Resumability needs no extra state beyond what is on disk: `tmpPath` is
  * minted ONCE (the vault's own `promotionTempPathSync` — same filesystem as
  * its CAS, so the eventual adopt is a rename) and its byte length on disk IS
  * the offset to resume from. A network failure mid-pull leaves the partial
- * file and the row exactly where they were — nothing to roll back.
+ * file and the effect exactly where they were — nothing to roll back.
  */
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { appendFileSync, createReadStream, rmSync, statSync } from "node:fs";
 
 import type { BlobManifestEntry, ShareVaultRef } from "@centraid/vault";
@@ -22,20 +24,9 @@ import type { BlobManifestEntry, ShareVaultRef } from "@centraid/vault";
 import type { GatewayDatabase } from "./gateway-db.js";
 import { PEER_BLOB_CHUNK_PATH } from "./peer-blob-route-path.js";
 import type { PeerDial, PeerDialRoute } from "./peer-edge-give-client.js";
-import { peerViewOf } from "./vault-link-row.js";
-import type { VaultLinksStore } from "./vault-links-store.js";
+import { enqueueShareEffect, hasQueuedBlobPull } from "./share-effects.js";
 
-const DEFAULT_CHUNK_BYTES = 4 * 1024 * 1024;
-
-interface PendingPullRow {
-  pull_id: string;
-  edge_id: string;
-  link_id: string;
-  local_vault_id: string;
-  sha256: string;
-  size: number;
-  tmp_path: string;
-}
+const DEFAULT_BLOB_CHUNK_BYTES = 4 * 1024 * 1024;
 
 /** Queue every ORIGINAL-rung blob a just-projected give still needs, sha-deduped. */
 export function recordPendingPulls(
@@ -49,33 +40,29 @@ export function recordPendingPulls(
   }
 ): void {
   for (const entry of input.originals) {
-    // Re-give short-circuits by sha: already-resident bytes need no pull row.
+    // Re-give short-circuits by sha: already-resident bytes need no pull.
     if (audience.blobs.local.hasSync(entry.sha256)) continue;
-    const existing = db.db
-      .prepare(
-        "SELECT 1 FROM peer_blob_pulls WHERE local_vault_id = ? AND sha256 = ?"
-      )
-      .get(input.localVaultId, entry.sha256);
-    if (existing) continue;
+    if (hasQueuedBlobPull(db, input.localVaultId, entry.sha256)) continue;
     const tmpPath = audience.blobs.local.promotionTempPathSync?.(entry.sha256);
     // No streaming-adoption seam (the in-memory tier) — nothing durable to
     // resume across, so there is no pull to track. Vault-package scope keeps
     // this module from doing anything about that here.
     if (!tmpPath) continue;
-    const now = new Date().toISOString();
-    db.run(
-      `INSERT INTO peer_blob_pulls
-         (pull_id, edge_id, link_id, local_vault_id, sha256, size, tmp_path, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      randomUUID(),
-      input.edgeId,
-      input.linkId,
-      input.localVaultId,
-      entry.sha256,
-      entry.size,
-      tmpPath,
-      now,
-      now
+    enqueueShareEffect(
+      db,
+      {
+        kind: "pull-blob",
+        edgeId: input.edgeId,
+        linkId: input.linkId,
+        localVaultId: input.localVaultId,
+        sha256: entry.sha256,
+        size: entry.size,
+        tmpPath,
+      },
+      // A pull the outbox already discharged, for bytes this vault no longer
+      // holds, is a real obligation again — re-arm the row rather than let a
+      // `done` marker outlive the fact it recorded.
+      { requeue: true }
     );
   }
 }
@@ -98,51 +85,58 @@ function sha256OfFile(path: string): Promise<string> {
   });
 }
 
-export type PullBlobOutcome = "done" | "pending" | "failed";
+export type PullBlobOutcome =
+  | { state: "done" }
+  /** Interrupted. `progressed` says whether bytes actually moved this pass. */
+  | { state: "pending"; progressed: boolean }
+  | { state: "failed"; reason: string };
+
+export interface RunBlobPullInput {
+  audience: ShareVaultRef;
+  dial: PeerDial;
+  route: PeerDialRoute;
+  edgeId: string;
+  sha256: string;
+  size: number;
+  tmpPath: string;
+  chunkBytes?: number;
+}
 
 /**
- * Pull ONE original to durable, resuming from whatever `tmp_path` already
+ * Pull ONE original to durable, resuming from whatever `tmpPath` already
  * holds. Never throws for a network condition — a peer that is offline or
  * partitioned mid-transfer leaves this "pending", never an exception the
  * caller would have to turn into a 500.
  */
-async function pullOne(
-  db: GatewayDatabase,
-  audience: ShareVaultRef,
-  dial: PeerDial,
-  route: PeerDialRoute,
-  row: PendingPullRow,
-  chunkBytes: number
+export async function runBlobPull(
+  input: RunBlobPullInput
 ): Promise<PullBlobOutcome> {
-  const store = audience.blobs.local;
-  const done = (): void => {
-    db.run("DELETE FROM peer_blob_pulls WHERE pull_id = ?", row.pull_id);
-  };
-  if (store.hasSync(row.sha256)) {
-    done();
-    return "done";
-  }
+  const store = input.audience.blobs.local;
+  if (store.hasSync(input.sha256)) return { state: "done" };
+  const chunkBytes = input.chunkBytes ?? DEFAULT_BLOB_CHUNK_BYTES;
+  const startedAt = fileSizeOf(input.tmpPath);
+  const progressed = (): boolean => fileSizeOf(input.tmpPath) > startedAt;
   for (;;) {
-    const have = fileSizeOf(row.tmp_path);
-    if (have >= row.size) break;
-    const length = Math.min(chunkBytes, row.size - have);
+    const have = fileSizeOf(input.tmpPath);
+    if (have >= input.size) break;
+    const length = Math.min(chunkBytes, input.size - have);
     let response: { status: number; json: unknown };
     try {
       // oxlint-disable-next-line no-await-in-loop -- ranged/resumable download: each chunk's offset comes from the file size the PREVIOUS chunk grew it to
-      response = await dial.request({
-        endpointTicket: dial.endpointTicketFor(
-          route.endpointId,
-          route.relayHints
+      response = await input.dial.request({
+        endpointTicket: input.dial.endpointTicketFor(
+          input.route.endpointId,
+          input.route.relayHints
         ),
         method: "GET",
         // `edgeId` is what lets the origin resolve exactly which link this
         // pull concerns (#726 audit finding 2) — two vaults co-hosted on one
         // remote gateway would otherwise share an endpoint and be
         // indistinguishable to it.
-        target: `${PEER_BLOB_CHUNK_PATH}?sha256=${row.sha256}&offset=${have}&length=${length}&edgeId=${encodeURIComponent(row.edge_id)}`,
+        target: `${PEER_BLOB_CHUNK_PATH}?sha256=${input.sha256}&offset=${have}&length=${length}&edgeId=${encodeURIComponent(input.edgeId)}`,
       });
     } catch {
-      return "pending";
+      return { state: "pending", progressed: progressed() };
     }
     const body =
       response.json !== null && typeof response.json === "object"
@@ -153,85 +147,22 @@ async function pullOne(
       body.state !== "chunk" ||
       typeof body.bytes !== "string"
     ) {
-      return "pending";
+      return { state: "pending", progressed: progressed() };
     }
     const bytes = Buffer.from(body.bytes, "base64");
-    if (bytes.length === 0) return "pending"; // no progress — avoid spinning
-    appendFileSync(row.tmp_path, bytes);
+    // No progress — return rather than spin.
+    if (bytes.length === 0)
+      return { state: "pending", progressed: progressed() };
+    appendFileSync(input.tmpPath, bytes);
   }
-  const digest = await sha256OfFile(row.tmp_path);
-  if (digest !== row.sha256) {
+  const digest = await sha256OfFile(input.tmpPath);
+  if (digest !== input.sha256) {
     // Corrupt or truncated — restart clean rather than resume onto garbage.
-    rmSync(row.tmp_path, { force: true });
-    done();
-    return "failed";
+    rmSync(input.tmpPath, { force: true });
+    return { state: "failed", reason: "pulled bytes failed their sha256" };
   }
-  store.adoptTempSync?.(row.sha256, row.tmp_path);
-  done();
-  return "done";
-}
-
-export interface DrainPeerBlobPullsResult {
-  done: string[];
-  pending: string[];
-  failed: string[];
-}
-
-function selectPendingPulls(
-  db: GatewayDatabase,
-  edgeId: string | undefined,
-  limit: number | undefined
-): PendingPullRow[] {
-  const clause = edgeId ? "WHERE edge_id = ?" : "";
-  const args: Array<string | number> = edgeId ? [edgeId] : [];
-  if (limit !== undefined) args.push(limit);
-  return db.db
-    .prepare(
-      `SELECT * FROM peer_blob_pulls ${clause} ORDER BY created_at${
-        limit === undefined ? "" : " LIMIT ?"
-      }`
-    )
-    .all(...args) as unknown as PendingPullRow[];
-}
-
-/** One background-worker tick: advance every (or one edge's) pending pull. */
-export async function drainPeerBlobPulls(input: {
-  db: GatewayDatabase;
-  links: VaultLinksStore;
-  vaultFor: (vaultId: string) => ShareVaultRef | undefined;
-  dial: PeerDial;
-  edgeId?: string;
-  chunkBytes?: number;
-  /** Rows processed this call; unbounded when omitted (a scheduler tick bounds it). */
-  limit?: number;
-}): Promise<DrainPeerBlobPullsResult> {
-  const rows = selectPendingPulls(input.db, input.edgeId, input.limit);
-  const result: DrainPeerBlobPullsResult = {
-    done: [],
-    pending: [],
-    failed: [],
-  };
-  // Every row is an independent pull (its own sha256, its own temp file), so
-  // this tick's rows run concurrently rather than one at a time.
-  await Promise.all(
-    rows.map(async (row) => {
-      const audience = input.vaultFor(row.local_vault_id);
-      const link = input.links.get(row.link_id);
-      const view = link ? peerViewOf(link, row.local_vault_id) : undefined;
-      if (!audience || !view) {
-        result.pending.push(row.sha256);
-        return;
-      }
-      const outcome = await pullOne(
-        input.db,
-        audience,
-        input.dial,
-        view.route,
-        row,
-        input.chunkBytes ?? DEFAULT_CHUNK_BYTES
-      );
-      result[outcome].push(row.sha256);
-    })
-  );
-  return result;
+  // Sha-verified CAS adoption IS this effect's idempotency anchor: a replay
+  // after a crash finds the bytes resident and discharges immediately.
+  store.adoptTempSync?.(input.sha256, input.tmpPath);
+  return { state: "done" };
 }

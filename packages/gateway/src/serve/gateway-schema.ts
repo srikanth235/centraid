@@ -104,6 +104,26 @@ export function installGatewaySchema(db: DatabaseSync): void {
       created_at TEXT NOT NULL,
       expires_at INTEGER NOT NULL
     ) STRICT;
+    /*
+     * Idempotency ledger for the *Add someone* mint (issue #750): one row per
+     * client-chosen operation id on POST /devices/ticket + forPerson,
+     * storing the FULL original response. A replay returns result_json
+     * verbatim and re-mints nothing. The row commits in the SAME transaction
+     * as the owner/ownership/ticket rows it describes, so a failed mint
+     * records nothing and a recorded operation always names committed rows.
+     *
+     * request_hash fingerprints the request's defining inputs (label,
+     * vaultName, ttlMs) so an operation id reused with DIFFERENT inputs is
+     * refused instead of silently replaying the first request's result —
+     * without it a typo'd retry could believe a never-performed request
+     * succeeded.
+     */
+    CREATE TABLE IF NOT EXISTS provision_operations (
+      operation_id TEXT PRIMARY KEY,
+      request_hash TEXT NOT NULL,
+      result_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    ) STRICT;
     CREATE TABLE IF NOT EXISTS erase_intents (
       vault_id TEXT PRIMARY KEY,
       created_at TEXT NOT NULL
@@ -150,7 +170,12 @@ export function installGatewaySchema(db: DatabaseSync): void {
      * three. The audience projection always commits before a move deletes
      * its source; replay resumes from target_state/source_state.
      *
-     * The retired live/lend relationship is not represented (#731).
+     * The retired live/lend relationship is not represented (#731): mode
+     * admits ONE value, which is that removal asserted at the boundary rather
+     * than merely remembered. A live edge cannot be written here, so no
+     * reader downstream has to ask whether a scope is a standing declaration
+     * — a scope is always a fixed, validated set of item ids
+     * (serve/share-scope.ts).
      */
     CREATE TABLE IF NOT EXISTS share_edges (
       edge_id TEXT PRIMARY KEY,
@@ -173,8 +198,70 @@ export function installGatewaySchema(db: DatabaseSync): void {
       CHECK (mode != 'snapshot' OR scope_json IS NOT NULL),
       CHECK (kind != 'move' OR mode = 'snapshot')
     ) STRICT;
-    CREATE INDEX IF NOT EXISTS share_edges_device_status
-      ON share_edges(created_by_device, status, updated_at);
+    /*
+     * Listing is BY OWNER (issue #750): every device of one owner sees the
+     * same edges, because authority is the owner's and a phone must not show
+     * a different share history than the laptop that made it.
+     * created_by_device stays on the row as PROVENANCE (which device acted)
+     * and is answered in the wire DTO — it is simply not a scope.
+     */
+    CREATE INDEX IF NOT EXISTS share_edges_owner_status
+      ON share_edges(owner_id, updated_at);
+    /*
+     * The ONE durable effect outbox of the sharing plane (issue #750
+     * abstraction 2). It succeeds peer_pending_gives, peer_blob_pulls and
+     * peer_pending_refusals outright — pre-1.0, no dual write — because
+     * those were three hand-rolled queues with three drainers, three retry
+     * policies and three places to forget a crash. One table, one executor,
+     * per-kind handlers.
+     *
+     * Every effect is forward-only and idempotent: effect_id is DERIVED
+     * from what the effect is about (give:<edge>, ask:<edge>,
+     * refuse:<edge>, pull:<edge>:<sha256>), so a replay after a crash
+     * re-enqueues the SAME row rather than a second copy, and each handler
+     * keeps the anchor that already made its work replay-safe: sha-verified
+     * CAS adoption for a pulled original, the edge-unique
+     * share_access_receipts row for a delivered give, the origin's
+     * acknowledgement for a relayed refusal.
+     *
+     * next_attempt_at is the retry clock AND the drainability flag: NULL
+     * means no machine ever retries this row because it is waiting on a
+     * HUMAN — that is exactly what an 'await-answer' effect is (the D9 'ask'
+     * the P6 surface lists), and it is why that lifecycle needs no table of
+     * its own. An 'await-answer' effect deliberately carries no bytes and no
+     * closure: nothing is written until the owner accepts, at which point the
+     * audience pulls the closure FRESH from the origin rather than projecting
+     * something staged here to go stale.
+     *
+     * Durability-before-network is the invariant a 'deliver-refusal' effect
+     * exists for: the owner's answer commits here, in the same transaction
+     * that closes the 'await-answer' effect, BEFORE any delivery attempt, so
+     * an offline origin can never lose a refusal. A 'pull-blob' effect keeps
+     * its tmp_path in the payload for the same reason it used to be a
+     * column: the file's own on-disk length IS the resume offset, so an
+     * interrupted transfer continues with a Range request instead of
+     * restarting.
+     *
+     * edge_id is deliberately not a foreign key: at the AUDIENCE end of a
+     * remote give there is no local share_edges row at all — the edge lives
+     * on the origin's gateway — and the effect is still this gateway's own
+     * durable obligation.
+     */
+    CREATE TABLE IF NOT EXISTS share_effects (
+      effect_id TEXT PRIMARY KEY,
+      edge_id TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('deliver-give', 'await-answer', 'deliver-refusal', 'pull-blob')),
+      payload_json TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('queued', 'done')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at INTEGER,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS share_effects_due_idx
+      ON share_effects(status, next_attempt_at);
+    CREATE INDEX IF NOT EXISTS share_effects_edge_idx
+      ON share_effects(edge_id);
     /*
      * Durable access audit, one row per EDGE regardless of item count (#726
      * P2) — three photographs placed by one edge leave one receipt, not
@@ -198,6 +285,51 @@ export function installGatewaySchema(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS share_access_receipts_audience_idx
       ON share_access_receipts(audience_vault_id, created_at);
     /*
+     * The vault DIRECTORY (issue #750 invariant 1): ONE stable identity
+     * record per known vault — local and peer alike. vault_id plus the
+     * vault's own Ed25519 identity public key (P1 mints one for EVERY
+     * vault), plus a display label. Identity lives HERE and nowhere else:
+     * before #750, vault_links carried a key and label PER LINK, so a peer
+     * vault linked to two local vaults existed twice, and the copies could
+     * drift. Now every link, route, and signature check resolves a vault
+     * through this one row.
+     *
+     * A directory row is written by the link ceremony (propose/recordPeer/
+     * redeem) — never by a route assertion, which may only MOVE an address
+     * (decision 1: a route is never identity).
+     */
+    CREATE TABLE IF NOT EXISTS vault_directory (
+      vault_id TEXT PRIMARY KEY,
+      public_key TEXT NOT NULL,
+      label TEXT,
+      created_at TEXT NOT NULL
+    ) STRICT;
+    /*
+     * ONE route per peer vault (issue #750 invariant 2). The mere PRESENCE
+     * of a row means "this vault lives elsewhere" — a vault on this gateway
+     * never has one, which is the D3 statement itself ("is this vault
+     * remote" is "does this vault need routing"). The row is a replaceable
+     * {endpoint, relay hints, assertedAt, signature} cache re-learned from a
+     * signed route assertion whenever the vault moves; asserted_at is the
+     * replay-ordering key (an older assertion never wins the route back),
+     * and signature keeps the cache self-attesting.
+     *
+     * PRIMARY KEY (vault_id) is the invariant, structurally: two local
+     * vaults linked to the SAME peer vault resolve through this single row,
+     * so one accepted assertion re-routes every link at once — routes can no
+     * longer be duplicated (or half-updated) per link. This table and the
+     * device-pairing tables are the only places gateway.db holds an iroh
+     * EndpointId at all; a route is never an authorization input — grants,
+     * edges, and receipts bind vault_id alone (decision 1).
+     */
+    CREATE TABLE IF NOT EXISTS vault_routes (
+      vault_id TEXT PRIMARY KEY REFERENCES vault_directory(vault_id) ON DELETE CASCADE,
+      endpoint_id TEXT NOT NULL,
+      relay_hints_json TEXT NOT NULL,
+      asserted_at INTEGER NOT NULL,
+      signature TEXT
+    ) STRICT;
+    /*
      * A LINK is the standing permission for an edge to cross between two
      * vaults (#726 P2 §3 + P3 decisions 1–3). ONE table covers both
      * localities because D3 makes locality ROUTING, not semantics: sharing to
@@ -211,42 +343,26 @@ export function installGatewaySchema(db: DatabaseSync): void {
      * first (the CHECK), so a pair resolves to one row regardless of who
      * proposed it; UNIQUE then also forbids a reversed duplicate.
      *
-     * public_key_a/public_key_b are the vaults' own Ed25519 identity keys —
-     * P1 mints one for EVERY vault, so a local side carries exactly what a
-     * remote side carries. approved_by_a/approved_by_b are the ceremony in
-     * both localities: on one machine each owner's device approves its own
-     * side; across machines minting the ticket is one side's approval and
-     * redeeming it is the other's. An edge crosses only with BOTH non-NULL.
-     *
-     * route_a_json/route_b_json are the ONLY thing remoteness adds: a
-     * replaceable {endpointId, relayHints, assertedAt, signature} cache
-     * re-learned from a signed route assertion whenever that vault moves.
-     * A route is never identity and never an authorization input — grants,
-     * edges, and receipts bind vault_id alone (decision 1) — and these two
-     * columns are the only place outside the device-pairing tables where
-     * gateway.db holds an iroh EndpointId at all. "Is this side remote" is
-     * "does this side need routing", which is the D3 statement itself. This
-     * gateway holds at least one side of every link it stores, so the second
-     * CHECK forbids a row that routes both ways.
+     * A link row is PURE permission (issue #750): approved_by_a/approved_by_b
+     * are the ceremony in both localities — on one machine each owner's
+     * device approves its own side; across machines minting the ticket is one
+     * side's approval and redeeming it is the other's. An edge crosses only
+     * with BOTH non-NULL. Identity (public keys, labels) lives in
+     * vault_directory; reachability lives in vault_routes — a link never
+     * carries either, so linking one peer vault from two local vaults stores
+     * that vault's identity and route exactly once.
      */
     CREATE TABLE IF NOT EXISTS vault_links (
       link_id TEXT PRIMARY KEY,
       vault_a TEXT NOT NULL,
       vault_b TEXT NOT NULL,
-      public_key_a TEXT NOT NULL,
-      public_key_b TEXT NOT NULL,
-      label_a TEXT,
-      label_b TEXT,
       approved_by_a TEXT,
       approved_by_b TEXT,
-      route_a_json TEXT,
-      route_b_json TEXT,
       permissions_json TEXT NOT NULL DEFAULT '{}',
       revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)),
       created_at TEXT NOT NULL,
       UNIQUE (vault_a, vault_b),
-      CHECK (vault_a < vault_b),
-      CHECK (route_a_json IS NULL OR route_b_json IS NULL)
+      CHECK (vault_a < vault_b)
     ) STRICT;
     CREATE INDEX IF NOT EXISTS vault_links_vault_a_idx ON vault_links(vault_a);
     CREATE INDEX IF NOT EXISTS vault_links_vault_b_idx ON vault_links(vault_b);
@@ -254,8 +370,9 @@ export function installGatewaySchema(db: DatabaseSync): void {
      * The remote half of the ceremony's one-time capability (#726 P3
      * decision 3): 15-minute TTL, secret held only as a sha256, burned in the
      * same transaction that writes the link. vault_public_key pins what the
-     * ticket PROMISED, so the link records the key the far side was shown
-     * rather than whatever the vault holds by redemption time.
+     * ticket PROMISED, so redemption records into vault_directory the key the
+     * far side was shown rather than whatever the vault holds by redemption
+     * time (#750: the directory row, not the link, now carries it).
      */
     CREATE TABLE IF NOT EXISTS peer_link_tickets (
       ticket_id TEXT PRIMARY KEY,
@@ -279,64 +396,6 @@ export function installGatewaySchema(db: DatabaseSync): void {
       setting TEXT NOT NULL CHECK (setting IN ('accept', 'ask', 'refuse')),
       updated_at TEXT NOT NULL,
       PRIMARY KEY (link_id, vault_id)
-    ) STRICT;
-    /*
-     * A give the audience ASKED about (D9 'ask') and has not yet answered.
-     * Deliberately carries no closure/bytes: nothing is written until the
-     * owner accepts, at which point the audience PULLS the closure fresh from
-     * the origin (peer plane's edge/closure/:edgeId route) rather than one
-     * being staged here to go stale. One row per edge; the P6 UI reads this
-     * table to list what is awaiting an answer.
-     */
-    CREATE TABLE IF NOT EXISTS peer_pending_gives (
-      edge_id TEXT PRIMARY KEY,
-      link_id TEXT NOT NULL,
-      peer_vault_id TEXT NOT NULL,
-      local_vault_id TEXT NOT NULL,
-      item_type TEXT NOT NULL,
-      item_count INTEGER NOT NULL,
-      created_at TEXT NOT NULL
-    ) STRICT;
-    /*
-     * A remote-give ORIGINAL still being pulled by sha (#726 P3 decision 7):
-     * derivatives already crossed with the closure, so what remains here is
-     * only the byte-heavy rung. tmp_path is minted ONCE (the audience
-     * vault's own promotionTempPathSync, same filesystem as its CAS) and
-     * reused across resumes — the file's on-disk length IS the resume offset,
-     * so an interrupted pull continues a Range request rather than
-     * restarting. The row is deleted the moment the sha is verified and
-     * adopted into the CAS; its mere existence means "not yet durable".
-     */
-    CREATE TABLE IF NOT EXISTS peer_blob_pulls (
-      pull_id TEXT PRIMARY KEY,
-      edge_id TEXT NOT NULL,
-      link_id TEXT NOT NULL,
-      local_vault_id TEXT NOT NULL,
-      sha256 TEXT NOT NULL,
-      size INTEGER NOT NULL,
-      tmp_path TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      UNIQUE (local_vault_id, sha256)
-    ) STRICT;
-    /*
-     * A D9 'refuse' the AUDIENCE has decided but the ORIGIN has not yet heard
-     * (#726 P3 decision 9). The owner's answer is durable the instant this
-     * row lands — before any network attempt — so a refusal is never lost to
-     * an offline peer; drainPeerRefusals (the same background tick that
-     * drains peer_blob_pulls) POSTs it to the peer plane's edge/deny route
-     * and deletes the row once the origin acknowledges. One row per edge: a
-     * second 'refuse' on the same edge is unreachable (the route that writes
-     * this row requires a live peer_pending_gives row, which the first
-     * refusal already deleted).
-     */
-    CREATE TABLE IF NOT EXISTS peer_pending_refusals (
-      edge_id TEXT PRIMARY KEY,
-      link_id TEXT NOT NULL,
-      peer_vault_id TEXT NOT NULL,
-      local_vault_id TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
     ) STRICT;
     CREATE TABLE IF NOT EXISTS push_registrations (
       device_id TEXT PRIMARY KEY REFERENCES devices(endpoint_id) ON DELETE CASCADE,

@@ -83,7 +83,10 @@ function callerDeviceKey(req: IncomingMessage): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function linkDto(link: VaultLink): Record<string, unknown> {
+function linkDto(
+  store: VaultLinksStore,
+  link: VaultLink
+): Record<string, unknown> {
   return {
     linkId: link.linkId,
     vaultA: link.vaultA,
@@ -92,18 +95,20 @@ function linkDto(link: VaultLink): Record<string, unknown> {
     // with vaultA/vaultB — `null` when genuinely unknown (an older link
     // proposed before this field was recorded), never a raw id standing in
     // for a name. The People panel renders that honestly instead of
-    // printing the id itself.
-    labelA: link.labelA,
-    labelB: link.labelB,
+    // printing the id itself. Labels live in the vault directory (#750
+    // invariant 1), so both sides read the same record every link does.
+    labelA: store.directoryEntry(link.vaultA)?.label ?? null,
+    labelB: store.directoryEntry(link.vaultB)?.label ?? null,
     partyIdA: partyIdForLinkedVault(link, link.vaultA) ?? null,
     partyIdB: partyIdForLinkedVault(link, link.vaultB) ?? null,
     approvedByA: link.approvedByA,
     approvedByB: link.approvedByB,
     approved: isLinkApproved(link),
-    // Which side, if either, this gateway must route to reach.
+    // Which side, if either, this gateway must route to reach — a vault is
+    // remote exactly when it holds a `vault_routes` row (#750 invariant 2).
     remoteVaultId:
-      link.routeA === undefined
-        ? link.routeB === undefined
+      store.routeFor(link.vaultA) === undefined
+        ? store.routeFor(link.vaultB) === undefined
           ? null
           : link.vaultB
         : link.vaultA,
@@ -255,7 +260,7 @@ async function handleRedeemTicket(
     const full = deps.store.get(result.link.linkId);
     return sendJson(res, 201, {
       state: "linked",
-      link: full ? linkDto(full) : undefined,
+      link: full ? linkDto(deps.store, full) : undefined,
     });
   }
   return sendJson(res, REDEEM_STATUS[result.state] ?? 400, result);
@@ -302,7 +307,9 @@ export function makeVaultLinksRouteHandler(
     if (url.pathname === LINKS_PATH) {
       if (method === "GET") {
         return sendJson(res, 200, {
-          links: deps.store.listForOwner(caller.ownerId).map(linkDto),
+          links: deps.store
+            .listForOwner(caller.ownerId)
+            .map((link) => linkDto(deps.store, link)),
         });
       }
       if (method !== "POST")
@@ -359,7 +366,7 @@ export function makeVaultLinksRouteHandler(
           ? { toLabel: deps.vaultName(otherVaultId) }
           : {}),
       });
-      return sendJson(res, 201, { link: linkDto(link) });
+      return sendJson(res, 201, { link: linkDto(deps.store, link) });
     }
 
     const rest = url.pathname.slice(`${LINKS_PATH}/`.length).split("/");
@@ -382,7 +389,7 @@ export function makeVaultLinksRouteHandler(
       if (method !== "POST")
         return sendJson(res, 405, { error: "method_not_allowed" });
       const approved = deps.store.approve(linkId, callerSide)!;
-      return sendJson(res, 200, { link: linkDto(approved) });
+      return sendJson(res, 200, { link: linkDto(deps.store, approved) });
     }
     if (rest[1] === "receive-setting") {
       // D9 (#726 P3 decision 9): a vault sets ONLY its own receiving

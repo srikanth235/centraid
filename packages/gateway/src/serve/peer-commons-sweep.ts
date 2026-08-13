@@ -15,7 +15,13 @@ import type {
   VaultDb,
 } from "@centraid/vault";
 
+import {
+  isCommonsIdentityRefusal,
+  raiseCommonsIdentityNotice,
+  raiseCommonsNotices,
+} from "./commons-notices.js";
 import type { CommonsStewardStatus } from "./commons-observability.js";
+import { readCommonsStewardStatus } from "./commons-observability.js";
 import {
   pullPeerCommons,
   sendPeerCommonsCommand,
@@ -63,6 +69,60 @@ export interface MountedCommonsVault {
   credential?: Credential;
 }
 
+/** First retry delay after one failed dial; doubles per consecutive failure. */
+export const COMMONS_SWEEP_BACKOFF_BASE_MS = 30 * 1000;
+/** Ceiling: even a long-absent steward is re-probed at least hourly. */
+export const COMMONS_SWEEP_BACKOFF_MAX_MS = 60 * 60 * 1000;
+
+/**
+ * Exponential per-grant backoff off the RECORDED absence evidence (#750
+ * defect e). `share_commons_steward_contact` — written by every pull through
+ * `recordCommonsPull` — already carries consecutive failures and the last
+ * attempt time; the sweep consults it instead of serially dialing an absent
+ * steward for every intent of every grant on every tick. Returns the epoch ms
+ * before which this grant's steward should NOT be dialed, or undefined when
+ * the evidence says it is worth trying now.
+ */
+function stewardBackoffUntil(
+  db: VaultDb,
+  grantId: string,
+  memberVaultId: string
+): number | undefined {
+  // One reader of `share_commons_steward_contact`, not two: the observability
+  // module owns how a contact row becomes a status, and the sweep asks it
+  // rather than re-deriving "is this steward absent" from the raw columns. A
+  // second local reading of the same evidence is how two answers to one
+  // question drift apart.
+  const status = readCommonsStewardStatus({
+    db: db.vault,
+    grantId,
+    memberVaultId,
+  });
+  if (
+    status.lastOutcome !== "unreachable" ||
+    status.consecutiveFailures < 1 ||
+    !status.lastAttemptAt
+  )
+    return undefined;
+  const attempted = Date.parse(status.lastAttemptAt);
+  if (!Number.isFinite(attempted)) return undefined;
+  const backoff = Math.min(
+    COMMONS_SWEEP_BACKOFF_BASE_MS * 2 ** (status.consecutiveFailures - 1),
+    COMMONS_SWEEP_BACKOFF_MAX_MS
+  );
+  return attempted + backoff;
+}
+
+function backedOff(
+  db: VaultDb,
+  grantId: string,
+  memberVaultId: string,
+  nowMs: number
+): boolean {
+  const until = stewardBackoffUntil(db, grantId, memberVaultId);
+  return until !== undefined && nowMs < until;
+}
+
 interface PendingIntent {
   intent_id: string;
   grant_id: string;
@@ -107,15 +167,35 @@ export async function sweepPeerCommons(input: {
       seat: local.db.vault,
       now: input.now ?? new Date().toISOString(),
     });
+    // Steward absence and consent-growth are conditions this seat already has
+    // the evidence for; the sweep is the periodic tick that turns them into
+    // the notices an owner actually sees (issue #750). A card must never cost
+    // the sweep its real work, so a failure here is logged, not thrown.
+    try {
+      raiseCommonsNotices({
+        db: local.db,
+        vaultId: local.vaultId,
+        ...(input.now ? { now: input.now } : {}),
+      });
+    } catch (error) {
+      input.logger?.warn(
+        `commons notices for ${local.vaultId} could not be raised: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
     const intents = local.db.vault
       .prepare(
         `SELECT intent_id, grant_id, actor_party_id, command, input_json,
                 based_on_sequence
            FROM share_commons_intent
-          WHERE status IN ('pending','parked')
+          WHERE status IN ('queued','parked')
           ORDER BY created_at, intent_id LIMIT ?`
       )
       .all(input.limit - progressed) as unknown as PendingIntent[];
+    // Grants whose steward answered "unavailable" THIS tick: later intents for
+    // the same grant skip the dial instead of repeating a known-dead call.
+    const unreachableThisTick = new Set<string>();
     for (const intent of intents) {
       const stewardId = stewardVaultId(local.db, intent.grant_id);
       const mountedSteward = stewardId ? mountedById.get(stewardId) : undefined;
@@ -135,6 +215,23 @@ export async function sweepPeerCommons(input: {
           grantId: intent.grant_id,
           stewardVaultId: stewardId,
           vaultFor: (vaultId) => mountedById.get(vaultId)?.db,
+          invokeFor: (vaultId, replicaCommand, replicaInput, invocationId) => {
+            const mounted = mountedById.get(vaultId);
+            if (!mounted?.gateway || !mounted.credential)
+              throw new Error(
+                `commons replica vault ${vaultId} is not mounted`
+              );
+            return mounted.gateway.invokeCommonsCanonical(
+              mounted.credential,
+              {
+                command: replicaCommand,
+                input: replicaInput,
+                purpose: "dpv:ServiceProvision",
+                invocationId,
+              },
+              { idSeed: invocationId }
+            );
+          },
         });
         const answer = executeCommonsCommand({
           steward: mountedSteward.db,
@@ -169,6 +266,11 @@ export async function sweepPeerCommons(input: {
               grantId: intent.grant_id,
               seats,
               now,
+              // Crash repair, not ordinary fan-out: the earlier attempt died
+              // at an unknown point, so the seats are reconciled from the
+              // closure rather than from a tail whose replay may already have
+              // committed.
+              forceFullProjection: true,
             });
           }
           // `executeCommonsCommand` normally settles while compiling. Repeat
@@ -200,6 +302,13 @@ export async function sweepPeerCommons(input: {
               : {}),
             now,
           });
+          if (isCommonsIdentityRefusal(answer.decision.reason))
+            raiseCommonsIdentityNotice({
+              db: local.db,
+              grantId: intent.grant_id,
+              reason: answer.decision.reason!,
+              now,
+            });
         }
         progressed += 1;
         continue;
@@ -208,6 +317,19 @@ export async function sweepPeerCommons(input: {
         ? input.links.peerForVault(stewardId, local.vaultId)
         : undefined;
       if (!stewardId || !link || !input.dial) continue;
+      // Absence-evidence backoff (#750 defect e): a steward the contact
+      // record says is unreachable is not dialed again — per intent, per
+      // grant — until its exponential window has elapsed.
+      if (
+        unreachableThisTick.has(intent.grant_id) ||
+        backedOff(
+          local.db,
+          intent.grant_id,
+          local.vaultId,
+          Date.parse(input.now ?? new Date().toISOString())
+        )
+      )
+        continue;
       const commandInput = JSON.parse(intent.input_json) as Record<
         string,
         unknown
@@ -250,6 +372,9 @@ export async function sweepPeerCommons(input: {
           memberVaultId: local.vaultId,
           grantId: intent.grant_id,
           seat: local.db,
+          ...(local.gateway && local.credential
+            ? { gateway: local.gateway, credential: local.credential }
+            : {}),
           now,
         });
         logStewardConcern(input.logger, local.vaultId, catchUp.steward);
@@ -262,8 +387,18 @@ export async function sweepPeerCommons(input: {
           reason: answer.reason,
           now,
         });
+        // A refusal the member cannot fix by editing the command: their vault
+        // identity is not the one this commons pinned (issue #750). Name it
+        // where they will see it, pointing at re-invitation.
+        if (isCommonsIdentityRefusal(answer.reason))
+          raiseCommonsIdentityNotice({
+            db: local.db,
+            grantId: intent.grant_id,
+            reason: answer.reason!,
+            now,
+          });
         progressed += 1;
-      }
+      } else unreachableThisTick.add(intent.grant_id);
     }
 
     const grants = local.db.vault
@@ -285,6 +420,16 @@ export async function sweepPeerCommons(input: {
         ? input.links.peerForVault(stewardId, local.vaultId)
         : undefined;
       if (!stewardId || !link || !input.dial) continue;
+      // Same absence-evidence backoff as the intent lane (#750 defect e).
+      if (
+        backedOff(
+          local.db,
+          grant.grantId,
+          local.vaultId,
+          Date.parse(input.now ?? new Date().toISOString())
+        )
+      )
+        continue;
       // oxlint-disable-next-line no-await-in-loop -- serial pulls keep the shared progress limit exact and the grant order deterministic
       const result = await pullPeerCommons({
         dial: input.dial,
@@ -293,6 +438,9 @@ export async function sweepPeerCommons(input: {
         memberVaultId: local.vaultId,
         grantId: grant.grantId,
         seat: local.db,
+        ...(local.gateway && local.credential
+          ? { gateway: local.gateway, credential: local.credential }
+          : {}),
         now: input.now,
       });
       logStewardConcern(input.logger, local.vaultId, result.steward);

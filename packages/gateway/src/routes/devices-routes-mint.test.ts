@@ -4,11 +4,17 @@
  * of their own (identity keypair included — `VaultRegistry.create`), claims
  * it, and mints a ticket bound to that NEW owner. Mutually exclusive with
  * the P0 self-pair `ownerId`/`vaultIds` lane.
+ *
+ * Issue #750 hardened the lane into a durable PROVISION: the endpoint/ticket
+ * capability preflights BEFORE anything is created, the workflow is
+ * idempotent under a client-chosen `operationId`, and a failed attempt
+ * leaves ZERO owners/vaults/ownership rows/tickets behind.
  */
 
-import { describe, afterEach, expect, test } from "vitest";
+import { describe, afterEach, expect, test, vi } from "vitest";
 
 import { parsePairingTicket } from "../serve/pairing-store.js";
+import type { DevicesHarness } from "./devices-routes.test-fixtures.js";
 import {
   cleanupHarnesses,
   deviceHeaders,
@@ -16,22 +22,68 @@ import {
 } from "./devices-routes.test-fixtures.js";
 
 /** A `mintVaultForPerson` stub: hands out fresh ids and remembers names so
- *  the harness's `vaultName` can resolve them right back. */
+ *  the harness's `vaultName` can resolve them right back. `live` stands in
+ *  for the filesystem — a minted vault dir that `unmintVaultForPerson` has
+ *  not removed. */
 function mintStub(): {
   vaultNames: Map<string, string>;
+  live: Set<string>;
+  mintCalls: () => number;
   mintVaultForPerson: (name: string) => { vaultId: string };
+  unmintVaultForPerson: (vaultId: string) => void;
 } {
   const vaultNames = new Map<string, string>([["vault-a", "Personal"]]);
+  const live = new Set<string>();
   let minted = 0;
   return {
     vaultNames,
+    live,
+    mintCalls: () => minted,
     mintVaultForPerson: (name) => {
       minted += 1;
       const vaultId = `minted-vault-${minted}`;
       vaultNames.set(vaultId, name);
+      live.add(vaultId);
       return { vaultId };
     },
+    unmintVaultForPerson: (vaultId) => {
+      live.delete(vaultId);
+      vaultNames.delete(vaultId);
+    },
   };
+}
+
+/** Row counts of every durable artefact the mint workflow touches. */
+function rowCounts(f: DevicesHarness): {
+  owners: number;
+  vaultOwners: number;
+  tickets: number;
+  operations: number;
+} {
+  const count = (table: string): number =>
+    (
+      f.database.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as {
+        n: number;
+      }
+    ).n;
+  return {
+    owners: count("owners"),
+    vaultOwners: count("vault_owners"),
+    tickets: count("tickets"),
+    operations: count("provision_operations"),
+  };
+}
+
+async function mintForPerson(
+  f: DevicesHarness,
+  body: Record<string, unknown>,
+  headers: Record<string, string> = deviceHeaders("founder-key")
+): Promise<Response> {
+  return fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
 }
 
 describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
@@ -45,6 +97,7 @@ describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
     const f = await harness({
       vaultName: (id) => stub.vaultNames.get(id),
       mintVaultForPerson: stub.mintVaultForPerson,
+      unmintVaultForPerson: stub.unmintVaultForPerson,
     });
     const founder = f.enrollments.enroll({
       endpointId: "founder-key",
@@ -53,10 +106,9 @@ describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
       ownerLabel: "Priya",
     });
 
-    const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
-      method: "POST",
-      headers: deviceHeaders("founder-key"),
-      body: JSON.stringify({ forPerson: { label: "Kid" } }),
+    const response = await mintForPerson(f, {
+      forPerson: { label: "Kid" },
+      operationId: "op-add-kid-1",
     });
     expect(response.status).toBe(200);
     const payload = (await response.json()) as {
@@ -113,12 +165,9 @@ describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
       vaultIds: ["vault-a"],
       label: "Founder laptop",
     });
-    const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
-      method: "POST",
-      headers: deviceHeaders("founder-key"),
-      body: JSON.stringify({
-        forPerson: { label: "Kid", vaultName: "Kid's Library" },
-      }),
+    const response = await mintForPerson(f, {
+      forPerson: { label: "Kid", vaultName: "Kid's Library" },
+      operationId: "op-add-kid-2",
     });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -134,11 +183,11 @@ describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
       canMintPairingTicket: () => true,
       vaultIds: () => ["vault-a"],
     });
-    const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ forPerson: { label: "Guest" } }),
-    });
+    const response = await mintForPerson(
+      f,
+      { forPerson: { label: "Guest" }, operationId: "op-add-guest" },
+      { "content-type": "application/json" }
+    );
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       ownerLabel: "Guest",
@@ -157,30 +206,262 @@ describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
       label: "Founder laptop",
     });
 
-    const combined = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
-      method: "POST",
-      headers: deviceHeaders("founder-key"),
-      body: JSON.stringify({
-        forPerson: { label: "Kid" },
-        vaultIds: ["vault-a"],
-      }),
+    const combined = await mintForPerson(f, {
+      forPerson: { label: "Kid" },
+      vaultIds: ["vault-a"],
+      operationId: "op-combined",
     });
     expect(combined.status).toBe(400);
     await expect(combined.json()).resolves.toMatchObject({
       error: "invalid_body",
     });
 
-    const malformed = await fetch(
-      `${f.base}/centraid/_gateway/devices/ticket`,
-      {
-        method: "POST",
-        headers: deviceHeaders("founder-key"),
-        body: JSON.stringify({ forPerson: { label: "" } }),
-      }
-    );
+    const malformed = await mintForPerson(f, {
+      forPerson: { label: "" },
+    });
     expect(malformed.status).toBe(400);
     await expect(malformed.json()).resolves.toMatchObject({
       error: "invalid_for_person",
     });
+  });
+});
+
+describe("mint-for-person is a durable provision (#750)", () => {
+  afterEach(cleanupHarnesses);
+
+  test("endpoint-capability preflight: no iroh endpoint refuses BEFORE creating anything", async () => {
+    const stub = mintStub();
+    const f = await harness({
+      vaultName: (id) => stub.vaultNames.get(id),
+      mintVaultForPerson: stub.mintVaultForPerson,
+      unmintVaultForPerson: stub.unmintVaultForPerson,
+      endpointTicket: () => undefined,
+    });
+    f.enrollments.enroll({
+      endpointId: "founder-key",
+      vaultIds: ["vault-a"],
+      label: "Founder laptop",
+    });
+    const before = rowCounts(f);
+
+    const response = await mintForPerson(f, {
+      forPerson: { label: "Kid" },
+      operationId: "op-endpointless",
+    });
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "no_iroh_endpoint",
+    });
+    // Zero new owners/vaults/ownership rows/tickets — the dud refused first.
+    expect(rowCounts(f)).toStrictEqual(before);
+    expect(stub.mintCalls()).toBe(0);
+    expect(stub.live.size).toBe(0);
+  });
+
+  test("operationId is required for the forPerson lane and shape-checked", async () => {
+    const stub = mintStub();
+    const f = await harness({
+      vaultName: (id) => stub.vaultNames.get(id),
+      mintVaultForPerson: stub.mintVaultForPerson,
+    });
+    f.enrollments.enroll({
+      endpointId: "founder-key",
+      vaultIds: ["vault-a"],
+      label: "Founder laptop",
+    });
+    const before = rowCounts(f);
+
+    const absent = await mintForPerson(f, { forPerson: { label: "Kid" } });
+    expect(absent.status).toBe(400);
+    await expect(absent.json()).resolves.toMatchObject({
+      error: "operation_id_required",
+    });
+
+    const malformed = await mintForPerson(f, {
+      forPerson: { label: "Kid" },
+      operationId: "no spaces!",
+    });
+    expect(malformed.status).toBe(400);
+    await expect(malformed.json()).resolves.toMatchObject({
+      error: "invalid_operation_id",
+    });
+
+    expect(rowCounts(f)).toStrictEqual(before);
+    expect(stub.mintCalls()).toBe(0);
+  });
+
+  test("failure BEFORE the durable steps (vault mint throws): zero debris, retry with the SAME operationId succeeds once", async () => {
+    const stub = mintStub();
+    let failNext = true;
+    const f = await harness({
+      vaultName: (id) => stub.vaultNames.get(id),
+      mintVaultForPerson: (name) => {
+        if (failNext) {
+          failNext = false;
+          throw new Error("disk full");
+        }
+        return stub.mintVaultForPerson(name);
+      },
+      unmintVaultForPerson: stub.unmintVaultForPerson,
+    });
+    f.enrollments.enroll({
+      endpointId: "founder-key",
+      vaultIds: ["vault-a"],
+      label: "Founder laptop",
+    });
+    const before = rowCounts(f);
+
+    const failed = await mintForPerson(f, {
+      forPerson: { label: "Kid" },
+      operationId: "op-retry-1",
+    });
+    expect(failed.status).toBe(500);
+    await expect(failed.json()).resolves.toMatchObject({
+      error: "provision_failed",
+    });
+    expect(rowCounts(f)).toStrictEqual(before);
+    expect(stub.live.size).toBe(0);
+
+    const retried = await mintForPerson(f, {
+      forPerson: { label: "Kid" },
+      operationId: "op-retry-1",
+    });
+    expect(retried.status).toBe(200);
+    // Exactly ONE owner/vault/ownership/ticket/operation from the whole saga.
+    expect(rowCounts(f)).toStrictEqual({
+      owners: before.owners + 1,
+      vaultOwners: before.vaultOwners + 1,
+      tickets: before.tickets + 1,
+      operations: before.operations + 1,
+    });
+    expect(stub.live.size).toBe(1);
+  });
+
+  test("failure AFTER the vault step (ticket insert throws): rollback + vault cleanup, retry with the SAME operationId succeeds once", async () => {
+    const stub = mintStub();
+    const f = await harness({
+      vaultName: (id) => stub.vaultNames.get(id),
+      mintVaultForPerson: stub.mintVaultForPerson,
+      unmintVaultForPerson: stub.unmintVaultForPerson,
+    });
+    f.enrollments.enroll({
+      endpointId: "founder-key",
+      vaultIds: ["vault-a"],
+      label: "Founder laptop",
+    });
+    const before = rowCounts(f);
+    // The owner row and ownership row have already been written inside the
+    // open transaction when this throws — the rollback must drop BOTH, and
+    // the cleanup hook must remove the already-minted vault.
+    vi.spyOn(f.tickets, "mint").mockImplementationOnce(() => {
+      throw new Error("ticket store exploded");
+    });
+
+    const failed = await mintForPerson(f, {
+      forPerson: { label: "Kid" },
+      operationId: "op-retry-2",
+    });
+    expect(failed.status).toBe(500);
+    await expect(failed.json()).resolves.toMatchObject({
+      error: "provision_failed",
+    });
+    expect(rowCounts(f)).toStrictEqual(before);
+    expect(stub.live.size).toBe(0);
+
+    const retried = await mintForPerson(f, {
+      forPerson: { label: "Kid" },
+      operationId: "op-retry-2",
+    });
+    expect(retried.status).toBe(200);
+    expect(rowCounts(f)).toStrictEqual({
+      owners: before.owners + 1,
+      vaultOwners: before.vaultOwners + 1,
+      tickets: before.tickets + 1,
+      operations: before.operations + 1,
+    });
+    // Two mint attempts, but the first attempt's vault was cleaned up.
+    expect(stub.mintCalls()).toBe(2);
+    expect(stub.live.size).toBe(1);
+  });
+
+  test("replay after success returns the recorded result verbatim and creates nothing new", async () => {
+    const stub = mintStub();
+    const f = await harness({
+      vaultName: (id) => stub.vaultNames.get(id),
+      mintVaultForPerson: stub.mintVaultForPerson,
+      unmintVaultForPerson: stub.unmintVaultForPerson,
+    });
+    f.enrollments.enroll({
+      endpointId: "founder-key",
+      vaultIds: ["vault-a"],
+      label: "Founder laptop",
+    });
+
+    const first = await mintForPerson(f, {
+      forPerson: { label: "Kid" },
+      operationId: "op-replay",
+    });
+    expect(first.status).toBe(200);
+    const original = (await first.json()) as Record<string, unknown>;
+    const after = rowCounts(f);
+
+    const replayed = await mintForPerson(f, {
+      forPerson: { label: "Kid" },
+      operationId: "op-replay",
+    });
+    expect(replayed.status).toBe(200);
+    // The FULL original response — same ticket, same ownerId, same vaultId.
+    await expect(replayed.json()).resolves.toStrictEqual(original);
+    expect(rowCounts(f)).toStrictEqual(after);
+    expect(stub.mintCalls()).toBe(1);
+    expect(stub.live.size).toBe(1);
+  });
+
+  // Audit finding (#750): replaying an operationId with DIFFERENT inputs must
+  // never silently hand back the first request's result — the caller would
+  // believe their new request succeeded when it was never performed.
+  test("reusing an operationId with a DIFFERENT request is refused, not replayed", async () => {
+    const stub = mintStub();
+    const f = await harness({
+      vaultName: (id) => stub.vaultNames.get(id),
+      mintVaultForPerson: stub.mintVaultForPerson,
+      unmintVaultForPerson: stub.unmintVaultForPerson,
+    });
+    f.enrollments.enroll({
+      endpointId: "founder-key",
+      vaultIds: ["vault-a"],
+      label: "Founder laptop",
+    });
+
+    const first = await mintForPerson(f, {
+      forPerson: { label: "Kid" },
+      operationId: "op-conflict",
+    });
+    expect(first.status).toBe(200);
+    const original = (await first.json()) as Record<string, unknown>;
+    const after = rowCounts(f);
+
+    // Same operationId, but a DIFFERENT person label — a different request.
+    const conflicting = await mintForPerson(f, {
+      forPerson: { label: "Someone Else" },
+      operationId: "op-conflict",
+    });
+    expect(conflicting.status).toBe(409);
+    await expect(conflicting.json()).resolves.toMatchObject({
+      error: "operation_id_conflict",
+    });
+    // Nothing new was created — not a second owner/vault, not a second
+    // operation record.
+    expect(rowCounts(f)).toStrictEqual(after);
+    expect(stub.mintCalls()).toBe(1);
+
+    // The ORIGINAL request still replays cleanly afterward.
+    const replayed = await mintForPerson(f, {
+      forPerson: { label: "Kid" },
+      operationId: "op-conflict",
+    });
+    expect(replayed.status).toBe(200);
+    await expect(replayed.json()).resolves.toStrictEqual(original);
+    expect(rowCounts(f)).toStrictEqual(after);
   });
 });

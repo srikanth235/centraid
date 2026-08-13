@@ -11,8 +11,8 @@ import type { VaultDb } from "../db.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { Credential, InvokeOutcome } from "../gateway/types.js";
 import { uuidv7 } from "../ids.js";
+import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { vaultIdentityPublicKey } from "../schema/vault-identity.js";
-import { isCommonsCommandActable } from "./actable.js";
 import { placeBlob } from "./blobs.js";
 import type { BlobPlacement } from "./blobs.js";
 import type {
@@ -28,6 +28,22 @@ import {
   commonsGenesisHash,
   insertChainedCommonsOp,
 } from "./commons-chain.js";
+import {
+  commonsTailBlobs,
+  commonsTailIsContiguous,
+  isCommonsReplayError,
+  readCommonsTail,
+  replayCommonsTail,
+  replicaInvocationKey,
+  stageCommonsTailBlobs,
+} from "./commons-replay.js";
+import type { CommonsReplicaExecutor } from "./commons-replay.js";
+import {
+  COMMONS_CONTAINER_KEYS,
+  commonsRoutesForCommand,
+  isCommonsCommandActable,
+} from "./commons-routing.js";
+import type { CommonsCommandRoute } from "./commons-routing.js";
 import type { CommonsMemberSignature } from "./commons-signature.js";
 import { verifyCommonsIntent } from "./commons-signature.js";
 import type { ShareVaultRef } from "./placement.js";
@@ -50,6 +66,9 @@ export interface CommonsMemberInput {
   capability: CommonsCapability;
   /** Invitation without this seat stays pending and compiles no data. */
   vault?: ShareVaultRef;
+  /** Host-only replica executor for command-tail replay (issue #750). Never
+   * serialized, never reachable from member or app code. */
+  applyCommand?: CommonsReplicaExecutor;
 }
 
 export interface CreateCommonsGrantInput {
@@ -383,6 +402,56 @@ export const COMMONS_DEFAULT_MAX_SIZE_BYTES = 4 * 1024 * 1024 * 1024;
  * bounds the tail so one laggard cannot stall compaction indefinitely. */
 export const COMMONS_OP_RETENTION_FLOOR = 256;
 
+/** Ops between stored checkpoints (issue #750 invariant 7). The full closure
+ * is serialized onto the grant row only when a checkpoint is CUT — every this
+ * many ops, matching the compaction cadence — never on every compile, so a
+ * single write stops rewriting `checkpoint_json` for the whole commons. */
+export const COMMONS_CHECKPOINT_INTERVAL = 32;
+
+/** Cut a checkpoint at the head when one is due (or forced): store the full
+ * closure + sequence on the grant row and attest it. The ONLY writer of
+ * `checkpoint_json` outside a projected control frame (issue #750 defect c). */
+export function checkpointCommonsState(input: {
+  steward: ShareVaultRef;
+  stewardVaultId: string;
+  grantId: string;
+  /** Thunked on purpose: building the closure is the O(commons size) walk this
+   * whole design exists to avoid, so it must not run when no checkpoint is
+   * due (issue #750 invariant 7). */
+  closure: () => WireClosure;
+  now: string;
+  force?: boolean;
+}): boolean {
+  const grant = readCommonsGrant(input.steward.vault, input.grantId);
+  const stored = input.steward.vault
+    .prepare(
+      "SELECT checkpoint_json IS NOT NULL AS held FROM share_circle_grant WHERE grant_id = ?"
+    )
+    .get(input.grantId) as { held: number } | undefined;
+  const due =
+    input.force === true ||
+    stored?.held !== 1 ||
+    grant.lastSequence - grant.checkpointSequence >=
+      COMMONS_CHECKPOINT_INTERVAL;
+  if (!due) return false;
+  const closure = input.closure();
+  input.steward.vault
+    .prepare(
+      `UPDATE share_circle_grant
+          SET checkpoint_sequence = last_sequence, checkpoint_json = ?
+        WHERE grant_id = ?`
+    )
+    .run(JSON.stringify(closure), input.grantId);
+  attestCommonsCheckpointState({
+    steward: input.steward,
+    stewardVaultId: input.stewardVaultId,
+    grantId: input.grantId,
+    sequence: grant.lastSequence,
+    closure,
+  });
+  return true;
+}
+
 export class CommonsMaxSizeError extends Error {
   constructor(
     readonly currentSizeBytes: number,
@@ -418,6 +487,10 @@ export interface CompileCommonsInput {
   grantId: string;
   seats: readonly CommonsMemberInput[];
   now: string;
+  /** Skip command-tail replay and re-project every seat from the closure.
+   * For callers that must reconcile state replay cannot see — a crash-repair
+   * fan-out, a restore — not for ordinary post-command compiles. */
+  forceFullProjection?: boolean;
 }
 
 export interface CompiledCommonsSeat {
@@ -846,16 +919,29 @@ export function compileCommons(
   const grant = readCommonsGrant(input.steward.vault, input.grantId);
   if (grant.revokedAt)
     throw new Error(`commons grant ${input.grantId} is revoked`);
-  const closure = commonsClosure(
-    input.steward.vault,
-    input.stewardVaultId,
-    grant
-  );
-  assertCommonsWithinMax(
-    input.steward.vault,
-    input.stewardVaultId,
-    input.grantId
-  );
+  // Lazy on purpose (issue #750 invariant 7): reading and projecting the whole
+  // closure is the O(commons size) cost this compile exists to avoid. A
+  // compile where every seat catches up by replaying the operation tail never
+  // touches it, so the declared-ceiling check — which needs the closure's
+  // byte size — rides along inside the same thunk rather than forcing the
+  // walk on its own. The ceiling still fails closed on every WRITE:
+  // `executeCommonsCommand` asserts it in the command's own transaction.
+  let loadedClosure: WireClosure | undefined;
+  const closure = (): WireClosure => {
+    if (!loadedClosure) {
+      const walked = commonsClosure(
+        input.steward.vault,
+        input.stewardVaultId,
+        grant
+      );
+      const sizeBytes = commonsClosureSizeBytes(walked);
+      const ceiling = grant.maxSizeBytes ?? COMMONS_DEFAULT_MAX_SIZE_BYTES;
+      if (sizeBytes > ceiling)
+        throw new CommonsMaxSizeError(sizeBytes, ceiling);
+      loadedClosure = walked;
+    }
+    return loadedClosure;
+  };
   const results: CompiledCommonsSeat[] = [];
   for (const seat of input.seats) {
     if (!seat.vault || !seat.vaultId) {
@@ -925,10 +1011,10 @@ export function compileCommons(
             deduped: true,
           },
         ],
-        blobs: closure.blobs.map((entry) => ({
-          sha256: entry.sha256,
-          mode: "present" as const,
-        })),
+        // The steward reads its own bytes; nothing is placed for this seat,
+        // and enumerating the closure just to say so would force the walk the
+        // replay path exists to skip.
+        blobs: [],
       });
       continue;
     }
@@ -968,9 +1054,99 @@ export function compileCommons(
         "SELECT 1 AS n FROM share_commons_lineage WHERE grant_id = ? LIMIT 1"
       )
       .get(grant.grantId);
+    // Command-tail replay (issue #750 invariant 7): a seat that already holds
+    // a projection and whose own cursor sits on the retained op chain
+    // RE-EXECUTES the operations it missed instead of receiving a projection.
+    // Its unchanged items and their seat-local derived rows (OCR/embeddings/
+    // FTS) are never touched, and the steward never walks the closure. Any
+    // replay failure — unknown command, refused handler, missing payload,
+    // version skew — falls back to the full scrub + re-project below, which
+    // stays the one destructive path and repairs any state.
+    if (!input.forceFullProjection && hasProjection && seat.vaultId) {
+      // The SEAT's own cursor row, never the steward's belief about it: a
+      // co-hosted member vault restored from an old backup carries its real
+      // (rewound) cursor, and replaying from the wrong anchor would apply a
+      // command to state it was never authored against.
+      const cursor = seat.vault.vault
+        .prepare(
+          `SELECT sequence FROM share_commons_cursor
+            WHERE grant_id = ? AND member_vault_id = ?`
+        )
+        .get(grant.grantId, seat.vaultId) as { sequence: number } | undefined;
+      const fromSequence = cursor ? Number(cursor.sequence) : undefined;
+      const tail =
+        fromSequence === undefined
+          ? []
+          : readCommonsTail(input.steward.vault, grant.grantId, fromSequence);
+      const replayable =
+        seat.applyCommand !== undefined &&
+        fromSequence !== undefined &&
+        commonsTailIsContiguous({
+          tail,
+          fromSequence,
+          headSequence: grant.lastSequence,
+        });
+      if (replayable) {
+        // Bytes claimed by sha cannot be re-derived from a command's input the
+        // way ids can, so they travel first. Placement is filesystem-
+        // idempotent and independent of the domain rows, so it stays outside
+        // the transaction below.
+        const manifest = commonsTailBlobs(input.steward.vault, tail);
+        const tailBlobs = manifest.map((entry) => ({
+          sha256: entry.sha256,
+          mode: placeBlob(
+            input.steward.blobs.local,
+            seat.vault!.blobs.local,
+            entry.sha256
+          ),
+        }));
+        const seatDb = seat.vault.vault;
+        const nested = seatDb.isTransaction;
+        seatDb.exec(
+          nested ? "SAVEPOINT compile_commons_replay" : "BEGIN IMMEDIATE"
+        );
+        let applied = false;
+        try {
+          const replicaCommit = beginReplicaCommit(seatDb);
+          stageCommonsTailBlobs(seatDb, manifest);
+          replayCommonsTail({
+            grantId: grant.grantId,
+            tail,
+            execute: seat.applyCommand!,
+          });
+          projectRoster(seatDb, input.steward.vault, grant, input.now);
+          endReplicaCommit(seatDb, replicaCommit);
+          seatDb.exec(nested ? "RELEASE compile_commons_replay" : "COMMIT");
+          applied = true;
+        } catch (error) {
+          seatDb.exec(
+            nested ? "ROLLBACK TO compile_commons_replay" : "ROLLBACK"
+          );
+          if (nested) seatDb.exec("RELEASE compile_commons_replay");
+          if (!isCommonsReplayError(error)) throw error;
+        }
+        if (applied) {
+          results.push({
+            partyId: seat.partyId,
+            vaultId: seat.vaultId,
+            status: "current",
+            projected: [
+              {
+                itemType: grant.containerType,
+                originItemId: grant.containerId,
+                itemId: grant.containerId,
+                deduped: true,
+              },
+            ],
+            blobs: tailBlobs,
+          });
+          continue;
+        }
+      }
+    }
     // Placing CAS bytes is filesystem-idempotent and independent of the domain
     // rows, so it stays outside the DB transaction below.
-    const blobs = closure.blobs.map((entry) => ({
+    const blobs = closure().blobs.map((entry) => ({
       sha256: entry.sha256,
       mode: placeBlob(
         input.steward.blobs.local,
@@ -1000,7 +1176,7 @@ export function compileCommons(
           preserveControlState: true,
         });
       }
-      projection = projectShareClosure(seatDb, closure, {
+      projection = projectShareClosure(seatDb, closure(), {
         sharedBy: `commons:${grant.grantId}`,
         now: () => Date.parse(input.now),
         keys:
@@ -1045,19 +1221,17 @@ export function compileCommons(
         sequence: grant.lastSequence,
         now: input.now,
       });
-  input.steward.vault
-    .prepare(
-      `UPDATE share_circle_grant
-          SET checkpoint_sequence = last_sequence, checkpoint_json = ?
-        WHERE grant_id = ?`
-    )
-    .run(JSON.stringify(closure), grant.grantId);
-  attestCommonsCheckpointState({
+  // The full closure lands on the grant row only when a checkpoint is DUE —
+  // every COMMONS_CHECKPOINT_INTERVAL ops, or the very first compile — never
+  // on every command (issue #750 defect c). Between checkpoints the stored
+  // snapshot stays put as the seat's proof anchor; bootstrap exports rebuild
+  // and freshly sign a head snapshot without storing it.
+  checkpointCommonsState({
     steward: input.steward,
     stewardVaultId: input.stewardVaultId,
     grantId: grant.grantId,
-    sequence: grant.lastSequence,
     closure,
+    now: input.now,
   });
   compactCommonsOperations(input.steward.vault, grant.grantId);
   return results;
@@ -1175,33 +1349,49 @@ export function commonsGrantForCommand(
   command: string,
   commandInput: Record<string, unknown>
 ): CommonsGrantRecord | undefined {
-  const activeGrant = (
+  for (const declared of commonsRoutesForCommand(command)) {
+    const value = commandInput[declared.inputKey];
+    if (typeof value !== "string" || !value) continue;
+    const grantId = resolveCommonsContainer(db, declared, value);
+    if (grantId) return readCommonsGrant(db, grantId);
+  }
+  return undefined;
+}
+
+/** Resolve one DECLARED route against the live grant rows. Each resolution
+ * kind is a fixed query — the routing decision itself was made by the table
+ * in `commons-routing.ts`, never by inspecting the command string. */
+function resolveCommonsContainer(
+  db: DatabaseSync,
+  declared: CommonsCommandRoute,
+  value: string
+): string | undefined {
+  const active = (
     containerType: ShareableItemType,
     containerId: string
-  ): CommonsGrantRecord | undefined => {
+  ): string | undefined =>
+    (
+      db
+        .prepare(
+          `SELECT grant_id FROM share_circle_grant
+            WHERE plane = 'commons' AND container_type = ? AND container_id = ?
+              AND revoked_at IS NULL`
+        )
+        .get(containerType, containerId) as { grant_id: string } | undefined
+    )?.grant_id;
+  if (declared.resolution === "container")
+    return active(declared.containerType, value);
+  if (declared.resolution === "tally-expense") {
     const row = db
-      .prepare(
-        `SELECT grant_id FROM share_circle_grant
-          WHERE plane = 'commons' AND container_type = ? AND container_id = ?
-            AND revoked_at IS NULL`
-      )
-      .get(containerType, containerId) as { grant_id: string } | undefined;
-    return row ? readCommonsGrant(db, row.grant_id) : undefined;
-  };
-  if (command.startsWith("core.")) {
-    const folderId =
-      typeof commandInput["folder_id"] === "string"
-        ? commandInput["folder_id"]
-        : typeof commandInput["parent_folder_id"] === "string"
-          ? commandInput["parent_folder_id"]
-          : undefined;
-    if (
-      folderId &&
-      (command === "core.add_document" || command.includes("folder"))
-    ) {
-      const direct = activeGrant("docs.folder", folderId);
-      if (direct) return direct;
-      const ancestor = db
+      .prepare("SELECT group_id FROM tally_expense WHERE expense_id = ?")
+      .get(value) as { group_id: string } | undefined;
+    return row ? active(declared.containerType, row.group_id) : undefined;
+  }
+  if (declared.resolution === "folder-descendant") {
+    const direct = active(declared.containerType, value);
+    if (direct) return direct;
+    return (
+      db
         .prepare(
           `WITH RECURSIVE ancestors(concept_id) AS (
              SELECT ?
@@ -1215,88 +1405,27 @@ export function commonsGrantForCommand(
            WHERE g.plane = 'commons' AND g.container_type = 'docs.folder'
              AND g.revoked_at IS NULL LIMIT 1`
         )
-        .get(folderId) as { grant_id: string } | undefined;
-      if (ancestor) return readCommonsGrant(db, ancestor.grant_id);
-    }
-    const documentId =
-      typeof commandInput["document_id"] === "string"
-        ? commandInput["document_id"]
-        : undefined;
-    if (documentId) {
-      const folderGrant = db
-        .prepare(
-          `WITH RECURSIVE folders(grant_id, concept_id) AS (
-             SELECT grant_id, container_id FROM share_circle_grant
-              WHERE plane = 'commons' AND container_type = 'docs.folder'
-                AND revoked_at IS NULL
-             UNION ALL
-             SELECT f.grant_id, c.concept_id FROM core_concept c
-             JOIN folders f ON c.broader_concept_id = f.concept_id
-           )
-           SELECT f.grant_id FROM folders f
-           JOIN core_tag t ON t.concept_id = f.concept_id
-           WHERE t.target_type = 'core.document' AND t.target_id = ?
-           LIMIT 1`
-        )
-        .get(documentId) as { grant_id: string } | undefined;
-      if (folderGrant) return readCommonsGrant(db, folderGrant.grant_id);
-    }
+        .get(value) as { grant_id: string } | undefined
+    )?.grant_id;
   }
-  let containerType: ShareableItemType | undefined;
-  let containerId: string | undefined;
-  if (command.startsWith("tally.")) {
-    containerType = "tally.group";
-    containerId =
-      typeof commandInput["group_id"] === "string"
-        ? commandInput["group_id"]
-        : undefined;
-    if (!containerId && typeof commandInput["expense_id"] === "string") {
-      const row = db
-        .prepare("SELECT group_id FROM tally_expense WHERE expense_id = ?")
-        .get(commandInput["expense_id"]) as { group_id: string } | undefined;
-      containerId = row?.group_id;
-    }
-  } else if (command.startsWith("core.") && command.includes("document")) {
-    containerType = "core.document";
-    containerId =
-      typeof commandInput["document_id"] === "string"
-        ? commandInput["document_id"]
-        : undefined;
-  } else if (command.startsWith("core.") && command.includes("collection")) {
-    containerType = "core.collection";
-    containerId =
-      typeof commandInput["collection_id"] === "string"
-        ? commandInput["collection_id"]
-        : undefined;
-  }
-  if (containerType && containerId) {
-    const grant = activeGrant(containerType, containerId);
-    if (grant) return grant;
-  }
-  // Structural catch-all (issue #731 B4). The pattern branches above only name
-  // the container types with a bespoke command family. A command whose input
-  // addresses ANY active commons container — including a supported type with no
-  // actable-registry entry (media/content/locker) — must still reach the
-  // commons rail so the app/automation door refuses an undeclared write instead
-  // of falling through to a private local mutation the next compile reverts.
-  const CONTAINER_ID_KEYS: readonly [ShareableItemType, readonly string[]][] = [
-    ["tally.group", ["group_id"]],
-    ["core.document", ["document_id"]],
-    ["core.collection", ["collection_id"]],
-    ["docs.folder", ["folder_id", "parent_folder_id"]],
-    ["media.asset", ["asset_id", "media_asset_id"]],
-    ["core.content_item", ["content_id", "content_item_id"]],
-    ["locker.item", ["item_id", "locker_item_id"]],
-  ];
-  for (const [type, keys] of CONTAINER_ID_KEYS)
-    for (const key of keys) {
-      const value = commandInput[key];
-      if (typeof value === "string" && value) {
-        const grant = activeGrant(type, value);
-        if (grant) return grant;
-      }
-    }
-  return undefined;
+  return (
+    db
+      .prepare(
+        `WITH RECURSIVE folders(grant_id, concept_id) AS (
+           SELECT grant_id, container_id FROM share_circle_grant
+            WHERE plane = 'commons' AND container_type = 'docs.folder'
+              AND revoked_at IS NULL
+           UNION ALL
+           SELECT f.grant_id, c.concept_id FROM core_concept c
+           JOIN folders f ON c.broader_concept_id = f.concept_id
+         )
+         SELECT f.grant_id FROM folders f
+         JOIN core_tag t ON t.concept_id = f.concept_id
+         WHERE t.target_type = 'core.document' AND t.target_id = ?
+         LIMIT 1`
+      )
+      .get(value) as { grant_id: string } | undefined
+  )?.grant_id;
 }
 
 function docsFolderContains(input: {
@@ -1339,24 +1468,17 @@ function docsFolderContains(input: {
 export const STALE_CONTEXT_REASON_PREFIX = "stale-context:";
 
 /** Keys whose string value names a specific row this command reasons about.
- * Deliberately excludes nothing structurally — the container's own id key
- * (e.g. `group_id` for a `tally.group` grant) is filtered by VALUE below
+ * DERIVED from the declared routing vocabulary (issue #750) rather than kept
+ * as a second hand-maintained key list that could drift from it — the keys
+ * that address a shareable row are exactly the keys stale-context has to
+ * watch. Deliberately excludes nothing structurally — the container's own id
+ * key (e.g. `group_id` for a `tally.group` grant) is filtered by VALUE below
  * instead, since every op in a grant's log already shares that same id and
  * matching on it would flag virtually every pair of commands in an active
  * commons (issue #731 goal 1: "do not refuse on any intervening op"). */
-const STALE_CONTEXT_ROW_KEYS = new Set([
-  "expense_id",
-  "document_id",
-  "folder_id",
-  "parent_folder_id",
-  "collection_id",
-  "asset_id",
-  "media_asset_id",
-  "content_id",
-  "content_item_id",
-  "item_id",
-  "locker_item_id",
-]);
+const STALE_CONTEXT_ROW_KEYS = new Set(
+  COMMONS_CONTAINER_KEYS.map((key) => key.inputKey)
+);
 
 /** Keys whose string value names a party this command depends on directly —
  * a payer, a split participant, a settlement counterpart, or (on a roster
@@ -1493,6 +1615,49 @@ function staleContextConflict(input: {
   return undefined;
 }
 
+/**
+ * The NAMED fault a re-minted member identity produces (issue #750).
+ *
+ * A member vault that lost its identity seed and was re-created presents a
+ * different `vault_public_key` than the one this commons pinned in
+ * `share_party_vault_binding` when the member joined. Every command it signs
+ * then fails verification — and "invalid vault signature" is exactly the
+ * wrong story: nothing is malformed and nobody is forging. The seat is a
+ * DIFFERENT vault wearing a known id, and the only cure is re-invitation
+ * (rotation is deferred by decision — see docs/decisions.md). Refusals carry
+ * this prefix so logs, receipts and the observability read-back name the real
+ * condition instead of a signature complaint.
+ */
+export const COMMONS_MEMBER_IDENTITY_CHANGED =
+  "commons_member_identity_changed";
+
+/** Reason text for the named identity fault, in the refusal grammar the rail
+ *  already uses (`<code>: <human sentence>`). */
+export function commonsMemberIdentityChangedReason(input: {
+  memberVaultId: string;
+}): string {
+  return `${COMMONS_MEMBER_IDENTITY_CHANGED}: this member vault's identity key is not the one this commons pinned when it joined — its writes cannot be verified until it is re-invited (vault ${input.memberVaultId})`;
+}
+
+/** The identity key this commons PINNED for a member seat when it joined. */
+function pinnedMemberVaultKey(
+  steward: DatabaseSync,
+  actorPartyId: string,
+  memberVaultId: string
+): { vaultId: string; publicKey: string | null } | undefined {
+  const row = steward
+    .prepare(
+      `SELECT vault_id, vault_public_key FROM share_party_vault_binding
+        WHERE party_id = ? AND vault_id = ? AND revoked_at IS NULL`
+    )
+    .get(actorPartyId, memberVaultId) as
+    | { vault_id: string; vault_public_key: string | null }
+    | undefined;
+  return row
+    ? { vaultId: row.vault_id, publicKey: row.vault_public_key }
+    : undefined;
+}
+
 function commandRefuses(input: {
   steward: DatabaseSync;
   grant: CommonsGrantRecord;
@@ -1500,6 +1665,10 @@ function commandRefuses(input: {
   command: string;
   commandInput: unknown;
   memberSignature?: CommonsMemberSignature;
+  /** The member vault's CURRENT identity key as proven by the transport
+   * (base64), when the caller has one. Compared against the pinned binding
+   * key so a re-mint is named rather than reported as a bad signature. */
+  presentedVaultPublicKey?: string;
   basedOnSequence?: number;
 }): string | undefined {
   const member = input.steward
@@ -1513,6 +1682,21 @@ function commandRefuses(input: {
   if (!member) return "the actor is not a member of this commons";
   if (member.capability !== "read+write")
     return "this commons is read-only for this member";
+  // Identity is checked BEFORE what the command says: if the seat is not the
+  // vault this commons pinned, nothing it sends can be attributed to it, and
+  // the person deserves the real story ("re-invite this member") rather than
+  // whatever the command itself would have been refused for (issue #750).
+  if (input.presentedVaultPublicKey && input.memberSignature) {
+    const pinned = pinnedMemberVaultKey(
+      input.steward,
+      input.actorPartyId,
+      input.memberSignature.memberVaultId
+    );
+    if (pinned?.publicKey && pinned.publicKey !== input.presentedVaultPublicKey)
+      return commonsMemberIdentityChangedReason({
+        memberVaultId: pinned.vaultId,
+      });
+  }
   if (!isCommonsCommandActable(input.grant.containerType, input.command))
     return `command ${input.command} is not declared for ${input.grant.containerType}`;
   if (!input.commandInput || typeof input.commandInput !== "object")
@@ -1577,25 +1761,22 @@ function commandRefuses(input: {
   if (input.actorPartyId !== input.grant.stewardPartyId) {
     if (!input.memberSignature)
       return "this member command is missing its vault signature";
-    const binding = input.steward
-      .prepare(
-        `SELECT vault_id, vault_public_key FROM share_party_vault_binding
-          WHERE party_id = ? AND vault_id = ? AND revoked_at IS NULL`
-      )
-      .get(input.actorPartyId, input.memberSignature.memberVaultId) as
-      | { vault_id: string; vault_public_key: string | null }
-      | undefined;
-    if (!binding?.vault_public_key)
+    const binding = pinnedMemberVaultKey(
+      input.steward,
+      input.actorPartyId,
+      input.memberSignature.memberVaultId
+    );
+    if (!binding?.publicKey)
       return "this member vault has no signing identity bound to the commons";
     if (
       !verifyCommonsIntent(
-        Buffer.from(binding.vault_public_key, "base64"),
+        Buffer.from(binding.publicKey, "base64"),
         {
           grantId: input.grant.grantId,
           actorPartyId: input.actorPartyId,
           command: input.command,
           commandInput: input.commandInput,
-          memberVaultId: binding.vault_id,
+          memberVaultId: binding.vaultId,
         },
         input.memberSignature
       )
@@ -1694,67 +1875,6 @@ function priorSignedDecision(input: {
   };
 }
 
-/** Steward-side structural and capability gate. The caller executes an
- * accepted command through the ordinary vault invoke path, then compiles. */
-export function authorizeCommonsCommand(input: {
-  steward: DatabaseSync;
-  grantId: string;
-  actorPartyId: string;
-  command: string;
-  commandInput: unknown;
-  memberSignature?: CommonsMemberSignature;
-  /** The grant sequence the actor had projected locally when this command
-   * was composed (issue #731 goal 1). Optional so every existing caller that
-   * predates this field keeps validating exactly as before — the stale-
-   * context check only ever runs when a caller actually supplies it. */
-  basedOnSequence?: number;
-  now: string;
-}): CommonsCommandDecision {
-  const prior = priorSignedDecision({
-    steward: input.steward,
-    grantId: input.grantId,
-    command: input.command,
-    commandInput: input.commandInput,
-    ...(input.memberSignature
-      ? { memberSignature: input.memberSignature }
-      : {}),
-  });
-  if (prior) return prior;
-  const grant = readCommonsGrant(input.steward, input.grantId);
-  const reason = commandRefuses({
-    steward: input.steward,
-    grant,
-    actorPartyId: input.actorPartyId,
-    command: input.command,
-    commandInput: input.commandInput,
-    ...(input.memberSignature
-      ? { memberSignature: input.memberSignature }
-      : {}),
-    ...(input.basedOnSequence === undefined
-      ? {}
-      : { basedOnSequence: input.basedOnSequence }),
-  });
-  const sequence = appendCommonsOperation({
-    steward: input.steward,
-    grantId: input.grantId,
-    actorPartyId: input.actorPartyId,
-    kind: input.command.includes("delete") ? "delete" : "command",
-    command: input.command,
-    input: input.commandInput,
-    ...(input.memberSignature
-      ? { memberSignature: input.memberSignature }
-      : {}),
-    outcome: reason ? "refused" : "executed",
-    ...(reason ? { reason } : {}),
-    now: input.now,
-  });
-  return {
-    accepted: reason === undefined,
-    ...(reason ? { reason } : {}),
-    sequence,
-  };
-}
-
 export interface ExecuteCommonsCommandInput {
   steward: VaultDb;
   gateway: Gateway;
@@ -1766,8 +1886,12 @@ export interface ExecuteCommonsCommandInput {
   commandInput: Record<string, unknown>;
   seats: readonly CommonsMemberInput[];
   memberSignature?: CommonsMemberSignature;
+  /** See `commandRefuses` — the transport-proven member identity key. */
+  presentedVaultPublicKey?: string;
   /** The grant sequence the actor had projected locally when this command
-   * was composed (issue #731 goal 1). Optional — see `authorizeCommonsCommand`. */
+   * was composed (issue #731 goal 1). Optional so a caller that predates this
+   * field keeps validating exactly as before — the stale-context check only
+   * ever runs when a caller actually supplies it. */
   basedOnSequence?: number;
   invocationId?: string;
   intentId?: string;
@@ -1906,6 +2030,9 @@ export function executeCommonsCommand(
     ...(input.memberSignature
       ? { memberSignature: input.memberSignature }
       : {}),
+    ...(input.presentedVaultPublicKey
+      ? { presentedVaultPublicKey: input.presentedVaultPublicKey }
+      : {}),
     ...(input.basedOnSequence === undefined
       ? {}
       : { basedOnSequence: input.basedOnSequence }),
@@ -1930,12 +2057,20 @@ export function executeCommonsCommand(
     };
   }
   const executeAndSequence = () => {
-    const outcome = input.gateway.invokeCommonsCanonical(input.credential, {
-      command: input.command,
-      input: input.commandInput,
-      purpose: "dpv:ServiceProvision",
-      ...(input.invocationId ? { invocationId: input.invocationId } : {}),
-    });
+    // The sequence this append is about to take. Seeding the steward's own
+    // execution with the replica key is what lets every member re-execute the
+    // same operation and mint byte-identical row ids (issue #750 invariant 7)
+    // — the whole reason catch-up can ship commands instead of rows.
+    const outcome = input.gateway.invokeCommonsCanonical(
+      input.credential,
+      {
+        command: input.command,
+        input: input.commandInput,
+        purpose: "dpv:ServiceProvision",
+        ...(input.invocationId ? { invocationId: input.invocationId } : {}),
+      },
+      { idSeed: replicaInvocationKey(input.grantId, grant.lastSequence + 1) }
+    );
     const executed =
       outcome.status === "executed" || outcome.status === "replayed";
     const reason = executed ? undefined : outcome.reason;
@@ -2038,7 +2173,7 @@ export function executeCommonsCommand(
  * are settled states like `denied` (issue #731 goal 2): once reached, an
  * intent is done re-appearing as pending/parked. */
 export type CommonsIntentStatus =
-  | "pending"
+  | "queued"
   | "parked"
   | "denied"
   | "executed"
@@ -2089,7 +2224,7 @@ export function queueCommonsIntent(input: {
       `INSERT INTO share_commons_intent
          (intent_id, grant_id, actor_party_id, command, input_json,
           based_on_sequence, status, reason, steward_label, created_at, settled_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?, NULL)
+       VALUES (?, ?, ?, ?, ?, ?, 'queued', NULL, ?, ?, NULL)
        ON CONFLICT(intent_id) DO NOTHING`
     )
     .run(
@@ -2139,7 +2274,7 @@ export function settleCommonsIntent(input: {
 /** Bounded life for a parked intent (issue #731 goal 2). Settles every
  * `parked` intent on this seat whose `created_at` is older than the horizon
  * to `expired`, so it stops re-appearing as an in-flight write and the peer
- * sweep's `WHERE status IN ('pending','parked')` retry query naturally
+ * sweep's `WHERE status IN ('queued','parked')` retry query naturally
  * leaves it alone. Idempotent — re-running finds nothing left to settle.
  * Returns the number of intents expired. */
 export function expireParkedCommonsIntents(input: {
@@ -2185,7 +2320,7 @@ export function cancelCommonsIntent(input: {
           SET status = 'cancelled',
               reason = 'cancelled by the member before it executed',
               settled_at = ?
-        WHERE intent_id = ? AND status IN ('pending','parked')`
+        WHERE intent_id = ? AND status IN ('queued','parked')`
     )
     .run(input.now, input.intentId);
   const row = input.seat

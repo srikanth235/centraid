@@ -333,8 +333,13 @@ export function makeVaultRouteHandler(
         options.keys.destroy(`${vaultId}.sealkey`);
         // The identity keypair shares the DEK's custody and lifecycle
         // (#726 P1) — an erase crypto-erases both, never leaving the
-        // signing seed behind after the DEK is gone.
+        // signing seed behind after the DEK is gone. The public-key PIN
+        // (#750 invariant 1) goes with them: a pin outliving its seed is
+        // exactly the state `VaultIdentityMismatchError` refuses to open, so
+        // leaving one behind would make a re-created vault of the same id
+        // permanently unopenable.
         options.keys.destroy(`${vaultId}.identity`);
+        options.keys.destroy(`${vaultId}.identity.pub`);
         options.gatewayDatabase.transaction(() => {
           options
             .gatewayDatabase!.db.prepare(

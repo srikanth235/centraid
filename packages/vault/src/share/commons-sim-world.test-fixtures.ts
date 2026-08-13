@@ -2,7 +2,7 @@
 // half owns the seeded PRNG and the physical world — real on-disk vaults, their
 // grants, the single write rail, the pull rail, crash-restart, and snapshot /
 // stale-restore. The schedule and the golden invariants live in
-// `commons-sim.ts`; keeping them apart is what stops the model and the oracle
+// `commons-sim.test-fixtures.ts`; keeping them apart is what stops the model and the oracle
 // from quietly agreeing with each other.
 
 import { copyFileSync, mkdirSync, rmSync } from "node:fs";
@@ -19,11 +19,17 @@ import { createGateway } from "../gateway/gateway.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
 import {
+  placeCommonsBootstrapBlobs,
+  placeCommonsIncrementBlobs,
+} from "./commons-blobs.test-fixtures.js";
+import {
   applyCommonsBootstrap,
+  applyCommonsIncrement,
   applyCommonsTombstone,
   exportCommonsSyncFrame,
-  placeCommonsBootstrapBlobs,
+  isCommonsIncrementUnusable,
 } from "./commons-bootstrap.js";
+import { readCommonsCursor } from "./commons-cursor.js";
 import { signCommonsIntent } from "./commons-signature.js";
 import type { CommonsCapability, CommonsMemberInput } from "./commons.js";
 import {
@@ -445,28 +451,80 @@ export function submit(
   return decision;
 }
 
-/** One member pull: a snapshot+tail frame out of the steward, applied at the
- * seat. Returns whether the seat's domain state actually moved. */
+/** One member pull, exercising BOTH rails (#750): the seat asks with its own
+ * cursor, replays an ops-since-cursor increment when its cursor sits on the
+ * chain, and re-baselines through the full snapshot frame when the increment
+ * is unusable or its tail cannot be re-executed against this replica. Returns
+ * whether the seat's domain state actually moved. */
 export function pull(grant: Grant, seat: Seat): boolean {
   const before = dumpKey(seat.db, grant.groupId);
-  const frame = exportCommonsSyncFrame({
-    steward: grant.steward.db.vault,
-    identitySeed: grant.steward.db.identitySeed,
-    stewardVaultId: grant.steward.vaultId,
-    grantId: grant.grantId,
-    memberVaultId: seat.vaultId,
-  });
-  if (frame.state === "tombstone")
-    applyCommonsTombstone({ seat: seat.db, tombstone: frame.tombstone });
-  else {
+  const cursor = readCommonsCursor(seat.db.vault, grant.grantId, seat.vaultId);
+  const frameFor = (afterSequence?: number) =>
+    exportCommonsSyncFrame({
+      steward: grant.steward.db.vault,
+      identitySeed: grant.steward.db.identitySeed,
+      stewardVaultId: grant.steward.vaultId,
+      grantId: grant.grantId,
+      memberVaultId: seat.vaultId,
+      ...(afterSequence === undefined ? {} : { afterSequence }),
+    });
+  const applyFull = (frame: ReturnType<typeof frameFor>): void => {
+    if (frame.state === "tombstone") {
+      applyCommonsTombstone({ seat: seat.db, tombstone: frame.tombstone });
+      return;
+    }
+    if (frame.state !== "bootstrap")
+      throw new Error(`expected a full frame, got ${frame.state}`);
     placeCommonsBootstrapBlobs({
       source: grant.steward.db,
       seat: seat.db,
       wire: frame.wire,
     });
     applyCommonsBootstrap({ seat: seat.db, wire: frame.wire, now: NOW });
-  }
+  };
+  const frame = frameFor(cursor?.sequence);
+  if (frame.state === "increment") {
+    placeCommonsIncrementBlobs({
+      source: grant.steward.db,
+      seat: seat.db,
+      increment: frame.increment,
+    });
+    try {
+      applyCommonsIncrement({
+        seat: seat.db,
+        increment: frame.increment,
+        now: NOW,
+        applyCommand: replicaExecutor(seat),
+      });
+    } catch (error) {
+      // Unusable-for-this-replica shapes re-baseline; faults still propagate.
+      if (!isCommonsIncrementUnusable(error)) throw error;
+      applyFull(frameFor());
+    }
+  } else applyFull(frame);
   return dumpKey(seat.db, grant.groupId) !== before;
+}
+
+/** The host seam a replica catches up through: the seat's own gateway, on the
+ * canonical Commons rail, seeded so replayed commands mint the steward's ids. */
+export function replicaExecutor(
+  seat: Seat
+): (
+  command: string,
+  commandInput: Record<string, unknown>,
+  invocationId: string
+) => ReturnType<Gateway["invokeCommonsCanonical"]> {
+  return (command, commandInput, invocationId) =>
+    seat.gateway.invokeCommonsCanonical(
+      seat.credential,
+      {
+        command,
+        input: commandInput,
+        purpose: "dpv:ServiceProvision",
+        invocationId,
+      },
+      { idSeed: invocationId }
+    );
 }
 
 export function currentMembers(world: World, grant: Grant): Seat[] {

@@ -6,7 +6,6 @@ import type { Credential } from "../gateway/types.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { signCommonsIntent } from "./commons-signature.js";
 import {
-  authorizeCommonsCommand,
   commonsCurrentSize,
   compileCommons,
   createCommonsGrant,
@@ -163,14 +162,28 @@ describe("circle-backed commons", () => {
       stewardLabel: "Priya's device",
       now,
     });
-    const denied = authorizeCommonsCommand({
-      steward: origin.vault,
-      grantId: grant.grantId,
-      actorPartyId: bob,
-      command: "media.update_asset",
-      commandInput: { asset_id: photo.assetId },
-      now,
-    });
+    // The one write rail. A structural/capability refusal is decided and
+    // sequenced before any command runs, so nothing is invoked here.
+    const gateway = createGateway(origin);
+    const credential: Credential = {
+      kind: "device",
+      deviceId: originBoot.deviceId,
+      deviceKey: originBoot.deviceKey,
+    };
+    const write = (commandInput: Record<string, unknown>) =>
+      executeCommonsCommand({
+        steward: origin,
+        gateway,
+        credential,
+        stewardVaultId: "vault-priya",
+        grantId: grant.grantId,
+        actorPartyId: bob,
+        command: "media.update_asset",
+        commandInput,
+        seats,
+        now,
+      }).decision;
+    const denied = write({ asset_id: photo.assetId });
     expect(denied).toMatchObject({
       accepted: false,
       sequence: 1,
@@ -200,16 +213,7 @@ describe("circle-backed commons", () => {
         "UPDATE social_circle_member SET capability = 'read+write' WHERE circle_id = ? AND party_id = ?"
       )
       .run(grant.circleId, bob);
-    expect(
-      authorizeCommonsCommand({
-        steward: origin.vault,
-        grantId: grant.grantId,
-        actorPartyId: bob,
-        command: "media.update_asset",
-        commandInput: {},
-        now,
-      })
-    ).toMatchObject({ accepted: false, sequence: 2 });
+    expect(write({})).toMatchObject({ accepted: false, sequence: 2 });
     const successor = transferCommonsSteward({
       steward: origin.vault,
       grantId: grant.grantId,

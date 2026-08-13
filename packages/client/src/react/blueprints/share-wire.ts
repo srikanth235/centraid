@@ -8,6 +8,10 @@ interface InlineLinkDestination {
   vaultId: string;
   partyId: string;
   approved: boolean;
+  /** The linked vault's OWN name, from the vault directory (#750) — `null`
+   *  only when the directory genuinely holds none. Never a truncated id
+   *  dressed up as a name. */
+  label: string | null;
 }
 
 interface InlineCommonsResident {
@@ -68,8 +72,17 @@ export function linkDestinationsFor(
           ? link.vaultA
           : undefined;
     const partyId = link.vaultA === vaultId ? link.partyIdA : link.partyIdB;
+    const label = link.vaultA === vaultId ? link.labelA : link.labelB;
     return vaultId && partyId
-      ? [{ linkId: link.linkId, vaultId, partyId, approved: true }]
+      ? [
+          {
+            linkId: link.linkId,
+            vaultId,
+            partyId,
+            approved: true,
+            label: label ?? null,
+          },
+        ]
       : [];
   });
 }

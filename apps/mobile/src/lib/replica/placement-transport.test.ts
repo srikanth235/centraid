@@ -15,7 +15,9 @@ import {
   claimCommonsInvitation,
   listCommonsResidents,
   listCommonsInvitations,
+  listCommonsRecovery,
   postPlacement,
+  recoverCommons,
   PlacementSubmissionError,
   retainCommonsItem,
 } from "./placement-transport";
@@ -233,6 +235,88 @@ describe("Commons invitations", () => {
       stewardVaultId: "vault-steward",
       claimToken: "one-time-secret",
     });
+  });
+});
+
+describe("Commons steward-absence recovery", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("reads steward presence for the asking vault and keeps the answer attributable", async () => {
+    let capturedUrl = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL) => {
+        capturedUrl = url.toString();
+        return jsonResponse(200, {
+          vaultId: "vault-b",
+          grants: [
+            {
+              grantId: "grant-1",
+              containerType: "album",
+              steward: { presence: "absent", silentForMs: 777_600_000 },
+            },
+          ],
+        });
+      })
+    );
+
+    await expect(
+      listCommonsRecovery(BASE_URL, "vault-b")
+    ).resolves.toStrictEqual([
+      {
+        actorVaultId: "vault-b",
+        grantId: "grant-1",
+        containerType: "album",
+        steward: { presence: "absent", silentForMs: 777_600_000 },
+      },
+    ]);
+    expect(capturedUrl).toBe(
+      new URL(
+        `${ROUTES.gatewayCommons}/recovery?actorVaultId=vault-b`,
+        BASE_URL
+      ).toString()
+    );
+  });
+
+  test("runs the ceremony for one named grant and reports delivery per seat", async () => {
+    let capturedBody: unknown;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: URL, init?: RequestInit) => {
+        capturedBody = JSON.parse(String(init?.body));
+        return jsonResponse(200, {
+          state: "recovered",
+          grantId: "grant-2",
+          invitations: [{ partyId: "party-c", state: "claim" }],
+        });
+      })
+    );
+
+    await expect(
+      recoverCommons(BASE_URL, "vault-b", "grant-1")
+    ).resolves.toMatchObject({
+      state: "recovered",
+      invitations: [{ partyId: "party-c", state: "claim" }],
+    });
+    expect(capturedBody).toStrictEqual({
+      actorVaultId: "vault-b",
+      grantId: "grant-1",
+    });
+  });
+
+  test("carries a refused ceremony's own reason, not a bare status code", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse(409, { state: "refused", reason: "parked-on-fault" })
+      )
+    );
+
+    await expect(
+      recoverCommons(BASE_URL, "vault-b", "grant-1")
+    ).rejects.toThrow(/parked-on-fault/u);
   });
 });
 

@@ -63,6 +63,7 @@ import type { GatewayDatabase } from "../serve/gateway-db.js";
 import { PairingTicketStore } from "../serve/pairing-store.js";
 import { startPeerDial } from "../serve/peer-dial.js";
 import type { PeerDial } from "../serve/peer-edge-give-client.js";
+import { announceLocalRoutes } from "../serve/peer-route-announce.js";
 import type { DeviceAccess } from "../serve/vault-context.js";
 import { VaultLinksStore } from "../serve/vault-links-store.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
@@ -456,6 +457,40 @@ export function makeDaemonDevicePlane(input: {
     }
     liveEndpointId = handle.endpointId;
     liveRelayHints = relayHintsOf(handle.ticket());
+    /*
+     * Route re-assertion, eager half (issue #750 invariant 3). The moment
+     * this gateway's EndpointId is (re)known — first start, key rotation, or
+     * recovery onto a new box — every LOCAL vault signs a route claim with
+     * its own identity seed and pushes it to every linked peer, so the peers
+     * re-discover this gateway without re-running a ceremony.
+     * `announceLocalRoutes` no-ops when the endpoint has not changed since
+     * the last fully delivered announcement (`gateway_meta` pin), and
+     * best-effort failures are logged and retried by the peer-plane sweep
+     * tick. Fire-and-forget: endpoint start must not wait on peers.
+     */
+    const registry = input.vaults();
+    if (registry) {
+      void announceLocalRoutes({
+        links,
+        dial: peerDial,
+        signAsVault: (vaultId, bytes) => registry.signAsVault(vaultId, bytes),
+        localVaultIds: () =>
+          registry.planesList().map((plane) => plane.boot.vaultId),
+        route: () => ({
+          endpointId: handle.endpointId,
+          relayHints: liveRelayHints,
+        }),
+        log: {
+          info: (message) => logger.info(message),
+          warn: (message) => logger.warn(message),
+        },
+      }).catch((error) => {
+        logger.warn(
+          "route re-assertion failed (will retry on next start/tick): " +
+            (error instanceof Error ? error.message : String(error))
+        );
+      });
+    }
     return {
       endpointId: handle.endpointId,
       ticket: () => handle.ticket(),

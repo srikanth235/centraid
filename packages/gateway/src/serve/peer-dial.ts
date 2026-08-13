@@ -3,7 +3,7 @@
  * production peer dial"). Every peer-plane caller — `redeemLinkTicket`,
  * `pushRouteAssertion` (`peer-link-client.ts`), `giveEdgeOverPeer`,
  * `pullEdgeClosure`, `denyEdgeOverPeer` (`peer-edge-give-client.ts`), and
- * `drainPeerBlobPulls` (`peer-blob-pull.ts`) — already depend on nothing
+ * the share outbox executor (`share-effect-executor.ts`) — already depend on nothing
  * more than these two transport-agnostic interfaces; this file is the ONE
  * production implementation of them, built on `@centraid/tunnel`'s generic
  * client. Tests substitute a loopback double that calls the far side's route
@@ -13,7 +13,7 @@
  *
  * The dialing identity MUST be this gateway's own persistent secret key: the
  * far side records whatever EndpointId the QUIC handshake proves as this
- * gateway's cached route (`vault_links.route_*_json`), so dialing under any
+ * gateway's cached route (the vault's `vault_routes` row), so dialing under any
  * other identity would leave a peer unable to ever reach this gateway back.
  * The ACCEPTING side of that same identity runs elsewhere (the native relay
  * in production, `startGatewayEndpoint` otherwise, issue #289/#726) — this

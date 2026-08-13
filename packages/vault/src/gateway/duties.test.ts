@@ -10,6 +10,7 @@ import { afterEach, assert, beforeEach, describe, expect, test } from "vitest";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
+import { blobUriFor } from "../blob/store.js";
 import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
@@ -462,6 +463,82 @@ describe("duties", () => {
         .get()
     ).toBeUndefined();
     expectPolyDependentsCleaned(deps, "core.content_item", "poly-c");
+  });
+
+  test("purge keeps derivative bytes another content item still claims (issue #750)", () => {
+    const past = "2020-01-01T00:00:00Z";
+    const now = new Date().toISOString();
+    // sha256 is UNIQUE on content items but NOT on derivatives: two items'
+    // thumbs may legally share one CAS entry. Purging the lapsed item must
+    // reclaim only its exclusively-owned bytes.
+    const shared = db.blobs.ingestSync(Buffer.from("purge-shared-thumb"));
+    const lapsedOriginal = db.blobs.ingestSync(Buffer.from("purge-lapsed-og"));
+    const liveOriginal = db.blobs.ingestSync(Buffer.from("purge-live-og"));
+    const item = db.vault.prepare(
+      `INSERT INTO core_content_item
+         (content_id, media_type, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
+       VALUES (?, 'image/jpeg', ?, ?, ?, ?, ?, ?)`
+    );
+    item.run(
+      "purge-shared-a",
+      blobUriFor(lapsedOriginal.sha256),
+      lapsedOriginal.sha256,
+      lapsedOriginal.byteSize,
+      past,
+      past,
+      past
+    );
+    item.run(
+      "purge-shared-b",
+      blobUriFor(liveOriginal.sha256),
+      liveOriginal.sha256,
+      liveOriginal.byteSize,
+      now,
+      null,
+      null
+    );
+    const derivative = db.vault.prepare(
+      `INSERT INTO core_content_derivative
+         (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
+       VALUES (?, ?, 'thumb', ?, 'image/jpeg', ?, NULL, ?)`
+    );
+    derivative.run(
+      uuidv7(),
+      "purge-shared-a",
+      shared.sha256,
+      shared.byteSize,
+      past
+    );
+    derivative.run(
+      uuidv7(),
+      "purge-shared-b",
+      shared.sha256,
+      shared.byteSize,
+      now
+    );
+
+    const result = gw.sweep(owner);
+    expect(result.contentPurged).toBe(1);
+    // The lapsed item's exclusively-owned original is reclaimed with its rows…
+    expect(
+      db.vault
+        .prepare(
+          `SELECT 1 FROM core_content_item WHERE content_id = 'purge-shared-a'`
+        )
+        .get()
+    ).toBeUndefined();
+    expect(db.blobs.hasSync(lapsedOriginal.sha256)).toBe(false);
+    // …but the SHARED thumb bytes survive: the live item's derivative still
+    // claims them, and the survivor keeps reading its own thumb.
+    expect(db.blobs.hasSync(shared.sha256)).toBe(true);
+    expect(db.blobs.hasSync(liveOriginal.sha256)).toBe(true);
+    expect(
+      db.vault
+        .prepare(
+          `SELECT 1 FROM core_content_derivative WHERE content_id = 'purge-shared-b'`
+        )
+        .get()
+    ).toBeTruthy();
   });
 
   test("purge sweep cleans every polymorphic dependent of a purged media asset (issue #441 A1)", () => {

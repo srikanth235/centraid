@@ -395,6 +395,26 @@ describe("ApprovalsRoute", () => {
             archivedAt: null,
           },
           {
+            noticeId: "commons-notice",
+            kind: "commons-steward",
+            sourceRef: "grant-1",
+            headline:
+              "A shared space's owner device hasn't been reachable for 9 days",
+            detail: {
+              sourceType: "commons",
+              deepLink: "/household",
+              grantId: "grant-1",
+              presence: "absent",
+              recoverable: true,
+            },
+            severity: "high",
+            count: 1,
+            firstAt: at,
+            lastAt: at,
+            readAt: null,
+            archivedAt: null,
+          },
+          {
             noticeId: "app-notice",
             kind: "app",
             sourceRef: "tasks",
@@ -421,7 +441,7 @@ describe("ApprovalsRoute", () => {
             archivedAt: null,
           },
         ],
-        unreadNoticeCount: 4,
+        unreadNoticeCount: 5,
       });
       const el = await render();
       const clickHeadline = (headline: string): void => {
@@ -446,6 +466,10 @@ describe("ApprovalsRoute", () => {
         kind: "gateway",
         tab: "alerts",
       });
+      // Steward absence is only actionable where the ceremony lives: the
+      // People & circles panel on Household (issue #750).
+      clickHeadline("A shared space's owner device");
+      expect(navigate).toHaveBeenLastCalledWith({ kind: "household" });
       clickHeadline("Apps");
       clickHeadline("Tasks imported");
       expect(navigate).toHaveBeenLastCalledWith({ kind: "app", id: "tasks" });

@@ -184,6 +184,103 @@ export async function answerCommonsInvitation(
   return out.invitation;
 }
 
+/**
+ * One commons grant this vault holds, as the recovery door describes it
+ * (`commons-recovery-routes.ts`). The gateway answers a much wider
+ * observability record per grant; only the fields a member surface renders are
+ * named here. `actorVaultId` is not on the wire — the caller asked about one
+ * vault, and the answer has to stay attributable once several vaults' rows are
+ * shown in one list.
+ */
+export interface CommonsRecoveryGrant {
+  actorVaultId: string;
+  grantId: string;
+  containerType: string;
+  steward: {
+    presence:
+      | "unknown"
+      | "reachable"
+      | "degraded"
+      | "absent"
+      | "link-down"
+      | "parked";
+    stewardVaultId?: string;
+    silentForMs?: number;
+    fault?: string;
+  };
+  /** Set once this seat has already re-founded the grant. */
+  supersededBy?: string;
+}
+
+/** How one successor invitation reached (or failed to reach) a roster seat. */
+export interface CommonsRecoveryDelivery {
+  partyId: string;
+  memberVaultId?: string;
+  state: "queued" | "delivered" | "claim" | "unreachable";
+}
+
+export interface CommonsRecoveryOutcome {
+  state: "recovered";
+  grantId: string;
+  /** Seats that must still accept the successor invitation. */
+  invitedPartyIds: string[];
+  invitations: CommonsRecoveryDelivery[];
+  replayed: boolean;
+}
+
+/** Plain words for the ceremony's NAMED refusals. Recovery refuses on purpose
+ *  far more often than it fails, so the member must read a reason, not a code
+ *  or a raw body. An unmapped reason still reaches them verbatim. */
+const RECOVERY_REFUSALS: Record<string, string> = {
+  "already-steward": "You already run this shared space.",
+  "parked-on-fault":
+    "This copy stopped syncing because its history could not be verified, so it must not be used to re-found the space.",
+  "grant-not-live": "That shared space is no longer live.",
+  "no-local-replica":
+    "This vault holds no copy of that shared space to re-found it from.",
+};
+
+/** Steward presence for every commons grant one of this owner's vaults holds. */
+export async function listCommonsRecovery(
+  actorVaultId: string
+): Promise<CommonsRecoveryGrant[]> {
+  const { baseUrl, token } = await auth();
+  const query = new URLSearchParams({ actorVaultId });
+  const res = await doFetch(
+    baseUrl,
+    `${COMMONS_PATH}/recovery?${query.toString()}`,
+    { method: "GET", headers: authHeaders(token) }
+  );
+  const out = await readJson<{
+    grants?: Omit<CommonsRecoveryGrant, "actorVaultId">[];
+  }>(res, "read shared-space recovery");
+  return (out.grants ?? []).map((grant) => ({ ...grant, actorVaultId }));
+}
+
+/**
+ * Re-found a commons from this vault's own copy after its steward is gone.
+ * Deliberate and never automatic — the caller has already put the absence in
+ * front of the owner. A refusal is an answer, not a transport failure, so it
+ * arrives as an Error carrying the ceremony's own reason.
+ */
+export async function recoverCommons(
+  actorVaultId: string,
+  grantId: string
+): Promise<CommonsRecoveryOutcome> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `${COMMONS_PATH}/recovery`, {
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
+    body: JSON.stringify({ actorVaultId, grantId }),
+  });
+  if (res.status === 409) {
+    const refusal = (await res.json()) as { reason?: string };
+    const reason = refusal.reason ?? "unknown";
+    throw new Error(RECOVERY_REFUSALS[reason] ?? `Recovery refused: ${reason}`);
+  }
+  return readJson<CommonsRecoveryOutcome>(res, "recover shared space");
+}
+
 /** One give parked by the audience's D9 `ask` receive setting — nothing was
  *  written yet; the audience owner has not answered. */
 export interface PendingEdge {

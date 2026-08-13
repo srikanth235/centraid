@@ -17,7 +17,7 @@ import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { closeOpenVaults, household, seedPhoto } from "./placement-fixture.js";
-import { shareItemsToVault, shareToVault } from "./placement.js";
+import { shareItemsToVault } from "./placement.js";
 import { projectShareClosure } from "./project-closure.js";
 import { readShareClosure } from "./read-closure.js";
 
@@ -170,12 +170,12 @@ describe("closure split", () => {
       )
       .run(uuidv7(), originBoot.ownerPartyId, photo.assetId, now);
 
-    const shared = shareToVault({
+    const shared = shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
       itemType: "media.asset",
-      itemId: photo.assetId,
+      itemIds: [photo.assetId],
       sharedBy: "member-priya",
       now: () => Date.parse("2026-08-08T00:00:00.000Z"),
     });
@@ -188,7 +188,7 @@ describe("closure split", () => {
            JOIN core_place p ON p.place_id = a.place_id
           WHERE a.asset_id = ?`
       )
-      .get(shared.itemId) as {
+      .get(shared.items[0]!.itemId) as {
       place_id: string;
       name: string;
       geo_lat: number;
@@ -208,7 +208,7 @@ describe("closure split", () => {
       )
     ).toStrictEqual([
       {
-        target_id: shared.itemId,
+        target_id: shared.items[0]!.itemId,
         reason: "projected",
         contribution_variant: "embedding",
         required_capability: null,
@@ -224,12 +224,12 @@ describe("closure split", () => {
     ).toStrictEqual([{ n: 0 }]);
     // Re-sharing is idempotent all the way through the door: a deduped row is
     // already registered, so it is not re-queued.
-    shareToVault({
+    shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
       itemType: "media.asset",
-      itemId: photo.assetId,
+      itemIds: [photo.assetId],
       sharedBy: "member-sid",
     });
     expect(
@@ -253,12 +253,12 @@ describe("closure split", () => {
       .prepare("UPDATE core_vault SET settings_json = ?")
       .run(JSON.stringify({ media: { location: "strip" } }));
 
-    const shared = shareToVault({
+    const shared = shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
       itemType: "media.asset",
-      itemId: photo.assetId,
+      itemIds: [photo.assetId],
       sharedBy: "member-priya",
     });
 
@@ -268,7 +268,7 @@ describe("closure split", () => {
     expect(
       audience.vault
         .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
-        .get(shared.itemId)
+        .get(shared.items[0]!.itemId)
     ).toMatchObject({ place_id: null });
   });
 

@@ -62,14 +62,11 @@ export {
 // Issue #599 decision 11: share-by-placement. The gateway's cross-vault share
 // plane calls these; they sit outside the per-vault handler path by design.
 export {
-  shareToVault,
   shareItemsToVault,
   unshareFromVault,
   moveOutOfVault,
   readShareOrigin,
   type ShareVaultRef,
-  type ShareToVaultInput,
-  type ShareToVaultResult,
   type ShareItemsToVaultInput,
   type ShareItemsToVaultResult,
   type UnshareFromVaultInput,
@@ -103,15 +100,18 @@ export {
 // Projection is ingest (D11): the audience's own door, keyed by entity type so
 // vault core never learns an app name.
 export {
-  declareProjectionIngest,
   type ProjectionIngestHook,
   type ProjectionIngestContext,
 } from "./share/projection-ingest.js";
 export {
   isCommonsCommandActable,
-  declareCommonsCommands,
-  commonsCommandsFor,
-} from "./share/actable.js";
+  commonsRoutesForCommand,
+  COMMONS_COMMAND_ROUTES,
+  COMMONS_CONTAINER_KEYS,
+  type CommonsCommandRoute,
+  type CommonsContainerKey,
+  type CommonsRouteResolution,
+} from "./share/commons-routing.js";
 export {
   createCommonsGrant,
   ensureCommonsParty,
@@ -125,7 +125,8 @@ export {
   appendCommonsOperation,
   appendCommonsOperationInTransaction,
   commonsGrantForCommand,
-  authorizeCommonsCommand,
+  COMMONS_MEMBER_IDENTITY_CHANGED,
+  commonsMemberIdentityChangedReason,
   executeCommonsCommand,
   queueCommonsIntent,
   settleCommonsIntent,
@@ -164,7 +165,6 @@ export {
 } from "./share/commons-lifecycle.js";
 export {
   readCommonsCursor,
-  advanceCommonsCursor,
   type CommonsCursor,
 } from "./share/commons-cursor.js";
 export {
@@ -192,18 +192,28 @@ export {
   exportCommonsBootstrap,
   exportCommonsSyncFrame,
   applyCommonsBootstrap,
+  applyCommonsIncrement,
   applyCommonsTombstone,
+  isCommonsIncrementUnusable,
   queueCommonsInvitation,
   createCommonsClaimInvitation,
   claimCommonsInvitation,
   listCommonsInvitations,
   answerCommonsInvitation,
-  placeCommonsBootstrapBlobs,
   type CommonsBootstrap,
+  type CommonsIncrement,
   type CommonsTombstone,
   type CommonsSyncFrame,
   type CommonsInvitationRecord,
 } from "./share/commons-bootstrap.js";
+// Command-tail replay (#750 invariant 7): catch-up proportional to what
+// changed, because the steward ships the operations rather than the rows.
+export {
+  isCommonsReplayError,
+  replicaInvocationKey,
+  type CommonsReplicaExecutor,
+  type CommonsTailBlob,
+} from "./share/commons-replay.js";
 // Replica-export recovery: a member re-founds a group whose steward is gone
 // (#731). Deliberate ceremony — see the module header.
 export {
@@ -560,6 +570,7 @@ export {
   identityKeyFileFor,
   ephemeralVaultIdentitySeed,
   loadOrCreateVaultIdentitySeed,
+  VaultIdentityMismatchError,
   vaultIdentityPublicKey,
   signWithVaultIdentity,
   verifyVaultIdentitySignature,

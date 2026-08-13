@@ -272,7 +272,7 @@ describe("B6 Tally Commons flagship", () => {
       bob.db.vault
         .prepare("SELECT status FROM share_commons_intent WHERE intent_id = ?")
         .get("intent-Lunch")
-    ).toMatchObject({ status: "pending" });
+    ).toMatchObject({ status: "queued" });
     expect(
       executeAtPriya(bob, "Lunch", allSeats(), "intent-Lunch").decision
     ).toMatchObject({ accepted: true });

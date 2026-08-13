@@ -21,10 +21,29 @@ import {
   answerCommonsInvitation,
   claimCommonsInvitation,
   listCommonsInvitations,
+  listCommonsRecovery,
+  recoverCommons,
 } from "../lib/replica/placement-transport";
-import type { CommonsInvitation } from "../lib/replica/placement-transport";
+import type {
+  CommonsInvitation,
+  CommonsRecoveryGrant,
+} from "../lib/replica/placement-transport";
 import type { SettingsScreenProps } from "../navigation";
 import SharingLinkRow, { LinkTicketPanel } from "./SharingLinkRow";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function stewardLine(entry: CommonsRecoveryGrant): string {
+  const silent = entry.steward.silentForMs;
+  const days = silent === undefined ? 0 : Math.floor(silent / DAY_MS);
+  return [
+    entry.containerType,
+    days > 0 ? `silent for ${days} ${days === 1 ? "day" : "days"}` : "",
+    entry.steward.fault ?? "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 function vaultLabel(vaultId: string, links: readonly GatewayLink[]): string {
   for (const link of links) {
@@ -45,6 +64,9 @@ export default function SharingScreen({
   const [commonsInvitations, setCommonsInvitations] = useState<
     CommonsInvitation[]
   >([]);
+  const [commonsRecovery, setCommonsRecovery] = useState<
+    CommonsRecoveryGrant[]
+  >([]);
   const [errorMessage, setErrorMessage] = useState<string>();
   const [busyId, setBusyId] = useState<string>();
   const [commonsInviteCode, setCommonsInviteCode] = useState("");
@@ -56,14 +78,24 @@ export default function SharingScreen({
       listEdges(replica.gatewayBase),
       listPendingEdges(replica.gatewayBase),
       listCommonsInvitations(replica.gatewayBase, replica.vaultId),
+      listCommonsRecovery(replica.gatewayBase, replica.vaultId),
     ])
-      .then(([nextLinks, nextEdges, nextPending, nextCommonsInvitations]) => {
-        setLinks(nextLinks);
-        setEdges(nextEdges);
-        setPending(nextPending);
-        setCommonsInvitations(nextCommonsInvitations);
-        setErrorMessage(undefined);
-      })
+      .then(
+        ([
+          nextLinks,
+          nextEdges,
+          nextPending,
+          nextCommonsInvitations,
+          nextCommonsRecovery,
+        ]) => {
+          setLinks(nextLinks);
+          setEdges(nextEdges);
+          setPending(nextPending);
+          setCommonsInvitations(nextCommonsInvitations);
+          setCommonsRecovery(nextCommonsRecovery);
+          setErrorMessage(undefined);
+        }
+      )
       .catch((error: unknown) =>
         setErrorMessage(error instanceof Error ? error.message : String(error))
       );
@@ -86,6 +118,16 @@ export default function SharingScreen({
     }
   };
   const snapshots = edges.filter((edge) => edge.mode === "snapshot");
+  // A grant this seat already re-founded has a live successor, and a steward
+  // this device simply cannot reach (`link-down`) proves nothing — neither is
+  // a concern to put in front of the owner.
+  const recoveryConcerns = commonsRecovery.filter(
+    (entry) =>
+      !entry.supersededBy &&
+      (entry.steward.presence === "degraded" ||
+        entry.steward.presence === "absent" ||
+        entry.steward.presence === "parked")
+  );
 
   return (
     <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
@@ -111,6 +153,56 @@ export default function SharingScreen({
           <Text style={[t("small"), { color: colors.danger }]}>
             {errorMessage}
           </Text>
+        ) : null}
+
+        {recoveryConcerns.length ? (
+          <Section title="Shared-space recovery" colors={colors}>
+            {recoveryConcerns.map((entry) => {
+              const busyKey = `recover:${entry.grantId}`;
+              return (
+                <View
+                  key={busyKey}
+                  style={[
+                    styles.card,
+                    {
+                      backgroundColor: colors.bgElev,
+                      borderColor: colors.line,
+                    },
+                  ]}
+                >
+                  <Text style={[t("body"), { color: colors.text }]}>
+                    {entry.steward.presence === "parked"
+                      ? "A shared space stopped syncing — its history could not be verified"
+                      : `The device that runs a shared space hasn’t answered (${entry.steward.presence})`}
+                  </Text>
+                  <Text style={[t("small"), { color: colors.textSoft }]}>
+                    {stewardLine(entry)}
+                  </Text>
+                  {entry.steward.presence === "absent" ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={busyId === busyKey}
+                      onPress={() =>
+                        replica.gatewayBase &&
+                        void act(busyKey, () =>
+                          recoverCommons(
+                            replica.gatewayBase!,
+                            entry.actorVaultId,
+                            entry.grantId
+                          )
+                        )
+                      }
+                      style={[styles.pill, { borderColor: colors.line }]}
+                    >
+                      <Text style={[t("control"), { color: colors.accent }]}>
+                        Recover from my copy
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              );
+            })}
+          </Section>
         ) : null}
 
         {pending.length ? (

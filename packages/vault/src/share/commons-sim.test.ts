@@ -14,8 +14,11 @@
 
 import { describe, expect, test } from "vitest";
 
-import type { SimReport } from "./commons-sim-world.js";
-import { ACTION_WEIGHTS, runCommonsSimulation } from "./commons-sim.js";
+import type { SimReport } from "./commons-sim-world.test-fixtures.js";
+import {
+  ACTION_WEIGHTS,
+  runCommonsSimulation,
+} from "./commons-sim.test-fixtures.js";
 
 /**
  * Shrink-lite: a seed the simulator has caught a real Commons bug on gets

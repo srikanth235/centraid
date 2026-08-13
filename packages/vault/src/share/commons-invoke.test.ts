@@ -121,7 +121,7 @@ describe("ordinary invoke is Commons-aware", () => {
             WHERE intent_id = ?`
         )
         .get("member-intent")
-    ).toMatchObject({ status: "pending", steward_label: "Priya's device" });
+    ).toMatchObject({ status: "queued", steward_label: "Priya's device" });
 
     const inlineApp = enrollApp(audience, { name: "tally-inline" });
     const appWrite = memberGateway.invoke(

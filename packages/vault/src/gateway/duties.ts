@@ -7,6 +7,7 @@
 // Gateway (the pause is gateway state); the view service in views.ts; file
 // custody in custody.ts; export & portability in portability.ts.
 
+import { liveBlobShas } from "../blob/read.js";
 import { sweepBlobStaging } from "../blob/staging.js";
 import { shaOfBlobUri } from "../blob/store.js";
 import { RELATIONS_SCHEME_URI } from "../commands/links.js";
@@ -526,12 +527,20 @@ function purgeContentItem(
   db.vault
     .prepare("DELETE FROM core_content_item WHERE content_id = ?")
     .run(contentId);
+  // Bytes go only when their FINAL claim just disappeared (issue #750).
+  // sha256 is UNIQUE on content items, but NOT on derivatives: two rows'
+  // thumbs may share one CAS entry, so re-derive the live set AFTER the row
+  // deletes above and skip any sha another row still claims. A skipped copy
+  // is not leaked — once its surviving claim drops, the local orphan sweep
+  // reclaims it through the grace window.
+  const live = liveBlobShas(db.vault);
   for (const v of variants) {
+    if (live.has(v.sha256)) continue;
     db.blobs.deleteLocalSync(v.sha256);
     reclaimed += 1;
   }
   const originalSha = contentRow ? shaOfBlobUri(contentRow.content_uri) : null;
-  if (originalSha) {
+  if (originalSha && !live.has(originalSha)) {
     db.blobs.deleteLocalSync(originalSha);
     reclaimed += 1;
   }
