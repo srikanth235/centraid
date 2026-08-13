@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 14,
   },
-  buttonText: { fontFamily: family.sansMedium, fontSize: 13 },
+  buttonText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
   card: {
     borderRadius: radii.lg,
     borderWidth: 1,
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  cardTitle: { fontFamily: family.sansMedium, fontSize: 17 },
+  cardTitle: { fontFamily: family.sansMedium, fontSize: t("reading").fontSize },
   explainer: {
     alignItems: "flex-start",
     borderRadius: radii.md,
@@ -264,9 +264,7 @@ const styles = StyleSheet.create({
   },
   explainerText: {
     flex: 1,
-    fontFamily: family.sansRegular,
-    fontSize: 12,
-    lineHeight: 18,
+    ...t("small"),
   },
   header: {
     alignItems: "center",
@@ -280,10 +278,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  lineLabel: { flex: 1, fontFamily: family.sansRegular, fontSize: 12 },
-  lineValue: { fontFamily: family.sansMedium, fontSize: 12 },
+  lineLabel: {
+    flex: 1,
+    fontFamily: family.sansRegular,
+    fontSize: t("mono").fontSize,
+  },
+  lineValue: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
   safe: { flex: 1 },
-  subtitle: { fontFamily: family.sansRegular, fontSize: 12, marginTop: 2 },
-  title: { fontFamily: family.sansMedium, fontSize: 23 },
-  total: { fontFamily: family.sansMedium, fontSize: 14 },
+  subtitle: {
+    fontFamily: family.sansRegular,
+    fontSize: t("mono").fontSize,
+    marginTop: 2,
+  },
+  title: { fontFamily: family.sansMedium, fontSize: t("title").fontSize },
+  total: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
 });

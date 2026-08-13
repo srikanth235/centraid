@@ -6,6 +6,8 @@
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { identityInk } from "@centraid/design";
+
 import Icon from "../../kit/components/Icon";
 import { useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -43,7 +45,13 @@ export default function ColorSwatchRow({
               pressed && styles.pressed,
             ]}
           >
-            {active ? <Icon name="check" size={16} color="#fff" /> : null}
+            {active ? (
+              <Icon
+                name="check"
+                size={16}
+                color={identityInk(hex, colors.text, colors.textInv)}
+              />
+            ) : null}
           </Pressable>
         );
       })}

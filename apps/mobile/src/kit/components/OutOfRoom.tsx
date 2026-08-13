@@ -17,7 +17,7 @@
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { borders, t, useTheme } from "../theme";
+import { borders, t, useTheme, radii } from "../theme";
 import { Text } from "./NativeText";
 
 export interface OutOfRoomProps {
@@ -103,7 +103,7 @@ const makeStyles = () =>
   StyleSheet.create({
     action: {
       alignSelf: "flex-start",
-      borderRadius: 7,
+      borderRadius: radii.md,
       borderWidth: 1,
       marginTop: 4,
       paddingHorizontal: 14,
@@ -113,13 +113,13 @@ const makeStyles = () =>
     cause: { ...t("small") },
     consequence: { ...t("title") },
     meter: {
-      borderRadius: 999,
+      borderRadius: radii.pill,
       height: 4,
       overflow: "hidden",
     },
     meterFill: { height: "100%" },
     wrap: {
-      borderRadius: 12,
+      borderRadius: radii.lg,
       borderWidth: borders.hairline,
       gap: 8,
       padding: 16,

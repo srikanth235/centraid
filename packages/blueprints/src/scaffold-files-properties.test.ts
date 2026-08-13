@@ -169,7 +169,7 @@ describe(scaffoldAppFiles, () => {
     }
   });
 
-  it("ships four knobs, each with a default that is one of its own options", () => {
+  it("ships three non-typographic knobs with valid defaults", () => {
     const appJson = JSON.parse(
       byPath(scaffoldAppFiles("todos")).get("app.json") as string
     ) as {
@@ -181,9 +181,8 @@ describe(scaffoldAppFiles, () => {
         options: Array<{ value: string; label: string }>;
       }>;
     };
-    expect(appJson.knobs).toHaveLength(4);
+    expect(appJson.knobs).toHaveLength(3);
     expect(appJson.knobs.map((k) => k.key)).toStrictEqual([
-      "appFont",
       "appWidth",
       "appRadius",
       "appColor",

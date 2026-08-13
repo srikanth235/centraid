@@ -18,11 +18,11 @@
 }
 
 .verbBadge {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 2px 7px;
   white-space: nowrap;
 }
@@ -108,7 +108,7 @@
   border-radius: var(--r-md);
   background: color-mix(in srgb, var(--text) 3%, transparent);
   color: var(--text);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
 }
 .ticketRow {
@@ -120,7 +120,7 @@
 .ticket {
   flex: 1 1 auto;
   min-width: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--text);

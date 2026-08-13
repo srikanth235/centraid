@@ -23,7 +23,7 @@
 }
 .context {
   gap: 5px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
 }
 .contextTrack {
@@ -46,7 +46,7 @@
 .activityDot {
   width: 5px;
   height: 5px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: var(--success);
 }
 .activity[data-busy="true"] .activityDot {

@@ -6,7 +6,7 @@ import Button from "../../kit/components/Button";
 import HomeKey from "../../kit/components/HomeKey";
 import { Text } from "../../kit/components/NativeText";
 import TopSafeArea from "../../kit/components/TopSafeArea";
-import { family, radii, spacing, t, useTheme } from "../../kit/theme";
+import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {
   getNotifications,
@@ -194,9 +194,7 @@ const makeStyles = (colors: ThemeColors) =>
     safe: { backgroundColor: colors.bg, flex: 1 },
     subtitle: { ...t("small"), color: colors.textFaint, marginTop: 2 },
     title: {
+      ...t("display"),
       color: colors.text,
-      fontFamily: family.serifRegular,
-      fontSize: 26,
-      letterSpacing: -0.3,
     },
   });

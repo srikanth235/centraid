@@ -31,7 +31,7 @@
   flex: 0 0 auto;
   width: 320px;
   height: 600px;
-  border-radius: 28px;
+  border-radius: var(--r-lg);
   background: linear-gradient(180deg, var(--text) 0%, var(--text) 100%);
   padding: 22px;
   display: flex;
@@ -53,7 +53,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 0 0 10px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   font-weight: 600;
   color: var(--text);
@@ -70,7 +70,7 @@
   position: absolute;
   inset: 1.2px;
   background: var(--text);
-  border-radius: 1px;
+  border-radius: var(--r-pill);
 }
 .body {
   flex: 1;
@@ -89,7 +89,7 @@
   );
   background-size: 200% 100%;
   animation: skel-shimmer 1.6s linear infinite;
-  border-radius: 7px;
+  border-radius: var(--r-md);
 }
 .blockTitle {
   height: 26px;
@@ -101,7 +101,7 @@
 }
 .blockCard {
   height: 112px;
-  border-radius: 12px;
+  border-radius: var(--r-lg);
 }
 .blockRow {
   height: 40px;
@@ -124,7 +124,7 @@
   align-items: center;
   gap: 7px;
   padding: 6px 12px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
@@ -136,7 +136,7 @@
 .buildingDot {
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
   animation: pulse-fade 1.4s ease-in-out infinite;
@@ -173,11 +173,11 @@
   align-items: center;
   gap: 7px;
   padding: 6px 12px 6px 10px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
   border: 0.5px solid var(--line);
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0;
   backdrop-filter: blur(12px) saturate(160%);
@@ -188,7 +188,7 @@
 .liveDot {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: var(--success);
   box-shadow: 0 0 6px color-mix(in oklab, var(--success) 70%, transparent);
 }

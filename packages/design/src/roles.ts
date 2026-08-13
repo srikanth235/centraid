@@ -406,10 +406,10 @@ const roleTable: RoleDef[] = [
   role(
     "--on-accent",
     "color",
-    "Ink published for saturated identity fills and media scrims, both of which stay dark in either theme.",
-    "AA against the saturated fill or scrim it is paired with",
+    "Solved inverse ink on the theme's filled accent control.",
+    "AA against the accent fill it is paired with",
     allSurfaces,
-    everywhere("#FDFDFC"),
+    everywhere(lightTheme.textInv),
     4.5
   ),
   role(
@@ -572,21 +572,6 @@ const roleTable: RoleDef[] = [
       blueprint: scalar(`${pageMargin.desktop}px`),
       native: scalar(pageMargin.mobile),
       shell: scalar(`${pageMargin.desktop}px`),
-    }
-  ),
-  role(
-    "--page-margin-compact",
-    "component",
-    "The page margin at the compact rung. A companion to `--page-margin`, not a second scale: it exists so a pane that discovers it is narrow can re-point one variable instead of restating a padding rule per row.",
-    "geometry only",
-    allSurfaces,
-    {
-      // The phone HAS no wide rung, so native's `--page-margin` already IS
-      // this number; the compact name is a web affordance for panes that can
-      // change width under a cascade.
-      blueprint: scalar(`${pageMargin.mobile}px`),
-      native: scalar(pageMargin.mobile),
-      shell: scalar(`${pageMargin.mobile}px`),
     }
   ),
   role(
@@ -863,6 +848,7 @@ export const DARK_THEME_ROLE_VALUES: Readonly<Record<string, string>> = {
   "--line-strong": darkTheme.lineStrong,
   "--link": darkTheme.link,
   "--net": darkTheme.net,
+  "--on-accent": darkTheme.textInv,
   "--skel": darkTheme.skel,
   "--success": darkTheme.success,
   "--text": darkTheme.text,

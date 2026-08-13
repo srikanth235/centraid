@@ -17,7 +17,7 @@
     transform var(--dur-1) var(--ease);
 }
 
-.btn:hover:not(:disabled, [aria-disabled="true"], .destructiveFilled) {
+.btn:hover:not(:disabled, [aria-disabled="true"]) {
   background: var(--bg-hover);
 }
 
@@ -107,17 +107,6 @@
   color: var(--danger);
 }
 
-.destructiveFilled {
-  background: var(--danger);
-  border-color: transparent;
-  color: var(--text-inv);
-}
-
-.destructiveFilled:hover:not(:disabled) {
-  background: var(--danger);
-  color: var(--text-inv);
-}
-
 .icon {
   background: transparent;
   border: 1px solid transparent;
@@ -157,9 +146,7 @@
    rung: two leaf colour tokens, never a container opacity. Declared after the
    shared block above because both selectors carry the same specificity. */
 .primary:disabled,
-.primary[aria-disabled="true"],
-.destructiveFilled:disabled,
-.destructiveFilled[aria-disabled="true"] {
+.primary[aria-disabled="true"] {
   background: var(--bg-sunken);
   border-color: var(--line);
 }

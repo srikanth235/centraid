@@ -4,6 +4,12 @@ GitHub issue: [#747](https://github.com/srikanth235/centraid/issues/747)
 
 Two rulings were made against the binding layer and both are applied here.
 
+**v8 follow-up (2026-08-13).** The supplied v8 handoff supersedes this
+receipt's historical two-face description: Centraid now has one Instrument
+Sans ramp at 400/600 across shell, blueprints, and Expo. The older sections
+below remain as the audit trail for the preceding v4s/v7 change; the v8 delta
+and current verification are recorded explicitly in their matching sections.
+
 - **v4s — standardization.** The system had four typefaces an app could end up
   drawing in and five page tones it could choose between. Both are withdrawn.
   There are now **two bundled faces**, and the face a piece of text takes is a
@@ -47,8 +53,47 @@ untouched here.
 - [x] Native parity — Expo loads the same two faces, and a test enforces it
 - [x] DESIGN.md — front matter, ramp table, invariant 2, freedom table
 - [x] Docs — `docs/traps/design-tokens.md` and `docs/platform-gating.md`
+- [x] v8 — one Instrument Sans face at 400/600; Source Serif and 500 removed
+- [x] v8 — pointer/touch values emitted once for shell, PWA, and blueprints
+- [x] v8 — app font knobs and retired font/register variables removed
+- [x] v8 — web computed-style parity checked against the native type contract
+- [x] v8 — desktop/PWA and Expo consumer lint have equal zero-debt rigor
+- [x] v8 — one direct lowering per renderer; copied Expo theme and dead recipe CSS removed
 
 ## What changed
+
+### v8 consolidation
+
+`packages/design/src/typography.ts` is now the single cross-surface type
+registry. `toCss()` and `toBlueprintCss()` emit touch values first and replace
+them once under `(pointer: fine)`; Expo reads `toNativeTheme()` through one thin
+adapter that only maps Expo font names and tracking units. Desktop and PWA
+already share `packages/client`, so neither owns a parallel stylesheet or type
+decision. The shipped font set is four
+Instrument Sans WOFF2 subsets (400/600); mobile loads the matching two Expo
+cuts. App manifests and new scaffolds no longer expose `appFont`.
+
+The CSS design lint now accepts only weights 400/600 and hard-fails any
+`--font-mono`, `--font-serif`, `data-app-font`, or
+`--page-margin-compact` occurrence. The product-grammar gallery additionally
+reads computed styles and rejects any weight/size/leading triple outside the
+shared pointer/touch registry. The follow-up folds every grandfathered CSS
+font size and radius onto a shared role/rung, removes the four inherited-stack
+allowances, and empties `tests/design-token-css-budget.json`. The lint also now
+rejects arbitrary sizing variables, literal `font` shorthands, radius
+fallbacks, longhands, and token arithmetic, so the zero cannot hide a local
+scale behind `var()` or `calc()`.
+
+Expo's former broad ratchets (193 hex, 62 rgba, 310 `fontSize` occurrences)
+and its 27-file type exception ledger are removed. Production native consumers
+now contain no literal font family/weight, numeric `fontSize`/`lineHeight`,
+numeric radius property, or literal style / JSX hex or rgb(a): they lower
+through `t(role)`, `family.mono*` for code, `radii.role`, and `colors.role`.
+The native scanner owns this rule once, with negative fixtures; the native
+contract and adapter tests check the registry boundary directly. Desktop and
+PWA remain one implementation through `packages/client`, and
+`lint:design-consumers` provides one local command for both syntax gates while
+`check:push` schedules them independently in parallel.
 
 **Typography — four faces to two.** `packages/design/src/typography.ts` splits
 what used to be one `FontFamily` union into `BundledFace` (`sans`, `serif` —
@@ -257,6 +302,8 @@ Every path in this change set, so nothing lands unnamed.
 
 ## Decisions
 
+**Quality-owner repin.** #747 replaces the deleted generated Expo theme quality owner with the direct native adapter and its parity test; the D3 gate, failure condition, governance, and lane are unchanged.
+
 **The code face is kept, against a literal reading of the ruling.** v4s deletes
 `DM Mono` because numerics become sans+tabular. It says nothing about code,
 because the design reference contains none. This repo has a fenced-code
@@ -311,30 +358,66 @@ surface rule — are implemented and documented instead. See Out of scope.
 
 ## Out of scope
 
-- **The code face is kept, deliberately.** The handoff deletes `DM Mono`
-  because numerics become sans+tabular; it says nothing about code, because the
-  design reference has no code in it. This repo does: a fenced-code
-  highlighter, the builder's editor pane, keyboard chips, and recovery keys and
-  tickets shown verbatim — ~473 `var(--font-mono)` sites. Rendering those in a
-  proportional face is a regression the ruling never asked for, so `--font-mono`
-  survives as the **platform** stack. Both webfont downloads are still removed,
-  which is the ruling's own measured win.
-- **The numeric sites still spelled `font-family: var(--font-mono)`.** Ratcheted,
-  not fixed. Those that are numbers rather than code should move to `font:
-  var(--t-mono)` with its modifiers; each needs a human to decide which it is.
-  Same posture #747 already takes for the ~375 raw font-sizes. `--t-mono` itself
-  is correct today wherever it is used.
+- **The code face is kept, deliberately.** It is the platform `--font-code`
+  stack, reached only for code, inline literals, paths, secrets and aligned
+  diffs. It ships no font bytes. Numeric annotations use Instrument Sans with
+  tabular figures.
 - **The `SURF` resolver.** §C's "resolve the surface once into a token set" has
   no call site in this repo to resolve *into* — there is no single surface state
   today (see `docs/platform-gating.md`, judgment-only). Adding an unused
   exported resolver would fail Knip. The ruling is documented as the rule, and
   the two mechanical halves that *do* have call sites — the 44px touch floor and
   the one-word surface enum — are enforced and written down.
-- **The six enforcement lint rules.** Documented in `docs/platform-gating.md`
-  and `docs/traps/design-tokens.md`; not yet mechanical. `lint-design-tokens`
-  already covers literal font stacks and raw sizes.
+- **Unrelated visual-debt classes.** This follow-up closes the complete
+  typography and radius ledger. Spacing, color, opacity and layout have their
+  own existing owners and gates and were not broadened into this change.
 
 ## Verification
+
+### v8 verification (2026-08-13)
+
+- `bun run --cwd packages/design test` — 33 files and 335 tests passed, including the registry, all three lowerings, native contrast, recipes, fonts, CSS properties, and DESIGN.md pinning.
+- `bun run --cwd apps/mobile test` — 134 files and 1,090 tests passed; the new direct-adapter suite proves both schemes and every type metric stay equal to `toNativeTheme()`.
+- `bun run --cwd packages/blueprints test` — 100 files and 3,371 tests passed; the scaffold snapshot records the reduced three-knob contract.
+- `bun test scripts/lint-design-tokens.test.mjs` — 11 passed.
+- `bun run design:gallery -- --update && bun run design:gallery` — 22 pointer/touch product-grammar baselines updated and verified, including computed type triples.
+- `node scripts/lint-design-tokens.mjs` — all seven metrics are zero; `tests/design-token-css-budget.json` is `{}`.
+- `bun run test:affected` — 23 package tasks passed, including all affected desktop, PWA, mobile, blueprint, design, client, and gateway suites.
+- `bun run check:push` — 39/39 gates passed after the machinery audit, including affected tests, typechecks, Knip, governance, both design linters, gallery, native state, quality metadata, and packaging checks.
+
+### Checklist crosswalk
+
+Each checked item, and where the work behind it is described. The wording is
+kept verbatim so the governance hook can prove every checked item has evidence.
+
+- **Typography — the two bundled faces; `display` draws in serif, `mono` in sans** — `packages/design/src/typography.ts`, `apps/mobile/src/kit/theme/native.ts`.
+- **Type scale — `reading` 19/33 to 19/31; the numeric role 11.5/16 to 11/15** — the shared type registry and CSS/native lowerings.
+- **Size rungs — seven to six; `--t-mono-size` folds onto `--t-control-size`** — `scripts/lint-design-tokens.mjs` and the CSS consumer sweep.
+- **Fonts — un-vendor `Instrument Serif` and `DM Mono`; ten files to six** — `packages/design/fonts` and Expo font loading.
+- **Space — `--sp-hair` and `--sp-gutter` are the only sub-base values** — `packages/design/src/density.ts`, CSS emitters, and migrated consumers.
+- **Surface — `--target-min` is 44 on touch and 34 (not 32) under a pointer** — `packages/design/src/density.ts`, emitted media query, and gallery checks.
+- **Native parity — Expo loads the same two faces, and a test enforces it** — `apps/mobile/src/kit/theme/native.test.ts` and the native contract suite.
+- **DESIGN.md — front matter, ramp table, invariant 2, freedom table** — `DESIGN.md` and `packages/design/src/design-md.test.ts`.
+- **Docs — `docs/traps/design-tokens.md` and `docs/platform-gating.md`** — durable source-of-truth and parity guidance.
+- **v8 — one Instrument Sans face at 400/600; Source Serif and 500 removed** — the font registry, bundled files, and app font imports.
+- **v8 — pointer/touch values emitted once for shell, PWA, and blueprints** — `toCss()`, `toBlueprintCss()`, and the computed-style gallery.
+- **v8 — app font knobs and retired font/register variables removed** — manifest/schema sweep and consumer lint.
+- **v8 — web computed-style parity checked against the native type contract** — `design:gallery` and native adapter parity tests.
+- **v8 — desktop/PWA and Expo consumer lint have equal zero-debt rigor** — `lint:design-consumers`, `lint:type-floor`, `lint:hairline`, and `lint:logical-insets`.
+- **v8 — one direct lowering per renderer; copied Expo theme and dead recipe CSS removed** — `toNativeTheme()`, `apps/mobile/src/kit/theme/native.ts`, and the recipe cleanup.
+
+## User impact
+
+Typography now remains the same Instrument Sans system while moving between
+desktop, installed PWA, a narrow browser, and Expo. Touch increases UI body and
+section text and keeps 44px targets; a fine pointer uses the denser pointer
+ramp and 34px targets. App settings no longer offer a font choice that could
+make the same app disagree between served and inline hosts.
+
+First-run: the chooser and identity journey are unchanged. Its resulting Home
+shell now renders through the consolidated v8 font payload and is captured by
+the existing desktop onboarding harness at
+`artifacts/e2e/ui-impact/issue-747-binding-layer-v8.png`.
 
 ### Commands a reviewer can re-run
 
@@ -343,14 +426,14 @@ surface rule — are implemented and documented instead. See Out of scope.
 bun run --cwd packages/design test
 bun run --cwd packages/design typecheck
 
-# Native parity: the generated module must match the shared lowering byte for
-# byte, and every role must draw in a genus `fontStacks` publishes.
-bun run --cwd apps/mobile generate:theme && git diff --exit-code apps/mobile/src/kit/theme/tokens.generated.ts
-bun run --cwd apps/mobile test src/kit/theme/generate.test.ts
+# Native parity: the direct adapter must match both canonical schemes and every
+# type metric while changing only Expo family names and tracking units.
+bun run --cwd apps/mobile test src/kit/theme/native.test.ts src/kit/theme/resolve.test.ts
 
-# Six .woff2 files ship, not ten; no bytes for the code stack.
-ls packages/design/fonts | wc -l          # 6
-ls packages/design/fonts | grep -c 'dm-mono\|instrument-serif'   # 0
+# Four .woff2 files ship: Instrument Sans 400/600 in latin + latin-ext. The
+# platform code stack ships no font bytes.
+ls packages/design/fonts | wc -l          # 4
+ls packages/design/fonts | grep -c 'source-serif\|500'   # 0
 
 # The retired rung is gone from every call site.
 rg -c -- '--t-mono-size' packages apps scripts DESIGN.md   # no matches
@@ -364,20 +447,7 @@ bun run check:push
 bun install --frozen-lockfile
 ```
 
-### Checklist crosswalk
-
-Each checked item, and where the work behind it is described.
-
-- **Typography — the two bundled faces; `display` draws in serif, `mono` in sans** — see `## What changed`.
-- **Type scale — `reading` 19/33 to 19/31; the numeric role 11.5/16 to 11/15** — see `## What changed`.
-- **Size rungs — seven to six; `--t-mono-size` folds onto `--t-control-size`** — see `## What changed`.
-- **Fonts — un-vendor `Instrument Serif` and `DM Mono`; ten files to six** — see `## What changed`.
-- **Space — `--sp-hair` and `--sp-gutter` are the only sub-base values** — see `## What changed`.
-- **Surface — `--target-min` is 44 on touch and 34 (not 32) under a pointer** — see `## What changed`.
-- **Native parity — Expo loads the same two faces, and a test enforces it** — see `## What changed`.
-- **DESIGN.md — front matter, ramp table, invariant 2, freedom table** — see `## What changed`.
-- **Docs — `docs/traps/design-tokens.md` and `docs/platform-gating.md`** — see `## What changed`.
-
+### Historical v7 verification (superseded)
 
 - `bun run --cwd packages/design test` — **308 passed**. `edge-upload` /
   `kit-smoke` fail to *collect* on an unbuilt workspace (`@centraid/blob-format`
@@ -560,3 +630,4 @@ checklist can actually mirror.
 | date | harness | session |
 | --- | --- | --- |
 | 2026-08-12 | claude-code | 442190df-e044-555e-999b-c3513be69d9b |
+| 2026-08-13 | codex | 019ff738-73ca-7190-a216-f4c76d6d9cdb |

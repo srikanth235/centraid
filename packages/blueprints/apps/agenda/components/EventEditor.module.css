@@ -61,7 +61,7 @@
 .guest {
   padding: 5px 9px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--bg-elev);
   color: var(--text-soft);
   font: var(--t-small);

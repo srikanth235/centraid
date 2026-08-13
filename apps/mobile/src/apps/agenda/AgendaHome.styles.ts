@@ -1,39 +1,40 @@
 import { StyleSheet } from "react-native";
 
-import { family } from "../../kit/theme";
+import { family, radii, t } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
-  backdrop: { backgroundColor: "rgba(0,0,0,.4)", flex: 1 },
   calendarChip: {
     alignItems: "center",
-    borderRadius: 999,
+    borderRadius: radii.pill,
     flexDirection: "row",
     gap: 6,
     minHeight: 32,
     paddingHorizontal: 10,
   },
-  calendarDot: { borderRadius: 4, height: 8, width: 8 },
+  calendarDot: { borderRadius: radii.sm, height: 8, width: 8 },
   calendarScroll: { flexGrow: 0, height: 48 },
   calendars: { gap: 8, paddingHorizontal: 18, paddingVertical: 9 },
-  calendarText: { fontFamily: family.sansMedium, fontSize: 11 },
+  calendarText: {
+    fontFamily: family.sansMedium,
+    fontSize: t("control").fontSize,
+  },
   create: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: radii.lg,
     marginTop: 12,
     padding: 12,
   },
-  createText: { color: "#fff", fontFamily: family.sansMedium, fontSize: 13 },
   // The 34px date column — day-of-month (mono, tabular) over day-of-week
   // (eyebrow caps). Width is fixed per the Binding Layer reference so every
   // row's events column starts at the same inset regardless of digit count.
   dateCol: {
     alignItems: "center",
-    borderRadius: 6,
+    borderRadius: radii.md,
     paddingTop: 4,
     paddingBottom: 6,
     width: 34,
   },
-  dateNum: { fontSize: 16 },
+  dateNum: { fontSize: t("body").fontSize },
   dayRow: {
     borderTopWidth: 1,
     flexDirection: "row",
@@ -41,7 +42,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   dialog: {
-    borderRadius: 16,
+    borderRadius: radii.lg,
     left: 28,
     padding: 20,
     position: "absolute",
@@ -49,15 +50,16 @@ export const styles = StyleSheet.create({
     top: "31%",
   },
   dialogMeta: {
-    fontFamily: family.sansRegular,
-    fontSize: 12,
-    lineHeight: 18,
+    ...t("small"),
     marginTop: 6,
   },
-  dialogTitle: { fontFamily: family.sansMedium, fontSize: 19 },
+  dialogTitle: {
+    fontFamily: family.sansMedium,
+    fontSize: t("reading").fontSize,
+  },
   empty: {
     fontFamily: family.sansRegular,
-    fontSize: 14,
+    fontSize: t("body").fontSize,
     padding: 40,
     textAlign: "center",
   },
@@ -69,7 +71,7 @@ export const styles = StyleSheet.create({
     gap: 2,
     paddingStart: 10,
   },
-  eventTitle: { fontFamily: family.sansMedium, fontSize: 14 },
+  eventTitle: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
   eventsCol: { flex: 1, gap: 10, minWidth: 0 },
   header: {
     alignItems: "center",
@@ -81,10 +83,10 @@ export const styles = StyleSheet.create({
   headerActions: { alignItems: "center", flexDirection: "row", gap: 22 },
   headerCopy: { flex: 1, marginLeft: 12 },
   input: {
-    borderRadius: 10,
+    borderRadius: radii.lg,
     borderWidth: 1,
     fontFamily: family.sansRegular,
-    fontSize: 15,
+    fontSize: t("body").fontSize,
     marginTop: 16,
     padding: 12,
   },
@@ -100,13 +102,13 @@ export const styles = StyleSheet.create({
   rangeTitle: {
     flex: 1,
     fontFamily: family.sansMedium,
-    fontSize: 14,
+    fontSize: t("body").fontSize,
     textAlign: "right",
   },
   safe: { flex: 1 },
   search: {
     alignItems: "center",
-    borderRadius: 11,
+    borderRadius: radii.lg,
     flexDirection: "row",
     gap: 8,
     marginBottom: 10,
@@ -116,36 +118,52 @@ export const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontFamily: family.sansRegular,
-    fontSize: 14,
+    fontSize: t("body").fontSize,
     paddingVertical: 10,
   },
   segment: {
-    borderRadius: 10,
+    borderRadius: radii.lg,
     flexDirection: "row",
     marginHorizontal: 18,
     padding: 3,
   },
   segmentItem: {
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: radii.md,
     flex: 1,
     paddingVertical: 7,
   },
-  segmentText: { fontFamily: family.sansMedium, fontSize: 12 },
-  startPreset: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  segmentText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
+  startPreset: {
+    borderRadius: radii.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
   startPresets: { flexDirection: "row", gap: 8, marginTop: 12 },
-  startPresetText: { fontFamily: family.sansMedium, fontSize: 11 },
-  subtitle: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 2 },
+  startPresetText: {
+    fontFamily: family.sansMedium,
+    fontSize: t("control").fontSize,
+  },
+  subtitle: {
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+    marginTop: 2,
+  },
   today: {
-    borderRadius: 8,
+    borderRadius: radii.md,
     borderWidth: 1,
     paddingHorizontal: 11,
     paddingVertical: 6,
   },
-  todayText: { fontFamily: family.sansMedium, fontSize: 12 },
-  title: { fontFamily: family.sansMedium, fontSize: 23 },
+  todayText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
+  title: { fontFamily: family.sansMedium, fontSize: t("title").fontSize },
   week: { gap: 8, padding: 14, paddingHorizontal: 18 },
   weekCount: { marginTop: 7 },
-  weekDay: { alignItems: "center", borderRadius: 12, padding: 10, width: 52 },
-  weekNumber: { fontSize: 17, marginTop: 5 },
+  weekDay: {
+    alignItems: "center",
+    borderRadius: radii.lg,
+    padding: 10,
+    width: 52,
+  },
+  weekNumber: { fontSize: t("reading").fontSize, marginTop: 5 },
 });

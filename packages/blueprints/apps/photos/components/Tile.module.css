@@ -19,7 +19,7 @@
 .tile {
   position: relative;
   overflow: hidden;
-  border-radius: var(--ph-tile-r);
+  border-radius: var(--r-xs);
   flex: 0 0 auto;
   /* THE GROUND A TILE PAINTS BEFORE ITS BYTES ARRIVE. `--bg-elev` reads as a
      card, and an absence is not a card. This is on the tile itself, not on a
@@ -84,7 +84,7 @@
   /* Off: transparent, a 1.5px paper border, and a 1px dark shadow RING so the
      circle survives a white beach as well as a night sky. */
   background: transparent;
-  border: 1.5px solid var(--on-accent);
+  border: 1.5px solid var(--on-stage);
   box-shadow: 0 0 0 1px var(--scrim);
   color: var(--text-inv);
   /* An affordance, not a state — hence `visibility`, never a container
@@ -125,7 +125,7 @@
   z-index: 2;
   font: var(--t-mono);
   font-variant-numeric: tabular-nums;
-  color: var(--on-stage, var(--on-accent));
+  color: var(--on-stage);
   text-shadow: 0 1px 3px var(--scrim);
   pointer-events: none;
 }
@@ -139,7 +139,7 @@
   z-index: 2;
   font: var(--t-mono);
   font-variant-numeric: tabular-nums;
-  color: var(--on-stage, var(--on-accent));
+  color: var(--on-stage);
   text-shadow: 0 1px 3px var(--scrim);
   pointer-events: none;
 }

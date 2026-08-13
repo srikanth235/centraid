@@ -84,17 +84,13 @@ export interface ChromeSlots {
 }
 
 export interface ChromeProps {
-  narrow: boolean;
   slots: ChromeSlots;
 }
 
-export function Chrome({ narrow, slots }: ChromeProps): ReactNode {
-  const shellClass = [styles.shell, narrow ? styles.isNarrow : ""]
-    .filter(Boolean)
-    .join(" ");
+export function Chrome({ slots }: ChromeProps): ReactNode {
   const denied = Boolean(slots.permission);
   return (
-    <div className={shellClass} data-tone="mat" data-density="compact">
+    <div className={styles.shell} data-tone="mat" data-density="compact">
       <main className={styles.main}>
         {slots.permission}
 

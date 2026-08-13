@@ -1,128 +1,31 @@
-// Mobile theme — re-exports the shared design system from
-// @centraid/design and resolves type styles to the actual
-// font-family names produced by @expo-google-fonts. RN doesn't
-// combine `fontFamily` + `fontWeight` reliably across platforms,
-// so each weight becomes its own family name.
-//
-// Tokens (colors per theme, density, palette, radii, tile finishes) come
-// from the package — this file only owns the RN-specific font resolution.
-//
-// Dark mode: `useTheme()` (below) returns a scheme-aware palette lowered from
-// the canonical blueprint token source (see tokens.generated.ts / resolve.ts). The
-// legacy `colors` export stays light-only for callers that read it at module
-// scope; anything that needs to follow the OS theme should call `useTheme()`.
+// Mobile design boundary. Canonical values come directly from
+// `@centraid/design/native`; `native.ts` contains the two unavoidable React
+// Native adaptations (Expo font family names and em-to-point tracking).
 
-import { Platform } from "react-native";
-import type { TextStyle } from "react-native";
-
-import { type as nativeType } from "./tokens.generated";
-
-export { spacing, radii, borders } from "@centraid/design";
-export { density, metrics, pageMargin } from "./tokens.generated";
-
-// One family name per (family, weight) pair. Keep in sync with the
-// imports in App.tsx — anything referenced here must be loaded there.
-//
-// The Binding Layer's ramp carries exactly TWO bundled faces and two weights
-// (400 / 500): Instrument Sans for body, UI and numerics, and Source Serif 4
-// for display and reading. v4s withdrew `Instrument Serif` (display is the one
-// serif) and `DM Mono` (numerics are the sans with tabular figures), so
-// `displayRegular` and `displayItalic` are gone — a caller that reached for
-// them reaches for `serifRegular`. There is no bold/semibold rung either: a
-// caller that used to reach for `sansBold` now reaches for `sansMedium`, the
-// heaviest weight the ramp has.
-//
-// `monoRegular` / `monoMedium` survive as the PLATFORM code face, for the
-// places that show code, a path, a ticket or a recovery key verbatim. Nothing
-// is loaded for them — RN resolves the platform's own fixed-advance family —
-// so they cost no bytes and match `--font-mono` on the web sheet. They are NOT
-// the numeric register: a number takes `t("mono")`, which is the sans.
-export const family = {
-  monoMedium: Platform.select({
-    android: "monospace",
-    default: "monospace",
-    ios: "Menlo",
-  }),
-  monoRegular: Platform.select({
-    android: "monospace",
-    default: "monospace",
-    ios: "Menlo",
-  }),
-  sansMedium: "InstrumentSans_500Medium",
-  sansRegular: "InstrumentSans_400Regular",
-  serifRegular: "SourceSerif4_400Regular",
-} as const;
-
-// Exactly `fontStacks`'s keys in @centraid/design. A genus here that the web
-// sheet does not publish — or one it publishes that is missing here — is the
-// divergence this map exists to make impossible.
-type FamilyKey = "sans" | "mono" | "serif";
-
-const FAMILY_BY_WEIGHT: Record<FamilyKey, Record<string, string>> = {
-  mono: {
-    "400": family.monoRegular,
-    "500": family.monoMedium,
-  },
-  sans: {
-    "400": family.sansRegular,
-    "500": family.sansMedium,
-  },
-  serif: { "400": family.serifRegular },
-};
-
-type NativeTypeValue = (typeof nativeType)[keyof typeof nativeType];
-
-export const t = (
-  key: keyof typeof nativeType
-): Pick<
-  TextStyle,
-  | "fontSize"
-  | "lineHeight"
-  | "fontFamily"
-  | "letterSpacing"
-  | "textTransform"
-  | "fontVariant"
-> => {
-  const def = nativeType[key] as NativeTypeValue & {
-    letterSpacing?: number;
-    textTransform?: "uppercase";
-    fontVariant?: TextStyle["fontVariant"];
-  };
-  const map = FAMILY_BY_WEIGHT[def.family as FamilyKey];
-  const fontFamily =
-    map[def.weight] ?? map["400"] ?? map["500"] ?? family.sansRegular;
-  return {
-    fontFamily,
-    fontSize: def.fontSize,
-    lineHeight: def.lineHeight,
-    // Tracking, caps and tabular figures are part of the ROLE, not decoration
-    // a caller adds on top (see generate.ts#renderType) — a role that carries
-    // one of these on the typed lowering must carry it here too, or "numerics
-    // are mono and tabular in every app, without exception" silently stops
-    // being true the moment a screen calls `t("mono")` instead of hand-rolling
-    // the style.
-    ...(def.letterSpacing === undefined
-      ? {}
-      : { letterSpacing: def.letterSpacing }),
-    ...(def.textTransform === undefined
-      ? {}
-      : { textTransform: def.textTransform }),
-    ...(def.fontVariant === undefined
-      ? {}
-      : { fontVariant: def.fontVariant as TextStyle["fontVariant"] }),
-  };
-};
-
-// Dark-mode-aware theme API, lowered from the canonical blueprint token source.
-export { useTheme } from "./useTheme";
-export { resolveTheme, navThemeFor } from "./resolve";
-export type { ThemeColors, Scheme } from "./resolve";
-
-// Device-local Appearance override (System / Light / Dark) folded over the OS.
 export {
-  useAppearance,
-  setAppearance,
+  borders,
+  density,
+  durations,
+  family,
+  fonts,
+  metrics,
+  pageMargin,
+  radii,
+  spacing,
+  t,
+  targetMin,
+  type,
+} from "./native";
+export type { NativeTextRole } from "./native";
+
+export { useTheme } from "./useTheme";
+export { navThemeFor, resolveTheme } from "./resolve";
+export type { Scheme, ThemeColors, ThemeValue } from "./resolve";
+
+export {
   hydrateAppearance,
   resolveScheme,
+  setAppearance,
+  useAppearance,
 } from "./appearance";
 export type { Appearance } from "./appearance";

@@ -74,7 +74,7 @@ const FONT_FAMILY_FIX =
   "delete the family — type comes from the contract: set " +
   "`font: var(--t-body)` (or --t-title / --t-body-strong / --t-small / " +
   "--t-control / --t-mono), and if you must name a family use " +
-  "var(--font-sans) / var(--font-mono) / var(--font-serif)";
+  "var(--font-sans), or var(--font-code) only for code, a literal, or a path";
 
 /**
  * Replace every CSS comment with the same number of newlines, so a documented

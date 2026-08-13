@@ -7,17 +7,17 @@
 
 import { StyleSheet } from "react-native";
 
-import { borders, spacing, t } from "../../kit/theme";
+import { borders, spacing, t, radii } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
   // The grid is two FlashList columns, so each cell already owns half the
   // width; the 4pt inset on both sides is what produces the 8pt gutter between
   // them and, with `content`'s 12pt page padding, the 16pt page margin.
   albumCard: { paddingBottom: spacing[3], paddingHorizontal: spacing[1] },
-  albumCover: { aspectRatio: 1.35, borderRadius: 12, width: "100%" },
+  albumCover: { aspectRatio: 1.35, borderRadius: radii.lg, width: "100%" },
   albumInput: {
     ...t("body"),
-    borderRadius: 12,
+    borderRadius: radii.lg,
     borderWidth: borders.hairline,
     marginTop: spacing[4],
     padding: spacing[3],
@@ -27,13 +27,13 @@ export const styles = StyleSheet.create({
   content: { padding: spacing[3], paddingBottom: spacing[6] * 2 },
   create: {
     alignItems: "center",
-    borderRadius: 12,
+    borderRadius: radii.lg,
     marginTop: spacing[3],
     padding: spacing[3],
   },
   createText: t("control"),
   dialog: {
-    borderRadius: 16,
+    borderRadius: radii.lg,
     borderWidth: borders.hairline,
     insetInlineEnd: spacing[5],
     insetInlineStart: spacing[5],
@@ -58,7 +58,7 @@ export const styles = StyleSheet.create({
   },
   icon: {
     alignItems: "center",
-    borderRadius: 12,
+    borderRadius: radii.lg,
     borderWidth: borders.hairline,
     height: 44,
     justifyContent: "center",

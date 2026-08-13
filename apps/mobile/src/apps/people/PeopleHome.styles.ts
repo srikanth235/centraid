@@ -5,12 +5,12 @@
 
 import { StyleSheet } from "react-native";
 
-import { family, radii } from "../../kit/theme";
+import { family, radii, t } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
   add: {
     alignItems: "center",
-    borderRadius: 12,
+    borderRadius: radii.lg,
     justifyContent: "center",
     width: 44,
   },
@@ -26,12 +26,12 @@ export const styles = StyleSheet.create({
   },
   detail: { flex: 1.45 },
   detailContent: { gap: 10, padding: 12, paddingBottom: 80 },
-  detailTitle: { fontFamily: family.sansMedium, fontSize: 23 },
+  detailTitle: { fontFamily: family.sansMedium, fontSize: t("title").fontSize },
   directory: { flex: 1 },
   form: { borderRadius: radii.lg, borderWidth: 1, gap: 9, padding: 10 },
   header: { alignItems: "center", flexDirection: "row", gap: 12, padding: 16 },
   input: {
-    borderRadius: 10,
+    borderRadius: radii.lg,
     borderWidth: 1,
     flex: 1,
     minWidth: 72,
@@ -40,7 +40,7 @@ export const styles = StyleSheet.create({
   kindRow: { gap: 16, paddingVertical: 4 },
   mergeEmpty: {
     fontFamily: family.sansRegular,
-    fontSize: 14,
+    fontSize: t("body").fontSize,
     padding: 24,
     textAlign: "center",
   },
@@ -49,7 +49,9 @@ export const styles = StyleSheet.create({
     paddingBottom: 8,
     paddingHorizontal: 12,
   },
-  meta: { fontFamily: family.sansRegular, fontSize: 12, lineHeight: 15 },
+  meta: {
+    ...t("mono"),
+  },
   // Height is pinned rather than derived from content: `getItemLayout` on the
   // directory list is only correct while every row is exactly this tall.
   person: {
@@ -58,15 +60,21 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 13,
   },
-  personName: { fontFamily: family.sansMedium, fontSize: 14, lineHeight: 18 },
+  personName: {
+    ...t("bodyStrong"),
+  },
   safe: { flex: 1 },
   save: {
-    borderRadius: 10,
+    borderRadius: radii.lg,
     marginLeft: "auto",
     paddingHorizontal: 13,
     paddingVertical: 9,
   },
   switchRow: { alignItems: "center", flexDirection: "row", gap: 8 },
-  title: { fontFamily: family.sansMedium, fontSize: 28 },
-  warning: { fontFamily: family.sansMedium, fontSize: 11, marginTop: 3 },
+  title: { fontFamily: family.sansMedium, fontSize: t("display").fontSize },
+  warning: {
+    fontFamily: family.sansMedium,
+    fontSize: t("control").fontSize,
+    marginTop: 3,
+  },
 });

@@ -1,6 +1,6 @@
 import { StyleSheet } from "react-native";
 
-import { borders, family, radii } from "../../kit/theme";
+import { borders, family, radii, t } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
   backlink: {
@@ -12,17 +12,15 @@ export const styles = StyleSheet.create({
   },
   backlinkLabel: {
     fontFamily: family.sansMedium,
-    fontSize: 13,
+    fontSize: t("mono").fontSize,
   },
   backlinkMeta: {
-    fontFamily: family.monoRegular,
-    fontSize: 12.5,
+    fontFamily: family.sansRegular,
+    fontSize: t("mono").fontSize,
   },
   backlinks: { gap: 8, marginTop: 18 },
   body: {
-    fontFamily: family.sansRegular,
-    fontSize: 15,
-    lineHeight: 23,
+    ...t("body"),
     minHeight: 280,
     paddingTop: 12,
     textAlignVertical: "top",
@@ -38,17 +36,17 @@ export const styles = StyleSheet.create({
   },
   buttonText: {
     fontFamily: family.sansMedium,
-    fontSize: 14,
+    fontSize: t("body").fontSize,
   },
   chip: {
-    borderRadius: 999,
+    borderRadius: radii.pill,
     borderWidth: borders.hairline,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
   chipText: {
     fontFamily: family.sansMedium,
-    fontSize: 12,
+    fontSize: t("mono").fontSize,
   },
   controls: {
     flexDirection: "row",
@@ -71,14 +69,12 @@ export const styles = StyleSheet.create({
     paddingVertical: 72,
   },
   emptyBody: {
-    fontFamily: family.sansRegular,
-    fontSize: 14,
-    lineHeight: 20,
+    ...t("body"),
     textAlign: "center",
   },
   emptyTitle: {
     fontFamily: family.sansMedium,
-    fontSize: 19,
+    fontSize: t("reading").fontSize,
   },
   fill: { flex: 1 },
   header: {
@@ -91,7 +87,7 @@ export const styles = StyleSheet.create({
   headerCopy: { flex: 1 },
   headerTitle: {
     fontFamily: family.sansMedium,
-    fontSize: 28,
+    fontSize: t("display").fontSize,
     letterSpacing: -0.7,
   },
   iconButton: {
@@ -108,12 +104,12 @@ export const styles = StyleSheet.create({
   },
   linkMeta: {
     fontFamily: family.sansRegular,
-    fontSize: 11,
+    fontSize: t("control").fontSize,
     marginTop: 2,
   },
   linkTitle: {
     fontFamily: family.sansMedium,
-    fontSize: 13,
+    fontSize: t("mono").fontSize,
   },
   linkWrap: { gap: 7, marginTop: 16 },
   list: { paddingBottom: 110, paddingHorizontal: 20 },
@@ -127,7 +123,7 @@ export const styles = StyleSheet.create({
   modalTitle: {
     flex: 1,
     fontFamily: family.sansMedium,
-    fontSize: 20,
+    fontSize: t("title").fontSize,
   },
   note: {
     borderBottomWidth: borders.hairline,
@@ -135,23 +131,19 @@ export const styles = StyleSheet.create({
     paddingVertical: 17,
   },
   noteMeta: {
-    fontFamily: family.monoRegular,
-    fontSize: 12.5,
+    fontFamily: family.sansRegular,
+    fontSize: t("mono").fontSize,
   },
   notePreview: {
-    fontFamily: family.sansRegular,
-    fontSize: 13,
-    lineHeight: 19,
+    ...t("small"),
   },
   noteTitle: {
     fontFamily: family.sansMedium,
-    fontSize: 17,
+    fontSize: t("reading").fontSize,
   },
   picker: { flex: 1, paddingHorizontal: 20 },
   pickerCopy: {
-    fontFamily: family.sansRegular,
-    fontSize: 13,
-    lineHeight: 19,
+    ...t("small"),
     marginBottom: 12,
   },
   search: {
@@ -167,19 +159,19 @@ export const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontFamily: family.sansRegular,
-    fontSize: 15,
+    fontSize: t("body").fontSize,
     minHeight: 42,
   },
   sheet: { flex: 1 },
   subtitle: {
     fontFamily: family.sansRegular,
-    fontSize: 12,
+    fontSize: t("mono").fontSize,
     marginTop: 2,
   },
   title: {
     borderBottomWidth: borders.hairline,
     fontFamily: family.sansMedium,
-    fontSize: 23,
+    fontSize: t("title").fontSize,
     paddingBottom: 10,
     paddingTop: 12,
   },

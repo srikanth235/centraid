@@ -10,6 +10,7 @@ const clean = {
   rawFontWeight: 0,
   rawRadius: 0,
   paletteHueAsText: 0,
+  retiredTypeAxis: 0,
 };
 
 test("analyzeCss ignores comments and accepts token-owned font stacks", () => {
@@ -36,7 +37,18 @@ test("analyzeCss accepts the `font:` shorthand as the tokened type form", () => 
   );
 });
 
-test("analyzeCss counts raw font-size but not inherit or a var knob", () => {
+test("analyzeCss rejects literal and arbitrary-variable font shorthands", () => {
+  assert.deepEqual(
+    analyzeCss(`
+      .a { font: 400 13px/19px var(--font-sans); }
+      .b { font: var(--app-brand-font); }
+      .c { font: inherit; }
+    `),
+    { ...clean, rawFontSize: 2 }
+  );
+});
+
+test("analyzeCss counts raw font-size and arbitrary sizing knobs", () => {
   assert.deepEqual(
     analyzeCss(`
       .a { font-size: 12.5px; }
@@ -44,18 +56,18 @@ test("analyzeCss counts raw font-size but not inherit or a var knob", () => {
       .c { font-size: inherit; }
       .d { font-size: var(--outage-size); }
     `),
-    { ...clean, rawFontSize: 2 }
+    { ...clean, rawFontSize: 3 }
   );
 });
 
-test("analyzeCss clears the composable size rungs but not the shorthands", () => {
+test("analyzeCss clears current composable size rungs but not retired roles", () => {
   assert.deepEqual(
     analyzeCss(`
       .a { font-size: var(--t-body-size); }
       .b { font-size: var(--t-hero-size); }
       .c { font-size: var(--t-control-size) !important; }
     `),
-    clean
+    { ...clean, rawFontSize: 1 }
   );
   // `--t-<key>` is a `font` shorthand; as a `font-size` value the declaration
   // is invalid and dropped whole, so it stays debt even though it is a var().
@@ -68,7 +80,7 @@ test("analyzeCss clears the composable size rungs but not the shorthands", () =>
   );
 });
 
-test("analyzeCss counts only off-scale font-weights", () => {
+test("analyzeCss accepts only the v8 400/600 font weights", () => {
   assert.deepEqual(
     analyzeCss(`
       .a { font-weight: 400; }
@@ -78,24 +90,41 @@ test("analyzeCss counts only off-scale font-weights", () => {
       .e { font-weight: 550; }
       .f { font-weight: 700; }
       .g { font-weight: bold; }
+      .h { font: 500 13px/19px var(--font-sans); }
+      .i { font: 600 11px/15px var(--font-sans); }
     `),
-    { ...clean, rawFontWeight: 3 }
+    { ...clean, rawFontSize: 2, rawFontWeight: 5 }
   );
 });
 
-test("analyzeCss counts off-scale radii and honours the documented carve-outs", () => {
+test("analyzeCss rejects retired typography axes", () => {
+  assert.deepEqual(
+    analyzeCss(`
+      .a { font-family: var(--font-mono); }
+      .b { font-family: var(--font-serif); }
+      .c { margin: var(--page-margin-compact); }
+      :root[data-app-font='serif'] .d { color: var(--text); }
+    `),
+    { ...clean, literalFontFamily: 2, retiredTypeAxis: 4 }
+  );
+});
+
+test("analyzeCss closes radius declarations over the shared scale", () => {
   assert.deepEqual(
     analyzeCss(`
       .zero { border-radius: 0; }
       .circle { border-radius: 50%; }
-      .pill { border-radius: 999px; }
-      .hairline { border-radius: 1px; }
-      .tokened { border-radius: calc(var(--r-md) - 3px); }
+      .pill { border-radius: var(--r-pill); }
+      .mark { border-radius: 26%; }
+      .tokenArithmetic { border-radius: calc(var(--r-md) - 3px); }
+      .semantic { border-radius: var(--tile-radius, var(--r-lg)); }
+      .dynamicMark { border-radius: var(--chip-radius, var(--r-md)); }
       .scaled { border-radius: 8px; }
       .corners { border-radius: 0 0 13px 13px; }
       .shouty { border-radius: 12px !important; }
+      .longhand { border-bottom-left-radius: 0.35rem; }
     `),
-    { ...clean, rawRadius: 3 }
+    { ...clean, rawRadius: 7 }
   );
 });
 

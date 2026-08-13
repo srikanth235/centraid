@@ -98,6 +98,7 @@ vi.mock(
       borders: { hairline: 1 },
       family: { sansMedium: "sans-medium", sansRegular: "sans-regular" },
       radii: { lg: 12, md: 7 },
+      t: () => ({}),
       useTheme: () => ({
         colors: {
           line: "#mock-line",

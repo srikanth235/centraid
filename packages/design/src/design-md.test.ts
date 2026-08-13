@@ -222,7 +222,7 @@ describe("DESIGN.md front matter", () => {
         override ?? NATIVE_DELTA_BY_FAMILY[styleValue.family]
       );
     }
-    // Tracking on the display serif, caps on micro, tabular figures on the
+    // Tracking on display/title, caps on micro, tabular figures on the
     // numeric register — part of the ramp, not per-surface CSS.
     expect(frontMatter).toContain('    letterSpacing: "-0.01em"');
     expect(frontMatter).toContain('    letterSpacing: "0.06em"');
@@ -288,11 +288,9 @@ describe("DESIGN.md body", () => {
     expect(body).toContain(`${metrics.stem}px`);
     expect(body).toContain("logical properties");
     expect(body).toContain("5 apps plus More");
-    // 2 — one ramp, two faces. v4s withdrew the register axis: the face is a
-    // property of the ROLE, not of the app the text sits in, so the law has to
-    // read that way rather than offering an app a choice it no longer has.
-    expect(body).toContain("One ramp, two faces");
-    expect(body).toContain("not of the app it appears in");
+    // 2 — one ramp, one face. v8 withdraws the last app-level family axis.
+    expect(body).toContain("One ramp, one face");
+    expect(body).toContain("hierarchy comes from named roles");
     expect(body).not.toContain("reading or scanning");
     // 3 — the ink-only control vocabulary.
     expect(body).toContain("the shell owns no colour");
@@ -359,11 +357,11 @@ describe("DESIGN.md body", () => {
     }
   });
 
-  test("documents every composable size rung and the deduplication law", () => {
+  test("documents every composable role size", () => {
     for (const [name, value] of Object.entries(typeSizeRungs(type))) {
       expect(body).toContain(`\`${name}\` ${value}`);
     }
-    expect(body).toContain("`--t-body-strong-size` does not exist");
+    expect(body).toContain("Duplicate values keep semantic names");
     expect(body).toContain("There are no line-height rungs");
   });
 
@@ -373,7 +371,7 @@ describe("DESIGN.md body", () => {
     expect(body).toContain("140ms");
     expect(body).toContain("280ms");
     expect(body).toContain("44px");
-    expect(body).toContain("48dp");
+    expect(body).toContain("34px");
     expect(body).toContain("720px");
     expect(body).toContain("prefers-reduced-motion");
     expect(body).toContain("ONE global rule");

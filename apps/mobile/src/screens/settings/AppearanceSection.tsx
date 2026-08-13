@@ -13,6 +13,7 @@ import {
   t,
   useAppearance,
   useTheme,
+  radii,
 } from "../../kit/theme";
 import type { Appearance, ThemeColors } from "../../kit/theme";
 import SettingsSection from "./SettingsSection";
@@ -62,17 +63,17 @@ const makeStyles = (colors: ThemeColors) =>
     help: { ...t("small"), color: colors.textFaint, marginTop: spacing[3] },
     seg: {
       alignItems: "center",
-      borderRadius: 8,
+      borderRadius: radii.md,
       flex: 1,
       paddingVertical: 9,
     },
     segActive: { backgroundColor: colors.accent },
     segLabel: { ...t("body"), color: colors.textSoft },
-    segLabelActive: { color: "#fff" },
+    segLabelActive: { color: colors.textInv },
     segment: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
-      borderRadius: 11,
+      borderRadius: radii.lg,
       borderWidth: 1,
       flexDirection: "row",
       gap: 4,

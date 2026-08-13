@@ -24,12 +24,12 @@
   color: var(--text-faint);
   background: var(--bg-sunken);
   padding: 6px 12px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
 }
 .status .pulse {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: var(--accent);
   animation: pulse-fade 1s infinite;
 }
@@ -44,8 +44,8 @@
   border: 0.5px solid color-mix(in srgb, var(--accent) 28%, transparent);
   color: var(--text);
   padding: 10px 14px;
-  border-radius: var(--r-xl) var(--r-xl) var(--r-sm) var(--r-xl);
-  font-size: 14px;
+  border-radius: var(--r-lg) var(--r-lg) var(--r-sm) var(--r-lg);
+  font-size: var(--t-small-size);
   line-height: 1.45;
 }
 .ai {
@@ -60,7 +60,7 @@
 }
 .aiText p {
   margin: 0 0 8px;
-  font-size: 14px;
+  font-size: var(--t-small-size);
   line-height: 1.55;
   color: var(--text-soft);
 }

@@ -96,7 +96,7 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.textSoft,
       marginLeft: 8,
     },
-    dot: { borderRadius: 3, height: 6, marginRight: 8, width: 6 },
+    dot: { borderRadius: radii.sm, height: 6, marginRight: 8, width: 6 },
     fill: { borderRadius: radii.pill, height: 3 },
     host: {
       alignItems: "center",

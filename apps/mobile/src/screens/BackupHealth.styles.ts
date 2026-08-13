@@ -1,13 +1,13 @@
 import { StyleSheet } from "react-native";
 
-import { borders, spacing, t } from "../kit/theme";
+import { borders, spacing, t, radii } from "../kit/theme";
 
 export const styles = StyleSheet.create({
   // The consent moment's geometry mirrors EnrichmentConsent.styles.ts on
   // purpose: one consent grammar, whichever surface is asking (#711, S4).
   action: {
     alignItems: "center",
-    borderRadius: 12,
+    borderRadius: radii.lg,
     borderWidth: borders.hairline,
     justifyContent: "center",
     minHeight: 48,
@@ -49,7 +49,7 @@ export const styles = StyleSheet.create({
   headerCopy: { flex: 1 },
   hero: {
     alignItems: "center",
-    borderRadius: 16,
+    borderRadius: radii.lg,
     borderWidth: 1,
     padding: spacing[5] + 2,
   },
@@ -61,7 +61,7 @@ export const styles = StyleSheet.create({
   meta: { ...t("control"), marginTop: spacing[1] + 1 },
   note: { ...t("small"), marginBottom: spacing[2] },
   panel: {
-    borderRadius: 16,
+    borderRadius: radii.lg,
     borderWidth: borders.hairline,
     marginTop: spacing[4],
     padding: spacing[4],
@@ -95,7 +95,7 @@ export const styles = StyleSheet.create({
   },
   settings: {
     alignItems: "center",
-    borderRadius: 12,
+    borderRadius: radii.lg,
     borderWidth: 1,
     flexDirection: "row",
     gap: spacing[2] + 2,

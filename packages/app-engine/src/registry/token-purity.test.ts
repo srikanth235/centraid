@@ -10,7 +10,7 @@ import { formatTokenPurityError, scanCssTokenPurity } from "./token-purity.ts";
 const CONTRACT = [
   "--accent",
   "--line",
-  "--font-mono",
+  "--font-code",
   "--scrim",
   "--shadow-md",
 ];
@@ -27,12 +27,12 @@ describe("CSS token-purity scanning", () => {
   background: var(--bg-elev);
   color: var(--text-soft);
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   padding: var(--sp-3);
   font: var(--t-body);
   font-family: var(--font-sans);
 }
-.meta { font-family: var(--font-mono), inherit; }
+.code { font-family: var(--font-code), inherit; }
 .card { --card-gap: var(--sp-2); gap: var(--card-gap); }`)
     ).toStrictEqual([]);
   });

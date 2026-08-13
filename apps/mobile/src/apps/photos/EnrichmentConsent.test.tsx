@@ -169,6 +169,7 @@ vi.mock(
   () =>
     ({
       borders: { hairline: 1 },
+      radii: { lg: 12, md: 8, pill: 999, sm: 4, xl: 16, xs: 0 },
       spacing: [0, 4, 8, 12, 16, 20, 24],
       t: () => ({}),
       useTheme: () => ({ colors: mocks.colors, scheme: "light" }),

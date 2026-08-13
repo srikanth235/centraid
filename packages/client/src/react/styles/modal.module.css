@@ -32,7 +32,7 @@
   width: min(560px, calc(100vw - 48px));
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   padding: 28px 28px 22px;
   z-index: 60;
   box-shadow: var(--shadow-lg);
@@ -45,15 +45,15 @@
 }
 .card h3 {
   font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: 26px;
+  font-weight: 600;
+  font-size: var(--t-display-size);
   letter-spacing: -0.025em;
   margin: 0 0 6px;
   color: var(--text);
 }
 .card p {
   margin: 0 0 18px;
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
   color: var(--text-soft);
   line-height: 1.45;
 }
@@ -63,11 +63,11 @@
   margin: 0 0 4px;
   padding: 10px 12px;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--t-small-size);
   color: var(--text);
   background: color-mix(in oklab, var(--text) 4%, transparent);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   outline: none;
 }
 .input:focus {

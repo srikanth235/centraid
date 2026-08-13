@@ -1,6 +1,6 @@
 .appSettingsNote {
   padding: 4px 0;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-ghost);
   line-height: 1.5;
 }

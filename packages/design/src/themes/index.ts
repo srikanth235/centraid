@@ -1,10 +1,8 @@
 // Centraid — themes barrel.
 // Collects every preset under this folder into a typed registry +
 // ordered display list. The desktop/web shell drinks from here via CSS vars
-// (`toCss()`). Mobile does NOT import these presets: it lowers the blueprint
-// emit instead — `apps/mobile/scripts/generate-theme.ts` runs
-// `toBlueprintCss()` through `src/kit/theme/generate.ts` into the checked-in
-// `src/kit/theme/tokens.generated.ts`, which `useTheme()` reads.
+// (`toCss()`). Mobile reaches the same theme values through the concrete typed
+// `toNativeTheme()` lowering; it neither parses CSS nor keeps a copied theme.
 
 import { darkTheme, lightTheme } from "./centraid";
 

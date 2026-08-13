@@ -271,7 +271,9 @@ export default function AgendaHome({
             const shown = !hiddenCalendars.has(id);
             const swatch = String(
               calendar.color ??
-                ["#4e68dd", "#b45173", "#258d86", "#ba7418"][index % 4]
+                [colors.cIndigo, colors.cRose, colors.cTeal, colors.cOchre][
+                  index % 4
+                ]
             );
             return (
               <Pressable

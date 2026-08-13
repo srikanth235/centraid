@@ -481,7 +481,7 @@ const makeStyles = (colors: ThemeColors) =>
     // looks the same: this page has no primary, because choosing one would be
     // choosing for the member which of their own shelves matters.
     headTitle: { ...t("title"), color: colors.text },
-    label: { ...t("smallStrong"), color: colors.onAccent },
+    label: { ...t("smallStrong"), color: colors.onStage },
     labelUnder: {
       ...t("smallStrong"),
       color: colors.text,

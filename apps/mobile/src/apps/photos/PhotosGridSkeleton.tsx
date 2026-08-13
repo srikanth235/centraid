@@ -16,7 +16,7 @@
 import React, { useMemo } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 
-import { useTheme } from "../../kit/theme";
+import { useTheme, radii } from "../../kit/theme";
 import { rungHeight } from "./photos-rungs";
 import type { Rung } from "./photos-rungs";
 import { skeletonRows, skeletonTileCount } from "./skeleton-rows";
@@ -74,5 +74,5 @@ export default function PhotosGridSkeleton({
 const styles = StyleSheet.create({
   skeleton: { flex: 1, overflow: "hidden" },
   skeletonRow: { flexDirection: "row", gap: 2, marginBottom: 2 },
-  skeletonTile: { borderRadius: 2 },
+  skeletonTile: { borderRadius: radii.sm },
 });

@@ -54,26 +54,6 @@
       ],
       "appKnobs": [
         {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
-        {
           "key": "appWidth",
           "label": "Width",
           "type": "segmented",
@@ -196,26 +176,6 @@
         "types.ts"
       ],
       "appKnobs": [
-        {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
         {
           "key": "appWidth",
           "label": "Width",
@@ -382,26 +342,6 @@
       ],
       "appKnobs": [
         {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
-        {
           "key": "appWidth",
           "label": "Width",
           "type": "segmented",
@@ -536,26 +476,6 @@
         "types.ts"
       ],
       "appKnobs": [
-        {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
         {
           "key": "appWidth",
           "label": "Width",
@@ -818,26 +738,6 @@
       ],
       "appKnobs": [
         {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
-        {
           "key": "appWidth",
           "label": "Width",
           "type": "segmented",
@@ -984,26 +884,6 @@
       ],
       "appKnobs": [
         {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
-        {
           "key": "appWidth",
           "label": "Width",
           "type": "segmented",
@@ -1138,22 +1018,6 @@
       ],
       "appKnobs": [
         {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
-        {
           "key": "appColor",
           "label": "Color",
           "type": "swatch",
@@ -1271,22 +1135,6 @@
         "types.ts"
       ],
       "appKnobs": [
-        {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
         {
           "key": "appColor",
           "label": "Color",

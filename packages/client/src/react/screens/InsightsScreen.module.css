@@ -29,7 +29,7 @@
 .titleIcon {
   width: 30px;
   height: 30px;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   display: grid;
   place-items: center;
   color: var(--text);
@@ -39,7 +39,7 @@
   margin: 0;
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 25px;
+  font-size: var(--t-display-size);
   letter-spacing: -0.02em;
   color: var(--text);
 }
@@ -54,12 +54,12 @@
   gap: 7px;
   height: 32px;
   padding: 0 11px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border: 0.5px solid var(--line-strong);
   background: var(--bg-elev);
   color: var(--text-soft);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   cursor: pointer;
 }
 .filterActive {
@@ -93,7 +93,7 @@
   flex-direction: column;
   gap: 9px;
   padding: 16px 18px;
-  border-radius: 13px;
+  border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
 }
@@ -101,7 +101,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -113,8 +113,8 @@
 }
 .kpiValue {
   font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: 33px;
+  font-weight: 600;
+  font-size: var(--t-display-size);
   line-height: 1;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -134,8 +134,8 @@
 
 /* Delta chip — "+18%" / "−6%". */
 .delta {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   font-weight: 600;
 }
 .delta[data-tone="up"] {
@@ -162,19 +162,19 @@
 .meterFoot {
   display: flex;
   justify-content: space-between;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .bar {
   height: 5px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--text) 8%, transparent);
   overflow: hidden;
 }
 .barFill {
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent);
 }
 
@@ -194,7 +194,7 @@
 
 /* Panel — shared card shell for chart / table / lists. */
 .panel {
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   overflow: hidden;
@@ -214,7 +214,7 @@
   color: var(--text);
 }
 .panelMeta {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   color: var(--text-ghost);
@@ -230,7 +230,7 @@
   margin-bottom: 14px;
 }
 .chartStatLabel {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -240,14 +240,14 @@
 .chartStatValue {
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 17px;
+  font-size: var(--t-reading-size);
   color: var(--text);
 }
 .chartStatAccent {
   color: var(--c-amber-text);
 }
 .chartStatSub {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-ghost);
   margin-top: 2px;
@@ -269,19 +269,19 @@
   position: absolute;
   top: -2px;
   transform: translateX(-50%);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-soft);
   background: var(--bg-elev);
   padding: 1px 5px;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   border: 0.5px solid var(--line);
 }
 .chartAxis {
   display: flex;
   justify-content: space-between;
   margin-top: 8px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
@@ -298,7 +298,7 @@
   place-items: center;
   padding: 18px;
   text-align: center;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-ghost);
 }
 
@@ -307,7 +307,7 @@
    (left-aligned like the table's own rows), not a reserved centered block. */
 .panelEmptyCompact {
   padding: 10px 12px 16px;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-ghost);
 }
 
@@ -338,10 +338,10 @@
   position: relative;
   z-index: 1;
   padding: 3px 11px;
-  border-radius: 7px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 
@@ -357,7 +357,7 @@
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
-  border-radius: 9px;
+  border-radius: var(--r-md);
 }
 .tr:not(.trHead):hover {
   background: var(--bg-sunken);
@@ -366,7 +366,7 @@
   box-shadow: 0 -0.5px 0 var(--line);
 }
 .th {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -378,8 +378,8 @@
   min-width: 0;
 }
 .mono {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
 }
 .cNum,
@@ -396,13 +396,13 @@
   flex: none;
   width: 24px;
   height: 24px;
-  border-radius: 7px;
+  border-radius: var(--r-md);
   display: grid;
   place-items: center;
 }
 .appName {
   font-size: var(--t-small-size);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -410,7 +410,7 @@
 }
 .tag {
   flex: none;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -422,14 +422,14 @@
 .mixbar {
   display: block;
   height: 5px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--text) 8%, transparent);
   overflow: hidden;
 }
 .mixbarFill {
   display: block;
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent);
 }
 .spark {
@@ -458,7 +458,7 @@
 }
 .modelName {
   font-size: var(--t-small-size);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .modelFoot {
@@ -480,7 +480,7 @@
   align-items: center;
   gap: 11px;
   padding: 11px 12px;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   width: 100%;
   text-align: left;
   border: 0;
@@ -539,7 +539,7 @@
   grid-template-columns: 1.4fr 1fr;
   gap: 16px;
   padding: 20px 22px;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
 }
@@ -558,7 +558,7 @@
 .heroValue {
   /* A single large figure is a NUMERIC, so it takes the mono register at the
      display rung rather than a bold sans one-off (#707). */
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: var(--t-mono-numeric);
   font-size: var(--t-display-size);
   line-height: 1;
@@ -581,7 +581,7 @@
   gap: 2px;
 }
 .heroStatLabel {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -590,11 +590,11 @@
 .heroStatValue {
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 18px;
+  font-size: var(--t-reading-size);
   color: var(--text);
 }
 .heroStatSub {
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .attention {
@@ -602,11 +602,11 @@
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  border-radius: 11px;
+  border-radius: var(--r-lg);
   border: 0.5px solid color-mix(in srgb, var(--c-amber) 40%, var(--line));
   background: color-mix(in srgb, var(--c-amber) 10%, var(--bg-elev));
   color: var(--text-soft);
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
 }
 .attention strong {
   color: var(--text);
@@ -614,10 +614,10 @@
 }
 .firstUse {
   padding: 14px 16px;
-  border-radius: 11px;
+  border-radius: var(--r-lg);
   border: 0.5px dashed var(--line-strong);
   color: var(--text-faint);
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
   line-height: 1.4;
 }
 .peakNote {
@@ -627,7 +627,7 @@
 }
 .footnote {
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   line-height: 1.4;
 }

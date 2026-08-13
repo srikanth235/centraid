@@ -18,7 +18,7 @@ import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
-import { borders, spacing, t, useTheme } from "../../kit/theme";
+import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import { Store } from "../../storage";
 import {
   EMPTY_IMPORT_PROGRESS,
@@ -135,7 +135,7 @@ export default function CameraRollImportOffer({
             onPress={() => void start()}
             style={[styles.button, { backgroundColor: colors.accentFill }]}
           >
-            <Text style={[styles.buttonText, { color: colors.onAccent }]}>
+            <Text style={[styles.buttonText, { color: colors.textInv }]}>
               Import
             </Text>
           </Pressable>
@@ -163,23 +163,23 @@ const styles = StyleSheet.create({
   body: { ...t("small"), marginTop: spacing[1] },
   button: {
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: radii.md,
     justifyContent: "center",
     minHeight: 40,
     paddingHorizontal: spacing[4],
   },
   buttonText: { ...t("control") },
   card: {
-    borderRadius: 12,
+    borderRadius: radii.lg,
     borderWidth: borders.hairline,
     marginHorizontal: spacing[4],
     marginVertical: spacing[2],
     padding: spacing[4],
   },
-  fill: { borderRadius: 3, height: 6 },
+  fill: { borderRadius: radii.sm, height: 6 },
   title: { ...t("smallStrong") },
   track: {
-    borderRadius: 3,
+    borderRadius: radii.sm,
     height: 6,
     marginTop: spacing[3],
     overflow: "hidden",

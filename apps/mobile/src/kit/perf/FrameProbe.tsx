@@ -22,6 +22,7 @@ import { StyleSheet, View } from "react-native";
 
 import { formatFrameSample, sampleFrames } from "../../lib/perf/frame-sampler";
 import { Text } from "../components/NativeText";
+import { t, useTheme } from "../theme";
 
 /**
  * `centraid://perf-frames?ms=4000` arms one sample. The probe opens this, does
@@ -48,6 +49,7 @@ function windowMsFrom(url: string): number | undefined {
 }
 
 export default function FrameProbe(): React.JSX.Element | null {
+  const { colors } = useTheme();
   const [sampling, setSampling] = useState(false);
   const [report, setReport] = useState<string>();
 
@@ -99,8 +101,14 @@ export default function FrameProbe(): React.JSX.Element | null {
   }
   if (!report) return null;
   return (
-    <View pointerEvents="none" style={styles.readout}>
-      <Text testID={FRAME_PROBE_REPORT_ID} style={styles.text}>
+    <View
+      pointerEvents="none"
+      style={[styles.readout, { backgroundColor: colors.stage }]}
+    >
+      <Text
+        testID={FRAME_PROBE_REPORT_ID}
+        style={[styles.text, { color: colors.success }]}
+      >
         {report}
       </Text>
     </View>
@@ -116,12 +124,11 @@ const styles = StyleSheet.create({
     width: 1,
   },
   readout: {
-    backgroundColor: "#000",
     left: 0,
     padding: 4,
     position: "absolute",
     right: 0,
     top: 0,
   },
-  text: { color: "#0f0", fontSize: 13 },
+  text: { fontSize: t("mono").fontSize },
 });

@@ -24,7 +24,7 @@
 .titleIcon {
   width: 30px;
   height: 30px;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   display: grid;
   place-items: center;
   color: var(--text);
@@ -34,7 +34,7 @@
   margin: 0;
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 25px;
+  font-size: var(--t-display-size);
   letter-spacing: -0.02em;
   color: var(--text);
 }
@@ -65,24 +65,24 @@
   margin: 0;
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--t-small-size);
   letter-spacing: -0.01em;
   color: var(--text);
 }
 .groupCount {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 0.5px solid var(--line);
 }
 
 .list {
   display: flex;
   flex-direction: column;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   overflow: hidden;
@@ -125,7 +125,7 @@ button.rowMain:hover {
   place-items: center;
   width: 26px;
   height: 26px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   flex: none;
   color: var(--text-faint);
   background: color-mix(in oklab, var(--text) 5%, transparent);
@@ -142,7 +142,7 @@ button.rowMain:hover {
   gap: 2px;
 }
 .rowTitle {
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
   overflow: hidden;
@@ -166,7 +166,7 @@ button.rowMain:hover {
   gap: 6px;
 }
 .rowMeta {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-ghost);
   flex: none;
@@ -198,7 +198,7 @@ button.rowMain:hover {
 }
 .field dt {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   color: var(--text-ghost);
@@ -213,7 +213,7 @@ button.rowMain:hover {
 }
 .detailNote {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
   font-style: italic;
 }
@@ -222,11 +222,10 @@ button.rowMain:hover {
   width: 100%;
   box-sizing: border-box;
   padding: 6px 9px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border: 0.5px solid var(--line);
   background: var(--bg-sunken);
-  font-family: inherit;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text);
 }
 .editTextarea {
@@ -243,22 +242,22 @@ button.rowMain:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-soft);
 }
 .editNote {
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .inputPreview {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border: 0.5px solid var(--line);
   background: var(--bg-sunken);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   white-space: pre-wrap;
   word-break: break-word;
@@ -282,7 +281,7 @@ button.rowMain:hover {
 .grantsList {
   display: flex;
   flex-direction: column;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   overflow: hidden;
@@ -293,7 +292,7 @@ button.rowMain:hover {
   gap: 8px;
   padding: 10px 16px;
   border-bottom: 0.5px solid var(--line);
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-soft);
 }
 .grantRow:last-child {
@@ -304,7 +303,7 @@ button.rowMain:hover {
   color: var(--text);
 }
 .grantVerb {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-faint);
 }
@@ -314,18 +313,18 @@ button.rowMain:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
 }
 .grantMeta {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-ghost);
   flex: none;
 }
 .grantsEmpty {
   margin: 10px 0 0;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-ghost);
 }
 
@@ -366,7 +365,7 @@ button.rowMain:hover {
   place-items: center;
   width: 27px;
   height: 27px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   flex: none;
   color: var(--notice-ink, var(--text-faint));
   /* 12%, not the 18% this shipped at: the ink rung is solved for a 12% wash
@@ -412,7 +411,7 @@ button.rowMain:hover {
 .unreadDot {
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   flex: none;
   background: var(--accent);
 }
@@ -423,9 +422,9 @@ button.rowMain:hover {
   display: inline-block;
   margin-right: 6px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-size: var(--t-control-size);
-  font-weight: 500;
+  font-weight: 600;
   vertical-align: baseline;
 }
 .noticeRow[data-severity="high"] .severityPill {
@@ -446,7 +445,7 @@ button.rowMain:hover {
   gap: 5px;
 }
 .streakOverflow {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
@@ -458,7 +457,7 @@ button.rowMain:hover {
 .streakBar {
   width: 3px;
   height: 10px;
-  border-radius: 1px;
+  border-radius: var(--r-pill);
   background: color-mix(in oklab, var(--text) 20%, transparent);
 }
 .noticeRow[data-severity="high"] .streakBar {
@@ -495,7 +494,7 @@ button.rowMain:hover {
 }
 .noticeMeta,
 .noticeDetail {
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .noticeDetail {
@@ -528,9 +527,9 @@ button.rowMain:hover {
 }
 .filterChip {
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 0.5px solid var(--line);
   background: transparent;
   color: var(--text-faint);
@@ -553,7 +552,7 @@ button.rowMain:hover {
   top: 10px;
   bottom: 10px;
   width: 3px;
-  border-radius: 0 var(--r-xs) var(--r-xs) 0;
+  border-radius: var(--r-xs) var(--r-xs) var(--r-xs) var(--r-xs);
   background: color-mix(in oklab, var(--danger) 70%, var(--accent));
 }
 .decisionAllow .activityIcon {
@@ -576,7 +575,7 @@ button.rowMain:hover {
   letter-spacing: 0.02em;
   text-transform: uppercase;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   vertical-align: middle;
   color: var(--text-faint);
   border: 0.5px solid var(--line);
@@ -600,19 +599,19 @@ button.rowMain:hover {
 .countMarker {
   display: inline-block;
   margin-left: 6px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   font-weight: 600;
   color: var(--text-faint);
   vertical-align: middle;
 }
 .attribution {
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   font-style: italic;
 }
 .monoId {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   word-break: break-all;
 }
@@ -656,7 +655,7 @@ button.rowMain:hover {
 .storeHolderList {
   display: flex;
   flex-direction: column;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   overflow: hidden;
@@ -685,7 +684,7 @@ button.rowMain:hover {
   color: var(--text-faint);
 }
 .storeHolderMode {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   font-variant-numeric: tabular-nums;
   color: var(--text-soft);
@@ -714,7 +713,7 @@ button.rowMain:hover {
 .storeHolderSwitchTrack {
   position: absolute;
   inset: 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--success);
   transition: background 0.16s ease;
 }
@@ -725,7 +724,7 @@ button.rowMain:hover {
   left: 16px;
   width: 16px;
   height: 16px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: var(--bg-elev);
   transition: transform 0.16s ease;
 }

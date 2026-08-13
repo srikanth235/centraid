@@ -13,7 +13,7 @@ import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
-import { borders, t, useTheme } from "../../kit/theme";
+import { borders, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
 /** §4.5: the rail is 44px wide, matching the minimum target everywhere else. */
@@ -85,7 +85,7 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
       // 999 radius, paper, hairline — a label, not a control.
-      borderRadius: 999,
+      borderRadius: radii.pill,
       borderWidth: borders.hairline,
       // `insetInlineEnd` rather than `right`, so the bubble mirrors under RTL —
       // and never the legacy `end`, which types but does not lay out.

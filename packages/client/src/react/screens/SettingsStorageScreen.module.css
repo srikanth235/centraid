@@ -5,7 +5,7 @@
 
 .panel {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   overflow: hidden;
 }
@@ -34,12 +34,12 @@
 }
 .rowName {
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 .rowSub {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-faint);
   overflow: hidden;
@@ -48,13 +48,13 @@
 }
 
 .kindBadge {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   color: var(--text-faint);
   background: color-mix(in srgb, var(--text) 8%, transparent);
 }
@@ -63,7 +63,7 @@
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .useBadge {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -96,7 +96,7 @@
   margin-top: 14px;
   padding: 16px;
   border: 0.5px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: color-mix(in oklab, var(--bg-sunken) 60%, transparent);
   display: flex;
   flex-direction: column;
@@ -105,13 +105,13 @@
 .kindToggle {
   display: inline-flex;
   border: 0.5px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 2px;
   align-self: flex-start;
 }
 .kindOption {
   padding: 6px 14px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: none;
   background: none;
   font-size: var(--t-control-size);
@@ -138,7 +138,7 @@
   display: block;
   margin-bottom: 6px;
   font-size: var(--t-control-size);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .textInput {
@@ -147,7 +147,7 @@
   padding: 9px 12px;
   background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   font-size: var(--t-small-size);
   color: var(--text);
   outline: none;
@@ -169,7 +169,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-soft);
 }
 
@@ -187,14 +187,14 @@
 }
 .attachStatus {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-soft);
   line-height: 1.5;
 }
 .binaryToggle {
   display: inline-flex;
   border: 0.5px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 2px;
   align-self: flex-start;
 }
@@ -203,10 +203,10 @@
      it — the input is the hit area, so the label must position it. */
   position: relative;
   padding: 7px 18px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: none;
   background: none;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
   cursor: pointer;
 }
@@ -226,7 +226,7 @@
 }
 
 .gateReason {
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
   font-style: italic;
 }

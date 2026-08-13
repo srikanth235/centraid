@@ -8,5 +8,5 @@
   text-align: center;
   padding: 60px 20px;
   color: var(--text-faint);
-  font-size: 14px;
+  font-size: var(--t-small-size);
 }

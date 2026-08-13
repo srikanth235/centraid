@@ -403,7 +403,7 @@ export default function ShareSheet({
               }}
               style={[styles.shareButton, { backgroundColor: colors.accent }]}
             >
-              <Text style={{ color: colors.onAccent }}>Done</Text>
+              <Text style={{ color: colors.textInv }}>Done</Text>
             </Pressable>
           ) : (
             <Pressable
@@ -421,7 +421,7 @@ export default function ShareSheet({
                 },
               ]}
             >
-              <Text style={{ color: colors.onAccent }}>
+              <Text style={{ color: colors.textInv }}>
                 {busy ? "Sharing…" : "Share"}
               </Text>
             </Pressable>
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
   },
   circleRow: { flexDirection: "row", gap: spacing[2] },
   check: { ...t("body"), width: 20 },
-  empty: { lineHeight: 22, paddingHorizontal: spacing[4], paddingVertical: 18 },
+  empty: { ...t("body"), paddingHorizontal: spacing[4], paddingVertical: 18 },
   footer: { paddingHorizontal: spacing[4], paddingVertical: spacing[3] },
   handoff: {
     alignItems: "center",

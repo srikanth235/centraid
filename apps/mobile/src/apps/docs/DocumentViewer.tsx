@@ -16,7 +16,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { family, useTheme } from "../../kit/theme";
+import { family, useTheme, t } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
 import {
   listCommonsResidents,
@@ -239,7 +239,7 @@ export default function DocumentViewer({
             color={
               document.canWrite === true
                 ? document.starred
-                  ? "#d99b18"
+                  ? colors.warning
                   : colors.textSoft
                 : colors.textFaint
             }
@@ -344,11 +344,15 @@ const styles = StyleSheet.create({
   meta: {
     flex: 1,
     fontFamily: family.sansRegular,
-    fontSize: 11,
+    fontSize: t("control").fontSize,
     textAlign: "center",
   },
   safe: { flex: 1 },
-  title: { flex: 1, fontFamily: family.sansMedium, fontSize: 15 },
+  title: {
+    flex: 1,
+    fontFamily: family.sansMedium,
+    fontSize: t("body").fontSize,
+  },
   toolbar: {
     alignItems: "center",
     borderTopWidth: 1,

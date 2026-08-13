@@ -1,49 +1,35 @@
 // Centraid's one semantic type scale — the Binding Layer's second invariant.
 //
-// ONE RAMP, TWO FACES. Six sizes, two bundled faces, two weights (400 and
-// 500). An app does NOT declare a primary register: the face a piece of text
-// takes is a property of its ROLE, not of the app it appears in (v4s). Serif
-// is the reading role only — a document, a note, empty-state prose, a conflict
-// excerpt. Sans is everything else, in every app equally.
+// ONE RAMP, ONE FACE. Seven sizes, Instrument Sans, two weights (400 and 600).
+// The platform code stack is permitted for code, inline literals and file
+// paths only; it is not a type role and ships no bytes. The legacy `mono` ROLE
+// name survives because consumers spell it, but it means numeric annotation:
+// Instrument Sans with tabular figures, never fixed-advance text.
 //
-// The nine legal pairs, and the repo role NAMES that carry them (no alias
-// layer, and no rename of ~400 consumer sites):
+// Pointer roles:
+//   Display     → `display`      600 · 32/36 · −.02em
+//   Title       → `title`        600 · 20/26 · −.01em
+//   Reading     → `reading`      400 · 17/28 · 66ch at the consumer
+//   Section     → `smallStrong`  600 · 13/18
+//   Body        → `body`/`small` 400 · 13/19
+//   Annotation  → `mono`         400 · 11/15 · tabular
+//   Micro       → `control` / `eyebrow` 600 · 11/15
 //
-//   Display     → `display`      serif 400 · 31/36 · −.01em
-//   Reading     → `reading`      serif 400 · 19/31
-//   Title       → `title`        sans  500 · 20/26
-//   Section     → `body`         sans  400 · 15/22 (+ `bodyStrong` at 500)
-//   Row/tile    → `small`        sans  400 · 13/19 (+ `smallStrong` at 500)
-//   Annotation  → `eyebrow`      sans  400 · 11/15, caps +.06em
-//                 `control`      sans  500 · 11/15
-//                 `mono`         sans  400 · 11/15, tabular  ← the NUMERIC role
-//   Link        → not a size role: `--link` plus an underline, inheriting.
-//
-// v4s withdrew two faces. `Instrument Serif` is gone — display is Source Serif
-// 4, the one serif. `DM Mono` is gone — numerics are Instrument Sans with
-// `font-variant-numeric: tabular-nums`, which is why the `mono` ROLE now draws
-// in the sans and keeps its `variantNumeric` rather than leaning on a face.
-// The role name survives because ~470 sites spell it; what it means changed.
-//
-// v7 folded the ramp from sixteen weight+size pairs to nine. The numeric role
-// moved 11.5 → 11: half a pixel from 11 is not a step, and 11.5px is
-// `.71875rem`, which is where a ladder stops being a ladder. It therefore
-// shares the 11px rung with `control`, so the rung is published once and the
-// numeric role no longer owns a `-size` name of its own. Call sites that used
-// to reach for it read `--t-control-size` — one name for one number.
+// Touch is the same rule resolved once: UI text steps up one rung, display
+// steps down, and title/reading/micro hold. `bodyStrong` is the single legal
+// 600 · 13/19 exception: active labels keep their leading while weight flips,
+// so a row never reflows under the pointer.
 //
 // Nothing falls below 11px. Emitters may adapt units (blueprint uses rem), but
 // they do not get to invent another scale. Native uses the explicit delta on
 // each role so React Native never parses CSS or does runtime arithmetic.
 
 /**
- * The BUNDLED faces — the two this package ships `.woff2` bytes for. v4s cut
- * this from four: two font downloads removed, and a face is no longer
- * something an app can choose.
+ * The single BUNDLED face this package ships `.woff2` bytes for. A face is no
+ * longer something an app can choose.
  */
 export const fonts = {
   sans: "Instrument Sans",
-  serif: "Source Serif 4",
 } as const;
 
 /** A face with vendored bytes under `../fonts`. */
@@ -52,7 +38,7 @@ export type BundledFace = keyof typeof fonts;
 /**
  * Every family a stack names.
  *
- * `mono` is NOT a face and ships no bytes: it is the PLATFORM code stack,
+ * `code` is NOT a face and ships no bytes: it is the PLATFORM code stack,
  * reached only by code surfaces (the fenced-code highlighter, the builder's
  * editor pane, a keyboard chip, a secret or a path shown verbatim). v4s
  * deleted the numeric face, not the ability to set code in a fixed advance —
@@ -60,16 +46,14 @@ export type BundledFace = keyof typeof fonts;
  * downloads for it, so the ruling's measured win (two fewer font downloads)
  * holds exactly.
  */
-export type FontFamily = BundledFace | "mono";
+export type FontFamily = BundledFace | "code";
 
-// CJK fallbacks are MANDATORY, not defensive. Neither bundled face has CJK
+// CJK fallbacks are MANDATORY, not defensive. Instrument Sans has no CJK
 // coverage; without an explicit fallback the browser silently substitutes a UA
 // default and the reading face disappears in the largest markets.
 export const fontStacks = {
-  mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
+  code: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
   sans: "'Instrument Sans', 'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif",
-  serif:
-    "'Source Serif 4', Charter, 'Hiragino Mincho ProN', 'Noto Serif JP', 'Noto Serif SC', 'Songti SC', Georgia, serif",
 } as const satisfies Record<FontFamily, string>;
 
 export interface NativeDelta {
@@ -81,7 +65,7 @@ export interface TypeStyle {
   size: number;
   lineHeight: number;
   family: FontFamily;
-  weight: "400" | "500";
+  weight: "400" | "600";
   nativeDelta: NativeDelta;
   /** Tracking, in em. Only the display and micro-caps rungs carry one. */
   letterSpacing?: string;
@@ -105,21 +89,21 @@ export interface TypeStyle {
  * mobile value is smaller — see `NATIVE_DELTA_OVERRIDES`.
  */
 export const NATIVE_DELTA_BY_FAMILY = {
-  mono: { lineHeight: 2, size: 1 },
-  sans: { lineHeight: 2, size: 2 },
-  serif: { lineHeight: 2, size: 2 },
+  code: { lineHeight: 0, size: 0 },
+  sans: { lineHeight: 3, size: 2 },
 } as const satisfies Record<FontFamily, NativeDelta>;
 
 /**
- * The two roles the brief gives an explicit mobile size for. A 31px display
- * serif overruns a 390px phone title, and 19px reading prose is one step
- * looser than a phone column wants, so both step DOWN rather than up:
- * display 31 → 27, reading 19 → 17.5. Editorial sizes step down on touch and
- * UI sizes step up; that is documented behaviour, not drift (v7 §D).
+ * Roles whose touch value does not follow the default +2/+3 UI step. Display
+ * steps down to 27/31; title, reading and micro hold their pointer values.
  */
 export const NATIVE_DELTA_OVERRIDES = {
-  display: { lineHeight: -4, size: -4 },
-  reading: { lineHeight: -2, size: -1.5 },
+  bodyStrong: { lineHeight: 0, size: 0 },
+  control: { lineHeight: 0, size: 0 },
+  display: { lineHeight: -5, size: -5 },
+  eyebrow: { lineHeight: 0, size: 0 },
+  reading: { lineHeight: 0, size: 0 },
+  title: { lineHeight: 0, size: 0 },
 } as const satisfies Record<string, NativeDelta>;
 
 type TypeStyleSource = Omit<TypeStyle, "nativeDelta">;
@@ -140,35 +124,36 @@ const style = <T extends TypeStyleSource>(
 // rung and `--t-control-size` the 11px one.
 export const type = {
   display: style("display", {
-    family: "serif",
-    letterSpacing: "-0.01em",
+    family: "sans",
+    letterSpacing: "-0.02em",
     lineHeight: 36,
-    size: 31,
-    weight: "400",
+    size: 32,
+    weight: "600",
   }),
   title: style("title", {
     family: "sans",
+    letterSpacing: "-0.01em",
     lineHeight: 26,
     size: 20,
-    weight: "500",
+    weight: "600",
   }),
   reading: style("reading", {
-    family: "serif",
-    lineHeight: 31,
-    size: 19,
+    family: "sans",
+    lineHeight: 28,
+    size: 17,
     weight: "400",
   }),
   body: style("body", {
     family: "sans",
-    lineHeight: 22,
-    size: 15,
+    lineHeight: 19,
+    size: 13,
     weight: "400",
   }),
   bodyStrong: style("bodyStrong", {
     family: "sans",
-    lineHeight: 22,
-    size: 15,
-    weight: "500",
+    lineHeight: 19,
+    size: 13,
+    weight: "600",
   }),
   small: style("small", {
     family: "sans",
@@ -178,15 +163,15 @@ export const type = {
   }),
   smallStrong: style("smallStrong", {
     family: "sans",
-    lineHeight: 19,
+    lineHeight: 18,
     size: 13,
-    weight: "500",
+    weight: "600",
   }),
   control: style("control", {
     family: "sans",
     lineHeight: 15,
     size: 11,
-    weight: "500",
+    weight: "600",
   }),
   eyebrow: style("eyebrow", {
     family: "sans",
@@ -194,7 +179,7 @@ export const type = {
     lineHeight: 15,
     size: 11,
     textTransform: "uppercase",
-    weight: "400",
+    weight: "600",
   }),
   // The NUMERIC role. Sans since v4s — "numerics are Instrument Sans with
   // tabular figures" — and 11/15 since v7 folded 11.5 onto the 11px rung. It
@@ -273,6 +258,17 @@ export function nativeTypeStyle(styleValue: TypeStyle): TypeStyle {
   };
 }
 
+/** Resolve the one pointer/touch axis once for an entire lowering. Width is
+ * not an input: it may change measure and column count, never type. */
+export function typeForSurface(touch: boolean): Record<TypeKey, TypeStyle> {
+  return Object.fromEntries(
+    Object.entries(type).map(([key, value]) => [
+      key,
+      touch ? nativeTypeStyle(value) : value,
+    ])
+  ) as Record<TypeKey, TypeStyle>;
+}
+
 // The root a `rem` is relative to. No surface in this repo sets a non-16px
 // `html { font-size }` — desktop/web (apps/web/index.html, packages/client)
 // and the blueprint iframe both inherit the UA default — so `rem` and `px`
@@ -335,6 +331,17 @@ export const blueprintType = Object.fromEntries(
     toBlueprintStyle(value as TypeStyle),
   ])
 ) as Record<TypeKey, BlueprintTypeStyle>;
+
+export function blueprintTypeForSurface(
+  touch: boolean
+): Record<TypeKey, BlueprintTypeStyle> {
+  return Object.fromEntries(
+    Object.entries(typeForSurface(touch)).map(([key, value]) => [
+      key,
+      toBlueprintStyle(value),
+    ])
+  ) as Record<TypeKey, BlueprintTypeStyle>;
+}
 
 export function blueprintTypeShorthand(styleValue: BlueprintTypeStyle): string {
   return `${styleValue.weight} ${styleValue.size}/${styleValue.lineHeight} var(--font-${styleValue.family})`;
@@ -402,19 +409,17 @@ export function remSizeScale(
   );
 }
 
-/** Publish one size rung per distinct role size. */
+/** Publish the composable size of every role. Duplicate values keep their
+ * semantic names because pointer/touch can move them onto different rungs. */
 export function typeSizeRungs(
   scale: Record<string, { size: number | `${number}rem` }>
 ): Record<string, string> {
   const out: Record<string, string> = {};
-  const seen = new Set<string>();
   for (const [key, styleValue] of Object.entries(scale)) {
     const value =
       typeof styleValue.size === "number"
         ? `${styleValue.size}px`
         : styleValue.size;
-    if (seen.has(value)) continue;
-    seen.add(value);
     out[`--t-${typeKeyToKebab(key)}-size`] = value;
   }
   return out;

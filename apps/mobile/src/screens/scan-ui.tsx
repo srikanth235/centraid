@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import Icon from "../kit/components/Icon";
 import { Text, TextInput } from "../kit/components/NativeText";
-import { family } from "../kit/theme";
+import { family, radii, t } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 
 export { parseCard } from "@centraid/client/capture";
@@ -143,23 +143,23 @@ export function ChoiceRows({
 
 const styles = StyleSheet.create({
   camera: {
-    borderRadius: 18,
+    borderRadius: radii.lg,
     borderWidth: 1,
     height: 430,
     overflow: "hidden",
   },
   chip: {
-    borderRadius: 999,
+    borderRadius: radii.pill,
     borderWidth: 1,
     paddingHorizontal: 11,
     paddingVertical: 8,
   },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
   content: { gap: 14, padding: 20, paddingBottom: 60 },
-  destination: { borderRadius: 11, borderWidth: 1, padding: 11 },
+  destination: { borderRadius: radii.lg, borderWidth: 1, padding: 11 },
   destinationGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   field: { gap: 7 },
-  fieldLabel: { fontFamily: family.sansMedium, fontSize: 12 },
+  fieldLabel: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
   header: {
     alignItems: "center",
     flexDirection: "row",
@@ -167,32 +167,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   headerGap: { width: 24 },
-  help: { fontFamily: family.sansRegular, fontSize: 14, lineHeight: 20 },
+  help: {
+    ...t("body"),
+  },
   input: {
-    borderRadius: 10,
+    borderRadius: radii.lg,
     borderWidth: 1,
     fontFamily: family.sansRegular,
-    fontSize: 15,
+    fontSize: t("body").fontSize,
     padding: 12,
   },
-  lineCard: { borderRadius: 14, borderWidth: 1, gap: 9, padding: 12 },
+  lineCard: { borderRadius: radii.lg, borderWidth: 1, gap: 9, padding: 12 },
   lineKind: {
-    fontFamily: family.monoMedium,
-    fontSize: 13,
+    fontFamily: family.sansMedium,
+    fontSize: t("mono").fontSize,
     textTransform: "uppercase",
   },
   multiline: { minHeight: 150, textAlignVertical: "top" },
   permission: { flex: 1, justifyContent: "center", padding: 28 },
-  primary: { alignItems: "center", borderRadius: 12, padding: 14 },
-  primaryText: { fontFamily: family.sansMedium, fontSize: 15 },
+  primary: { alignItems: "center", borderRadius: radii.lg, padding: 14 },
+  primaryText: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
   safe: { flex: 1 },
   title: {
     flex: 1,
     fontFamily: family.sansMedium,
-    fontSize: 21,
+    fontSize: t("title").fontSize,
     textAlign: "center",
   },
-  total: { fontFamily: family.sansMedium, fontSize: 18 },
+  total: { fontFamily: family.sansMedium, fontSize: t("reading").fontSize },
 });
 
 export { styles as scanStyles };

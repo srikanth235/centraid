@@ -179,12 +179,12 @@ const makeStyles = (colors: ThemeColors) =>
     buttonText: {
       color: colors.textInv,
       fontFamily: family.sansMedium,
-      fontSize: 15,
+      fontSize: t("body").fontSize,
     },
     card: {
       backgroundColor: colors.bgElev,
       borderColor: colors.lineStrong,
-      borderRadius: radii.xl,
+      borderRadius: radii.lg,
       borderWidth: 1,
       maxWidth: 420,
       padding: spacing[5],

@@ -191,7 +191,6 @@ const makeStyles = (colors: ThemeColors) =>
     cardTitle: {
       ...t("small"),
       color: colors.text,
-      lineHeight: 18,
       marginTop: spacing[2],
     },
     count: { ...t("mono"), color: colors.textSoft, marginEnd: spacing[3] },
@@ -226,7 +225,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingTop: spacing[2],
     },
     mapChip: {
-      borderRadius: 999,
+      borderRadius: radii.pill,
       borderWidth: borders.hairline,
       paddingHorizontal: spacing[3],
       paddingVertical: spacing[1],

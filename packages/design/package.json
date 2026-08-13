@@ -28,6 +28,11 @@
       "types": "./dist/kit.d.ts",
       "default": "./dist/kit.js"
     },
+    "./native": {
+      "types": "./dist/native.d.ts",
+      "react-native": "./src/native.ts",
+      "default": "./dist/native.js"
+    },
     "./fonts": {
       "types": "./dist/fonts.d.ts",
       "default": "./dist/fonts.js"
@@ -65,8 +70,7 @@
   },
   "dependencies": {
     "@centraid/blob-format": "workspace:*",
-    "@fontsource/instrument-sans": "5.2.5",
-    "@fontsource/source-serif-4": "5.2.5"
+    "@fontsource/instrument-sans": "5.2.5"
   },
   "devDependencies": {
     "@centraid/test-kit": "workspace:*",

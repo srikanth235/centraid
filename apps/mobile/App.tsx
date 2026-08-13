@@ -1,17 +1,14 @@
 // Direct sub-path imports avoid the package's barrel index.js which
 // re-exports every weight (some of which Metro fails to resolve).
 //
-// The Binding Layer's TWO faces, two weights (400 / 500) where the face ships
-// both: Instrument Sans (body, UI, and — since v4s — numerics, which take
-// tabular figures rather than a face of their own) and Source Serif 4 (the one
-// serif: display and reading). `Instrument Serif` and `DM Mono` are withdrawn,
-// so this list must stay three files, not seven — a face loaded here that the
-// ramp cannot name is exactly the divergence from the web sheet that the
-// generated theme exists to prevent. Code surfaces use the PLATFORM monospace
+// The Binding Layer's ONE face, two weights (400 / 600): Instrument Sans for
+// every product role. The reading serif and numeric face are withdrawn, so
+// this list must stay two files — a face loaded here that the
+// ramp cannot name is exactly the divergence from the shared registry that the
+// native adapter prevents. Code surfaces use the PLATFORM monospace
 // (see kit/theme/index.ts#family), which loads nothing.
 import InstrumentSans_400Regular from "@expo-google-fonts/instrument-sans/400Regular/InstrumentSans_400Regular.ttf";
-import InstrumentSans_500Medium from "@expo-google-fonts/instrument-sans/500Medium/InstrumentSans_500Medium.ttf";
-import SourceSerif4_400Regular from "@expo-google-fonts/source-serif-4/400Regular/SourceSerif4_400Regular.ttf";
+import InstrumentSans_600SemiBold from "@expo-google-fonts/instrument-sans/600SemiBold/InstrumentSans_600SemiBold.ttf";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useFonts } from "expo-font";
@@ -401,8 +398,7 @@ export default function App(): React.JSX.Element | null {
   // component when the faces land, which is what swaps the system fallback out.
   useFonts({
     InstrumentSans_400Regular,
-    InstrumentSans_500Medium,
-    SourceSerif4_400Regular,
+    InstrumentSans_600SemiBold,
   });
 
   useEffect(() => {

@@ -10,7 +10,7 @@
 .card {
   position: relative;
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   overflow: hidden;
   background: var(--bg-elev);
   transition: border-color var(--dur-1) var(--ease);
@@ -50,7 +50,7 @@
    the label needs to recede, the rung is the place to say so. */
 .thumbLabel {
   font: var(--t-body-strong);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   letter-spacing: var(--t-eyebrow-tracking);
 }
 /* The document's own opening words, set in the app's declared READING

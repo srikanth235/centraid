@@ -546,16 +546,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  // Micro-caps, tracked, uppercase (:5084) — the eyebrow role's own treatment
-  // (family, weight, transform) at the state chip's own 11px/.06em rather than
-  // the eyebrow's 13px/.06em, which is why the size and tracking are
-  // overridden explicitly instead of spreading `t("eyebrow")` unmodified.
-  chipLabel: {
-    ...t("eyebrow"),
-    fontSize: 11,
-    letterSpacing: 0.66,
-    lineHeight: 14,
-  },
+  chipLabel: { ...t("eyebrow") },
   checkbox: {
     alignItems: "center",
     borderRadius: radii.sm,
@@ -568,9 +559,7 @@ const styles = StyleSheet.create({
   eventAt: { ...t("mono") },
   fileName: { ...t("small"), flex: 1 },
   fileSize: { ...t("mono") },
-  // The handoff's mobile value (:5056, `mob?14:15`) overrides `smallStrong`'s
-  // 15/21 the same way `prose` overrides `reading` above.
-  eventTitle: { ...t("smallStrong"), fontSize: 14, lineHeight: 19 },
+  eventTitle: { ...t("bodyStrong") },
   faces: { alignItems: "center", flexDirection: "row" },
   face: {
     alignItems: "center",
@@ -583,17 +572,12 @@ const styles = StyleSheet.create({
     marginEnd: -7,
     width: 30,
   },
-  faceInitials: { ...t("control"), fontSize: 12 },
-  // The numeric register, scaled: the ramp carries one mono role, and the
-  // brief's "one large figure" is that role at display size — same family,
-  // same tabular figures, so digits still align column-wise. 25px is the
-  // brief's mobile figure size (:5079's `mob?25:28`), smaller than desktop's
-  // 28 because the third `after` line now shares the tile's vertical budget.
+  faceInitials: { ...t("control"), fontSize: t("mono").fontSize },
+  // A large numeric figure uses the display rung while keeping tabular digits.
   figure: {
-    ...t("mono"),
-    fontSize: 25,
+    ...t("display"),
+    fontVariant: ["tabular-nums"],
     letterSpacing: -0.5,
-    lineHeight: 30,
   },
   invite: { ...t("control") },
   // No ground of its own and no minimum height: the CELLS are the mosaic. A
@@ -606,10 +590,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   mosaicBleed: { marginBottom: -TILE_PAD },
-  // The reading register, overridden to the handoff's explicit mobile value
-  // (:5053, `mob?15:16`) — the ramp's `reading` role is tuned for the desktop
-  // measure, and at 17.5/31 three clamped lines ate 93pt of a 152pt tile.
-  prose: { ...t("reading"), fontSize: 15, lineHeight: 24 },
+  prose: { ...t("reading") },
   ruledRow: {
     alignItems: "center",
     flexDirection: "row",

@@ -69,7 +69,7 @@
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   color: var(--text-soft);
   background: var(--bg-sunken, color-mix(in srgb, var(--text) 6%, transparent));
   border: 0.5px solid var(--line);
@@ -90,7 +90,7 @@
    letter per line once the layout squeezed this column. */
 .groupName {
   margin: 0;
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
   overflow-wrap: break-word;
@@ -102,19 +102,19 @@
   align-items: center;
   gap: 4px;
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent-deep, var(--accent));
   font-size: var(--t-control-size);
 }
 .groupEmpty {
   margin: 0 0 0 42px;
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 
 .rowWarn {
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   line-height: 1.45;
   color: var(--danger);
   overflow-wrap: anywhere;
@@ -123,7 +123,7 @@
 /* Tombstones: present for audit, folded away by default, no actions. */
 .tombstones {
   margin-left: 42px;
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .tombstones summary {
@@ -141,7 +141,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
 }
 .tombstones li span[data-quiet="true"] {
@@ -170,7 +170,7 @@
   place-items: center;
   width: 34px;
   height: 34px;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   color: var(--text-soft);
   background: var(--bg-sunken, color-mix(in srgb, var(--text) 6%, transparent));
   border: 0.5px solid var(--line);
@@ -196,7 +196,7 @@
 }
 .name {
   font-size: var(--t-small-size);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
   overflow-wrap: break-word;
 }
@@ -234,11 +234,11 @@
 
 .currentChip,
 .transportChip {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 2px 7px;
   white-space: nowrap;
 }
@@ -263,7 +263,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-faint);
 }
@@ -288,10 +288,10 @@
 }
 .grantProfile span {
   padding: 2px 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--accent) 9%, transparent);
   color: var(--accent-deep, var(--accent));
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
 }
 .grantProfile span:first-child {
@@ -315,7 +315,7 @@
 }
 .computeToggle small {
   color: var(--text-faint);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
 }
 .computeCaps {
@@ -325,15 +325,15 @@
 }
 .computeCaps span {
   padding: 2px 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--success) 9%, transparent);
   color: var(--success);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
 }
 
 .rowError {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--danger);
   overflow-wrap: anywhere;
@@ -366,7 +366,7 @@
 .confirmAsk {
   flex: 1 1 12ch;
   min-width: 0;
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-soft);
   overflow-wrap: anywhere;

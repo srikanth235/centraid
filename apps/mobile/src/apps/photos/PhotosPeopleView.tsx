@@ -57,7 +57,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { spacing, t, useTheme } from "../../kit/theme";
+import { spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import { buildPeopleShelf } from "./people-model";
@@ -271,7 +271,7 @@ export default function PhotosPeopleView({
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    avatar: { aspectRatio: 1, borderRadius: 999, width: "72%" },
+    avatar: { aspectRatio: 1, borderRadius: radii.pill, width: "72%" },
     card: { alignItems: "center", gap: spacing[1], width: "33.33%" },
     count: { ...t("mono"), color: colors.textFaint },
     empty: {

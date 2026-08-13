@@ -16,7 +16,7 @@
 }
 .version {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   overflow: hidden;
 }
 .versionCurrent {

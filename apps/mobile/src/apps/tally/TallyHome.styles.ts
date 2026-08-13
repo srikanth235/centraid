@@ -1,10 +1,10 @@
 import { StyleSheet } from "react-native";
 
-import { family, radii } from "../../kit/theme";
+import { family, radii, t } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
-  amount: { fontFamily: family.monoMedium, fontSize: 14 },
-  chip: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+  amount: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
+  chip: { borderRadius: radii.pill, paddingHorizontal: 14, paddingVertical: 8 },
   chips: {
     alignItems: "center",
     gap: 8,
@@ -12,9 +12,9 @@ export const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   code: {
-    borderRadius: 9,
+    borderRadius: radii.md,
     borderWidth: 1,
-    fontFamily: family.monoMedium,
+    fontFamily: family.sansMedium,
     padding: 10,
     width: 58,
   },
@@ -35,24 +35,28 @@ export const styles = StyleSheet.create({
     margin: 12,
     padding: 12,
   },
-  groupInput: { borderRadius: 9, borderWidth: 1, minWidth: 100, padding: 8 },
+  groupInput: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    minWidth: 100,
+    padding: 8,
+  },
   header: { alignItems: "center", flexDirection: "row", gap: 12, padding: 16 },
   input: {
-    borderRadius: 9,
+    borderRadius: radii.md,
     borderWidth: 1,
     flex: 1,
     minWidth: 80,
     padding: 10,
   },
   list: { gap: 8, padding: 12, paddingBottom: 80 },
-  meta: { fontFamily: family.sansRegular, fontSize: 12 },
+  meta: { fontFamily: family.sansRegular, fontSize: t("mono").fontSize },
   modal: { borderRadius: radii.lg, gap: 12, margin: 24, padding: 18 },
   modalBackdrop: {
-    backgroundColor: "rgba(0,0,0,.4)",
     flex: 1,
     justifyContent: "center",
   },
-  personName: { fontFamily: family.sansMedium, fontSize: 14 },
+  personName: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
   row: { alignItems: "center", flexDirection: "row", gap: 8 },
   safe: { flex: 1 },
   share: {
@@ -63,7 +67,7 @@ export const styles = StyleSheet.create({
     padding: 10,
   },
   save: {
-    borderRadius: 10,
+    borderRadius: radii.lg,
     marginLeft: "auto",
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -76,5 +80,5 @@ export const styles = StyleSheet.create({
     padding: 11,
   },
   templates: { gap: 8, paddingHorizontal: 12, paddingVertical: 4 },
-  title: { fontFamily: family.sansMedium, fontSize: 28 },
+  title: { fontFamily: family.sansMedium, fontSize: t("display").fontSize },
 });

@@ -11,7 +11,7 @@ Make the Product Grammar Constitution executable across the shell, compact shell
 ## Safety argument
 
 - The change is a pre-release design-contract migration: it changes presentation tokens and component vocabulary, not persisted data, protocol payloads, or vault semantics.
-- CSS and native lowerings are generated from the same typed values. Mobile no longer parses CSS or applies a second runtime override layer; a generated-file test catches drift between `toNativeTheme()` and the checked-in module.
+- CSS and native lowerings read the same typed values. Mobile no longer parses CSS, applies a second runtime override layer, or keeps a checked-in copy; its thin adapter calls `toNativeTheme()` directly and only maps Expo font names and tracking units.
 - The scaffolded blueprint `app.css` is a generated artifact. This is a v0 migration: the emitter and scaffold output move together, and stored apps from an older contract are explicitly outside this change rather than being given a compatibility alias layer. A future role rename must update the emitter, scaffold fixture, manifest/build output, and snapshots in one change; hand-editing a single served app would create a silent fork.
 - The role registry is total over shell, blueprint, and native profiles. A role that cannot render is recorded as an explicit `unsupported` value, so missing declarations fail at typecheck/test time rather than becoming transparent UI.
 - The matrix gates are seeded through the repository's demonstrated-red entries in `tests/matrix.json`; product-grammar D1–D7 are now executable gates and the main quality gate remains green.
@@ -20,8 +20,8 @@ Make the Product Grammar Constitution executable across the shell, compact shell
 ## Plan
 
 1. Establish the normative `DESIGN.md`, semantic roles, profiles, lowerings, native delta, target-size adapter, and contract tests.
-2. Add the complete recipe registry and CSS recipe emitter; migrate default and action variants across shell, kit, blueprint, and mobile.
-3. Consolidate icons, app/person identity, bytes/relative-time formatting, and mobile theme generation; remove Feather/CSS-parser split paths.
+2. Add the complete recipe registry and real renderer adapters; migrate default and action variants across shell, kit, blueprint, and mobile.
+3. Consolidate icons, app/person identity, bytes/relative-time formatting, and native theme lowering; remove Feather/CSS-parser split paths.
 4. Migrate token consumers and extension chrome; close the named B1–B29 regressions that are in scope for this issue. **Initial implementation complete; review closure tracked in #695.**
 5. Record the M1–M20 shared/adapted/local matrix and enumerated reference states; use it to drive visual gallery lanes and seeded quality gates. **Complete.**
 6. Run package and repository gates, update this log and the issue receipt, then publish the branch as the issue PR. **Complete in this branch.**
@@ -35,6 +35,7 @@ Make the Product Grammar Constitution executable across the shell, compact shell
 | 2026-08-02 | 4 | — | Shell/blueprint/mobile/extension token migration complete; B1–B29 are closed, including host-owned appearance, identity/action separation, native pickers, upload/unpair feedback, icon validation, and token hard-zero gates. |
 | 2026-08-02 | 5–6 | — | `tests/design-grammar-matrix.json` enumerates M1–M20, five surface lowerings, and 48 reference states; `scripts/design-gallery.mjs` verifies 22 committed baselines with RGBA diffs, and the focused/repository gates are recorded in the issue receipt. |
 | 2026-08-02 | #695 | — | Review closure adds registry-backed lowerings, native equivalence/freshness checks, real kit-backed gallery lanes, mobile/extension token ratchets, and receipt corrections. |
+| 2026-08-13 | #747 v8 | — | Removed the unused recipe CSS emitter and checked-in Expo theme copy. Desktop/PWA continue to share the shell; Expo now consumes `toNativeTheme()` through one minimal adapter. |
 
 ## Rejected alternatives
 

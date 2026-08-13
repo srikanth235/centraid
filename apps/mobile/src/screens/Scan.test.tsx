@@ -164,6 +164,7 @@ vi.mock(
         sansMedium: "mock-sans-medium",
         sansRegular: "mock-sans-regular",
       },
+      radii: { lg: 12, md: 8, pill: 999, sm: 4, xl: 16, xs: 0 },
       spacing: Array.from({ length: 8 }, (_, index) => index * 4),
       t: () => ({}),
       useTheme: () => ({ colors: mocks.colors }),

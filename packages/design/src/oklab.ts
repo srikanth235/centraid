@@ -178,9 +178,9 @@ export function alphaOver(color: string, bg: string, share: number): string {
 }
 
 /** Substitute the knobs the token CSS parameterizes colours by, so an
- *  `hsl(0 0% calc(var(--bg-l) + 4.5%))` becomes a measurable colour. Mirrors
- *  what `apps/mobile/src/kit/theme/generate.ts` does when it lowers the same
- *  CSS for React Native. */
+ *  `hsl(0 0% calc(var(--bg-l) + 4.5%))` becomes a measurable colour. This is
+ *  CSS measurement machinery; React Native receives already-concrete values
+ *  from `toNativeTheme()` and never parses this syntax. */
 export function resolveVars(
   value: string,
   scope: Record<string, string>

@@ -477,7 +477,7 @@
   font: var(--t-small);
 }
 .launchItem[data-active="true"] .launchLabel {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .stem:not([data-compact="true"]) .launchItem[data-active="true"] .launchLabel {
@@ -507,7 +507,7 @@
   translate: 0 -50%;
   inline-size: 2px;
   block-size: 22px;
-  border-radius: 1px;
+  border-radius: var(--r-pill);
   margin-block-start: 0;
 }
 
@@ -1310,7 +1310,7 @@
   }
   .appTitle {
     /* The display rung steps down on a phone, per the ramp's mobile column. */
-    font-size: 26px;
+    font-size: var(--t-display-size);
   }
 
   /* THE COUNT IS THE FIRST THING OUT. A phone bar is already spending its whole

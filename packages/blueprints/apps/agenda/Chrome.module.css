@@ -1,7 +1,7 @@
 /* Agenda chrome shared by the served and inline routes (issue #505). Common
    shell/sidebar/topbar/drawer geometry composes the kit-app-* vocabulary;
    this module retains Agenda's variations. Design tokens (--text, --app-identity,
-   --bg-elev, --line, --r-md, --t-title, --font-mono, …) are supplied by the shell
+   --bg-elev, --line, --r-md, --t-title, --font-code, …) are supplied by the shell
    document (the scoped blueprint-token block InlineAppRoute injects), so this
    file references them directly.
 

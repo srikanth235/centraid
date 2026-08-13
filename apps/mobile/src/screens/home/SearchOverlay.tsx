@@ -333,7 +333,11 @@ const makeStyles = (
       justifyContent: "center",
       paddingHorizontal: 12,
     },
-    cancelLabel: { ...t("small"), color: secondary.color, fontSize: 13 },
+    cancelLabel: {
+      ...t("small"),
+      color: secondary.color,
+      fontSize: t("mono").fontSize,
+    },
     chip: {
       backgroundColor: "transparent",
       borderColor: colors.lineStrong,
@@ -342,7 +346,11 @@ const makeStyles = (
       paddingHorizontal: 10,
       paddingVertical: 4,
     },
-    chipLabel: { ...t("small"), color: colors.textSoft, fontSize: 13 },
+    chipLabel: {
+      ...t("small"),
+      color: colors.textSoft,
+      fontSize: t("mono").fontSize,
+    },
     content: { flex: 1, paddingHorizontal: H_PADDING },
     empty: { ...t("small"), color: colors.textSoft, paddingVertical: 8 },
     foot: {
@@ -364,7 +372,7 @@ const makeStyles = (
     group: { marginBottom: 16 },
     groupCount: { ...t("mono"), color: colors.textFaint },
     groupDot: {
-      borderRadius: 3,
+      borderRadius: radii.sm,
       flexShrink: 0,
       height: 6,
       width: 6,

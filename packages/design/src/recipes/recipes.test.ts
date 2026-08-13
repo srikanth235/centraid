@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 
 import { BLUEPRINT_TOKEN_CONTRACT, SHELL_TOKEN_CONTRACT } from "../contract.js";
 import { toNativeTheme } from "../native.js";
-import { emitRecipeCss } from "./css.js";
 import {
   BUTTON_VARIANTS,
   RECIPES,
@@ -10,7 +9,7 @@ import {
   RECIPE_ROLE_REFERENCES,
   getRecipe,
 } from "./index.js";
-import { NATIVE_RECIPES, nativeButtonStyle } from "./native.js";
+import { nativeButtonStyle } from "./native.js";
 
 describe("revision 3 recipe registry", () => {
   test("publishes the complete 26-recipe inventory", () => {
@@ -48,14 +47,11 @@ describe("revision 3 recipe registry", () => {
     }
   });
 
-  test("lowers the same recipe inventory to native styles", () => {
-    expect(Object.keys(NATIVE_RECIPES).sort()).toStrictEqual(
-      [...RECIPE_NAMES].sort()
-    );
+  test("lowers the canonical button recipe to native styles", () => {
     const theme = toNativeTheme("light");
     for (const variant of BUTTON_VARIANTS) {
       const style = nativeButtonStyle(variant, theme);
-      expect(style.minHeight).toBe(theme.metrics.control);
+      expect(style.minHeight).toBe(theme.targetMin.coarse);
       expect(style.borderRadius).toBe(theme.radii.md);
       expect(style.color).toMatch(/^#/u);
     }
@@ -69,7 +65,15 @@ describe("revision 3 recipe registry", () => {
       theme.colors.lineStrong
     );
     expect(nativeButtonStyle("quiet", theme).color).toBe(theme.colors.text);
-    expect(nativeButtonStyle("quiet", theme).paddingHorizontal).toBe(10);
+    for (const scheme of ["light", "dark"] as const) {
+      const schemeTheme = toNativeTheme(scheme);
+      expect(nativeButtonStyle("primary", schemeTheme).color).toBe(
+        schemeTheme.colors.textInv
+      );
+    }
+    expect(nativeButtonStyle("quiet", theme).paddingHorizontal).toBe(
+      theme.spacing[4]
+    );
 
     // D19: disabled overrides every variant to the same transparent recipe —
     // a filled control that cannot be pressed stops being filled.
@@ -78,24 +82,12 @@ describe("revision 3 recipe registry", () => {
       expect(disabledStyle.backgroundColor).toBe("transparent");
       expect(disabledStyle.borderColor).toBe(theme.colors.line);
       expect(disabledStyle.color).toBe(theme.colors.textDisabled);
-      expect(disabledStyle.minHeight).toBe(theme.metrics.control);
+      expect(disabledStyle.minHeight).toBe(theme.targetMin.coarse);
     }
   });
 
-  test("emits the scoped web lowering from the shared recipe contract", () => {
-    const css = emitRecipeCss(".centraid-inline-scope");
-
-    expect(css).toContain(
-      ".centraid-inline-scope .kit-btn { min-height: max(var(--h-control, 34px), var(--target-min, 44px));"
-    );
-    expect(css).not.toContain("destructiveFilled");
-    expect(css).toContain(".centraid-inline-scope .kit-status-line {");
-    expect(css).toContain(".centraid-inline-scope .kit-status-line-fill {");
-    expect(css.endsWith("\n")).toBe(true);
-  });
-
   test("rejects a button recipe without native capability", () => {
-    const recipe = NATIVE_RECIPES.Button;
+    const recipe = RECIPES.Button;
     const originalCapabilities = recipe.capabilities;
     recipe.capabilities = ["web", "blueprint"];
     try {

@@ -30,7 +30,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { family, radii, useTheme } from "../../kit/theme";
+import { family, radii, useTheme, t } from "../../kit/theme";
 import type { TasksScreenProps } from "../../navigation";
 
 type TaskView = "inbox" | "today" | "upcoming" | `project:${string}`;
@@ -537,7 +537,10 @@ export default function TasksHome({
         animationType="fade"
         onRequestClose={() => setEditingTask(undefined)}
       >
-        <View accessibilityViewIsModal style={styles.modalBackdrop}>
+        <View
+          accessibilityViewIsModal
+          style={[styles.modalBackdrop, { backgroundColor: colors.scrim }]}
+        >
           <View style={[styles.modal, { backgroundColor: colors.bgElev }]}>
             <Text style={[styles.taskTitle, { color: colors.text }]}>
               Edit task
@@ -575,7 +578,10 @@ export default function TasksHome({
         animationType="fade"
         onRequestClose={() => setMovingTask(undefined)}
       >
-        <View accessibilityViewIsModal style={styles.modalBackdrop}>
+        <View
+          accessibilityViewIsModal
+          style={[styles.modalBackdrop, { backgroundColor: colors.scrim }]}
+        >
           <View style={[styles.modal, { backgroundColor: colors.bgElev }]}>
             <Text style={[styles.taskTitle, { color: colors.text }]}>
               Move task
@@ -647,12 +653,12 @@ export default function TasksHome({
 const styles = StyleSheet.create({
   add: {
     alignItems: "center",
-    borderRadius: 12,
+    borderRadius: radii.lg,
     justifyContent: "center",
     width: 46,
   },
-  check: { borderRadius: 10, borderWidth: 2, height: 20, width: 20 },
-  chip: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+  check: { borderRadius: radii.lg, borderWidth: 2, height: 20, width: 20 },
+  chip: { borderRadius: radii.pill, paddingHorizontal: 14, paddingVertical: 8 },
   chips: { gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
   composer: { flexDirection: "row", gap: 8, paddingHorizontal: 16 },
   destination: { borderBottomWidth: 1, minHeight: 42, paddingVertical: 11 },
@@ -670,11 +676,11 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: 1,
     flex: 1,
-    fontSize: 16,
+    fontSize: t("body").fontSize,
     padding: 13,
   },
   list: { gap: 8, padding: 16, paddingBottom: 8 },
-  meta: { fontFamily: family.sansRegular, fontSize: 12 },
+  meta: { fontFamily: family.sansRegular, fontSize: t("mono").fontSize },
   modal: {
     borderRadius: radii.lg,
     margin: 24,
@@ -682,7 +688,6 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   modalBackdrop: {
-    backgroundColor: "rgba(0,0,0,.4)",
     flex: 1,
     justifyContent: "center",
   },
@@ -702,7 +707,12 @@ const styles = StyleSheet.create({
   },
   safe: { flex: 1 },
   sectionDestination: { paddingLeft: 18 },
-  smallInput: { borderRadius: 8, borderWidth: 1, minWidth: 130, padding: 8 },
+  smallInput: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    minWidth: 130,
+    padding: 8,
+  },
   task: {
     alignItems: "center",
     borderRadius: radii.lg,
@@ -712,6 +722,6 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   taskMain: { flex: 1 },
-  taskTitle: { fontFamily: family.sansMedium, fontSize: 15 },
-  title: { fontFamily: family.sansMedium, fontSize: 28 },
+  taskTitle: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
+  title: { fontFamily: family.sansMedium, fontSize: t("display").fontSize },
 });

@@ -29,7 +29,7 @@
 .titleIcon {
   width: 30px;
   height: 30px;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   display: grid;
   place-items: center;
   color: var(--text-inv);
@@ -39,12 +39,12 @@
   margin: 0;
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 25px;
+  font-size: var(--t-display-size);
   letter-spacing: -0.02em;
   color: var(--text);
 }
 .headMeta {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -62,7 +62,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -91,7 +91,7 @@
 /* Kinds loading + error lines. */
 .loading,
 .error {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-faint);
   padding: 24px 4px;
@@ -109,13 +109,13 @@
   gap: 12px;
   padding: 56px 24px;
   border: 0.5px dashed var(--line-strong);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--bg-sunken);
 }
 .comingSoonIcon {
   width: 46px;
   height: 46px;
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   display: grid;
   place-items: center;
   color: var(--text-faint);

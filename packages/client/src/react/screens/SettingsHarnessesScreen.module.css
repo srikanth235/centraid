@@ -2,7 +2,7 @@
    same object visually, so they share one row idiom. ───────────────────── */
 .panel {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   overflow: hidden;
   /* The panel — not the viewport — is what the lanes have to fit into: this
@@ -73,7 +73,7 @@
    the second line. The dot belongs to the first line. */
 .routeName {
   font: var(--t-small);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
   display: flex;
   align-items: flex-start;
@@ -92,7 +92,7 @@
   /* Optically centres the dot on the first line box (an empty span has no
      baseline to align to). */
   margin-top: 0.42em;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   flex: none;
   background: var(--route-accent, var(--accent));
 }
@@ -150,8 +150,8 @@
   padding: 3px 5px 3px 8px;
   border: 1px solid var(--line);
   /* `--r-pill` is a BLUEPRINT-contract token; the shell's radius scale stops
-     at `--r-xl` and composes the pill inline (radii.ts). */
-  border-radius: 999px;
+     at `--r-lg` and composes the pill inline (radii.ts). */
+  border-radius: var(--r-pill);
   color: var(--text-soft);
   font: var(--t-control);
 }
@@ -245,12 +245,12 @@
 }
 .rowName {
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 .rowSub {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-faint);
   white-space: nowrap;
@@ -274,7 +274,7 @@
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   color: var(--row-accent, var(--accent));
   background: color-mix(
     in oklab,
@@ -297,7 +297,7 @@
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   color: var(--text-ghost);
 }
 /* Action row under the harness inventory — Refresh models. */

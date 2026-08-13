@@ -18,7 +18,7 @@
   border: 0;
   background: transparent;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   font-size: var(--t-small-size);
   color: var(--text-faint);
   display: flex;
@@ -85,7 +85,7 @@
   margin-top: 24px;
   padding: 40px 24px;
   border: 1px dashed var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   color: var(--text-faint);
   font-size: var(--t-small-size);
   text-align: center;
@@ -95,6 +95,7 @@
   border-color: transparent;
 }
 .empty code {
+  font-family: var(--font-code);
   background: var(--bg-sunken);
   padding: 1px 6px;
   border-radius: var(--r-sm);
@@ -108,28 +109,28 @@
 }
 .statCard {
   border: 0.5px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   padding: 14px 16px;
   background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 .statValue {
   margin-top: 4px;
-  font-size: 24px;
-  font-weight: 700;
+  font-size: var(--t-display-size);
+  font-weight: 600;
   letter-spacing: -0.03em;
   line-height: 1.1;
   color: var(--text);
   word-break: break-all;
 }
 .statValue.statMono {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-small-size);
-  font-weight: 500;
+  font-weight: 600;
 }
 .statValue.statMuted {
   color: var(--text-faint);
-  font-weight: 500;
-  font-size: 14px;
+  font-weight: 600;
+  font-size: var(--t-small-size);
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
@@ -153,7 +154,7 @@
   padding: 4px 10px;
   font-size: var(--t-control-size);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: transparent;
   color: var(--text-soft);
   cursor: pointer;
@@ -171,7 +172,7 @@
   max-width: 240px;
   margin-left: auto;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--line);
   background: var(--bg-sunken);
   color: var(--text);
@@ -183,7 +184,7 @@
   flex-direction: column;
   gap: 2px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   overflow: hidden;
 }
 .logsRow {
@@ -193,7 +194,7 @@
   gap: 8px;
   padding: 6px 10px;
   font-size: var(--t-control-size);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   border-bottom: 1px solid var(--line);
 }
 .logsRow:last-child {
@@ -236,7 +237,7 @@
 }
 .automationRow {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   padding: 12px 14px;
   background: var(--bg-elev);
   display: flex;
@@ -264,8 +265,8 @@
   font-size: var(--t-small-size);
 }
 .automationCron {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   padding: 2px 6px;
   border-radius: var(--r-sm);
@@ -283,7 +284,7 @@
   min-width: 22px;
 }
 .automationPrompt {
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
@@ -299,12 +300,11 @@
   padding: 2px 6px;
   border-radius: var(--r-sm);
   background: var(--bg-sunken);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 .automationMetaFaint {
   color: var(--text-faint);
   background: transparent;
-  font-family: inherit;
 }
 .automationActions {
   display: flex;
@@ -312,11 +312,11 @@
   gap: 8px;
 }
 .automationResult {
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   margin-left: auto;
   padding: 3px 8px;
   border-radius: var(--r-sm);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 .automationResult[data-ok="true"] {
   color: var(--success);
@@ -405,7 +405,7 @@
   align-items: center;
   gap: 14px;
   padding: 16px;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   border: 1px solid var(--line);
   background: var(--bg-elev);
 }
@@ -419,7 +419,7 @@
   flex: none;
   width: 50px;
   height: 50px;
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--text) 5%, transparent);
@@ -436,7 +436,7 @@
   flex: none;
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: var(--text-ghost);
 }
 .heroDot[data-status="live"] {
@@ -467,9 +467,9 @@
   color: var(--text-faint);
 }
 .heroUrl {
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--t-body-size);
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text);
   overflow: hidden;
@@ -491,13 +491,13 @@
   align-items: center;
   gap: 6px;
   font: inherit;
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: var(--t-small-size);
+  font-weight: 600;
   color: var(--text-soft);
   background: var(--bg-sunken);
   border: 1px solid var(--line);
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   cursor: pointer;
   transition:
     background 0.12s ease,
@@ -513,13 +513,13 @@
 }
 .feed {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   overflow: hidden;
 }
 .feedEmpty {
   padding: 18px 16px;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 .feedRow {
@@ -536,7 +536,7 @@
   flex: none;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   display: grid;
   place-items: center;
   background: hsla(101 28% 42% / 0.14);
@@ -554,7 +554,7 @@
 }
 .feedTitle {
   font-size: var(--t-small-size);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .feedLive {
@@ -569,8 +569,8 @@
 }
 .feedWhen {
   flex: none;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .statEyebrow {
@@ -587,7 +587,7 @@
   display: inline-block;
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--text-ghost);
 }
 .statusDot[data-status="live"] {

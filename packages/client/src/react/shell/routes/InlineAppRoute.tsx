@@ -85,7 +85,7 @@ function syncInlineProductAccent(root: HTMLElement): void {
   }
 }
 
-// The blueprint token layer (--font-mono/--bg-elev/--accent/--ease/type scale …),
+// The blueprint token layer (--font-code/--bg-elev/--accent/--ease/type scale …),
 // rescoped from `:root` to the inline app subtree so it never restyles the
 // shell chrome. Injected once; the shell's own `data-theme` on <html> still
 // drives the dark block. Kept synchronous so inline theming needs no paint gap.

@@ -13,7 +13,7 @@
 
 import { StyleSheet } from "react-native";
 
-import { borders, spacing, t } from "../../kit/theme";
+import { borders, spacing, t, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
 export const makeStyles = (colors: ThemeColors) =>
@@ -32,7 +32,7 @@ export const makeStyles = (colors: ThemeColors) =>
     dialog: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
-      borderRadius: 16,
+      borderRadius: radii.lg,
       borderWidth: borders.hairline,
       insetInlineEnd: spacing[5],
       insetInlineStart: spacing[5],
@@ -66,7 +66,7 @@ export const makeStyles = (colors: ThemeColors) =>
     input: {
       ...t("body"),
       borderColor: colors.lineStrong,
-      borderRadius: 12,
+      borderRadius: radii.lg,
       borderWidth: borders.hairline,
       color: colors.text,
       marginTop: spacing[4],
@@ -87,7 +87,7 @@ export const makeStyles = (colors: ThemeColors) =>
     meta: { ...t("mono"), color: colors.textSoft },
     outlineBtn: {
       borderColor: colors.line,
-      borderRadius: 999,
+      borderRadius: radii.pill,
       borderWidth: borders.hairline,
       justifyContent: "center",
       minHeight: 34,

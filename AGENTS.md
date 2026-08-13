@@ -42,6 +42,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [SECURITY.md](SECURITY.md) | Vulnerability disclosure + pairing/relay/gateway threat model |
 | [CHANGELOG.md](CHANGELOG.md) | Keep a Changelog; release notes source (D3) |
 | [DESIGN.md](DESIGN.md) | The canonical design document — binding rulebook + machine-readable brief in the official [design.md](https://github.com/google-labs-code/design.md) spec (YAML token front matter + canonical sections). Format checked by `bun run lint:design-md`; values pinned to `packages/design/src` by `packages/design/src/design-md.test.ts` |
+| [docs/design-machinery.md](docs/design-machinery.md) | Cross-surface design inventory, lowering ownership, component boundaries, and enforcement parity |
 | [docs/decisions.md](docs/decisions.md) | Settled #468 decisions (H1, C1, D4, F1, J5, signing, …) |
 | [docs/glossary.md](docs/glossary.md) | Vocabulary + forbidden synonyms + code pointers |
 | [docs/coding-standards.md](docs/coding-standards.md) | Agent failure modes (try/catch, `?.`, refactors, fallible actions) |

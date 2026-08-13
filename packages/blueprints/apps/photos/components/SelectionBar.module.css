@@ -14,7 +14,7 @@
      modifiers travel from their own tokens rather than a literal font stack
      (B3: a numeric pins its own direction, or a mixed digit/word run reorders
      under RTL). */
-  font: 500 20px var(--font-mono);
+  font: var(--t-title);
   font-variant-numeric: var(--t-mono-numeric);
   direction: var(--t-mono-direction);
   unicode-bidi: var(--t-mono-bidi);
@@ -156,7 +156,7 @@
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-2) var(--gutter);
+  padding: var(--sp-2) var(--content-margin);
   flex-wrap: wrap;
 }
 
@@ -229,7 +229,7 @@
 }
 
 .bottomActionLabel {
-  font: 500 11px var(--font-sans);
+  font: var(--t-control);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

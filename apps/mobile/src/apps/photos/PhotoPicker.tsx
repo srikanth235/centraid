@@ -38,7 +38,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { borders, spacing, t, useTheme } from "../../kit/theme";
+import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
@@ -185,7 +185,7 @@ export default function PhotoPicker({
           <Text
             style={[
               styles.addText,
-              { color: canAdd ? colors.onAccent : colors.textDisabled },
+              { color: canAdd ? colors.textInv : colors.textDisabled },
             ]}
           >
             {picked.size === 0 ? "Add" : `Add ${picked.size}`}
@@ -227,7 +227,7 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     add: {
       alignItems: "center",
-      borderRadius: 8,
+      borderRadius: radii.md,
       justifyContent: "center",
       minHeight: 34,
       paddingHorizontal: spacing[3],

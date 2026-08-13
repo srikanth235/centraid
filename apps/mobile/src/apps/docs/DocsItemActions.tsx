@@ -11,7 +11,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { family, useTheme } from "../../kit/theme";
+import { family, useTheme, radii, t } from "../../kit/theme";
 import type { NativeFolder } from "./docs-model";
 import type { DriveItem } from "./DocsLibraryItems";
 
@@ -151,7 +151,10 @@ export default function DocsItemActions({
 
   return (
     <Modal transparent animationType="fade" visible onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+      <Pressable
+        style={[styles.backdrop, { backgroundColor: colors.scrim }]}
+        onPress={onClose}
+      />
       <View
         accessibilityViewIsModal
         style={[styles.sheet, { backgroundColor: colors.bgElev }]}
@@ -318,23 +321,23 @@ const styles = StyleSheet.create({
     gap: 12,
     minHeight: 50,
   },
-  actionText: { fontFamily: family.sansMedium, fontSize: 14 },
-  backdrop: { backgroundColor: "rgba(0,0,0,.42)", flex: 1 },
+  actionText: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
+  backdrop: { flex: 1 },
   empty: {
     fontFamily: family.sansRegular,
-    fontSize: 13,
+    fontSize: t("mono").fontSize,
     paddingVertical: 18,
   },
   input: {
-    borderRadius: 10,
+    borderRadius: radii.lg,
     borderWidth: 1,
     fontFamily: family.sansRegular,
-    fontSize: 15,
+    fontSize: t("body").fontSize,
     marginVertical: 14,
     padding: 12,
   },
   sheet: {
-    borderRadius: 18,
+    borderRadius: radii.lg,
     bottom: 24,
     left: 16,
     maxHeight: "70%",
@@ -342,5 +345,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 16,
   },
-  title: { fontFamily: family.sansMedium, fontSize: 19, marginBottom: 4 },
+  title: {
+    fontFamily: family.sansMedium,
+    fontSize: t("reading").fontSize,
+    marginBottom: 4,
+  },
 });

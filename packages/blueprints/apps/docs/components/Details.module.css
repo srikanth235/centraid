@@ -75,7 +75,7 @@
 .hero {
   position: relative;
   height: 132px;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -88,7 +88,7 @@
 }
 .hero span {
   font: var(--t-title);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   letter-spacing: var(--t-eyebrow-tracking);
 }
 .detailName {

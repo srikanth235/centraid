@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Design-token ratchet (#630 Wave 0; type/radius counters added by #686 B2).
+// Design-token zero-debt gate (#630 Wave 0; type/radius closure in #747).
 //
 // Raw hex colors and literal font-family stacks in client/blueprint CSS are
-// design-system forks. Existing debt is explicit in the checked-in budget;
-// every decrease must tighten that budget, every increase fails, and new CSS
-// files start at zero. Comments are stripped so issue references such as #505
-// are not mistaken for colors.
+// design-system forks. The checked-in budget is now empty; comparison remains
+// so any attempted allowance is visible in review and the gate still explains
+// stale or widened entries. Comments are stripped so issue references such as
+// #505 are not mistaken for colors.
 //
 // Run with `--write` to rewrite the budget from the current tree (the only
 // sanctioned way to record a decrease).
@@ -36,6 +36,7 @@ export const METRICS = [
   "rawFontWeight",
   "rawRadius",
   "paletteHueAsText",
+  "retiredTypeAxis",
 ];
 
 /** The eight app-icon hues (`palette.ts`). Kept as a literal list rather than
@@ -71,9 +72,9 @@ function countPaletteHueAsText(css) {
 }
 
 /** The two-weight chrome rule (DESIGN.md, typography.ts):
- * 400 + 500/600. `normal` is 400. 700 exists only in `marketingType`, which
+ * 400 + 600. `normal` is 400. 700 exists only in `marketingType`, which
  * is web-only and outside the chrome — so it counts as debt here. */
-const SANCTIONED_WEIGHTS = new Set(["400", "500", "600", "normal", "inherit"]);
+const SANCTIONED_WEIGHTS = new Set(["400", "600", "normal", "inherit"]);
 
 const declarations = (css, property) => [
   ...css.matchAll(
@@ -82,6 +83,11 @@ const declarations = (css, property) => [
 ];
 
 const isTokened = (value) => value.includes("var(--");
+
+const TYPE_ROLE =
+  /var\(\s*--t-(?:display|title|reading|body|body-strong|small|small-strong|control|eyebrow|mono)\s*\)/u;
+const TYPE_SIZE_ROLE =
+  /var\(\s*--t-(?:display|title|reading|body|body-strong|small|small-strong|control|eyebrow|mono)-size\s*\)/u;
 
 /** A `--t-<key>` is a `font` **shorthand** — family, weight, size and
  * line-height at once — so it cannot serve a rule that wants only the size.
@@ -99,44 +105,58 @@ const isTokened = (value) => value.includes("var(--");
 const SHORTHAND_AS_SIZE = /var\(\s*--t-(?!.*-size\s*[),])[\w-]+\s*[),]/u;
 
 function countRawFontSize(css) {
-  return declarations(css, "font-size").filter((match) => {
+  const longhands = declarations(css, "font-size").filter((match) => {
     const value = match.groups?.value.trim() ?? "";
     if (SHORTHAND_AS_SIZE.test(value)) return true;
-    return value !== "inherit" && !isTokened(value);
+    return value !== "inherit" && !TYPE_SIZE_ROLE.test(value);
   }).length;
+  const shorthands = declarations(css, "font").filter((match) => {
+    const value = match.groups?.value.trim() ?? "";
+    return value !== "inherit" && !TYPE_ROLE.test(value);
+  }).length;
+  return longhands + shorthands;
 }
 
 function countRawFontWeight(css) {
-  return declarations(css, "font-weight").filter((match) => {
-    const value = (match.groups?.value ?? "")
-      .replace(/!important/giu, "")
-      .trim();
-    return !SANCTIONED_WEIGHTS.has(value) && !isTokened(value);
+  const declarationsWithWeight = declarations(css, "font-weight").filter(
+    (match) => {
+      const value = (match.groups?.value ?? "")
+        .replace(/!important/giu, "")
+        .trim();
+      return !SANCTIONED_WEIGHTS.has(value) && !isTokened(value);
+    }
+  ).length;
+  const shorthandWeights = declarations(css, "font").filter((match) => {
+    const first = (match.groups?.value ?? "").trim().split(/\s+/u)[0] ?? "";
+    return /^\d{3}$/u.test(first) && !SANCTIONED_WEIGHTS.has(first);
   }).length;
+  return declarationsWithWeight + shorthandWeights;
 }
 
-/** One count per `border-radius` declaration that carries an off-scale px
- * component. The scale is `--r-xs|sm|md|lg|xl` = 2/4/6/10/14px. Carve-outs,
- * because none of them are points on that scale:
- *   - `0` / `inherit`      — a reset, not a radius
- *   - any `%` (e.g. `50%`) — circle/ellipse geometry
- *   - `>= 99px`            — the pill idiom radii.ts documents as composed
- *                            inline ("a pill on FABs")
- *   - `1px`                — sub-`xs` optical nudge so an inner edge matches
- *                            an outer radius minus its hairline border
- *   - `var(...)`/`calc(var(...))` — already tokened */
+/** Every radius declaration is closed over the shared scale. The only
+ * non-rung value is the 26%-of-box app-mark geometry documented in radii.ts.
+ * Semantic values emitted by the design registry (`--tile-*`) and the
+ * per-instance app-chip radius derived from iconChipRadius() are shared
+ * implementation, not local scales. `inherit` carries an already-validated
+ * parent value. Literals, arbitrary variables, fallbacks and token arithmetic
+ * are all debt: `calc(var(--r-md) * .55)` is another scale wearing a token. */
 function countRawRadius(css) {
-  return declarations(css, "border-radius").filter((match) => {
+  const matches = [
+    ...declarations(css, "border-radius"),
+    ...declarations(css, "border-top-left-radius"),
+    ...declarations(css, "border-top-right-radius"),
+    ...declarations(css, "border-bottom-left-radius"),
+    ...declarations(css, "border-bottom-right-radius"),
+  ];
+  const allowedToken =
+    /var\(\s*--r-(?:xs|sm|md|lg|pill)\s*\)|var\(\s*--tile-(?:radius|icon-radius)(?:\s*,\s*var\(\s*--r-lg\s*\))?\s*\)|var\(\s*--chip-radius\s*,\s*var\(\s*--r-md\s*\)\s*\)/gu;
+  return matches.filter((match) => {
     const value = (match.groups?.value ?? "")
       .replace(/!important/giu, "")
       .trim();
-    if (isTokened(value)) return false;
-    return value.split(/[\s/]+/u).some((part) => {
-      const px = /^(?<n>\d+(?:\.\d+)?)px$/u.exec(part);
-      if (!px) return false;
-      const n = Number(px.groups?.n);
-      return n !== 1 && n < 99;
-    });
+    if (value === "inherit" || value === "26%") return false;
+    const residue = value.replace(allowedToken, "").trim();
+    return residue.length > 0;
   }).length;
 }
 
@@ -145,7 +165,10 @@ export function analyzeCss(css) {
   const rawHex = [...stripped.matchAll(/#[\da-f]{3,8}\b/giu)].length;
   const literalFontFamily = [
     ...stripped.matchAll(/font-family\s*:\s*(?<value>[^;]+);/giu),
-  ].filter((match) => !match.groups?.value.trim().startsWith("var(--")).length;
+  ].filter((match) => {
+    const value = match.groups?.value.trim() ?? "";
+    return !/^(?:inherit|var\(\s*--font-(?:sans|code)\s*\))$/u.test(value);
+  }).length;
   return {
     rawHex,
     literalFontFamily,
@@ -153,6 +176,11 @@ export function analyzeCss(css) {
     rawFontWeight: countRawFontWeight(stripped),
     rawRadius: countRawRadius(stripped),
     paletteHueAsText: countPaletteHueAsText(stripped),
+    retiredTypeAxis: [
+      ...stripped.matchAll(
+        /--font-(?:mono|serif)\b|--page-margin-compact\b|data-app-font\b/giu
+      ),
+    ].length,
   };
 }
 
@@ -222,7 +250,8 @@ export function formatTotals(actual) {
     `${totals.rawFontSize} raw font-size(s), ` +
     `${totals.rawFontWeight} off-scale font-weight(s), ` +
     `${totals.rawRadius} raw border-radius(es), ` +
-    `${totals.paletteHueAsText} palette-hue-as-text`
+    `${totals.paletteHueAsText} palette-hue-as-text` +
+    `, ${totals.retiredTypeAxis} retired type-axis use(s)`
   );
 }
 

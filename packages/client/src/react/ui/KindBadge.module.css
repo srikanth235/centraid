@@ -6,7 +6,7 @@
   align-items: center;
   flex: 0 0 auto;
   gap: 5px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.04em;

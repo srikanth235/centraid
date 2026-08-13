@@ -44,7 +44,7 @@
   white-space: nowrap;
 }
 .listCount {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-faint);
   font-variant-numeric: var(--t-mono-numeric);

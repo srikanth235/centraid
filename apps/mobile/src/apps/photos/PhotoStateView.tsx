@@ -20,7 +20,7 @@ import {
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
 import ShareSheet from "../../kit/share/ShareSheet";
-import { borders, spacing, t, useTheme } from "../../kit/theme";
+import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
 import {
@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", flex: 1, justifyContent: "center" },
   emptyTrash: {
     alignItems: "center",
-    borderRadius: 999,
+    borderRadius: radii.pill,
     borderWidth: borders.hairline,
     justifyContent: "center",
     minHeight: 34,

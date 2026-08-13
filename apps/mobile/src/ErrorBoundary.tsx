@@ -6,6 +6,7 @@ import { toNativeTheme } from "@centraid/design";
 
 // React Native error boundary (issue #468 K1) — class component required.
 import { Text } from "./kit/components/NativeText";
+import { radii, t } from "./kit/theme";
 
 interface Props {
   children: ReactNode;
@@ -37,7 +38,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     const { error } = this.state;
     if (!error) return this.props.children;
     const scheme = Appearance.getColorScheme() === "dark" ? "dark" : "light";
-    const { colors, radii } = toNativeTheme(scheme);
+    const { colors } = toNativeTheme(scheme);
     return (
       <View
         style={[styles.wrap, { backgroundColor: colors.bg }]}
@@ -51,10 +52,7 @@ export default class ErrorBoundary extends Component<Props, State> {
         </Text>
         <Pressable
           onPress={this.handleReset}
-          style={[
-            styles.button,
-            { backgroundColor: colors.accentFill, borderRadius: radii.md },
-          ]}
+          style={[styles.button, { backgroundColor: colors.accentFill }]}
           accessibilityRole="button"
         >
           <Text style={[styles.buttonText, { color: colors.textInv }]}>
@@ -73,24 +71,21 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   title: {
-    fontSize: 18,
-    fontWeight: "600",
+    ...t("title"),
     marginBottom: 8,
   },
   body: {
-    fontSize: 14,
-    lineHeight: 20,
+    ...t("body"),
     marginBottom: 16,
   },
   button: {
     alignSelf: "flex-start",
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: radii.md,
   },
   buttonText: {
-    fontWeight: "600",
-    fontSize: 13,
+    ...t("bodyStrong"),
   },
 });
 /* eslint-enable react/no-set-state, react/state-in-constructor */

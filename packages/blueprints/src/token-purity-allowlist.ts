@@ -40,33 +40,15 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
   Record<string, TokenPurityBudget>
 > = {
   // Remaining entries after the #686 burn-down (was 28 files / 252 violations).
-  // What's left is sanctioned: app-font knobs declaring contract font roles,
-  // per-app identity props (--app-hue / --app-identity), the photos wall,
+  // What's left is sanctioned: per-app identity props
+  // (--app-hue / --app-identity), the photos wall,
   // and hsl(var(--app-hue) ...) theater-stage backdrops awaiting a --stage
   // token in packages/design.
-  "docs/Chrome.module.css": {
-    hex: 0,
-    functional: 0,
-    fontFamily: 0,
-    customProps: ["--font-sans"],
-  },
   "docs/components/QuickLook.module.css": {
     hex: 0,
     functional: 1,
     fontFamily: 0,
     customProps: [],
-  },
-  "locker/Chrome.module.css": {
-    hex: 0,
-    functional: 0,
-    fontFamily: 0,
-    customProps: ["--font-sans"],
-  },
-  "notes/Chrome.module.css": {
-    hex: 0,
-    functional: 0,
-    fontFamily: 0,
-    customProps: ["--font-sans"],
   },
   "people/Chrome.module.css": {
     hex: 0,
@@ -85,12 +67,6 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
   // packages/design. That role landed (Photos v4 §2.2 / CHANGELOG §B), the
   // stylesheet now says `var(--stage)`, and the seam is closed — so the entry
   // is gone rather than shrunk to an empty budget.
-  "tally/Chrome.module.css": {
-    hex: 0,
-    functional: 0,
-    fontFamily: 0,
-    customProps: ["--font-sans"],
-  },
 };
 
 /**
@@ -101,10 +77,10 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
  * time, so the rule silently did not apply. The twelve that predated #686 were
  * all resolved by reading what each site was actually doing:
  *
- *   * `--r-lg` (3 refs) — the shell radius scale has `lg`, the blueprint
- *     contract does not. All three sites are the repo's card idiom
- *     (`1px solid var(--line)` + `var(--bg-elev)` + 14px padding), which every
- *     peer in the same two apps rounds with `--r-xl`. Bound to that.
+ *   * the former duplicate container-radius alias (3 refs) — all three sites
+ *     are the repo's card idiom (`1px solid var(--line)` + `var(--bg-elev)` +
+ *     14px padding), which every peer rounds with `--r-lg`. Normalized to the
+ *     one public container-radius name.
  *   * `--acc` — an abbreviation of `--accent` in a focus ring. Bound to
  *     `var(--accent)`, matching every other `:focus-visible` in the apps.
  *   * `--t-label` — the uppercase sidebar section label. The blueprint type
