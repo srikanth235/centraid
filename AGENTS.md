@@ -27,8 +27,10 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 1. **Before non-trivial work**, skim the relevant rows in the [docs index](#docs-index) (and `docs/traps/` if you are near a known footgun).
 2. **Code-level facts** belong in code comments next to the invariant.
 3. **System / process facts** (workflows, ownership, recovery, vocabulary) belong under `docs/`.
-4. When you learn a gotcha, convention, or workflow that **outlives the task**, update the matching doc in the same PR (or leave a short PR note proposing the doc change if out of scope).
-5. Stale docs are bugs — same as broken links ([CONSTITUTION.md](CONSTITUTION.md)).
+4. Docs describe **current state**. Cite history by linking the issue or receipt; do not narrate a sequence of past implementations. Current decisions, deliberate non-goals, and supersession markers are state and belong in the docs.
+5. Intent belongs in proposal issues. The repo's three durable layers are **State** (`docs/`, architecture, runbooks), **Decisions** (`docs/decisions.md` and supersession chains), and **Evidence** (receipts, changelog, ledgers); evidence is never copied into mutable state docs.
+6. When you learn a gotcha, convention, or workflow that **outlives the task**, update the matching doc in the same PR (or leave a short PR note proposing the doc change if out of scope).
+7. Stale docs are bugs — same as broken links ([CONSTITUTION.md](CONSTITUTION.md)).
 
 ## Docs index
 
@@ -43,11 +45,10 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [CHANGELOG.md](CHANGELOG.md) | Keep a Changelog; release notes source (D3) |
 | [DESIGN.md](DESIGN.md) | The canonical design document — binding rulebook + machine-readable brief in the official [design.md](https://github.com/google-labs-code/design.md) spec (YAML token front matter + canonical sections). Format checked by `bun run lint:design-md`; values pinned to `packages/design/src` by `packages/design/src/design-md.test.ts` |
 | [docs/design-machinery.md](docs/design-machinery.md) | Cross-surface design inventory, lowering ownership, component boundaries, and enforcement parity |
-| [docs/decisions.md](docs/decisions.md) | Settled #468 decisions (H1, C1, D4, F1, J5, signing, …) |
+| [docs/decisions.md](docs/decisions.md) | Current decisions, deliberate non-goals, and supersession chains over the evidence corpus |
 | [docs/glossary.md](docs/glossary.md) | Vocabulary + forbidden synonyms + code pointers |
 | [docs/coding-standards.md](docs/coding-standards.md) | Agent failure modes (try/catch, `?.`, refactors, fallible actions) |
-| [docs/toolchain.md](docs/toolchain.md) | Tool ownership, stable commands, rule rubric, profiles, and upgrades |
-| [docs/sonarcloud.md](docs/sonarcloud.md) | SonarCloud Autoscan scope, silenced rules, Centraid profile/gate, apply script |
+| [docs/toolchain.md](docs/toolchain.md) | Tool ownership, stable commands, SonarCloud Autoscan, rule rubric, profiles, and upgrades |
 | [docs/protocol.md](docs/protocol.md) | C1 two-contract, COMPAT tags, wire-schema purity, RPC plane naming |
 | [docs/platform-gating.md](docs/platform-gating.md) | `isWeb` / `isNative` / Electron / compact form-factor |
 | [docs/blueprint-seats.md](docs/blueprint-seats.md) | Three seats (origin/custodian/viewer), byte-bearing vs record-only, custody triple, per-app north stars |
@@ -55,12 +56,8 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/release.md](docs/release.md) | Three numbers, surfaces matrix, prepare vs publish, patch/minor, beta |
 | [docs/oauth-assist.md](docs/oauth-assist.md) | Assist code-courier architecture, privacy, scopes, BYO, reconnect |
 | [docs/mobile-offline.md](docs/mobile-offline.md) | Native multi-vault replicas, background sync, storage, privacy, and performance guardrails |
-| [docs/photos-derived-ledger.md](docs/photos-derived-ledger.md) | Derived-intelligence foundation (E1/E2/E3): ledger tables, model-versioned backfill, recognition automations, sqlite-vec load rules, faces (E4) shipped, Memories v0, E6 (device-side indexing) dead by decision |
-| [docs/photos-places.md](docs/photos-places.md) | Places on both surfaces: member-named locations, one shared projection, and why there is no basemap |
-| [docs/photos-dogfood.md](docs/photos-dogfood.md) | Discovery ritual (D2): maintainer real-library import checklist, known stuck-state regression classes, cadence, findings log |
-| [docs/photos-switcher-walkthrough.md](docs/photos-switcher-walkthrough.md) | Day-one switcher script (D3): Google Photos refugee walkthrough (import → timeline → search → share → offload → key photo), honest shipped/partial/gap status per step |
-| [docs/photos-design-notes.md](docs/photos-design-notes.md) | Sanctioned v9 design divergences (copy, mobile band, colour-role and control decisions) and the verified metric-perfect do-not-improve list |
-| [docs/docs-app-design-notes.md](docs/docs-app-design-notes.md) | What the Docs app ships against the v9 handoff, the withholding table (which facts and verbs the seat cannot honestly serve, and where each is enforced), and the known duplications left in place |
+| [docs/photos/README.md](docs/photos/README.md) | Photos state register: derived ledger, places, dogfood ritual, switcher walkthrough, and sanctioned design notes |
+| [docs/design-divergences.md](docs/design-divergences.md) | Per-app sanctioned design divergences, honest withholdings, and do-not-fix-quietly contracts |
 | [docs/recognition-automations.md](docs/recognition-automations.md) | Self-contained recognition handlers: vault content/invoke flow, local model assets, provenance/backfill, OCR (images and PDFs), faces, and live-model evidence |
 | [docs/release/oauth-assist-google.md](docs/release/oauth-assist-google.md) | Google/Cloudflare production and verification evidence gates |
 | [docs/identifiers.md](docs/identifiers.md) | `dev.centraid.*` table (J5) |
@@ -70,11 +67,10 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/harnesses.md](docs/harnesses.md) | Harnesses: ACP is the single path, adapters, tool catalog |
 | [docs/dev-environment.md](docs/dev-environment.md) | Worktrees, ports, named services, launch.json, product CLI |
 | [docs/multi-agent.md](docs/multi-agent.md) | Parallel-agent norms + supervision caps |
-| [docs/refactors/](docs/refactors/) | Multi-session plan format + progress logs |
+| Proposal issues | Intent, multi-session plans, checklists, and open questions; receipts record the resulting evidence |
 | [docs/cron-timezone.md](docs/cron-timezone.md) | Cron IANA zones, resolution tiers, DST gap/overlap policy (#570) |
 | [docs/traps/](docs/traps/) | One doc per known footgun |
 | [docs/recovery/](docs/recovery/) | Exact recovery steps (release, backup, **vault erase + restore-after-erase**, pairing, Assist OAuth, **Commons steward loss**) |
-| [docs/plans/](docs/plans/) | Design/measurement plans (examples for refactors) |
 
 ### Traps (one file each)
 

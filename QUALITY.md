@@ -21,7 +21,7 @@
 
 - **`react-native-maps` is dead weight and still ships.** Places on the phone
   now draws the shared `place-map.ts` projection through `react-native-svg`
-  (see [docs/photos-places.md](docs/photos-places.md)), so nothing imports
+  (see [docs/photos/places.md](docs/photos/places.md)), so nothing imports
   `MapView` any more — but the dependency is still in `apps/mobile/package.json`
   and still in `ios/Podfile.lock`. It is parked in `knip.json`'s
   `ignoreDependencies` **only** because deleting it without regenerating the

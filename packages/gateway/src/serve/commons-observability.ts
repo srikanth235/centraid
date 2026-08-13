@@ -62,7 +62,7 @@ export const COMMONS_STEWARD_DEGRADED_AFTER_MS = 24 * 60 * 60 * 1000;
 /** Silent for a week, with a working local link, is "absent". */
 export const COMMONS_STEWARD_ABSENT_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 /**
- * The op window `docs/plans/commons-fixed-window-sync.md` proposes as K. Lag
+ * The op window documented in `docs/decisions.md#commons` proposes as K. Lag
  * beyond it is the measurement that flips that plan's go/no-go, so the
  * summary counts members sitting past it rather than just reporting a max.
  */

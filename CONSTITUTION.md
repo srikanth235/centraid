@@ -19,6 +19,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - Every commit is treated as agent-authored — the audit chain (issue → receipt → commit → token + steering ledger) is mandatory, not opt-in.
 - The repo is its own system of record. Decisions, costs, steering events, and quality observations belong in tracked files, not in chat history.
 - Docs are load-bearing. Stale docs are bugs; broken internal links are bugs; missing baseline docs (constitution, agents, readme, license, security, architecture) are bugs.
+- Documentation describes current state. History is cited by reference; current decisions, deliberate non-goals, and supersession markers remain documentable state, while intent belongs in proposal issues.
 - Escape hatches exist (`SKIP_GOVERNANCE=1`, `git commit --no-verify`) — but every skipped commit is still checked in CI.
 - Every user-facing interaction has a perceived-latency budget. A hot path that ships without a measured budget is an incomplete feature, not a fast one nobody got around to measuring.
 - Nothing whose cost scales with vault size runs synchronously on the request path or the event loop. Growth is the default assumption; "it is small today" is an observation, not a design.
@@ -81,7 +82,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 ### coverage-scope-reachability
 
 - **Directive**: Every first-party TypeScript source tree under `packages/*/src` or `apps/*/src`, and the co-located executable `packages/blueprints/apps` / `packages/design/kit` runtime trees, must be covered by an enforced coverage floor, own a product-matrix flow, or appear in the intentional-ungated allowlist; every floor must also be reachable from Vitest's instrumentation globs.
-- **Rationale**: Coverage ratchets cannot protect code the coverage runner never instruments. Issue #532 closed this blind spot for conventional package/app roots, #630 added the 41,821-line bundled blueprint runtime, and #725 found the recognition model and handler build sources under the then-separate `tools/*` root remained outside both enumeration and instrumentation ownership. #753 retired that root — the model runtime is now an ordinary `packages/*` member — so the two remaining source-tree classes obey one reachability rule with one fewer glob to keep in sync.
+- **Rationale**: Coverage ratchets cannot protect code the coverage runner never instruments. The check covers ordinary `packages/*/src` and `apps/*/src` trees plus the co-located blueprint app and kit runtimes; the recognition sources now live under `packages/model-runtime`. The same enumeration and instrumentation rule applies to every covered source-tree class (see #532, #630, #725, and #753 for the boundary decisions).
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/check.sh`
 - **Exceptions**: Runtime trees that are intentionally journey-only may be listed by exact scope id in `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/allowlist.txt` with a matching `TESTING.md` explanation. Line waivers are not supported because the policy applies to whole coverage scopes.
 

@@ -149,13 +149,43 @@ Parent backlog: [#496](https://github.com/srikanth235/centraid/issues/496).
 
 Playwright alone owns desktop and web regression journeys. The mobile journey layer is the committed agent-driven flows under [`tests/agent-e2e-mobile/`](tests/agent-e2e-mobile); their device-driving substrate is **Maestro**, spawned by the harness ([`lib/harness.mjs`](tests/agent-e2e-mobile/lib/harness.mjs) `runMaestroChunk` runs `maestro --udid … test <flow.yaml>` per step) against an installed development app on a booted iOS Simulator or Android emulator. The `mobile-e2e` job in [`e2e.yml`](.github/workflows/e2e.yml) installs a pinned Maestro CLI and runs those flows nightly. There is no second native suite and no Detox suite. Desktop agent-driven flows were retired after their unique restart/persistence assertions moved to Electron Playwright.
 
-React Native component tests use `@testing-library/react-native` 13 on the **same Vitest runner**. They are reserved for claims that need the RN accessibility/responder tree; pure transforms stay unit tests and recognizer/device integration stays Maestro. The renderer choice, measured cost, and mock boundary are recorded in [`docs/plans/photos-testing.md`](docs/plans/photos-testing.md). A component test over roughly 200ms must state what cheaper layer cannot falsify and should be consolidated with adjacent scenarios rather than spawning another cold renderer file.
+React Native component tests use `@testing-library/react-native` 13 on the **same Vitest runner**. They are reserved for claims that need the RN accessibility/responder tree; pure transforms stay unit tests and recognizer/device integration stays Maestro. A component test over roughly 200ms must state what cheaper layer cannot falsify and should be consolidated with adjacent scenarios rather than spawning another cold renderer file.
+
+### App admission contract
+
+When an app graduates beyond sample data, its current design record and matrix entries must name:
+
+- the app, north star, seat class (`record-only` or `byte-bearing`), and graduation issue;
+- a `*-model.ts` beside each view for pure product arithmetic;
+- one cheapest falsifying layer per scenario: `U`, `C`, or `E` (`U + E` only when the assertions differ);
+- a handler contract for every vault-facing action, including refusal, receipt/postcondition, and partial-batch behavior;
+- structurally impossible engine/app combinations as `skip` in `tests/matrix.json#appEngines`, with a seat-doctrine citation;
+- one north-star journey and tighten-only budget per byte-bearing app/platform, or the shared replica journey for record-only apps;
+- the seeded `@centraid/test-kit/year3-vault` profile, destructive-flow reseed order, app path filter, and a measured app coverage floor.
+
+The smallest reusable record is:
+
+| Claim                                 | Layer | Evidence                  |
+| ------------------------------------- | ----- | ------------------------- |
+| Pure product arithmetic               | `U`   | `<feature>-model.test.ts` |
+| Native role/state/responder semantics | `C`   | `<Feature>.test.tsx`      |
+| Device/runtime integration            | `E`   | `<app>-<journey>.mjs`     |
+
+Every vault action records its happy-path postcondition, refusal/partial-failure behavior, and owning contract file. Every structural exclusion records why the engine is impossible and cites `docs/blueprint-seats.md#engine-contracts`. The shared profile is paid for once per platform; a byte-bearing app's journey owns its budget and PR filter.
+
+### Photos native renderer contract (#716)
+
+Photos uses `@testing-library/react-native` on Vitest, not Jest, Detox, or Appium. The consolidated `PhotosHome.test.tsx` has eleven RNTL cases; the final file measured 4.15s Vitest duration, 528ms test-body time, and about 5.7s shell time. That startup cost is accepted once because it falsifies RN roles, responder wiring, accessibility labels, and host geometry that jsdom cannot represent. Pure models remain ordinary tests.
+
+Production application components and JS helpers stay real. Mocks are limited to native host/device seams: AsyncStorage, Expo device services, replica/data providers, `expo-image`, `react-native-svg`, and media URI resolution. A future direct `op-sqlite`, FlashList measurement, or RNGH dependency receives an import-typed seam mock; it must not replace the component or its pure model. Recognizer precedence, native modal layering, pinch/pan/swipe, keyboard alignment, and denied OS permissions remain Maestro claims.
+
+`apps/mobile/src/apps/photos/photos-fixtures.ts` is the deterministic in-process corpus shared by pure and component tests. The device seed separately provides 19 byte-bearing assets across months and years, one video, the Tahoe album/place, and named people. The five structural journeys and their under-eight-minute aggregate budget are listed in the Photos table below; `photos-budget.md` owns the tighten-only response. Offline write/reconnect replay is a separate host-network journey (#717), not a sixth Photos UI flow.
 
 ### Photos scenario × layer contract (#716)
 
 `U` is a pure/unit test, `C` is the RNTL/Vitest component file, and `E` is one named Maestro journey. A row owns one cheapest falsifying layer; `U + E` is intentional only where the claims differ (model arithmetic versus device gesture/runtime integration).
 
-This table conforms to the reusable [app scenario × layer admission template](docs/plans/app-scenario-layer-template.md). The template is mandatory when an app graduates beyond sample data; it also records the pure-model-beside-the-view, handler-contract, structural-exclusion, north-star-journey, shared-profile, and per-app budget conventions. The Photos rows below remain the unchanged reference instance.
+This table is the reference instance of the app admission contract above. It records the pure-model-beside-the-view, handler-contract, structural-exclusion, north-star-journey, shared-profile, and per-app budget conventions.
 
 | Photos scenario | U | C | E | Owner / evidence |
 | --- | --- | --- | --- | --- |
@@ -183,7 +213,7 @@ The recognition boundary law is especially strict: blueprint apps enqueue consen
 
 ### Layer 2 — app delta
 
-A graduating app completes the [scenario × layer template](docs/plans/app-scenario-layer-template.md). Each claim names its cheapest falsifying layer: `U` for a pure model beside the view, `C` for React Native component semantics, or `E` for one named platform journey. `U + E` is allowed only when the two layers prove different claims. Vault-facing actions also have handler contracts. Structural exclusions follow the seat doctrine and are recorded as matrix skips rather than tests of impossible UI.
+A graduating app completes the [app admission contract](#app-admission-contract). Each claim names its cheapest falsifying layer: `U` for a pure model beside the view, `C` for React Native component semantics, or `E` for one named platform journey. `U + E` is allowed only when the two layers prove different claims. Vault-facing actions also have handler contracts. Structural exclusions follow the seat doctrine and are recorded as matrix skips rather than tests of impossible UI.
 
 Byte-bearing apps own one north-star journey per platform and one tighten-only budget file beside their flows. Record-only apps share one representative replica write/read/offline journey until an app gains a genuinely app-specific native integration. Journeys in one platform run reuse a seeded `@centraid/test-kit/year3-vault` profile; a destructive/exclusive-state journey runs first and explicitly reseeds. PR workflows path-filter app journeys by the changed app directory. The suite wall-clock ratchet remains the global backpressure.
 
@@ -196,7 +226,7 @@ Each tier makes a different claim. A higher tier does not retroactively turn jud
 | **PR** | Injected handler-model fixtures plus pure tokenizer, CTC, NMS, PDF/OCR, DB postprocess, and geometry units | Handler contracts, typed vault content/invoke flow, consent gating, honest local-asset unavailability, image/PDF OCR behavior, and deterministic preprocessing/postprocessing without weights or native ML dependencies in the root install. |
 | **Nightly** | Handler failure injection, scale rigs, and provenance/backfill selection properties | Volume correctness, drain invariants, failure isolation, and model-upgrade-as-backfill behavior. |
 | **Weekly / release opt-in live** | `bun run --cwd packages/model-runtime setup`, then `bun run test:enrich:live` over pinned real weights and committed goldens | Actual tensor layouts and preprocessing: exact model pins, image/PDF OCR text with confidence/box tolerance, embedding cosine tolerance, face count/geometry tolerance, and lock/licence pin integrity. Run after model or preprocessing changes and before releases. |
-| **Never a CI gate** | OCR recall, cluster purity, search relevance, and other model-quality judgements | Dogfood evidence, not product law. Findings belong to the D2 ritual in [`docs/photos-dogfood.md`](docs/photos-dogfood.md), not a pass/fail assertion. |
+| **Never a CI gate** | OCR recall, cluster purity, search relevance, and other model-quality judgements | Dogfood evidence, not product law. Findings belong to the D2 ritual in [`docs/photos/dogfood.md`](docs/photos/dogfood.md), not a pass/fail assertion. |
 
 The weekly artifact has its own **eight-day freshness window** in the health report. An absent artifact renders grey/missing, never green; an artifact older than eight days renders stale. Scheduled failure or cancellation opens/updates the lane's tracking issue under the same response terms as the nightly SLA.
 
