@@ -15,7 +15,7 @@
  */
 
 import type { LinkRoute } from "./vault-link-row.js";
-import { isLinkApproved, routeTo } from "./vault-link-row.js";
+import { isLinkApproved } from "./vault-link-row.js";
 import type { VaultLinksStore } from "./vault-links-store.js";
 
 export interface LinkCrossingDeps {
@@ -49,10 +49,10 @@ export function judgeEdgeCrossing(
     return { state: "same-owner" };
   const link = deps.links.findPair(originVaultId, audienceVaultId);
   if (!link || !isLinkApproved(link)) return { state: "not_found" };
-  const route = routeTo(link, audienceVaultId);
-  // A vault this gateway does not hold is reachable only through the link's
-  // route cache. No route and no local owner means the pair names something
-  // this gateway cannot address at all.
+  // The audience's ONE `vault_routes` row (#750 invariant 2): present exactly
+  // when the audience lives elsewhere. No route and no local owner means the
+  // pair names something this gateway cannot address at all.
+  const route = deps.links.routeFor(audienceVaultId);
   if (audienceOwner === undefined && !route) return { state: "not_found" };
   return {
     state: "linked",

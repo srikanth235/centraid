@@ -8,7 +8,8 @@
  *
  * D9 runs BEFORE any byte moves and before the closure body is even trusted
  * enough to project: refuse writes nothing and answers denied (a state, not
- * an exception); ask writes only a pointer row and answers asked; accept
+ * an exception); ask writes only an 'await-answer' obligation into the share
+ * outbox (no closure, no bytes) and answers asked; accept
  * projects. Every derivative's bytes are sha256-verified against the name the
  * closure gave them before they ever reach the audience's CAS — untrusted
  * network input never gets adopted on the strength of its own say-so.
@@ -34,13 +35,16 @@ import {
 } from "../serve/peer-closure-blobs.js";
 import type { WireDerivativeBlob } from "../serve/peer-closure-blobs.js";
 import { receiveSettingFor } from "../serve/peer-receive-settings.js";
-import { readEdgeRow, updateStatus } from "./edges-reconcile.js";
+import { readEdgeRow } from "../serve/share-edge-row.js";
+import { applyEdgeSignal, edgeFactsOf } from "../serve/share-edge-store.js";
+import {
+  completeShareEffect,
+  enqueueShareEffect,
+  findQueuedEffect,
+} from "../serve/share-effects.js";
+import { parseEdgeScope } from "../serve/share-scope.js";
 import type { PeerIdentity } from "./peer-plane.js";
 import { readJson, sendJson } from "./route-helpers.js";
-
-export const PEER_EDGE_GIVE_PATH = "/centraid/_peer/edge/give";
-export const PEER_EDGE_CLOSURE_PATH_PREFIX = "/centraid/_peer/edge/closure/";
-export const PEER_EDGE_DENY_PATH = "/centraid/_peer/edge/deny";
 
 export interface PeerEdgeGiveDeps {
   gatewayDatabase: GatewayDatabase;
@@ -101,18 +105,21 @@ export async function handlePeerEdgeGive(
     });
   }
   if (setting === "ask") {
-    deps.gatewayDatabase.run(
-      `INSERT INTO peer_pending_gives
-         (edge_id, link_id, peer_vault_id, local_vault_id, item_type, item_count, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (edge_id) DO NOTHING`,
-      edgeId,
-      link.linkId,
-      link.peerVaultId,
-      link.localVaultId,
-      itemType,
-      closure.items.length,
-      new Date().toISOString()
+    // An obligation on a HUMAN, not on the machine: `awaitsHuman` leaves
+    // `next_attempt_at` NULL so no sweep ever "retries" someone's decision.
+    // Nothing else is written — no closure, no bytes — until they answer.
+    enqueueShareEffect(
+      deps.gatewayDatabase,
+      {
+        kind: "await-answer",
+        edgeId,
+        linkId: link.linkId,
+        peerVaultId: link.peerVaultId,
+        localVaultId: link.localVaultId,
+        itemType,
+        itemCount: closure.items.length,
+      },
+      { awaitsHuman: true }
     );
     return sendJson(res, 200, { state: "asked" });
   }
@@ -130,10 +137,11 @@ export async function handlePeerEdgeGive(
       detail: error instanceof Error ? error.message : String(error),
     });
   }
-  deps.gatewayDatabase.run(
-    "DELETE FROM peer_pending_gives WHERE edge_id = ?",
-    edgeId
-  );
+  // A give that arrives to be projected outright closes any earlier 'ask'
+  // for the same edge (the audience's setting changed between the two) —
+  // there is nothing left for its owner to answer.
+  const asked = findQueuedEffect(deps.gatewayDatabase, "await-answer", edgeId);
+  if (asked) completeShareEffect(deps.gatewayDatabase, asked.effectId);
   recordPendingPulls(deps.gatewayDatabase, audience, {
     edgeId,
     linkId: link.linkId,
@@ -170,7 +178,7 @@ export async function handlePeerEdgeClosure(
     closure = readShareClosure(origin.vault, {
       originVaultId: row.origin_vault_id,
       itemType: row.item_type,
-      itemIds: JSON.parse(row.scope_json ?? "[]") as string[],
+      itemIds: parseEdgeScope(row.mode, row.scope_json).itemIds,
       crossOwner: true,
     });
     derivatives = collectDerivativeBlobs(origin, closure);
@@ -184,7 +192,12 @@ export async function handlePeerEdgeClosure(
   // wire twice (or more); it has no way to learn whether the audience's
   // projection actually succeeds, so — same as the push path — reaching this
   // point IS this gateway's definition of "given".
-  updateStatus(deps.gatewayDatabase, edgeId, "completed", null);
+  applyEdgeSignal(
+    deps.gatewayDatabase,
+    row,
+    edgeFactsOf(row, { delivery: "peer", crossOwner: true }),
+    { type: "give-served" }
+  );
   return sendJson(res, 200, { state: "given", closure, derivatives });
 }
 
@@ -216,15 +229,14 @@ export async function handlePeerEdgeDeny(
   // vault ids, not the wire's say-so.
   const link = peer.linkForPair(row.origin_vault_id, row.audience_vault_id);
   if (!link) return sendJson(res, 404, { state: "not_found" });
-  // Idempotent: a completed or already-denied edge is left alone rather than
-  // clobbered by a late-arriving (queued, retried) denial.
-  if (row.status !== "completed" && row.status !== "denied") {
-    updateStatus(
-      deps.gatewayDatabase,
-      edgeId,
-      "denied",
-      "recipient declined this share"
-    );
-  }
+  // Idempotent by construction: the reducer absorbs a denial aimed at an
+  // edge that already completed (or was already denied), so a late-arriving
+  // retry of this relay clobbers nothing.
+  applyEdgeSignal(
+    deps.gatewayDatabase,
+    row,
+    edgeFactsOf(row, { delivery: "peer", crossOwner: true }),
+    { type: "give-denied", reason: "recipient declined this share" }
+  );
   return sendJson(res, 200, { state: "acknowledged" });
 }

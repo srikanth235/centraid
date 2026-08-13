@@ -8,8 +8,8 @@ import { registerScheduleCommands } from "../commands/schedule.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { sha256Hex, uuidv7 } from "../ids.js";
-import { advanceCommonsCursor } from "../share/commons-cursor.js";
 import {
+  acknowledgeCommonsSeatCursor,
   appendCommonsOperation,
   createCommonsGrant,
   queueCommonsIntent,
@@ -190,8 +190,8 @@ describe("portability", () => {
                  'portable receipt proof', ?)`
       )
       .run(grant.grantId, boot.ownerPartyId, now);
-    advanceCommonsCursor({
-      db: db.vault,
+    acknowledgeCommonsSeatCursor({
+      steward: db.vault,
       grantId: grant.grantId,
       memberVaultId: boot.vaultId,
       sequence: 1,

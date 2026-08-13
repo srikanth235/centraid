@@ -7,6 +7,7 @@ import {
   appEntry,
   cleanupEnv,
   closeApp,
+  gotoNav,
   launchApp,
   makeEnv,
   markUserApp,
@@ -525,6 +526,39 @@ test("2.11 — first-party notes is openable from a Home first-move or tile", as
   try {
     await waitForHome(page);
     await expect(page.locator('[data-app-id="notes"]').first()).toBeVisible();
+  } finally {
+    await closeApp(app);
+  }
+});
+
+test("2.12 — Household opens and yields the #750 UI evidence", async () => {
+  // Same contract as 2.6b: the evidence frame has to be the surface the change
+  // set touched. #750's user-visible half — the sharing card's people and
+  // circles, and the steward-recovery rows this issue made reachable from the
+  // UI rather than from a runbook — lives on Household, so Household-open is
+  // the honest frame.
+  //
+  // The assertion anchors on the page's own <h1> (HouseholdScreen.tsx:138),
+  // which renders unconditionally. It deliberately does NOT wait for the
+  // sharing card's "People & circles" heading: against the mock gateway that
+  // card does not mount, and an assertion that depends on fixture depth would
+  // make this a sharing-data test rather than the evidence frame it is.
+  gateway.state.apps = [];
+  await seedRemoteGateway(env, gateway);
+  const { app, page } = await launchApp(env);
+  try {
+    await waitForHome(page);
+    await gotoNav(page, "Household");
+    await expect(page.getByRole("heading", { name: "Devices" })).toBeVisible();
+    const evidenceDir = path.resolve(
+      import.meta.dirname,
+      "../../../../artifacts/e2e/ui-impact"
+    );
+    await mkdir(evidenceDir, { recursive: true });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-750-vault-sharing.png"),
+      fullPage: true,
+    });
   } finally {
     await closeApp(app);
   }

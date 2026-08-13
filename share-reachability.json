@@ -1,0 +1,13 @@
+{
+  "modules": [
+    "packages/gateway/src/serve/peer-*.ts",
+    "packages/gateway/src/serve/vault-links-store.ts",
+    "packages/gateway/src/serve/share-*.ts",
+    "packages/gateway/src/serve/commons-*.ts",
+    "packages/gateway/src/routes/commons-*.ts",
+    "packages/gateway/src/routes/edges-*.ts",
+    "packages/gateway/src/routes/edge-*.ts",
+    "packages/vault/src/share/*.ts"
+  ],
+  "allowlist": []
+}

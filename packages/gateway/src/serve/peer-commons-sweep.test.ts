@@ -18,7 +18,11 @@ import {
   settleCommonsIntent,
 } from "@centraid/vault";
 
-import { sweepPeerCommons } from "./peer-commons-sweep.js";
+import {
+  COMMONS_SWEEP_BACKOFF_BASE_MS,
+  COMMONS_SWEEP_BACKOFF_MAX_MS,
+  sweepPeerCommons,
+} from "./peer-commons-sweep.js";
 import type { PeerDial } from "./peer-edge-give-client.js";
 import { link, makeSide, seedPhoto } from "./peer-give.test-fixtures.js";
 
@@ -30,6 +34,19 @@ function unreachableDial(): PeerDial {
   return {
     endpointTicketFor: () => "ticket",
     request: async () => ({ status: 404, json: { state: "not_found" } }),
+  };
+}
+
+/** The same dead steward, with a call counter for the backoff suite. */
+function countingUnreachableDial(): PeerDial & { calls: () => number } {
+  let dialled = 0;
+  return {
+    calls: () => dialled,
+    endpointTicketFor: () => "ticket",
+    request: async () => {
+      dialled += 1;
+      return { status: 404, json: { state: "not_found" } };
+    },
   };
 }
 
@@ -143,6 +160,54 @@ describe("sweepPeerCommons steward-status surfacing", () => {
         limit: 10,
       })
     ).resolves.toStrictEqual({ progressed: 0 });
+  });
+});
+
+describe("sweepPeerCommons backs off an absent steward (issue #750 defect e)", () => {
+  test("recorded absence evidence gates re-dialing exponentially, intents included", async () => {
+    const { member, grantId } = await memberWithGrant("sweep-backoff");
+    const t0 = new Date().toISOString();
+    // A pending intent alongside the grant pull: without the gate the sweep
+    // used to dial the dead steward once per intent per grant per tick.
+    queueCommonsIntent({
+      seat: member.vault.vault,
+      grantId,
+      actorPartyId: member.ownerPartyId,
+      command: "media.update_asset",
+      commandInput: { asset_id: "does-not-matter", title: "queued" },
+      now: t0,
+    });
+    const dial = countingUnreachableDial();
+    const at = async (offsetMs: number): Promise<void> => {
+      await sweepPeerCommons({
+        vaults: [{ vaultId: member.vaultId, db: member.vault }],
+        links: member.links,
+        dial,
+        limit: 10,
+        now: new Date(Date.parse(t0) + offsetMs).toISOString(),
+      });
+    };
+    await at(0);
+    const firstTick = dial.calls();
+    expect(firstTick).toBeGreaterThan(0);
+    // Inside the first backoff window: NOTHING is dialed — not the pull, not
+    // the queued intent.
+    await at(COMMONS_SWEEP_BACKOFF_BASE_MS / 2);
+    expect(dial.calls()).toBe(firstTick);
+    // Past the window the steward is probed again…
+    await at(COMMONS_SWEEP_BACKOFF_BASE_MS + 1000);
+    const secondProbe = dial.calls();
+    expect(secondProbe).toBeGreaterThan(firstTick);
+    // …and the second consecutive failure doubles the window.
+    await at(
+      COMMONS_SWEEP_BACKOFF_BASE_MS + 1000 + COMMONS_SWEEP_BACKOFF_BASE_MS
+    );
+    expect(dial.calls()).toBe(secondProbe);
+    // The ceiling always allows an eventual re-probe.
+    await at(
+      COMMONS_SWEEP_BACKOFF_BASE_MS + 1000 + COMMONS_SWEEP_BACKOFF_MAX_MS
+    );
+    expect(dial.calls()).toBeGreaterThan(secondProbe);
   });
 });
 

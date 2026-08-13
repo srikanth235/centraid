@@ -96,6 +96,26 @@
 // carries the renamed current-v0 tables and columns without an adapter. These
 // rows must survive restore because dropping enrollment or caller evidence
 // would detach automation grants from the principal that exercised them.
+//
+// Schema/export audit #750: `share_commons_intent.status` renames its CHECK
+// value `pending` to `queued` (one intent grammar — the replica outbox's own
+// word) and its partial index follows. `share.commons_intent` stays in the
+// canonical walk with an unchanged row shape: no new table, column, or
+// adapter, so the walk carries these rows exactly as before. The one honest
+// consequence is that a bundle written by a pre-#750 build holds `pending`
+// rows this build's CHECK refuses on restore — deliberately not adapted, per
+// that issue's stated v0 posture that pre-release on-disk shapes are reset
+// rather than migrated.
+//
+// Schema/export audit #750 (identity): `schema/vault-identity.ts` gains a
+// public-key PIN file written beside the seed, so a vault whose seed went
+// missing fails closed instead of silently minting a replacement key that
+// every already-linked peer would reject. It declares no table, column, or
+// adapter, and — like the seed it guards (see the #726 P1 entry above) — the
+// pin stays OUT of the portable bundle. Carrying it would be actively wrong
+// here, not merely unnecessary: a bundle restores a NEW vault that mints its
+// own identity, and a pin from the old one would fail that vault closed
+// against a key it never held.
 
 import { createHash } from "node:crypto";
 

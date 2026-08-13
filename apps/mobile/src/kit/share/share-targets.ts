@@ -9,6 +9,10 @@ export interface NativeShareLink {
   vaultB: string;
   partyIdA?: string | null;
   partyIdB?: string | null;
+  /** Each vault's OWN name, from the gateway's vault directory (#750).
+   *  Symmetric with vaultA/vaultB: `labelA` names `vaultA`. */
+  labelA?: string | null;
+  labelB?: string | null;
   approved: boolean;
   revoked: boolean;
 }
@@ -138,12 +142,20 @@ export function nativeNamedShareCircles(input: {
 function otherSide(
   link: NativeShareLink,
   sourceVaultId: string
-): { partyId: string; vaultId: string } | undefined {
+): { partyId: string; vaultId: string; label: string | null } | undefined {
   if (!link.approved || link.revoked) return undefined;
   if (link.vaultA === sourceVaultId && link.partyIdB)
-    return { partyId: link.partyIdB, vaultId: link.vaultB };
+    return {
+      partyId: link.partyIdB,
+      vaultId: link.vaultB,
+      label: link.labelB ?? null,
+    };
   if (link.vaultB === sourceVaultId && link.partyIdA)
-    return { partyId: link.partyIdA, vaultId: link.vaultA };
+    return {
+      partyId: link.partyIdA,
+      vaultId: link.vaultA,
+      label: link.labelA ?? null,
+    };
   return undefined;
 }
 
@@ -157,10 +169,17 @@ export function nativeShareTargets(input: {
   scopes: readonly NativeShareScope[];
 }): NativeShareTarget[] {
   const mounted = new Set(input.scopes.map((scope) => scope.vaultId));
-  const linkedByParty = new Map<string, string>();
+  const linkedByParty = new Map<
+    string,
+    { vaultId: string; label: string | null }
+  >();
   for (const link of input.links) {
     const peer = otherSide(link, input.sourceVaultId);
-    if (peer) linkedByParty.set(peer.partyId, peer.vaultId);
+    if (peer)
+      linkedByParty.set(peer.partyId, {
+        vaultId: peer.vaultId,
+        label: peer.label,
+      });
   }
   const seen = new Set<string>();
   const people = input.parties.flatMap((row) => {
@@ -175,7 +194,7 @@ export function nativeShareTargets(input: {
     )
       return [];
     seen.add(partyId);
-    const vaultId = linkedByParty.get(partyId);
+    const vaultId = linkedByParty.get(partyId)?.vaultId;
     if (vaultId && mounted.has(vaultId)) return [];
     return [
       {
@@ -186,14 +205,17 @@ export function nativeShareTargets(input: {
       },
     ];
   });
-  const linkedOnly = [...linkedByParty].flatMap(([partyId, vaultId]) => {
-    if (seen.has(partyId) || mounted.has(vaultId)) return [];
+  const linkedOnly = [...linkedByParty].flatMap(([partyId, peer]) => {
+    if (seen.has(partyId) || mounted.has(peer.vaultId)) return [];
     return [
       {
-        id: vaultId,
+        id: peer.vaultId,
         partyId,
-        vaultId,
-        label: `Linked person ${vaultId.length > 10 ? `${vaultId.slice(0, 8)}…` : vaultId}`,
+        vaultId: peer.vaultId,
+        // The linked vault's OWN name, carried on the link (#750). A
+        // truncated vault id is not a name and is no longer offered as one —
+        // when the directory holds none, the sheet says so plainly.
+        label: peer.label?.trim() ? peer.label.trim() : "Linked person",
       },
     ];
   });

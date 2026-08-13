@@ -214,9 +214,29 @@ describe("DevicePairPanel suite", () => {
       expect(onCreateTicket).toHaveBeenCalledWith({
         ttlMinutes: 15,
         forPerson: { label: "Priya" },
+        // The mint's idempotency key (#750), generated at call initiation.
+        operationId: expect.any(String),
       });
       // The minted ticket names the new person, not whoever is hosting.
       expect(el.textContent).toContain("Priya");
+    });
+
+    it("a retry after a failed mint reuses the SAME operationId (#750)", async () => {
+      const onCreateTicket = vi
+        .fn<DevicePairPanelProps["onCreateTicket"]>()
+        .mockRejectedValueOnce(new Error("gateway unreachable"))
+        .mockResolvedValue(PERSON_TICKET);
+      const el = await mount(onCreateTicket, { forPerson: true });
+      typeName(el, "Priya");
+      await generate(el);
+      await generate(el);
+
+      expect(onCreateTicket).toHaveBeenCalledTimes(2);
+      const firstId = onCreateTicket.mock.calls[0]![0]!.operationId;
+      const retryId = onCreateTicket.mock.calls[1]![0]!.operationId;
+      expect(firstId).toBeTruthy();
+      // Same intent → same key: the gateway replays instead of re-minting.
+      expect(retryId).toBe(firstId);
     });
 
     it("states the hosting posture on the minted ticket, verbatim", async () => {

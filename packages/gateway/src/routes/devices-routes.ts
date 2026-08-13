@@ -88,6 +88,14 @@ export interface DevicesRouteDeps {
    */
   mintVaultForPerson?: (name: string) => { vaultId: string };
   /**
+   * Cleanup twin of `mintVaultForPerson` (issue #750): remove a vault the
+   * *Add someone* workflow minted before its gateway.db transaction failed —
+   * the dir, the keys inside it, and the registry mount. Wired to
+   * `VaultRegistry.delete`. Undefined ⇒ a failed mint leaves an orphan dir
+   * (inert debris — no committed row names it), never partial rows.
+   */
+  unmintVaultForPerson?: (vaultId: string) => void;
+  /**
    * The gateway's iroh EndpointTicket (identity pin + relay hint) for a minted
    * ticket's `gw` field, read lazily at mint time; undefined before the daemon
    * has an endpoint (or on the desktop embed).

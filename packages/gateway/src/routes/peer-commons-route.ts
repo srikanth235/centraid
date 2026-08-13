@@ -1,9 +1,12 @@
+// governance: allow-repo-hygiene file-size-limit (#750) the peer Commons doors — sync frames with their transfer-session store, one-shot blob authorization, chunk serving, and signed commands — share one authenticated pair boundary; splitting them would split the session state from the routes it authorizes.
 /** Peer-plane snapshot/tail, CAS pull, and signed command doors for Commons. */
 
+import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
   acknowledgeCommonsSeatCursor,
+  commonsMemberIdentityChangedReason,
   compactCommonsOperations,
   commonsCurrentSize,
   commonsSeats,
@@ -27,11 +30,75 @@ import { readJson, sendJson } from "./route-helpers.js";
 
 export const PEER_COMMONS_BOOTSTRAP_PATH_PREFIX =
   "/centraid/_peer/commons/bootstrap/";
+export const PEER_COMMONS_BLOB_AUTH_PATH =
+  "/centraid/_peer/commons/blob/authorize";
 export const PEER_COMMONS_BLOB_PATH = "/centraid/_peer/commons/blob/chunk";
 export const PEER_COMMONS_COMMAND_PATH = "/centraid/_peer/commons/command";
 export const PEER_COMMONS_INVITE_PATH = "/centraid/_peer/commons/invite";
 export const PEER_COMMONS_CLAIM_PATH = "/centraid/_peer/commons/claim";
 export const PEER_COMMONS_REFUSE_PATH = "/centraid/_peer/commons/refuse";
+
+/**
+ * Per-transfer authorization state (#750 defect b). Authorizing a blob pull
+ * used to run a FULL closure export + Ed25519 signing for EVERY 1 MiB chunk
+ * (~1024 exports per member per GiB). Now the closure walk happens ONCE, when
+ * a transfer session is opened; each chunk only validates against the
+ * session's sha set. Sessions are in-memory and expiring — losing one on a
+ * gateway restart merely costs the member one re-authorize round trip.
+ * The same store carries a paginated bootstrap frame (#750 defect d), sliced
+ * so no single response serializes the entire commons.
+ */
+const PEER_COMMONS_SESSION_TTL_MS = 5 * 60 * 1000;
+/** Server-side ceiling for one bootstrap page. The member may ask for less
+ * (its own memory bound), never for more. */
+export const PEER_COMMONS_PAGE_BYTES = 1024 * 1024;
+
+interface PeerCommonsSession {
+  stewardVaultId: string;
+  memberVaultId: string;
+  grantId: string;
+  /** Content addresses this transfer may pull, proven once at open. */
+  shas?: ReadonlySet<string>;
+  /** Serialized bootstrap frame, when this session carries pages. */
+  frame?: string;
+  pageBytes?: number;
+  expiresAt: number;
+}
+
+const peerCommonsSessions = new Map<string, PeerCommonsSession>();
+
+function openPeerCommonsSession(
+  session: Omit<PeerCommonsSession, "expiresAt">
+): {
+  token: string;
+  expiresAt: number;
+} {
+  const nowMs = Date.now();
+  for (const [token, held] of peerCommonsSessions)
+    if (held.expiresAt <= nowMs) peerCommonsSessions.delete(token);
+  const token = randomBytes(16).toString("hex");
+  const expiresAt = nowMs + PEER_COMMONS_SESSION_TTL_MS;
+  peerCommonsSessions.set(token, { ...session, expiresAt });
+  return { token, expiresAt };
+}
+
+function peerCommonsSession(input: {
+  token: string;
+  stewardVaultId: string;
+  memberVaultId: string;
+  grantId?: string;
+}): PeerCommonsSession | undefined {
+  const held = peerCommonsSessions.get(input.token);
+  if (
+    !held ||
+    held.expiresAt <= Date.now() ||
+    held.stewardVaultId !== input.stewardVaultId ||
+    held.memberVaultId !== input.memberVaultId ||
+    (input.grantId !== undefined && held.grantId !== input.grantId)
+  )
+    return undefined;
+  return held;
+}
 
 export interface PeerCommonsRouteDeps {
   vaultFor: (
@@ -84,6 +151,31 @@ export function handlePeerCommonsBootstrap(
   const steward = linked ? deps.vaultFor(linked.stewardVaultId) : undefined;
   if (!linked || !steward) return notFound(res);
   try {
+    // Page fetch for an already-opened bootstrap session (#750 defect d):
+    // slices the frame stored at open time, never re-exports.
+    const sessionToken = query.get("session");
+    if (sessionToken) {
+      const page = uint(query.get("page"));
+      const session = peerCommonsSession({
+        token: sessionToken,
+        stewardVaultId: linked.stewardVaultId,
+        memberVaultId: linked.memberVaultId,
+        grantId,
+      });
+      if (!session?.frame || !session.pageBytes || page === undefined)
+        return notFound(res);
+      const pages = Math.ceil(session.frame.length / session.pageBytes);
+      if (page >= pages) return notFound(res);
+      return sendJson(res, 200, {
+        state: "bootstrap-page",
+        page,
+        pages,
+        chunk: session.frame.slice(
+          page * session.pageBytes,
+          (page + 1) * session.pageBytes
+        ),
+      });
+    }
     if (query.get("inspect") === "1") {
       const grant = readCommonsGrant(steward.vault, grantId);
       const claimed = steward.vault
@@ -146,18 +238,27 @@ export function handlePeerCommonsBootstrap(
         now: new Date().toISOString(),
       });
     }
+    const acknowledged = uint(query.get("afterSequence"));
+    // `full=1` is the member's re-baseline fallback: an increment its replica
+    // could not use (wrong anchor, unresolvable delta) must be able to force
+    // the complete frame without dropping its ack.
+    const wantsFull = query.get("full") === "1";
     const frame = exportCommonsSyncFrame({
       steward: steward.vault,
       identitySeed: steward.identitySeed,
       stewardVaultId: linked.stewardVaultId,
       grantId,
       memberVaultId: linked.memberVaultId,
+      ...(acknowledged === undefined || wantsFull
+        ? {}
+        : { afterSequence: acknowledged }),
     });
-    const acknowledged = uint(query.get("afterSequence"));
     const currentSequence =
-      frame.state === "bootstrap"
-        ? frame.wire.currentSequence
-        : frame.tombstone.currentSequence;
+      frame.state === "tombstone"
+        ? frame.tombstone.currentSequence
+        : frame.state === "increment"
+          ? frame.increment.currentSequence
+          : frame.wire.currentSequence;
     if (acknowledged !== undefined && acknowledged <= currentSequence) {
       acknowledgeCommonsSeatCursor({
         steward: steward.vault,
@@ -176,7 +277,7 @@ export function handlePeerCommonsBootstrap(
     // above already ran). Tombstones are never short-circuited: a removed
     // member still needs the scrub they carry.
     if (
-      frame.state === "bootstrap" &&
+      frame.state !== "tombstone" &&
       acknowledged !== undefined &&
       acknowledged === currentSequence
     )
@@ -189,7 +290,69 @@ export function handlePeerCommonsBootstrap(
         // behind "you are caught up".
         headHash: readCommonsChainHead(steward.vault, grantId).hash,
       });
-    return sendJson(res, 200, frame);
+    if (frame.state !== "bootstrap") return sendJson(res, 200, frame);
+    // Bound every response (#750 defect d): a full-closure frame larger than
+    // the member's page budget is stored once and served in slices.
+    const requested = uint(query.get("pageBytes"));
+    const pageBytes = Math.min(
+      requested && requested >= 4096 ? requested : PEER_COMMONS_PAGE_BYTES,
+      PEER_COMMONS_PAGE_BYTES
+    );
+    const serialized = JSON.stringify(frame);
+    if (serialized.length <= pageBytes) return sendJson(res, 200, frame);
+    const opened = openPeerCommonsSession({
+      stewardVaultId: linked.stewardVaultId,
+      memberVaultId: linked.memberVaultId,
+      grantId,
+      frame: serialized,
+      pageBytes,
+    });
+    return sendJson(res, 200, {
+      state: "bootstrap-pages",
+      grantId,
+      session: opened.token,
+      pages: Math.ceil(serialized.length / pageBytes),
+      expiresAt: opened.expiresAt,
+    });
+  } catch {
+    return notFound(res);
+  }
+}
+
+/**
+ * Open one blob-pull transfer session (#750 defect b): membership + the
+ * grant's current blob set are proven ONCE here; every chunk after validates
+ * against the stored session instead of re-exporting the closure.
+ */
+export function handlePeerCommonsBlobAuthorize(
+  res: ServerResponse,
+  peer: PeerIdentity,
+  query: URLSearchParams,
+  deps: PeerCommonsRouteDeps
+): true {
+  const linked = pair(peer, query);
+  const grantId = query.get("grantId") ?? "";
+  const steward = linked ? deps.vaultFor(linked.stewardVaultId) : undefined;
+  if (!linked || !steward || !grantId) return notFound(res);
+  try {
+    const wire = exportCommonsBootstrap({
+      steward: steward.vault,
+      identitySeed: steward.identitySeed,
+      stewardVaultId: linked.stewardVaultId,
+      grantId,
+      memberVaultId: linked.memberVaultId,
+    });
+    const opened = openPeerCommonsSession({
+      stewardVaultId: linked.stewardVaultId,
+      memberVaultId: linked.memberVaultId,
+      grantId,
+      shas: new Set(wire.closure.blobs.map((blob) => blob.sha256)),
+    });
+    return sendJson(res, 200, {
+      state: "authorized",
+      token: opened.token,
+      expiresAt: opened.expiresAt,
+    });
   } catch {
     return notFound(res);
   }
@@ -204,6 +367,7 @@ export function handlePeerCommonsBlob(
   const linked = pair(peer, query);
   const grantId = query.get("grantId") ?? "";
   const sha256 = query.get("sha256") ?? "";
+  const token = query.get("token") ?? "";
   const offset = uint(query.get("offset"));
   const length = uint(query.get("length"));
   const steward = linked ? deps.vaultFor(linked.stewardVaultId) : undefined;
@@ -211,6 +375,7 @@ export function handlePeerCommonsBlob(
     !linked ||
     !steward ||
     !grantId ||
+    !token ||
     !/^[0-9a-f]{64}$/u.test(sha256) ||
     offset === undefined ||
     length === undefined ||
@@ -218,15 +383,16 @@ export function handlePeerCommonsBlob(
   )
     return notFound(res);
   try {
-    const wire = exportCommonsBootstrap({
-      steward: steward.vault,
-      identitySeed: steward.identitySeed,
+    // Chunk authorization is the transfer session opened by
+    // `handlePeerCommonsBlobAuthorize` — proven once, validated per chunk
+    // (#750 defect b). No closure export, no signing, on this path.
+    const session = peerCommonsSession({
+      token,
       stewardVaultId: linked.stewardVaultId,
-      grantId,
       memberVaultId: linked.memberVaultId,
+      grantId,
     });
-    if (!wire.closure.blobs.some((blob) => blob.sha256 === sha256))
-      return notFound(res);
+    if (!session?.shas?.has(sha256)) return notFound(res);
     const stat = steward.blobs.local.statSync(sha256);
     if (!stat || offset > stat.size) return notFound(res);
     const end = Math.min(offset + length, stat.size) - 1;
@@ -320,8 +486,32 @@ export async function handlePeerCommonsCommand(
       .get(grant.circleId, memberVaultId, link.peerPublicKey) as
       | { party_id: string }
       | undefined;
-    if (!boundParty || boundParty.party_id !== actorPartyId)
-      return notFound(res);
+    if (!boundParty || boundParty.party_id !== actorPartyId) {
+      // A member whose vault identity was RE-MINTED still links and still
+      // signs — it simply is not the key this commons pinned. That is a named
+      // condition with a cure (re-invitation), not an unknown caller, so it
+      // answers with the fault instead of a silent 404 (issue #750).
+      const pinned = steward.vault
+        .prepare(
+          `SELECT b.party_id FROM share_party_vault_binding b
+           JOIN social_circle_member m
+             ON m.circle_id = ? AND m.party_id = b.party_id
+           WHERE b.vault_id = ? AND b.revoked_at IS NULL
+             AND b.vault_public_key IS NOT NULL
+             AND b.vault_public_key <> ? LIMIT 1`
+        )
+        .get(grant.circleId, memberVaultId, link.peerPublicKey) as
+        | { party_id: string }
+        | undefined;
+      if (!pinned) return notFound(res);
+      return sendJson(res, 403, {
+        state: "refused",
+        decision: {
+          accepted: false,
+          reason: commonsMemberIdentityChangedReason({ memberVaultId }),
+        },
+      });
+    }
   } catch {
     return notFound(res);
   }
@@ -336,12 +526,33 @@ export async function handlePeerCommonsCommand(
     command,
     commandInput: body.input as Record<string, unknown>,
     memberSignature,
+    presentedVaultPublicKey: link.peerPublicKey,
     basedOnSequence,
     seats: commonsSeats({
       steward: steward.vault,
       grantId,
       stewardVaultId,
       vaultFor: deps.vaultFor,
+      // Co-hosted member seats catch up by replaying this command through
+      // their OWN gateway (#750 invariant 7), seeded so they mint the ids the
+      // steward just minted. A seat whose vault is not mounted here has no
+      // executor and re-projects from the closure instead.
+      invokeFor: (vaultId, replicaCommand, replicaInput, invocationId) => {
+        const seatGateway = deps.gatewayFor(vaultId);
+        const seatCredential = deps.credentialFor(vaultId);
+        if (!seatGateway || !seatCredential)
+          throw new Error(`commons replica vault ${vaultId} is not mounted`);
+        return seatGateway.invokeCommonsCanonical(
+          seatCredential,
+          {
+            command: replicaCommand,
+            input: replicaInput,
+            purpose: "dpv:ServiceProvision",
+            invocationId,
+          },
+          { idSeed: invocationId }
+        );
+      },
     }),
     ...(typeof body.intentId === "string"
       ? { intentId: body.intentId, invocationId: body.intentId }

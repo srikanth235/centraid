@@ -193,9 +193,6 @@ describe("host custody loses erase/mint/backup-config on a vault it does not own
       target: bobsVault.vaultId,
       body: { ownerId: alice.ownerId },
       vaultIds: parseVaultIds([bobsVault.vaultId]) ?? [],
-      mintVaultForPerson: () => {
-        throw new Error("not exercised by this scenario");
-      },
     });
     expect(decision).toMatchObject({
       status: 403,

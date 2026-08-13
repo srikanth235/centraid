@@ -9,6 +9,7 @@ import {
   cancelCommonsIntent,
   commonsSeats,
   commonsCurrentSize,
+  COMMONS_COMMAND_ROUTES,
   compileCommons,
   createCommonsClaimInvitation,
   claimCommonsInvitation,
@@ -45,6 +46,7 @@ import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
 export const COMMONS_PATH = "/centraid/_gateway/commons";
+/** What the product offers as a shared space today. */
 const COMMONS_CONTAINER_TYPES = new Set<ShareableItemType>([
   "core.collection",
   "core.content_item",
@@ -53,11 +55,23 @@ const COMMONS_CONTAINER_TYPES = new Set<ShareableItemType>([
   "media.asset",
   "tally.group",
 ]);
+/**
+ * Container types the DECLARED routing table can address (issue #750). A
+ * container nobody can route a write to would accept the share and then
+ * silently revert every member edit at the next compile, so the routing table
+ * — not a second hand-kept list — decides whether offering it is honest.
+ */
+const ROUTABLE_CONTAINER_TYPES = new Set<ShareableItemType>(
+  COMMONS_COMMAND_ROUTES.map((route) => route.containerType)
+);
 
 export function isCommonsContainerType(
   value: string
 ): value is ShareableItemType {
-  return COMMONS_CONTAINER_TYPES.has(value as ShareableItemType);
+  return (
+    COMMONS_CONTAINER_TYPES.has(value as ShareableItemType) &&
+    ROUTABLE_CONTAINER_TYPES.has(value as ShareableItemType)
+  );
 }
 
 export interface CommonsRouteDeps {

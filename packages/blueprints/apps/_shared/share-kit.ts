@@ -83,21 +83,27 @@ export async function loadShareCircles(): Promise<ShareCircle[]> {
   }
 }
 
-/** A raw `window.centraid.links()` row, before a label is attached. */
+/** A `window.centraid.links()` row. The label rides ALONG the destination
+ *  contract (#750) — it is the linked vault's own name, resolved from the
+ *  vault directory by the gateway, not something this sheet reconstructs. */
 export interface LinkRow {
   linkId: string;
   vaultId: string;
   partyId: string;
   approved: boolean;
+  label?: string | null;
 }
 
 /**
- * Best-effort human label for a linked vault id.
+ * The human label for a linked vault: the one the LINK carries, resolved from
+ * the gateway's vault directory. A truncated vault id is NOT a fallback — an
+ * id is not a name, and printing one only ever looked like one. When the
+ * directory genuinely holds no name, say so plainly instead. (A vault this
+ * member has mounted never reaches here: `linkedDestinations` excludes it, so
+ * it is listed once, under its own scope name.)
  */
-function linkLabel(vaultId: string, scopes: readonly InlineScope[]): string {
-  const known = scopes.find((scope) => scope.id === vaultId);
-  if (known) return known.label;
-  return `Linked vault ${vaultId.length > 10 ? `${vaultId.slice(0, 8)}…` : vaultId}`;
+function linkLabel(link: LinkRow): string {
+  return link.label?.trim() ? link.label.trim() : "Linked vault";
 }
 
 /** Every APPROVED, non-mounted linked vault — the "linked people" half of
@@ -112,7 +118,7 @@ export function linkedDestinations(
     .filter((link) => link.approved && !mounted.has(link.vaultId))
     .map((link) => ({
       id: link.vaultId,
-      label: linkLabel(link.vaultId, scopes),
+      label: linkLabel(link),
       partyId: link.partyId,
       vaultId: link.vaultId,
     }));

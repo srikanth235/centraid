@@ -171,6 +171,12 @@ export interface GatewayDeviceTicketInput {
   vaultIds?: string[];
   /** Mint a vault for a NEW person instead of self-pairing. */
   forPerson?: { label: string; vaultName?: string };
+  /**
+   * Idempotency key the gateway REQUIRES with `forPerson` (issue #750):
+   * generated once per intended mint (a UUID) and reused on retry, so a
+   * retried request can never mint a second owner/vault.
+   */
+  operationId?: string;
   ttlMinutes?: number;
 }
 

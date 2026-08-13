@@ -6,7 +6,7 @@
 // Nothing here touches the gateway HTTP layer; every step is a vault-package
 // call, so a failing seed replays byte-for-byte from the seed alone.
 //
-// This half owns the schedule and the oracle; `commons-sim-world.ts` owns the
+// This half owns the schedule and the oracle; `commons-sim-world.test-fixtures.ts` owns the
 // physical world and the two rails (write, pull).
 
 import {
@@ -21,7 +21,7 @@ import type {
   SimOptions,
   SimReport,
   World,
-} from "./commons-sim-world.js";
+} from "./commons-sim-world.test-fixtures.js";
 import {
   NOW,
   closeWorld,
@@ -38,7 +38,7 @@ import {
   staleRestoreSeat,
   stewardOnly,
   submit,
-} from "./commons-sim-world.js";
+} from "./commons-sim-world.test-fixtures.js";
 import type { CommonsCapability } from "./commons.js";
 import {
   compactCommonsOperations,
@@ -521,7 +521,7 @@ function checkIntentsSettled(world: World): void {
   for (const seat of world.seats) {
     const pending = seat.db.vault
       .prepare(
-        "SELECT COUNT(*) AS n FROM share_commons_intent WHERE status = 'pending'"
+        "SELECT COUNT(*) AS n FROM share_commons_intent WHERE status = 'queued'"
       )
       .get() as { n: number };
     if (pending.n !== 0)

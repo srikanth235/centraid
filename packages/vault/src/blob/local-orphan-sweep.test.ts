@@ -10,9 +10,10 @@ import {
   casPath,
   closeOpenVaults,
   household,
+  reclaimOrphans,
   seedPhoto,
 } from "../share/placement-fixture.js";
-import { shareToVault, unshareFromVault } from "../share/placement.js";
+import { shareItemsToVault, unshareFromVault } from "../share/placement.js";
 import { sweepLocalOrphans } from "./local-orphan-sweep.js";
 
 describe("local-orphan-sweep suite", () => {
@@ -23,18 +24,18 @@ describe("local-orphan-sweep suite", () => {
   test("an unshared blob is held for the grace window, then reclaimed", () => {
     const { origin, originBoot, audience } = household();
     const photo = seedPhoto(origin, originBoot, "sweep-a");
-    const shared = shareToVault({
+    const shared = shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
       itemType: "media.asset",
-      itemId: photo.assetId,
+      itemIds: [photo.assetId],
       sharedBy: "member-priya",
     });
     unshareFromVault({
       audience,
       itemType: "media.asset",
-      itemId: shared.itemId,
+      itemId: shared.items[0]!.itemId,
     });
 
     // First sight tombstones, never deletes — the grace clock starts here.
@@ -107,15 +108,79 @@ describe("local-orphan-sweep suite", () => {
     expect(origin.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
   });
 
+  test("bytes shared by two rows survive until the FINAL reference is deleted", () => {
+    const { origin, originBoot } = household();
+    // Two rows over ONE blob. Originals cannot share a sha in one vault
+    // (core_content_item.sha256 is UNIQUE), so the schema-legal shared-SHA
+    // case is derivative rows: point photo B's thumb at photo A's thumb
+    // bytes — one CAS entry, two `core_content_derivative` claims.
+    const a = seedPhoto(origin, originBoot, "shared-thumb-a");
+    const b = seedPhoto(origin, originBoot, "shared-thumb-b");
+    origin.vault
+      .prepare(
+        "UPDATE core_content_derivative SET sha256 = ? WHERE content_id = ?"
+      )
+      .run(a.thumbSha, b.contentId);
+    // B's own thumb bytes are now unclaimed; clear that noise first so every
+    // assertion below is about the shared sha.
+    expect(reclaimOrphans(origin)).toStrictEqual([b.thumbSha]);
+
+    const dropPhoto = (photo: { assetId: string; contentId: string }): void => {
+      origin.vault
+        .prepare("DELETE FROM media_asset WHERE asset_id = ?")
+        .run(photo.assetId);
+      origin.vault
+        .prepare("DELETE FROM core_content_derivative WHERE content_id = ?")
+        .run(photo.contentId);
+      origin.vault
+        .prepare("DELETE FROM core_content_item WHERE content_id = ?")
+        .run(photo.contentId);
+    };
+
+    // First reference gone: A's original orphans, but the SHARED thumb sha is
+    // still claimed by B's derivative — never tombstoned, never held.
+    dropPhoto(a);
+    const held = sweepLocalOrphans(origin, {
+      graceWindowMs: 3 * DAY,
+      now: 10_000,
+    });
+    expect(held.deleted).toStrictEqual([]);
+    expect(held.graceHeld).toStrictEqual([a.sha256]);
+    const reclaimed = sweepLocalOrphans(origin, {
+      graceWindowMs: 3 * DAY,
+      now: 10_000 + 4 * DAY,
+    });
+    expect(reclaimed.deleted).toStrictEqual([a.sha256]);
+    expect(origin.blobs.getSync(a.thumbSha)).toStrictEqual(a.thumbBytes);
+
+    // FINAL reference gone: the shared sha drops out of the live set, is held
+    // for the grace window on first sight, then reclaimed.
+    dropPhoto(b);
+    const firstSight = sweepLocalOrphans(origin, {
+      graceWindowMs: 3 * DAY,
+      now: 20_000,
+    });
+    expect(firstSight.deleted).toStrictEqual([]);
+    expect(firstSight.graceHeld.sort()).toStrictEqual(
+      [b.sha256, a.thumbSha].sort()
+    );
+    const final = sweepLocalOrphans(origin, {
+      graceWindowMs: 3 * DAY,
+      now: 20_000 + 4 * DAY,
+    });
+    expect(final.deleted.sort()).toStrictEqual([b.sha256, a.thumbSha].sort());
+    expect(origin.blobs.hasSync(a.thumbSha)).toBe(false);
+  });
+
   test("reclaiming one vault never takes bytes another vault still links", () => {
     const { origin, originBoot, audience } = household();
     const photo = seedPhoto(origin, originBoot, "sweep-d");
-    shareToVault({
+    shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
       itemType: "media.asset",
-      itemId: photo.assetId,
+      itemIds: [photo.assetId],
       sharedBy: "member-priya",
     });
     const sharedIno = statSync(casPath(audience, photo.sha256)).ino;

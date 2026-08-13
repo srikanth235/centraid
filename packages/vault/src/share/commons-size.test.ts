@@ -11,6 +11,7 @@ import {
   commonsCurrentSize,
   compileCommons,
   createCommonsGrant,
+  executeCommonsCommand,
 } from "./commons.js";
 import { closeOpenVaults, household, seedPhoto } from "./placement-fixture.js";
 
@@ -18,7 +19,7 @@ describe("Commons full-copy size", () => {
   afterEach(closeOpenVaults);
 
   test("counts row-only wire bytes and enforces the exact maximum", () => {
-    const { origin, originBoot } = household();
+    const { origin, originBoot, audience, audienceBoot } = household();
     const gateway = createGateway(origin);
     registerTallyCommands(gateway);
     const credential: Credential = {
@@ -70,17 +71,50 @@ describe("Commons full-copy size", () => {
         "UPDATE share_circle_grant SET max_size_bytes = ? WHERE grant_id = ?"
       )
       .run(size - 1, grant.grantId);
+    // Two enforcement points, one message. A compile that materializes the
+    // closure — here, projecting a seat that holds nothing yet — refuses at
+    // the exact byte. Since catch-up replays commands instead of projecting
+    // rows (issue #750 invariant 7), a compile where every seat replays never
+    // builds the closure and so never re-measures it; the WRITE path below is
+    // what keeps the ceiling live, and it is the only path that can grow a
+    // commons past it in the first place.
     expect(() =>
       compileCommons({
         steward: origin,
         stewardVaultId: "vault-priya",
         grantId: grant.grantId,
-        seats: [],
+        seats: [
+          {
+            partyId: audienceBoot.ownerPartyId,
+            capability: "read",
+            vaultId: "vault-family",
+            vault: audience,
+          },
+        ],
         now: nowIso(),
       })
     ).toThrow(
       `commons closure is ${size} bytes, above its ${size - 1} byte maximum`
     );
+    expect(
+      executeCommonsCommand({
+        steward: origin,
+        gateway,
+        credential,
+        stewardVaultId: "vault-priya",
+        grantId: grant.grantId,
+        actorPartyId: originBoot.ownerPartyId,
+        command: "tally.rename_group",
+        // Same length as the current name, so the refusal names the same
+        // byte count the ceiling was pinned to.
+        commandInput: { group_id: groupId, name: "Row ONLY" },
+        seats: [],
+        now: nowIso(),
+      }).decision
+    ).toMatchObject({
+      accepted: false,
+      reason: `commons closure is ${size} bytes, above its ${size - 1} byte maximum`,
+    });
   });
 
   test("adds each deduplicated content payload exactly once", () => {

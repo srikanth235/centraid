@@ -514,6 +514,55 @@ export function verifyCommonsFrameHistory(input: {
   };
 }
 
+/**
+ * Verify an increment's ops-since-cursor against the point this seat already
+ * PROVED, before anything is applied (issue #750 invariant 7). The anchor is
+ * the seat's own `share_commons_verified` head — which itself chains back to
+ * a signed checkpoint from the last full bootstrap — so an increment needs no
+ * checkpoint of its own: it either extends the proven chain hash-for-hash or
+ * it throws `CommonsHistoryError` and the caller parks, exactly as a bad full
+ * frame would. The caller must have already matched `anchor.sequence` to the
+ * frame's `fromSequence`; a frame built for another cursor is a FALLBACK
+ * (re-baseline), not a fault, and never reaches this function.
+ */
+export function verifyCommonsIncrementHistory(input: {
+  seat: DatabaseSync;
+  grantId: string;
+  anchor: CommonsVerifiedPoint;
+  currentSequence: number;
+  ops: readonly Record<string, unknown>[];
+}): CommonsVerifiedPoint {
+  const verified = readCommonsVerified(input.seat, input.grantId);
+  const held = heldHashes(input.seat, input.grantId);
+  let previous = { sequence: input.anchor.sequence, hash: input.anchor.opHash };
+  for (const row of input.ops) {
+    const fields = commonsOpChainFields(row);
+    const prevHash = row["prev_hash"];
+    const claimed = row["op_hash"];
+    if (typeof prevHash !== "string" || typeof claimed !== "string")
+      diverged(`commons operation ${fields.sequence} carries no chain hash`);
+    if (commonsOpHash(prevHash, fields) !== claimed)
+      diverged(
+        `commons operation ${fields.sequence} does not match its own hash`
+      );
+    if (fields.sequence !== previous.sequence + 1)
+      diverged(`commons increment skips sequence ${previous.sequence + 1}`);
+    if (prevHash !== previous.hash)
+      diverged(`commons increment forks at sequence ${fields.sequence}`);
+    rewound(held, verified, fields.sequence, claimed);
+    previous = { sequence: fields.sequence, hash: claimed };
+  }
+  if (previous.sequence !== input.currentSequence)
+    diverged(
+      `commons increment ends at ${previous.sequence}, not its declared head ${input.currentSequence}`
+    );
+  if (verified && input.currentSequence < verified.sequence)
+    diverged(
+      `commons steward head ${input.currentSequence} is behind verified ${verified.sequence}`
+    );
+  return { sequence: previous.sequence, opHash: previous.hash };
+}
+
 /** One sequence, two different hashes — the steward's log was rewound or
  * forked under a point this seat already holds or already proved. */
 function rewound(

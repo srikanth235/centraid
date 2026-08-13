@@ -1,7 +1,10 @@
 /*
- * The ONE link table (issue #726 P2 §3 + P3 decisions 1–4): a pair on this
- * machine and a pair across the world are the same rows, differing only in
- * whether a side carries a route.
+ * The link store over its three tables (issue #726 P2 §3 + P3 decisions 1–4,
+ * reshaped by issue #750): `vault_links` is pure permission, `vault_directory`
+ * is one identity record per known vault, and `vault_routes` is ONE row per
+ * vault that lives elsewhere — a pair on this machine and a pair across the
+ * world are the same link rows, differing only in whether the far vault has a
+ * route row.
  */
 
 import crypto from "node:crypto";
@@ -80,13 +83,14 @@ describe(VaultLinksStore, () => {
     expect(store.findPair("vault-b", "vault-a")?.linkId).toBe(proposed.linkId);
   });
 
-  test("a local pair records both identity keys and no route", async () => {
+  test("a local pair records both identities in the directory and no route", async () => {
     const store = await open();
-    const link = proposal(store, "vault-a", "vault-b");
-    expect(link.publicKeyA).toBe(keyA);
-    expect(link.publicKeyB).toBe(keyB);
-    expect(link.routeA).toBeUndefined();
-    expect(link.routeB).toBeUndefined();
+    proposal(store, "vault-a", "vault-b");
+    expect(store.directoryEntry("vault-a")?.publicKey).toBe(keyA);
+    expect(store.directoryEntry("vault-b")?.publicKey).toBe(keyB);
+    // No `vault_routes` row IS what "on this gateway" means (#750).
+    expect(store.routeFor("vault-a")).toBeUndefined();
+    expect(store.routeFor("vault-b")).toBeUndefined();
     // Nothing routed means nothing the peer plane will admit.
     expect(store.hasAnyLink()).toBe(false);
   });
@@ -283,7 +287,53 @@ describe(VaultLinksStore, () => {
     ).toMatchObject({ localVaultId: "vault-local", peerVaultId: "vault-y" });
   });
 
-  test("the DDL keeps an EndpointId in the route cache and nowhere else", async () => {
+  test("one signed-route slot serves EVERY link to a peer vault (#750 invariants 1–2)", async () => {
+    // Two LOCAL vaults link to the SAME peer vault — the household shape that
+    // used to duplicate the peer's key/label/route across two rows, where a
+    // later assertion updated only whichever row a lookup found first.
+    const store = await open();
+    for (const local of ["vault-local-1", "vault-local-2"]) {
+      const ticket = store.tickets.mint(local, keyA);
+      expect(
+        store.redeem({
+          ticketId: ticket.ticketId,
+          secret: ticket.secret,
+          peerVaultId: "vault-peer",
+          peerPublicKey: keyB,
+          route: { endpointId: "ep-first", relayHints: [], assertedAt: 1 },
+          peerLabel: "Priya",
+          localLabel: local,
+        })
+      ).toBeTruthy();
+    }
+    expect(store.list()).toHaveLength(2);
+    // ONE directory record, ONE route row — by construction, not by sweep.
+    const directoryRows = store.gatewayDatabase.db
+      .prepare("SELECT count(*) AS n FROM vault_directory WHERE vault_id = ?")
+      .get("vault-peer") as { n: number };
+    expect(directoryRows.n).toBe(1);
+    const routeRows = store.gatewayDatabase.db
+      .prepare("SELECT count(*) AS n FROM vault_routes")
+      .get() as { n: number };
+    expect(routeRows.n).toBe(1);
+
+    // ONE assertion moves the route BOTH links resolve.
+    expect(
+      store.recordRoute({
+        peerVaultId: "vault-peer",
+        peerEndpointId: "ep-moved",
+        peerRelayHints: ["https://relay2.example"],
+        assertedAt: Date.now() + 5000,
+      })
+    ).toBe(true);
+    for (const local of ["vault-local-1", "vault-local-2"]) {
+      const view = store.peerForVault("vault-peer", local);
+      expect(view?.route.endpointId).toBe("ep-moved");
+      expect(view?.peerPublicKey).toBe(keyB);
+    }
+  });
+
+  test("the DDL keeps an EndpointId in vault_routes and nowhere else in the link tables", async () => {
     const store = await open();
     const ddl = new Map(
       (
@@ -291,12 +341,12 @@ describe(VaultLinksStore, () => {
           .prepare(
             `SELECT name, sql FROM sqlite_schema
               WHERE type = 'table'
-                AND name IN ('vault_links', 'share_edges', 'share_access_receipts')`
+                AND name IN ('vault_links', 'vault_directory', 'share_edges', 'share_access_receipts')`
           )
           .all() as unknown as Array<{ name: string; sql: string }>
       ).map((row) => [row.name, row.sql] as const)
     );
-    expect(ddl.size).toBe(3);
+    expect(ddl.size).toBe(4);
     for (const sql of ddl.values()) {
       for (const match of sql.matchAll(
         /^\s+(?<column>[a-z_]+)\s+(?:TEXT|INTEGER|REAL|BLOB)/gmu
@@ -304,9 +354,16 @@ describe(VaultLinksStore, () => {
         expect(match.groups?.column).not.toMatch(/endpoint/u);
       }
     }
-    // The route cache is the one place an EndpointId lives, and it is JSON —
-    // replaceable data, not a column anything can join or bind against.
-    expect(ddl.get("vault_links")).toMatch(/route_a_json TEXT/u);
-    expect(ddl.get("vault_links")).toMatch(/route_b_json TEXT/u);
+    // A link row is pure permission (#750): identity and routing live in the
+    // directory tables, so nothing here can drift per link.
+    const links = ddl.get("vault_links")!;
+    for (const retired of [
+      "public_key",
+      "label_",
+      "route_a_json",
+      "route_b_json",
+    ]) {
+      expect(links).not.toContain(retired);
+    }
   });
 });

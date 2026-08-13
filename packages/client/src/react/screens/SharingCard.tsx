@@ -8,6 +8,8 @@ import {
 } from "../../gateway-client-links.js";
 import type {
   CommonsInvitation,
+  CommonsRecoveryGrant,
+  CommonsRecoveryOutcome,
   GatewayEdge,
   GatewayLink,
   PendingEdge,
@@ -18,6 +20,11 @@ import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import StatusPill from "../ui/StatusPill.js";
 import LinkRow, { LinkTicketPanel } from "./LinkRow.js";
+import SharingRecoveryRows, {
+  recoveryBusyKey,
+  recoveryConcerns,
+  recoveryOutcomeSummary,
+} from "./SharingRecoveryRows.js";
 
 import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
@@ -97,11 +104,24 @@ export interface SharingCardProps {
     memberVaultId: string,
     answer: "accept" | "refuse"
   ) => Promise<unknown>;
+  loadCommonsRecovery?: (
+    actorVaultId: string
+  ) => Promise<CommonsRecoveryGrant[]>;
+  onRecoverCommons?: (
+    actorVaultId: string,
+    grantId: string
+  ) => Promise<CommonsRecoveryOutcome>;
   onMintLinkTicket?: typeof mintGatewayLinkTicket;
   onRedeemLinkTicket?: typeof redeemGatewayLinkTicket;
 }
 
 const POLL_MS = 20_000;
+
+/** A host that cannot read steward presence yet shows no absence rather than
+ *  an error — the rest of the People panel must keep working without it. */
+const noCommonsRecovery: NonNullable<
+  SharingCardProps["loadCommonsRecovery"]
+> = async () => [];
 
 export default function SharingCard(props: SharingCardProps): JSX.Element {
   const {
@@ -115,6 +135,8 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
     loadCommonsInvitations,
     onClaimCommonsInvitation,
     onAnswerCommonsInvitation,
+    loadCommonsRecovery = noCommonsRecovery,
+    onRecoverCommons,
     onMintLinkTicket = mintGatewayLinkTicket,
     onRedeemLinkTicket = redeemGatewayLinkTicket,
   } = props;
@@ -124,6 +146,10 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
   const [commonsInvitations, setCommonsInvitations] = useState<
     CommonsInvitation[]
   >([]);
+  const [commonsRecovery, setCommonsRecovery] = useState<
+    CommonsRecoveryGrant[]
+  >([]);
+  const [recoveryOutcome, setRecoveryOutcome] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [proposeVault, setProposeVault] = useState(ownVaultIds[0] ?? "");
   const [proposeTarget, setProposeTarget] = useState("");
@@ -140,22 +166,41 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
       Promise.all(
         (ownVaultKey ? ownVaultKey.split("\0") : []).map(loadCommonsInvitations)
       ).then((rows) => rows.flat()),
+      Promise.all(
+        (ownVaultKey ? ownVaultKey.split("\0") : []).map(loadCommonsRecovery)
+      ).then((rows) => rows.flat()),
     ])
-      .then(([nextLinks, nextEdges, nextPending, nextCommonsInvitations]) => {
-        if (!mountedRef.current) return;
-        setLinks(nextLinks);
-        setEdges(nextEdges);
-        setPending(nextPending);
-        setCommonsInvitations(nextCommonsInvitations);
-        setErrorMessage(null);
-      })
+      .then(
+        ([
+          nextLinks,
+          nextEdges,
+          nextPending,
+          nextCommonsInvitations,
+          nextCommonsRecovery,
+        ]) => {
+          if (!mountedRef.current) return;
+          setLinks(nextLinks);
+          setEdges(nextEdges);
+          setPending(nextPending);
+          setCommonsInvitations(nextCommonsInvitations);
+          setCommonsRecovery(nextCommonsRecovery);
+          setErrorMessage(null);
+        }
+      )
       .catch((error: unknown) => {
         if (mountedRef.current)
           setErrorMessage(
             error instanceof Error ? error.message : String(error)
           );
       });
-  }, [loadCommonsInvitations, loadEdges, loadLinks, loadPending, ownVaultKey]);
+  }, [
+    loadCommonsInvitations,
+    loadCommonsRecovery,
+    loadEdges,
+    loadLinks,
+    loadPending,
+    ownVaultKey,
+  ]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -183,6 +228,7 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
   };
 
   const completed = edges.filter((edge) => edge.mode === "snapshot");
+  const concerns = recoveryConcerns(commonsRecovery);
 
   return (
     <section className={cx(gwStyles.panel, deviceStyles.card)}>
@@ -195,6 +241,29 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
       <div className={deviceStyles.body}>
         {errorMessage ? (
           <div className={deviceStyles.loadError}>{errorMessage}</div>
+        ) : null}
+
+        {concerns.length ? (
+          <SharingRecoveryRows
+            concerns={concerns}
+            busyRow={busyRow}
+            outcome={recoveryOutcome}
+            {...(onRecoverCommons
+              ? {
+                  onRecover: (entry) =>
+                    void act(recoveryBusyKey(entry), async () => {
+                      setRecoveryOutcome(
+                        recoveryOutcomeSummary(
+                          await onRecoverCommons(
+                            entry.actorVaultId,
+                            entry.grantId
+                          )
+                        )
+                      );
+                    }),
+                }
+              : {})}
+          />
         ) : null}
 
         {pending.length ? (

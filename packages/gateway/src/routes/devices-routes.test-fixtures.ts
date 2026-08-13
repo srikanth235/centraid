@@ -36,6 +36,8 @@ export async function cleanupHarnesses(): Promise<void> {
 
 export interface DevicesHarness {
   base: string;
+  /** The real gateway.db behind the stores — tests count rows through it. */
+  database: GatewayDatabase;
   enrollments: EnrollmentStore;
   tickets: PairingTicketStore;
   sessions: WebControlSessionStore;
@@ -52,6 +54,7 @@ export async function harness(
       | "canMintPairingTicket"
       | "vaultIds"
       | "mintVaultForPerson"
+      | "unmintVaultForPerson"
     >
   > = {}
 ): Promise<DevicesHarness> {
@@ -79,6 +82,7 @@ export async function harness(
   const { port } = server.address() as AddressInfo;
   return {
     base: `http://127.0.0.1:${port}`,
+    database,
     enrollments,
     tickets,
     sessions,

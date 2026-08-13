@@ -11,12 +11,12 @@ import {
   applyCommonsBootstrap,
   exportCommonsBootstrap,
 } from "./commons-bootstrap.js";
-import { advanceCommonsCursor, readCommonsCursor } from "./commons-cursor.js";
+import { readCommonsCursor } from "./commons-cursor.js";
 import { upsertCommonsMember } from "./commons-lifecycle.js";
 import { signCommonsIntent } from "./commons-signature.js";
 import {
+  acknowledgeCommonsSeatCursor,
   appendCommonsOperation,
-  authorizeCommonsCommand,
   compileCommons,
   createCommonsGrant,
   executeCommonsCommand,
@@ -274,8 +274,8 @@ describe("commons ordered-convergence property", () => {
               pending[grantKey].add(operation.sequence);
               while (pending[grantKey].delete(applied[grantKey] + 1)) {
                 applied[grantKey] += 1;
-                advanceCommonsCursor({
-                  db: audience.vault,
+                acknowledgeCommonsSeatCursor({
+                  steward: audience.vault,
                   grantId: grants[grantKey].grantId,
                   memberVaultId: "vault-family",
                   sequence: applied[grantKey],
@@ -489,9 +489,23 @@ describe("commons ordered-convergence property", () => {
                   });
                 }
                 if (index === commandCount) break;
+                const amount = 200 + index * 2;
                 const commandInput = {
                   group_id: fixture.groupId,
-                  ordinal: index,
+                  description: `generated-downgrade-${index}`,
+                  amount_minor: amount,
+                  paid_by: fixture.memberPartyId,
+                  category: "food",
+                  splits: [
+                    {
+                      party_id: fixture.originPartyId,
+                      share_minor: amount / 2,
+                    },
+                    {
+                      party_id: fixture.memberPartyId,
+                      share_minor: amount / 2,
+                    },
+                  ],
                 };
                 const memberSignature = signCommonsIntent(
                   fixture.audience.identitySeed,
@@ -505,15 +519,20 @@ describe("commons ordered-convergence property", () => {
                   }
                 );
                 decisions.push(
-                  authorizeCommonsCommand({
-                    steward: fixture.origin.vault,
+                  executeCommonsCommand({
+                    steward: fixture.origin,
+                    gateway: fixture.gateway,
+                    credential: fixture.credential,
+                    stewardVaultId: "vault-priya",
                     grantId: fixture.grantId,
                     actorPartyId: fixture.memberPartyId,
                     command: "tally.add_expense",
                     commandInput,
                     memberSignature,
+                    seats: fixture.seats,
+                    invocationId: `generated-downgrade-${index}`,
                     now: NOW,
-                  })
+                  }).decision
                 );
               }
 

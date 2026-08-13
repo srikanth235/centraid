@@ -160,16 +160,21 @@ CREATE TABLE share_commons_intent (
   -- share_circle_grant.last_sequence -- never caller-supplied, so it cannot
   -- be a legacy-shape optional: every intent row states its own baseline.
   based_on_sequence INTEGER NOT NULL,
+  -- ONE intent grammar (issue #750): these are the replica pending-write
+  -- outbox's own state names, not a third vocabulary. 'queued' is what the
+  -- outbox calls a durable write waiting to leave the seat; the commons rail
+  -- adds no state the outbox lacks, so it borrows the outbox's word instead
+  -- of rendering 'pending' beside 'queued' in the same user-visible list.
   status          TEXT NOT NULL CHECK (status IN
-    ('pending','parked','denied','executed','expired','cancelled')),
+    ('queued','parked','denied','executed','expired','cancelled')),
   reason          TEXT,
   steward_label   TEXT,
   created_at      TEXT NOT NULL,
   settled_at      TEXT
 ) STRICT;
-CREATE INDEX share_commons_intent_pending
+CREATE INDEX share_commons_intent_open
   ON share_commons_intent(grant_id, created_at)
-  WHERE status IN ('pending','parked');
+  WHERE status IN ('queued','parked');
 
 -- A peer invitation is consent metadata, not a projected grant. The full
 -- authenticated consent metadata is held durably; no closure/domain row is

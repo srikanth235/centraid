@@ -6,10 +6,10 @@ import type { Credential } from "../gateway/types.js";
 import { nowIso } from "../ids.js";
 import { commonsSeats } from "./commons-lifecycle.js";
 import {
-  authorizeCommonsCommand,
   commonsGrantForCommand,
   compileCommons,
   createCommonsGrant,
+  executeCommonsCommand,
 } from "./commons.js";
 import { closeOpenVaults, household } from "./placement-fixture.js";
 
@@ -178,15 +178,32 @@ describe("docs.folder Commons command boundary", () => {
         .all(grant.grantId)
     ).toMatchObject([{ command: "core.add_document" }]);
 
-    expect(
-      authorizeCommonsCommand({
-        steward: origin.vault,
+    // The member's write takes the one write rail; both refusals below are
+    // decided and sequenced before any document command runs.
+    const memberWrite = (
+      command: string,
+      commandInput: Record<string, unknown>
+    ) =>
+      executeCommonsCommand({
+        steward: origin,
+        gateway,
+        credential,
+        stewardVaultId: "vault-priya",
         grantId: grant.grantId,
         actorPartyId: audienceBoot.ownerPartyId,
-        command: "core.rename_document",
-        commandInput: { document_id: later, title: "Nope" },
+        command,
+        commandInput,
+        seats: commonsSeats({
+          steward: origin.vault,
+          grantId: grant.grantId,
+          stewardVaultId: "vault-priya",
+          vaultFor: (vaultId) =>
+            vaultId === "vault-family" ? audience : undefined,
+        }),
         now,
-      })
+      }).decision;
+    expect(
+      memberWrite("core.rename_document", { document_id: later, title: "Nope" })
     ).toMatchObject({
       accepted: false,
       reason: "this commons is read-only for this member",
@@ -197,13 +214,9 @@ describe("docs.folder Commons command boundary", () => {
       )
       .run(grant.circleId, audienceBoot.ownerPartyId);
     expect(
-      authorizeCommonsCommand({
-        steward: origin.vault,
-        grantId: grant.grantId,
-        actorPartyId: audienceBoot.ownerPartyId,
-        command: "core.move_document",
-        commandInput: { document_id: later, folder_id: personal },
-        now,
+      memberWrite("core.move_document", {
+        document_id: later,
+        folder_id: personal,
       })
     ).toMatchObject({
       accepted: false,

@@ -241,6 +241,82 @@ export async function answerCommonsInvitation(
   return out.invitation;
 }
 
+/**
+ * One commons grant this vault holds, as the recovery door describes it. The
+ * gateway answers a wider observability record per grant; only what a member
+ * surface renders is named. `actorVaultId` is not on the wire — the caller
+ * asked about one vault, and the answer must stay attributable.
+ */
+export interface CommonsRecoveryGrant {
+  actorVaultId: string;
+  grantId: string;
+  containerType: string;
+  steward: {
+    presence:
+      | "unknown"
+      | "reachable"
+      | "degraded"
+      | "absent"
+      | "link-down"
+      | "parked";
+    silentForMs?: number;
+    fault?: string;
+  };
+  supersededBy?: string;
+}
+
+export interface CommonsRecoveryOutcome {
+  state: "recovered";
+  grantId: string;
+  invitations: {
+    partyId: string;
+    memberVaultId?: string;
+    state: "queued" | "delivered" | "claim" | "unreachable";
+  }[];
+}
+
+export async function listCommonsRecovery(
+  baseUrl: string,
+  actorVaultId: string
+): Promise<CommonsRecoveryGrant[]> {
+  const query = new URLSearchParams({ actorVaultId });
+  const response = await fetch(
+    new URL(`${ROUTES.gatewayCommons}/recovery?${query.toString()}`, baseUrl),
+    { headers: authHeader() }
+  );
+  if (!response.ok)
+    throw new Error(`read shared-space recovery failed (${response.status})`);
+  const out = (await response.json()) as {
+    grants?: Omit<CommonsRecoveryGrant, "actorVaultId">[];
+  };
+  return (out.grants ?? []).map((grant) => ({ ...grant, actorVaultId }));
+}
+
+/** Re-found a commons from this vault's own copy after its steward is gone.
+ *  A refusal is a NAMED answer from the ceremony, not a transport failure, so
+ *  it carries its reason to the caller rather than a bare status code. */
+export async function recoverCommons(
+  baseUrl: string,
+  actorVaultId: string,
+  grantId: string
+): Promise<CommonsRecoveryOutcome> {
+  const response = await fetch(
+    new URL(`${ROUTES.gatewayCommons}/recovery`, baseUrl),
+    {
+      method: "POST",
+      headers: { ...authHeader(), "content-type": "application/json" },
+      body: JSON.stringify({ actorVaultId, grantId }),
+    }
+  );
+  if (response.status === 409) {
+    const refusal = (await response.json()) as { reason?: string };
+    throw new Error(`Recovery refused: ${refusal.reason ?? "unknown"}`);
+  }
+  if (!response.ok)
+    throw new Error(`recover shared space failed (${response.status})`);
+  return (await response.json()) as CommonsRecoveryOutcome;
+}
+
 /** Compile a shared container into each joined member's vault. */
 export async function postCommons(
   baseUrl: string,

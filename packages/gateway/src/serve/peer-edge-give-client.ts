@@ -15,7 +15,9 @@ export const PEER_EDGE_GIVE_PATH = "/centraid/_peer/edge/give";
 export const PEER_EDGE_CLOSURE_PATH_PREFIX = "/centraid/_peer/edge/closure/";
 export const PEER_EDGE_DENY_PATH = "/centraid/_peer/edge/deny";
 
-export function peerEdgeClosurePath(edgeId: string): string {
+/** Local only: the one caller is `pullEdgeClosure` below, and the peer plane
+ *  matches the PREFIX rather than rebuilding a path it never dials. */
+function peerEdgeClosurePath(edgeId: string): string {
   return `${PEER_EDGE_CLOSURE_PATH_PREFIX}${encodeURIComponent(edgeId)}`;
 }
 
@@ -179,9 +181,9 @@ export type DenyEdgeOverPeerOutcome =
  * Tell the origin a D9 'ask' was refused (#726 P3 decision 9). Reaches
  * FORWARD only — the origin learns its edge was denied and nothing else:
  * no counts, no reasons that describe other content, no existence
- * information about other vaults. Called from `peer-refusal-relay.ts`'s
- * background drain, never from the answer route itself, so an unreachable
- * origin never blocks the owner's answer.
+ * information about other vaults. Called from the share outbox's
+ * `deliver-refusal` handler (`share-effect-executor.ts`), never from the
+ * answer route itself, so an unreachable origin never blocks the answer.
  */
 export async function denyEdgeOverPeer(input: {
   dial: PeerDial;

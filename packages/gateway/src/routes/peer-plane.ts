@@ -41,6 +41,11 @@ import type { RouteHandler } from "../serve/build-gateway.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
 import { PEER_BLOB_CHUNK_PATH } from "../serve/peer-blob-route-path.js";
 import {
+  PEER_EDGE_CLOSURE_PATH_PREFIX,
+  PEER_EDGE_DENY_PATH,
+  PEER_EDGE_GIVE_PATH,
+} from "../serve/peer-edge-give-client.js";
+import {
   parseRouteAssertion,
   verifyRouteAssertion,
 } from "../serve/peer-route-assertion.js";
@@ -49,11 +54,13 @@ import type { VaultLinksStore } from "../serve/vault-links-store.js";
 import { handlePeerBlobChunk } from "./peer-blob-route.js";
 import {
   handlePeerCommonsBlob,
+  handlePeerCommonsBlobAuthorize,
   handlePeerCommonsBootstrap,
   handlePeerCommonsCommand,
   handlePeerCommonsClaim,
   handlePeerCommonsInvite,
   handlePeerCommonsRefuse,
+  PEER_COMMONS_BLOB_AUTH_PATH,
   PEER_COMMONS_BLOB_PATH,
   PEER_COMMONS_BOOTSTRAP_PATH_PREFIX,
   PEER_COMMONS_COMMAND_PATH,
@@ -62,9 +69,6 @@ import {
   PEER_COMMONS_REFUSE_PATH,
 } from "./peer-commons-route.js";
 import {
-  PEER_EDGE_CLOSURE_PATH_PREFIX,
-  PEER_EDGE_DENY_PATH,
-  PEER_EDGE_GIVE_PATH,
   handlePeerEdgeClosure,
   handlePeerEdgeDeny,
   handlePeerEdgeGive,
@@ -228,6 +232,15 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     const peerOwnerPartyId = readString(body, "ownerPartyId");
     const claimedEndpoint = readString(body, "endpointId");
     if (!ticketId || !secret || !peerVaultId || !peerPublicKey) {
+      return sendJson(res, 400, { state: "bad_request" });
+    }
+    // The far side of a link is, by definition, not here. A redemption that
+    // names a vault THIS gateway holds is claiming an identity it cannot
+    // have, and accepting it would hand that vault a route row — which is
+    // precisely what "this vault lives elsewhere" means (#750 invariant 2),
+    // so the owner's next give to their own vault would be exported to the
+    // claimant instead of staying local.
+    if (deps.vaultPublicKey(peerVaultId) !== undefined) {
       return sendJson(res, 400, { state: "bad_request" });
     }
     // The redemption binds to the endpoint the QUIC handshake PROVED. A body
@@ -419,6 +432,13 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
           commonsDeps
         );
       }
+      if (pathname === PEER_COMMONS_BLOB_AUTH_PATH && method === "GET")
+        return handlePeerCommonsBlobAuthorize(
+          res,
+          peer,
+          new URL(target, "http://gateway.local").searchParams,
+          commonsDeps
+        );
       if (pathname === PEER_COMMONS_BLOB_PATH && method === "GET")
         return handlePeerCommonsBlob(
           res,

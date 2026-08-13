@@ -227,6 +227,39 @@ describe("link ceremony", () => {
     expect(replay.json).toStrictEqual({ state: "not_found" });
   });
 
+  it("refuses a redemption that claims a vault this gateway holds (#750)", async () => {
+    const links = openStore();
+    const handler = makeHandler(links);
+    const ticket = links.tickets.mint(LOCAL_VAULT, LOCAL_KEY);
+    // The redeemer names the gateway's OWN vault as the far side. Accepting
+    // it would give a local vault a route row — the definition of "lives
+    // elsewhere" — and the owner's next give to it would leave the house.
+    const stolen = await call(handler, {
+      method: "POST",
+      url: "/centraid/_peer/link/redeem",
+      body: redeemBody({
+        ticketId: ticket.ticketId,
+        secret: ticket.secret,
+        vaultId: LOCAL_VAULT,
+        vaultPublicKey: peerPublicKey,
+      }),
+    });
+    expect(stolen.status).toBe(400);
+    // The refusal is total: no route was installed, so the local vault is
+    // still local, and its directory identity was not overwritten.
+    expect(links.routeFor(LOCAL_VAULT)).toBeUndefined();
+    expect(links.directoryEntry(LOCAL_VAULT)?.publicKey).not.toBe(
+      peerPublicKey
+    );
+    // The ticket survives an attempt that never became a ceremony.
+    const honest = await call(handler, {
+      method: "POST",
+      url: "/centraid/_peer/link/redeem",
+      body: redeemBody({ ticketId: ticket.ticketId, secret: ticket.secret }),
+    });
+    expect(honest.status).toBe(200);
+  });
+
   it("tells a wrong secret, an unknown ticket, and an expired one apart from nothing", async () => {
     const links = openStore();
     const handler = makeHandler(links);
