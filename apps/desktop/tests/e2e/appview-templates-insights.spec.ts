@@ -356,9 +356,7 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
     launched = await launchApp(env);
     await waitForHome(launched.page);
     await gotoNav(launched.page, "Automations");
-    await expect(
-      launched.page.getByRole("button", { name: /Daily Digest/u })
-    ).toBeVisible();
+    await expect(launched.page.getByTitle("Open Daily Digest")).toBeVisible();
     await expect(fs.access(manifestPath)).resolves.toBeUndefined();
   } finally {
     if (launched) await closeApp(launched.app);

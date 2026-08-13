@@ -159,6 +159,10 @@ gates that the per-package runs do not compose. Fixed here:
   a lost affordance. After the clone the automations list is non-empty, so the empty
   state's "Browse templates" verb is gone and the gallery is reached from the app
   bar's "Templates" secondary. `automations.spec.ts` already documents that split.
+- Follow-up CI repair — the post-restart assertion now targets the v9 row action
+  (`Open Daily Digest`), and `DevicesCard.module.css` no longer declares
+  `align-items` alongside the overriding `place-items`, resolving SonarCloud's
+  `css:S4657` reliability bug.
 - `apps/mobile/lazy-screens.tsx` sits beside `App.tsx`, NOT under `src/`. The first attempt put it
   in `src/`, which `apps/mobile/scripts/check-import-boundaries.ts` rejected: nothing under `src/`
   may import `src/apps/*` (platform/kit must not reach into an app, and no app into another). Only
