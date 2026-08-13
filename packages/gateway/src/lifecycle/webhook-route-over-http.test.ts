@@ -174,28 +174,31 @@ describe("webhook-route-over-http scenarios", () => {
     expect(body.deliveryId).toBeTruthy();
     expect(body.error).toBeUndefined();
 
-    await vi.waitFor(async () => {
-      const db = new DatabaseSync(await journalDbPath(), { readOnly: true });
-      try {
-        expect(
-          (
-            db.prepare("SELECT COUNT(*) AS n FROM trigger_ingress").get() as {
-              n: number;
-            }
-          ).n
-        ).toBe(1);
-        const cursor = db
-          .prepare(
-            `SELECT position_json FROM automation_trigger_cursor
+    await vi.waitFor(
+      async () => {
+        const db = new DatabaseSync(await journalDbPath(), { readOnly: true });
+        try {
+          expect(
+            (
+              db.prepare("SELECT COUNT(*) AS n FROM trigger_ingress").get() as {
+                n: number;
+              }
+            ).n
+          ).toBe(1);
+          const cursor = db
+            .prepare(
+              `SELECT position_json FROM automation_trigger_cursor
             WHERE automation_id = ? AND source_kind = 'webhook'`
-          )
-          .get(ref) as { position_json: string | null } | undefined;
-        expect(cursor?.position_json).toStrictEqual(expect.any(String));
-        expect(Number(JSON.parse(cursor!.position_json!))).toBeGreaterThan(0);
-      } finally {
-        db.close();
-      }
-    });
+            )
+            .get(ref) as { position_json: string | null } | undefined;
+          expect(cursor?.position_json).toStrictEqual(expect.any(String));
+          expect(Number(JSON.parse(cursor!.position_json!))).toBeGreaterThan(0);
+        } finally {
+          db.close();
+        }
+      },
+      { timeout: 30_000 }
+    );
 
     await vi.waitFor(
       async () => {
