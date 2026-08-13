@@ -4,9 +4,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-git config core.hooksPath .githooks
+# shellcheck source=scripts/cloud-agent-env.sh
+source "${ROOT}/scripts/cloud-agent-env.sh"
 
-export PATH="${HOME}/.bun/bin:${PATH}"
+git config core.hooksPath .githooks
 
 bun install --frozen-lockfile
 bun run build

@@ -4,7 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-export PATH="${HOME}/.bun/bin:${PATH}"
+# shellcheck source=scripts/cloud-agent-env.sh
+source "${ROOT}/scripts/cloud-agent-env.sh"
 
 git config core.hooksPath .githooks
-mkdir -p "${ROOT}/.gw-data"
+mkdir -p "${HOME}/.centraid/gw-data"
