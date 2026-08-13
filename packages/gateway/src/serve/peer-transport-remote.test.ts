@@ -40,13 +40,9 @@ import {
 } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
-import { reconcileRemoteEdge } from "../routes/edges-reconcile-remote.js";
-import { readEdgeRow } from "../routes/edges-reconcile.js";
 import { makePeerPlaneHandler } from "../routes/peer-plane.js";
 import { EnrollmentStore } from "./enrollment-store.js";
 import { GatewayDatabase } from "./gateway-db.js";
-import { judgeEdgeCrossing } from "./link-crossing.js";
-import { drainPeerBlobPulls } from "./peer-blob-pull.js";
 import { startPeerDial } from "./peer-dial.js";
 import type { PeerDialHandle } from "./peer-dial.js";
 import type { PeerDial } from "./peer-edge-give-client.js";
@@ -56,6 +52,9 @@ import {
   pushRouteAssertion,
   redeemLinkTicket,
 } from "./peer-link-client.js";
+import { readEdgeRow } from "./share-edge-row.js";
+import { drainShareEffects, runShareEffect } from "./share-effect-executor.js";
+import { listQueuedEffects } from "./share-effects.js";
 import { isLinkApproved } from "./vault-link-row.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 
@@ -211,21 +210,6 @@ function showTicket(side: Side): string {
   });
 }
 
-function routeFrom(from: Side, to: Side) {
-  const crossing = judgeEdgeCrossing(
-    {
-      links: from.links,
-      ownerOf: (id) => (id === from.vaultId ? from.ownerId : undefined),
-    },
-    from.vaultId,
-    to.vaultId
-  );
-  if (crossing.state !== "linked" || !crossing.route) {
-    throw new Error(`expected a routed link from ${from.label} to ${to.label}`);
-  }
-  return crossing.route;
-}
-
 function seedPhoto(side: Side, label: string) {
   const bytes = Buffer.from(`original-${label}-${crypto.randomUUID()}`);
   const thumbBytes = Buffer.from(`thumb-${label}`);
@@ -356,36 +340,41 @@ describe("peer transport over real iroh (#726 P3 gap 1)", () => {
       itemIds: [photo.assetId],
     });
 
-    const updated = await reconcileRemoteEdge(
-      origin.gatewayDb,
-      row,
-      origin.vault,
-      routeFrom(origin, audience),
-      dialFrom(origin, audience)
+    await runShareEffect(
+      {
+        db: origin.gatewayDb,
+        links: origin.links,
+        vaultFor: (id) => (id === origin.vaultId ? origin.vault : undefined),
+        dial: dialFrom(origin, audience),
+      },
+      {
+        kind: "deliver-give",
+        edgeId: row.edge_id,
+        delivery: "peer",
+        crossOwner: true,
+      }
     );
-    expect(updated.status).toBe("completed");
+    expect(readEdgeRow(origin.gatewayDb, row.edge_id)!.status).toBe(
+      "completed"
+    );
     expect(audience.vault.blobs.local.hasSync(photo.thumbSha)).toBe(true);
     // The original crossed as a manifest entry, not yet as bytes.
     expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(false);
-    const pendingBefore = audience.gatewayDb.db
-      .prepare("SELECT sha256 FROM peer_blob_pulls")
-      .all() as Array<{ sha256: string }>;
-    expect(pendingBefore.map((p) => p.sha256)).toStrictEqual([photo.sha256]);
+    expect(listQueuedEffects(audience.gatewayDb, "pull-blob")).toHaveLength(1);
 
-    const drained = await drainPeerBlobPulls({
+    const drained = await drainShareEffects({
       db: audience.gatewayDb,
       links: audience.links,
-      vaultFor: (id) => (id === audience.vaultId ? audience.vault : undefined),
+      vaultFor: (id: string) =>
+        id === audience.vaultId ? audience.vault : undefined,
       dial: dialFrom(audience, origin),
       chunkBytes: 8,
     });
-    expect(drained.done).toStrictEqual([photo.sha256]);
+    expect(drained.done).toHaveLength(1);
     expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(true);
     expect(
       audience.vault.blobs.local.getSync(photo.sha256)?.equals(photo.bytes)
     ).toBe(true);
-    expect(
-      audience.gatewayDb.db.prepare("SELECT * FROM peer_blob_pulls").all()
-    ).toHaveLength(0);
+    expect(listQueuedEffects(audience.gatewayDb, "pull-blob")).toHaveLength(0);
   }, 30_000);
 });

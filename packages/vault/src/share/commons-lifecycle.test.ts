@@ -1,7 +1,10 @@
 // governance: allow-repo-hygiene file-size-limit (#731) one lifecycle acceptance suite covers grants, invites, compaction/replay, restore, revoke, retain, and transfer over a shared real-vault fixture.
 import { afterEach, describe, expect, test, vi } from "vitest";
 
+import { createGateway } from "../gateway/gateway.js";
+import type { Credential } from "../gateway/types.js";
 import { nowIso, uuidv7 } from "../ids.js";
+import { placeCommonsBootstrapBlobs } from "./commons-blobs.test-fixtures.js";
 import {
   answerCommonsInvitation,
   applyCommonsBootstrap,
@@ -9,10 +12,9 @@ import {
   exportCommonsBootstrap,
   exportCommonsSyncFrame,
   listCommonsInvitations,
-  placeCommonsBootstrapBlobs,
   queueCommonsInvitation,
 } from "./commons-bootstrap.js";
-import { advanceCommonsCursor, readCommonsCursor } from "./commons-cursor.js";
+import { readCommonsCursor } from "./commons-cursor.js";
 import {
   listCommonsGrants,
   recompileCommonsGrants,
@@ -22,11 +24,15 @@ import {
   upsertCommonsMember,
 } from "./commons-lifecycle.js";
 import {
+  acknowledgeCommonsSeatCursor,
   appendCommonsOperation,
-  authorizeCommonsCommand,
+  checkpointCommonsState,
+  commonsClosure,
   compileCommons,
   compactCommonsOperations,
+  executeCommonsCommand,
   createCommonsGrant,
+  readCommonsGrant,
   retainCommonsItem,
   removeCommonsFromSeat,
   transferCommonsSteward,
@@ -59,24 +65,29 @@ describe("commons lifecycle and logical cursors", () => {
   test("per-grant member offsets advance monotonically above one vault replica", () => {
     const { audience } = household();
     const now = nowIso();
+    acknowledgeCommonsSeatCursor({
+      steward: audience.vault,
+      grantId: "grant-a",
+      memberVaultId: "vault-family",
+      sequence: 7,
+      now,
+    });
     expect(
-      advanceCommonsCursor({
-        db: audience.vault,
-        grantId: "grant-a",
-        memberVaultId: "vault-family",
-        sequence: 7,
-        now,
-      })
-    ).toMatchObject({ sequence: 7 });
-    advanceCommonsCursor({
-      db: audience.vault,
+      readCommonsCursor(audience.vault, "grant-a", "vault-family")
+    ).toMatchObject({ sequence: 7, updatedAt: now });
+    // A delayed or replayed tail acknowledges an OLDER sequence. The offset is
+    // monotonic, so it cannot move the seat backward; the acknowledgement
+    // instant is honestly the one this late tail arrived at.
+    const late = "2000-01-01T00:00:00.000Z";
+    acknowledgeCommonsSeatCursor({
+      steward: audience.vault,
       grantId: "grant-a",
       memberVaultId: "vault-family",
       sequence: 3,
-      now: "2000-01-01T00:00:00.000Z",
+      now: late,
     });
-    advanceCommonsCursor({
-      db: audience.vault,
+    acknowledgeCommonsSeatCursor({
+      steward: audience.vault,
       grantId: "grant-b",
       memberVaultId: "vault-family",
       sequence: 2,
@@ -84,7 +95,7 @@ describe("commons lifecycle and logical cursors", () => {
     });
     expect(
       readCommonsCursor(audience.vault, "grant-a", "vault-family")
-    ).toMatchObject({ sequence: 7, updatedAt: now });
+    ).toMatchObject({ sequence: 7, updatedAt: late });
     expect(
       readCommonsCursor(audience.vault, "grant-b", "vault-family")
     ).toMatchObject({ sequence: 2 });
@@ -215,6 +226,22 @@ describe("commons lifecycle and logical cursors", () => {
       seats: [ownerSeat, memberSeat],
       now,
     });
+    // Checkpoints now advance on their own cadence, not on every compile
+    // (#750 defect c): forcing full pruning first requires forcing the
+    // checkpoint event that covers the pruned sequences.
+    checkpointCommonsState({
+      steward: origin,
+      stewardVaultId: "vault-priya",
+      grantId: grant.grantId,
+      closure: () =>
+        commonsClosure(
+          origin.vault,
+          "vault-priya",
+          readCommonsGrant(origin.vault, grant.grantId)
+        ),
+      now,
+      force: true,
+    });
     compactCommonsOperations(origin.vault, grant.grantId, true);
     expect(
       origin.vault
@@ -239,9 +266,20 @@ describe("commons lifecycle and logical cursors", () => {
         now,
       })
     ).toBe(audienceBoot.ownerPartyId);
+    // The compact nonce ledger answers the replay on the one write rail,
+    // before the command could reach the gateway at all.
+    const audienceGateway = createGateway(audience);
+    const audienceCredential: Credential = {
+      kind: "device",
+      deviceId: audienceBoot.deviceId,
+      deviceKey: audienceBoot.deviceKey,
+    };
     expect(
-      authorizeCommonsCommand({
-        steward: audience.vault,
+      executeCommonsCommand({
+        steward: audience,
+        gateway: audienceGateway,
+        credential: audienceCredential,
+        stewardVaultId: "vault-family",
         grantId: grant.grantId,
         actorPartyId: audienceBoot.ownerPartyId,
         command: "media.update_asset",
@@ -251,11 +289,12 @@ describe("commons lifecycle and logical cursors", () => {
           nonce: "compacted-signed-nonce",
           signature: "same-replayed-signature",
         },
+        seats: [],
         now,
-      })
+      }).decision
     ).toMatchObject({ accepted: false, sequence: 2, reason: "signed proof" });
-    advanceCommonsCursor({
-      db: audience.vault,
+    acknowledgeCommonsSeatCursor({
+      steward: audience.vault,
       grantId: grant.grantId,
       memberVaultId: "vault-priya",
       sequence: 1,
@@ -274,6 +313,21 @@ describe("commons lifecycle and logical cursors", () => {
       grantId: grant.grantId,
       seats: [memberSeat],
       now,
+    });
+    // Same cadence rule at the successor (#750 defect c): full pruning first
+    // requires the successor to cut the checkpoint covering those sequences.
+    checkpointCommonsState({
+      steward: audience,
+      stewardVaultId: "vault-family",
+      grantId: grant.grantId,
+      closure: () =>
+        commonsClosure(
+          audience.vault,
+          "vault-family",
+          readCommonsGrant(audience.vault, grant.grantId)
+        ),
+      now,
+      force: true,
     });
     compactCommonsOperations(audience.vault, grant.grantId, true);
     expect(

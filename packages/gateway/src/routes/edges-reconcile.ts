@@ -1,158 +1,86 @@
 /*
- * The durable two-phase reconciler an edge replays until it completes
- * (#726 P2 — generalizes placement-routes.ts' original single-item logic).
- * A crash can land between the two vault commits, but can never remove the
- * source first: `target_state` is the idempotent receipt-replay marker the
- * source step consults.
+ * The LOCAL transport of a `deliver-give` effect (#726 P2, reshaped by #750
+ * abstraction 5): both vaults are open in this process, so "delivery" is a
+ * direct call into `@centraid/vault`'s share/move doors.
  *
- * One row, however many items `scope_json` carries: the target phase is
- * ONE `shareItemsToVault` call (one closure, one blob pass, one audience
- * transaction) and ONE receipt covering every item. The source phase (a
- * move) loops the per-item `moveOutOfVault` door, but needs no per-item
- * progress tracking of its own — deleting an already-deleted projected row
- * is a documented no-op (`removal.ts`), so replaying the whole loop after a
- * partial failure is safe.
+ * It owns no state machine. Every status this file used to write by hand now
+ * goes through `applyEdgeSignal` → `share-coordinator.ts`, exactly as the
+ * peer transport's does — locality decides ROUTING, never semantics (D3).
+ * What remains here is the genuinely local part: which vault calls to make,
+ * in which order.
+ *
+ * That order is the invariant a crash can land inside of: the audience
+ * projection ALWAYS commits (and earns its receipt) before a move deletes the
+ * source, and `target_state` is what a replay resumes from. One row, however
+ * many items the scope carries: the target phase is ONE `shareItemsToVault`
+ * call and ONE receipt; the source phase loops the per-item `moveOutOfVault`
+ * door but needs no progress tracking of its own, because deleting an
+ * already-deleted projected row is a documented no-op (`removal.ts`).
  */
 
 import type {
   moveOutOfVault,
   shareItemsToVault,
   ShareVaultRef,
-  ShareableItemType,
 } from "@centraid/vault";
 
 import type { GatewayDatabase } from "../serve/gateway-db.js";
-import { recordShareAccessReceipt } from "../serve/share-access-receipts.js";
+import type { EdgeFacts } from "../serve/share-coordinator.js";
+import type { EdgeRow } from "../serve/share-edge-row.js";
+import { applyEdgeSignal } from "../serve/share-edge-store.js";
+import { parseEdgeScope } from "../serve/share-scope.js";
 
-export type EdgeKind = "add" | "move";
-export type EdgeMode = "snapshot";
-export type EdgeStatus =
-  | "queued"
-  | "in-flight"
-  | "established"
-  | "parked"
-  | "denied"
-  | "revoked"
-  | "completed"
-  | "failed";
-
-export interface EdgeRow {
-  edge_id: string;
-  created_by_device: string;
-  owner_id: string;
-  kind: EdgeKind;
-  mode: EdgeMode;
-  item_type: ShareableItemType;
-  scope_json: string | null;
-  origin_vault_id: string;
-  audience_vault_id: string;
-  verbs: "read";
-  target_item_ids_json: string | null;
-  target_state: "queued" | "executed";
-  source_state: "not-needed" | "queued" | "executed";
-  status: EdgeStatus;
-  reason: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export function readEdgeRow(
-  db: GatewayDatabase,
-  edgeId: string
-): EdgeRow | undefined {
-  return db.db
-    .prepare("SELECT * FROM share_edges WHERE edge_id = ?")
-    .get(edgeId) as EdgeRow | undefined;
+export interface DeliverGiveLocallyInput {
+  db: GatewayDatabase;
+  row: EdgeRow;
+  facts: EdgeFacts;
+  origin: ShareVaultRef;
+  audience: ShareVaultRef;
+  share: typeof shareItemsToVault;
+  move: typeof moveOutOfVault;
 }
 
 /**
- * Also called from `edges-reconcile-remote.ts` and `peer-edge-give-route.ts`
- * — same statuses, same table, whether the audience is local or across a
- * link (#726 P3 decision 7: locality decides routing only).
- * @public
+ * Project the scope into the audience vault and, for a move, release the
+ * source. Throws only for a genuine vault failure — the executor turns that
+ * into a parked edge whose effect the next tick retries.
  */
-export function updateStatus(
-  db: GatewayDatabase,
-  edgeId: string,
-  status: EdgeStatus,
-  reason: string | null
-): void {
-  db.run(
-    `UPDATE share_edges SET status = ?, reason = ?, updated_at = ?
-      WHERE edge_id = ?`,
-    status,
-    reason,
-    new Date().toISOString(),
-    edgeId
-  );
-}
-
-export function reconcileEdge(
-  db: GatewayDatabase,
-  row: EdgeRow,
-  origin: ShareVaultRef,
-  audience: ShareVaultRef,
-  share: typeof shareItemsToVault,
-  move: typeof moveOutOfVault,
-  /**
-   * True for a co-hosted CROSS-OWNER edge (father→daughter, both vaults on
-   * this gateway) — threat 8: gates the origin's `media.location` policy
-   * against `exif_json` inside `readShareClosure`. Same-owner edges default
-   * false and are unaffected.
-   */
-  crossOwner = false
-): EdgeRow {
-  if (row.status === "completed") return row;
-  let current = row;
-  updateStatus(db, current.edge_id, "in-flight", null);
-  const itemIds = JSON.parse(current.scope_json ?? "[]") as string[];
+export function deliverGiveLocally(input: DeliverGiveLocallyInput): EdgeRow {
+  const { itemIds } = parseEdgeScope(input.row.mode, input.row.scope_json);
+  let current = input.row;
 
   if (current.target_state !== "executed") {
-    const result = share({
-      origin,
+    const result = input.share({
+      origin: input.origin,
       originVaultId: current.origin_vault_id,
-      audience,
+      audience: input.audience,
       itemType: current.item_type,
       itemIds,
       sharedBy: current.owner_id,
-      crossOwner,
+      // Threat 8: a co-hosted CROSS-owner give gates the origin's
+      // `media.location` policy inside `readShareClosure`. Same-owner gives
+      // (Work→Personal) are unaffected.
+      crossOwner: input.facts.crossOwner,
     });
-    const targetItemIds = result.items.map((item) => item.itemId);
-    db.transaction(() => {
-      db.run(
-        `UPDATE share_edges
-            SET target_state = 'executed', target_item_ids_json = ?, updated_at = ?
-          WHERE edge_id = ?`,
-        JSON.stringify(targetItemIds),
-        new Date().toISOString(),
-        current.edge_id
-      );
-      recordShareAccessReceipt(db, {
-        edgeId: current.edge_id,
-        ownerId: current.owner_id,
-        action: "share",
-        itemType: current.item_type,
-        originVaultId: current.origin_vault_id,
-        originItemIds: itemIds,
-        audienceVaultId: current.audience_vault_id,
-        audienceItemIds: targetItemIds,
-      });
+    current = applyEdgeSignal(input.db, current, input.facts, {
+      type: "target-projected",
+      targetItemIds: result.items.map((item) => item.itemId),
     });
   }
 
-  current = readEdgeRow(db, current.edge_id)!;
   if (current.kind === "move" && current.source_state !== "executed") {
     for (const itemId of itemIds) {
-      move({ source: origin, itemType: current.item_type, itemId });
+      input.move({
+        source: input.origin,
+        itemType: current.item_type,
+        itemId,
+      });
     }
-    db.run(
-      `UPDATE share_edges SET source_state = 'executed', updated_at = ?
-        WHERE edge_id = ?`,
-      new Date().toISOString(),
-      current.edge_id
-    );
+    current = applyEdgeSignal(input.db, current, input.facts, {
+      type: "source-released",
+    });
   }
-
-  updateStatus(db, current.edge_id, "completed", null);
-  return readEdgeRow(db, current.edge_id)!;
+  // A pass that found both halves already executed (replay after a crash)
+  // still has to end the edge — the reducer decides whether it is ended.
+  return applyEdgeSignal(input.db, current, input.facts, { type: "settled" });
 }

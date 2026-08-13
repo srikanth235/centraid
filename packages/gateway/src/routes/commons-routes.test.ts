@@ -83,7 +83,8 @@ describe("Commons container registry", () => {
       linkedVaultPublicKey: (localVaultId, peerVaultId) => {
         const link = steward.links.findPair(localVaultId, peerVaultId);
         if (!link || !link.approvedByA || !link.approvedByB) return undefined;
-        return peerVaultId === link.vaultA ? link.publicKeyA : link.publicKeyB;
+        // #750 invariant 1: identity lives in the vault directory, not the link.
+        return steward.links.directoryEntry(peerVaultId)?.publicKey;
       },
     });
     const server = http.createServer((req, res) => void handler(req, res));

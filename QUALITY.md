@@ -2,6 +2,23 @@
 
 ## Open
 
+- **`wal-shipper` [G4] fails on the current tree.** `packages/vault/src/wal-shipper.test.ts`
+  > `[G4] a failed segment write reports an error, moves nothing, and retries
+  the same range` fails in a full `bun run test` (the rest of the package is
+  green: 1275 passed, 2 skipped). It is not a regression from any recent
+  sharing work — `wal-shipper.ts` and its test are byte-identical to their
+  state at `e0a8ed51` (#642) and were untouched by #726, #731, #741, #745,
+  #749, and #750. Recorded here because a red test nobody has written down
+  stops reading as a signal: every agent that has run the vault suite since
+  has had to re-derive that it is pre-existing. Whoever picks it up should
+  first check whether the failure is environment-shaped before assuming the
+  shipper logic is wrong. **It is**: the test injects a write failure with
+  `chmodSync(dir, 0o500)`, and root ignores directory permissions, so the
+  write it expects to fail succeeds. Every agent session in this container
+  runs as root, which is why it reproduces here and not on a developer
+  machine. The fix is to inject the failure by a means root cannot bypass,
+  not to change the shipper.
+
 - **`react-native-maps` is dead weight and still ships.** Places on the phone
   now draws the shared `place-map.ts` projection through `react-native-svg`
   (see [docs/photos-places.md](docs/photos-places.md)), so nothing imports

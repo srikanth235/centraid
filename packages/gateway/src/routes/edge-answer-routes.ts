@@ -1,14 +1,19 @@
 /*
  * D9's answer route (#726 P3 decision 9): `GET /centraid/_gateway/edges/pending`
  * lists what is parked awaiting THIS owner's decision, and
- * `POST /centraid/_gateway/edges/:edgeId/answer` decides it. Accepting PULLS
- * the closure fresh from the origin (`peer-edge-give-client.ts`'s
- * `pullEdgeClosure`) rather than projecting anything staged earlier —
- * nothing was staged (`peer-edge-give-route.ts`'s 'ask' branch writes only a
- * pointer row). Refusing writes nothing back to the origin at all: D9 says a
- * refusal reaches forward only, and there is no route by which an answer
- * here could tell the sender anything more than what the original 'ask'
- * already didn't.
+ * `POST /centraid/_gateway/edges/:edgeId/answer` decides it.
+ *
+ * Both read the ONE share outbox since #750: a give the audience asked about
+ * is an `await-answer` effect (`share_effects`), not a table of its own. That
+ * effect deliberately carries no closure and no bytes — accepting PULLS the
+ * closure fresh from the origin (`peer-edge-give-client.ts`'s
+ * `pullEdgeClosure`) rather than projecting something staged earlier to go
+ * stale.
+ *
+ * Refusing writes the origin's notification into the SAME outbox, in the same
+ * transaction that closes the ask: the owner's answer is durable before any
+ * network attempt, and delivery happens on a later sweep tick. An offline
+ * origin can never block — or lose — a refusal.
  *
  * The answering UI itself is P6; this is the state machinery and the route.
  */
@@ -30,8 +35,13 @@ import {
 } from "../serve/peer-closure-blobs.js";
 import type { PeerDial } from "../serve/peer-edge-give-client.js";
 import { pullEdgeClosure } from "../serve/peer-edge-give-client.js";
-import { recordPendingRefusal } from "../serve/peer-refusal-relay.js";
-import { peerViewOf } from "../serve/vault-link-row.js";
+import type { ShareEffect } from "../serve/share-coordinator.js";
+import {
+  completeShareEffect,
+  enqueueShareEffect,
+  findQueuedEffect,
+  listQueuedEffects,
+} from "../serve/share-effects.js";
 import type { VaultLinksStore } from "../serve/vault-links-store.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
@@ -45,15 +55,7 @@ export interface EdgeAnswerRouteDeps {
   peerDial?: PeerDial;
 }
 
-interface PendingGiveRow {
-  edge_id: string;
-  link_id: string;
-  peer_vault_id: string;
-  local_vault_id: string;
-  item_type: string;
-  item_count: number;
-  created_at: string;
-}
+type AwaitAnswer = Extract<ShareEffect, { kind: "await-answer" }>;
 
 function callerDeviceId(req: IncomingMessage): string | undefined {
   const raw = req.headers[AUTHED_DEVICE_HEADER];
@@ -61,14 +63,17 @@ function callerDeviceId(req: IncomingMessage): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function pendingDto(row: PendingGiveRow): Record<string, unknown> {
+function pendingDto(
+  effect: AwaitAnswer,
+  createdAt: string
+): Record<string, unknown> {
   return {
-    edgeId: row.edge_id,
-    peerVaultId: row.peer_vault_id,
-    localVaultId: row.local_vault_id,
-    itemType: row.item_type,
-    itemCount: row.item_count,
-    createdAt: row.created_at,
+    edgeId: effect.edgeId,
+    peerVaultId: effect.peerVaultId,
+    localVaultId: effect.localVaultId,
+    itemType: effect.itemType,
+    itemCount: effect.itemCount,
+    createdAt,
   };
 }
 
@@ -86,13 +91,21 @@ export function makeEdgeAnswerRouteHandler(
 
     if (url.pathname === `${EDGES_PREFIX}/pending`) {
       if ((req.method ?? "GET") !== "GET") return false;
-      const rows = deps.gatewayDatabase.db
-        .prepare("SELECT * FROM peer_pending_gives ORDER BY created_at")
-        .all() as unknown as PendingGiveRow[];
-      const mine = rows.filter(
-        (row) => owners.ownerOf(row.local_vault_id) === owner.ownerId
+      const pending = listQueuedEffects(
+        deps.gatewayDatabase,
+        "await-answer"
+      ).flatMap((row) =>
+        row.effect.kind === "await-answer" &&
+        owners.ownerOf(row.effect.localVaultId) === owner.ownerId
+          ? [
+              pendingDto(
+                row.effect,
+                createdAtOf(deps.gatewayDatabase, row.effectId)
+              ),
+            ]
+          : []
       );
-      return sendJson(res, 200, { pending: mine.map(pendingDto) });
+      return sendJson(res, 200, { pending });
     }
 
     const rest = url.pathname.slice(`${EDGES_PREFIX}/`.length).split("/");
@@ -100,12 +113,16 @@ export function makeEdgeAnswerRouteHandler(
     if ((req.method ?? "GET") !== "POST")
       return sendJson(res, 405, { error: "method_not_allowed" });
     const edgeId = decodeURIComponent(rest[0] ?? "");
-    const row = deps.gatewayDatabase.db
-      .prepare("SELECT * FROM peer_pending_gives WHERE edge_id = ?")
-      .get(edgeId) as PendingGiveRow | undefined;
+    const queued = findQueuedEffect(
+      deps.gatewayDatabase,
+      "await-answer",
+      edgeId
+    );
+    const ask =
+      queued?.effect.kind === "await-answer" ? queued.effect : undefined;
     // An edge the caller cannot see at all, and one this owner does not
     // control, look identical — topology hiding, same as the edge plane.
-    if (!row || owners.ownerOf(row.local_vault_id) !== owner.ownerId) {
+    if (!ask || !queued || owners.ownerOf(ask.localVaultId) !== owner.ownerId) {
       return sendJson(res, 404, { error: "not_found" });
     }
     let body: Record<string, unknown>;
@@ -124,32 +141,29 @@ export function makeEdgeAnswerRouteHandler(
       // The answer is durable the instant this transaction commits — before
       // any network attempt. Delivery to the origin (so its edge lands
       // `denied` instead of `parked` forever, #726 P3 decision 9) happens on
-      // the next `drainPeerRefusals` scheduler tick, never on this request:
-      // an offline origin must never block the owner's answer.
+      // a later sweep tick, never on this request: an offline origin must
+      // never block the owner's answer.
       deps.gatewayDatabase.transaction(() => {
-        deps.gatewayDatabase.run(
-          "DELETE FROM peer_pending_gives WHERE edge_id = ?",
-          edgeId
-        );
-        recordPendingRefusal(deps.gatewayDatabase, {
+        completeShareEffect(deps.gatewayDatabase, queued.effectId);
+        enqueueShareEffect(deps.gatewayDatabase, {
+          kind: "deliver-refusal",
           edgeId,
-          linkId: row.link_id,
-          peerVaultId: row.peer_vault_id,
-          localVaultId: row.local_vault_id,
+          linkId: ask.linkId,
+          peerVaultId: ask.peerVaultId,
+          localVaultId: ask.localVaultId,
         });
       });
       return sendJson(res, 200, { edgeId, decision: "refuse" });
     }
 
-    const link = deps.links.get(row.link_id);
-    const view = link ? peerViewOf(link, row.local_vault_id) : undefined;
+    const view = deps.links.peerViewFor(ask.linkId, ask.localVaultId);
     if (!view || !deps.peerDial) {
       return sendJson(res, 409, {
         error: "peer_unreachable",
         message: "no route to the origin right now — try again later",
       });
     }
-    const audience = deps.vaultFor(row.local_vault_id);
+    const audience = deps.vaultFor(ask.localVaultId);
     if (!audience) return sendJson(res, 404, { error: "not_found" });
     const pulled = await pullEdgeClosure({
       dial: deps.peerDial,
@@ -167,7 +181,7 @@ export function makeEdgeAnswerRouteHandler(
     }
     if (
       !isWireClosureShape(pulled.closure) ||
-      pulled.closure.originVaultId !== row.peer_vault_id
+      pulled.closure.originVaultId !== ask.peerVaultId
     ) {
       return sendJson(res, 409, {
         error: "peer_unreachable",
@@ -193,14 +207,11 @@ export function makeEdgeAnswerRouteHandler(
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    deps.gatewayDatabase.run(
-      "DELETE FROM peer_pending_gives WHERE edge_id = ?",
-      edgeId
-    );
+    completeShareEffect(deps.gatewayDatabase, queued.effectId);
     recordPendingPulls(deps.gatewayDatabase, audience, {
       edgeId,
-      linkId: row.link_id,
-      localVaultId: row.local_vault_id,
+      linkId: ask.linkId,
+      localVaultId: ask.localVaultId,
       originals: pulled.closure.blobs.filter(
         (entry) => entry.rung === "original"
       ),
@@ -211,4 +222,12 @@ export function makeEdgeAnswerRouteHandler(
       items: project.items,
     });
   };
+}
+
+/** When the ask landed — the outbox row's own `created_at`, not a new clock. */
+function createdAtOf(db: GatewayDatabase, effectId: string): string {
+  const row = db.db
+    .prepare("SELECT created_at FROM share_effects WHERE effect_id = ?")
+    .get(effectId) as { created_at: string } | undefined;
+  return row?.created_at ?? new Date().toISOString();
 }

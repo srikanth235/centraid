@@ -77,6 +77,57 @@ export function parseVaultIds(raw: unknown): string[] | null {
   return vaultIds;
 }
 
+/**
+ * `body.operationId` — the client-chosen idempotency key the *Add someone*
+ * mint lane requires (issue #750). Shape-checked here so a typo'd id can
+ * never silently start a second provision: 8–128 chars of `[A-Za-z0-9._-]`
+ * (a UUID fits). `undefined` = absent; `null` = malformed.
+ */
+export function parseOperationId(raw: unknown): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== "string") return null;
+  return /^[0-9A-Za-z][0-9A-Za-z._-]{7,127}$/u.test(raw) ? raw : null;
+}
+
+/**
+ * Validation-only preflight for the *Add someone* mint lane (#726 P1, #750):
+ * every refusal the lane can answer WITHOUT creating anything. The durable
+ * workflow itself (owner → vault → ownership → ticket) lives in
+ * `device-ticket-mint.ts`'s `executeForPersonMint`, which runs only after
+ * this — and after the endpoint-capability preflight — has passed.
+ */
+export function preflightForPersonMint(input: {
+  enrollments: EnrollmentStore;
+  callerKey: string | undefined;
+  hostCustody: boolean;
+  body: Record<string, unknown>;
+  vaultIds: string[];
+}): InvitationRefusal | undefined {
+  const callerOwner = input.callerKey
+    ? input.enrollments.ownerFor(input.callerKey)
+    : undefined;
+  // Any enrolled owner may run this ceremony (it costs disk on THIS machine,
+  // not access to anyone's vault); so may host custody.
+  if (!callerOwner && !input.hostCustody) {
+    return {
+      status: 403,
+      error: "device_identity_required",
+      message:
+        "minting a vault for a new person requires an enrolled owner device or direct host custody",
+    };
+  }
+  // Mutually exclusive with the self-pair `ownerId`/`vaultIds` lane: there
+  // is no existing owner or vault to name yet.
+  if (typeof input.body.ownerId === "string" || input.vaultIds.length > 0) {
+    return {
+      status: 400,
+      error: "invalid_body",
+      message: "forPerson cannot be combined with ownerId or vaultIds",
+    };
+  }
+  return undefined;
+}
+
 export interface ResolveInvitationInput {
   enrollments: EnrollmentStore;
   vaultName: (vaultId: string) => string | undefined;
@@ -86,14 +137,6 @@ export interface ResolveInvitationInput {
   target: string;
   body: Record<string, unknown>;
   vaultIds: string[];
-  /** Parsed `body.forPerson` — the *Add someone* ceremony (#726 P1). */
-  forPerson?: ForPerson;
-  /**
-   * Create + mount a fresh vault for a newly minted person, identity keypair
-   * included (the registry mints it at creation — see `vault-identity.ts`).
-   * Wired to `VaultRegistry.create` by the route.
-   */
-  mintVaultForPerson: (name: string) => { vaultId: string };
 }
 
 function orderTargetFirst(
@@ -115,46 +158,6 @@ export function resolveInvitation(
   const callerOwner = input.callerKey
     ? input.enrollments.ownerFor(input.callerKey)
     : undefined;
-
-  if (input.forPerson !== undefined) {
-    // *Add someone* (#726 P1): create the person, mint them a vault (identity
-    // keypair included), claim it, then mint a ticket bound to that NEW
-    // owner. Any enrolled owner may run this — it costs disk on this
-    // machine, never access to anyone else's vault — and so may host
-    // custody. Mutually exclusive with the self-pair `ownerId`/`vaultIds`
-    // lane: there is no existing owner or vault to name yet.
-    if (!callerOwner && !input.hostCustody) {
-      return {
-        status: 403,
-        error: "device_identity_required",
-        message:
-          "minting a vault for a new person requires an enrolled owner device or direct host custody",
-      };
-    }
-    if (typeof input.body.ownerId === "string" || input.vaultIds.length > 0) {
-      return {
-        status: 400,
-        error: "invalid_body",
-        message: "forPerson cannot be combined with ownerId or vaultIds",
-      };
-    }
-    const forPerson = input.forPerson;
-    const created = owners.gatewayDatabase.transaction(() =>
-      owners.createWithinTransaction(forPerson.label)
-    );
-    const minted = input.mintVaultForPerson(
-      forPerson.vaultName ?? `${forPerson.label}'s vault`
-    );
-    // Claim happens right after mount (same ordering `enrollWithinTransaction`
-    // uses for founding/`vault create`): the vault exists on disk first, then
-    // the ownership row lands in one write.
-    owners.setOwner(minted.vaultId, created.ownerId);
-    return {
-      ownerId: created.ownerId,
-      ownerLabel: created.label,
-      vaultIds: [minted.vaultId],
-    };
-  }
 
   const requestedOwner =
     typeof input.body.ownerId === "string" ? input.body.ownerId : undefined;

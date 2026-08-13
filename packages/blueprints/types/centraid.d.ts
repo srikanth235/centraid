@@ -252,20 +252,16 @@ interface CentraidScope {
   canWrite: boolean;
 }
 
-/** One durable member command waiting on (or settled by) its Commons steward. */
+/** One durable member command waiting on (or settled by) its Commons steward.
+ *  Its statuses are the pending-write outbox's own words (issue #750): one
+ *  intent grammar across every surface that renders in-flight writes. */
 interface CentraidCommonsIntent {
   intentId: string;
   grantId: string;
   actorPartyId: string;
   command: string;
   input: Record<string, unknown>;
-  status:
-    | "pending"
-    | "parked"
-    | "executed"
-    | "denied"
-    | "expired"
-    | "cancelled";
+  status: "queued" | "parked" | "executed" | "denied" | "expired" | "cancelled";
   reason?: string;
   stewardLabel?: string;
   createdAt: string;

@@ -16,9 +16,9 @@ import { commonsSeats } from "./commons-lifecycle.js";
 import type { CommonsMemberSignature } from "./commons-signature.js";
 import {
   acknowledgeCommonsSeatCursor,
+  COMMONS_MEMBER_IDENTITY_CHANGED,
   appendCommonsOperation,
   assertCommonsWithinMax,
-  authorizeCommonsCommand,
   COMMONS_DEFAULT_MAX_SIZE_BYTES,
   commonsGrantForCommand,
   compactCommonsOperations,
@@ -26,6 +26,10 @@ import {
   createCommonsGrant,
   executeCommonsCommand,
   transferCommonsSteward,
+} from "./commons.js";
+import type {
+  CommonsCommandDecision,
+  ExecuteCommonsCommandInput,
 } from "./commons.js";
 import { closeOpenVaults, household, seedPhoto } from "./placement-fixture.js";
 
@@ -42,6 +46,47 @@ function addParty(
      VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?, '1.4')`
   ).run(partyId, name, name, now, now);
   return partyId;
+}
+
+/** The one write rail, driven at the steward. Every case below refuses
+ * structurally or replays a stored decision, so nothing is ever invoked and
+ * no member vault has to be reconciled into. */
+function stewardWrite(fixture: {
+  origin: ReturnType<typeof household>["origin"];
+  originBoot: ReturnType<typeof household>["originBoot"];
+  grantId: string;
+}) {
+  const gateway = createGateway(fixture.origin);
+  const credential: Credential = {
+    kind: "device",
+    deviceId: fixture.originBoot.deviceId,
+    deviceKey: fixture.originBoot.deviceKey,
+  };
+  return (
+    input: Omit<
+      ExecuteCommonsCommandInput,
+      | "steward"
+      | "gateway"
+      | "credential"
+      | "stewardVaultId"
+      | "grantId"
+      | "seats"
+    >
+  ): CommonsCommandDecision =>
+    executeCommonsCommand({
+      ...input,
+      steward: fixture.origin,
+      gateway,
+      credential,
+      stewardVaultId: "vault-priya",
+      grantId: fixture.grantId,
+      seats: commonsSeats({
+        steward: fixture.origin.vault,
+        grantId: fixture.grantId,
+        stewardVaultId: "vault-priya",
+        vaultFor: () => undefined,
+      }),
+    }).decision;
 }
 
 describe("commons hardening", () => {
@@ -155,6 +200,80 @@ describe("commons hardening", () => {
     });
   });
 
+  test("a re-minted member identity refuses by NAME, not as an invalid signature", () => {
+    const { origin, originBoot, audience } = household();
+    const now = nowIso();
+    const bob = addParty(origin.vault, "Bob", now);
+    const photo = seedPhoto(origin, originBoot, "identity");
+    const grant = createCommonsGrant({
+      origin: origin.vault,
+      ownerPartyId: originBoot.ownerPartyId,
+      ownerVaultId: "vault-priya",
+      ownerVault: origin,
+      containerType: "media.asset",
+      containerId: photo.assetId,
+      members: [
+        {
+          partyId: bob,
+          capability: "read+write",
+          vaultId: "vault-family",
+          vault: audience,
+        },
+      ],
+      now,
+    });
+    const pinned = origin.vault
+      .prepare(
+        `SELECT vault_public_key AS key FROM share_party_vault_binding
+          WHERE party_id = ? AND vault_id = ?`
+      )
+      .get(bob, "vault-family") as { key: string };
+    expect(pinned.key).toBeTruthy();
+    const write = stewardWrite({ origin, originBoot, grantId: grant.grantId });
+    // The member vault lost its seed and was re-created: it links, it signs,
+    // and its key is simply not the one this commons pinned.
+    const decision = write({
+      actorPartyId: bob,
+      command: "media.update_asset",
+      commandInput: { asset_id: photo.assetId },
+      memberSignature: {
+        memberVaultId: "vault-family",
+        nonce: "re-mint",
+        signature: Buffer.alloc(64).toString("base64"),
+      },
+      presentedVaultPublicKey: Buffer.alloc(32, 7).toString("base64"),
+      now,
+    });
+    expect(decision.accepted).toBe(false);
+    expect(decision.reason).toContain(COMMONS_MEMBER_IDENTITY_CHANGED);
+    expect(decision.reason).not.toContain("invalid vault signature");
+    // The named fault is durable on the refusal receipt, so logs and the
+    // observability read-back name the condition instead of the symptom.
+    const receipt = origin.vault
+      .prepare(
+        `SELECT reason FROM share_commons_op
+          WHERE grant_id = ? ORDER BY sequence DESC LIMIT 1`
+      )
+      .get(grant.grantId) as { reason: string };
+    expect(receipt.reason).toContain(COMMONS_MEMBER_IDENTITY_CHANGED);
+    // The named fault is a REAL distinction: with no presented key the same
+    // seat falls through to the ordinary structural refusal instead.
+    const unnamed = write({
+      actorPartyId: bob,
+      command: "media.update_asset",
+      commandInput: { asset_id: photo.assetId, note: "second" },
+      memberSignature: {
+        memberVaultId: "vault-family",
+        nonce: "no-key",
+        signature: Buffer.alloc(64).toString("base64"),
+      },
+      now,
+    });
+    expect(unnamed.reason).toBe(
+      "command media.update_asset is not declared for media.asset"
+    );
+  });
+
   test("a signature nonce reused for a different command refuses instead of silently replaying", () => {
     const { origin, originBoot } = household();
     const now = nowIso();
@@ -172,9 +291,8 @@ describe("commons hardening", () => {
       nonce: "shared-nonce",
       signature: "unused-for-steward-actor",
     };
-    const first = authorizeCommonsCommand({
-      steward: origin.vault,
-      grantId: grant.grantId,
+    const write = stewardWrite({ origin, originBoot, grantId: grant.grantId });
+    const first = write({
       actorPartyId: originBoot.ownerPartyId,
       command: "media.first",
       commandInput: { asset_id: photo.assetId },
@@ -182,9 +300,7 @@ describe("commons hardening", () => {
       now,
     });
     // The exact same command + input replays idempotently (the stored outcome).
-    const replay = authorizeCommonsCommand({
-      steward: origin.vault,
-      grantId: grant.grantId,
+    const replay = write({
       actorPartyId: originBoot.ownerPartyId,
       command: "media.first",
       commandInput: { asset_id: photo.assetId },
@@ -193,9 +309,7 @@ describe("commons hardening", () => {
     });
     expect(replay).toStrictEqual(first);
     // A DIFFERENT command under the same nonce is a collision, not a retry.
-    const collision = authorizeCommonsCommand({
-      steward: origin.vault,
-      grantId: grant.grantId,
+    const collision = write({
       actorPartyId: originBoot.ownerPartyId,
       command: "media.second",
       commandInput: { asset_id: photo.assetId },

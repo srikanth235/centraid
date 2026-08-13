@@ -17,7 +17,7 @@ import {
 } from "./placement-fixture.js";
 import {
   readShareOrigin,
-  shareToVault,
+  shareItemsToVault,
   unshareFromVault,
 } from "./placement.js";
 
@@ -39,12 +39,12 @@ describe("placement-lifecycle suite", () => {
     }) as typeof audience.vault.prepare;
 
     expect(() =>
-      shareToVault({
+      shareItemsToVault({
         origin,
         originVaultId: "vault-priya",
         audience,
         itemType: "media.asset",
-        itemId: photo.assetId,
+        itemIds: [photo.assetId],
         sharedBy: "member-priya",
       })
     ).toThrow("injected mid-share failure");
@@ -122,12 +122,12 @@ describe("placement-lifecycle suite", () => {
   test("unshare removes the projection; the origin row and bytes stay readable", () => {
     const { origin, originBoot, audience } = household();
     const photo = seedPhoto(origin, originBoot, "g");
-    const shared = shareToVault({
+    const shared = shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
       itemType: "media.asset",
-      itemId: photo.assetId,
+      itemIds: [photo.assetId],
       sharedBy: "member-priya",
     });
     const originalIno = statSync(casPath(origin, photo.sha256)).ino;
@@ -135,7 +135,7 @@ describe("placement-lifecycle suite", () => {
     const result = unshareFromVault({
       audience,
       itemType: "media.asset",
-      itemId: shared.itemId,
+      itemId: shared.items[0]!.itemId,
     });
 
     expect(result.removed).toBe(true);
@@ -159,7 +159,7 @@ describe("placement-lifecycle suite", () => {
       n: 0,
     });
     expect(
-      readShareOrigin(audience.vault, "media.asset", shared.itemId)
+      readShareOrigin(audience.vault, "media.asset", shared.items[0]!.itemId)
     ).toBeUndefined();
     // The bytes are still linked here until the audience's GC runs — and the
     // origin is untouched either way.
@@ -186,12 +186,12 @@ describe("placement-lifecycle suite", () => {
     const { origin, originBoot, audience } = household();
     const photo = seedPhoto(origin, originBoot, "h");
     const share = () =>
-      shareToVault({
+      shareItemsToVault({
         origin,
         originVaultId: "vault-priya",
         audience,
         itemType: "media.asset",
-        itemId: photo.assetId,
+        itemIds: [photo.assetId],
         sharedBy: "member-sid",
       });
 
@@ -204,11 +204,12 @@ describe("placement-lifecycle suite", () => {
     reclaimOrphans(audience);
     const again = share();
 
-    expect(again.deduped).toBe(false);
+    expect(again.items[0]!.deduped).toBe(false);
     expect(again.blobs.map((b) => b.mode)).toStrictEqual(["linked", "linked"]);
     expect(audience.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
     expect(
-      readShareOrigin(audience.vault, "media.asset", again.itemId)?.sharedBy
+      readShareOrigin(audience.vault, "media.asset", again.items[0]!.itemId)
+        ?.sharedBy
     ).toBe("member-sid");
   });
 
@@ -236,12 +237,12 @@ describe("placement-lifecycle suite", () => {
   test("the origin's orphan sweep cannot delete bytes the audience still links", () => {
     const { origin, originBoot, audience } = household();
     const photo = seedPhoto(origin, originBoot, "j");
-    shareToVault({
+    shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
       itemType: "media.asset",
-      itemId: photo.assetId,
+      itemIds: [photo.assetId],
       sharedBy: "member-priya",
     });
 
@@ -289,12 +290,12 @@ describe("placement-lifecycle suite", () => {
     const { origin, audience } = household();
 
     expect(() =>
-      shareToVault({
+      shareItemsToVault({
         origin,
         originVaultId: "vault-priya",
         audience,
         itemType: "media.asset",
-        itemId: "missing",
+        itemIds: ["missing"],
         sharedBy: "member-priya",
       })
     ).toThrow(/is not in the origin vault/u);
@@ -306,12 +307,12 @@ describe("placement-lifecycle suite", () => {
     const photo = seedPhoto(origin, originBoot, "k");
 
     expect(() =>
-      shareToVault({
+      shareItemsToVault({
         origin,
         originVaultId: "vault-priya",
         audience: origin,
         itemType: "media.asset",
-        itemId: photo.assetId,
+        itemIds: [photo.assetId],
         sharedBy: "member-priya",
       })
     ).toThrow(/into itself/u);

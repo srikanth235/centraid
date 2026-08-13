@@ -1,6 +1,6 @@
 /*
- * Exit evidence for #726 P3 gap 2 (and gap 3's delivery half): the pull /
- * refusal queues drain on a SCHEDULER TICK, not by a direct call — proved
+ * Exit evidence for #726 P3 gap 2 (and gap 3's delivery half): the ONE share
+ * outbox drains on a SCHEDULER TICK, not by a direct call — proved
  * here by calling only `.start()`/`.stop()` on the sweep and observing the
  * durable rows disappear on their own. `runOnce()` (the test seam for
  * `peer-blob-pull.test.ts`-style direct-call assertions) is deliberately
@@ -14,7 +14,7 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { GatewayDatabase } from "./gateway-db.js";
 import type { PeerDial } from "./peer-edge-give-client.js";
 import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
-import { recordPendingRefusal } from "./peer-refusal-relay.js";
+import { enqueueShareEffect, findQueuedEffect } from "./share-effects.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 
 function seedRoutedLink(
@@ -51,17 +51,35 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
     });
     await sweep.runOnce();
     // No throw, nothing to assert on disk — a build with no peer dial wired
-    // must not touch peer-plane tables at all.
-    expect(
-      db.db.prepare("SELECT * FROM peer_pending_refusals").all()
-    ).toHaveLength(0);
+    // must not write anything into the share outbox.
+    expect(db.db.prepare("SELECT * FROM share_effects").all()).toHaveLength(0);
+  });
+
+  it("runs the route re-announcement on every tick, even with no dial (#750 invariant 3)", async () => {
+    const db = GatewayDatabase.open(tempDirSync("centraid-sweep-announce-"));
+    const links = VaultLinksStore.open(db);
+    let announced = 0;
+    const sweep = createPeerPlaneSweep({
+      db,
+      links,
+      vaultFor: () => undefined,
+      dial: () => undefined,
+      announceRoutes: async () => {
+        announced += 1;
+      },
+    });
+    await sweep.runOnce();
+    // The announce seam is the RETRY path for a rotated EndpointId a peer has
+    // not heard yet; the seam itself decides whether there is anything to say.
+    expect(announced).toBe(1);
   });
 
   it("drains a durable refusal on a SCHEDULER TICK, not a direct call", async () => {
     const db = GatewayDatabase.open(tempDirSync("centraid-sweep-tick-"));
     const links = VaultLinksStore.open(db);
     const linkId = seedRoutedLink(links, "vlt_local", "vlt_peer");
-    recordPendingRefusal(db, {
+    enqueueShareEffect(db, {
+      kind: "deliver-refusal",
       edgeId: "edge-tick",
       linkId,
       peerVaultId: "vlt_peer",
@@ -79,10 +97,9 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
       sweep.start();
       await vi.waitFor(
         () => {
-          const row = db.db
-            .prepare("SELECT * FROM peer_pending_refusals WHERE edge_id = ?")
-            .get("edge-tick");
-          expect(row).toBeUndefined();
+          expect(
+            findQueuedEffect(db, "deliver-refusal", "edge-tick")
+          ).toBeUndefined();
         },
         { timeout: 2000, interval: 10 }
       );
@@ -96,14 +113,15 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
     const links = VaultLinksStore.open(db);
     let calls = 0;
     const throwingLinks = {
-      get: () => {
+      peerViewFor: () => {
         calls += 1;
         throw new Error("simulated db failure");
       },
     } as unknown as VaultLinksStore;
     const warnings: string[] = [];
     const linkId = seedRoutedLink(links, "vlt_local", "vlt_peer");
-    recordPendingRefusal(db, {
+    enqueueShareEffect(db, {
+      kind: "deliver-refusal",
       edgeId: "edge-backoff",
       linkId,
       peerVaultId: "vlt_peer",
@@ -123,9 +141,7 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
     expect(warnings[0]).toMatch(/simulated db failure/u);
     // The row is untouched — a failed tick parks, it never loses work.
     expect(
-      db.db
-        .prepare("SELECT * FROM peer_pending_refusals WHERE edge_id = ?")
-        .get("edge-backoff")
+      findQueuedEffect(db, "deliver-refusal", "edge-backoff")
     ).toBeDefined();
   });
 });

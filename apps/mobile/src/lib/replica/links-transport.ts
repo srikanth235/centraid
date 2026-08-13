@@ -37,9 +37,48 @@ async function getJson<T>(baseUrl: string, path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+/**
+ * Total parser for one wire link (#750). The share sheet reads a link's
+ * LABEL, not just its ids, so a drifted payload is dropped here rather than
+ * surfaced as a half-built destination.
+ */
+function parseGatewayLink(value: unknown): GatewayLink | undefined {
+  if (value === null || typeof value !== "object") return undefined;
+  const row = value as Record<string, unknown>;
+  const text = (key: string): string | undefined =>
+    typeof row[key] === "string" && (row[key] as string).length > 0
+      ? (row[key] as string)
+      : undefined;
+  const label = (key: string): string | null =>
+    typeof row[key] === "string" ? (row[key] as string) : null;
+  const linkId = text("linkId");
+  const vaultA = text("vaultA");
+  const vaultB = text("vaultB");
+  if (!linkId || !vaultA || !vaultB) return undefined;
+  return {
+    linkId,
+    vaultA,
+    vaultB,
+    labelA: label("labelA"),
+    labelB: label("labelB"),
+    partyIdA: label("partyIdA"),
+    partyIdB: label("partyIdB"),
+    approvedByA: row.approvedByA === true,
+    approvedByB: row.approvedByB === true,
+    approved: row.approved === true,
+    remoteVaultId: text("remoteVaultId") ?? null,
+    revoked: row.revoked === true,
+    createdAt: text("createdAt") ?? "",
+  };
+}
+
 export async function listLinks(baseUrl: string): Promise<GatewayLink[]> {
-  const out = await getJson<{ links: GatewayLink[] }>(baseUrl, LINKS_PATH);
-  return out.links ?? [];
+  const out = await getJson<{ links?: unknown }>(baseUrl, LINKS_PATH);
+  if (!Array.isArray(out.links)) return [];
+  return out.links.flatMap((entry) => {
+    const link = parseGatewayLink(entry);
+    return link ? [link] : [];
+  });
 }
 
 export async function approveLink(

@@ -242,6 +242,43 @@ const ROUTES: Record<string, Responder> = {
     });
   },
 
+  // ── commons steward-absence recovery (#731 presence, #750 surface) ──
+  // The GET answers the vault's whole commons observability record; the client
+  // reads the `grants` array out of it and nothing else.
+  "GET /centraid/_gateway/commons/recovery": () =>
+    json({
+      vaultId: "vault-1",
+      deviceLinkAt: "2026-08-12T00:00:00.000Z",
+      grants: [
+        {
+          grantId: "grant-1",
+          containerType: "album",
+          steward: {
+            grantId: "grant-1",
+            presence: "absent",
+            stewardVaultId: "vault-gone",
+            silentForMs: 9 * 24 * 60 * 60 * 1000,
+            consecutiveFailures: 12,
+            lastOutcome: "unreachable",
+          },
+        },
+      ],
+    }),
+  "POST /centraid/_gateway/commons/recovery": () =>
+    json({
+      state: "recovered",
+      grantId: "grant-2",
+      circleId: "circle-1",
+      containerType: "album",
+      containerId: "album-1",
+      invitedPartyIds: ["party-b", "party-c"],
+      replayed: false,
+      invitations: [
+        { partyId: "party-b", memberVaultId: "vault-b", state: "delivered" },
+        { partyId: "party-c", state: "claim" },
+      ],
+    }),
+
   // ── capture ──
   "POST /centraid/_gateway/capture/ocr": () =>
     json({
@@ -333,6 +370,7 @@ export const backup = await import("./gateway-client-backup.js");
 export const atlas = await import("./gateway-client-atlas.js");
 export const owners = await import("./gateway-client-owners.js");
 export const devices = await import("./gateway-client-devices.js");
+export const edges = await import("./gateway-client-edges.js");
 export const capture = await import("./gateway-client-capture.js");
 export const history = await import("./gateway-client-conversation-history.js");
 export const editing = await import("./gateway-client-editing.js");

@@ -15,7 +15,7 @@ const TONE = {
   muted: shared.muted!,
 } as const;
 
-/** Settled states a durable Commons intent never re-enters "pending" from
+/** Settled states a durable Commons intent never re-enters "queued" from
  * (issue #731 goal 2's `expired`/`cancelled` join the original `denied`) —
  * only these are ever dismissible. */
 const DISMISSIBLE_INTENT_STATUSES = new Set([
@@ -46,7 +46,7 @@ export function ExpenseRow({
    * out of the overlay for good (issue #731 m6, extended by goal 2) —
    * `refreshCommonsExpenses` otherwise keeps re-showing it on every refresh
    * forever, since none of these three age out of `commonsIntents()` on
-   * their own the way an executed write does. Omitted for `pending`/`parked`
+   * their own the way an executed write does. Omitted for `queued`/`parked`
    * rows and every non-optimistic row — only a settled-but-not-executed row
    * is ever dismissible.
    */
@@ -55,7 +55,7 @@ export function ExpenseRow({
   onEditPending?: (row: LedgerRow) => void;
   /**
    * Cancel a durable Commons intent that has not executed yet (issue #731
-   * goal 2). Meaningful only while the row is still `pending`/`parked` —
+   * goal 2). Meaningful only while the row is still `queued`/`parked` —
    * once the steward (or the peer sweep) has settled it one way or another,
    * cancelling is no longer an available choice, so the control disappears
    * rather than lingering as a no-op.

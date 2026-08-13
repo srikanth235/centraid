@@ -13,6 +13,7 @@ import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { vaultIdentityPublicKey } from "../schema/vault-identity.js";
+import { placeCommonsBootstrapBlobs } from "./commons-blobs.test-fixtures.js";
 import {
   answerCommonsInvitation,
   applyCommonsBootstrap,
@@ -20,7 +21,6 @@ import {
   createCommonsClaimInvitation,
   exportCommonsBootstrap,
   listCommonsInvitations,
-  placeCommonsBootstrapBlobs,
   queueCommonsInvitation,
 } from "./commons-bootstrap.js";
 import {

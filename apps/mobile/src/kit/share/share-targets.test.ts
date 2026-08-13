@@ -48,6 +48,55 @@ describe(nativeShareTargets, () => {
     ]);
   });
 
+  test("a linked person with no directory entry keeps their own name, and a link with no person carries the vault's label (#750)", () => {
+    expect(
+      nativeShareTargets({
+        sourceVaultId: "owner-vault",
+        scopes: [],
+        parties: [],
+        links: [
+          {
+            vaultA: "owner-vault",
+            vaultB: "asha-vault",
+            partyIdA: "owner",
+            partyIdB: "asha",
+            labelA: "My vault",
+            labelB: "Asha",
+            approved: true,
+            revoked: false,
+          },
+        ],
+      })
+    ).toStrictEqual([
+      {
+        id: "asha-vault",
+        partyId: "asha",
+        vaultId: "asha-vault",
+        label: "Asha",
+      },
+    ]);
+  });
+
+  test("never dresses a vault id up as a name when the directory holds none", () => {
+    const [target] = nativeShareTargets({
+      sourceVaultId: "owner-vault",
+      scopes: [],
+      parties: [],
+      links: [
+        {
+          vaultA: "owner-vault",
+          vaultB: "vlt_0123456789abcdef",
+          partyIdA: "owner",
+          partyIdB: "unnamed",
+          approved: true,
+          revoked: false,
+        },
+      ],
+    });
+    expect(target?.label).toBe("Linked person");
+    expect(target?.label).not.toContain("vlt_");
+  });
+
   test("never treats an unrelated link as the destination", () => {
     expect(
       nativeShareTargets({

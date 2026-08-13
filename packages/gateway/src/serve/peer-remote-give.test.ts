@@ -19,25 +19,26 @@ import { describe, expect, test } from "vitest";
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 
 import { makeEdgeAnswerRouteHandler } from "../routes/edge-answer-routes.js";
-import { reconcileRemoteEdge } from "../routes/edges-reconcile-remote.js";
 import { EnrollmentStore } from "./enrollment-store.js";
 import { judgeEdgeCrossing } from "./link-crossing.js";
-import { drainPeerBlobPulls } from "./peer-blob-pull.js";
 import {
   contentItemCount,
+  deliverEdge,
   derivativeRows,
   dialFrom,
   dialFromHost,
+  drainEdgeEffects,
   insertEdgeRow,
   link,
   makeCoHostedSides,
   makeSide,
-  routeFrom,
+  pendingPulls,
   seedPhoto,
   transportTo,
 } from "./peer-give.test-fixtures.js";
 import type { PeerRequest } from "./peer-link-client.js";
 import { setReceiveSetting } from "./peer-receive-settings.js";
+import { findQueuedEffect } from "./share-effects.js";
 
 describe("remote give (#726 P3)", () => {
   test("derivatives paint immediately; the original is pulled ranged and resumes after interruption", async () => {
@@ -51,13 +52,7 @@ describe("remote give (#726 P3)", () => {
       itemIds: [photo.assetId],
     });
 
-    const updated = await reconcileRemoteEdge(
-      origin.gatewayDb,
-      row,
-      origin.vault,
-      routeFrom(origin, audience),
-      dialFrom(origin, audience)
-    );
+    const updated = await deliverEdge(origin, row, dialFrom(origin, audience));
     expect(updated.status).toBe("completed");
 
     // The audience painted the thumb before pulling anything else.
@@ -68,11 +63,9 @@ describe("remote give (#726 P3)", () => {
     // The original is recorded (a content_item row exists) but its bytes
     // are not yet local — exactly one pending pull.
     expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(false);
-    const pending = () =>
-      audience.gatewayDb.db
-        .prepare("SELECT sha256, tmp_path FROM peer_blob_pulls")
-        .all() as Array<{ sha256: string; tmp_path: string }>;
-    expect(pending().map((p) => p.sha256)).toStrictEqual([photo.sha256]);
+    expect(pendingPulls(audience).map((p) => p.sha256)).toStrictEqual([
+      photo.sha256,
+    ]);
 
     // Interrupted: the transport fails after the first (tiny) chunk.
     let calls = 0;
@@ -81,20 +74,17 @@ describe("remote give (#726 P3)", () => {
       if (calls === 2) throw new Error("simulated network drop");
       return transportTo(origin, audience.endpointId)(input);
     };
-    const firstDrain = await drainPeerBlobPulls({
-      db: audience.gatewayDb,
-      links: audience.links,
-      vaultFor: (vaultId) =>
-        vaultId === audience.vaultId ? audience.vault : undefined,
-      dial: {
+    const firstDrain = await drainEdgeEffects(
+      audience,
+      {
         request: flakyRequest,
-        endpointTicketFor: (id) => `ticket-for-${id}`,
+        endpointTicketFor: (id: string) => `ticket-for-${id}`,
       },
-      chunkBytes: 4,
-    });
-    expect(firstDrain.pending).toStrictEqual([photo.sha256]);
+      { chunkBytes: 4 }
+    );
+    expect(firstDrain.retried).toHaveLength(1);
     expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(false);
-    const partialPath = pending()[0]!.tmp_path;
+    const partialPath = pendingPulls(audience)[0]!.tmpPath;
     const partialSize = statSync(partialPath).size;
     expect(partialSize).toBeGreaterThan(0);
     expect(partialSize).toBeLessThan(photo.bytes.length);
@@ -107,24 +97,21 @@ describe("remote give (#726 P3)", () => {
       offsetsRequested.push(Number(url.searchParams.get("offset")));
       return transportTo(origin, audience.endpointId)(input);
     };
-    const secondDrain = await drainPeerBlobPulls({
-      db: audience.gatewayDb,
-      links: audience.links,
-      vaultFor: (vaultId) =>
-        vaultId === audience.vaultId ? audience.vault : undefined,
-      dial: {
+    const secondDrain = await drainEdgeEffects(
+      audience,
+      {
         request: resumingRequest,
-        endpointTicketFor: (id) => `ticket-for-${id}`,
+        endpointTicketFor: (id: string) => `ticket-for-${id}`,
       },
-      chunkBytes: 4,
-    });
-    expect(secondDrain.done).toStrictEqual([photo.sha256]);
+      { chunkBytes: 4 }
+    );
+    expect(secondDrain.done).toHaveLength(1);
     expect(offsetsRequested[0]).toBe(partialSize);
     expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(true);
     expect(
       audience.vault.blobs.local.getSync(photo.sha256)?.equals(photo.bytes)
     ).toBe(true);
-    expect(pending()).toHaveLength(0);
+    expect(pendingPulls(audience)).toHaveLength(0);
   });
 
   test("re-giving a held original short-circuits by sha — no bytes are pulled again", async () => {
@@ -137,20 +124,8 @@ describe("remote give (#726 P3)", () => {
       audienceVaultId: audience.vaultId,
       itemIds: [photo.assetId],
     });
-    await reconcileRemoteEdge(
-      origin.gatewayDb,
-      first,
-      origin.vault,
-      routeFrom(origin, audience),
-      dialFrom(origin, audience)
-    );
-    await drainPeerBlobPulls({
-      db: audience.gatewayDb,
-      links: audience.links,
-      vaultFor: (vaultId) =>
-        vaultId === audience.vaultId ? audience.vault : undefined,
-      dial: dialFrom(audience, origin),
-    });
+    await deliverEdge(origin, first, dialFrom(origin, audience));
+    await drainEdgeEffects(audience, dialFrom(audience, origin));
     expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(true);
 
     // Give the SAME item again, on a fresh edge.
@@ -159,18 +134,14 @@ describe("remote give (#726 P3)", () => {
       audienceVaultId: audience.vaultId,
       itemIds: [photo.assetId],
     });
-    const updated = await reconcileRemoteEdge(
-      origin.gatewayDb,
+    const updated = await deliverEdge(
+      origin,
       second,
-      origin.vault,
-      routeFrom(origin, audience),
       dialFrom(origin, audience)
     );
     expect(updated.status).toBe("completed");
     // No pending pull was ever queued for bytes already resident.
-    expect(
-      audience.gatewayDb.db.prepare("SELECT * FROM peer_blob_pulls").all()
-    ).toHaveLength(0);
+    expect(pendingPulls(audience)).toHaveLength(0);
     expect(contentItemCount(audience.vault)).toBe(1);
   });
 
@@ -226,13 +197,7 @@ describe("remote give (#726 P3)", () => {
     if (crossing.state !== "linked" || !crossing.route) {
       throw new Error("expected a linked crossing with a route");
     }
-    const updated = await reconcileRemoteEdge(
-      origin.gatewayDb,
-      row,
-      origin.vault,
-      crossing.route,
-      dialFrom(origin, audience)
-    );
+    const updated = await deliverEdge(origin, row, dialFrom(origin, audience));
     expect(updated.status).toBe("parked");
     expect(updated.reason).toBe("peer link not reachable");
     expect(contentItemCount(audience.vault)).toBe(0);
@@ -254,13 +219,7 @@ describe("remote give (#726 P3)", () => {
       audienceVaultId: audience.vaultId,
       itemIds: [kept.assetId],
     });
-    await reconcileRemoteEdge(
-      origin.gatewayDb,
-      keptEdge,
-      origin.vault,
-      routeFrom(origin, audience),
-      dialFrom(origin, audience)
-    );
+    await deliverEdge(origin, keptEdge, dialFrom(origin, audience));
     expect(contentItemCount(audience.vault)).toBe(1);
 
     // Now the audience stops accepting.
@@ -271,11 +230,9 @@ describe("remote give (#726 P3)", () => {
       audienceVaultId: audience.vaultId,
       itemIds: [refused.assetId],
     });
-    const updated = await reconcileRemoteEdge(
-      origin.gatewayDb,
+    const updated = await deliverEdge(
+      origin,
       refusedEdge,
-      origin.vault,
-      routeFrom(origin, audience),
       dialFrom(origin, audience)
     );
 
@@ -306,20 +263,13 @@ describe("remote give (#726 P3)", () => {
       audienceVaultId: audience.vaultId,
       itemIds: [photo.assetId],
     });
-    const updated = await reconcileRemoteEdge(
-      origin.gatewayDb,
-      row,
-      origin.vault,
-      routeFrom(origin, audience),
-      dialFrom(origin, audience)
-    );
+    const updated = await deliverEdge(origin, row, dialFrom(origin, audience));
     expect(updated.status).toBe("parked");
     expect(updated.reason).toBe("awaiting recipient decision");
     expect(contentItemCount(audience.vault)).toBe(0);
-    const pendingRow = audience.gatewayDb.db
-      .prepare("SELECT * FROM peer_pending_gives WHERE edge_id = ?")
-      .get("edge-asked");
-    expect(pendingRow).toBeDefined();
+    expect(
+      findQueuedEffect(audience.gatewayDb, "await-answer", "edge-asked")
+    ).toBeDefined();
 
     // The owner later accepts — the audience PULLS the closure fresh.
     const answerHandler = makeEdgeAnswerRouteHandler({
@@ -355,9 +305,7 @@ describe("remote give (#726 P3)", () => {
     expect(JSON.parse(answerBody)).toMatchObject({ decision: "accept" });
     expect(contentItemCount(audience.vault)).toBe(1);
     expect(
-      audience.gatewayDb.db
-        .prepare("SELECT * FROM peer_pending_gives WHERE edge_id = ?")
-        .get("edge-asked")
+      findQueuedEffect(audience.gatewayDb, "await-answer", "edge-asked")
     ).toBeUndefined();
   });
 
@@ -381,13 +329,7 @@ describe("remote give (#726 P3)", () => {
       audienceVaultId: audience.vaultId,
       itemIds: [photoFromX.assetId],
     });
-    const updatedFromX = await reconcileRemoteEdge(
-      x.gatewayDb,
-      edgeFromX,
-      x.vault,
-      routeFrom(x, audience),
-      dialFrom(x, audience)
-    );
+    const updatedFromX = await deliverEdge(x, edgeFromX, dialFrom(x, audience));
     expect(updatedFromX.status).toBe("completed");
 
     const edgeFromY = insertEdgeRow(y, {
@@ -395,13 +337,7 @@ describe("remote give (#726 P3)", () => {
       audienceVaultId: audience.vaultId,
       itemIds: [photoFromY.assetId],
     });
-    const updatedFromY = await reconcileRemoteEdge(
-      y.gatewayDb,
-      edgeFromY,
-      y.vault,
-      routeFrom(y, audience),
-      dialFrom(y, audience)
-    );
+    const updatedFromY = await deliverEdge(y, edgeFromY, dialFrom(y, audience));
     expect(updatedFromY.status).toBe("completed");
 
     // Both derivatives painted — neither give silently failed nor landed
@@ -417,16 +353,11 @@ describe("remote give (#726 P3)", () => {
     // naming its OWN `edgeId` (the blob-route half of the fix) so the host
     // can resolve which of `x`/`y` it concerns rather than guessing from the
     // endpoint alone.
-    const drained = await drainPeerBlobPulls({
-      db: audience.gatewayDb,
-      links: audience.links,
-      vaultFor: (vaultId) =>
-        vaultId === audience.vaultId ? audience.vault : undefined,
-      dial: dialFromHost(audience, [x, y]),
-    });
-    expect(drained.done.sort()).toStrictEqual(
-      [photoFromX.sha256, photoFromY.sha256].sort()
+    const drained = await drainEdgeEffects(
+      audience,
+      dialFromHost(audience, [x, y])
     );
+    expect(drained.done).toHaveLength(2);
     // Attributed correctly, not swapped: each original's bytes match its OWN
     // source, never the co-hosted sibling's.
     expect(

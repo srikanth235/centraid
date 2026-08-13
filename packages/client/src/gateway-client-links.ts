@@ -64,6 +64,42 @@ export interface GatewayLink {
   createdAt: string;
 }
 
+/**
+ * Total parser for one wire link (#750). The share sheets read a link's
+ * LABEL, not just its ids, so a payload whose shape drifted must be dropped
+ * here rather than surfaced as a half-built destination: a row missing its
+ * pair is not a link, and a label that is not a string is not a name.
+ */
+function parseGatewayLink(value: unknown): GatewayLink | undefined {
+  if (value === null || typeof value !== "object") return undefined;
+  const row = value as Record<string, unknown>;
+  const text = (key: string): string | undefined =>
+    typeof row[key] === "string" && (row[key] as string).length > 0
+      ? (row[key] as string)
+      : undefined;
+  const label = (key: string): string | null =>
+    typeof row[key] === "string" ? (row[key] as string) : null;
+  const linkId = text("linkId");
+  const vaultA = text("vaultA");
+  const vaultB = text("vaultB");
+  if (!linkId || !vaultA || !vaultB) return undefined;
+  return {
+    linkId,
+    vaultA,
+    vaultB,
+    labelA: label("labelA"),
+    labelB: label("labelB"),
+    partyIdA: label("partyIdA"),
+    partyIdB: label("partyIdB"),
+    approvedByA: row.approvedByA === true,
+    approvedByB: row.approvedByB === true,
+    approved: row.approved === true,
+    remoteVaultId: text("remoteVaultId") ?? null,
+    revoked: row.revoked === true,
+    createdAt: text("createdAt") ?? "",
+  };
+}
+
 /** Every link touching a vault this caller owns. */
 export async function listGatewayLinks(): Promise<GatewayLink[]> {
   const { baseUrl, token } = await auth();
@@ -71,8 +107,12 @@ export async function listGatewayLinks(): Promise<GatewayLink[]> {
     method: "GET",
     headers: authHeaders(token),
   });
-  const out = await readJson<{ links: GatewayLink[] }>(res, "list links");
-  return out.links ?? [];
+  const out = await readJson<{ links?: unknown }>(res, "list links");
+  if (!Array.isArray(out.links)) return [];
+  return out.links.flatMap((entry) => {
+    const link = parseGatewayLink(entry);
+    return link ? [link] : [];
+  });
 }
 
 /**

@@ -1,5 +1,5 @@
 import QRCode from "qrcode";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import type {
@@ -98,17 +98,27 @@ export default function DevicePairPanel({
     };
   }, [ticket]);
 
+  // The mint's idempotency key (#750): minted once per INTENDED operation and
+  // reused on retry after a failure, so "press Generate again" can never mint
+  // a second owner/vault. A success clears it — "New ticket" is a new intent.
+  const operationRef = useRef<string | null>(null);
+
   const generate = async (): Promise<void> => {
     if (forPerson && name.trim().length === 0) return;
     setBusy(true);
     setError(null);
+    if (forPerson) operationRef.current ??= crypto.randomUUID();
+    const operationId = operationRef.current;
     try {
       setTicket(
         await onCreateTicket({
           ttlMinutes: minutes,
-          ...(forPerson ? { forPerson: { label: name.trim() } } : {}),
+          ...(forPerson && operationId !== null
+            ? { forPerson: { label: name.trim() }, operationId }
+            : {}),
         })
       );
+      operationRef.current = null;
     } catch (caughtError) {
       setError(pairErrorMessage(caughtError));
     } finally {

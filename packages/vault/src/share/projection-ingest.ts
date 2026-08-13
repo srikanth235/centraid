@@ -12,10 +12,11 @@
 // replicating device never sees the row before its registration.
 //
 // KEYED BY ENTITY TYPE, NEVER BY APP. `media.asset` is vault ontology;
-// "Photos" is an app that happens to read it. The per-app declaration of which
-// hook an app's items want lives with the scope kit, and reaches this table
-// only as an entity name — so no app id is representable here, let alone
-// branched on. A record-only app declares nothing and gets nothing.
+// "Photos" is an app that happens to read it. The table below is closed and
+// owned by vault core: an app's scope-kit `projectionIngest` declaration names
+// an entity door, it does not register one — so no app id is representable
+// here, let alone branched on. A record-only app declares nothing and gets
+// nothing.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -141,20 +142,6 @@ export function projectionIngest(
   itemType: ShareableItemType
 ): ProjectionIngestHook | undefined {
   return HOOKS.get(itemType);
-}
-
-/**
- * Declare (or clear) the door for an entity type. The seam exists so an app's
- * declaration can reach the projection without vault core learning the app —
- * pass `null` to remove one.
- * @public
- */
-export function declareProjectionIngest(
-  itemType: ShareableItemType,
-  hook: ProjectionIngestHook | null
-): void {
-  if (hook === null) HOOKS.delete(itemType);
-  else HOOKS.set(itemType, hook);
 }
 
 /**

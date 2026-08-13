@@ -76,7 +76,7 @@ import {
 } from "../schema/sealed.js";
 import { SEED_DEMO_ACTIVITY } from "../schema/seed.js";
 import { resolveEntity } from "../schema/tables.js";
-import { isCommonsCommandActable } from "../share/actable.js";
+import { isCommonsCommandActable } from "../share/commons-routing.js";
 import {
   appendCommonsOperation,
   appendCommonsOperationInTransaction,
@@ -1262,14 +1262,16 @@ export class Gateway {
   /** Explicit Commons rail already authorized and sequenced the command. */
   invokeCommonsCanonical(
     cred: Credential,
-    rawRequest: InvokeRequest
+    rawRequest: InvokeRequest,
+    options: { idSeed?: string } = {}
   ): InvokeOutcome {
-    return this.invokeCore(this.identify(cred), rawRequest);
+    return this.invokeCore(this.identify(cred), rawRequest, options.idSeed);
   }
 
   private invokeCore(
     identity: Identity,
-    rawRequest: InvokeRequest
+    rawRequest: InvokeRequest,
+    deterministicIdSeed?: string
   ): InvokeOutcome {
     // Purposes are off the critical path (issue #306 decision 4): a caller
     // that names none rides the default; the journal records what applied.
@@ -1471,6 +1473,7 @@ export class Gateway {
         {
           deferCommitSettlement: this.activeBatchInvocationIds !== undefined,
           deferReplicaNotify: this.activeBatchInvocationIds !== undefined,
+          ...(deterministicIdSeed ? { deterministicIdSeed } : {}),
         }
       )
     );

@@ -1,4 +1,9 @@
-/** Adaptive peer maintenance for give-byte pulls and refusal relays. */
+/*
+ * Adaptive peer maintenance. Since #750 there is ONE queue to drain — the
+ * share outbox (`share_effects`) — instead of a per-lifecycle drainer for
+ * give bytes and another for refusal relays; the commons sweep and the route
+ * re-announcement remain their own concerns.
+ */
 
 import type {
   Credential,
@@ -8,10 +13,9 @@ import type {
 } from "@centraid/vault";
 
 import type { GatewayDatabase } from "./gateway-db.js";
-import { drainPeerBlobPulls } from "./peer-blob-pull.js";
 import { sweepPeerCommons } from "./peer-commons-sweep.js";
 import type { PeerDial } from "./peer-edge-give-client.js";
-import { drainPeerRefusals } from "./peer-refusal-relay.js";
+import { drainShareEffects } from "./share-effect-executor.js";
 import type { VaultLinksStore } from "./vault-links-store.js";
 
 const DEFAULT_ROW_LIMIT = 25;
@@ -30,6 +34,13 @@ export interface PeerPlaneSweepOptions {
     credential?: Credential;
   }[];
   dial: () => PeerDial | undefined;
+  /**
+   * Re-announce this gateway's EndpointId to linked peers when it changed
+   * and some peer has not heard it yet (issue #750 invariant 3 — the retry
+   * half of `announceLocalRoutes`; the eager half runs at endpoint start).
+   * Must never throw for a network condition.
+   */
+  announceRoutes?: () => Promise<unknown>;
   rowLimit?: number;
   idleIntervalMs?: number;
   activeIntervalMs?: number;
@@ -68,24 +79,20 @@ export function createPeerPlaneSweep(
     }
     const dial = options.dial();
     try {
-      const [blobPulls, refusals, commons] = await Promise.all([
-        dial
-          ? drainPeerBlobPulls({
-              db: options.db,
-              links: options.links,
-              vaultFor: options.vaultFor,
-              dial,
-              limit: rowLimit,
-            })
-          : Promise.resolve({ done: [] }),
-        dial
-          ? drainPeerRefusals({
-              db: options.db,
-              links: options.links,
-              dial,
-              limit: rowLimit,
-            })
-          : Promise.resolve({ acknowledged: [] }),
+      // Route announcements first: a peer that moved cannot be dialed for
+      // pulls/refusals until IT has re-asserted to us, but our own move must
+      // not wait behind this tick's other work either way.
+      if (options.announceRoutes) await options.announceRoutes();
+      const [effects, commons] = await Promise.all([
+        drainShareEffects(
+          {
+            db: options.db,
+            links: options.links,
+            vaultFor: options.vaultFor,
+            ...(dial ? { dial } : {}),
+          },
+          { limit: rowLimit }
+        ),
         options.commonsVaults
           ? sweepPeerCommons({
               vaults: options.commonsVaults(),
@@ -97,8 +104,8 @@ export function createPeerPlaneSweep(
           : Promise.resolve({ progressed: 0 }),
       ]);
       const progressed =
-        blobPulls.done.length > 0 ||
-        refusals.acknowledged.length > 0 ||
+        effects.done.length > 0 ||
+        effects.abandoned.length > 0 ||
         commons.progressed > 0;
       schedule(progressed ? activeMs : idleMs);
     } catch (error) {

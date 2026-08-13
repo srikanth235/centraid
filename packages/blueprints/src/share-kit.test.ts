@@ -16,6 +16,7 @@ interface LinkRow {
   vaultId: string;
   partyId: string;
   approved: boolean;
+  label?: string | null;
 }
 interface ShareDestination {
   id: string;
@@ -78,24 +79,39 @@ const FAMILY: Scope = {
   personal: false,
 };
 describe("linkedDestinations — approved links not already mounted", () => {
-  it("names the OTHER side of the link, best-effort labelled", () => {
+  it("names the OTHER side of the link by the label the link carries (#750)", () => {
     const links: LinkRow[] = [
       {
         linkId: "l1",
         vaultId: "peer-1",
         partyId: "party-peer",
         approved: true,
+        label: "Asha's photos",
       },
     ];
-    const listed = shareKit.linkedDestinations(links, [OWN]);
-    expect(listed).toStrictEqual([
+    expect(shareKit.linkedDestinations(links, [OWN])).toStrictEqual([
       {
         id: "peer-1",
-        label: "Linked vault peer-1",
+        label: "Asha's photos",
         partyId: "party-peer",
         vaultId: "peer-1",
       },
     ]);
+  });
+
+  it("never dresses a vault id up as a name when no label is known", () => {
+    const links: LinkRow[] = [
+      {
+        linkId: "l1",
+        vaultId: "vlt_0123456789abcdef",
+        partyId: "party-peer",
+        approved: true,
+        label: null,
+      },
+    ];
+    const [listed] = shareKit.linkedDestinations(links, [OWN]);
+    expect(listed?.label).toBe("Linked vault");
+    expect(listed?.label).not.toContain("vlt_");
   });
 
   it("excludes a link whose vault is already mounted — never listed twice", () => {

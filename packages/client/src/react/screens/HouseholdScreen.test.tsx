@@ -25,6 +25,7 @@ vi.hoisted(() => {
 import type { OwnerScope } from "../shell/ownerScope.js";
 import HouseholdScreen from "./HouseholdScreen.js";
 import type { HouseholdScreenProps } from "./HouseholdScreen.js";
+import type { SharingCardProps } from "./SharingCard.js";
 
 // Household is the page that had to exist once the vault switcher was retired
 // (#599, Decision 14): an owner is no longer "in" one vault, so something must
@@ -50,6 +51,30 @@ describe("HouseholdScreen suite", () => {
       label: "Personal",
       canWrite: true,
       ...over,
+    };
+  }
+
+  /** The People panel's props with every door answering "nothing here" — each
+   *  test overrides only the door whose behaviour it is stating. */
+  function sharing(): SharingCardProps {
+    return {
+      now: NOW,
+      ownVaultIds: ["v1"],
+      loadLinks: async () => [],
+      onProposeLink: async () => {
+        throw new Error("not used");
+      },
+      onApproveLink: async () => {
+        throw new Error("not used");
+      },
+      loadReceiveSetting: async () => "ask",
+      onSetReceiveSetting: async (_id, setting) => setting,
+      loadEdges: async () => [],
+      loadPending: async () => [],
+      onAnswerPending: async () => ({}),
+      loadCommonsInvitations: async () => [],
+      onClaimCommonsInvitation: async () => ({}),
+      onAnswerCommonsInvitation: async () => ({}),
     };
   }
 
@@ -87,20 +112,7 @@ describe("HouseholdScreen suite", () => {
       >(async () => ({}));
       const el = await mount({
         sharing: {
-          now: NOW,
-          ownVaultIds: ["v1"],
-          loadLinks: async () => [],
-          onProposeLink: async () => {
-            throw new Error("not used");
-          },
-          onApproveLink: async () => {
-            throw new Error("not used");
-          },
-          loadReceiveSetting: async () => "ask",
-          onSetReceiveSetting: async (_id, setting) => setting,
-          loadEdges: async () => [],
-          loadPending: async () => [],
-          onAnswerPending: async () => ({}),
+          ...sharing(),
           loadCommonsInvitations: async () => [
             {
               invitationId: "invite-1",
@@ -112,7 +124,6 @@ describe("HouseholdScreen suite", () => {
               createdAt: "2026-08-10T00:00:00.000Z",
             },
           ],
-          onClaimCommonsInvitation: async () => ({}),
           onAnswerCommonsInvitation,
         },
       });
@@ -137,6 +148,81 @@ describe("HouseholdScreen suite", () => {
       );
     });
 
+    it("puts a lost shared-space steward in front of the owner and runs the ceremony from here", async () => {
+      const onRecoverCommons = vi.fn<
+        NonNullable<SharingCardProps["onRecoverCommons"]>
+      >(async () => ({
+        state: "recovered",
+        grantId: "grant-2",
+        invitedPartyIds: ["party-b", "party-c"],
+        replayed: false,
+        invitations: [
+          { partyId: "party-b", memberVaultId: "vault-b", state: "delivered" },
+          { partyId: "party-c", state: "claim" },
+        ],
+      }));
+      const el = await mount({
+        sharing: {
+          ...sharing(),
+          loadCommonsRecovery: async () => [
+            {
+              actorVaultId: "v1",
+              grantId: "grant-1",
+              containerType: "album",
+              steward: {
+                presence: "absent",
+                stewardVaultId: "vault-gone",
+                silentForMs: 9 * 24 * 60 * 60 * 1000,
+              },
+            },
+          ],
+          onRecoverCommons,
+        },
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(el.textContent).toContain("Shared-space recovery");
+      expect(el.textContent).toContain("silent for 9 days");
+      const recover = [...el.querySelectorAll("button")].find(
+        (button) => button.textContent === "Recover from my copy"
+      );
+      expect(recover).toBeDefined();
+      await act(async () => recover?.click());
+      expect(onRecoverCommons).toHaveBeenCalledWith("v1", "grant-1");
+      // The seat with no link to this device cannot be invited over the wire;
+      // saying so is the difference between a recovered circle and a smaller one.
+      expect(el.textContent).toContain("must be invited by hand");
+    });
+
+    it("never offers the ceremony for a seat parked on an unverified history", async () => {
+      const el = await mount({
+        sharing: {
+          ...sharing(),
+          loadCommonsRecovery: async () => [
+            {
+              actorVaultId: "v1",
+              grantId: "grant-1",
+              containerType: "album",
+              steward: { presence: "parked", fault: "chain-divergence" },
+            },
+          ],
+          onRecoverCommons: async () => {
+            throw new Error("must not be reachable");
+          },
+        },
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(el.textContent).toContain("could not be verified");
+      expect(
+        [...el.querySelectorAll("button")].some(
+          (button) => button.textContent === "Recover from my copy"
+        )
+      ).toBe(false);
+    });
+
     it("redeems a pasted one-time Commons invite into the selected vault", async () => {
       const onClaimCommonsInvitation = vi.fn<
         (
@@ -146,25 +232,7 @@ describe("HouseholdScreen suite", () => {
         ) => Promise<unknown>
       >(async () => ({}));
       const el = await mount({
-        sharing: {
-          now: NOW,
-          ownVaultIds: ["v1"],
-          loadLinks: async () => [],
-          onProposeLink: async () => {
-            throw new Error("not used");
-          },
-          onApproveLink: async () => {
-            throw new Error("not used");
-          },
-          loadReceiveSetting: async () => "ask",
-          onSetReceiveSetting: async (_id, setting) => setting,
-          loadEdges: async () => [],
-          loadPending: async () => [],
-          onAnswerPending: async () => ({}),
-          loadCommonsInvitations: async () => [],
-          onClaimCommonsInvitation,
-          onAnswerCommonsInvitation: async () => ({}),
-        },
+        sharing: { ...sharing(), onClaimCommonsInvitation },
       });
       const input = el.querySelector(
         'input[aria-label="Shared-space invitation"]'

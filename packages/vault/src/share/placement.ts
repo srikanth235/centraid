@@ -63,17 +63,17 @@ export interface ShareVaultRef {
   identitySeed?: Buffer;
 }
 
-export interface ShareToVaultInput {
-  /** The vault the item lives in. READ-ONLY throughout this flow. */
+export interface ShareItemsToVaultInput {
+  /** The vault the items live in. READ-ONLY throughout this flow. */
   origin: ShareVaultRef;
   /** Gateway id of the origin vault, recorded as provenance in the audience. */
   originVaultId: string;
-  /** The vault the item is placed into — the only vault written. */
+  /** The vault the items are placed into — the only vault written. */
   audience: ShareVaultRef;
-  /** Logical entity name of the item being shared. */
+  /** Logical entity name of the items being shared. */
   itemType: ShareableItemType;
-  /** The item's row id in the ORIGIN vault. */
-  itemId: string;
+  /** The items' row ids in the ORIGIN vault. One closure covers the set. */
+  itemIds: readonly string[];
   /**
    * Written into `core_share_origin.shared_by` (issue #726 Finding 6 — the
    * household L2 member-principal layer this field name once implied is
@@ -92,16 +92,6 @@ export interface ShareToVaultInput {
    * that route), so only the cross-vault edge plane opts in.
    */
   crossOwner?: boolean;
-}
-
-export interface ShareToVaultResult {
-  itemType: ShareableItemType;
-  /** The projection's row id in the AUDIENCE vault. */
-  itemId: string;
-  /** True when the audience vault already held this item — an idempotent re-share. */
-  deduped: boolean;
-  /** Every content address the closure needed, and how it got there. */
-  blobs: BlobPlacement[];
 }
 
 export interface UnshareFromVaultInput {
@@ -136,7 +126,7 @@ export interface ShareOriginRecord {
   originVaultId: string;
   originItemId: string;
   /** `core_share_origin.shared_by` — an owner id, or a `peer:<vaultId>`
-   *  attribution. See `ShareToVaultInput.sharedBy`'s doc comment. */
+   *  attribution. See `ShareItemsToVaultInput.sharedBy`'s doc comment. */
   sharedBy: string;
   sharedAt: number;
 }
@@ -168,14 +158,6 @@ export function readShareOrigin(
     sharedBy: row.shared_by,
     sharedAt: row.shared_at,
   };
-}
-
-export interface ShareItemsToVaultInput extends Omit<
-  ShareToVaultInput,
-  "itemId"
-> {
-  /** The items' row ids in the ORIGIN vault. One closure covers the set. */
-  itemIds: readonly string[];
 }
 
 export interface ShareItemsToVaultResult {
@@ -234,22 +216,6 @@ export function shareItemsToVault(
         : undefined,
   });
   return { itemType: input.itemType, items: projection.items, blobs };
-}
-
-/**
- * Place ONE item — the local composition of `readShareClosure` and
- * `projectShareClosure`, and the call the gateway's placement plane makes.
- */
-export function shareToVault(input: ShareToVaultInput): ShareToVaultResult {
-  const { itemId, ...rest } = input;
-  const shared = shareItemsToVault({ ...rest, itemIds: [itemId] });
-  const item = shared.items[0]!;
-  return {
-    itemType: input.itemType,
-    itemId: item.itemId,
-    deduped: item.deduped,
-    blobs: shared.blobs,
-  };
 }
 
 /**

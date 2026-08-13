@@ -4,7 +4,7 @@ import { registerDocumentCommands } from "../commands/documents.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
 import { closeOpenVaults, household } from "./placement-fixture.js";
-import { shareToVault, unshareFromVault } from "./placement.js";
+import { shareItemsToVault, unshareFromVault } from "./placement.js";
 
 describe("Docs folder placement", () => {
   afterEach(closeOpenVaults);
@@ -47,15 +47,15 @@ describe("Docs folder placement", () => {
     const bookings = createFolder("Bookings", trip);
     const first = addDocument(bookings, "Train tickets");
 
-    const shared = shareToVault({
+    const shared = shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
       itemType: "docs.folder",
-      itemId: trip,
+      itemIds: [trip],
       sharedBy: "member-priya",
     });
-    expect(shared.itemId).toBe(trip);
+    expect(shared.items[0]!.itemId).toBe(trip);
     expect(
       audience.vault
         .prepare(
@@ -73,12 +73,12 @@ describe("Docs folder placement", () => {
     ).toMatchObject({ n: 1 });
 
     const later = addDocument(bookings, "Hotel receipt");
-    shareToVault({
+    shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
       itemType: "docs.folder",
-      itemId: trip,
+      itemIds: [trip],
       sharedBy: "member-priya",
     });
     expect(

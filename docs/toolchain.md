@@ -12,6 +12,7 @@ This is the durable command and ownership contract for TypeScript quality work. 
 | Compiler diagnostics and type correctness | pinned TypeScript |
 | Task graph execution | pinned Turbo |
 | Dead code and dependency hygiene | Knip |
+| Sharing-plane export reachability | `scripts/check-share-reachability.mjs` (`check:reachability`) + `share-reachability.json` |
 | Runtime behaviour | Vitest and e2e suites |
 | DESIGN.md spec conformance | `@google/design.md` (pinned exact) — see `lint:design-md` |
 | Second-opinion security / reliability (PR check) | SonarCloud Autoscan — see [docs/sonarcloud.md](sonarcloud.md) |
@@ -41,6 +42,17 @@ All callers use repository-pinned binaries through these Bun scripts:
 | `lint:design-consumers` | one local parity check for desktop/PWA/blueprint CSS and Expo native consumers; both halves remain separate `check:push` gates so CI can run them concurrently |
 | `lint:design-md` | official DESIGN.md linter over the root `DESIGN.md`: schema, `{token.refs}`, WCAG pairs, canonical section order. Errors fail; warnings are advisory |
 | `toolchain:doctor` | non-mutating Ultracite/config drift diagnosis |
+| `check:reachability` | sharing-plane export reachability (see below) |
+
+## Sharing-plane export reachability
+
+Knip's dead-export detection stops at workspace entry files: a capability re-exported through `src/index.ts` counts as "used" because the barrel is an entry, and colocated vitest files are entries too. That combination laundered dead sharing-plane capabilities past every gate (issue #750: `declareCommonsCommands` / `commonsCommandsFor` were exported, barrel-re-exported, and called by nothing in production).
+
+`bun run check:reachability` (`scripts/check-share-reachability.mjs`, part of `check:push`) closes the class. For every value export of the modules configured in the root `share-reachability.json` it resolves the transitive importer set — following re-exports through index.ts barrels and workspace package specifiers — and fails unless a production file (non-test source under `packages/` or `apps/`, per the TESTING.md naming conventions) imports the capability in a value position. Test/benchmark/fixture files, type-only imports and usages, and pure import-then-re-export sites do not count as callers. It parses with the repo-pinned TypeScript compiler at syntax level only, so it runs standalone with no build.
+
+**Same-file rule.** A capability used in a value position inside its _own_ declaring module counts as production-reached, provided that module is production code — the same convention as knip's `ignoreExportsUsedInFile`, which this repo already runs. The two gates compose: knip fails on unused **files**, so a module that only reaches itself is either alive (something runs it) or knip deletes the whole file; this gate fails on dead **exports inside live modules**. A same-file value use inside a live production module therefore does execute in production, while the defect class this gate exists for — `declareCommonsCommands`, `pushRouteAssertion`: a capability invoked nowhere, in-file or out — still fails. A declaration's own name is not a use (the usage walk skips top-level declaration name nodes), same-file uses in test modules never rescue anything, and a same-file use in a type position is still type-only. Such a reacher is reported as `<file> (same-file)` so the output stays honest about why it passed.
+
+Documented exceptions live in the config's `allowlist`, one non-empty `reason` string per entry (the same documented-exception style as `knip.json`); a stale entry — one whose capability gained a production caller or disappeared — is itself a failure, so the list only shrinks. The allowlist is currently **empty** and should stay that way: a failing capability is fixed by wiring the production caller or deleting the export, not by adding an entry.
 
 Do not invoke raw `npx`, global tools, `bunx` guesses, or implicit config discovery. Editors, hooks, local commands, and CI all name the root configs. Pre-commit checks staged files and does not rewrite source files; pre-push runs `check:pr`. The one intentional mutation is governance token accounting: immediately before a commit, its hook appends the frozen cost coordinate to this issue's receipt so the commit and ledger row remain one auditable unit.
 

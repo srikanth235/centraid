@@ -8,7 +8,7 @@ import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 
 import { VaultShareError } from "../errors.js";
 import { uuidv7 } from "../ids.js";
-import { placeBlob } from "./blobs.js";
+import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { CLOSURE_FORMAT_VERSION } from "./closure.js";
 import type { WireClosure } from "./closure.js";
 import type { CommonsCheckpointAttestation } from "./commons-chain.js";
@@ -16,12 +16,28 @@ import {
   assertCommonsStateDigest,
   chainColumns,
   readCommonsCheckpointAttestation,
+  readCommonsVerified,
   recordCommonsVerified,
   signCommonsCheckpoint,
   verifyCommonsFrameHistory,
+  verifyCommonsIncrementHistory,
 } from "./commons-chain.js";
 import {
+  commonsTailBlobs,
+  commonsTailIsContiguous,
+  isCommonsReplayError,
+  readCommonsTail,
+  replayCommonsTail,
+  stageCommonsTailBlobs,
+} from "./commons-replay.js";
+import type {
+  CommonsReplicaExecutor,
+  CommonsTailBlob,
+} from "./commons-replay.js";
+import {
+  COMMONS_CHECKPOINT_INTERVAL,
   commonsClosure,
+  COMMONS_OP_RETENTION_FLOOR,
   readCommonsGrant,
   removeCommonsFromSeat,
 } from "./commons.js";
@@ -62,9 +78,63 @@ export interface CommonsTombstone {
   reason: "grant_revoked" | "member_removed";
 }
 
+/** Small control-plane rows an increment still refreshes wholesale — they are
+ * roster-sized, never library-sized, so this stays O(members) per frame. The
+ * grant row travels WITHOUT `checkpoint_json`: an increment must never ship
+ * (or overwrite) the full stored closure (issue #750 defects c/d). */
+export interface CommonsIncrementControl {
+  grant: Record<string, unknown>;
+  circle: Record<string, unknown>;
+  members: readonly Record<string, unknown>[];
+  memberStates: readonly Record<string, unknown>[];
+  parties: readonly Record<string, unknown>[];
+  bindings: readonly Record<string, unknown>[];
+}
+
+/**
+ * Ops-since-cursor catch-up (issue #750 invariant 7): what a member whose
+ * cursor sits ON the op chain receives instead of a full closure. `ops` are
+ * the verbose chained rows in `(fromSequence, currentSequence]` — the
+ * EXECUTABLE tail the member re-runs to reach the steward's state, not a
+ * description of the rows it should end up with; `receipts` / `replay` are
+ * only the rows those sequences added; `blobs` are the content-addressed bytes
+ * those commands claim by sha, which are the one thing re-execution cannot
+ * derive for itself. Verification is the SAME chain machinery a full frame
+ * uses, anchored at the member's own proven head instead of a travelling
+ * checkpoint.
+ */
+export interface CommonsIncrement {
+  grantId: string;
+  stewardVaultId: string;
+  memberVaultId: string;
+  fromSequence: number;
+  currentSequence: number;
+  ops: readonly Record<string, unknown>[];
+  receipts: readonly Record<string, unknown>[];
+  replay: readonly Record<string, unknown>[];
+  control: CommonsIncrementControl;
+  blobs: readonly CommonsTailBlob[];
+}
+
 export type CommonsSyncFrame =
   | { state: "bootstrap"; wire: CommonsBootstrap }
+  | { state: "increment"; increment: CommonsIncrement }
   | { state: "tombstone"; tombstone: CommonsTombstone };
+
+/** The increment could not be used against THIS replica's cursor/verified
+ * point — not a fault, not a park: the caller re-pulls the full frame. */
+export class CommonsIncrementUnusableError extends VaultShareError {
+  constructor(message: string) {
+    super(message);
+    this.name = "CommonsIncrementUnusableError";
+  }
+}
+
+export function isCommonsIncrementUnusable(
+  error: unknown
+): error is CommonsIncrementUnusableError {
+  return error instanceof CommonsIncrementUnusableError;
+}
 
 export interface CommonsInvitationRecord {
   invitationId: string;
@@ -510,6 +580,119 @@ export function exportCommonsBootstrap(input: {
   };
 }
 
+/**
+ * Build the ops-since-cursor increment for one member, or undefined when the
+ * cursor is OFF the retained window — ahead of the head, or missing verbose
+ * ops because compaction reclaimed them. Undefined means "full bootstrap",
+ * never an error: re-baselining is the correct answer for both shapes.
+ *
+ * Nothing here reads the closure. That is the point of invariant 7 (issue
+ * #750): the steward answers a sync-with-changes in time proportional to the
+ * operations the member missed, never to the size of the commons.
+ */
+export function exportCommonsIncrement(input: {
+  steward: DatabaseSync;
+  stewardVaultId: string;
+  grantId: string;
+  memberVaultId: string;
+  afterSequence: number;
+}): CommonsIncrement | undefined {
+  const grant = readCommonsGrant(input.steward, input.grantId);
+  if (grant.revokedAt) return undefined;
+  const membership = input.steward
+    .prepare(
+      `SELECT 1 AS n FROM social_circle_member m
+       JOIN share_commons_member_state s
+         ON s.grant_id = ? AND s.party_id = m.party_id AND s.status = 'current'
+       JOIN share_party_vault_binding b ON b.party_id = m.party_id
+       WHERE m.circle_id = ? AND b.vault_id = ? AND b.revoked_at IS NULL`
+    )
+    .get(grant.grantId, grant.circleId, input.memberVaultId);
+  if (!membership) return undefined;
+  if (input.afterSequence > grant.lastSequence) return undefined;
+  const ops = input.steward
+    .prepare(
+      `SELECT * FROM share_commons_op
+        WHERE grant_id = ? AND sequence > ? ORDER BY sequence`
+    )
+    .all(grant.grantId, input.afterSequence) as Record<string, unknown>[];
+  // Contiguity from the member's cursor is what makes both chain verification
+  // and replay possible at the seat; a pruned window re-baselines instead.
+  if (
+    !commonsTailIsContiguous({
+      tail: ops.map((op) => ({ sequence: Number(op["sequence"]) })),
+      fromSequence: input.afterSequence,
+      headSequence: grant.lastSequence,
+    })
+  )
+    return undefined;
+  const receipts = input.steward
+    .prepare(
+      `SELECT * FROM share_commons_receipt
+        WHERE grant_id = ? AND sequence > ? ORDER BY sequence`
+    )
+    .all(grant.grantId, input.afterSequence) as Record<string, unknown>[];
+  const replay = input.steward
+    .prepare(
+      `SELECT * FROM share_commons_replay
+        WHERE grant_id = ? AND sequence > ?
+        ORDER BY sequence, signing_vault_id, signature_nonce`
+    )
+    .all(grant.grantId, input.afterSequence) as Record<string, unknown>[];
+  const { checkpoint_json: _checkpointJson, ...grantRow } = input.steward
+    .prepare("SELECT * FROM share_circle_grant WHERE grant_id = ?")
+    .get(grant.grantId) as Record<string, unknown>;
+  const circle = input.steward
+    .prepare("SELECT * FROM social_circle WHERE circle_id = ?")
+    .get(grant.circleId) as Record<string, unknown>;
+  const members = input.steward
+    .prepare(
+      "SELECT * FROM social_circle_member WHERE circle_id = ? ORDER BY added_at, member_id"
+    )
+    .all(grant.circleId) as Record<string, unknown>[];
+  const parties = members.map(
+    (member) =>
+      input.steward
+        .prepare("SELECT * FROM core_party WHERE party_id = ?")
+        .get(String(member["party_id"])) as Record<string, unknown>
+  );
+  const bindings = input.steward
+    .prepare(
+      `SELECT * FROM share_party_vault_binding
+        WHERE party_id IN (
+          SELECT party_id FROM social_circle_member WHERE circle_id = ?
+        )`
+    )
+    .all(grant.circleId) as Record<string, unknown>[];
+  const memberStates = input.steward
+    .prepare(
+      "SELECT * FROM share_commons_member_state WHERE grant_id = ? ORDER BY party_id"
+    )
+    .all(grant.grantId) as Record<string, unknown>[];
+  return {
+    grantId: grant.grantId,
+    stewardVaultId: input.stewardVaultId,
+    memberVaultId: input.memberVaultId,
+    fromSequence: input.afterSequence,
+    currentSequence: grant.lastSequence,
+    ops,
+    receipts,
+    replay,
+    control: {
+      grant: grantRow,
+      circle,
+      members,
+      memberStates,
+      parties,
+      bindings,
+    },
+    blobs: commonsTailBlobs(
+      input.steward,
+      readCommonsTail(input.steward, grant.grantId, input.afterSequence)
+    ),
+  };
+}
+
 /** Historical bindings authorize a removed member to learn only the
  * going-forward tombstone, never the closure they no longer hold. */
 export function exportCommonsSyncFrame(input: {
@@ -518,6 +701,12 @@ export function exportCommonsSyncFrame(input: {
   grantId: string;
   memberVaultId: string;
   identitySeed: Buffer;
+  /**
+   * The member's applied cursor (issue #750 invariant 7). When supplied and
+   * the cursor sits on the retained op chain, the frame is an increment —
+   * ops + receipts + the closure delta — instead of a full re-baseline.
+   */
+  afterSequence?: number;
 }): CommonsSyncFrame {
   const grant = readCommonsGrant(input.steward, input.grantId);
   const bound = input.steward
@@ -553,6 +742,16 @@ export function exportCommonsSyncFrame(input: {
         reason: grant.revokedAt ? "grant_revoked" : "member_removed",
       },
     };
+  if (input.afterSequence !== undefined) {
+    const increment = exportCommonsIncrement({
+      steward: input.steward,
+      stewardVaultId: input.stewardVaultId,
+      grantId: input.grantId,
+      memberVaultId: input.memberVaultId,
+      afterSequence: input.afterSequence,
+    });
+    if (increment) return { state: "increment", increment };
+  }
   return { state: "bootstrap", wire: exportCommonsBootstrap(input) };
 }
 
@@ -903,12 +1102,381 @@ export function applyCommonsBootstrap(input: {
   }
 }
 
-/** Same-machine test/transport helper: place the snapshot's bytes by sha. */
-export function placeCommonsBootstrapBlobs(input: {
-  source: ShareVaultRef;
+/** The increment's control refresh: roster-sized rows wholesale, new
+ * receipts/replay append-only, and the grant row WITHOUT touching the seat's
+ * stored checkpoint pair — an increment moves the head, never the baseline. */
+function projectIncrementControl(
+  db: DatabaseSync,
+  increment: CommonsIncrement
+): void {
+  const control = increment.control;
+  const parties = db.prepare(
+    `INSERT INTO core_party
+       (party_id, kind, display_name, sort_name, birth_date,
+        avatar_content_id, created_at, updated_at, ontology_version)
+     VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)
+     ON CONFLICT(party_id) DO UPDATE SET
+       kind = excluded.kind, display_name = excluded.display_name,
+       sort_name = excluded.sort_name, birth_date = excluded.birth_date,
+       updated_at = excluded.updated_at,
+       ontology_version = excluded.ontology_version`
+  );
+  for (const party of control.parties)
+    parties.run(
+      sql(party["party_id"]),
+      sql(party["kind"]),
+      sql(party["display_name"]),
+      sql(party["sort_name"]),
+      sql(party["birth_date"]),
+      sql(party["created_at"]),
+      sql(party["updated_at"]),
+      sql(party["ontology_version"])
+    );
+  const circle = control.circle;
+  db.prepare(
+    `INSERT INTO social_circle (circle_id, owner_party_id, name, kind)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(circle_id) DO UPDATE SET
+       owner_party_id = excluded.owner_party_id,
+       name = excluded.name, kind = excluded.kind`
+  ).run(
+    sql(circle["circle_id"]),
+    sql(circle["owner_party_id"]),
+    sql(circle["name"]),
+    sql(circle["kind"])
+  );
+  db.prepare("DELETE FROM social_circle_member WHERE circle_id = ?").run(
+    sql(circle["circle_id"])
+  );
+  const member = db.prepare(
+    `INSERT INTO social_circle_member
+       (member_id, circle_id, party_id, added_at, capability)
+     VALUES (?, ?, ?, ?, ?)`
+  );
+  for (const row of control.members)
+    member.run(
+      sql(row["member_id"]),
+      sql(row["circle_id"]),
+      sql(row["party_id"]),
+      sql(row["added_at"]),
+      sql(row["capability"])
+    );
+  for (const row of control.bindings)
+    db.prepare(
+      `INSERT INTO share_party_vault_binding
+         (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(party_id, vault_id) DO UPDATE SET
+         vault_public_key = excluded.vault_public_key,
+         linked_at = excluded.linked_at, revoked_at = excluded.revoked_at`
+    ).run(
+      sql(row["binding_id"]),
+      sql(row["party_id"]),
+      sql(row["vault_id"]),
+      sql(row["vault_public_key"]),
+      sql(row["linked_at"]),
+      sql(row["revoked_at"])
+    );
+  const grant = control.grant;
+  db.prepare(
+    `UPDATE share_circle_grant SET
+       circle_id = ?, container_type = ?, container_id = ?, plane = ?,
+       departure_policy = ?, implicit_circle = ?, steward_party_id = ?,
+       created_at = ?, revoked_at = ?, last_sequence = ?,
+       chain_head_sequence = ?, chain_head_hash = ?, max_size_bytes = ?
+     WHERE grant_id = ?`
+  ).run(
+    sql(grant["circle_id"]),
+    sql(grant["container_type"]),
+    sql(grant["container_id"]),
+    sql(grant["plane"]),
+    sql(grant["departure_policy"]),
+    sql(grant["implicit_circle"]),
+    sql(grant["steward_party_id"]),
+    sql(grant["created_at"]),
+    sql(grant["revoked_at"]),
+    increment.currentSequence,
+    sql(grant["chain_head_sequence"]),
+    sql(grant["chain_head_hash"]),
+    sql(grant["max_size_bytes"]),
+    increment.grantId
+  );
+  db.prepare("DELETE FROM share_commons_member_state WHERE grant_id = ?").run(
+    increment.grantId
+  );
+  const state = db.prepare(
+    `INSERT INTO share_commons_member_state
+       (grant_id, party_id, status, accepted_at) VALUES (?, ?, ?, ?)`
+  );
+  for (const row of control.memberStates)
+    state.run(
+      sql(row["grant_id"]),
+      sql(row["party_id"]),
+      sql(row["status"]),
+      sql(row["accepted_at"])
+    );
+  const replay = db.prepare(
+    `INSERT INTO share_commons_replay
+       (grant_id, signing_vault_id, signature_nonce, sequence, outcome, reason)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(grant_id, signing_vault_id, signature_nonce) DO NOTHING`
+  );
+  for (const row of increment.replay)
+    replay.run(
+      sql(row["grant_id"]),
+      sql(row["signing_vault_id"]),
+      sql(row["signature_nonce"]),
+      sql(row["sequence"]),
+      sql(row["outcome"]),
+      sql(row["reason"])
+    );
+  const receipt = db.prepare(
+    `INSERT INTO share_commons_receipt
+       (grant_id, sequence, kind, actor_party_id, outcome, reason, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(grant_id, sequence) DO NOTHING`
+  );
+  for (const row of increment.receipts)
+    receipt.run(
+      sql(row["grant_id"]),
+      sql(row["sequence"]),
+      sql(row["kind"]),
+      sql(row["actor_party_id"]),
+      sql(row["outcome"]),
+      sql(row["reason"]),
+      sql(row["created_at"])
+    );
+}
+
+/**
+ * How many operations this seat's DOMAIN state stands on top of the last
+ * sequence it proved against the steward's signed state digest.
+ *
+ * A full bootstrap projects the domain from the snapshot closure it asserted
+ * the digest of, and records that snapshot's sequence as the seat's stored
+ * checkpoint; the tail it applies on top is history rows only (an executed
+ * command in the tail makes the steward rebuild the snapshot at the head
+ * instead). So `checkpoint_sequence` at a member is exactly "the last sequence
+ * whose state this seat proved", and everything after it is unproven.
+ */
+function unprovenStateRun(
+  seat: DatabaseSync,
+  increment: CommonsIncrement
+): number {
+  return (
+    increment.currentSequence -
+    readCommonsGrant(seat, increment.grantId).checkpointSequence
+  );
+}
+
+/**
+ * Apply an ops-since-cursor increment (issue #750 invariant 7) by REPLAYING
+ * its executable tail against this replica. The frame is verified against this
+ * seat's OWN proven chain head before anything is written; a
+ * diverged/forked/tampered increment throws `CommonsHistoryError` and PARKS
+ * exactly like a bad full frame. Everything else that does not fit this
+ * replica — wrong anchor, no prior bootstrap, no replica executor, or a tail
+ * this build cannot re-execute — throws `CommonsIncrementUnusableError`, which
+ * means "re-pull the full frame" with the replica left exactly as it was. A
+ * replay failure is NEVER fatal and never sticky: the full frame's scrub +
+ * re-project repairs any state, so an operation this build cannot run can
+ * never wedge the grant.
+ *
+ * Replay, control projection, op insert, cursor advance and the verified point
+ * are ONE transaction. A partially replayed tail is not a state any seat may
+ * keep, and a cursor that moved past commands whose rows rolled back would be
+ * silent divergence.
+ *
+ * The hash chain proves the HISTORY an increment carries — never the rows the
+ * replay produced from it. Nothing here can close that gap by comparing
+ * digests: the one attested state digest is a hash of the STEWARD's closure
+ * bytes, and a member's projection deliberately re-owns and (on id collision)
+ * re-ids what it stores (`projectShareClosure`), so no member can recompute
+ * that digest from its own rows. There is no per-operation attested digest
+ * either — `share_commons_op` carries `prev_hash`/`op_hash` only — and adding
+ * one would cost O(commons size) per write, exactly what invariant 7 exists to
+ * remove.
+ *
+ * So state proof here is CHECKPOINT-BOUNDED by refusal instead: a seat may
+ * stand at most `COMMONS_CHECKPOINT_INTERVAL` operations on top of the state
+ * it last proved. At that bound the increment is refused as unusable, and the
+ * caller's existing fallback re-baselines through the full frame — whose
+ * snapshot digest IS asserted inside its own apply transaction. Be honest
+ * about the bound: between those points the replica is history-verified but
+ * NOT state-verified, so a tail that replays cleanly yet leaves different rows
+ * than the steward holds survives for at most one checkpoint interval before
+ * the full re-baseline replaces it. It is bounded, not detected. Replay-
+ * produced rows are exactly as unproven as the delta-produced rows they
+ * replace, so the bound applies unchanged.
+ */
+export function applyCommonsIncrement(input: {
   seat: ShareVaultRef;
-  wire: CommonsBootstrap;
+  increment: CommonsIncrement;
+  now: string;
+  /** Host-only replica executor. Without one this replica cannot replay, so
+   * every increment is unusable and the caller re-pulls the full frame. */
+  applyCommand?: CommonsReplicaExecutor;
 }): void {
-  for (const blob of input.wire.closure.blobs)
-    placeBlob(input.source.blobs.local, input.seat.blobs.local, blob.sha256);
+  const seatDb = input.seat.vault;
+  const increment = input.increment;
+  const localVaultId = seatDb
+    .prepare("SELECT vault_id FROM core_vault LIMIT 1")
+    .get() as { vault_id: string } | undefined;
+  if (localVaultId?.vault_id !== increment.memberVaultId)
+    throw new Error("commons increment targets another vault");
+  const cursor = seatDb
+    .prepare(
+      `SELECT sequence FROM share_commons_cursor
+        WHERE grant_id = ? AND member_vault_id = ?`
+    )
+    .get(increment.grantId, increment.memberVaultId) as
+    | { sequence: number }
+    | undefined;
+  // The seat's cursor IS the replay idempotency boundary (issue #750): it
+  // advances in the same transaction as the tail it stands for, so a frame
+  // whose head this seat already holds carries nothing to re-execute. A
+  // redelivered or delayed frame is a no-op, never a second application.
+  if (cursor && increment.currentSequence <= cursor.sequence) return;
+  const verified = readCommonsVerified(seatDb, increment.grantId);
+  if (!verified || verified.sequence !== increment.fromSequence)
+    throw new CommonsIncrementUnusableError(
+      `commons increment starts at ${increment.fromSequence}, not this seat's verified head ${String(verified?.sequence)}`
+    );
+  const hasProjection = seatDb
+    .prepare(
+      "SELECT 1 AS n FROM share_commons_lineage WHERE grant_id = ? LIMIT 1"
+    )
+    .get(increment.grantId);
+  const retained = seatDb
+    .prepare(
+      "SELECT 1 AS n FROM share_commons_retained WHERE grant_id = ? LIMIT 1"
+    )
+    .get(increment.grantId);
+  if (!hasProjection && !retained)
+    throw new CommonsIncrementUnusableError(
+      "commons increment needs an existing projection to apply onto"
+    );
+  // A retained root is receiver-authored, so nothing is replayed onto it and
+  // no executor is needed; every other seat catches up by re-executing the
+  // tail and cannot use an increment without one.
+  if (!retained && !input.applyCommand)
+    throw new CommonsIncrementUnusableError(
+      "commons increment needs a replica command executor to replay its tail"
+    );
+  // Fail closed BEFORE any write, same shape as the bootstrap path: a chain
+  // that does not extend this seat's proven head parks with the replica
+  // untouched.
+  const proven = verifyCommonsIncrementHistory({
+    seat: seatDb,
+    grantId: increment.grantId,
+    anchor: verified,
+    currentSequence: increment.currentSequence,
+    ops: increment.ops,
+  });
+  // Refuse BEFORE any write, like every other unusable shape: a seat that has
+  // already ridden a full checkpoint interval of increments on top of its last
+  // proven state must re-baseline rather than pile another unproven op onto
+  // it. A retained root is receiver-authored — the steward's digest never
+  // covered those rows — so it is exempt.
+  const unproven = retained ? 0 : unprovenStateRun(seatDb, increment);
+  if (unproven >= COMMONS_CHECKPOINT_INTERVAL)
+    throw new CommonsIncrementUnusableError(
+      `commons increment would stand ${unproven} operations past this seat's last proven state`
+    );
+  // Bytes claimed by sha cannot be re-derived from a command's input the way
+  // ids can, so the caller has already placed them in this seat's CAS; only
+  // the staging rows that let `claimStaged` resolve are written below, inside
+  // the transaction.
+  const tail = increment.ops.map((row) => ({
+    sequence: Number(row["sequence"]),
+    kind: String(row["kind"]),
+    command: (row["command"] ?? null) as string | null,
+    input_json: (row["input_json"] ?? null) as string | null,
+    outcome: String(row["outcome"]),
+  }));
+  const nested = seatDb.isTransaction;
+  seatDb.exec(nested ? "SAVEPOINT apply_commons_increment" : "BEGIN IMMEDIATE");
+  try {
+    const replicaCommit = beginReplicaCommit(seatDb);
+    // A retained root is receiver-authored: control truth still flows, the
+    // steward's commands never re-execute over it.
+    if (!retained) {
+      stageCommonsTailBlobs(seatDb, increment.blobs);
+      replayCommonsTail({
+        grantId: increment.grantId,
+        tail,
+        execute: input.applyCommand!,
+      });
+    }
+    projectIncrementControl(seatDb, increment);
+    const insertOp = seatDb.prepare(
+      `INSERT INTO share_commons_op
+         (grant_id, sequence, op_id, kind, actor_party_id, command, input_json,
+          member_signature, signing_vault_id, signature_nonce, outcome, reason,
+          created_at, prev_hash, op_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(grant_id, sequence) DO NOTHING`
+    );
+    for (const row of increment.ops)
+      insertOp.run(
+        sql(row["grant_id"]),
+        sql(row["sequence"]),
+        sql(row["op_id"]),
+        sql(row["kind"]),
+        sql(row["actor_party_id"]),
+        sql(row["command"]),
+        sql(row["input_json"]),
+        sql(row["member_signature"]),
+        sql(row["signing_vault_id"]),
+        sql(row["signature_nonce"]),
+        sql(row["outcome"]),
+        sql(row["reason"]),
+        sql(row["created_at"]),
+        ...chainColumns(row)
+      );
+    // A full bootstrap used to bound this seat's op replica by pruning below
+    // the snapshot; increments must not let it grow forever. Same retention
+    // floor as the steward — the verified point outlives the pruned rows.
+    seatDb
+      .prepare(
+        "DELETE FROM share_commons_op WHERE grant_id = ? AND sequence <= ?"
+      )
+      .run(
+        increment.grantId,
+        increment.currentSequence - COMMONS_OP_RETENTION_FLOOR
+      );
+    seatDb
+      .prepare(
+        `INSERT INTO share_commons_cursor
+           (grant_id, member_vault_id, sequence, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(grant_id, member_vault_id) DO UPDATE SET
+           sequence = MAX(sequence, excluded.sequence),
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        increment.grantId,
+        increment.memberVaultId,
+        increment.currentSequence,
+        input.now
+      );
+    recordCommonsVerified({
+      db: seatDb,
+      grantId: increment.grantId,
+      sequence: proven.sequence,
+      opHash: proven.opHash,
+      now: input.now,
+    });
+    endReplicaCommit(seatDb, replicaCommit);
+    seatDb.exec(nested ? "RELEASE apply_commons_increment" : "COMMIT");
+  } catch (error) {
+    seatDb.exec(nested ? "ROLLBACK TO apply_commons_increment" : "ROLLBACK");
+    if (nested) seatDb.exec("RELEASE apply_commons_increment");
+    // A tail this replica could not re-execute is an ordinary re-baseline
+    // signal, not a fault: the caller pulls the full frame and converges. It
+    // is deliberately NOT a park — the steward's history verified fine.
+    if (isCommonsReplayError(error))
+      throw new CommonsIncrementUnusableError(error.message);
+    throw error;
+  }
 }

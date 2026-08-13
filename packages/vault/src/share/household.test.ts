@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { nowIso, uuidv7 } from "../ids.js";
 import { sealAad, sealValue, unsealValue } from "../schema/sealed.js";
 import { closeOpenVaults, household, seedPhoto } from "./placement-fixture.js";
-import { shareToVault, unshareFromVault } from "./placement.js";
+import { shareItemsToVault, unshareFromVault } from "./placement.js";
 
 describe("household audience placement", () => {
   afterEach(closeOpenVaults);
@@ -30,12 +30,12 @@ describe("household audience placement", () => {
     add.run(uuidv7(), collectionId, first.assetId, 0, now);
     add.run(uuidv7(), collectionId, second.assetId, 1, now);
 
-    const shared = shareToVault({
+    const shared = shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
       itemType: "core.collection",
-      itemId: collectionId,
+      itemIds: [collectionId],
       sharedBy: "member-priya",
     });
 
@@ -48,7 +48,7 @@ describe("household audience placement", () => {
             WHERE c.collection_id = ?
             GROUP BY c.collection_id`
         )
-        .get(shared.itemId)
+        .get(shared.items[0]!.itemId)
     ).toMatchObject({ name: "Summer", entries: 2 });
     expect(
       audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
@@ -58,7 +58,7 @@ describe("household audience placement", () => {
       unshareFromVault({
         audience,
         itemType: "core.collection",
-        itemId: shared.itemId,
+        itemId: shared.items[0]!.itemId,
       }).removed
     ).toBe(true);
     expect(
@@ -120,12 +120,12 @@ describe("household audience placement", () => {
       )
       .run(uuidv7(), collectionId, first.assetId, now);
 
-    const shared = shareToVault({
+    const shared = shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
       itemType: "core.collection",
-      itemId: collectionId,
+      itemIds: [collectionId],
       sharedBy: "member-priya",
     });
 
@@ -134,7 +134,7 @@ describe("household audience placement", () => {
         .prepare(
           "SELECT cover_content_id FROM core_collection WHERE collection_id = ?"
         )
-        .get(shared.itemId)
+        .get(shared.items[0]!.itemId)
     ).toMatchObject({ cover_content_id: foreignContentId });
   });
 
@@ -157,19 +157,19 @@ describe("household audience placement", () => {
       )
       .run(itemId, password, now, now);
 
-    const shared = shareToVault({
+    const shared = shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
       itemType: "locker.item",
-      itemId,
+      itemIds: [itemId],
       sharedBy: "member-priya",
     });
     const row = audience.vault
       .prepare(
         "SELECT password, connection_id FROM locker_item WHERE item_id = ?"
       )
-      .get(shared.itemId) as {
+      .get(shared.items[0]!.itemId) as {
       password: string;
       connection_id: string | null;
     };
@@ -178,7 +178,7 @@ describe("household audience placement", () => {
     expect(
       unsealValue(
         audience.sealKey,
-        sealAad("locker_item", "password", shared.itemId),
+        sealAad("locker_item", "password", shared.items[0]!.itemId),
         row.password
       )
     ).toBe("correct horse battery staple");
@@ -235,12 +235,12 @@ describe("household audience placement", () => {
     split.run(expenseId, originBoot.ownerPartyId, 2100, now);
     split.run(expenseId, friendId, 2100, now);
 
-    const shared = shareToVault({
+    const shared = shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
       itemType: "tally.group",
-      itemId: groupId,
+      itemIds: [groupId],
       sharedBy: "gateway-member-priya",
     });
 
@@ -254,7 +254,7 @@ describe("household audience placement", () => {
             WHERE g.group_id = ?
             GROUP BY g.group_id`
         )
-        .get(shared.itemId)
+        .get(shared.items[0]!.itemId)
     ).toMatchObject({
       icon: "🏠",
       name: "House trip",

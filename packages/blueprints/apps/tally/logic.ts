@@ -375,7 +375,7 @@ export function createLogic({
         const intent = byId.get(row.commonsIntentId);
         if (!intent || intent.command !== "tally.add_expense") continue;
         if (
-          intent.status === "pending" ||
+          intent.status === "queued" ||
           intent.status === "parked" ||
           intent.status === "denied" ||
           intent.status === "expired" ||
@@ -386,7 +386,7 @@ export function createLogic({
             [
               {
                 intentId: row.commonsIntentId,
-                status: intent.status === "pending" ? "queued" : intent.status,
+                status: intent.status,
                 ...(intent.reason ? { reason: intent.reason } : {}),
                 ...(intent.stewardLabel
                   ? { stewardLabel: intent.stewardLabel }

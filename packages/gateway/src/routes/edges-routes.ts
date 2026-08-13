@@ -12,6 +12,16 @@
  * answers `not_found` — topology hiding, you learn nothing about a vault you
  * cannot reach.
  *
+ * Since #750 this route hand-writes no status at all. It records the edge,
+ * asks the reducer to `begin` (which durably enqueues ONE `deliver-give`
+ * effect), and runs that effect inline so the owner still gets the answer
+ * synchronously. If the peer is unreachable the effect stays in the outbox
+ * and the sweep retries it — the give is no longer lost to a bad moment.
+ *
+ * GET lists by OWNER, not by device (#750 abstraction 5): authority is the
+ * owner's, so every device of one owner sees the same edges.
+ * `createdByDevice` remains on the wire as provenance.
+ *
  * The retired live/lend mode is intentionally not accepted here (#731).
  */
 
@@ -19,22 +29,31 @@ import type { IncomingMessage } from "node:http";
 
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import { ROUTES } from "@centraid/protocol";
-import {
-  isShareableItemType,
+import { isShareableItemType } from "@centraid/vault";
+import type {
   moveOutOfVault,
   shareItemsToVault,
+  ShareVaultRef,
+  ShareableItemType,
 } from "@centraid/vault";
-import type { ShareVaultRef, ShareableItemType } from "@centraid/vault";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
 import { judgeEdgeCrossing } from "../serve/link-crossing.js";
 import type { PeerDial } from "../serve/peer-edge-give-client.js";
+import { effectIdFor } from "../serve/share-coordinator.js";
+import type { EdgeDelivery, ShareEffect } from "../serve/share-coordinator.js";
+import type { EdgeKind, EdgeMode, EdgeRow } from "../serve/share-edge-row.js";
+import { readEdgeRow } from "../serve/share-edge-row.js";
+import { applyEdgeSignal, edgeFactsOf } from "../serve/share-edge-store.js";
+import { runShareEffect, settle } from "../serve/share-effect-executor.js";
+import {
+  parseEdgeScope,
+  parseTargetItemIds,
+  validateItemIds,
+} from "../serve/share-scope.js";
 import type { VaultLinksStore } from "../serve/vault-links-store.js";
-import { reconcileRemoteEdge } from "./edges-reconcile-remote.js";
-import type { EdgeKind, EdgeMode, EdgeRow } from "./edges-reconcile.js";
-import { readEdgeRow, reconcileEdge } from "./edges-reconcile.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
 export const EDGES_PATH = ROUTES.gatewayEdges;
@@ -81,10 +100,10 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
       const rows = deps.gatewayDatabase.db
         .prepare(
           `SELECT * FROM share_edges
-            WHERE created_by_device = ?
+            WHERE owner_id = ?
             ORDER BY updated_at DESC LIMIT 200`
         )
-        .all(deviceId) as unknown as EdgeRow[];
+        .all(owner.ownerId) as unknown as EdgeRow[];
       return sendJson(res, 200, {
         edges: rows.map((row) =>
           edgeWire(row, receiptFor(deps.gatewayDatabase, row.edge_id))
@@ -150,53 +169,49 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    try {
-      if (route) {
-        if (!deps.peerDial)
-          throw new Error("this gateway cannot dial out to a peer");
-        row = await reconcileRemoteEdge(
-          deps.gatewayDatabase,
-          row,
-          origin,
-          route,
-          deps.peerDial
-        );
-      } else {
-        row = reconcileEdge(
-          deps.gatewayDatabase,
-          row,
-          origin,
-          audience!,
-          deps.share ?? shareItemsToVault,
-          deps.move ?? moveOutOfVault,
-          // Same-owner needs no row to reach `judgeEdgeCrossing`'s "linked"
-          // state at all (D3) — reaching this branch as "linked" always means
-          // a co-hosted CROSS-owner pair (threat 8).
-          crossing.state === "linked"
-        );
-      }
-      return sendJson(
-        res,
-        200,
-        edgeWire(row, receiptFor(deps.gatewayDatabase, row.edge_id))
-      );
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      deps.gatewayDatabase.run(
-        `UPDATE share_edges
-            SET status = 'parked', reason = ?, updated_at = ?
-          WHERE edge_id = ?`,
-        reason,
-        new Date().toISOString(),
-        input.edgeId
-      );
-      row = readEdgeRow(deps.gatewayDatabase, input.edgeId)!;
-      return sendJson(
-        res,
-        202,
-        edgeWire(row, receiptFor(deps.gatewayDatabase, row.edge_id))
-      );
-    }
+    const delivery: EdgeDelivery = route ? "peer" : "local";
+    const facts = edgeFactsOf(row, {
+      delivery,
+      // Same-owner needs no link row to reach `judgeEdgeCrossing`'s "linked"
+      // state at all (D3) — reaching this branch as "linked" always means a
+      // CROSS-owner pair (threat 8).
+      crossOwner: crossing.state === "linked",
+    });
+    row = applyEdgeSignal(deps.gatewayDatabase, row, facts, { type: "begin" });
+    const effect: ShareEffect = {
+      kind: "deliver-give",
+      edgeId: row.edge_id,
+      delivery,
+      crossOwner: facts.crossOwner,
+    };
+    const outcome = await runShareEffect(effectDeps(deps), effect);
+    settle(
+      deps.gatewayDatabase,
+      { effectId: effectIdFor(effect), attempts: 0, effect },
+      outcome
+    );
+    const settled = readEdgeRow(deps.gatewayDatabase, row.edge_id) ?? row;
+    // 202 is "this gateway could not act" — a vault call that threw, or a
+    // build with no way to dial out. A peer STATE (asked, denied, offline)
+    // is a 200 answer about the edge, exactly as before.
+    return sendJson(
+      res,
+      outcome.state === "retry" && outcome.fault ? 202 : 200,
+      edgeWire(settled, receiptFor(deps.gatewayDatabase, settled.edge_id))
+    );
+  };
+}
+
+function effectDeps(
+  deps: EdgesRouteDeps
+): Parameters<typeof runShareEffect>[0] {
+  return {
+    db: deps.gatewayDatabase,
+    links: deps.links,
+    vaultFor: deps.vaultFor,
+    ...(deps.peerDial ? { dial: deps.peerDial } : {}),
+    ...(deps.share ? { share: deps.share } : {}),
+    ...(deps.move ? { move: deps.move } : {}),
   };
 }
 
@@ -207,8 +222,8 @@ function insertOrRead(
   input: EdgeInput
 ): EdgeRow {
   const now = new Date().toISOString();
-  // One column, two meanings by mode: the fixed item set a snapshot copies, or
-  // the standing declaration a window is cut to.
+  // The fixed item set a snapshot copies — validated on the way in, parsed
+  // (never cast) on the way out (`serve/share-scope.ts`).
   const scopeJson = JSON.stringify(input.itemIds);
   db.run(
     `INSERT INTO share_edges
@@ -255,12 +270,14 @@ function edgeWire(
     kind: row.kind,
     mode: row.mode,
     itemType: row.item_type,
-    itemIds: JSON.parse(row.scope_json ?? "[]"),
+    itemIds: parseEdgeScope(row.mode, row.scope_json).itemIds,
     originVaultId: row.origin_vault_id,
     audienceVaultId: row.audience_vault_id,
     verbs: row.verbs,
+    /** Provenance: which device acted, now that listing is by owner (#750). */
+    createdByDevice: row.created_by_device,
     ...(row.target_item_ids_json
-      ? { targetItemIds: JSON.parse(row.target_item_ids_json) }
+      ? { targetItemIds: parseTargetItemIds(row.target_item_ids_json) }
       : {}),
     status: row.status,
     ...(row.reason ? { reason: row.reason } : {}),
@@ -302,16 +319,6 @@ function parseInput(body: Record<string, unknown>): EdgeInput {
     throw new Error("origin and audience vaults must differ");
   const verbs = string("verbs");
   if (verbs !== "read") throw new Error("verbs must be read");
-  const rawItemIds = body.itemIds;
-  if (!Array.isArray(rawItemIds) || rawItemIds.length === 0)
-    throw new Error("itemIds must be a non-empty array");
-  const itemIds = dedupe(
-    rawItemIds.map((entry, index) => {
-      if (typeof entry !== "string" || entry.length === 0)
-        throw new Error(`itemIds[${index}] must be a non-empty string`);
-      return entry;
-    })
-  );
   return {
     edgeId: string("edgeId"),
     originVaultId,
@@ -319,21 +326,11 @@ function parseInput(body: Record<string, unknown>): EdgeInput {
     mode,
     kind,
     itemType,
-    itemIds,
+    // The same total validator the stored scope is read back through — one
+    // definition of "a scope", at the wire door and at the audit door alike.
+    itemIds: validateItemIds(body.itemIds),
     verbs: "read",
   };
-}
-
-/** First-occurrence order preserved — `scope_json` is a SET, not a log. */
-function dedupe(values: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const value of values) {
-    if (seen.has(value)) continue;
-    seen.add(value);
-    out.push(value);
-  }
-  return out;
 }
 
 function callerDeviceId(req: IncomingMessage): string | undefined {
