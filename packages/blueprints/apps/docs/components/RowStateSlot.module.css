@@ -1,0 +1,22 @@
+/* The row's one state slot (Docs spec §4.1).
+
+   The annotation rung, never the body rung: this is a note about the row, not
+   part of the row's name. `--net` marks a REFUSAL ("will not open", "could not
+   be fetched") — the two things that would waste a member's tap — and nothing
+   else; "cannot be shown" and a purge date are facts, so they stay in ink. */
+
+.slot {
+  font: var(--t-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.slot[data-net="true"] {
+  color: var(--net);
+}
+
+.glyph {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-faint);
+}

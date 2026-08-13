@@ -166,7 +166,14 @@ function PhotoTileImpl({
             numberOfLines={1}
             style={[
               styles.stateText,
-              { color: state.tone === "net" ? colors.net : colors.textFaint },
+              {
+                color:
+                  state.tone === "net"
+                    ? colors.net
+                    : state.tone === "seam"
+                      ? colors.seam
+                      : colors.textFaint,
+              },
             ]}
           >
             {state.text}

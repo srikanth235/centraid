@@ -1,4 +1,5 @@
-import { act } from "react";
+import { act, useState } from "react";
+import type { JSX } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,14 +8,18 @@ import type {
   CentraidGatewayDevice,
   GatewayOwner,
 } from "../../gateway-client.js";
-import DevicesCard from "./DevicesCard.js";
-import type { DevicesCardProps } from "./DevicesCard.js";
+import DevicesCard, { useDeviceRoster } from "./DevicesCard.js";
+import type { DeviceRosterWiring, DevicesCardProps } from "./DevicesCard.js";
 
-// The card is people-first (#726): every assertion here is about a PERSON —
-// their vaults, their devices, and the one removal verb this device-token
-// client can offer (revoking hardware; removing a PERSON is host-custody).
-// A device with no owner is not a state the roster can hold, so there is no
-// "Unassigned" case to test for beyond its absence.
+// The roster is people-first (#726) and, since #765, block-shaped: "Yours" is
+// a section head over a row block, and everything a device answers to lives in
+// the row's own detail behind one trailing verb. Every assertion here is about
+// what the reader can DO — open a device, rename it, revoke it — never about
+// which class drew it.
+//
+// Pairing is deliberately NOT a button in here any more: "Pair a device" is
+// the page's one filled commit and it lives in the app bar, so the panel is
+// opened through the controlled `pairing` prop the screen owns.
 
 const NOW = Date.UTC(2026, 6, 13, 12, 0, 0);
 
@@ -26,6 +31,32 @@ const LAST_DEVICE_ERROR = new Error(
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
+
+type HarnessProps = DeviceRosterWiring &
+  Pick<DevicesCardProps, "onCreateTicket">;
+
+/** Mounts the card over its own hook, the way the screen does. The extra
+ *  button stands in for the app bar's commit, which is not part of this unit. */
+function Harness(props: HarnessProps): JSX.Element {
+  const { onCreateTicket, ...wiring } = props;
+  const roster = useDeviceRoster(wiring);
+  const [pairing, setPairing] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setPairing(true)}>
+        Pair a device
+      </button>
+      <DevicesCard
+        now={NOW}
+        onPairingChange={setPairing}
+        pairing={pairing}
+        roster={roster}
+        {...(onCreateTicket ? { onCreateTicket } : {})}
+      />
+    </>
+  );
+}
+
 describe("DevicesCard suite", () => {
   afterEach(() => {
     act(() => root?.unmount());
@@ -67,17 +98,15 @@ describe("DevicesCard suite", () => {
     };
   }
 
-  async function mount(
-    props: Partial<DevicesCardProps> & Pick<DevicesCardProps, "loadDevices">
-  ) {
+  async function mount(props: Partial<HarnessProps> = {}) {
     container = document.createElement("div");
     document.body.appendChild(container);
     await act(async () => {
       root = createRoot(container as HTMLDivElement);
       root.render(
-        <DevicesCard
-          now={NOW}
-          onRevokeDevice={() => Promise.resolve({ removed: true })}
+        <Harness
+          loadDevices={async () => [device()]}
+          onRevokeDevice={async () => ({ removed: true })}
           {...props}
         />
       );
@@ -107,67 +136,76 @@ describe("DevicesCard suite", () => {
     });
   }
 
+  /** Open a device's detail — the one verb a row offers. */
+  async function open(el: HTMLElement): Promise<void> {
+    await click(button(el, "Manage") ?? button(el, "Rename"));
+  }
+
   describe(DevicesCard, () => {
-    it("renders an empty state when no devices are paired", async () => {
+    it("heads your own hardware, and says how much of it there is", async () => {
       const el = await mount({
-        loadDevices: vi
-          .fn<DevicesCardProps["loadDevices"]>()
-          .mockResolvedValue([]),
+        loadDevices: async () => [
+          device({ current: true, label: "This laptop" }),
+        ],
+        loadOwners: async () => [owner()],
       });
-      expect(el.textContent).toContain("No devices are paired");
+      const text = el.textContent ?? "";
+      expect(text).toContain("Yours");
+      expect(text).toContain("This laptop");
+      // The row's own state word, not a chip and not a wire word.
+      expect(text).toContain("This device");
+      expect(text).not.toContain("admin");
+      expect(text).not.toContain("Unassigned");
     });
 
-    it("shows the caller's own person and their vaults, never a wire word", async () => {
+    it("names the person only on someone else's device, and states the rule", async () => {
       const el = await mount({
-        loadDevices: vi
-          .fn<DevicesCardProps["loadDevices"]>()
-          .mockResolvedValue([device({ current: true, label: "This laptop" })]),
-        loadOwners: vi
-          .fn<NonNullable<DevicesCardProps["loadOwners"]>>()
-          .mockResolvedValue([owner()]),
+        loadDevices: async () => [
+          device({ current: true }),
+          device({
+            deviceId: "enr_2",
+            endpointId: "http:def",
+            label: "Sam’s phone",
+            ownerId: "o_sam",
+            ownerLabel: "Sam",
+          }),
+        ],
       });
-      expect(el.textContent).toContain("Priya");
-      expect(el.textContent).toContain("Personal");
-      expect(el.textContent).not.toContain("admin");
-      expect(el.textContent).not.toContain("Unassigned");
-      expect(el.textContent).toContain("1 person · 1 device");
-      expect(el.textContent).toContain("You");
+      const text = el.textContent ?? "";
+      expect(text).toContain("Other people");
+      expect(text).toContain("Sam’s phone");
+      expect(text).toContain("Sam");
+      expect(text).toContain("Other person");
+      expect(text).toContain(
+        "A person on your gateway reaches only what you placed in a shared space."
+      );
     });
 
     it("offers only the narrow removal verb — there is no Remove <person>", async () => {
-      const el = await mount({
-        loadDevices: vi
-          .fn<DevicesCardProps["loadDevices"]>()
-          .mockResolvedValue([device()]),
-        loadOwners: vi
-          .fn<NonNullable<DevicesCardProps["loadOwners"]>>()
-          .mockResolvedValue([owner()]),
-      });
+      const el = await mount({ loadOwners: async () => [owner()] });
+      await open(el);
       expect(button(el, "Revoke device")).toBeTruthy();
       expect(button(el, "Remove Priya")).toBeUndefined();
+      // Which vaults the hardware reaches is the row's own detail, not a
+      // second line on every row in the block.
+      expect(el.textContent).toContain("Personal");
     });
 
-    it("renames a device inline without revoking it", async () => {
+    it("renames a device from its own detail, without revoking it", async () => {
       const original = device();
       const onRenameDevice = vi
-        .fn<NonNullable<DevicesCardProps["onRenameDevice"]>>()
+        .fn<NonNullable<DeviceRosterWiring["onRenameDevice"]>>()
         .mockResolvedValue({ ...original, label: "Kitchen browser" });
       const onRevokeDevice = vi
-        .fn<DevicesCardProps["onRevokeDevice"]>()
+        .fn<DeviceRosterWiring["onRevokeDevice"]>()
         .mockResolvedValue({ removed: true });
       const el = await mount({
-        loadDevices: vi
-          .fn<DevicesCardProps["loadDevices"]>()
-          .mockResolvedValue([original]),
+        loadDevices: async () => [original],
         onRenameDevice,
         onRevokeDevice,
       });
 
-      await click(
-        el.querySelector<HTMLButtonElement>(
-          '[aria-label="Rename Priya’s browser"]'
-        ) ?? undefined
-      );
+      await open(el);
       const input = el.querySelector<HTMLInputElement>(
         'input[aria-label="Device name"]'
       )!;
@@ -189,21 +227,22 @@ describe("DevicesCard suite", () => {
 
     it("requires a confirm step before revoking one device, then calls onRevokeDevice", async () => {
       const onRevokeDevice = vi
-        .fn<DevicesCardProps["onRevokeDevice"]>()
+        .fn<DeviceRosterWiring["onRevokeDevice"]>()
         .mockResolvedValue({ removed: true });
       const onCurrentDeviceRevoked = vi
-        .fn<NonNullable<DevicesCardProps["onCurrentDeviceRevoked"]>>()
+        .fn<NonNullable<DeviceRosterWiring["onCurrentDeviceRevoked"]>>()
         .mockResolvedValue(undefined);
       const loadDevices = vi
-        .fn<DevicesCardProps["loadDevices"]>()
+        .fn<DeviceRosterWiring["loadDevices"]>()
         .mockResolvedValueOnce([device()])
         .mockResolvedValue([]);
       const el = await mount({
         loadDevices,
-        onRevokeDevice,
         onCurrentDeviceRevoked,
+        onRevokeDevice,
       });
 
+      await open(el);
       await click(button(el, "Revoke device"));
       expect(onRevokeDevice).not.toHaveBeenCalled();
       expect(el.textContent).toContain("Revoke this device?");
@@ -216,21 +255,21 @@ describe("DevicesCard suite", () => {
 
     it("eagerly purges only after the current device was revoked successfully", async () => {
       const onRevokeDevice = vi
-        .fn<DevicesCardProps["onRevokeDevice"]>()
+        .fn<DeviceRosterWiring["onRevokeDevice"]>()
         .mockResolvedValue({ removed: true });
       const onCurrentDeviceRevoked = vi
-        .fn<NonNullable<DevicesCardProps["onCurrentDeviceRevoked"]>>()
+        .fn<NonNullable<DeviceRosterWiring["onCurrentDeviceRevoked"]>>()
         .mockResolvedValue(undefined);
-      const loadDevices = vi
-        .fn<DevicesCardProps["loadDevices"]>()
-        .mockResolvedValueOnce([device({ current: true })])
-        .mockResolvedValue([]);
       const el = await mount({
-        loadDevices,
-        onRevokeDevice,
+        loadDevices: vi
+          .fn<DeviceRosterWiring["loadDevices"]>()
+          .mockResolvedValueOnce([device({ current: true })])
+          .mockResolvedValue([]),
         onCurrentDeviceRevoked,
+        onRevokeDevice,
       });
 
+      await open(el);
       await click(button(el, "Revoke device"));
       await click(button(el, "Revoke"));
 
@@ -243,17 +282,18 @@ describe("DevicesCard suite", () => {
 
     it("escalates the confirm and re-sends confirmLastDevice when the gateway refuses", async () => {
       const onRevokeDevice = vi
-        .fn<DevicesCardProps["onRevokeDevice"]>()
+        .fn<DeviceRosterWiring["onRevokeDevice"]>()
         .mockRejectedValueOnce(LAST_DEVICE_ERROR)
         .mockResolvedValue({ removed: true });
       const el = await mount({
         loadDevices: vi
-          .fn<DevicesCardProps["loadDevices"]>()
+          .fn<DeviceRosterWiring["loadDevices"]>()
           .mockResolvedValueOnce([device()])
           .mockResolvedValue([]),
         onRevokeDevice,
       });
 
+      await open(el);
       await click(button(el, "Revoke device"));
       await click(button(el, "Revoke"));
       // The refusal names the vault that would be stranded; the owner is told
@@ -266,88 +306,69 @@ describe("DevicesCard suite", () => {
       });
     });
 
-    it("folds revoked devices into a tombstone disclosure and out of the counts", async () => {
+    it("keeps a revoked device visible, inert, and out of the count", async () => {
       const el = await mount({
-        loadDevices: vi
-          .fn<DevicesCardProps["loadDevices"]>()
-          .mockResolvedValue([
-            device(),
-            device({
-              deviceId: "enr_old",
-              label: "Stolen phone",
-              revoked: true,
-            }),
-          ]),
-        loadOwners: vi
-          .fn<NonNullable<DevicesCardProps["loadOwners"]>>()
-          .mockResolvedValue([owner()]),
+        loadDevices: async () => [
+          device(),
+          device({
+            deviceId: "enr_old",
+            endpointId: "http:old",
+            label: "Stolen phone",
+            revoked: true,
+          }),
+        ],
+        loadOwners: async () => [owner()],
       });
-      expect(el.textContent).toContain("1 person · 1 device");
-      const details = el.querySelector("details");
-      expect(details?.querySelector("summary")?.textContent).toBe(
-        "1 revoked device"
-      );
-      expect(details?.textContent).toContain("Stolen phone");
-      // A tombstone carries no action — it exists so past writes still resolve.
-      expect(details?.querySelector("button")).toBeNull();
+      const text = el.textContent ?? "";
+      expect(text).toContain("Stolen phone");
+      expect(text).toContain("Revoked");
+      // One LIVE device — the tombstone is present for audit and counted
+      // nowhere.
+      expect(el.querySelector("h2")?.nextElementSibling?.textContent).toBe("1");
+      // A tombstone carries no action at all.
+      expect(button(el, "Manage")).toBeTruthy();
+      expect([...el.querySelectorAll("button")]).toHaveLength(2);
     });
 
-    it("surfaces a load error", async () => {
+    it("shows the pairing panel only when the screen asks for one", async () => {
       const el = await mount({
-        loadDevices: vi
-          .fn<DevicesCardProps["loadDevices"]>()
-          .mockRejectedValue(new Error("offline")),
-      });
-      expect(el.textContent).toContain("Couldn’t list paired devices");
-      expect(el.textContent).toContain("offline");
-    });
-
-    it("hides the pairing affordance when the host cannot mint tickets", async () => {
-      const el = await mount({
-        loadDevices: vi
-          .fn<DevicesCardProps["loadDevices"]>()
-          .mockResolvedValue([device()]),
-      });
-      expect(button(el, "Pair a device")).toBeUndefined();
-    });
-
-    it("opens the self-pair panel when the host can mint tickets", async () => {
-      const el = await mount({
-        loadDevices: vi
-          .fn<DevicesCardProps["loadDevices"]>()
-          .mockResolvedValue([device()]),
         onCreateTicket:
           vi.fn<NonNullable<DevicesCardProps["onCreateTicket"]>>(),
       });
+      expect(el.querySelector('[data-testid="pair-panel"]')).toBeNull();
       await click(button(el, "Pair a device"));
       expect(el.querySelector('[data-testid="pair-panel"]')).toBeTruthy();
     });
 
-    it("offers Add someone beside Pair a device, opening the forPerson panel (#726 P1)", async () => {
+    it("offers Add someone as the quiet second door, opening the forPerson panel (#726 P1)", async () => {
       const el = await mount({
-        loadDevices: vi
-          .fn<DevicesCardProps["loadDevices"]>()
-          .mockResolvedValue([device()]),
         onCreateTicket:
           vi.fn<NonNullable<DevicesCardProps["onCreateTicket"]>>(),
       });
-      expect(button(el, "Add someone")).toBeTruthy();
-
       await click(button(el, "Add someone"));
       expect(el.querySelector('[data-testid="pair-panel"]')).toBeTruthy();
       // The mint form, not the self-pair hint — Add someone needs a name.
       expect(el.querySelector('[data-testid="add-someone-name"]')).toBeTruthy();
-      // Only one panel at a time: the other entry point is hidden while open.
-      expect(button(el, "Pair a device")).toBeUndefined();
+      // Only one door at a time while a panel is open.
+      expect(button(el, "Add someone")).toBeUndefined();
     });
 
-    it("hides Add someone when the host cannot mint tickets", async () => {
-      const el = await mount({
-        loadDevices: vi
-          .fn<DevicesCardProps["loadDevices"]>()
-          .mockResolvedValue([device()]),
-      });
+    it("hides both pairing doors when the host cannot mint tickets", async () => {
+      const el = await mount();
       expect(button(el, "Add someone")).toBeUndefined();
+      await click(button(el, "Pair a device"));
+      expect(el.querySelector('[data-testid="pair-panel"]')).toBeNull();
+    });
+
+    it("reports the work a contributing device could pick up", async () => {
+      const el = await mount({
+        loadWorkStatus: async () => [
+          { vaultId: "v1", total: 5, available: 3, leased: 2 },
+        ],
+      });
+      expect(
+        el.querySelector('[data-testid="device-work-depth"]')?.textContent
+      ).toContain("3 queued · 2 leased");
     });
   });
 });

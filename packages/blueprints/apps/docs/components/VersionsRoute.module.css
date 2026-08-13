@@ -1,0 +1,62 @@
+/* Version history as a screen (Docs spec §6.2). One column, one measure — the
+   spine of a document reads top to bottom, and the two sections are the same
+   spine seen twice, so they take the same card idiom and the same width. */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding-block-end: var(--sp-5);
+}
+
+.top {
+  padding-inline: var(--sp-4);
+}
+.back {
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+.back:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+.back:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
+}
+
+.section {
+  margin-inline: var(--sp-4);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  max-inline-size: 68ch;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding-inline: var(--sp-4);
+}
+.headLabel {
+  margin: 0;
+  font: var(--t-eyebrow);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+.headMeta {
+  font: var(--t-small);
+  color: var(--text-faint);
+}
+
+.note {
+  margin: 0;
+  padding-inline: var(--sp-4);
+  max-inline-size: 68ch;
+  font: var(--t-small);
+  color: var(--text-soft);
+}

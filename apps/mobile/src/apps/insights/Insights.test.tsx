@@ -1,0 +1,414 @@
+// The Analytics place, rendered (#765, spec §5). Five states, one screen.
+//
+// What this pins is what a future edit is likeliest to undo quietly:
+//
+//  - loading draws the ROW GEOMETRY plus the sentence that explains why, and
+//    never a spinner
+//  - empty still shows the WINDOW CHIPS, unlike every other page's filter row:
+//    an empty 7 days is a reason to ask about 90, not a dead end
+//  - error is the net panel with the reference's exact copy and an honest verb
+//  - the window is one question asked once: changing it re-reads, and the count
+//    line, the chart's label, the axis and the facts move together
+//  - the window is remembered under the key the desktop leg uses
+//  - Export CSV is offered only when there is something to export, and it
+//    reaches the real share sheet
+//
+// The bar's filled verb is ABSENT by decision — a page that counts what already
+// happened writes nothing — and the last test holds that absence in place.
+
+// @vitest-environment jsdom
+import React from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { resolveTheme } from "../../kit/theme";
+import type { GatewayHealth, InsightsSummary } from "../../lib/insights";
+import type { InsightsScreenProps } from "../../navigation";
+import {
+  mountBlock,
+  nodesOf,
+  press,
+  styleOf,
+} from "../../test/react-native-stub";
+import InsightsScreen from "./Insights";
+import { WINDOW_PREF_KEY } from "./insights-window-pref";
+
+vi.mock(import("react-native"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return {
+    ...stub.reactNativeStub(),
+    RefreshControl: () => null,
+  } as unknown as typeof import("react-native");
+});
+vi.mock(import("@react-native-async-storage/async-storage"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.asyncStorageStub() as unknown as {
+    default: typeof import("@react-native-async-storage/async-storage").default;
+  };
+});
+vi.mock(import("react-native-svg"), async () => {
+  const stub = await import("../../test/react-native-stub");
+  return stub.svgStub() as unknown as typeof import("react-native-svg");
+});
+vi.mock(import("react-native-safe-area-context"), () => ({
+  useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),
+}));
+
+// Each mock takes the REAL function's signature, so a wire shape that drifts is
+// a typecheck failure here rather than a test that passes against a module the
+// app no longer has.
+type Insights = typeof import("../../lib/insights");
+type Gateway = typeof import("../../lib/gateway");
+type FileSystem = typeof import("expo-file-system");
+type SharingModule = typeof import("expo-sharing");
+
+const wire = vi.hoisted(() => ({
+  create: vi.fn<() => void>(),
+  health: vi.fn<Insights["fetchGatewayHealth"]>(),
+  isSharingAvailable: vi.fn<SharingModule["isAvailableAsync"]>(),
+  prefs: vi.fn<Gateway["fetchJson"]>(),
+  share: vi.fn<SharingModule["shareAsync"]>(),
+  summary: vi.fn<Insights["fetchInsightsSummary"]>(),
+  write: vi.fn<(content: string) => void>(),
+}));
+
+vi.mock(import("../../lib/insights"), async (importOriginal) => ({
+  // The formatters are the real ones: a fixture of them would pass whatever the
+  // screen happened to render.
+  ...(await importOriginal()),
+  fetchGatewayHealth: wire.health,
+  fetchInsightsSummary: wire.summary,
+}));
+vi.mock(
+  import("../../lib/gateway"),
+  () =>
+    ({
+      // `instanceof` is all the hook asks of it; a second class in this file
+      // would be one more than the linter allows, and this one has no behaviour.
+      GatewayError: Error,
+      apiHeaders: () => ({}),
+      fetchJson: wire.prefs,
+      requireGatewayBase: () => Promise.resolve("http://127.0.0.1:7777"),
+      resolveGatewayBase: () => Promise.resolve("http://127.0.0.1:7777"),
+    }) as unknown as Gateway
+);
+vi.mock(import("../../lib/vault-links"), () => ({
+  subscribeVaultLinks: () => () => undefined,
+}));
+vi.mock(
+  import("expo-file-system"),
+  () =>
+    ({
+      File: class File {
+        uri = "file:///cache/centraid-analytics-30d.csv";
+        create = wire.create;
+        write = wire.write;
+      },
+      Paths: { cache: "file:///cache" },
+    }) as unknown as FileSystem
+);
+vi.mock(
+  import("expo-sharing"),
+  () =>
+    ({
+      isAvailableAsync: wire.isSharingAvailable,
+      shareAsync: wire.share,
+    }) as unknown as SharingModule
+);
+
+const colors = resolveTheme("light").colors;
+const ANCHOR = Date.parse("2026-08-13T09:00:00.000Z");
+
+function summaryOf(over: Partial<InsightsSummary> = {}): InsightsSummary {
+  return {
+    bySource: [
+      {
+        costUsd: 2,
+        key: "tidy/downloads",
+        kind: "automation",
+        label: "Tidy downloads",
+        runs: 60,
+        tokens: 100,
+      },
+    ],
+    byEffort: [],
+    byModel: [],
+    daily: [{ costUsd: 2, date: "2026-08-13", runs: 60, tokens: 100 }],
+    generatedAt: ANCHOR,
+    kpis: {
+      appsTouched: 2,
+      estimatedCostUsd: 0,
+      failedRuns: 2,
+      forecastCostUsd: 9,
+      generations: 312,
+      harnessReportedCostUsd: 2,
+      hydrationTokens: 0,
+      quotaTokens: 0,
+      retries: 0,
+      totalCostUsd: 2,
+      totalTokens: 100,
+      unpricedRuns: 0,
+      unreportedRuns: 0,
+    },
+    recent: [
+      {
+        automationRef: "tidy/downloads",
+        costUsd: 0.42,
+        hydrationTokens: 0,
+        kind: "automation",
+        label: "Tidy downloads",
+        ok: false,
+        runId: "run-1",
+        startedAt: ANCHOR,
+        tokens: 1200,
+      },
+    ],
+    windowDays: 30,
+    ...over,
+  };
+}
+
+const health: GatewayHealth = {
+  components: [{ component: "storage", errorCount: 0, status: "ok" }],
+  metrics: {
+    outboxPending: 0,
+    rssBytes: 1024 * 1024,
+    uptimeMs: 21 * 86_400_000,
+  },
+  recentEvents: [],
+  startedAt: "2026-07-23T00:00:00.000Z",
+  status: "ok",
+  uptimeMs: 21 * 86_400_000,
+};
+
+const navigation = {
+  goBack: vi.fn<() => void>(),
+  navigate: vi.fn<(name: string, params?: unknown) => void>(),
+} as unknown as InsightsScreenProps["navigation"];
+
+let dispose: (() => void) | undefined;
+
+/** One macrotask turn: every microtask queued before it has drained by the
+ *  time the timer callback runs. */
+async function tick(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+/** Let the effects' reads — and anything they chained — finish. Three turns:
+ *  the preference read, the summary read it can re-trigger, and a write. */
+async function settle(): Promise<void> {
+  await tick();
+  await tick();
+  await tick();
+}
+
+async function render(): Promise<HTMLElement> {
+  const mounted = mountBlock(
+    <InsightsScreen
+      navigation={navigation}
+      route={{ key: "ins", name: "Insights" } as InsightsScreenProps["route"]}
+    />
+  );
+  dispose = mounted.unmount;
+  await settle();
+  return mounted.container;
+}
+
+function textOf(container: HTMLElement): string[] {
+  return nodesOf(container, "span").map((node) => node.textContent ?? "");
+}
+
+function labelled(container: HTMLElement, label: string): Element | null {
+  return (
+    nodesOf(container, "button").find((node) =>
+      (node.textContent ?? "").includes(label)
+    ) ?? null
+  );
+}
+
+function ariaLabels(container: HTMLElement): string[] {
+  return [...container.querySelectorAll("[aria-label]")].map(
+    (node) => node.getAttribute("aria-label") ?? ""
+  );
+}
+
+describe(InsightsScreen, () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    wire.summary.mockResolvedValue(summaryOf());
+    wire.health.mockResolvedValue(health);
+    wire.prefs.mockResolvedValue({ prefs: {} } as never);
+    wire.isSharingAvailable.mockResolvedValue(true);
+    wire.share.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    dispose?.();
+    dispose = undefined;
+  });
+
+  it("draws the row geometry while it reads, and says why", async () => {
+    wire.summary.mockReturnValue(
+      new Promise<InsightsSummary>(() => {
+        // Never settles: this is what "still reading" looks like.
+      })
+    );
+    const container = await render();
+    const skeleton = nodesOf(container, "div").find(
+      (node) => node.dataset.role === "progressbar"
+    );
+    expect(skeleton?.getAttribute("aria-label")).toBe("Reading the run log");
+    expect(textOf(container)).toContain(
+      "A row knows its shape before its content arrives, so nothing reflows when it does."
+    );
+    expect(textOf(container)).toContain("Reading from the gateway");
+    // The quiet verb is withdrawn while loading — there is nothing to export.
+    expect(labelled(container, "Export CSV")).toBeNull();
+  });
+
+  it("keeps the window chips when nothing has run", async () => {
+    wire.summary.mockResolvedValue(
+      summaryOf({
+        bySource: [],
+        daily: [],
+        kpis: { ...summaryOf().kpis, failedRuns: 0, generations: 0 },
+        recent: [],
+      })
+    );
+    const container = await render();
+    const spans = textOf(container);
+    expect(spans).toContain("Nothing has run yet");
+    expect(spans).toContain(
+      "Once automations and the assistant start doing work, their volume and outcomes appear here."
+    );
+    // The one page whose chip row survives its own empty state.
+    expect(spans).toContain("7 days");
+    expect(spans).toContain("90 days");
+    expect(spans).toContain(
+      "Nothing to attend to · nothing needs you here right now."
+    );
+  });
+
+  it("reports a failed read as the net panel, with an honest verb", async () => {
+    wire.summary.mockRejectedValue(new Error("connect ECONNREFUSED"));
+    const container = await render();
+    const spans = textOf(container);
+    expect(spans).toContain("THIS PAGE COULD NOT LOAD");
+    expect(spans).toContain("The run log is unavailable");
+    expect(spans).toContain(
+      "Runs are still being recorded. This page reads a rollup that is rebuilt every ten minutes, and the rebuild has not finished."
+    );
+    expect(spans).toContain("connect ECONNREFUSED");
+    expect(
+      nodesOf(container, "div").some(
+        (node) => styleOf(node).borderColor === colors.net
+      )
+    ).toBe(true);
+    expect(labelled(container, "Try again")).not.toBeNull();
+    expect(spans).toContain(
+      "This page could not load · everything else on the gateway is unaffected."
+    );
+    // Chips are withheld here: the window is a question about data, and there
+    // is none.
+    expect(spans).not.toContain("30 days");
+  });
+
+  it("counts the window once, and says what the gateway itself is doing", async () => {
+    const container = await render();
+    const spans = textOf(container);
+    expect(spans).toContain("312 runs · 2 failed");
+    expect(ariaLabels(container)).toContain(
+      "Runs per day over the last 30 days"
+    );
+    expect(spans).toContain("30 days ago");
+    expect(spans).toContain("automations");
+    expect(spans).toContain("Recent runs");
+    expect(spans).toContain("Failed · Automation · $0.42 · 1.2k tokens");
+    expect(spans).toContain("uptime");
+    expect(spans).toContain("21d 0h");
+    expect(spans).toContain(
+      "The gateway is your own machine. These are its numbers, not a service's."
+    );
+    expect(spans).toContain(
+      "99% of runs succeeded · The gateway has been up for 21 days."
+    );
+  });
+
+  it("opens the automation a failed run belongs to", async () => {
+    const container = await render();
+    press(labelled(container, "Open"));
+    expect(navigation.navigate).toHaveBeenCalledWith("Automations", {
+      automationRef: "tidy/downloads",
+    });
+  });
+
+  it("moves the count, the chart and the axis together when the window changes", async () => {
+    const container = await render();
+    wire.summary.mockResolvedValue(
+      summaryOf({
+        kpis: { ...summaryOf().kpis, failedRuns: 0, generations: 41 },
+        windowDays: 7,
+      })
+    );
+    press(labelled(container, "7 days"));
+    await settle();
+    const spans = textOf(container);
+    expect(wire.summary).toHaveBeenLastCalledWith(7);
+    expect(spans).toContain("41 runs");
+    expect(spans).toContain("7 days ago");
+    expect(ariaLabels(container)).toContain(
+      "Runs per day over the last 7 days"
+    );
+    // And it is remembered, under the key the desktop leg reads.
+    expect(wire.prefs).toHaveBeenCalledWith(
+      expect.stringContaining("/_centraid-user/prefs"),
+      expect.objectContaining({
+        body: JSON.stringify({ patch: { [WINDOW_PREF_KEY]: 7 } }),
+        method: "PUT",
+      })
+    );
+  });
+
+  it("opens on the window the member last chose, wherever they chose it", async () => {
+    wire.prefs.mockResolvedValue({
+      prefs: { [WINDOW_PREF_KEY]: 90 },
+    } as never);
+    const container = await render();
+    expect(wire.summary).toHaveBeenLastCalledWith(90);
+    expect(ariaLabels(container)).toContain(
+      "Runs per day over the last 90 days"
+    );
+  });
+
+  it("hands the window that is on screen to the share sheet", async () => {
+    const container = await render();
+    press(labelled(container, "Export CSV"));
+    await settle();
+    expect(wire.write).toHaveBeenCalledWith(
+      "date,runs,tokens,cost_usd\n2026-08-13,60,100,2.0000"
+    );
+    expect(wire.share).toHaveBeenCalledWith(
+      "file:///cache/centraid-analytics-30d.csv",
+      expect.objectContaining({ mimeType: "text/csv" })
+    );
+  });
+
+  it("says so when the device cannot share at all", async () => {
+    wire.isSharingAvailable.mockResolvedValue(false);
+    const container = await render();
+    press(labelled(container, "Export CSV"));
+    await settle();
+    expect(textOf(container)).toContain(
+      "This device has no way to share a file, so the rollup cannot leave the app."
+    );
+  });
+
+  it("offers no filled commit at all — this page writes nothing", async () => {
+    const container = await render();
+    const filled = nodesOf(container, "button").filter(
+      (node) => styleOf(node).backgroundColor === colors.accentFill
+    );
+    expect(filled).toHaveLength(0);
+  });
+});

@@ -1,0 +1,47 @@
+/* The five empty states (Docs spec §4.6).
+
+   ONE BLOCK, TWO REGISTERS. The first-run drive takes the display serif and
+   the reading measure, because it is the whole screen and it is telling a
+   member where their bytes go. The other four take the title rung: they are
+   one state of a screen that normally has rows, and a display serif there
+   would make an ordinary filter miss feel like an event. */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-4);
+  max-inline-size: 44ch;
+}
+
+.title {
+  margin: 0;
+  font: var(--t-title);
+  color: var(--text);
+}
+.title[data-display="true"] {
+  font: var(--t-display);
+}
+
+.body {
+  margin: 0;
+  font: var(--t-body);
+  color: var(--text-soft);
+}
+.empty[data-variant="drive"] .body {
+  font: var(--t-reading);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-block-start: var(--sp-2);
+}
+
+.note {
+  margin: var(--sp-3) 0 0;
+  font: var(--t-small);
+  color: var(--text-faint);
+}

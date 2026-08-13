@@ -106,3 +106,26 @@
   flex: 1;
   text-decoration: none;
 }
+
+/* §11's banner. A hairline in `--net` and the container radius — a border, not
+   a fill: nothing has been lost, and a filled alarm bar would say it had. */
+.offline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin: var(--sp-3) var(--sp-4) 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--net);
+  border-radius: var(--r-lg);
+  background: var(--net-wash);
+}
+
+.offlineText {
+  margin: 0;
+  flex: 1 1 40ch;
+  max-inline-size: 78ch;
+  font: var(--t-small);
+  color: var(--text);
+}

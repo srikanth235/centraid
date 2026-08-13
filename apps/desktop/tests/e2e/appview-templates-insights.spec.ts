@@ -310,12 +310,32 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
     // to remain available until publish"). Adopt navigates to the new thread,
     // so return to the gallery and assert the Daily Digest card is still listed.
     await gotoNav(launched.page, "Automations");
+    // The clone left one automation behind, so the page is no longer empty and
+    // its empty-state verb ("Browse templates", used earlier in this test) is
+    // gone. With a populated list the way to the gallery is the app bar's
+    // secondary (#765) — same destination, different door.
     await launched.page
-      .getByRole("button", { name: "Browse templates" })
+      .getByRole("button", { name: "Templates" })
+      .first()
       .click();
     await expect(
       launched.page.getByRole("button", { name: /Daily Digest/u })
     ).toBeVisible();
+
+    // #765 UI evidence. This is the v9 binding layer on a POPULATED operational
+    // page — app-bar verbs (filled commit + quiet secondary), the status line,
+    // and the block vocabulary drawing real rows rather than an empty state.
+    // An empty page would prove nothing about the blocks, which is why the
+    // capture sits here, after the clone, rather than at first paint.
+    const evidenceDir = path.resolve(
+      import.meta.dirname,
+      "../../../../artifacts/e2e/ui-impact"
+    );
+    await fs.mkdir(evidenceDir, { recursive: true });
+    await launched.page.screenshot({
+      path: path.join(evidenceDir, "issue-765-v9-binding-layer.png"),
+      fullPage: true,
+    });
 
     const manifestPath = path.join(env.appsDir, "digest-clone", "app.json");
     const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")) as {
@@ -406,7 +426,7 @@ test("10.3 — independent builder drafts coexist on disk and survive a full Ele
 
 // ─────────────────────────── §11 Analytics (was Insights) ───────────────────────────
 
-test("11.1 — Analytics renders the spend hero", async () => {
+test("11.1 — Analytics renders the runs chart and what it cost", async () => {
   gateway.state.insights = {
     windowDays: 30,
     generatedAt: Date.now(),
@@ -449,8 +469,18 @@ test("11.1 — Analytics renders the spend hero", async () => {
   try {
     await waitForHome(page);
     await gotoNav(page, "Analytics");
-    await expect(page.getByTestId("insights-hero")).toBeVisible();
-    await expect(page.getByTestId("insights-hero")).toContainText("$1.23");
+    // v9 (#765): the spend hero and the KPI strip are gone. The page is the
+    // runs chart — one image with a sentence — over the source facts, and the
+    // spend is one of those facts rather than a headline figure.
+    await expect(
+      page.getByRole("img", { name: "Runs per day over the last 30 days" })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("group", { name: "Time window" })
+    ).toBeVisible();
+    // The spend fact, wherever the fact list puts it — the page states the
+    // figure, it no longer headlines it.
+    await expect(page.locator("body")).toContainText("$1.23");
   } finally {
     await closeApp(app);
   }

@@ -1,69 +1,94 @@
-// governance: allow-repo-hygiene file-size-limit cohesive Insights cover (gateway health + vault summary cards + refresh); decompose the cards in a follow-up (#498)
-// Insights — a mobile-scaled read of two gateway surfaces the desktop keeps on
-// its sidebar but the phone launcher otherwise omits: GATEWAY health/metrics
-// (the distinctive "what is my gateway doing right now") and a LIMITED slice of
-// usage insights (tokens/cost KPIs + a daily sparkline + recent activity), for
-// the active vault. A cover in the springboard idiom: teal leave key to dismiss, serif
-// title, floating Home key. Both surfaces load independently (useInsights), so a
-// gateway serving one but not the other still shows what it has.
+// ANALYTICS — what has run, and what it cost (#765, spec §5).
+//
+// The page has ONE parameter (the window) and NO commit: it counts what
+// already happened, so its bar carries a single quiet verb and nothing filled.
+// The old shape — a status hero, a five-tile KPI grid, an SVG area chart with
+// a gradient fill, and four meter-bar panels — is gone; what survives is the
+// data, re-said in the block vocabulary.
+//
+// The window chips are shown in EVERY state that has a page (ready and empty),
+// unlike every other operational screen's filter row, because the window is
+// not a filter over rows — it is the question the page is answering, and a
+// member who lands on an empty 7 days has to be able to ask about 90.
+//
+// THREE GAPS ARE VISIBLE HERE RATHER THAN PAPERED OVER, and they are the same
+// three the desktop leg carries (`insights-model.ts` states each one where it
+// bites): the daily rollup has no per-day failure split, so the chart's
+// columns carry one segment and no failed legend key; no run duration is
+// recorded, so the reference's `median duration` fact is absent; and the
+// gateway reports no disk figure and no shared-compute roster, so those two
+// facts are absent from the Gateway panel.
 
 import React, { useMemo } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, {
-  Circle,
-  Defs,
-  LinearGradient,
-  Path,
-  Stop,
-} from "react-native-svg";
 
-import { palette } from "@centraid/design";
-
+import BarsBlock from "../../kit/components/BarsBlock";
+import { COLUMN_COUNT } from "../../kit/components/BarsBlock.styles";
+import ChipsBlock from "../../kit/components/ChipsBlock";
+import EmptyBlock from "../../kit/components/EmptyBlock";
+import { healthLineFor } from "../../kit/components/health-line";
+import HealthLine from "../../kit/components/HealthLine";
 import HomeKey from "../../kit/components/HomeKey";
-import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import NoteBlock from "../../kit/components/NoteBlock";
+import PanelBlock from "../../kit/components/PanelBlock";
+import PlaceHeader from "../../kit/components/PlaceHeader";
+import RowsBlock from "../../kit/components/RowsBlock";
+import SectionBlock from "../../kit/components/SectionBlock";
+import SkeletonRows from "../../kit/components/SkeletonRows";
 import TopSafeArea from "../../kit/components/TopSafeArea";
-import { t, useTheme } from "../../kit/theme";
-import type { ThemeColors } from "../../kit/theme";
-import {
-  formatBytes,
-  formatCount,
-  formatMs,
-  formatUptime,
-  formatUsd,
-  relativeTime,
-} from "../../lib/insights";
-import type {
-  ComponentHealth,
-  ComponentStatus,
-  GatewayHealth,
-  InsightsSummary,
-} from "../../lib/insights";
+import { useTheme } from "../../kit/theme";
 import type { InsightsScreenProps } from "../../navigation";
 import GatewayAlerts from "./GatewayAlerts";
-import { makeStyles } from "./Insights.styles";
+import {
+  axisLabels,
+  buildBars,
+  gatewayFacts,
+  insightsHealth,
+  pricingLine,
+  recentRows,
+  runsMeta,
+  sourceFacts,
+  sourceMeta,
+  windowChips,
+} from "./insights-model";
+import { styles } from "./Insights.styles";
 import { useInsights } from "./useInsights";
-import type { InsightsState } from "./useInsights";
+import type { InsightsController } from "./useInsights";
 
-type Styles = ReturnType<typeof makeStyles>;
-type Colors = ThemeColors;
+/** The error state: what failed, what is safe, one way forward. The rollup
+ *  rebuilds on its own schedule and nothing here can trigger it, so the verb
+ *  is the honest one — ask again. */
+const ERROR_EYEBROW = "THIS PAGE COULD NOT LOAD";
+const ERROR_TITLE = "The run log is unavailable";
+const ERROR_BODY =
+  "Runs are still being recorded. This page reads a rollup that is rebuilt every ten minutes, and the rebuild has not finished.";
+const ERROR_RETRY = "Try again";
 
-// Semantic status scale, deliberately separate from the teal accent: a healthy
-// green, an amber degrade, the theme's own red for error.
-function statusColor(status: ComponentStatus, colors: Colors): string {
-  return status === "ok"
-    ? palette.forest
-    : status === "degraded"
-      ? palette.amber
-      : colors.danger;
-}
+/** The empty state, in the routine register. No action: nothing on this page
+ *  makes work happen, so an empty read has nothing to offer but the reason. */
+const EMPTY_TITLE = "Nothing has run yet";
+const EMPTY_BODY =
+  "Once automations and the assistant start doing work, their volume and outcomes appear here.";
 
-const STATUS_WORD: Record<ComponentStatus, string> = {
-  ok: "All systems healthy",
-  degraded: "Running degraded",
-  error: "Needs attention",
-};
+/** Why a skeleton, said once, under the skeleton. */
+const LOADING_NOTE =
+  "A row knows its shape before its content arrives, so nothing reflows when it does.";
+
+/** The note under the Gateway facts, verbatim. */
+const GATEWAY_NOTE =
+  "The gateway is your own machine. These are its numbers, not a service's.";
+
+/** The Gateway panel when the health read is the half that failed. */
+const NO_HEALTH =
+  "Not available from this gateway. Its own numbers are reported by the machine running it, and this one did not answer.";
+
+/** The chart's colour key. The `succeeded` word is the ink actually drawn;
+ *  the failed key is EMPTY because the rollup carries no per-day outcome split
+ *  (gap 1), so no column can ever show that segment. A legend naming a colour
+ *  the chart cannot draw would be the page's one dishonest sentence. */
+const LEGEND_RUNS = "runs";
+const LEGEND_FAILED = "";
 
 export default function InsightsScreen({
   navigation,
@@ -72,604 +97,189 @@ export default function InsightsScreen({
   return route.params?.initialTab === "alerts" ? (
     <GatewayAlerts onLeave={() => navigation.goBack()} />
   ) : (
-    <InsightsOverview navigation={navigation} route={route} />
+    <Analytics navigation={navigation} route={route} />
   );
 }
 
-function InsightsOverview({
-  navigation,
-}: InsightsScreenProps): React.JSX.Element {
-  const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { state, refreshing, refresh } = useInsights();
-
-  return (
-    <TopSafeArea style={styles.safe} edges={["top"]}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Insights</Text>
-        <Text style={styles.subtitle}>Your gateway and vault, at a glance</Text>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: insets.bottom + 84 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void refresh()}
-            tintColor={colors.textFaint}
-          />
-        }
-      >
-        <Body state={state} styles={styles} colors={colors} />
-      </ScrollView>
-
-      <HomeKey variant="floating" onPress={() => navigation.goBack()} />
-    </TopSafeArea>
-  );
-}
-
-function Body({
-  state,
-  styles,
-  colors,
+function AnalyticsBody({
+  page,
+  onOpenAutomation,
 }: {
-  state: InsightsState;
-  styles: Styles;
-  colors: Colors;
+  page: InsightsController;
+  onOpenAutomation: (automationRef: string) => void;
 }): React.JSX.Element {
-  if (state.kind === "loading") {
-    return (
-      <View style={styles.emptyWrap}>
-        <Text style={styles.emptyCopy}>Gathering insights…</Text>
-      </View>
-    );
-  }
-  if (state.kind === "no-gateway") {
-    return (
-      <View style={styles.emptyWrap}>
-        <Icon name="bar-chart-2" size={30} color={colors.accent} />
-        <Text style={styles.emptyTitle}>Not connected</Text>
-        <Text style={styles.emptyCopy}>
-          Connect your desktop to see your gateway health and usage here.
-        </Text>
-      </View>
-    );
-  }
-  if (state.kind === "error") {
-    return (
-      <View style={styles.emptyWrap}>
-        <Icon name="alert-circle" size={30} color={colors.accent} />
-        <Text style={styles.emptyTitle}>Could not load insights</Text>
-        <Text style={styles.emptyCopy}>{state.message}</Text>
-        <Text style={styles.emptyHint}>Pull to refresh to retry.</Text>
-      </View>
-    );
-  }
+  const { load, state, windowDays } = page;
 
+  if (state === "loading")
+    return (
+      <>
+        <SkeletonRows accessibilityLabel="Reading the run log" />
+        <NoteBlock text={LOADING_NOTE} />
+      </>
+    );
+
+  if (state === "error" || load.kind !== "ready")
+    return (
+      <PanelBlock
+        body={ERROR_BODY}
+        eyebrow={ERROR_EYEBROW}
+        facts={
+          load.kind === "error"
+            ? [
+                {
+                  key: "what happened",
+                  net: true,
+                  value: load.reason,
+                },
+              ]
+            : undefined
+        }
+        action={{ label: ERROR_RETRY, onPress: page.retry }}
+        title={ERROR_TITLE}
+        tone="net"
+      />
+    );
+
+  const { health, summary } = load;
+  const chips = (
+    <ChipsBlock
+      accessibilityLabel="Time window"
+      chips={windowChips(windowDays).map((chip) => ({
+        id: chip.id,
+        label: chip.label,
+        on: chip.on,
+        onPress: () => page.setWindowDays(Number(chip.id)),
+      }))}
+      mono
+    />
+  );
+
+  if (state === "empty")
+    return (
+      <>
+        {chips}
+        <EmptyBlock body={EMPTY_BODY} routine title={EMPTY_TITLE} />
+      </>
+    );
+
+  const recent = recentRows(summary);
   return (
     <>
-      <Text style={styles.sectionLabel}>GATEWAY</Text>
-      {state.health ? (
-        <HealthHero health={state.health} styles={styles} colors={colors} />
-      ) : (
-        <Text style={styles.note}>
-          {state.healthError ?? "Gateway health is unavailable."}
-        </Text>
-      )}
+      {chips}
+      <SectionBlock label="Runs" meta={runsMeta(summary)} />
+      <BarsBlock
+        accessibilityLabel={`Runs per day over the last ${String(windowDays)} days`}
+        axis={axisLabels(windowDays)}
+        data={buildBars(summary, windowDays, page.now, COLUMN_COUNT)}
+        legendFailed={LEGEND_FAILED}
+        legendSucceeded={LEGEND_RUNS}
+      />
 
-      <Text style={styles.sectionLabel}>USAGE · LAST 30 DAYS</Text>
-      {state.summary ? (
-        <UsageSection summary={state.summary} styles={styles} colors={colors} />
+      <SectionBlock label="By source" meta={sourceMeta(summary)} />
+      <PanelBlock
+        body={`${pricingLine(summary)} Completed runs in this vault only; estimates use public model rates.`}
+        facts={sourceFacts(summary)}
+      />
+
+      {recent.length > 0 ? (
+        <>
+          <SectionBlock label="Recent runs" meta={String(recent.length)} />
+          <RowsBlock
+            accessibilityLabel="Recent runs"
+            rows={recent.map((run) => ({
+              // A run with no automation behind it has nowhere to go on this
+              // surface, so it carries no verb rather than a dead one.
+              ...(run.automationRef
+                ? {
+                    action: {
+                      hint: `Open ${run.title}`,
+                      label: "Open",
+                      onPress: () => onOpenAutomation(run.automationRef ?? ""),
+                    },
+                  }
+                : {}),
+              key: run.key,
+              meta: run.meta,
+              net: run.net,
+              sub: run.sub,
+              title: run.title,
+            }))}
+          />
+        </>
+      ) : null}
+
+      <SectionBlock label="Gateway" meta="your own machine" />
+      {health ? (
+        <PanelBlock facts={gatewayFacts(health)} />
       ) : (
-        <Text style={styles.note}>
-          {state.summaryError ?? "Usage insights are unavailable."}
-        </Text>
+        <PanelBlock body={NO_HEALTH} />
       )}
+      <NoteBlock text={GATEWAY_NOTE} />
     </>
   );
 }
 
-// --- Gateway health ---
-
-function HealthHero({
-  health,
-  styles,
-  colors,
-}: {
-  health: GatewayHealth;
-  styles: Styles;
-  colors: Colors;
-}): React.JSX.Element {
-  const tone = statusColor(health.status, colors);
-  const { metrics } = health;
-  const p99 = metrics.eventLoopLagP99Ms;
-  const errored = health.components.filter((c) => c.status !== "ok");
-  const okCount = health.components.length - errored.length;
+function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
+  const { colors } = useTheme();
+  const page = useInsights();
+  const ink = useMemo(
+    () => ({
+      error: { color: colors.net },
+      safe: { backgroundColor: colors.bg },
+    }),
+    [colors]
+  );
+  const summary = page.load.kind === "ready" ? page.load.summary : undefined;
+  const health = page.load.kind === "ready" ? page.load.health : undefined;
+  const line = healthLineFor(
+    page.state,
+    insightsHealth(summary, health?.metrics.uptimeMs)
+  );
 
   return (
-    <View style={styles.hero}>
-      <View style={styles.heroTop}>
-        <View style={[styles.heroDot, { backgroundColor: tone }]} />
-        <View style={styles.heroMeta}>
-          <Text style={styles.heroStatus}>{STATUS_WORD[health.status]}</Text>
-          <Text style={styles.heroSub}>
-            <Text style={[styles.heroSub, t("mono")]}>
-              {okCount}/{health.components.length}
-            </Text>{" "}
-            components ok · up{" "}
-            <Text style={[styles.heroSub, t("mono")]}>
-              {formatUptime(health.uptimeMs)}
+    <TopSafeArea edges={["top"]} style={[styles.safe, ink.safe]}>
+      <View style={styles.page}>
+        <View style={styles.head}>
+          <HomeKey onPress={() => navigation.goBack()} variant="leave" />
+          <View style={styles.headBar}>
+            {/* No filled verb at all — this page writes nothing. The quiet
+                verb is withdrawn while loading (the reference's own gating)
+                and while there is nothing read to export, because a share
+                sheet over an empty file is worse than no button. */}
+            <PlaceHeader
+              title="Analytics"
+              {...(summary && !page.exporting
+                ? {
+                    secondary: { label: "Export CSV", onPress: page.exportCsv },
+                  }
+                : {})}
+            />
+          </View>
+        </View>
+        <ScrollView
+          contentContainerStyle={styles.body}
+          refreshControl={
+            <RefreshControl
+              onRefresh={() => void page.refresh()}
+              refreshing={page.refreshing}
+              tintColor={colors.textFaint}
+            />
+          }
+        >
+          {page.exportError ? (
+            <Text style={[styles.exportError, ink.error]}>
+              {page.exportError}
             </Text>
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.chips}>
-        <Chip
-          label="MEMORY"
-          value={formatBytes(metrics.rssBytes)}
-          styles={styles}
-        />
-        <Chip
-          label="OUTBOX"
-          value={formatCount(metrics.outboxPending)}
-          styles={styles}
-        />
-        {p99 === undefined ? null : (
-          <Chip label="LOOP p99" value={formatMs(p99)} styles={styles} />
-        )}
-        {metrics.storageFsyncMs === undefined ? null : (
-          <Chip
-            label="FSYNC"
-            value={formatMs(metrics.storageFsyncMs)}
-            styles={styles}
+          ) : null}
+          <AnalyticsBody
+            onOpenAutomation={(automationRef) =>
+              navigation.navigate("Automations", { automationRef })
+            }
+            page={page}
           />
-        )}
-        {metrics.sseClients === undefined ? null : (
-          <Chip
-            label="STREAMS"
-            value={formatCount(metrics.sseClients)}
-            styles={styles}
-          />
-        )}
+        </ScrollView>
       </View>
-
-      <View style={styles.components}>
-        {health.components.map((c, i) => (
-          <ComponentRow
-            key={c.component}
-            comp={c}
-            first={i === 0}
-            styles={styles}
-            colors={colors}
-          />
-        ))}
-      </View>
-
-      {health.recentEvents.length > 0 ? (
-        <>
-          <View style={[styles.divider, { marginTop: 12 }]} />
-          {health.recentEvents.slice(0, 3).map((e, i) => (
-            <View key={`${e.at}-${i}`} style={styles.eventRow}>
-              <View
-                style={[
-                  styles.eventBadge,
-                  {
-                    backgroundColor:
-                      e.level === "error" ? colors.danger : palette.amber,
-                  },
-                ]}
-              />
-              <View style={styles.eventBody}>
-                <Text style={styles.eventMsg} numberOfLines={2}>
-                  {e.message}
-                </Text>
-                <Text
-                  style={styles.eventMeta}
-                >{`${e.component} · ${relativeTime(e.at)}`}</Text>
-              </View>
-            </View>
-          ))}
-        </>
-      ) : null}
-    </View>
-  );
-}
-
-function Chip({
-  label,
-  value,
-  styles,
-}: {
-  label: string;
-  value: string;
-  styles: Styles;
-}): React.JSX.Element {
-  return (
-    <View style={styles.chip}>
-      <Text style={styles.chipLabel}>{label}</Text>
-      <Text style={styles.chipValue}>{value}</Text>
-    </View>
-  );
-}
-
-function ComponentRow({
-  comp,
-  first,
-  styles,
-  colors,
-}: {
-  comp: ComponentHealth;
-  first: boolean;
-  styles: Styles;
-  colors: Colors;
-}): React.JSX.Element {
-  return (
-    <View>
-      {first ? null : <View style={styles.divider} />}
-      <View style={styles.compRow}>
-        <View
-          style={[
-            styles.compDot,
-            { backgroundColor: statusColor(comp.status, colors) },
-          ]}
-        />
-        <Text style={styles.compName} numberOfLines={1}>
-          {comp.component}
-        </Text>
-        {comp.detail ? (
-          <Text style={styles.compDetail} numberOfLines={1}>
-            {comp.detail}
-          </Text>
-        ) : null}
-      </View>
-      {comp.status !== "ok" && comp.lastError ? (
-        <Text style={styles.compError} numberOfLines={2}>
-          {comp.lastError}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
-// --- Usage insights (limited) ---
-
-function UsageSection({
-  summary,
-  styles,
-  colors,
-}: {
-  summary: InsightsSummary;
-  styles: Styles;
-  colors: Colors;
-}): React.JSX.Element {
-  const { kpis } = summary;
-  const quotaPct =
-    kpis.quotaTokens > 0
-      ? Math.min(100, Math.round((kpis.totalTokens / kpis.quotaTokens) * 100))
-      : 0;
-  const series = summary.daily.map((d) => d.tokens);
-  const hasDaily = series.length > 0;
-  const dailyTotal = series.reduce((s, v) => s + v, 0);
-  const avg = hasDaily ? Math.round(dailyTotal / series.length) : 0;
-  const peak = hasDaily ? Math.max(...series) : 0;
-  const models = summary.byModel.slice(0, 3);
-  const modelMax = Math.max(1, ...models.map((m) => m.tokens));
-  const efforts = summary.byEffort.slice(0, 4);
-  const effortMax = Math.max(1, ...efforts.map((e) => e.tokens));
-
-  return (
-    <View>
-      <View style={styles.kpiGrid}>
-        <Kpi
-          icon="activity"
-          label="TOKENS"
-          value={formatCount(kpis.totalTokens)}
-          styles={styles}
-          colors={colors}
-        >
-          {kpis.quotaTokens > 0 ? (
-            <View style={styles.meter}>
-              <View style={styles.meterTrack}>
-                <View
-                  style={[
-                    styles.meterFill,
-                    { backgroundColor: colors.accent, width: `${quotaPct}%` },
-                  ]}
-                />
-              </View>
-              <Text style={styles.meterFoot}>{`${quotaPct}% of included`}</Text>
-            </View>
-          ) : (
-            <Text style={styles.kpiFoot}>
-              {kpis.hydrationTokens > 0 ? (
-                <>
-                  <Text style={[styles.kpiFoot, t("mono")]}>
-                    {formatCount(kpis.hydrationTokens)}
-                  </Text>{" "}
-                  hydration
-                </>
-              ) : (
-                "this window"
-              )}
-            </Text>
-          )}
-        </Kpi>
-        <Kpi
-          icon="dollar-sign"
-          label="SPENT · USD"
-          value={formatUsd(kpis.totalCostUsd)}
-          styles={styles}
-          colors={colors}
-        >
-          <Text style={styles.kpiFoot}>
-            {kpis.unpricedRuns > 0 ? (
-              <>
-                <Text style={[styles.kpiFoot, t("mono")]}>
-                  {kpis.unpricedRuns}
-                </Text>{" "}
-                unpriced
-              </>
-            ) : (
-              "last 30 days"
-            )}
-          </Text>
-        </Kpi>
-        <Kpi
-          icon="zap"
-          label="GENERATIONS"
-          value={String(kpis.generations)}
-          styles={styles}
-          colors={colors}
-        >
-          <Text style={styles.kpiFoot}>
-            <Text style={[styles.kpiFoot, t("mono")]}>{kpis.retries}</Text>{" "}
-            retries
-          </Text>
-        </Kpi>
-        <Kpi
-          icon="grid"
-          label="APPS TOUCHED"
-          value={String(kpis.appsTouched)}
-          styles={styles}
-          colors={colors}
-        >
-          <Text style={styles.kpiFoot}>
-            ≈{" "}
-            <Text style={[styles.kpiFoot, t("mono")]}>
-              {formatUsd(kpis.forecastCostUsd)}
-            </Text>{" "}
-            forecast
-          </Text>
-        </Kpi>
-      </View>
-
-      <View style={styles.panel}>
-        <View style={styles.panelHead}>
-          <Text style={styles.panelTitle}>Daily consumption</Text>
-          <Text
-            style={styles.panelMeta}
-          >{`${summary.windowDays} DAYS · TOKENS`}</Text>
-        </View>
-        {hasDaily ? (
-          <>
-            <View style={styles.chartStats}>
-              <View>
-                <Text style={styles.chartStatLabel}>DAILY AVG</Text>
-                <Text style={styles.chartStatValue}>{formatCount(avg)}</Text>
-              </View>
-              <View>
-                <Text style={styles.chartStatLabel}>PEAK</Text>
-                <Text style={styles.chartStatValue}>{formatCount(peak)}</Text>
-              </View>
-            </View>
-            <Sparkline values={series} colors={colors} />
-            <View style={styles.chartAxis}>
-              <Text style={styles.chartAxisText}>{summary.daily[0]?.date}</Text>
-              <Text style={styles.chartAxisText}>
-                {summary.daily[summary.daily.length - 1]?.date}
-              </Text>
-            </View>
-          </>
-        ) : (
-          <Text style={styles.panelEmpty}>No activity in this window yet.</Text>
-        )}
-      </View>
-
-      {models.length > 0 ? (
-        <View style={styles.panel}>
-          <View style={styles.panelHead}>
-            <Text style={styles.panelTitle}>By model</Text>
-            <Text style={styles.panelMeta}>TOP {models.length}</Text>
-          </View>
-          {models.map((m) => (
-            <View key={m.model} style={styles.model}>
-              <Text style={styles.modelName} numberOfLines={1}>
-                {m.model}
-              </Text>
-              <View style={styles.meterTrack}>
-                <View
-                  style={[
-                    styles.meterFill,
-                    {
-                      backgroundColor: colors.accent,
-                      width: `${Math.round((m.tokens / modelMax) * 100)}%`,
-                    },
-                  ]}
-                />
-              </View>
-              <View style={styles.modelFoot}>
-                <Text style={styles.modelFootText}>
-                  {formatCount(m.tokens)}
-                </Text>
-                <Text style={styles.modelFootText}>{formatUsd(m.costUsd)}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      ) : null}
-
-      {efforts.length > 0 ? (
-        <View style={styles.panel}>
-          <View style={styles.panelHead}>
-            <Text style={styles.panelTitle}>By effort</Text>
-            <Text style={styles.panelMeta}>RUNNER-CONFIRMED</Text>
-          </View>
-          {efforts.map((e) => (
-            <View key={e.effort} style={styles.model}>
-              <Text style={styles.modelName} numberOfLines={1}>
-                {e.effort}
-              </Text>
-              <View style={styles.meterTrack}>
-                <View
-                  style={[
-                    styles.meterFill,
-                    {
-                      backgroundColor: colors.accent,
-                      width: `${Math.round((e.tokens / effortMax) * 100)}%`,
-                    },
-                  ]}
-                />
-              </View>
-              <View style={styles.modelFoot}>
-                <Text style={styles.modelFootText}>
-                  {formatCount(e.tokens)}
-                </Text>
-                <Text
-                  style={styles.modelFootText}
-                >{`${e.runs} · ${formatUsd(e.costUsd)}`}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      ) : null}
-
-      {summary.recent.length > 0 ? (
-        <View style={styles.panel}>
-          <View style={styles.panelHead}>
-            <Text style={styles.panelTitle}>Recent activity</Text>
-            <Text
-              style={styles.panelMeta}
-            >{`${summary.recent.length} RUNS`}</Text>
-          </View>
-          {summary.recent.slice(0, 6).map((a, i) => (
-            <View key={a.runId}>
-              {i === 0 ? null : <View style={styles.divider} />}
-              <View style={styles.act}>
-                <Text style={styles.actAgo}>{relativeTime(a.startedAt)}</Text>
-                <View style={styles.actBody}>
-                  <Text style={styles.actLabel} numberOfLines={1}>
-                    {a.label}
-                  </Text>
-                  <Text style={styles.actKind}>
-                    {`${a.kind.toUpperCase()}${a.effort ? ` · ${a.effort.toUpperCase()}` : ""}${a.ok ? "" : " · FAILED"}`}
-                  </Text>
-                </View>
-                <View style={styles.actNums}>
-                  <Text style={styles.actTokens}>{formatCount(a.tokens)}</Text>
-                  <Text style={styles.actUsd}>{formatUsd(a.costUsd)}</Text>
-                </View>
-              </View>
-            </View>
-          ))}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function Kpi({
-  icon,
-  label,
-  value,
-  children,
-  styles,
-  colors,
-}: {
-  icon: string;
-  label: string;
-  value: string;
-  children: React.ReactNode;
-  styles: Styles;
-  colors: Colors;
-}): React.JSX.Element {
-  return (
-    <View style={styles.kpi}>
-      <View style={styles.kpiLabel}>
-        <Icon name={icon} size={12} color={colors.textFaint} />
-        <Text style={styles.kpiLabelText}>{label}</Text>
-      </View>
-      <Text style={styles.kpiValue}>{value}</Text>
-      {children}
-    </View>
-  );
-}
-
-// A teal area sparkline — the mobile port of the desktop Insights LineChart:
-// same area-gradient + peak marker, sized to the panel. `preserveAspectRatio`
-// "none" lets the fixed viewBox stretch to the card width.
-function Sparkline({
-  values,
-  colors,
-}: {
-  values: readonly number[];
-  colors: Colors;
-}): React.JSX.Element {
-  const W = 320;
-  const H = 96;
-  const PAD = 10;
-  const pts = values.length === 1 ? [values[0] ?? 0, values[0] ?? 0] : values;
-  const n = pts.length;
-  const max = Math.max(...pts);
-  const min = Math.min(...pts);
-  const span = max - min || 1;
-  const px = (i: number): number => (n <= 1 ? 0 : (i / (n - 1)) * W);
-  const py = (v: number): number =>
-    H - PAD - ((v - min) / span) * (H - PAD * 2);
-  const coords = pts.map((v, i) => [px(i), py(v)] as const);
-  const line = coords
-    .map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`)
-    .join(" ");
-  const area = `${line} L${W} ${H} L0 ${H} Z`;
-  const peakIdx = pts.indexOf(max);
-  const peak = coords[peakIdx] ?? ([0, 0] as const);
-
-  return (
-    <Svg
-      width="100%"
-      height={H}
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="none"
-    >
-      <Defs>
-        <LinearGradient id="insArea" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0%" stopColor={colors.accent} stopOpacity={0.28} />
-          <Stop offset="100%" stopColor={colors.accent} stopOpacity={0} />
-        </LinearGradient>
-      </Defs>
-      <Path d={area} fill="url(#insArea)" />
-      <Path
-        d={line}
-        fill="none"
-        stroke={colors.accent}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-      <Circle
-        cx={peak[0]}
-        cy={peak[1]}
-        r={3.5}
-        fill={colors.bgElev}
-        stroke={colors.accent}
-        strokeWidth={2}
-      />
-    </Svg>
+      <HealthLine text={line.text} />
+    </TopSafeArea>
   );
 }

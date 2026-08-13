@@ -44,6 +44,15 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
   // (--app-hue / --app-identity), the photos wall,
   // and hsl(var(--app-hue) ...) theater-stage backdrops awaiting a --stage
   // token in packages/design.
+  // Docs' teal identity, declared in the same commit that added it. The two
+  // knobs are the sanctioned per-app identity surface (see `people` and
+  // `photos` below); everything else in that file is contract vocabulary.
+  "docs/Chrome.module.css": {
+    hex: 0,
+    functional: 0,
+    fontFamily: 0,
+    customProps: ["--app-hue", "--app-identity"],
+  },
   "docs/components/QuickLook.module.css": {
     hex: 0,
     functional: 1,

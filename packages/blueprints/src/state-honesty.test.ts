@@ -41,12 +41,39 @@ describe("blueprint state honesty", () => {
     ["notes", "notes/components/Wall.tsx"],
     ["people", "people/app-root.tsx"],
     ["tasks", "tasks/components/Board.tsx"],
-    ["docs", "docs/app-root.tsx"],
     ["tally", "tally/components/Ledger.tsx"],
   ])("%s primary empty state uses kit vocabulary with a CTA", (_app, file) => {
     const source = read(file);
     expect(source).toContain("kit-empty");
     expect(source).toContain("kit-btn");
+  });
+
+  // Docs left that row for the same reason Photos never joined it. `.kit-empty`
+  // is a centred notice card with one line of copy, and the Docs spec (§4.6)
+  // asks this state for FIVE distinguishable variants — a new drive, an empty
+  // folder, an empty shelf, a filter with no matches, a search with no matches
+  // — of which only the first takes a display serif and a paragraph about
+  // where a member's bytes go. So Docs draws its own block too. The
+  // requirement this row is really testing — an empty view that names its own
+  // reason and offers a way forward — is asserted here instead, and is
+  // stronger than it was: the way forward is only drawn where the app can
+  // actually perform it (`runFor`), so no variant dead-ends.
+  test("docs draws the five empty states, only one with a display serif", () => {
+    const block = read("docs/components/EmptyState.tsx");
+    expect(block).toContain("kit-btn");
+    expect(block).toContain("runFor");
+    expect(block).toContain("data-variant");
+    const css = read("docs/components/EmptyState.module.css");
+    expect(css).toContain("var(--t-display)");
+    expect(css).toContain("var(--t-reading)");
+    // The five variants and the gate on "has a read even landed" are one pure
+    // function each, not a cascade inside a render. The gate is the SHARED
+    // kit's, so Docs and Photos cannot answer "is this view empty" two
+    // different ways.
+    const viewState = read("docs/view-state.ts");
+    expect(viewState).toContain("emptyStateView");
+    expect(viewState).toContain("showsEmptyState");
+    expect(read("_shared/view-state-kit.ts")).toContain("gate.loaded");
   });
 
   // Photos is deliberately NOT in that list. `.kit-empty` is a centred notice

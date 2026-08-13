@@ -248,12 +248,13 @@ describe("the toolbar row", () => {
     expect(toolbar()).toBe("");
   });
 
-  it("renders once it carries the tile-size stepper", () => {
+  it("renders once it carries the tile-size control", () => {
     const html = toolbar({ tileSize: 2, onStepTileSize: () => {} });
-    // Every icon-only control has a label, and the rung reads out.
-    expect(html).toContain('aria-label="Smaller tiles"');
-    expect(html).toContain('aria-label="Larger tiles"');
-    expect(html).toContain(">M<");
+    // Four segments, named by their own visible text, in one group whose name
+    // states the property and the member's position in it.
+    expect(html).toContain('aria-label="Tile size 3 of 4"');
+    for (const rung of [">XS<", ">S<", ">M<", ">L<"])
+      expect(html).toContain(rung);
   });
 
   it("renders once there is more than one vault to filter", () => {
@@ -262,16 +263,18 @@ describe("the toolbar row", () => {
     expect(html).toContain("Sharing");
   });
 
-  it("disables the stepper at each end rather than letting it wrap", () => {
-    expect(toolbar({ tileSize: 0, onStepTileSize: () => {} })).toMatch(
-      /Smaller tiles"[^>]*disabled/u
-    );
-    expect(toolbar({ tileSize: 3, onStepTileSize: () => {} })).toMatch(
-      /Larger tiles"[^>]*disabled/u
-    );
+  it("holds exactly one rung, and says which one it is", () => {
+    // The range has ends rather than wrapping: at XS the group says `1 of 4`,
+    // at L it says `4 of 4`, and one segment is pressed in each case.
+    const first = toolbar({ tileSize: 0, onStepTileSize: () => {} });
+    expect(first).toContain('aria-label="Tile size 1 of 4"');
+    expect([...first.matchAll(/aria-pressed="true"/gu)]).toHaveLength(1);
+    const last = toolbar({ tileSize: 3, onStepTileSize: () => {} });
+    expect(last).toContain('aria-label="Tile size 4 of 4"');
+    expect([...last.matchAll(/aria-pressed="true"/gu)]).toHaveLength(1);
   });
 
-  it("keeps the stepper off the shelves where tiles are not packed", () => {
+  it("keeps the tile-size control off shelves where tiles are not packed", () => {
     expect(showsTileSize(ALBUMS)).toBe(false);
     expect(showsTileSize(null)).toBe(true);
     expect(showsTileSize(TRASH)).toBe(true);

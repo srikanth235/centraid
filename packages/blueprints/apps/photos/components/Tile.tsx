@@ -111,7 +111,14 @@ export function Tile({
     initialMediaState(asset)
   );
   const media = state ?? seen;
-  const line = stateLine(media) ?? note ?? null;
+  const mediaLine = stateLine(media);
+  const line = mediaLine ?? note ?? null;
+  // The state slot's ONE tone decision. `note` is the expiring register — it
+  // is only ever a countdown to a purge today — and `--seam` is the role for
+  // exactly that ("not yet, and not wrong: pending, expiring, invited"). The
+  // media's own lines keep their tones: `could not decode` is `--net`, `on the
+  // gateway` is the quiet default, and neither is expiring.
+  const expiring = mediaLine == null && note != null;
   const kind = showsKindSlot(rung) ? kindLabel(asset) : null;
   const key = assetKey(asset);
   const name = asset.title ?? asset.kind ?? "Photograph";
@@ -179,7 +186,11 @@ export function Tile({
       {kind ? <span className={styles.kind}>{kind}</span> : null}
 
       {/* ---- slot 4: state. One line, never a fill and never a red dot. ---- */}
-      {line ? <span className={styles.state}>{line}</span> : null}
+      {line ? (
+        <span className={cls(styles.state, expiring && styles.expiring)}>
+          {line}
+        </span>
+      ) : null}
 
       {extras || pending ? (
         <div className={styles.extras}>

@@ -138,36 +138,11 @@
   border-color: color-mix(in oklab, var(--danger) 35%, var(--line));
 }
 
-.detailLabel {
-  font: var(--t-eyebrow);
-  letter-spacing: var(--t-eyebrow-tracking);
-  text-transform: var(--t-eyebrow-transform);
-  color: var(--text-faint);
-  margin-bottom: var(--sp-2);
-}
 .shareStatus {
   display: block;
   color: var(--text-soft);
   font: var(--t-small);
   margin: var(--sp-2) 0;
-}
-.detailGrid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--sp-2) 14px;
-  font: var(--t-small);
-  margin-bottom: 22px;
-}
-.detailGrid dt {
-  font: var(--t-mono);
-  font-variant-numeric: var(--t-mono-numeric);
-  color: var(--text-faint);
-  margin: 0;
-}
-.detailGrid dd {
-  color: var(--text-soft);
-  margin: 0;
-  overflow-wrap: anywhere;
 }
 .detailsFoot {
   display: flex;
@@ -183,24 +158,83 @@
    trailing chevron — hover alone is nothing on a phone, and `--text-faint` at
    rest made this read as a dead section heading rather than the disclosure it
    is. Geometry (`kit-plain-btn` undoes the UA button box) comes from the kit. */
-.versionToggle {
+
+/* §8's tab strip. Three tabs, a 2px ink bar under the current one — never a
+   fill and never the app's hue, the same rule the shelf strip follows so the
+   two "which one am I on" marks read identically. */
+.tabs {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  gap: var(--sp-2);
-  color: var(--text-soft);
-  padding: var(--sp-2) var(--sp-2);
-  margin-inline: calc(var(--sp-2) * -1);
-  border-radius: var(--r-md);
-  min-height: var(--target-min);
-  transition: background var(--dur-1) var(--ease);
+  gap: var(--sp-4);
+  margin-block: var(--sp-3) var(--sp-2);
+  border-block-end: 1px solid var(--line);
 }
-.versionToggle:hover {
-  background: var(--bg-hover, var(--bg-sunken));
+.tab {
+  padding-block: var(--sp-2);
+  border: none;
+  border-block-end: 2px solid transparent;
+  background: none;
+  font: var(--t-small);
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.tab[data-current="true"] {
+  border-block-end-color: var(--text);
   color: var(--text);
 }
-.versionToggle:focus-visible {
+.tab:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
+}
+
+/* The fact list every tab is made of: a key column in the eyebrow rung and a
+   value that may carry one note under it. Hairlined between rows, because the
+   rail is a list of separate claims and not a paragraph. */
+.facts {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+.factRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-block: var(--sp-2);
+}
+.factRow + .factRow {
+  border-block-start: 1px solid var(--line);
+}
+.factKey {
+  font: var(--t-eyebrow);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+.factValue {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text);
+}
+.factValue[data-net="true"] {
+  color: var(--net);
+}
+.factNote {
+  display: block;
+  margin-block-start: var(--sp-1);
+  font: var(--t-small);
+  color: var(--text-faint);
+}
+
+.tabLabel {
+  margin-block-start: var(--sp-3);
+  font: var(--t-eyebrow);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.railFoot {
+  margin: var(--sp-3) 0 0;
+  font: var(--t-small);
+  color: var(--text-faint);
 }

@@ -45,6 +45,22 @@ async function openAutomations(page: TypeImport_11i4z7t.Page): Promise<void> {
     .waitFor({ state: "visible" });
 }
 
+/**
+ * Open one automation from the overview.
+ *
+ * The v9 revamp (issue #765) replaced the clickable tile grid with the shared
+ * row block: a row is not a control, its trailing action is, and every one of
+ * those reads "Open". The `title` is what distinguishes them — it is a title
+ * rather than an `aria-label` because the button already renders visible text
+ * (aria-label discipline, issue #708 B.4).
+ */
+async function openAutomationRow(
+  page: TypeImport_11i4z7t.Page,
+  name: string
+): Promise<void> {
+  await page.getByTitle(`Open ${name}`).click();
+}
+
 /** Overflow menu (⋯) holds Edit / Pause·Resume / Delete after the chat-thread redesign. */
 async function openAutomationMenu(
   page: TypeImport_11i4z7t.Page
@@ -61,7 +77,7 @@ async function openRunDetails(page: TypeImport_11i4z7t.Page): Promise<void> {
 
 // ─────────────────────────── §8 list & viewer ───────────────────────────
 
-test("8.1 — the automations list renders rows with status pills", async () => {
+test("8.1 — the automations list renders a row per automation, with its state", async () => {
   gateway.state.automations = [
     automationRow({ id: "digest", name: "Inbox Digest", enabled: true }),
     automationRow({ id: "backup", name: "Nightly Backup", enabled: false }),
@@ -69,38 +85,41 @@ test("8.1 — the automations list renders rows with status pills", async () => 
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
-    await expect(page.getByTestId("automation-row")).toHaveCount(2);
-    await expect(
-      page
-        .getByTestId("automation-row-name")
-        .filter({ hasText: "Inbox Digest" })
-    ).toBeVisible();
-    // Every row carries a status pill (`data-au-status` is the pill's stable hook).
-    await expect(page.locator("[data-au-status]").first()).toBeVisible();
+    const list = page.getByTestId("automations-overview");
+    await expect(list).toContainText("Inbox Digest");
+    await expect(list).toContainText("Nightly Backup");
+    // One trailing Open per row — the row itself is not a control.
+    await expect(page.getByTitle(/^Open /u)).toHaveCount(2);
+    // The state word takes the row's one mono slot (no more status pills).
+    await expect(list).toContainText("Active");
   } finally {
     await closeApp(app);
   }
 });
 
-test("8.2 — a list load failure shows the error card and Retry recovers", async () => {
+test("8.2 — a list load failure shows the error panel and Reconnect recovers", async () => {
   gateway.state.automationsStatus = 500;
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
     const errorCard = page.getByTestId("automations-error");
-    await expect(errorCard).toContainText("Couldn't load automations");
-    const retry = errorCard.getByRole("button", { name: "Retry" });
+    // v9 error shape (#765): what failed, what is still safe, one way forward.
+    await expect(errorCard).toContainText("The scheduler is not answering");
+    await expect(errorCard).toContainText(
+      "Automations are stored on the gateway and are safe"
+    );
+    const retry = errorCard.getByRole("button", { name: "Reconnect" });
     // Error UI must settle before we rewire the mock — a mid-flight reload
     // would still see 500 and re-paint the card under the cursor.
     await expect(retry).toBeVisible();
     await expect(retry).toBeEnabled();
-    // Recover: fix the gateway, click Retry.
+    // Recover: fix the gateway, click Reconnect.
     gateway.state.automationsStatus = 200;
     gateway.state.automations = [
       automationRow({ id: "digest", name: "Inbox Digest" }),
     ];
     await retry.click();
-    await expect(page.getByTestId("automation-row")).toHaveCount(1);
+    await expect(page.getByTitle("Open Inbox Digest")).toBeVisible();
   } finally {
     await closeApp(app);
   }
@@ -110,8 +129,8 @@ test('8.3 — "New automation" opens the editor; the draft is posted on Save', a
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
-    // With no automations seeded the overview renders both the header action
-    // and the empty-state action; either is the same affordance.
+    // "New automation" is the page's one filled commit and it lives in the app
+    // bar (#765) — the empty state's own verb is "Browse templates".
     await page.getByRole("button", { name: "New automation" }).first().click();
     // Realignment: this test used to expect the draft POST on open. Draft
     // creation is deliberately deferred to Save — AutomationEditorRoute calls
@@ -145,10 +164,7 @@ test("8.4 — clicking an automation row opens its viewer", async () => {
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
-    await page
-      .getByTestId("automation-row")
-      .filter({ hasText: "Inbox Digest" })
-      .click();
+    await openAutomationRow(page, "Inbox Digest");
     await expect(page.getByTestId("automation-thread")).toBeVisible();
     await expect(page.getByTestId("automation-thread")).toContainText(
       "Inbox Digest"
@@ -165,10 +181,7 @@ test("8.5 — toggling the lifecycle menu posts set-enabled; a failed toggle toa
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
-    await page
-      .getByTestId("automation-row")
-      .filter({ hasText: "Inbox Digest" })
-      .click();
+    await openAutomationRow(page, "Inbox Digest");
     await expect(page.getByTestId("automation-thread")).toBeVisible();
 
     // Enable/disable lives in the ⋯ menu (Pause when enabled, Resume when not).
@@ -217,10 +230,7 @@ test("8.6 — a webhook automation shows its URL and copies it", async () => {
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
-    await page
-      .getByTestId("automation-row")
-      .filter({ hasText: "Webhook Bot" })
-      .click();
+    await openAutomationRow(page, "Webhook Bot");
     await expect(page.getByTestId("automation-webhook-url")).toContainText(
       "wh-123"
     );
@@ -238,10 +248,7 @@ test("8.7 — deleting an automation confirms, posts DELETE, returns to the list
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
-    await page
-      .getByTestId("automation-row")
-      .filter({ hasText: "Inbox Digest" })
-      .click();
+    await openAutomationRow(page, "Inbox Digest");
     await expect(page.getByTestId("automation-thread")).toBeVisible();
     await openAutomationMenu(page);
     await page.getByTestId("automation-menu-delete").click();
@@ -265,10 +272,7 @@ test("8.8 — Edit opens the automation builder", async () => {
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
-    await page
-      .getByTestId("automation-row")
-      .filter({ hasText: "Inbox Digest" })
-      .click();
+    await openAutomationRow(page, "Inbox Digest");
     await expect(page.getByTestId("automation-thread")).toBeVisible();
     await openAutomationMenu(page);
     await page.getByTestId("automation-menu-edit").click();
@@ -334,10 +338,7 @@ test("9.1 + 9.2 — Run now opens the forensic viewer and the timeline resolves 
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
-    await page
-      .getByTestId("automation-row")
-      .filter({ hasText: "Inbox Digest" })
-      .click();
+    await openAutomationRow(page, "Inbox Digest");
     await page.getByRole("button", { name: "Run now" }).click();
     // The fired turn lands in the thread feed; Details opens the forensic
     // viewer, whose timeline resolves to a successful final node.
@@ -416,10 +417,7 @@ test("9.3 — a failed turn surfaces the failure outcome", async () => {
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
-    await page
-      .getByTestId("automation-row")
-      .filter({ hasText: "Inbox Digest" })
-      .click();
+    await openAutomationRow(page, "Inbox Digest");
     await page.getByRole("button", { name: "Run now" }).click();
     await openRunDetails(page);
     await expect(page.getByTestId("timeline-final")).toHaveAttribute(
@@ -441,10 +439,7 @@ test("9.4 + 9.9 — the forensic timeline uses the shared tool-and-answer transc
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
-    await page
-      .getByTestId("automation-row")
-      .filter({ hasText: "Inbox Digest" })
-      .click();
+    await openAutomationRow(page, "Inbox Digest");
     await page.getByRole("button", { name: "Run now" }).click();
     await openRunDetails(page);
     await expect(page.getByTestId("timeline-final")).toHaveAttribute(
@@ -470,10 +465,7 @@ test("9.7 — Run again fires another turn from the automation thread", async ()
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
-    await page
-      .getByTestId("automation-row")
-      .filter({ hasText: "Inbox Digest" })
-      .click();
+    await openAutomationRow(page, "Inbox Digest");
     await page.getByRole("button", { name: "Run now" }).click();
     // Re-run lives on the automation thread card ("Run again"), not the
     // run-view detail (those in-view controls were removed as noise).

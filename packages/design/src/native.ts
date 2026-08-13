@@ -10,6 +10,7 @@
 // choice at the root: the accent is ink, so there is nothing to pick.
 
 import { borders } from "./borders";
+import { rgbaHex } from "./color";
 import { DENSITY_TIERS, metrics, pageMargin, spacing } from "./density";
 import { paletteFor } from "./palette";
 import { radii } from "./radii";
@@ -33,6 +34,7 @@ export interface NativeColors {
   accentDeep: string;
   accentFill: string;
   accentDeepHover: string;
+  accentInkHover: string;
   accentLight: string;
   accentSoft: string;
   accentText: string;
@@ -50,11 +52,14 @@ export interface NativeColors {
   lineSel: string;
   link: string;
   net: string;
+  netHover: string;
+  netWash: string;
   onAccent: string;
   onStage: string;
   onStageSoft: string;
   focusRingColor: string;
   scrim: string;
+  seam: string;
   shadowLg: string;
   shadowMd: string;
   shadowSm: string;
@@ -122,15 +127,10 @@ function identityRing(scheme: NativeScheme): Record<`c${string}`, string> {
   ) as Record<`c${string}`, string>;
 }
 
-/** `rgba()` for an alpha wash of a hex — the concrete form of the emitters'
- *  `color-mix(… N%, transparent)`, evaluated here rather than at render. */
-function rgbaHex(hex: string, alpha: number): string {
-  const digits = hex.slice(1);
-  const channels = [0, 2, 4].map((offset) =>
-    Number.parseInt(digits.slice(offset, offset + 2), 16)
-  );
-  return `rgba(${channels.join(",")},${alpha.toString().replace(/^0(?=\.)/u, "")})`;
-}
+// `rgbaHex` — the concrete form of the emitters' `color-mix(… N%,
+// transparent)`, evaluated here rather than at render — lives in `./color`
+// beside `parseColor`, because `--net-wash` is built from it in the theme
+// registry too and two spellings of one wash is the defect it prevents.
 
 /** An opaque composite of `hex` at `alpha` over `over` — RN has no
  *  `color-mix()`, and a wash that lands on an unknown surface is a wash whose
@@ -159,6 +159,7 @@ function colorsFor(scheme: NativeScheme): NativeColors {
     accentDeep: theme.accentDeep,
     accentFill: theme.accentDeep,
     accentDeepHover: theme.accentHover,
+    accentInkHover: theme.accentInkHover,
     accentLight: theme.accentLight,
     accentSoft: rgbaHex(theme.accent, 0.08),
     accentText: theme.accentText,
@@ -176,6 +177,10 @@ function colorsFor(scheme: NativeScheme): NativeColors {
     lineSel: rgbaHex(theme.link, 0.42),
     link: theme.link,
     net: theme.net,
+    netHover: theme.netHover,
+    // Already an `rgba()` in the registry — no `color-mix()` to evaluate here,
+    // because this wash's alpha is a theme value rather than an emitter one.
+    netWash: theme.netWash,
     onAccent: theme.textInv,
     // Same literal in both themes — the media ground does not follow the
     // theme (Photos handoff v4 §B).
@@ -183,6 +188,7 @@ function colorsFor(scheme: NativeScheme): NativeColors {
     onStageSoft: ON_STAGE_SOFT,
     focusRingColor: theme.ring,
     scrim: theme.scrim,
+    seam: theme.seam,
     shadowLg: theme.shadowLg,
     shadowMd: theme.shadowMd,
     shadowSm: theme.shadowSm,

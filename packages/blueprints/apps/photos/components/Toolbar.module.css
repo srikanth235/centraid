@@ -51,8 +51,8 @@
   color: var(--text);
 }
 
-/* The vault filter and the stepper are groups for the accessibility tree, not
-   boxes — a <fieldset> draws a border and padding by UA default. */
+/* The vault filter and the tile-size control are groups for the accessibility
+   tree, not boxes — a <fieldset> draws a border and padding by UA default. */
 .vaults,
 .stepper {
   display: flex;
@@ -75,20 +75,52 @@
   background: var(--accent-soft);
 }
 
+/* THE SEGMENTED TRACK (issue #765). Four rungs, XS–L, in one sunken track
+   with the held one raised out of it — the system's segmented shape: track =
+   `--bg-sunken`, selected item = the raised surface, and no fill anywhere.
+   The − / + stepper this replaced made a member press twice to cross the range
+   and never showed them where the range stopped; four named rungs are few
+   enough that each can be its own target.
+
+   `gap: 0` on purpose: the segments share one track, so a gap between them
+   would read as four separate controls rather than one property. */
 .stepper {
   margin-inline-start: auto;
+  gap: 0;
   padding: 2px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  background: var(--bg-elev);
+  background: var(--bg-sunken);
 }
 
-/* The rung name is a numeric-register readout: mono, tabular, and above the
-   11px floor. */
+/* One segment. The rung name is a numeric-register readout: mono, tabular, and
+   above the 11px floor. A recessive state takes its own token on the leaf,
+   never a container opacity (§18). */
 .rung {
+  min-inline-size: 4ch;
+  min-block-size: var(--h-control);
+  padding-inline: var(--sp-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
   font: var(--t-mono);
   font-variant-numeric: tabular-nums;
-  color: var(--text-soft);
-  min-inline-size: 2ch;
+  color: var(--text-faint);
   text-align: center;
+  cursor: pointer;
+}
+.rung:hover {
+  color: var(--text);
+}
+.rung:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* The held rung is RAISED out of the track — the one thing the track is for.
+   It is a surface and a hairline, not a fill: the ink simply steps back up to
+   `--text`, and this view's one filled control stays the app bar's commit. */
+.rung[aria-pressed="true"] {
+  background: var(--bg-elev);
+  border-color: var(--line-sel);
+  color: var(--text);
 }

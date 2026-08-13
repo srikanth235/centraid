@@ -194,10 +194,10 @@
    on a phone leaves the content a sliver; the controls overlay the edges
    instead. The Download label collapses to its glyph so the title keeps the
    row. */
-:global(.docs.is-narrow) .quickStage {
+.quick[data-narrow="true"] .quickStage {
   padding-inline: var(--sp-2);
 }
-:global(.docs.is-narrow) .quickBtnLabel {
+.quick[data-narrow="true"] .quickBtnLabel {
   /* Visually collapsed, still the control's accessible name — no
      `position: absolute`, which would escape the button's own box. */
   width: 1px;
@@ -206,7 +206,7 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
-:global(.docs.is-narrow) .quickRead {
+.quick[data-narrow="true"] .quickRead {
   width: 100%;
   padding: var(--sp-4);
 }

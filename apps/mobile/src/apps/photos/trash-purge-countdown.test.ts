@@ -66,9 +66,11 @@ describe("the countdown lands in the tile's state slot", () => {
     expect(overlay?.form).toBe("line");
     if (overlay?.form !== "line") throw new Error("expected a line");
     expect(overlay.text).toMatch(/^purges in \d+ days?$/u);
-    // Quiet mono on the page colour: a trashed photograph is not an error,
-    // and `--net` here would paint the whole shelf red (§4.4).
-    expect(overlay.tone).toBe("normal");
+    // Mono on the page colour in the EXPIRING register (`--seam`, issue
+    // #765): a trashed photograph is not an error, and `--net` here would
+    // paint the whole shelf red (§4.4) — but it is not a settled fact either,
+    // which is precisely the state `--seam` names.
+    expect(overlay.tone).toBe("seam");
   });
 
   it("takes the slot from the custody mark, never sits beside it", () => {
@@ -86,7 +88,7 @@ describe("the countdown lands in the tile's state slot", () => {
     ).toStrictEqual({
       form: "line",
       text: purgeNote(5),
-      tone: "normal",
+      tone: "seam",
     });
   });
 

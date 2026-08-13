@@ -9,6 +9,10 @@ import type {
 } from "../../../gateway-client-outbox.js";
 import type { VaultParkedEntry } from "../../../gateway-client-vault.js";
 import {
+  APPROVALS_FULL_AT,
+  approvalsCountLine,
+  approvalsHealth,
+  approvalsState,
   buildGrantRow,
   buildActivityRow,
   collapseAdjacentActivity,
@@ -418,5 +422,39 @@ describe(collapseAdjacentActivity, () => {
       reviewEntry({ receiptId: "r2", decision: "deny" })
     );
     expect(collapseAdjacentActivity([a, b])).toHaveLength(2);
+  });
+});
+
+describe("what the frame says about Notifications", () => {
+  it("calls a page with nothing waiting empty, and a long queue full", () => {
+    expect(approvalsState({ grants: 2, waiting: 0 })).toBe("empty");
+    expect(approvalsState({ grants: 2, waiting: 1 })).toBe("ready");
+    expect(approvalsState({ grants: 2, waiting: APPROVALS_FULL_AT })).toBe(
+      "ready"
+    );
+    expect(approvalsState({ grants: 2, waiting: APPROVALS_FULL_AT + 1 })).toBe(
+      "full"
+    );
+  });
+
+  it("counts what is waiting and what is standing, and never says zero", () => {
+    expect(approvalsCountLine({ grants: 2, waiting: 3 })).toBe(
+      "3 decisions waiting · 2 standing grants"
+    );
+    expect(approvalsCountLine({ grants: 1, waiting: 1 })).toBe(
+      "1 decision waiting · 1 standing grant"
+    );
+    expect(approvalsCountLine({ grants: 2, waiting: 0 })).toBe(
+      "Nothing waiting · 2 standing grants"
+    );
+  });
+
+  it("says nothing has happened yet, and offers no inline verb", () => {
+    const health = approvalsHealth({ grants: 0, waiting: 3 });
+    expect(health.label).toBe("3 waiting on you");
+    expect(health.detail).toBe(
+      "Nothing here has happened yet. Approving is the act."
+    );
+    expect(health).not.toHaveProperty("action");
   });
 });

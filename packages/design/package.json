@@ -42,6 +42,11 @@
       "react-native": "./src/font-faces.ts",
       "default": "./dist/font-faces.js"
     },
+    "./blocks": {
+      "types": "./dist/blocks/index.d.ts",
+      "react-native": "./src/blocks/index.ts",
+      "default": "./dist/blocks/index.js"
+    },
     "./color": {
       "types": "./dist/color.d.ts",
       "react-native": "./src/color.ts",

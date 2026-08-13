@@ -1,0 +1,56 @@
+/* The breadcrumb row (Docs spec §1.6).
+
+   One line, the small rung, no card and no background: it is a label for the
+   place, not a control surface. The trailing crumb is the only one in the
+   full ink rung — every crumb before it is soft, which is what makes the
+   chain read as "you are here, and here is the way back". */
+
+.bread {
+  padding-inline: var(--sp-4);
+  padding-block: var(--sp-3) 0;
+}
+
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+}
+
+.sep {
+  font: var(--t-small);
+  color: var(--text-ghost);
+}
+
+.link {
+  font: var(--t-small);
+  color: var(--text-soft);
+  text-decoration: none;
+}
+.link:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+.link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
+}
+
+.here {
+  font: var(--t-small);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

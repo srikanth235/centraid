@@ -6,8 +6,10 @@ import type { FakeClock } from "@centraid/test-kit/fake-clock";
 import {
   clearStatus,
   postStatus,
+  readRouteHealth,
   readStatus,
   resetStatus,
+  setRouteHealth,
   showUndoStatus,
   subscribeStatus,
 } from "./statusChannel.js";
@@ -54,6 +56,60 @@ describe("the status channel", () => {
     postStatus("Importing", { progress: { done: 412, total: 1904 } });
     clock.advanceSync(60_000);
     expect(readStatus()?.progress).toStrictEqual({ done: 412, total: 1904 });
+  });
+
+  describe("the standing route-health slot", () => {
+    it("starts silent", () => {
+      expect(readRouteHealth()).toBeNull();
+    });
+
+    it("stands rather than decaying — a condition is not news", () => {
+      setRouteHealth({ text: "1 automation is failing · since 4 August." });
+      clock.advanceSync(60_000);
+      expect(readRouteHealth()?.text).toBe(
+        "1 automation is failing · since 4 August."
+      );
+    });
+
+    it("is a SECOND slot, so a confirmation cannot erase the route's line", () => {
+      setRouteHealth({
+        text: "Everything is readable · last write 4 min ago.",
+      });
+      postStatus("Renamed · Groceries");
+      expect(readStatus()?.text).toBe("Renamed · Groceries");
+      expect(readRouteHealth()?.text).toBe(
+        "Everything is readable · last write 4 min ago."
+      );
+      // …and the condition is still there when the news passes.
+      clock.advanceSync(6000);
+      expect(readStatus()).toBeNull();
+      expect(readRouteHealth()).not.toBeNull();
+    });
+
+    it("wakes subscribers, and clears with null on the route's unmount", () => {
+      const seen: (string | null)[] = [];
+      const off = subscribeStatus(() =>
+        seen.push(readRouteHealth()?.text ?? null)
+      );
+      setRouteHealth({ text: "Gmail needs re-authorization · expired." });
+      setRouteHealth(null);
+      // Already clear: nothing changed, so nothing is announced again.
+      setRouteHealth(null);
+      off();
+      expect(seen).toStrictEqual([
+        "Gmail needs re-authorization · expired.",
+        null,
+      ]);
+    });
+
+    it("carries the page's tone for the one inline verb", () => {
+      setRouteHealth({
+        action: { label: "Review it", run: vi.fn<() => void>() },
+        text: "1 request is pending · Ana asked to connect.",
+        tone: "seam",
+      });
+      expect(readRouteHealth()?.tone).toBe("seam");
+    });
   });
 
   describe("the undo grace window", () => {

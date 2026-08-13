@@ -1,389 +1,117 @@
-/* Gateway → Overview → Paired devices. Co-located with DevicesCard.tsx;
-   reuses GatewayScreen.module.css's .panel/.panelHead/.panelEmpty shells
-   (imported there as `gwStyles`) so the card reads as a sibling of
-   Backups/Storage rather than a bolted-on style. */
+/* What is LEFT of the old roster card (#726) after the v9 pass (#765).
 
-/* The card lives in the Gateway overview's right rail (a packed flex
-   column); it sizes like any other panel there.
+   The roster itself is now section heads + row blocks from `react/ui/`, so
+   every rule that drew a device row, a person header, a chip or a tombstone
+   disclosure is gone. These are the shells `SharingCard`/`LinkRow`/
+   `SharingRecoveryRows` still import as `deviceStyles` (a share row was built
+   to read as a sibling of a device row), plus the two `DevicePairPanel`
+   borrows. They live here until the sharing surface takes its own v9 pass —
+   at which point this file goes with it. */
 
-   It is also a CONTAINER, and every breakpoint below keys off that rather
-   than the viewport. The card is routinely far narrower than the window — in
-   Household it sits in a max-width column, in Gateway it sits in a rail — so
-   a viewport media query fired at the wrong moment in both directions: a
-   716px window left the person rows unwrapped while the card was ~400px and
-   crushing device names to one letter per line. */
+/* The card is a CONTAINER, and the breakpoints inside the sharing card key
+   off that rather than the viewport: it is routinely far narrower than the
+   window, and a viewport query fired at the wrong moment in both directions. */
 .card {
-  min-width: 0;
   container: devices-card / inline-size;
+  min-inline-size: 0;
 }
 
 .body {
-  padding: 14px 18px 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
 }
 
 .loadError {
-  font-size: var(--t-control-size);
   color: var(--danger);
+  font-size: var(--t-control-size);
   overflow-wrap: anywhere;
 }
 
 .list {
-  display: flex;
-  flex-direction: column;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
-  /* Many paired devices scroll inside the card rather than growing the rail;
-     x stays clipped so the rounded corners hold. */
-  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  /* Many rows scroll inside the card rather than growing the column; x stays
+     clipped so the rounded corners hold. */
+  max-block-size: 320px;
   overflow: hidden auto;
   overscroll-behavior: contain;
 }
 
-/* ── People-first grouping (var(--text)) ────────────────────────────────────────
-   A group is one PERSON: the header carries what is authored on them (their
-   access, and the wide "Remove <person>" verb), the list under it carries the
-   hardware that merely inherits. */
-.groups {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.groupHead {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-.groupGlyph {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--r-pill);
-  color: var(--text-soft);
-  background: var(--bg-sunken, color-mix(in srgb, var(--text) 6%, transparent));
-  border: 0.5px solid var(--line);
-}
-.group[data-self] .groupGlyph {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
-}
-.groupMain {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-/* `break-word`, not `anywhere`: `anywhere` breaks mid-word even when the word
-   would fit on a line of its own, which is how "desktop host" rendered as one
-   letter per line once the layout squeezed this column. */
-.groupName {
-  margin: 0;
-  font-size: var(--t-small-size);
-  font-weight: 600;
-  color: var(--text);
-  overflow-wrap: break-word;
-}
-/* Ownership words (Owner / Member / Viewer) beside the vault they apply to —
-   the only place a role is stated, because the person is where it is authored. */
-.roleChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
-  border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent-deep, var(--accent));
-  font-size: var(--t-control-size);
-}
-.groupEmpty {
-  margin: 0 0 0 42px;
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-}
-
-.rowWarn {
-  font-size: var(--t-control-size);
-  line-height: 1.45;
-  color: var(--danger);
-  overflow-wrap: anywhere;
-}
-
-/* Tombstones: present for audit, folded away by default, no actions. */
-.tombstones {
-  margin-left: 42px;
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-}
-.tombstones summary {
-  cursor: pointer;
-}
-.tombstones ul {
-  list-style: none;
-  margin: 6px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.tombstones li {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-}
-.tombstones li span[data-quiet="true"] {
-  color: color-mix(in srgb, var(--text-faint) 72%, transparent);
-}
-
 .row {
-  display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 12px 14px;
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-3);
 }
+
 .row + .row {
-  border-top: 1px solid var(--line);
-}
-/* The current device gets a quiet accent rail + wash so signing yourself
-   out reads as the deliberate act it is. */
-.row[data-current] {
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-  box-shadow: inset 2px 0 0 var(--accent);
+  border-block-start: 1px solid var(--line);
 }
 
 .glyph {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
+  align-items: center;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
   border-radius: var(--r-md);
+  block-size: 34px;
   color: var(--text-soft);
-  background: var(--bg-sunken, color-mix(in srgb, var(--text) 6%, transparent));
-  border: 0.5px solid var(--line);
-}
-.row[data-current] .glyph {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  display: grid;
+  flex: none;
+  inline-size: 34px;
+  place-items: center;
 }
 
 .main {
-  flex: 1 1 auto;
-  min-width: 0;
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-1);
+  min-inline-size: 0;
 }
 
 .nameLine {
+  align-items: center;
   display: flex;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-}
-.name {
-  font-size: var(--t-small-size);
-  font-weight: 600;
-  color: var(--text);
-  overflow-wrap: break-word;
-}
-.renameForm {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.renameInput {
-  /* Container-relative, not viewport-relative: the field sits inside the card,
-     so `30vw` was free to overflow a card narrower than the window. */
-  width: min(190px, 60cqw);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-  padding: 3px 6px;
-}
-.renameAction,
-.renameIcon {
-  border: 0;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-  font: var(--t-control);
-  padding: 3px 5px;
-}
-.renameAction:hover,
-.renameIcon:hover {
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  color: var(--text);
+  gap: var(--sp-2);
 }
 
-.currentChip,
-.transportChip {
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  border-radius: var(--r-pill);
-  padding: 2px 7px;
-  white-space: nowrap;
-}
-.currentChip {
-  color: var(--accent-deep, var(--accent));
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
-/* Relay (Iroh) vs Direct (HTTP) — the transport a device paired over. Relay
-   carries a faint success tint (the private-by-default path); direct is
-   neutral ink. */
-.transportChip {
-  color: var(--text-faint);
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-}
-.transportChip[data-transport="iroh"] {
-  color: var(--success);
-  background: color-mix(in srgb, var(--success) 12%, transparent);
+.name {
+  color: var(--text);
+  font: var(--t-body);
+  overflow-wrap: break-word;
 }
 
 .meta {
+  align-items: center;
+  color: var(--text-faint);
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-}
-.meta span[data-quiet="true"] {
-  color: color-mix(in srgb, var(--text-faint) 72%, transparent);
-}
-.metaVault {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.metaVault svg {
-  color: var(--text-faint);
-  opacity: 0.8;
-}
-
-.grantProfile {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 2px;
-}
-.grantProfile span {
-  padding: 2px 6px;
-  border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  color: var(--accent-deep, var(--accent));
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-}
-.grantProfile span:first-child {
-  color: var(--text-faint);
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-}
-
-.computeToggle {
-  width: fit-content;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin-top: 4px;
-  color: var(--text-soft);
-  cursor: pointer;
-  font-size: var(--t-control-size);
-  line-height: 1.35;
-}
-.computeToggle input {
-  accent-color: var(--accent);
-}
-.computeToggle small {
-  color: var(--text-faint);
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-}
-.computeCaps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-.computeCaps span {
-  padding: 2px 6px;
-  border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--success) 9%, transparent);
-  color: var(--success);
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  gap: var(--sp-3);
 }
 
 .rowError {
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
   color: var(--danger);
+  font: var(--t-mono);
   overflow-wrap: anywhere;
 }
 
 .rowAction {
-  flex: none;
   align-self: center;
-}
-
-/* Revoke stays quiet until hovered/confirmed — a destructive action that
-   doesn't shout, but turns unmistakably danger-red on the confirm step. */
-.revokeBtn:hover {
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
-}
-.revokeBtn svg {
-  opacity: 0.85;
-}
-
-.confirm {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-/* The ask names the person and their device count, so it is the longest
-   string in the card. It used to be `nowrap`, which made the confirm step the
-   widest thing in the row and squeezed every sibling to nothing. */
-.confirmAsk {
-  flex: 1 1 12ch;
-  min-width: 0;
-  font-size: var(--t-control-size);
-  line-height: 1.4;
-  color: var(--text-soft);
-  overflow-wrap: anywhere;
-}
-.confirmYes {
-  color: var(--text);
-  background: var(--danger);
-  border-color: var(--danger);
-}
-.confirmYes:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--danger) 88%, var(--text));
+  flex: none;
 }
 
 .spin {
-  display: inline-flex;
   animation: devices-spin 0.9s linear infinite;
+  display: inline-flex;
 }
+
 @keyframes devices-spin {
   to {
     transform: rotate(360deg);
@@ -394,54 +122,31 @@
 
 /* Narrow CARD (not narrow window): let the action drop below the row body
    instead of crushing the name and meta lines. `.rowAction` is `flex: none`,
-   so without this the button's intrinsic width — "Remove <person>" is as long
-   as the person's name — wins every sizing negotiation and `.main` collapses
-   to a column of single characters. */
+   so without this the button's intrinsic width wins every sizing negotiation
+   and `.main` collapses to a column of single characters. */
 @container devices-card (max-width: 560px) {
-  .row,
-  .groupHead {
+  .row {
     flex-wrap: wrap;
   }
+
   .rowAction {
     align-self: flex-start;
     /* Line the action up under the text column, past the glyph. */
-    padding-left: 46px;
-  }
-  .groupHead .rowAction {
-    padding-left: 42px;
+    padding-inline-start: 46px;
   }
 }
 
-/* Very narrow card: the glyph gutter costs more than it gives. Drop the
-   indent, let actions span the row, and stop the chips from stacking into a
-   ragged column. */
 @container devices-card (max-width: 360px) {
-  .rowAction,
-  .groupHead .rowAction {
+  .rowAction {
     align-self: stretch;
-    padding-left: 0;
+    padding-inline-start: 0;
   }
-  .rowAction > button,
-  .confirm {
-    width: 100%;
+
+  .rowAction > button {
+    inline-size: 100%;
   }
-  .confirm > button {
-    flex: 1 1 auto;
-  }
-  .tombstones,
-  .groupEmpty {
-    margin-left: 0;
-  }
+
   .meta {
-    gap: 4px 10px;
+    gap: var(--sp-1) var(--sp-3);
   }
-}
-
-/* The card head's right rail: counts, work depth, and the pair affordance. */
-
-.headRight {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 12px;
 }

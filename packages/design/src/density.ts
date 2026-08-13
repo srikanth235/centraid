@@ -70,6 +70,15 @@ export const metrics = {
    *  its segments are not individually the primary target. */
   segmented: 28,
   /**
+   * The fact-list key column — the fixed inline-start column that holds a
+   * `micro` uppercase key beside its value in a facts panel. 150 under a
+   * pointer, 110 on touch (v9 surface axis `keyCol`): the phone narrows the
+   * column rather than wrapping the key, so the value edge stays aligned
+   * down the whole list.
+   */
+  keyCol: 150,
+  keyColTouch: 110,
+  /**
    * The navigation stem. Never themed, never scrolled away, never resized.
    *
    * 240 rather than the 92 the first Binding Layer cut shipped: at 92 the

@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 
 import {
+  getGatewayBackupStatus,
   vaultAtlasGraph,
   vaultAtlasPulse,
   vaultAtlasStats,
@@ -8,19 +9,31 @@ import {
 import AtlasScreen from "../../screens/AtlasScreen.js";
 import PageScroll from "../PageScroll.js";
 
-// React-owned Vault Atlas route (issue #441 Part B) — the ontology-at-a-glance
-// census that lives under the sidebar's Operations section. Thin like
-// BackupsRoute: it hands the three read-only census loaders straight to the
-// screen, which owns its own head, tab strip, and per-tab loading/error states
-// (there's no runtime snapshot to gate on here). The screen carries its own
-// title + tabs, so PageScroll wraps it headless — same as GatewayRoute.
+// The Data route (issue #441 Part B, revamped for v9 in #765). Thin: it hands
+// the census/pulse/graph readers to the screen, which owns the five states, the
+// block list, and the two frame slots (`routeVitals` count line + status-line
+// health). The screen's title and its one verb come from `opsBar.ts`, so
+// PageScroll wraps it headless.
+
+/** The most recent backup across every mounted vault, or `null` when backup is
+ *  not configured / the read failed. One clause of the status line, and the
+ *  page says nothing about backups rather than guessing when it is absent. */
+async function lastBackupAt(): Promise<string | null> {
+  const status = await getGatewayBackupStatus();
+  const stamps = status.vaults
+    .map((v) => v.lastBackupAt)
+    .filter((at): at is string => typeof at === "string");
+  return stamps.length === 0 ? null : (stamps.sort().at(-1) ?? null);
+}
+
 export default function AtlasRoute(): JSX.Element {
   return (
     <PageScroll>
       <AtlasScreen
-        loadStats={vaultAtlasStats}
-        loadPulse={vaultAtlasPulse}
         loadGraph={vaultAtlasGraph}
+        loadLastBackupAt={lastBackupAt}
+        loadPulse={vaultAtlasPulse}
+        loadStats={vaultAtlasStats}
       />
     </PageScroll>
   );

@@ -12,6 +12,7 @@ import {
 } from "vitest";
 
 import type * as TypeImport_1mc1xey from "./App.js";
+import { publishVitals, resetVitals } from "./routeVitals.js";
 
 type GatewayClient = typeof import("../../gateway-client.js");
 
@@ -138,6 +139,7 @@ describe("App suite", () => {
     apiMocks.listAppScopes.mockReset().mockResolvedValue(undefined);
     apiMocks.listVaults.mockReset().mockResolvedValue([]);
     store.clear();
+    resetVitals();
     store.set("home.userApps", [
       { id: "todos", name: "Todos", iconKey: "Todo", color: "#123" },
     ]);
@@ -237,6 +239,61 @@ describe("App suite", () => {
       });
       const active = el.querySelector('.stem [data-active="true"]');
       expect(active?.textContent).toContain("Automations");
+    });
+
+    it("names an operational route in the bar, and lets its loader fill the count line (#765)", async () => {
+      const el = await mount();
+      const autoBtn = [
+        ...el.querySelectorAll<HTMLButtonElement>(".stem .launchItem"),
+      ].find((b) => b.textContent?.includes("Automations"))!;
+      await act(async () => {
+        autoBtn.click();
+      });
+      const bar = el.querySelector(".appBar")!;
+      // The title is STATIC, so it is right on the first frame rather than
+      // after the route's query resolves.
+      expect(bar.textContent).toContain("Automations");
+      // Automations is migrated (#765): its screen reads on mount and publishes
+      // its own state, so by this point the bar is showing what that read said
+      // rather than the pre-publish fallback (which `opsBar.test.ts` covers).
+      // The stub gateway has no automations endpoint, so the read fails —
+      // error withdraws the commit and keeps the quiet verb, which is the whole
+      // "what failed, what is still safe" shape.
+      expect(bar.textContent).not.toContain("New automation");
+      expect(bar.textContent).toContain("Templates");
+      // No successful read to date, so the error state carries no count line
+      // rather than a blank row of identity waiting to be filled in.
+      expect(el.querySelector(".opsCount")).toBeNull();
+
+      await act(async () => {
+        publishVitals("automations", {
+          count: "6 automations · 1 failing · 1 paused",
+          state: "ready",
+        });
+      });
+      expect(el.querySelector(".opsCount")?.textContent).toBe(
+        "6 automations · 1 failing · 1 paused"
+      );
+      // A read page offers both verbs: the one filled commit and its quiet peer.
+      expect(el.querySelector(".appBar")?.textContent).toContain(
+        "New automation"
+      );
+      expect(el.querySelector(".appBar")?.textContent).toContain("Templates");
+
+      // Loading withdraws BOTH verbs: a bar offering to act on a page it has
+      // not read yet is offering to act on nothing.
+      await act(async () => {
+        publishVitals("automations", { state: "loading" });
+      });
+      expect(el.querySelector(".appBar")?.textContent).not.toContain(
+        "New automation"
+      );
+      expect(el.querySelector(".appBar")?.textContent).not.toContain(
+        "Templates"
+      );
+      expect(el.querySelector(".opsCount")?.textContent).toBe(
+        "Reading from the gateway"
+      );
     });
 
     it("pins an unpinned destination onto the stem, and persists it", async () => {

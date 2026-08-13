@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { postStatus, resetStatus } from "./statusChannel.js";
+import { postStatus, resetStatus, setRouteHealth } from "./statusChannel.js";
 import StatusLine from "./StatusLine.js";
 
 let root: Root | null = null;
@@ -78,6 +78,65 @@ describe("shell/StatusLine", () => {
       expect(action.textContent).toBe("Undo");
       act(() => action.click());
       expect(run).toHaveBeenCalledOnce();
+    });
+
+    describe("the route's standing health line (#765)", () => {
+      const health = {
+        action: { label: "Open the failure", run: vi.fn<() => void>() },
+        text: "1 automation is failing · Weekly digest has failed 3 runs.",
+      };
+
+      it("stands over the ambient sentence, with the same neutral dot", () => {
+        const el = render(<StatusLine ambient="Synced" />);
+        act(() => setRouteHealth(health));
+        expect(el.querySelector(".statusText")?.textContent).toBe(health.text);
+        expect(el.querySelector(".statusDot")).not.toBeNull();
+        expect(el.querySelectorAll(".statusText")).toHaveLength(1);
+      });
+
+      it("offers the ONE inline verb, underlined rather than bounded", () => {
+        const el = render(<StatusLine ambient="Synced" />);
+        act(() => setRouteHealth({ ...health, tone: "seam" }));
+        const action = el.querySelector<HTMLButtonElement>(".statusAction")!;
+        expect(action.textContent).toBe("Open the failure");
+        // The route's verb ends the sentence; the shell's own controls (undo,
+        // check gateway) keep the bounded shape.
+        expect(action.dataset.inline).toBe("true");
+        expect(action.dataset.tone).toBe("seam");
+        act(() => action.click());
+        expect(health.action.run).toHaveBeenCalledOnce();
+      });
+
+      it("yields to a note, and is still there when the note passes", () => {
+        const el = render(<StatusLine ambient="Synced" />);
+        act(() => setRouteHealth(health));
+        act(() => postStatus("Renamed · Groceries"));
+        expect(el.querySelector(".statusText")?.textContent).toBe(
+          "Renamed · Groceries"
+        );
+        // A note over the health line takes the bounded shape back.
+        expect(
+          el.querySelector<HTMLElement>(".statusAction")?.dataset.inline
+        ).toBeUndefined();
+        act(() => setRouteHealth(null));
+        expect(el.querySelector(".statusText")?.textContent).toBe(
+          "Renamed · Groceries"
+        );
+      });
+
+      it("loses to offline — being offline is the bigger news", () => {
+        const el = render(
+          <StatusLine
+            ambient="Synced"
+            offline
+            offlineReason="Offline · commits are disabled"
+          />
+        );
+        act(() => setRouteHealth(health));
+        expect(el.querySelector(".statusText")?.textContent).toContain(
+          "Offline"
+        );
+      });
     });
 
     describe("offline", () => {

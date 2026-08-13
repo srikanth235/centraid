@@ -851,6 +851,30 @@
   color: var(--text-soft);
 }
 
+/* The six operational routes' COUNT LINE (#765): "3 decisions waiting · 2
+   standing grants". It rides in the meta slot, so it already has the numeric
+   register from `.appMeta`; what it adds is the bidi isolation a run of counts
+   and clock times needs under RTL, and a nowrap so a long count sheds its tail
+   rather than pushing the bar into a second line. */
+.opsCount {
+  display: block;
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* An operational route is not an APP: it has no mark and no hue, so the bar
+   would otherwise fall through to the header's display face the moment a count
+   line appears under the title. These six are places in the frame, and they
+   name themselves at the app-lockup's title rung — the same rung Photos and
+   Docs take — rather than at the 32px signature, which belongs to a surface
+   that owns its whole window. */
+.appIdentity:has(.opsCount) .appTitle {
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+}
+
 /* Numerics are mono and tabular in every app, without exception. */
 .appMeta {
   margin-block-start: 5px;
@@ -1052,6 +1076,37 @@
 }
 .statusLine[data-offline="true"] .statusAction {
   border-color: var(--net);
+}
+/* The ROUTE's own verb on the health line (#765) is one word inside a sentence,
+   not a control beside it: "1 automation is failing · Weekly digest has failed
+   its last 3 runs, since 4 August. Open the failure". A bounded button there
+   would read as a second, competing affordance on a line whose whole job is to
+   be quiet. So it takes an underline instead of a border, in the same
+   annotation rung as the sentence it ends. The page's tone colours the RULE and
+   never the ink — `--net` is a border or a rule, never a fill, and `--seam` is
+   the pending register. */
+.statusAction[data-inline="true"] {
+  block-size: auto;
+  /* It ends the sentence rather than sitting at the trailing edge of the
+     window, so it drops the auto margin the bounded control carries. */
+  margin-inline-start: 0;
+  padding-inline: 0;
+  border: 0;
+  color: var(--text);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.statusAction[data-inline="true"]:hover {
+  background: transparent;
+  color: var(--text);
+}
+.statusAction[data-inline="true"][data-tone="net"] {
+  text-decoration-color: var(--net);
+}
+.statusAction[data-inline="true"][data-tone="seam"] {
+  text-decoration-color: var(--seam);
 }
 
 /* ── Tier 2 · the All-apps sheet ────────────────────────────────────────── */

@@ -1,0 +1,73 @@
+/* The Folders shelf (Docs spec §4.3). A bordered card of rows, the repo's
+   card idiom: 1px hairline, container radius, elevated paper. Nothing here is
+   a tree — no indent rail, no disclosure triangle, no second scroll column. */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+}
+
+/* The sentence the shelf owes a member it just moved (view-state.ts rule 2).
+   Prose in the reading register, not a banner: nothing went wrong, and a
+   strip with a border would say otherwise. */
+.gone {
+  margin: 0;
+  max-inline-size: 60ch;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding-inline: var(--sp-4);
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: start;
+}
+.row + .row {
+  border-block-start: 1px solid var(--line);
+}
+.row:hover:not([data-static="true"]) {
+  background: var(--bg-sunken);
+}
+.row:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.label {
+  font: var(--t-body);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meta {
+  font: var(--t-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.note {
+  margin: 0;
+  max-inline-size: 60ch;
+  font: var(--t-small);
+  color: var(--text-soft);
+}

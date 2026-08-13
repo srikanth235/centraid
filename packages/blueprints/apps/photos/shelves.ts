@@ -2,18 +2,14 @@
 // every surface asks about a shelf (v4 handoff §5, §3.1, §16; the Sharing
 // place was retired by issue #726 — a share's place is the recipient's vault).
 //
-// A SHELF IS THE SAME TIMELINE UNDER A FILTER — same tile, same grouping, same
-// tile-size control, same selection. That is why a shelf is a value here and
-// not a component: the strip, the band, the app bar and the toolbar row all
-// read the SAME record, so they cannot disagree about what "Trash" is.
-//
-// ONE DESTINATION. `photos` and `photos/<sub>` are one route (§16), so the
-// frame routes to one app and the shelf is a segment inside it. `shelfRoute` /
-// `shelfFromRoute` are that mapping, kept here rather than in the orchestrator
-// so the round trip is a testable pure function even while the shell has no
-// per-app sub-route to push into yet.
+// The structure — id model, route round trip, band tab — is
+// `_shared/shelves.ts`. This file is Photos' TABLES.
+import { createShelfRoutes, tokenFromShelf } from "../_shared/shelves.ts";
+import type { BandDestination, Shelf, ShelfId } from "../_shared/shelves.ts";
 import type { SelectionShelfKind } from "./components/SelectionBar.tsx";
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
+
+export type { Shelf, ShelfId } from "../_shared/shelves.ts";
 
 // The shelves that had no built-in id before v4. Same one-slot trick as the
 // existing built-ins: the prefix can never collide with a collection id,
@@ -33,8 +29,7 @@ export const SEARCH = "built-in:search";
 export const STORAGE = "built-in:storage";
 
 /** One confirmed person's own sub-state of the People shelf (§5): the same
- *  timeline under a filter, exactly as album detail is. The prefix can never
- *  collide with a collection id, which carries no colon. */
+ *  timeline under a filter, exactly as album detail is. */
 const PERSON_PREFIX = "person:";
 
 /** The shelf id for one person, from their party id. */
@@ -44,20 +39,7 @@ export function personShelf(partyId: string): string {
 
 /** The party id behind a person shelf, or null for any other shelf. */
 export function personIdFrom(id: ShelfId): string | null {
-  return typeof id === "string" && id.startsWith(PERSON_PREFIX)
-    ? id.slice(PERSON_PREFIX.length)
-    : null;
-}
-
-/** `null` is the Library shelf: the app's own root, with no segment. */
-export type ShelfId = string | null;
-
-export interface Shelf {
-  id: ShelfId;
-  /** The tab's caption. Final copy — the handoff's strings, verbatim. */
-  label: string;
-  /** The `photos/<sub>` segment, or `""` for the root. */
-  segment: string;
+  return tokenFromShelf(PERSON_PREFIX, id);
 }
 
 /** The strip, in order (§5). Search is deliberately absent: it is a shelf the
@@ -84,7 +66,7 @@ const ROUTED: readonly Shelf[] = [
  * supplies the home capsule outside this group and enforces the cap; the app
  * only says what its own tabs are.
  */
-export const BAND_DESTINATIONS: readonly { id: string; label: string }[] = [
+export const BAND_DESTINATIONS: readonly BandDestination[] = [
   { id: "library", label: "Library" },
   { id: "albums", label: "Albums" },
   { id: "people", label: "People" },
@@ -107,31 +89,15 @@ export const MORE_DESTINATIONS: readonly Shelf[] = [
   { id: STORAGE, label: "Storage", segment: "storage" },
 ];
 
-/** The band's ids are route segments, so one table serves both directions. */
-export function shelfFromSegment(segment: string): ShelfId {
-  return ROUTED.find((shelf) => shelf.segment === segment)?.id ?? null;
-}
-
-/** `photos` or `photos/<sub>` — one destination either way (§16). */
-export function shelfRoute(id: ShelfId): string {
-  const segment = ROUTED.find((shelf) => shelf.id === id)?.segment ?? "";
-  return segment ? `photos/${segment}` : "photos";
-}
-
-export function shelfFromRoute(route: string): ShelfId {
-  const [head, ...rest] = route.split("/");
-  if (head !== "photos") return null;
-  return shelfFromSegment(rest.join("/"));
-}
-
-/** The band's `activeId` for a shelf — the segment, or `library` at the root.
- *  A shelf with no band tab (Trash, say) lights none of them rather than
- *  lighting the wrong one. */
-export function bandActiveId(id: ShelfId): string | undefined {
-  const segment = ROUTED.find((shelf) => shelf.id === id)?.segment ?? "library";
-  const key = segment === "" ? "library" : segment;
-  return BAND_DESTINATIONS.some((dest) => dest.id === key) ? key : undefined;
-}
+/** The route round trip and the band's active tab (`_shared/shelves.ts`):
+ *  `photos` or `photos/<sub>`, one destination either way (§16). */
+export const { shelfFromSegment, shelfRoute, shelfFromRoute, bandActiveId } =
+  createShelfRoutes({
+    route: "photos",
+    routed: ROUTED,
+    band: BAND_DESTINATIONS,
+    rootBandId: "library",
+  });
 
 /** The shelves that paint something OTHER than the justified timeline: a card
  *  grid, a map, circular cards, clusters, a query box. */

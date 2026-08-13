@@ -194,9 +194,19 @@ export type StateOverlay =
   | {
       form: "line";
       text: string;
-      /** `net` takes the `--net` role for the text AND a 1px `--net` border on
-       *  the tile; `normal` is one quiet mono line on the page colour. */
-      tone: "normal" | "net";
+      /**
+       * `net` takes the `--net` role for the text AND a 1px `--net` border on
+       * the tile; `seam` takes the `--seam` role for the text alone; `normal`
+       * is one quiet mono line on the page colour.
+       *
+       * `seam` is the expiring register (issue #765). The design system names
+       * the role for precisely this — "not yet, and not wrong: pending,
+       * expiring, invited" — which is what a purge countdown is: nothing has
+       * failed, and something is going to happen. It is the reason the
+       * countdown never had to borrow `--net` and paint a shelf of ordinary
+       * trashed photographs as an alarm.
+       */
+      tone: "normal" | "net" | "seam";
     }
   | { form: "custody" };
 
@@ -223,7 +233,7 @@ export function stateOverlay(
   // less than how long they will be anywhere at all.
   const days = purgeInDays(asset.purgeAt);
   if (days !== undefined) {
-    return { form: "line", text: purgeNote(days), tone: "normal" };
+    return { form: "line", text: purgeNote(days), tone: "seam" };
   }
   // NO `on the gateway` LINE. It used to render on every `remote-only` tile
   // whenever the gateway stopped answering — an ambient condition (one fact

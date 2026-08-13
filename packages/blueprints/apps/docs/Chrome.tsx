@@ -1,25 +1,55 @@
-// The Docs chrome as JSX (issue #505 inline path). One-for-one with the static
-// body markup index.html serves — the sidebar (brand, New menu, nav/folders/
-// storage slots), the topbar (hamburger, search, grid/list toggle, theme button,
-// [data-ask-mount]), the consent/notice banners, the toolbar (active scope,
-// type/tag chip slots, sort), the bulk bar, and the scroll host — but expressed
-// as a React tree so app-inline.tsx renders one tree instead of fourteen
-// imperative roots. Classes come from Chrome.module.css (scoped chrome) + the
-// global kit-* vocabulary (kit.css, loaded once by the route host).
+// The Docs chrome as JSX — a ROUTE INSIDE THE FRAME (issue #505 inline path,
+// Docs spec §1). The sidebar (brand, New menu, folders, storage), the topbar
+// (hamburger, search, grid/list toggle, [data-ask-mount]), the consent/notice
+// banners, the shelf strip, the toolbar, the bulk bar and the scroll host,
+// expressed as one React tree so app-inline.tsx renders one tree instead of
+// fourteen imperative roots. Classes come from Chrome.module.css (scoped
+// chrome) + the global kit-* vocabulary (kit.css, loaded once by the host).
 //
-// The reused components/*.module.css narrow rules key on the GLOBAL
-// `.docs.is-narrow` state class (their `:global(.docs.is-narrow) …` overrides),
-// so this root also stamps the served app's static `docs`/`is-narrow`/`side-open`
-// class trio alongside the module-scoped `.shell`/`.isNarrow`/`.sideOpen` (trap
-// #5). The app root deliberately does NOT carry `id="root"` — the host page's own
-// mount div owns that id, and the reused nav.ts only touches it as a harmless
-// no-op class toggle.
+// TRAP #5 IS CLOSED HERE. This root used to stamp a GLOBAL `docs` /
+// `is-narrow` / `side-open` class trio alongside the module-scoped
+// `.shell`/`.isNarrow`/`.sideOpen`, purely so that three sibling
+// `components/*.module.css` files could reach across a module boundary with
+// `:global(.docs.is-narrow) …` overrides. That is a seam: any app that
+// happened to stamp `docs` anywhere in the document would have restyled these
+// components, and the coupling was invisible from either end. The three
+// stylesheets now carry their own `data-narrow` attribute on their own
+// elements (List/Editor/QuickLook take a `narrow` prop), the trio is deleted,
+// and this file's classes are all module-scoped again.
+//
+// EVERYTHING VARIABLE ARRIVES AS A SLOT (`ChromeSlots`), the same shape
+// `photos/Chrome.tsx` uses. The chrome owns geometry; what stands in each
+// region is the orchestrator's decision, so the two can be reasoned about —
+// and re-carved for the routes still to land — independently.
 import type { KeyboardEvent, ReactNode } from "react";
 
 import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
 import type { AppState } from "./types.ts";
 
 import styles from "./Chrome.module.css";
+
+/** Everything the chrome DRAWS but does not decide. One region per slot, and
+ *  a `null` slot renders nothing at all rather than an empty container. */
+export interface ChromeSlots {
+  /** The shelf strip (§1.7). Null on the compact form factor whose band claim
+   *  was honoured — the band carries the shelves there — and on the routes
+   *  §1.7 excludes. */
+  shelfStrip: ReactNode;
+  /** The folder list, with its inline create/rename editors. */
+  folderList: ReactNode;
+  storage: ReactNode;
+  /** The "+ New" dropdown's contents, or null while it is closed. */
+  newMenu: ReactNode;
+  tagChips: ReactNode;
+  /** The selection action bar, or null while nothing is selected. */
+  bulkBar: ReactNode;
+  /** The current route's body (components/DriveRoute, FoldersRoute, …). */
+  scroll: ReactNode;
+  /** Details / Quick Look / Editor / the share sheet. */
+  overlays: ReactNode;
+  /** The compact band's overflow sheet (§1.5), or null while it is closed. */
+  moreSheet: ReactNode;
+}
 
 export interface ChromeProps {
   narrow: boolean;
@@ -31,6 +61,10 @@ export interface ChromeProps {
   activeTitle: string;
   activeSub: string;
   sortLabel: string;
+  /** The grid/list toggle and the filter chips mean nothing off the drive
+   *  (§1.7), so the toolbar's tools stand down rather than sitting there
+   *  inert over a shelf they cannot filter. */
+  showDriveTools: boolean;
   dropVisible: boolean;
   dropTarget: string;
   onOpenSide: () => void;
@@ -43,15 +77,7 @@ export interface ChromeProps {
   onUploadChange: () => void;
   searchRef: (el: HTMLInputElement | null) => void;
   uploadRef: (el: HTMLInputElement | null) => void;
-  sidebarNav: ReactNode;
-  folderList: ReactNode;
-  storage: ReactNode;
-  newMenu: ReactNode;
-  typeChips: ReactNode;
-  tagChips: ReactNode;
-  bulkBar: ReactNode;
-  scroll: ReactNode;
-  overlays: ReactNode;
+  slots: ChromeSlots;
 }
 
 export function Chrome(props: ChromeProps): ReactNode {
@@ -60,19 +86,14 @@ export function Chrome(props: ChromeProps): ReactNode {
   // render"), so they are destructured into plain locals here (#573).
   const { searchRef, uploadRef } = props;
 
+  // Module-scoped only. The global `docs`/`is-narrow`/`side-open` trio that
+  // used to be mirrored here is gone (see the trap #5 note at the top).
   const shellClass = [
     styles.shell,
     props.narrow ? styles.isNarrow : "",
     props.ready ? styles.ready : "",
     props.sideOpen ? styles.sideOpen : "",
     props.consent ? styles.denied : "",
-    // Global classes the reused Grid/List/Editor .module.css
-    // `:global(.docs.is-narrow)` rules key on — the module-scoped .isNarrow above
-    // can't be seen from another module, so mirror the served app's static #root
-    // classes here.
-    "docs",
-    props.narrow ? "is-narrow" : "",
-    props.sideOpen ? "side-open" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -167,19 +188,15 @@ export function Chrome(props: ChromeProps): ReactNode {
             role="menu"
             hidden={!props.newMenuOpen}
           >
-            {props.newMenu}
+            {props.slots.newMenu}
           </div>
         </div>
 
-        <nav className={styles.nav} aria-label="Views">
-          {props.sidebarNav}
-        </nav>
-
         <div className={styles.sectionLabel}>Folders</div>
-        <div className={styles.folders}>{props.folderList}</div>
+        <div className={styles.folders}>{props.slots.folderList}</div>
 
         <div className={styles.sideFoot}>
-          <div className={styles.storage}>{props.storage}</div>
+          <div className={styles.storage}>{props.slots.storage}</div>
           <div className={styles.consentLine}>
             <svg
               aria-hidden="true"
@@ -258,7 +275,14 @@ export function Chrome(props: ChromeProps): ReactNode {
             />
           </label>
           <div className={styles.topbarTools}>
-            <fieldset className="kit-seg" aria-label="View">
+            {/* Grid or list is a view of the DRIVE. Off it there are no rows
+                to lay out either way, so the toggle stands down with the
+                filters rather than pretending to change something. */}
+            <fieldset
+              className="kit-seg"
+              aria-label="View"
+              hidden={!props.showDriveTools}
+            >
               <button
                 type="button"
                 aria-label="Grid view"
@@ -327,17 +351,23 @@ export function Chrome(props: ChromeProps): ReactNode {
           hidden
         />
 
+        {/* The shelf strip (§1.7), between the banners and the toolbar. It is
+            a slot because WHETHER it renders is a routing question — the
+            compact band claims the same six destinations, and §1.7 lists the
+            routes that carry no strip at all. */}
+        {props.slots.shelfStrip}
+
         <div className={styles.toolbar}>
           <div className={styles.toolbarTitle}>
             <div className={styles.title}>{props.activeTitle}</div>
             <div className={styles.sub}>{props.activeSub}</div>
           </div>
-          <div className={styles.toolbarTools}>
-            <fieldset className={styles.chips} aria-label="Filter by type">
-              {props.typeChips}
-            </fieldset>
+          {/* The filters, the view toggle and the sort belong to the DRIVE.
+              Off it (Folders, Coming due) there is nothing to filter or sort,
+              and a row of inert controls is worse than none. */}
+          <div className={styles.toolbarTools} hidden={!props.showDriveTools}>
             <fieldset className={styles.chips} aria-label="Filter by tag">
-              {props.tagChips}
+              {props.slots.tagChips}
             </fieldset>
             <span className={styles.toolbarDiv} aria-hidden="true" />
             <button type="button" className="kit-btn" onClick={props.onSort}>
@@ -359,20 +389,25 @@ export function Chrome(props: ChromeProps): ReactNode {
           </div>
         </div>
 
-        {props.bulkBar ? (
+        {props.slots.bulkBar ? (
           <div
             className={styles.bulk}
             role="toolbar"
             aria-label="Selection actions"
           >
-            {props.bulkBar}
+            {props.slots.bulkBar}
           </div>
         ) : null}
 
-        <div className={styles.scroll}>{props.scroll}</div>
+        <div className={styles.scroll}>{props.slots.scroll}</div>
       </main>
 
-      {props.overlays}
+      {props.slots.overlays}
+
+      {/* The band's own overflow sheet (§1.5) — the app's, because the band's
+          sixth slot is the app's. It renders only while open, so there is no
+          empty region to collapse and nothing to hide. */}
+      {props.slots.moreSheet}
 
       {/* Opened programmatically (uploadRef.click()); `hidden` already keeps it
           out of the a11y tree, so it carries no aria-hidden on top of that. */}

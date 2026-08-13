@@ -3,7 +3,14 @@
 // switcher's popover callbacks. A route-wiring extraction remains the right
 // follow-up; #599 shrank this file rather than growing it (the vault switcher's
 // callbacks and the New-vault modal left for Household).
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { JSX } from "react";
 
 import { themes } from "@centraid/design";
@@ -50,6 +57,8 @@ import {
   updateGatewaySwitcherRows,
 } from "./gatewaySwitcher.js";
 import type { LauncherDestination, ShellPage } from "./launcherModel.js";
+import { isOpsPage, opsBarDef, opsBarVerbs } from "./opsBar.js";
+import type { OpsPage } from "./opsBar.js";
 import { openPrompt } from "./prompt.js";
 import { resetQueryCache } from "./queryCache.js";
 import ApprovalsRoute from "./routes/ApprovalsRoute.js";
@@ -93,6 +102,8 @@ import StarredRoute from "./routes/StarredRoute.js";
 import StorageRoute from "./routes/StorageRoute.js";
 import TemplatesRoute from "./routes/TemplatesRoute.js";
 import TestConnectionModal from "./routes/TestConnectionModal.js";
+import { readAllVerbs, readAllVitals, subscribeVitals } from "./routeVitals.js";
+import type { RouteVerbs } from "./routeVitals.js";
 import ShellApp from "./ShellApp.js";
 import type { ShellAppBar, ShellNav } from "./ShellApp.js";
 import { PageEmpty } from "./status.js";
@@ -115,6 +126,8 @@ import {
   updatePillTitle,
   useUpdateStatus,
 } from "./useUpdateStatus.js";
+
+import chrome from "./chrome.module.css";
 
 // Build the ShellActions surface for the current render. Navigation + status +
 // confirm are live; the remaining overlay actions (⌘K palette, the generic app
@@ -149,6 +162,45 @@ function makeActions(
       /* the home app-card context menu is wired inside HomeRoute */
     },
   };
+}
+
+/**
+ * The app-bar verbs the SHELL can honour on the six operational routes (#765).
+ *
+ * These are the ones that are plain navigations or shell overlays, so they work
+ * before the route has published anything — the bar is useful on the first
+ * frame. Everything else (an export of the window a page is showing, a filter
+ * reset, a review queue) needs state only the route has, and the route claims
+ * it through `publishRouteVerbs`, which takes precedence over anything here.
+ */
+function shellOpsVerbs(
+  page: OpsPage,
+  nav: ShellNav,
+  openPairDevice: () => void
+): RouteVerbs {
+  switch (page) {
+    case "automations":
+      return {
+        // An automation is a trigger and a thing to do — the editor is where
+        // both are said, and a draft exists from the moment you open it.
+        onCommit: () => nav.navigate({ kind: "automation-editor" }),
+        onSecondary: () => nav.navigate({ kind: "templates" }),
+      };
+    case "household":
+      // Pairing is an act, not a preference, so it opens as its own modal
+      // exactly as it does from the account menu — one door, two handles.
+      return { onCommit: openPairDevice };
+    // The remaining four have no verb the shell can honour on the first frame:
+    // every one of theirs (export this window, reset these filters, review this
+    // queue) needs state only the route holds, so they claim the bar through
+    // `publishRouteVerbs` instead. Listed rather than defaulted so a seventh
+    // ops page has to answer this question rather than silently getting none.
+    case "approvals":
+    case "atlas":
+    case "connectors":
+    case "insights":
+      return {};
+  }
 }
 
 // Map the current route to the launcher's active-page highlight.
@@ -1089,25 +1141,99 @@ export default function App(): JSX.Element {
   // filled ink — "Search everything" is the third and last entry onto the ONE
   // palette (⌘K and the stem's Search control are the others), and finding a
   // thing is the verb Home exists for. All apps lives in the stem's foot.
-  const renderAppBar = useCallback((nav: ShellNav): ShellAppBar | undefined => {
-    if (nav.route.kind !== "home") return undefined;
-    return {
-      title: "Home",
-      actions: (
-        // Titlebar scale, so Home's bar is exactly as tall as the bar on a
-        // route that only navigates. `size="chrome"` used to unfill a primary
-        // — the size class set its own background after the variant rules —
-        // which is why this carried variant alone; that cascade is fixed and
-        // guarded, so the commit keeps its ink at the smaller size.
-        <Button
-          label={HOME_SEARCH_EVERYTHING}
-          onClick={() => setPaletteOpen(true)}
-          size="chrome"
-          variant="primary"
-        />
-      ),
-    };
-  }, []);
+  //
+  // The six operational routes (#765) take the same bar rather than each
+  // drawing its own in-content header: one title, one count line, and the same
+  // two verbs in the same two places on every one of them. What each page SAYS
+  // is static (`opsBar.ts`), so the title is never wrong even for a frame; what
+  // it says about the data it just read arrives on `routeVitals.ts` from the
+  // route's own loader, which is also why the bar is not set from an effect.
+  const openPairDevice = useCallback(() => setPairDeviceOpen(true), []);
+  const vitals = useSyncExternalStore(
+    subscribeVitals,
+    readAllVitals,
+    readAllVitals
+  );
+  const routeVerbs = useSyncExternalStore(
+    subscribeVitals,
+    readAllVerbs,
+    readAllVerbs
+  );
+  const renderAppBar = useCallback(
+    (nav: ShellNav): ShellAppBar | undefined => {
+      if (nav.route.kind === "home")
+        return {
+          title: "Home",
+          actions: (
+            // Titlebar scale, so Home's bar is exactly as tall as the bar on a
+            // route that only navigates. `size="chrome"` used to unfill a
+            // primary — the size class set its own background after the variant
+            // rules — which is why this carried variant alone; that cascade is
+            // fixed and guarded, so the commit keeps its ink at the smaller
+            // size.
+            <Button
+              label={HOME_SEARCH_EVERYTHING}
+              onClick={() => setPaletteOpen(true)}
+              size="chrome"
+              variant="primary"
+            />
+          ),
+        };
+      const page = nav.route.kind;
+      if (!isOpsPage(page)) return undefined;
+      const vital = vitals[page];
+      const verbs = opsBarVerbs(page, vital?.state);
+      // A verb renders only once something can perform it: the route publishes
+      // the handlers only it can honour (an export of the window it is showing,
+      // a filter reset), and the shell resolves the ones that are plain
+      // navigations. A control that would do nothing is worse than a bar with
+      // one control on it.
+      const published = routeVerbs[page];
+      const fallback = shellOpsVerbs(page, nav, openPairDevice);
+      const onCommit = published?.onCommit ?? fallback.onCommit;
+      const onSecondary = published?.onSecondary ?? fallback.onSecondary;
+      const commit = verbs.commit && onCommit ? verbs.commit : undefined;
+      const secondary =
+        verbs.secondary && onSecondary ? verbs.secondary : undefined;
+      // The count line is the first thing a phone bar sheds — it is a second
+      // row of identity in a bar that is already over-subscribed, and every
+      // number in it is stated again in the page beneath.
+      const count = compact ? "" : (vital?.count ?? "");
+      return {
+        title: opsBarDef(page).title,
+        ...(count
+          ? { meta: <span className={chrome.opsCount}>{count}</span> }
+          : {}),
+        ...(commit || secondary
+          ? {
+              // Quiet first, the one filled commit last — the same order on
+              // every route, so the commit is always under the same thumb.
+              actions: (
+                <>
+                  {secondary ? (
+                    <Button
+                      label={secondary.label}
+                      onClick={onSecondary}
+                      size="chrome"
+                      variant="secondary"
+                    />
+                  ) : null}
+                  {commit ? (
+                    <Button
+                      label={commit.label}
+                      onClick={onCommit}
+                      size="chrome"
+                      variant="primary"
+                    />
+                  ) : null}
+                </>
+              ),
+            }
+          : {}),
+      };
+    },
+    [compact, openPairDevice, routeVerbs, vitals]
+  );
 
   const renderRoute = useCallback(
     (nav: ShellNav): JSX.Element => {

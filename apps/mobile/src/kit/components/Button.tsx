@@ -3,23 +3,28 @@ import { Pressable, StyleSheet, View } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 
 import { nativeButtonStyle } from "@centraid/design";
-import type {
-  ButtonVariant,
-  IconName,
-  NativeButtonStyle,
-} from "@centraid/design";
+import type { ButtonVariant, NativeButtonStyle } from "@centraid/design";
+import type { ButtonData } from "@centraid/design/blocks";
 
 import { spacing, t, useTheme } from "../theme";
 import Icon from "./Icon";
 import { Text } from "./NativeText";
 
-export interface ButtonProps {
+/**
+ * `label`, `icon` and `disabled` are the shared half (`ButtonData`); `label` is
+ * narrowed to required here because this kit has no children escape hatch.
+ *
+ * There is no `size`: the 44px touch floor is the size. There is no `commit`
+ * either, and that is a decision rather than a gap — see `ButtonData`.
+ */
+export interface ButtonProps extends ButtonData {
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
-  icon?: IconName;
-  disabled?: boolean;
   style?: StyleProp<ViewStyle>;
+  /** What distinguishes this instance of a repeated verb. A HINT, not a label:
+   *  the control already renders its visible word (#708 B.4). */
+  accessibilityHint?: string;
 }
 
 export default function Button({
@@ -29,6 +34,7 @@ export default function Button({
   icon,
   disabled,
   style,
+  accessibilityHint,
 }: ButtonProps): React.JSX.Element {
   const { colors, radii, targetMin } = useTheme();
   const recipeStyle = useMemo(
@@ -38,6 +44,7 @@ export default function Button({
   const styles = useMemo(() => makeStyles(recipeStyle), [recipeStyle]);
   return (
     <Pressable
+      accessibilityHint={accessibilityHint}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       onPress={disabled ? undefined : onPress}

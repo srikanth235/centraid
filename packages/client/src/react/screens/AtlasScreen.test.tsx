@@ -10,28 +10,16 @@ import type {
   AtlasGraphPayload,
   AtlasPulsePayload,
 } from "../../gateway-client.js";
+import { readVitals, resetVitals } from "../shell/routeVitals.js";
+import { readRouteHealth, resetStatus } from "../shell/statusChannel.js";
 import AtlasScreen from "./AtlasScreen.js";
 import type { AtlasScreenProps } from "./AtlasScreen.js";
 
-// The Browse tab (mounted when a Kinds card is clicked) self-fetches through the
-// vault client. Stub those helpers so the openBrowse seam can be exercised here
-// without a live gateway; Browse's own behaviour is covered in
-// AtlasBrowseTab.test.tsx. vitest hoists this mock above the imports above.
+// The records section under the block list self-fetches through the vault
+// client; stub those helpers so the page can be exercised without a gateway
+// (the section's own behaviour is covered in AtlasRecordsSection.test.tsx).
+// vitest hoists this mock above the imports above.
 vi.mock(import("../../gateway-client.js"), () => ({
-  browseTables: () =>
-    Promise.resolve([
-      {
-        logical: "core.party",
-        physical: "core_party",
-        pack: "core",
-        packLabel: "Core",
-        packKind: "ontology",
-        label: "Party",
-        rows: 214,
-        machinery: false,
-        singlePk: true,
-      },
-    ]),
   browseColumns: () =>
     Promise.resolve({
       logical: "core.party",
@@ -57,11 +45,11 @@ vi.mock(import("../../gateway-client.js"), () => ({
     Promise.resolve({
       logical: "core.party",
       physical: "core_party",
-      rows: [],
-      columns: ["party_id"],
+      rows: [{ party_id: "p1", display_name: "Alice" }],
+      columns: ["party_id", "display_name"],
       nextCursor: null,
       orderBy: "party_id",
-      dir: "asc",
+      dir: "desc",
       keysetKey: "party_id",
     }),
   browseRow: () =>
@@ -84,6 +72,21 @@ vi.mock(import("../../gateway-client.js"), () => ({
 const GENERATED_AT = "2026-07-17T12:00:00.000Z";
 const SINCE = "2026-06-17T12:00:00.000Z";
 
+const table = (
+  logical: string,
+  label: string,
+  rows: number,
+  bytes: number | null
+) => ({
+  logical,
+  physical: logical.replace(".", "_"),
+  table: logical.split(".")[1] ?? logical,
+  label,
+  rows,
+  bytes,
+  pages: bytes === null ? null : 1,
+});
+
 function makeStats(over: Partial<AtlasCensusPayload> = {}): AtlasCensusPayload {
   return {
     generatedAt: GENERATED_AT,
@@ -98,24 +101,8 @@ function makeStats(over: Partial<AtlasCensusPayload> = {}): AtlasCensusPayload {
         rows: 214,
         bytes: 3_000_000,
         tables: [
-          {
-            logical: "core.party",
-            physical: "core_party",
-            table: "party",
-            label: "Party",
-            rows: 214,
-            bytes: 2_000_000,
-            pages: 40,
-          },
-          {
-            logical: "core.place",
-            physical: "core_place",
-            table: "place",
-            label: "Place",
-            rows: 0,
-            bytes: 0,
-            pages: 0,
-          },
+          table("core.party", "Party", 214, 2_000_000),
+          table("core.place", "Place", 0, 0),
         ],
       },
       {
@@ -125,22 +112,33 @@ function makeStats(over: Partial<AtlasCensusPayload> = {}): AtlasCensusPayload {
         file: "vault",
         rows: 12,
         bytes: 40_000,
-        tables: [
-          {
-            logical: "consent.device",
-            physical: "consent_device",
-            table: "device",
-            label: "Device",
-            rows: 12,
-            bytes: 40_000,
-            pages: 2,
-          },
-        ],
+        tables: [table("consent.device", "Device", 12, 40_000)],
       },
     ],
     totals: { rows: 226, bytes: 3_040_000, kinds: 3, populatedKinds: 2 },
     ...over,
   };
+}
+
+/** A census with enough written kinds to tip the page into `full`. */
+function makeFullStats(): AtlasCensusPayload {
+  const tables = Array.from({ length: 10 }, (_u, i) =>
+    table(`core.k${i}`, `Kind ${i}`, 100 - i, 1000 * (i + 1))
+  );
+  return makeStats({
+    packs: [
+      {
+        pack: "core",
+        packLabel: "Core",
+        packKind: "ontology",
+        file: "vault",
+        rows: 955,
+        bytes: 55_000,
+        tables,
+      },
+    ],
+    totals: { rows: 955, bytes: 55_000, kinds: 12, populatedKinds: 10 },
+  });
 }
 
 function makePulse(): AtlasPulsePayload {
@@ -162,17 +160,51 @@ function makePulse(): AtlasPulsePayload {
   };
 }
 
-function makeGraph(): AtlasGraphPayload {
+function makeGraph(over: Partial<AtlasGraphPayload> = {}): AtlasGraphPayload {
   return {
     generatedAt: GENERATED_AT,
     center: "core_party",
-    nodes: [],
+    nodes: [
+      {
+        physical: "core_party",
+        logical: "core.party",
+        table: "party",
+        label: "Party",
+        pack: "core",
+        packKind: "ontology",
+        packLabel: "Core",
+        friendly: "People",
+        hopDistance: 0,
+        selfRef: false,
+      },
+      {
+        physical: "knowledge_note",
+        logical: "knowledge.note",
+        table: "note",
+        label: "Note",
+        pack: "knowledge",
+        packKind: "ontology",
+        packLabel: "Knowledge",
+        friendly: "Notes",
+        hopDistance: 1,
+        selfRef: false,
+      },
+    ],
     fkEdges: [],
-    authoredLinks: [],
+    authoredLinks: [
+      {
+        relationConceptId: "wrote",
+        relationLabel: "wrote",
+        fromType: "core.party",
+        toType: "knowledge.note",
+        count: 41,
+      },
+    ],
     island: [],
-    edgeCount: 0,
-    centerEdgeCount: 0,
+    edgeCount: 1,
+    centerEdgeCount: 1,
     selfRefCount: 0,
+    ...over,
   };
 }
 
@@ -193,127 +225,206 @@ function makeProps(over: Partial<AtlasScreenProps> = {}): AtlasScreenProps {
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
+
 describe("screens/AtlasScreen", () => {
   afterEach(() => {
     act(() => root?.unmount());
     root = null;
     container?.remove();
     container = null;
+    resetVitals();
+    resetStatus();
     vi.restoreAllMocks();
   });
 
-  async function mount(props: AtlasScreenProps): Promise<HTMLDivElement> {
+  async function render(props: AtlasScreenProps): Promise<HTMLDivElement> {
     container = document.createElement("div");
     document.body.appendChild(container);
     await act(async () => {
       root = createRoot(container as HTMLDivElement);
       root.render(<AtlasScreen {...props} />);
     });
-    // Let the mount-time census/pulse/graph promises settle.
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
     return container;
   }
 
-  const cardByLogical = (
-    el: HTMLElement,
-    logical: string
-  ): HTMLElement | null =>
-    el.querySelector<HTMLElement>(
-      `[data-testid="atlas-kind-card"][data-logical="${logical}"]`
-    );
+  async function settle(n = 8): Promise<void> {
+    await forEachSequentially(Array.from({ length: n }), async () => {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    });
+  }
 
+  async function mount(props: AtlasScreenProps): Promise<HTMLDivElement> {
+    const el = await render(props);
+    await settle();
+    return el;
+  }
+
+  const $$ = (el: ParentNode, sel: string) => [
+    ...el.querySelectorAll<HTMLElement>(sel),
+  ];
+  const rowsUnder = (el: HTMLElement, label: string) =>
+    $$(el, `fieldset[aria-label="${label}"] .row`);
   const click = async (node: Element | null | undefined): Promise<void> => {
     await act(async () =>
       node?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     );
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await settle(4);
   };
 
-  describe("AtlasScreen — Kinds census", () => {
-    it("renders the census sentence from the stats payload", async () => {
+  describe("the block list", () => {
+    it("lists every written kind with what it holds and when it was last written", async () => {
       const el = await mount(makeProps());
-      expect(el.textContent).toContain("Your vault knows");
-      expect(el.textContent).toContain("214");
-      expect(el.textContent).toContain("parties"); // ontology-vocabulary plural of "Party"
-      expect(el.textContent).toContain("2 of 3 kinds"); // populatedKinds of kinds
+      const rows = rowsUnder(el, "Kinds");
+      // Two written kinds; the never-written one is counted, not listed.
+      expect(rows).toHaveLength(2);
+      expect(rows[0]?.textContent).toContain("Party");
+      expect(rows[0]?.textContent).toContain("214 records");
+      expect(rows[0]?.textContent).toContain("1.9 MB");
+      expect(el.textContent).not.toContain("Place");
+      expect(el.textContent).toContain("showing 2 of 3");
     });
 
-    it("renders a dashed ghost card for a zero-row kind", async () => {
+    it("explains what a kind is, in the words the design pinned", async () => {
       const el = await mount(makeProps());
-      const ghost = el.querySelector<HTMLElement>(
-        '[data-testid="atlas-kind-card"][data-empty="true"]'
+      expect(el.textContent).toContain(
+        "A kind is a shape of record an app writes. Sizes include every version kept."
       );
-      expect(ghost).toBeTruthy();
-      expect(ghost?.dataset.logical).toBe("core.place");
-      expect(ghost?.textContent).toContain("Place");
-      expect(ghost?.textContent).toContain("never written");
     });
 
-    it("the Rows/Bytes toggle switches a populated card between its count and size", async () => {
+    it("names the relations a person authored and keeps the map reachable", async () => {
       const el = await mount(makeProps());
-      const value = () =>
-        cardByLogical(el, "core.party")?.querySelector(
-          '[data-testid="atlas-kind-value"]'
-        )?.textContent;
-      expect(value()).toBe("214");
-
-      // The metric toggle is a native radio group: the visible text is on the
-      // <label>, the control is the radio inside it.
-      const bytesRadio = [...el.querySelectorAll("label")]
-        .find((l) => l.textContent === "Bytes")
-        ?.querySelector<HTMLInputElement>('input[type="radio"]');
-      await click(bytesRadio);
-      expect(value()).toContain("MB"); // 2,000,000 B → "1.9 MB"
-      expect(value()).not.toBe("214");
+      const rows = rowsUnder(el, "How they relate");
+      expect(rows[0]?.textContent).toContain("People → Notes");
+      expect(rows[0]?.textContent).toContain("“wrote”");
+      expect(rows[0]?.textContent).toContain("41 links");
+      // The orrery is not a block shape, so it keeps a door rather than dying.
+      expect(rows.at(-1)?.textContent).toContain("The whole map");
+      expect(rows.at(-1)?.textContent).toContain("Open the map");
     });
 
-    it("keeps the machinery shelf collapsed by default, expandable on click", async () => {
+    it("shows the fullest kind's records, and browses another on demand", async () => {
       const el = await mount(makeProps());
-      expect(
-        el.querySelector('[data-testid="atlas-machinery-table"]')
-      ).toBeNull();
-      const toggle = el.querySelector('[data-testid="atlas-machinery-toggle"]');
-      expect(toggle).toBeTruthy();
-      await click(toggle);
-      const table = el.querySelector('[data-testid="atlas-machinery-table"]');
-      expect(table).toBeTruthy();
-      expect(table?.textContent).toContain("Device"); // the consent machinery kind
-    });
-
-    it("a kind-card click opens Browse preselected to that kind (openBrowse seam)", async () => {
-      const el = await mount(makeProps());
-      await click(cardByLogical(el, "core.party"));
-      // Let the Browse tab's tables/columns/rows fetches settle.
-      await forEachSequentially(Array.from({ length: 6 }), async () => {
-        await act(async () => {
-          await Promise.resolve();
-        });
-      });
-      // Screen switched to the Browse tab, preselected to the clicked kind — the
-      // editor header echoes the logical name and its insert control is present.
-      expect(
-        el.querySelector('[data-testid="atlas-browse-insert"]')
-      ).toBeTruthy();
-      expect(el.textContent).toContain("core.party");
+      expect(el.textContent).toContain("Alice"); // the records table
+      const deviceRow = rowsUnder(el, "Kinds").find((r) =>
+        r.textContent?.includes("Device")
+      );
+      await click(
+        [...(deviceRow?.querySelectorAll("button") ?? [])].find((b) =>
+          b.textContent?.includes("Browse")
+        )
+      );
+      // The section head follows the kind that was asked for.
+      expect(el.textContent).toContain("Device");
     });
   });
 
-  describe("AtlasScreen — census failure", () => {
-    it("surfaces a stats-load error instead of the census", async () => {
+  describe("the frame's slots", () => {
+    it("publishes the count line and the readable health from live data", async () => {
+      await mount(makeProps());
+      expect(readVitals("atlas")).toStrictEqual({
+        count: "2 kinds · 226 records · 2.9 MB",
+        state: "ready",
+      });
+      const health = readRouteHealth();
+      expect(health?.text).toContain("Everything is readable");
+      // No backup reader was given, so no backup clause is invented.
+      expect(health?.text).not.toContain("backup");
+    });
+
+    it("carries the backup clause when the gateway can supply one", async () => {
+      await mount(
+        makeProps({
+          loadLastBackupAt: () =>
+            Promise.resolve(new Date(Date.now() - 3_600_000).toISOString()),
+        })
+      );
+      expect(readRouteHealth()?.text).toContain("Last backup 1h ago.");
+    });
+  });
+
+  describe("the five states", () => {
+    it("holds the row geometry while it reads, and says why", async () => {
+      const el = await render(
+        makeProps({
+          loadStats: vi
+            .fn<AtlasScreenProps["loadStats"]>()
+            .mockReturnValue(new Promise(() => {})),
+        })
+      );
+      expect(
+        el.querySelector('[aria-label="Reading your vault’s census"]')
+      ).toBeTruthy();
+      expect(el.textContent).toContain(
+        "A row knows its shape before its content arrives"
+      );
+      expect(readVitals("atlas")?.state).toBe("loading");
+    });
+
+    it("says a vault with nothing in it is not a failure", async () => {
+      const el = await mount(
+        makeProps({
+          loadStats: vi.fn<AtlasScreenProps["loadStats"]>().mockResolvedValue(
+            makeStats({
+              packs: [],
+              totals: { rows: 0, bytes: 0, kinds: 0, populatedKinds: 0 },
+            })
+          ),
+        })
+      );
+      expect(el.textContent).toContain("This vault is empty");
+      expect(el.textContent).toContain(
+        "Kinds appear here as apps write records. Nothing is created until an app or an import puts something in."
+      );
+      // Nothing to commit on an empty read surface.
+      expect(el.querySelectorAll("button")).toHaveLength(0);
+      expect(readVitals("atlas")?.state).toBe("empty");
+    });
+
+    it("says what failed, what is still safe, and one way forward", async () => {
+      const loadStats = vi
+        .fn<AtlasScreenProps["loadStats"]>()
+        .mockRejectedValueOnce(new Error("permission denied"))
+        .mockResolvedValue(makeStats());
+      const el = await mount(makeProps({ loadStats }));
+      expect(el.textContent).toContain("Cannot open the store");
+      expect(el.textContent).toContain(
+        "The vault is encrypted and present on disk. The gateway could not open it, which is usually a permissions problem on the machine rather than damage to the data."
+      );
+      expect(readVitals("atlas")?.state).toBe("error");
+
+      await click(
+        [...el.querySelectorAll("button")].find((b) =>
+          b.textContent?.includes("Try again")
+        )
+      );
+      expect(loadStats).toHaveBeenCalledTimes(2);
+      expect(el.textContent).toContain("Party");
+    });
+
+    it("grows a filter row once the list is long, and filters on it", async () => {
       const el = await mount(
         makeProps({
           loadStats: vi
             .fn<AtlasScreenProps["loadStats"]>()
-            .mockRejectedValue(new Error("vault offline")),
+            .mockResolvedValue(makeFullStats()),
         })
       );
-      const err = el.querySelector('[data-testid="atlas-census-error"]');
-      expect(err?.textContent).toContain("vault offline");
+      expect(readVitals("atlas")?.state).toBe("full");
+      const chips = $$(el, 'fieldset[aria-label="Filter kinds"] button');
+      expect(chips.map((c) => c.textContent)).toStrictEqual([
+        "All kinds",
+        "Largest",
+        "Written today",
+      ]);
+      expect(rowsUnder(el, "Kinds")).toHaveLength(10);
+
+      // Nothing was written today in this census, so the chip empties the list
+      // rather than pretending otherwise.
+      await click(chips.find((c) => c.textContent === "Written today"));
+      expect(rowsUnder(el, "Kinds")).toHaveLength(0);
+      expect(el.textContent).toContain("showing 0 of 12");
     });
   });
 });

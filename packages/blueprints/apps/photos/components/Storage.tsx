@@ -82,21 +82,47 @@ export function storageFacts(
  * neither. Every number on this screen now sits where it belongs — beside the
  * row or the section it describes, in the numeric register.
  */
-function Head({ label, meta }: { label: string; meta?: string }) {
+function Head({
+  label,
+  meta,
+  pending,
+}: {
+  label: string;
+  meta?: string;
+  /** The meta names a state that has not landed yet — see `.pending`. */
+  pending?: boolean;
+}) {
   return (
     <h2 className={styles.head}>
       <span className={styles.headLabel}>{label}</span>
-      {meta ? <span className={styles.headMeta}>{meta}</span> : null}
+      {meta ? (
+        <span
+          className={`${styles.headMeta} ${pending ? styles.pending : ""}`.trim()}
+        >
+          {meta}
+        </span>
+      ) : null}
     </h2>
   );
 }
 
 /** One ruled row: what it is on the leading edge, its count on the trailing. */
-function Row({ label, totals }: { label: string; totals: Totals }) {
+function Row({
+  label,
+  totals,
+  pending,
+}: {
+  label: string;
+  totals: Totals;
+  /** These bytes are on their way somewhere, not settled — see `.pending`. */
+  pending?: boolean;
+}) {
   return (
     <div className={styles.row}>
       <dt className={styles.rowLabel}>{label}</dt>
-      <dd className={styles.rowValue}>
+      <dd
+        className={`${styles.rowValue} ${pending ? styles.pending : ""}`.trim()}
+      >
         {totals.count} · {fmtBytes(totals.bytes, "—")}
       </dd>
     </div>
@@ -146,9 +172,13 @@ function Health({ custody }: { custody: CustodyFacts | null }) {
   const health = custodyHealth(custody);
   return (
     <>
+      {/* `waiting` is the one verdict that is neither settled nor wrong: the
+          copies are queued. It takes `--seam`, the role for exactly that
+          (issue #765) — every other verdict keeps the quiet numeric ink. */}
       <Head
         label={STORAGE_COPY.healthHead}
         meta={STORAGE_COPY.healthMeta[health]}
+        pending={health === "waiting"}
       />
       <p className={styles.note}>
         {health === "unknown" || health === "held"
@@ -204,6 +234,9 @@ function WhereTheOriginalsAre({ custody }: { custody: CustodyFacts }) {
               key={bucket}
               label={STORAGE_COPY.custodyRow[bucket]}
               totals={totalsOf[bucket]}
+              // Queued-to-be-copied is the one bucket in flight; the other four
+              // are answers. `--seam` marks it as in-flight rather than wrong.
+              pending={bucket === "pending-offsite"}
             />
           )
         )}

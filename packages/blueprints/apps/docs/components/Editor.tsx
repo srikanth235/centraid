@@ -20,7 +20,9 @@
 // load-bearing, not an optimization.
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { decodeDataUri, fmtFull } from "../format.ts";
+import { DSAVE, refusedStatus, savedStatus } from "../document-copy.ts";
+import type { SaveOutcomeId } from "../document-copy.ts";
+import { decodeDataUri } from "../format.ts";
 import { I } from "../icons.ts";
 import type { DriveDoc } from "../types.ts";
 import { Icon } from "./Shared.tsx";
@@ -28,15 +30,43 @@ import { Icon } from "./Shared.tsx";
 import styles from "./Editor.module.css";
 
 type LoadState = "loading" | "ready" | "error";
-type SaveState = "" | "saving" | "saved" | "pending" | "error";
+
+/**
+ * WHICH OF THE SEVEN OUTCOMES A VAULT ANSWER IS (spec §6.3).
+ *
+ * The vault settles a write into one of six terminal statuses; §6.3 names
+ * seven member-facing outcomes. The mapping is one table, here, because the
+ * two that are easiest to blur are exactly the two §6.3 insists are different:
+ * `parked` is HELD FOR A PERSON ("waiting for approval — it commits the moment
+ * she does") and `queued` is HELD FOR A GATEWAY ("it goes the moment the
+ * gateway is back"). "This is not the same state as queued", says the spec, of
+ * the first — so they get separate rows and separate sentences.
+ *
+ * The seventh, `nochange`, has no status of its own: it is what a save means
+ * when the body is byte-identical to the last one committed, and only the
+ * editor can know that.
+ */
+const OUTCOME_BY_STATUS: Readonly<Record<string, SaveOutcomeId>> = {
+  executed: "saved",
+  parked: "approval",
+  queued: "queued",
+  "in-flight": "saving",
+  failed: "refused",
+  denied: "refused",
+};
 
 export function Editor({
   doc,
+  narrow,
   registerFlush,
   onClose,
   onSave,
 }: {
   doc: DriveDoc;
+  /** The compact form factor — the editor goes full-bleed. Carried as a prop
+   *  and stamped on this component's own backdrop, never read off a global
+   *  state class another module owns (trap #5). */
+  narrow: boolean;
   registerFlush: (fn: () => Promise<void>) => void;
   onClose: () => void;
   onSave: (
@@ -60,7 +90,15 @@ export function Editor({
   const [loadState, setLoadState] = useState<LoadState>(
     inline?.state ?? "loading"
   );
-  const [saveState, setSaveState] = useState<SaveState>("");
+  // WHICH OF THE SEVEN THE EDITOR IS IN. `null` is the state before anything
+  // has been typed or written — not an outcome, and therefore not a sentence:
+  // the row says nothing rather than claiming a write that never happened.
+  const [outcome, setOutcome] = useState<SaveOutcomeId | null>(null);
+  /** The moment the last committed version landed, for §6.3's `saved` line. */
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  /** The vault's OWN reason on a refusal. §6.3's whole point about `refused`
+   *  is that the rule can be named; naming the wrong rule would be worse. */
+  const [refusedReason, setRefusedReason] = useState<string | null>(null);
   const bodyRef = useRef(inline?.text ?? "");
   const lastSavedRef = useRef(inline?.text ?? "");
   const saveTimerRef = useRef(0);
@@ -106,13 +144,27 @@ export function Editor({
     if (savingRef.current) return savingRef.current;
     const p = (async () => {
       const snap = bodyRef.current;
-      if (snap === lastSavedRef.current) return;
-      setSaveState("saving");
-      const outcome = await onSave(doc.document_id, snap);
+      // "A no-op is not a version: nothing was written, and the history is not
+      // one entry longer." (§6.3 `nochange`, verbatim.) So an identical body
+      // is a REPORTED outcome, not a silent return — the member pressed Save
+      // and is owed the answer.
+      if (snap === lastSavedRef.current) {
+        setOutcome("nochange");
+        return;
+      }
+      setOutcome("saving");
+      const written = await onSave(doc.document_id, snap);
       lastSavedRef.current = snap;
       const stillDirty = bodyRef.current !== snap;
-      if (outcome?.status === "executed") {
-        setSaveState(stillDirty ? "saving" : "saved");
+      const settled: SaveOutcomeId = written
+        ? (OUTCOME_BY_STATUS[written.status] ?? "refused")
+        : "refused";
+      if (settled === "refused") {
+        setRefusedReason(written?.reason ?? written?.message ?? null);
+      }
+      if (settled === "saved") {
+        setSavedAt(new Date().toISOString());
+        setOutcome(stillDirty ? "saving" : "saved");
         // Re-armed inline rather than through scheduleSave(): a forward
         // reference between the two trips the compiler's hoisted-context
         // analysis and bails out the whole component; self-recursion doesn't.
@@ -120,10 +172,8 @@ export function Editor({
           clearTimeout(saveTimerRef.current);
           saveTimerRef.current = window.setTimeout(performSave, 700);
         }
-      } else if (outcome?.status === "parked") {
-        setSaveState("pending");
       } else {
-        setSaveState("error");
+        setOutcome(settled);
       }
     })();
     savingRef.current = p;
@@ -156,24 +206,34 @@ export function Editor({
   const updateBody = (v: string): void => {
     bodyRef.current = v;
     setBody(v);
+    // Typing over any settled outcome puts the editor back in the only state
+    // that is true of it: there are changes here and nothing has been
+    // committed. Leaving "Saved" on screen over a modified body is the one
+    // lie an editor must never tell.
+    setOutcome("unsaved");
+    setRefusedReason(null);
     scheduleSave();
   };
 
-  const saveLabel =
-    saveState === "saving"
-      ? "Saving…"
-      : saveState === "saved"
-        ? "Saved · receipt"
-        : saveState === "pending"
-          ? "Pending approval"
-          : saveState === "error"
-            ? "Not saved"
-            : doc.updated_at
-              ? `Edited ${fmtFull(doc.updated_at)}`
-              : "";
+  // §6.3's state row and commit button, from one record. `null` is "nothing
+  // has happened yet", which is not one of the seven and says nothing.
+  const state = outcome ? DSAVE[outcome] : null;
+  const statusLine =
+    outcome === "saved"
+      ? savedStatus({
+          at: savedAt
+            ? new Date(savedAt).toLocaleTimeString(undefined, {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : null,
+        })
+      : outcome === "refused"
+        ? refusedStatus(refusedReason)
+        : (state?.status ?? "");
 
   return (
-    <div className={styles.editorBackdrop}>
+    <div className={styles.editorBackdrop} data-narrow={String(narrow)}>
       {/* The backdrop's dismiss-on-outside-click is a real button laid under the
           card (the card is `position: relative`), so it has a keyboard
           equivalent — this replaces the old `e.target === e.currentTarget`
@@ -200,7 +260,7 @@ export function Editor({
             <Icon svg={I.close!} />
           </button>
           <span className={styles.editorTitle}>{doc.title ?? "Untitled"}</span>
-          <span className={styles.editorSave}>{saveLabel}</span>
+          <span className={styles.editorSave}>{state?.label ?? ""}</span>
         </div>
         <div className={styles.editorBody}>
           {loadState === "loading" ? (
@@ -220,6 +280,43 @@ export function Editor({
               onBlur={flush}
             />
           )}
+        </div>
+        {/* §6.3's foot: the state row, the note, and the one commit — in that
+            order, because a member reads which outcome they are in BEFORE they
+            decide whether to press anything. */}
+        <div className={styles.editorFoot}>
+          {state ? (
+            <div className={styles.stateRow}>
+              <span
+                className={styles.stateDot}
+                data-net={String(state.net)}
+                aria-hidden="true"
+              />
+              <output className={styles.stateText} aria-live="polite">
+                {statusLine}
+              </output>
+              {/* The inline action §6.3 gives three of the seven. It is drawn
+                  only where it can go somewhere: the receipt viewer and the
+                  Notifications route are the frame's, not this app's, so the
+                  action names the destination and is not a control that would
+                  refuse. */}
+              {state.action ? (
+                <span className={styles.stateAction}>{state.action}</span>
+              ) : null}
+            </div>
+          ) : null}
+          {state ? <p className={styles.stateNote}>{state.note}</p> : null}
+          {/* "A filled control that cannot be pressed stops being filled."
+              (§6.3, verbatim.) `commits` is the single source of both the
+              disabled attribute and the fill. */}
+          <button
+            type="button"
+            className={state && !state.commits ? "kit-btn" : "kit-btn primary"}
+            disabled={Boolean(state && !state.commits)}
+            onClick={() => void flush()}
+          >
+            {state?.commit ?? DSAVE.unsaved.commit}
+          </button>
         </div>
       </dialog>
     </div>

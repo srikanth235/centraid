@@ -1,33 +1,28 @@
 // What Photos contributes to the FRAME (v4 handoff §3, §3.1).
 //
-// Photos is a route inside the frame, not a standalone app. The app bar, the
-// one status line and the compact band are the frame's; this module says what
-// they should CARRY and nothing about how they look. There is no class, no
-// colour and no metric here on purpose — an app that could restyle the bar
-// would be drawing a second chrome inside the first, which is the duplication
-// the contribution channel exists to retire.
-//
-// Two of these actions are Photos': `Select` (outlined) and `Import` (the ONE
-// filled ink element in the view, §18). The frame draws the app mark chip, the
-// 20/26 title and the numeric register around them.
-import type { CSSProperties, ReactNode } from "react";
+// The contribution SHAPE is `_shared/app-frame.tsx`; this file is what Photos
+// puts in it. Two of these actions are Photos' own: `Select` (outlined) and
+// `Import` (the ONE filled ink element in the view, §18). The frame draws the
+// app mark chip, the 20/26 title and the numeric register around them.
+import type { ReactNode } from "react";
 
+import {
+  SearchBarButton,
+  bandClaim as claimBand,
+  countLabel,
+} from "../_shared/app-frame.tsx";
+import type { AppBarBase } from "../_shared/app-frame.tsx";
 import type {
   InlineAppBarContribution,
   InlineBandClaim,
-  InlineFrame,
 } from "../inline-types.ts";
-import { SearchIcon } from "./icons.tsx";
 import { BAND_DESTINATIONS, bandActiveId } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
 
-export interface AppBarState {
+export interface AppBarState extends AppBarBase {
   /** The shelf's own title, or an album's (§5: album detail carries the
    *  album's own title and count in the bar). */
   title: string;
-  /** How many photographs this view is showing, or null where a count would
-   *  have to be invented (the Duplicates clusters, an empty Places map). */
-  count: number | null;
   /** The noun the count counts. Final copy. */
   unit?: string;
   showSelect: boolean;
@@ -49,17 +44,6 @@ export interface AppBarState {
    */
   onToggleAll?: () => void;
   selectedCount?: number;
-  /**
-   * Is this surface compact? On compact, the band already carries a Search
-   * destination (§3.1) — a second Search control in the bar would be a
-   * second way to the same place. Desktop/PWA has no band, so the bar is the
-   * only way in, and §9's search page was unreachable there until this
-   * control existed.
-   */
-  compact: boolean;
-  /** Reach the Search shelf. Omitted on a surface with no way to search
-   *  (there is none today, but the bar should not assume one forever). */
-  onSearch?: () => void;
 }
 
 /** The bar's count, in words the product uses. `null` contributes nothing
@@ -72,9 +56,7 @@ export function barCount(state: AppBarState): ReactNode {
     return `${state.selectedCount ?? 0} selected`;
   }
   if (state.count === null) return undefined;
-  const unit = state.unit ?? "photographs";
-  const singular = unit.endsWith("s") ? unit.slice(0, -1) : unit;
-  return `${state.count} ${state.count === 1 ? singular : unit}`;
+  return countLabel(state.count, state.unit ?? "photographs");
 }
 
 /**
@@ -90,25 +72,9 @@ export function appBar(state: AppBarState): InlineAppBarContribution {
   const actions: ReactNode = (
     <>
       {!state.compact && handleSearch ? (
-        // The bar's own way to Search (§9), desktop/PWA only — the compact
-        // band already claims a Search destination (§3.1), so this control
-        // would double it there. Outlined, never filled: Import stays the
-        // one filled element in the view (§18).
-        <button
-          type="button"
-          className="kit-icon-btn"
-          aria-label="Search"
-          style={
-            {
-              "--icon-button-size": "34px",
-              border: "1px solid var(--line-strong)",
-              borderRadius: "7px",
-            } as CSSProperties
-          }
-          onClick={handleSearch}
-        >
-          <SearchIcon size={16} />
-        </button>
+        // The bar's own way to Search (§9), desktop/PWA only. Import stays the
+        // one filled element in the view (§18), so this one is outlined.
+        <SearchBarButton label="Search" onSearch={handleSearch} />
       ) : null}
       {state.selectMode && handleToggleAll ? (
         // The phone only (§6, §15): desktop/PWA carry Select all/none inside
@@ -147,46 +113,13 @@ export function appBar(state: AppBarState): InlineAppBarContribution {
   return { title: state.title, count: barCount(state), actions };
 }
 
-/**
- * The compact band claim (§3.1). Photos claims it with exactly Library ·
- * Albums · People · Search · More; the frame keeps the home capsule outside
- * this group, enforces the cap, and ignores the claim entirely on a surface
- * that is not compact — so the app never has to ask whether it may.
- */
+/** The compact band claim (§3.1) — Photos' own four destinations plus More
+ *  (`BAND_DESTINATIONS`), which the frame ignores on any surface that is not
+ *  compact, so the app never has to ask whether it may claim. */
 export function bandClaim(
   shelf: ShelfId,
   onSelect: (segment: string) => void,
   onMore: () => void
 ): InlineBandClaim {
-  return {
-    destinations: BAND_DESTINATIONS,
-    activeId: bandActiveId(shelf),
-    onSelect,
-    onMore,
-  };
-}
-
-/** One write's outcome, as the status line carries it (§16 `outcome`). */
-export interface Outcome {
-  text: string;
-  /** The inline text action — Photos is the first route to use that slot, and
-   *  it uses it for Undo (§3). */
-  undo?: () => void;
-  /** Determinate progress with exact counts. Never a spinner (§14). */
-  progress?: { done: number; total: number; unit?: string };
-}
-
-/** Put an outcome on the frame's ONE status line, or take it back down. */
-export function publishOutcome(
-  frame: InlineFrame,
-  outcome: Outcome | null
-): void {
-  if (outcome === null || outcome.text === "") {
-    frame.clearStatus();
-    return;
-  }
-  frame.setStatus(outcome.text, {
-    ...(outcome.undo ? { action: { label: "Undo", run: outcome.undo } } : {}),
-    ...(outcome.progress ? { progress: outcome.progress } : {}),
-  });
+  return claimBand(BAND_DESTINATIONS, bandActiveId(shelf), onSelect, onMore);
 }

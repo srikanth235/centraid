@@ -261,6 +261,27 @@ export const EMPTY_ACTIONS = {
  * screen, not an error strip: a headline, one paragraph, then what is true
  * right now — what is missing, what Photos can see meanwhile (nothing), and
  * what happens if the grant comes back.
+ *
+ * TWO FACTS, NOT THREE — A SANCTIONED DEVIATION (issue #765).
+ * The v9 permission screen carries a third row ahead of these two: "What is
+ * true right now" / "6,214 photographs, all still in the vault" / meta
+ * "unchanged". This surface cannot say it honestly, and a fact row that
+ * guesses is worse than a fact row that is absent:
+ *
+ *   * A denial arrives as `own.denied` on the OWN scope (`library-store.ts`),
+ *     and the read it rides in on carries no rows — `libraryFrom()` replaces
+ *     the scope's page with the answer that came back, so at the moment this
+ *     screen renders the app holds no count to print.
+ *   * A count kept from BEFORE the grant went is exactly the stale copy this
+ *     screen exists to refuse. The row would be the one sentence on the
+ *     screen that is not currently being read from anywhere.
+ *   * The claim behind the row — the library is unaffected — is not lost: the
+ *     lede says it in words ("nothing has been read, and nothing has been sent
+ *     anywhere") and does not need a numeral it cannot source.
+ *
+ * If the host ever hands the denial a library count (a field on `vaultDenied`,
+ * or a rollup the deny path is allowed to keep), the row goes in as specified
+ * and this note comes out. See docs/photos-design-notes.md.
  */
 export const PERMISSION_COPY = {
   headline: "Photos has no access yet",

@@ -17,6 +17,9 @@
 //   - a sentence + determinate progress — a long LOCAL operation, which a
 //     local-first product always knows the size of, which is exactly why a
 //     spinner would be a lie here.
+//
+// Plus ONE standing slot beside them — `setRouteHealth` — for the condition of
+// the route you are on, which holds rather than decays. See below.
 
 export interface StatusAction {
   label: string;
@@ -39,7 +42,26 @@ export interface StatusNote {
   progress?: StatusProgress;
 }
 
+/**
+ * The STANDING note for the route you are on (issue #765).
+ *
+ * It is the same shape as a transient note plus a tone, and it is a second slot
+ * rather than a longer-lived note because the two have different lifetimes: a
+ * note is something that just happened and decays, while route health is a
+ * condition that holds for as long as you are on the page. Putting health
+ * through `postStatus` would mean every confirmation on the page erased the one
+ * standing sentence, and the next confirmation would have nothing to fall back
+ * to.
+ *
+ * `tone` colours the inline action's rule and nothing else — `net` is "leaves
+ * the device", `seam` is pending/expiring/invited. Never a fill.
+ */
+export interface RouteHealthNote extends StatusNote {
+  tone?: "net" | "seam";
+}
+
 let note: StatusNote | null = null;
+let routeHealth: RouteHealthNote | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 const subscribers = new Set<() => void>();
 
@@ -67,6 +89,24 @@ export function subscribeStatus(fn: () => void): () => void {
 
 export function readStatus(): StatusNote | null {
   return note;
+}
+
+export function readRouteHealth(): RouteHealthNote | null {
+  return routeHealth;
+}
+
+/**
+ * Set (or clear, with `null`) the standing line for the current route.
+ *
+ * No TTL: a condition does not decay, it is replaced by the next route's or
+ * cleared when this one unmounts. The channel stays generic on purpose — the
+ * verbatim per-state sentences belong to the routes that publish them
+ * (`routeVitals.ts` owns the three that are the same on every ops page).
+ */
+export function setRouteHealth(next: RouteHealthNote | null): void {
+  if (routeHealth === null && next === null) return;
+  routeHealth = next;
+  emit();
 }
 
 /** Drop back to the ambient sentence. */
@@ -151,5 +191,6 @@ export function resetStatus(): void {
   activeFinish = null;
   clearTimer();
   note = null;
+  routeHealth = null;
   subscribers.clear();
 }

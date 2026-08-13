@@ -25,6 +25,14 @@ export default jsdomProject({
         ),
       },
       {
+        // The headless block layer — the logic the DOM and React Native kits
+        // share. A subpath for the same barrel-ceiling reason.
+        find: /^@centraid\/design\/blocks$/u,
+        replacement: fileURLToPath(
+          new URL("../design/src/blocks/index.ts", import.meta.url)
+        ),
+      },
+      {
         find: /^@centraid\/design$/u,
         replacement: fileURLToPath(
           new URL("../design/src/index.ts", import.meta.url)

@@ -1,29 +1,18 @@
-// What the view is ALLOWED to say about itself, given what has actually been
-// read (v4 handoff §14, README §14). Pure and DOM-free on purpose: every rule
-// in this file is one the app got WRONG by expressing it as a condition inline
-// in a render function, where it could not be read and could not be tested.
+// What the Photos view is ALLOWED to say about itself, given what has actually
+// been read (v4 handoff §14, README §14). The three rules and
+// `libraryReachability` live in `_shared/view-state-kit.ts`. Photos' own
+// instances of them:
 //
-// Three rules live here, and each one exists because its absence made the app
-// tell a member something untrue:
+//  1. `visibleAssets()` is `[]` before the first read resolves, so until
+//     `loaded` the view paints `--skel` at the packed geometry instead
+//     (components/LoadingGrid.tsx) rather than saying "No photographs yet".
 //
-//  1. NOTHING IS EMPTY UNTIL A READ HAS LANDED. `visibleAssets()` is `[]`
-//     before the first read resolves, so gating the empty state on a count
-//     alone told a member with 6,214 photographs that they had none. The empty
-//     state is gated on `loaded` — a read that came back — and until then the
-//     view paints `--skel` at the packed geometry instead (components/
-//     LoadingGrid.tsx). "No photographs yet" is a FACT about the library, and
-//     a fact is not something a view may assume while it is still asking.
-//
-//  2. A SHELF IS NEVER SILENTLY SWAPPED FOR ANOTHER ONE. Trash used to bounce
-//     to the library when it was empty, which left the member somewhere they
-//     did not ask to be with nothing said about why. §14 requires every shelf
-//     to be empty ON ITS OWN TERMS, and "Trash is empty." is exactly those
-//     terms. The one shelf that legitimately cannot survive a read is an album
-//     that no longer exists — there is nothing left to show and no words that
-//     would make its absence a state.
-//
-//  3. OFFLINE IS A STATE THE APP READS, NEVER ONE IT INVENTS. See
-//     `libraryReachability` for what this app can and cannot know today.
+//  2. §14 requires every shelf to be empty ON ITS OWN TERMS, and "Trash is
+//     empty." is exactly those terms. The one shelf that cannot survive a read
+//     is an album that no longer exists — nothing left to show, and no words
+//     that would make its absence a state.
+import { showsEmptyState } from "../_shared/view-state-kit.ts";
+import type { EmptyStateGate } from "../_shared/view-state-kit.ts";
 import type { ShelfId } from "./shelves.ts";
 import {
   emptyCopy,
@@ -57,15 +46,7 @@ export function shelfAfterRead(
 }
 
 /** What the current view knows about itself when it has nothing to show. */
-export interface EmptyStateInput {
-  /**
-   * A read has LANDED for this view. False covers both "the first read is
-   * still in flight" and "every read so far failed": in neither case does the
-   * app know whether the library is empty, so in neither case may it say so.
-   */
-  loaded: boolean;
-  /** How many things this view is showing right now. */
-  count: number;
+export interface EmptyStateInput extends EmptyStateGate {
   shelf: ShelfId;
   /** The live search text, trimmed. A miss is about what the member just
    *  typed, not about the shelf. */
@@ -76,9 +57,6 @@ export interface EmptyStateInput {
   /** The compact form factor. `Take a photograph` is offered where a camera
    *  is a real way in (§15's Import row: phone only). */
   phone?: boolean;
-  /** Something else already answers this view — the new-album input is open,
-   *  so the shelf is not standing there with nothing in it. */
-  suppressed?: boolean;
 }
 
 /** The empty block (§14, proto 4406): one title, one paragraph, two actions. */
@@ -119,9 +97,7 @@ export const NO_EMPTY_STATE: EmptyStateView = {
  */
 export function emptyStateView(input: EmptyStateInput): EmptyStateView {
   const query = input.query?.trim() ?? "";
-  if (!input.loaded || input.suppressed || input.count > 0) {
-    return NO_EMPTY_STATE;
-  }
+  if (!showsEmptyState(input)) return NO_EMPTY_STATE;
   const offersImport = emptyOffersImport(input.shelf, { query });
   return {
     visible: true,
@@ -140,33 +116,5 @@ export function emptyStateView(input: EmptyStateInput): EmptyStateView {
   };
 }
 
-/**
- * Is the member's library out of reach right now (§14 Offline)?
- *
- * THIS APP CANNOT ASK THE SHELL. The frame contract (`InlineFrame`,
- * apps/inline-types.ts) carries the app bar, the status line and the band —
- * and nothing about reachability. The shell HAS the verdict (its heartbeat
- * monitor drives `StatusLine`'s own offline state), it simply does not pass it
- * down. So this reads the two things the app can honestly observe:
- *
- *  * `hostStatus` — a `data-gateway-status` knob on the app root, the same
- *    dataset channel the host already stamps `data-app-*` knobs onto. When the
- *    shell starts stamping it, this becomes the real signal at zero cost here;
- *    until then it is absent, which reads as "the host did not say".
- *  * `readFailed` — a read that actually came back failed. That is evidence,
- *    not a guess: the inline client tries the local replica and falls back to
- *    the gateway, so a failure means neither answered.
- *
- * `navigator.onLine` is deliberately NOT consulted. On the desktop the gateway
- * is a local child process, so a device with no network reaches it perfectly
- * well — treating that as an outage would put an untrue banner on screen,
- * which is the class of bug this file exists to close.
- */
-export function libraryReachability(input: {
-  hostStatus?: string | null;
-  readFailed: boolean;
-}): "reachable" | "unreachable" {
-  if (input.hostStatus === "down") return "unreachable";
-  if (input.hostStatus === "up") return "reachable";
-  return input.readFailed ? "unreachable" : "reachable";
-}
+/** §14 Offline, as the shared kit reads it — never as this app invents it. */
+export { libraryReachability } from "../_shared/view-state-kit.ts";

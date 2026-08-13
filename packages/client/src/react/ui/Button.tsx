@@ -2,6 +2,7 @@ import { useId } from "react";
 import type { JSX, MouseEvent, ReactNode } from "react";
 
 import type { ButtonVariant, IconName } from "@centraid/design";
+import type { ButtonData } from "@centraid/design/blocks";
 
 import { useCommitAvailability } from "../shell/commitAvailability.js";
 import { cx } from "./cx.js";
@@ -10,10 +11,20 @@ import Icon from "./Icon.js";
 import styles from "./Button.module.css";
 
 export type { ButtonVariant } from "@centraid/design";
+
+/**
+ * `md` (default) · `sm` (compact page button) · `chrome` (26px titlebar scale).
+ *
+ * Shell-only, and deliberately absent from the shared `ButtonData`: the phone
+ * has exactly one size because the 44px touch floor IS the size, so offering
+ * this field there would only invite a caller to ask for a titlebar-scale
+ * control on a touch surface.
+ */
 export type ButtonSize = "md" | "sm" | "chrome";
 
-export interface ButtonProps {
-  label?: string;
+/** `label`, `icon`, `disabled` and `commit` are the shared half — see
+ *  `ButtonData`. Everything below is the DOM's own. */
+export interface ButtonProps extends ButtonData {
   /** Arbitrary content — takes precedence over `label` when both are given. */
   children?: ReactNode;
   /**
@@ -23,10 +34,7 @@ export interface ButtonProps {
    */
   onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
   variant?: ButtonVariant;
-  /** `md` (default) · `sm` (compact page button) · `chrome` (26px titlebar scale). */
   size?: ButtonSize;
-  icon?: IconName;
-  disabled?: boolean;
   className?: string;
   title?: string;
   ariaLabel?: string;
@@ -40,6 +48,9 @@ export interface ButtonProps {
    * A commit control disables itself while the shell cannot commit, and
    * carries the reason as its accessible description — no screen reimplements
    * the check.
+   *
+   * Shell-only by design, not by omission: see `ButtonData` for why the phone
+   * queues instead of refusing.
    */
   commit?: boolean;
 }

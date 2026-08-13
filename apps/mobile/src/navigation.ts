@@ -16,6 +16,9 @@
 //   ├─ Scan          → ScanScreen (camera/share OCR review)
 //   ├─ Automations   → AutomationsScreen (list + run the vault's automations)
 //   ├─ Insights      → InsightsScreen (gateway health + limited usage insights)
+//   ├─ Connectors    → ConnectorsScreen (what is allowed to reach outside)
+//   ├─ Data          → DataScreen (every store the vault keeps)
+//   ├─ Devices       → DevicesScreen (the machines holding a copy)
 //   └─ Settings      → SettingsStack (Settings, Approvals, PhoneStorage,
 //                                     BackupHealth)
 //
@@ -161,6 +164,17 @@ export type RootStackParamList = {
   Assistant: undefined;
   Automations: { automationRef?: string } | undefined;
   Insights: { initialTab?: "overview" | "alerts" } | undefined;
+  // The three places promoted to screens of their own (issue #765). They are
+  // ROOT covers, beside Automations and Insights — not members of
+  // `SettingsStackParamList`. Two reasons: a place is not a setting (Connectors
+  // used to land on Settings because nothing else existed, which is the bug
+  // this fixes), and the Settings stack is deliberately not composed with the
+  // root stack, so a screen inside it cannot navigate to a sibling cover.
+  Connectors: undefined;
+  // `kind` names which store's records to open on — the same "land on the named
+  // shelf rather than push a second copy" shape `PhotosHome.destination` uses.
+  Data: { kind?: string } | undefined;
+  Devices: undefined;
   Settings: NavigatorScreenParams<SettingsStackParamList>;
 };
 
@@ -183,6 +197,9 @@ export type TallyScreenProps = RootScreenProps<"Tally">;
 export type AssistantScreenProps = RootScreenProps<"Assistant">;
 export type AutomationsScreenProps = RootScreenProps<"Automations">;
 export type InsightsScreenProps = RootScreenProps<"Insights">;
+export type ConnectorsScreenProps = RootScreenProps<"Connectors">;
+export type DataScreenProps = RootScreenProps<"Data">;
+export type DevicesScreenProps = RootScreenProps<"Devices">;
 
 // Shared outer context for any nested-stack screen: the root stack, so a screen
 // deep inside a cover can still navigate to a sibling cover or back to Home.

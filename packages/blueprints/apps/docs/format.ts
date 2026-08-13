@@ -1,19 +1,11 @@
 import { safeDocumentUrl } from "../_shared/untrusted.ts";
-import { I } from "./icons.ts";
 // Formatting + file-type helpers — pure functions of their arguments; none
-// hold or mutate app state, though `emptyStateFor` below takes `state` as a
-// plain argument to derive its copy. Split out of app.tsx so both the
+// hold or mutate app state. Split out of app.tsx so both the
 // orchestrator (currentRows' type filter, the upload size-skip message, the
 // empty-row copy) and the row/details/quick-look components can call these
 // directly instead of threading them all as props.
 import { fmtBytes as fmtBytesBase } from "./kit.ts";
-import type {
-  AppState,
-  CustodyInfo,
-  DocFields,
-  EmptyStateCfg,
-  TypeMeta,
-} from "./types.ts";
+import type { CustodyInfo, DocFields, TypeMeta } from "./types.ts";
 
 // The drive shows an em dash for absent sizes everywhere it prints bytes.
 export const fmtBytes = (n: number | null | undefined): string =>
@@ -203,6 +195,28 @@ export function isAudio(doc: DocFields): boolean {
 export function isMedia(doc: DocFields): boolean {
   return isVideo(doc) || isAudio(doc);
 }
+
+/**
+ * Can Docs SHOW this kind at all (spec §10.1's `render` column)?
+ *
+ * "A kind is a fact about the bytes. Whether Docs can SET it is a separate
+ * fact, and the facts panel exists for the difference." (§10.1 comment,
+ * verbatim.) The three kinds it cannot show are Word, Spreadsheet and Deck —
+ * so a row of one says "cannot be shown" BEFORE the member taps it, and the
+ * rail answers what the viewer cannot.
+ *
+ * Keyed off `typeMeta`'s own category rather than a second media-type table:
+ * two tables would eventually disagree, and the one that disagreed would be
+ * the one telling a member their document is unopenable.
+ */
+export function canRender(doc: DocFields): boolean {
+  const { cat } = typeMeta(doc.media_type);
+  if (cat === "sheet" || cat === "slide") return false;
+  if (cat !== "doc") return cat !== "other";
+  // The `doc` category holds both text kinds (which render) and the binary
+  // word-processor kinds (which do not).
+  return String(doc.media_type ?? "").startsWith("text/");
+}
 /**
  * The FILL sibling of a kind's text rung (`--kind-pdf` → `--kind-pdf-fill`).
  *
@@ -223,60 +237,15 @@ export function tintBg(cv: string, pct: number): string {
   return `color-mix(in oklab, var(${fillVar(cv)}) ${pct}%, transparent)`;
 }
 
-// The row list's empty-state copy, as plain data — one per nav/search/type
-// combination, in the same precedence order the old inline cascade used.
-// `needsUpload` flags the two spots that also want an "Upload…" action
-// button, which stays a DOM-imperative `h()` node built by the caller (the
-// click handler needs the live `#uploadInput`, not a prop this pure function
-// could carry).
-export function emptyStateFor(
-  state: AppState,
-  hasActiveFiles: boolean
-): EmptyStateCfg {
-  if (state.nav.kind === "starred" && state.type === "all")
-    return {
-      icon: I.star!,
-      title: "Nothing starred yet",
-      sub: "Star a document from its menu to pin it here. It is one star across your vault — photos you favorite land here too.",
-    };
-  if (state.search.trim())
-    return {
-      icon: I.allDocs!,
-      title: "No matches",
-      sub: `No documents match “${state.search.trim()}”. Try fewer words.`,
-    };
-  if (state.nav.kind === "trash")
-    return {
-      icon: I.trash!,
-      title: "Trash is empty",
-      sub: "Trashed documents purge after about 30 days.",
-    };
-  if (state.type !== "all")
-    return {
-      icon: I.allDocs!,
-      title: "No matches",
-      sub: "No documents of this type here. Clear the filter to see everything.",
-    };
-  if (state.nav.kind === "folder")
-    return {
-      icon: I.folder!,
-      title: "Empty folder",
-      sub: "Nothing filed here yet.",
-      needsUpload: "Upload to this folder",
-    };
-  if (!hasActiveFiles)
-    return {
-      icon: I.allDocs!,
-      title: "Your drive is empty",
-      sub: "Leases, IDs, warranties, tax forms — file the important stuff here.",
-      needsUpload: "Upload your first document",
-    };
-  return {
-    icon: I.allDocs!,
-    title: "Nothing here",
-    sub: "No documents to show.",
-  };
-}
+// The row list's empty-state copy USED to live here as `emptyStateFor`: one
+// flat cascade of nav/search/type combinations, rendered through `.kit-empty`.
+// It is gone. §4.6 says there are exactly FIVE empty states and that they are
+// distinguishable — a new drive, an empty folder, an empty shelf, a filter
+// with no matches, a search with no matches — and only the first is a
+// whole-screen state. That model lives in `view-copy.ts` (the copy),
+// `view-state.ts` (which variant, and whether a read has even landed) and
+// `components/EmptyState.tsx` (the block). Nothing here needed to know about
+// `AppState` any more, which is why this module is pure again.
 
 // The blob custody projection (issue #352 phase 4, blob/custody.ts) in
 // owner-facing words + a tone the CSS keys off (custody-ok/custody-warn/

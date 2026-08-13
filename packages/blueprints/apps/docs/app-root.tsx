@@ -15,25 +15,34 @@ import {
 } from "react";
 import type { KeyboardEvent, ReactElement, ReactNode } from "react";
 
+import { publishOutcome } from "../_shared/app-frame.tsx";
 import { mountedScopes } from "../_shared/scope-kit.ts";
 import { ShareSheet } from "../_shared/ShareSheet.tsx";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { BulkBar } from "./components/BulkBar.tsx";
 import { Details } from "./components/Details.tsx";
+import { DriveRoute } from "./components/DriveRoute.tsx";
+import { DueRoute } from "./components/DueRoute.tsx";
 import { Editor } from "./components/Editor.tsx";
-import { GridCard } from "./components/Grid.tsx";
-import { ListHead, ListRow, WindowFoot } from "./components/List.tsx";
+import { FoldersRoute } from "./components/FoldersRoute.tsx";
+import { MoreSheet } from "./components/MoreSheet.tsx";
 import { NewMenu } from "./components/NewMenu.tsx";
 import { QuickLook } from "./components/QuickLook.tsx";
-import { FolderList, SmartNav, Storage } from "./components/Sidebar.tsx";
-import { TagChips, TypeChips } from "./components/Toolbar.tsx";
-import { emptyStateFor } from "./format.ts";
+import { Reading } from "./components/Reading.tsx";
+import { OfflineBanner } from "./components/Shared.tsx";
+import { ShelfStrip } from "./components/ShelfStrip.tsx";
+import { FolderList, Storage } from "./components/Sidebar.tsx";
+import { TagChips } from "./components/Toolbar.tsx";
+import { VersionsRoute } from "./components/VersionsRoute.tsx";
+import { crumbsFor } from "./drive-copy.ts";
+import { NO_FILTERS, filtersActive } from "./filters.ts";
+import type { DriveFilters } from "./filters.ts";
+import { canRender, isTextEditable } from "./format.ts";
+import { appBar, bandClaim } from "./frame.tsx";
 import {
   closePopover,
   debounce,
-  emptyState,
-  h,
   observeWidth,
   onDataChange,
   onFocusRefresh,
@@ -42,7 +51,24 @@ import {
 } from "./kit.ts";
 import { createLogic } from "./logic.ts";
 import { createNav } from "./nav.ts";
+import {
+  DUE,
+  FOLDERS,
+  RECENT,
+  STARRED,
+  TRASH,
+  folderIdFrom,
+  shelfFromSegment,
+  showsDrive,
+} from "./shelves.ts";
+import type { ShelfId } from "./shelves.ts";
 import type { AppData, AppState, DriveDoc, Folder } from "./types.ts";
+import { SHELF_LABELS, captionFor } from "./view-copy.ts";
+import {
+  emptyStateView,
+  libraryReachability,
+  shelfAfterRead,
+} from "./view-state.ts";
 
 import styles from "./Chrome.module.css";
 
@@ -82,10 +108,10 @@ function initialView(rootEl: HTMLElement | null): AppState["view"] {
 function makeState(view: AppState["view"]): AppState {
   return {
     view,
-    nav: { kind: "all" },
+    shelf: null,
+    filters: NO_FILTERS,
     sortKey: "added",
     sortDir: -1,
-    type: "all",
     tag: "all",
     search: "",
     searchResults: null,
@@ -94,6 +120,8 @@ function makeState(view: AppState["view"]): AppState {
     anchorIndex: null,
     detailsId: null,
     quickId: null,
+    readingId: null,
+    versionsId: null,
     editingId: null,
     newMenuOpen: false,
     creatingFolder: false,
@@ -123,10 +151,19 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
   const [ready, setReady] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  // A read that actually came back FAILED — the only evidence this app has for
+  // "the gateway is out of reach" (view-state.ts `libraryReachability`). State
+  // rather than the ref below, because the banner, the caption and every row's
+  // state slot are rendered from it.
+  const [readFailedState, setReadFailedState] = useState(false);
   const [consent, setConsent] = useState<{ message: string } | null>(null);
   const [dropVisible, setDropVisible] = useState(false);
   const [dropTarget, setDropTarget] = useState("");
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
+  // The compact band's overflow sheet (§1.5). React state rather than a field
+  // on the mutable `state` bag: nothing outside this component opens it.
+  const [moreOpen, setMoreOpen] = useState(false);
+
   const [residentFolderIds, setResidentFolderIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -134,10 +171,15 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
   const rootElRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const uploadRef = useRef<HTMLInputElement | null>(null);
-  const emptyRef = useRef<HTMLDivElement | null>(null);
   const skeletonRef = useRef<HTMLDivElement | null>(null);
   const flushEditorRef = useRef<(() => Promise<void>) | null>(null);
   const readFailedRef = useRef(false);
+  // The member was moved off a folder that no longer exists (view-state.ts
+  // rule 2). A ref, not state: it is SET during the same render that performs
+  // the move (so the destination can explain itself on that very frame) and
+  // cleared by the next navigation, which is a render-phase write no
+  // `setState` may do.
+  const goneFolderRef = useRef(false);
 
   const dataRef = useRef<AppData>({
     folders: [],
@@ -169,6 +211,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       } catch {
         readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
         readFailedRef.current = true;
+        setReadFailedState(true);
         setLoaded(true);
         return;
       }
@@ -176,6 +219,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         readFailedRef.current = false;
         core.logic.notice("");
       }
+      setReadFailedState(false);
       const denied = next?.vaultDenied;
       setConsent(denied ? { message: denied.message ?? "" } : null);
       setLoaded(true);
@@ -290,15 +334,32 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
   const {
     closeDetails: handleCloseDetails,
     closeQuick: handleCloseQuick,
+    closeReading: handleCloseReading,
+    closeVersions: handleCloseVersions,
+    openVersions: handleOpenVersions,
     openDetails: handleOpenDetails,
     quickStep: handleQuickStep,
     selectTag: handleSelectTag,
-    selectType: handleSelectType,
     showMoreDocs: handleShowMoreDocs,
     startCreateFolder: handleStartCreateFolder,
     triggerUpload: handleTriggerUpload,
   } = nav;
-  const handleOpenQuick = core.nav.openQuick;
+  // OPENING A ROW IS A ROUTING DECISION (§1.8). Text renders on paper at a
+  // 34em measure — that is the reading view, a screen. Everything else is a
+  // kind for the stage, which has not landed; Quick Look remains the interim
+  // viewer for those, so no member loses the ability to see their own file
+  // while the stage is built.
+  const handleOpenQuick = useCallback(
+    (id: string) => {
+      const doc = dataRef.current.documents.find((d) => d.document_id === id);
+      if (doc && isTextEditable(doc)) {
+        core.nav.openReading(id);
+        return;
+      }
+      core.nav.openQuick(id);
+    },
+    [core]
+  );
   const state = stateRef.current;
   const data = dataRef.current;
 
@@ -317,11 +378,14 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
     [rootRef]
   );
 
-  // Wrap nav.selectNav so a nav click also closes the React drawer (its own
-  // `$('root')` class toggle is a no-op on the host's mount div).
-  const selectNav = useCallback(
-    (navArg: AppState["nav"]) => {
-      nav.selectNav(navArg);
+  // Wrap nav.selectShelf so a shelf change also closes the React drawer and
+  // the band's More sheet — every navigation inside Docs clears what was open
+  // over it (spec §1.1's `dgo`/`dgoFromMore`).
+  const selectShelf = useCallback(
+    (shelf: ShelfId) => {
+      nav.selectShelf(shelf);
+      goneFolderRef.current = false;
+      setMoreOpen(false);
       setSideOpen(false);
     },
     [nav]
@@ -452,15 +516,17 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         next.delete(folder.folder_id);
         return next;
       });
-      frame.setStatus(
-        "Saved to my vault. This copy survives if the share ends."
-      );
+      // Outcomes go through ONE door (§11): the frame's single status line.
+      publishOutcome(frame, {
+        text: "Saved to my vault. This copy survives if the share ends.",
+      });
     } catch (error) {
-      frame.setStatus(
-        error instanceof Error
-          ? `Folder was not saved: ${error.message}`
-          : "Folder was not saved to your vault."
-      );
+      publishOutcome(frame, {
+        text:
+          error instanceof Error
+            ? `Folder was not saved: ${error.message}`
+            : "Folder was not saved to your vault.",
+      });
     }
   };
 
@@ -520,10 +586,8 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       if (!dragHasFiles(e)) return;
       e.preventDefault();
       dragDepth += 1;
-      const target =
-        state.nav.kind === "folder"
-          ? logic.folderName(state.nav.folderId)
-          : "Documents";
+      const folderId = folderIdFrom(state.shelf);
+      const target = folderId ? logic.folderName(folderId) : "Documents";
       setDropTarget(`Drop to upload to ${target}`);
       setDropVisible(true);
     };
@@ -579,40 +643,56 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
 
   // ---- derive the render (app.tsx's render()/renderSidebar/renderToolbar/… ) ----
 
-  // A folder can vanish under us (deleted elsewhere) — fall back to the top.
-  if (state.nav.kind === "folder" && !logic.folderById(state.nav.folderId))
-    state.nav = { kind: "all" };
+  // A FOLDER CAN VANISH UNDER US (deleted in another window). The member is
+  // NOT dropped silently on All any more: `shelfAfterRead` falls them back to
+  // Folders — where they reached the folder from — and says so once they are
+  // there (view-state.ts rule 2).
+  const survived = shelfAfterRead(
+    state.shelf,
+    data.folders.map((f) => f.folder_id)
+  );
+  if (survived.shelf !== state.shelf) {
+    state.shelf = survived.shelf;
+    goneFolderRef.current = survived.goneFolder;
+  }
   state.visibleRows = logic.currentRows();
   const rows = state.visibleRows;
 
   const active = logic.activeFiles();
-  const counts = {
-    all: active.length,
-    starred: active.filter((f) => f.starred).length,
-    trash: logic.trashedFiles().length,
-  };
+  const trashCount = logic.trashedFiles().length;
+  const openFolderId = folderIdFrom(state.shelf);
+  const openFolderName = openFolderId
+    ? logic.folderName(openFolderId)
+    : undefined;
 
-  const titles = {
-    all: "All documents",
-    recent: "Recent",
-    starred: "Starred",
-    trash: "Trash",
-  };
-  let activeTitle =
-    state.nav.kind === "folder"
-      ? logic.folderName(state.nav.folderId)
-      : titles[state.nav.kind];
-  if (state.search.trim()) activeTitle = `Results for “${state.search.trim()}”`;
+  // Per-shelf counts for the strip and the More sheet — one map, so the two
+  // surfaces can never disagree about how many things a shelf holds.
+  const shelfCounts = new Map<string, number>([
+    [FOLDERS, data.folders.length],
+    [STARRED, active.filter((f) => f.starred).length],
+    [TRASH, trashCount],
+  ]);
+
+  const onDrive = showsDrive(state.shelf) && !state.search.trim();
+  const searching = Boolean(state.search.trim());
+
+  let activeTitle: string;
+  if (searching) activeTitle = `Results for “${state.search.trim()}”`;
+  else if (openFolderName) activeTitle = openFolderName;
+  else if (state.shelf === null) activeTitle = "All documents";
+  else activeTitle = SHELF_LABELS[state.shelf] ?? "Docs";
   const n = rows.length;
   let activeSub: string;
-  if (state.search.trim())
+  if (searching)
     activeSub = `${n} match${n === 1 ? "" : "es"} “${state.search.trim()}”`;
-  else if (state.nav.kind === "trash")
+  else if (state.shelf === TRASH)
     activeSub = `${n} in trash · auto-purge after 30 days`;
-  else if (state.nav.kind === "recent")
-    activeSub = "Newest across every folder";
-  else if (state.nav.kind === "starred")
+  else if (state.shelf === RECENT) activeSub = "Newest across every folder";
+  else if (state.shelf === STARRED)
     activeSub = `${n} starred document${n === 1 ? "" : "s"} · one star across your vault`;
+  else if (state.shelf === FOLDERS)
+    activeSub = `${data.folders.length} folder${data.folders.length === 1 ? "" : "s"} · a folder is a label, not a place`;
+  else if (state.shelf === DUE) activeSub = "Dated obligations · switched off";
   else activeSub = `${n} document${n === 1 ? "" : "s"}`;
 
   const sortNames = { added: "Date", name: "Name", size: "Size" };
@@ -622,89 +702,84 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
     ...new Set(active.flatMap((f) => (f.tags ?? []).map((t) => t.label))),
   ].sort();
 
-  // Empty-state config for the current view; filled imperatively (below) into
-  // the #empty container's kit-empty structure exactly as served.
-  const emptyCfg =
-    loaded && rows.length === 0
-      ? emptyStateFor(state, active.length > 0)
-      : null;
-  useEffect(() => {
-    if (!emptyCfg || !emptyRef.current) return;
-    const clearSearch = (): void => {
-      if (searchInputRef.current) searchInputRef.current.value = "";
-      state.search = "";
-      state.searchResults = null;
-      bump();
-    };
-    const action = h(
-      "button",
-      {
-        type: "button",
-        class: "kit-btn",
-        onclick: emptyCfg.needsUpload
-          ? () => uploadRef.current?.click()
-          : state.search.trim()
-            ? clearSearch
-            : state.type === "all"
-              ? state.nav.kind === "starred" || state.nav.kind === "trash"
-                ? () => {
-                    state.nav = { kind: "all" };
-                    bump();
-                  }
-                : () => uploadRef.current?.click()
-              : () => {
-                  state.type = "all";
-                  bump();
-                },
-      },
-      emptyCfg.needsUpload ??
-        (state.search.trim()
-          ? "Clear search"
-          : state.type === "all"
-            ? state.nav.kind === "starred" || state.nav.kind === "trash"
-              ? "View all documents"
-              : "Upload document"
-            : "Clear filter")
-    );
-    emptyState(emptyRef.current, {
-      icon: emptyCfg.icon,
-      title: emptyCfg.title,
-      sub: emptyCfg.sub,
-      action,
-    });
-    // No deps array: the #empty node is freshly mounted each time the view
-    // re-enters the empty branch, and its copy can be identical across separate
-    // empty episodes — so fill on every render while it exists (the guard makes
-    // it a no-op otherwise). Matches app.tsx re-running emptyState() per render.
+  // ---- what the view may SAY about itself (view-state.ts, §4.6, §11) ----
+  //
+  // "Nothing is empty until a read has landed" and "offline is a state the app
+  // READS, never one it invents" are both rules this file used to get wrong by
+  // expressing them inline. Both are now one call each.
+  const offline =
+    libraryReachability({
+      hostStatus: rootElRef.current?.dataset.gatewayStatus ?? null,
+      readFailed: readFailedState,
+    }) === "unreachable";
+
+  const emptyView = emptyStateView({
+    loaded,
+    count: rows.length,
+    shelf: state.shelf,
+    ...(searching ? { query: state.search } : {}),
+    ...(filtersActive(state.filters) ? { filtered: true } : {}),
+    ...(openFolderName ? { folderName: openFolderName } : {}),
+    ...(active.length === 0 ? { driveIsEmpty: true } : {}),
+    // The new-folder editor is standing in the shelf's place, so the shelf is
+    // not the thing with nothing in it.
+    ...(state.creatingFolder ? { suppressed: true } : {}),
   });
 
-  const inTrash = state.nav.kind === "trash" && !state.search.trim();
-  const trashed = state.nav.kind === "trash" && !state.search.trim();
+  const clearSearch = useCallback(() => {
+    if (searchInputRef.current) searchInputRef.current.value = "";
+    state.searchSeq += 1;
+    state.search = "";
+    state.searchResults = null;
+    bump();
+  }, [state]);
+
+  const clearFilters = useCallback(() => {
+    state.filters = NO_FILTERS;
+    logic.clearSelection();
+    bump();
+  }, [logic, state]);
+
+  const selectFilter = useCallback(
+    (axis: keyof DriveFilters, option: string | null) => {
+      state.filters = { ...state.filters, [axis]: option };
+      logic.clearSelection();
+      bump();
+    },
+    [logic, state]
+  );
+
+  // The way forward for an empty view, BY LABEL — and only where this app can
+  // actually perform it. A variant whose action is a route that has not landed
+  // ("Scan a document", "Move documents here") returns nothing and the button
+  // is not drawn, which is the difference between a screen that is honest
+  // about what it cannot do and one that dead-ends a member.
+  const emptyRunFor = useCallback(
+    (label: string): (() => void) | undefined => {
+      if (label === "Upload documents") return () => uploadRef.current?.click();
+      if (label === "Clear the query") return clearSearch;
+      if (label === "Clear filters") return clearFilters;
+      return undefined;
+    },
+    [clearFilters, clearSearch]
+  );
+
+  const inTrash = state.shelf === TRASH && !searching;
+  const trashed = inTrash;
   const showFoot =
-    state.driveTruncated &&
-    !state.search.trim() &&
-    state.nav.kind !== "starred";
+    state.driveTruncated && !searching && state.shelf !== STARRED;
   const scopes = mountedScopes();
 
   // ---- slots ----
 
-  const sidebarNav = (
-    <SmartNav
-      navKind={state.nav.kind}
-      counts={counts}
-      onSelectNav={selectNav}
-    />
-  );
   const folderList = (
     <FolderList
       folders={data.folders}
       activeDocs={active}
-      navKind={state.nav.kind}
-      navFolderId={state.nav.folderId}
+      shelf={state.shelf}
       renamingFolderId={state.renamingFolderId}
       creatingFolder={state.creatingFolder}
-      trashCount={counts.trash}
-      onSelectNav={selectNav}
+      onSelectShelf={selectShelf}
       onShareFolder={setShareFolder}
       residentFolderIds={residentFolderIds}
       onSaveFolder={saveFolderToMyVault}
@@ -717,13 +792,35 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
     />
   );
   const storage = <Storage docs={active} truncated={state.driveTruncated} />;
+
+  // The shelf strip (§1.7). It is NOT drawn on the compact form factor whose
+  // band claim was honoured — the band carries the same six destinations there
+  // and drawing both would put Trash in a strip that scrolls out of sight
+  // while the band says the same thing better. This app cannot ask the shell
+  // whether its claim was honoured, so it reads the same signal the claim
+  // itself is gated on: the compact form factor.
+  const shelfStrip = narrow ? null : (
+    <ShelfStrip
+      shelf={state.shelf}
+      counts={shelfCounts}
+      onSelect={selectShelf}
+      narrow={narrow}
+    />
+  );
+  const moreSheet = moreOpen ? (
+    <MoreSheet
+      shelf={state.shelf}
+      counts={shelfCounts}
+      onSelect={selectShelf}
+      onClose={() => setMoreOpen(false)}
+    />
+  ) : null;
   const newMenu = state.newMenuOpen ? (
     <NewMenu
       onUpload={handleTriggerUpload}
       onNewFolder={handleStartCreateFolder}
     />
   ) : null;
-  const typeChips = <TypeChips type={state.type} onSelect={handleSelectType} />;
   const tagChips = (
     <TagChips tags={tagOptions} active={state.tag} onSelect={handleSelectTag} />
   );
@@ -739,81 +836,127 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       />
     ) : null;
 
-  let scroll: ReactNode;
+  // ---- the route switch ----
+  //
+  // ONE BRANCH PER ROUTE, and each branch's BODY lives in its own component
+  // (components/DriveRoute, FoldersRoute, DueRoute). The orchestrator decides
+  // WHICH screen; the component decides what that screen looks like. That
+  // split is what keeps this file under the size cap and what lets the
+  // remaining Docs routes land in parallel without three agents editing the
+  // same switch arm.
+  //
+  // The boot skeleton sits ABOVE the switch, because "a read has not landed"
+  // is a fact about the read and not about the shelf (view-state.ts rule 1).
+  // The EMPTY block does not: §4.6's five variants are each one state of a
+  // particular screen — an empty folder says a different thing from an empty
+  // drive — so `emptyStateView`'s verdict travels INTO the route body, which
+  // draws it in the row set's own place, under that screen's own breadcrumb
+  // and caption.
+  // The two document-scoped routes (§6.1, §6.2). They stand IN the scroll
+  // region rather than over it: a reading view is paper and a version history
+  // is a spine, and neither is something a member peers at through a hole in
+  // the drive.
+  const readingDoc = state.readingId
+    ? data.documents.find((d) => d.document_id === state.readingId)
+    : null;
+  const versionsDoc = state.versionsId
+    ? data.documents.find((d) => d.document_id === state.versionsId)
+    : null;
+
+  let routeBody: ReactNode;
   if (!loaded) {
-    scroll = (
+    routeBody = (
       <div className={styles.listwrap}>
         <div ref={skeletonRef} />
       </div>
     );
-  } else if (rows.length === 0) {
-    scroll = <div className="kit-empty" ref={emptyRef} />;
-  } else if (state.view === "grid") {
-    scroll = (
-      <>
-        <div className={styles.grid}>
-          {rows.map((d, i) => (
-            <GridCard
-              key={d.document_id}
-              doc={d}
-              index={i}
-              selectedIds={state.selected}
-              onOpenDetails={handleOpenDetails}
-              onOpenQuick={handleOpenQuick}
-              onToggleSelect={handleToggleSelect}
-            />
-          ))}
-        </div>
-        {showFoot ? (
-          <WindowFoot
-            driveWindow={state.driveWindow}
-            onShowMore={handleShowMoreDocs}
-          />
-        ) : null}
-      </>
+  } else if (versionsDoc) {
+    routeBody = (
+      <VersionsRoute
+        doc={versionsDoc}
+        loadHistory={logic.loadHistory}
+        loadActivity={logic.loadActivity}
+        onRestoreVersion={handleRestoreVersion}
+        onSelectShelf={selectShelf}
+        onClose={handleCloseVersions}
+      />
     );
+  } else if (readingDoc) {
+    routeBody = (
+      <Reading
+        key={readingDoc.document_id}
+        doc={readingDoc}
+        folderName={logic.folderName}
+        {...(canRender(readingDoc) && isTextEditable(readingDoc)
+          ? { onEdit: () => nav.openEditor(readingDoc.document_id) }
+          : {})}
+        onOpenVersions={() => handleOpenVersions(readingDoc.document_id)}
+        onOpenDetails={() => handleOpenDetails(readingDoc.document_id)}
+        onClose={handleCloseReading}
+      />
+    );
+  } else if (state.shelf === FOLDERS && !searching) {
+    routeBody = (
+      <FoldersRoute
+        folders={data.folders}
+        activeDocs={active}
+        goneFolder={goneFolderRef.current}
+        onSelectShelf={selectShelf}
+      />
+    );
+  } else if (state.shelf === DUE && !searching) {
+    routeBody = <DueRoute />;
   } else {
-    scroll = (
-      <>
-        <div className={styles.listwrap}>
-          {state.narrow ? null : (
-            <div className={styles.listHead}>
-              <ListHead
-                rows={rows}
-                selectedIds={state.selected}
-                onToggleAll={handleToggleAllVisible}
-              />
-            </div>
-          )}
-          <div>
-            {rows.map((d, i) => (
-              <ListRow
-                key={d.document_id}
-                doc={d}
-                index={i}
-                selectedIds={state.selected}
-                narrow={state.narrow}
-                search={state.search}
-                trashed={trashed}
-                folderName={logic.folderName}
-                onOpenDetails={handleOpenDetails}
-                onOpenQuick={handleOpenQuick}
-                onToggleSelect={handleToggleSelect}
-                onOpenMenu={handleOpenDocMenu}
-                onRestore={handleRestoreDoc}
-              />
-            ))}
-          </div>
-        </div>
-        {showFoot ? (
-          <WindowFoot
-            driveWindow={state.driveWindow}
-            onShowMore={handleShowMoreDocs}
-          />
-        ) : null}
-      </>
+    routeBody = (
+      <DriveRoute
+        shelf={state.shelf}
+        crumbs={crumbsFor(state.shelf, {
+          ...(openFolderName ? { folderName: openFolderName } : {}),
+          searching,
+        })}
+        onSelectShelf={selectShelf}
+        rows={rows}
+        view={state.view}
+        narrow={state.narrow}
+        search={state.search}
+        trashed={trashed}
+        offline={offline}
+        filters={state.filters}
+        onSelectFilter={selectFilter}
+        onClearFilters={clearFilters}
+        caption={captionFor(state.shelf, {
+          offline,
+          ...(openFolderName ? { folderName: openFolderName } : {}),
+        })}
+        empty={emptyView}
+        emptyRunFor={emptyRunFor}
+        selectedIds={state.selected}
+        driveWindow={state.driveWindow}
+        showFoot={showFoot}
+        windowFailed={readFailedState}
+        folderName={logic.folderName}
+        onOpenDetails={handleOpenDetails}
+        onOpenQuick={handleOpenQuick}
+        onToggleSelect={handleToggleSelect}
+        onToggleAll={handleToggleAllVisible}
+        onOpenMenu={handleOpenDocMenu}
+        onRestore={handleRestoreDoc}
+        onShowMore={handleShowMoreDocs}
+      />
     );
   }
+
+  // §11's banner stands ABOVE whatever the route drew, exactly as §4.3's own
+  // state panels stand above the breadcrumb — and ONCE here rather than six
+  // times, because it changes what every route body below it can promise.
+  const scroll = (
+    <>
+      {offline && loaded ? (
+        <OfflineBanner onRetry={() => void core.refresh()} />
+      ) : null}
+      {routeBody}
+    </>
+  );
 
   const detailsDoc = state.detailsId
     ? data.documents.find((d) => d.document_id === state.detailsId)
@@ -840,16 +983,16 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
           onEdit={(d) => nav.openEditor(d.document_id)}
           onReplace={handleReplaceDocument}
           loadHistory={logic.loadHistory}
-          onRestoreVersion={handleRestoreVersion}
+          onOpenVersions={handleOpenVersions}
           onAddTag={handleAddTag}
           onRemoveTag={handleRemoveTag}
-          loadActivity={logic.loadActivity}
         />
       ) : null}
       {quickDoc ? (
         <QuickLook
           doc={quickDoc}
           rows={state.visibleRows}
+          narrow={narrow}
           folderName={logic.folderName}
           onClose={handleCloseQuick}
           onStep={handleQuickStep}
@@ -859,6 +1002,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         <Editor
           key={editorDoc.document_id}
           doc={editorDoc}
+          narrow={narrow}
           registerFlush={(fn) => {
             flushEditorRef.current = fn;
           }}
@@ -874,10 +1018,84 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         itemType="docs.folder"
         itemIds={shareFolder ? [shareFolder.folder_id] : []}
         appLabel="Docs"
-        onDone={(outcome) => frame.setStatus(outcome.message)}
+        onDone={(outcome) => publishOutcome(frame, { text: outcome.message })}
       />
     </>
   );
+
+  // ---- what Docs contributes to the FRAME (frame.tsx, spec §1.4, §11) ----
+  //
+  // Called from EFFECTS, never during render: the bar and the band render
+  // ABOVE this app in the tree, so a contribution made while rendering would
+  // be updating a component that is already painting.
+  //
+  // NEITHER ACTION IS CONTRIBUTED YET, and both omissions are deliberate:
+  //
+  //   * `onPrimary` — the bar's filled verb per shelf is `primaryLabel`'s to
+  //     name, but Docs' own "+ New" is still a dropdown anchored in the
+  //     sidebar, and a second filled control in the bar would be two answers
+  //     to one question. The verb moves up when the `newdoc` route lands.
+  //   * `onSearch` — the query still lives in this app's own topbar field, in
+  //     view on every pointer surface. A bar button that only focused a field
+  //     already on screen is a second control for no second destination; it
+  //     becomes real when Search is its own route.
+  //
+  // Until then the bar carries the title and the count, which is what the
+  // frame could never say for itself.
+  const barTitleValue = activeTitle;
+  const barCountValue = onDrive || searching ? rows.length : null;
+  useEffect(() => {
+    frame.setAppBar(
+      appBar({
+        shelf: state.shelf,
+        ...(openFolderName ? { folderName: openFolderName } : {}),
+        count: barCountValue,
+        compact: narrow,
+      })
+    );
+    // `state` is a mutable bag held in a ref, so the bar's dependencies are
+    // the derived values above rather than the object it was read from.
+  }, [
+    frame,
+    state.shelf,
+    openFolderName,
+    barCountValue,
+    narrow,
+    barTitleValue,
+  ]);
+
+  useEffect(() => {
+    if (!narrow) {
+      frame.claimBand(null);
+      return;
+    }
+    frame.claimBand(
+      bandClaim(
+        state.shelf,
+        (segment) => {
+          // Search is a shelf in the model (shelves.ts) but its screen has not
+          // landed: today the query lives in the topbar field, so the band's
+          // Search tab takes the member to the thing that actually searches
+          // rather than to an empty route.
+          if (segment === "search") {
+            setMoreOpen(false);
+            searchInputRef.current?.focus();
+            return;
+          }
+          selectShelf(shelfFromSegment(segment));
+        },
+        () => setMoreOpen((open) => !open)
+      )
+    );
+  }, [frame, state.shelf, narrow, selectShelf]);
+
+  // Hand the bar and the band back when Docs stops being the route.
+  useEffect(() => {
+    return () => {
+      frame.setAppBar(null);
+      frame.claimBand(null);
+    };
+  }, [frame]);
 
   return (
     // Fill the app pane (a flex child of the route body) so the inline chrome gets
@@ -903,6 +1121,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         activeTitle={activeTitle}
         activeSub={activeSub}
         sortLabel={sortLabel}
+        showDriveTools={onDrive || searching}
         dropVisible={dropVisible}
         dropTarget={dropTarget}
         onOpenSide={() => setSideOpen(true)}
@@ -919,15 +1138,17 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         uploadRef={(el) => {
           uploadRef.current = el;
         }}
-        sidebarNav={sidebarNav}
-        folderList={folderList}
-        storage={storage}
-        newMenu={newMenu}
-        typeChips={typeChips}
-        tagChips={tagChips}
-        bulkBar={bulkBar}
-        scroll={scroll}
-        overlays={overlays}
+        slots={{
+          shelfStrip,
+          folderList,
+          storage,
+          newMenu,
+          tagChips,
+          bulkBar,
+          scroll,
+          overlays,
+          moreSheet,
+        }}
       />
     </div>
   );

@@ -19,6 +19,8 @@ import { themes } from "./themes/index.js";
 import {
   ACCENT_HOVER,
   ACCENT_HOVER_DARK,
+  ACCENT_INK_HOVER,
+  ACCENT_INK_HOVER_DARK,
   ACCENT_LIGHT,
   ACCENT_LIGHT_DARK,
   BRAND,
@@ -31,9 +33,15 @@ import {
   LINK_DARK,
   NET,
   NET_DARK,
+  NET_HOVER,
+  NET_HOVER_DARK,
+  NET_WASH,
+  NET_WASH_DARK,
   ON_STAGE,
   RING,
   RING_DARK,
+  SEAM,
+  SEAM_DARK,
   STAGE,
   STAGE_LINE,
   SUCCESS,
@@ -132,12 +140,23 @@ describe("DESIGN.md front matter", () => {
       "accent-deep-dark": themes.dark.accentDeep,
       "accent-hover": ACCENT_HOVER,
       "accent-hover-dark": ACCENT_HOVER_DARK,
+      // The OUTLINE's hover, which is a different role from the FILL's and
+      // steps the other way — see roles.ts and the Colors section.
+      "accent-ink-hover": ACCENT_INK_HOVER,
+      "accent-ink-hover-dark": ACCENT_INK_HOVER_DARK,
       "accent-text": BRAND,
       "accent-text-dark": BRAND_DARK,
       link: LINK,
       "link-dark": LINK_DARK,
       net: NET,
       "net-dark": NET_DARK,
+      "net-hover": NET_HOVER,
+      "net-hover-dark": NET_HOVER_DARK,
+      // The one wash with a per-theme alpha, and the only tint of --net.
+      "net-wash": NET_WASH,
+      "net-wash-dark": NET_WASH_DARK,
+      seam: SEAM,
+      "seam-dark": SEAM_DARK,
       ring: RING,
       "ring-dark": RING_DARK,
       success: SUCCESS_LIGHT,
@@ -302,6 +321,9 @@ describe("DESIGN.md body", () => {
     expect(body).toContain(`\`--h-control\` ${metrics.control}px`);
     expect(body).toContain(`\`--h-row\` ${metrics.row}px`);
     expect(body).toContain(`\`--h-segmented\` ${metrics.segmented}px`);
+    expect(body).toContain(
+      `\`--w-key-col\` — the fact-list key column, ${metrics.keyCol}px under a pointer and ${metrics.keyColTouch}px on touch`
+    );
     expect(body).toContain("line-clamped");
     // 5 — motion and feedback.
     expect(body).toContain("status line");
@@ -345,6 +367,21 @@ describe("DESIGN.md body", () => {
       ["`lineS`", "`--line`"],
       ["`onAccent`", "`--text-inv`"],
       ["`ring`", "`--focus-ring-color`"],
+      // v9's additions. The two `No new role` rows are as load-bearing as the
+      // new ones: they are the record that `label` and `band-on` were checked
+      // against the ramp and found already present, rather than overlooked.
+      ["`netHover`", "`--net-hover`"],
+      ["`netWash`", "`--net-wash`"],
+      ["`seam`", "`--seam`"],
+      ["`accentHover`", "`--accent-hover`"],
+      ["`ghost`", "`--text-ghost`"],
+      ["`label` / `band-on`", "`--t-body` / `--t-control`"],
+      ["`label-on`", "`--t-label-on`"],
+      [
+        "`annot-label` / `annot-label-on`",
+        "`--t-annot-label` / `--t-annot-label-on`",
+      ],
+      ["`band`", "`--t-band`"],
     ] as const) {
       expect(body, brief).toMatch(row(brief, repo));
     }

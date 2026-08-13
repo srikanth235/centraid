@@ -2,17 +2,27 @@
    a 4:3 cover at the sub-control radius, the title clamped to two lines, the
    count in tabular mono.
 
-   The column rule is a GRID FIT, not a breakpoint: `auto-fill` with a 210px
-   floor lands on four across a desktop content pane and two on a 390px phone,
-   which is what the handoff asks for without either surface being named.
+   FOUR AND TWO, FIXED (issue #765). This was `auto-fill` with a 210px floor,
+   which lands on four across a typical desktop content pane and two on a
+   390px phone — right at the two sizes anybody checked, and wrong either side
+   of them: a wide pane fits five or six, and a narrow-but-not-phone pane
+   (a split window, a small tablet) drops to three. The handoff names a column
+   COUNT, not a card width, so the count is what this states — the same way
+   People.module.css states its six and three. Same breakpoint as People's, so
+   the two shelves change shape together rather than at different widths.
 
    Surfaces are paper, not elevation — no shadow. Nothing below 11px. Logical
    properties only. */
 
 .albumGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--sp-4);
+}
+@media (max-width: 719.98px) {
+  .albumGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .albumCard {

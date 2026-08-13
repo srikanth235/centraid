@@ -19,6 +19,7 @@ import { contrastRatio, parseColor, rgbToHsl, toHex } from "./color.js";
 import { toCss } from "./css.js";
 import { toNativeTheme } from "./native.js";
 import {
+  alphaOver,
   declarations,
   evalColorMix,
   oklabDistance,
@@ -244,6 +245,66 @@ describe("shell token contrast floors", () => {
     // is no danger-under-`--text-inv` fill pairing left to pin here. See
     // "keeps the ink contract for filled states" below for the StatusLine
     // fill/track pairing that replaces this coverage.
+
+    test(`${name}: the v9 state and hover rungs clear their floors`, () => {
+      // `--seam`, `--net-hover` and `--accent-hover` are all BORDER-AND-LABEL
+      // rungs: destructive is outlined and never filled, and a seam state is a
+      // chip with a rule around it, so each one is simultaneously the type and
+      // the edge. That means one floor covers both jobs — AA as text, which is
+      // strictly harder than the 3:1 a border owes.
+      for (const token of ["--seam", "--net-hover", "--accent-hover"]) {
+        const value = resolve(tokens[token] ?? "", scope);
+        expect(value, `${name} ${token} is emitted`).toBeTruthy();
+        for (const surface of surfaces) {
+          expect(
+            contrastRatio(value, surface),
+            `${name} ${token} on ${surface}`
+          ).toBeGreaterThanOrEqual(AA_BODY);
+        }
+      }
+    });
+
+    test(`${name}: --net stays legible ON its own wash`, () => {
+      // The whole permission `--net-wash` is granted under: a tint faint
+      // enough that the ink it belongs to, and the ramp beside it, still read
+      // on top. If this fails the wash has stopped being a wash and become the
+      // large alarming filled surface `--net` forbids.
+      const washed = resolve(tokens["--net-wash"] ?? "", scope);
+      expect(washed, `${name} --net-wash is emitted`).toMatch(/^rgba\(/u);
+      for (const surface of surfaces) {
+        const ground = alphaOver(washed, surface, parseColor(washed).alpha);
+        for (const token of ["--net", "--text", "--text-soft"]) {
+          expect(
+            contrastRatio(resolve(tokens[token] ?? "", scope), ground),
+            `${name} ${token} on --net-wash over ${surface}`
+          ).toBeGreaterThanOrEqual(AA_BODY);
+        }
+      }
+    });
+
+    test(`${name}: the hover rungs step the way their job requires`, () => {
+      // `--net` is not at the end of its ramp, so its hover moves AWAY from
+      // the paper — a warning that quietens under the pointer is wrong. The
+      // accent IS the end of its ramp, so an outline's ink can only step
+      // toward the paper; nothing rides on top of it, so that costs nothing
+      // the floor above has not already measured.
+      const page = surfaces[0] ?? "";
+      const net = resolve(tokens["--net"] ?? "", scope);
+      const netHover = resolve(tokens["--net-hover"] ?? "", scope);
+      expect(
+        contrastRatio(netHover, page),
+        `${name} --net-hover`
+      ).toBeGreaterThan(contrastRatio(net, page));
+      const accent = resolve(tokens["--accent"] ?? "", scope);
+      const accentHover = resolve(tokens["--accent-hover"] ?? "", scope);
+      expect(accentHover, `${name} --accent-hover is a real step`).not.toBe(
+        accent
+      );
+      expect(
+        contrastRatio(accentHover, page),
+        `${name} --accent-hover`
+      ).toBeLessThan(contrastRatio(accent, page));
+    });
 
     test(`${name}: the status line's determinate fill carries its ink`, () => {
       // `.kit-status-line-fill` paints `--text` — the SAME ink `--text-soft`

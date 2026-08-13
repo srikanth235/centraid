@@ -1,179 +1,134 @@
-/* Household (issue #599, Decision 14) — the page that answers "who is in this
-   household, what hardware do they use, and which vaults do we have". It took
-   the People & devices card off the Gateway page, which is now purely "is the
-   gateway healthy". */
+/* Devices (issues #599, #726; v9 body #765).
+
+   The page is a plain column of blocks — section heads, row blocks and notes
+   from `react/ui/` — so almost nothing is styled here. What is left is the
+   page's own measure, the detail a row opens under itself, and the two quiet
+   asides that are neither a block nor a row.
+
+   Every value is a token (docs/traps/design-tokens.md) and every direction is
+   logical: the page mirrors whole under RTL from the stage's single `dir`. */
 
 .page {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 20px 24px 40px;
-  max-width: 1080px;
-  /* Every child here is a flex item in a column; without this they inherit
+  /* Every child is a flex item in a column; without this they inherit
      `min-width: auto` and refuse to shrink below their content, so the page
-     scrolls sideways instead of the cards reflowing. */
-  min-width: 0;
+     scrolls sideways instead of the blocks reflowing. */
+  min-inline-size: 0;
+  max-inline-size: 1080px;
+  padding: var(--sp-4) var(--sp-5) var(--sp-6);
 }
 
-@media (max-width: 560px) {
-  .page {
-    gap: 14px;
-    padding: 16px 12px 32px;
-  }
-}
-
-.head {
+/* A verb that belongs to the block above it but is not one of its rows —
+   "Add someone", "New vault". Never filled: the page's one commit is in the
+   app bar. */
+.asideAction {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.title {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-.title h1 {
   margin: 0;
-  font: var(--t-title);
-  color: var(--text);
-}
-.titleIcon {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--r-md);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-.headMeta {
-  font: var(--t-small);
-  color: var(--text-faint);
+  padding-block-start: var(--sp-3);
 }
 
-.section {
+/* ── The detail a row opens under itself ───────────────────────────────── */
+
+.detail {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-.sectionHead {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 2px 10px;
-}
-.sectionHead h2 {
-  margin: 0;
-  font: var(--t-small-strong);
-  color: var(--text);
-}
-.sectionMeta {
-  font: var(--t-small);
-  color: var(--text-faint);
+  gap: var(--sp-2);
 }
 
-/* `min(248px, 100%)`, not a bare 248px: a bare track floor cannot shrink, so
-   below 248px the grid overflows its column rather than dropping to one. */
-.vaults {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(248px, 100%), 1fr));
-  gap: 10px;
-}
-.vault {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  border-radius: var(--r-lg);
-  border: 0.5px solid var(--line);
-  background: var(--bg-elev);
-}
-.vaultTop {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.avatar {
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: var(--r-md);
-  display: grid;
-  place-items: center;
-}
-.avatar svg {
-  display: block;
-}
-.vaultText {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.vaultName {
-  font: var(--t-title);
-  font-size: var(--t-small-size);
-  font-weight: 600;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.vaultRole {
-  margin-top: 1px;
-  font: var(--t-small);
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-}
-.badge {
-  flex-shrink: 0;
-  align-self: flex-start;
-  font: var(--t-mono);
-  font-size: var(--t-control-size);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  padding: 2px 6px;
-  border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-}
-.badge[data-default="true"] {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
-.vaultLinks {
+.detailVaults {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--sp-1) var(--sp-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
-.link {
+
+.detailVaults li {
+  align-items: center;
+  color: var(--text-faint);
   display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 9px;
-  border: 0.5px solid var(--line);
-  border-radius: var(--r-pill);
-  background: transparent;
-  color: var(--text-soft);
-  font: var(--t-small);
-  font-size: var(--t-control-size);
-  cursor: pointer;
-  transition:
-    background 100ms,
-    color 100ms;
-}
-.link:hover,
-.link:focus-visible {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  color: var(--text);
-  outline: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  gap: var(--sp-1);
 }
 
-.empty {
-  padding: 18px;
-  border-radius: var(--r-lg);
-  border: 0.5px dashed var(--line);
-  font: var(--t-small);
+.detailNote {
   color: var(--text-faint);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* What the gateway refused, and what it would cost to get back in. `--net` is
+   a border or an ink, never a fill. */
+.detailWarn {
+  color: var(--net);
+  font: var(--t-mono);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.detailActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+/* The ask beside the confirm. It is the longest string on the row, so it
+   wraps rather than pushing the two buttons off the block. */
+.detailAsk {
+  color: var(--text-soft);
+  flex: 1 1 16ch;
+  font: var(--t-mono);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Contributing compute is a consent, so it is a switch the reader sets — not
+   a state the row reports at them. */
+.computeToggle {
+  align-items: center;
+  color: var(--text-soft);
+  cursor: pointer;
+  display: inline-flex;
+  font: var(--t-body);
+  gap: var(--sp-2);
+  inline-size: fit-content;
+}
+
+.computeToggle input {
+  accent-color: var(--accent);
+}
+
+.renameForm {
+  align-items: center;
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.renameInput {
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: var(--t-body);
+  inline-size: min(240px, 100%);
+  padding: var(--sp-1) var(--sp-2);
+}
+
+/* ── Sharing ───────────────────────────────────────────────────────────────
+   Links, parked shares and the shared-space steward ceremony still render in
+   their pre-v9 card (`SharingCard`), which owns its own chrome. This only
+   gives the region the block rhythm and something for the "Recovery" verb to
+   scroll to. */
+.sharing {
+  display: flex;
+  flex-direction: column;
+  margin-block-start: var(--sp-4);
+  min-inline-size: 0;
+  scroll-margin-block-start: var(--sp-4);
 }

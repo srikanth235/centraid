@@ -444,10 +444,13 @@ export interface AutomationsOverviewBridgeProps {
   loadData: () => Promise<AuOverviewData>;
   onOpenAutomation: (ref: string) => void;
   onOpenRun: (automationId: string, runId: string) => void;
+  /** The empty state's one verb. "New automation" is NOT here: it is the
+   *  page's filled commit and lives in the app bar (issue #765, `opsBar.ts`),
+   *  resolved by the route's published verbs — a screen that also drew it
+   *  would put two of the view's one commit on the same page. */
   onBrowseTemplates: () => void;
-  onNewAutomation: () => void;
-  /** Curated template starters for the empty fleet — omitted when the
-   *  catalog is unavailable. Empty state falls back to Browse / New only. */
+  /** Curated template starters — the "Worth setting up" section. Omitted when
+   *  the catalog is unavailable, and the section disappears with it. */
   loadSuggestions?: () => Promise<AuOverviewSuggestionDTO[]>;
   /** Adopt a suggested template (clone → thread), same path as Templates. */
   onUseSuggestion?: (templateId: string) => void;

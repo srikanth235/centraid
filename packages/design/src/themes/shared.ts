@@ -13,7 +13,7 @@
 // "leaves the device" red — it appears as a border or a 2px rule and never as
 // a fill, because nothing alarming should be a large filled surface.
 
-import { semanticShade } from "../color";
+import { rgbaHex, semanticShade } from "../color";
 import type { Palette } from "../palette";
 
 // ── Ink ────────────────────────────────────────────────────────────────────
@@ -27,28 +27,32 @@ import type { Palette } from "../palette";
 // honest. It is validated against the WORST surface it can land on — in light
 // that is `WALL` (`#F0EFED`), the deepest paper the system paints, deeper than
 // both the page and the raised paper, and in dark it is the raised paper
-// (`#171716`), which is LIGHTER than the page. The brief specifies `#70706D`
-// for light and validates it against `surf` alone; on `WALL` that measures
-// 4.32:1, so the shipped value is deepened. Variant C deepens the whole ramp
-// one further rung — `ink3` ships as `#5A5A58` — because the same one-page
-// decision that retired the tone axis (see `PAGE`/`WALL` below) also removed
-// the last excuse for a borderline rung: with one page and one deepest paper
-// to clear, there is no tone-by-tone trade-off left to protect. That is the
-// only place this package departs from the brief's colour table, and
-// `contrast.test.ts` is what would catch it drifting back.
+// (`#171716`), which is LIGHTER than the page.
+//
+// The ramp now ships the Binding Layer v9 ladder exactly — `ink2 #5A5A58`,
+// `ink3 #6C6C69`, `ghost #888885` in light, `#9A9A98 / #878785 / #656563` in
+// dark. It previously sat one rung DEEPER at every secondary level, on the
+// reasoning that a borderline `ink3` had no tone-by-tone trade-off left to
+// protect. Measured against `WALL`, the deepest paper in the system, the v9
+// values clear their obligations with room to spare: soft 6.02:1, faint
+// 4.58:1 (floor 4.5), ghost 3.09:1 (floor 3, and ghost is forbidden from body
+// copy by its own role). Deepening past that was buying contrast the floors
+// did not ask for, at the cost of the four rungs reading as one flat grey —
+// the failure `contrast.test.ts`'s ramp-ordering assertion exists to name.
+// That test re-measures both ramps off the emitted CSS, so this is the pin.
 export const BRAND = "#141414";
 export const BRAND_DARK = "#EDEDEC";
-const INK_2 = "#4A4A48";
-const INK_2_DARK = "#ADADAB";
-const INK_3 = "#5A5A58";
-const INK_3_DARK = "#9A9A98";
+const INK_2 = "#5A5A58";
+const INK_2_DARK = "#9A9A98";
+const INK_3 = "#6C6C69";
+const INK_3_DARK = "#878785";
 // Below the ramp: placeholders and disabled glyphs. WCAG 1.4.3 exempts
 // inactive controls, and these two rungs exist precisely so a recessive state
 // gets its own colour token on the LEAF element instead of an `opacity` on the
 // container — opacity composites every descendant and silently invalidates
 // token-level contrast.
-const INK_GHOST = "#6C6C69";
-const INK_GHOST_DARK = "#878785";
+const INK_GHOST = "#888885";
+const INK_GHOST_DARK = "#656563";
 const INK_DISABLED = "#9C9C99";
 const INK_DISABLED_DARK = "#565654";
 
@@ -71,6 +75,21 @@ export const ACCENT_LIGHT_DARK = "#C8C8C6";
 export const ACCENT_HOVER = "#000000";
 export const ACCENT_HOVER_DARK = "#FFFFFF";
 
+/**
+ * The ink under hover/press when it is a LINE and a LABEL rather than a fill —
+ * the outlined or quiet control, whose border and text are both the ink.
+ *
+ * It steps the opposite way from `ACCENT_HOVER` above, and the asymmetry is
+ * forced rather than chosen: a fill's hover must move AWAY from the ink it
+ * carries, and the accent already sits at the extreme of the ramp, so the only
+ * direction left for an outline's own ink is toward the paper. Nothing rides
+ * on top of it — the label IS this colour — so a step toward the paper costs
+ * contrast against the page and nothing else: 13.4:1 light, 12.8:1 dark,
+ * against floors of 4.5 as text and 3 as a border.
+ */
+export const ACCENT_INK_HOVER = "#2E2E2D";
+export const ACCENT_INK_HOVER_DARK = "#D2D2D1";
+
 // ── The reserved hues ──────────────────────────────────────────────────────
 
 /** Prose links and text selection. Never permitted on a control. */
@@ -87,6 +106,45 @@ export const RING_DARK = "#8098E8";
  */
 export const NET = "#9A3B2E";
 export const NET_DARK = "#E08878";
+/**
+ * `NET` under hover on the outlined destructive control — the border and the
+ * label together, because destructive is never a fill and there is no ground
+ * to move.
+ *
+ * Unlike `ACCENT_INK_HOVER`, this steps AWAY from the paper (deeper in light,
+ * brighter in dark): `NET` is not at the end of its own ramp, so it still has
+ * somewhere to go, and a warning that gets quieter under the pointer is the
+ * wrong answer.
+ */
+export const NET_HOVER = "#7F3026";
+export const NET_HOVER_DARK = "#EC9C8D";
+/**
+ * The ONE tint of `NET` the system permits, and the exception that proves the
+ * "never a fill" rule rather than breaking it: at 7% (light) / 11% (dark) it
+ * is a ground faint enough that the ink ramp still clears AA on it, which is
+ * what stops it from becoming the large alarming surface `--net` forbids. The
+ * alphas differ per theme because a wash on near-black has to work harder to
+ * be seen at all.
+ *
+ * Derived from `NET`, never re-typed: a wash that stops tracking the rung it
+ * tints is two colours pretending to be one.
+ */
+const NET_WASH_ALPHA = { dark: 0.11, light: 0.07 } as const;
+export const NET_WASH = rgbaHex(NET, NET_WASH_ALPHA.light);
+export const NET_WASH_DARK = rgbaHex(NET_DARK, NET_WASH_ALPHA.dark);
+/**
+ * "Not yet, and not wrong" — pending, expiring, invited. The state between a
+ * thing having happened and a thing having failed, which the system otherwise
+ * has no word for: `--warning` says a reading is degraded and `--net` says
+ * bytes leave the device, and neither is true of an invitation nobody has
+ * accepted yet.
+ *
+ * A border, a status chip and status text, on the same terms as `--net`: it
+ * clears AA as text on every surface in both themes (4.83:1 at worst in
+ * light, 6.57:1 in dark) and is never a large filled surface.
+ */
+export const SEAM = "#B4441F";
+export const SEAM_DARK = "#E0864F";
 
 // ── The stage ──────────────────────────────────────────────────────────────
 //
@@ -208,6 +266,9 @@ export interface Theme {
   accentDeep: string;
   /** The fill under hover/press — further from the ink it carries. */
   accentHover: string;
+  /** The ink under hover/press when it is the LINE and the LABEL, not a fill.
+   *  Steps toward the paper, because the ink has nowhere else to go. */
+  accentInkHover: string;
   /** Ink as text. */
   accentText: string;
 
@@ -219,6 +280,14 @@ export interface Theme {
   warning: string;
   /** "Leaves the device" — borders and 2px rules only. */
   net: string;
+  /** `net` under hover on the outlined destructive control — border and label
+   *  together, stepped away from the paper. */
+  netHover: string;
+  /** The one permitted tint of `net`: a wash faint enough that the ink ramp
+   *  still clears AA on it. */
+  netWash: string;
+  /** "Not yet, and not wrong" — pending, expiring, invited. */
+  seam: string;
   /** Prose links and text selection. Never on a control. */
   link: string;
   /** The focus ring. */

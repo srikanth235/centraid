@@ -34,6 +34,80 @@
   landed: that host's CocoaPods 1.16.2 aborts under Ruby 4.0.3 with
   `Unicode Normalization not appropriate for ASCII-8BIT`. Until it happens the
   app bundles a native map SDK it never calls.
+- **An inline app cannot read the frame's band owner, so a compact pane can
+  lose its shelf navigation.** The shell keeps `shell.bandOwner.<appId>` in
+  `packages/client/src/react/shell/useBandOwner.ts`, but `InlineFrame`
+  (`packages/blueprints/apps/inline-types.ts`) exposes nothing about it. An app
+  can claim the band; it cannot ask whether the claim was honoured. Docs hides
+  its shelf strip on compact and claims unconditionally, so if the member hands
+  the band back to the shell there is no shelf navigation left at all. Photos
+  papers over the same hole by keeping a second copy of the preference. The fix
+  is one field on the frame contract — the shell already has the verdict, it
+  simply does not pass it down — after which Photos' duplicate copy can go.
+
+- **The daily rollup has no per-day failure split, so the bars carry one
+  segment.** The automations and insights surfaces draw a bar per day, and the
+  v9 bar block stacks succeeded-then-failed with a fail-first clamp
+  (`packages/design/src/blocks/bars.ts`). The rollup the gateway records does
+  not separate the two, so every bar is drawn as a single run count and the
+  legend is withheld rather than invented. When the rollup gains the split the
+  block needs no change — only the caller's second segment.
+
+- **No run durations are recorded, so both surfaces withhold the
+  median-duration fact.** The v9 facts panel for automations names a typical
+  run duration. Nothing in the run ledger stores a start/finish pair, so
+  desktop, PWA and mobile all omit the row instead of computing something that
+  would look authoritative and be wrong. Recording the pair is a gateway-side
+  change; the panels already have the slot.
+
+- **`ShelfStrip` and `MoreSheet` are near-duplicates in Photos and Docs.** The
+  shelf *model* is now shared (`packages/blueprints/apps/_shared/shelves.ts`),
+  but these two components are still written twice because their CSS modules
+  genuinely diverge (`--content-margin` vs `--sp-4`, the mono-numeric token
+  trio, Docs' `meta`/`footer` rows against Photos' bare count). The repo's
+  shared-component pattern is one component plus one shared CSS module
+  (`_shared/SearchScaffold.tsx`), so merging them changes rendered output and
+  needs `design:gallery` baselines regenerated — too much for a drive-by.
+
+- **Modals are the one control the shell hand-rolls.** Six raw `<dialog>`
+  elements with no kit component behind them: `AllAppsSheet`, `PaletteScreen`,
+  `VaultModal`, `TestConnectionModal`, `ConnectFlowModal`, `RenameGatewayModal`.
+  Three of the four modals share `vaultModalStyles.profModal`, so it is
+  half-centralised by copying a class name rather than by a component. This is
+  the largest remaining gap between the shell and the design system — the audit
+  in #765 found the shell otherwise clean (zero raw `<input>`, `<textarea>` or
+  `<table>`; mobile has zero raw `<TextInput>` and routes all 692 `<Text>`
+  through the kit's `NativeText`).
+
+- **Three raw `<button>`s carry no styling at all.** `AutomationThreadScreen`,
+  `RunViewScreen` and `CaptureOverlay` each render
+  `<button type="button" onClick={onBack}>` with no class, against a kit with 32
+  `<Button>` uses. Eight more raw buttons use a local class and four already
+  ride shared ones (`controlsCss.chip`, `buttonCss.ghost`); the unstyled three
+  are the unambiguous misses.
+
+- **21 mobile `<Pressable>`s act as buttons without the kit.** Many carry
+  `accessibilityRole="button"` explicitly. They cluster in `apps/agenda`,
+  `apps/tasks`, `apps/tally`, `apps/locker` and `apps/people` — the same apps as
+  the entry below, and the same root cause.
+
+- **The design gates enforce tokens, not components.** This is the structural
+  reason the three items above drift silently: a hand-rolled `<button>` or
+  `<dialog>` styled with `var(--…)` passes `lint-design-tokens`,
+  `lint-hairline`, `lint-type-floor` and every other gate green. The gates ask
+  "did you use a raw value?", never "did you use the component that exists?".
+  Closing that would need a rule that knows which elements have kit equivalents
+  — worth doing before the vocabulary grows again.
+
+- **Six blueprint apps still draw their own chrome.** `agenda`, `locker`,
+  `notes`, `people`, `tally` and `tasks` each carry a hand-rolled `Chrome.tsx`
+  (231, 105, 295, 378, 306 and 223 lines) with its own topbar, hamburger,
+  drawer scrim and theme button — a second chrome inside the frame's chrome,
+  which is exactly what Photos and Docs stopped doing in #765. They already
+  import the frame contract, so the contribution channel is there; adopting it
+  is per-app work that touches each app's interaction model and wants its own
+  issue rather than a widened design-system pass.
+
 - #496 — **Test infrastructure assurance** (enforcement, signal, coverage).
   Parent backlog for ruleset on `main`, nightly auto-issue + Pages main-only
   guard, floors/`minimumTests` ratchet, `requireAssertions`, affected vitest in
