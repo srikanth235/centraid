@@ -128,6 +128,7 @@ vi.mock(
       // The band's label carries state in its WEIGHT (:4975), so it names two
       // families rather than taking the `control` role wholesale.
       family: { sansMedium: "sans-medium", sansRegular: "sans-regular" },
+      radii: { lg: 12, md: 8, pill: 999, sm: 4, xl: 16, xs: 0 },
       t: () => ({}),
       useTheme: () => ({
         colors: {

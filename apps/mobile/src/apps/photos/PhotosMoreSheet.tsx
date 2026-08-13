@@ -22,7 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { borders, family, radii, t, useTheme } from "../../kit/theme";
+import { borders, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { PHOTOS_MORE_FOOT, PHOTOS_MORE_ROWS } from "./photos-band";
 import type { PhotosMoreRowKey } from "./photos-band";
@@ -153,17 +153,15 @@ const makeStyles = (colors: ThemeColors) =>
     rowLabel: {
       color: colors.text,
       flex: 1,
-      fontFamily: family.sansRegular,
-      fontSize: 13,
-      lineHeight: 18,
+      ...t("small"),
     },
     rowMeta: { ...t("mono"), color: colors.textFaint },
     scrim: { ...StyleSheet.absoluteFill },
     sheet: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
-      borderTopLeftRadius: 12,
-      borderTopRightRadius: 12,
+      borderTopLeftRadius: radii.lg,
+      borderTopRightRadius: radii.lg,
       borderWidth: borders.hairline,
       bottom: 0,
       insetInlineEnd: 0,

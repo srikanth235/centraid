@@ -147,6 +147,10 @@ test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands 
       fullPage: true,
     });
     await page.screenshot({
+      path: path.join(evidenceDir, "issue-747-binding-layer-v8.png"),
+      fullPage: true,
+    });
+    await page.screenshot({
       path: path.join(evidenceDir, "issue-726-vault-as-share-unit.png"),
       fullPage: true,
     });

@@ -23,7 +23,7 @@
   align-items: center;
   justify-content: center;
   color: var(--text-soft);
-  font: var(--t-small, 400 0.85rem/1.4 system-ui, sans-serif);
+  font: var(--t-small);
 }
 
 /* The seat wall (docs/blueprint-seats.md S5) — an app the manifest refuses

@@ -42,7 +42,7 @@
   display: inline-flex;
   padding: 2px;
   gap: 2px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
 }
@@ -50,13 +50,13 @@
   /* <label> wrapping an invisible native radio (a11y.srControl) that covers
      it — the input is the hit area, so the label must position it. */
   position: relative;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 5px 12px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: none;
   color: var(--text-faint);
   cursor: pointer;
@@ -83,7 +83,7 @@
   align-items: center;
   gap: 7px;
   padding: 5px 11px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   color: var(--text-faint);
@@ -98,7 +98,7 @@
   cursor: default;
 }
 .refreshStamp {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.03em;
 }
@@ -123,7 +123,7 @@
   color: var(--text);
 }
 .packMeta {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -149,7 +149,7 @@
   min-height: 88px;
   padding: 11px 12px;
   text-align: left;
-  border-radius: 11px;
+  border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   color: var(--text);
@@ -175,22 +175,22 @@
 }
 .cardLabel {
   font-family: var(--font-sans);
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: var(--t-small-size);
+  font-weight: 600;
   line-height: 1.25;
   color: inherit;
 }
 .cardGhostNote {
   margin-top: auto;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
 .cardValue {
-  font-family: var(--font-mono);
-  font-size: 17px;
+  font-family: var(--font-sans);
+  font-size: var(--t-reading-size);
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text);
@@ -198,7 +198,7 @@
 }
 .cardQuiet {
   margin-top: auto;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -250,7 +250,7 @@
   color: inherit;
 }
 .machineryMeta {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -259,13 +259,13 @@
 .machineryTable {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
 }
 .machineryTable th {
   text-align: left;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -285,11 +285,11 @@
 }
 .machineryPack {
   color: var(--text-ghost);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
 }
 .numCol {
   text-align: right;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
 }

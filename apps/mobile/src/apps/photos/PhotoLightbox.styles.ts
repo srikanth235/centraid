@@ -156,7 +156,7 @@ export const styles = StyleSheet.create({
    *  `expo-video-thumbnails` cannot honestly produce one — see
    *  `video-scrub-strip-native.ts`. */
   scrubStrip: { flexDirection: "row", gap: 2, paddingHorizontal: spacing[3] },
-  scrubStripFrame: { borderRadius: 3, height: 34, width: 34 },
+  scrubStripFrame: { borderRadius: radii.sm, height: 34, width: 34 },
   transport: {
     alignItems: "center",
     flexDirection: "row",

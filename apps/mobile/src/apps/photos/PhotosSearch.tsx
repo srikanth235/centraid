@@ -60,7 +60,7 @@ import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
-import { borders, spacing, t, useTheme } from "../../kit/theme";
+import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
 import type { PhotosScreenProps } from "../../navigation";
@@ -614,7 +614,7 @@ const makeStyles = (colors: ThemeColors) =>
     clearTarget: { justifyContent: "center", minHeight: 34 },
     example: {
       borderColor: colors.line,
-      borderRadius: 999,
+      borderRadius: radii.pill,
       borderWidth: borders.hairline,
       justifyContent: "center",
       minHeight: 34,
@@ -656,7 +656,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       backgroundColor: colors.bgSunken,
       borderColor: colors.line,
-      borderRadius: 7,
+      borderRadius: radii.md,
       borderWidth: borders.hairline,
       flexDirection: "row",
       gap: spacing[2],
@@ -714,7 +714,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     panel: {
       borderColor: colors.line,
-      borderRadius: 12,
+      borderRadius: radii.lg,
       borderWidth: borders.hairline,
       gap: spacing[2],
       marginHorizontal: spacing[4],

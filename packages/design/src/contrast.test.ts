@@ -47,8 +47,8 @@ const TEXT_FLOORS = {
 
 /** Substitute the knobs the token CSS parameterizes colours by, so an
  *  `hsl(var(--app-hue) 8% 42%)` becomes a measurable colour, then evaluate the
- *  one `calc()` form in use. Mirrors what `apps/mobile/src/kit/theme/
- *  generate.ts` does when it lowers the same CSS for React Native. */
+ *  one `calc()` form in use. Native does not need this parser: its direct
+ *  lowering already contains concrete values. */
 function resolve(value: string, scope: Record<string, string>): string {
   return value
     .replace(

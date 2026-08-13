@@ -32,9 +32,9 @@
   color: var(--text-faint);
 }
 .exdate .dy {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: var(--t-mono-numeric);
-  font-size: 18px;
+  font-size: var(--t-reading-size);
   font-weight: 600;
 }
 .exmain {
@@ -68,9 +68,9 @@
   color: var(--text-faint);
 }
 .examt {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: var(--t-mono-numeric);
-  font-size: 15px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   margin-top: 2px;
 }

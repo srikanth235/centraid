@@ -6,11 +6,11 @@
   min-width: 46px;
   min-height: 46px;
   border: 1px solid var(--line-strong);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent);
   color: var(--text-inv);
   box-shadow: 0 12px 32px color-mix(in srgb, var(--text) 20%, transparent);
-  font: 600 14px var(--font-sans);
+  font: var(--t-small-strong);
   cursor: pointer;
 }
 
@@ -44,7 +44,7 @@
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--line-strong);
-  border-radius: 20px;
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   color: var(--text);
   box-shadow: 0 28px 90px color-mix(in srgb, var(--text) 42%, transparent);
@@ -67,7 +67,7 @@
 .head h2 {
   flex: 1;
   margin: 0;
-  font: 600 20px var(--font-sans, var(--font-sans));
+  font: var(--t-title);
 }
 
 .head button,
@@ -107,7 +107,7 @@
   background: var(--bg);
   color: var(--text);
   padding: 10px 12px;
-  font: 400 14px var(--font-sans);
+  font: var(--t-body);
 }
 
 .label textarea {
@@ -153,7 +153,7 @@
 
 .scanPanel h3 {
   margin: 0;
-  font: 600 17px var(--font-sans, var(--font-sans));
+  font: var(--t-title);
 }
 
 .participants {
@@ -193,7 +193,7 @@
 .receiptLine input {
   min-width: 0;
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--bg);
   color: var(--text);
   padding: 8px;

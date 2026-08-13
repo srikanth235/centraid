@@ -2,16 +2,15 @@
 // Single source of truth for colors, typography, spacing, density,
 // tile-finishes, icons, and built-in app metadata.
 //
-// Three lowerings of the one contract:
+// Three direct lowerings of the one contract:
 //   - Desktop/web shell — CSS vars via `toCss()`, injected at boot.
 //   - Blueprint apps    — CSS vars via `toBlueprintCss()`, served to the
 //                         sandboxed app surface.
-//   - Expo mobile       — imports the typed values (`type`, `spacing`,
-//                         `radii`, …) and lowers `toBlueprintCss()` ahead of
-//                         time into `apps/mobile/src/kit/theme/
-//                         tokens.generated.ts` (see that app's
-//                         `scripts/generate-theme.ts`). It does not consume
-//                         `toCss()` or the `themes` presets.
+//   - Expo mobile       — concrete typed values via `toNativeTheme()`; its
+//                         adapter only maps Expo font names and RN tracking.
+//
+// There is no copied theme or platform-specific token registry. A value is
+// either canonical here, or it is a renderer concern at one adapter boundary.
 //
 // Canonical design document: DESIGN.md (repo root).
 
@@ -91,11 +90,13 @@ export {
   NATIVE_DELTA_OVERRIDES,
   TYPE_PROFILE_SUPPORT,
   blueprintType,
+  blueprintTypeForSurface,
   blueprintTypeShorthand,
   nativeTypeStyle,
   type,
   typeShorthand,
   typeForProfile,
+  typeForSurface,
   typeModifiers,
   typeSizeRungs,
 } from "./typography";
@@ -151,9 +152,8 @@ export type {
   RecipeName,
   RecipeState,
 } from "./recipes/index";
-export { emitRecipeCss } from "./recipes/css";
-export { NATIVE_RECIPES, nativeButtonStyle } from "./recipes/native";
-export type { NativeButtonStyle, NativeRecipeLowering } from "./recipes/native";
+export { nativeButtonStyle } from "./recipes/native";
+export type { NativeButtonStyle } from "./recipes/native";
 
 // Blueprint-app ("field notebook") token layer — a separate design
 // language for the sandboxed blueprint apps, not a variant of `toCss()`'s

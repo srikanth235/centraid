@@ -11,10 +11,9 @@
 // tiles, the band, and the Photos chrome all ended up looking washed out on
 // device while matching the handoff in a simulator screenshot.
 //
-// The one rule weight is `borders.hairline` from @centraid/design (re-exported
-// by apps/mobile/src/kit/theme), lowered into `tokens.generated.ts`. That token
-// carries the rationale; this gate only makes the wrong spelling
-// unrepresentable.
+// The one rule weight is `borders.hairline` from @centraid/design, re-exported
+// directly by apps/mobile/src/kit/theme. The registry carries the value; this
+// gate only makes the wrong spelling unrepresentable.
 //
 // Like the logical-inset gate, this is a source scan rather than a runtime
 // test: nothing throws and nothing warns when a border is drawn a third too

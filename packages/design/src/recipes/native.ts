@@ -1,33 +1,7 @@
-import { metrics } from "../density";
+import { spacing } from "../density";
 import type { NativeColors, NativeTheme } from "../native";
 import { RECIPES } from "./index";
-import type { ButtonVariant, RecipeName } from "./index";
-
-/**
- * Native lowering of the recipe table.  The object keeps role references
- * intact so a renderer can compose a style from the same solved theme rather
- * than inventing a parallel mobile vocabulary.
- */
-export interface NativeRecipeLowering {
-  name: RecipeName;
-  rest: readonly string[];
-  states: Readonly<Record<string, readonly string[]>>;
-  capabilities: readonly ("web" | "blueprint" | "native")[];
-}
-
-export const NATIVE_RECIPES: Readonly<
-  Record<RecipeName, NativeRecipeLowering>
-> = Object.fromEntries(
-  Object.entries(RECIPES).map(([name, recipe]) => [
-    name,
-    {
-      capabilities: recipe.capabilities,
-      name: recipe.name,
-      rest: recipe.rest,
-      states: recipe.states,
-    },
-  ])
-) as Record<RecipeName, NativeRecipeLowering>;
+import type { ButtonVariant } from "./index";
 
 export interface NativeButtonStyle {
   backgroundColor: string;
@@ -54,13 +28,13 @@ export function nativeButtonStyle(
   theme: NativeThemeParts,
   disabled = false
 ): NativeButtonStyle {
-  const recipe = NATIVE_RECIPES.Button;
+  const recipe = RECIPES.Button;
   if (!recipe.capabilities.includes("native")) {
     throw new Error("Button recipe must support native lowering");
   }
   const { colors, radii } = theme;
-  const minHeight = metrics.control;
-  const paddingHorizontal = 24;
+  const minHeight = theme.targetMin.coarse;
+  const paddingHorizontal = spacing[4];
   if (disabled) {
     return {
       backgroundColor: "transparent",
@@ -97,7 +71,7 @@ export function nativeButtonStyle(
         color: colors.text,
         minHeight,
         borderRadius: radii.md,
-        paddingHorizontal: 10,
+        paddingHorizontal,
       };
     case "secondary":
       return {

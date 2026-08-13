@@ -35,4 +35,5 @@
   white-space: pre-wrap;
   color: var(--text-soft);
   font: var(--t-small);
+  font-family: var(--font-code);
 }

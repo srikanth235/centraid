@@ -66,7 +66,7 @@
   gap: 6px;
   padding: 6px var(--sp-3);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--bg-elev);
   font: var(--t-small);
   color: var(--text-soft);
@@ -88,7 +88,7 @@
   justify-content: center;
   width: 18px;
   height: 18px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent-soft);
   color: var(--text-soft);
   font-size: var(--t-control-size);

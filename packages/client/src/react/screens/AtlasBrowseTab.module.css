@@ -11,13 +11,13 @@
 }
 
 .loading {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-faint);
   padding: 24px 4px;
 }
 .gridError {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--danger);
   padding: 12px 14px;
@@ -75,7 +75,7 @@
   text-align: left;
   font-family: var(--font-sans);
   font-size: var(--t-small-size);
-  font-weight: 500;
+  font-weight: 600;
 }
 @media (min-width: 720px) {
   .pickToggle {
@@ -88,7 +88,7 @@
   flex-direction: column;
   gap: 8px;
   border: 0.5px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   padding: 10px;
   overflow: hidden;
@@ -108,7 +108,7 @@
   align-items: center;
   gap: 7px;
   padding: 6px 9px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--bg-sunken);
   color: var(--text-ghost);
 }
@@ -119,7 +119,7 @@
   background: none;
   outline: none;
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text);
 }
 .pickInput::placeholder {
@@ -139,7 +139,7 @@
   gap: var(--sp-hair);
 }
 .pickPack {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -150,7 +150,7 @@
   margin-top: 4px;
   padding: 6px 6px 3px;
   border-top: 0.5px solid var(--line);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -163,7 +163,7 @@
   gap: 8px;
   padding: 6px 8px;
   border: none;
-  border-radius: 7px;
+  border-radius: var(--r-md);
   background: none;
   color: var(--text-soft);
   cursor: pointer;
@@ -180,14 +180,14 @@
 }
 .pickLabel {
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .pickCount {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-ghost);
   font-variant-numeric: tabular-nums;
@@ -221,17 +221,17 @@
   color: var(--text);
 }
 .mainLogical {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .machineryTag {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 2px 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   color: var(--text-faint);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
@@ -248,13 +248,13 @@
   align-items: center;
   gap: 6px;
   padding: 7px 13px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border: 0.5px solid var(--accent);
   background: var(--accent);
   color: var(--text-inv);
   font-family: var(--font-sans);
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: var(--t-small-size);
+  font-weight: 600;
   cursor: pointer;
   transition: opacity 0.12s var(--ease);
 }
@@ -270,12 +270,12 @@
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   color: var(--text-soft);
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   cursor: pointer;
   transition: color 0.12s var(--ease);
 }
@@ -291,15 +291,15 @@
   align-items: center;
   gap: 6px;
   padding: 7px 13px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border: 0.5px solid var(--danger);
   /* Rest 8% / hover 12% — the hover step stays inside the 12% self-wash
      `--danger` is solved against, so the label keeps its ratio in both. */
   background: color-mix(in oklab, var(--danger) 8%, transparent);
   color: var(--danger);
   font-family: var(--font-sans);
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: var(--t-small-size);
+  font-weight: 600;
   cursor: pointer;
 }
 .dangerBtn:hover:not(:disabled) {
@@ -315,7 +315,7 @@
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: var(--r-md);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   color: var(--text-faint);
@@ -344,13 +344,13 @@
   gap: 12px;
   padding: 56px 24px;
   border: 0.5px dashed var(--line-strong);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--bg-sunken);
 }
 .promptIcon {
   width: 46px;
   height: 46px;
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   display: grid;
   place-items: center;
   color: var(--text-faint);
@@ -383,17 +383,17 @@
   margin: 0;
   flex: 1;
   font-family: var(--font-sans);
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   line-height: 1.4;
 }
 .unlockBtn {
   flex: none;
   padding: 5px 11px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   cursor: pointer;
@@ -407,12 +407,12 @@
 .gridWrap {
   overflow-x: auto;
   border: 0.5px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
 }
 .grid {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
 }
 .gridHead {
   position: sticky;
@@ -431,7 +431,7 @@
   background: none;
   color: var(--text-faint);
   cursor: pointer;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   text-align: left;
 }
@@ -485,10 +485,10 @@
   padding: 32px 16px;
   text-align: center;
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-ghost);
   border: 0.5px dashed var(--line-strong);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
 }
 
 .nullCell {
@@ -496,7 +496,7 @@
   font-style: italic;
 }
 .fkCell {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-soft);
   cursor: help;
@@ -519,11 +519,11 @@
   align-items: center;
   gap: 4px;
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 0.5px solid var(--line);
   background: var(--bg-sunken);
   color: var(--text-ghost);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.04em;
 }
@@ -531,11 +531,11 @@
 .loadMore {
   align-self: center;
   padding: 8px 18px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   cursor: pointer;
@@ -589,7 +589,7 @@
   color: var(--text);
 }
 .drawerTable {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
@@ -610,7 +610,7 @@
   display: flex;
   align-items: baseline;
   gap: 7px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-soft);
 }
@@ -625,12 +625,12 @@
 .input {
   width: 100%;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   outline: none;
 }
 .input:focus {
@@ -645,20 +645,20 @@
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border: 0.5px dashed var(--line-strong);
   background: var(--bg-sunken);
   color: var(--text-ghost);
   font-family: var(--font-sans);
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
 }
 .autoField {
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border: 0.5px dashed var(--line);
   background: var(--bg-sunken);
   color: var(--text-ghost);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
 }
 
@@ -669,7 +669,7 @@
   gap: 5px;
 }
 .fkChosen {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-faint);
   word-break: break-all;
@@ -697,7 +697,7 @@
   width: 100%;
   padding: 6px 9px;
   border: none;
-  border-radius: 7px;
+  border-radius: var(--r-md);
   background: none;
   cursor: pointer;
   text-align: left;
@@ -707,11 +707,11 @@
 }
 .fkHitDisplay {
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text);
 }
 .fkHitId {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
@@ -719,7 +719,7 @@
 .drawerError {
   margin: 0 18px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border: 0.5px solid var(--danger);
   background: color-mix(in oklab, var(--danger) 8%, transparent);
   color: var(--danger);
@@ -765,7 +765,7 @@
   flex-direction: column;
   gap: 14px;
   padding: 20px;
-  border-radius: 16px;
+  border-radius: var(--r-lg);
   background: var(--bg);
   border: 0.5px solid var(--line-strong);
   box-shadow: var(--shadow-lg);
@@ -821,22 +821,22 @@
   border-bottom: none;
 }
 .depTable {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text);
 }
 .depVia {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .depBadge {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
 }
 .depBadgeFk {
   color: var(--danger);
@@ -848,7 +848,7 @@
 }
 .depCount {
   margin-left: auto;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
@@ -856,7 +856,7 @@
 .dialogBlocked {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border-left: 2px solid var(--danger);
   background: color-mix(in oklab, var(--danger) 7%, transparent);
   color: var(--text-soft);
@@ -867,7 +867,7 @@
 .dialogWarn {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border-left: 2px solid var(--line-strong);
   background: var(--bg-sunken);
   color: var(--text-faint);

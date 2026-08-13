@@ -113,7 +113,7 @@ export function ListItem({
         </View>
       </View>
       {item.document.starred ? (
-        <Icon name="star" size={16} color="#d99b18" />
+        <Icon name="star" size={16} color={colors.warning} />
       ) : null}
       <Pressable
         accessibilityLabel={`Actions for ${item.document.title}`}

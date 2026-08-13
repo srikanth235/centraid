@@ -251,8 +251,8 @@ const makeStyles = (colors: ThemeColors) =>
       minHeight: metrics.control,
       paddingHorizontal: 16,
     },
-    // The page colour on ink, not white — `onAccent` is the paper.
-    btnPrimaryLabel: { ...t("control"), color: colors.onAccent },
+    // The solved inverse foreground on the theme's ink fill.
+    btnPrimaryLabel: { ...t("control"), color: colors.textInv },
     btnSecondary: {
       alignItems: "center",
       borderColor: colors.lineStrong,

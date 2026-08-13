@@ -573,7 +573,10 @@ export default function DocsHome({
         visible={addOpen}
         onRequestClose={() => setAddOpen(false)}
       >
-        <Pressable style={styles.backdrop} onPress={() => setAddOpen(false)} />
+        <Pressable
+          style={[styles.backdrop, { backgroundColor: colors.scrim }]}
+          onPress={() => setAddOpen(false)}
+        />
         <View style={[styles.dialog, { backgroundColor: colors.bgElev }]}>
           <Text style={[styles.dialogTitle, { color: colors.text }]}>
             Add to Docs
@@ -626,7 +629,11 @@ export default function DocsHome({
                 <Text
                   style={[
                     styles.createText,
-                    { color: folderName.trim() ? "#fff" : colors.textFaint },
+                    {
+                      color: folderName.trim()
+                        ? colors.textInv
+                        : colors.textFaint,
+                    },
                   ]}
                 >
                   Create folder

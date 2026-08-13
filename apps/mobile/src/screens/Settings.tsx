@@ -568,15 +568,14 @@ const makeStyles = (colors: ThemeColors) =>
     camera: { borderRadius: radii.md, flex: 1, overflow: "hidden" },
     emptyTitle: { ...t("title"), color: colors.text, marginBottom: spacing[2] },
     fieldLabel: {
-      ...t("small"),
+      ...t("smallStrong"),
       color: colors.textSoft,
-      fontWeight: "500",
       marginBottom: 6,
     },
     fieldLabelSpaced: { marginTop: spacing[4] },
     help: { ...t("small"), color: colors.textFaint, marginBottom: spacing[3] },
     helpMono: {
-      fontFamily: family.monoRegular,
+      fontFamily: family.sansRegular,
       color: colors.textSoft,
     },
     input: {
@@ -633,10 +632,8 @@ const makeStyles = (colors: ThemeColors) =>
       paddingTop: spacing[2],
     },
     title: {
+      ...t("display"),
       color: colors.text,
-      fontFamily: family.serifRegular,
-      fontSize: 26,
-      letterSpacing: -0.3,
     },
     unavailable: { ...t("small"), color: colors.textFaint },
   });

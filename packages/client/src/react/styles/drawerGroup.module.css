@@ -6,7 +6,7 @@
 }
 .groupLabel {
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   letter-spacing: -0.005em;
   color: var(--text);

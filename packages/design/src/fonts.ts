@@ -51,10 +51,6 @@ const fontSourceRoot = (genus: BundledFace): string => {
       return path.dirname(
         require.resolve("@fontsource/instrument-sans/package.json")
       );
-    case "serif":
-      return path.dirname(
-        require.resolve("@fontsource/source-serif-4/package.json")
-      );
   }
 };
 

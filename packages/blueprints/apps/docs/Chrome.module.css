@@ -62,22 +62,6 @@
   --app-drawer-width: 274px;
 }
 
-/* Knob: appFont swaps the body/UI sans face. The host sets data-app-font on the
-   inline scope wrapper (pushKnobToInlineRoot); app.css's :root[data-app-font]
-   rules aren't loaded inline, so re-express them here keyed on that wrapper.
-   Each branch REBINDS the sans role to another token-owned face rather than
-   naming a family: `unset` on a custom property falls back to inheritance, i.e.
-   the :root default stack, so "sans" needs no literal of its own. */
-:global(.centraid-inline-scope[data-app-font="sans"]) {
-  --font-sans: unset;
-}
-:global(.centraid-inline-scope[data-app-font="serif"]) {
-  --font-sans: var(--font-serif);
-}
-:global(.centraid-inline-scope[data-app-font="mono"]) {
-  --font-sans: var(--font-mono);
-}
-
 /* ---------- Sidebar (static chrome; nav rows/folders/storage → *.module.css) ---------- */
 
 .side {
@@ -131,7 +115,7 @@
   z-index: 40;
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-lg);
   padding: var(--sp-1);
   animation: kit-rise var(--dur-2) var(--ease-entry);
@@ -162,7 +146,7 @@
 }
 .storage {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   padding: var(--sp-3) var(--sp-3);
   background: var(--bg-elev);
 }
@@ -316,7 +300,7 @@
    and to nothing else. */
 .listwrap {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   overflow: hidden;
   background: var(--bg-elev);
 }

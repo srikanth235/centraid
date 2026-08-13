@@ -24,7 +24,7 @@ import React, { useMemo } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
-import { borders, spacing, t, useTheme } from "../../kit/theme";
+import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { photoAccessCopy, photoAccessState } from "./photo-access";
 import type {
@@ -158,7 +158,7 @@ function Control({
       <Text
         style={[
           styles.controlText,
-          { color: filled ? colors.onAccent : colors.text },
+          { color: filled ? colors.textInv : colors.text },
         ]}
       >
         {control.label}
@@ -178,7 +178,7 @@ const makeStyles = (colors: ThemeColors) =>
     body: { paddingBottom: spacing[6], paddingHorizontal: spacing[4] },
     control: {
       alignItems: "center",
-      borderRadius: 8,
+      borderRadius: radii.md,
       justifyContent: "center",
       minHeight: 44,
       paddingHorizontal: spacing[4],

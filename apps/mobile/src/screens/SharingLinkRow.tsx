@@ -11,7 +11,7 @@ import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
 import { Text } from "../kit/components/NativeText";
 import type { useTheme } from "../kit/theme";
-import { density, radii, t } from "../kit/theme";
+import { density, family, radii, t } from "../kit/theme";
 import {
   getReceiveSetting,
   mintLinkTicket,
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
   paste: {
     borderRadius: radii.md,
     borderWidth: 1,
-    fontFamily: "monospace",
+    fontFamily: family.monoRegular,
     minHeight: 64,
     padding: 8,
   },
@@ -300,5 +300,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  ticketText: { fontFamily: "monospace" },
+  ticketText: { fontFamily: family.monoRegular },
 });

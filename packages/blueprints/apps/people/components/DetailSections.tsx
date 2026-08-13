@@ -87,7 +87,7 @@ function DebtsSection({
     debts.length > 0 ? (
       <span
         style={{
-          fontFamily: "var(--font-mono)",
+          fontFamily: "var(--font-sans)",
           fontSize: "11px",
           textTransform: "none",
           letterSpacing: 0,

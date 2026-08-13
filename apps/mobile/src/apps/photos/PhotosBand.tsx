@@ -46,7 +46,7 @@ import {
 import type { BandOwner } from "../../kit/band/band-owner";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { t, useTheme } from "../../kit/theme";
+import { t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { BAND_CAPSULE, resolveBand } from "./photos-band";
 import type { BandDestinationKey } from "./photos-band";
@@ -199,7 +199,7 @@ const makeStyles = (colors: ThemeColors) =>
     activeRule: {
       // A rule, not a pill: square ends, full 2pt height, held 14pt off each
       // side of the tab, on the tab's top edge (:4974).
-      borderRadius: 0,
+      borderRadius: radii.xs,
       height: ACTIVE_RULE,
       insetInlineEnd: ACTIVE_RULE_INSET,
       insetInlineStart: ACTIVE_RULE_INSET,

@@ -37,7 +37,7 @@ describe(scaffoldAppFiles, () => {
     expect(appJson.id).toBe("todos");
     expect(appJson.name).toBe("Todos");
     expect(
-      Array.isArray(appJson.knobs) && appJson.knobs.length === 4
+      Array.isArray(appJson.knobs) && appJson.knobs.length === 3
     ).toBeTruthy();
     expect(files.get("index.html")!).toMatch(/<title>Todos<\/title>/u);
     expect(files.get("package.json")!).toMatch(/"centraid-app-todos"/u);

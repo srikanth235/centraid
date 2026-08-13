@@ -56,6 +56,7 @@
     "lint:aria-labels": "node scripts/lint-aria-labels.mjs",
     "lint:container-opacity": "node scripts/lint-container-opacity.mjs",
     "lint:css": "node scripts/lint-css-classes.mjs",
+    "lint:design-consumers": "bun run lint:design-tokens && bun run lint:mobile-design",
     "lint:design-md": "design.md lint DESIGN.md",
     "lint:design-tokens": "node scripts/lint-design-tokens.mjs",
     "lint:e2e-flows": "node scripts/lint-e2e-flows.mjs",

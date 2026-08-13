@@ -14,7 +14,7 @@
 
 .pageSkeletonRow {
   height: 64px;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   background: color-mix(in srgb, var(--bg-elev) 55%, transparent);
   position: relative;

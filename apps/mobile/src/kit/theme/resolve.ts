@@ -1,33 +1,25 @@
-// Typed native theme resolver.  `tokens.generated.ts` is the checked-in
-// lowering of @centraid/design/src/native.ts; this module only selects the
-// already-concrete light or dark object.
-//
-// The Binding Layer collapsed the product accent to one ink value — there is
-// no owner-selectable hue any more, so this module (unlike its predecessor)
-// takes no accent key.
+// Scheme selection and navigation adaptation over the canonical native theme.
 
 import type { Theme as NavigationTheme } from "@react-navigation/native";
 
+import type { NativeColors, NativeScheme } from "@centraid/design/native";
+
 import {
   borders,
-  darkPalette,
+  canonicalTheme,
   density,
   durations,
   fonts,
-  lightPalette,
   metrics,
   pageMargin,
   radii,
   spacing,
   targetMin,
   type,
-} from "./tokens.generated";
+} from "./native";
 
-export type Scheme = "light" | "dark";
-
-export type ThemeColors = {
-  [Key in keyof typeof lightPalette]: string;
-};
+export type Scheme = NativeScheme;
+export type ThemeColors = NativeColors;
 
 export interface ThemeValue {
   scheme: Scheme;
@@ -36,7 +28,6 @@ export interface ThemeValue {
   borders: typeof borders;
   spacing: typeof spacing;
   metrics: typeof metrics;
-  /** The horizontal page inset. Not a `spacing` rung — see density.ts. */
   pageMargin: typeof pageMargin;
   density: typeof density;
   fonts: typeof fonts;
@@ -46,10 +37,9 @@ export interface ThemeValue {
 }
 
 function themeFor(scheme: Scheme): ThemeValue {
-  const colors: ThemeColors = scheme === "dark" ? darkPalette : lightPalette;
   return {
     borders,
-    colors,
+    colors: canonicalTheme(scheme).colors,
     density,
     durations,
     fonts,
@@ -63,15 +53,13 @@ function themeFor(scheme: Scheme): ThemeValue {
   };
 }
 
-const CACHE = new Map<Scheme, ThemeValue>();
+const THEMES: Record<Scheme, ThemeValue> = {
+  dark: themeFor("dark"),
+  light: themeFor("light"),
+};
 
 export function resolveTheme(scheme: Scheme | null | undefined): ThemeValue {
-  const resolvedScheme = scheme === "dark" ? "dark" : "light";
-  const cached = CACHE.get(resolvedScheme);
-  if (cached) return cached;
-  const theme = themeFor(resolvedScheme);
-  CACHE.set(resolvedScheme, theme);
-  return theme;
+  return scheme === "dark" ? THEMES.dark : THEMES.light;
 }
 
 function navTheme(theme: ThemeValue): NavigationTheme {
@@ -88,20 +76,20 @@ function navTheme(theme: ThemeValue): NavigationTheme {
     },
     fonts: {
       regular: { fontFamily: fonts.sans.regular, fontWeight: "400" },
-      medium: { fontFamily: fonts.sans.medium, fontWeight: "500" },
-      bold: { fontFamily: fonts.sans.medium, fontWeight: "500" },
-      heavy: { fontFamily: fonts.sans.medium, fontWeight: "500" },
+      medium: { fontFamily: fonts.sans.semibold, fontWeight: "600" },
+      bold: { fontFamily: fonts.sans.semibold, fontWeight: "600" },
+      heavy: { fontFamily: fonts.sans.semibold, fontWeight: "600" },
     },
   };
 }
 
-export const navThemes: Record<Scheme, NavigationTheme> = {
-  dark: navTheme(resolveTheme("dark")),
-  light: navTheme(resolveTheme("light")),
+const NAV_THEMES: Record<Scheme, NavigationTheme> = {
+  dark: navTheme(THEMES.dark),
+  light: navTheme(THEMES.light),
 };
 
 export function navThemeFor(
   scheme: Scheme | null | undefined
 ): NavigationTheme {
-  return scheme === "dark" ? navThemes.dark : navThemes.light;
+  return scheme === "dark" ? NAV_THEMES.dark : NAV_THEMES.light;
 }

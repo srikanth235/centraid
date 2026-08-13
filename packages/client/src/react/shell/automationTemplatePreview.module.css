@@ -37,12 +37,12 @@
   border-bottom: 0.5px solid var(--line);
 }
 .auDrawerEmoji {
-  font-size: 26px;
+  font-size: var(--t-display-size);
   line-height: 1;
 }
 .auDrawerName {
   font-family: var(--font-sans);
-  font-size: 17px;
+  font-size: var(--t-reading-size);
   font-weight: 600;
   color: var(--text);
 }
@@ -51,7 +51,7 @@
   align-items: center;
   gap: 6px;
   margin-top: 3px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-faint);
 }
@@ -62,7 +62,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: var(--r-md);
   border: none;
   background: none;
   color: var(--text-faint);
@@ -78,7 +78,7 @@
   padding: 18px 20px;
 }
 .auDrawerSecL {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;

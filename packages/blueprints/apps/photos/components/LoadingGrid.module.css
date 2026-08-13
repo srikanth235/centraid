@@ -35,6 +35,6 @@
 .tile {
   display: block;
   flex: none;
-  border-radius: var(--ph-tile-r, 3px);
+  border-radius: var(--r-xs);
   background: var(--skel, var(--bg-sunken));
 }

@@ -20,7 +20,7 @@ import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
-import { borders, pageMargin, t, useTheme } from "../../kit/theme";
+import { borders, pageMargin, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { statusSentence } from "./home-status";
 import type { HomeStatusFacts } from "./home-status";
@@ -53,7 +53,7 @@ export default function HomeStatusLine(
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     // statusDotStyle, :5944 — 5px, not 6.
-    dot: { borderRadius: 2.5, height: 5, width: 5 },
+    dot: { borderRadius: radii.sm, height: 5, width: 5 },
     // statusLineStyle, :5941–5943 — a FIXED 30px row, not one that grows with
     // a second line: one clamped line is the honesty adaptation (the sentence
     // itself carries real counts, ./home-status), but the row's own height is

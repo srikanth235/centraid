@@ -27,7 +27,7 @@
   flex-direction: column;
   gap: 2px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   overflow: hidden;
 }
 .metric {
@@ -44,7 +44,7 @@
   width: 11px;
   height: 11px;
   margin-top: 4px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: var(--text-ghost);
 }
 .metricDot[data-tone="ok"] {
@@ -73,7 +73,7 @@
   gap: 4px;
 }
 .metricValue {
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
   letter-spacing: -0.01em;
@@ -91,14 +91,14 @@
   color: var(--text-soft);
 }
 .metricLabel {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
 .metricHow {
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
 }
 .metricHow summary {
   width: fit-content;
@@ -110,20 +110,20 @@
 .exitHow {
   margin: 6px 0 0;
   color: var(--text-soft);
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   line-height: 1.5;
 }
 .costTrack {
   position: relative;
   height: 7px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--text) 9%, transparent);
   overflow: hidden;
 }
 .costFill {
   position: absolute;
   inset: 0 auto 0 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--success);
 }
 .costTrack[data-severity="warn"] .costFill {
@@ -152,7 +152,7 @@
   width: fit-content;
   cursor: pointer;
   color: var(--text-soft);
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
 }
 .diagnosticsBody {
@@ -170,7 +170,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-faint);
 }
@@ -185,7 +185,7 @@
 }
 .providerLine {
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
 }
 .providerLine svg {
   color: var(--success);
@@ -198,18 +198,18 @@
 
 .notConfigured {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   line-height: 1.55;
   color: var(--text-faint);
 }
 .notConfigured code {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
 }
 
 .runError {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--danger);
   overflow-wrap: anywhere;
@@ -238,24 +238,24 @@
 }
 .vaultName {
   font-size: var(--t-small-size);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .runningBadge {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--accent-deep, var(--accent));
   background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 2px 7px;
 }
 .vaultMeta {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-faint);
 }
@@ -263,7 +263,7 @@
   color: var(--c-amber-text);
 }
 .vaultError {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--danger);
   overflow-wrap: anywhere;
@@ -336,12 +336,12 @@
 }
 .policySetting strong {
   color: var(--text-soft);
-  font-size: 11.5px;
-  font-weight: 500;
+  font-size: var(--t-control-size);
+  font-weight: 600;
 }
 .policySetting small {
   color: var(--text-faint);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   line-height: 1.4;
 }
@@ -365,14 +365,14 @@
   align-items: center;
   gap: 7px;
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
 }
 .pendingDot {
   width: 7px;
   height: 7px;
   flex: none;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: var(--success);
   transition: background 180ms ease;
 }
@@ -388,7 +388,7 @@
   width: fit-content;
   color: var(--text-soft);
   cursor: pointer;
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
 }
 .advancedGrid {
@@ -399,7 +399,7 @@
 .policyMessage {
   padding-top: 7px;
   color: var(--success);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   animation: policy-message-in 160ms ease-out;
 }
@@ -423,17 +423,17 @@
   display: block;
   margin-top: 3px;
   color: var(--text-faint);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   line-height: 1.35;
 }
 .inventoryHead > span {
   flex: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 2px 7px;
   background: color-mix(in srgb, var(--success) 10%, transparent);
   color: var(--success);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   text-transform: uppercase;
 }
@@ -477,7 +477,7 @@
 }
 .inventoryStore > span,
 .inventoryStore em {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   font-style: normal;
 }
@@ -504,7 +504,7 @@
 .inventoryFacts dd {
   margin: 0;
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   text-align: right;
 }
 .inventoryHistory {
@@ -512,7 +512,7 @@
   flex-direction: column;
   gap: 4px;
   color: var(--text-faint);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   line-height: 1.4;
 }
@@ -572,7 +572,7 @@
   border: 0.5px solid color-mix(in srgb, var(--c-amber) 35%, var(--line));
   background: color-mix(in srgb, var(--c-amber) 8%, transparent);
   color: var(--text-soft);
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   line-height: 1.5;
 }
 .sealNudge svg {
@@ -581,7 +581,7 @@
   color: var(--c-amber-text);
 }
 .sealNudge code {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text);
 }
@@ -613,7 +613,7 @@
   width: 100%;
   padding: 7px 9px;
   border: 0.5px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
   color: var(--text);
   font: inherit;
@@ -638,7 +638,7 @@
   gap: 7px;
   padding: 6px 2px;
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
 }
 .sealConfirmed svg {
   flex: none;
@@ -699,7 +699,7 @@
 .deviceListTable {
   display: flex;
   flex-direction: column;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   overflow: hidden;
@@ -745,7 +745,7 @@
   letter-spacing: 0.03em;
   color: var(--text-faint);
   border: 0.5px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 1px 6px;
 }
 .deviceListScope {
@@ -755,7 +755,7 @@
   color: var(--text-soft);
 }
 .deviceListSize {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   font-variant-numeric: tabular-nums;
 }
@@ -764,7 +764,7 @@
   font-style: italic;
 }
 .deviceListSeen {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
@@ -836,12 +836,12 @@
 }
 .copyCardFacts dd {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text);
 }
 .copyCardMeta {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);

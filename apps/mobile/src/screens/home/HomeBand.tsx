@@ -41,7 +41,7 @@ import {
 } from "../../kit/band-surface";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { borders, family, metrics, t, useTheme } from "../../kit/theme";
+import { borders, family, metrics, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { bandTabs } from "./band";
 import type { BandTab, BandTarget } from "./band";
@@ -182,7 +182,7 @@ const makeStyles = (colors: ThemeColors) =>
     // both from the handoff.
     mark: {
       alignItems: "center",
-      borderRadius: 8,
+      borderRadius: radii.md,
       height: 30,
       justifyContent: "center",
       width: 30,
@@ -193,7 +193,7 @@ const makeStyles = (colors: ThemeColors) =>
       // `t.line` = this ramp's `lineStrong` (:5967), never the lighter `line`
       // (which is the handoff's `t.lineS`).
       borderColor: colors.lineStrong,
-      borderRadius: 7,
+      borderRadius: radii.md,
       borderWidth: borders.hairline,
       height: 26,
       justifyContent: "center",
@@ -202,7 +202,7 @@ const makeStyles = (colors: ThemeColors) =>
     moreGlyphMark: {
       color: colors.textSoft,
       fontFamily: family.sansMedium,
-      fontSize: 12,
+      fontSize: t("mono").fontSize,
     },
     moreLabel: {
       ...t("control"),

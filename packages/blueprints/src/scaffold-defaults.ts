@@ -33,17 +33,16 @@
 //
 // Rules baked in here:
 //   - No color literals at all; every color is `var(--…)` from the baseline.
-//   - No raw `font-size` — type is the `--t-*` `font` shorthands. A shorthand
-//     also resets `font-family`, so every use is followed by
-//     `font-family: inherit;` to keep the appFont knob flowing down.
+//   - No raw `font-size` — type is the `--t-*` `font` shorthands. The one
+//     Instrument Sans face is part of those roles, not an app setting.
 //   - No px/rem spacing by feel — padding/margin/gap come from `--sp-1…7`.
-//   - Radii from `--r-sm` / `--r-md` / `--r-xl` / `--r-pill`.
+//   - Radii from `--r-sm` / `--r-md` / `--r-lg` / `--r-pill`.
 //   - Hit targets ≥ 44px via min-height on the toggle; kit owns its own.
 //   - `:focus-visible` outlines preserved with the product focus role.
 //   - `prefers-reduced-motion` respected.
 //   - Mobile-first with one breakpoint at 720px.
-//   - Honors the four standard per-app knobs declared in the matching
-//     `app.json#knobs[]`: `appFont` / `appWidth` / `appRadius` via
+//   - Honors the three standard per-app knobs declared in the matching
+//     `app.json#knobs[]`: `appWidth` / `appRadius` via
 //     `:root[data-app-*]` selectors, and `appColor` consumed only by identity
 //     marks via `--app-identity`. Product accent remains the action/selection
 //     color and is never replaced by an app identity knob.
@@ -104,7 +103,7 @@ main {
 .surface {
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   padding: var(--sp-4);
 }
 
@@ -178,18 +177,8 @@ main {
    These blocks are deliberately COMPOUND selectors: kit.css loads after
    app.css, so a bare '.kit-btn { … }' here would lose to kit's own rule. A
    ':root[data-app-*] .kit-btn' selector outranks it on specificity, which
-   order can't undo. Font knobs target 'body' (which sets its own 'font'
-   shorthand) so the family actually reaches the page. */
-
-:root[data-app-font='sans'] body {
-  font-family: var(--font-sans);
-}
-:root[data-app-font='serif'] body {
-  font-family: var(--font-serif);
-}
-:root[data-app-font='mono'] body {
-  font-family: var(--font-mono);
-}
+   order can't undo. Type is intentionally absent: one family and one ladder
+   are system invariants, not app settings. */
 
 :root[data-app-width='narrow'] main { max-width: 36rem; }
 :root[data-app-width='wide'] main { max-width: 64rem; }

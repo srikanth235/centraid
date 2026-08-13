@@ -283,19 +283,9 @@ void refresh();
 
 // Default per-app knob list embedded in every new app's `app.json`
 // (under `knobs[]`). Surfaces in the desktop's "App settings" gear
-// popover: font, page width, corner radius, and accent colour.
+// popover: page width, corner radius, and accent colour. Typography is a
+// product invariant, so a new app cannot choose another face.
 const DEFAULT_APP_KNOBS: ReadonlyArray<Record<string, unknown>> = [
-  {
-    key: "appFont",
-    label: "Font",
-    type: "segmented",
-    default: "sans",
-    options: [
-      { value: "sans", label: "Sans" },
-      { value: "serif", label: "Serif" },
-      { value: "mono", label: "Mono" },
-    ],
-  },
   {
     key: "appWidth",
     label: "Width",

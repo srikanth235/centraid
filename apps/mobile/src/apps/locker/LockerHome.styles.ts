@@ -45,7 +45,7 @@ export const makeLockerStyles = (colors: ThemeColors) =>
     fieldLabel: {
       ...t("control"),
       color: colors.textFaint,
-      fontFamily: family.monoMedium,
+      fontFamily: family.sansMedium,
       textTransform: "uppercase",
     },
     fieldValue: { ...t("body"), color: colors.text, marginTop: spacing[1] },
@@ -94,14 +94,14 @@ export const makeLockerStyles = (colors: ThemeColors) =>
     },
     modalBack: {
       alignItems: "center",
-      backgroundColor: "rgba(0, 0, 0, 0.45)",
+      backgroundColor: colors.scrim,
       flex: 1,
       justifyContent: "center",
       padding: spacing[5],
     },
     modalCard: {
       backgroundColor: colors.bgElev,
-      borderRadius: radii.xl,
+      borderRadius: radii.lg,
       maxWidth: 440,
       padding: spacing[5],
       width: "100%",

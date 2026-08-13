@@ -73,6 +73,16 @@ describe("native product-grammar lowering", () => {
     }
   });
 
+  test("on-accent is the theme's inverse ink, not a light-mode constant", () => {
+    for (const scheme of ["light", "dark"] as const) {
+      const colors = toNativeTheme(scheme).colors;
+      expect(colors.onAccent, scheme).toBe(colors.textInv);
+    }
+    expect(toNativeTheme("light").colors.onAccent).not.toBe(
+      toNativeTheme("dark").colors.onAccent
+    );
+  });
+
   test("the native rule is a FULL point, not the platform hairline", () => {
     // The v4 handoff draws every border and rule as `border: 1px solid`, and
     // the native lowering has to carry that number itself: React Native's
@@ -120,12 +130,10 @@ describe("native product-grammar lowering", () => {
     );
   });
 
-  test("the phone steps the two register roles DOWN, not up", () => {
-    // Everything else gains a point or two on a phone; display and reading
-    // are the two the brief gives an explicit smaller mobile size for.
+  test("the phone resolves the one touch type table", () => {
     const nativeType = toNativeTheme("light").type;
     expect(nativeType.display.fontSize).toBe(27);
-    expect(nativeType.reading.fontSize).toBe(17.5);
+    expect(nativeType.reading.fontSize).toBe(17);
     expect(nativeType.body.fontSize).toBe(type.body.size + 2);
   });
 

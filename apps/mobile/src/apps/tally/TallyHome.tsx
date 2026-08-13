@@ -524,7 +524,10 @@ export default function TallyHome({
         animationType="fade"
         onRequestClose={() => setEditing(undefined)}
       >
-        <View accessibilityViewIsModal style={styles.modalBackdrop}>
+        <View
+          accessibilityViewIsModal
+          style={[styles.modalBackdrop, { backgroundColor: colors.scrim }]}
+        >
           <View style={[styles.modal, { backgroundColor: colors.bgElev }]}>
             <Text style={[styles.personName, { color: colors.text }]}>
               Edit{" "}

@@ -1,7 +1,7 @@
 import { useId } from "react";
 import type { JSX, MouseEvent, ReactNode } from "react";
 
-import type { IconName } from "@centraid/design";
+import type { ButtonVariant, IconName } from "@centraid/design";
 
 import { useCommitAvailability } from "../shell/commitAvailability.js";
 import { cx } from "./cx.js";
@@ -9,12 +9,7 @@ import Icon from "./Icon.js";
 
 import styles from "./Button.module.css";
 
-export type ButtonVariant =
-  | "primary"
-  | "secondary"
-  | "quiet"
-  | "destructive"
-  | "destructiveFilled";
+export type { ButtonVariant } from "@centraid/design";
 export type ButtonSize = "md" | "sm" | "chrome";
 
 export interface ButtonProps {
@@ -51,7 +46,6 @@ export interface ButtonProps {
 
 const VARIANT_CLASS: Record<ButtonVariant, string | undefined> = {
   destructive: styles.destructive,
-  destructiveFilled: styles.destructiveFilled,
   primary: styles.primary,
   quiet: styles.quiet,
   secondary: styles.secondary,
@@ -113,11 +107,7 @@ export default function Button({
           <Icon
             name={icon}
             size={14}
-            strokeWidth={
-              variant === "primary" || variant === "destructiveFilled"
-                ? 2
-                : 1.75
-            }
+            strokeWidth={variant === "primary" ? 2 : 1.75}
           />
         ) : null}
         {children ?? label}

@@ -14,6 +14,7 @@ import { chromium } from "playwright";
 import { PNG } from "pngjs";
 
 import {
+  typeForSurface,
   toBlueprintCss,
   toCss,
   toNativeTheme,
@@ -82,7 +83,7 @@ function nativeTokenCss(scheme) {
     vars.push(`--sp-${key}: ${value}px;`);
   for (const [key, value] of Object.entries(theme.type))
     vars.push(
-      `--t-${key.replace(/(?<letter>[A-Z])/gu, (_match, letter) => `-${letter.toLowerCase()}`)}: ${value.fontSize}px/${value.lineHeight}px system-ui;`
+      `--t-${key.replace(/(?<letter>[A-Z])/gu, (_match, letter) => `-${letter.toLowerCase()}`)}: ${value.weight} ${value.fontSize}px/${value.lineHeight}px system-ui;`
     );
   vars.push(
     `--target-min: ${theme.targetMin.coarse}px;`,
@@ -90,7 +91,7 @@ function nativeTokenCss(scheme) {
     `--dur-2: ${theme.durations.two}ms;`,
     "--ease: cubic-bezier(0.2, 0.7, 0.3, 1);",
     "--font-sans: system-ui, sans-serif;",
-    "--font-mono: ui-monospace, monospace;"
+    "--font-code: ui-monospace, monospace;"
   );
   return `:root { ${vars.join(" ")} }`;
 }
@@ -118,7 +119,7 @@ function fixtureHtml({ surface, scheme, width, app }) {
 <head><meta charset="utf-8"><style>${tokens}${KIT_CSS}
   :root[data-theme="dark"] { color-scheme: dark; }
   * { box-sizing: border-box; }
-  body { margin: 0; min-width: 0; background: var(--bg); color: var(--text); font-family: var(--font-sans); }
+  body { margin: 0; min-width: 0; background: var(--bg); color: var(--text); font: var(--t-body); }
   .gallery { min-height: 100vh; padding: 24px; display: grid; align-content: start; gap: 16px; max-width: 760px; margin: 0 auto; }
   .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .eyebrow { color: var(--text-faint); font: var(--t-eyebrow); text-transform: uppercase; letter-spacing: .08em; }
@@ -130,6 +131,7 @@ function fixtureHtml({ surface, scheme, width, app }) {
   .meta { color: var(--text-soft); font: var(--t-small); }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .notice { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 10px 12px; color: var(--text-soft); font: var(--t-small); }
+  strong { font: var(--t-body-strong); }
   @media (max-width: 719px) { .gallery { padding: 16px; } .actions button { flex: 1; } }
 </style></head>
 <body><main class="gallery" data-gallery-surface="${surface}" data-gallery-scheme="${scheme}" data-gallery-width="${width}">
@@ -237,6 +239,40 @@ async function assertRenderable(page, selector, id) {
     throw new Error(`${id}: missing renderable ${selector}`);
 }
 
+const LEGAL_TYPE_TRIPLES = new Set(
+  [false, true].flatMap((touch) =>
+    Object.values(typeForSurface(touch)).map(
+      ({ weight, size, lineHeight }) => `${weight}|${size}|${lineHeight}`
+    )
+  )
+);
+
+async function assertLegalTypeTriples(page, id) {
+  const triples = await page.locator("body *").evaluateAll((elements) =>
+    elements
+      .filter((element) => {
+        const style = getComputedStyle(element);
+        return style.display !== "none" && style.visibility !== "hidden";
+      })
+      .map((element) => {
+        const style = getComputedStyle(element);
+        return {
+          element: element.tagName.toLowerCase(),
+          triple: `${style.fontWeight}|${Number(style.fontSize.replace("px", ""))}|${Number(style.lineHeight.replace("px", ""))}`,
+        };
+      })
+  );
+  const illegal = triples.filter(
+    ({ triple }) => !LEGAL_TYPE_TRIPLES.has(triple)
+  );
+  if (illegal.length > 0)
+    throw new Error(
+      `${id}: illegal computed type triple(s): ${illegal
+        .map(({ element, triple }) => `${element}=${triple}`)
+        .join(", ")}`
+    );
+}
+
 async function main() {
   const entries = captures();
   const manifest = {
@@ -290,6 +326,7 @@ async function main() {
           );
           await assertRenderable(page, '[data-variant="primary"]', entry.id);
           await assertRenderable(page, '[data-variant="secondary"]', entry.id);
+          await assertLegalTypeTriples(page, entry.id);
           const primaryCount = await page
             .locator('[data-variant="primary"]')
             .count();

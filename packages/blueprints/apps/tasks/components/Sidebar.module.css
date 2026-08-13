@@ -48,7 +48,7 @@
 .projectDot {
   width: 9px;
   height: 9px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   flex: none;
 }
 
@@ -88,13 +88,13 @@
 }
 .progressTrack {
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--bg-sunken);
   overflow: hidden;
 }
 .progressBar {
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent-deep);
   transition: width var(--dur-2) var(--ease-entry);
 }

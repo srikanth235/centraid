@@ -603,7 +603,7 @@ const makeStyles = (colors: ThemeColors) =>
     emptyTitle: { ...t("title"), color: colors.text, marginBottom: spacing[2] },
     filter: {
       borderColor: colors.line,
-      borderRadius: 999,
+      borderRadius: radii.pill,
       borderWidth: 1,
       paddingHorizontal: spacing[3],
       paddingVertical: spacing[2],

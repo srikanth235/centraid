@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { View, Pressable, StyleSheet } from "react-native";
 
+import { identityInk } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
 import { borders, radii, spacing, t, useTheme } from "../theme";
@@ -37,7 +38,11 @@ export default function AppHeader({
         <Icon name="ArrowLeft" size={20} color={colors.text} />
       </Pressable>
       <View style={[styles.iconWrap, { backgroundColor: color }]}>
-        <Icon name={iconKey} size={16} color="#fff" />
+        <Icon
+          name={iconKey}
+          size={16}
+          color={identityInk(color, colors.text, colors.textInv)}
+        />
       </View>
       <View style={styles.titleWrap}>
         <Text style={styles.title} numberOfLines={1}>

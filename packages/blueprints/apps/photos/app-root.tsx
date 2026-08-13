@@ -155,7 +155,6 @@ const KitSkeleton = "kit-skeleton" as unknown as FC<{ rows?: number }>;
 type SlotKey = keyof ChromeSlots;
 
 export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
-  const [narrow, setNarrow] = useState(false);
   const rootElRef = useRef<HTMLDivElement | null>(null);
   // The frame handle is read from inside the mount-once boot closure. A ref
   // keeps that read live without re-running the boot when the host re-renders;
@@ -196,7 +195,6 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       const forced = el.dataset.appWidth === "narrow";
       const isNarrow = forced || el.clientWidth < 860;
       narrowRef.current = isNarrow;
-      setNarrow(isNarrow);
     }
   }, []);
 
@@ -1578,7 +1576,6 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
     const stopWidth = rootElRef.current
       ? observeWidth(rootElRef.current, 860, (isNarrow: boolean) => {
           narrowRef.current = isNarrow;
-          setNarrow(isNarrow);
           renderShelfStrip();
           renderMain();
         })
@@ -1640,7 +1637,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         minHeight: 0,
       }}
     >
-      <Chrome narrow={narrow} slots={slots} />
+      <Chrome slots={slots} />
     </div>
   );
 }

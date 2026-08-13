@@ -34,7 +34,7 @@
   flex: 1;
 }
 .deviceName {
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
   overflow-wrap: anywhere;

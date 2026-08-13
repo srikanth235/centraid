@@ -18,9 +18,9 @@
    bar/.lightbox/.slideshow containers) position against the VIEWPORT (100vh,
    position:fixed, viewport `@media` widths) because the served app is full-
    screen. Inline the app is one pane inside the shell, so those are re-scoped
-   here to `position:absolute` against `.shell` and to a component-width
-   `.isNarrow` class (app-inline's `observeWidth`), never the viewport (#505
-   traps 1 + 7). The sidebar <aside>'s own positioning (a served hashed class we
+   here to `position:absolute` against `.shell`; width changes measure and
+   columns in the component modules, not the design-system surface contract
+   (#505 traps 1 + 7). The sidebar <aside>'s own positioning (a served hashed class we
    cannot edit) is neutralised structurally via `.sideHost > aside`. */
 
 /* ---------- Token layer (Photos identity, folded from app.css) ---------- */
@@ -31,8 +31,6 @@
   --app-hue: 28;
   --app-identity: var(--c-amber);
   --ph-sidebar-w: 250px;
-  --ph-tile-r: 3px;
-  --ph-tile-r-sel: 13px;
 }
 
 /* ---------- Base reset (app.css global remainder), scoped ---------- */
@@ -67,20 +65,6 @@
   box-shadow: var(--focus-ring);
 }
 
-/* App-level knobs — read off the app ROOT element (the host stamps data-app-*
-   there inline, not on <html>), #505 trap 6. */
-.appRoot[data-app-font="sans"] {
-  font-family: var(--font-sans);
-}
-.appRoot[data-app-font="serif"] {
-  /* The one --font-serif use in the repo, and a deliberate identity choice:
-     "roles, not families" sanctions serif as a ROLE, and this knob rebinds the
-     app's body face to it — it is not a hardcoded family. */
-  font-family: var(--font-serif);
-}
-.appRoot[data-app-font="mono"] {
-  font-family: var(--font-mono);
-}
 .appRoot[data-app-width="narrow"] .scroll {
   max-width: 68rem;
   margin: 0 auto;
@@ -106,13 +90,13 @@
      spans the pane — the shelf strip, the toolbar, the album bar, the
      selection bar, the scroller — used to carry its own hardcoded `20px`,
      which is how five files come to disagree the moment one of them is
-     edited. They now read `var(--gutter)`, so the compact rung below is a
+     edited. They now read `var(--content-margin)`, so the compact rung below is a
      one-line change instead of a five-line one.
      20px was also not a number the system has: `--page-margin` is 32 on
      desktop and 18 on the phone (`packages/design/src/density.ts`), the same
      scale every native screen already insets by. The web simply had no token
      to read, so this app guessed — and guessed a third value. */
-  --gutter: var(--page-margin);
+  --content-margin: var(--page-margin);
 }
 
 /* ---------- Main ---------- */
@@ -134,7 +118,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 2px var(--gutter) var(--sp-6);
+  padding: 2px var(--content-margin) var(--sp-6);
 }
 .content {
   position: relative;
@@ -376,16 +360,5 @@
    `.kit-status-line`, a FRAME element, from inside the app is exactly what
    the frame contract forbids. */
 
-/* ---------- Narrow (phone) — driven by `.isNarrow` on `.shell` ---------- */
-/* The drawer rules retired with the drawer (v4 §3): the frame owns navigation
-   on every surface — the stem on desktop, the claimed band on the phone — so
-   there is no second navigation inside the pane to slide, scrim or animate.
-   What is left is the compact gutter. */
-/* One declaration, inherited by every row in the pane — the phone rung of the
-   same token native reads. It is set on `.shell` rather than per-component so
-   a pane that is narrow because the WINDOW is narrow and a pane that is
-   narrow because it is docked beside something else get the identical inset;
-   `.isNarrow` is the pane's own width, never the viewport (#505 trap 1). */
-.shell.isNarrow {
-  --gutter: var(--page-margin-compact);
-}
+/* Narrow changes measure and column count only. Pointer/touch resolves the
+   shared page margin once in the generated token sheet. */

@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Pressable, View, StyleSheet } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 
 import { nativeButtonStyle } from "@centraid/design";
@@ -36,20 +36,10 @@ export default function Button({
     [colors, radii, targetMin, variant, disabled]
   );
   const styles = useMemo(() => makeStyles(recipeStyle), [recipeStyle]);
-  // The recipe's visual box is the 34pt control height; hitSlop restores the
-  // 48pt coarse touch target around it without inflating what's drawn.
-  const verticalHitSlop = (targetMin.coarse - recipeStyle.minHeight) / 2;
-
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled }}
-      hitSlop={{
-        bottom: verticalHitSlop,
-        left: 0,
-        right: 0,
-        top: verticalHitSlop,
-      }}
       onPress={disabled ? undefined : onPress}
       style={({ pressed }) => [
         styles.base,

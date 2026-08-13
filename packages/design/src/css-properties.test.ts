@@ -71,9 +71,12 @@ describe("generated stylesheet values", () => {
     }
   });
 
-  test("the type scale is one role set and size rungs collapse duplicates", () => {
+  test("the type scale is one role set and every role keeps its size name", () => {
     const root = parseBlocks(toCss()).get(":root");
-    for (const [key, value] of Object.entries(type)) {
+    const touchType = Object.fromEntries(
+      Object.entries(type).map(([key, value]) => [key, nativeTypeStyle(value)])
+    );
+    for (const [key, value] of Object.entries(touchType)) {
       const { size, lineHeight } = toRemStyle(value);
       expect(
         root?.get(
@@ -81,21 +84,18 @@ describe("generated stylesheet values", () => {
         )
       ).toContain(`${size}/${lineHeight}`);
     }
-    // SIX distinct sizes, ten roles. `--t-body-strong-size` would duplicate the
-    // body rung and `--t-small-strong-size` the UI rung; `--t-eyebrow-size` and
-    // `--t-mono-size` would both duplicate the micro rung, because v7 folded
-    // the numeric role from 11.5 to 11 — annotation, micro caps and numerics
-    // are one 11px rung with one name. The declaration order in `typography.ts`
-    // is what decides which name owns each rung, which is why it is ramp order
-    // and not alphabetical.
     const rungs = typeSizeRungs(remSizeScale(type));
     expect(Object.keys(rungs)).toStrictEqual([
       "--t-display-size",
       "--t-title-size",
       "--t-reading-size",
       "--t-body-size",
+      "--t-body-strong-size",
       "--t-small-size",
+      "--t-small-strong-size",
       "--t-control-size",
+      "--t-eyebrow-size",
+      "--t-mono-size",
     ]);
     // rem = px / 16 — the shell now emits host-relative units (issue #708)
     // so 200% OS text scale, which moves the ROOT font-size, actually reaches
@@ -103,11 +103,15 @@ describe("generated stylesheet values", () => {
     // 0.71875rem is gone with the 11.5px size it lowered: a rung whose rem
     // value needs five decimal places is the tell v7 named.
     expect(Object.values(rungs)).toStrictEqual([
-      "1.9375rem",
+      "2rem",
       "1.25rem",
-      "1.1875rem",
-      "0.9375rem",
+      "1.0625rem",
       "0.8125rem",
+      "0.8125rem",
+      "0.8125rem",
+      "0.8125rem",
+      "0.6875rem",
+      "0.6875rem",
       "0.6875rem",
     ]);
     // Nothing in the ramp falls below 11px.
@@ -119,7 +123,8 @@ describe("generated stylesheet values", () => {
     // a stylesheet remembers to add. "Numerics are tabular in every app,
     // without exception" is only true while `--t-mono-numeric` exists.
     expect(typeModifiers(type)).toStrictEqual({
-      "--t-display-tracking": "-0.01em",
+      "--t-display-tracking": "-0.02em",
+      "--t-title-tracking": "-0.01em",
       "--t-eyebrow-tracking": "0.06em",
       "--t-eyebrow-transform": "uppercase",
       "--t-mono-numeric": "tabular-nums",
@@ -149,14 +154,16 @@ describe("generated stylesheet values", () => {
         size: value.size + value.nativeDelta.size,
       });
     }
-    // The overrides are exactly the two roles the brief gives a smaller mobile
-    // size for; every other role gains a point or two on a phone.
     expect(Object.keys(NATIVE_DELTA_OVERRIDES)).toStrictEqual([
+      "bodyStrong",
+      "control",
       "display",
+      "eyebrow",
       "reading",
+      "title",
     ]);
     expect(type.display.size + type.display.nativeDelta.size).toBe(27);
-    expect(type.reading.size + type.reading.nativeDelta.size).toBe(17.5);
+    expect(type.reading.size + type.reading.nativeDelta.size).toBe(17);
   });
 
   test("every theme publishes exactly the same role set", () => {
@@ -207,7 +214,7 @@ describe("generated stylesheet values", () => {
       expect(props?.get("--line-sel")).toBe(
         "color-mix(in oklab, var(--link) 42%, var(--line))"
       );
-      expect(props?.get("--on-accent")).toBe("#FDFDFC");
+      expect(props?.get("--on-accent")).toBe(theme.textInv);
       expect(props?.get("--text-disabled")).toBe(theme.textDisabled);
     }
 
@@ -228,9 +235,9 @@ describe("generated stylesheet values", () => {
     ).toBe(true);
     // A control is 44px on touch without exception, and the control height —
     // 34px, not an off-scale 32 — under a pointer (v7 §C).
-    expect(css).toContain(
-      "@media (pointer: fine) { :root { --target-min: 34px; } }"
-    );
+    expect(css).toContain("@media (pointer: fine)");
+    expect(css).toContain("--target-min: 34px;");
+    expect(css).toContain("--page-margin: 32px;");
   });
 
   test("native and blueprint type lowerings preserve the canonical role", () => {
@@ -246,7 +253,7 @@ describe("generated stylesheet values", () => {
     );
   });
 
-  test("size rungs lower both pixel and rem scales and deduplicate values", () => {
+  test("size roles lower both pixel and rem scales without losing names", () => {
     expect(
       typeSizeRungs({
         body: { size: 15 },
@@ -255,6 +262,7 @@ describe("generated stylesheet values", () => {
       })
     ).toStrictEqual({
       "--t-body-size": "15px",
+      "--t-body-strong-size": "15px",
       "--t-compact-size": "1rem",
     });
   });

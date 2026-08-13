@@ -1,12 +1,12 @@
 import { StyleSheet } from "react-native";
 
-import { family, t } from "../../kit/theme";
+import { family, t, radii } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
   addCopy: { flex: 1, marginLeft: 12 },
   addIcon: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: radii.lg,
     height: 42,
     justifyContent: "center",
     width: 42,
@@ -18,39 +18,41 @@ export const styles = StyleSheet.create({
     marginTop: 12,
     minHeight: 64,
   },
-  backdrop: { backgroundColor: "rgba(0,0,0,.42)", flex: 1 },
+  backdrop: { flex: 1 },
   copy: { flex: 1, marginLeft: 12 },
   create: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: radii.lg,
     marginTop: 12,
     padding: 12,
   },
-  createText: { fontFamily: family.sansMedium, fontSize: 13 },
+  createText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
   // The custody exception mark (docs-custody.ts `marksLocalOnly`) — 6px after
   // the meta line, matching Photos' bottom-slot custody chip gutter.
   custodyMark: { marginLeft: 6 },
   dialog: {
-    borderRadius: 18,
+    borderRadius: radii.lg,
     left: 24,
     padding: 20,
     position: "absolute",
     right: 24,
     top: "25%",
   },
-  dialogTitle: { fontFamily: family.sansMedium, fontSize: 20 },
+  dialogTitle: { fontFamily: family.sansMedium, fontSize: t("title").fontSize },
   empty: {
-    fontFamily: family.sansRegular,
-    fontSize: 13,
-    lineHeight: 19,
+    ...t("small"),
     marginTop: 7,
     textAlign: "center",
   },
-  emptyTitle: { fontFamily: family.sansMedium, fontSize: 18, marginTop: 14 },
+  emptyTitle: {
+    fontFamily: family.sansMedium,
+    fontSize: t("reading").fontSize,
+    marginTop: 14,
+  },
   emptyWrap: { alignItems: "center", paddingHorizontal: 30, paddingTop: 60 },
   filter: {
     alignItems: "center",
-    borderRadius: 999,
+    borderRadius: radii.pill,
     flexDirection: "row",
     gap: 6,
     minHeight: 34,
@@ -58,17 +60,17 @@ export const styles = StyleSheet.create({
   },
   filters: { alignItems: "center", gap: 8, paddingHorizontal: 18 },
   filterScroll: { flexGrow: 0, height: 50 },
-  filterText: { fontFamily: family.sansMedium, fontSize: 12 },
+  filterText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
   folderInput: {
-    borderRadius: 10,
+    borderRadius: radii.lg,
     borderWidth: 1,
     fontFamily: family.sansRegular,
-    fontSize: 14,
+    fontSize: t("body").fontSize,
     marginTop: 7,
     padding: 11,
   },
   gridCard: {
-    borderRadius: 14,
+    borderRadius: radii.lg,
     borderWidth: 1,
     minHeight: 164,
     padding: 10,
@@ -78,15 +80,13 @@ export const styles = StyleSheet.create({
   gridMenu: { position: "absolute", right: 9, top: 9, zIndex: 1 },
   gridPreview: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: radii.lg,
     height: 82,
     justifyContent: "center",
   },
   gridRow: { gap: 10 },
   gridTitle: {
-    fontFamily: family.sansMedium,
-    fontSize: 13,
-    lineHeight: 17,
+    ...t("smallStrong"),
     marginTop: 9,
   },
   header: {
@@ -100,7 +100,7 @@ export const styles = StyleSheet.create({
   headerCopy: { flex: 1 },
   icon: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: radii.lg,
     height: 40,
     justifyContent: "center",
     width: 40,
@@ -108,7 +108,7 @@ export const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontFamily: family.sansRegular,
-    fontSize: 14,
+    fontSize: t("body").fontSize,
     paddingVertical: 10,
   },
   libraryHeader: {
@@ -119,16 +119,27 @@ export const styles = StyleSheet.create({
     paddingBottom: 7,
     paddingTop: 13,
   },
-  libraryMeta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
-  libraryTitle: { fontFamily: family.sansMedium, fontSize: 17 },
+  libraryMeta: {
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+    marginTop: 3,
+  },
+  libraryTitle: {
+    fontFamily: family.sansMedium,
+    fontSize: t("reading").fontSize,
+  },
   list: { paddingBottom: 48, paddingHorizontal: 18 },
-  meta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 4 },
+  meta: {
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+    marginTop: 4,
+  },
   // Row wrapper so the custody mark sits beside the meta text instead of
   // below it — the meta Text itself keeps its own marginTop.
   metaRow: { alignItems: "center", flexDirection: "row" },
   newFolderLabel: {
-    fontFamily: family.monoMedium,
-    fontSize: 12.5,
+    fontFamily: family.sansMedium,
+    fontSize: t("mono").fontSize,
     letterSpacing: 1,
     marginTop: 18,
   },
@@ -138,11 +149,11 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     minHeight: 68,
   },
-  rowTitle: { fontFamily: family.sansMedium, fontSize: 14 },
+  rowTitle: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
   safe: { flex: 1 },
   search: {
     alignItems: "center",
-    borderRadius: 12,
+    borderRadius: radii.lg,
     flexDirection: "row",
     gap: 8,
     marginHorizontal: 18,
@@ -150,14 +161,22 @@ export const styles = StyleSheet.create({
   },
   shareFolder: { alignItems: "center", flexDirection: "row", gap: 5 },
   shareFolderText: t("control"),
-  subtitle: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 2 },
-  title: { fontFamily: family.sansMedium, fontSize: 23, letterSpacing: -0.5 },
+  subtitle: {
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+    marginTop: 2,
+  },
+  title: {
+    fontFamily: family.sansMedium,
+    fontSize: t("title").fontSize,
+    letterSpacing: -0.5,
+  },
   viewButton: {
     alignItems: "center",
-    borderRadius: 7,
+    borderRadius: radii.md,
     height: 30,
     justifyContent: "center",
     width: 32,
   },
-  viewSwitch: { borderRadius: 9, flexDirection: "row", padding: 2 },
+  viewSwitch: { borderRadius: radii.md, flexDirection: "row", padding: 2 },
 });

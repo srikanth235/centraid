@@ -24,8 +24,7 @@ import Svg, { G, Line, Text as SvgText } from "react-native-svg";
 // library told a third party anything, in an app whose gateway refuses a
 // non-loopback enrichment URL specifically so bytes cannot leave the host.
 //
-// What replaced it is `place-map.ts` — the same projection the web shelf runs,
-// drawn here with `react-native-svg`. Two consequences worth stating: the two
+// What replaced it is `place-map.ts` — the same projection the web shelf runs, // drawn here with `react-native-svg`. Two consequences worth stating: the two
 // Places surfaces now agree because they execute the same arithmetic rather
 // than because someone kept them in step, and the phone stopped emitting. The
 // cost is honest — there is no land under the pins. See place-map.ts for why
@@ -50,7 +49,7 @@ import { Text } from "../../kit/components/NativeText";
 import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
-import { borders, spacing, t, useTheme } from "../../kit/theme";
+import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import { usePhotoTimeline } from "./timeline-source";
@@ -306,7 +305,7 @@ const makeStyles = (colors: ThemeColors) =>
       ...t("small"),
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
-      borderRadius: 12,
+      borderRadius: radii.lg,
       borderWidth: borders.hairline,
       color: colors.textSoft,
       overflow: "hidden",
@@ -330,7 +329,7 @@ const makeStyles = (colors: ThemeColors) =>
     pin: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
-      borderRadius: 8,
+      borderRadius: radii.md,
       borderWidth: borders.hairline,
       overflow: "hidden",
       position: "absolute",
@@ -347,7 +346,7 @@ const makeStyles = (colors: ThemeColors) =>
     pinCount: {
       ...t("mono"),
       backgroundColor: colors.stage,
-      borderTopLeftRadius: 6,
+      borderTopLeftRadius: radii.md,
       bottom: 0,
       color: colors.onStage,
       overflow: "hidden",
@@ -360,7 +359,7 @@ const makeStyles = (colors: ThemeColors) =>
     // the web map takes.
     plate: {
       backgroundColor: colors.bgSunken,
-      borderRadius: 12,
+      borderRadius: radii.lg,
       overflow: "hidden",
     },
     readout: { ...t("small"), color: colors.textFaint, marginTop: spacing[2] },

@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { navThemeFor, navThemes, resolveTheme } from "./resolve";
-import { darkPalette, lightPalette } from "./tokens.generated";
+import { canonicalTheme } from "./native";
+import { navThemeFor, resolveTheme } from "./resolve";
 
 describe("theme resolution", () => {
   it("selects concrete palette by scheme", () => {
-    expect(resolveTheme("light").colors).toBe(lightPalette);
-    expect(resolveTheme("dark").colors).toBe(darkPalette);
-    expect(resolveTheme("dark").colors.bg).not.toBe(lightPalette.bg);
+    expect(resolveTheme("light").colors).toBe(canonicalTheme("light").colors);
+    expect(resolveTheme("dark").colors).toBe(canonicalTheme("dark").colors);
+    expect(resolveTheme("dark").colors.bg).not.toBe(
+      canonicalTheme("light").colors.bg
+    );
   });
 
   it("defaults to light and preserves stable singleton identity", () => {
@@ -28,8 +30,8 @@ describe("theme resolution", () => {
     // The page margin travels on the theme like every other shared scalar, so
     // a screen reaches for `theme.pageMargin` instead of retyping 18.
     expect(theme.pageMargin).toBe(18);
-    expect(theme.targetMin.coarse).toBe(48);
-    expect(theme.targetMin.fine).toBe(32);
+    expect(theme.targetMin.coarse).toBe(44);
+    expect(theme.targetMin.fine).toBe(34);
   });
 
   it("spends no hue — the accent is ink, same on both themes' action role", () => {
@@ -43,19 +45,23 @@ describe("theme resolution", () => {
 });
 
 describe("navigation theme lowering", () => {
-  it("tracks the generated palette", () => {
+  it("tracks the canonical native palette", () => {
     expect(navThemeFor("dark").dark).toBe(true);
     expect(navThemeFor("light").dark).toBe(false);
-    expect(navThemeFor("dark").colors.background).toBe(darkPalette.bg);
-    expect(navThemeFor("light").colors.text).toBe(lightPalette.text);
+    expect(navThemeFor("dark").colors.background).toBe(
+      canonicalTheme("dark").colors.bg
+    );
+    expect(navThemeFor("light").colors.text).toBe(
+      canonicalTheme("light").colors.text
+    );
   });
 
   it("maps navigation weights onto the loaded sans family — no bold rung", () => {
-    expect(navThemes.light.fonts.regular.fontFamily).toBe(
+    expect(navThemeFor("light").fonts.regular.fontFamily).toBe(
       "InstrumentSans_400Regular"
     );
-    expect(navThemes.dark.fonts.bold.fontFamily).toBe(
-      "InstrumentSans_500Medium"
+    expect(navThemeFor("dark").fonts.bold.fontFamily).toBe(
+      "InstrumentSans_600SemiBold"
     );
   });
 });

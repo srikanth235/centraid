@@ -6,7 +6,7 @@ import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
-import { family, useTheme } from "../../kit/theme";
+import { family, useTheme, radii, t } from "../../kit/theme";
 
 type TimeSemantics = "zoned" | "floating" | "all-day";
 export type AgendaCreateInput = Record<string, ReplicaValue>;
@@ -323,13 +323,13 @@ export default function AgendaCreateModal({
 
 const styles = StyleSheet.create({
   chip: {
-    borderRadius: 999,
+    borderRadius: radii.pill,
     minHeight: 34,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
-  chipText: { fontFamily: family.sansMedium, fontSize: 12 },
+  chipText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
   content: { gap: 12, padding: 20, paddingBottom: 60 },
   field: { gap: 5 },
   header: {
@@ -339,32 +339,36 @@ const styles = StyleSheet.create({
     minHeight: 54,
     paddingHorizontal: 18,
   },
-  help: { fontFamily: family.sansRegular, fontSize: 11, marginTop: -7 },
+  help: {
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+    marginTop: -7,
+  },
   input: {
-    borderRadius: 10,
+    borderRadius: radii.lg,
     borderWidth: 1,
     fontFamily: family.sansRegular,
-    fontSize: 14,
+    fontSize: t("body").fontSize,
     minHeight: 44,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   dateButton: {
-    borderRadius: 10,
+    borderRadius: radii.lg,
     borderWidth: 1,
     minHeight: 44,
     justifyContent: "center",
     paddingHorizontal: 12,
   },
-  dateText: { fontFamily: family.sansRegular, fontSize: 14 },
+  dateText: { fontFamily: family.sansRegular, fontSize: t("body").fontSize },
   label: {
-    fontFamily: family.monoMedium,
-    fontSize: 12.5,
+    fontFamily: family.sansMedium,
+    fontSize: t("mono").fontSize,
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   multiline: { minHeight: 88, textAlignVertical: "top" },
   safe: { flex: 1 },
-  save: { fontFamily: family.sansMedium, fontSize: 14 },
-  title: { fontFamily: family.sansMedium, fontSize: 15 },
+  save: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
+  title: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
 });

@@ -72,7 +72,7 @@
   flex-shrink: 0;
   width: 22px;
   height: 22px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   display: grid;
   place-items: center;
   margin-top: 2px;
@@ -97,7 +97,7 @@
 .abProgressDots i {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--text) 18%, transparent);
   transition: background 0.2s ease;
 }
@@ -120,18 +120,18 @@
   min-width: 0;
 }
 .abProgressVerb {
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
   flex: none;
 }
 .abProgressFile {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-soft);
   background: var(--bg-sunken);
   padding: 1px 6px;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -146,7 +146,7 @@
 }
 .abProgressCancel {
   flex: none;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -180,7 +180,6 @@
   border-radius: var(--r-md);
   cursor: pointer;
   text-align: left;
-  font-family: inherit;
   transition:
     background 140ms ease-out,
     border-color 140ms ease-out;
@@ -192,7 +191,7 @@
 .tgChangeCard .tgCardIcon {
   width: 28px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: var(--r-md);
   display: grid;
   place-items: center;
   background: color-mix(in oklab, var(--accent) 18%, transparent);
@@ -207,12 +206,12 @@
   flex: 1;
 }
 .tgChangeCard .tgCardTitle {
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: var(--t-small-size);
+  font-weight: 600;
   color: var(--text);
 }
 .tgChangeCard .tgCardSub {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-faint);
   overflow: hidden;
@@ -221,12 +220,12 @@
 }
 .tgChangeCard .tgCardVersion {
   flex-shrink: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-soft);
   background: color-mix(in oklab, var(--text) 5%, transparent);
   padding: 2px 7px;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   letter-spacing: 0.01em;
 }
 .chatThinking {
@@ -248,7 +247,7 @@
 .chatThinking .thinkingDot {
   width: 5px;
   height: 5px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: var(--text-faint);
   opacity: 0.55;
 }
@@ -257,7 +256,7 @@
   animation: pulse-fade 1s infinite;
 }
 .chatThinking .thinkingBody {
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   font-style: italic;
   line-height: 1.55;
   color: var(--text-faint);
@@ -279,7 +278,7 @@
   gap: 8px;
 }
 .promptStartersLabel {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -291,10 +290,10 @@
   border: 0.5px solid var(--line);
   background: transparent;
   color: var(--text-soft);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 6px 12px;
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: var(--t-small-size);
+  font-weight: 600;
   cursor: pointer;
   transition:
     background 140ms ease-out,
@@ -309,7 +308,7 @@
 .chatInput {
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   padding: 12px 14px 10px;
   display: flex;
   flex-direction: column;
@@ -319,7 +318,7 @@
     box-shadow 0.15s;
 }
 .chatInputKbd {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-ghost);
   padding: 2px 7px;
@@ -339,9 +338,9 @@
   gap: 6px;
   border: 0.5px solid var(--line);
   background: var(--bg-sunken, var(--bg-elev));
-  border-radius: 8px;
+  border-radius: var(--r-md);
   padding: 4px 6px 4px 9px;
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   max-width: 220px;
 }
@@ -384,7 +383,7 @@
   background: transparent;
   outline: none;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--t-small-size);
   line-height: 1.5;
   resize: none;
   min-height: 22px;
@@ -409,7 +408,7 @@
   border: 0;
   background: transparent;
   padding: 6px 10px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-size: var(--t-control-size);
   color: var(--text-faint);
   cursor: pointer;
@@ -427,7 +426,7 @@
 .sendBtn {
   width: 30px;
   height: 30px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   border: 0;
   background: var(--accent);
   color: white;

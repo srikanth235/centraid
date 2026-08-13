@@ -37,9 +37,9 @@
   margin-top: 1px;
 }
 .balAmt {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: var(--t-mono-numeric);
-  font-size: 15px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   text-align: end;
   flex-shrink: 0;
@@ -53,7 +53,7 @@
 }
 .stat {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   padding: var(--sp-4) 18px;
 }
@@ -64,9 +64,9 @@
   color: var(--text-faint);
 }
 .stat .v {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: var(--t-mono-numeric);
-  font-size: 26px;
+  font-size: var(--t-display-size);
   font-weight: 600;
   margin-top: var(--sp-2);
   letter-spacing: -0.02em;
@@ -78,7 +78,7 @@
 }
 .card {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   overflow: hidden;
 }
@@ -105,7 +105,7 @@
 }
 .gcard {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   padding: var(--sp-4);
   text-align: start;
@@ -123,7 +123,7 @@
 }
 .gcardName {
   font: var(--t-body-strong);
-  font-size: 14px;
+  font-size: var(--t-small-size);
 }
 .gcardMem {
   font: var(--t-mono);
@@ -152,7 +152,7 @@
 .trashName {
   display: block;
   font: var(--t-body);
-  font-weight: 500;
+  font-weight: 600;
 }
 .trashMeta {
   display: block;
@@ -163,14 +163,14 @@
 
 .dashEmpty {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   padding: 40px var(--sp-5);
   text-align: center;
 }
 .dashEmpty .t {
   font: var(--t-title);
-  font-size: 17px;
+  font-size: var(--t-reading-size);
   margin-bottom: 6px;
 }
 .dashEmpty .d {

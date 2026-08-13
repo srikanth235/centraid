@@ -432,14 +432,12 @@ describe("CentraidTokens", () => {
     const sources = [...cssText.matchAll(/src: url\((?<href>[^)]+)\)/gu)].map(
       (match) => match.groups?.href
     );
-    // SIX, not ten: v4s withdrew `Instrument Serif` and `DM Mono`, so the
-    // desktop preload declares Instrument Sans 400/500 and Source Serif 4 400,
-    // each in latin + latin-ext. The code face is the PLATFORM stack and has no
-    // `@font-face` rule at all.
-    expect(sources).toHaveLength(6);
+    // FOUR: v8 leaves one Instrument Sans face at 400/600, each in latin +
+    // latin-ext. The platform code stack has no `@font-face` rule at all.
+    expect(sources).toHaveLength(4);
     expect(
       sources.filter((src) => src?.startsWith("fonts/") === true)
-    ).toHaveLength(6);
+    ).toHaveLength(4);
   });
 
   it("delegates tileFinish to the design-token implementation", () => {

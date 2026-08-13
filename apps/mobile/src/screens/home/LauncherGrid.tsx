@@ -33,11 +33,8 @@ import { iconChipFinish, iconChipRadius, radii } from "@centraid/design";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { borders, t, useTheme } from "../../kit/theme";
+import { borders, durations, t, useTheme } from "../../kit/theme";
 import type { Scheme, ThemeColors } from "../../kit/theme";
-// Not re-exported by ../../kit/theme's barrel (out of this issue's scope to
-// add to), so read straight off the generated token module it wraps.
-import { durations } from "../../kit/theme/tokens.generated";
 import type { LauncherItem } from "./catalog";
 import { packTiles } from "./grid-packing";
 import { isWideTile } from "./springboard-policy";

@@ -17,7 +17,7 @@ import { Text } from "../../kit/components/NativeText";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
 import { useImageFallback } from "../../kit/media/use-image-fallback";
-import { t, useTheme } from "../../kit/theme";
+import { t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { Rung } from "./photos-rungs";
 import {
@@ -260,7 +260,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     custody: {
       alignItems: "center",
-      borderRadius: 2,
+      borderRadius: radii.sm,
       bottom: 4,
       insetInlineStart: 4,
       justifyContent: "center",
@@ -271,7 +271,7 @@ const makeStyles = (colors: ThemeColors) =>
     state: {
       // proto:4019 — `inset-inline:4px; bottom:4px; padding:1px 3px;
       // border-radius:2px`. A chip on the photograph, not a bar across it.
-      borderRadius: 2,
+      borderRadius: radii.sm,
       bottom: 4,
       insetInlineEnd: 4,
       insetInlineStart: 4,

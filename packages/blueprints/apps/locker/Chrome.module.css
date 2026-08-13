@@ -36,7 +36,6 @@
   --app-side-width: 230px;
   --app-side-padding: 14px 12px;
   --app-brand-padding: 2px 6px 12px;
-  --app-brand-radius: 9px;
   --app-brand-background: linear-gradient(
     160deg,
     color-mix(in oklab, var(--app-identity) 78%, var(--text-inv)),
@@ -68,14 +67,6 @@
 /* No dark block: --accs/--accd now alias --accent-soft / --accent-deep, each
    of which already carries its own dark ramp from the blueprint token layer
    (#686). */
-
-/* Knob: appFont swaps the body/UI face between sans and mono. The host sets
-   data-app-font on the inline scope wrapper (pushKnobToInlineRoot); app.css's
-   :root[data-app-font] rule isn't loaded inline, so re-express it here keyed on
-   that wrapper. */
-:global(.centraid-inline-scope[data-app-font="mono"]) {
-  --font-sans: var(--font-mono);
-}
 
 /* The reused Sidebar/List/Detail modules bake app.css's served `height: 100vh`
    onto `.side`/`.list`/`.detail` (the app was full-screen). Inline the frame is
@@ -127,7 +118,7 @@
   max-width: min(560px, calc(100% - 32px));
   background: var(--bg-elev);
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-md);
   padding: 11px var(--sp-4);
   font: var(--t-small);

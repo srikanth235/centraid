@@ -310,7 +310,7 @@
   color: var(--text);
   /* The display rung, in the numeric face: a balance is the one number on
      Home big enough to read across a room, and it is still a ramp size. */
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-display-size);
   font-variant-numeric: var(--t-mono-numeric);
   line-height: 36px;

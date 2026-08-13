@@ -154,10 +154,10 @@ Settled **2026-07-29** in [#630](https://github.com/srikanth235/centraid/issues/
 
 Recorded **2026-08-01** as an orchestrator recommendation under [#686](https://github.com/srikanth235/centraid/issues/686). Canonical design document: [DESIGN.md](../DESIGN.md).
 
-- **The contract names roles, never faces.** `sans` / `display` / `mono` / `serif`, plus the semantic scale in `packages/design/src/typography.ts` (`size`, `lineHeight`, `weight` per key). A surface binds roles to faces; a surface never adds a role, and no consumer may set an arbitrary `font-family`.
-- **Web and desktop use system stacks. #468 K11 stands.** `system-ui` / `ui-monospace` chains, no webfont family first, so the chrome never blocks on a network fetch. This is not up for renegotiation as part of #686.
-- **Mobile maps the same roles to platform-appropriate loaded faces.** React Native cannot combine `fontFamily` with `fontWeight` reliably across platforms, so each (role, weight) pair must be its own family name. The current mapping in `apps/mobile/src/kit/theme/index.ts` — Geist (sans), Space Grotesk (display), JetBrains Mono (mono), Playfair Display (serif) — is **recorded here as the sanctioned per-role mapping**, pending a future revisit toward native faces (San Francisco / Roboto) if the download weight or the cross-platform look argues for it.
-- **Therefore the web↔mobile face divergence is decided, not drift.** An audit that finds different family names on the two surfaces has found the intended state. The thing to check is that mobile still resolves _roles and the numeric scale_ from `@centraid/design`, and that the size/lineHeight/weight values are not re-typed by hand.
+- **The v8 contract names roles and uses one bundled face.** Instrument Sans 400/600 sets every product role on desktop, PWA, blueprints, and Expo. The platform code stack remains only for code, inline literals, and paths; it ships no bytes.
+- **Pointer/touch is resolved once by the shared emitters.** Width changes measure and columns, never type. Both CSS emitters and the native lowering derive from `packages/design/src/typography.ts`.
+- **Consumers do not own a local scale.** `font:` uses a named `--t-*` role; the composable `--t-*-size` rungs cover geometry-bound exceptions. Literal or arbitrary-variable font sizing, off-scale weights, and app-level font/register choices fail `lint-design-tokens` at zero tolerance.
+- **The old cross-surface face divergence is superseded.** Expo loads the same Instrument Sans 400/600 assets and resolves the same roles; a different product family is drift.
 
 ## #686 — the type scale is not under-adopted, it is under-shaped
 
@@ -190,11 +190,11 @@ Recorded **2026-08-02**, same issue. `--t-<key>-size` now exists on both surface
 
 **`packages/design/kit` was left alone entirely.** `kit.css` renders under _both_ token layers — the shell `:root` and the rescoped `.centraid-inline-scope` block — so its exact matches resolve to two different values, and every one of them would move on one of the two surfaces. (This sentence first said "eight exact matches", contradicting the "20" measured two entries below. Re-derived: the count is **20**, and 16 of them were bound in the follow-up entry at the end of this file.)
 
-**Still open, as recorded debt:** the ~477 near-misses (within 0.6px) and the ~314 genuinely off-scale declarations. Both are visual changes and need per-site judgement, not a sweep. The ratchet total fell 1291 → 880 with no other metric moving, and `rawFontSize` now counts `font-size: var(--t-<key>)` — naming a shorthand where a size belongs — as debt rather than letting it hide inside the `var()` carve-out.
+**Closed by the v8 follow-up on 2026-08-13.** Every remaining literal was assigned to a shared role/size rung, the kit gained the same display rung as its hosts, and the checked-in CSS debt budget became `{}`. This section remains as the measurement history that motivated the composable rung API; it is no longer an open backlog.
 
 ## #686 — one token name, two meanings: the shell and blueprint type scales have diverged
 
-Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/issues/686). Surfaced while adopting the composable size rungs; **not fixed** — it needs a deliberate call.
+Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/issues/686). **Superseded by v8 on 2026-08-13:** shell and blueprint emitters now expose the same semantic roles, with pointer/touch as their single intentional value axis. The remainder of this section is retained as historical measurement, not current guidance.
 
 `toCss()` and `toBlueprintCss()` both emit `--t-*`, and the contract's rule is that an emitter "may choose values appropriate to its surface, but cannot invent a second spelling for a semantic role." The inverse has happened: the same spelling now carries a **different role** on each surface.
 

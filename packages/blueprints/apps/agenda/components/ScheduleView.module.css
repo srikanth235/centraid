@@ -22,8 +22,8 @@
   padding-top: var(--sp-2);
 }
 .schedNum {
-  font-family: var(--font-mono);
-  font-size: 22px;
+  font-family: var(--font-sans);
+  font-size: var(--t-title-size);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text);
 }
@@ -66,7 +66,7 @@
 .schedBar {
   width: 4px;
   align-self: stretch;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   flex-shrink: 0;
 }
 .schedTime {

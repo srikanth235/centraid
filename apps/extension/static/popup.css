@@ -56,12 +56,11 @@ header small,
 .status-card {
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   padding: var(--sp-4);
 }
 .hero h1 {
-  font: var(--t-greeting);
-  letter-spacing: -0.02em;
+  font: var(--t-display);
   margin: var(--sp-1) 0 var(--sp-3);
 }
 .hero p {
@@ -156,7 +155,7 @@ button:hover {
 .pulse {
   width: var(--sp-2);
   height: var(--sp-2);
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: var(--success);
   box-shadow: 0 0 0 var(--sp-1)
     color-mix(in oklab, var(--success) 12%, transparent);

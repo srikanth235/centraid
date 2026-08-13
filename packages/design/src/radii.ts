@@ -5,11 +5,10 @@
 // PERCENTAGE of its own size (26%), which no static custom property can carry —
 // see `iconChipRadius()`.
 //
-// The six rung names survive the flip because ~400 stylesheet sites reference
-// them; they now resolve to the system's four values rather than to a six-step
-// ramp. `lg` and `xl` deliberately land on the same container radius: the
-// Binding Layer has ONE container shape, and a card, a sheet and a dialog are
-// all containers. `sm` is the only value outside the brief's set — a 4px
+// Each shape has one public name. The old `xl` alias resolved to the same 12px
+// value as `lg`; keeping both made callers choose between synonyms for the one
+// container shape, so it was removed. `sm` is the only value outside the
+// brief's primary set — a 4px
 // half-rung kept for details nested INSIDE a control (a swatch, a checkbox
 // tick well), where the control's own 7px would read as a second container.
 
@@ -22,8 +21,6 @@ export const radii = {
   md: 7,
   /** Containers: cards, panels, sheets, dialogs. */
   lg: 12,
-  /** Containers, reached from the "large surface" side. Same shape by law. */
-  xl: 12,
   /** Fully round — avatars and switch tracks only. */
   pill: 999,
 } as const;

@@ -111,8 +111,8 @@ export function lintTypeFloorCss(root = ROOT, targets = CSS_TARGETS) {
 // A bare numeric literal only — `fontSize: variable`, `fontSize:
 // theme.type.body.fontSize`, and similar expressions aren't a literal this
 // gate can misjudge, so they're left alone (out of scope, not silently
-// passed: a non-numeric fontSize is either already routed through the
-// generated theme or isn't a plain constant this gate can reason about).
+// passed: a non-numeric fontSize is either already routed through the native
+// adapter or isn't a plain constant this gate can reason about).
 const TS_FONT_SIZE_RE =
   /(?<![\w-])fontSize\s*:\s*(?<value>-?[0-9.]+)\s*[,;}]/gu;
 
@@ -187,8 +187,8 @@ function main() {
     console.error(
       "\nNothing falls below 11px (packages/design/src/typography.ts). Tokenize a\n" +
         "CSS hit to the nearest rung ≥11px (usually `var(--t-control-size)`); a\n" +
-        "mobile hit to the nearest native rung in\n" +
-        "apps/mobile/src/kit/theme/tokens.generated.ts's `type` (usually `mono`'s\n" +
+        "mobile hit to the nearest native rung exposed by\n" +
+        "apps/mobile/src/kit/theme's `type` (usually `mono`'s\n" +
         "12.5). Never invent a new size. See scripts/lint-type-floor.mjs.\n"
     );
     if (!reportOnly) process.exit(1);

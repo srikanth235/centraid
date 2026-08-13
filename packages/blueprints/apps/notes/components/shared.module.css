@@ -21,7 +21,7 @@
   font: var(--t-control);
   color: var(--accent-text);
   background: var(--accent-soft);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 3px 6px 3px 10px;
 }
 .armedLabel {

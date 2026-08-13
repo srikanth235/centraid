@@ -15,7 +15,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { Text } from "../components/NativeText";
 import type { ReplicaQueryConnection } from "../hooks/useReplicaQuery";
-import { borders, family, radii, useTheme } from "../theme";
+import { borders, family, radii, useTheme, t } from "../theme";
 
 export default function ReplicaStateCard({
   connection,
@@ -70,9 +70,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   message: {
-    fontFamily: family.sansRegular,
-    fontSize: 13,
-    lineHeight: 19,
+    ...t("small"),
   },
   retry: {
     alignSelf: "flex-start",
@@ -84,10 +82,10 @@ const styles = StyleSheet.create({
   },
   retryText: {
     fontFamily: family.sansMedium,
-    fontSize: 13,
+    fontSize: t("mono").fontSize,
   },
   title: {
     fontFamily: family.sansMedium,
-    fontSize: 15,
+    fontSize: t("body").fontSize,
   },
 });

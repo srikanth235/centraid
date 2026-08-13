@@ -21,7 +21,7 @@ export const makeStyles = (colors: ThemeColors) =>
     addBtnText: {
       color: colors.accent,
       fontFamily: family.sansMedium,
-      fontSize: 12,
+      fontSize: t("mono").fontSize,
     },
     card: {
       backgroundColor: colors.bgElev,
@@ -42,7 +42,7 @@ export const makeStyles = (colors: ThemeColors) =>
     cardActions: { flexDirection: "row", marginTop: spacing[2] },
     cardHead: { alignItems: "center", flexDirection: "row", gap: spacing[3] },
     cardName: { ...t("bodyStrong"), color: colors.text, flex: 1 },
-    description: { ...t("small"), color: colors.textSoft, lineHeight: 19 },
+    description: { ...t("small"), color: colors.textSoft },
     emptyCopy: { ...t("body"), color: colors.textSoft, textAlign: "center" },
     emptyHint: { ...t("small"), color: colors.textFaint, textAlign: "center" },
     emptyTitle: { ...t("title"), color: colors.text, textAlign: "center" },
@@ -85,8 +85,8 @@ export const makeStyles = (colors: ThemeColors) =>
     scheduleRow: { alignItems: "center", flexDirection: "row", gap: 6 },
     scheduleText: {
       color: colors.textFaint,
-      fontFamily: family.monoMedium,
-      fontSize: 11,
+      fontFamily: family.sansMedium,
+      fontSize: t("control").fontSize,
     },
     subtitle: { ...t("small"), color: colors.textSoft, marginTop: 3 },
     templateCard: {
@@ -100,7 +100,7 @@ export const makeStyles = (colors: ThemeColors) =>
       padding: spacing[4],
     },
     templateCopy: { flex: 1, gap: 5, minWidth: 0 },
-    templateDesc: { ...t("small"), color: colors.textSoft, lineHeight: 18 },
+    templateDesc: { ...t("small"), color: colors.textSoft },
     templateIcon: {
       alignItems: "center",
       backgroundColor: colors.bgSunken,
@@ -112,22 +112,24 @@ export const makeStyles = (colors: ThemeColors) =>
     templateName: { ...t("bodyStrong"), color: colors.text },
     templateTrigger: {
       color: colors.textFaint,
-      fontFamily: family.monoMedium,
-      fontSize: 12.5,
+      fontFamily: family.sansMedium,
+      fontSize: t("mono").fontSize,
       textTransform: "uppercase",
     },
     title: {
+      ...t("display"),
       color: colors.text,
-      fontFamily: family.serifRegular,
-      fontSize: 28,
     },
     togglePill: {
       alignItems: "center",
-      borderRadius: 999,
+      borderRadius: radii.pill,
       justifyContent: "center",
       minWidth: 52,
       paddingHorizontal: 12,
       paddingVertical: 6,
     },
-    toggleText: { fontFamily: family.sansMedium, fontSize: 11 },
+    toggleText: {
+      fontFamily: family.sansMedium,
+      fontSize: t("control").fontSize,
+    },
   });

@@ -472,17 +472,6 @@
   ],
   "knobs": [
     {
-      "key": "appFont",
-      "label": "Font",
-      "type": "segmented",
-      "default": "sans",
-      "options": [
-        { "value": "sans", "label": "Sans" },
-        { "value": "serif", "label": "Serif" },
-        { "value": "mono", "label": "Mono" }
-      ]
-    },
-    {
       "key": "appWidth",
       "label": "Width",
       "type": "segmented",

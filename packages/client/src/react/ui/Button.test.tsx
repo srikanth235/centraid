@@ -19,7 +19,7 @@ describe(Button, () => {
     expect(html).toContain('type="button"');
   });
 
-  it("supports the five recipe variants", () => {
+  it("supports the four canonical recipe variants", () => {
     expect(
       renderToStaticMarkup(<Button label="x" variant="secondary" />)
     ).toContain("secondary");
@@ -29,9 +29,6 @@ describe(Button, () => {
     expect(
       renderToStaticMarkup(<Button label="x" variant="destructive" />)
     ).toContain("destructive");
-    expect(
-      renderToStaticMarkup(<Button label="x" variant="destructiveFilled" />)
-    ).toContain("destructiveFilled");
   });
 
   it("defaults to the secondary variant", () => {

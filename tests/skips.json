@@ -32,7 +32,7 @@
     },
     "apps/mobile/src/lib/replica/multi-vault-reader.test.ts#1": {
       "kind": "env-gate",
-      "line": 857,
+      "line": 858,
       "snippet": "const strict = process.env.CENTRAID_PERF_EVIDENCE === \"1\";",
       "issue": 659,
       "reason": "Product latency budgets only bind on the dedicated evidence lane; the shared vitest fan-out keeps a 15x smoke ceiling so CPU contention cannot fake a regression."
@@ -46,7 +46,7 @@
     },
     "packages/agent-runtime/src/automation/live-automation-failover.test.ts#1": {
       "kind": "conditional-skip",
-      "line": 27,
+      "line": 32,
       "snippet": "test.skipIf(process.env.CENTRAID_LIVE_AUTOMATION !== \"1\")(",
       "issue": 656,
       "reason": "Drives real harness binaries, so it is opt-in via CENTRAID_LIVE_AUTOMATION=1 and cannot run on a hermetic PR lane."

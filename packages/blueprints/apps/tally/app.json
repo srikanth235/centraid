@@ -757,16 +757,6 @@
   ],
   "knobs": [
     {
-      "key": "appFont",
-      "label": "Font",
-      "type": "segmented",
-      "default": "sans",
-      "options": [
-        { "value": "sans", "label": "Sans" },
-        { "value": "mono", "label": "Mono" }
-      ]
-    },
-    {
       "key": "appColor",
       "label": "Color",
       "type": "swatch",

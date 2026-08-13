@@ -176,7 +176,7 @@ function colorsFor(scheme: NativeScheme): NativeColors {
     lineSel: rgbaHex(theme.link, 0.42),
     link: theme.link,
     net: theme.net,
-    onAccent: "#FDFDFC",
+    onAccent: theme.textInv,
     // Same literal in both themes — the media ground does not follow the
     // theme (Photos handoff v4 §B).
     onStage: ON_STAGE,
@@ -243,7 +243,7 @@ export function toNativeTheme(scheme: NativeScheme): NativeTheme {
     radii,
     scheme,
     spacing,
-    targetMin: { coarse: 48, fine: 32 },
+    targetMin: { coarse: metrics.controlTouch, fine: metrics.control },
     type: nativeType,
   };
 }

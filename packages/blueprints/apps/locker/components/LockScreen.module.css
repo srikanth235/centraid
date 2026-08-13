@@ -17,7 +17,7 @@
 .lockMark {
   width: 66px;
   height: 66px;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: linear-gradient(
     160deg,
     color-mix(in oklab, var(--app-identity) 78%, var(--text-inv)),

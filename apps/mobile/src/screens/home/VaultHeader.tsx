@@ -32,7 +32,7 @@ import { iconChipFinish, radii } from "@centraid/design";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { borders, family, pageMargin, t, useTheme } from "../../kit/theme";
+import { borders, pageMargin, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
 /** The vault mark, :5363–5365 — 30×30, radius 8. Smaller than the old 34px
@@ -213,17 +213,13 @@ const makeStyles = (colors: ThemeColors) =>
       // 8, static — the handoff's own value (:5363), not `iconChipRadius()`'s
       // 26%-of-size ratio: that function is for app icon chips, and the vault
       // mark is drawn at a size (30px) the ratio would round to 7.8, not 8.
-      borderRadius: 8,
+      borderRadius: radii.md,
       height: MARK,
       justifyContent: "center",
       width: MARK,
     },
-    // The display face at 15px, not the `display` role (27px) — the handoff's
-    // `lockupMarkStyle` sets its own size, and no ramp rung already matches.
     markInitial: {
-      fontFamily: family.serifRegular,
-      fontSize: 15,
-      lineHeight: 18,
+      ...t("smallStrong"),
     },
     names: { flex: 1 },
     pressed: { backgroundColor: colors.bgPress },

@@ -29,7 +29,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { icons as ICON_SET } from "@centraid/design";
+import { icons as ICON_SET, identityInk } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
 import Grabber from "../../kit/components/Grabber";
@@ -376,7 +376,11 @@ function ActiveCard({
       ]}
     >
       <View style={[styles.emblem, { backgroundColor: tint }]}>
-        <Icon name={iconOf(vault.icon)} size={24} color={colors.textInv} />
+        <Icon
+          name={iconOf(vault.icon)}
+          size={24}
+          color={identityInk(tint, colors.text, colors.textInv)}
+        />
       </View>
       <View style={styles.rowMeta}>
         <Text style={styles.activeName} numberOfLines={1}>
@@ -387,7 +391,14 @@ function ActiveCard({
         </Text>
       </View>
       <View style={[styles.activePill, { backgroundColor: tint }]}>
-        <Text style={styles.activePillText}>ACTIVE</Text>
+        <Text
+          style={[
+            styles.activePillText,
+            { color: identityInk(tint, colors.text, colors.textInv) },
+          ]}
+        >
+          ACTIVE
+        </Text>
       </View>
     </View>
   );
@@ -420,7 +431,11 @@ function VaultLinkRow({
         style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
       >
         <View style={[styles.dot, { backgroundColor: tint }]}>
-          <Icon name={iconOf(vault.icon)} size={16} color={colors.textInv} />
+          <Icon
+            name={iconOf(vault.icon)}
+            size={16}
+            color={identityInk(tint, colors.text, colors.textInv)}
+          />
         </View>
         <View style={styles.rowMeta}>
           <Text style={styles.rowName} numberOfLines={1}>
@@ -510,24 +525,22 @@ const makeStyles = (colors: ThemeColors) =>
     activeName: {
       ...t("title"),
       color: colors.text,
-      fontFamily: family.serifRegular,
     },
     activePill: {
-      borderRadius: 8,
+      borderRadius: radii.md,
       paddingHorizontal: 8,
       paddingVertical: 3,
     },
     activePillText: {
-      color: "#fff",
-      fontFamily: family.monoMedium,
-      fontSize: 12.5,
+      fontFamily: family.sansMedium,
+      fontSize: t("mono").fontSize,
       letterSpacing: 1,
     },
     activeSub: { ...t("small"), color: colors.textFaint, marginTop: 3 },
     addRow: { marginBottom: 8 },
     dot: {
       alignItems: "center",
-      borderRadius: 12,
+      borderRadius: radii.lg,
       height: 40,
       justifyContent: "center",
       width: 40,
@@ -535,7 +548,7 @@ const makeStyles = (colors: ThemeColors) =>
     dotHollow: { backgroundColor: "transparent", borderWidth: 1.5 },
     emblem: {
       alignItems: "center",
-      borderRadius: 15,
+      borderRadius: radii.lg,
       height: 52,
       justifyContent: "center",
       width: 52,
@@ -548,8 +561,8 @@ const makeStyles = (colors: ThemeColors) =>
     },
     eyebrow: {
       color: colors.textFaint,
-      fontFamily: family.monoMedium,
-      fontSize: 11,
+      fontFamily: family.sansMedium,
+      fontSize: t("control").fontSize,
       letterSpacing: 1,
       marginTop: 2,
       paddingHorizontal: 20,
@@ -564,7 +577,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       backgroundColor: colors.bg,
       borderColor: colors.line,
-      borderRadius: 12,
+      borderRadius: radii.lg,
       borderWidth: 1,
       height: 40,
       justifyContent: "center",
@@ -604,25 +617,23 @@ const makeStyles = (colors: ThemeColors) =>
     scrollBody: { paddingHorizontal: 20, paddingTop: 18 },
     sectionLabel: {
       color: colors.textFaint,
-      fontFamily: family.monoMedium,
-      fontSize: 11,
+      fontFamily: family.sansMedium,
+      fontSize: t("control").fontSize,
       letterSpacing: 0.9,
       marginBottom: 4,
       marginTop: 10,
     },
     sheet: {
       backgroundColor: colors.bgElev,
-      borderTopLeftRadius: 26,
-      borderTopRightRadius: 26,
+      borderTopLeftRadius: radii.lg,
+      borderTopRightRadius: radii.lg,
       maxHeight: "86%",
       paddingTop: 6,
     },
-    scrim: { backgroundColor: "rgba(0,0,0,.42)", ...StyleSheet.absoluteFill },
+    scrim: { backgroundColor: colors.scrim, ...StyleSheet.absoluteFill },
     title: {
+      ...t("display"),
       color: colors.text,
-      fontFamily: family.serifRegular,
-      fontSize: 28,
-      letterSpacing: -0.4,
       marginTop: 2,
       paddingHorizontal: 20,
     },

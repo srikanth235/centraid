@@ -32,7 +32,7 @@
   white-space: nowrap;
 }
 .fieldV.mono {
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--t-small-size);
   letter-spacing: 0.02em;
   font-variant-numeric: var(--t-mono-numeric);
@@ -84,7 +84,7 @@
 .note {
   padding: 14px var(--sp-4);
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   font: var(--t-body);
   line-height: 1.6;
@@ -118,8 +118,8 @@
   gap: 10px;
 }
 .otpCode {
-  font-family: var(--font-mono);
-  font-size: 19px;
+  font-family: var(--font-code);
+  font-size: var(--t-reading-size);
   letter-spacing: 0.14em;
   color: var(--accd-fg);
   font-weight: 600;

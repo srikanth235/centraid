@@ -40,7 +40,7 @@ import {
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
 import ShareSheet from "../../kit/share/ShareSheet";
-import { borders, spacing, t, useTheme } from "../../kit/theme";
+import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
@@ -322,7 +322,7 @@ const makeStyles = (colors: ThemeColors) =>
     primary: {
       alignItems: "center",
       borderColor: colors.line,
-      borderRadius: 8,
+      borderRadius: radii.md,
       borderWidth: borders.hairline,
       justifyContent: "center",
       minHeight: 34,

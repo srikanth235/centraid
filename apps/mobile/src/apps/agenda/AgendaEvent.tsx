@@ -11,7 +11,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { family, useTheme } from "../../kit/theme";
+import { family, useTheme, radii, t } from "../../kit/theme";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import type { NativeWriteInput } from "../../lib/replica/native-session";
 import type { AgendaScreenProps } from "../../navigation";
@@ -319,24 +319,30 @@ const styles = StyleSheet.create({
     gap: 12,
     minHeight: 54,
   },
-  actionText: { flex: 1, fontFamily: family.sansMedium, fontSize: 14 },
+  actionText: {
+    flex: 1,
+    fontFamily: family.sansMedium,
+    fontSize: t("body").fontSize,
+  },
   avatar: {
     alignItems: "center",
-    borderRadius: 18,
+    borderRadius: radii.lg,
     height: 36,
     justifyContent: "center",
     width: 36,
   },
-  avatarText: { fontFamily: family.sansMedium, fontSize: 14 },
+  avatarText: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
   content: { padding: 22, paddingBottom: 60 },
-  date: { fontFamily: family.monoMedium, fontSize: 12.5, letterSpacing: 1 },
+  date: {
+    fontFamily: family.sansMedium,
+    fontSize: t("mono").fontSize,
+    letterSpacing: 1,
+  },
   description: {
-    fontFamily: family.sansRegular,
-    fontSize: 14,
-    lineHeight: 21,
+    ...t("body"),
     marginTop: 22,
   },
-  empty: { fontFamily: family.sansRegular, fontSize: 13 },
+  empty: { fontFamily: family.sansRegular, fontSize: t("mono").fontSize },
   guest: {
     alignItems: "center",
     borderBottomWidth: 1,
@@ -346,10 +352,10 @@ const styles = StyleSheet.create({
   guestName: {
     flex: 1,
     fontFamily: family.sansMedium,
-    fontSize: 14,
+    fontSize: t("body").fontSize,
     marginLeft: 10,
   },
-  guestState: { fontFamily: family.sansRegular, fontSize: 12 },
+  guestState: { fontFamily: family.sansRegular, fontSize: t("mono").fontSize },
   header: {
     alignItems: "center",
     flexDirection: "row",
@@ -357,39 +363,47 @@ const styles = StyleSheet.create({
     minHeight: 50,
     paddingHorizontal: 14,
   },
-  headerTitle: { fontFamily: family.sansMedium, fontSize: 15 },
+  headerTitle: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
   pending: {
     alignItems: "center",
-    borderRadius: 12,
+    borderRadius: radii.lg,
     flexDirection: "row",
     gap: 10,
     marginTop: 22,
     padding: 14,
   },
-  pendingText: { flex: 1, fontFamily: family.sansMedium, fontSize: 13 },
-  risk: { fontFamily: family.monoRegular, fontSize: 12.5 },
+  pendingText: {
+    flex: 1,
+    fontFamily: family.sansMedium,
+    fontSize: t("mono").fontSize,
+  },
+  risk: { fontFamily: family.sansRegular, fontSize: t("mono").fontSize },
   rsvp: { flexDirection: "row", gap: 8, marginTop: 14 },
   rsvpButton: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: radii.lg,
     borderWidth: 1,
     flex: 1,
     padding: 10,
   },
-  rsvpText: { fontFamily: family.sansMedium, fontSize: 12 },
+  rsvpText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
   safe: { flex: 1 },
   section: {
-    fontFamily: family.monoMedium,
-    fontSize: 12.5,
+    fontFamily: family.sansMedium,
+    fontSize: t("mono").fontSize,
     letterSpacing: 1,
     marginBottom: 6,
     marginTop: 30,
   },
   title: {
     fontFamily: family.sansMedium,
-    fontSize: 28,
+    fontSize: t("display").fontSize,
     letterSpacing: -0.7,
     marginTop: 10,
   },
-  when: { fontFamily: family.sansRegular, fontSize: 14, marginTop: 10 },
+  when: {
+    fontFamily: family.sansRegular,
+    fontSize: t("body").fontSize,
+    marginTop: 10,
+  },
 });

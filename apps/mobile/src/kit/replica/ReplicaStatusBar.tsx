@@ -367,7 +367,7 @@ function humanStatus(status: string): string {
 }
 
 const styles = StyleSheet.create({
-  action: { fontFamily: family.sansMedium, fontSize: 12 },
+  action: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
   card: {
     alignItems: "center",
     borderRadius: radii.md,
@@ -377,8 +377,12 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   cardCopy: { flex: 1 },
-  cardMeta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
-  cardTitle: { fontFamily: family.sansMedium, fontSize: 14 },
+  cardMeta: {
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+    marginTop: 3,
+  },
+  cardTitle: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
   outOfRoomWrap: { padding: 14 },
   bootstrap: {
     alignItems: "center",
@@ -390,7 +394,7 @@ const styles = StyleSheet.create({
   bootstrapText: {
     flex: 1,
     fontFamily: family.sansRegular,
-    fontSize: 11,
+    fontSize: t("control").fontSize,
   },
   divergence: {
     gap: 7,
@@ -402,33 +406,45 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 7,
   },
-  divergenceText: { flex: 1, fontFamily: family.sansRegular, fontSize: 11 },
-  dot: { borderRadius: 4, height: 7, width: 7 },
+  divergenceText: {
+    flex: 1,
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+  },
+  dot: { borderRadius: radii.sm, height: 7, width: 7 },
   empty: {
     fontFamily: family.sansRegular,
-    fontSize: 14,
+    fontSize: t("body").fontSize,
     paddingVertical: 40,
     textAlign: "center",
   },
-  label: { flex: 1, fontFamily: family.sansRegular, fontSize: 11 },
+  label: {
+    flex: 1,
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+  },
   list: { gap: 10, padding: 18 },
   pending: {
     alignItems: "center",
-    borderRadius: 999,
+    borderRadius: radii.pill,
     flexDirection: "row",
     gap: 3,
     paddingHorizontal: 9,
     paddingVertical: 5,
   },
-  pendingText: { fontFamily: family.sansMedium, fontSize: 13 },
-  reason: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 6 },
+  pendingText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
+  reason: {
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+    marginTop: 6,
+  },
   refresh: {
     alignItems: "center",
     flexDirection: "row",
     gap: 4,
     paddingVertical: 7,
   },
-  refreshText: { fontFamily: family.sansMedium, fontSize: 13 },
+  refreshText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
   sheet: { flex: 1 },
   sheetHeader: {
     alignItems: "center",
@@ -436,10 +452,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 18,
   },
-  source: { fontFamily: family.sansRegular, fontSize: 13, marginTop: 4 },
+  source: {
+    fontFamily: family.sansRegular,
+    fontSize: t("mono").fontSize,
+    marginTop: 4,
+  },
   spacer: { flex: 1 },
-  subtitle: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
-  title: { fontFamily: family.sansMedium, fontSize: 22 },
+  subtitle: {
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+    marginTop: 3,
+  },
+  title: { fontFamily: family.sansMedium, fontSize: t("title").fontSize },
   wrap: {
     alignItems: "center",
     borderBottomWidth: borders.hairline,

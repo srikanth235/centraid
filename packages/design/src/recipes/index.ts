@@ -165,7 +165,7 @@ export const RECIPES: Readonly<Record<RecipeName, Recipe>> = {
   ),
   Dialog: makeRecipe(
     "Dialog",
-    ["--bg-elev", "--r-xl", "--sp-5", "--shadow-lg"],
+    ["--bg-elev", "--r-lg", "--sp-5", "--shadow-lg"],
     { open: ["--scrim", "--dur-2"] },
     ["focus is contained", "labelled dialog", "escape closes when safe"],
     ["web", "blueprint", "native"]
@@ -220,7 +220,7 @@ export const RECIPES: Readonly<Record<RecipeName, Recipe>> = {
   ),
   Sheet: makeRecipe(
     "Sheet",
-    ["--bg-elev", "--r-xl", "--sp-5", "--shadow-lg"],
+    ["--bg-elev", "--r-lg", "--sp-5", "--shadow-lg"],
     { open: ["--scrim", "--dur-2"] },
     ["focus is contained", "labelled sheet", "safe-area padding"],
     ["web", "blueprint", "native"]

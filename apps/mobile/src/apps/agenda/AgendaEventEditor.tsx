@@ -7,7 +7,7 @@ import type { ReplicaRow } from "@centraid/client/replica/native";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import type { AgendaEventModel } from "../../kit/schedule/recurrence";
-import { family, useTheme } from "../../kit/theme";
+import { family, useTheme, radii, t } from "../../kit/theme";
 import type { NativeWriteInput } from "../../lib/replica/native-session";
 
 type Scope = "occurrence" | "future" | "series";
@@ -429,13 +429,13 @@ export default function AgendaEventEditor({
 const styles = StyleSheet.create({
   content: { gap: 12, padding: 20, paddingBottom: 60 },
   dateButton: {
-    borderRadius: 10,
+    borderRadius: radii.lg,
     borderWidth: 1,
     minHeight: 44,
     justifyContent: "center",
     paddingHorizontal: 12,
   },
-  dateText: { fontFamily: family.sansRegular, fontSize: 14 },
+  dateText: { fontFamily: family.sansRegular, fontSize: t("body").fontSize },
   field: { gap: 5 },
   header: {
     alignItems: "center",
@@ -445,38 +445,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   input: {
-    borderRadius: 10,
+    borderRadius: radii.lg,
     borderWidth: 1,
     fontFamily: family.sansRegular,
-    fontSize: 14,
+    fontSize: t("body").fontSize,
     minHeight: 44,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   label: {
-    fontFamily: family.monoMedium,
-    fontSize: 12.5,
+    fontFamily: family.sansMedium,
+    fontSize: t("mono").fontSize,
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   multiline: { minHeight: 88, textAlignVertical: "top" },
   safe: { flex: 1 },
-  save: { fontFamily: family.sansMedium, fontSize: 14 },
+  save: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
   scope: {
-    borderRadius: 999,
+    borderRadius: radii.pill,
     minHeight: 34,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   scopeRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
-  scopeText: { fontFamily: family.sansMedium, fontSize: 12 },
+  scopeText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
   skip: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: radii.lg,
     borderWidth: 1,
     marginTop: 12,
     padding: 12,
   },
-  skipText: { fontFamily: family.sansMedium, fontSize: 13 },
-  title: { fontFamily: family.sansMedium, fontSize: 15 },
+  skipText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
+  title: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
 });

@@ -49,7 +49,7 @@ The token contract: your app-local `app.css` `:root` sets **`--app-hue`** (your 
 Every size comes off the contract too, never off feel:
 
 - **Spacing — `var(--sp-1)`…`var(--sp-6)` = 4 · 8 · 12 · 16 · 24 · 32px.** Every `padding`, `margin`, and `gap` uses a rung. A gutter that is not on the scale is a bug, not a nuance — do not pick a px or rem value by feel. (`--sp-7`/48px retired with the Binding Layer flip — 32px is the largest rhythm step now.)
-- **Radii — `var(--r-sm)`, `var(--r-md)`, `var(--r-xl)`, `var(--r-pill)`.**
+- **Radii — `var(--r-sm)`, `var(--r-md)`, `var(--r-lg)`, `var(--r-pill)`.**
 - **Type — the `font` shorthands `var(--t-title)`, `var(--t-body)`, `var(--t-body-strong)`, `var(--t-small)`, `var(--t-control)`, `var(--t-mono)`.** Never write `font-size:`. A `font` shorthand also resets `font-family`, so follow it with `font-family: inherit;` wherever the app-font knob must keep flowing down.
 - **Focus — `box-shadow: var(--focus-ring)`.**
 

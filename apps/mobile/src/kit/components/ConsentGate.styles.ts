@@ -4,12 +4,12 @@
 
 import { StyleSheet } from "react-native";
 
-import { borders, spacing, t } from "../theme";
+import { borders, spacing, t, radii } from "../theme";
 
 export const styles = StyleSheet.create({
   action: {
     alignItems: "center",
-    borderRadius: 12,
+    borderRadius: radii.lg,
     borderWidth: borders.hairline,
     justifyContent: "center",
     minHeight: 48,
@@ -42,7 +42,7 @@ export const styles = StyleSheet.create({
   filled: { borderColor: "transparent" },
   note: { ...t("small"), paddingHorizontal: spacing[1] },
   panel: {
-    borderRadius: 16,
+    borderRadius: radii.lg,
     borderWidth: borders.hairline,
     marginBottom: spacing[4],
     padding: spacing[4],

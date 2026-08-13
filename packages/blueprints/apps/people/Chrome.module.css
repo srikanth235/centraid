@@ -66,13 +66,11 @@
 .shell {
   composes: kit-app-shell from global;
   --app-drawer-width: 274px;
-  --app-brand-radius: 9px;
   --app-brand-background: linear-gradient(
     160deg,
     color-mix(in oklab, var(--app-identity) 78%, var(--text-inv)),
     var(--app-identity)
   );
-  --app-brand-font: var(--t-body-strong);
   --app-scrim-background: var(--scrim);
   -webkit-font-smoothing: antialiased;
 }
@@ -147,7 +145,7 @@
   z-index: 40;
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-lg);
   padding: 5px;
   animation: dRise var(--dur-2) var(--ease-entry);
@@ -174,7 +172,7 @@
 }
 .storage {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   padding: var(--sp-3) 13px;
   background: var(--bg-elev);
 }
@@ -360,7 +358,7 @@
 /* ---------- List ---------- */
 .listwrap {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   overflow: hidden;
   background: var(--bg-elev);
   box-shadow: var(--shadow-sm);

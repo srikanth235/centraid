@@ -120,7 +120,7 @@
 .guestAvatar {
   width: 26px;
   height: 26px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent-soft);
   color: var(--accent-text);
   font: var(--t-control);
@@ -189,7 +189,7 @@
 .activityRail {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent-fill);
   margin-top: 5px;
   flex-shrink: 0;
@@ -205,7 +205,7 @@
   margin-top: 2px;
 }
 .activityDate {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);

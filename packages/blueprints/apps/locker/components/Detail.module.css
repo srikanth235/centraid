@@ -37,7 +37,7 @@
 .emptyDetail .ic {
   width: 60px;
   height: 60px;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--bg-sunken);
   display: flex;
   align-items: center;
@@ -54,13 +54,13 @@
 }
 .wtStat {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   padding: 15px;
 }
 .wtStat .n {
-  font-family: var(--font-mono);
-  font-size: 28px;
+  font-family: var(--font-sans);
+  font-size: var(--t-display-size);
   font-weight: 600;
   font-variant-numeric: var(--t-mono-numeric);
 }

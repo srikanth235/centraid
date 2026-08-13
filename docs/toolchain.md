@@ -38,6 +38,7 @@ All callers use repository-pinned binaries through these Bun scripts:
 | `check:fast` | format check, ordinary lint, and affected typecheck |
 | `check:pr` | frozen install, static policy, typecheck, affected tests, and Knip |
 | `check:full` | PR gate plus dependents, coverage, affected mutation/perf, and web/desktop e2e |
+| `lint:design-consumers` | one local parity check for desktop/PWA/blueprint CSS and Expo native consumers; both halves remain separate `check:push` gates so CI can run them concurrently |
 | `lint:design-md` | official DESIGN.md linter over the root `DESIGN.md`: schema, `{token.refs}`, WCAG pairs, canonical section order. Errors fail; warnings are advisory |
 | `toolchain:doctor` | non-mutating Ultracite/config drift diagnosis |
 

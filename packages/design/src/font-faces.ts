@@ -1,4 +1,4 @@
-// Centraid — the two bundled faces, described without touching a filesystem.
+// Centraid — the bundled face, described without touching a filesystem.
 //
 // This is the half of the font seam a BROWSER may hold. `fonts.ts` owns the
 // other half: where the `.woff2` bytes live on disk, which needs `node:path`
@@ -15,11 +15,10 @@ import { fonts } from "./typography";
 import type { BundledFace } from "./typography";
 
 /** Filename stem of each vendored face, matching the upstream convention.
- *  Only the two BUNDLED faces appear: `mono` is the platform code stack and
+ *  Only the one BUNDLED face appears: `code` is the platform code stack and
  *  ships no bytes, so it has no slug and no `@font-face` rule. */
 const FONT_SLUG = {
   sans: "instrument-sans",
-  serif: "source-serif-4",
 } as const satisfies Record<BundledFace, string>;
 
 export type FontSubset = "latin" | "latin-ext";
@@ -40,26 +39,23 @@ export interface FontFile {
   genus: BundledFace;
   /** The CSS `font-family` name, as the type scale spells it. */
   family: string;
-  weight: 400 | 500;
+  weight: 400 | 600;
   subset: FontSubset;
   /** File name inside `FONTS_DIR`. */
   fileName: string;
 }
 
 /**
- * Every vendored file, and only those. The ramp uses exactly two weights, and
- * only the sans carries both: the serif draws the display and reading roles
- * at 400 only, so shipping its 500 would be dead bytes on every first paint.
+ * Every vendored file, and only those. The one face carries the ramp's two
+ * weights. Code uses the platform stack and ships no bytes.
  *
- * Six files, down from ten. v4s withdrew `Instrument Serif` (display is the
- * one serif now) and `DM Mono` (numerics are the sans with tabular figures),
- * which is two font downloads removed from every first paint.
+ * Four files, down from six. v8 withdraws Source Serif 4 and replaces the
+ * barely-visible 500 step with Instrument Sans 600.
  */
 export const FONT_FILES: readonly FontFile[] = (
   [
     ["sans", 400],
-    ["sans", 500],
-    ["serif", 400],
+    ["sans", 600],
   ] as const
 ).flatMap(([genus, weight]) =>
   (["latin", "latin-ext"] as const).map((subset) => ({

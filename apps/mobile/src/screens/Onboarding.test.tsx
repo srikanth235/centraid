@@ -221,6 +221,8 @@ vi.mock(
         sansMedium: "sans-medium",
         sansRegular: "sans",
       },
+      radii: { lg: 12, md: 8, pill: 999, sm: 4, xl: 16, xs: 0 },
+      t: () => ({}),
     }) as unknown as Partial<ThemeModule>
 );
 

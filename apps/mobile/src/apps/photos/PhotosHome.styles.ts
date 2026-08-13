@@ -20,7 +20,7 @@ import {
   BAND_RADIUS,
   BAND_TOP_GAP,
 } from "../../kit/band-surface";
-import { family, pageMargin, t } from "../../kit/theme";
+import { family, pageMargin, t, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { BAND_CAPSULE_SIZE } from "./photos-band";
 
@@ -121,12 +121,12 @@ export const makeStyles = (colors: ThemeColors) =>
     // page margin, which happened to sum to 18; now that `header` carries the
     // real token, adding `spacing[2]` again would push the title past it.
     title: { ...t("title"), color: colors.text },
-    uploadFill: { borderRadius: 999, height: "100%" },
+    uploadFill: { borderRadius: radii.pill, height: "100%" },
     uploadProgress: { gap: 5, paddingHorizontal: 16, paddingVertical: 8 },
     uploadProgressText: { ...t("mono"), color: colors.textSoft },
     uploadTrack: {
       backgroundColor: colors.line,
-      borderRadius: 999,
+      borderRadius: radii.pill,
       height: 5,
       overflow: "hidden",
     },

@@ -89,7 +89,7 @@
 /* The detail chips read in the metadata voice — mono, a notch smaller than
    kit-seg's default sans buttons. */
 .detailSeg > button {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   min-height: 1.9rem;
   padding: 0.25rem 0.6rem;
@@ -130,7 +130,7 @@
 .subtaskDot {
   width: 16px;
   height: 16px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1.5px dashed var(--line-strong);
   flex-shrink: 0;
 }
@@ -160,7 +160,7 @@
 .activityRail {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent-deep);
   margin-top: 5px;
   flex-shrink: 0;
@@ -229,7 +229,7 @@
 .tagInput {
   font: var(--t-control);
   border: 1px dashed var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: var(--sp-1) 10px;
   background: transparent;
   color: var(--text);

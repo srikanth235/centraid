@@ -3,12 +3,12 @@
 // call site, so one sheet serves light and dark.
 import { StyleSheet } from "react-native";
 
-import { borders, spacing, t } from "../../kit/theme";
+import { borders, spacing, t, radii } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
   action: {
     alignItems: "center",
-    borderRadius: 12,
+    borderRadius: radii.lg,
     borderWidth: borders.hairline,
     justifyContent: "center",
     minHeight: 48,
@@ -49,7 +49,7 @@ export const styles = StyleSheet.create({
   },
   note: { ...t("small"), paddingHorizontal: spacing[1] },
   panel: {
-    borderRadius: 16,
+    borderRadius: radii.lg,
     borderWidth: borders.hairline,
     marginBottom: spacing[4],
     padding: spacing[4],
@@ -75,7 +75,7 @@ export const styles = StyleSheet.create({
   },
   rowLabel: t("smallStrong"),
   rows: {
-    borderRadius: 14,
+    borderRadius: radii.lg,
     borderWidth: borders.hairline,
     marginBottom: spacing[4],
     overflow: "hidden",
@@ -88,7 +88,7 @@ export const styles = StyleSheet.create({
     paddingBottom: spacing[2],
     paddingHorizontal: spacing[3],
   },
-  tile: { borderRadius: 12, overflow: "hidden" },
+  tile: { borderRadius: radii.lg, overflow: "hidden" },
   tileImg: { height: "100%", width: "100%" },
   tileNote: {
     ...t("mono"),

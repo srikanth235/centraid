@@ -128,9 +128,9 @@
       "failure": "the recipe inventory or state contract test fails"
     },
     "D3": {
-      "command": "bun run --cwd apps/mobile test -- generate.test.ts",
-      "seed": "introduce a CSS expression into the native lowering output",
-      "failure": "native theme generation rejects non-concrete values"
+      "command": "bun run --cwd apps/mobile test -- native.test.ts",
+      "seed": "change one adapter metric away from the canonical native lowering",
+      "failure": "the direct native adapter parity test reports the drift"
     },
     "D4": {
       "command": "bun run lint:design-tokens",
@@ -318,14 +318,14 @@
         },
         {
           "id": "D3",
-          "name": "typed native theme lowering",
-          "owner": "apps/mobile/src/kit/theme/generate.test.ts",
-          "evidence": "returns concrete light and dark values",
+          "name": "direct typed native theme lowering",
+          "owner": "apps/mobile/src/kit/theme/native.test.ts",
+          "evidence": "both schemes and every type metric remain equal to the canonical native lowering",
           "lane": "vitest",
           "wallClockCost": "low",
-          "knob": "apps/mobile/src/kit/theme/generate.ts",
+          "knob": "apps/mobile/src/kit/theme/native.ts",
           "governance": "waiver-gated",
-          "redLastDemonstrated": "2026-08-02"
+          "redLastDemonstrated": "2026-08-13"
         }
       ]
     },
