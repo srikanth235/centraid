@@ -235,6 +235,8 @@ Complementary controls on top of manual review and the threat model above. These
 
 **Structural contract:** `node --test scripts/ci/hygiene-gates.test.mjs` asserts the three gates stay wired into real workflows (part of `scripts:test`).
 
+**CodeQL triage (#678).** The code-scanning dashboard over-counts if every open alert is treated as equal. Kit Ask HTML now quote-escapes attribute interpolation (`packages/design/kit/kit.ts` `escapeHtml`). Vault ingest / owner SQL comment stripping avoid polynomial regexes. The local backup registry refuses `__proto__` / `constructor` / `prototype` keys. The replica sqlite worker drops cross-origin messages. CORS reflecting Origin and Bearer-header auth remain intentional (#504) and are annotated at the sinks, not rewritten. Test/script/e2e paths are excluded via `.github/codeql/codeql-config.yml` so new product signal is visible. Locker auth stays HMAC-pepper + async scrypt; sha256 content/path IDs are not password hashes.
+
 **Re-apply / local:**
 
 ```bash

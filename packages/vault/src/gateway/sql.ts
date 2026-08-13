@@ -39,8 +39,34 @@ export interface VaultSqlRows {
 
 export type VaultSqlResult = VaultSqlRows & { receiptId: string };
 
-const COMMENT_RE = /\/\*[\s\S]*?\*\//gu;
-const LINE_COMMENT_RE = /--[^\n]*/gu;
+/**
+ * Strip SQL comments in linear time. The previous `/\/\*[\s\S]*?\*\//`
+ * form is CodeQL `js/polynomial-redos` on hostile assistant SQL (issue #678).
+ * Unclosed block comments consume the remainder — fail closed vs executing
+ * the tail as code.
+ */
+function stripSqlComments(sql: string): string {
+  let out = "";
+  let i = 0;
+  while (i < sql.length) {
+    if (sql.startsWith("/*", i)) {
+      const end = sql.indexOf("*/", i + 2);
+      if (end < 0) return `${out} `;
+      out += " ";
+      i = end + 2;
+      continue;
+    }
+    if (sql.startsWith("--", i)) {
+      const end = sql.indexOf("\n", i);
+      if (end < 0) return out;
+      i = end;
+      continue;
+    }
+    out += sql[i];
+    i += 1;
+  }
+  return out;
+}
 
 /**
  * Lexical gate: one statement, read-shaped. Execution enforcement is
@@ -50,9 +76,7 @@ const LINE_COMMENT_RE = /--[^\n]*/gu;
  * where query_only cannot be toggled) still refuses writes outright.
  */
 export function readOnlySqlRefusal(sql: string): string | undefined {
-  const stripped = sql
-    .replace(COMMENT_RE, " ")
-    .replace(LINE_COMMENT_RE, " ")
+  const stripped = stripSqlComments(sql)
     .trim()
     .replace(/;+\s*$/u, "");
   if (!stripped) return "empty statement";

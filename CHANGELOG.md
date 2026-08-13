@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Highest-signal CodeQL findings from the code-scanning backlog ([#678](https://github.com/srikanth235/centraid/issues/678)): kit Ask HTML now escapes quotes in attribute context; vault ingest and owner-SQL comment stripping no longer use polynomial regexes; the local backup registry rejects prototype-polluting keys; the replica sqlite worker checks message origin; CodeQL ignores tests/scripts/e2e so the dashboard is product signal.
+
 ### Added
 
 - Self-contained recognition automations ([#724](https://github.com/srikanth235/centraid/issues/724), [#731](https://github.com/srikanth235/centraid/issues/731)): photo/PDF OCR, image/text embeddings, faces, and audio/video transcription run directly inside ordinary automation handlers. Handlers obtain bounded bytes through `ctx.vault.content`, execute their bundled PP-OCRv4, CLIP, YuNet/SFace, or Whisper implementation with optional local assets from `packages/model-runtime`, and persist typed results through `ctx.vault.invoke`; there is no enrichment process, HTTP seam, `ctx.enrich`, or `ctx.infer`. Model-versioned `enrich_derivation` stamps make upgrades bounded backfills, faces remain explicitly consent-gated with forget cascades, and every execution uses the normal automation ledger.

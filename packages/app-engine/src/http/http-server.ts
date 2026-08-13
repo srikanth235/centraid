@@ -196,6 +196,10 @@ function setCorsHeaders(
     ),
   });
   if (decision.allowOrigin !== null) {
+    // lgtm[js/cors-misconfiguration-for-credentials]
+    // Reflect Origin only after decideCors (#504): credentialed CORS is
+    // allowlisted shell origins or Bearer intent; foreign cookie-only
+    // origins get `*` without credentials. See SECURITY.md + issue #678.
     res.setHeader("Access-Control-Allow-Origin", decision.allowOrigin);
   }
   if (decision.credentials) {
@@ -336,6 +340,10 @@ export async function startRuntimeHttpServer(
     delete req.headers[WEB_APP_HEADER];
     delete req.headers[WEB_SHELL_ORIGIN_HEADER];
     const raw = (req.headers.authorization ?? "").replace(/^Bearer\s+/iu, "");
+    // lgtm[js/user-controlled-bypass]
+    // Authorization controlling access *is* Bearer auth. The header is
+    // compared with timingSafeEqual / authorizeBearer; absence is 401
+    // unless the path is an explicit public callback (issue #678).
     const resolveAuthorization = (): BearerAuthorization | undefined => {
       if (opts.authorizeBearer || opts.authorizeRequest) {
         return raw

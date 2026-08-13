@@ -66,6 +66,9 @@ jobs:
           # security-extended adds the lower-precision-but-real queries; the
           # default suite alone misses most injection sinks.
           queries: security-extended
+          # Issue #678: keep prod signal; drop tests/scripts/e2e/spikes that
+          # dominate the code-scanning dashboard without matching the threat model.
+          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Analyze
         uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3

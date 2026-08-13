@@ -69,6 +69,28 @@ import type {
 } from "./provider.js";
 
 const SOFT_DELETE_WINDOW_DAYS = 14;
+const UNSAFE_REGISTRY_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+function assertSafeRegistryKey(key: string, label: string): void {
+  if (UNSAFE_REGISTRY_KEYS.has(key)) {
+    throw BackupProviderError.of(
+      "invalid_request",
+      `${label} is not a valid registry key`
+    );
+  }
+}
+
+function copySafeRecord<T>(
+  src: Record<string, T> | undefined
+): Record<string, T> {
+  const out = Object.create(null) as Record<string, T>;
+  if (!src) return out;
+  for (const [key, value] of Object.entries(src)) {
+    if (UNSAFE_REGISTRY_KEYS.has(key)) continue;
+    out[key] = value;
+  }
+  return out;
+}
 const CAPABILITIES: ProviderCapabilities = {
   protocol: ["centraid-storage-provider/1"],
   dataPlane: "s3",
@@ -148,13 +170,18 @@ export class LocalBackupProvider implements BackupProvider {
     try {
       const raw = await fs.readFile(this.registryFile, "utf8");
       const parsed = JSON.parse(raw) as Registry;
+      const idempotency = Object.create(null) as Registry["idempotency"];
+      for (const [targetId, rows] of Object.entries(parsed.idempotency ?? {})) {
+        if (UNSAFE_REGISTRY_KEYS.has(targetId)) continue;
+        idempotency[targetId] = copySafeRecord(rows);
+      }
       return {
-        targets: parsed.targets ?? {},
-        snapshots: parsed.snapshots ?? {},
-        idempotency: parsed.idempotency ?? {},
-        nextSeq: parsed.nextSeq ?? {},
-        policies: parsed.policies ?? {},
-        events: parsed.events ?? {},
+        targets: copySafeRecord(parsed.targets),
+        snapshots: copySafeRecord(parsed.snapshots),
+        idempotency,
+        nextSeq: copySafeRecord(parsed.nextSeq),
+        policies: copySafeRecord(parsed.policies),
+        events: copySafeRecord(parsed.events),
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -182,6 +209,7 @@ export class LocalBackupProvider implements BackupProvider {
     registry: Registry,
     targetId: string
   ): RegistryTarget {
+    assertSafeRegistryKey(targetId, "target id");
     const target = registry.targets[targetId];
     if (!target)
       throw BackupProviderError.of("not_found", `unknown target "${targetId}"`);
@@ -194,6 +222,7 @@ export class LocalBackupProvider implements BackupProvider {
     kind: ProviderEventKind,
     detail: Record<string, unknown>
   ): void {
+    assertSafeRegistryKey(targetId, "target id");
     (registry.events[targetId] ??= []).push({
       at: Math.floor(Date.now() / 1000),
       kind,
@@ -324,6 +353,7 @@ export class LocalBackupProvider implements BackupProvider {
       );
 
     // Idempotency replay BEFORE the fencing check (spec-mandated order).
+    assertSafeRegistryKey(reg.idempotencyKey, "idempotency key");
     const existing = registry.idempotency[targetId]?.[reg.idempotencyKey];
     if (existing) return existing;
 

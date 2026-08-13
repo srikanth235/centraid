@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 
 import { parseCsvRows } from "./csv.js";
 import { parseIcs } from "./ics.js";
+import { parseAddress } from "./mbox.js";
 import { isPasswordsCsvHeader, parsePasswordsCsv } from "./passwords-csv.js";
 import { assertImportFileSize, MAX_IMPORT_FILE_BYTES } from "./stage-file.js";
 import { normalizeHandle, parseVcards } from "./vcard.js";
@@ -18,6 +19,20 @@ describe("ingest pure parsers (#545 B6)", () => {
       /import file exceeds/u
     );
     expect(() => assertImportFileSize(MAX_IMPORT_FILE_BYTES)).not.toThrow();
+  });
+
+  test("parseAddress splits display name from the angled address without regex backtracking", () => {
+    expect(parseAddress(`"Meera Pillai" <meera@example.com>`)).toStrictEqual({
+      name: "Meera Pillai",
+      email: "meera@example.com",
+    });
+    expect(parseAddress(`<${"a".repeat(2000)}@example.com>`)).toMatchObject({
+      email: `${"a".repeat(2000)}@example.com`,
+    });
+    expect(parseAddress("bare@example.com")).toStrictEqual({
+      name: null,
+      email: "bare@example.com",
+    });
   });
 
   test("parseIcs maps VEVENT fields to structs", () => {

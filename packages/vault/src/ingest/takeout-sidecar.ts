@@ -249,16 +249,20 @@ export function parseTakeoutSidecar(text: string): SidecarFacts {
  */
 function sidecarStems(fileName: string): string[] {
   const stems = [fileName];
-  const duplicate = /^(?<stem>.*)(?<marker>\(\d+\))(?<ext>\.[^.]+)$/u.exec(
-    fileName
-  );
-  if (duplicate?.groups) {
-    const { stem, marker, ext } = duplicate.groups;
-    stems.push(`${stem}${ext}${marker}`);
+  const extStart = fileName.lastIndexOf(".");
+  if (extStart <= 0) return stems;
+  const ext = fileName.slice(extStart);
+  const base = fileName.slice(0, extStart);
+  // Suffix scans, not `/^(.*)(\(\d+\))(\.[^.]+)$/` — the greedy `.*` plus
+  // trailing groups is CodeQL `js/polynomial-redos` on hostile names (#678).
+  const duplicate = /\(\d+\)$/u.exec(base);
+  if (duplicate) {
+    stems.push(`${base.slice(0, -duplicate[0].length)}${ext}${duplicate[0]}`);
   }
-  const edited = /^(?<stem>.*)-edited(?<ext>\.[^.]+)$/u.exec(fileName);
-  if (edited?.groups) {
-    stems.push(...sidecarStems(`${edited.groups.stem}${edited.groups.ext}`));
+  if (base.endsWith("-edited")) {
+    stems.push(
+      ...sidecarStems(`${base.slice(0, base.length - "-edited".length)}${ext}`)
+    );
   }
   return stems;
 }
