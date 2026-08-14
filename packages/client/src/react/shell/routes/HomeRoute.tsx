@@ -128,6 +128,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
       }),
     }
   );
+  const homeReadsSettled = springboardFeed.state.status === "ready";
 
   // The sample plane (#708). Cheap, cached, and fail-soft to "no offer" — a
   // gateway that cannot answer should cost the member an offer, never the
@@ -184,15 +185,18 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   }, [sample.seedable, refreshAfterSample]);
 
   // First-time users should see a useful Home without having to decide what a
-  // sample week is. Wait for the sample plane to settle, disclose the same
-  // removable offer in its working state, then run the existing seed path.
+  // sample week is. Wait for the sample plane and initial Home reads to settle,
+  // disclose the same removable offer in its working state, then run the
+  // existing seed path. Starting after the first replica read avoids making
+  // bootstrap and the first demo writes contend for the local store.
   // The ref protects the one-shot promise even if development Strict Mode
   // replays an effect before the state update commits.
   useEffect(() => {
     if (
       !autoSeedSample ||
       autoSeedStarted.current ||
-      sampleQuery.state.status !== "ready"
+      sampleQuery.state.status !== "ready" ||
+      !homeReadsSettled
     ) {
       return;
     }
@@ -207,6 +211,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     sample.rows,
     sample.seedable,
     sampleQuery.state.status,
+    homeReadsSettled,
   ]);
 
   const onClear = useCallback(() => {

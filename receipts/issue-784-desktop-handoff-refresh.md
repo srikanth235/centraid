@@ -38,6 +38,8 @@ tests, and styling are covered by `packages/client/src/react/screens/FirstRunGat
 `packages/client/src/react/shell/routes/HomeRoute.tsx`, and
 `packages/client/src/react/shell/routes/homeSample.ts` move identity editing
 to Settings and make first Home entry seed the removable sample week. The
+auto-fill waits for Home's initial springboard reads to settle before starting,
+so the first gateway write does not compete with replica bootstrap. The
 settings bridge and its tests live in `packages/client/src/react/shell/routes/profileData.ts`,
 `packages/client/src/react/shell/routes/AppSettingsController.tsx`,
 `packages/client/src/react/screens/AppSettingsPanel.tsx`, and
@@ -123,7 +125,8 @@ now demonstrates the no-profile-gate first run and emits the existing UI-impact
 frames used by the design and onboarding checks. The production pending-overlay
 journey in `apps/desktop/tests/e2e/pending-overlay.spec.ts` follows the same
 chooser → local connection → Home handoff, so offline-reload coverage no longer
-depends on the deleted profile fields.
+depends on the deleted profile fields; it also waits for the disclosed
+first-run sample fill to finish before exercising pending writes.
 
 ### Full changed-file inventory
 
@@ -262,7 +265,7 @@ Verify desktop/PWA and Expo behavior with targeted unit, type, design, and UI-im
 The following replayable commands provide that evidence:
 
 ```sh
-bun run --cwd packages/client test -- src/react/ui/AppMark.test.tsx src/react/screens/AppSettingsPanel.test.tsx src/react/screens/PaletteScreen.test.tsx src/react/shell/routes/paletteData.test.ts src/react/shell/routes/homeData.test.ts src/react/screens/HomeSpringboard.test.tsx src/react/ui/AppCard.test.tsx src/react/screens/LibraryCards.test.tsx
+bun run --cwd packages/client test -- src/react/ui/AppMark.test.tsx src/react/screens/AppSettingsPanel.test.tsx src/react/screens/PaletteScreen.test.tsx src/react/shell/routes/paletteData.test.ts src/react/shell/routes/homeData.test.ts src/react/shell/routes/HomeRoute.test.tsx src/react/screens/HomeSpringboard.test.tsx src/react/ui/AppCard.test.tsx src/react/screens/LibraryCards.test.tsx
 bun run --cwd packages/client typecheck
 bun run --cwd packages/blueprints typecheck
 bun run --cwd packages/blueprints test -- apps/agenda apps/photos
@@ -285,7 +288,7 @@ The UI receipt gate is run after this receipt is added, and the changed
 `apps/desktop/tests/e2e/onboarding-home.spec.ts` harness is the emitter for the
 `artifacts/e2e/ui-impact/issue-784-desktop-handoff.png` evidence path. The
 pending-overlay production journey is separately exercised against the
-streamlined local-host path.
+streamlined local-host path after its background sample fill has settled.
 
 ## Audit
 

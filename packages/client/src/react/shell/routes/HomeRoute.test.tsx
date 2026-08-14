@@ -220,6 +220,33 @@ describe("HomeRoute", () => {
     );
   });
 
+  it("waits for the initial Home reads before auto-filling the sample week", async () => {
+    loadHomeSample.mockResolvedValue({ rows: 0, seedable: ["tasks"] });
+    seedHomeSample.mockResolvedValue(["tasks"]);
+    let settleTiles: (() => void) | undefined;
+    loadHomeTileContent.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          settleTiles = () => resolve({});
+        })
+    );
+
+    await render([app("tasks")], false, true);
+    await act(async () => {
+      await flush();
+    });
+    expect(seedHomeSample).not.toHaveBeenCalled();
+
+    await act(async () => {
+      settleTiles?.();
+      await flush();
+    });
+    expect(seedHomeSample).toHaveBeenCalledWith(
+      ["tasks"],
+      expect.any(Function)
+    );
+  });
+
   it("never builds tile content before the brief has settled", async () => {
     // The cache keys a query by its KEY, not by the closure — so a springboard
     // query that ran while the brief was still in flight cached a tileContent

@@ -36,6 +36,31 @@ async function foundDesktop(page: Page): Promise<void> {
   await onboarding.waitFor({ state: "visible", timeout: 60_000 });
   await onboarding.waitFor({ state: "detached", timeout: 60_000 });
   await waitForHome(page);
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async () => {
+          const settings = await window.CentraidApi.getSettings();
+          if (settings.activeGatewayKind !== "local" || !settings.gatewayUrl)
+            return false;
+          try {
+            const result = (await window.CentraidApi.listGatewayVaults({
+              gatewayId: "local",
+            })) as { vaults?: unknown };
+            return Array.isArray(result.vaults);
+          } catch {
+            return false;
+          }
+        }),
+      { timeout: 60_000 }
+    )
+    .toBe(true);
+  // This fixture exercises app writes after onboarding, not the background
+  // sample generators. Let the one-shot first-run fill finish so its gateway
+  // writes and replica catch-up cannot overlap the pending-write journey.
+  await expect(page.getByTestId("home-sample-note")).toBeVisible({
+    timeout: 60_000,
+  });
 }
 
 /**
