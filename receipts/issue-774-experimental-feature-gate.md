@@ -84,7 +84,11 @@ explicitly: `packages/gateway/src/routes/lifecycle-automation-routes.test.ts`,
 `tests/agent-e2e-pairing/lib/harness.mjs` (env in `spawnDaemon`), and
 `tests/agent-e2e-mobile/lib/ci-gateway.mjs` (build option). The new
 `packages/gateway/src/serve/experimental-gating.test.ts` proves the wall
-over real serve boots.
+over real serve boots. The desktop e2e mock in
+`apps/desktop/tests/e2e/fixtures.ts` advertises the opt-in capability map so
+the automation and Insights journeys exercise their intended surfaces instead
+of stopping at the shell's capability wall; its navigation helper scopes clicks
+to the labelled stem when an app-bar verb shares the same label.
 
 ### Client walls, not blank pages
 
@@ -190,11 +194,13 @@ bun run --cwd packages/gateway typecheck
 bun run --cwd packages/protocol test
 bun run --cwd packages/client test && bun run --cwd packages/client typecheck
 bun run --cwd apps/mobile test && bun run --cwd apps/mobile typecheck
+bun run --cwd apps/desktop test:e2e -- --grep '8\\.1|10\\.2'
 bun run lint && bun run format:check
 ```
 
 Observed: gateway 1502 passed / 6 skipped; protocol 48; client 2232
-across 246 files; mobile 1349; typecheck clean across all touched
+across 246 files; mobile 1349; targeted desktop opt-in e2e 2 passed;
+typecheck clean across all touched
 packages; oxlint + oxfmt clean. Known environmental failures only:
 `gateway-db-lock.integration.test.ts` needs the `sqlite3` CLI (absent in
 the dev container) and mobile `PendingRestartJourney.test.tsx` cannot
@@ -212,7 +218,7 @@ unverified by execution here.
 - `packages/client/src/react/shell/capabilities.ts` · `packages/client/src/react/shell/useCapabilities.tsx` · `packages/client/src/react/shell/CapabilityWall.tsx` · `packages/client/src/react/shell/App.tsx` · `packages/client/src/react/shell/App.test.tsx` · `packages/client/src/react/shell/App.capabilities.test.tsx` · `packages/client/src/react/shell/App.inline-branch.test.tsx` · `packages/client/src/react/shell/Stem.tsx` · `packages/client/src/react/shell/AllAppsSheet.tsx` · `packages/client/src/react/shell/launcherModel.ts` · `packages/client/src/react/shell/launcherModel.test.ts` · `packages/client/src/react/shell/routes/paletteData.ts` · `packages/client/src/react/shell/routes/AppSettingsController.tsx` · `packages/client/src/react/shell/routes/AutomationEditorRoute.tsx`
 - `packages/client/src/react/screen-contracts.ts` · `packages/client/src/react/screens/AppSettingsPanel.tsx` · `packages/client/src/react/screens/AutomationEditorScreen.tsx`
 - `apps/mobile/src/lib/replica/mobile-gateway-compatibility-core.ts` · `apps/mobile/src/lib/replica/mobile-gateway-compatibility.ts` · `apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts` · `apps/mobile/src/lib/replica/mobile-gateway-compatibility.integration.test.ts` · `apps/mobile/src/kit/replica/ReplicaProvider.tsx` · `apps/mobile/src/screens/home/places.ts` · `apps/mobile/src/screens/home/places.test.ts` · `apps/mobile/src/screens/home/HomeBand.tsx` · `apps/mobile/src/screens/home/AllAppsSheet.tsx` · `apps/mobile/src/kit/components/FeatureOffPlace.tsx` · `apps/mobile/src/kit/components/FeatureOffPlace.styles.ts` · `apps/mobile/src/apps/automations/Automations.tsx` · `apps/mobile/src/apps/automations/Automations.test.tsx` · `apps/mobile/src/screens/connectors/Connectors.tsx` · `apps/mobile/src/screens/connectors/Connectors.test.tsx` · `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx`
-- `tests/agent-e2e-mobile/lib/ci-gateway.mjs` · `tests/agent-e2e-pairing/lib/harness.mjs`
+- `apps/desktop/tests/e2e/fixtures.ts` · `tests/agent-e2e-mobile/lib/ci-gateway.mjs` · `tests/agent-e2e-pairing/lib/harness.mjs`
 - `docs/decisions.md` · `docs/config-ownership.md` · `docs/protocol.md` · `receipts/issue-774-experimental-feature-gate.md`
 
 ## Audit
@@ -220,3 +226,13 @@ unverified by execution here.
 PASS — a fresh-context audit against the issue intent and `git diff origin/main...HEAD` confirms the load-bearing claims. `resolveExperimentalFeatures` implements exactly the stated precedence (env authoritative for every feature when `CENTRAID_EXPERIMENTAL` is set at all, else boolean prefs, else host option, else off, unknown tokens surfaced as warnings and logged at boot); `build-gateway.ts` conditionally registers the connections/OAuth-callback handler and narrows the store-backed prefix list to `/centraid/_apps` with automations off, and the webhook handler falls through to not-found; the scheduler reconcile filter arms recognition-template rows on their own `enabled` bit while all other rows require `experimental.automations`, with schedulers started unconditionally — the recognition carve-out is real, not aspirational. The protocol changes (optional `automations`/`connectors` keys, `OPTIONAL_GATEWAY_CAPABILITIES` export, the property test's `optional.has(capability)` assertion), the CLI `experimental` config lane, the client seam (`capabilities.ts` route table, `useCapabilities.tsx`, `CapabilityWall`), the mobile places filter with pin state untouched, the test opt-ins, and all three doc updates are present as described. File lists cover the diff without phantom entries, and the Out of scope section matches the code (no hot-apply, no data deletion, `builderEnabled` untouched).
 
 The audit flagged one overstated decision bullet — the blanket "unknown ≠ off on clients" rule holds on mobile and at the desktop route wall, but the desktop launcher/palette deliberately boot at off (hiding beats flashing against a loopback gateway), and a failed capability read resolves to off rather than staying unknown. The bullet above and the `docs/decisions.md` ruling were narrowed to match the code in response; the desktop first-frame trade is recorded in `capabilities.ts`. Everything else verified; verification counts spot-checked where cheap (design suite re-run matches).
+
+## Session
+
+<!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
+
+### Identifiers
+
+| date | harness | session |
+| --- | --- | --- |
+| 2026-08-14 | codex | 019fffad-d461-7c32-acbd-f6d7af89a752 |
