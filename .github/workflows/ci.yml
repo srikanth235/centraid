@@ -281,6 +281,11 @@ jobs:
       - run: bun run check:ui-receipt
       # Quarantined tests must be declared, attributed, and not expired.
       - run: bun run test:quarantine
+      # Assertion-hygiene counts (toBeTruthy/toBeFalsy and the non-negated
+      # toHaveBeenCalled family) are down-only budgets in
+      # tests/hygiene-budgets.json — the enforcement the lint preset cannot
+      # give, since neither matcher is wrong in isolation (#781).
+      - run: bun run test:hygiene-ratchet
 
   verify:
     runs-on: ubuntu-latest

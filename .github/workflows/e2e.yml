@@ -416,7 +416,11 @@ jobs:
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile-android'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # 120, not the iOS job's 60: this lane can pay a cold-cache gradle build
+    # (~21 min, #535) before any flow runs, and swiftshader software rendering
+    # makes each journey slower than the hardware-accelerated iOS simulator.
+    # Raised from 90 when #781 added the three experience probes to this lane.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
@@ -555,6 +559,18 @@ jobs:
           # comments and non-ASCII chars tripped its parser (#535). Keep this a
           # single line that hands off to a committed bash file instead.
           script: bash apps/mobile/scripts/android-emulator-e2e.sh
+      # Mirrors the iOS job's identical step. The harness already rm -rf's this
+      # directory in a finally, so this is belt-and-braces against a run that
+      # dies before the finally — but it was iOS-only, which meant an Android
+      # crash mid-pairing could ship pairing diagnostics in the runs/ artifact.
+      - name: Remove sensitive pairing diagnostics
+        if: always()
+        run: |
+          if [ -d tests/agent-e2e-mobile/runs ]; then
+            find tests/agent-e2e-mobile/runs -type d \
+              -path '*/maestro-debug/*-configure-gateway' \
+              -prune -exec rm -rf {} +
+          fi
       # Bank the apk even if a later flow failed — the artifact is the product of
       # the fingerprinted inputs regardless of whether Maestro passed (see iOS).
       # Guarded on the build having actually produced an apk, so a cache-hit run

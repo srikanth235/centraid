@@ -64,11 +64,26 @@ node scripts/test-report/prepare.mjs
 # Non-short-circuit: every flow writes evidence even when an earlier journey
 # fails. template-gate covers the five WebView blueprints; native-v0-resilience
 # covers Photos, Docs, and Agenda, matching the iOS eight-app gate.
+#
+# The order below mirrors the iOS job's "Run all committed mobile journeys" step
+# (.github/workflows/e2e.yml) exactly, including the three experience probes
+# volume-proof / cold-start / scroll-frames. Those three ran only on iOS while
+# tests/experience-budgets/mobile.json already claimed both jobs as their probe
+# host, so the Android lane produced no cold-start or frame-drop evidence at all
+# — the gap #781 closes. Nothing here is iOS-specific: the harness resolves the
+# device and the `.debug` applicationId per platform (tests/agent-e2e-mobile/lib/
+# harness.mjs), the frame probe is a plain deep link into a __DEV__-only RN
+# component (apps/mobile/src/kit/perf/FrameProbe.tsx; the `centraid` scheme is in
+# android/app/src/main/AndroidManifest.xml), and the report is recovered from the
+# per-platform Maestro debug output the runs/ artifact already uploads.
 set +e
 ec=0
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/template-gate.mjs || ec=$?
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
+MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
+MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
+MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
 set -e
 exit "$ec"

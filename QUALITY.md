@@ -2,6 +2,23 @@
 
 ## Open
 
+- **Nightly mobile evidence is keyed by flow, not by flow × platform, so iOS
+  and Android overwrite each other.** `writeFlowVerdict` writes
+  `artifacts/e2e/<slug>.json` and `recordQualityResult` writes
+  `artifacts/scale/<owner-slug>.json`; neither path carries a platform
+  component. `test-health-report` then downloads `nightly-evidence-*` with
+  `merge-multiple: true`, so for any flow that runs on both jobs the merged
+  tree keeps whichever platform uploaded last. This already applied to
+  `home-loads`, `template-gate`, and `native-v0-resilience`; #781 extended it
+  to `cold-start` and `scroll-frames`, where the collision now silently hides
+  one platform's cold-start milliseconds and frame-drop count behind the
+  other's. It is not currently corrupting a drift gate — the `quality-history`
+  cache is restored only in `quality-performance-scale` and `restore-year3`,
+  never in the mobile jobs, so `rigDriftBudget` returns `null` on both and no
+  cross-platform samples interleave — but the merged report is already
+  under-reporting, and extending that cache to mobile would turn a display bug
+  into a false ratchet. Fix is a platform segment in both evidence paths plus a
+  reader update, which is wider than the parity slice it was found in.
 - **`react-native-maps` is dead weight and still ships.** Places on the phone
   now draws the shared `place-map.ts` projection through `react-native-svg`
   (see [docs/photos/places.md](docs/photos/places.md)), so nothing imports
