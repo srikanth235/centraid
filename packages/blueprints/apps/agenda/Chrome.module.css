@@ -109,6 +109,10 @@
 /* ---- Sidebar ---- */
 .side {
   composes: kit-app-side from global;
+  /* The shell stem is the only navigation band. Agenda's former sidebar is
+     retained as a slot for the served app contract, but never rendered as a
+     second desktop navigation column. */
+  display: none;
 }
 .brand {
   composes: kit-app-brand from global;
@@ -177,6 +181,7 @@
   /* The dismiss target is a real <button> (issue #573) — keep the plain arrow
      the clickable <div> had, not the button/`kit-plain-btn` hand. */
   cursor: default;
+  display: none;
 }
 
 /* ---- Main / topbar ---- */
@@ -189,6 +194,7 @@
 }
 .hamburger {
   composes: kit-app-hamburger from global;
+  display: none;
 }
 .headerBar {
   display: flex;

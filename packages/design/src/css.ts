@@ -65,6 +65,15 @@ function themeProps(theme: Theme): Record<string, string> {
     "--accent-light": theme.accentLight,
     "--accent-soft": `color-mix(in oklab, ${theme.accent} 8%, transparent)`,
     "--accent-text": theme.accentText,
+    // App marks override these element-local defaults with the app's solved
+    // hue, ink, and size. Keeping the defaults in the shell contract means
+    // the shared CSS module is valid even before a mark receives its props.
+    "--app-mark-hue": "var(--c-slate)",
+    "--app-mark-ink": "var(--app-identity-text)",
+    "--app-mark-size": "30px",
+    // App marks use a quiet chip and let the solved identity text rung carry
+    // the single-tone outline.
+    "--app-mark-tint": theme.kind === "dark" ? "20%" : "13%",
     // An app that declares no identity renders in ink; the shell always does.
     "--app-identity-text": "var(--text)",
     "--bg": theme.bg,

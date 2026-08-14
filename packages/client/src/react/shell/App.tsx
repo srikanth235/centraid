@@ -292,7 +292,17 @@ export function SettingsRouteRedirect({
 // ShellApp, which wires the chrome frame + router. Routes render from the
 // renderRoute switch below; each is ported one at a time from the vanilla
 // app-*.ts modules. NOT yet wired to #root while that work continues.
-export default function App(): JSX.Element {
+export default function App({
+  seedSampleOnFirstRun = false,
+}: {
+  seedSampleOnFirstRun?: boolean;
+}): JSX.Element {
+  // The flag lives above the route so navigating away during the first sample
+  // fill cannot mount Home again and start a second run.
+  const [autoSeedSample, setAutoSeedSample] = useState(seedSampleOnFirstRun);
+  const onAutoSeedStarted = useCallback(() => {
+    setAutoSeedSample(false);
+  }, []);
   const { prefs, setPrefs } = useAppearance();
   // `mutateApps` is deliberately NOT taken: its only caller was Home's app
   // context menu (App info / Rename / Uninstall), which left with the
@@ -1269,6 +1279,8 @@ export default function App(): JSX.Element {
               appsLoading={appsLoading}
               userApps={userApps}
               drafts={visibleDrafts}
+              autoSeedSample={autoSeedSample}
+              onAutoSeedStarted={onAutoSeedStarted}
             />
           );
         case "assistant":
@@ -1455,6 +1467,8 @@ export default function App(): JSX.Element {
       compact,
       gatewaysRefreshKey,
       removeGatewayConnection,
+      autoSeedSample,
+      onAutoSeedStarted,
     ]
   );
 

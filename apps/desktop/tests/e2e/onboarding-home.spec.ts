@@ -36,32 +36,27 @@ test.afterEach(async () => {
 
 // ─────────────────────────── §1 Onboarding ───────────────────────────
 
-test("1.1 — first launch shows onboarding with the CTA disabled until a name is entered", async () => {
+test("1.1 — first launch reaches Home without a profile gate", async () => {
   await seedRemoteGateway(env, gateway, { onboarding: true });
   const { app, page } = await launchApp(env);
   try {
-    // Desktop first run is chooser-first (#603). Identity now comes LAST and
-    // only when the roster has no name for this person, so reach it via the
-    // fresh path: connect is instant there, then the service offer, then the
-    // name field whose CTA gating is under test.
+    // Desktop first run is chooser-first (#603). The fresh path should now
+    // connect and hand off to Home without asking for identity details.
+    const onboarding = page.getByTestId("onboarding-view");
     const chooser = page.getByTestId("first-run-choice");
     await chooser.waitFor({ state: "visible" });
     await chooser
       .getByRole("button", { name: /start fresh on this mac/iu })
       .click();
     await page.getByTestId("onboarding-view").waitFor({ state: "visible" });
-    // The fresh path dials its own gateway and goes straight to identity — the
-    // H5 service offer is no longer a blocking step (it lives on the Gateway
-    // screen now), so there is nothing to decline here.
-    const name = page.getByRole("textbox", { name: "Your name" });
-    await name.waitFor({ state: "visible", timeout: 60_000 });
-    const cta = page.getByRole("button", { name: "Continue" });
-    await expect(cta).toBeDisabled();
-    await name.fill("Ada Lovelace");
-    await expect(cta).toBeEnabled();
-    // Clearing the name disables it again.
-    await name.fill("");
-    await expect(cta).toBeDisabled();
+    await expect(
+      page.getByRole("heading", { name: /make yourself/iu })
+    ).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Your name" })).toHaveCount(
+      0
+    );
+    await onboarding.waitFor({ state: "detached", timeout: 60_000 });
+    await waitForHome(page);
   } finally {
     await closeApp(app);
   }
@@ -73,7 +68,7 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
   // desktop deliberately does NOT start its local gateway until the user picks
   // "Start fresh on this Mac" — that start is what would otherwise pop an OS
   // keychain prompt before any UI. The gateway then founds Personal itself;
-  // the profile step renames it to the user's display name.
+  // profile identity stays optional and is edited later from Settings → Profile.
   const { app, page } = await launchApp(env);
   try {
     const chooser = page.getByTestId("first-run-choice");
@@ -95,17 +90,8 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
     const onboarding = page.getByTestId("onboarding-view");
     await onboarding.waitFor({ state: "visible" });
 
-    // The fresh/local path connects on mount and lands directly on identity —
-    // the gateway just founded itself, so its owner is still the placeholder
-    // "You" and the name is genuinely unknown. The H5 OS-service install is no
-    // longer asked here; it is an opt-in tip on the Gateway screen.
-    const nameField = page.getByRole("textbox", { name: "Your name" });
-    await nameField.waitFor({ state: "visible", timeout: 60_000 });
-    await nameField.fill("Ada Lovelace");
-    // Pick a specific swatch.
-    await onboarding.getByRole("radio").nth(2).click();
-    await page.getByRole("button", { name: "Continue" }).click();
-
+    // The fresh/local path connects on mount and enters Home directly. The
+    // optional profile step is gone; the H5 service tip is also not blocking.
     // Onboarding view gone, home shell present.
     await onboarding.waitFor({ state: "detached" });
     await waitForHome(page);
@@ -170,6 +156,10 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
       path: path.join(evidenceDir, "issue-776-sharesheet-quick-add.png"),
       fullPage: true,
     });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-784-desktop-handoff.png"),
+      fullPage: true,
+    });
 
     // Persisted flag means a relaunch would skip onboarding, and the local
     // gateway is now really running.
@@ -182,12 +172,13 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
     expect(persisted.onboardingCompletedAt).toBeTruthy();
     expect(persisted.gatewayUrl ?? "").not.toBe("");
 
-    // The one auto-founded vault, renamed to the display name.
+    // The one auto-founded vault remains Personal until an explicit Settings
+    // action changes its name.
     const listed = (await page.evaluate(() =>
       window.CentraidApi.listGatewayVaults({ gatewayId: "local" })
     )) as { vaults?: Array<{ name: string }> };
     const names = (listed.vaults ?? []).map((vault) => vault.name).sort();
-    expect(names).toEqual(["Ada Lovelace"]);
+    expect(names).toEqual(["Personal"]);
   } finally {
     await closeApp(app);
   }

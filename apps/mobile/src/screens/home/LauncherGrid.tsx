@@ -29,9 +29,9 @@ import Animated, {
 } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
 
-import { iconChipFinish, iconChipRadius, radii } from "@centraid/design";
+import { radii } from "@centraid/design";
 
-import Icon from "../../kit/components/Icon";
+import AppMark from "../../kit/components/AppMark";
 import { Text } from "../../kit/components/NativeText";
 import { borders, durations, t, useTheme } from "../../kit/theme";
 import type { Scheme, ThemeColors } from "../../kit/theme";
@@ -146,7 +146,6 @@ function ContentTile({
     transform: [{ scale: scale.value }],
   }));
   const { pressIn, pressOut } = buildPressHandlers(scale);
-  const finish = iconChipFinish(meta.color, colors.bg, scheme);
   const count = countText(tile);
   // A withheld count reads as the label alone ("Open Locker, locked"); the em
   // dash is a visual glyph and has nothing to say to a screen reader.
@@ -172,23 +171,12 @@ function ContentTile({
               carries the app's hue, the name is the UI role, the count is the
               numeric role with tabular figures so tiles align column-wise. */}
           <View style={styles.header}>
-            <View
-              style={[
-                styles.chip,
-                {
-                  backgroundColor: installed
-                    ? finish.backgroundColor
-                    : colors.bgSunken,
-                  borderRadius: iconChipRadius(CHIP_SIZE),
-                },
-              ]}
-            >
-              <Icon
-                name={meta.iconKey}
-                size={15}
-                color={installed ? finish.markColor : colors.textFaint}
-              />
-            </View>
+            <AppMark
+              color={meta.color}
+              iconKey={meta.iconKey}
+              muted={!installed}
+              size={CHIP_SIZE}
+            />
             <Text numberOfLines={1} style={styles.name}>
               {meta.name}
             </Text>

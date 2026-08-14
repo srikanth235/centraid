@@ -1,0 +1,19 @@
+/* Desktop app marks: one outline colour on a quiet hue chip. */
+.mark {
+  position: relative;
+  display: inline-grid;
+  flex: 0 0 auto;
+  inline-size: var(--app-mark-size);
+  block-size: var(--app-mark-size);
+  place-items: center;
+  background: color-mix(
+    in oklab,
+    var(--app-mark-hue) var(--app-mark-tint),
+    var(--bg-elev)
+  );
+  color: var(--app-mark-ink);
+}
+
+.mark svg {
+  display: block;
+}

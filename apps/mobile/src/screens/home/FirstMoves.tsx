@@ -39,12 +39,12 @@ import {
   HOME_FIRST_RUN_TITLE,
   HOME_START_TITLE,
 } from "@centraid/client/home-copy";
-import { iconChipFinish, iconChipRadius, radii } from "@centraid/design";
+import { radii } from "@centraid/design";
 
-import Icon from "../../kit/components/Icon";
+import AppMark from "../../kit/components/AppMark";
 import { Text } from "../../kit/components/NativeText";
 import { borders, metrics, t, useTheme } from "../../kit/theme";
-import type { Scheme, ThemeColors } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 import type { FirstMove } from "./first-moves";
 
 const MARK = 24;
@@ -65,7 +65,7 @@ export default function FirstMovesBand({
   moves,
   onPick,
 }: FirstMovesProps): React.JSX.Element | null {
-  const { colors, scheme } = useTheme();
+  const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   if (moves.length === 0) return null;
   return (
@@ -76,7 +76,6 @@ export default function FirstMovesBand({
           key={move.id}
           move={move}
           colors={colors}
-          scheme={scheme}
           styles={styles}
           onPress={() => onPick(move)}
         />
@@ -167,19 +166,14 @@ export function DayOne({
 function MoveRow({
   move,
   colors,
-  scheme,
   styles,
   onPress,
 }: {
   move: FirstMove;
   colors: ThemeColors;
-  scheme: Scheme;
   styles: ReturnType<typeof makeStyles>;
   onPress: () => void;
 }): React.JSX.Element {
-  const finish = move.color
-    ? iconChipFinish(move.color, colors.bg, scheme)
-    : undefined;
   return (
     <Pressable
       accessibilityRole="button"
@@ -190,23 +184,12 @@ function MoveRow({
       }}
       style={({ pressed }) => [styles.move, pressed && styles.movePressed]}
     >
-      <View
-        style={[
-          styles.mark,
-          finish
-            ? {
-                backgroundColor: finish.backgroundColor,
-                borderRadius: iconChipRadius(MARK),
-              }
-            : undefined,
-        ]}
-      >
-        <Icon
-          name={move.iconKey}
-          size={14}
-          color={finish ? finish.markColor : colors.textSoft}
-        />
-      </View>
+      <AppMark
+        color={move.color ?? colors.textSoft}
+        iconKey={move.iconKey}
+        muted={!move.color}
+        size={MARK}
+      />
       {/* handoff :1211–1237 — one 44px row is chip + label + arrow, no second
           line. `move.hint` still carries the accessibility label above; a
           sighted member gets the label alone, the same information a
@@ -276,12 +259,6 @@ const makeStyles = (colors: ThemeColors) =>
       // Day-one foot, handoff :5734 area — `R.gap.xl` (24).
       marginTop: 24,
       paddingTop: 12,
-    },
-    mark: {
-      alignItems: "center",
-      height: MARK,
-      justifyContent: "center",
-      width: MARK,
     },
     move: {
       alignItems: "center",

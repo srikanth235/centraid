@@ -2,7 +2,6 @@ import { useEffect, useReducer, useRef } from "react";
 import type { JSX } from "react";
 
 import type { IconName } from "@centraid/design";
-import { tileFinish } from "@centraid/design";
 
 import { cx } from "../../ui/cx.js";
 import Icon from "../../ui/Icon.js";
@@ -20,7 +19,6 @@ import {
 } from "./connectFlowIO.js";
 import { VaultStep } from "./ConnectFlowVaultStep.js";
 import HandshakeLadder, { reportSummaryText } from "./HandshakeLadder.js";
-import { PROFILE_COLORS } from "./VaultModal.js";
 
 import a11y from "../../styles/a11y.module.css";
 import controlsCss from "../../styles/controls.module.css";
@@ -51,8 +49,8 @@ export interface ConnectFlowProps {
    *  for hosts that already made the choice (issue #603 first run). */
   initialMethod?: ConnectMethod;
   onDone: (result: ConnectFlowResult) => void;
-  /** Omit to hide the "Start over" affordance (the onboarding host renders
-   *  its own back-to-identity step instead). */
+  /** Omit to hide the "Start over" affordance (the onboarding host returns
+   *  to its own chooser instead). */
   onCancel?: () => void;
 }
 
@@ -61,10 +59,8 @@ const METHOD_CARDS: ReadonlyArray<{
   icon: IconName;
   title: string;
   desc: string;
-  color: string;
 }> = [
   {
-    color: PROFILE_COLORS[0]!,
     desc: "Everything stays here — nothing to configure.",
     icon: "Monitor",
     method: "local",
@@ -74,7 +70,6 @@ const METHOD_CARDS: ReadonlyArray<{
     // Vault-first copy: a ticket pairs this device to one or more VAULTS, and
     // the gateway that hosts them is an implementation detail the owner never
     // has to name. The method id stays `gateway` — internal, not shown.
-    color: PROFILE_COLORS[3]!,
     desc: "Paste or scan a pairing ticket.",
     icon: "Wifi",
     method: "gateway",
@@ -175,7 +170,6 @@ export default function ConnectFlow({
         >
           {METHOD_CARDS.filter((c) => methods.includes(c.method)).map(
             (card) => {
-              const finish = tileFinish(card.color, "gradient");
               return (
                 <label key={card.method} className={styles.methodCard}>
                   <input
@@ -187,15 +181,8 @@ export default function ConnectFlow({
                       dispatch({ method: card.method, type: "selectMethod" })
                     }
                   />
-                  <span
-                    className={styles.methodIcon}
-                    style={{
-                      background: finish.background,
-                      boxShadow: finish.boxShadow,
-                      color: finish.glyphColor,
-                    }}
-                  >
-                    <Icon name={card.icon} size={20} strokeWidth={1.8} />
+                  <span className={styles.methodIcon}>
+                    <Icon name={card.icon} size={20} strokeWidth={1.6} />
                   </span>
                   <span className={styles.methodTitle}>{card.title}</span>
                   <span className={styles.methodDesc}>{card.desc}</span>

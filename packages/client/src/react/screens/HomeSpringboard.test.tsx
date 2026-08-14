@@ -118,7 +118,10 @@ describe("screens/HomeSpringboard", () => {
     it("spends the app's identity hue on the mark and nowhere else", () => {
       const el = mount();
       const mark = tile(el, "photos").querySelector(".mark") as HTMLElement;
-      expect(mark.style.background).toContain("--c-amber");
+      expect(mark.dataset.appMark).toBe("single-tone");
+      expect(mark.getAttribute("style")).toContain(
+        "--app-mark-hue: var(--c-amber)"
+      );
       // The tile itself takes no hue — the shell spends none.
       expect(tile(el, "photos").getAttribute("style")).toBeNull();
     });
@@ -336,6 +339,26 @@ describe("screens/HomeSpringboard", () => {
         moves!.compareDocumentPosition(offer!) &
           Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeGreaterThan(0);
+    });
+
+    it("shows the sample working state while first entry starts it automatically", () => {
+      const el = mount({
+        sample: {
+          autoSeedPending: true,
+          canSeed: true,
+          clearing: false,
+          filling: null,
+          loaded: false,
+          onClear: vi.fn<() => void>(),
+          onSeed: vi.fn<() => void>(),
+        },
+        tiles: buildHomeTiles({ content: {}, installedIds: INSTALLED }),
+      });
+      const offer = el.querySelector('[data-testid="home-sample-offer"]');
+      expect(offer?.querySelector("button")).toBeNull();
+      expect(offer?.querySelector(".workingLabel")?.textContent).toBe(
+        HOME_SAMPLE_FILLING
+      );
     });
 
     it("still offers the sample once ONE tile has content — day one is not the gate", () => {

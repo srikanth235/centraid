@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, JSX } from "react";
 
+import type { IconName } from "@centraid/design";
+
 import type {
   AppKnobDTO,
   AppSettingsBridgeProps,
   AppSettingsSnapshot,
 } from "../screen-contracts.js";
+import AppMark from "../ui/AppMark.js";
 import { cx } from "../ui/cx.js";
 import { Icon, IconButton } from "../ui/index.js";
 
@@ -270,8 +273,8 @@ export default function AppSettingsPanel(
 
   const panelStyle = { "--accent-color": snap.accent } as CSSProperties;
   const iconStyle: CSSProperties = {
-    background: snap.iconBg,
-    color: snap.iconColor,
+    background: snap.iconBg ?? "var(--bg-elev)",
+    color: snap.iconColor ?? "var(--text)",
     ...(snap.iconShadow ? { boxShadow: snap.iconShadow } : {}),
   };
 
@@ -289,12 +292,21 @@ export default function AppSettingsPanel(
         style={panelStyle}
       >
         <div className={styles.settingsHeader}>
-          <span
-            className={styles.settingsIcon}
-            style={iconStyle}
-            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
-            dangerouslySetInnerHTML={{ __html: snap.iconSvg }}
-          />
+          {snap.appMark ? (
+            <AppMark
+              className={styles.settingsIcon}
+              colorKey={snap.appMark.colorKey}
+              iconKey={snap.appMark.iconKey as IconName}
+              size={40}
+            />
+          ) : (
+            <span
+              className={styles.settingsIcon}
+              style={iconStyle}
+              // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
+              dangerouslySetInnerHTML={{ __html: snap.iconSvg ?? "" }}
+            />
+          )}
           <div className={styles.settingsHeaderText}>
             <div className={styles.settingsName}>{snap.appName}</div>
             <div className={styles.settingsEyebrow}>App settings</div>

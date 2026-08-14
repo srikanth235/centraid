@@ -43,7 +43,7 @@ function groupsFor(query: string): PaletteGroupDTO[] {
         sub: "A todo app",
         iconHtml: "<svg></svg>",
         variant: "app",
-        tile: { background: "#000", glyphColor: "#fff" },
+        appMark: { colorKey: "ochre", iconKey: "Check" },
         meta: "2h",
         run: appRun,
       },
@@ -89,9 +89,8 @@ describe("screens/PaletteScreen", () => {
       expect(el.querySelectorAll(".group")).toHaveLength(2);
       expect(rows(el)).toHaveLength(3);
       expect(rows(el)[0]?.dataset.active).toBe("true");
-      // app-variant row carries the gradient tile + injected icon svg
-      expect(el.querySelector(".rowTile")).toBeTruthy();
-      expect(el.querySelector(".rowTile svg")).toBeTruthy();
+      // app-variant rows carry the shared single-tone mark.
+      expect(el.querySelector('[data-app-mark="single-tone"]')).toBeTruthy();
     });
 
     it("moves the active row with ArrowDown and runs it on Enter", () => {

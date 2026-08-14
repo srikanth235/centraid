@@ -45,20 +45,15 @@ export function buildHomeAppItems(
     const draft = isDraftApp(a);
     const ua = draft ? undefined : deps.userApps.find((x) => x.id === a.id);
     const tone = draft ? "draft" : recent(ua?.createdAt) ? "new" : null;
-    const finish = window.CentraidTokens.tileFinish(a.color, deps.tileVariant);
     return {
       desc: a.desc || "",
+      colorKey: a.colorKey,
       draft,
       iconKey: a.iconKey,
       id: a.id,
       name: a.name,
       starred: deps.isStarred(a.id),
       stamp: draft ? "saved" : relativeTime(ua?.updatedAt),
-      tile: {
-        background: finish.background,
-        boxShadow: finish.boxShadow,
-        glyphColor: finish.glyphColor,
-      },
       tone,
     };
   });

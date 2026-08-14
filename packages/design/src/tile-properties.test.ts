@@ -17,8 +17,13 @@
  */
 import { describe, expect, test } from "vitest";
 
-import { palette } from "./palette.js";
-import { TILE_VARIANTS, tileFinish } from "./tile.js";
+import { palette, paletteText } from "./palette.js";
+import {
+  ICON_CHIP_TINT,
+  TILE_VARIANTS,
+  iconChipFinish,
+  tileFinish,
+} from "./tile.js";
 import type { TileVariant } from "./tile.js";
 
 const HUES = Object.values(palette);
@@ -203,5 +208,25 @@ describe("tile variants", () => {
         "inset"
       );
     }
+  });
+});
+
+describe("single-tone app mark finish", () => {
+  test("uses the solved text rung for every built-in app hue", () => {
+    for (const [key, hue] of Object.entries(palette)) {
+      expect(iconChipFinish(hue, "#ffffff", "light").markColor).toBe(
+        paletteText.light[key as keyof typeof paletteText.light]
+      );
+      expect(iconChipFinish(hue, "#101010", "dark").markColor).toBe(
+        paletteText.dark[key as keyof typeof paletteText.dark]
+      );
+    }
+  });
+
+  test("keeps arbitrary manifest hues renderable", () => {
+    const finish = iconChipFinish("#167f8f", "#ffffff", "light");
+    expect(finish.markColor).toBe("#167f8f");
+    expect(ICON_CHIP_TINT.light).toBe(0.13);
+    expect(ICON_CHIP_TINT.dark).toBe(0.2);
   });
 });

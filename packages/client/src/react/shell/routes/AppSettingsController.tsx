@@ -12,7 +12,6 @@ import {
 import type { AppSettingsSnapshot } from "../../screen-contracts.js";
 import AppSettingsPanel from "../../screens/AppSettingsPanel.js";
 import VaultScreen from "../../screens/VaultScreen.js";
-import { iconSvg } from "../iconSvg.js";
 import { useShellCapabilities } from "../useCapabilities.js";
 import {
   buildVaultProps,
@@ -105,9 +104,6 @@ export default function AppSettingsController({
   // React roots mounted into the panel's host divs, disposed on unmount.
   const subRoots = useRef(new Map<HTMLElement, Root>());
 
-  const finish = window.CentraidTokens.tileFinish(app.color, "gradient");
-  const headerIcon = iconSvg(app.iconKey || "Sparkle", 15, 1.85);
-
   const runDto = (
     ref: string
   ): AppSettingsSnapshot["orders"][number]["run"] => {
@@ -122,10 +118,7 @@ export default function AppSettingsController({
 
   const buildSnapshot = (): AppSettingsSnapshot => ({
     appName: app.name,
-    iconSvg: headerIcon,
-    iconBg: finish.background,
-    iconColor: finish.glyphColor,
-    iconShadow: finish.boxShadow ?? null,
+    appMark: { colorKey: app.colorKey, iconKey: app.iconKey },
     accent: app.color,
     vaultVisible: vaultVisible.current,
     automationsBadge: automationsBadge.current,
