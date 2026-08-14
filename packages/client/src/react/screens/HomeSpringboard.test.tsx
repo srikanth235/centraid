@@ -151,8 +151,8 @@ describe("screens/HomeSpringboard", () => {
       expect(tile(el, "docs").querySelector(".readingTitle")?.textContent).toBe(
         "Lease agreement"
       );
-      // The handoff's docs body: a serif prose excerpt under the title, in the
-      // same reading register Notes uses.
+      // Docs and Notes share the compact body preview register under their
+      // distinct content shapes.
       expect(tile(el, "docs").querySelector(".reading")?.textContent).toBe(
         "The landlord agreed to the longer notice period."
       );

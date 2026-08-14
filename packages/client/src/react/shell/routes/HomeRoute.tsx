@@ -24,6 +24,8 @@ import type { HomeTileContent } from "./homeTiles.js";
 export interface HomeRouteProps {
   userApps: readonly UserAppMeta[];
   drafts: readonly DraftAppMeta[];
+  /** The installed-app registry must settle before Home can call anything empty. */
+  appsLoading: boolean;
 }
 
 // Home (issue #708). Home is the springboard and nothing else: the app bar
@@ -36,7 +38,7 @@ export interface HomeRouteProps {
 // brief and the per-app tile content.
 export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   const { navigate } = useShellActions();
-  const { userApps, drafts } = props;
+  const { appsLoading, userApps, drafts } = props;
 
   // Cached across visits (issue #659) AND across boots (#708). Home is the
   // app's front door and the most re-entered route in the shell, so it paints
@@ -216,7 +218,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
         // flight the springboard shows static skeletons, which is a different
         // sentence: "still looking", not "there is nothing" — so `loading`
         // gates the whole graded treatment rather than one branch of it.
-        loading={!settled}
+        loading={appsLoading || !settled}
         justFilled={justFilled}
         onConnect={() => navigate({ kind: "connectors" })}
         onOpen={(id: string) => navigate({ kind: "app", id })}

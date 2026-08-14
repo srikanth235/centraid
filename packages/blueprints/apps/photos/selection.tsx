@@ -16,9 +16,10 @@
 // THE PHONE IS DIFFERENT (§6, §15): the row carries nothing while selecting
 // there (the count, Select all and Done move to the frame's head instead —
 // app-root.tsx's `contributeAppBar`), and the five actions move to
-// `SelectionBottomBar`, a floating overlay ABOVE the claimed band
-// (Chrome.tsx's `#selectionBottomBar`) — never a second band, since it claims
-// no destinations and never touches `frame.claimBand`.
+// `SelectionBottomBar`, which takes the compact foot while selecting
+// (Chrome.tsx's `#selectionBottomBar`). The shell withdraws the claimed band
+// for this focused state; this action bar claims no destinations and never
+// touches `frame.claimBand`.
 //
 // SELECTION SURVIVES SCROLLING AND SHELF CHANGES, and is cleared when the
 // route leaves Photos (§6, §16) — the mount's teardown is that clear, because

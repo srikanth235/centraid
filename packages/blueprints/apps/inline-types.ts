@@ -176,10 +176,10 @@ export interface InlineFrame {
   /** Drop back to the route's ambient sentence. */
   clearStatus: () => void;
   /**
-   * Claim the compact bottom band. Honoured only for a first-party app, only
-   * on the compact form factor, and only while the member's `bandOwner`
-   * preference says `app`; ignored otherwise, so an app never has to ask.
-   * `null` hands the band back.
+   * Claim the compact bottom band. Honoured only for a first-party app and
+   * only on the compact form factor; ignored otherwise, so an app never has
+   * to ask.
+   * `null` withdraws the contribution.
    */
   claimBand: (claim: InlineBandClaim | null) => void;
 }
@@ -190,6 +190,9 @@ export interface InlineAppProps {
   rootRef: (el: HTMLElement | null) => void;
   /** The frame's contribution channel — app bar, status line, compact band. */
   frame: InlineFrame;
+  /** The shell form factor. Served/harness mounts omit this and remain
+   * regular-width, so a narrow pane does not remove its only navigation. */
+  compact?: boolean;
 }
 
 /** The descriptor an inline app default-exports from `app-inline.tsx`. */

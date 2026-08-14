@@ -76,7 +76,7 @@ describe("vault-registry scenarios", () => {
     const personal = registry.create("Personal", { personal: true });
 
     // The listing leads with the DEFAULT vault, not the oldest one (#665):
-    // `Shared` is founded first, but `Personal` carries the marker.
+    // `Shared` is created first, but `Personal` carries the marker.
     expect(registry.list().map((v) => v.vaultId)).toStrictEqual([
       personal.vaultId,
       shared.vaultId,

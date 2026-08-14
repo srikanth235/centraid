@@ -34,7 +34,7 @@ function auth(extra: Record<string, string> = {}): Record<string, string> {
   return { Authorization: `Bearer ${handle.token}`, ...extra };
 }
 
-/** The DEFAULT vault's journal — a gateway auto-founds two of them (#603). */
+/** The DEFAULT vault's journal — a gateway auto-founds one personal vault (#603). */
 async function journalDbPath(): Promise<string> {
   const vaultId = handle.vaults.defaultVaultId();
   const entries = await fs.readdir(dataDir, { recursive: true });

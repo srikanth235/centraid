@@ -67,10 +67,10 @@ const ROUTED: readonly Shelf[] = [
  * only says what its own tabs are.
  */
 export const BAND_DESTINATIONS: readonly BandDestination[] = [
-  { id: "library", label: "Library" },
-  { id: "albums", label: "Albums" },
-  { id: "people", label: "People" },
-  { id: "search", label: "Search" },
+  { id: "library", label: "Library", icon: "Image" },
+  { id: "albums", label: "Albums", icon: "album" },
+  { id: "people", label: "People", icon: "person" },
+  { id: "search", label: "Search", icon: "Search" },
 ];
 
 /**

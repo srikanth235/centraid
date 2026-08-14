@@ -26,6 +26,8 @@ export interface Shelf {
 export interface BandDestination {
   id: string;
   label: string;
+  /** The shared registry key for the tab's supporting glyph. */
+  icon?: string;
 }
 
 /**

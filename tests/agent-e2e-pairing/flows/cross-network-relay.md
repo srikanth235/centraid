@@ -45,7 +45,7 @@ Gateway and device run in **separate Docker containers on separate, non-intercon
    Deliberately **not** done: re-running a UDP probe after the removal to re-confirm blocking. It would prove nothing. Taking the `--sport` `ACCEPT` away also removes the echo server's ability to reply at all, so silence afterwards is guaranteed by construction whether or not the `DROP` is working — the probe stops being self-validating at exactly the moment you'd want to trust it. Reading the rule set back is both cheaper and actually falsifiable.
 
 3. `--ipv6=false` on both networks. This one is load-bearing, discovered by running the flow and reading what `paths()` actually reported (see below) — OrbStack hands containers a real, globally-routable IPv6 address (NDP-proxied from the host's own WAN prefix), not a Docker-private one. Two containers on IPv4-isolated-but-dual-stack networks connected DIRECTLY over that real IPv6 address the first time this flow ran, defeating the whole point. Forcing IPv4-only removes that escape hatch instead of trying to firewall an address range that varies by host and ISP.
-4. The gateway daemon (`centraid-gateway serve`, on a fresh data dir that auto-founds `Shared` + `Personal` — issue #603 removed `--init-vault`) runs in a container on `netA`; `pair` runs via `docker exec` into that same container. `lib/device-redeem.mjs` runs the device role — `createTunnelClient()` with **no** `relays: 'disabled'` override — in a throwaway container on `netB`.
+4. The gateway daemon (`centraid-gateway serve`, on a fresh data dir that auto-founds one marked `Personal` vault — issue #603 removed `--init-vault`) runs in a container on `netA`; `pair` runs via `docker exec` into that same container. `lib/device-redeem.mjs` runs the device role — `createTunnelClient()` with **no** `relays: 'disabled'` override — in a throwaway container on `netB`.
 
 Everything else about the ceremony (mint → redeem → tunnel → burn) is identical to `device-pairing-lifecycle`; only the transport changed.
 
@@ -89,8 +89,8 @@ Worth noting, because the asymmetry looks suspicious: the TCP host-routed probe 
 1. Build (scoped to `@centraid/gateway` + `@centraid/tunnel`, same as the sibling flows) if `dist/` is missing.
 2. `ensureNativeAddon()` — see above.
 3. Two isolated networks + isolation proof (see above).
-4. Start the gateway container on a fresh data dir; it auto-founds `Shared` + `Personal` at construction.
-5. `pair --vault "Shared"` inside the gateway container — parse the pasteable ticket.
+4. Start the gateway container on a fresh data dir; it auto-founds one marked `Personal` vault at construction.
+5. `pair --vault "Personal"` inside the gateway container — parse the pasteable ticket.
 6. `lib/device-redeem.mjs` in a fresh container on the device network: redeem, one tunneled `GET /centraid/_vault/vaults`, then attempt the same ticket again to confirm it's burned. Reports `{ paired, endpointId, vaultId, vaultName, probeStatus, replayRefused, replayError, path }` as one line of JSON on stdout.
 7. Assert: paired into the right vault, tunneled probe → 200, replay refused, enrollment visible through the paired-device roster backed by `gateway.db`, AND a path was selected with `isRelay: true`.
 

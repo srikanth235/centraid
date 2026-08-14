@@ -10,7 +10,7 @@ Related automated coverage: `apps/desktop/tests/e2e/onboarding-home.spec.ts` (§
 
 ## Mechanism summary (what we are testing)
 
-- **Auto-founding.** A gateway with a fresh data dir _and_ zero `owners` rows creates two vaults on first boot — `Shared` then `Personal` — and enrolls the host endpoint's owner "You", owning both (`vault_owners`, one row per vault — `packages/gateway/src/serve/build-gateway.ts:1102`). Ownership (#726) replaced the member/role model: a vault has **exactly one owner**, never a role lattice. **`Personal` is the default everywhere**, never `Shared`: `Personal` is founded with a durable `personal` marker in its own `core_vault.settings_json`, and `defaultVaultId()` prefers the marked vault (falling back to the oldest only when none is marked). Listing order follows the same marker (#665): `VaultRegistry.list()` puts the default vault FIRST and the remainder in creation order, so `Personal` heads every client-facing vault list (`GET /_vault/vaults` and `GET /_vault/scopes` alike) and a client that reads element 0 as "primary" agrees with `defaultVaultId()`. With no marked vault the head is the oldest, exactly as before. The marker survives the desktop fresh path renaming `Personal` to the owner's display name, which a name match would not. The **never-inhabited guard**: an erased-but-inhabited gateway (owners exist, vaults gone) boots with zero vaults and reports vault health `error`; it is never re-founded.
+- **Auto-founding.** A gateway with a fresh data dir _and_ zero `owners` rows creates one marked `Personal` vault on first boot and enrolls the host endpoint's owner "You" (`vault_owners` — `packages/gateway/src/serve/build-gateway.ts`). Shared vaults are created later by an explicit owner action. Ownership (#726) replaced the member/role model: a vault has **exactly one owner**, never a role lattice. `defaultVaultId()` prefers the marked vault, and the marker survives the desktop fresh path renaming `Personal` to the owner's display name. The **never-inhabited guard**: an erased-but-inhabited gateway (owners exist, vaults gone) boots with zero vaults and reports vault health `error`; it is never re-founded.
 - **Pair tickets are the only enrollment path.** Single-use, default TTL 15 min, minted via the desktop Household → Devices panel, `POST /centraid/_gateway/devices/ticket`, or `centraid-gateway pair`. Redeemed exclusively over iroh ALPN `centraid/gw-pair/1` (the HTTP `POST /centraid/_gateway/pair` route is gone). A redeemed device gets an **enrollment row** bound to an owner across the vaults the ticket named — there is no bearer token, and no per-vault role: an enrolled device either belongs to the vault's one owner or it doesn't (#726). Minting **cannot name a new person** any more — self-pair only; inviting someone else into your own vaults is refused with `owner_vaults_only` (the _Add someone_ mint flow, which gives them a vault of their own, ships in #726 P1).
 - **Desktop first-run** branches on platform: chooser "Start fresh on this Mac" vs "Connect with a ticket". The local gateway is **latched off** (`deferLocalStart`) until `setActiveGateway({id:'local'})` lifts it — this is also what defers the macOS keychain prompt. Steps: `identity → (ticket) connect → (local) service`. There is no `complete` step; finishing writes `onboardingCompletedAt` and unmounts the gate. The fresh path then renames the auto-founded `Personal` vault to the display name (non-fatal on failure). Desktop gateway mode is **detached by default** (`centraid-gateway` daemon on port 17832, survives app quit); `CENTRAID_EMBEDDED_GATEWAY=1` forces in-process (e2e does this).
 - **Web PWA** gets no chooser — ticket is the only method. State lives under `centraid.web.v1.*`: `connection` (localStorage if "remember this device", sessionStorage otherwise), `settings` (`onboardingCompletedAt`), `iroh-device-key`, `iroh-bridge`.
@@ -26,7 +26,7 @@ Related automated coverage: `apps/desktop/tests/e2e/onboarding-home.spec.ts` (§
 centraid-gateway serve --data-dir ./gw-data --host 127.0.0.1 --port 17832
 ```
 
-Auto-founds `Shared` + `Personal`. Web UI serves on **API port + 1**, falling back to an ephemeral port with a warning — read the `web app: http://127.0.0.1:<p>` startup line.
+Auto-founds one marked `Personal` vault. Web UI serves on **API port + 1**, falling back to an ephemeral port with a warning — read the `web app: http://127.0.0.1:<p>` startup line.
 
 Mint tickets:
 
@@ -100,8 +100,8 @@ Worktree trap: `bun install` + `bun run build` inside the worktree, private data
 
 | ID | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
-| A1 | **[auto]** Fresh data dir auto-founds | Start `serve` with an empty data dir | `Shared` + `Personal` exist; **Personal** is the default ticket target (`personal` marker, not creation order); Shared is oldest so it heads `vault list`; host endpoint's owner enrolled as "You", owning both (`vault_owners`); `/info` carries no founding/status fields |
-| A2 | **[auto]** Restart of inhabited gateway is a no-op | Restart serve on the A1 dir | Same two vaults; no new vault, owner, or enrollment rows |
+| A1 | **[auto]** Fresh data dir auto-founds | Start `serve` with an empty data dir | One marked **Personal** vault exists and is the default ticket target; the host endpoint's owner is enrolled as "You" (`vault_owners`); `/info` carries no founding/status fields |
+| A2 | **[auto]** Restart of inhabited gateway is a no-op | Restart serve on the A1 dir | The same one vault; no new vault, owner, or enrollment rows |
 | A3 | **[auto]** Erased-but-inhabited is NOT re-founded | Delete vault dirs, keep `gateway.db`; restart | Zero vaults mounted; vault health `error`; no re-founding; recovery is `docs/recovery/vault-erase.md` |
 | A4 | Corrupt vault does not trigger re-founding | Corrupt a vault dir so it fails to mount; restart | `isFresh()` counts failed mounts → no founding; vault appears under `failedMounts` |
 
@@ -120,7 +120,7 @@ Worktree trap: `bun install` + `bun run build` inside the worktree, private data
 | B9 | Gateway down on revisit | With a remembered connection, stop the gateway, reload | App boots (no re-onboarding); offline state surfaced; recovers when the gateway returns, no re-pair |
 | B10 | Concurrent double-redeem race | Two profiles submit the same ticket simultaneously | Exactly one wins (`BEGIN IMMEDIATE`, `changes === 1`); loser gets `invalid_ticket`; one enrollment row |
 | B11 | ~~Read-only role~~ (removed, #726) | — | Ownership is binary, not a role lattice: every enrolled device gets full trust on the vaults it lands in (`consent_device.trust: "full"`); there is no read-only ticket any more. Attenuation is device-side (`grant_profile_json`), orthogonal to pairing |
-| B12 | Vault-targeted ticket | Mint `--vault Shared`; onboard | Active vault is Shared, not the Personal default (an unnamed mint lands in Personal) |
+| B12 | Vault-targeted ticket | Explicitly create a second vault named `Shared`; mint `--vault Shared`; onboard | Active vault is Shared, not the Personal default (an unnamed mint lands in Personal) |
 | B13 | Installed PWA pass | Repeat B1–B2 from the installed PWA | Same behaviour; storage survives; install banner doesn't interfere |
 
 ---
@@ -129,7 +129,7 @@ Worktree trap: `bun install` + `bun run build` inside the worktree, private data
 
 | ID | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
-| C1 | **[auto]** Happy path — "Start fresh on this Mac" | Clean userData + clean gateway data dir → launch → `first-run-choice` → fresh → identity → service decline | **Before** commit: `getSettings().gatewayUrl === ""` (defer latch — no gateway spawn, no keychain prompt); after Continue: gateway starts, active vault = `Personal`, renamed to the display name; final vault list `['<name>','Shared']`; `onboardingCompletedAt` set; no `complete` step — gate unmounts straight into the app |
+| C1 | **[auto]** Happy path — "Start fresh on this Mac" | Clean userData + clean gateway data dir → launch → `first-run-choice` → fresh → identity → service decline | **Before** commit: `getSettings().gatewayUrl === ""` (defer latch — no gateway spawn, no keychain prompt); after Continue: gateway starts, active vault = `Personal`, renamed to the display name; final vault list `['<name>']`; `onboardingCompletedAt` set; no `complete` step — gate unmounts straight into the app |
 | C2 | Identity validation & controls | On identity: empty name, 60+ char paste, Enter key, colour radios | Continue disabled until trimmed name non-empty (`data-state` idle→ready); `maxLength=60` clips; Enter submits; radiogroup `Color <hex>` updates `data-selected` + `--onb-accent`. ⚠️ Initial colour is **random** — pin it for snapshot tests |
 | C3 | Fresh-path failure & inline retry | Make the local gateway fail to start (e.g. corrupt data dir perms); press Continue | Error renders in `role="alert"`; **retry = press Continue again**; error clears only on next attempt |
 | C4 | Supervisor backoff dead end | Force repeated start failures, keep pressing Continue | Backoff message ("backing off after a failed start… retrying automatically"), then after loop-break: "…use Settings → Gateway → Restart" — but **Settings is unreachable pre-onboarding**. Confirm the trap; candidate UX fix |

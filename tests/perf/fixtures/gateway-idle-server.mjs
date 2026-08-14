@@ -13,7 +13,7 @@ const root = process.argv[2];
 if (!root) throw new Error("gateway idle fixture needs a root directory");
 
 const handle = await serve({
-  // A fresh vaultDir auto-founds Shared + Personal at construction (#603).
+  // A fresh vaultDir auto-founds Personal at construction (#603).
   paths: { vaultDir: `${root}/vault` },
 });
 

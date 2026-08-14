@@ -72,13 +72,6 @@
   background: var(--text);
 }
 
-/* Numerics are mono and tabular, and read in order under RTL. */
-.tabCount {
-  font: var(--t-mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-faint);
-}
-
 /* Compact form factor — the pane's own width, never the viewport, and carried
    as data on this module's own element rather than by reaching for a class
    another CSS module hashes. */

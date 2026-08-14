@@ -3,8 +3,8 @@
 //
 // The header above these is INVARIANT — icon, name, count — and is drawn once by
 // ./LauncherGrid. Everything below the header is deliberately NOT invariant:
-// Photos is a mosaic that bleeds to the tile edge, Notes is prose in the
-// READING register, Docs is ruled file rows with sizes in the NUMERIC register
+// Photos is a mosaic that bleeds to the tile edge, Notes is compact prose in the
+// body register, Docs is ruled file rows with sizes in the NUMERIC register
 // (the two are separated on exactly that axis, because a title-over-an-opening-
 // line made them indistinguishable), Agenda pins an after-line to the bottom,
 // People is
@@ -363,15 +363,10 @@ function Prose({
         {title}
       </Text>
       {excerpt ? (
-        // The reading register, serif — this is prose, and the whole point of
-        // the second register is that prose does not look like UI text.
-        // Mobile clamps to THREE lines (:5053's `mob?3:2`), one more than
-        // desktop's two: the serif register sets larger on a narrower measure,
-        // so two lines here would cut an opening sentence noticeably shorter.
-        <Text
-          numberOfLines={3}
-          style={[styles.prose, { color: colors.textSoft }]}
-        >
+        // A Home tile is a compact preview, not the document reading view.
+        // Keep its prose on the shared body register so Docs, Notes and Tasks
+        // share the same ink and density across the web and native surfaces.
+        <Text numberOfLines={3} style={[styles.prose, { color: colors.text }]}>
           {excerpt}
         </Text>
       ) : null}
@@ -531,7 +526,7 @@ const styles = StyleSheet.create({
   // draw from the brief's one `eventAfterCss`): pinned to the tile bottom by
   // `marginTop: "auto"` in a non-centered flex column, so it reads as the
   // answer sitting apart from the rest of the body, not another row of it.
-  afterLine: { ...t("mono"), marginTop: "auto" },
+  afterLine: { ...t("small"), marginTop: "auto" },
   awaiting: { ...t("mono"), marginTop: "auto", paddingTop: 6 },
   body: { flex: 1, gap: 4 },
   // Pinned to the tile bottom exactly like `afterLine`, but in `t.ink` rather
@@ -559,7 +554,7 @@ const styles = StyleSheet.create({
   eventAt: { ...t("mono") },
   fileName: { ...t("small"), flex: 1 },
   fileSize: { ...t("mono") },
-  eventTitle: { ...t("bodyStrong") },
+  eventTitle: { ...t("smallStrong") },
   faces: { alignItems: "center", flexDirection: "row" },
   face: {
     alignItems: "center",
@@ -572,7 +567,9 @@ const styles = StyleSheet.create({
     marginEnd: -7,
     width: 30,
   },
-  faceInitials: { ...t("control"), fontSize: t("mono").fontSize },
+  // The handoff uses the section role for initials: the people are content,
+  // not a micro control. `smallStrong` is that role's shared lowering.
+  faceInitials: { ...t("smallStrong") },
   // A large numeric figure uses the display rung while keeping tabular digits.
   figure: {
     ...t("display"),
@@ -590,7 +587,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   mosaicBleed: { marginBottom: -TILE_PAD },
-  prose: { ...t("reading") },
+  prose: { ...t("small") },
   ruledRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -600,7 +597,7 @@ const styles = StyleSheet.create({
   skeletonBar: { borderRadius: radii.sm, height: 10 },
   skeletonBody: { gap: 9, paddingTop: 4 },
   taskRow: { alignItems: "center", flexDirection: "row", gap: 8 },
-  taskTitle: { ...t("control"), flex: 1 },
+  taskTitle: { ...t("small"), flex: 1 },
   // The Tally figure's caption (:5081's `figureLabelCss`, 13px sans/ink2) —
   // distinct from `invite`/`chipLabel`, which sit at other weights and roles.
   tallyLabel: { ...t("small") },

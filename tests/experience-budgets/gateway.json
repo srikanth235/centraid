@@ -68,7 +68,7 @@
     },
     "fiveVaultFootprint": {
       "status": "measured",
-      "volume": "5 mounted vaults = 10 SQLite handles (year-3 household: Shared + Personal auto-founded per #603, plus one personal vault per member)",
+      "volume": "5 mounted vaults = 10 SQLite handles (year-3 household: Personal auto-founded per #603, plus one shared or personal vault per member)",
       "probe": "tests/scale/multi-vault-footprint.scale.test.ts",
       "maxSummedPageCacheBytes": 32768000,
       "maxSummedMmapBytes": 134217728,

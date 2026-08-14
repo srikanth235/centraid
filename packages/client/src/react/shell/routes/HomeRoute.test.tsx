@@ -84,14 +84,17 @@ const app = (id: string): UserAppMeta =>
     updatedAt: "2020-01-01T00:00:00Z",
   }) as unknown as UserAppMeta;
 
-async function render(userApps: UserAppMeta[]): Promise<HTMLElement> {
+async function render(
+  userApps: UserAppMeta[],
+  appsLoading = false
+): Promise<HTMLElement> {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
   await act(async () => {
     root!.render(
       <ShellActionsProvider value={makeActions()}>
-        <HomeRoute userApps={userApps} drafts={[]} />
+        <HomeRoute appsLoading={appsLoading} userApps={userApps} drafts={[]} />
       </ShellActionsProvider>
     );
     await flush();
@@ -185,6 +188,13 @@ describe("HomeRoute", () => {
     const el = await render([app("photos"), app("tasks")]);
     expect(el.querySelector('[data-testid="home-first-run"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="home-tile"]')).toBeNull();
+  });
+
+  it("keeps Home in its loading treatment until installed apps settle", async () => {
+    const el = await render([app("photos")], true);
+    expect(el.querySelector('[data-testid="home-first-run"]')).toBeNull();
+    expect(el.querySelector('[data-testid="home-tile"]')).toBeNull();
+    expect(el.textContent).toContain("Reading your vault");
   });
 
   it("never builds tile content before the brief has settled", async () => {

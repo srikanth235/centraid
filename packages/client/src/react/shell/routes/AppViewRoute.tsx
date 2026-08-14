@@ -18,8 +18,8 @@ import styles from "./AppViewRoute.module.css";
 
 // React-owned app view — the full-bleed running-app runtime. Replaces the
 // vanilla openApp (app-appview.ts): a brand-chip lead + Use/Build switch, the
-// sandboxed app iframe (AppFrame, native), and the gear popover
-// (AppSettingsController — knobs, linked automations, the vault pane).
+// sandboxed app iframe (AppFrame, native), and the optional per-app management
+// popover (AppSettingsController — knobs, linked automations, the vault pane).
 //
 // The desktop shell's own "Ask <App>" FAB + slide-in chat panel (formerly
 // AppChatPanel/useAppChat) was removed: it was the only entry point to that
@@ -49,12 +49,17 @@ export default function AppViewRoute({
 }: AppViewRouteProps): JSX.Element {
   const { confirm, enterBuilder, openNewAppSheet, showToast, builderEnabled } =
     useShellActions();
+  const handleToggleStem = nav.toggleStem;
+  // Photos owns its toolbar and follows the handoff without the generic shell
+  // settings sheet. Other app types retain their management affordance.
+  const appSettingsEnabled = app.id !== "photos";
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"appearance" | "vault">(
     "appearance"
   );
 
   useEffect(() => {
+    if (!appSettingsEnabled) return undefined;
     const openVaultSettings = (): void => {
       setSettingsTab("vault");
       setSettingsOpen(true);
@@ -68,7 +73,7 @@ export default function AppViewRoute({
         "centraid:open-app-vault-settings",
         openVaultSettings
       );
-  }, []);
+  }, [appSettingsEnabled]);
 
   // A bundled app-template id is RESERVED (issue #434) and an installed bundled
   // app keeps its blueprint id, so an app whose id is in the catalog serves in
@@ -170,22 +175,24 @@ export default function AppViewRoute({
           </button>
         </div>
       ) : null}
-      <span className={chrome.tbBtnWrap}>
-        <button
-          className={chrome.tbBtn}
-          type="button"
-          aria-label="App settings"
-          aria-haspopup="dialog"
-          data-open={settingsOpen ? "true" : undefined}
-          onClick={() => {
-            setSettingsTab("appearance");
-            setSettingsOpen((open) => !open);
-          }}
-          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
-          dangerouslySetInnerHTML={{ __html: iconSvg("Settings", 15) }}
-        />
-        <span className={chrome.tooltip}>App settings</span>
-      </span>
+      {appSettingsEnabled ? (
+        <span className={chrome.tbBtnWrap}>
+          <button
+            className={chrome.tbBtn}
+            type="button"
+            aria-label="App settings"
+            aria-haspopup="dialog"
+            data-open={settingsOpen ? "true" : undefined}
+            onClick={() => {
+              setSettingsTab("appearance");
+              setSettingsOpen((open) => !open);
+            }}
+            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
+            dangerouslySetInnerHTML={{ __html: iconSvg("Settings", 15) }}
+          />
+          <span className={chrome.tooltip}>App settings</span>
+        </span>
+      ) : null}
       <button
         className={chrome.tbBtn}
         type="button"
@@ -200,6 +207,8 @@ export default function AppViewRoute({
   return (
     <ShellFrame
       stem={renderStem(nav)}
+      onToggleStem={handleToggleStem}
+      stemOpen={nav.stemOpen}
       statusLine={statusLine}
       canGoBack={nav.canGoBack}
       canGoForward={nav.canGoForward}
@@ -223,7 +232,7 @@ export default function AppViewRoute({
             />
           </div>
         </div>
-        {settingsOpen ? (
+        {appSettingsEnabled && settingsOpen ? (
           <AppSettingsController
             app={app}
             appId={appId}

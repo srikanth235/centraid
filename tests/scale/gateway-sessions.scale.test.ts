@@ -26,7 +26,7 @@ describe("gateway-sessions.scale scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-scale-${crypto.randomUUID()}-`);
     handle = await serve({
-      // A fresh vaultDir auto-founds Shared + Personal at construction (#603),
+      // A fresh vaultDir auto-founds Personal at construction (#603),
       // which is all the fixture needs — no named init vault any more.
       paths: { vaultDir: path.join(dataDir, "vault") },
       token: "scale-admin-token",

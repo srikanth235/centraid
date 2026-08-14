@@ -41,8 +41,8 @@ try {
       .split("\n")
       .filter(Boolean)
       .map((line) => JSON.parse(line));
-    const vaultId = vaults.find((vault) => vault.name === "Shared")?.vaultId;
-    if (!vaultId) throw new Error("auto-founded Shared vault was not found");
+    const vaultId = vaults.find((vault) => vault.name === "Personal")?.vaultId;
+    if (!vaultId) throw new Error("auto-founded Personal vault was not found");
     const headers = {
       authorization: `Bearer ${ctx.gateway.token}`,
       "content-type": "application/json",
@@ -79,7 +79,7 @@ try {
     if (!add.ok)
       throw new Error(`Locker seed failed: ${add.status} ${await add.text()}`);
 
-    const { raw: ticket } = await ctx.mintTicket({ vault: "Shared" });
+    const { raw: ticket } = await ctx.mintTicket({ vault: "Personal" });
     const context = await chromium.launchPersistentContext("", {
       headless: false,
       args: [

@@ -181,15 +181,14 @@
 
 /* ---------- Overlays — re-scoped from viewport-fixed to app-pane-absolute ---------- */
 
-/* The phone's floating selection action bar (§6, §15) — SelectionBottomBar's
-   five 56px targets. The pane (`.shell`, position:relative) already ends
-   where the frame's band begins (the frame gives the claimed band its own
-   grid row outside this pane), so `bottom: 0` here sits ABOVE the band
-   without this app ever needing to know the band's height. It is a floating
-   ACTION bar, not a second band: it carries no destinations and never calls
-   `frame.claimBand`. Opaque paper and a hairline, never a shadow or blur
-   (§3.1's same rule for the bands — the backdrop is unpredictable
-   photographs either way). */
+/* The phone's selection action bar (§6, §15) — SelectionBottomBar's five
+   56px targets. On compact web/PWA surfaces it replaces the claimed Photos
+   band while selection is active, just as it does on Expo; the shell withdraws
+   the band grid item through `body.has-selection`, leaving this as the one
+   bottom surface. It is an ACTION bar, not a navigation band: it carries no
+   destinations and never calls `frame.claimBand`. Opaque paper and a
+   hairline, never a shadow or blur (§3.1's same rule for the bands — the
+   backdrop is unpredictable photographs either way). */
 .selectionBottomBar {
   position: absolute;
   inset-inline: 0;

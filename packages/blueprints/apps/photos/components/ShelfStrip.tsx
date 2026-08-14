@@ -1,4 +1,4 @@
-// The shelf strip (v4 handoff §5): eight tabs under the frame's app bar.
+// The shelf strip (v4 handoff §5): seven tabs under the frame's app bar.
 //
 // The current tab is carried by a 2px INK bar plus 500 weight — not a fill,
 // and never the app's hue. Photos' amber is a mark and a content accent; it
@@ -21,16 +21,12 @@ import styles from "./ShelfStrip.module.css";
 export function ShelfStrip({
   shelf,
   onSelect,
-  counts,
   narrow = false,
 }: {
   /** The current shelf. An album's own id lights no tab — the strip is not
    *  rendered in album detail at all. */
   shelf: ShelfId;
   onSelect: (id: ShelfId) => void;
-  /** Per-shelf counts, by shelf id. A shelf with nothing to count omits its
-   *  entry rather than showing a zero it had to invent. */
-  counts?: ReadonlyMap<string, number>;
   /** The compact form factor — 44px tabs instead of 38px. */
   narrow?: boolean;
 }) {
@@ -43,7 +39,6 @@ export function ShelfStrip({
     >
       {SHELVES.map((entry: Shelf) => {
         const current = entry.id === shelf;
-        const count = entry.id === null ? undefined : counts?.get(entry.id);
         return (
           <button
             key={entry.label}
@@ -55,9 +50,6 @@ export function ShelfStrip({
             onClick={() => onSelect(entry.id)}
           >
             <span className={styles.tabLabel}>{entry.label}</span>
-            {count === undefined ? null : (
-              <span className={styles.tabCount}>{count}</span>
-            )}
           </button>
         );
       })}

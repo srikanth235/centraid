@@ -66,8 +66,8 @@ export const SPRINGBOARD_ORDER: readonly string[] = [
 const TILE_SIZE: Record<string, TileSize> = {
   agenda: "small",
   docs: "medium",
-  // Notes' body IS the Docs body — a title over prose in the reading register —
-  // and the size class follows the body.
+  // Notes' body IS the Docs preview body — a title over compact prose — and
+  // the size class follows the body.
   notes: "medium",
   locker: "small",
   people: "small",

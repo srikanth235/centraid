@@ -48,6 +48,9 @@ All three stay border-and-ink. The brief itself draws them bordered, and Photos'
 
 ## Controls
 
+- **Photos does not expose the generic shell App settings sheet.** Its toolbar owns the controls shown in the handoff, and Photos ships no app-local appearance knobs; the web shell therefore withholds that entry point for `app.id === "photos"`. Other app types keep their management surface.
+- **The compact Photos band is stable.** The web frame always honours Photos' first-party claim on compact surfaces, so there is no grid-icon hand-back control that swaps its shelves for the host launcher.
+- **Selection replaces the compact band.** While Photos selection is active, its five-action bar takes the foot and the claimed navigation band withdraws; normal browsing restores the band and its leading Home capsule. The global `+ Add` capture launcher remains available.
 - **Tile size is a 4-segment control (XS S M L), not a − / + stepper** (issue #765, `components/Toolbar.tsx`). The rung model is unchanged: one member preference, one clamp (`stepTileSize`), walked by a delta — pinch on the phone and the segments on the pointer surface are two ways into the same property. The group is named `Tile size N of 4`; the segments are named by their own visible text and carry `aria-pressed`, because they are one property's four rungs and not four named views.
 - **Mobile keeps its own `TimelineGrainControl`** and does not adopt the segmented shape. Grain on the phone is a different property from tile size on a pointer surface, and it is reachable by pinch as well.
 - **Album and People grids state a column COUNT, not a card width** (`AlbumGrid.module.css` 4/2, `People.module.css` 6/3, same breakpoint). `auto-fill` with a minimum width was right at the two window sizes anybody checked and wrong either side of them.

@@ -7,7 +7,7 @@ This is the current, executable coverage map for the real Electron app. A scenar
 | Area | Spec | Tests | Covered behavior |
 | --- | --- | --: | --- |
 | Launch | `launch-time.spec.ts` | 1 | Cold process start through usable Home |
-| Onboarding and Home | `onboarding-home.spec.ts` | 10 | First-run CTA, auto-founded `Shared` + `Personal`, returning user, tiles/badges, empty state, rename, tile menu, app open, sidebar, command palette |
+| Onboarding and Home | `onboarding-home.spec.ts` | 10 | First-run CTA, auto-founded `Personal`, returning user, tiles/badges, empty state, rename, tile menu, app open, sidebar, command palette |
 | Delete | `delete-app.spec.ts` | 8 | Draft/published delete, offline/404 behavior, cancel/Escape/Enter/backdrop dismissal |
 | Builder | `builder.spec.ts` | 6 | New builder turn and tool pill, publish failure, preview iframe, existing-app edit, Code file tree, Logs filtering |
 | App view / automation templates / Analytics | `appview-templates-insights.spec.ts` | 4 | System app renders inline with no iframe, automation clone survives a restart, independent drafts, Analytics runs chart |

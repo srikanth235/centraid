@@ -150,10 +150,10 @@ npm install --prefix $env:USERPROFILE\.centraid @centraid/gateway
 
 ### Pair clients after install (VPS / headless)
 
-Start the gateway — a fresh data dir **auto-founds** two vaults, **Shared** and **Personal**, at construction (issue #603). There is no founding ceremony, no founding ticket, and no first-run wall; the only ticket concept left is the **pair ticket**, which always means _join an existing gateway_. An existing data dir is never modified.
+Start the gateway — a fresh data dir **auto-founds** one **Personal** vault at construction (issue #603). There is no founding ceremony, no founding ticket, and no first-run wall; shared vaults are created later by an explicit owner action. The only ticket concept left is the **pair ticket**, which always means _join an existing gateway_. An existing data dir is never modified.
 
 ```sh
-# Fresh VPS: serve creates Shared + Personal silently, then keeps serving.
+# Fresh VPS: serve creates Personal silently, then keeps serving.
 centraid-gateway serve --data-dir "$DATA_DIR"
 
 # Mint a one-time pair ticket for a phone / PWA / desktop.
