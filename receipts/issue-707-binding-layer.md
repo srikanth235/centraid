@@ -700,3 +700,12 @@ Local evidence for the product fix: `packages/client` `HomeSpringboard.test.tsx`
 - Each '- [x]' checklist item is realized: **PASS** — Phase 0 "Make the handoff bundle available as the acceptance reference" correctly reads "(superseded: the bundle is reference-only and is deliberately NOT committed — see Decisions)"; Decisions §2 explains the maintainer's mid-task reversal. The '## Checklist' correctly **omits** the Phase 7 item "RTL mirrors — no physical direction properties remain" (not present in receipt), consistent with the RTL descope recorded in steering row ordinal 3.
 - The '## Out of scope' section correctly records the RTL descope: **PASS** — Explicitly states "**RTL / bidirectional layout** — descoped by the maintainer on 2026-08-03" with justification (no RTL locale shipped), and accurately notes that the blueprint sweep "converted its 123 occurrences to logical properties before the descope." This section is consistent with the steering events.
 
+## Session
+
+<!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
+
+### Identifiers
+
+| date | harness | session |
+| --- | --- | --- |
+| 2026-08-14 | codex | 019ffbe1-f04f-7cd0-9a4e-41a586d4934b |

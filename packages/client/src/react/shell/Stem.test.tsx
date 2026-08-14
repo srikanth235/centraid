@@ -110,6 +110,20 @@ describe("shell/Stem", () => {
       expect(el.textContent).not.toMatch(/\d/u);
     });
 
+    it("uses the handoff's desktop launcher glyph treatment", () => {
+      const desktop = render(<Stem {...stemProps} />);
+      const desktopIcon = desktop.querySelector(".launchItem .launchChip svg")!;
+      expect(desktopIcon.getAttribute("width")).toBe("17");
+      expect(desktopIcon.getAttribute("stroke-width")).toBe("1.6");
+
+      act(() => root?.unmount());
+      host?.remove();
+      const compact = render(<Stem {...stemProps} compact />);
+      const compactIcon = compact.querySelector(".launchItem .launchChip svg")!;
+      expect(compactIcon.getAttribute("width")).toBe("18");
+      expect(compactIcon.getAttribute("stroke-width")).toBe("1.5");
+    });
+
     it("keeps the Search control on every host and drops only the hint", () => {
       // The installed PWA cannot claim ⌘K — the browser has it — so the
       // control is the guarantee and the shortcut is the extra.

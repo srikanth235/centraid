@@ -62,6 +62,10 @@ const AVATAR_SIZE = 30;
 const DEFAULT_VAULT_ICON: IconName = "Sparkle";
 /** The glyph inside the chip. The chip is the identity; the mark is the verb. */
 const GLYPH_SIZE = 18;
+/** Desktop launcher glyphs follow the handoff's 17px / 1.6 stroke treatment.
+ *  Compact keeps its existing band scale and caller contract. */
+const STEM_GLYPH_SIZE = 17;
+const STEM_GLYPH_STROKE = 1.6;
 
 /**
  * The vault the frame is scoped to, and the gateway holding it.
@@ -192,7 +196,11 @@ function LauncherItem({
         }
         aria-hidden="true"
       >
-        <Icon name={destination.icon} size={GLYPH_SIZE} />
+        <Icon
+          name={destination.icon}
+          size={compact ? GLYPH_SIZE : STEM_GLYPH_SIZE}
+          strokeWidth={compact ? undefined : STEM_GLYPH_STROKE}
+        />
       </span>
       <span className={chrome.launchLabel}>
         {compact
