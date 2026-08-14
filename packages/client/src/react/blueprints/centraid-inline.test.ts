@@ -6,7 +6,10 @@ import { lockerPendingProjection } from "@centraid/blueprints/apps/locker/pendin
 
 import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
-import { installInlineCentraid } from "./centraid-inline.js";
+import {
+  installInlineCentraid,
+  settledPartyIdFromOutcome,
+} from "./centraid-inline.js";
 import type {
   InlineCentraidClient,
   InstallInlineCentraidOptions,
@@ -92,6 +95,42 @@ function client(target: { centraid?: unknown }): {
 }
 
 const noQueries: InlineAppModule["queries"] = {};
+
+describe(settledPartyIdFromOutcome, () => {
+  it("accepts only an executed intent carrying a real party id", () => {
+    expect(
+      settledPartyIdFromOutcome({
+        status: "executed",
+        output: { party_id: "party-cara" },
+      })
+    ).toBe("party-cara");
+  });
+
+  it("refuses an intent still waiting on a steward", () => {
+    for (const status of ["queued", "parked", "denied", "cancelled"])
+      expect(() =>
+        settledPartyIdFromOutcome({
+          status,
+          output: { party_id: "party-cara" },
+        })
+      ).toThrow(/did not complete/u);
+  });
+
+  it("never hands back the offline overlay's placeholder id", () => {
+    expect(() =>
+      settledPartyIdFromOutcome({
+        status: "executed",
+        output: { party_id: "pending:intent-1:0" },
+      })
+    ).toThrow(/settled identity/u);
+  });
+
+  it("refuses an executed intent that returned no identity at all", () => {
+    expect(() => settledPartyIdFromOutcome({ status: "executed" })).toThrow(
+      /settled identity/u
+    );
+  });
+});
 
 describe(installInlineCentraid, () => {
   beforeEach(() => {
@@ -695,6 +734,71 @@ describe(installInlineCentraid, () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:01.000Z",
     });
+  });
+
+  it("mints a quick-add person under the People app's identity from an embedding app", async () => {
+    const session = fakeSession({
+      write: vi.fn<Session["write"]>(async (_appId, input) => ({
+        intentId: (input as { intentId?: string }).intentId ?? "gen-1",
+        status: "executed",
+        output: { party_id: "party-cara" },
+      })),
+    });
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "docs",
+      session,
+      queries: noQueries,
+      target,
+      isOnline: () => true,
+    });
+
+    await expect(
+      (target.centraid as InlineCentraidClient).quickAddPerson({
+        name: "  Cara  ",
+      })
+    ).resolves.toStrictEqual({ partyId: "party-cara", label: "Cara" });
+    expect(session.write).toHaveBeenCalledWith(
+      "people",
+      expect.objectContaining({
+        action: "add-person",
+        input: { display_name: "Cara", cadence_days: 30 },
+      })
+    );
+  });
+
+  it("refuses a quick-add offline rather than queueing an identity nobody can share to", async () => {
+    const session = fakeSession();
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "docs",
+      session,
+      queries: noQueries,
+      target,
+      isOnline: () => false,
+    });
+
+    await expect(
+      (target.centraid as InlineCentraidClient).quickAddPerson({ name: "Cara" })
+    ).rejects.toThrow(/needs a gateway connection/u);
+    expect(session.write).not.toHaveBeenCalled();
+  });
+
+  it("refuses a blank quick-add name with a typed refusal", async () => {
+    const session = fakeSession();
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "docs",
+      session,
+      queries: noQueries,
+      target,
+      isOnline: () => true,
+    });
+
+    await expect(
+      (target.centraid as InlineCentraidClient).quickAddPerson({ name: "   " })
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(session.write).not.toHaveBeenCalled();
   });
 
   it("restores the previous window.centraid on teardown", () => {

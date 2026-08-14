@@ -141,6 +141,46 @@ describe(nativeShareTargets, () => {
     ]);
   });
 
+  test("marks an offline-queued person unselectable instead of listing them as a real identity", () => {
+    expect(
+      nativeShareTargets({
+        sourceVaultId: "owner-vault",
+        ownerPartyId: "owner",
+        scopes: [],
+        parties: [
+          { party_id: "asha", display_name: "Asha" },
+          { party_id: "pending:i1:party", display_name: "Nadia" },
+        ],
+        links: [],
+      })
+    ).toStrictEqual([
+      { id: "party:asha", label: "Asha", partyId: "asha" },
+      {
+        id: "party:pending:i1:party",
+        label: "Nadia",
+        partyId: "pending:i1:party",
+        pending: true,
+      },
+    ]);
+  });
+
+  test("never submits a queued person's overlay id, even when a selection names one", () => {
+    expect(
+      selectedNativeShareMembers(
+        [
+          { id: "party:asha", partyId: "asha", label: "Asha" },
+          {
+            id: "party:pending:i1:party",
+            partyId: "pending:i1:party",
+            label: "Nadia",
+            pending: true,
+          },
+        ],
+        { "party:asha": "read", "party:pending:i1:party": "read+write" }
+      )
+    ).toStrictEqual([{ partyId: "asha", capability: "read" }]);
+  });
+
   test("offers only Tally-backed named circles and selects their exact roster", () => {
     const targets = [
       { id: "party:asha", partyId: "asha", label: "Asha" },

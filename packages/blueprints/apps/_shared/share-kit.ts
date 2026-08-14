@@ -45,6 +45,10 @@ export function selectedShareMembers(
   return destinations.flatMap((destination) => {
     const capability = selections[destination.id];
     if (!capability) return [];
+    // A person queued offline carries an overlay id that no vault has ever
+    // settled. Sharing to it would name an identity that does not exist yet,
+    // so the row is dropped from the member array rather than sent.
+    if (destination.partyId && isPendingPartyId(destination.partyId)) return [];
     return [
       {
         ...(destination.partyId ? { partyId: destination.partyId } : {}),
@@ -148,6 +152,56 @@ export function peopleDestinations(
   });
 }
 
+/** An offline write projects a synthetic `pending:<intentId>:<suffix>` id
+ * before any vault settles it. Such an id names nobody, so it can never stand
+ * in for a person's identity in a share. */
+export function isPendingPartyId(partyId: string): boolean {
+  return partyId.startsWith("pending:");
+}
+
+/** The destination for a person just minted from the sheet itself. The id is
+ * synthesized exactly as `peopleDestinations` does for a person with no vault
+ * binding, so a later roster reload replaces the row instead of doubling it. */
+export function quickAddedDestination(
+  partyId: string,
+  label: string
+): ShareDestination {
+  return { id: `party:${partyId}`, label, partyId };
+}
+
+/** Append a freshly added person to the listed destinations. Someone already
+ * on the list keeps their existing row — the same dedupe-by-party rule
+ * `peopleDestinations` applies, so adding a name that is already there is a
+ * no-op rather than a second identical person. */
+export function withQuickAddedPerson(
+  destinations: readonly ShareDestination[],
+  added: ShareDestination
+): ShareDestination[] {
+  const duplicate = destinations.some(
+    (destination) =>
+      destination.partyId !== undefined && destination.partyId === added.partyId
+  );
+  return duplicate ? [...destinations] : [...destinations, added];
+}
+
+/** Destinations whose label looks like the name being typed, so the sheet can
+ * ask "did you mean this person?" before minting a second identity for them.
+ * Matching is deliberately loose — equality, or either name containing the
+ * other — because a roster spells people out ("Asha Rao") more often than the
+ * person typing does. An empty name asks nothing. */
+export function nearNameMatches(
+  destinations: readonly ShareDestination[],
+  name: string
+): ShareDestination[] {
+  const needle = name.trim().toLowerCase();
+  if (!needle) return [];
+  return destinations.filter((destination) => {
+    const label = destination.label.trim().toLowerCase();
+    if (!label) return false;
+    return label.includes(needle) || needle.includes(label);
+  });
+}
+
 /**
  * Load the people roster live. Never throws: a transient People read falls
  * back to approved links, and a host with neither answers an empty roster.
@@ -182,6 +236,6 @@ export function shareBlockedReason(
   destinations: readonly ShareDestination[]
 ): string | null {
   return destinations.length === 0
-    ? "There is nobody to share with yet — add someone in People first."
+    ? "There is nobody to share with yet — add someone by name below."
     : null;
 }

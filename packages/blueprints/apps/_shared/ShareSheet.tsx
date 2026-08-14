@@ -8,9 +8,12 @@ import type { PlaceableItemType } from "./placement-registry.ts";
 import {
   loadShareDestinations,
   loadShareCircles,
+  nearNameMatches,
+  quickAddedDestination,
   selectionsForCircle,
   selectedShareMembers,
   shareBlockedReason,
+  withQuickAddedPerson,
 } from "./share-kit.ts";
 import type { ShareCircle, ShareDestination } from "./share-kit.ts";
 
@@ -61,6 +64,13 @@ export function ShareSheet(props: ShareSheetProps) {
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [inviteHandoffs, setInviteHandoffs] = useState<InviteHandoff[]>([]);
+  const [quickAddName, setQuickAddName] = useState("");
+  const [quickAddBusy, setQuickAddBusy] = useState(false);
+  // Non-empty only while an ambiguous name waits for a second, explicit press
+  // (#630): nothing is minted until the person confirms these are not them.
+  const [quickAddMatches, setQuickAddMatches] = useState<ShareDestination[]>(
+    []
+  );
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -73,6 +83,9 @@ export function ShareSheet(props: ShareSheetProps) {
       setDestinations(null);
       setSelectedCircleId("");
       setInviteHandoffs([]);
+      setQuickAddName("");
+      setQuickAddBusy(false);
+      setQuickAddMatches([]);
       try {
         const [rows, namedCircles] = await Promise.all([
           loadShareDestinations(props.sourceScopeId, props.scopes),
@@ -145,6 +158,82 @@ export function ShareSheet(props: ShareSheetProps) {
     setSelectedCircleId(next.circleId);
     setSelections(next.selections);
   };
+
+  // The host mints People identities only where it can settle a real party id;
+  // where it cannot, the sheet offers no affordance at all.
+  const canQuickAdd = typeof window.centraid?.quickAddPerson === "function";
+
+  const submitQuickAdd = async (): Promise<void> => {
+    const name = quickAddName.trim();
+    if (!name || quickAddBusy) return;
+    const listed = destinations ?? [];
+    if (!quickAddMatches.length) {
+      const matches = nearNameMatches(listed, name);
+      if (matches.length) {
+        // First press on an ambiguous name only asks; the write waits.
+        setQuickAddMatches(matches);
+        return;
+      }
+    }
+    setQuickAddBusy(true);
+    try {
+      const person = await window.centraid.quickAddPerson!({ name });
+      const added = quickAddedDestination(person.partyId, person.label);
+      setDestinations(withQuickAddedPerson(listed, added));
+      // A person added by hand is an individual roster edit, so the share
+      // detaches from any named circle exactly as a checkbox edit does.
+      setSelections((previous) => ({ ...previous, [added.id]: "read" }));
+      setSelectedCircleId("");
+      setQuickAddName("");
+      setQuickAddMatches([]);
+      setErrorMessage(null);
+    } catch (error) {
+      // The typed name survives a refusal — nothing typed is lost.
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "That person could not be added."
+      );
+    } finally {
+      setQuickAddBusy(false);
+    }
+  };
+
+  const quickAdd = canQuickAdd ? (
+    <div className={styles.quickAdd}>
+      <label className={styles.quickAddField}>
+        Add someone by name
+        <input
+          value={quickAddName}
+          placeholder="Name"
+          onChange={(event) => {
+            setQuickAddName(event.target.value);
+            // A changed name re-arms the confirmation gate.
+            setQuickAddMatches([]);
+          }}
+        />
+      </label>
+      {quickAddMatches.length ? (
+        <p className={styles.quickAddHint}>
+          Already on your list:{" "}
+          {quickAddMatches.map((match) => match.label).join(", ")}. That may
+          already be this person.
+        </p>
+      ) : null}
+      <button
+        type="button"
+        className="kit-btn"
+        disabled={!quickAddName.trim() || quickAddBusy}
+        onClick={() => void submitQuickAdd()}
+      >
+        {quickAddBusy
+          ? "Adding…"
+          : quickAddMatches.length
+            ? "Add anyway"
+            : "Add person"}
+      </button>
+    </div>
+  ) : null;
 
   const run = async (): Promise<void> => {
     if (!selected.length || !props.itemType || !props.itemIds?.length) return;
@@ -225,7 +314,10 @@ export function ShareSheet(props: ShareSheetProps) {
         {destinations === null ? (
           <p className={styles.note}>Finding people…</p>
         ) : blocked ? (
-          <p className={styles.note}>{blocked}</p>
+          <>
+            <p className={styles.note}>{blocked}</p>
+            {quickAdd}
+          </>
         ) : (
           <>
             {circles.length ? (
@@ -300,6 +392,7 @@ export function ShareSheet(props: ShareSheetProps) {
                   </div>
                 );
               })}
+              {quickAdd}
             </fieldset>
           </>
         )}
