@@ -120,7 +120,10 @@ The Home data/render contract remains covered by
 
 The desktop evidence journey in `apps/desktop/tests/e2e/onboarding-home.spec.ts`
 now demonstrates the no-profile-gate first run and emits the existing UI-impact
-frames used by the design and onboarding checks.
+frames used by the design and onboarding checks. The production pending-overlay
+journey in `apps/desktop/tests/e2e/pending-overlay.spec.ts` follows the same
+chooser → local connection → Home handoff, so offline-reload coverage no longer
+depends on the deleted profile fields.
 
 ### Full changed-file inventory
 
@@ -128,6 +131,7 @@ The following inventory names every source, test, style, and documentation path
 included in this change set, including deletions and the newly added shared mark:
 
 - `apps/desktop/tests/e2e/onboarding-home.spec.ts`
+- `apps/desktop/tests/e2e/pending-overlay.spec.ts`
 - `apps/mobile/src/apps/docs/DocsHome.tsx`
 - `apps/mobile/src/kit/components/AppHeader.tsx`
 - `apps/mobile/src/kit/components/AppMark.test.tsx`
@@ -279,7 +283,9 @@ bun run lint:design-tokens
 
 The UI receipt gate is run after this receipt is added, and the changed
 `apps/desktop/tests/e2e/onboarding-home.spec.ts` harness is the emitter for the
-`artifacts/e2e/ui-impact/issue-784-desktop-handoff.png` evidence path.
+`artifacts/e2e/ui-impact/issue-784-desktop-handoff.png` evidence path. The
+pending-overlay production journey is separately exercised against the
+streamlined local-host path.
 
 ## Audit
 

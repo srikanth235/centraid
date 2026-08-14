@@ -29,10 +29,12 @@ async function foundDesktop(page: Page): Promise<void> {
     .getByTestId("first-run-choice")
     .getByRole("button", { name: /start fresh on this mac/iu })
     .click();
-  const name = page.getByRole("textbox", { name: "Your name" });
-  await name.waitFor({ state: "visible", timeout: 60_000 });
-  await name.fill("Offline Owner");
-  await page.getByRole("button", { name: "Continue" }).click();
+  // First run is now one connection act: the local path starts the embedded
+  // host and hands straight to Home. Profile identity belongs in Settings, so
+  // this fixture must not resurrect the deleted name/color gate.
+  const onboarding = page.getByTestId("onboarding-view");
+  await onboarding.waitFor({ state: "visible", timeout: 60_000 });
+  await onboarding.waitFor({ state: "detached", timeout: 60_000 });
   await waitForHome(page);
 }
 
