@@ -36,21 +36,23 @@ This file is the adjudication layer over the repository's append-only evidence. 
 | **#599 member/role model** | Superseded by [#726](https://github.com/srikanth235/centraid/issues/726); current authority is one owner per vault. |
 | **#724 enrichment service** | Superseded by [#731](https://github.com/srikanth235/centraid/issues/731); current recognition runs inside bundled handlers. |
 
+## Defaults (so nobody has to ask)
+
+| Topic | Default |
+| --- | --- |
+| **B3 knip** | knip runs per-workspace at error level; unused files, dependencies, and exports fail the gate |
+| **G1 dev env** | `.claude/launch.json` plus [dev-environment.md](dev-environment.md) are the dev-environment manifest; do not invent a new format |
+| **I5 rollout** | Desktop updates use a 72-hour staged rollout window with a stable per-install bucket (`bucket < elapsed/window`) |
+| **I10 packaging** | macOS ships ZIP **and** DMG; Windows ships per-user NSIS |
+| **K11 fonts** | The app shell uses the system font stack; no webfont, no render-blocking third-party CDN |
+
 ## Gateway founding and recovery
 
 A fresh gateway founds itself: it creates `Shared` and `Personal` and enrolls the host device as owner on both. An existing data directory is never modified by founding. There is one ticket concept — the pair ticket — and web/PWA and mobile onboarding are ticket-only. The former founding ceremony and `vaults:initialize` / `vaults:restore` routes are not part of the current surface. Recovery kits remain a backup-plane export and are consumed by `centraid-gateway recover`. Settled in [#603](https://github.com/srikanth235/centraid/issues/603).
 
 ## Ownership, sharing, and peer transport
 
-The current authority model from [#726](https://github.com/srikanth235/centraid/issues/726) is:
-
-- `vault_owners(vault_id PRIMARY KEY, owner_id)` structurally enforces one owner per vault. Role enums and the `member_roles` table are not part of the model.
-- A proved device identity binds to an owner; authorization asks which owner the device proves and whether that owner owns the vault. Device capability masks remain orthogonal.
-- Sharing is placement, not row filtering. Give is a receiver-owned snapshot; Commons is circle-backed co-owned residency with domain rows and blobs in each joined vault.
-- `share_edges` is the snapshot placement primitive. `vault_links` is the one permission table for local and remote vaults; locality changes routing, not sharing semantics.
-- The peer ALPN forwards into the gateway's existing local HTTP surface. Rust transports bytes; TypeScript owns identity, consent, authorization, and persistence.
-
-The current authentication boundary is transport-first: Iroh `EndpointId` proves the device, and custody of the data directory proves the host. There is no password/session/OIDC plane. This remains the standing security decision from [#599](https://github.com/srikanth235/centraid/issues/599), except that the owner model above supersedes its role vocabulary.
+The ruling from [#726](https://github.com/srikanth235/centraid/issues/726): **one owner per vault, structurally enforced; there are no roles.** Authorization asks which owner a proved device binds to and whether that owner owns the vault. Sharing is placement, not row filtering — Give is a receiver-owned snapshot; Commons is circle-backed co-owned residency. The authentication boundary is transport-first (Iroh `EndpointId` proves the device; custody of the data directory proves the host) with no password/session/OIDC plane, which remains the standing [#599](https://github.com/srikanth235/centraid/issues/599) security decision minus its role vocabulary. Schema, tables, and mechanics live in [ARCHITECTURE.md](../ARCHITECTURE.md#vault-ownership-and-sharing-726) and [SECURITY.md](../SECURITY.md); vocabulary in [glossary.md](glossary.md#owners-gateway-726).
 
 ## Commons
 
@@ -90,9 +92,7 @@ The eight bundled system apps are inline React routes in the shared shell. Their
 
 ## Performance and Rust byte plane
 
-The constrained gateway profile keeps request p99 ≤ 250 ms, event-loop p99 ≤ 150 ms, RSS ≤ 512 MiB, and bounded fsync, physical-write, and idle-work ceilings. Node remains the gateway runtime until Bun supports `node:sqlite` and passes the same durability suite. Five designs — dependency-aware read cache, compiled consent decisions, incremental materializations, verified boot snapshot, and lazy vault mount — remain evidence-gated; eager mounting is current because missed wakeups are correctness failures.
-
-The Rust `packages/tunnel/data-plane` service moves bounded bytes only. TypeScript chooses the authorized object, route, headers, range, provider operation, and expiry; Rust validates the ticket, confines paths, caps transforms, and streams with backpressure. Rust never owns identity, consent, journal, replica, agent, or automation decisions. See [ARCHITECTURE.md](../ARCHITECTURE.md#performance-and-byte-plane-boundary) and [#456](https://github.com/srikanth235/centraid/issues/456).
+Node remains the gateway runtime until Bun supports `node:sqlite` and passes the same durability suite. Five performance designs — dependency-aware read cache, compiled consent decisions, incremental materializations, verified boot snapshot, and lazy vault mount — are evidence-gated, not adopted; mounting stays eager because a missed automation wakeup is a correctness failure. The Rust data plane moves bounded bytes only and never owns identity, consent, journal, replica, agent, or automation decisions. Budgets, profiles, and the full boundary live in [ARCHITECTURE.md](../ARCHITECTURE.md#performance-and-byte-plane-boundary); settled in [#456](https://github.com/srikanth235/centraid/issues/456).
 
 ## Product grammar and block composition
 

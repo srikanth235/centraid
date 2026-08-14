@@ -8,7 +8,7 @@ Docs is aligned to the v9 design system: the flat `NavKind` is a shelf model, th
 
 If a change would alter one of these rows, update the current decision and its contract/test together; do not silently change a component.
 
-Related: [Photos design notes](photos/design-notes.md), [DESIGN.md](../DESIGN.md) (the binding rulebook), [design machinery](design-machinery.md) (lowering ownership), [blueprint seats](blueprint-seats.md) (what a seat may read), and [glossary](glossary.md).
+Related: [the Photos section below](#photos--sanctioned-design-divergences), [DESIGN.md](../DESIGN.md) (the binding rulebook), [design machinery](design-machinery.md) (lowering ownership), [blueprint seats](blueprint-seats.md) (what a seat may read), and [glossary](glossary.md).
 
 ### Current surface
 

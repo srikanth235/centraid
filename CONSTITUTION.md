@@ -248,6 +248,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - 2026-08-10 — @srikanth235 — Clarify `handler-uses-ctx-primitives` after recognition handlers became self-contained: provider work uses `ctx.agent`, deterministic recognition uses `ctx.vault.content` / `ctx.vault.invoke`, and the obsolete `ctx.infer` wording is removed. The enforced provider-SDK import rule is unchanged (#731).
 - 2026-08-11 — @srikanth235 — Rename the former provider-backed handler primitive to `ctx.delegate`, reserving “agent” for autonomous principals. The enforced provider-SDK import rule is unchanged (#743).
 - 2026-08-12 — @srikanth235 — Modify `coverage-scope-reachability`: drop the `tools/*/src` source-tree class and its Vitest instrumentation requirement. The `tools/` workspace root is retired — its sole occupant became `packages/model-runtime` — so tool-scoped floor globs are no longer reachable by the default coverage include and a floor pointing there must now fail (#753).
+- 2026-08-14 — @srikanth235 — Add the current-state documentation principle: docs describe current state, history is cited by reference rather than narrated, deliberate non-goals and supersession markers remain documentable state, and intent lives in proposal issues. Principle only, no new mechanical directive; a narration tripwire is deferred as a future warn-only sweep lane (#767).
 
 ## Escape hatches
 

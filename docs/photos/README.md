@@ -8,7 +8,7 @@ This directory is the current-state register for the Photos application. Each fi
 | [Places](places.md) | Member-named locations, one shared projection, geometry, and the no-basemap boundary |
 | [Dogfood](dogfood.md) | The real-library discovery ritual, release cadence, and known regression classes |
 | [Switcher walkthrough](switcher-walkthrough.md) | The day-one Google Photos refugee journey and the shipped/partial boundaries it exercises |
-| [Design notes](design-notes.md) | Sanctioned copy, control, colour-role, and metric-perfect divergences |
+| [Design notes](../design-divergences.md#photos--sanctioned-design-divergences) | Sanctioned copy, control, colour-role, and metric-perfect divergences (shared register) |
 
 The files describe current behaviour, deliberate absences, and the issue that settled each non-obvious boundary. Historical implementation sequences belong in the linked issues and receipts.
 

@@ -129,6 +129,15 @@
 
 ## Resolved
 
+- #767 (PR #773) — The committed `tests/design-gallery/baselines/mo-advisory-dark.png`
+  baseline had drifted against the current `toNativeTheme()` lowering on main
+  (the #765 design-source change did not refresh the MO-advisory lane), so
+  `check:push`'s gallery gate was red on an untouched tree. Refreshed with the
+  documented `bun run design:gallery -- --update` flow inside PR #773; no
+  DESIGN.md contract content changed. Recorded here so a binary baseline
+  refresh inside a docs PR has a written cause instead of reading as silent
+  scope creep.
+
 - #716 — Fixed replica-intent attribution across the gateway's cached vault
   bridge. The bridge deferred vault lookup until an app-worker callback, after
   the originating AsyncLocalStorage scopes had unwound, so connected mobile

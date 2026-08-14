@@ -175,7 +175,7 @@ Every vault action records its happy-path postcondition, refusal/partial-failure
 
 ### Photos native renderer contract (#716)
 
-Photos uses `@testing-library/react-native` on Vitest, not Jest, Detox, or Appium. The consolidated `PhotosHome.test.tsx` has eleven RNTL cases; the final file measured 4.15s Vitest duration, 528ms test-body time, and about 5.7s shell time. That startup cost is accepted once because it falsifies RN roles, responder wiring, accessibility labels, and host geometry that jsdom cannot represent. Pure models remain ordinary tests.
+Photos uses `@testing-library/react-native` on Vitest, not Jest, Detox, or Appium. The consolidated `PhotosHome.test.tsx` holds the RNTL scenario cases in one file: the cold-renderer startup cost is paid once per file and accepted because it falsifies RN roles, responder wiring, accessibility labels, and host geometry that jsdom cannot represent (the renderer comparison and measurements are recorded in [#716](https://github.com/srikanth235/centraid/issues/716)). Pure models remain ordinary tests.
 
 Production application components and JS helpers stay real. Mocks are limited to native host/device seams: AsyncStorage, Expo device services, replica/data providers, `expo-image`, `react-native-svg`, and media URI resolution. A future direct `op-sqlite`, FlashList measurement, or RNGH dependency receives an import-typed seam mock; it must not replace the component or its pure model. Recognizer precedence, native modal layering, pinch/pan/swipe, keyboard alignment, and denied OS permissions remain Maestro claims.
 
