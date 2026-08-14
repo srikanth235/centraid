@@ -19,6 +19,7 @@ import {
   verifyGatewayBackupBucket,
   verifyGatewayBackupsNow,
 } from "../../../gateway-client.js";
+import { seat } from "../../host-platform.js";
 import GatewayScreen from "../../screens/GatewayScreen.js";
 import {
   knobPrefKey,
@@ -65,9 +66,13 @@ export interface GatewayConnectionsProps {
 
 export default function GatewayRoute({
   initialTab,
+  focus,
+  cause,
   connections,
 }: {
   initialTab?: "overview" | "components" | "storage" | "logs" | "alerts";
+  focus?: "backups" | "capacity";
+  cause?: "backup-alert";
   /** Host plumbing for the Components tab's Connections section (issue #665).
    *  The three acts open modals the shell root owns (they must sit above every
    *  page), so App hands the callbacks down rather than this route wiring
@@ -245,9 +250,12 @@ export default function GatewayRoute({
           // instead of hiding it.
         }}
         initialTab={initialTab}
+        focus={focus}
+        cause={cause}
         loadLocalUsage={getLocalStorageUsage}
         saveStorageLimits={updateStorageLimits}
         loadOwners={listGatewayOwners}
+        readOnly={seat() === "viewer"}
       />
     </PageScroll>
   );

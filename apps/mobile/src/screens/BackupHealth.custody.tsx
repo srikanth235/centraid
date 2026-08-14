@@ -62,7 +62,7 @@ const CUSTODY_ROWS: ReadonlyArray<{
   {
     bucket: "replicated",
     label: "Backed up",
-    sub: "on your gateway and off it — nothing more to do for these",
+    sub: "on your vault's home machine and off it — nothing more to do for these",
   },
   {
     bucket: "remote-only",
@@ -77,7 +77,7 @@ const CUSTODY_ROWS: ReadonlyArray<{
   {
     bucket: "local-only",
     label: "Not backed up",
-    sub: "on your gateway's own disk and nowhere else",
+    sub: "on your vault's home machine and nowhere else",
     net: true,
   },
   {
@@ -104,7 +104,7 @@ export function CustodyBlock({
   if (custody === null)
     return (
       <Text style={[styles.note, { color: colors.textSoft }]}>
-        Your gateway&apos;s storage status could not be read. Nothing is wrong
+        Your vault&apos;s storage status could not be read. Nothing is wrong
         with the originals; only this view of them failed.
       </Text>
     );
@@ -112,8 +112,8 @@ export function CustodyBlock({
     return (
       <Text style={[styles.note, { color: colors.textSoft }]}>
         {online
-          ? "Reading your gateway's storage status…"
-          : "Offline — your gateway's storage status is not readable from here."}
+          ? "Reading your vault's storage status…"
+          : "Offline — your vault's storage status is not readable from here."}
       </Text>
     );
   if (custody.computedAt === null)

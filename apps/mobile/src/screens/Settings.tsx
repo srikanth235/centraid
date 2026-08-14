@@ -385,10 +385,10 @@ export default function SettingsScreen({
           <Pressable
             onPress={() => navigation.navigate("PhoneStorage")}
             style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
-            accessibilityLabel="Phone storage"
+            accessibilityLabel="On this phone"
           >
             <Icon name="Folder" size={18} color={colors.textSoft} />
-            <Text style={styles.rowLabel}>Vault storage on this phone</Text>
+            <Text style={styles.rowLabel}>On this phone</Text>
             <Icon name="ChevronRight" size={16} color={colors.textFaint} />
           </Pressable>
           {/* Backup health moved here from the Photos stack (issue #712 B2).

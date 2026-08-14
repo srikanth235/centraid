@@ -31,6 +31,7 @@ import {
   insightsCsv,
   insightsHealth,
   nothingRan,
+  originActivityHealth,
   unhealthyComponents,
   uptimeSentence,
 } from "./insights-model";
@@ -225,6 +226,19 @@ describe("the standing line", () => {
 });
 
 describe("empty and export", () => {
+  it("keeps Origin Activity's standing line about runs, not the machine", () => {
+    const copy = originActivityHealth(
+      summaryOf({ kpis: { ...summaryOf().kpis, generations: 3 } })
+    );
+    expect(copy.detail).toBe("3 runs in this window.");
+    expect(`${copy.label} ${copy.detail}`).not.toMatch(
+      /gateway|daemon|replica|component/iu
+    );
+    expect(healthLineFor("loading", originActivityHealth(undefined)).text).toBe(
+      "Reading vault activity"
+    );
+  });
+
   it("is empty only when the window holds no runs and no recent tail", () => {
     expect(nothingRan(summaryOf())).toBe(true);
     expect(nothingRan(summaryOf({ recent: [runOf()] }))).toBe(false);

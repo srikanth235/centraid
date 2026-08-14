@@ -155,7 +155,7 @@ export default function DeviceActions({
           <>
             <Text style={styles.dialogTitle}>This is the last device</Text>
             <Text style={styles.dialogAsk}>
-              {`Revoking it leaves ${vaultName} reachable only from the gateway machine and its command line. Type ${vaultName} to confirm.`}
+              {`Revoking it leaves ${vaultName} reachable only from its home machine. Type ${vaultName} to confirm.`}
             </Text>
             <TextInput
               accessibilityLabel="Vault name"

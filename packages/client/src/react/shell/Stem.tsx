@@ -45,8 +45,8 @@ import chrome from "./chrome.module.css";
 // written in logical properties so it mirrors under RTL for free.
 //
 // The launcher scrolls vertically on desktop, so the desktop stem has no cap.
-// The compact band does: five slots plus More, because a sixth tab puts every
-// target under 44px, and 44px is a hard constraint rather than a preference.
+// The compact band does: at most five destinations (including Home) plus a
+// standing More control — six controls at most, all above the 44px floor.
 
 /** The launcher chip, per the brief's size table: 26px in the desktop stem,
  *  30px in the compact band. One rung apart because the two forms read at
@@ -378,7 +378,7 @@ export default function Stem({
             ) : null}
           </Fragment>
         ))}
-        {compact && band.overflow > 0 ? (
+        {compact ? (
           <button
             className={chrome.launchItem}
             type="button"

@@ -1,5 +1,4 @@
-// The eleven places (the Binding Layer, v4 handoff — PLACES table,
-// design_handoff_photos/"Centraid System - Binding Layer v4.dc.html":3424-3436).
+// The eleven stable mobile place ids, presented with the v10 destination names.
 //
 // A place is a destination the FRAME can go that is not an app: Home itself,
 // plus ten rooms the shell keeps — what is waiting on a decision, what runs on
@@ -52,9 +51,7 @@ export interface Place {
   /** Home only. Pinned by law, the way a browser cannot unpin its own back
    *  button (:3469) — the All-apps row shows "by law" instead of a switch. */
   law: boolean;
-  /** Whether this place is pinned out of the box. Six of the ten non-Home
-   *  places default to pinned (:3469); Starred, Gateway, Storage and Settings
-   *  start unpinned. */
+  /** Whether this place is pinned out of the box. */
   pin: boolean;
 }
 
@@ -85,48 +82,48 @@ export const PLACES: readonly Place[] = [
     what: "Everything the vault wanted to tell you",
   },
   {
+    icon: DESTINATION_MARKS.analytics,
+    id: "stats",
+    law: false,
+    name: "Activity",
+    pin: true,
+    short: "Activity",
+    what: "Runs, failures, harnesses, models and spend",
+  },
+  {
+    icon: DESTINATION_MARKS.data,
+    id: "data",
+    law: false,
+    name: "Vault",
+    pin: true,
+    short: "Vault",
+    what: "Contents, copies and sharing",
+  },
+  {
     icon: DESTINATION_MARKS.automations,
     id: "autos",
     law: false,
     name: "Automations",
-    pin: true,
+    pin: false,
     short: "Rules",
-    what: "Rules that run on this gateway",
+    what: "Rules that run on your vault's home machine",
   },
   {
     icon: DESTINATION_MARKS.connectors,
     id: "conn",
     law: false,
     name: "Connectors",
-    pin: true,
+    pin: false,
     short: "Connectors",
     what: "What is allowed to reach outside",
-  },
-  {
-    icon: DESTINATION_MARKS.analytics,
-    id: "stats",
-    law: false,
-    name: "Analytics",
-    pin: true,
-    short: "Analytics",
-    what: "What is in the vault, counted",
-  },
-  {
-    icon: DESTINATION_MARKS.data,
-    id: "data",
-    law: false,
-    name: "Data",
-    pin: true,
-    short: "Data",
-    what: "Every store, and which app may read it",
   },
   {
     icon: DESTINATION_MARKS.devices,
     id: "devices",
     law: false,
-    name: "Devices",
-    pin: true,
-    short: "Devices",
+    name: "Copies",
+    pin: false,
+    short: "Copies",
     what: "The machines holding a copy",
   },
   {
@@ -142,19 +139,19 @@ export const PLACES: readonly Place[] = [
     icon: DESTINATION_MARKS.gateway,
     id: "gateway",
     law: false,
-    name: "Gateway",
+    name: "System",
     pin: false,
-    short: "Gateway",
+    short: "System",
     what: "The machine this vault lives on",
   },
   {
     icon: DESTINATION_MARKS.storage,
     id: "storage",
     law: false,
-    name: "Storage",
+    name: "On this phone",
     pin: false,
-    short: "Storage",
-    what: "Disks, backups, and what is left",
+    short: "On phone",
+    what: "Cached data, pending uploads and room",
   },
   {
     icon: DESTINATION_MARKS.settings,
@@ -176,10 +173,8 @@ export const PLACE_COUNT = PLACES.length;
 /** The place table minus Home, since Home is law rather than a pin toggle. */
 const TOGGLEABLE_PLACES: readonly Place[] = PLACES.filter((p) => !p.law);
 
-/** The pin set a member starts with: the six places whose `pin` is `true`
- *  (:3469 — "eleven places... six pinned by default"). Out of the box this
- *  keeps the compact band unchanged, because the first four of these six are
- *  exactly Notifications, Automations, Connectors and Analytics (:3480). */
+/** The v10 default: Home is law; Alerts, Activity and Vault are pinned. The
+ * fifth destination slot remains available when the member pins another. */
 export const DEFAULT_PLACE_PINS: readonly PlaceId[] = TOGGLEABLE_PLACES.filter(
   (p) => p.pin
 ).map((p) => p.id);
@@ -256,7 +251,12 @@ export function isPlaceEnabled(
 export function enabledPlaces(
   features: MobileGatewayFeatures | undefined
 ): readonly Place[] {
-  return PLACES.filter((p) => isPlaceEnabled(p.id, features));
+  // Mobile is the Origin seat. System is a custodian/viewer presentation and
+  // is omitted here, but its stable route id still resolves in `Home.tsx` so a
+  // saved/deep link never dead-ends.
+  return PLACES.filter(
+    (p) => p.id !== "gateway" && isPlaceEnabled(p.id, features)
+  );
 }
 
 /**
@@ -273,7 +273,7 @@ export function enabledPlacePins(
   pins: readonly PlaceId[],
   features: MobileGatewayFeatures | undefined
 ): readonly PlaceId[] {
-  return pins.filter((id) => isPlaceEnabled(id, features));
+  return pins.filter((id) => id !== "gateway" && isPlaceEnabled(id, features));
 }
 
 /** Case-insensitive substring filter for the All-apps sheet's places section. */

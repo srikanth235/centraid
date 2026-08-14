@@ -39,7 +39,9 @@ import { startVisibilityTicker } from "./visibility-ticker.js";
 // page; the vaults half reads the owner's scope registry, which is also what
 // every "which vault?" picker resolves against — one source, so the page and
 // the pickers can never disagree about what this owner can reach.
-export default function HouseholdRoute(): JSX.Element {
+export default function HouseholdRoute({
+  embedded = false,
+}: { embedded?: boolean } = {}): JSX.Element {
   const { navigate, showToast } = useShellActions();
   const scopes = useOwnerScopes();
   const [now, setNow] = useState(() => Date.now());
@@ -55,8 +57,8 @@ export default function HouseholdRoute(): JSX.Element {
   // hidden (issue #528 Phase D wakeup hygiene) — same discipline as Gateway.
   useEffect(() => startVisibilityTicker(() => setNow(Date.now())), []);
 
-  return (
-    <PageScroll>
+  const content = (
+    <>
       {newVaultOpen ? (
         <VaultModal
           mode="add"
@@ -117,6 +119,7 @@ export default function HouseholdRoute(): JSX.Element {
           onRecoverCommons: recoverCommons,
         }}
       />
-    </PageScroll>
+    </>
   );
+  return embedded ? content : <PageScroll>{content}</PageScroll>;
 }

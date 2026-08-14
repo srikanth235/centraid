@@ -105,9 +105,9 @@ export interface DiagnosticsConnectionsProps {
   /** Bumped by the owner of the rename/remove modals once one commits, so the
    *  list re-reads instead of showing the label it had a moment ago. */
   refreshKey?: number;
-  onTest: (gatewayId: string, label: string) => void;
-  onRename: (gatewayId: string, label: string) => void;
-  onRemove: (gatewayId: string, label: string) => void;
+  onTest?: (gatewayId: string, label: string) => void;
+  onRename?: (gatewayId: string, label: string) => void;
+  onRemove?: (gatewayId: string, label: string) => void;
 }
 
 export interface SettingsDiagnosticsBridgeProps {
@@ -373,34 +373,40 @@ function ConnectionsPanel({
                 </div>
                 <div className={styles.rowSub}>{connectionSummary(row)}</div>
               </div>
-              <div className={styles.connActions}>
-                <button
-                  type="button"
-                  className={controlsCss.chip}
-                  onClick={() => onTest(row.gatewayId, row.gatewayLabel)}
-                >
-                  <Icon name="Wifi" size={12} />
-                  Test connection
-                </button>
-                <button
-                  type="button"
-                  className={controlsCss.chip}
-                  onClick={() => onRename(row.gatewayId, row.gatewayLabel)}
-                >
-                  <Icon name="Pencil" size={12} />
-                  Rename
-                </button>
-                {row.canRemove ? (
-                  <button
-                    type="button"
-                    className={cx(controlsCss.chip, controlsCss.chipDanger)}
-                    onClick={() => onRemove(row.gatewayId, row.gatewayLabel)}
-                  >
-                    <Icon name="Trash" size={12} />
-                    Remove
-                  </button>
-                ) : null}
-              </div>
+              {onTest || onRename || onRemove ? (
+                <div className={styles.connActions}>
+                  {onTest ? (
+                    <button
+                      type="button"
+                      className={controlsCss.chip}
+                      onClick={() => onTest(row.gatewayId, row.gatewayLabel)}
+                    >
+                      <Icon name="Wifi" size={12} />
+                      Test connection
+                    </button>
+                  ) : null}
+                  {onRename ? (
+                    <button
+                      type="button"
+                      className={controlsCss.chip}
+                      onClick={() => onRename(row.gatewayId, row.gatewayLabel)}
+                    >
+                      <Icon name="Pencil" size={12} />
+                      Rename
+                    </button>
+                  ) : null}
+                  {row.canRemove && onRemove ? (
+                    <button
+                      type="button"
+                      className={cx(controlsCss.chip, controlsCss.chipDanger)}
+                      onClick={() => onRemove(row.gatewayId, row.gatewayLabel)}
+                    >
+                      <Icon name="Trash" size={12} />
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ))
         )}

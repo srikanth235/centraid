@@ -16,8 +16,8 @@
 // bites): the daily rollup has no per-day failure split, so the chart's
 // columns carry one segment and no failed legend key; no run duration is
 // recorded, so the reference's `median duration` fact is absent; and the
-// gateway reports no disk figure and no shared-compute roster, so those two
-// facts are absent from the Gateway panel.
+// Origin never presents machine health here. That belongs to System on the
+// Custodian seat; Activity on this phone is only the member's run history.
 
 import React, { useMemo } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
@@ -38,6 +38,8 @@ import RowsBlock from "../../kit/components/RowsBlock";
 import SectionBlock from "../../kit/components/SectionBlock";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import TopSafeArea from "../../kit/components/TopSafeArea";
+import { memberFacingError } from "../../kit/member-error";
+import { ACTIVITY_SECTION_ORDER } from "../../kit/origin-seat-layout";
 import { useTheme } from "../../kit/theme";
 import type { InsightsScreenProps } from "../../navigation";
 import GatewayAlerts from "./GatewayAlerts";
@@ -46,9 +48,8 @@ import {
   buildBars,
   columnCount,
   effortBreakdown,
-  gatewayFacts,
   harnessBreakdown,
-  insightsHealth,
+  originActivityHealth,
   modelBreakdown,
   peakNote,
   recentRows,
@@ -58,7 +59,6 @@ import {
   sourceMeta,
   spendFacts,
   spendFigure,
-  unhealthyComponents,
   windowChips,
 } from "./insights-model";
 import type { Breakdown } from "./insights-model";
@@ -84,14 +84,6 @@ const EMPTY_BODY =
 /** Why a skeleton, said once, under the skeleton. */
 const LOADING_NOTE =
   "A row knows its shape before its content arrives, so nothing reflows when it does.";
-
-/** The note under the Gateway facts, verbatim. */
-const GATEWAY_NOTE =
-  "The gateway is your own machine. These are its numbers, not a service's.";
-
-/** The Gateway panel when the health read is the half that failed. */
-const NO_HEALTH =
-  "Not available from this gateway. Its own numbers are reported by the machine running it, and this one did not answer.";
 
 /** The chart's colour key. The `succeeded` word is the ink actually drawn;
  *  the failed key is EMPTY because the rollup carries no per-day outcome split
@@ -138,11 +130,9 @@ export default function InsightsScreen({
 function AnalyticsBody({
   page,
   onOpenAutomation,
-  onOpenAlerts,
 }: {
   page: InsightsController;
   onOpenAutomation: (automationRef: string) => void;
-  onOpenAlerts: () => void;
 }): React.JSX.Element {
   const { load, state, windowDays } = page;
 
@@ -165,7 +155,7 @@ function AnalyticsBody({
                 {
                   key: "what happened",
                   net: true,
-                  value: load.reason,
+                  value: memberFacingError(load.reason),
                 },
               ]
             : undefined
@@ -176,7 +166,7 @@ function AnalyticsBody({
       />
     );
 
-  const { health, summary } = load;
+  const { summary } = load;
   const chips = (
     <ChipsBlock
       accessibilityLabel="Time window"
@@ -200,7 +190,6 @@ function AnalyticsBody({
 
   const recent = recentRows(summary);
   const peak = peakNote(summary);
-  const unhealthy = health ? unhealthyComponents(health) : undefined;
   return (
     <>
       {chips}
@@ -210,7 +199,10 @@ function AnalyticsBody({
         figure={spendFigure(summary, windowDays)}
       />
 
-      <SectionBlock label="Daily activity" meta={runsMeta(summary)} />
+      <SectionBlock
+        label={ACTIVITY_SECTION_ORDER[0]}
+        meta={runsMeta(summary)}
+      />
       <BarsBlock
         accessibilityLabel={`Spend per day over the last ${String(windowDays)} days`}
         axis={axisLabels(summary, windowDays, page.now)}
@@ -225,7 +217,10 @@ function AnalyticsBody({
         {...(peak ? { note: peak } : {})}
       />
 
-      <SectionBlock label="By source" meta={sourceMeta(summary)} />
+      <SectionBlock
+        label={ACTIVITY_SECTION_ORDER[1]}
+        meta={sourceMeta(summary)}
+      />
       <Distribution
         accessibilityLabel="Spend per source"
         breakdown={sourceBreakdown(summary)}
@@ -237,22 +232,25 @@ function AnalyticsBody({
       <Distribution
         accessibilityLabel="Spend by harness"
         breakdown={harnessBreakdown(summary)}
-        label="By harness"
+        label={ACTIVITY_SECTION_ORDER[2]}
       />
       <Distribution
         accessibilityLabel="Spend by model"
         breakdown={modelBreakdown(summary)}
-        label="By model"
+        label={ACTIVITY_SECTION_ORDER[3]}
       />
       <Distribution
         accessibilityLabel="Spend by effort"
         breakdown={effortBreakdown(summary)}
-        label="By effort"
+        label={ACTIVITY_SECTION_ORDER[4]}
       />
 
       {recent.length > 0 ? (
         <>
-          <SectionBlock label="Recent runs" meta={String(recent.length)} />
+          <SectionBlock
+            label={ACTIVITY_SECTION_ORDER[5]}
+            meta={String(recent.length)}
+          />
           <RowsBlock
             accessibilityLabel="Recent runs"
             rows={recent.map((run) => ({
@@ -276,28 +274,6 @@ function AnalyticsBody({
           />
         </>
       ) : null}
-
-      <SectionBlock label="Gateway" meta="your own machine" />
-      {health ? (
-        <PanelBlock
-          facts={gatewayFacts(health)}
-          // Bad news gets a verb. "3 of 4 healthy" told a member something was
-          // wrong and gave them nowhere to go with it; the alerts place is
-          // where the component's own errors are (#775).
-          {...(unhealthy
-            ? {
-                action: {
-                  hint: `Not healthy: ${unhealthy}`,
-                  label: "See what’s wrong",
-                  onPress: onOpenAlerts,
-                },
-              }
-            : {})}
-        />
-      ) : (
-        <PanelBlock body={NO_HEALTH} />
-      )}
-      <NoteBlock text={GATEWAY_NOTE} />
     </>
   );
 }
@@ -313,11 +289,7 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
     [colors]
   );
   const summary = page.load.kind === "ready" ? page.load.summary : undefined;
-  const health = page.load.kind === "ready" ? page.load.health : undefined;
-  const line = healthLineFor(
-    page.state,
-    insightsHealth(summary, health?.metrics.uptimeMs)
-  );
+  const line = healthLineFor(page.state, originActivityHealth(summary));
 
   return (
     <TopSafeArea edges={["top"]} style={[styles.safe, ink.safe]}>
@@ -330,7 +302,7 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
                 and while there is nothing read to export, because a share
                 sheet over an empty file is worse than no button. */}
             <PlaceHeader
-              title="Analytics"
+              title="Activity"
               {...(summary && !page.exporting
                 ? {
                     secondary: { label: "Export CSV", onPress: page.exportCsv },
@@ -351,13 +323,10 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
         >
           {page.exportError ? (
             <Text style={[styles.exportError, ink.error]}>
-              {page.exportError}
+              {memberFacingError(page.exportError)}
             </Text>
           ) : null}
           <AnalyticsBody
-            onOpenAlerts={() =>
-              navigation.navigate("Insights", { initialTab: "alerts" })
-            }
             onOpenAutomation={(automationRef) =>
               navigation.navigate("Automations", { automationRef })
             }

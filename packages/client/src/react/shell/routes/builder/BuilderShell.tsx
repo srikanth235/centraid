@@ -390,6 +390,10 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
       onForward={() => nav.forward()}
       showNewChat
       onNewChat={() => nav.navigate({ kind: "home" })}
+      assistantOpen={nav.assistantOpen}
+      {...(nav.toggleAssistant
+        ? { onToggleAssistant: nav.toggleAssistant }
+        : {})}
       showChatToggle
       chatPaneOpen={chatVisible}
       onToggleChat={toggleChat}

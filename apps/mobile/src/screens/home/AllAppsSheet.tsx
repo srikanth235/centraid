@@ -54,10 +54,8 @@ import { togglePlacePin, usePlacePins } from "./home-pins";
 import {
   enabledPlacePins,
   enabledPlaces,
-  isPlaceEnabled,
   isPlacePinned,
   pinnedPlaces,
-  searchPlaces,
 } from "./places";
 import type { Place } from "./places";
 import type { TileData } from "./tile-model";
@@ -117,14 +115,16 @@ export default function AllAppsSheet({
   // band and land on a dead route. See `places.ts` for why unknown ≠ off.
   const { features } = useReplica();
   const places = useMemo(
-    () => searchPlaces(trimmed).filter((p) => isPlaceEnabled(p.id, features)),
+    () =>
+      enabledPlaces(features).filter((place) =>
+        matchesQuery(place.name, trimmed)
+      ),
     [trimmed, features]
   );
   // The handoff's own foot formula (:5990-5991): pinned apps (Home excluded,
   // since it carries no switch) over the total installed, then pinned places
   // (Home included, since it counts as pinned by law) over the places this
-  // gateway serves — the list the member is looking at, which is all eleven
-  // unless a v0 feature gate is holding one back.
+  // gateway serves on this seat — the list the member is looking at.
   const footText = `${pinnedSet.size} of ${items.length} apps · ${
     pinnedPlaces(enabledPlacePins(placePins, features)).length
   } of ${enabledPlaces(features).length} places`;

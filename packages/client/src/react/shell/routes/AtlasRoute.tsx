@@ -26,15 +26,16 @@ async function lastBackupAt(): Promise<string | null> {
   return stamps.length === 0 ? null : (stamps.sort().at(-1) ?? null);
 }
 
-export default function AtlasRoute(): JSX.Element {
-  return (
-    <PageScroll>
-      <AtlasScreen
-        loadGraph={vaultAtlasGraph}
-        loadLastBackupAt={lastBackupAt}
-        loadPulse={vaultAtlasPulse}
-        loadStats={vaultAtlasStats}
-      />
-    </PageScroll>
+export default function AtlasRoute({
+  embedded = false,
+}: { embedded?: boolean } = {}): JSX.Element {
+  const screen = (
+    <AtlasScreen
+      loadGraph={vaultAtlasGraph}
+      loadLastBackupAt={lastBackupAt}
+      loadPulse={vaultAtlasPulse}
+      loadStats={vaultAtlasStats}
+    />
   );
+  return embedded ? screen : <PageScroll>{screen}</PageScroll>;
 }

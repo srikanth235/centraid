@@ -530,7 +530,7 @@
           "wallClockCost": "low",
           "knob": "packages/design/src/contract.ts",
           "governance": "waiver-gated",
-          "redLastDemonstrated": "2026-08-02"
+          "redLastDemonstrated": "2026-08-14"
         }
       ]
     }

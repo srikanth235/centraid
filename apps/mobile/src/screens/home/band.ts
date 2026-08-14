@@ -63,8 +63,8 @@ function toTab(place: Place): BandTab {
  * its own "···" glyph rather than an app icon (:2575-2578).
  *
  * Called with `DEFAULT_PLACE_PINS` (./places), this returns Home, Alerts,
- * Rules, Connectors, Analytics — the same five the band always showed before
- * places became pinnable, so an out-of-box member sees no change.
+ * Activity, Vault. More is always rendered separately. A member's next pin may
+ * fill the fifth destination slot; More then becomes the sixth 44pt target.
  */
 export function bandTabs(pinnedIds: readonly PlaceId[]): readonly BandTab[] {
   return bandPlaces(pinnedIds).map(toTab);

@@ -18,6 +18,7 @@
 
 import { authHeader } from "../../lib/gateway";
 import { UploadQueue } from "../../lib/upload/native-queue";
+import { memberFacingError } from "../member-error";
 
 export interface TransferQueueFailure {
   filename?: string;
@@ -27,6 +28,8 @@ export interface TransferQueueFailure {
 export interface TransferQueueCounts {
   /** Rows the queue has not settled. Exact — never "some", never a spinner. */
   pending: number;
+  /** Pending rows whose recorded MIME type is a video. */
+  pendingVideos: number;
   /** Plaintext bytes those rows represent. */
   bytes: number;
   /** Rows carrying a last error, so the screen can state each one inline. */
@@ -38,6 +41,7 @@ export interface TransferQueueCounts {
 
 const UNREADABLE: TransferQueueCounts = {
   pending: 0,
+  pendingVideos: 0,
   bytes: 0,
   failures: [],
   readable: false,
@@ -53,13 +57,16 @@ export function readTransferQueue(gatewayBase: string): TransferQueueCounts {
     const pending = queue.pending();
     return {
       pending: pending.length,
+      pendingVideos: pending.filter((item) =>
+        item.mediaType?.startsWith("video/")
+      ).length,
       bytes: pending.reduce((sum, item) => sum + item.plaintextSize, 0),
       failures: pending.flatMap((item) =>
         item.lastError
           ? [
               {
                 ...(item.filename ? { filename: item.filename } : {}),
-                lastError: item.lastError,
+                lastError: memberFacingError(item.lastError),
               },
             ]
           : []

@@ -18,12 +18,23 @@
 //     failure mode this screen cannot afford.
 
 import type { HealthCopy, OpsState } from "../../kit/components/health-line";
+import { memberFacingError } from "../../kit/member-error";
 import type { DeviceRow, DeviceTicket } from "../../lib/devices";
 import type { VaultRow } from "../../lib/gateway";
 
 /** The roster size at which the page reads as `full` rather than `ready` —
  *  the reference's own full-state roster (spec §7: 8 devices). */
 export const FULL_ROSTER = 8;
+
+/** Raw transport errors are member-facing here, so architecture vocabulary is
+ * lowered before it reaches Copies. */
+export function memberDeviceError(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message : fallback;
+  return memberFacingError(message).replace(
+    /\bvault host\b/giu,
+    "home machine"
+  );
+}
 
 /** What one device says, before the screen decides what pressing it does. */
 export interface DeviceRowCopy {
@@ -240,9 +251,10 @@ export function devicesHealthCopy(input: {
   return {
     detail,
     emptyText: "Only this device is enrolled.",
-    errorText: "The gateway has not answered, so this roster may be stale.",
+    errorText:
+      "Your vault's home machine has not answered, so this roster may be stale.",
     label,
-    loadingText: "Reading the devices paired to this gateway.",
+    loadingText: "Reading the devices paired with this vault.",
   };
 }
 

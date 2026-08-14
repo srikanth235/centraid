@@ -94,6 +94,7 @@ import { styles } from "./BackupHealth.styles";
 
 const EMPTY_QUEUE: TransferQueueCounts = {
   pending: 0,
+  pendingVideos: 0,
   bytes: 0,
   failures: [],
   readable: true,
@@ -112,6 +113,7 @@ function readQueueInto(
 
 export default function BackupHealth({
   navigation,
+  route,
 }: SettingsScreenProps<"BackupHealth">): React.JSX.Element {
   const { colors } = useTheme();
   const { gatewayBase, online, session } = useReplica();
@@ -187,7 +189,7 @@ export default function BackupHealth({
         const moved = summary.settled + summary.deduped;
         postStatus(
           moved > 0
-            ? `${moved} settled on the gateway.`
+            ? `${moved} settled on your vault's home machine.`
             : "Nothing moved. The queue is empty, or the transfer rules below are not met right now."
         );
         void Store.hydrate<string | undefined>(
@@ -234,6 +236,29 @@ export default function BackupHealth({
           <RefreshControl refreshing={refreshing} onRefresh={refreshNow} />
         }
       >
+        {route.params?.signalCause ? (
+          <View
+            accessibilityLabel="Arrived from Notifications"
+            accessibilityLiveRegion="polite"
+            accessibilityRole="alert"
+            style={[
+              styles.panel,
+              {
+                backgroundColor: colors.bg,
+                borderColor: colors.line,
+                borderLeftColor: colors.attention,
+                borderLeftWidth: 2,
+              },
+            ]}
+          >
+            <Text style={[styles.eyebrow, { color: colors.textFaint }]}>
+              FROM NOTIFICATIONS
+            </Text>
+            <Text style={[styles.body, { color: colors.text }]}>
+              {route.params.signalCause}
+            </Text>
+          </View>
+        ) : null}
         {/* THE VERDICT (#712, P5): complete · pending · failing · unreadable.
             Only `failing` takes the `net` rule, and it takes it as an EDGE and
             ink — never a fill, never a red plate (§18). */}

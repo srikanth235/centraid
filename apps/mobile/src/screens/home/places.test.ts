@@ -55,18 +55,13 @@ describe("the eleven places", () => {
     expect(getPlace("notifs").short).toBe("Alerts");
     expect(getPlace("autos").short).toBe("Rules");
     expect(getPlace("conn").short).toBe("Connectors");
-    expect(getPlace("stats").short).toBe("Analytics");
+    expect(getPlace("stats").short).toBe("Activity");
+    expect(getPlace("data").short).toBe("Vault");
+    expect(getPlace("storage").name).toBe("On this phone");
   });
 
-  it("defaults to the six places the handoff ships pinned", () => {
-    expect(DEFAULT_PLACE_PINS).toStrictEqual([
-      "notifs",
-      "autos",
-      "conn",
-      "stats",
-      "data",
-      "devices",
-    ]);
+  it("defaults to Alerts, Activity and Vault", () => {
+    expect(DEFAULT_PLACE_PINS).toStrictEqual(["notifs", "stats", "data"]);
   });
 
   it("treats Home as pinned even with an empty pin list", () => {
@@ -93,10 +88,15 @@ describe("the eleven places", () => {
     // band spec calls out by name (:3480).
     expect(band.slice(1).map((p) => p.id)).toStrictEqual([
       "notifs",
-      "autos",
-      "conn",
       "stats",
+      "data",
+      "autos",
     ]);
+  });
+
+  it("filters System from the Origin seat without deleting its route id", () => {
+    expect(enabledPlaces(undefined).map((p) => p.id)).not.toContain("gateway");
+    expect(getPlace("gateway").name).toBe("System");
   });
 
   it("shows only Home in the band when nothing is pinned", () => {
@@ -105,7 +105,7 @@ describe("the eleven places", () => {
 
   it("filters by name, case-insensitively", () => {
     expect(searchPlaces("connect").map((p) => p.id)).toStrictEqual(["conn"]);
-    expect(searchPlaces("ANALYTICS").map((p) => p.id)).toStrictEqual(["stats"]);
+    expect(searchPlaces("ACTIVITY").map((p) => p.id)).toStrictEqual(["stats"]);
     expect(searchPlaces("")).toStrictEqual(PLACES);
     expect(searchPlaces("nothing matches this")).toHaveLength(0);
   });
@@ -117,17 +117,19 @@ describe("the eleven places", () => {
     const off = { automations: false, connectors: false };
     expect(enabledPlaces(off).map((p) => p.id)).not.toContain("autos");
     expect(enabledPlaces(off).map((p) => p.id)).not.toContain("conn");
-    expect(enabledPlaces(off)).toHaveLength(PLACE_COUNT - 2);
+    expect(enabledPlaces(off)).toHaveLength(PLACE_COUNT - 3);
     expect(
       bandPlaces(enabledPlacePins(DEFAULT_PLACE_PINS, off)).map((p) => p.id)
       // The freed band slots are taken by the next pinned places in table
       // order — a gated place leaves no hole behind.
-    ).toStrictEqual(["home", "notifs", "stats", "data", "devices"]);
+    ).toStrictEqual(["home", "notifs", "stats", "data"]);
   });
 
   it("keeps both places when the gateway has switched them on", () => {
     const on = { automations: true, connectors: true };
-    expect(enabledPlaces(on)).toStrictEqual(PLACES);
+    expect(enabledPlaces(on)).toStrictEqual(
+      PLACES.filter((place) => place.id !== "gateway")
+    );
     expect(enabledPlacePins(DEFAULT_PLACE_PINS, on)).toStrictEqual(
       DEFAULT_PLACE_PINS
     );
@@ -146,8 +148,10 @@ describe("the eleven places", () => {
   // The rule the whole gate hangs on: no gateway has answered yet, which is
   // not the same as a gateway that answered "off". Hiding on silence would
   // reshuffle the band on every offline cold start.
-  it("hides nothing while the gateway's answer is unknown", () => {
-    expect(enabledPlaces(undefined)).toStrictEqual(PLACES);
+  it("keeps capability-unknown places while applying the Origin seat", () => {
+    expect(enabledPlaces(undefined)).toStrictEqual(
+      PLACES.filter((place) => place.id !== "gateway")
+    );
     expect(isPlaceEnabled("autos", undefined)).toBe(true);
     expect(isPlaceEnabled("conn", undefined)).toBe(true);
     expect(enabledPlacePins(DEFAULT_PLACE_PINS, undefined)).toStrictEqual(

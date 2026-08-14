@@ -65,6 +65,7 @@ function themeProps(theme: Theme): Record<string, string> {
     "--accent-light": theme.accentLight,
     "--accent-soft": `color-mix(in oklab, ${theme.accent} 8%, transparent)`,
     "--accent-text": theme.accentText,
+    "--attention": theme.attention,
     // An app that declares no identity renders in ink; the shell always does.
     "--app-identity-text": "var(--text)",
     "--bg": theme.bg,

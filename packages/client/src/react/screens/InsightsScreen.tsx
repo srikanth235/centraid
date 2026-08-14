@@ -202,14 +202,14 @@ export default function InsightsScreen({
         </>
       ) : null}
 
-      <SectionBlock label="Gateway" meta={gatewaySince(resourceUsage)} />
+      <SectionBlock label="This machine" meta={gatewaySince(resourceUsage)} />
       {resourceUsage ? (
         <PanelBlock
-          body="What this vault’s gateway host actually used — measured, not the browser or phone you’re reading this on."
+          body="What this vault’s host actually used — measured, not the browser or phone you’re reading this on."
           facts={gatewayFacts(resourceUsage)}
         />
       ) : (
-        <PanelBlock body="Not available from this gateway. Update the gateway host to see what it actually used." />
+        <PanelBlock body="Not available from this vault host. Update the host to see what it actually used." />
       )}
       <NoteBlock>
         Measured proxies only — CPU time, bytes moved, and time spent active.
@@ -217,7 +217,8 @@ export default function InsightsScreen({
         appears because software alone cannot measure power draw.
       </NoteBlock>
       <NoteBlock>
-        The gateway is your own machine. These are its numbers, not a service’s.
+        The vault host is your own machine. These are its numbers, not a
+        service’s.
       </NoteBlock>
     </div>
   );

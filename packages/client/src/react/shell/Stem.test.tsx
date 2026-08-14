@@ -273,7 +273,7 @@ describe("shell/Stem", () => {
         expect(el.querySelector(".stemAllApps")).toBeNull();
       });
 
-      it("caps at five tabs and moves the rest behind More", () => {
+      it("caps at five destinations plus standing More", () => {
         const onAllApps = vi.fn<() => void>();
         const el = render(
           <Stem
@@ -290,7 +290,7 @@ describe("shell/Stem", () => {
             }}
           />
         );
-        expect(el.querySelectorAll(".launchItem")).toHaveLength(5);
+        expect(el.querySelectorAll(".launchItem")).toHaveLength(6);
         expect(labelsOf(el).at(-1)).toBe("More");
         act(() =>
           el.querySelector<HTMLButtonElement>(".launchItem:last-child")?.click()
@@ -299,9 +299,22 @@ describe("shell/Stem", () => {
       });
 
       it("uses the short label where a destination declares one", () => {
-        const el = render(<Stem {...stemProps} compact />);
+        const el = render(
+          <Stem
+            {...stemProps}
+            compact
+            pins={{ approvals: true, atlas: true, insights: true }}
+          />
+        );
         expect(labelsOf(el)).toContain("Alerts");
         expect(labelsOf(el)).not.toContain("Notifications");
+        expect(labelsOf(el)).toStrictEqual([
+          "Home",
+          "Alerts",
+          "Activity",
+          "Vault",
+          "More",
+        ]);
       });
     });
   });
@@ -321,7 +334,7 @@ describe("shell/Stem", () => {
       );
       expect(names).toContain("Assistant");
       expect(names).toContain("Connectors");
-      expect(names).toContain("Storage");
+      expect(names).toContain("System");
       expect(names.length).toBeGreaterThan(10);
     });
 

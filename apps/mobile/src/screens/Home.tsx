@@ -4,7 +4,7 @@
 // the route's own title row carrying the view's one filled control
 // (./home/HomeTitleRow), the content tiles that have earned the grid
 // (./home/LauncherGrid), the first moves for the apps that have not
-// (./home/FirstMoves), one ambient status line (./home/HomeStatusLine), and the
+// (./home/FirstMoves), one Origin health ribbon (./home/HomeStatusLine), and the
 // band of frame destinations (./home/HomeBand).
 //
 // GRADED, NOT BINARY. A vault fills up gradually, so Home has three states and
@@ -70,6 +70,7 @@ import {
   springboardState,
   tileEarnsGrid,
 } from "./home/springboard-policy";
+import { useOriginHealth } from "./home/useOriginHealth";
 import { useSpringboardTiles } from "./home/useSpringboardTiles";
 import VaultHeader from "./home/VaultHeader";
 import VaultsSwitcher from "./home/VaultsSwitcher";
@@ -171,6 +172,7 @@ export default function HomeScreen({
   const pins = usePins();
   const vault = useActiveVault();
   const replica = useReplica();
+  const healthSignal = useOriginHealth();
 
   useEffect(() => {
     void loadHome(setState);
@@ -392,7 +394,7 @@ export default function HomeScreen({
    * land on Insights, which the nav tree's own comment already scopes as
    * "gateway health + limited usage insights" — one screen legitimately
    * holding both facts, not two labels hiding behind one wrong page.
-   * `storage` is `PhoneStorage`, the existing local-replica-usage screen.
+   * `storage` is the stable id for On this phone, the local-replica-usage screen.
    * `data` and `devices` are the two net-new covers from the same issue.
    *
    * `starred` has NO mobile screen — there is no cross-app favourites view —
@@ -425,8 +427,10 @@ export default function HomeScreen({
           openSettings();
           break;
         case "stats":
-        case "gateway":
           navigation.navigate("Insights");
+          break;
+        case "gateway":
+          navigation.navigate("SystemOnPhone");
           break;
         case "storage":
           navigation.navigate("Settings", { screen: "PhoneStorage" });
@@ -487,6 +491,27 @@ export default function HomeScreen({
           which is why the prototype's scrollbar starts below that rule
           rather than under the vault lockup. */}
       <HomeTitleRow />
+      <HomeStatusLine
+        signal={healthSignal}
+        onOpen={() => {
+          switch (healthSignal.destination) {
+            case undefined:
+              break;
+            case "phone":
+              navigation.navigate("Settings", { screen: "PhoneStorage" });
+              break;
+            case "backup":
+              navigation.navigate("Settings", { screen: "BackupHealth" });
+              break;
+            case "notifications":
+              navigation.navigate("SignalNotification", {
+                cause: healthSignal.notificationCause ?? healthSignal.copy,
+                detail: healthSignal.notificationDetail ?? "phone",
+              });
+              break;
+          }
+        }}
+      />
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -519,13 +544,6 @@ export default function HomeScreen({
         )}
       </ScrollView>
 
-      <HomeStatusLine
-        total={things.total}
-        capped={things.capped}
-        settled={things.settled}
-        gatewayName={vault.gatewayName}
-        offline={offline}
-      />
       <HomeBand active="home" onSelect={selectBandTab} />
 
       {searchOpen ? (

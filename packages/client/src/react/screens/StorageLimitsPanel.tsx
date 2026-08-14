@@ -8,7 +8,7 @@ import type {
 } from "../../gateway-client-local-storage.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
-import { formatBytes, parseBytes } from "./localUsageView.js";
+import { budgetSummary, formatBytes, parseBytes } from "./localUsageView.js";
 
 import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
@@ -46,6 +46,7 @@ export interface StorageLimitsPanelProps {
   /** Live footprint — powers the "you are here" line under each control. */
   report: LocalUsageReportDTO | null;
   onSave: (patch: StorageLimitsPatchDTO) => Promise<void>;
+  readOnly?: boolean;
 }
 
 interface LimitControlProps {
@@ -220,6 +221,7 @@ export default function StorageLimitsPanel({
   limits,
   report,
   onSave,
+  readOnly,
 }: StorageLimitsPanelProps): JSX.Element {
   const ledger = ledgerBytes(report);
 
@@ -234,6 +236,26 @@ export default function StorageLimitsPanel({
       <div className={styles.body}>
         {limits === null ? (
           <div className={gwStyles.panelEmpty}>Reading your limits…</div>
+        ) : readOnly ? (
+          <dl data-testid="storage-limits-read-only">
+            <div>
+              <dt>Disk budget</dt>
+              <dd>
+                {limits.totalLimitBytes === null
+                  ? "Off"
+                  : formatBytes(limits.totalLimitBytes)}
+              </dd>
+            </div>
+            <div>
+              <dt>Ledger limit</dt>
+              <dd>
+                {limits.journalLimitBytes === null
+                  ? "Off"
+                  : formatBytes(limits.journalLimitBytes)}
+              </dd>
+            </div>
+            {report ? <div>{budgetSummary(report, limits)}</div> : null}
+          </dl>
         ) : (
           <>
             <LimitControl

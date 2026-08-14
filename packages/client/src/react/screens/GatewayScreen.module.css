@@ -148,6 +148,34 @@
   margin-inline: auto;
 }
 
+.detailLinks {
+  align-items: center;
+  border-block-end: 1px solid var(--line);
+  display: flex;
+  gap: var(--sp-4);
+  min-block-size: var(--target-min);
+}
+
+.detailLinks button,
+.systemBack {
+  background: transparent;
+  border: 0;
+  color: var(--text-soft);
+  cursor: pointer;
+  font: var(--t-small-strong);
+  min-block-size: var(--target-min);
+  padding: 0;
+}
+
+.detailLinks button:hover,
+.systemBack:hover {
+  color: var(--text);
+}
+
+.systemBack {
+  align-self: flex-start;
+}
+
 /* Hero — the gauge cluster. A faint status-tinted wash bleeds from the
    top edge so the panel itself reads up/down at a glance. */
 .hero {

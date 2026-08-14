@@ -12,6 +12,7 @@ const queue = (
   fields: Partial<TransferQueueCounts> = {}
 ): TransferQueueCounts => ({
   pending: 0,
+  pendingVideos: 0,
   bytes: 0,
   failures: [],
   readable: true,
@@ -58,7 +59,7 @@ describe(backupVerdictCopy, () => {
     );
     expect(copy.title).toBe("2 transfers refused");
     // The transport's own words, not a paraphrase.
-    expect(copy.detail).toContain("gateway refused: 507");
+    expect(copy.detail).toContain("vault host refused: 507");
     expect(copy.detail).toContain("11 photographs are on this device only");
   });
 

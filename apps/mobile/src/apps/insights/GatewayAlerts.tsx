@@ -6,6 +6,7 @@ import Button from "../../kit/components/Button";
 import HomeKey from "../../kit/components/HomeKey";
 import { Text } from "../../kit/components/NativeText";
 import TopSafeArea from "../../kit/components/TopSafeArea";
+import { memberFacingError } from "../../kit/member-error";
 import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {
@@ -42,7 +43,9 @@ export default function GatewayAlerts(props: {
     } catch (error) {
       setState({
         kind: "error",
-        message: error instanceof Error ? error.message : "Could not load.",
+        message: memberFacingError(
+          error instanceof Error ? error.message : "Could not load."
+        ),
       });
     }
   }, []);
@@ -73,7 +76,7 @@ export default function GatewayAlerts(props: {
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={props.onLeave} />
         <View style={styles.headerCopy}>
-          <Text style={styles.title}>Gateway alerts</Text>
+          <Text style={styles.title}>System alerts</Text>
           <Text style={styles.subtitle}>
             Health transitions and recovery updates
           </Text>
@@ -96,11 +99,11 @@ export default function GatewayAlerts(props: {
         }
       >
         {state.kind === "loading" ? (
-          <Text style={styles.empty}>Loading gateway alerts…</Text>
+          <Text style={styles.empty}>Loading system alerts…</Text>
         ) : state.kind === "error" ? (
           <Text style={styles.empty}>{state.message}</Text>
         ) : rows.length === 0 ? (
-          <Text style={styles.empty}>No gateway alerts.</Text>
+          <Text style={styles.empty}>No system alerts.</Text>
         ) : (
           rows.map((row) => (
             <View
@@ -110,7 +113,9 @@ export default function GatewayAlerts(props: {
                 row.readAt === null && { borderColor: colors.accent },
               ]}
             >
-              <Text style={styles.cardTitle}>{row.headline}</Text>
+              <Text style={styles.cardTitle}>
+                {memberFacingError(row.headline)}
+              </Text>
               <Text style={styles.meta}>
                 <Text style={[styles.meta, t("mono")]}>
                   {new Date(row.lastAt).toLocaleString()}
@@ -160,7 +165,9 @@ function gatewayAlertDetail(detail: Record<string, unknown>): string {
   const preferred = ["detail", "error", "gatewayLabel"]
     .map((key) => detail[key])
     .find((value): value is string => typeof value === "string");
-  return preferred ?? "Open Gateway on desktop for live runtime diagnostics.";
+  return memberFacingError(
+    preferred ?? "Open System on the home machine for live diagnostics."
+  );
 }
 
 const makeStyles = (colors: ThemeColors) =>

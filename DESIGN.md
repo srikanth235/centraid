@@ -41,6 +41,8 @@ colors:
   danger-dark: "#e08878"
   warning: "#7c5619"
   warning-dark: "#d9a75b"
+  attention: "#8A6520"
+  attention-dark: "#D8A64E"
   c-amber: "#904e46"
   c-forest: "#397247"
   c-indigo: "#635a93"
@@ -377,6 +379,7 @@ The Binding Layer brief names its roles differently from this repo. The values p
 | `netHover` | `--net-hover` | The outlined destructive control under hover — border and label together, stepped AWAY from the paper. |
 | `netWash` | `--net-wash` | The one permitted tint of `--net`: 7% light, 11% dark, built from `--net` itself. |
 | `seam` | `--seam` | "Not yet, and not wrong" — pending, expiring, invited. |
+| `attention` | `--attention` | The middle system-signal tone. Amber type, border, or a 2px rule; never a fill. |
 | `accentHover` | `--accent-hover` | The ink under hover when it is the LINE and the LABEL. Distinct from `--accent-deep-hover`, which is the FILL's hover and steps the other way. |
 | `ghost` | `--text-ghost` | The faintest rung. Placeholders and unavailable glyphs; forbidden in body copy, so its floor is 3:1, not 4.5. |
 | `label` / `band-on` | `--t-body` / `--t-control` | **No new role.** Each is value-identical to an existing rung at BOTH surfaces and carries no modifier the other lacks; a second name for one value is the defect this table exists to prevent. |
@@ -404,6 +407,8 @@ Home takes no hue: it renders in `--text-soft`. Colour is never the only channel
 **The shell spends no colour.** `--accent` is ink in both themes, and so are `--accent-fill`, `--accent-deep`, `--accent-text` and `--accent-light`. `--accent-deep-hover` steps the fill further FROM the ink it carries, so a hover can never reduce a label's contrast. `--accent-soft` is an 8% ink wash for hover ground, never a fill. If a hue ever reappears in this family, every app identity colour silently stops meaning "this belongs to that app".
 
 Three hues are reserved and named. `--link` is prose links and text selection, and is never permitted on a control; `--bg-sel` and `--line-sel` are washes of it. `--focus-ring-color` is the ring. `--net` is "this leaves the device" — a border or a 2px rule, never a fill, because nothing alarming should be a large filled surface. `--danger` is solved from the same base as `--net` so a destructive action and a network egress read as one consequence.
+
+System signals use exactly three tones: `quiet` (tertiary ink only), `attention` (`#8A6520` / `#D8A64E`), and `urgent` (`--net`). `--attention` is deliberately distinct from the general-purpose `--warning` semantic role: it is the one amber rung members learn on the ambient ribbon and its escalation path. Like `--net`, it may appear as type, a border, or a 2px rule, never as a fill.
 
 `--net` carries two rungs of its own. `--net-hover` (`#7F3026` / `#EC9C8D`) is the outlined destructive control under the pointer — the border and the label together, since there is no ground to move — and it steps AWAY from the paper, because a warning that gets quieter under the pointer is the wrong answer. `--net-wash` (`rgba(154,59,46,.07)` / `rgba(224,136,120,.11)`) is the ONE tint of `--net` the system permits, and it is the exception that states the rule rather than breaking it: it is faint enough that `--net` and the whole ink ramp still clear AA painted on top of it, which is precisely what keeps it from becoming the large alarming surface `--net` forbids. It is built from `--net` rather than typed beside it, and it is the one wash whose alpha differs per theme — a tint on near-black has to work harder to be seen — so it lowers as a concrete `rgba()` in all three syntaxes instead of the shared `color-mix(… N%, transparent)` that `--accent-soft` and `--bg-sel` use.
 

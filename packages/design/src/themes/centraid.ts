@@ -19,6 +19,8 @@ import {
   ACCENT_INK_HOVER_DARK,
   ACCENT_LIGHT,
   ACCENT_LIGHT_DARK,
+  ATTENTION,
+  ATTENTION_DARK,
   BRAND,
   BRAND_DARK,
   DANGER,
@@ -53,6 +55,7 @@ export const lightTheme: Theme = {
   accentInkHover: ACCENT_INK_HOVER,
   accentLight: ACCENT_LIGHT,
   accentText: BRAND,
+  attention: ATTENTION,
   // ONE PAGE. The shell and every app in it share this one colour — see
   // `PAGE`/`WALL` in shared.ts for why the per-app tone axis was retired.
   bg: PAGE.light,
@@ -126,6 +129,7 @@ export const darkTheme: Theme = {
   accentInkHover: ACCENT_INK_HOVER_DARK,
   accentLight: ACCENT_LIGHT_DARK,
   accentText: BRAND_DARK,
+  attention: ATTENTION_DARK,
   bg: PAGE.dark,
   bgApp: WALL.dark,
   // `surf` — LIGHTER than the page here, which is why `--text-faint` is

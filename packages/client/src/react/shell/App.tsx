@@ -37,6 +37,11 @@ import { ShellActionsProvider } from "./actions.js";
 import type { ShellActions } from "./actions.js";
 import AllAppsSheet from "./AllAppsSheet.js";
 import { ambientStatusFor } from "./ambientStatus.js";
+import {
+  AssistantCompanionController,
+  assistantContextLabel,
+  readAssistantPageText,
+} from "./assistant-companion/index.js";
 import { isRouteAvailable, routeCapability } from "./capabilities.js";
 import CapabilityWall from "./CapabilityWall.js";
 import { CaptureLauncher, CaptureOverlay } from "./CaptureOverlay.js";
@@ -62,12 +67,12 @@ import { isOpsPage, opsBarDef, opsBarVerbs } from "./opsBar.js";
 import type { OpsPage } from "./opsBar.js";
 import { openPrompt } from "./prompt.js";
 import { resetQueryCache } from "./queryCache.js";
+import { routeKey } from "./router.js";
 import ApprovalsRoute from "./routes/ApprovalsRoute.js";
 import AppViewRoute from "./routes/AppViewRoute.js";
 import type { AssistantConversationEntry } from "./routes/AssistantConversations.js";
 import AssistantConversations from "./routes/AssistantConversations.js";
 import AssistantRoute from "./routes/AssistantRoute.js";
-import AtlasRoute from "./routes/AtlasRoute.js";
 import AutomationEditorRoute from "./routes/AutomationEditorRoute.js";
 import AutomationsRoute from "./routes/AutomationsRoute.js";
 import AutomationViewRoute from "./routes/AutomationViewRoute.js";
@@ -103,6 +108,7 @@ import StarredRoute from "./routes/StarredRoute.js";
 import StorageRoute from "./routes/StorageRoute.js";
 import TemplatesRoute from "./routes/TemplatesRoute.js";
 import TestConnectionModal from "./routes/TestConnectionModal.js";
+import VaultRoute from "./routes/VaultRoute.js";
 import { readAllVerbs, readAllVitals, subscribeVitals } from "./routeVitals.js";
 import type { RouteVerbs } from "./routeVitals.js";
 import ShellApp from "./ShellApp.js";
@@ -224,7 +230,7 @@ function activePageFor(route: ShellRoute): ShellPage | undefined {
     case "gateway":
       return "gateway";
     case "storage":
-      return "storage";
+      return "gateway";
     case "settings":
       // Legacy deep link Settings → Connections → promote highlight to Connectors.
       return route.page === "connections" ? "connectors" : "settings";
@@ -1298,7 +1304,10 @@ export default function App(): JSX.Element {
         case "gateway":
           return (
             <GatewayRoute
+              key={routeKey(nav.route)}
               initialTab={nav.route.tab}
+              focus={nav.route.focus}
+              cause={nav.route.cause}
               connections={{
                 refreshKey: gatewaysRefreshKey,
                 onRemove: removeGatewayConnection,
@@ -1314,7 +1323,7 @@ export default function App(): JSX.Element {
         case "storage":
           return <StorageRoute />;
         case "atlas":
-          return <AtlasRoute />;
+          return <VaultRoute />;
         case "automation-view":
           // Keyed so an in-place automation change remounts: traces, watched
           // turn ids, and any open SSE all belong to one automation (#541).
@@ -1523,6 +1532,33 @@ export default function App(): JSX.Element {
     paletteRecents.setOnResults(null);
   }, [paletteConversationSearch, paletteEntitySearch, paletteRecents]);
 
+  const renderAssistantCompanion = useCallback(
+    (
+      nav: ShellNav,
+      companion: {
+        open: boolean;
+        setOpen: (open: boolean) => void;
+        surface: "pointer" | "touch";
+      }
+    ) => {
+      const handleOpenChange = (open: boolean): void => companion.setOpen(open);
+      return (
+        <AssistantCompanionController
+          surface={companion.surface}
+          open={companion.open}
+          contextLabel={assistantContextLabel(nav.route)}
+          getContextText={readAssistantPageText}
+          onOpenChange={handleOpenChange}
+          onOpenFull={() => {
+            companion.setOpen(false);
+            nav.navigate({ kind: "assistant" });
+          }}
+        />
+      );
+    },
+    []
+  );
+
   return (
     // The offline verdict travels once, from here, and the shared commit
     // control reads it (issue #708, C7). It wraps the modals and sheets too —
@@ -1533,6 +1569,7 @@ export default function App(): JSX.Element {
           initialRoute={initialShellRoute}
           renderStem={renderStem}
           renderAppBar={renderAppBar}
+          renderAssistantCompanion={renderAssistantCompanion}
           statusLine={statusLine}
           onNavReady={(nav) => {
             navRef.current = nav;

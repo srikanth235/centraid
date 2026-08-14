@@ -255,8 +255,8 @@ export default function AtlasScreen({
       <div className={styles.page}>
         <PanelBlock
           action={{ label: "Try again", onClick: retry }}
-          body="The vault is encrypted and present on disk. The gateway could not open it, which is usually a permissions problem on the machine rather than damage to the data."
-          eyebrow="Data"
+          body="The vault is encrypted and present on disk. Its host could not open it, which is usually a permissions problem on the machine rather than damage to the data."
+          eyebrow="Vault"
           title="Cannot open the store"
           tone="net"
           wide

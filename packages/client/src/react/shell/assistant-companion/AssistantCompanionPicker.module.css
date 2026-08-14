@@ -1,0 +1,101 @@
+.picker {
+  position: absolute;
+  z-index: 2;
+  inset-inline: var(--sp-3);
+  inset-block-end: 150px;
+  inline-size: auto;
+  max-block-size: min(420px, 58%);
+  margin: 0;
+  padding: var(--sp-3);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-lg);
+}
+
+.picker[data-surface="touch"] {
+  inset-inline: var(--sp-2);
+  inset-block-end: 168px;
+}
+
+.pickerSection + .pickerSection {
+  margin-block-start: var(--sp-4);
+}
+.pickerLabel {
+  margin: 0 0 var(--sp-1);
+  color: var(--text-faint);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+}
+.optionList {
+  display: flex;
+  flex-direction: column;
+}
+.option {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  min-block-size: var(--h-row);
+  padding-inline: var(--sp-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  text-align: start;
+  cursor: pointer;
+}
+.option:hover {
+  background: var(--bg-hover);
+}
+.option[data-selected="true"] {
+  border-color: var(--line);
+  background: var(--bg-sunken);
+}
+.optionMark {
+  flex: none;
+  inline-size: 16px;
+  color: var(--text);
+  text-align: center;
+}
+.optionBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.optionName {
+  font: var(--t-body);
+}
+.optionMeta {
+  color: var(--text-faint);
+  font: var(--t-annot-label);
+}
+.effortTrack {
+  display: flex;
+  gap: var(--sp-hair);
+  padding: var(--sp-hair);
+  border-radius: var(--r-md);
+  background: var(--bg-sunken);
+}
+.effort {
+  flex: 1;
+  min-block-size: 32px;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-soft);
+  font: var(--t-control);
+  cursor: pointer;
+}
+.effort[data-selected="true"] {
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+}
+.effortNote {
+  margin: var(--sp-2) 0 0;
+  color: var(--text-faint);
+  font: var(--t-annot-label);
+}

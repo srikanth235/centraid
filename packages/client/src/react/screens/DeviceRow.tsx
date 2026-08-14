@@ -306,7 +306,7 @@ export function DeviceRowDetail({
       {strandedVault ? (
         <p className={styles.detailWarn}>
           This is the last owner device for {strandedVault}. Getting back in
-          would need the gateway machine and its command line.
+          would need the vault host machine and its command line.
         </p>
       ) : null}
       {error ? <p className={styles.detailWarn}>{error}</p> : null}

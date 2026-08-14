@@ -48,7 +48,9 @@ export function routeKey(route: ShellRoute): string {
     case "templates":
       return route.kind;
     case "gateway":
-      return route.tab ? `gateway:${route.tab}` : "gateway";
+      return ["gateway", route.tab, route.focus, route.cause]
+        .filter(Boolean)
+        .join(":");
     case "automation-editor":
       return `automation-editor:${route.automationId ?? "new"}`;
     case "automation-view":

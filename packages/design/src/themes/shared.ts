@@ -253,6 +253,12 @@ export const SUCCESS = semanticShade(SUCCESS_BASE_DARK, "dark");
 export const WARNING_LIGHT = semanticShade(WARNING_BASE_LIGHT, "light");
 export const WARNING = semanticShade(WARNING_BASE_DARK, "dark");
 
+/** V10 system-signal attention. Unlike the general warning role, this literal
+ * is reserved for the middle rung of the quiet/attention/urgent signal
+ * vocabulary and is used only as type, a border, or a 2px rule. */
+export const ATTENTION = "#8A6520";
+export const ATTENTION_DARK = "#D8A64E";
+
 export interface Theme {
   /** Light vs dark family — drives the picker grouping. Must equal the
    * theme's registry key; see themes/index.ts. */
@@ -278,6 +284,8 @@ export interface Theme {
   danger: string;
   /** Cautionary state — over-budget readings, degraded status. */
   warning: string;
+  /** A system signal that needs notice but not interruption. Never a fill. */
+  attention: string;
   /** "Leaves the device" — borders and 2px rules only. */
   net: string;
   /** `net` under hover on the outlined destructive control — border and label

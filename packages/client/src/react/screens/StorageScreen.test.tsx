@@ -149,4 +149,17 @@ describe(StorageScreen, () => {
       totalLimitBytes: 30 * GB,
     });
   });
+
+  it("keeps live capacity facts but removes Rescan and limit mutations for a viewer", async () => {
+    const saveStorageLimits = vi.fn<StorageScreenProps["saveStorageLimits"]>();
+    const el = await mount({ readOnly: true, saveStorageLimits });
+    expect(el.textContent).toContain("3.0 GB");
+    expect(
+      el.querySelector('[data-testid="storage-limits-read-only"]')
+    ).not.toBeNull();
+    expect(el.textContent).not.toContain("Rescan");
+    expect(el.textContent).not.toContain("Set");
+    expect(el.querySelector("input")).toBeNull();
+    expect(saveStorageLimits).not.toHaveBeenCalled();
+  });
 });

@@ -326,7 +326,7 @@ export default function DevicesCard({
             {...actions}
           />
           <NoteBlock>
-            A person on your gateway reaches only what you placed in a shared
+            A person on your vault host reaches only what you placed in a shared
             space.
           </NoteBlock>
         </>

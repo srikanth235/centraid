@@ -8,7 +8,6 @@ import type { JSX } from "react";
 
 import {
   availabilityPct,
-  buildOutageRows,
   formatAgo,
   formatClock,
   formatDuration,
@@ -19,7 +18,6 @@ import type {
   GatewayRuntimeSnapshot,
   ReconciledStatus,
 } from "../shell/routes/gatewayData.js";
-import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import BackupCard from "./BackupCard.js";
 import type { BackupCardProps } from "./BackupCard.js";
@@ -42,7 +40,6 @@ import type {
 import StorageScreen from "./StorageScreen.js";
 import type { StorageScreenProps } from "./StorageScreen.js";
 
-import a11y from "../styles/a11y.module.css";
 import styles from "./GatewayScreen.module.css";
 
 // Gateway runtime, backup custody, local storage, component health, logs, and
@@ -56,8 +53,8 @@ export interface GatewayScreenProps {
   now: number;
   /** True while a settings write is in flight — the alert card locks. */
   savingAlert?: boolean;
-  onAlertSecondsChange: (seconds: number) => void;
-  onAlertsEnabledChange: (enabled: boolean) => void;
+  onAlertSecondsChange?: (seconds: number) => void;
+  onAlertsEnabledChange?: (enabled: boolean) => void;
   /** Optional launch-at-login toggle; defaults false for older hosts/tests. */
   launchAtLogin?: boolean;
   onLaunchAtLoginChange?: (enabled: boolean) => void;
@@ -76,7 +73,7 @@ export interface GatewayScreenProps {
    * status). Refused for a remote gateway — main answers `{ok: false}`
    * with an explanation, rendered inline rather than thrown.
    */
-  onRestartGateway: () => Promise<{ ok: boolean; error?: string }>;
+  onRestartGateway?: () => Promise<{ ok: boolean; error?: string }>;
   /** Save `/centraid/_gateway/diagnostics` through a native dialog (Logs
    *  tab toolbar). `canceled` when the user dismissed the dialog. */
   onExportDiagnostics: LogsBridgeProps["onExportDiagnostics"];
@@ -108,27 +105,20 @@ export interface GatewayScreenProps {
   loadLocalUsage?: StorageScreenProps["loadLocalUsage"];
   saveStorageLimits?: StorageScreenProps["saveStorageLimits"];
   loadOwners?: StorageScreenProps["loadOwners"];
+  /** Viewer seats can inspect this gateway but cannot operate its host. */
+  readOnly?: boolean;
+  focus?: "backups" | "capacity";
+  cause?: "backup-alert";
 }
 
 type TabId = "overview" | "storage" | "components" | "logs" | "alerts";
 
-const TABS: readonly { id: TabId; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "storage", label: "Storage" },
-  { id: "components", label: "Components" },
-  { id: "logs", label: "Logs" },
-  { id: "alerts", label: "Alerts" },
-];
-
 const STATUS_WORD: Record<ReconciledStatus, string> = {
-  up: "Operational",
+  up: "Answering",
   degraded: "Degraded",
-  down: "Unreachable",
-  unknown: "Listening…",
+  down: "Not answering",
+  unknown: "Checking…",
 };
-
-/** Only the tail of the sample ring fits the strip comfortably. */
-const STRIP_SAMPLES = 120;
 
 function Figure({
   label,
@@ -178,12 +168,10 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
       ? snapshot.gatewayUptimeMs + Math.max(0, now - snapshot.lastCheckAt)
       : undefined;
   const availability = availabilityPct(snapshot);
-  const outageRows = buildOutageRows(snapshot, now);
-  const samples = snapshot.samples.slice(-STRIP_SAMPLES);
-  const stripSpanMs =
-    samples.length >= 2
-      ? (samples[samples.length - 1]?.at ?? 0) - (samples[0]?.at ?? 0)
-      : 0;
+  // SEAM: the runtime wire carries only this process session's sample ring and
+  // outage list. Do not present either as 30-day history. A durable daily
+  // availability series must be added to the gateway contract before this
+  // overview can draw the handoff's 30-day composition.
 
   return (
     <div className={styles.page} data-status={overall}>
@@ -192,7 +180,13 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
           <span className={styles.titleIcon}>
             <Icon name="Cellular" size={16} />
           </span>
-          <h1>Gateway</h1>
+          <h1>
+            {tab === "overview"
+              ? "System"
+              : tab === "alerts"
+                ? "Alert history"
+                : tab[0]?.toUpperCase() + tab.slice(1)}
+          </h1>
         </div>
         <div className={styles.headMeta}>
           heartbeat · every {Math.round(snapshot.pollIntervalMs / 1000)}s
@@ -202,31 +196,68 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
         </div>
       </div>
 
-      <div className={styles.tabs} role="tablist" aria-label="Gateway">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            className={cx(styles.tab, tab === t.id && styles.tabActive)}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-            {t.id === "components" && unhealthyCount > 0 ? (
-              <span className={styles.tabBadge}>{unhealthyCount}</span>
-            ) : null}
+      {tab === "overview" ? (
+        <nav className={styles.detailLinks} aria-label="System details">
+          <button type="button" onClick={() => setTab("components")}>
+            Components{unhealthyCount > 0 ? ` · ${unhealthyCount}` : ""}
           </button>
-        ))}
-      </div>
+          <button type="button" onClick={() => setTab("logs")}>
+            Logs
+          </button>
+          <button type="button" onClick={() => setTab("alerts")}>
+            Alert history
+          </button>
+        </nav>
+      ) : (
+        <button
+          className={styles.systemBack}
+          type="button"
+          onClick={() => setTab("overview")}
+        >
+          ‹ System · Back
+        </button>
+      )}
 
       {tab === "overview" ? (
         <>
+          {props.cause === "backup-alert" ? (
+            <section className={styles.panel} data-testid="system-arrival">
+              <div className={styles.panelEmpty}>
+                You arrived from the backup alert. Backups are shown first so
+                you can see what needs attention.
+              </div>
+            </section>
+          ) : null}
+          {props.focus === "backups" && props.backup ? (
+            <BackupCard {...props.backup} now={now} readOnly={props.readOnly} />
+          ) : null}
+          {props.focus === "capacity" &&
+          props.loadLocalUsage &&
+          props.saveStorageLimits ? (
+            <StorageScreen
+              loadLocalUsage={props.loadLocalUsage}
+              saveStorageLimits={props.saveStorageLimits}
+              {...(props.loadOwners ? { loadOwners: props.loadOwners } : {})}
+              readOnly={props.readOnly}
+            />
+          ) : null}
           {/* The H5 service offer, relocated here from a blocking onboarding
               step. Demotes itself to a one-line standing control once the
               user declines — dismissing the pitch must not retire the only
               way to install the service — and disappears once installed. */}
-          <GatewayServiceTip />
+          {props.readOnly ? null : <GatewayServiceTip />}
+
+          {props.readOnly ? (
+            <section className={styles.panel}>
+              <div className={styles.panelHead}>
+                <h2>Read-only here</h2>
+              </div>
+              <div className={styles.panelEmpty}>
+                Backup, capacity, component, and alert controls are available in
+                Centraid on {snapshot.gatewayLabel}.
+              </div>
+            </section>
+          ) : null}
 
           {/* Hero — orb + status word on the left, the gauge cluster on the
               right, heartbeat strip across the bottom. */}
@@ -238,13 +269,21 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                 </span>
                 <div className={styles.statusText}>
                   <div className={styles.statusWord}>
-                    {STATUS_WORD[overall]}
+                    {props.readOnly && snapshot.lastCheckAt !== undefined
+                      ? `This browser last synced ${formatAgo(snapshot.lastCheckAt, now)}`
+                      : STATUS_WORD[overall]}
                   </div>
                   <div className={styles.statusSub}>
-                    {snapshot.statusSince === undefined
-                      ? ""
-                      : `for ${formatDuration(now - snapshot.statusSince)} · `}
-                    {snapshot.gatewayKind} gateway “{snapshot.gatewayLabel}”
+                    {props.readOnly ? (
+                      <>Runs on {snapshot.gatewayLabel}</>
+                    ) : (
+                      <>
+                        {snapshot.statusSince === undefined
+                          ? ""
+                          : `for ${formatDuration(now - snapshot.statusSince)} · `}
+                        {snapshot.gatewayKind} gateway “{snapshot.gatewayLabel}”
+                      </>
+                    )}
                   </div>
                   {heartbeat === "down" && snapshot.lastError ? (
                     <div className={styles.statusError}>
@@ -299,80 +338,15 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                 />
               </div>
             </div>
-
-            {/* The strip is a row of bare beat squares, not an image: the name
-                it used to fake with `role="img"` is real text now (absolutely
-                positioned, so it is not a flex item and costs no gap). */}
-            <div className={styles.strip}>
-              <span className={a11y.srOnly}>Recent heartbeat results</span>
-              {samples.length > 0 ? (
-                samples.map((s) => (
-                  <span
-                    key={s.at}
-                    className={styles.beat}
-                    data-ok={s.ok ? "true" : "false"}
-                    title={`${formatClock(s.at)} — ${s.ok ? `ok, ${s.latencyMs ?? "—"} ms` : "no answer"}`}
-                  />
-                ))
-              ) : (
-                <span className={styles.stripEmpty}>
-                  waiting for the first heartbeat…
-                </span>
-              )}
-            </div>
-            <div className={styles.stripAxis}>
-              <span>
-                {stripSpanMs > 0 ? `${formatDuration(stripSpanMs)} ago` : ""}
-              </span>
-              <span>now</span>
-            </div>
           </section>
 
           {/* Two packed columns, not one auto-placed grid: shared grid rows
               let the tall Resource card open a dead column next to it. */}
           <div className={styles.grid}>
             <div className={styles.gridCol}>
-              {/* Outage log — every stretch of missed heartbeats this session. */}
-              <section className={styles.panel}>
-                <div className={styles.panelHead}>
-                  <h2>Outage log</h2>
-                  <span className={styles.panelMeta}>
-                    since {formatClock(snapshot.trackingSince)} ·{" "}
-                    {snapshot.checksFailed} failed{" "}
-                    {snapshot.checksFailed === 1 ? "check" : "checks"}
-                  </span>
-                </div>
-                {outageRows.length > 0 ? (
-                  <div className={styles.outages}>
-                    {outageRows.map((o) => (
-                      <div
-                        key={o.id}
-                        className={styles.outage}
-                        data-ongoing={o.ongoing || undefined}
-                      >
-                        <span className={styles.outageDot} />
-                        <span className={styles.outageStart}>
-                          {o.startedLabel}
-                        </span>
-                        <span className={styles.outageDuration}>
-                          {o.durationLabel}
-                          {o.ongoing ? " — ongoing" : ""}
-                        </span>
-                        {o.alerted ? (
-                          <span className={styles.outageBadge}>notified</span>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className={styles.panelEmpty}>
-                    No downtime recorded this session. The log resets when the
-                    app relaunches or you switch gateways.
-                  </div>
-                )}
-              </section>
-
-              {props.loadResourceMode && props.saveResourceMode ? (
+              {!props.readOnly &&
+              props.loadResourceMode &&
+              props.saveResourceMode ? (
                 <ResourceModeCard
                   loadMode={props.loadResourceMode}
                   saveMode={props.saveResourceMode}
@@ -447,14 +421,32 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                     </dd>
                   </div>
                 </dl>
-                <div className={styles.idFooter}>
-                  <RestartGatewayButton onRestart={props.onRestartGateway} />
-                </div>
+                {props.readOnly ? (
+                  <div className={styles.panelEmpty}>
+                    Runs on {snapshot.gatewayLabel}.
+                  </div>
+                ) : props.onRestartGateway ? (
+                  <div className={styles.idFooter}>
+                    <RestartGatewayButton onRestart={props.onRestartGateway} />
+                  </div>
+                ) : null}
               </section>
             </div>
           </div>
 
-          {props.backup ? <BackupCard {...props.backup} now={now} /> : null}
+          {props.focus !== "backups" && props.backup ? (
+            <BackupCard {...props.backup} now={now} readOnly={props.readOnly} />
+          ) : null}
+          {props.focus !== "capacity" &&
+          props.loadLocalUsage &&
+          props.saveStorageLimits ? (
+            <StorageScreen
+              loadLocalUsage={props.loadLocalUsage}
+              saveStorageLimits={props.saveStorageLimits}
+              {...(props.loadOwners ? { loadOwners: props.loadOwners } : {})}
+              readOnly={props.readOnly}
+            />
+          ) : null}
         </>
       ) : null}
 
@@ -463,7 +455,18 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
           <SettingsDiagnosticsScreen
             loadHealth={props.loadHealth}
             onJumpToLogs={jumpToLogs}
-            {...(props.connections ? { connections: props.connections } : {})}
+            {...(props.connections
+              ? {
+                  connections: props.readOnly
+                    ? {
+                        loadConnections: props.connections.loadConnections,
+                        ...(props.connections.refreshKey === undefined
+                          ? {}
+                          : { refreshKey: props.connections.refreshKey }),
+                      }
+                    : props.connections,
+                }
+              : {})}
           />
         </div>
       ) : null}
@@ -474,6 +477,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
             loadLocalUsage={props.loadLocalUsage}
             saveStorageLimits={props.saveStorageLimits}
             {...(props.loadOwners ? { loadOwners: props.loadOwners } : {})}
+            readOnly={props.readOnly}
           />
         </div>
       ) : null}
@@ -483,7 +487,9 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
           <LogsScreen
             streamLogs={props.streamLogs}
             focusQuery={logsFocus}
-            onExportDiagnostics={props.onExportDiagnostics}
+            {...(!props.readOnly && props.onExportDiagnostics
+              ? { onExportDiagnostics: props.onExportDiagnostics }
+              : {})}
           />
         </div>
       ) : null}
@@ -491,9 +497,14 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
       {tab === "alerts" ? (
         <GatewayAlertsTab
           snapshot={snapshot}
+          readOnly={props.readOnly}
           savingAlert={props.savingAlert}
-          onAlertSecondsChange={props.onAlertSecondsChange}
-          onAlertsEnabledChange={props.onAlertsEnabledChange}
+          {...(props.onAlertSecondsChange
+            ? { onAlertSecondsChange: props.onAlertSecondsChange }
+            : {})}
+          {...(props.onAlertsEnabledChange
+            ? { onAlertsEnabledChange: props.onAlertsEnabledChange }
+            : {})}
           launchAtLogin={props.launchAtLogin}
           savingLaunchAtLogin={props.savingLaunchAtLogin}
           {...(props.onLaunchAtLoginChange

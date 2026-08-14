@@ -47,8 +47,11 @@ export const AgendaEvent = lazyScreen(
 export const AgendaHome = lazyScreen(
   () => import("./src/apps/agenda/AgendaHome")
 );
-export const AssistantScreen = lazyScreen(
+export const AssistantFullScreen = lazyScreen(
   () => import("./src/apps/assistant/Assistant")
+);
+export const AssistantScreen = lazyScreen(
+  () => import("./src/apps/assistant/AssistantCompanionSheet")
 );
 export const AutomationsScreen = lazyScreen(
   () => import("./src/apps/automations/Automations")
@@ -140,7 +143,13 @@ export const PhoneStorageScreen = lazyScreen(
   () => import("./src/screens/PhoneStorage")
 );
 export const ScanScreen = lazyScreen(() => import("./src/screens/Scan"));
+export const SignalNotificationScreen = lazyScreen(
+  () => import("./src/screens/SignalNotification")
+);
 export const SettingsScreen = lazyScreen(
   () => import("./src/screens/Settings")
 );
 export const SharingScreen = lazyScreen(() => import("./src/screens/Sharing"));
+export const SystemOnPhoneScreen = lazyScreen(
+  () => import("./src/screens/SystemOnPhone")
+);

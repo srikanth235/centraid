@@ -9,9 +9,9 @@ describe("the operational routes' app bar", () => {
       "Notifications",
       "Automations",
       "Connectors",
-      "Analytics",
-      "Data",
-      "Devices",
+      "Activity",
+      "Vault",
+      "Copies",
     ]);
     expect(isOpsPage("approvals")).toBe(true);
     // Places in the frame that are NOT operational routes: they keep the bare
@@ -30,7 +30,7 @@ describe("the operational routes' app bar", () => {
       ["Review all", "History"],
       ["New automation", "Templates"],
       ["Add a connection", "Catalog"],
-      // Analytics and Data are READ surfaces: they count and they copy out,
+      // Activity and Vault are READ surfaces: they count and they copy out,
       // and neither is a write, so neither declares a filled commit at all.
       ["", "Export CSV"],
       ["", "Export a kind"],

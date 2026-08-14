@@ -84,12 +84,14 @@ export default function BackupCopyCards({
   status,
   metrics,
   onRestore,
+  readOnly,
 }: {
   status: BackupStatusDTO;
   metrics: StorageMetrics;
   /** Absent until a client-side restore flow exists — the button still
    *  renders (never buried), disabled, with an honest reason. */
   onRestore?: () => void;
+  readOnly?: boolean;
 }): JSX.Element {
   const restoreReasonId = useId();
   return (
@@ -103,34 +105,36 @@ export default function BackupCopyCards({
         />
         <WhatIsHeldBackCard />
       </div>
-      <div className={cx(styles.copyCard, styles.restoreCard)}>
-        <h3>Restore from a backup</h3>
-        <p className={styles.restoreNote}>
-          Restoring replaces everything on this device with the contents of a
-          backup. Centraid shows what is in it, and when it was made, before
-          anything is written.
-        </p>
-        <button
-          type="button"
-          className={cx(
-            buttonCss.btn,
-            buttonCss.destructive,
-            styles.restoreBtn
-          )}
-          disabled={!onRestore}
-          onClick={onRestore}
-          aria-describedby={onRestore ? undefined : restoreReasonId}
-        >
-          <Icon name="History" size={14} />
-          <span>Restore from backup</span>
-        </button>
-        {onRestore ? null : (
-          <p className={styles.restoreSeamNote} id={restoreReasonId}>
-            Restoring from an offsite copy isn’t wired into the app yet — today
-            it’s a gateway-side recovery act. See the recovery runbook.
+      {readOnly ? null : (
+        <div className={cx(styles.copyCard, styles.restoreCard)}>
+          <h3>Restore from a backup</h3>
+          <p className={styles.restoreNote}>
+            Restoring replaces everything on this device with the contents of a
+            backup. Centraid shows what is in it, and when it was made, before
+            anything is written.
           </p>
-        )}
-      </div>
+          <button
+            type="button"
+            className={cx(
+              buttonCss.btn,
+              buttonCss.destructive,
+              styles.restoreBtn
+            )}
+            disabled={!onRestore}
+            onClick={onRestore}
+            aria-describedby={onRestore ? undefined : restoreReasonId}
+          >
+            <Icon name="History" size={14} />
+            <span>Restore from backup</span>
+          </button>
+          {onRestore ? null : (
+            <p className={styles.restoreSeamNote} id={restoreReasonId}>
+              Restoring from an offsite copy isn’t wired into the app yet —
+              today it’s a gateway-side recovery act. See the recovery runbook.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

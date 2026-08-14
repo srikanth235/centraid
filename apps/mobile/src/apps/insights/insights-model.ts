@@ -514,6 +514,28 @@ export function insightsHealth(
   };
 }
 
+/** Origin Activity has no machine-health clause; its standing line describes
+ * only the run rollup presented on this screen. */
+export function originActivityHealth(
+  summary: InsightsSummary | undefined
+): HealthCopy {
+  const generic = {
+    emptyText: "Nothing to attend to · nothing needs you here right now.",
+    errorText: "Activity could not load · your vault contents are unaffected.",
+    loadingText: "Reading vault activity",
+  };
+  if (!summary) return { ...generic, detail: "", label: "" };
+  const { failedRuns, generations } = summary.kpis;
+  const succeeded = Math.max(0, generations - failedRuns);
+  const pct =
+    generations === 0 ? 100 : Math.round((succeeded / generations) * 100);
+  return {
+    ...generic,
+    detail: `${String(generations)} run${generations === 1 ? "" : "s"} in this window.`,
+    label: `${String(pct)}% of runs succeeded`,
+  };
+}
+
 /** Has anything happened at all in this window? The one thing that empties
  *  this page — a window with no runs and no recent tail. */
 export function nothingRan(summary: InsightsSummary): boolean {

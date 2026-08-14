@@ -56,6 +56,20 @@ describe("shell/ShellFrame", () => {
       expect(rule!).toMatch(/border-block-end:\s*1px solid var\(--line\)/u);
     });
 
+    it("keeps compact app-bar controls on the shared touch-target floor", () => {
+      const css = readFileSync(
+        path.join(import.meta.dirname, "chrome.module.css"),
+        "utf8"
+      );
+      const rule = /\.appBar \.tbBtn \{(?<body>[^}]*)\}/u.exec(css)?.groups
+        ?.body;
+      expect(rule, "compact .appBar .tbBtn rule not found").toBeTypeOf(
+        "string"
+      );
+      expect(rule!).toContain("min-inline-size: var(--target-min)");
+      expect(rule!).toContain("min-block-size: var(--target-min)");
+    });
+
     it("offers the stem toggle only to a host that owns the state", () => {
       // A frame with no `stemOpen` is a host that cannot answer the question —
       // the compact band and the full-bleed windows. Drawing a dead toggle

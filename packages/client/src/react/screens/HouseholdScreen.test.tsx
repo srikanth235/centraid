@@ -266,9 +266,9 @@ describe("HouseholdScreen suite", () => {
         onRevokeDevice: async () => ({ removed: true }),
       });
       const text = el.textContent ?? "";
-      expect(text).toContain("Cannot reach the gateway");
+      expect(text).toContain("Cannot reach the vault host");
       expect(text).toContain(
-        "This page is being served from a cached copy. Device pairing and revocation both need the gateway, so both are unavailable until it answers."
+        "This page is being served from a cached copy. Device pairing and revocation both need the vault host, so both are unavailable until it answers."
       );
       expect(button(el, "Try again")).toBeTruthy();
       expect(readVitals("household")?.state).toBe("error");
@@ -351,7 +351,7 @@ describe("HouseholdScreen suite", () => {
       const onOpenStorage = vi.fn<HouseholdScreenProps["onOpenStorage"]>();
       const el = await mount({ ...roster(), onOpenStorage });
       await click(rowAction(el, "Personal", "Manage"));
-      await click(button(el, "Storage & backups"));
+      await click(button(el, "System capacity & backups"));
       expect(onOpenStorage).toHaveBeenCalledWith();
     });
 

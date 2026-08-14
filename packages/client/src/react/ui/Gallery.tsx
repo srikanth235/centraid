@@ -202,7 +202,7 @@ export default function Gallery(): JSX.Element {
         />
         <EmptyBlock
           action={{ label: "Pair a device", onClick: () => {} }}
-          body="This gateway is the only copy. Pair a second device and the vault has somewhere to go."
+          body="This host is the only copy. Pair a second device and the vault has somewhere to go."
           title="Nothing has a copy yet"
         />
         <EmptyBlock

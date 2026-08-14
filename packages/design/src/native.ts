@@ -39,6 +39,7 @@ export interface NativeColors {
   accentSoft: string;
   accentText: string;
   appIdentityText: string;
+  attention: string;
   bg: string;
   bgChrome: string;
   bgElev: string;
@@ -164,6 +165,7 @@ function colorsFor(scheme: NativeScheme): NativeColors {
     accentSoft: rgbaHex(theme.accent, 0.08),
     accentText: theme.accentText,
     appIdentityText: theme.text,
+    attention: theme.attention,
     bg: theme.bg,
     bgChrome: theme.sidebarBg,
     bgElev: theme.bgElev,

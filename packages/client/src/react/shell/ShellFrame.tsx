@@ -86,6 +86,11 @@ export interface ShellFrameProps {
   children: ReactNode;
   /** The one persistent status line, pinned to the bottom of the main column. */
   statusLine?: ReactNode;
+  /** Frame-level Assistant companion. A pointer rail reserves stage width;
+   *  the touch form remains a modal sheet. */
+  assistantCompanion?: ReactNode;
+  assistantOpen?: boolean;
+  onToggleAssistant?: () => void;
   /** The app's own title; a full identity lockup promotes it to display. */
   appTitle?: string;
   /** The line under it, in the numeric register. */
@@ -190,6 +195,17 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
         shortcut="⌘N"
         ariaLabel="New app"
         onClick={props.onNewChat}
+      />
+    ) : null,
+    props.onToggleAssistant ? (
+      <TbBtn
+        key="assistant"
+        icon={<ChatPanelClosedGlyph />}
+        title={props.assistantOpen ? "Close Assistant" : "Open Assistant"}
+        shortcut="⌘J"
+        ariaLabel={props.assistantOpen ? "Close Assistant" : "Open Assistant"}
+        open={props.assistantOpen}
+        onClick={props.onToggleAssistant}
       />
     ) : null,
     props.titlebarLead ?? null,
@@ -314,9 +330,15 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
           standing beside a hidden one, so there is no state in which both
           exist and none in which neither does. */}
       {props.compact && props.band ? props.band : props.stem}
-      <div className={chrome.main}>
+      <div
+        className={chrome.main}
+        data-assistant-main="true"
+        data-assistant={props.assistantOpen ? "open" : undefined}
+        data-compact={props.compact ? "true" : undefined}
+      >
         <div
           className={chrome.appBar}
+          data-assistant-chrome="true"
           data-layout={props.titlebarCenter ? "grid" : "flat"}
           // The app lockup (mark · title · count) rather than the bare
           // titlebar title — the app-bar type rung, not the header's.
@@ -334,6 +356,7 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
         </div>
         {props.children}
         {props.statusLine}
+        {props.assistantCompanion}
       </div>
     </div>
   );

@@ -35,24 +35,30 @@ describe("the mobile band", () => {
     expect(tabs[0]?.id).toBe("home");
   });
 
-  it("shows Home, Alerts, Rules, Connectors and Analytics by default", () => {
-    // The out-of-box pin set (./places#DEFAULT_PLACE_PINS) has to keep this
-    // band unchanged from before places became pinnable — a member who never
-    // opens All apps should never notice the model underneath it changed.
+  it("shows the v10 Origin destinations by default", () => {
     expect(bandTabs(DEFAULT_PLACE_PINS).map((tab) => tab.short)).toStrictEqual([
       "Home",
       "Alerts",
-      "Rules",
-      "Connectors",
-      "Analytics",
+      "Activity",
+      "Vault",
     ]);
   });
 
   it("holds at most 5 destinations, Home included", () => {
-    expect(bandTabs(DEFAULT_PLACE_PINS)).toHaveLength(MAX_BAND_TABS);
+    expect(bandTabs(DEFAULT_PLACE_PINS)).toHaveLength(4);
+    // HomeBand adds standing More outside this list even with no overflow.
+    expect(bandTabs(DEFAULT_PLACE_PINS).length + 1).toBe(5);
     // Pinning every place still caps the band at five — the rest overflow to
     // More, exactly like a sixth pinned app overflows the desktop stem.
     expect(bandTabs(ALL_PLACE_IDS)).toHaveLength(MAX_BAND_TABS);
+    expect(bandTabs(ALL_PLACE_IDS).length + 1).toBe(6);
+  });
+
+  it("lets one additional pin fill the fifth slot without displacing More", () => {
+    expect(bandTabs([...DEFAULT_PLACE_PINS, "autos"])).toHaveLength(5);
+    expect(
+      bandTabs([...DEFAULT_PLACE_PINS, "autos"]).map((tab) => tab.short)
+    ).toStrictEqual(["Home", "Alerts", "Activity", "Vault", "Rules"]);
   });
 
   it("shows only Home when nothing is pinned", () => {

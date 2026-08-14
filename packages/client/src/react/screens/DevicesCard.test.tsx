@@ -177,7 +177,7 @@ describe("DevicesCard suite", () => {
       expect(text).toContain("Sam");
       expect(text).toContain("Other person");
       expect(text).toContain(
-        "A person on your gateway reaches only what you placed in a shared space."
+        "A person on your vault host reaches only what you placed in a shared space."
       );
     });
 
