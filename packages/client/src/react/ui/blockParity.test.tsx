@@ -18,19 +18,27 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   BUTTON_FIXTURE,
   CHIPS_FIXTURE,
+  DISTRIBUTION_FIXTURE,
   EMPTY_ROUTINE_FIXTURE,
+  GRID_COLUMNS_FIXTURE,
+  GRID_ROW_FIXTURE,
   PANEL_COMMIT_FIXTURE,
   PANEL_DANGEROUS_FIXTURE,
+  PANEL_FACT_NOTE_FIXTURE,
   PANEL_FACTS_FIXTURE,
+  PANEL_FIGURE_FIXTURE,
   ROW_ACTION_FIXTURE,
   ROW_FIXTURE,
   ROW_PLAIN_FIXTURE,
+  SECTION_ACTION_FIXTURE,
   SECTION_FIXTURE,
 } from "@centraid/design/blocks";
 
 import Button from "./Button.js";
 import ChipsBlock from "./ChipsBlock.js";
+import DistributionBlock from "./DistributionBlock.js";
 import EmptyBlock from "./EmptyBlock.js";
+import GridBlock from "./GridBlock.js";
 import PanelBlock from "./PanelBlock.js";
 import RowsBlock from "./RowsBlock.js";
 import SectionBlock from "./SectionBlock.js";
@@ -119,6 +127,41 @@ describe("block parity — the shell draws every shared flag", () => {
     expect(verb.className).not.toContain("primary");
   });
 
+  it("carries a fact's own caveat, and promotes the figure to the display rung", () => {
+    const el = render(
+      <PanelBlock
+        facts={[PANEL_FACT_NOTE_FIXTURE]}
+        figure={PANEL_FIGURE_FIXTURE}
+      />
+    );
+    expect(el.querySelector(".factNote")?.textContent).toBe(
+      PANEL_FACT_NOTE_FIXTURE.note
+    );
+    expect(el.querySelector(".figureValue")?.textContent).toBe(
+      PANEL_FIGURE_FIXTURE.value
+    );
+    expect(el.querySelector(".figureQualifier")?.textContent).toBe(
+      PANEL_FIGURE_FIXTURE.qualifier
+    );
+  });
+
+  it("orders a distribution by share and draws each row's bar", () => {
+    const el = render(
+      <DistributionBlock
+        ariaLabel="Spend by harness"
+        rows={DISTRIBUTION_FIXTURE}
+      />
+    );
+    expect(
+      [...el.querySelectorAll("dt")].map((n) => n.textContent)
+    ).toStrictEqual(["claude-code", "codex", "gemini-cli"]);
+    expect(
+      [...el.querySelectorAll<HTMLElement>(".track")].map((n) =>
+        n.style.getPropertyValue("--dist-share")
+      )
+    ).toStrictEqual(["73", "26", "1"]);
+  });
+
   it("states a chip's on-ness without spending colour on it", () => {
     const el = render(
       <ChipsBlock ariaLabel="Filter" chips={CHIPS_FIXTURE} onPick={() => {}} />
@@ -142,6 +185,72 @@ describe("block parity — the shell draws every shared flag", () => {
     const el = render(<SectionBlock {...SECTION_FIXTURE} />);
     expect(el.querySelector("h2")?.textContent).toBe(SECTION_FIXTURE.label);
     expect(el.textContent).toContain(SECTION_FIXTURE.meta);
+  });
+
+  it("draws a section's trailing verb quiet, and inert when it is off", () => {
+    const el = render(
+      <SectionBlock
+        {...SECTION_FIXTURE}
+        action={{ ...SECTION_ACTION_FIXTURE, onClick() {} }}
+      />
+    );
+    const verb = el.querySelector("button") as HTMLButtonElement;
+    expect(verb.textContent).toContain(SECTION_ACTION_FIXTURE.label);
+    expect(verb.className).toContain("quiet");
+    expect(verb.className).not.toContain("primary");
+    expect(verb.disabled).toBe(true);
+    expect(verb.title).toBe(SECTION_ACTION_FIXTURE.hint);
+  });
+
+  it("declares every grid column and keeps its four cell kinds apart", () => {
+    const el = render(
+      <GridBlock
+        ariaLabel="Records"
+        columns={GRID_COLUMNS_FIXTURE}
+        onSort={() => {}}
+        rows={[{ id: "p-1", name: "Thomasina", values: GRID_ROW_FIXTURE }]}
+      />
+    );
+    // The declarations: badges on the header, and no sort control on the one
+    // column the store cannot order by.
+    expect(el.querySelector('th[data-col="party_id"]')?.textContent).toContain(
+      "pk"
+    );
+    expect(
+      el.querySelector('th[data-col="home_place_id"]')?.textContent
+    ).toContain("fk");
+    expect(el.querySelector('th[data-col="extra"] button')).toBeNull();
+
+    // The four cell kinds. A value, a value cut reversibly, an absence, an
+    // empty string, and a value the store will not print.
+    expect(el.querySelector('td[data-col="party_id"]')?.textContent).toBe(
+      "p-1"
+    );
+    expect(
+      el.querySelector('td[data-col="display_name"] button')?.textContent
+    ).toContain("…");
+    expect(
+      el.querySelector<HTMLElement>(
+        'td[data-col="home_place_id"] [data-absent]'
+      )?.dataset.absent
+    ).toBe("null");
+    expect(
+      el.querySelector<HTMLElement>('td[data-col="extra"] [data-absent]')
+        ?.dataset.absent
+    ).toBe("blank");
+    expect(el.textContent).not.toContain("«sealed»");
+    expect(el.querySelector('td[data-col="secret"]')?.textContent).toContain(
+      "sealed"
+    );
+
+    // The register is per COLUMN, so one grid holds prose and figures at once.
+    expect(
+      el.querySelector<HTMLElement>('td[data-col="party_id"]')?.dataset.register
+    ).toBe("mono");
+    expect(
+      el.querySelector<HTMLElement>('td[data-col="display_name"]')?.dataset
+        .register
+    ).toBe("text");
   });
 
   it("disables a button and still draws its icon", () => {

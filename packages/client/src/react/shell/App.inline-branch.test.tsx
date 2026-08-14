@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_GATEWAY_CAPABILITIES } from "@centraid/protocol";
+
 import type * as TypeImport_1mc1xey from "./App.js";
 
 // The `app` route branches to the inline route for any registered inline id —
@@ -40,6 +42,18 @@ vi.mock(import("./routes/inlineApps.js"), () => ({
 
 vi.mock(import("../../gateway-client.js"), () => ({
   getUserPrefs: () => Promise.resolve({}),
+  // The shell root reads the capability map once at boot (C1). These suites
+  // exercise a gateway with the experimental features ON, so the launcher and
+  // the automation routes are the ones they already assert on; the gated-off
+  // shell has its own suite in App.capabilities.test.tsx.
+  // Typed against the real map, so a required capability added to the wire
+  // shape breaks here rather than being quietly absent in the fixture.
+  readGatewayCapabilities: () =>
+    Promise.resolve({
+      ...DEFAULT_GATEWAY_CAPABILITIES,
+      automations: true,
+      connectors: true,
+    }),
   saveUserPrefs: () => Promise.resolve({}),
   listApps: () =>
     Promise.resolve([

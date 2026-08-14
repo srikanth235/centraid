@@ -38,6 +38,8 @@ import { ShellActionsProvider } from "./actions.js";
 import type { ShellActions } from "./actions.js";
 import AllAppsSheet from "./AllAppsSheet.js";
 import { ambientStatusFor } from "./ambientStatus.js";
+import { isRouteAvailable, routeCapability } from "./capabilities.js";
+import CapabilityWall from "./CapabilityWall.js";
 import { CaptureLauncher, CaptureOverlay } from "./CaptureOverlay.js";
 import {
   commitAvailabilityFor,
@@ -115,6 +117,10 @@ import { useAssistantConversations } from "./useAssistantConversations.js";
 import { useAsyncData } from "./useAsyncData.js";
 import { useNotificationsCounts } from "./useBlockingCount.js";
 import { useBuilderEnabled } from "./useBuilderEnabled.js";
+import {
+  CapabilitiesProvider,
+  useGatewayCapabilities,
+} from "./useCapabilities.js";
 import { useCompactLayout } from "./useCompactLayout.js";
 import { useGatewayStatus } from "./useGatewayRuntime.js";
 import { useOwnerScopes } from "./useOwnerScopes.js";
@@ -409,6 +415,11 @@ export default function App(): JSX.Element {
   // (menus/palette read it), used to gate drafts + the "Build new" affordances
   // here, and to redirect the builder routes below.
   const builderEnabled = useBuilderEnabled();
+  // The ONE read of the gateway's capability map (C1, docs/platform-gating.md).
+  // Everything gated below — the launcher, the palette, the ops bar's verbs,
+  // the route wall — reads this value; nothing asks the gateway again.
+  const { capabilities, resolved: capabilitiesResolved } =
+    useGatewayCapabilities();
   const navRef = useRef<ShellNav | null>(null);
   const switcherButtonRef = useRef<HTMLButtonElement | null>(null);
   const switcherActionRef = useRef<(() => void) | null>(null);
@@ -1072,6 +1083,7 @@ export default function App(): JSX.Element {
         activePage={activePageFor(nav.route)}
         scheme={themes[prefs.theme]?.kind ?? "dark"}
         compact={compact}
+        capabilities={capabilities}
         hasCommandKey={hasCommandKey}
         onSelect={(destination: LauncherDestination) => {
           // Settings is an overlay rather than a destination: changing a
@@ -1114,6 +1126,7 @@ export default function App(): JSX.Element {
       pins,
       prefs.theme,
       compact,
+      capabilities,
       hasCommandKey,
       gatewayLabel,
       gatewaySwitcherOpen,
@@ -1181,6 +1194,12 @@ export default function App(): JSX.Element {
         };
       const page = nav.route.kind;
       if (!isOpsPage(page)) return undefined;
+      // A walled route keeps its title — the bar is the frame, and a blank one
+      // over the wall would read as a broken screen — but it offers no verb.
+      // "New automation" above a page explaining that automations are off is
+      // a control that cannot do the thing it names.
+      if (!isRouteAvailable(page, capabilities))
+        return { title: opsBarDef(page).title };
       const vital = vitals[page];
       const verbs = opsBarVerbs(page, vital?.state);
       // A verb renders only once something can perform it: the route publishes
@@ -1232,7 +1251,7 @@ export default function App(): JSX.Element {
           : {}),
       };
     },
-    [compact, openPairDevice, routeVerbs, vitals]
+    [capabilities, compact, openPairDevice, routeVerbs, vitals]
   );
 
   const renderRoute = useCallback(
@@ -1241,6 +1260,21 @@ export default function App(): JSX.Element {
       // off (issue #434, Phase 3). Gated once here so Home, Starred, the app
       // lookup, and the launcher all agree.
       const visibleDrafts = builderEnabled ? drafts : NO_DRAFTS;
+      // The capability wall (C1). Deep links, stale history entries and the
+      // `window.Centraid.openAutomations` shim all still ADDRESS these routes
+      // after the launcher stops offering them, and every one of them must be
+      // answered rather than silently dropped. One gate for every gated kind,
+      // read from the one route table — a per-case `if` in the switch below is
+      // how the automation editor ends up walled and the run viewer does not.
+      const gated = routeCapability(nav.route.kind);
+      if (gated && !capabilities[gated]) {
+        // Until the handshake answers, the shell believes nothing is enabled
+        // (`CAPABILITIES_OFF`). That belief is right for the launcher — hiding
+        // beats flashing — but it must not accuse a gateway that has not
+        // spoken yet, so the wall waits for a verdict behind a blank frame.
+        if (!capabilitiesResolved) return <PageEmpty message="" />;
+        return <CapabilityWall capability={gated} />;
+      }
       switch (nav.route.kind) {
         case "home":
           return <HomeRoute userApps={userApps} drafts={visibleDrafts} />;
@@ -1316,7 +1350,14 @@ export default function App(): JSX.Element {
           return <TemplatesRoute />;
         case "settings":
           // Legacy deep link: Settings → Connections now lives at Connectors.
-          if (nav.route.page === "connections") return <ConnectorsRoute />;
+          // It reaches the same surface, so it reaches the same wall — the
+          // route table keys on `kind`, and this one kind renders two places.
+          if (nav.route.page === "connections")
+            return capabilities.connectors ? (
+              <ConnectorsRoute />
+            ) : (
+              <CapabilityWall capability="connectors" />
+            );
           return (
             <SettingsRouteRedirect
               nav={nav}
@@ -1406,6 +1447,8 @@ export default function App(): JSX.Element {
       userApps,
       drafts,
       builderEnabled,
+      capabilities,
+      capabilitiesResolved,
       prefs,
       isStarred,
       toggleStar,
@@ -1490,129 +1533,134 @@ export default function App(): JSX.Element {
     // The offline verdict travels once, from here, and the shared commit
     // control reads it (issue #708, C7). It wraps the modals and sheets too —
     // a dialog's Save is as much a commit as a route's is.
-    <CommitAvailabilityProvider value={commitAvailabilityFor(gatewayStatus)}>
-      <ShellApp
-        initialRoute={initialShellRoute}
-        renderStem={renderStem}
-        renderAppBar={renderAppBar}
-        statusLine={statusLine}
-        onNavReady={(nav) => {
-          navRef.current = nav;
-        }}
-        renderScreen={renderScreen}
-        {...(builderEnabled
-          ? { onNewApp: () => navRef.current?.navigate({ kind: "builder" }) }
-          : {})}
-      />
-      {allAppsOpen ? (
-        <AllAppsSheet
-          pins={pins}
-          compact={compact}
-          onTogglePin={togglePin}
-          onSelect={(destination) => {
-            setAllAppsOpen(false);
-            if (destination.id === "settings") setSettingsPage("");
-            else navRef.current?.navigate(destination.route);
+    <CapabilitiesProvider value={capabilities}>
+      <CommitAvailabilityProvider value={commitAvailabilityFor(gatewayStatus)}>
+        <ShellApp
+          initialRoute={initialShellRoute}
+          renderStem={renderStem}
+          renderAppBar={renderAppBar}
+          statusLine={statusLine}
+          onNavReady={(nav) => {
+            navRef.current = nav;
           }}
-          onClose={() => setAllAppsOpen(false)}
+          renderScreen={renderScreen}
+          {...(builderEnabled
+            ? { onNewApp: () => navRef.current?.navigate({ kind: "builder" }) }
+            : {})}
         />
-      ) : null}
-      <CaptureLauncher onOpen={() => setCaptureOpen(true)} />
-      {captureOpen ? (
-        <CaptureOverlay
-          initialText={captureInitialText}
-          onClose={() => {
-            setCaptureOpen(false);
-            clearSharedCaptureQuery();
-          }}
-        />
-      ) : null}
-      {whatsNewOpen ? <WhatsNewModal onClose={closeWhatsNew} /> : null}
-      {paletteOpen ? (
-        <PaletteScreen
-          onClose={closePalette}
-          onReady={(refreshLocal) => {
-            paletteConversationSearch.setOnResults(refreshLocal);
-            paletteEntitySearch.setOnResults(refreshLocal);
-            paletteRecents.setOnResults(refreshLocal);
-          }}
-          buildGroups={(query) =>
-            buildPaletteGroups(query, {
-              userApps,
-              drafts: builderEnabled ? drafts : NO_DRAFTS,
-              builderEnabled,
-              tileVariant: prefs.tileVariant,
-              navigate: (route) => navRef.current?.navigate(route),
-              enterBuilder: (initialPrompt) =>
-                navRef.current?.navigate({
-                  kind: "builder",
-                  ...(initialPrompt ? { initialPrompt } : {}),
-                }),
-              onClose: closePalette,
-              conversationSearch: paletteConversationSearch,
-              entitySearch: paletteEntitySearch,
-              recents: paletteRecents,
-            })
-          }
-          suggestions={() =>
-            buildPaletteSuggestions({
-              userApps,
-              drafts: builderEnabled ? drafts : NO_DRAFTS,
-              builderEnabled,
-              tileVariant: prefs.tileVariant,
-              navigate: (route) => navRef.current?.navigate(route),
-              enterBuilder: (initialPrompt) =>
-                navRef.current?.navigate({
-                  kind: "builder",
-                  ...(initialPrompt ? { initialPrompt } : {}),
-                }),
-              onClose: closePalette,
-              recents: paletteRecents,
-            })
-          }
-        />
-      ) : null}
-      {addGatewayOpen ? (
-        <ConnectFlowModal
-          context="switcher"
-          onCancel={() => setAddGatewayOpen(false)}
-          onDone={(result) => {
-            setAddGatewayOpen(false);
-            postStatus(`Connected · ${result.displayLabel}`);
-            // The commit already switched the active gateway+vault, which
-            // fires onGatewayChanged/onVaultChanged — the reScope effect
-            // above picks it up and refreshes the app list + navigates home.
-          }}
-        />
-      ) : null}
-      {testConnectionTarget ? (
-        <TestConnectionModal
-          gatewayId={testConnectionTarget.gatewayId}
-          gatewayLabel={testConnectionTarget.label}
-          onClose={() => setTestConnectionTarget(null)}
-        />
-      ) : null}
-      {renameTarget ? (
-        <RenameGatewayModal
-          initialLabel={renameTarget.label}
-          onCancel={() => setRenameTarget(null)}
-          onCommit={(label) => {
-            const { gatewayId } = renameTarget;
-            setRenameTarget(null);
-            void window.CentraidApi.renameGateway({ id: gatewayId, label })
-              .then(() => {
-                postStatus(`Renamed · ${label}`);
-                setGatewaysRefreshKey((n) => n + 1);
+        {allAppsOpen ? (
+          <AllAppsSheet
+            pins={pins}
+            compact={compact}
+            capabilities={capabilities}
+            onTogglePin={togglePin}
+            onSelect={(destination) => {
+              setAllAppsOpen(false);
+              if (destination.id === "settings") setSettingsPage("");
+              else navRef.current?.navigate(destination.route);
+            }}
+            onClose={() => setAllAppsOpen(false)}
+          />
+        ) : null}
+        <CaptureLauncher onOpen={() => setCaptureOpen(true)} />
+        {captureOpen ? (
+          <CaptureOverlay
+            initialText={captureInitialText}
+            onClose={() => {
+              setCaptureOpen(false);
+              clearSharedCaptureQuery();
+            }}
+          />
+        ) : null}
+        {whatsNewOpen ? <WhatsNewModal onClose={closeWhatsNew} /> : null}
+        {paletteOpen ? (
+          <PaletteScreen
+            onClose={closePalette}
+            onReady={(refreshLocal) => {
+              paletteConversationSearch.setOnResults(refreshLocal);
+              paletteEntitySearch.setOnResults(refreshLocal);
+              paletteRecents.setOnResults(refreshLocal);
+            }}
+            buildGroups={(query) =>
+              buildPaletteGroups(query, {
+                userApps,
+                drafts: builderEnabled ? drafts : NO_DRAFTS,
+                builderEnabled,
+                capabilities,
+                tileVariant: prefs.tileVariant,
+                navigate: (route) => navRef.current?.navigate(route),
+                enterBuilder: (initialPrompt) =>
+                  navRef.current?.navigate({
+                    kind: "builder",
+                    ...(initialPrompt ? { initialPrompt } : {}),
+                  }),
+                onClose: closePalette,
+                conversationSearch: paletteConversationSearch,
+                entitySearch: paletteEntitySearch,
+                recents: paletteRecents,
               })
-              .catch((error: unknown) =>
-                postStatus(
-                  `Couldn't rename: ${error instanceof Error ? error.message : String(error)}`
-                )
-              );
-          }}
-        />
-      ) : null}
-    </CommitAvailabilityProvider>
+            }
+            suggestions={() =>
+              buildPaletteSuggestions({
+                userApps,
+                drafts: builderEnabled ? drafts : NO_DRAFTS,
+                builderEnabled,
+                capabilities,
+                tileVariant: prefs.tileVariant,
+                navigate: (route) => navRef.current?.navigate(route),
+                enterBuilder: (initialPrompt) =>
+                  navRef.current?.navigate({
+                    kind: "builder",
+                    ...(initialPrompt ? { initialPrompt } : {}),
+                  }),
+                onClose: closePalette,
+                recents: paletteRecents,
+              })
+            }
+          />
+        ) : null}
+        {addGatewayOpen ? (
+          <ConnectFlowModal
+            context="switcher"
+            onCancel={() => setAddGatewayOpen(false)}
+            onDone={(result) => {
+              setAddGatewayOpen(false);
+              postStatus(`Connected · ${result.displayLabel}`);
+              // The commit already switched the active gateway+vault, which
+              // fires onGatewayChanged/onVaultChanged — the reScope effect
+              // above picks it up and refreshes the app list + navigates home.
+            }}
+          />
+        ) : null}
+        {testConnectionTarget ? (
+          <TestConnectionModal
+            gatewayId={testConnectionTarget.gatewayId}
+            gatewayLabel={testConnectionTarget.label}
+            onClose={() => setTestConnectionTarget(null)}
+          />
+        ) : null}
+        {renameTarget ? (
+          <RenameGatewayModal
+            initialLabel={renameTarget.label}
+            onCancel={() => setRenameTarget(null)}
+            onCommit={(label) => {
+              const { gatewayId } = renameTarget;
+              setRenameTarget(null);
+              void window.CentraidApi.renameGateway({ id: gatewayId, label })
+                .then(() => {
+                  postStatus(`Renamed · ${label}`);
+                  setGatewaysRefreshKey((n) => n + 1);
+                })
+                .catch((error: unknown) =>
+                  postStatus(
+                    `Couldn't rename: ${error instanceof Error ? error.message : String(error)}`
+                  )
+                );
+            }}
+          />
+        ) : null}
+      </CommitAvailabilityProvider>
+    </CapabilitiesProvider>
   );
 }
 

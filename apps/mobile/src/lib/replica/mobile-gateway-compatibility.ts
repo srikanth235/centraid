@@ -2,7 +2,9 @@ import { authHeader } from "../gateway";
 import {
   MobileGatewayCompatibilityError,
   judgeMobileGatewayCompatibility,
+  readMobileGatewayFeatures,
 } from "./mobile-gateway-compatibility-core";
+import type { MobileGatewayFeatures } from "./mobile-gateway-compatibility-core";
 
 /**
  * One central compatibility wall for foreground and background construction.
@@ -29,12 +31,19 @@ import {
  * moment a gateway actually answers — phase B's first reachability pass calls
  * back in here with `online: true`, which is exactly when skew becomes a
  * provable fact and blocking becomes legitimate.
+ *
+ * It also RETURNS what this gateway has switched on (the experimental v0
+ * feature flags), because this is the one place that asks `/info` for the
+ * foreground session: a second fetch per gated surface is exactly the
+ * route-by-route probing C1 exists to prevent. `undefined` means the gateway
+ * did not answer — unknown, which is not "off"; see
+ * `readMobileGatewayFeatures`.
  */
 export async function requireMobileOfflineGateway(input: {
   baseUrl: string;
   online: boolean;
-}): Promise<void> {
-  if (!input.online) return;
+}): Promise<MobileGatewayFeatures | undefined> {
+  if (!input.online) return undefined;
   let response: Response;
   try {
     response = await fetch(new URL("/centraid/_gateway/info", input.baseUrl), {
@@ -43,17 +52,18 @@ export async function requireMobileOfflineGateway(input: {
   } catch {
     // The transport having a bad day is the offline case wearing a socket
     // error; same rule, same reason.
-    return;
+    return undefined;
   }
   if (!response.ok) {
     // A 404 is the one status that IS a judgment: this gateway is old enough
     // not to serve the info route at all.
     if (response.status === 404)
       throw new MobileGatewayCompatibilityError("update-gateway");
-    return;
+    return undefined;
   }
   const body = await response.json().catch(() => undefined);
   const judgment = judgeMobileGatewayCompatibility(body);
   if (judgment !== "supported")
     throw new MobileGatewayCompatibilityError(judgment);
+  return readMobileGatewayFeatures(body);
 }

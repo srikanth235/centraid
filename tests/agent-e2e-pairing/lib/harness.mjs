@@ -171,7 +171,13 @@ async function spawnDaemon(
     String(port),
   ];
   const child = spawn(process.execPath, args, {
-    env: { ...process.env, CENTRAID_DATA_PLANE_SECRET: controlSecret },
+    env: {
+      ...process.env,
+      CENTRAID_DATA_PLANE_SECRET: controlSecret,
+      // Automations + connectors ship gated OFF (v0 early feedback); the
+      // paired journeys exercise both, including across the restart path.
+      CENTRAID_EXPERIMENTAL: "automations,connectors",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let buffer = "";

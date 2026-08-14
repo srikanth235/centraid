@@ -129,7 +129,10 @@ async function readDraft(
 describe("automation-lifecycle-over-http scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-autocrud-${crypto.randomUUID()}-`);
-    handle = await serve({ paths: pathsUnder(dataDir) });
+    handle = await serve({
+      paths: pathsUnder(dataDir),
+      experimental: { automations: true },
+    });
   }, 30_000);
 
   afterEach(async () => {

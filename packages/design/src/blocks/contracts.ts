@@ -110,6 +110,67 @@ export interface PanelFactData {
   value: string;
   mono?: boolean;
   net?: boolean;
+  /**
+   * A caveat that belongs to THIS fact and to no other — "measured, not
+   * limited by Conserve" under the harness-runs figure.
+   *
+   * It is a line under the value rather than a footnote at the foot of the
+   * panel, because a footnote is a caveat the reader has to match back up to
+   * the number it qualifies, and the reader who most needs it is the one
+   * skimming. A panel-wide caveat is `body`; this one is not panel-wide.
+   */
+  note?: string;
+}
+
+/**
+ * The one fact promoted out of the list — display type, with a qualifier line
+ * under it.
+ *
+ * A page whose whole question is "did this month cost $2 or $200" answers it in
+ * the type scale or it does not answer it: the same figure at the fact rung is
+ * a 13px string among thirty other 13px strings, and the reader has to read to
+ * find out. AT MOST ONE per view, for the same reason a view gets one filled
+ * commit — two promoted figures promote nothing.
+ */
+export interface PanelFigureData {
+  /**
+   * The figure, ALREADY WORDED ("$3.40", "1,284"). A block never formats a
+   * number: what "$3.40" means (a floor? a total?) is the screen's knowledge.
+   */
+  value: string;
+  /** What the figure is — "Spend · 30 days". The eyebrow rung above it. */
+  label: string;
+  /** The honesty line under it: how the figure was arrived at, or what it
+   *  leaves out. Absent when the figure needs no qualifying. */
+  qualifier?: string;
+  /** The figure is bad news (spend over budget, a failure count). Colours the
+   *  VALUE, on the same terms as a `net` fact. */
+  net?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Distribution
+// ---------------------------------------------------------------------------
+
+/**
+ * One labelled proportional row: a word, an already-worded figure, and the
+ * magnitude its share bar is measured from.
+ *
+ * `weight` is deliberately NOT derived from `value`: a share is arithmetic over
+ * one unit (dollars) while the figure beside it is copy that usually carries
+ * two ("$2.50 · 11k"). Parsing the copy back into a number would make the bar
+ * depend on how the row happened to be worded.
+ */
+export interface DistributionDatum {
+  /** Stable identity, never rendered — two windows can label a row the same. */
+  id: string;
+  /** The word ("claude-code", "high"). One line: it truncates, never wraps,
+   *  because a wrapping label would step the row off the share bar's baseline. */
+  label: string;
+  /** The measured figure, already worded. Numeric register. */
+  value: string;
+  /** The magnitude the share is measured from. Non-positive counts as zero. */
+  weight: number;
 }
 
 /**
@@ -169,6 +230,84 @@ export interface SectionCopy {
   /** The count line ("showing 3 of 12"). Truncates, so the label does not have
    *  to. Numeric, so it renders in the tabular register. */
   meta?: string;
+}
+
+/**
+ * A section's TRAILING VERB — "Refresh", "Rows/Bytes", "Sort".
+ *
+ * A section head is the only place a per-section verb can honestly live. The
+ * app bar carries the ROUTE's verbs, so a verb about one section of a route
+ * has to either move up there and lose its subject ("Refresh" — refresh what?)
+ * or become a control floating beside the rows with no head to belong to.
+ * Neither is the vocabulary; this slot is.
+ *
+ * It is ALWAYS quiet — no fill, no outline. Invariant 3 allows one filled
+ * control per view and it is the view's commit; a section verb is never that.
+ * A verb that DESTROYS is not admitted here either: a destructive control
+ * belongs on the thing it destroys, in the row or the panel that names it.
+ *
+ * Many of these verbs state the CURRENT setting rather than an imperative
+ * ("Newest first", "Rows/Bytes") — a toggle whose label is its own readout, so
+ * the section head does not need a second element to say where it stands.
+ */
+export interface SectionActionData extends ActionData {
+  /** Present but inert — the verb is stated and refused, so a member can see
+   *  that the capability exists while the section has nothing to apply it to. */
+  off?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Grid
+// ---------------------------------------------------------------------------
+
+/**
+ * The register a column's values are drawn in.
+ *
+ * PER COLUMN, not per grid: a records table is mostly identifiers, counts and
+ * timestamps with one or two prose fields among them, and a grid that picked
+ * one register for the whole table would either set prose in tabular figures
+ * or let ids reflow under RTL. `mono` is the numeric register — tabular
+ * figures, isolated, ltr — and `text` is ordinary ink.
+ */
+export type GridRegister = "text" | "mono";
+
+/**
+ * One declared column of a grid.
+ *
+ * The declaration is separate from the values on purpose: a grid is told what
+ * its columns MEAN once, and then handed rows that are plain records. That is
+ * what lets the header carry the key badges and the foreign-key target without
+ * every cell repeating them.
+ */
+export interface GridColumnData {
+  /** The record field this column reads, and the key a sort is expressed in. */
+  key: string;
+  /** The displayed header word. */
+  label: string;
+  register?: GridRegister;
+  /** Part of the record's primary key. Drawn as a badge on the header. */
+  pk?: boolean;
+  /**
+   * The logical name of the table this column points at, when it is a foreign
+   * key. Presence is the `fk` badge; the value is the target a member needs to
+   * know a column is a reference and to WHAT.
+   */
+  fk?: string;
+  /**
+   * The store never returns this column in plaintext. Its cells draw the
+   * sealed mark instead of a value — including when the caller was handed the
+   * masking sentinel, which must never reach a screen as text.
+   */
+  sealed?: boolean;
+  /** The store cannot order by this column. The header is a label, not a
+   *  control: a sort affordance that answers "no" is worse than none. */
+  fixed?: boolean;
+}
+
+/** Which column a grid is ordered by, and which way. */
+export interface GridSortData {
+  key: string;
+  dir: "asc" | "desc";
 }
 
 // ---------------------------------------------------------------------------

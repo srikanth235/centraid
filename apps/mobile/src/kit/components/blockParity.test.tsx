@@ -18,10 +18,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BUTTON_FIXTURE,
   CHIPS_FIXTURE,
+  DISTRIBUTION_FIXTURE,
   EMPTY_ROUTINE_FIXTURE,
   PANEL_COMMIT_FIXTURE,
   PANEL_DANGEROUS_FIXTURE,
+  PANEL_FACT_NOTE_FIXTURE,
   PANEL_FACTS_FIXTURE,
+  PANEL_FIGURE_FIXTURE,
   ROW_ACTION_FIXTURE,
   ROW_FIXTURE,
   ROW_PLAIN_FIXTURE,
@@ -32,6 +35,7 @@ import { mountBlock, nodesOf, styleOf } from "../../test/react-native-stub";
 import { resolveTheme } from "../theme";
 import Button from "./Button";
 import ChipsBlock from "./ChipsBlock";
+import DistributionBlock from "./DistributionBlock";
 import EmptyBlock from "./EmptyBlock";
 import PanelBlock from "./PanelBlock";
 import RowsBlock from "./RowsBlock";
@@ -153,6 +157,39 @@ describe("block parity — the phone draws every shared flag", () => {
     expect(String(styleOf(verb).borderColor).toLowerCase()).toBe(
       colors.net.toLowerCase()
     );
+  });
+
+  it("carries a fact's own caveat, and promotes the figure to the display rung", () => {
+    const el = render(
+      <PanelBlock
+        facts={[PANEL_FACT_NOTE_FIXTURE]}
+        figure={PANEL_FIGURE_FIXTURE}
+      />
+    );
+    const texts = nodesOf(el, "span").map((node) => node.textContent);
+    expect(texts).toContain(PANEL_FACT_NOTE_FIXTURE.note);
+    expect(texts).toContain(PANEL_FIGURE_FIXTURE.value);
+    expect(texts).toContain(PANEL_FIGURE_FIXTURE.qualifier);
+  });
+
+  it("orders a distribution by share and draws each row's bar", () => {
+    const el = render(
+      <DistributionBlock
+        accessibilityLabel="Spend by harness"
+        rows={DISTRIBUTION_FIXTURE}
+      />
+    );
+    const texts = nodesOf(el, "span").map((node) => node.textContent);
+    expect(texts[0]).toBe("claude-code");
+    expect(texts[1]).toBe("73%");
+    const fills = nodesOf(el, "div").filter(
+      (node) => styleOf(node).backgroundColor === colors.accentFill
+    );
+    expect(fills.map((node) => styleOf(node).width)).toStrictEqual([
+      "73%",
+      "26%",
+      "1%",
+    ]);
   });
 
   it("states a chip's on-ness without spending colour on it", () => {

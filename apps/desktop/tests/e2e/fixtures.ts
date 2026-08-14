@@ -300,6 +300,26 @@ async function route(
 ): Promise<void> {
   const seg = p.split("/").filter(Boolean); // e.g. ['centraid','_apps','todo-abc']
 
+  // The desktop suite exercises the opt-in automation surfaces. Keep that
+  // intent explicit in the mock handshake now that the shell reads one
+  // capability map before rendering its launcher (C1, issue #774).
+  if (p === "/centraid/_gateway/info" && method === "GET") {
+    return json(res, 200, {
+      capabilities: {
+        webSessions: true,
+        devicePairing: true,
+        tunnel: true,
+        backupWal: false,
+        assistOAuth: false,
+        automationTurns: true,
+        multiVaultReplica: true,
+        crossVaultPlacements: true,
+        automations: true,
+        connectors: true,
+      },
+    });
+  }
+
   // ---- editing/session lifecycle (match specific before /:id) ----
   if (p === "/centraid/_apps/_sessions" && method === "POST") {
     const sid = (() => {
@@ -1161,10 +1181,15 @@ const RAIL_LABEL_ALIASES: Readonly<Record<string, string>> = {
  *
  *  There is no palette-only fallback any more: Discover was the one
  *  destination that needed it, and it retired with #708. Everything this
- *  helper is asked for is a pinned launcher row. */
+ *  helper is asked for is a pinned launcher row. Scope the lookup to the
+ *  labelled stem because an app route may also render a same-named app-bar
+ *  verb (for example, Automations after a template clone). */
 export async function gotoNav(page: Page, label: string): Promise<void> {
   const railLabel = RAIL_LABEL_ALIASES[label] ?? label;
-  await page.getByRole("button", { name: railLabel, exact: true }).click();
+  await page
+    .locator('nav[aria-label="Apps"]')
+    .getByRole("button", { name: railLabel, exact: true })
+    .click();
 }
 
 /** The grid item for an app, keyed by its stable data-app-id anchor.

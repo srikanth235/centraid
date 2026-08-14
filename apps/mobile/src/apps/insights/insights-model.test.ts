@@ -27,35 +27,29 @@ vi.mock(import("../../lib/gateway") as Promise<unknown>, () => ({
   requireGatewayBase: () => Promise.resolve("http://127.0.0.1:9"),
 }));
 
-import { healthLineFor } from "../../kit/components/health-line";
-import type {
-  GatewayHealth,
-  InsightsSummary,
-  InsightsActivityRow,
-} from "../../lib/insights";
+import type { InsightsSummary, InsightsActivityRow } from "../../lib/insights";
 import {
   axisLabels,
   buildBars,
-  csvFilename,
-  gatewayFacts,
-  insightsCsv,
-  insightsHealth,
+  columnCount,
+  harnessBreakdown,
   isWindowDays,
-  nothingRan,
   pricingLine,
   recentRows,
   runsMeta,
+  peakNote,
   sourceFacts,
   sourceMeta,
-  uptimeSentence,
+  spendFacts,
+  spendFigure,
   windowChips,
 } from "./insights-model";
 
 const DAY_MS = 86_400_000;
-/** The chart's column count on this surface (`BarsBlock.styles.COLUMN_COUNT`),
+/** The plot's column ceiling on this surface (`BarsBlock.styles.MAX_COLUMNS`),
  *  repeated here because that module pulls the renderer in. The screen passes
- *  the real constant; this pins the fold at the same width. */
-const COLUMNS = 10;
+ *  the real constant; this pins the fold at the same ceiling. */
+const COLUMNS = 31;
 /** A fixed anchor so the fold's arithmetic is readable: 2026-08-13T00:00:00Z. */
 const ANCHOR = Date.parse("2026-08-13T00:00:00.000Z");
 
@@ -63,12 +57,14 @@ function summaryOf(over: Partial<InsightsSummary> = {}): InsightsSummary {
   return {
     bySource: [],
     byEffort: [],
+    byHarness: [],
     byModel: [],
     daily: [],
     generatedAt: ANCHOR,
     kpis: {
       appsTouched: 2,
       estimatedCostUsd: 0,
+      failedCostUsd: 0,
       failedRuns: 0,
       forecastCostUsd: 0,
       generations: 0,
@@ -101,25 +97,6 @@ function runOf(over: Partial<InsightsActivityRow> = {}): InsightsActivityRow {
   };
 }
 
-function healthOf(over: Partial<GatewayHealth> = {}): GatewayHealth {
-  return {
-    components: [
-      { component: "storage", errorCount: 0, status: "ok" },
-      { component: "outbox", errorCount: 0, status: "ok" },
-    ],
-    metrics: {
-      outboxPending: 0,
-      rssBytes: 3 * 1024 * 1024 * 1024,
-      uptimeMs: 21 * DAY_MS,
-    },
-    recentEvents: [],
-    startedAt: "2026-07-23T00:00:00.000Z",
-    status: "ok",
-    uptimeMs: 21 * DAY_MS,
-    ...over,
-  };
-}
-
 /** `YYYY-MM-DD` for a day offset from the anchor. */
 function dayAt(daysAgo: number): string {
   return new Date(ANCHOR - daysAgo * DAY_MS).toISOString().slice(0, 10);
@@ -141,18 +118,37 @@ describe("the window picker", () => {
     expect(isWindowDays(undefined)).toBe(false);
   });
 
-  it("re-says the axis when the window moves", () => {
-    expect(axisLabels(7)).toStrictEqual(["7 days ago", "halfway", "today"]);
-    expect(axisLabels(90)).toStrictEqual(["90 days ago", "halfway", "today"]);
+  it("marks the axis with real dates rather than relative words", () => {
+    // A column is a day, and a day has a name: "30 days ago · halfway" gave a
+    // reader nothing they could check a spike against (#775).
+    expect(axisLabels(summaryOf(), 7, ANCHOR)).toStrictEqual([
+      "7 Aug",
+      "10 Aug",
+      "today",
+    ]);
+    expect(axisLabels(summaryOf(), 90, ANCHOR)[0]).toBe("16 May");
   });
 });
 
 describe("the runs chart", () => {
-  it("always draws ten columns, whatever the window", () => {
-    expect(buildBars(summaryOf(), 7, ANCHOR, COLUMNS)).toHaveLength(10);
+  it("draws ONE COLUMN PER DAY up to the plot's ceiling (#775)", () => {
+    // The chart used to sample every window to ten columns, so one expensive
+    // afternoon was averaged across three ordinary days.
     expect(
-      buildBars(summaryOf({ windowDays: 90 }), 90, ANCHOR, COLUMNS)
-    ).toHaveLength(10);
+      buildBars(summaryOf(), 7, ANCHOR, columnCount(7, COLUMNS))
+    ).toHaveLength(7);
+    expect(
+      buildBars(summaryOf(), 30, ANCHOR, columnCount(30, COLUMNS))
+    ).toHaveLength(30);
+    // Only the window the plot genuinely cannot carry still folds.
+    expect(
+      buildBars(
+        summaryOf({ windowDays: 90 }),
+        90,
+        ANCHOR,
+        columnCount(90, COLUMNS)
+      )
+    ).toHaveLength(31);
   });
 
   it("carries one segment per column — nothing splits runs by outcome", () => {
@@ -174,43 +170,84 @@ describe("the runs chart", () => {
     const bars = buildBars(
       summaryOf({
         daily: [
-          { costUsd: 0, date: dayAt(9), runs: 4, tokens: 0 },
-          { costUsd: 0, date: dayAt(0), runs: 8, tokens: 0 },
+          { costUsd: 0.5, date: dayAt(9), runs: 4, tokens: 0 },
+          { costUsd: 1, date: dayAt(0), runs: 8, tokens: 0 },
         ],
       }),
       10,
       ANCHOR,
-      COLUMNS
+      10
     );
     expect(bars.map((bar) => bar.succeeded)).toStrictEqual([
       50, 0, 0, 0, 0, 0, 0, 0, 0, 100,
     ]);
   });
 
-  it("names each column for a reader who cannot see it", () => {
+  it("draws SPEND, so a cheap busy day cannot outrank an expensive quiet one", () => {
     const bars = buildBars(
       summaryOf({
-        daily: [{ costUsd: 0, date: dayAt(0), runs: 1, tokens: 0 }],
+        daily: [
+          { costUsd: 4, date: dayAt(1), runs: 1, tokens: 0 },
+          { costUsd: 0.004, date: dayAt(0), runs: 40, tokens: 0 },
+        ],
+      }),
+      2,
+      ANCHOR,
+      2
+    );
+    // …and a day that cost something is never drawn as nothing.
+    expect(bars.map((bar) => bar.succeeded)).toStrictEqual([100, 1]);
+  });
+
+  it("names each column with its date, its cost and its volume", () => {
+    const bars = buildBars(
+      summaryOf({
+        daily: [{ costUsd: 0.25, date: dayAt(0), runs: 1, tokens: 0 }],
       }),
       10,
       ANCHOR,
-      COLUMNS
+      10
     );
-    expect(bars.at(-1)?.label).toBe("1 run · today");
-    expect(bars[0]?.label).toBe("0 runs · 9 days ago");
+    expect(bars.at(-1)?.label).toBe("13 Aug · $0.25 · 1 run");
+    expect(bars[0]?.label).toBe("4 Aug · $0.00 · 0 runs");
   });
 
   it("falls back to the read's own clock when the rollup did not stamp itself", () => {
     const bars = buildBars(
       summaryOf({
-        daily: [{ costUsd: 0, date: dayAt(0), runs: 3, tokens: 0 }],
+        daily: [{ costUsd: 3, date: dayAt(0), runs: 3, tokens: 0 }],
         generatedAt: 0,
       }),
       10,
       ANCHOR,
-      COLUMNS
+      10
     );
     expect(bars.at(-1)?.succeeded).toBe(100);
+  });
+
+  it("names the peak day, which is the only value the plot can state", () => {
+    expect(
+      peakNote(
+        summaryOf({
+          peakDay: {
+            costUsd: 2.4,
+            date: dayAt(2),
+            tokens: 12_000,
+            topSources: [
+              {
+                costUsd: 2.4,
+                key: "tidy/downloads",
+                kind: "automation",
+                label: "Tidy downloads",
+                tokens: 12_000,
+              },
+            ],
+          },
+        })
+      )
+    ).toBe("Busiest 11 Aug: $2.40 · 12k tokens · mostly Tidy downloads");
+    // A window with no peak says nothing rather than inventing one.
+    expect(peakNote(summaryOf())).toBeUndefined();
   });
 });
 
@@ -264,8 +301,6 @@ describe("the by-source facts", () => {
     expect(facts.map((fact) => fact.key)).toStrictEqual([
       "automations",
       "the assistant",
-      "spend",
-      "tokens",
     ]);
     expect(facts[0]?.value).toBe("60 · 60% · $2.00");
     expect(facts[1]?.value).toBe("40 · 40% · $1.00");
@@ -283,12 +318,64 @@ describe("the by-source facts", () => {
   });
 
   it("calls spend a floor when a run in the window could not be priced", () => {
-    const facts = sourceFacts(
-      summaryOf({ kpis: { ...busy.kpis, unpricedRuns: 3 } })
+    // The figure is promoted out of the fact list (#775) — the floor is stated
+    // in its LABEL, where a member reading only the big number still sees it.
+    const priced = spendFigure(summaryOf({ kpis: busy.kpis }), 30);
+    expect(priced.label).toBe("Spend · 30 days");
+    expect(priced.value).toBe("$3.00");
+    const floored = spendFigure(
+      summaryOf({ kpis: { ...busy.kpis, unpricedRuns: 3 } }),
+      30
     );
-    expect(facts.find((fact) => fact.key === "spend")?.value).toBe(
-      "at least $3.00 · $9.00 forecast"
+    expect(floored.label).toBe("At least · 30 days");
+    expect(floored.qualifier).toBe("3 unpriced.");
+  });
+
+  it("states what the failures cost and how often work was retried", () => {
+    const facts = spendFacts(
+      summaryOf({
+        kpis: {
+          ...busy.kpis,
+          failedCostUsd: 0.4,
+          failedRuns: 2,
+          retries: 3,
+        },
+      })
     );
+    const value = (key: string): string | undefined =>
+      facts.find((fact) => fact.key === key)?.value;
+    expect(value("runs")).toBe("100 · 3 retried");
+    expect(value("failed")).toBe("2 · $0.40 spent");
+    expect(facts.find((fact) => fact.key === "failed")?.net).toBe(true);
+    // A window with no failures says nothing about them.
+    expect(
+      spendFacts(summaryOf({ kpis: busy.kpis })).some(
+        (fact) => fact.key === "failed"
+      )
+    ).toBe(false);
+  });
+
+  it("measures a breakdown against the whole, and falls back to tokens", () => {
+    const spend = harnessBreakdown(
+      summaryOf({
+        byHarness: [
+          { costUsd: 1, harness: "codex", runs: 2, tokens: 100 },
+          { costUsd: 3, harness: "claude-code", runs: 6, tokens: 900 },
+        ],
+      })
+    );
+    expect(spend.unit).toBe("of spend");
+    expect(spend.rows.map((row) => row.weight)).toStrictEqual([1, 3]);
+    expect(spend.rows[1]?.value).toBe("$3.00 · 900 · 6 runs");
+    // A window where nothing could be priced measures the WHOLE breakdown in
+    // tokens rather than mixing two units inside one set of bars.
+    const unpriced = harnessBreakdown(
+      summaryOf({
+        byHarness: [{ costUsd: 0, harness: "codex", runs: 2, tokens: 100 }],
+      })
+    );
+    expect(unpriced.unit).toBe("of tokens");
+    expect(unpriced.meta).toBe("sorted by tokens");
   });
 
   it("states where the money came from, and never calls unknown free", () => {
@@ -308,7 +395,7 @@ describe("the by-source facts", () => {
   });
 
   it("names the one source that took most of the spend, when there is one", () => {
-    const facts = sourceFacts(
+    const facts = spendFacts(
       summaryOf({
         ...busy,
         attention: {
@@ -361,139 +448,5 @@ describe("the recent runs", () => {
     );
     expect(rows[0]?.automationRef).toBe("tidy/downloads");
     expect(rows[1]?.automationRef).toBeUndefined();
-  });
-});
-
-describe("the gateway facts", () => {
-  it("reports only what the health snapshot measures", () => {
-    const facts = gatewayFacts(healthOf());
-    expect(facts.map((fact) => fact.key)).toStrictEqual([
-      "uptime",
-      "memory",
-      "components",
-      "outbox",
-    ]);
-    expect(facts[0]?.value).toBe("21d 0h");
-    expect(facts[2]?.value).toBe("2 of 2 healthy");
-  });
-
-  it("never invents a disk figure or a shared-compute roster", () => {
-    const labels = gatewayFacts(healthOf()).map((fact) => fact.key);
-    expect(labels).not.toContain("disk");
-    expect(labels).not.toContain("compute shared");
-  });
-
-  it("adds the latency facts only when the gateway reports them", () => {
-    const facts = gatewayFacts(
-      healthOf({
-        metrics: {
-          eventLoopLagP99Ms: 4.2,
-          outboxPending: 2,
-          rssBytes: 1024,
-          storageFsyncMs: 12,
-          uptimeMs: DAY_MS,
-        },
-      })
-    );
-    expect(facts.map((fact) => fact.key)).toContain("loop lag");
-    expect(facts.map((fact) => fact.key)).toContain("storage fsync");
-  });
-
-  it("lets the component count be the one fact that can be bad news", () => {
-    const facts = gatewayFacts(
-      healthOf({
-        components: [
-          { component: "storage", errorCount: 0, status: "ok" },
-          { component: "outbox", errorCount: 3, status: "error" },
-        ],
-      })
-    );
-    expect(facts.find((fact) => fact.key === "components")).toMatchObject({
-      net: true,
-      value: "1 of 2 healthy",
-    });
-  });
-});
-
-describe("the standing line", () => {
-  it("says how much succeeded and how long the machine has been up", () => {
-    const copy = insightsHealth(
-      summaryOf({
-        kpis: { ...summaryOf().kpis, failedRuns: 9, generations: 1284 },
-      }),
-      21 * DAY_MS
-    );
-    expect(copy.label).toBe("99% of runs succeeded");
-    expect(copy.detail).toBe("The gateway has been up for 21 days.");
-    expect(healthLineFor("ready", copy)).toStrictEqual({
-      text: "99% of runs succeeded · The gateway has been up for 21 days.",
-    });
-  });
-
-  it("carries no inline verb — this page has nothing to act on", () => {
-    const copy = insightsHealth(summaryOf(), 0);
-    expect(copy.action).toBeUndefined();
-    expect(healthLineFor("ready", copy).action).toBeUndefined();
-  });
-
-  it("makes no claim about duration", () => {
-    const copy = insightsHealth(summaryOf(), DAY_MS);
-    expect(`${copy.label} ${copy.detail}`).not.toContain("duration");
-  });
-
-  it("says the coarsest true thing about uptime, or admits it does not know", () => {
-    expect(uptimeSentence(DAY_MS)).toBe("The gateway has been up for 1 day.");
-    expect(uptimeSentence(2 * 3_600_000)).toBe(
-      "The gateway has been up for 2 hours."
-    );
-    expect(uptimeSentence(undefined)).toBe(
-      "This gateway did not report how long it has been up."
-    );
-  });
-
-  it("falls back to the three generic sentences when nothing was read", () => {
-    const copy = insightsHealth(undefined, undefined);
-    expect(healthLineFor("loading", copy).text).toBe(
-      "Reading from the gateway"
-    );
-    expect(healthLineFor("error", copy).text).toBe(
-      "This page could not load · everything else on the gateway is unaffected."
-    );
-    expect(healthLineFor("empty", copy).text).toBe(
-      "Nothing to attend to · nothing needs you here right now."
-    );
-  });
-});
-
-describe("empty and export", () => {
-  it("is empty only when the window holds no runs and no recent tail", () => {
-    expect(nothingRan(summaryOf())).toBe(true);
-    expect(nothingRan(summaryOf({ recent: [runOf()] }))).toBe(false);
-    expect(
-      nothingRan(summaryOf({ kpis: { ...summaryOf().kpis, generations: 1 } }))
-    ).toBe(false);
-  });
-
-  it("exports the numbers the chart is drawn from, in the chart's order", () => {
-    expect(
-      insightsCsv(
-        summaryOf({
-          daily: [
-            { costUsd: 1.5, date: "2026-08-12", runs: 3, tokens: 400 },
-            { costUsd: 0, date: "2026-08-13", runs: 0, tokens: 0 },
-          ],
-        })
-      )
-    ).toBe(
-      [
-        "date,runs,tokens,cost_usd",
-        "2026-08-12,3,400,1.5000",
-        "2026-08-13,0,0,0.0000",
-      ].join("\n")
-    );
-  });
-
-  it("names the file after the window it holds", () => {
-    expect(csvFilename(90)).toBe("centraid-analytics-90d.csv");
   });
 });

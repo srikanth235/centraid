@@ -23,6 +23,12 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
   getUserPrefs: () => Promise.resolve({}),
+  // The shell root reads the capability map once at boot (C1). These suites
+  // exercise a gateway with the experimental features ON, so the launcher and
+  // the automation routes are the ones they already assert on; the gated-off
+  // shell has its own suite in App.capabilities.test.tsx.
+  readGatewayCapabilities: () =>
+    Promise.resolve({ automations: true, connectors: true }),
   // The sidebar identity row + every scope picker read the owner's scope
   // registry (#599). `undefined` is the "gateway has no scopes plane" answer,
   // which falls through to listVaults.

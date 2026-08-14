@@ -21,6 +21,18 @@
 //     reports no disk figure and no shared-compute roster. The reference's
 //     `disk` and `compute shared` facts are therefore absent, not zeroed.
 
+import {
+  barShares,
+  dayFold,
+  dayMark,
+  insightBreakdown,
+  insightSourceRollups,
+} from "@centraid/design/blocks";
+import type {
+  InsightBreakdown,
+  PanelFigureData,
+} from "@centraid/design/blocks";
+
 import type { BarDatum } from "../../kit/components/bars-model";
 import type { HealthCopy } from "../../kit/components/health-line";
 import type { PanelFact } from "../../kit/components/PanelBlock";
@@ -37,6 +49,8 @@ import type {
   InsightsActivityRow,
   InsightsSummary,
 } from "../../lib/insights";
+
+export type Breakdown = InsightBreakdown;
 
 /** The three windows. This page's one parameter, and its whole state. */
 export const WINDOW_OPTIONS = [7, 30, 90] as const;
@@ -67,27 +81,33 @@ export function windowChips(
   }));
 }
 
-function dayLabel(daysAgo: number): string {
-  if (daysAgo <= 0) return "today";
-  if (daysAgo === 1) return "yesterday";
-  return `${String(daysAgo)} days ago`;
+function runWord(runs: number): string {
+  return `${runs.toLocaleString()} ${runs === 1 ? "run" : "runs"}`;
 }
 
 /**
- * Fold the daily rollup into the chart's ten columns.
+ * Columns the chart draws: ONE PER DAY, up to what the plot can carry (#775).
  *
- * Days with no runs are ABSENT from `daily` (the rollup groups by day), so the
- * fold is by calendar offset from the window's first day, never by position in
- * the array — otherwise a quiet week would slide the busy days left and the
- * chart would claim work happened on days nothing ran.
+ * The chart used to sample every window to ten columns, so a single expensive
+ * afternoon was averaged across three ordinary days — the one shape a spend
+ * chart exists to show. Every window up to a month is now one column per day;
+ * a ninety-day window folds to `max`, and each column says the span it covers.
+ */
+export function columnCount(windowDays: number, max: number): number {
+  return Math.max(1, Math.min(windowDays, max));
+}
+
+/**
+ * The chart's columns: SPEND per day, scaled against the window's own peak.
  *
- * `now` is the clock the read landed at, used only when the rollup did not
- * stamp itself: a summary rendered an hour later must still say the same thing
- * about the same days.
+ * Spend and not runs, because "what did this cost" is the question the page is
+ * answering — twenty cheap chats and one long build are the same column by
+ * volume and nothing like it by money. The run count stays in each column's own
+ * sentence, which is what a screen reader hears.
  *
- * `columns` is the chart's own count, passed in rather than imported: it lives
- * in the block's stylesheet (`BarsBlock.styles`), which pulls the renderer in,
- * and this module stays free of it so the fold is testable on its own.
+ * The fold itself (calendar offset from the window's first day, so a quiet week
+ * cannot slide the busy days left) is the shared headless model's, not this
+ * screen's. `now` is used only when the rollup did not stamp itself.
  */
 export function buildBars(
   summary: InsightsSummary,
@@ -95,40 +115,66 @@ export function buildBars(
   now: number,
   columns: number
 ): BarDatum[] {
-  const n = Math.max(1, columns);
-  const anchor = summary.generatedAt > 0 ? summary.generatedAt : now;
-  const firstDay = Math.floor(anchor / DAY_MS) - (windowDays - 1);
-  const runs = Array.from({ length: n }, () => 0);
-  for (const point of summary.daily) {
-    const ms = Date.parse(`${point.date}T00:00:00Z`);
-    if (Number.isNaN(ms)) continue;
-    const offset = Math.floor(ms / DAY_MS) - firstDay;
-    const index = Math.floor((offset * n) / windowDays);
-    if (index < 0 || index >= n) continue;
-    runs[index] = (runs[index] ?? 0) + point.runs;
-  }
-  const peak = Math.max(1, ...runs);
-  return runs.map((count, index) => {
-    const from = Math.round((index * windowDays) / n);
-    const to = Math.round(((index + 1) * windowDays) / n) - 1;
+  const buckets = dayFold(summary.daily, {
+    anchor: summary.generatedAt > 0 ? summary.generatedAt : now,
+    columns,
+    windowDays,
+  });
+  const shares = barShares(buckets.map((bucket) => bucket.costUsd));
+  return buckets.map((bucket, index) => {
     const span =
-      from === to
-        ? dayLabel(windowDays - 1 - from)
-        : `${dayLabel(windowDays - 1 - from)} – ${dayLabel(windowDays - 1 - to)}`;
+      bucket.date === bucket.endDate
+        ? dayMark(bucket.date)
+        : `${dayMark(bucket.date)} – ${dayMark(bucket.endDate)}`;
     return {
       // One segment, always: there is no per-day outcome split to stack (gap
       // 1 in the file header).
       failed: 0,
-      key: `col-${String(index)}`,
-      label: `${String(count)} ${count === 1 ? "run" : "runs"} · ${span}`,
-      succeeded: Math.round((count / peak) * 100),
+      key: bucket.key,
+      label: `${span} · ${formatUsd(bucket.costUsd)} · ${runWord(bucket.runs)}`,
+      succeeded: shares[index] ?? 0,
     };
   });
 }
 
-/** The three axis marks, oldest → newest. Re-said whenever the window moves. */
-export function axisLabels(windowDays: number): [string, string, string] {
-  return [`${String(windowDays)} days ago`, "halfway", "today"];
+/**
+ * The axis marks: real dates, oldest → newest.
+ *
+ * "30 days ago · halfway · today" told a reader nothing they could check a
+ * spike against — a column is a day, and a day has a name.
+ */
+export function axisLabels(
+  summary: InsightsSummary,
+  windowDays: number,
+  now: number
+): string[] {
+  const days = dayFold([], {
+    anchor: summary.generatedAt > 0 ? summary.generatedAt : now,
+    columns: windowDays,
+    windowDays,
+  });
+  const first = days[0];
+  const middle = days[Math.floor(days.length / 2)];
+  if (!first) return [];
+  const marks = [dayMark(first.date)];
+  if (middle && days.length > 2) marks.push(dayMark(middle.date));
+  marks.push("today");
+  return marks;
+}
+
+/**
+ * The peak day, in words — the only place a column's actual value is stated,
+ * because the plot has no value axis. Absent when the rollup found no peak.
+ */
+export function peakNote(summary: InsightsSummary): string | undefined {
+  const peak = summary.peakDay;
+  if (!peak) return undefined;
+  const top = peak.topSources[0];
+  return [
+    `Busiest ${dayMark(peak.date)}: ${formatUsd(peak.costUsd)}`,
+    `${formatCount(peak.tokens)} tokens`,
+    ...(top ? [`mostly ${top.label}`] : []),
+  ].join(" · ");
 }
 
 /** `1,284 runs · 9 failed` — the Runs section's count line, and the only place
@@ -144,13 +190,6 @@ export function sourceMeta(summary: InsightsSummary): string {
   return `${summary.kpis.generations.toLocaleString()} runs`;
 }
 
-/** The three source buckets this page reports, in the reference's order. */
-function sourceBucket(kind: string): "automations" | "the assistant" | "apps" {
-  if (kind === "automation") return "automations";
-  if (kind === "chat") return "the assistant";
-  return "apps";
-}
-
 /**
  * By-source facts: runs, share of the window, and what they cost.
  *
@@ -159,38 +198,49 @@ function sourceBucket(kind: string): "automations" | "the assistant" | "apps" {
  * behind it.
  */
 export function sourceFacts(summary: InsightsSummary): PanelFact[] {
-  const totals = new Map<string, { runs: number; cost: number }>();
-  for (const row of summary.bySource) {
-    const bucket = sourceBucket(row.kind);
-    const seen = totals.get(bucket) ?? { cost: 0, runs: 0 };
-    totals.set(bucket, {
-      cost: seen.cost + row.costUsd,
-      runs: seen.runs + row.runs,
-    });
-  }
-  const totalRuns = [...totals.values()].reduce((sum, t) => sum + t.runs, 0);
-  const facts: PanelFact[] = [];
-  for (const bucket of ["automations", "the assistant", "apps"] as const) {
-    const bucketTotals = totals.get(bucket);
-    // A source with no runs in this window is omitted, not zeroed: a row of
-    // zeroes reads as a measurement, and this one is an absence.
-    if (!bucketTotals) continue;
-    const share = totalRuns
-      ? `${String(Math.round((bucketTotals.runs / totalRuns) * 100))}%`
-      : "—";
-    facts.push({
-      key: bucket,
-      value: `${String(bucketTotals.runs)} · ${share} · ${formatUsd(bucketTotals.cost)}`,
-    });
-  }
+  return insightSourceRollups(summary.bySource).map((row) => ({
+    key: row.bucket,
+    value: `${String(row.runs)} · ${row.sharePercent === null ? "—" : `${String(row.sharePercent)}%`} · ${formatUsd(row.costUsd)}`,
+  }));
+}
+
+/**
+ * The one promoted figure: what the window cost.
+ *
+ * "Did this month cost $2 or $200" is the question a member opens this page
+ * with, and it was being answered by a 13pt string in the middle of a fact
+ * list. "At least" is the honest label while runs are unpriced — the figure is
+ * a floor, and a floor that calls itself a total is a lie.
+ */
+export function spendFigure(
+  summary: InsightsSummary,
+  windowDays: number
+): PanelFigureData {
   const { kpis } = summary;
   const incomplete = kpis.unpricedRuns > 0 || kpis.unreportedRuns > 0;
-  facts.push(
+  return {
+    label: `${incomplete ? "At least" : "Spend"} · ${String(windowDays)} days`,
+    qualifier: pricingLine(summary),
+    value: formatUsd(kpis.totalCostUsd),
+  };
+}
+
+/**
+ * The facts beside the figure — volume, forecast, and what the failures cost.
+ *
+ * `retries` and `failedCostUsd` are on the wire and were rendered nowhere: a
+ * page about spend that cannot say what was spent on work that failed is
+ * missing the number a member would act on.
+ */
+export function spendFacts(summary: InsightsSummary): PanelFact[] {
+  const { kpis } = summary;
+  const facts: PanelFact[] = [
     {
-      key: "spend",
-      // "At least" is the honest verb when runs are unpriced: the figure is a
-      // floor, and a floor that calls itself a total is a lie.
-      value: `${incomplete ? "at least " : ""}${formatUsd(kpis.totalCostUsd)} · ${formatUsd(kpis.forecastCostUsd)} forecast`,
+      key: "runs",
+      value:
+        kpis.retries > 0
+          ? `${kpis.generations.toLocaleString()} · ${String(kpis.retries)} retried`
+          : kpis.generations.toLocaleString(),
     },
     {
       key: "tokens",
@@ -198,15 +248,90 @@ export function sourceFacts(summary: InsightsSummary): PanelFact[] {
         kpis.hydrationTokens > 0
           ? `${formatCount(kpis.totalTokens)} · ${formatCount(kpis.hydrationTokens)} hydration`
           : formatCount(kpis.totalTokens),
-    }
-  );
-  if (summary.attention) {
+    },
+    {
+      key: "forecast",
+      note: "A 30-day run rate at this window's pace, not a bill.",
+      value: formatUsd(kpis.forecastCostUsd),
+    },
+  ];
+  if (kpis.failedRuns > 0)
+    facts.push({
+      key: "failed",
+      // The one fact here that is bad news, so the one that takes `net`.
+      net: true,
+      value: `${String(kpis.failedRuns)} · ${formatUsd(kpis.failedCostUsd)} spent`,
+    });
+  if (summary.attention)
     facts.push({
       key: "most of it",
       value: `${summary.attention.label} · ${String(Math.round(summary.attention.share * 100))}% of spend`,
     });
-  }
   return facts;
+}
+
+/** Spend by harness — which runner the money went to. */
+export function harnessBreakdown(summary: InsightsSummary): Breakdown {
+  return insightBreakdown(
+    summary.byHarness.map((row) => ({
+      costUsd: row.costUsd,
+      id: row.harness,
+      label: row.harness,
+      runs: row.runs,
+      tokens: row.tokens,
+    })),
+    formatUsd,
+    formatCount,
+    runWord
+  );
+}
+
+/** Spend by model — the one breakdown a member can act on by switching. */
+export function modelBreakdown(summary: InsightsSummary): Breakdown {
+  return insightBreakdown(
+    summary.byModel.map((row) => ({
+      costUsd: row.costUsd,
+      id: row.model,
+      label: row.model,
+      runs: row.runs,
+      tokens: row.tokens,
+    })),
+    formatUsd,
+    formatCount,
+    runWord
+  );
+}
+
+/** Spend by effort — the harness-confirmed thought level, and what it cost. */
+export function effortBreakdown(summary: InsightsSummary): Breakdown {
+  return insightBreakdown(
+    summary.byEffort.map((row) => ({
+      costUsd: row.costUsd,
+      id: row.effort,
+      label: row.effort,
+      runs: row.runs,
+      tokens: row.tokens,
+    })),
+    formatUsd,
+    formatCount,
+    runWord
+  );
+}
+
+/** Spend per source — the automation, chat or app the work came from. */
+export function sourceBreakdown(summary: InsightsSummary): Breakdown {
+  return insightBreakdown(
+    summary.bySource.map((row) => ({
+      costUsd: row.costUsd,
+      id: `${row.kind}:${row.key}`,
+      label: row.label,
+      runs: row.runs,
+      tokens: row.tokens,
+    })),
+    formatUsd,
+    formatCount,
+    runWord
+  );
 }
 
 /**
@@ -290,9 +415,23 @@ function recentRow(run: InsightsActivityRow): RecentRunRow {
  * shared-compute roster appear, because the health snapshot serves neither
  * (gap 3) — the reference's four-fact panel is three-to-six honest facts here.
  */
+/**
+ * WHICH component is unhealthy, named — or `undefined` when they all are well.
+ *
+ * "3 of 4 healthy" is bad news with no subject: it tells a member something is
+ * wrong and nothing about what, so there is nothing to do with it. The names
+ * come from the gateway's own component roster.
+ */
+export function unhealthyComponents(health: GatewayHealth): string | undefined {
+  const bad = health.components.filter((c) => c.status !== "ok");
+  if (bad.length === 0) return undefined;
+  return bad.map((c) => c.component).join(", ");
+}
+
 export function gatewayFacts(health: GatewayHealth): PanelFact[] {
   const { metrics } = health;
   const healthy = health.components.filter((c) => c.status === "ok").length;
+  const unwell = unhealthyComponents(health);
   const facts: PanelFact[] = [
     {
       key: "uptime",
@@ -306,7 +445,10 @@ export function gatewayFacts(health: GatewayHealth): PanelFact[] {
       key: "components",
       // The one fact that can be bad news, so it is the one that may take
       // `net`: a component that is not ok is the gateway telling on itself.
-      net: healthy < health.components.length,
+      net: unwell !== undefined,
+      // …and bad news names its subject rather than leaving the member to
+      // guess which of four things is the broken one.
+      ...(unwell ? { note: `Not healthy: ${unwell}.` } : {}),
       value: `${String(healthy)} of ${String(health.components.length)} healthy`,
     },
     {

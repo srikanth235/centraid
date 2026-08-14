@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { CAPABILITIES_OFF, CAPABILITIES_ON } from "./capabilities.js";
 import {
   BAND_MAX_ITEMS,
   bandDestinations,
@@ -8,6 +9,7 @@ import {
   LAUNCHER_DESTINATIONS,
   pinnedDestinations,
   searchDestinations,
+  visibleDestinations,
 } from "./launcherModel.js";
 import type { ShellPage } from "./launcherModel.js";
 
@@ -85,7 +87,7 @@ describe("the launcher model", () => {
       expect(DEFAULT_PINS).toContain(id);
     }
     // The band still obeys its own cap — it just reaches it now.
-    const band = bandDestinations(pinsOf(...DEFAULT_PINS));
+    const band = bandDestinations(pinsOf(...DEFAULT_PINS), CAPABILITIES_ON);
     expect(band.items).toHaveLength(BAND_MAX_ITEMS - 1);
     expect(band.overflow).toBeGreaterThan(0);
     // Nothing is lost: shown + overflow accounts for every pin, Home included.
@@ -94,7 +96,7 @@ describe("the launcher model", () => {
 
   it("orders the stem by the model, not by recency", () => {
     const pins = pinsOf("settings", "assistant");
-    const order = pinnedDestinations(pins).map((d) => d.id);
+    const order = pinnedDestinations(pins, CAPABILITIES_ON).map((d) => d.id);
     // Launcher order, regardless of the order the pins were written in: a
     // launcher that re-sorts itself stops being a place you can point at.
     expect(order).toStrictEqual(["home", "assistant", "settings"]);
@@ -102,7 +104,10 @@ describe("the launcher model", () => {
 
   describe("the compact band", () => {
     it("shows every pinned destination when they fit", () => {
-      const band = bandDestinations(pinsOf("assistant", "approvals"));
+      const band = bandDestinations(
+        pinsOf("assistant", "approvals"),
+        CAPABILITIES_ON
+      );
       expect(band.items.map((d) => d.id)).toStrictEqual([
         "home",
         "assistant",
@@ -120,14 +125,14 @@ describe("the launcher model", () => {
         "insights",
         "starred"
       );
-      const band = bandDestinations(pins);
+      const band = bandDestinations(pins, CAPABILITIES_ON);
       // Four apps plus More: a sixth tab would put every target under 44px,
       // which stops being a tap target.
       expect(band.items).toHaveLength(BAND_MAX_ITEMS - 1);
       expect(band.overflow).toBe(3);
       // Nothing is dropped — overflow accounts for every pinned destination.
       expect(band.items.length + band.overflow).toBe(
-        pinnedDestinations(pins).length
+        pinnedDestinations(pins, CAPABILITIES_ON).length
       );
     });
 
@@ -141,21 +146,92 @@ describe("the launcher model", () => {
 
   describe("the All-apps filter", () => {
     it("lists everything when the query is empty", () => {
-      expect(searchDestinations("  ")).toStrictEqual(LAUNCHER_DESTINATIONS);
+      expect(searchDestinations("  ", CAPABILITIES_ON)).toStrictEqual(
+        LAUNCHER_DESTINATIONS
+      );
     });
 
     it("matches on the label a member actually reads, case-insensitively", () => {
       // `insights` is the internal key; "Analytics" is the word on screen.
-      expect(searchDestinations("analytics").map((d) => d.id)).toStrictEqual([
-        "insights",
-      ]);
-      expect(searchDestinations("DEVICES").map((d) => d.id)).toStrictEqual([
-        "household",
-      ]);
+      expect(
+        searchDestinations("analytics", CAPABILITIES_ON).map((d) => d.id)
+      ).toStrictEqual(["insights"]);
+      expect(
+        searchDestinations("DEVICES", CAPABILITIES_ON).map((d) => d.id)
+      ).toStrictEqual(["household"]);
     });
 
     it("returns nothing for a query that matches nothing", () => {
-      expect(searchDestinations("zzzz")).toHaveLength(0);
+      expect(searchDestinations("zzzz", CAPABILITIES_ON)).toHaveLength(0);
+    });
+
+    it("does not list a destination this gateway cannot serve", () => {
+      // The sheet is the complete index of the places the shell can go, so
+      // gating has to reach it too — a stem that hid Automations while the
+      // sheet still offered it would be two answers to one question.
+      expect(searchDestinations("automations", CAPABILITIES_OFF)).toHaveLength(
+        0
+      );
+    });
+  });
+
+  describe("the experimental capability gates (C1)", () => {
+    it("hides automations, its analytics, and connectors when the gateway offers neither", () => {
+      const ids = visibleDestinations(CAPABILITIES_OFF).map((d) => d.id);
+      expect(ids).not.toContain("automations");
+      expect(ids).not.toContain("connectors");
+      // Analytics counts automation runs over `/centraid/_insights`, which the
+      // gateway leaves unmounted with automations off — it is an automations
+      // surface wearing another name, not a third gate.
+      expect(ids).not.toContain("insights");
+      // Everything ungated is untouched: the gate withdraws two features, not
+      // a slice of the shell.
+      expect(ids).toContain("home");
+      expect(ids).toContain("approvals");
+      expect(ids).toContain("atlas");
+    });
+
+    it("gates the two features independently", () => {
+      const autosOnly = visibleDestinations({
+        automations: true,
+        connectors: false,
+      }).map((d) => d.id);
+      expect(autosOnly).toContain("automations");
+      expect(autosOnly).toContain("insights");
+      expect(autosOnly).not.toContain("connectors");
+
+      const connsOnly = visibleDestinations({
+        automations: false,
+        connectors: true,
+      }).map((d) => d.id);
+      expect(connsOnly).toContain("connectors");
+      expect(connsOnly).not.toContain("automations");
+    });
+
+    it("filters the view, never the member's pins", () => {
+      // A gated-off feature is not the member unpinning it: the stored pin
+      // survives, so turning the experiment on later restores the launcher
+      // they arranged rather than an emptier one.
+      const pins = pinsOf(...DEFAULT_PINS);
+      expect(
+        pinnedDestinations(pins, CAPABILITIES_OFF).map((d) => d.id)
+      ).not.toContain("automations");
+      expect(
+        pinnedDestinations(pins, CAPABILITIES_ON).map((d) => d.id)
+      ).toContain("automations");
+      expect(pins.automations).toBe(true);
+    });
+
+    it("frees band slots rather than leaving a gap where a gated tab stood", () => {
+      const pins = pinsOf(...DEFAULT_PINS);
+      const full = bandDestinations(pins, CAPABILITIES_ON);
+      const gated = bandDestinations(pins, CAPABILITIES_OFF);
+      expect(full.overflow).toBeGreaterThan(gated.overflow);
+      expect(gated.items.map((d) => d.id)).not.toContain("connectors");
+      // Still nothing lost: shown + overflow accounts for every VISIBLE pin.
+      expect(gated.items.length + gated.overflow).toBe(
+        pinnedDestinations(pins, CAPABILITIES_OFF).length
+      );
     });
   });
 });

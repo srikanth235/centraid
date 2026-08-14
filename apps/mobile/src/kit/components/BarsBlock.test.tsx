@@ -111,6 +111,37 @@ describe(BarsBlock, () => {
     expect(chart?.dataset.role).toBe("image");
   });
 
+  it("draws every column it is given, and tightens the gutter rather than dropping days", () => {
+    // The block used to sample to ten columns itself, so a spike vanished and
+    // the screen had no way to know (#775).
+    const month = Array.from({ length: 30 }, (_unused, index) =>
+      day(String(index), 40, 0)
+    );
+    const container = render(<BarsBlock {...props} data={month} />);
+    const chart = nodesOf(container, "div").find(
+      (node) => styleOf(node).height === 116
+    );
+    expect(
+      nodesOf(container, "div").filter((node) =>
+        node.getAttribute("aria-label")?.startsWith("day")
+      )
+    ).toHaveLength(30);
+    expect(styleOf(chart ?? null).gap).toBe(1);
+  });
+
+  it("states the peak in words, because the plot has no value axis", () => {
+    const container = render(
+      <BarsBlock
+        {...props}
+        data={[day("1", 34, 0)]}
+        note="Busiest 14 Aug: $2.40"
+      />
+    );
+    expect(
+      nodesOf(container, "span").map((node) => node.textContent)
+    ).toContain("Busiest 14 Aug: $2.40");
+  });
+
   it("names each column and each legend key", () => {
     const container = render(
       <BarsBlock {...props} data={[day("1", 34, 8), day("2", 40, 0)]} />

@@ -79,7 +79,10 @@ async function install(templateId: string): Promise<Response> {
 describe("install-over-http scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-install-${crypto.randomUUID()}-`);
-    handle = await serve({ paths: pathsUnder(dataDir) });
+    handle = await serve({
+      paths: pathsUnder(dataDir),
+      experimental: { automations: true },
+    });
   });
 
   afterEach(async () => {
@@ -273,7 +276,10 @@ describe("install-over-http scenarios", () => {
     ).json()) as { versions: unknown[] };
 
     await handle.close();
-    handle = await serve({ paths: pathsUnder(dataDir) });
+    handle = await serve({
+      paths: pathsUnder(dataDir),
+      experimental: { automations: true },
+    });
     const afterRestart = await fetch(
       `${handle.url}/centraid/_apps/photo-ocr/git-versions`,
       { headers: auth() }

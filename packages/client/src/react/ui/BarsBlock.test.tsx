@@ -90,13 +90,68 @@ describe("ui/BarsBlock", () => {
     expect(column.style.getPropertyValue("--bar-fail")).toBe("100");
   });
 
-  it("draws exactly three axis labels", () => {
+  it("draws the marks it was given, and does not decide how many there are", () => {
     const el = mount(
       <BarsBlock ariaLabel="Runs per day" axis={AXIS} bars={BARS} />
     );
     expect(
       [...el.querySelectorAll(".axisLabel")].map((n) => n.textContent)
     ).toStrictEqual(["30 days ago", "halfway", "today"]);
+    act(() => root?.unmount());
+    root = null;
+    container?.remove();
+    // Real dates, and only two of them: the caller's axis, not the block's.
+    const dated = mount(
+      <BarsBlock
+        ariaLabel="Spend per day"
+        axis={["15 Jul", "14 Aug"]}
+        bars={BARS}
+      />
+    );
+    expect(
+      [...dated.querySelectorAll(".axisLabel")].map((n) => n.textContent)
+    ).toStrictEqual(["15 Jul", "14 Aug"]);
+  });
+
+  it("states the peak in words, because the plot has no value axis", () => {
+    const el = mount(
+      <BarsBlock
+        ariaLabel="Spend per day"
+        axis={AXIS}
+        bars={BARS}
+        note="Peak 14 Aug · $2.40 · 12 runs"
+      />
+    );
+    expect(el.querySelector(".note")?.textContent).toBe(
+      "Peak 14 Aug · $2.40 · 12 runs"
+    );
+  });
+
+  it("tightens the gutter rather than dropping columns on a long window", () => {
+    const many = Array.from({ length: 90 }, (_unused, i) => ({
+      id: `d${i}`,
+      label: `day ${i}`,
+      ok: 10,
+    }));
+    const el = mount(
+      <BarsBlock ariaLabel="Spend per day" axis={AXIS} bars={many} />
+    );
+    expect(el.querySelectorAll(".column")).toHaveLength(90);
+    expect(el.querySelector<HTMLElement>(".bars")?.dataset.dense).toBe("true");
+  });
+
+  it("leaves the gutter alone at one column per day for a month", () => {
+    const month = Array.from({ length: 30 }, (_unused, i) => ({
+      id: `d${i}`,
+      label: `day ${i}`,
+      ok: 10,
+    }));
+    const el = mount(
+      <BarsBlock ariaLabel="Spend per day" axis={AXIS} bars={month} />
+    );
+    expect(
+      el.querySelector<HTMLElement>(".bars")?.dataset.dense
+    ).toBeUndefined();
   });
 
   it("names two outcomes in the legend, and only two", () => {

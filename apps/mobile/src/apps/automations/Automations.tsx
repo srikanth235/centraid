@@ -43,6 +43,7 @@ import type { LayoutChangeEvent } from "react-native";
 import Button from "../../kit/components/Button";
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
+import FeatureOffPlace from "../../kit/components/FeatureOffPlace";
 import { healthLineFor } from "../../kit/components/health-line";
 import HealthLine from "../../kit/components/HealthLine";
 import HomeKey from "../../kit/components/HomeKey";
@@ -55,6 +56,7 @@ import type { RowsBlockRow } from "../../kit/components/RowsBlock";
 import SectionBlock from "../../kit/components/SectionBlock";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import TopSafeArea from "../../kit/components/TopSafeArea";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { useTheme } from "../../kit/theme";
 import type { AutomationsScreenProps } from "../../navigation";
 import {
@@ -107,6 +109,19 @@ export default function AutomationsScreen({
   route,
 }: AutomationsScreenProps): React.JSX.Element {
   const focusedRef = route.params?.automationRef;
+  // The gate is read here, above both branches, so a gateway with automations
+  // switched off never mounts the hooks that would read routes it does not
+  // serve. `undefined` is unknown, not off — no gateway has answered yet, and
+  // the page's own states already handle a gateway that will not talk.
+  const { features } = useReplica();
+  if (features && !features.automations)
+    return (
+      <FeatureOffPlace
+        feature="automations"
+        onLeave={() => navigation.goBack()}
+        title="Automations"
+      />
+    );
   return focusedRef ? (
     <AutomationThread
       automationRef={focusedRef}

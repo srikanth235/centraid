@@ -21,6 +21,17 @@
   white-space: nowrap;
 }
 
+/* The trailing verb (#775). It is pushed to the trailing edge by its own
+   margin rather than by the count's flex, so a head with no count puts the
+   verb in the same place a head with one does. Centred rather than on the
+   baseline: a bounded control sitting on a text baseline reads as a control
+   that slipped. */
+.action {
+  align-self: center;
+  flex: none;
+  margin-inline-start: auto;
+}
+
 /* The count truncates; the label above does not. */
 .meta {
   color: var(--text-faint);

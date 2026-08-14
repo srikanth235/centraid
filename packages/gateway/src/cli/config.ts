@@ -33,6 +33,8 @@ import type { HarnessKind } from "@centraid/app-engine";
 
 import { validateBackupConfig } from "../backup/backup-config.js";
 import type { BackupConfig } from "../backup/backup-config.js";
+import { EXPERIMENTAL_FEATURES } from "../serve/experimental-features.js";
+import type { ExperimentalFeature } from "../serve/experimental-features.js";
 
 export interface DaemonHarnessConfig {
   /** Any kind the runtime registers — validated against `HARNESS_KINDS`. */
@@ -70,6 +72,12 @@ export interface DaemonConfig {
    * have not set `gateway.resourceMode`. Env `CENTRAID_RESOURCE_MODE` wins.
    */
   resourceMode?: DaemonResourceMode;
+  /**
+   * Experimental feature gate (v0 early feedback), each feature off unless
+   * named. Durable prefs (`gateway.experimental.*`) win over this block, and
+   * `CENTRAID_EXPERIMENTAL` wins over both.
+   */
+  experimental?: Partial<Record<ExperimentalFeature, boolean>>;
 }
 
 export class DaemonConfigError extends Error {
@@ -157,6 +165,31 @@ export function validateConfig(value: unknown): DaemonConfig {
       );
     }
     out.resourceMode = value.resourceMode;
+  }
+  if (value.experimental !== undefined) {
+    out.experimental = validateExperimental(value.experimental);
+  }
+  return out;
+}
+
+function validateExperimental(
+  value: unknown
+): Partial<Record<ExperimentalFeature, boolean>> {
+  if (!isRecord(value))
+    throw new DaemonConfigError("`experimental` must be an object");
+  const out: Partial<Record<ExperimentalFeature, boolean>> = {};
+  for (const [key, flag] of Object.entries(value)) {
+    if (!(EXPERIMENTAL_FEATURES as readonly string[]).includes(key)) {
+      throw new DaemonConfigError(
+        `\`experimental.${key}\` is not a known experimental feature (${EXPERIMENTAL_FEATURES.map((f) => `"${f}"`).join(", ")})`
+      );
+    }
+    if (typeof flag !== "boolean") {
+      throw new DaemonConfigError(
+        `\`experimental.${key}\` must be a boolean when set`
+      );
+    }
+    out[key as ExperimentalFeature] = flag;
   }
   return out;
 }

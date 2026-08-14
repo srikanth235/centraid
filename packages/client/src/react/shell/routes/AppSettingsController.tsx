@@ -13,6 +13,7 @@ import type { AppSettingsSnapshot } from "../../screen-contracts.js";
 import AppSettingsPanel from "../../screens/AppSettingsPanel.js";
 import VaultScreen from "../../screens/VaultScreen.js";
 import { iconSvg } from "../iconSvg.js";
+import { useShellCapabilities } from "../useCapabilities.js";
 import {
   buildVaultProps,
   fetchAppKnobValues,
@@ -86,6 +87,10 @@ export default function AppSettingsController({
   inlineRoot,
   showToast,
 }: AppSettingsControllerProps): JSX.Element {
+  // The per-app Automations tab is a cross-link INTO the gated surface, so it
+  // reads the same one verdict the launcher does rather than discovering the
+  // absence by request.
+  const { automations } = useShellCapabilities();
   // Mutable snapshot inputs — refs so the async fetches + run streams mutate in
   // place and re-push without re-rendering this controller.
   const knobs = useRef<AppKnob[] | null>(null);
@@ -181,20 +186,26 @@ export default function AppSettingsController({
         pushRef.current();
       }
     });
-    void listAutomations().then((all) => {
-      if (!alive.current) return;
-      orders.current = all.filter((r) => r.manifest.apps?.includes(appId));
-      automationsBadge.current =
-        orders.current.length === 0 ? null : orders.current.length;
-      pushRef.current();
-    });
+    // Not merely a hidden tab: with the automations experiment off the
+    // gateway does not mount `/centraid/_automations` at all, so this read
+    // would reject against a route that is not there (C1 — ask the capability,
+    // never the 404).
+    if (automations) {
+      void listAutomations().then((all) => {
+        if (!alive.current) return;
+        orders.current = all.filter((r) => r.manifest.apps?.includes(appId));
+        automationsBadge.current =
+          orders.current.length === 0 ? null : orders.current.length;
+        pushRef.current();
+      });
+    }
 
     return () => {
       alive.current = false;
       roots.forEach((r) => r.unmount());
       roots.clear();
     };
-  }, [appId]);
+  }, [appId, automations]);
 
   const pushKnob = (key: string, value: string): void => {
     if (inlineRoot) pushKnobToInlineRoot(inlineRoot, key, value);
@@ -270,6 +281,7 @@ export default function AppSettingsController({
   return (
     <AppSettingsPanel
       initialTab={initialTab}
+      automationsVisible={automations}
       onReady={(u) => {
         updater.current = u;
         u(buildSnapshot());

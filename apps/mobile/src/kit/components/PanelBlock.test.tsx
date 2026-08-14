@@ -89,6 +89,67 @@ describe(PanelBlock, () => {
     expect(styleOf(quiet ?? null).backgroundColor).toBe("transparent");
   });
 
+  it("keeps a fact's caveat under the fact it qualifies", () => {
+    const container = render(
+      <PanelBlock
+        facts={[
+          {
+            key: "harness runs",
+            note: "Measured, not limited by Conserve.",
+            value: "3 runs · 9.0s active",
+          },
+          { key: "sweeps", value: "2 passes" },
+        ]}
+      />
+    );
+    const spans = nodesOf(container, "span");
+    expect(spans.map((node) => node.textContent)).toStrictEqual([
+      "harness runs",
+      "3 runs · 9.0s active",
+      "Measured, not limited by Conserve.",
+      "sweeps",
+      "2 passes",
+    ]);
+    // The caveat is a sentence and leaves the numeric register.
+    expect(styleOf(spans[2] ?? null).color).toBe(colors.textFaint);
+    expect(styleOf(spans[2] ?? null).fontVariant).toBeUndefined();
+  });
+
+  it("promotes one fact to the display rung, over a qualifier line", () => {
+    const container = render(
+      <PanelBlock
+        figure={{
+          label: "At least · 30 days",
+          qualifier: "1 unpriced.",
+          value: "$3.40",
+        }}
+      />
+    );
+    const spans = nodesOf(container, "span");
+    expect(spans.map((node) => node.textContent)).toStrictEqual([
+      "At least · 30 days",
+      "$3.40",
+      "1 unpriced.",
+    ]);
+    // The display rung is the whole mechanism — the same string at the fact
+    // rung is one 13pt value among thirty.
+    const factRung = styleOf(spans[0] ?? null).fontSize as number;
+    expect(styleOf(spans[1] ?? null).fontSize).toBeGreaterThan(factRung);
+    // …and it is still a number: tabular figures, from the numeric role.
+    expect(styleOf(spans[1] ?? null).fontVariant).toStrictEqual([
+      "tabular-nums",
+    ]);
+  });
+
+  it("tones a figure that is bad news, and draws no empty qualifier", () => {
+    const container = render(
+      <PanelBlock figure={{ label: "Failed", net: true, value: "12" }} />
+    );
+    const spans = nodesOf(container, "span");
+    expect(spans).toHaveLength(2);
+    expect(styleOf(spans[1] ?? null).color).toBe(colors.net);
+  });
+
   it("renders nothing it was not given", () => {
     const container = render(<PanelBlock body="Facts only." />);
     expect(nodesOf(container, "span")).toHaveLength(1);

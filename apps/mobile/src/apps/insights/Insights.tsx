@@ -23,8 +23,9 @@ import React, { useMemo } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 
 import BarsBlock from "../../kit/components/BarsBlock";
-import { COLUMN_COUNT } from "../../kit/components/BarsBlock.styles";
+import { MAX_COLUMNS } from "../../kit/components/BarsBlock.styles";
 import ChipsBlock from "../../kit/components/ChipsBlock";
+import DistributionBlock from "../../kit/components/DistributionBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
 import { healthLineFor } from "../../kit/components/health-line";
 import HealthLine from "../../kit/components/HealthLine";
@@ -43,15 +44,24 @@ import GatewayAlerts from "./GatewayAlerts";
 import {
   axisLabels,
   buildBars,
+  columnCount,
+  effortBreakdown,
   gatewayFacts,
+  harnessBreakdown,
   insightsHealth,
-  pricingLine,
+  modelBreakdown,
+  peakNote,
   recentRows,
   runsMeta,
+  sourceBreakdown,
   sourceFacts,
   sourceMeta,
+  spendFacts,
+  spendFigure,
+  unhealthyComponents,
   windowChips,
 } from "./insights-model";
+import type { Breakdown } from "./insights-model";
 import { styles } from "./Insights.styles";
 import { useInsights } from "./useInsights";
 import type { InsightsController } from "./useInsights";
@@ -90,6 +100,30 @@ const NO_HEALTH =
 const LEGEND_RUNS = "runs";
 const LEGEND_FAILED = "";
 
+/** A breakdown, or nothing at all: an empty distribution is an absence, and a
+ *  section head over no rows reads as a failed load. */
+function Distribution({
+  label,
+  breakdown,
+  accessibilityLabel,
+}: {
+  label?: string;
+  breakdown: Breakdown;
+  accessibilityLabel: string;
+}): React.JSX.Element | null {
+  if (breakdown.rows.length === 0) return null;
+  return (
+    <>
+      {label ? <SectionBlock label={label} meta={breakdown.meta} /> : null}
+      <DistributionBlock
+        accessibilityLabel={accessibilityLabel}
+        rows={breakdown.rows}
+        unit={breakdown.unit}
+      />
+    </>
+  );
+}
+
 export default function InsightsScreen({
   navigation,
   route,
@@ -104,9 +138,11 @@ export default function InsightsScreen({
 function AnalyticsBody({
   page,
   onOpenAutomation,
+  onOpenAlerts,
 }: {
   page: InsightsController;
   onOpenAutomation: (automationRef: string) => void;
+  onOpenAlerts: () => void;
 }): React.JSX.Element {
   const { load, state, windowDays } = page;
 
@@ -163,22 +199,55 @@ function AnalyticsBody({
     );
 
   const recent = recentRows(summary);
+  const peak = peakNote(summary);
+  const unhealthy = health ? unhealthyComponents(health) : undefined;
   return (
     <>
       {chips}
-      <SectionBlock label="Runs" meta={runsMeta(summary)} />
+      <PanelBlock
+        body="Completed runs in this vault only; estimates use public model rates."
+        facts={spendFacts(summary)}
+        figure={spendFigure(summary, windowDays)}
+      />
+
+      <SectionBlock label="Daily activity" meta={runsMeta(summary)} />
       <BarsBlock
-        accessibilityLabel={`Runs per day over the last ${String(windowDays)} days`}
-        axis={axisLabels(windowDays)}
-        data={buildBars(summary, windowDays, page.now, COLUMN_COUNT)}
+        accessibilityLabel={`Spend per day over the last ${String(windowDays)} days`}
+        axis={axisLabels(summary, windowDays, page.now)}
+        data={buildBars(
+          summary,
+          windowDays,
+          page.now,
+          columnCount(windowDays, MAX_COLUMNS)
+        )}
         legendFailed={LEGEND_FAILED}
         legendSucceeded={LEGEND_RUNS}
+        {...(peak ? { note: peak } : {})}
       />
 
       <SectionBlock label="By source" meta={sourceMeta(summary)} />
-      <PanelBlock
-        body={`${pricingLine(summary)} Completed runs in this vault only; estimates use public model rates.`}
-        facts={sourceFacts(summary)}
+      <Distribution
+        accessibilityLabel="Spend per source"
+        breakdown={sourceBreakdown(summary)}
+      />
+      {sourceFacts(summary).length > 0 ? (
+        <PanelBlock facts={sourceFacts(summary)} />
+      ) : null}
+
+      <Distribution
+        accessibilityLabel="Spend by harness"
+        breakdown={harnessBreakdown(summary)}
+        label="By harness"
+      />
+      <Distribution
+        accessibilityLabel="Spend by model"
+        breakdown={modelBreakdown(summary)}
+        label="By model"
+      />
+      <Distribution
+        accessibilityLabel="Spend by effort"
+        breakdown={effortBreakdown(summary)}
+        label="By effort"
       />
 
       {recent.length > 0 ? (
@@ -210,7 +279,21 @@ function AnalyticsBody({
 
       <SectionBlock label="Gateway" meta="your own machine" />
       {health ? (
-        <PanelBlock facts={gatewayFacts(health)} />
+        <PanelBlock
+          facts={gatewayFacts(health)}
+          // Bad news gets a verb. "3 of 4 healthy" told a member something was
+          // wrong and gave them nowhere to go with it; the alerts place is
+          // where the component's own errors are (#775).
+          {...(unhealthy
+            ? {
+                action: {
+                  hint: `Not healthy: ${unhealthy}`,
+                  label: "See what’s wrong",
+                  onPress: onOpenAlerts,
+                },
+              }
+            : {})}
+        />
       ) : (
         <PanelBlock body={NO_HEALTH} />
       )}
@@ -272,6 +355,9 @@ function Analytics({ navigation }: InsightsScreenProps): React.JSX.Element {
             </Text>
           ) : null}
           <AnalyticsBody
+            onOpenAlerts={() =>
+              navigation.navigate("Insights", { initialTab: "alerts" })
+            }
             onOpenAutomation={(automationRef) =>
               navigation.navigate("Automations", { automationRef })
             }

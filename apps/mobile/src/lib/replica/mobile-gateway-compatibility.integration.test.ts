@@ -41,16 +41,41 @@ describe("mobile gateway compatibility handshake", () => {
     );
     vi.stubGlobal("fetch", fetchInfo);
 
+    // The admitted gateway advertises no experimental flag, so both read off
+    // — and the SAME call reports them, which is the point: a gated surface
+    // never gets to fetch `/info` a second time for itself.
     await expect(
       requireMobileOfflineGateway({
         baseUrl: "http://127.0.0.1:18789",
         online: true,
       })
-    ).resolves.toBeUndefined();
+    ).resolves.toStrictEqual({ automations: false, connectors: false });
     expect(fetchInfo).toHaveBeenCalledWith(
       new URL("http://127.0.0.1:18789/centraid/_gateway/info"),
       { headers: { Authorization: "Bearer test-mobile" } }
     );
+  });
+
+  test("reports the experimental features an opted-in gateway advertises", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<() => Promise<Response>>(async () =>
+        Response.json({
+          ...supportedInfo,
+          capabilities: {
+            ...supportedInfo.capabilities,
+            automations: true,
+            connectors: false,
+          },
+        })
+      )
+    );
+    await expect(
+      requireMobileOfflineGateway({
+        baseUrl: "http://127.0.0.1:18789",
+        online: true,
+      })
+    ).resolves.toStrictEqual({ automations: true, connectors: false });
   });
 
   // THE ONE THIS FILE EXISTS TO HOLD. The predecessor cached an online
@@ -71,6 +96,8 @@ describe("mobile gateway compatibility handshake", () => {
         baseUrl: "http://127.0.0.1:18789",
         online: false,
       })
+      // …and `undefined`, not "both off": a gateway that never answered has
+      // not switched anything off, so no surface may be hidden on its behalf.
     ).resolves.toBeUndefined();
   });
 

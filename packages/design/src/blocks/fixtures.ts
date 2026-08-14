@@ -22,10 +22,14 @@
 import type {
   ButtonData,
   ChipData,
+  DistributionDatum,
   EmptyCopy,
+  GridColumnData,
   PanelActionData,
   PanelFactData,
+  PanelFigureData,
   RowData,
+  SectionActionData,
   SectionCopy,
 } from "./contracts";
 
@@ -68,6 +72,23 @@ export const PANEL_FACTS_FIXTURE: readonly PanelFactData[] = [
   { key: "nothing has been sent", value: "8.4 MB", mono: true, net: true },
 ];
 
+/** A fact carrying a caveat of its own. A kit that renders the value and drops
+ *  the note has silently promised something Conserve does not govern. */
+export const PANEL_FACT_NOTE_FIXTURE: PanelFactData = {
+  key: "harness runs",
+  value: "3 runs · 9.0s active",
+  mono: true,
+  note: "Measured, not limited by Conserve.",
+};
+
+/** The promoted figure: a display-rung value, what it is, and what it leaves
+ *  out. A kit that draws the value at the fact rung has promoted nothing. */
+export const PANEL_FIGURE_FIXTURE: PanelFigureData = {
+  label: "At least · 30 days",
+  value: "$3.40",
+  qualifier: "$2.10 harness-reported · 1 unpriced.",
+};
+
 /** The one filled commit a view is allowed. Everything else stays outlined. */
 export const PANEL_COMMIT_FIXTURE: PanelActionData = {
   label: "Approve and send",
@@ -106,6 +127,65 @@ export const EMPTY_FIRST_RUN_FIXTURE: EmptyCopy = {
 export const SECTION_FIXTURE: SectionCopy = {
   label: "Waiting on you",
   meta: "showing 3 of 12",
+};
+
+/**
+ * A breakdown whose rows are deliberately OUT of order and unequal: the block
+ * must lead with the biggest share, and the third row measured something small
+ * enough to round away — so a kit that draws a bare percentage draws nothing
+ * where the fixture expects the one-percent floor.
+ */
+export const DISTRIBUTION_FIXTURE: readonly DistributionDatum[] = [
+  { id: "codex", label: "codex", value: "$0.90 · 4k", weight: 0.9 },
+  {
+    id: "claude-code",
+    label: "claude-code",
+    value: "$2.50 · 11k",
+    weight: 2.5,
+  },
+  {
+    id: "gemini-cli",
+    label: "gemini-cli",
+    value: "<$0.01 · 40",
+    weight: 0.004,
+  },
+];
+
+/** A section's trailing verb, inert. It must stay QUIET even so — a kit that
+ *  reached for the outlined recipe to show the refusal would put a second
+ *  bounded control in a head that is meant to read as one line. */
+export const SECTION_ACTION_FIXTURE: SectionActionData = {
+  hint: "Nothing has been read yet",
+  label: "Refresh",
+  off: true,
+};
+
+/**
+ * A grid's columns, carrying every declaration at once: a primary key, a
+ * reference with a named target, a sealed column and one the store cannot
+ * order by. A kit that draws only the badges it finds convenient passes every
+ * visual check and leaves a member unable to tell a reference from a value.
+ */
+export const GRID_COLUMNS_FIXTURE: readonly GridColumnData[] = [
+  { key: "party_id", label: "party_id", pk: true, register: "mono" },
+  { key: "display_name", label: "display_name" },
+  { fk: "core.place", key: "home_place_id", label: "home_place_id" },
+  { key: "secret", label: "secret", sealed: true },
+  { fixed: true, key: "extra", label: "extra" },
+];
+
+/**
+ * One record against those columns, with each cell kind represented: a value,
+ * a value long enough to be cut, an absent value, the empty string, and the
+ * masking sentinel. `null` and `""` are DIFFERENT cells and a kit must say so.
+ */
+export const GRID_ROW_FIXTURE: Readonly<Record<string, unknown>> = {
+  display_name:
+    "Thomasina Pemberton-Marchetti of the Upper Cottage, Little Wenlock",
+  extra: "",
+  home_place_id: null,
+  party_id: "p-1",
+  secret: "«sealed»",
 };
 
 /** A disabled control carrying an icon — the two Button fields most easily

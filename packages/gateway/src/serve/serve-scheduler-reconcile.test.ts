@@ -115,6 +115,7 @@ describe("serve-scheduler-reconcile scenarios", () => {
     started = 0;
     handle = await serve({
       paths: pathsUnder(dataDir),
+      experimental: { automations: true },
       scheduler: stubScheduler(),
     });
   });
@@ -200,6 +201,7 @@ describe("serve-scheduler-reconcile scenarios", () => {
     await handle.close();
     handle = await serve({
       paths: pathsUnder(dataDir),
+      experimental: { automations: true },
       scheduler: bootstrapRejectingScheduler(),
     });
 
@@ -211,7 +213,10 @@ describe("serve-scheduler-reconcile scenarios", () => {
     // Exercise the real scheduler behind a live HTTP gateway, not the spy used
     // by the reconcile test above.
     await handle.close();
-    handle = await serve({ paths: pathsUnder(dataDir) });
+    handle = await serve({
+      paths: pathsUnder(dataDir),
+      experimental: { automations: true },
+    });
     await publishBrief(DATA_AUTOMATION_JSON);
 
     // Publishing awaits reconciliation, including the fresh watcher's
@@ -293,6 +298,7 @@ describe("serve-scheduler-reconcile scenarios", () => {
     await handle.close();
     handle = await serve({
       paths: pathsUnder(dataDir),
+      experimental: { automations: true },
       scheduler: stubScheduler(),
     });
     const droppedPlane = handle.vaults.current();
@@ -310,7 +316,10 @@ describe("serve-scheduler-reconcile scenarios", () => {
       .get() as { prov_id: string };
     await handle.close();
 
-    handle = await serve({ paths: pathsUnder(dataDir) });
+    handle = await serve({
+      paths: pathsUnder(dataDir),
+      experimental: { automations: true },
+    });
     await waitFor(async () => {
       await refreshRuns();
       return (

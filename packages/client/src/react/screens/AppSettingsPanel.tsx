@@ -237,6 +237,7 @@ export default function AppSettingsPanel(
     onMountRuns,
     onMountVault,
     initialTab = "appearance",
+    automationsVisible = true,
   } = props;
   const [snap, setSnap] = useState<AppSettingsSnapshot | null>(null);
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -311,6 +312,9 @@ export default function AppSettingsPanel(
           <div className={cx(segCss.seg, styles.settingsTabs)}>
             {TABS.map((t) => {
               if (t.id === "vault" && !snap.vaultVisible) return null;
+              // Same rule as the vault tab above: a tab the gateway cannot
+              // serve is absent, never present-and-empty.
+              if (t.id === "automations" && !automationsVisible) return null;
               const badge =
                 t.id === "automations"
                   ? snap.automationsBadge

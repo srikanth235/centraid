@@ -267,6 +267,9 @@ async function commandServe(args: string[]): Promise<void> {
     ...(config.resourceMode === undefined
       ? {}
       : { resourceMode: config.resourceMode }),
+    ...(config.experimental === undefined
+      ? {}
+      : { experimental: config.experimental }),
     token: loopbackSecret,
     logTag: "centraid-gateway",
     deviceAccess: devicePlane.deviceAccess,

@@ -63,6 +63,66 @@ export function supportsMobileOfflineGateway(raw: unknown): boolean {
 }
 
 /**
+ * The experimental gateway features (v0 early feedback) this app gates a
+ * surface on. Read off the SAME `/centraid/_gateway/info` answer the
+ * compatibility wall already fetched — C1 says capabilities are detected in
+ * one place and never re-derived per screen.
+ */
+export interface MobileGatewayFeatures {
+  /** The Automations place — lifecycle, runs feed, webhook ingress. */
+  automations: boolean;
+  /** The Connectors place — connection health/configure, consent ceremony. */
+  connectors: boolean;
+}
+
+/**
+ * What a member sees if they reach a switched-off place anyway — a deep link,
+ * a saved shortcut, a row on another screen. Beside the compatibility wall
+ * copy above for the same reason: the words a wall says are part of the
+ * judgment, not of the screen that happens to draw them.
+ *
+ * It names the GATEWAY, not the app: nothing is missing from this phone, and
+ * the switch is not on it either.
+ */
+export const MOBILE_FEATURE_OFF_COPY: Record<
+  keyof MobileGatewayFeatures,
+  { title: string; body: string }
+> = {
+  automations: {
+    title: "Automations are off",
+    body: "This gateway has not switched automations on. Turn them on from the desktop to see the rules that run here.",
+  },
+  connectors: {
+    title: "Connectors are off",
+    body: "This gateway has not switched connectors on. Turn them on from the desktop to manage what is allowed to reach outside.",
+  },
+};
+
+/**
+ * What this gateway says it has switched on. Absent flag reads as OFF (the
+ * protocol keys are optional, so a gateway that predates them handshakes
+ * clean); a body that is not a capability map at all reads as off too, since
+ * this is only ever called on an answer that already passed the wall.
+ *
+ * `undefined` is NOT produced here — "the gateway never answered" is the
+ * caller's fact (see `requireMobileOfflineGateway`), and consumers must keep
+ * the two apart: an unanswered question is not a verdict, so it may not hide
+ * a surface.
+ */
+export function readMobileGatewayFeatures(raw: unknown): MobileGatewayFeatures {
+  const capabilities =
+    raw !== null && typeof raw === "object"
+      ? (raw as { capabilities?: unknown }).capabilities
+      : undefined;
+  if (!isGatewayCapabilities(capabilities))
+    return { automations: false, connectors: false };
+  return {
+    automations: capabilities.automations === true,
+    connectors: capabilities.connectors === true,
+  };
+}
+
+/**
  * C1(b) judgment shared by foreground and background construction.
  * judgeGatewayInfo owns the mutual protocol window; this adapter only chooses
  * which side is older so the one blocking wall can give a useful instruction.

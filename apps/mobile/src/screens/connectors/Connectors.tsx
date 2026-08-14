@@ -34,6 +34,7 @@ import { RefreshControl, ScrollView, View } from "react-native";
 
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
+import FeatureOffPlace from "../../kit/components/FeatureOffPlace";
 import { healthLineFor } from "../../kit/components/health-line";
 import HealthLine from "../../kit/components/HealthLine";
 import HomeKey from "../../kit/components/HomeKey";
@@ -45,6 +46,7 @@ import RowsBlock from "../../kit/components/RowsBlock";
 import SectionBlock from "../../kit/components/SectionBlock";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import TopSafeArea from "../../kit/components/TopSafeArea";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { useTheme } from "../../kit/theme";
 import type { ConnectorsScreenProps } from "../../navigation";
 import {
@@ -166,7 +168,30 @@ function ConnectorsBody({
   );
 }
 
-export default function ConnectorsScreen({
+/**
+ * The gate, above the page. Split from `ConnectorsPlace` rather than checked
+ * inside it so a gateway with connectors switched off never mounts
+ * `useConnectors` — the hook would read routes this gateway does not serve and
+ * dress a 404 as a page error. `undefined` is unknown, not off: no gateway has
+ * answered yet, and the page's own error state already covers one that will
+ * not talk.
+ */
+export default function ConnectorsScreen(
+  props: ConnectorsScreenProps
+): React.JSX.Element {
+  const { features } = useReplica();
+  if (features && !features.connectors)
+    return (
+      <FeatureOffPlace
+        feature="connectors"
+        onLeave={() => props.navigation.goBack()}
+        title="Connectors"
+      />
+    );
+  return <ConnectorsPlace {...props} />;
+}
+
+function ConnectorsPlace({
   navigation,
 }: ConnectorsScreenProps): React.JSX.Element {
   const { colors } = useTheme();

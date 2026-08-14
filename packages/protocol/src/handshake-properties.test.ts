@@ -4,6 +4,7 @@ import { fc } from "@centraid/test-kit/fast-check";
 
 import {
   DEFAULT_GATEWAY_CAPABILITIES,
+  OPTIONAL_GATEWAY_CAPABILITIES,
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
   judgeGatewayInfo,
@@ -193,6 +194,7 @@ describe("protocol handshake property", () => {
   });
 
   test("every advertised capability is required on the handshake", () => {
+    const optional = new Set<string>(OPTIONAL_GATEWAY_CAPABILITIES);
     for (const capability of Object.keys(DEFAULT_GATEWAY_CAPABILITIES)) {
       const capabilities: Record<string, unknown> = {
         ...DEFAULT_GATEWAY_CAPABILITIES,
@@ -204,8 +206,11 @@ describe("protocol handshake property", () => {
         minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
         capabilities,
       });
-      expect(result.ok, capability).toBe(false);
-      assert(!result.ok);
+      // Experimental gates are additive: a gateway that predates them still
+      // handshakes clean, and the absent flag reads as off. Every other
+      // capability is load-bearing — omitting it is malformed.
+      expect(result.ok, capability).toBe(optional.has(capability));
+      if (result.ok) continue;
       expect(result.reason, capability).toBe("malformed");
     }
   });

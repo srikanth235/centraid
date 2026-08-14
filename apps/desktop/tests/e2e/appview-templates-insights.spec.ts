@@ -467,18 +467,35 @@ test("11.1 — Analytics renders the runs chart and what it cost", async () => {
   try {
     await waitForHome(page);
     await gotoNav(page, "Analytics");
-    // v9 (#765): the spend hero and the KPI strip are gone. The page is the
-    // runs chart — one image with a sentence — over the source facts, and the
-    // spend is one of those facts rather than a headline figure.
+    // v9 (#765) retired the KPI strip; #775 restored the two things going
+    // with it that the page could not do without — the promoted spend figure
+    // and the categorical breakdowns the gateway was already computing. The
+    // chart is one image with a sentence, and it draws SPEND per day.
     await expect(
-      page.getByRole("img", { name: "Runs per day over the last 30 days" })
+      page.getByRole("img", { name: "Spend per day over the last 30 days" })
     ).toBeVisible();
     await expect(
       page.getByRole("group", { name: "Time window" })
     ).toBeVisible();
-    // The spend fact, wherever the fact list puts it — the page states the
-    // figure, it no longer headlines it.
+    await expect(
+      page.locator("dl[aria-label='Spend by harness']")
+    ).toBeVisible();
+    await expect(page.locator("body")).toContainText("claude-code");
+    // The spend, promoted: the page HEADLINES the figure again.
     await expect(page.locator("body")).toContainText("$1.23");
+
+    // #775 UI evidence, captured on a POPULATED page for the same reason the
+    // #765 capture is: an empty Analytics screen would prove nothing about
+    // the figure, the distribution rows, or the dated chart.
+    const evidenceDir = path.resolve(
+      import.meta.dirname,
+      "../../../../artifacts/e2e/ui-impact"
+    );
+    await fs.mkdir(evidenceDir, { recursive: true });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-775-analytics-restored.png"),
+      fullPage: true,
+    });
   } finally {
     await closeApp(app);
   }

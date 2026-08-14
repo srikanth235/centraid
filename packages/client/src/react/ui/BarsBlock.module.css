@@ -19,6 +19,14 @@
   padding: var(--sp-4);
 }
 
+/* One column per day is the honest fold (#775), so a ninety-day window really
+   does draw ninety columns — at which point the gutter is what would eat the
+   plot. It steps down to the hairline gap rather than the chart sampling the
+   window away. */
+.bars[data-dense="true"] {
+  --bars-gap: var(--sp-hair);
+}
+
 .bars[data-compact="true"] {
   --bars-h: calc(var(--h-row) * 2 + var(--sp-5) + var(--sp-1));
   --bars-gap: var(--sp-gutter);
@@ -80,6 +88,15 @@
   font: var(--t-mono);
   font-variant-numeric: var(--t-mono-numeric);
   unicode-bidi: var(--t-mono-bidi);
+}
+
+/* The peak line (#775). A plot with no value axis shows proportion and nothing
+   else, so the one column worth naming names itself here in words. */
+.note {
+  color: var(--text-soft);
+  font: var(--t-small);
+  margin: 0;
+  text-wrap: pretty;
 }
 
 .legend {
