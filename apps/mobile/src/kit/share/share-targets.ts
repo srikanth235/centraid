@@ -1,3 +1,13 @@
+// The shared laws are the single source of truth for what a share submits.
+// Native re-states only the parts whose INPUTS differ (two-sided links, vault
+// scopes); everything whose types line up delegates here rather than keeping a
+// second copy that can drift (#776).
+import {
+  isPendingPartyId,
+  selectedShareMembers,
+  selectionsForCircle,
+} from "@centraid/blueprints/apps/_shared/share-kit";
+
 export interface NativeShareScope {
   vaultId: string;
   label: string;
@@ -24,6 +34,10 @@ export interface NativeShareTarget {
   label: string;
   partyId?: string;
   vaultId?: string;
+  /** This person exists only as a queued offline write: their party id is an
+   * overlay id no vault has settled. The row stays visible (the member did add
+   * them) but is never selectable, so no share can name that id. */
+  pending?: true;
 }
 
 export interface NativeShareMember {
@@ -38,40 +52,21 @@ export interface NativeNamedShareCircle {
   members: NativeShareMember[];
 }
 
+/** The shared law verbatim: a target is exactly a `ShareDestination`, so the
+ * member array — including its refusal to submit a pending overlay id — is
+ * computed once, in `_shared/share-kit`. */
 export function selectedNativeShareMembers(
   targets: readonly NativeShareTarget[],
   selections: Readonly<Record<string, "read" | "read+write">>
 ): NativeShareMember[] {
-  return targets.flatMap((target) => {
-    const capability = selections[target.id];
-    if (!capability) return [];
-    return [
-      {
-        ...(target.partyId ? { partyId: target.partyId } : {}),
-        ...(target.vaultId ? { vaultId: target.vaultId } : {}),
-        capability,
-      },
-    ];
-  });
+  return selectedShareMembers(targets, selections);
 }
 
 export function selectionsForNativeCircle(
   targets: readonly NativeShareTarget[],
   circle: NativeNamedShareCircle
 ): Record<string, "read" | "read+write"> {
-  const byParty = new Map(
-    circle.members.flatMap((member) =>
-      member.partyId ? [[member.partyId, member.capability] as const] : []
-    )
-  );
-  return Object.fromEntries(
-    targets.flatMap((target) => {
-      const capability = target.partyId
-        ? byParty.get(target.partyId)
-        : undefined;
-      return capability ? [[target.id, capability]] : [];
-    })
-  );
+  return selectionsForCircle(targets, circle);
 }
 
 /** Only current-owner Tally-decorated circles are deliberate named audiences.
@@ -202,6 +197,11 @@ export function nativeShareTargets(input: {
         partyId,
         label,
         ...(vaultId ? { vaultId } : {}),
+        // A person the member added while offline is projected by the outbox
+        // overlay, never settled by a vault. They are listed — hiding them
+        // would deny a write the member can see everywhere else — but marked
+        // so the sheet can refuse to select them.
+        ...(isPendingPartyId(partyId) ? { pending: true as const } : {}),
       },
     ];
   });

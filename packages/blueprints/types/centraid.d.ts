@@ -387,6 +387,11 @@ interface CentraidClient {
       vaultId?: string;
     }>
   >;
+  /** Mint a People person inline from the ShareSheet. Online-only: resolves
+   *  only with a real, settled party id — never a pending overlay id. */
+  quickAddPerson?: (opts: {
+    name: string;
+  }) => Promise<{ partyId: string; label: string }>;
   /** Named Tally-backed circles only; implicit per-container circles never
    * appear here. */
   shareCircles?: () => Promise<

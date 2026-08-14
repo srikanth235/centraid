@@ -50,6 +50,30 @@
   color: var(--text-soft);
 }
 
+/* The inline person quick-add. Rendered in the destination list AND in the
+   empty-roster state, so the "add someone by name below" copy is true. */
+.quickAdd {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  justify-items: start;
+}
+
+.quickAddField {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-inline-size: 0;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+.quickAddHint {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
 .warn {
   margin: 10px 0 0;
   padding: 10px 12px;

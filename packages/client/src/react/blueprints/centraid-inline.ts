@@ -136,7 +136,7 @@ export interface InlineShareCircle {
 /** A refusal the app is expected to render, not a crash. */
 export class InlineScopeError extends Error {
   constructor(
-    readonly code: "SCOPE_READONLY" | "UNKNOWN_SCOPE",
+    readonly code: "INVALID_INPUT" | "SCOPE_READONLY" | "UNKNOWN_SCOPE",
     message: string
   ) {
     super(message);
@@ -225,6 +225,11 @@ export interface InlineCentraidClient {
   }) => Promise<InlineCommonsShareResult>;
   /** People-directory identities, joined to a vault only after acceptance. */
   shareTargets: () => Promise<InlineShareTarget[]>;
+  /** Mint a People person inline from the ShareSheet. Online-only: resolves
+   *  only with a real, settled party id — never a pending overlay id. */
+  quickAddPerson: (opts: {
+    name: string;
+  }) => Promise<{ partyId: string; label: string }>;
   /** Deliberately reusable named audiences. Implicit per-container circles
    * are excluded by construction. */
   shareCircles: () => Promise<InlineShareCircle[]>;
@@ -383,6 +388,32 @@ async function loadShareTargets(
     });
   }
   return [...targets.values()];
+}
+
+/** The default check-in cadence a person gets when People mints them without
+ * the member choosing one, matching the People screen's own default. */
+const QUICK_ADD_CADENCE_DAYS = 30;
+
+/**
+ * The party id a quick-add write actually settled on, or a throw. Only an
+ * `executed` intent has a real identity behind it: `queued`/`parked` are still
+ * waiting on a steward, and `denied`/`expired`/`cancelled` never happened at
+ * all. A `pending:` id is the offline overlay's placeholder, never a person —
+ * returning one would put a nonexistent identity into a share.
+ */
+export function settledPartyIdFromOutcome(outcome: unknown): string {
+  const settled = outcome as {
+    status?: unknown;
+    output?: { party_id?: unknown };
+  } | null;
+  if (settled?.status !== "executed")
+    throw new Error(
+      `Adding a person did not complete (${String(settled?.status ?? "no outcome")}).`
+    );
+  const partyId = settled.output?.party_id;
+  if (typeof partyId !== "string" || !partyId || partyId.startsWith("pending:"))
+    throw new Error("Adding a person did not return a settled identity.");
+  return partyId;
 }
 
 async function loadShareCircles(
@@ -845,6 +876,33 @@ export function createInlineCentraidClient(
 
     shareTargets() {
       return loadShareTargets(primary.session, primary.scope.id);
+    },
+
+    async quickAddPerson(opts) {
+      const name = opts.name.trim();
+      if (!name)
+        throw new InlineScopeError(
+          "INVALID_INPUT",
+          "A person needs a name before they can be added."
+        );
+      // No offline queue for this one: the sheet needs the settled party id
+      // right now to name a member, and an overlay id names nobody.
+      if (!isOnline())
+        throw new Error(
+          "Adding a person needs a gateway connection on web; add them from the People app on the native seat."
+        );
+      // Written under the PEOPLE app's identity from whichever app is
+      // embedding the sheet — the same cross-app-id path `loadShareTargets`
+      // reads the roster over, so no app manifest grows a People grant.
+      const outcome = await primary.session.write("people", {
+        action: "add-person",
+        input: {
+          display_name: name,
+          cadence_days: QUICK_ADD_CADENCE_DAYS,
+        } as never,
+        intentId: globalThis.crypto.randomUUID(),
+      });
+      return { partyId: settledPartyIdFromOutcome(outcome), label: name };
     },
 
     shareCircles() {

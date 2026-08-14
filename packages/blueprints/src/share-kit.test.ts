@@ -64,6 +64,16 @@ const shareKit = (await import(moduleUrl)) as {
   shareBlockedReason: (
     destinations: readonly ShareDestination[]
   ) => string | null;
+  isPendingPartyId: (partyId: string) => boolean;
+  quickAddedDestination: (partyId: string, label: string) => ShareDestination;
+  withQuickAddedPerson: (
+    destinations: readonly ShareDestination[],
+    added: ShareDestination
+  ) => ShareDestination[];
+  nearNameMatches: (
+    destinations: readonly ShareDestination[],
+    name: string
+  ) => ShareDestination[];
 };
 
 const OWN: Scope = {
@@ -205,12 +215,122 @@ describe("peopleDestinations — joined and invited identities", () => {
       },
     ]);
   });
+
+  it("drops a selected person whose identity is still a pending overlay id", () => {
+    expect(
+      shareKit.selectedShareMembers(
+        [
+          {
+            id: "party:pending:intent-1:0",
+            label: "Cara",
+            partyId: "pending:intent-1:0",
+          },
+          { id: "party:asha", label: "Asha", partyId: "asha" },
+        ],
+        {
+          "party:pending:intent-1:0": "read",
+          "party:asha": "read",
+        }
+      )
+    ).toStrictEqual([{ partyId: "asha", capability: "read" }]);
+  });
+});
+
+describe("quick-add laws — minting a person from the sheet itself", () => {
+  it("synthesizes the id exactly as peopleDestinations does for a vault-less person", () => {
+    expect(shareKit.quickAddedDestination("asha", "Asha")).toStrictEqual({
+      id: "party:asha",
+      label: "Asha",
+      partyId: "asha",
+    });
+    expect(
+      shareKit.peopleDestinations([{ partyId: "asha", label: "Asha" }], [])[0]
+        ?.id
+    ).toBe(shareKit.quickAddedDestination("asha", "Asha").id);
+  });
+
+  it("appends the added person to the listed destinations", () => {
+    expect(
+      shareKit.withQuickAddedPerson(
+        [{ id: "party:ben", label: "Ben", partyId: "ben" }],
+        shareKit.quickAddedDestination("asha", "Asha")
+      )
+    ).toStrictEqual([
+      { id: "party:ben", label: "Ben", partyId: "ben" },
+      { id: "party:asha", label: "Asha", partyId: "asha" },
+    ]);
+  });
+
+  it("never lists the same party twice, even under a different label", () => {
+    const listed: ShareDestination[] = [
+      {
+        id: "asha-vault",
+        label: "Asha",
+        partyId: "asha",
+        vaultId: "asha-vault",
+      },
+    ];
+    expect(
+      shareKit.withQuickAddedPerson(
+        listed,
+        shareKit.quickAddedDestination("asha", "Asha Rao")
+      )
+    ).toStrictEqual(listed);
+  });
+
+  it("does not treat two vault-less destinations as the same party", () => {
+    expect(
+      shareKit.withQuickAddedPerson(
+        [{ id: "own", label: "Library" }],
+        shareKit.quickAddedDestination("asha", "Asha")
+      )
+    ).toHaveLength(2);
+  });
+});
+
+describe("nearNameMatches — did you mean someone already listed?", () => {
+  const listed: ShareDestination[] = [
+    { id: "party:asha", label: "Asha Rao", partyId: "asha" },
+    { id: "party:ben", label: "Ben", partyId: "ben" },
+  ];
+
+  it("matches on case and surrounding whitespace alike", () => {
+    expect(shareKit.nearNameMatches(listed, "  ben ")).toStrictEqual([
+      listed[1],
+    ]);
+    expect(shareKit.nearNameMatches(listed, "BEN")).toStrictEqual([listed[1]]);
+  });
+
+  it("matches when either name contains the other", () => {
+    expect(shareKit.nearNameMatches(listed, "Asha")).toStrictEqual([listed[0]]);
+    expect(
+      shareKit.nearNameMatches(
+        [{ id: "party:ben", label: "Ben", partyId: "ben" }],
+        "Ben Rao"
+      )
+    ).toHaveLength(1);
+  });
+
+  it("asks nothing about an empty name", () => {
+    expect(shareKit.nearNameMatches(listed, "   ")).toStrictEqual([]);
+  });
+
+  it("finds nobody when no listed name is close", () => {
+    expect(shareKit.nearNameMatches(listed, "Cara")).toStrictEqual([]);
+  });
+});
+
+describe("isPendingPartyId", () => {
+  it("names the offline overlay's placeholder id and nothing else", () => {
+    expect(shareKit.isPendingPartyId("pending:intent-1:0")).toBe(true);
+    expect(shareKit.isPendingPartyId("asha")).toBe(false);
+  });
 });
 
 describe("shareBlockedReason", () => {
   it("states the honest zero-destination reason", () => {
     expect(shareKit.shareBlockedReason([])).toBe(
-      "There is nobody to share with yet — add someone in People first."
+      "There is nobody to share with yet — add someone by name below."
     );
   });
 

@@ -163,6 +163,13 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
       path: path.join(evidenceDir, "issue-750-vault-sharing.png"),
       fullPage: true,
     });
+    // #776's quick-add is a post-onboarding ShareSheet surface; the focused
+    // web/mobile tests exercise that dialog, while this unchanged first-run
+    // frame records the desktop shell evidence required by the UI receipt.
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-776-sharesheet-quick-add.png"),
+      fullPage: true,
+    });
 
     // Persisted flag means a relaunch would skip onboarding, and the local
     // gateway is now really running.
