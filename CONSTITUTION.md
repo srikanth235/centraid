@@ -19,6 +19,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - Every commit is treated as agent-authored — the audit chain (issue → receipt → commit → token + steering ledger) is mandatory, not opt-in.
 - The repo is its own system of record. Decisions, costs, steering events, and quality observations belong in tracked files, not in chat history.
 - Docs are load-bearing. Stale docs are bugs; broken internal links are bugs; missing baseline docs (constitution, agents, readme, license, security, architecture) are bugs.
+- Documentation describes current state. History is cited by reference; current decisions, deliberate non-goals, and supersession markers remain documentable state, while intent belongs in proposal issues.
 - Escape hatches exist (`SKIP_GOVERNANCE=1`, `git commit --no-verify`) — but every skipped commit is still checked in CI.
 - Every user-facing interaction has a perceived-latency budget. A hot path that ships without a measured budget is an incomplete feature, not a fast one nobody got around to measuring.
 - Nothing whose cost scales with vault size runs synchronously on the request path or the event loop. Growth is the default assumption; "it is small today" is an observation, not a design.
@@ -29,19 +30,16 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 
 <!-- pack: governance-kit/foundation -->
 
-### query-handlers-read-only
+### handler-contract
 
-- **Directive**: centraid query handlers (`*/queries/*.js`) must not mutate the database — no `stmt.run()`, no `db.exec()`. Use `actions/*.js` (dispatched via `centraid_write` / `POST /centraid/_tool/centraid_write`) for any writes.
-- **Rationale**: the runtime's handler-runner skips SQLite session tracking for `handlerKind === 'query'` as a perf optimization on the read path (`packages/app-engine/src/handler-runner.ts`). Writes from a query handler succeed but are invisible to the change-notification SSE feed at `/centraid/<id>/_changes`, so subscribed iframes never re-fetch — UI goes silently stale with no error anywhere. Mutations must live where the bus actually observes them.
-- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/query-handlers-read-only/check.sh`
-- **Exceptions**: per-line waiver `// governance: allow-query-handlers-read-only <reason>` for the rare opt-in case (e.g. lazy view materialization on first access).
-
-### handler-uses-ctx-primitives
-
-- **Directive**: centraid handlers (`**/queries/*.js`, `**/actions/*.js`) must not import provider SDKs directly (`@anthropic-ai/sdk`, `openai`, `groq-sdk`, `@google/generative-ai`, `cohere-ai`, `@mistralai/mistralai`, `replicate`, `together-ai`). Provider-backed judgment flows through `ctx.delegate`; self-contained recognition handlers obtain bytes with `ctx.vault.content`, run their bundled implementation, and persist through `ctx.vault.invoke`. There is no generic `ctx.infer` or `ctx.enrich` capability.
-- **Rationale**: handler-as-source-of-truth. Extending `ctx.*` is the supported way to grow capabilities. Reaching past it (a) defeats per-profile model routing, (b) bypasses run-ledger cost accounting in `runtime.sqlite`, and (c) couples the handler to a specific provider — breaking the gateway portability that the architecture's "same code, three hosts" property depends on.
-- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/handler-uses-ctx-primitives/check.sh`
-- **Exceptions**: per-line waiver `// governance: allow-handler-uses-ctx-primitives <reason>` for the rare opt-in case (e.g. an action that legitimately needs to call a provider directly during a controlled experiment).
+- **Directive**: centraid app handlers stay inside the contract that keeps their data visible to the change stream. Four sub-checks over `**/queries/*.{js,ts}`, `**/actions/*.{js,ts}`, and `**/app.json`:
+    - `query-read-only` — query handlers must not mutate the database (no `stmt.run()`, no `db.exec()`). Writes belong in `actions/*.js`.
+    - `declared-writes` — every entry in a centraid `app.json#actions[]` array declares a `writes:` array of table names. `writes: []` is valid and means "no database writes". Applies to manifests with a top-level `manifestVersion` (which excludes `apps/mobile/app.json`, an Expo config).
+    - `sqlite-separation` — handlers may not reference `runtime.sqlite` in any form. They see only the app's `data.sqlite` through the `ctx.db` proxy.
+    - `ctx-primitives` — handlers may not import provider SDKs directly (`@anthropic-ai/sdk`, `openai`, `groq-sdk`, `@google/generative-ai`, `cohere-ai`, `@mistralai/mistralai`, `replicate`, `together-ai`). Provider-backed judgment flows through `ctx.delegate`; self-contained recognition handlers use `ctx.vault.content` and `ctx.vault.invoke`. There is no generic `ctx.infer` or `ctx.enrich`.
+- **Rationale**: all four guard one boundary — a handler owns its app's `data.sqlite` and reaches everything else through `ctx.*` — and they share one failure signature: the mutation succeeds, the bus stays quiet, subscribed iframes never re-fetch, and the UI goes stale with no error anywhere. The change-stream feed at `/centraid/<id>/_changes` is the common dependency: the handler-runner skips SQLite session tracking for `handlerKind === 'query'` as a read-path optimization (`packages/app-engine/src/handler-runner.ts`), per-table invalidation is driven by each action's declared `writes:`, and `runtime.sqlite` is gateway-owned state the stream would never invalidate. `ctx-primitives` guards the same boundary from the other side: reaching past `ctx.*` defeats per-profile model routing, bypasses run-ledger cost accounting, and couples a handler to one provider — breaking the "same code, three hosts" portability the architecture depends on. Extending `ctx.*` is the supported way to grow capabilities. They are one directive because none is a load-bearing axis alone and the catalog should be honest about how much work each entry does — the same reasoning behind governance-kit's own `repo-hygiene` and `required-docs`.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/handler-contract/check.sh`
+- **Exceptions**: per-line waiver `// governance: allow-handler-contract <reason>` for the rare opt-in case (e.g. lazy view materialization on first access, or an action that must call a provider directly during a controlled experiment). The retired per-directive tokens (`allow-query-handlers-read-only`, `allow-data-runtime-sqlite-separation`, `allow-handler-uses-ctx-primitives`) are still honoured, so an existing waiver keeps working. `declared-writes` takes no waiver: JSON has no comment syntax, and the right opt-out for a no-DB-write action is the explicit empty array.
 
 ### no-hardcoded-model-ids
 
@@ -57,13 +55,6 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/check.sh`
 - **Exceptions**: per-line waiver `/* governance: allow-no-hardcoded-colors <reason> */` for the rare literal that genuinely cannot be a token (e.g. a value fixed by an external spec).
 
-### actions-declare-table-writes
-
-- **Directive**: every entry in a centraid `app.json#actions[]` array must include a `writes:` field whose value is an array of table names. Empty arrays (`writes: []`) are allowed and signal "this action performs no database writes" (e.g. a webhook-only action). Missing or non-array `writes` is rejected. Applies to all tracked `**/app.json` files whose top-level `manifestVersion` is set (distinguishing Centraid manifests from `apps/mobile/app.json`, which is an Expo config).
-- **Rationale**: same foot-gun shape as [[query-handlers-read-only]]. The change-stream SSE feed at `/centraid/<id>/_changes` uses each action's declared `writes:` tables to invalidate per-table query subscriptions. A missing or wrong `writes` field is silently broken: the mutation succeeds, the bus stays quiet, subscribed iframes never re-fetch, UI goes stale with no error. Making the declaration mandatory turns "I forgot to list the table" into a commit-time failure instead of a runtime mystery.
-- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/actions-declare-table-writes/check.sh`
-- **Exceptions**: none. JSON has no comment syntax, and the check is file-level; the right opt-out for a no-DB-write action is the explicit empty array.
-
 ### gateway-engine-mode-agnostic
 
 - **Directive**: code under `packages/app-engine/` may not branch on which gateway mode it is running under. Specifically, gateway-mode-discrimination identifiers (`gatewayMode`, `gatewayKind`, `gateway_mode`, `gateway_kind`, `isEmbeddedGateway`, `isOpenClawGateway`, `isLocalGateway`, `isRemoteGateway`, `deploymentMode`, `hostingMode`) are forbidden in tracked source files. Mode-specific behavior belongs at the entrypoints: `apps/desktop/src/main/` for the embedded gateway, `packages/openclaw-plugin/src/` for the OpenClaw gateway.
@@ -71,17 +62,10 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/gateway-engine-mode-agnostic/check.sh`
 - **Exceptions**: per-line waiver `// governance: allow-gateway-engine-mode-agnostic <reason>` for the rare case where app-engine genuinely needs to inspect its host (none today; the architecture promise is that no such case should exist).
 
-### data-runtime-sqlite-separation
-
-- **Directive**: centraid handler files (`**/queries/*.js`, `**/actions/*.js`) may not reference `runtime.sqlite` in any form (no path strings, no `path.join(..., 'runtime.sqlite')`, no `new Database('.../runtime.sqlite')`). Handlers see only the app's `data.sqlite` via the `ctx.db` proxy.
-- **Rationale**: each app has two SQLite files with distinct owners. `data.sqlite` is app-owned and is what `ctx.db` proxies onto. `runtime.sqlite` is gateway-owned and holds the conversation ledger and automation state. A handler that opens or names `runtime.sqlite` is a layering violation: it reads/writes state the gateway treats as its own and the change-stream would never invalidate. The matching reverse direction - gateway core staying out of `data.sqlite` outside the handler-runner / three-tool dispatcher path - is harder to specify statically (there are multiple legitimate openers and an allowlist would be brittle). Left to code review for now; this directive enforces the easy half.
-- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/data-runtime-sqlite-separation/check.sh`
-- **Exceptions**: per-line waiver `// governance: allow-data-runtime-sqlite-separation <reason>` on the offending line. No legitimate case is anticipated today.
-
 ### coverage-scope-reachability
 
 - **Directive**: Every first-party TypeScript source tree under `packages/*/src` or `apps/*/src`, and the co-located executable `packages/blueprints/apps` / `packages/design/kit` runtime trees, must be covered by an enforced coverage floor, own a product-matrix flow, or appear in the intentional-ungated allowlist; every floor must also be reachable from Vitest's instrumentation globs.
-- **Rationale**: Coverage ratchets cannot protect code the coverage runner never instruments. Issue #532 closed this blind spot for conventional package/app roots, #630 added the 41,821-line bundled blueprint runtime, and #725 found the recognition model and handler build sources under the then-separate `tools/*` root remained outside both enumeration and instrumentation ownership. #753 retired that root — the model runtime is now an ordinary `packages/*` member — so the two remaining source-tree classes obey one reachability rule with one fewer glob to keep in sync.
+- **Rationale**: Coverage ratchets cannot protect code the coverage runner never instruments. The check covers ordinary `packages/*/src` and `apps/*/src` trees plus the co-located blueprint app and kit runtimes; the recognition sources now live under `packages/model-runtime`. The same enumeration and instrumentation rule applies to every covered source-tree class (see #532, #630, #725, and #753 for the boundary decisions).
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/check.sh`
 - **Exceptions**: Runtime trees that are intentionally journey-only may be listed by exact scope id in `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/allowlist.txt` with a matching `TESTING.md` explanation. Line waivers are not supported because the policy applies to whole coverage scopes.
 
@@ -247,6 +231,8 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - 2026-08-10 — @srikanth235 — Clarify `handler-uses-ctx-primitives` after recognition handlers became self-contained: provider work uses `ctx.agent`, deterministic recognition uses `ctx.vault.content` / `ctx.vault.invoke`, and the obsolete `ctx.infer` wording is removed. The enforced provider-SDK import rule is unchanged (#731).
 - 2026-08-11 — @srikanth235 — Rename the former provider-backed handler primitive to `ctx.delegate`, reserving “agent” for autonomous principals. The enforced provider-SDK import rule is unchanged (#743).
 - 2026-08-12 — @srikanth235 — Modify `coverage-scope-reachability`: drop the `tools/*/src` source-tree class and its Vitest instrumentation requirement. The `tools/` workspace root is retired — its sole occupant became `packages/model-runtime` — so tool-scoped floor globs are no longer reachable by the default coverage include and a floor pointing there must now fail (#753).
+- 2026-08-14 — @srikanth235 — Add the current-state documentation principle: docs describe current state, history is cited by reference rather than narrated, deliberate non-goals and supersession markers remain documentable state, and intent lives in proposal issues. Principle only, no new mechanical directive; a narration tripwire is deferred as a future warn-only sweep lane (#767).
+- 2026-08-14 — @srikanth235 — Consolidate `query-handlers-read-only`, `actions-declare-table-writes`, `data-runtime-sqlite-separation`, and `handler-uses-ctx-primitives` into one `handler-contract` directive with four named sub-checks. Same file set, same rules, same waiver semantics (the four retired tokens are still honoured); the four guarded one boundary with one failure signature, and none was a load-bearing axis alone — the reasoning governance-kit already applies to `repo-hygiene` and `required-docs`. Local pack catalog 11 → 8 (#767).
 
 ## Escape hatches
 

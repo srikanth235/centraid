@@ -1,6 +1,6 @@
 # Recognition automations
 
-Settled **2026-08-10**, superseding issue #724's separate enrichment-service process and issue #731's reserved-fetch executor. OCR, transcription, image/text embeddings, and faces are ordinary bundled automations whose handlers own model execution.
+OCR, transcription, image/text embeddings, and faces are bundled automations whose handlers own model execution.
 
 ## One handler, one execution boundary
 
@@ -66,6 +66,6 @@ The live suite checks OCR image and PDF behavior, embedding cosine tolerances, f
 ## Related
 
 - [`ARCHITECTURE.md`](../ARCHITECTURE.md) — runtime placement and automation lifecycle.
-- [`docs/photos-derived-ledger.md`](photos-derived-ledger.md) — vault provenance, semantic search, faces, and backfill.
+- [`docs/photos/derived-ledger.md`](photos/derived-ledger.md) — vault provenance, semantic search, faces, and backfill.
 - [`docs/blueprint-seats.md`](blueprint-seats.md) — the app/automation model-access doctrine.
 - [`packages/model-runtime/README.md`](../packages/model-runtime/README.md) — build and asset setup commands.

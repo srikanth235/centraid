@@ -19,6 +19,8 @@ bun install
 bun run build                         # packages emit dist/; blueprints regenerate manifest/vendors as needed
 ```
 
+`CLAUDE.md` is a symlink to `AGENTS.md` (`ln -sf AGENTS.md CLAUDE.md`), so every agent CLI reads one manual with no sync burden. Restore the symlink if a tool ever replaces it with a copy.
+
 Smoke:
 
 ```sh

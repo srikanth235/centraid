@@ -512,6 +512,6 @@ Do not hardcode colours, font stacks, type sizes, spacing, radii, icon dictionar
 - [packages/design/src/fonts.ts](packages/design/src/fonts.ts) — the one bundled face and the `@font-face` emitter
 - [issue #707](https://github.com/srikanth235/centraid/issues/707) — the Binding Layer brief this constitution implements, quoted in full in the issue; the design-agent prototypes are reference-only and are not kept in the repo
 - [docs/traps/design-tokens.md](docs/traps/design-tokens.md) — source-of-truth trap
-- [docs/refactors/product-grammar.md](docs/refactors/product-grammar.md) — migration safety argument and progress log
+- [issue #690](https://github.com/srikanth235/centraid/issues/690) — product-grammar migration intent and review closure
 - `bun run lint:design-md` — official design.md validation
 - `bun run check:pr` — the full local mirror of CI

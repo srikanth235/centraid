@@ -15,7 +15,7 @@ This is the durable command and ownership contract for TypeScript quality work. 
 | Sharing-plane export reachability | `scripts/check-share-reachability.mjs` (`check:reachability`) + `share-reachability.json` |
 | Runtime behaviour | Vitest and e2e suites |
 | DESIGN.md spec conformance | `@google/design.md` (pinned exact) — see `lint:design-md` |
-| Second-opinion security / reliability (PR check) | SonarCloud Autoscan — see [docs/sonarcloud.md](sonarcloud.md) |
+| Second-opinion security / reliability (PR check) | SonarCloud Autoscan — see [SonarCloud Autoscan](#sonarcloud-autoscan) |
 
 Ultracite seeds `core`, `react`, and `vitest` policy. It is not the routine command runner. `toolchain:doctor` is its non-mutating drift check. Optional GitHub, Sonar, and react-doctor JavaScript-plugin presets remain declined as bundles; a future issue may admit one rule at a time through the rubric below.
 
@@ -43,6 +43,43 @@ All callers use repository-pinned binaries through these Bun scripts:
 | `lint:design-md` | official DESIGN.md linter over the root `DESIGN.md`: schema, `{token.refs}`, WCAG pairs, canonical section order. Errors fail; warnings are advisory |
 | `toolchain:doctor` | non-mutating Ultracite/config drift diagnosis |
 | `check:reachability` | sharing-plane export reachability (see below) |
+
+## SonarCloud Autoscan
+
+SonarCloud is the second-opinion security and reliability check for product code. It runs Automatic Analysis (Autoscan) on GitHub push/PR through project `srikanth235_centraid`; no CI scanner is used. The PR gate is Sonar way because the Free plan cannot assign a custom gate. Coverage remains Vitest's responsibility, and Sonar does not use `sonar-project.properties` for scope.
+
+### Ownership and scope
+
+Sonar complements, rather than replaces, Oxfmt, Oxlint, TypeScript, Knip, Vitest, Gitleaks, OSV, Trivy, GHAS, actionlint, and CodeQL. Do not weaken local policy to satisfy a Sonar style finding.
+
+Product scope is `packages/**` and `apps/**`, excluding generated and non-runtime surfaces. The configured exclusions are:
+
+| Path | Owner / reason |
+| --- | --- |
+| `scripts/**` | CI/tooling CLIs; Oxlint and unit tests |
+| `.github/**` | Workflows; actionlint and CodeQL Actions |
+| `tests/**`, `**/*.{test,spec}.*`, `**/e2e/**`, `**/fixtures/**` | Test and fixture surface |
+| `docs/**`, `receipts/**`, `assets/**` | Non-runtime artifacts |
+| `**/dist/**`, `**/generated/**`, visual harness, tunnel native, wasm | Generated or non-TypeScript product |
+| Five release-generated recognition `handler.js` bundles | `packages/model-runtime` is the source of truth; local lint, typecheck, and tests own the implementation |
+
+The duplication metric excludes `packages/design/src/roles.ts` because its repeated profile-lowering record shape keeps each role's meaning, contrast obligation, and totality reviewable inline. TypeScript, coverage, and mutation gates still exercise it.
+
+### Noise policy
+
+The `NOISE_RULES` list in [`scripts/ci/configure-sonarcloud.mjs`](../scripts/ci/configure-sonarcloud.mjs) silences rules already owned elsewhere or known to be false positives in this monorepo: style preferences, React prop/index-key pedantry, intentional path inheritance and loopback URLs, locale sorting, and workflow/CLI logging false positives. ReDoS (`S5852`), postMessage origin (`S2819`), download-then-exec (`S8482`), empty tests (`S2187`), real control-flow bugs, CSP review, and vault/gateway sinks remain active.
+
+On the Free plan, the custom Centraid profile and gate can be created but cannot be assigned. Keep those copies (without a coverage condition) for a future paid assignment; until then, exclusions and multicriteria protect hygiene/tooling PRs while product PRs fail closed on new BUG/VULNERABILITY findings in `packages/` and `apps/`.
+
+### Re-apply after policy changes
+
+```sh
+export SONAR_TOKEN=$(security find-generic-password -s sonarqube-cli -w)
+bun run scripts/ci/configure-sonarcloud.mjs
+bun run scripts/ci/configure-sonarcloud.mjs --resolve-noise
+```
+
+The settings apply on the next Autoscan analysis. Dashboard: <https://sonarcloud.io/project/overview?id=srikanth235_centraid>.
 
 ## Sharing-plane export reachability
 

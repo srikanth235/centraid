@@ -243,7 +243,7 @@ gitleaks detect --source . --no-git --config .gitleaks.toml
 node scripts/ci/osv-lockfile-scan.mjs
 ```
 
-SonarCloud Autoscan remains a second-opinion maintainability/security check on PRs; it is not one of these three gates. Scope exclusions, silenced noise rules, and the idempotent apply script live in [docs/sonarcloud.md](docs/sonarcloud.md) (`scripts/ci/configure-sonarcloud.mjs`).
+SonarCloud Autoscan remains a second-opinion maintainability/security check on PRs; it is not one of these three gates. Scope exclusions, silenced noise rules, and the idempotent apply script live in [the toolchain contract](docs/toolchain.md#sonarcloud-autoscan) (`scripts/ci/configure-sonarcloud.mjs`).
 
 ## Known metadata exposure to backup providers
 

@@ -39,7 +39,7 @@ Where the block implementations live today:
 | React DOM | `packages/blueprints/apps/_shared` | the eight inline system apps |
 | DOM custom elements | `packages/design/kit/kit-*.js` + `kit.css` | apps served over HTTP to the builder/code-store surface, which resolve no bare package specifiers |
 
-The two React DOM rows are the one place the rule is not yet satisfied. The refactor that collapses them, the token-compatibility audit that clears the way (only `--w-key-col` is genuinely missing from the blueprint lowering), and the reason it is more than one session's work are in [docs/refactors/one-block-vocabulary-per-dom.md](refactors/one-block-vocabulary-per-dom.md). The headless layer landed first, so the two implementations already share their logic while their markup waits.
+The two React DOM rows remain the one composition follow-up: the shell and inline blueprint apps share the headless logic but still own separate markup and stylesheets. The compatibility audit found only `--w-key-col` missing from the blueprint lowering; the consolidation is tracked in [issue #765](https://github.com/srikanth235/centraid/issues/765). The served custom-element kit is intentionally a separate rendering technology with its own implementation and is not part of the React DOM consolidation.
 
 ## Surface inventory
 

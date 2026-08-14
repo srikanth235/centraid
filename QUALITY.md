@@ -21,7 +21,7 @@
 
 - **`react-native-maps` is dead weight and still ships.** Places on the phone
   now draws the shared `place-map.ts` projection through `react-native-svg`
-  (see [docs/photos-places.md](docs/photos-places.md)), so nothing imports
+  (see [docs/photos/places.md](docs/photos/places.md)), so nothing imports
   `MapView` any more — but the dependency is still in `apps/mobile/package.json`
   and still in `ios/Podfile.lock`. It is parked in `knip.json`'s
   `ignoreDependencies` **only** because deleting it without regenerating the
@@ -128,6 +128,15 @@
   near-duplicate `relativeTime` still need consolidation / floors — #545 D5/B8).
 
 ## Resolved
+
+- #767 (PR #773) — The committed `tests/design-gallery/baselines/mo-advisory-dark.png`
+  baseline had drifted against the current `toNativeTheme()` lowering on main
+  (the #765 design-source change did not refresh the MO-advisory lane), so
+  `check:push`'s gallery gate was red on an untouched tree. Refreshed with the
+  documented `bun run design:gallery -- --update` flow inside PR #773; no
+  DESIGN.md contract content changed. Recorded here so a binary baseline
+  refresh inside a docs PR has a written cause instead of reading as silent
+  scope creep.
 
 - #716 — Fixed replica-intent attribution across the gateway's cached vault
   bridge. The bridge deferred vault lookup until an app-worker callback, after

@@ -2,6 +2,16 @@
 
 Centraid is often worked by several coding agents in parallel. These norms protect the maintainer's machine and each other's results.
 
+## Root-agent orchestration (umbrella issues)
+
+An umbrella issue is worked by one **root agent** that owns the plan; sub-agents execute slices. The plan is not a task list — it carries the invariants that plain dispatch loses:
+
+- **Slice by ownership, not by size.** A slice is a set of files/subsystems no other in-flight slice touches. Two slices that must edit the same file are one slice, or are serialized — never raced.
+- **Order is part of the plan.** Dependencies between slices (schema before consumers, rename before references, policy before sweep) are sequenced by the root; a sub-agent never starts a slice whose inputs have not landed.
+- **Sub-agents get the slice contract, not the whole plan**: goal, in-scope/out-of-scope files, the invariants they must not break, and the verification evidence the receipt needs. They report results; they do not re-plan.
+- **The root integrates.** After each slice lands, the root re-checks the seams — cross-slice links, anchors, contracts, and tests spanning slices — before dispatching dependents. Correctness failures live at the seams, and only the root sees them.
+- The worker/verifier split, isolation defaults, and iteration caps below apply to every sub-agent.
+
 ## G2 — Parallel work norms
 
 ### Do not run the full suite when agents run in parallel

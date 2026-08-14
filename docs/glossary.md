@@ -94,7 +94,7 @@ Schema names follow the same one-axis rule: **a table never repeats its schema n
 
 ## Owners (gateway, #726)
 
-Supersedes the five-layer **member/role** model settled in [#599](https://github.com/srikanth235/centraid/issues/599) (2026-07-27). That history is not rewritten — see [decisions.md](decisions.md#599--household-members-sharing-and-the-no-credential-invariant) for what #599 actually shipped, and the [#726 entry](decisions.md) below it for what replaced it on 2026-08-08. This section is the live model.
+The current owner model supersedes the five-layer **member/role** vocabulary from [#599](https://github.com/srikanth235/centraid/issues/599); see the [current ownership decision](decisions.md#ownership-sharing-and-peer-transport). This section is the live model.
 
 Authorization collapses to **two questions, neither a role**:
 
