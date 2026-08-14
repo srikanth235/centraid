@@ -40,6 +40,11 @@ export const coverageInclude = [
   // co-located outside packages/blueprints/src (issue #630 Wave 0).
   "packages/blueprints/apps/**/*.{ts,tsx}",
   "packages/design/kit/**/*.{ts,js}",
+  // The hand-authored source of the published recognition automations. It
+  // lives outside packages/model-runtime/src because it is bundled per handler
+  // rather than compiled with the package (issue #781). Only `.js` is
+  // instrumented: the tree's `.ts` files are its suites and their harness.
+  "packages/model-runtime/automation-handlers/**/*.js",
   // The PWA service worker is load-bearing production offline/caching code that
   // lives outside src/ only because it must be served from the PWA root. Named
   // file, not `apps/*/public/**` — the rest of public/ is static assets (issue

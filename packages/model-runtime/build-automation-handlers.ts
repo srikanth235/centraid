@@ -1,6 +1,12 @@
 import path from "node:path";
 
-const root = path.resolve(import.meta.dirname, "../..");
+// Where the generated bundles land. The repo root by default; the drift check
+// in `automation-handlers/bundle-drift.test.ts` (#781) points it at a temp
+// directory so it can rebuild and diff against the committed bundles without
+// writing into the working tree.
+const root = process.env.CENTRAID_AUTOMATION_BUNDLE_ROOT
+  ? path.resolve(process.env.CENTRAID_AUTOMATION_BUNDLE_ROOT)
+  : path.resolve(import.meta.dirname, "../..");
 
 const handlers = [
   {

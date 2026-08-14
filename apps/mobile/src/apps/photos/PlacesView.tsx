@@ -21,8 +21,6 @@ import { Image } from "expo-image";
 import React, { useMemo } from "react";
 import { FlatList, Pressable, StyleSheet, View } from "react-native";
 
-import { PLACE_UNNAMED } from "@centraid/blueprints/apps/photos/shared-copy";
-
 import { Text } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { imageSource } from "../../kit/media/media-source";
@@ -31,19 +29,15 @@ import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import PhotosScreen from "./PhotosScreen";
+import { placeCards } from "./places-model";
 import { tileGround } from "./tile-overlays";
 import { usePhotoTimeline } from "./timeline-source";
 
-interface PlaceCard {
-  id: string;
-  name: string;
-  count: number;
-  coverUri?: string;
-}
-
 // Places group by rounding each capture's coordinates to one decimal (roughly
-// 11km) — the same 0.1°-proximity `PlacesMap` clusters by, so a place card
-// here and a map pin there name the same group.
+// 11km), which is also the key `PlaceDetail` filters by — so a card and the
+// screen it opens cannot disagree about which photographs are "here". The
+// grouping itself lives in `places-model.ts`, beside the map's own; see that
+// file's header for why the two group differently on purpose.
 
 export default function PlacesView({
   navigation,
@@ -55,41 +49,10 @@ export default function PlacesView({
     useMemo(() => ({ entity: "core.place" }), [])
   );
   const { assets } = usePhotoTimeline();
-  const placeById = useMemo(
-    () => new Map(places.rows.map((row) => [String(row.place_id), row])),
-    [places.rows]
+  const cards = useMemo(
+    () => placeCards(assets, places.rows),
+    [assets, places.rows]
   );
-
-  const cards = useMemo<PlaceCard[]>(() => {
-    const groups = new Map<
-      string,
-      { name: string; count: number; coverUri?: string }
-    >();
-    for (const asset of assets) {
-      if (!asset.placeId) continue;
-      const row = placeById.get(asset.placeId);
-      if (!row) continue;
-      const latitude = Number(row.latitude ?? row.lat);
-      const longitude = Number(row.longitude ?? row.lon ?? row.lng);
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
-      const key = `${latitude.toFixed(1)}:${longitude.toFixed(1)}`;
-      const name = row.name ? String(row.name) : PLACE_UNNAMED;
-      const current = groups.get(key);
-      if (current) {
-        current.count += 1;
-        current.coverUri ??= asset.previewUri ?? asset.uri;
-      } else {
-        groups.set(key, {
-          name,
-          count: 1,
-          coverUri: asset.previewUri ?? asset.uri,
-        });
-      }
-    }
-    return [...groups.entries()]
-      .map(([id, group]) => ({ id, ...group }))
-      .sort((a, b) => b.count - a.count);
-  }, [assets, placeById]);
 
   return (
     // The band, via the shell (issue #712 P8). This screen used to draw a bare

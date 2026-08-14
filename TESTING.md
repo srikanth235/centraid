@@ -483,7 +483,7 @@ Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts
 
 ### Coverage-scope reachability (#532)
 
-Governance directive `coverage-scope-reachability` fails when a `packages/*`, `apps/*`, or `tools/*` source tree, or either co-located blueprint `apps` / `kit` runtime, has non-test executable source but no coverage floor, matrix owner, or intentional allowlist entry — so a new product surface cannot land invisible to every floor.
+Governance directive `coverage-scope-reachability` fails when a `packages/*`, `apps/*`, or `tools/*` source tree, or any executable tree co-located outside `src/` inside a package or app (discovered from the tree, not enumerated — #781), has non-test executable source but no coverage floor, matrix owner, or intentional allowlist entry — and a floored non-src tree must also appear in the root `coverageInclude`, so a floor that measures nothing is itself a violation — so a new product surface cannot land invisible to every floor.
 
 ## Deliberately deferred
 

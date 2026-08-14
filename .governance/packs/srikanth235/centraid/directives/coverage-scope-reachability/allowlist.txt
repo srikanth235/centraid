@@ -1,5 +1,6 @@
 # Intentionally ungated surfaces (#532 / TESTING.md). One package or app id per
-# line (e.g. packages/protocol, apps/desktop). Comments start with #.
+# line (e.g. packages/protocol, apps/desktop). A row also covers that id's
+# non-`src` executable trees. Comments start with #.
 # Dev-only / tiny packages without a whole-tree floor:
 # packages/blob-format is NO LONGER ungated (#656 Layer 1F): its source was one
 # `src/index.ts`, which the root `coverageExclude` `**/index.ts` erased, so the
@@ -10,6 +11,28 @@ packages/test-kit
 # each carry their own floor — replica/**, react/**, and the top-level
 # *.{ts,tsx} gateway-client seam. The allowlist row it used to hold is gone on
 # purpose, so a future client tree with no floor fails this directive.
+# Non-`src` trees first surfaced by the #781 scope discovery. Each is a
+# deliberate exception, not an oversight:
+#
+# packages/blueprints/automations holds DEPLOYED ARTIFACTS, not sources. The
+# five recognition bundles are generated from
+# packages/model-runtime/automation-handlers, which carries the floor and the
+# rebuild-drift check that proves the two agree; instrumenting the minified
+# copy would double-count the same program (the same reasoning excludes them
+# from SonarCloud in scripts/ci/configure-sonarcloud.mjs). The remaining
+# hand-authored connector/enricher handlers are driven by
+# packages/blueprints/src/pull-handlers.test.ts and
+# packages/automation/src/manifest/enricher-templates.test.ts but have no
+# whole-tree floor of their own — a known gap recorded in #781, not a decision
+# that they need none.
+packages/blueprints/automations
+# One re-export bridge (types/virtual-kit/kit.ts) that exists so TypeScript can
+# resolve an app-relative `./kit.ts` to packages/design/kit, which is floored.
+# It declares no behaviour of its own.
+packages/blueprints/types
+# The visual-verification harness: a mock window.centraid and a dev server,
+# never shipped and never loaded by the runtime.
+packages/blueprints/visual-harness
 # Renderer / installable clients: e2e + extracted units, not line floors.
 apps/desktop
 apps/extension

@@ -6,20 +6,27 @@
 #   (b) named as owner path prefix in tests/matrix.json, OR
 #   (c) listed in this directive's allowlist.txt
 #
-# The bundled blueprint runtime is intentionally co-located outside `src/`.
-# Treat its executable `apps/` and `kit/` trees as first-class scopes instead
-# of collapsing them into `packages/blueprints`, whose `src/` floor cannot
-# instrument either tree.
+# Executable code co-located OUTSIDE `src/` is its own scope, not part of the
+# package's. A floor on `packages/<pkg>/src/**` cannot instrument a sibling
+# tree, so collapsing the two would let any non-`src` runtime tree ride into
+# "floored" on a floor that never measures it. This is why the bundled
+# blueprint `apps/` and shared `kit/` runtimes are separate scopes (#630,
+# #725) — and, since #781, why every such tree is discovered rather than
+# named: `packages/model-runtime/automation-handlers` (the hand-authored
+# source of the published recognition bundles) was invisible for exactly this
+# reason while `packages/model-runtime/src/**` reported the package "floored".
 #
 # Also: every coverage-floors.json path-scope must sit under packages/ or
 # apps/.
 #
 # Bash 3.2 compatible (macOS /bin/bash) — no mapfile, no associative arrays.
 #
-# Self-test: GOVERNANCE_COVERAGE_SCOPE_SELFTEST=1 proves violation + exit
-# wiring by emitting a synthetic unowned package id. It does not re-run the
-# classification loop against a real packages/* tree — that is what the live
-# check (scripts/test.sh step 2) covers.
+# Self-test: GOVERNANCE_COVERAGE_SCOPE_SELFTEST=1 replaces the discovered ids
+# with one synthetic package id and one synthetic non-`src` scope id, then runs
+# the real classification loops over them — so it proves violation + exit
+# wiring for BOTH scope classes without depending on the state of any real
+# packages/* tree. The live check (scripts/test.sh step 2) covers the real
+# trees.
 set -u
 source "$(dirname "$0")/../../../../../lib.sh"
 directive_start "coverage-scope-reachability"
@@ -38,24 +45,25 @@ if [[ ! -f "$FLOORS" || ! -f "$MATRIX" ]]; then
     exit 0
 fi
 
-# --- self-test path (output/exit wiring only) ---
-if [[ "${GOVERNANCE_COVERAGE_SCOPE_SELFTEST:-0}" == "1" ]]; then
-    synthetic="packages/__coverage_scope_selftest_unowned__"
-    if grep -q "$synthetic" "$FLOORS" 2>/dev/null; then
-        echo "self-test: synthetic id unexpectedly present in floors" >&2
-        exit 1
-    fi
-    if grep -q "$synthetic" "$MATRIX" 2>/dev/null; then
-        echo "self-test: synthetic id unexpectedly present in matrix" >&2
-        exit 1
-    fi
-    if grep -qE "^${synthetic}$" "$ALLOWLIST" 2>/dev/null; then
-        echo "self-test: synthetic id unexpectedly allowlisted" >&2
-        exit 1
-    fi
-    violation "$synthetic/src/index.ts - package has source but no coverage floor, matrix owner, or allowlist entry (self-test)"
-    directive_end
-    exit 0
+# --- self-test guard: the synthetic ids must be genuinely unowned ---
+SELFTEST="${GOVERNANCE_COVERAGE_SCOPE_SELFTEST:-0}"
+SYNTHETIC_PKG="packages/__coverage_scope_selftest_unowned__"
+SYNTHETIC_SCOPE="packages/__coverage_scope_selftest_unowned__/runtime"
+if [[ "$SELFTEST" == "1" ]]; then
+    for synthetic in "$SYNTHETIC_PKG" "$SYNTHETIC_SCOPE"; do
+        if grep -q "$synthetic" "$FLOORS" 2>/dev/null; then
+            echo "self-test: synthetic id unexpectedly present in floors" >&2
+            exit 1
+        fi
+        if grep -q "$synthetic" "$MATRIX" 2>/dev/null; then
+            echo "self-test: synthetic id unexpectedly present in matrix" >&2
+            exit 1
+        fi
+        if grep -qE "^${synthetic}$" "$ALLOWLIST" 2>/dev/null; then
+            echo "self-test: synthetic id unexpectedly allowlisted" >&2
+            exit 1
+        fi
+    done
 fi
 
 # Floor path scopes (object-valued keys in coverage-floors.json).
@@ -132,18 +140,37 @@ PKG_IDS="$(
         | sort -u
 )"
 
-# Non-standard executable roots under packages/blueprints. Keep them separate:
-# a floor on packages/blueprints/src/** must not accidentally satisfy either.
-BLUEPRINT_SCOPE_IDS="$(
-    for scope in packages/blueprints/apps packages/design/kit; do
-        if git -C "$REPO_ROOT" ls-files \
-            "$scope/**/*.ts" "$scope/**/*.tsx" "$scope/**/*.js" "$scope/**/*.mjs" \
-            "$scope/*.ts" "$scope/*.tsx" "$scope/*.js" "$scope/*.mjs" 2>/dev/null \
-            | grep -qvE '\.(test|spec)\.(ts|tsx|js|mjs)$|\.d\.ts$'; then
-            echo "$scope"
-        fi
-    done
+# Executable trees co-located OUTSIDE `src/` inside a package or app, e.g.
+# packages/blueprints/apps, packages/design/kit,
+# packages/model-runtime/automation-handlers. Discovered, not enumerated
+# (#781): a hardcoded list only ever names the trees someone already thought
+# about, and the next one lands invisible. Each is its own scope id, so the
+# package's `src/**` floor cannot satisfy it.
+#
+# Skipped by directory name: `src` (owned by the package loop above) and the
+# dirs that are by definition not product runtime — build/dev scripts, test
+# trees, fixtures, and build output. Files nested under one of those inside a
+# scope are skipped too, so a tree whose only code is a generator script is not
+# a runtime scope.
+SCOPE_SKIP_DIRS='src|scripts|tests|test|spec|e2e|__tests__|benchmarks|fixtures|node_modules|dist|build|coverage|target'
+EXTRA_SCOPE_IDS="$(
+    git -C "$REPO_ROOT" ls-files 'packages/*/*/**' 'apps/*/*/**' 2>/dev/null \
+        | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' \
+        | grep -vE '\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|\.d\.ts$' \
+        | awk -F/ -v skip="^($SCOPE_SKIP_DIRS)$" '
+            $3 ~ skip { next }
+            {
+                for (i = 4; i < NF; i++)
+                    if ($i ~ skip) next
+                print $1"/"$2"/"$3
+            }' \
+        | sort -u
 )"
+
+if [[ "$SELFTEST" == "1" ]]; then
+    PKG_IDS="$SYNTHETIC_PKG"
+    EXTRA_SCOPE_IDS="$SYNTHETIC_SCOPE"
+fi
 
 is_floored() {
     local pkg="$1"
@@ -169,14 +196,17 @@ has_matrix_owner() {
     return 1
 }
 
+# An allowlisted package or app covers its own non-`src` trees too: a surface
+# that is deliberately ungated as a whole (apps/mobile, apps/web, …) does not
+# become gated by moving code out of src/.
 is_allowlisted() {
     local pkg="$1"
     local a
     while IFS= read -r a; do
         [[ -z "$a" ]] && continue
-        if [[ "$a" == "$pkg" ]]; then
-            return 0
-        fi
+        case "$pkg" in
+        "$a" | "$a"/*) return 0 ;;
+        esac
     done <<<"$ALLOW_LINES"
     return 1
 }
@@ -201,12 +231,18 @@ while IFS= read -r scope; do
         continue
     fi
     if is_floored "$scope"; then
+        # A floored non-`src` tree is only floored if the coverage tool
+        # instruments it — `packages/*/src/**` never will (#781).
+        if [[ "$SELFTEST" != "1" && -f "$VITEST_CFG" ]] \
+            && ! grep -Fq "$scope/" "$VITEST_CFG"; then
+            violation "vitest.config.ts coverage.include must cover $scope/** (its floor measures nothing without it)"
+        fi
         continue
     fi
     if has_matrix_owner "$scope"; then
         continue
     fi
-    violation "$scope - has executable blueprint code but no coverage floor, matrix owner, or allowlist entry (add a floor, matrix flow, or allowlist.txt row)"
-done <<<"$BLUEPRINT_SCOPE_IDS"
+    violation "$scope - executable code outside src/ with no coverage floor, matrix owner, or allowlist entry; the package's src/** floor cannot instrument it (add a floor, matrix flow, or allowlist.txt row)"
+done <<<"$EXTRA_SCOPE_IDS"
 
 directive_end

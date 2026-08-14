@@ -28,6 +28,20 @@ gates still outside CI, the #587 D21 rulings, hygiene ratchets (partially
 closed here), and the env-gated live/hardware lanes. Later waves on this branch
 work several of them; none of them closes with this commit.
 
+**Wave 2b** (the sections marked "Wave 2b" below) advances four of those
+categories without closing any: sharing-plane ownership gains its first three
+named laws, `packages/model-runtime/automation-handlers/` moves from unfloored
+to floored-and-tested with a rebuild-drift check and the reachability directive
+generalised so the next such tree cannot hide, missing matrix presence closes
+for Insights / experimental gating / the Places mobile seat, and the hygiene
+bullet's `ci.yml` path-filter item lands (so of its five items, two now remain:
+`.test.mjs` lint scope and the fixed-sleep inventory). Still untouched by any
+wave: nightly signal, the app-admission contract, the deterministic-env test
+home, the stale-ratchet reseed, `design:gallery`'s CI lane, the #587 D21
+rulings, and the env-gated lanes. `packages/blueprints/automations/**` (23
+hand-authored connector/enricher handlers) is *allowlisted with an explicit
+known-gap note*, not tested — recorded below.
+
 ## What changed
 
 ### Assertion-hygiene ratchet (#781 "Hygiene ratchets")
@@ -192,6 +206,261 @@ scripts/test-report/hygiene-ratchet.test.mjs
 tests/hygiene-budgets.json
 ```
 
+### Wave 2b — sharing-plane laws (#781 "Sharing plane ownership")
+
+The plane's ~32,500 lines (#726/#750) carried one matrix flow and zero named
+laws. It now carries three, each in a new contract file, each demonstrated red
+by perturbing production source and restoring it (`git diff` clean afterwards):
+
+- **`[law:share-closure-confinement]`** —
+  `packages/vault/src/share/closure-confinement.contract.test.ts` (5 tests,
+  real on-disk origin vault via the existing `household()` / `seedPhoto()`
+  fixtures). A share closure carries only the rows reachable from the items it
+  names, and an unknown item refuses the entire read rather than yielding a
+  partial closure. Red proof: widening `read-closure.ts`'s derivative query
+  with `OR 1 = 1` leaks a withheld sibling photograph's sha into the blob
+  manifest and fails two tests.
+- **`[law:share-receipt-authority]`** —
+  `packages/gateway/src/serve/share-receipt-authority.contract.test.ts`
+  (4 declared tests / 7 cases, real `GatewayDatabase` + `EnrollmentStore`,
+  driving `applyEdgeSignal`, the one door every status change goes through).
+  An access receipt exists exactly when an edge's rows landed at the audience;
+  refused, parked, revoked, and peer-handed-off edges leave none, and a
+  malformed scope refuses the transition atomically. Red proof: replacing
+  `share-edge-store.ts`'s `db.transaction(...)` with a plain IIFE lets the
+  status move survive a scope refusal that wrote no receipt.
+- **`[law:share-outbox-obligation]`** —
+  `packages/gateway/src/serve/share-outbox-obligation.contract.test.ts`
+  (4 tests, real SQLite, every deadline injected — no timers). Obligations in
+  the `share_effects` outbox are durable and keyed by identity: replayed
+  enqueues reuse the row without rewinding its retry clock, human-awaiting
+  obligations are never machine-claimed, one unreadable row never blocks its
+  neighbours, and failures back off exponentially while progressed transfers
+  re-queue immediately. Red proof: flattening the exponential backoff to a
+  constant fails the second-failure boundary assertion.
+
+Four candidate laws were checked and **rejected as duplicates** of existing
+owners rather than restated: cross-owner GPS redaction
+(`closure-location-policy.test.ts`), edge lifecycle transitions
+(`share-coordinator.test.ts`), refusal delivery (`share-refusal-outbox.test.ts`),
+and re-share idempotence / mid-share rollback (`placement.test.ts` /
+`placement-lifecycle.test.ts`).
+
+### Wave 2b — model-runtime handlers floored and drift-checked (#781 "Unfloored production code")
+
+`packages/model-runtime/automation-handlers/` (five hand-authored handlers,
+1,042 LOC — the source of the 28 generated `packages/blueprints/automations`
+bundles) was outside every coverage floor and structurally invisible to the
+`coverage-scope-reachability` directive. Now:
+
+- **61 source-level tests in six new files** (`embed-text.test.ts` 11,
+  `embed-image.test.ts` 9, `faces.test.ts` 9, `transcript.test.ts` 8,
+  `photo-ocr.test.ts` 18, `bundle-drift.test.ts` 6) over a shared
+  `handler-harness.ts` whose fake `ctx` implements a real mini query engine
+  (`where`/`orderBy`/`limit`), so cursor, batch-capacity, and stamp-matching
+  laws are actually falsifiable rather than mocked into tautology. The
+  handlers' existing `set*RuntimeForTests` seams are used; no handler source
+  changed. What genuinely needs the live weekly lane stays there:
+  `recognizePdf`'s rendered-page branch and everything behind the seam in
+  `src/capabilities/*` (real ONNX sessions).
+- **The deferred #753 rebuild-drift check now exists**
+  (`bundle-drift.test.ts`): it rebuilds all five bundles via
+  `build-automation-handlers.ts` into a `tempDir()`, applies the repo's own
+  oxfmt config, and byte-compares against the committed bundles (~0.4s). The
+  build is deterministic in-container (verified: two builds byte-identical).
+  Red proof: editing one summary string in the committed `embed-text.js` fails
+  with "committed bundle is stale — rerun 'bun run --cwd packages/model-runtime
+  build:automations'". The only production edit in this slice is a 3-line seam
+  in `packages/model-runtime/build-automation-handlers.ts`: a
+  `CENTRAID_AUTOMATION_BUNDLE_ROOT` output-root override so the test can build
+  without writing into the working tree.
+- **The reachability directive is generalised, not re-enumerated.**
+  `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/check.sh`'s
+  hardcoded `BLUEPRINT_SCOPE_IDS` (two roots) becomes `EXTRA_SCOPE_IDS`,
+  discovered from `git ls-files` over `packages/*/*/**` + `apps/*/*/**`,
+  skipping `src` and never-runtime directory names. The discovered set today:
+  `packages/blueprints/{apps,automations,types,visual-harness}`,
+  `packages/design/kit`, `packages/model-runtime/automation-handlers`,
+  `apps/mobile/{modules,plugins}`, `apps/web/public`. Two checks were *added*
+  (none removed or weakened): allowlist rows cover sub-trees, and a floored
+  non-src tree must also appear in the root `coverageInclude` — a floor that
+  measures nothing is now a violation. The directive's self-test now replaces
+  both id lists with synthetics and runs the real classification loops.
+  Red proofs: removing the new floor and removing the `coverageInclude` line
+  each produce the expected named violation; both restored.
+- **The floor is seeded from measurement, the include from need.**
+  `tests/coverage-floors.json` gains
+  `"packages/model-runtime/automation-handlers/**": { lines: 81, branches: 78 }`
+  — measured 2026-08-14 at 83.28 / 80.44, seeded the usual two points under,
+  provenance appended to the file's `approvedDeviation`. Root
+  `vitest.config.ts#coverageInclude` gains
+  `packages/model-runtime/automation-handlers/**/*.js` (`.js` only — the
+  tree's `.ts` files are its suites and harness).
+  `packages/model-runtime/{tsconfig.json,vitest.config.ts}` include the new
+  tree so it typechecks and its tests run on the package lane.
+- **`packages/model-runtime/**` joins `ci.yml`'s `gateway` path filter** — the
+  recognition automations the packaged gateway ships are *built from* this
+  tree, so a source-only change there changes what the artifact runs. This
+  lands the "in no `ci.yml` path filter" item of the hygiene bullet.
+- **`packages/blueprints/automations/**` is allowlisted, not tested.** The
+  generalised directive discovered this second unfloored tree: 23 hand-authored
+  connector/enricher handlers, partly exercised by
+  `packages/blueprints/src/pull-handlers.test.ts` and
+  `packages/automation/src/manifest/enricher-templates.test.ts` but with no
+  floor and no matrix owner. Its allowlist row says explicitly that this is a
+  known gap recorded in #781, not a decision that the tree needs no floor. It
+  is the next slice of this category, not a quiet exemption.
+
+`TESTING.md`'s "Coverage-scope reachability" sentence is updated to say
+discovery rather than enumeration, and to name the new floor-must-measure rule.
+
+### Wave 2b — laws for experimental gating, Insights, and block parity (#781 "Missing matrix presence")
+
+Three more named laws over dense-but-lawless suites, each demonstrated red with
+**only the law test failing** (the specificity evidence — the pre-existing
+tests in each file all passed while the law caught the seeded defect):
+
+- **`[law:experimental-gate-parity]`** (#774) — new test in
+  `packages/gateway/src/serve/experimental-gating.test.ts`. A feature is
+  advertised in the C1 handshake *exactly when* its routes are mounted,
+  enumerated over `EXPERIMENTAL_FEATURES` with a typed surface table, so a
+  third experiment fails to compile until it names its surfaces. Red proof:
+  perturbing `build-gateway.ts` so a connectors-only boot leaks the
+  `_automations`/`_insights` route families fails only the law — the nine
+  pre-existing scenario tests all pass, which is precisely the gap it closes.
+- **`[law:insights-rollup-render-or-withhold]`** (#775) — new test in
+  `packages/client/src/react/screens/InsightsScreen.test.tsx`. Every field of
+  the gateway's insights rollup is rendered on Analytics or withheld on the
+  record with a stated reason; the fixture is typed, so a new gateway field
+  breaks typecheck and must then choose. Two fields are withheld today and now
+  say so (`kpis.appsTouched`, `windowDays`). Red proof: deleting the `forecast`
+  fact from `insights-model.ts` fails only the law — `forecastCostUsd` was
+  previously rendered and asserted by *nothing*, the silent-deletion class
+  #765 exposed.
+- **`[law:native-block-flag-marks]`** (#765/#775 parity half) — tag + a
+  strengthened test in `apps/mobile/src/kit/components/blockParity.test.tsx`.
+  Every semantic flag the shared block contracts declare must produce a mark on
+  the phone that the unflagged form does not. The existing routine-empty-state
+  test asserted only copy, so a kit ignoring the `routine` flag entirely still
+  passed; it now compares registers across both fixtures. Red proof: forcing
+  `firstRun = true` in `EmptyBlock.tsx` (flag accepted, ignored) fails only
+  this test. The law lives in the native file — where #765's drift actually
+  happened — and the web twin gets a flow-only entry (`web-block-parity`)
+  rather than a near-duplicate law.
+
+### Wave 2b — Places mobile seat tests (#781 "Missing matrix presence")
+
+`apps/mobile/src/apps/photos/{PlacesMap,PlacesView,PlaceDetail}.tsx` (#739) had
+zero tests. The app-admission contract mandates a `*-model.ts` beside each view
+for pure product arithmetic, so the shared arithmetic was **extracted** into a
+new `places-model.ts` (behaviour-identical — the three views now call the model
+instead of holding private copies) and tested at the cheapest tier that can
+falsify each claim: `places-model.test.ts` (20 unit tests: card vs pin rows,
+the 0.1° shelf merge vs per-place map points, trash exclusion, newest-first
+cover, pin area ramp, accessible-name sentence) plus `PlacesView.test.tsx` (6),
+`PlaceDetail.test.tsx` (6), and `PlacesMap.test.tsx` (9) component tests that
+exercise the *real* model (never mocked), including one source-level assertion
+that `react-native-maps` is not imported — the privacy regression that would
+look correct in any rendered tree. The load-bearing cross-screen claim — the
+card a user taps opens a detail holding exactly the photographs the card
+counted — is proven as a loop over every card, which is the #711 "labelled
+destination opens something else" class made unfalsifiable-by-hand.
+
+These files follow the established jsdom-per-view mobile pattern
+(`FaceReview.test.tsx` et al.) rather than RNTL, because
+`apps/mobile/vitest.projects.ts` hard-codes a single consolidated RNTL file
+(#716) and that config is deliberately not widened here.
+
+**One live product defect was found and preserved, not fixed** (a testing
+branch does not smuggle product fixes): `PlacesView`/`PlaceDetail` read
+`row.latitude ?? row.lat` / `row.longitude ?? row.lon ?? row.lng`, but
+`core_place` ships `geo_lat`/`geo_lng` and only the web handler renames them —
+`PlacesMap` reads `geo_lat` first, so against a real vault the map draws pins
+while the shelf says "No places yet" and every card's detail is empty. The
+defect is preserved verbatim in `places-model.ts#placeCardKey`, now documented
+in a `KNOWN DEFECT` comment on that function, and needs its own bug issue.
+
+A second suspected defect was **withdrawn during audit**: the slice reported
+that `Number(null) === 0` would plot a legally-null-coordinate place at 0°,0°
+(Null Island). The wave-2b adjudication refuted this by direct evaluation —
+both chains use `??`, so a `core_place` row with `geo_lat: null` falls through
+to the absent `latitude`/`lat`, yields `NaN`, and is *dropped*, which is the
+correct outcome. The mobile seat still lacks the web's explicit
+`typeof === "number"` guard, but no misbehaviour is reachable through the
+schema's legal shapes today; noting that asymmetry is a hardening suggestion,
+not a bug report.
+
+Two comments in the views claiming the map "clusters by the same 0.1°
+proximity" (untrue since #739 moved the map to pixel merging) are corrected as
+part of the extraction.
+
+### Wave 2b — root-agent integration seams
+
+- **`tests/matrix.json`**: six laws registered under `laws` (the three share
+  laws plus `experimental-gate-parity`, `insights-rollup-render-or-withhold`,
+  `native-block-flag-marks`) and eight flows appended (`share-closure-confinement`
+  vault-core×security, `share-receipt-authority` gateway×contracts,
+  `share-outbox-obligation` gateway×durability, `gateway-experimental-gate-law`
+  gateway×contracts, `insights-rollup-law` web×contracts,
+  `mobile-block-parity-law` mobile×contracts, `web-block-parity` web×contracts
+  — closing the previously untagged web twin — and `mobile-places-seat`
+  mobile×correctness). `minimumTests` values are the real counted declarations
+  in each owner. 102 canonical flows, 134 owned cells; `test:matrix` and
+  `lint:law-registry` (25 laws, 44 tag sites) both green.
+- **`tests/quality/classification-ratchet.json`**: `tests/matrix.json`
+  fingerprint refreshed for the additions; the `approvedDeviation` quoted under
+  Decisions below.
+- **`tests/hygiene-budgets.json`**: the wave-2a gate caught its own sibling
+  slices adding +3 truthy / +5 called sites — the first live catch. The three
+  `toBeTruthy()` sites (find-a-button helpers in the Places component tests)
+  are **fixed to the stronger `toBeDefined()`** rather than budgeted. The five
+  `toHaveBeenCalledOnce` / `toHaveBeenCalledExactlyOnceWith` sites on the
+  stubbed navigator are legitimate — the call with its exact route and params
+  *is* the observable outcome of tapping a card — so `toHaveBeenCalled` is
+  hand-raised 840 → 845 in a reviewed edit with the reason recorded in the
+  budget file, exactly the visible path the ratchet exists to force.
+
+### Files changed in wave 2b
+
+```text
+.github/workflows/ci.yml
+.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/allowlist.txt
+.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/check.sh
+.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/constitution.md
+.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/directive.yaml
+TESTING.md
+apps/mobile/src/apps/photos/PlaceDetail.test.tsx
+apps/mobile/src/apps/photos/PlaceDetail.tsx
+apps/mobile/src/apps/photos/PlacesMap.test.tsx
+apps/mobile/src/apps/photos/PlacesMap.tsx
+apps/mobile/src/apps/photos/PlacesView.test.tsx
+apps/mobile/src/apps/photos/PlacesView.tsx
+apps/mobile/src/apps/photos/places-model.test.ts
+apps/mobile/src/apps/photos/places-model.ts
+apps/mobile/src/kit/components/blockParity.test.tsx
+packages/client/src/react/screens/InsightsScreen.test.tsx
+packages/gateway/src/serve/experimental-gating.test.ts
+packages/gateway/src/serve/share-outbox-obligation.contract.test.ts
+packages/gateway/src/serve/share-receipt-authority.contract.test.ts
+packages/model-runtime/automation-handlers/bundle-drift.test.ts
+packages/model-runtime/automation-handlers/embed-image.test.ts
+packages/model-runtime/automation-handlers/embed-text.test.ts
+packages/model-runtime/automation-handlers/faces.test.ts
+packages/model-runtime/automation-handlers/handler-harness.ts
+packages/model-runtime/automation-handlers/photo-ocr.test.ts
+packages/model-runtime/automation-handlers/transcript.test.ts
+packages/model-runtime/build-automation-handlers.ts
+packages/model-runtime/tsconfig.json
+packages/model-runtime/vitest.config.ts
+packages/vault/src/share/closure-confinement.contract.test.ts
+receipts/issue-781-audit-gap-closure.md
+tests/coverage-floors.json
+tests/hygiene-budgets.json
+tests/matrix.json
+tests/quality/classification-ratchet.json
+vitest.config.ts
+```
+
 ## Out of scope
 
 - The remaining #781 categories listed under Checklist above. They are separate
@@ -229,6 +498,30 @@ cleaned, which is the failure mode a ratchet exists to prevent.
 Bumping a timeout to accommodate new work is normally a smell. Here the
 alternative was to keep an experience budget asserting a probe host that does
 not run, which is the precise dishonesty class this backlog exists to close.
+
+**Wave 2b: matrix additions are a receipt-approved deviation.** The governed
+classification fingerprint moved because `tests/matrix.json` gained entries;
+the approved deviation reads, verbatim:
+
+#781 wave 2 registers six new laws (share-closure-confinement, share-receipt-authority, share-outbox-obligation, experimental-gate-parity, insights-rollup-render-or-withhold, native-block-flag-marks) and eight new flows in tests/matrix.json; every prior law, flow, grade, owner, and quality is unchanged, so the fingerprint refresh records additions only.
+
+**Wave 2b: fix the sites, then raise the budget — in that order.** When the
+hygiene gate went red on its sibling slices (+3/+5), the default answer was not
+a raise. The three weak `toBeTruthy()` sites were strengthened to
+`toBeDefined()`; only the five navigation-stub assertions, where the called-with
+shape *is* the outcome under test, justified the 840 → 845 raise. Raising first
+and asking later would have made the gate a rubber stamp in its first week.
+
+**Wave 2b: product defects found by new tests are recorded, not fixed.** The
+Places coordinate-column mismatch is a live user-facing bug, and fixing it
+inside a testing-strategy branch would couple a product behaviour change to a
+36-file testing diff with no issue of its own. It is preserved bit-for-bit in
+the extraction, documented in a `KNOWN DEFECT` comment on
+`places-model.ts#placeCardKey` (added after the wave-2b adjudication found the
+receipt claiming documentation that did not exist), and needs a dedicated bug
+issue. The second reported defect (Null Island) was refuted by that same
+adjudication and is withdrawn above — a testing-honesty receipt does not get to
+keep an exciting bug claim its own auditor disproved.
 
 ## Verification
 
@@ -281,6 +574,40 @@ its budget by hand, in a reviewed edit that says what the extra assertions buy.
 That is the gate working as designed — an upward move is exactly the event it
 exists to make visible — and it is recorded here so the next wave does not
 reach for `--write` and find it silently unhelpful.
+
+### Wave 2b verification
+
+```bash
+bun run test:matrix
+# matrix: 15 surfaces × 11 dimensions, 102 canonical flows
+# matrix: 134 owned cells graded from evidence (run evidence: absent), 30 inventoried skips
+bun run lint:law-registry
+# law registry: ok (25 laws registered, 44 tag site(s))
+bun run test:hygiene-ratchet
+# hygiene: 1229 test files at budget — toBeTruthy/toBeFalsy 413,
+# toHaveBeenCalled* (excluding .not.toHaveBeenCalled()) 845
+bun run test:ratchet          # ratchet-floors ok; skips 30/30
+bun run test:qualities        # 23 passed
+bun run lint:quality-knobs    # no silent widening
+bun run scripts:test          # 173/173
+bun run test:ratchet:unit     # 18 files / 258 tests
+bun run lint && bun run format:check && bun run knip   # all clean
+```
+
+Per-package: `typecheck` clean for `apps/mobile`, `packages/gateway`,
+`packages/vault`, `packages/client`, and `packages/model-runtime`. New suites
+green under the root runner: the three share contracts 16/16, the four Places
+files 41/41 (after the `toBeDefined()` strengthening), model-runtime 18 files /
+152 tests (61 of them new) reported green twice by the slice that wrote them,
+`GOVERNANCE_SHELL_FULL=1 bun run test:governance-shell` green on the
+generalised directive (self-test + live + shellcheck across 34 files).
+
+Every demonstrated-red claim in the wave-2b sections above (eight seeded
+defects across the six laws, the bundle-drift check, and the two directive
+checks) was produced by perturbing the named file, observing the named failure,
+and restoring the source; `git diff` on every perturbed production file is
+empty in the final tree except the deliberate 3-line
+`CENTRAID_AUTOMATION_BUNDLE_ROOT` seam.
 
 ## Audit
 
@@ -410,6 +737,166 @@ builds. `harness.mjs` resolves `${APP_ID}.debug` for android and passes
 cache is restored only at lines 755 and 803 (`quality-performance-scale`,
 `restore-year3`), never in the mobile jobs — the QUALITY.md entry's reasoning
 holds. No genuine iOS dependency found that the receipt missed.
+
+**Wave 2b adjudication.** Fresh-context audit of the 36-file staged diff and
+the sections marked "Wave 2b" (the wave-2a rounds above stand; nothing in the
+wave-2b edits contradicts them). **Verdict: REFUTED / PASS / PASS.**
+
+**Check 1 — the "Wave 2b" sections faithfully describe the staged diff:
+REFUTED**, on two verifiable infidelities in the Places slice; everything else
+under this check was checked and holds.
+
+- The Decisions entry "Wave 2b: product defects found by new tests are
+  recorded, not fixed" says the two defects are "preserved bit-for-bit in the
+  extraction, **documented in the model's comments**". The first half is true;
+  the second is false. `places-model.ts` contains no comment naming either
+  defect (a grep for `geo_lat` in the non-test Places sources returns exactly
+  one hit — line 146, the `placePoints` expression itself), and no comment in
+  the four new Places test files names them either. `placeCardKey`'s own
+  docblock reads the other way: "`null` when the row carries no usable
+  coordinates" — which is precisely what the coordinate-column mismatch makes
+  untrue against a real vault row. The next editor of this file is warned by
+  nothing.
+- The Null Island defect is overstated as written: "`Number(null) === 0`, so a
+  place row with legally-null coordinates plots at 0°,0°". The chains are `??`,
+  so a `core_place` row with `geo_lat: null` / `geo_lng: null` — the only
+  legally-null shape the schema can produce (`packages/vault/src/schema/core.ts`
+  lines 55-56, nullable `REAL`) — falls through to `latitude`/`lat`, which the
+  row does not carry, yielding `undefined` → `NaN` → the row is dropped, not
+  plotted. Verified by evaluating both chains directly: `{geo_lat: null,
+  geo_lng: null}` → `[NaN, NaN]`; `{latitude: null, longitude: null}` → key
+  `null`. 0°,0° arises only when the **last** alias in a chain (`lat`/`lng`) is
+  present-and-null, a shape no replica `core.place` read produces. Defect (1),
+  by contrast, is real and severe exactly as described: `placeCardKey` reads
+  `latitude ?? lat` while the schema ships `geo_lat`/`geo_lng` and only the web
+  handler renames them (`packages/blueprints/apps/photos/queries/_shared.ts:114`,
+  with the `typeof … === "number"` guard the receipt credits it with), so
+  against a real vault the shelf and detail are empty while `placePoints`
+  (which reads `geo_lat` first) still draws pins. Both behaviours are indeed
+  preserved verbatim in the staged `places-model.ts`.
+
+Everything else under check 1 was verified and is faithful. All 36 staged
+paths appear in the receipt's "Files changed in wave 2b" block — a sorted diff
+of that block against `git diff --cached --name-only` is empty — and each is
+named or covered in prose. `tests/matrix.json`: parsed HEAD vs index and
+compared semantically — exactly the six named laws and the eight named flows
+are **added**, zero laws or flows removed, and **zero prior law, flow, grade,
+owner, or engine cell changed** (94 → 102 flows); the remaining textual churn
+is `\uXXXX` → literal em-dash/arrow and JSON re-wrapping, both value-preserving.
+Every stated surface × dimension pairing matches the file. `minimumTests`
+match counted declarations in each owner: closure-confinement 5, receipt-
+authority 4 (three `test(` + one `test.each` of four cases = the receipt's "4
+declared tests / 7 cases"), outbox-obligation 4, experimental-gating 10
+(9 pre-existing + the law), InsightsScreen 22, mobile blockParity 11, web
+blockParity 12 (owner untouched, flow-only entry as claimed), places-model 20.
+Handler test counts reproduce (11 / 9 / 9 / 8 / 18, plus bundle-drift's
+`it.each` over five bundles + one = 6 → the claimed 61). The governance
+directive genuinely only adds: every pre-existing check survives byte-for-byte
+(the `packages/*/src/**`, `blueprints/apps`, `design/kit` coverage-include
+assertions, the floor-glob prefix check, the package loop), the hardcoded
+two-root list becomes `git ls-files` discovery whose output I reproduced and
+which matches the receipt's list exactly (9 trees, in the order given), and the
+new floored-tree-must-appear-in-`coverageInclude` check is a strictly added
+violation. The one relaxation — `is_allowlisted` now matching `$a/*` — unflags
+nothing that the old script checked (neither `packages/blueprints/apps` nor
+`packages/design/kit` sits under an allowlist row, and package ids are
+two-segment so no row can prefix-match one); calling it an "added check" rather
+than a widened matcher is loose wording, not a false claim. The
+`packages/blueprints/automations` row is honest: its comment says in terms
+"a known gap recorded in #781, not a decision that they need none". No gate,
+budget, or floor is weakened: `tests/coverage-floors.json` only gains a scope
+(81/78, two points under the recorded 83.28/80.44 measurement, provenance
+appended to `approvedDeviation`), `vitest.config.ts` only gains an include,
+`ci.yml` only gains a path, and the `tests/hygiene-budgets.json` 840 → 845
+raise carries its reason in the budget file's `_comment` as claimed. The three
+`toBeDefined()` strengthenings exist (PlacesView.test.tsx:214,
+PlaceDetail.test.tsx:219, PlacesMap.test.tsx:220), the new Places files contain
+zero `toBeTruthy` (so `toBeTruthyFalsy` correctly stays 413), and exactly five
+`toHaveBeenCalledOnce`/`toHaveBeenCalledExactlyOnceWith` sites live in them —
+the +5 the raise pays for.
+
+**Re-run gates, all matching the receipt's quoted output byte for byte:**
+`bun run test:matrix` → "15 surfaces × 11 dimensions, 102 canonical flows" /
+"134 owned cells … 30 inventoried skips"; `bun run lint:law-registry` →
+"25 laws registered, 44 tag site(s)"; `bun run test:hygiene-ratchet` →
+"1229 test files at budget — … 413, … 845"; `bun run lint:quality-knobs` →
+"no silent widening". The three share contracts run 16/16 and
+`places-model.test.ts` 20/20 under `node node_modules/vitest/vitest.mjs run`.
+
+**Two demonstrated-red claims re-produced independently.** Flattening
+`share-effects.ts`'s `Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * 2 ** (attempts
+- 1))` to `BASE_BACKOFF_MS` fails exactly one test, at the second-failure
+boundary (`share-outbox-obligation.contract.test.ts:151`, due-at
+`T0+5s+9,999ms`) — the named assertion. Forcing `firstRun = true` in
+`EmptyBlock.tsx:39` fails 1 of 11 in `blockParity.test.tsx` — only the
+`[law:native-block-flag-marks]` test, at `expected 27 to be greater than 27`,
+confirming both the red and the "only the law fails" specificity claim. Both
+files restored with `git checkout --`; `git diff` on each is empty.
+
+**Check 2 — no `- [x]`, and the surrounding narrative is honest: PASS.** No
+checked box exists (the single `- [x]` grep hit is this audit section quoting
+the marker). "Advances four categories without closing any" is conservative
+and correct: sharing-plane ownership still lacks a journey and the #726/#750
+`[law:…]` sweep; `packages/blueprints/automations` is explicitly allowlisted-
+not-tested, so "unfloored production code" stays open; the app-admission
+contract, nightly signal, deterministic-env home, stale ratchets,
+`design:gallery`, the D21 rulings and the env-gated lanes are untouched by the
+diff. The "two of five hygiene items remain" arithmetic checks out item by
+item: the count budgets and the Android probe landed in wave 2a, the `ci.yml`
+path filter lands here (`model-runtime` appears 0 times in `HEAD:ci.yml` and
+2 times in the staged one, inside the `gateway` filter as claimed), while raw
+`mkdtempSync` still sits unlinted in `scripts/lint-*.test.mjs` and no fixed-
+sleep inventory exists anywhere in the diff — two remaining, exactly as stated.
+One softness worth naming without failing the check: "missing matrix presence
+closes for … the Places mobile seat" is true of *matrix presence* (the
+`mobile-places-seat` flow exists) but the issue's own item also says "no
+Maestro flow", and none is added — `tests/agent-e2e-mobile/flows/` gains
+nothing here. The receipt never claims otherwise elsewhere, and the top-line
+"without closing any" keeps the ledger honest.
+
+**Check 3 — "## Checklist" mirrors the issue's checklist: PASS.** Both items
+reproduce #781's acceptance criteria verbatim and in order, wrapping aside;
+the wave-2b edits changed only the narrative beneath them, not the items.
+
+**Wave 2b, round 2.** Both round-1 findings were fixed and re-staged; this is
+the re-adjudication of the updated index. **Round-2 verdict: PASS / PASS /
+PASS.**
+
+The staged file set is byte-for-byte the same 36 paths, and `--numstat` is
+identical to round 1's on **every** path except the two that had to move:
+`places-model.ts` 186 → 196 added lines and this receipt 313 → 447. Nothing
+else in the diff shifted, so every round-1 finding about the matrix additions,
+the directive, the floors/budgets/includes, the handler suites, and the two
+re-produced demonstrated-reds stands exactly as written above.
+
+- **(a) fixed.** `placeCardKey` now carries a `KNOWN DEFECT` docblock that
+  names the `latitude ?? lat` chain, the `geo_lat`/`geo_lng` columns it should
+  read (citing `packages/vault/src/schema/core.ts`), the web-only rename
+  (`queries/_shared.ts`), the user-visible consequence (map draws pins while
+  shelf and detail see no coordinates), and that the fix belongs to its own bug
+  issue — plus the useful warning that `places-model.test.ts` pins the CURRENT
+  column reads, so a fixer must flip them consciously. The change is
+  comment-only: the function body is unchanged and the 20 model tests still
+  pass (re-run: 20/20). The receipt's "documented in the model's comments"
+  claim is now true. One typo worth fixing whenever this file is next touched,
+  too small to hold a verdict: the docblock says "`mapPoints` below reads
+  `geo_lat` first" — the function is `placePoints`.
+- **(b) withdrawn, not softened.** The What-changed section now reads "One live
+  product defect", and the Null Island claim is replaced by an explicit
+  "withdrawn during audit" paragraph that states the refutation correctly (both
+  chains are `??`, a `geo_lat: null` row falls through to the absent
+  `latitude`/`lat`, yields `NaN`, and is dropped — the correct outcome) and
+  re-files the missing `typeof` guard as a hardening asymmetry rather than a
+  bug. The Decisions paragraph matches: singular defect, documentation claim
+  narrowed to the comment that now exists, and the withdrawal stated plainly
+  with its provenance. No trace of the withdrawn claim survives anywhere else
+  in the receipt.
+
+Checks 2 and 3 were re-checked against the updated text and are unaffected: no
+`- [x]` (the only grep hits remain this audit section quoting the marker),
+"advances four categories without closing any" and the "two of five hygiene
+items remain" arithmetic are untouched and still verify, and the Checklist
+still mirrors #781's two acceptance criteria verbatim.
 
 ## Session
 

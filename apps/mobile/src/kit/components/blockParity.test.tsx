@@ -19,6 +19,7 @@ import {
   BUTTON_FIXTURE,
   CHIPS_FIXTURE,
   DISTRIBUTION_FIXTURE,
+  EMPTY_FIRST_RUN_FIXTURE,
   EMPTY_ROUTINE_FIXTURE,
   PANEL_COMMIT_FIXTURE,
   PANEL_DANGEROUS_FIXTURE,
@@ -68,7 +69,7 @@ function render(node: React.ReactNode): HTMLElement {
 
 const noop = (): void => undefined;
 
-describe("block parity — the phone draws every shared flag", () => {
+describe("[law:native-block-flag-marks] block parity — the phone draws every shared flag", () => {
   afterEach(() => {
     dispose?.();
     dispose = undefined;
@@ -206,11 +207,43 @@ describe("block parity — the phone draws every shared flag", () => {
     expect(styleOf(chips[0]).borderColor).toBe(colors.text);
   });
 
-  it("draws the routine empty state quieter than a first meeting", () => {
-    const el = render(<EmptyBlock {...EMPTY_ROUTINE_FIXTURE} />);
-    const texts = nodesOf(el, "span");
-    expect(texts[0]?.textContent).toBe(EMPTY_ROUTINE_FIXTURE.title);
-    expect(texts[1]?.textContent).toBe(EMPTY_ROUTINE_FIXTURE.body);
+  it("[law:native-block-flag-marks] draws the routine empty state quieter than a first meeting, and spends no fill on it", () => {
+    // `routine` is a REGISTER, not a word. Asserting the copy alone let a kit
+    // accept the flag and draw the first-run block — the once-in-a-lifetime
+    // screen — over "nothing is waiting on you", turning the healthy state
+    // into an event. So both forms are drawn and COMPARED.
+    const verb = { label: "Pair a device", onPress: noop };
+    const routine = render(
+      <EmptyBlock {...EMPTY_ROUTINE_FIXTURE} action={verb} />
+    );
+    const routineTexts = nodesOf(routine, "span");
+    expect(routineTexts[0]?.textContent).toBe(EMPTY_ROUTINE_FIXTURE.title);
+    expect(routineTexts[1]?.textContent).toBe(EMPTY_ROUTINE_FIXTURE.body);
+    const quiet = {
+      body: styleOf(routineTexts[1]).fontSize,
+      fill: styleOf(nodesOf(routine, "button")[0]).backgroundColor,
+      title: styleOf(routineTexts[0]).fontSize,
+    };
+    dispose?.();
+    dispose = undefined;
+
+    const meeting = render(
+      <EmptyBlock {...EMPTY_FIRST_RUN_FIXTURE} action={verb} />
+    );
+    const meetingTexts = nodesOf(meeting, "span");
+    expect(meetingTexts[0]?.textContent).toBe(EMPTY_FIRST_RUN_FIXTURE.title);
+    const loud = {
+      body: styleOf(meetingTexts[1]).fontSize,
+      fill: styleOf(nodesOf(meeting, "button")[0]).backgroundColor,
+      title: styleOf(meetingTexts[0]).fontSize,
+    };
+
+    expect(Number(loud.title)).toBeGreaterThan(Number(quiet.title));
+    expect(Number(loud.body)).toBeGreaterThan(Number(quiet.body));
+    // The first meeting gets the one filled commit; the routine form spends
+    // nothing on a verb nobody is waiting to press.
+    expect(loud.fill).toBe(colors.accentFill);
+    expect(quiet.fill).not.toBe(colors.accentFill);
   });
 
   it("names a section and its count", () => {

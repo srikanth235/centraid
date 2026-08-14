@@ -8,6 +8,11 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "setup.ts", "ort-types.d.ts"],
+  "include": [
+    "src/**/*.ts",
+    "automation-handlers/**/*.ts",
+    "setup.ts",
+    "ort-types.d.ts"
+  ],
   "exclude": ["node_modules", "runtime", "dist"]
 }
