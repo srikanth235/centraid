@@ -61,8 +61,8 @@ export type HomeTileSize = "small" | "medium" | "large";
  * is `medium` because prose clamped into a 1×1 is a title with a word after it.
  *
  * Notes takes Docs' size for the same reason and by the same rule — the brief
- * names no Notes app, but Notes' body IS the Docs body (title over prose in the
- * reading register), and the size class follows the body.
+ * names no Notes app, but Notes' body IS the Docs body (title over compact
+ * prose), and the size class follows the body.
  */
 const TILE_SIZE: Record<HomeTileAppId, HomeTileSize> = {
   agenda: "small",
@@ -106,7 +106,7 @@ export interface HomeTileTaskRow {
 export type HomeTileBody =
   /** Thumbnail mosaic, bleeding to the tile edge. */
   | { kind: "photos"; thumbs: readonly string[]; more: number }
-  /** Title plus prose excerpt, both in the reading register. */
+  /** Title plus compact prose excerpt. */
   | { kind: "docs"; title: string; excerpt: string }
   /** The next event, with the one after it pinned to the tile bottom. */
   | { kind: "agenda"; title: string; at: string; after: string }
@@ -118,7 +118,7 @@ export type HomeTileBody =
   | { kind: "tally"; figure: string; caption: string }
   /** A state chip. */
   | { kind: "locker"; chip: string; tone: "ok" | "warn" }
-  /** The most recent note's first line, in the reading register. */
+  /** The most recent note's first line, in the compact body register. */
   | { kind: "notes"; line: string; at: string }
   /** Nothing to show. A MARKER, not a rendering: `partitionHomeTiles` reads it
    *  to keep this app out of the grid entirely, and the invitation to fill it

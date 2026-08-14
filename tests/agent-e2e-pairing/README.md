@@ -75,7 +75,7 @@ tests/agent-e2e-pairing/
 | `packages/gateway/src/serve/device-plane.test.ts` | durable `gateway.db` grant/enrollment semantics |
 | `packages/gateway/src/cli/admin.test.ts` | CLI arg parsing + in-process command output |
 | `packages/tunnel/src/gateway-endpoint.test.ts` | iroh ALPN protocol against FAKE stores |
-| `device-pairing-lifecycle` / `pairing-ticket-hygiene` | the real ceremony across real processes, loopback transport. `device-pairing-lifecycle` also owns the `gateway.journey` matrix cell since #603: fresh daemon auto-founds `Shared` + `Personal`, a ticket for `Shared` is minted and redeemed |
+| `device-pairing-lifecycle` / `pairing-ticket-hygiene` | the real ceremony across real processes, loopback transport. `device-pairing-lifecycle` also owns the `gateway.journey` matrix cell since #603: fresh daemon auto-founds one marked `Personal` vault, and a ticket for it is minted and redeemed |
 | `cross-network-relay` | the same ceremony over the real n0 relay/hole-punch transport |
 | `extension-companion` | the real MV3 worker + browser WASM, explicit Locker fill, receipt, and remote revocation |
 

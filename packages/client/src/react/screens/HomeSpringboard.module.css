@@ -2,9 +2,9 @@
 
    The tile is the one place in the product where a piece of every app is on
    screen at once, so the INVARIANT header is what has to be identical — mark,
-   name, count — and the body is what has to differ. The rules below are
-   therefore split exactly that way: header rules are shared, body rules are
-   per-app and are allowed to be as unlike each other as the content is. */
+   name, count — while the body structure is what has to differ. The text
+   remains on the shared tile register: section for headings, body for content,
+   and annotation for timestamps and counts. */
 
 /* Four columns, and rows that are minmax(<n>px, auto) rather than a fixed
    height: at 150%+ text scale the row grows instead of slicing the tile's own
@@ -159,11 +159,13 @@
   position: absolute;
 }
 
-/* ── docs + notes: the reading register ───────────────────────────────── */
+/* ── docs + notes: compact body previews ──────────────────────────────── */
 
 .readingTitle {
   color: var(--text);
-  font: var(--t-body-strong);
+  /* Docs is a ruled file list in the handoff: its row names use body ink and
+     weight, while Notes owns the stronger title role. */
+  font: var(--t-small);
   margin: 0 0 var(--sp-1);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -171,16 +173,19 @@
 }
 
 .reading {
-  color: var(--text-soft);
+  color: var(--text);
   display: -webkit-box;
-  /* Serif, because a document and a note are prose and the tile should read
-     like the app does. Line-clamped, never clipped. */
-  font: var(--t-reading);
+  /* A tile is a compact preview, not the document reading view. */
+  font: var(--t-small);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   line-clamp: 3;
   margin: 0;
   overflow: hidden;
+}
+
+.noteLine {
+  color: var(--text-soft);
 }
 
 .readingStamp {
@@ -202,7 +207,7 @@
 .eventTitle {
   color: var(--text);
   display: -webkit-box;
-  font: var(--t-title);
+  font: var(--t-small-strong);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -273,7 +278,7 @@
 
 .taskRow {
   align-items: center;
-  color: var(--text-soft);
+  color: var(--text);
   display: flex;
   font: var(--t-small);
   gap: var(--sp-2);
@@ -289,8 +294,8 @@
 }
 
 .taskRow[data-done="true"] .taskBox {
-  background: var(--text-soft);
-  border-color: var(--text-soft);
+  background: var(--text);
+  border-color: var(--text);
 }
 
 .taskText {
@@ -310,15 +315,14 @@
   color: var(--text);
   /* The display rung, in the numeric face: a balance is the one number on
      Home big enough to read across a room, and it is still a ramp size. */
-  font-family: var(--font-sans);
-  font-size: var(--t-display-size);
+  font: var(--t-display);
   font-variant-numeric: var(--t-mono-numeric);
-  line-height: 36px;
+  letter-spacing: var(--t-display-tracking);
   margin-block-start: var(--sp-2);
 }
 
 .figureCaption {
-  color: var(--text-faint);
+  color: var(--text-soft);
   font: var(--t-small);
 }
 
@@ -330,14 +334,20 @@
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   color: var(--text-soft);
-  font: var(--t-control);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
   margin-block-start: var(--sp-2);
   padding: var(--sp-1) var(--sp-2);
+  text-transform: var(--t-eyebrow-transform);
 }
 
 .chip[data-tone="warn"] {
   border-color: var(--warning);
   color: var(--warning);
+}
+
+.chip[data-tone="ok"] {
+  color: var(--c-rose-text);
 }
 
 /* ── day one ──────────────────────────────────────────────────────────────
@@ -442,10 +452,10 @@
   min-inline-size: 0;
 }
 
-/* A verb, at the weight the rest of the shell gives an actionable name. */
+/* A body-size action label; the hint below carries the secondary explanation. */
 .moveLabel {
   color: var(--text);
-  font: var(--t-small-strong);
+  font: var(--t-small);
 }
 
 /* What it becomes — the reason to press it, never an apology for the emptiness. */

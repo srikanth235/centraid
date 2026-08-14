@@ -27,8 +27,8 @@ import chrome from "./chrome.module.css";
 // toggle, no drawer, and no scrim over the content — the three affordances the
 // old three-zone sidebar needed and the stem does not.
 //
-// The main column owns the per-app bar (title in the display face, meta in the
-// numeric register, and the app's own actions), the content, and the ONE
+// The main column owns the per-app bar (title role, display for a full identity
+// lockup, meta in the numeric register, and the app's own actions), the content, and the ONE
 // persistent status line at the bottom of the frame. Everything positional in
 // chrome.module.css is written with logical properties, so the whole frame
 // mirrors under RTL without a second rule.
@@ -86,7 +86,7 @@ export interface ShellFrameProps {
   children: ReactNode;
   /** The one persistent status line, pinned to the bottom of the main column. */
   statusLine?: ReactNode;
-  /** The app's own title, in the display face. */
+  /** The app's own title; a full identity lockup promotes it to display. */
   appTitle?: string;
   /** The line under it, in the numeric register. */
   appMeta?: ReactNode;
@@ -216,9 +216,8 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
     ) : null,
   ].filter(Boolean);
 
-  // The app identity block. The title takes the display face in EVERY app —
-  // it is the signature that carries the product across surfaces that
-  // otherwise look nothing alike — and the meta line under it is numeric, so
+  // The app identity block. A bare screen name takes the title role; a full
+  // lockup promotes it to display, and the meta line under it is numeric, so
   // counts and times are mono and tabular without each screen remembering to
   // ask for it.
   // Destructured, never read as `action.x` in the JSX below: handing a member

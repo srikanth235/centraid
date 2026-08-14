@@ -28,8 +28,8 @@
     "@centraid/vault": "workspace:*",
     "electron-updater": "^6.6.2",
     "qrcode": "^1.5.4",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@centraid/test-kit": "workspace:*",

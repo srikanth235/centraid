@@ -239,6 +239,8 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
 export interface ShellAppsController {
   userApps: UserAppMeta[];
   drafts: DraftAppMeta[];
+  /** True until the first installed-app reconcile has settled. */
+  loading: boolean;
   /** Re-hydrate drafts + reconcile pins from the gateway listing. */
   refresh: () => Promise<void>;
   /** Replace the installed-apps list (used by CRUD paths) and persist it. */
@@ -266,6 +268,7 @@ export function useShellApps(): ShellAppsController {
     Store.get<UserAppMeta[]>("home.userApps", [])
   );
   const [drafts, setDrafts] = useState<DraftAppMeta[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const updateUserApps = useCallback((next: UserAppMeta[]) => {
     Store.set("home.userApps", next);
@@ -275,10 +278,12 @@ export function useShellApps(): ShellAppsController {
   const apply = useCallback((snapshot: ShellAppsSnapshot | null) => {
     if (snapshot === null) {
       setDrafts([]);
+      setLoading(false);
       return;
     }
     setUserApps(snapshot.userApps);
     setDrafts(snapshot.drafts);
+    setLoading(false);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -326,6 +331,7 @@ export function useShellApps(): ShellAppsController {
   return {
     userApps,
     drafts,
+    loading,
     refresh,
     setUserApps: updateUserApps,
     mutateApps,

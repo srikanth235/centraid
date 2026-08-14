@@ -16,7 +16,6 @@ import ShellFrame from "./ShellFrame.js";
 import { resetStatus } from "./statusChannel.js";
 import StatusLine from "./StatusLine.js";
 import Stem from "./Stem.js";
-import { Store } from "./store.js";
 
 // Frame integration for an inline app (Photos v4, §3 + CHANGELOG F/G).
 //
@@ -48,9 +47,9 @@ const claim: InlineBandClaim = {
   activeId: "library",
   destinations: [
     { icon: "Image", id: "library", label: "Library" },
-    { id: "albums", label: "Albums" },
-    { id: "people", label: "People" },
-    { id: "search", label: "Search" },
+    { icon: "album", id: "albums", label: "Albums" },
+    { icon: "person", id: "people", label: "People" },
+    { icon: "Search", id: "search", label: "Search" },
   ],
   onSelect: vi.fn<InlineBandClaim["onSelect"]>(),
 };
@@ -63,23 +62,18 @@ function Host({
   compact,
   firstParty = true,
   onHome = NO_HOME,
-  mountedApp = app,
   contribute,
 }: {
   compact: boolean;
   firstParty?: boolean;
   onHome?: () => void;
-  /** WHICH app is mounted. Parameterised for issue #712 E3: the band
-   *  hand-back is SHELL behaviour keyed by app id, not Photos behaviour, and
-   *  the only way to say so mechanically is to mount a second app. */
-  mountedApp?: AppMetaResolvedType;
   contribute: (frame: ReturnType<typeof useInlineAppFrame>["frame"]) => void;
 }): JSX.Element {
   const contributed = useInlineAppFrame({
-    app: mountedApp,
+    app,
     compact,
     firstParty,
-    mountKey: `${mountedApp.id}\0${mountedApp.id}:0\0vault-own`,
+    mountKey: `${app.id}\0${app.id}:0\0vault-own`,
     onHome,
   });
   contributeOnce(contributed.frame, contribute);
@@ -222,7 +216,11 @@ describe("shell/inlineFrame", () => {
       // says the capsule is not a sixth tab.
       const group = found[0]!.querySelector<HTMLElement>("fieldset")!;
       expect(group.querySelectorAll("button")).toHaveLength(4);
+      expect(group.querySelectorAll(".launchChip svg")).toHaveLength(4);
       expect(group.querySelector('[aria-label="Home"]')).toBeNull();
+      // The claimed band is stable on compact surfaces; there is no grid
+      // hand-back control that can swap it for the host launcher.
+      expect(found[0]!.querySelector('button[aria-label^="Use "]')).toBeNull();
     });
 
     it("keeps the home capsule outside the group, at 52px and never under 44", () => {
@@ -265,128 +263,6 @@ describe("shell/inlineFrame", () => {
       expect(bands(el)[0]!.dataset.band).toBe("host");
     });
 
-    it("gives the band back when the member's stored preference says host", () => {
-      Store.set("shell.bandOwner.photos", "host");
-      const el = render(
-        <Host compact contribute={(frame) => frame.claimBand(claim)} />
-      );
-      expect(bands(el)).toHaveLength(1);
-      expect(bands(el)[0]!.dataset.band).toBe("host");
-    });
-
-    // THE BAND CAN BE HANDED BACK (issue #712 E3). `setBandOwner` existed and
-    // nothing called it: the preference the frame honours had no control that
-    // could express it, so a claim was permanent in practice. These assert the
-    // control, both directions, its persistence, and — the whole point — that
-    // it is SHELL behaviour keyed by app id rather than anything Photos owns.
-    describe("handing the band back", () => {
-      /** Read the raw browser storage, NOT the `Store` helper — the claim
-       *  under test is that the answer outlives the process, and a helper
-       *  that could be holding it in memory cannot prove that. */
-      const storedOwner = (appId: string): unknown =>
-        JSON.parse(
-          localStorage.getItem(`centraid.v1.shell.bandOwner.${appId}`) ?? "null"
-        );
-
-      const toggle = (el: HTMLElement, name: string): HTMLButtonElement => {
-        const found = el.querySelector<HTMLButtonElement>(
-          `button[aria-label="${name}"]`
-        );
-        expect(found, `no control labelled "${name}"`).not.toBeNull();
-        return found!;
-      };
-
-      it("offers the frame's band, and honours the answer", () => {
-        const el = render(
-          <Host compact contribute={(frame) => frame.claimBand(claim)} />
-        );
-        expect(bands(el)[0]!.dataset.band).toBe("app");
-        act(() => toggle(el, "Use Centraid's band").click());
-        expect(bands(el)[0]!.dataset.band).toBe("host");
-      });
-
-      it("offers the app's band back — the choice is not one-way", () => {
-        Store.set("shell.bandOwner.photos", "host");
-        const el = render(
-          <Host compact contribute={(frame) => frame.claimBand(claim)} />
-        );
-        expect(bands(el)[0]!.dataset.band).toBe("host");
-        // Labelled with what pressing it does, not with the state it is in.
-        act(() => toggle(el, "Use Photos's band").click());
-        expect(bands(el)[0]!.dataset.band).toBe("app");
-      });
-
-      it("survives a relaunch — the answer is written, not held in state", () => {
-        const el = render(
-          <Host compact contribute={(frame) => frame.claimBand(claim)} />
-        );
-        act(() => toggle(el, "Use Centraid's band").click());
-        // A remount is this suite's relaunch: the store is the same
-        // `localStorage` a reloaded page reads, and nothing in the tree
-        // survives the unmount.
-        act(() => root!.unmount());
-        host!.remove();
-        expect(storedOwner("photos")).toBe("host");
-        const again = render(
-          <Host compact contribute={(frame) => frame.claimBand(claim)} />
-        );
-        expect(bands(again)[0]!.dataset.band).toBe("host");
-      });
-
-      it("is keyed per app — a second app is untouched by Photos' answer", () => {
-        // SHELL BEHAVIOUR, NOT PHOTOS BEHAVIOUR. Photos is the only bundled
-        // app that claims a band today (nothing else calls `frame.claimBand`),
-        // so the second app here is an arbitrary one standing in for the next
-        // one that claims — which is exactly the guarantee `useBandOwner`'s
-        // own comment makes: "a member who wants the host band back in Photos
-        // has said nothing about the next app that claims".
-        const docs = {
-          id: "docs",
-          name: "Docs",
-          iconKey: "Folder",
-          color: "#456",
-        } as unknown as AppMetaResolvedType;
-        const photos = render(
-          <Host compact contribute={(frame) => frame.claimBand(claim)} />
-        );
-        act(() => toggle(photos, "Use Centraid's band").click());
-        act(() => root!.unmount());
-        host!.remove();
-
-        const el = render(
-          <Host
-            compact
-            mountedApp={docs}
-            contribute={(frame) => frame.claimBand(claim)}
-          />
-        );
-        // Docs still has its band: Photos' answer said nothing about it.
-        expect(bands(el)[0]!.dataset.band).toBe("app");
-        act(() => toggle(el, "Use Centraid's band").click());
-        expect(bands(el)[0]!.dataset.band).toBe("host");
-        expect(storedOwner("docs")).toBe("host");
-        // …and Photos' own answer is still where it was.
-        expect(storedOwner("photos")).toBe("host");
-      });
-
-      it("is absent where there is no band to argue about", () => {
-        // No claim at all, and the compact surface that could honour one.
-        const none = render(<Host compact contribute={() => undefined} />);
-        expect(none.querySelector('button[aria-label^="Use "]')).toBeNull();
-        act(() => root!.unmount());
-        host!.remove();
-        // A claim, but a desktop window: there is no band either way, so
-        // offering the choice would be offering nothing.
-        const wide = render(
-          <Host
-            compact={false}
-            contribute={(frame) => frame.claimBand(claim)}
-          />
-        );
-        expect(wide.querySelector('button[aria-label^="Use "]')).toBeNull();
-      });
-    });
-
     it("floats on OPAQUE paper — no blur, no translucency, no shadow", () => {
       // The bar sits over unpredictable photographs, so label contrast, the
       // active bar and the focus ring must not depend on what the member
@@ -410,6 +286,14 @@ describe("shell/inlineFrame", () => {
       // still fully opaque, which is the part this test exists to defend.
       expect(rule!).toMatch(/background:\s*var\(--bg-elev\)/u);
       expect(rule!).not.toMatch(/backdrop-filter|opacity|box-shadow/u);
+
+      const appBand =
+        /\n\.appBand \{\n {2}grid-area: stem;(?<body>[^}]*)\}/u.exec(css)
+          ?.groups?.body;
+      expect(appBand, "the claimed-band rule was not found").toBeTypeOf(
+        "string"
+      );
+      expect(appBand!).toMatch(/min-inline-size:\s*0/u);
     });
   });
 

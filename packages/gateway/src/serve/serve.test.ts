@@ -192,11 +192,9 @@ describe("serve scenarios", () => {
     expect(body.runtime.nodeVersion).toBe(process.version);
     expect(body.health.status).toStrictEqual(expect.any(String));
     expect(Array.isArray(body.logs)).toBe(true);
-    // Both auto-founded vaults are mounted, sized off vault.db/journal.db.
-    expect(body.vaults).toHaveLength(2);
-    // The diagnostics inventory enumerates planes in FOUNDING order (Shared
-    // leads) — unlike the client-facing listing, which leads with the default
-    // vault (#665). Nothing here reads element 0 as "primary".
+    // The auto-founded personal vault is mounted, sized off
+    // vault.db/journal.db.
+    expect(body.vaults).toHaveLength(1);
     expect(body.vaults[0]!.vaultId).toBe(
       handle.vaults.planesList()[0]!.boot.vaultId
     );
@@ -240,12 +238,10 @@ describe("serve scenarios", () => {
       configured: false,
       recoveryKit: { confirmedAt: null },
     });
-    expect(body.vaults).toHaveLength(2);
-    // Backup inventories planes in FOUNDING order, so Shared leads here even
-    // though the client-facing vault listing leads with Personal (#665).
+    expect(body.vaults).toHaveLength(1);
     expect(body.vaults[0]).toMatchObject({
       vaultId: handle.vaults.planesList()[0]!.boot.vaultId,
-      name: "Shared",
+      name: "Personal",
       running: false,
       destination: { kind: "gateway-local" },
       pendingOffsite: { count: 0, bytes: 0 },
@@ -272,9 +268,7 @@ describe("serve scenarios", () => {
         provider: { kind: "local", dir: providerDir },
       },
     });
-    // Backup status inventories planes in FOUNDING order, so this is Shared —
-    // the registry DEFAULT (`current()`, and the head of the client-facing
-    // listing since #665) is Personal.
+    // The only auto-founded plane is also the registry default.
     const vaultId = handle.vaults.planesList()[0]!.boot.vaultId;
     const auth = { Authorization: `Bearer ${handle.token}` };
 
@@ -292,7 +286,7 @@ describe("serve scenarios", () => {
       }>;
     };
     expect(beforeBody.configured).toBe(true);
-    expect(beforeBody.vaults).toHaveLength(2);
+    expect(beforeBody.vaults).toHaveLength(1);
     expect(beforeBody.vaults[0]).toMatchObject({ vaultId, running: false });
     expect(beforeBody.vaults[0]?.lastBackupAt).toBeUndefined();
 

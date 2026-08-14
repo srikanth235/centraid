@@ -376,10 +376,13 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
       vm.previewDevice !== "desktop" &&
       styles.hasPhone
   );
+  const handleToggleStem = nav.toggleStem;
 
   return (
     <ShellFrame
       stem={renderStem(nav)}
+      onToggleStem={handleToggleStem}
+      stemOpen={nav.stemOpen}
       statusLine={statusLine}
       canGoBack={nav.canGoBack}
       canGoForward={nav.canGoForward}

@@ -8,11 +8,11 @@ Prove the current pairing workflow end to end: mint a pasteable ticket on the ga
 
 ## Setup
 
-Fresh `--data-dir`, no bootstrap flag: the daemon auto-founds `Shared` + `Personal` at construction (issue #603 removed `--init-vault`). The harness waits for the HTTP listener and the iroh endpoint identity.
+Fresh `--data-dir`, no bootstrap flag: the daemon auto-founds one marked `Personal` vault at construction (issue #603 removed `--init-vault`). The harness waits for the HTTP listener and the iroh endpoint identity.
 
 ## Steps
 
-1. `pair --vault "Shared"` — parse the pasteable base64url token; assert it carries the gateway EndpointTicket, ticket id/secret, vault name, expiry.
+1. `pair --vault "Personal"` — parse the pasteable base64url token; assert it carries the gateway EndpointTicket, ticket id/secret, vault name, expiry.
 2. Fresh device identity redeems over `centraid/gw-pair/1` → `ok: true` with the vault id/name + version-handshake material.
 3. The paired-device roster shows the durable `gateway.db` row and platform.
 4. A tunneled `GET /centraid/_vault/vaults` from the enrolled device → 200.

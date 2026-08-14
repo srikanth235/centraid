@@ -135,7 +135,14 @@ const str = (value: unknown): string => (value == null ? "" : String(value));
  * is where the behaviour is tested.
  */
 export function useSpringboardTiles(): Map<string, TileData> {
-  const { gatewayBase } = useReplica();
+  const { gatewayBase, online } = useReplica();
+  // `gatewayBase` is also the address used to queue writes and can remain
+  // cached while the tunnel is down. It is not proof that a media request can
+  // succeed. Home must not turn that stale address into four failed Image
+  // loads; remote-only photos are explicitly waiting for the gateway until
+  // reachability says the bytes can be fetched. Pinned on-device thumbnails
+  // still win because `selectPhotoMosaic` checks them independently.
+  const photoGatewayBase = online ? gatewayBase : undefined;
   // One clock reading per visit, not per render: reading the clock in a render
   // body is impure (the assembly memo below would never be stable), and a
   // minute-by-minute ticker would re-render the whole springboard while nobody
@@ -289,7 +296,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
 
     const mosaic = selectPhotoMosaic(
       photos.rows,
-      gatewayBase,
+      photoGatewayBase,
       pinnedThumbnailUri
     );
     tiles.set("photos", {
@@ -411,7 +418,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
     events,
     exceptions,
     expenses,
-    gatewayBase,
+    photoGatewayBase,
     noteContents,
     notes,
     now,

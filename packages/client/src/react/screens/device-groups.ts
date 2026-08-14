@@ -24,8 +24,8 @@ import type {
  * One physical device, with every enrollment it holds folded in.
  *
  * The devices route returns a row per (device, VAULT) enrollment, so a browser
- * paired into Shared + Personal came back twice. Rendered raw that reads as
- * two devices — the card counted "4 devices" for two — and each copy carried a
+ * paired into multiple vaults came back twice. Rendered raw that reads as two
+ * devices — the card counted "4 devices" for two — and each copy carried a
  * button labelled "Revoke device" that only dropped one vault. The user thinks
  * in hardware, so the row is hardware and `enrollmentIds` carries what revoking
  * it has to remove.

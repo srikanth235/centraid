@@ -1,5 +1,5 @@
-// The three Photos preferences the v4 handoff puts on the MEMBER RECORD
-// (§16): `tileSize`, `vaultsOn` and `bandOwner`.
+// The two Photos preferences the v4 handoff puts on the MEMBER RECORD
+// (§16): `tileSize` and `vaultsOn`.
 //
 // WHAT IS AND IS NOT TRUE HERE. "On the member record" is a real requirement —
 // a tile size remembered per surface would make a member preference
@@ -8,7 +8,7 @@
 // app bar, the status line and the band, and `window.centraid` carries reads,
 // writes and change subscriptions. Nothing else.
 //
-// So this module is the SEAM and not the storage. It holds the three values
+// So this module is the SEAM and not the storage. It holds the two values
 // for the life of the mount and exposes one place to plug the real store into
 // when the shell grows one. It deliberately does NOT reach for `localStorage`:
 // that would be device-local storage wearing a member-record label, and the
@@ -24,14 +24,11 @@ export interface MemberPrefs {
   tileSize: Rung;
   /** Which vaults are in the merged timeline. Empty means every one. */
   vaultsOn: ReadonlySet<string>;
-  /** Who owns the compact bottom band: this app, or the frame (§3.1). */
-  bandOwner: "app" | "host";
 }
 
 const DEFAULTS: MemberPrefs = {
   tileSize: DEFAULT_RUNG,
   vaultsOn: new Set(),
-  bandOwner: "app",
 };
 
 /** The store an inline app is given. One implementation today; the shell's

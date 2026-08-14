@@ -18,7 +18,7 @@
  *
  * Vault lifecycle is split by AUTHORITY, not by transport (issue #289,
  * corrected in #568 item J). `create` and `delete` are ADMIN acts, but they
- * are no longer CLI-only: a fresh data dir auto-creates its two vaults at
+ * are no longer CLI-only: a fresh data dir auto-creates its personal vault at
  * construction (issue #603), an admin device may create further ones, and the
  * erase ceremony (`vault-routes.ts`) deletes over HTTP behind the owner
  * enrollment + typed-name + verified-kit guards. What has not changed is that
@@ -554,9 +554,9 @@ export class VaultRegistry {
    *
    * The signal is the durable `personal` marker written into the vault's own
    * `core_vault.settings_json` at founding, NOT creation order and NOT the
-   * name: ids are UUIDv7 so "oldest" is Shared (founded first), and the
-   * desktop fresh path renames the personal vault to the owner's display
-   * name. Ties (a data dir with several marked vaults — restore edge) resolve
+   * name: ids are UUIDv7, and the desktop fresh path renames the personal
+   * vault to the owner's display name. Ties (a data dir with several marked
+   * vaults — restore edge) resolve
    * oldest-first; a registry with no marked vault at all (pre-marker dev data,
    * or a household that erased its personal vault) falls back to the oldest,
    * which is the previous behaviour.
@@ -642,12 +642,13 @@ export class VaultRegistry {
    * the two can never disagree about which vault heads the list.
    *
    * WHY THE HEAD IS NOT JUST THE OLDEST. Ids are UUIDv7, so plain
-   * lexicographic order IS creation order, and the auto-found bootstrap
-   * (#603) founds `Shared` before the personal vault — so oldest-first put
-   * `Shared` at the head of every list. Clients treat the first row as
-   * PRIMARY (`useMemberScopes.ts` takes `scopes[0]`), which put them on a
-   * different vault than the gateway's own `defaultVaultId()`. Hoisting the
-   * default vault settles that disagreement in one place.
+   * lexicographic order IS creation order. An older non-personal vault can
+   * still exist in a data dir that was created or restored before the personal
+   * marker was introduced, so oldest-first can put the wrong vault at the head.
+   * Clients treat the first row as PRIMARY (`useMemberScopes.ts` takes
+   * `scopes[0]`), which must agree with the gateway's own
+   * `defaultVaultId()`. Hoisting the default vault settles that disagreement
+   * in one place.
    *
    * The head is `defaultVaultIdOrUndefined()` — the same durable `personal`
    * marker the rest of the gateway trusts, never the literal name "Personal"

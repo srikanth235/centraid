@@ -103,8 +103,8 @@ function ensureInlineScopeTokens(): void {
       `:root:not([data-theme]) .${INLINE_SCOPE_CLASS}`
     )
     .replace(
-      /(?<lineStart>^|\n):root\s*\{/gu,
-      `$<lineStart>.${INLINE_SCOPE_CLASS} {`
+      /(?<lineStart>^|\n)(?<indent>\s*):root\s*\{/gu,
+      `$<lineStart>$<indent>.${INLINE_SCOPE_CLASS} {`
     );
   const style = document.createElement("style");
   style.dataset.centraidInlineTokens = "true";
@@ -140,6 +140,9 @@ interface InlineAppMountProps {
   scopes: readonly ResolvedAppScope[];
   /** The frame's contribution channel — app bar, status line, compact band. */
   frame: InlineFrame;
+  /** The shell form factor, forwarded so apps can distinguish a narrow pane
+   * inside a desktop window from the compact host band. */
+  compact: boolean;
   onRootReady: (el: HTMLElement | null, descriptor: InlineAppModule) => void;
   onOpenApprovals: () => void;
 }
@@ -150,6 +153,7 @@ function InlineAppMount({
   descriptorPromise,
   scopes,
   frame,
+  compact,
   onRootReady,
   onOpenApprovals,
 }: InlineAppMountProps): JSX.Element {
@@ -232,7 +236,7 @@ function InlineAppMount({
     (el: HTMLElement | null) => onRootReady(el, descriptor),
     [descriptor, onRootReady]
   );
-  return <Root rootRef={rootRef} frame={frame} />;
+  return <Root rootRef={rootRef} frame={frame} compact={compact} />;
 }
 
 export default function InlineAppRoute({
@@ -247,6 +251,9 @@ export default function InlineAppRoute({
 }: InlineAppRouteProps): JSX.Element {
   const { confirm, enterBuilder, openNewAppSheet, showToast, builderEnabled } =
     useShellActions();
+  // Photos owns its toolbar and follows the handoff without the generic shell
+  // settings sheet. Other inline apps retain their management affordance.
+  const appSettingsEnabled = app.id !== "photos";
   // The seat wall (docs/blueprint-seats.md S5): a manifest-declared refusal,
   // not a hard-coded app id, so the next app that needs one (the doc's
   // open follow-up list already has candidates) gets it free. Locker is the
@@ -383,23 +390,25 @@ export default function InlineAppRoute({
           dangerouslySetInnerHTML={{ __html: iconSvg("Sparkle", 14) }}
         />
       ) : null}
-      <span className={chrome.tbBtnWrap}>
-        <button
-          className={chrome.tbBtn}
-          type="button"
-          aria-label="App settings"
-          aria-haspopup="dialog"
-          data-open={settingsOpen ? "true" : undefined}
-          onClick={() =>
-            setSettings(
-              settingsOpen ? null : { inlineRoot: appRootRef.current }
-            )
-          }
-          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
-          dangerouslySetInnerHTML={{ __html: iconSvg("Settings", 15) }}
-        />
-        <span className={chrome.tooltip}>App settings</span>
-      </span>
+      {appSettingsEnabled ? (
+        <span className={chrome.tbBtnWrap}>
+          <button
+            className={chrome.tbBtn}
+            type="button"
+            aria-label="App settings"
+            aria-haspopup="dialog"
+            data-open={settingsOpen ? "true" : undefined}
+            onClick={() =>
+              setSettings(
+                settingsOpen ? null : { inlineRoot: appRootRef.current }
+              )
+            }
+            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
+            dangerouslySetInnerHTML={{ __html: iconSvg("Settings", 15) }}
+          />
+          <span className={chrome.tooltip}>App settings</span>
+        </span>
+      ) : null}
     </span>
   );
 
@@ -439,6 +448,9 @@ export default function InlineAppRoute({
     <ShellFrame
       stem={renderStem(nav)}
       compact={compact}
+      {...(compact
+        ? {}
+        : { onToggleStem: nav.toggleStem, stemOpen: nav.stemOpen })}
       {...(contributed.band === undefined ? {} : { band: contributed.band })}
       statusLine={statusLine}
       canGoBack={nav.canGoBack}
@@ -500,6 +512,7 @@ export default function InlineAppRoute({
                     descriptorPromise={descriptorPromise}
                     scopes={scopes}
                     frame={contributed.frame}
+                    compact={Boolean(compact)}
                     onRootReady={onRootReady}
                     onOpenApprovals={() => nav.navigate({ kind: "approvals" })}
                   />
@@ -510,7 +523,7 @@ export default function InlineAppRoute({
             </ErrorBoundary>
           )}
         </div>
-        {settings === null ? null : (
+        {appSettingsEnabled && settings !== null ? (
           <AppSettingsController
             app={app}
             appId={appId}
@@ -544,7 +557,7 @@ export default function InlineAppRoute({
             }}
             showToast={showToast}
           />
-        )}
+        ) : null}
       </div>
     </ShellFrame>
   );

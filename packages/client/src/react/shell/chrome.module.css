@@ -5,7 +5,7 @@
 
      .window      the frame grid — stem column + main column
      .stem        invariant 1: the `--w-stem` launcher band (bottom on compact)
-     .appBar      the per-app bar: title (display face) + meta (numeric) + nav
+     .appBar      the per-app bar: title + meta (numeric) + nav
      .main        content
      .statusLine  invariant 5: the ONE persistent feedback line
      .sheet*      the All-apps sheet (desktop dialog / compact bottom sheet)
@@ -344,7 +344,10 @@
 .stem[data-compact="true"] .launchList {
   flex-direction: row;
   flex: 1;
+  align-items: center;
+  justify-content: space-between;
   overflow: visible;
+  padding-block-end: 0;
 }
 
 /* The seam under Home. `--line` is the separator hairline — the same token the
@@ -378,10 +381,11 @@
   transition: background var(--dur-1) var(--ease);
 }
 .stem[data-compact="true"] .launchItem {
-  flex: 1;
-  min-inline-size: 0;
+  flex: 0 1 auto;
+  min-inline-size: var(--h-row);
   inline-size: auto;
   padding-block: 7px 3px;
+  padding-inline: 6px;
 }
 .launchItem:hover {
   background: var(--bg-hover);
@@ -622,7 +626,19 @@
   grid-area: stem;
   display: flex;
   gap: var(--sp-1);
+  /* A claimed band is a grid item. Let it shrink with the compact frame so
+     its capsule stays inside the viewport instead of its tab labels choosing
+     a min-content width and shifting the whole row off the leading edge. */
+  min-inline-size: 0;
   min-height: 0;
+}
+/* Photos' selection action bar takes the compact foot while selection is
+   active, matching the Expo surface. Keep the claimed band contribution
+   mounted so the host stem cannot take its place; withdrawing this grid item
+   collapses the band row and leaves one bottom surface. Normal browsing
+   restores the Photos band, including its leading Home capsule. */
+:global(body.has-selection) .appBand {
+  display: none;
 }
 .appBandGroup {
   display: flex;
@@ -765,17 +781,13 @@
   text-align: start;
 }
 /* Two registers, one class.
-   In the HEADER lockup (title over a meta line) the title is the display face
-   at 31px — the signature that carries the product across surfaces that look
-   nothing alike.
-   Alone in the titlebar it is FURNITURE, and it takes the same 13/500 rung as
-   the launcher's selected row: the stem says "Home" and the bar says "Home",
-   one word at one weight in two places. At the title rung it was nearly twice
-   the size of anything else in a 44px bar — a caption shouting over the
-   controls beside it. */
+   A bare screen name takes the title role, matching the handoff's app bar and
+   the native Home title row. A full identity lockup (title over a meta line)
+   promotes to the display face below; that is the signature block, not the
+   compact name-only bar. */
 .appTitle {
   margin: 0;
-  font: var(--t-small-strong);
+  font: var(--t-title);
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -785,10 +797,8 @@
   font: var(--t-display);
   letter-spacing: var(--t-display-tracking);
 }
-/* The title as a control. It keeps the display face and the title's own type —
-   a switcher that shrank its label to control size would be admitting the
-   title is somewhere else. The shell owns no hue, so the only state it shows
-   is ink and a hairline, and the chevron is the affordance. */
+/* The title as a control. It keeps the title role rather than shrinking to a
+   generic control label; the chevron is the affordance. */
 .appTitleBtn {
   -webkit-app-region: no-drag;
   display: flex;
@@ -1363,8 +1373,8 @@
   .appBar {
     padding-inline: var(--sp-4);
   }
-  .appTitle {
-    /* The display rung steps down on a phone, per the ramp's mobile column. */
+  .appBar[data-identity="true"] .appTitle {
+    /* Only the full identity block uses the display rung on compact screens. */
     font-size: var(--t-display-size);
   }
 

@@ -26,6 +26,10 @@ import { useCompactLayout } from "./useCompactLayout.js";
 // without touching the reducer.
 export interface ShellNav {
   route: ShellRoute;
+  /** Whether the desktop navigation stem is visible in the current frame. */
+  stemOpen: boolean;
+  /** Toggle the persistent desktop navigation stem. */
+  toggleStem: () => void;
   navigate: (route: ShellRoute) => void;
   /** Swap the current history entry in place (no new back-stack entry). */
   replace: (route: ShellRoute) => void;
@@ -46,7 +50,7 @@ export interface ShellNav {
  * "chrome is persistent" invariant exists to prevent.
  */
 export interface ShellAppBar {
-  /** The app's own title, in the display face. */
+  /** The app's own title; a full identity lockup promotes it to display. */
   title?: string;
   /** The line under it, in the numeric register. */
   meta?: ReactNode;
@@ -157,6 +161,8 @@ export default function ShellApp({
   const nav = useMemo<ShellNav>(
     () => ({
       route,
+      stemOpen,
+      toggleStem,
       navigate: (r) => dispatch({ type: "navigate", route: r }),
       replace: (r) => dispatch({ type: "replace", route: r }),
       back: () => dispatch({ type: "back" }),
@@ -164,7 +170,7 @@ export default function ShellApp({
       canGoBack: canBack(state),
       canGoForward: canFwd(state),
     }),
-    [route, state]
+    [route, state, stemOpen, toggleStem]
   );
 
   useEffect(() => {

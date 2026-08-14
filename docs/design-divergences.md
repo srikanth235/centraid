@@ -36,16 +36,9 @@ Every one of these has a route segment in `shelves.ts` (so the app can _describe
 
 **The People filter axis is withheld for the same reason, and it is the sharpest example.** §4.2 names four filter properties; `apps/docs/filters.ts` ships three. "Owned by you / Owned by Ana / Names Tom Pemberton / Shared with Family" needs owners, shares and the `names` capability's cross-app links — none of which this drive projection reads. `liveOptions()` renders no pill whose predicate cannot be computed, "because a pill that silently matches nothing is worse than a pill that is not there: the member reads the empty result as a fact about their drive."
 
-### The band-owner gap in the frame contract
+### Compact band ownership
 
-**On the compact form factor, Docs can lose shelf navigation entirely — and cannot detect it.**
-
-- The shell owns the real answer: `packages/client/src/react/shell/useBandOwner.ts` keeps `shell.bandOwner.<appId>` in the client `Store`, and a member who hands the band back to the host makes the shell ignore that app's `claimBand`.
-- `InlineFrame` (`packages/blueprints/apps/inline-types.ts`) carries the app bar, the status line and the band claim — and **nothing about who currently owns the band**. `claimBand` has no return value and no callback.
-- Docs hides its shelf strip on the compact form factor (the band carries the same destinations there, and drawing both would put Trash in a strip that scrolls out of sight) and claims the band unconditionally. If the claim is not honoured, the strip is gone and the band shows the frame's destinations: **there is no way to reach Folders, Coming due or Trash on that surface.**
-- Photos papers over the same gap with a second copy of the preference in its own store (`apps/photos/member-prefs.ts` `bandOwner`), gating its claim on a record the shell never reads. Two records for one member preference is the divergence [docs/config-ownership.md](config-ownership.md) exists to prevent.
-
-The fix is a frame-contract change, not an app change: `InlineFrame` should hand the app the band owner the way `data-gateway-status` is meant to hand it reachability, and both apps should read that one record. Until then, Docs' strip should be gated on the same signal the claim is — not on the form factor alone.
+The web frame honours a first-party app's compact band claim whenever the surface is compact. There is no per-app grid-icon hand-back control: the app's shelves remain reachable instead of silently switching to a different host launcher. `InlineFrame` carries the contribution, while the frame owns the decision to ignore it on desktop or for non-first-party apps.
 
 ### Deferred follow-up tiers
 
@@ -86,6 +79,12 @@ The brief's `sharing` screen is represented by the vault sharing plane, and its 
 - The frame Home capsule sits at the leading edge outside the app tab group, which mirrors correctly under RTL.
 - The Library grain control (`Years · Months · All`) is permanent and the grid skeleton uses packed final geometry.
 - Tile size is `XS · S · M · L`, while mobile keeps its separate timeline-grain control. Album and People grids state column counts rather than card widths.
+
+### Surface controls
+
+- Photos does not expose the generic shell App settings sheet. Its toolbar owns the controls shown in the handoff, and Photos ships no app-local appearance knobs; the web shell therefore withholds that entry point for `app.id === "photos"`. Other app types keep their management surface.
+- The compact Photos band is stable. The web frame always honours Photos' first-party claim on compact surfaces, so there is no grid-icon hand-back control that swaps its shelves for the host launcher.
+- Selection replaces the compact band. While Photos selection is active, its five-action bar takes the foot and the claimed navigation band withdraws; normal browsing restores the band and its leading Home capsule. The global `+ Add` capture launcher remains available.
 
 ### Colour roles and verified geometry
 

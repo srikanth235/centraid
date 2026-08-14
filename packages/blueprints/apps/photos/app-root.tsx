@@ -155,13 +155,18 @@ const KitSkeleton = "kit-skeleton" as unknown as FC<{ rows?: number }>;
 
 type SlotKey = keyof ChromeSlots;
 
-export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
+export function Root({
+  rootRef,
+  frame,
+  compact = false,
+}: InlineAppProps): ReactElement {
   const rootElRef = useRef<HTMLDivElement | null>(null);
   // The frame handle is read from inside the mount-once boot closure. A ref
   // keeps that read live without re-running the boot when the host re-renders;
   // it is seeded at construction and re-synced in an effect, never written
   // during render.
   const frameRef = useRef(frame);
+  const compactRef = useRef(compact);
   const narrowRef = useRef(false);
   const [slots, setSlots] = useState<ChromeSlots>({
     shelfStrip: null,
@@ -179,6 +184,10 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
   useEffect(() => {
     frameRef.current = frame;
   }, [frame]);
+
+  useEffect(() => {
+    compactRef.current = compact;
+  }, [compact]);
 
   const setRoot = useCallback(
     (el: HTMLDivElement | null) => {
@@ -286,9 +295,9 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
     let lastFreshLoadAt = 0;
     let recordNextLoad = false;
 
-    // `tileSize`, `vaultsOn` and `bandOwner` — the three preferences the
-    // handoff puts on the member record (§16). See member-prefs.ts for what is
-    // and is not true about that today.
+    // `tileSize` and `vaultsOn` — the two preferences the handoff puts on the
+    // member record (§16). See member-prefs.ts for what is and is not true
+    // about that today.
     const prefs = createMemberPrefs(() => {
       renderShelfStrip();
       renderToolbarRow();
@@ -778,17 +787,15 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
               }
             : contribution
       );
-      // The band is claimed unconditionally: the frame honours it only on the
-      // compact form factor and only while the member's `bandOwner` says
-      // `app`, so the app never has to ask whether it may (§3.1).
+      // The band is claimed unconditionally: the frame honours it only for a
+      // first-party app on the compact form factor, so Photos never needs a
+      // second ownership toggle in its app bar (§3.1).
       frameRef.current.claimBand(
-        prefs.read().bandOwner === "app"
-          ? bandClaim(
-              shelf,
-              (segment) => navigateTo(shelfFromSegment(segment)),
-              openMore
-            )
-          : null
+        bandClaim(
+          shelf,
+          (segment) => navigateTo(shelfFromSegment(segment)),
+          openMore
+        )
       );
     }
 
@@ -854,7 +861,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       // On the phone whose band claim was honoured, the band carries the
       // shelves and the strip is not rendered — exactly one navigation for one
       // set of destinations (§3, §15).
-      if (narrowRef.current && prefs.read().bandOwner === "app") {
+      if (compactRef.current && narrowRef.current) {
         shelfStripRoot.render(null);
         return;
       }
@@ -868,15 +875,15 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       shelfStripRoot.render(
         <ShelfStrip
           shelf={shelf}
-          counts={shelfCounts()}
           narrow={narrowRef.current}
           onSelect={navigateTo}
         />
       );
     }
 
-    /** What each shelf counts, for the strip AND the band's sheet — two views
-     *  of one navigation must never disagree about how many are in Trash. */
+    /** What each shelf counts for the compact band's More sheet. The desktop
+     *  strip follows the handoff's quiet label-only presentation; counts remain
+     *  available where the overflow sheet has room to explain them. */
     function shelfCounts(): ReadonlyMap<string, number> {
       return new Map<string, number>([
         [FAVORITES, assets.filter((a) => a.favorite).length],

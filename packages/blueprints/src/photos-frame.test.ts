@@ -63,7 +63,6 @@ interface ToolbarProps {
 interface StripProps {
   shelf: string | null;
   onSelect: (id: string | null) => void;
-  counts?: ReadonlyMap<string, number>;
   narrow?: boolean;
 }
 interface Asset {
@@ -101,7 +100,11 @@ const {
   shelfRoute,
   showsTileSize,
 } = (await import(app("shelves.ts"))) as {
-  BAND_DESTINATIONS: readonly { id: string; label: string }[];
+  BAND_DESTINATIONS: readonly {
+    id: string;
+    label: string;
+    icon?: string;
+  }[];
   SHELVES: readonly Shelf[];
   bandActiveId: (id: string | null) => string | undefined;
   shelfFromRoute: (route: string) => string | null;
@@ -171,15 +174,13 @@ describe("the shelf strip", () => {
     expect(upToCurrent.match(/role="tab"/gu) ?? []).toHaveLength(1);
   });
 
-  it("shows a count only for the shelves that have one", () => {
+  it("keeps shelf labels quiet and leaves counts to the overflow sheet", () => {
     const html = strip({
       shelf: null,
       onSelect: () => {},
-      counts: new Map([[ALBUMS, 3]]),
     });
-    expect(html).toContain(">3<");
-    // Seven shelves supplied no count and invented none.
-    expect([...html.matchAll(/>\d+</gu)]).toHaveLength(1);
+    expect(html).not.toContain("tabCount");
+    expect(html).toContain(">Albums<");
   });
 
   it("takes the compact rung from the pane's own width, not a viewport", () => {
@@ -300,6 +301,12 @@ describe("the shelf route", () => {
     expect(BAND_DESTINATIONS.length).toBeLessThanOrEqual(5);
     // Every tab is labelled — a glyph alone is not a name.
     expect(BAND_DESTINATIONS.every((d) => d.label.length > 0)).toBe(true);
+    expect(BAND_DESTINATIONS.map((d) => d.icon)).toStrictEqual([
+      "Image",
+      "album",
+      "person",
+      "Search",
+    ]);
   });
 
   it("lights no band tab rather than the wrong one", () => {

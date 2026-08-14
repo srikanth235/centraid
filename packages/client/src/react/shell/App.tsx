@@ -29,7 +29,6 @@ import {
   syncWebDueNotifications,
   syncWebNotifications,
 } from "../../gateway-client.js";
-import { HOME_SEARCH_EVERYTHING } from "../../home-copy.js";
 import { isWebHost } from "../host-platform.js";
 import PaletteScreen from "../screens/PaletteScreen.js";
 import WhatsNewModal from "../screens/WhatsNewModal.js";
@@ -299,7 +298,13 @@ export default function App(): JSX.Element {
   // context menu (App info / Rename / Uninstall), which left with the
   // springboard rewrite. The hook keeps it because the optimistic
   // rename/uninstall path (#659) is what re-homing those actions will need.
-  const { userApps, drafts, refresh, setUserApps } = useShellApps();
+  const {
+    userApps,
+    drafts,
+    loading: appsLoading,
+    refresh,
+    setUserApps,
+  } = useShellApps();
   const assistantConversations = useAssistantConversations();
   // Conversations mid-undo-window after a delete — optimistically hidden from
   // the ledger until the grace timer commits or the reader undoes (§3).
@@ -1150,10 +1155,9 @@ export default function App(): JSX.Element {
   //
   // Home's bar names the screen, not the vault: the vault is at the head of the
   // stem, true on every route, and saying it twice on one screen would make the
-  // reader check whether the two are the same thing. ONE action, and it is the
-  // filled ink — "Search everything" is the third and last entry onto the ONE
-  // palette (⌘K and the stem's Search control are the others), and finding a
-  // thing is the verb Home exists for. All apps lives in the stem's foot.
+  // reader check whether the two are the same thing. Home has no title-bar
+  // action: the stem's Search control and the keyboard shortcut remain the
+  // global search entry points, while All apps lives in the stem's foot.
   //
   // The six operational routes (#765) take the same bar rather than each
   // drawing its own in-content header: one title, one count line, and the same
@@ -1174,24 +1178,7 @@ export default function App(): JSX.Element {
   );
   const renderAppBar = useCallback(
     (nav: ShellNav): ShellAppBar | undefined => {
-      if (nav.route.kind === "home")
-        return {
-          title: "Home",
-          actions: (
-            // Titlebar scale, so Home's bar is exactly as tall as the bar on a
-            // route that only navigates. `size="chrome"` used to unfill a
-            // primary — the size class set its own background after the variant
-            // rules — which is why this carried variant alone; that cascade is
-            // fixed and guarded, so the commit keeps its ink at the smaller
-            // size.
-            <Button
-              label={HOME_SEARCH_EVERYTHING}
-              onClick={() => setPaletteOpen(true)}
-              size="chrome"
-              variant="primary"
-            />
-          ),
-        };
+      if (nav.route.kind === "home") return { title: "Home" };
       const page = nav.route.kind;
       if (!isOpsPage(page)) return undefined;
       // A walled route keeps its title — the bar is the frame, and a blank one
@@ -1277,7 +1264,13 @@ export default function App(): JSX.Element {
       }
       switch (nav.route.kind) {
         case "home":
-          return <HomeRoute userApps={userApps} drafts={visibleDrafts} />;
+          return (
+            <HomeRoute
+              appsLoading={appsLoading}
+              userApps={userApps}
+              drafts={visibleDrafts}
+            />
+          );
         case "assistant":
           // The ledger lives in the stem on desktop — one column of navigation
           // per window. Compact has no stem to put it in (the band is a row of
@@ -1446,6 +1439,7 @@ export default function App(): JSX.Element {
     [
       userApps,
       drafts,
+      appsLoading,
       builderEnabled,
       capabilities,
       capabilitiesResolved,

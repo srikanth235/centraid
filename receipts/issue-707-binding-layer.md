@@ -601,6 +601,15 @@ re-baselined product-grammar screenshots under
 
 - Phase 7: `bun run check:pr` green on the merge of `origin/main` into this branch. The 22 re-baselined gallery PNGs were read back, not just regenerated: the commit control measures filled ink `rgb(20,20,20)` on paper in light and correctly inverts to filled paper `rgb(237,237,236)` on ink in dark, and the identity mark measures the app's registry hue rather than the retired teal. The new manifest↔registry test was proven red-capable by reverting `packages/blueprints/apps/tasks/app.json` to `teal` (1 failed / 83 passed) and green again on restore (84 passed). Receipt with Checklist / What changed / Out of scope / Verification is this document.
 
+### PR #778 mobile CI closeout (2026-08-14)
+
+- `apps/mobile/package.json` now matches Expo SDK 57's expected dependency set, including mobile-local React DOM 19.2.3 and TypeScript 6.0.3 while the repository root remains on its authoritative TypeScript 5.9.3 catalog.
+- `apps/desktop/package.json`, `apps/web/package.json`, `packages/blueprints/package.json`, `packages/client/package.json`, and `apps/mobile/package.json` use the same React/React DOM 19.2.3 family; `apps/mobile/package.json` also aligns `react-test-renderer` to 19.2.3 so the RN renderer shares the app's React instance.
+- `bun.lock` was regenerated from the workspace manifests so Bun's hoisted install retains the mobile-specific `react-dom` and `typescript` resolutions instead of silently selecting the root versions.
+- `apps/mobile/ios/Podfile.lock` was regenerated with the upgraded Expo/RN pods, and `apps/mobile/ios/Centraid.xcodeproj/project.pbxproj` records the AsyncStorage → RNCAsyncStorage resource-bundle rename.
+- `apps/mobile/native-fingerprints.json` was updated through `ci:native-state --write` after L1–L3 passed; both platform identities now match the generated native projects.
+- Verified locally: `bun run check:pr`, `bun run --cwd apps/mobile ci:versions`, `bun run --cwd apps/mobile ci:native-state --status`, and `git diff --check` are green. The affected test run passed 21/21 tasks, including 3,630 blueprints tests, 2,176 client tests, and 1,485 gateway tests.
+
 ```sh
 bun run format:check
 git diff --check
@@ -700,3 +709,12 @@ Local evidence for the product fix: `packages/client` `HomeSpringboard.test.tsx`
 - Each '- [x]' checklist item is realized: **PASS** — Phase 0 "Make the handoff bundle available as the acceptance reference" correctly reads "(superseded: the bundle is reference-only and is deliberately NOT committed — see Decisions)"; Decisions §2 explains the maintainer's mid-task reversal. The '## Checklist' correctly **omits** the Phase 7 item "RTL mirrors — no physical direction properties remain" (not present in receipt), consistent with the RTL descope recorded in steering row ordinal 3.
 - The '## Out of scope' section correctly records the RTL descope: **PASS** — Explicitly states "**RTL / bidirectional layout** — descoped by the maintainer on 2026-08-03" with justification (no RTL locale shipped), and accurately notes that the blueprint sweep "converted its 123 occurrences to logical properties before the descope." This section is consistent with the steering events.
 
+## Session
+
+<!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
+
+### Identifiers
+
+| date | harness | session |
+| --- | --- | --- |
+| 2026-08-14 | codex | 019ffbe1-f04f-7cd0-9a4e-41a586d4934b |

@@ -161,7 +161,7 @@ async function spawnDaemon(
   { timeoutMs = 60000, port, controlSecret } = {}
 ) {
   const log = createWriteStream(logFile, { flags: "a" });
-  // No --init-vault: a fresh data dir auto-founds Shared + Personal (#603).
+  // No --init-vault: a fresh data dir auto-founds Personal (#603).
   const args = [
     GATEWAY_CLI,
     "serve",

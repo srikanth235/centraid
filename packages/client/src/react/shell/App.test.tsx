@@ -177,11 +177,12 @@ describe("App suite", () => {
       const el = await mount();
       expect(el.querySelector(".window")).not.toBeNull();
       // Home's body is the springboard and nothing else (issue #708). The bar
-      // names the SCREEN and carries one action — the vault is at the head of
-      // the stem, true on every route, so Home does not say it a second time.
+      // names the SCREEN and carries no redundant global action — the vault is
+      // at the head of the stem, true on every route, so Home does not say it a
+      // second time.
       const bar = el.querySelector(".appBar")!;
       expect(bar.textContent).toContain("Home");
-      expect(bar.textContent).toContain("Search everything");
+      expect(bar.textContent).not.toContain("Search everything");
       expect(bar.textContent).not.toContain("All apps");
       // The stem holds the vault head, Search, the PINNED destinations, and a
       // foot of All apps + the account row (Settings and What's new live in

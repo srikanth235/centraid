@@ -187,7 +187,7 @@ function TileBody({ body }: { body: HomeTileBody }): JSX.Element {
     case "notes":
       return (
         <div className={styles.body}>
-          <p className={styles.reading}>{body.line}</p>
+          <p className={`${styles.reading} ${styles.noteLine}`}>{body.line}</p>
           <span className={styles.readingStamp}>{body.at}</span>
         </div>
       );

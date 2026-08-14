@@ -2,62 +2,96 @@
    prefix dropped). The section eyebrow comes from shared.module.css. */
 
 .memories {
-  margin: 6px 0 22px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3) 0 var(--sp-4);
+}
+.memoriesHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.memoriesHeader .memoriesLabel {
+  flex: 0 0 auto;
+  padding: 0;
+  color: var(--text-faint);
+}
+.allMemories {
+  margin: 0;
+  padding: 1px 6px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.allMemories:hover {
+  color: var(--text-soft);
+}
+.allMemories:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
 }
 .memoriesStrip {
   display: flex;
   gap: var(--sp-3);
   overflow-x: auto;
-  padding-bottom: var(--sp-1);
+  padding: 0;
 }
 .memoriesStrip::-webkit-scrollbar {
   height: 0;
 }
-/* 250x120 desktop / 200x96 phone, 4px radius (v4 handoff §4.6). Landscape,
-   not portrait: a memory is a scene, and the card is the shape a scene is. No
-   shadow — surfaces are paper, not elevation. */
+/* 250x120 desktop / 200x96 phone, 4px radius (v4 handoff §4.6). The image is
+   the scene; the title and subtitle sit on paper below it, not on a scrim. */
 .memoryCard {
-  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
   flex: 0 0 auto;
   width: 250px;
-  height: 120px;
-  border-radius: var(--r-sm);
-  overflow: hidden;
-  border: none;
-  background: var(--bg-sunken) center/cover no-repeat;
   padding: 0;
+  border: none;
+  background: none;
+  text-align: start;
+  cursor: pointer;
+}
+.memoryCard:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
 }
 @media (max-width: 719px) {
   .memoryCard {
     width: 200px;
+  }
+}
+.memoryCover {
+  display: block;
+  flex: 0 0 auto;
+  width: 100%;
+  height: 120px;
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken) center/cover no-repeat;
+}
+@media (max-width: 719px) {
+  .memoryCover {
     height: 96px;
   }
 }
-.memoryScrim {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to top,
-    color-mix(in oklab, var(--scrim) 86%, transparent),
-    color-mix(in oklab, var(--scrim) 7%, transparent) 55%,
-    transparent
-  );
-}
 .memoryText {
-  position: absolute;
-  inset-inline-start: 12px;
-  inset-inline-end: 12px;
-  bottom: 12px;
-  text-align: start;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .memoryTitle {
-  font: var(--t-body-strong);
-  font-size: var(--t-small-size);
-  color: var(--text-inv);
-  line-height: 1.25;
+  font: var(--t-small-strong);
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -65,5 +99,7 @@
 .memorySub {
   font: var(--t-mono);
   font-variant-numeric: var(--t-mono-numeric);
-  color: color-mix(in oklab, var(--text-inv) 80%, transparent);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
 }

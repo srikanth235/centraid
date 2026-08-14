@@ -3,10 +3,10 @@
 import { runFlow } from "../lib/harness.mjs";
 
 await runFlow("device-pairing-lifecycle", async (ctx) => {
-  // 1. A fresh daemon auto-founds Shared + Personal (#603); tickets default to Shared.
+  // 1. A fresh daemon auto-founds Personal (#603); tickets default to it.
   // Mint the pasteable ticket for it through the live daemon.
-  const { payload } = await ctx.mintTicket({ vault: "Shared" });
-  if (payload.vaultName !== "Shared") {
+  const { payload } = await ctx.mintTicket({ vault: "Personal" });
+  if (payload.vaultName !== "Personal") {
     throw new Error(`ticket names vault "${payload.vaultName}"`);
   }
   if (payload.exp <= Date.now())
@@ -26,7 +26,7 @@ await runFlow("device-pairing-lifecycle", async (ctx) => {
     platform: "agent-e2e",
   });
   if (!paired.ok) throw new Error(`redeem failed: ${JSON.stringify(paired)}`);
-  if (!paired.vaultId || paired.vaultName !== "Shared") {
+  if (!paired.vaultId || paired.vaultName !== "Personal") {
     throw new Error(
       `pair response names the wrong vault: ${JSON.stringify(paired)}`
     );

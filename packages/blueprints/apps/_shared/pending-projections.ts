@@ -20,4 +20,6 @@ export function pendingProjectionFor(
   return DECLARATIONS.get(appId);
 }
 
-export const PENDING_PROJECTION_APP_IDS = [...DECLARATIONS.keys()].toSorted();
+// Hermes on the native client does not provide the ES2023 non-mutating sort
+// helpers. Keep the copy-before-sort semantics without requiring a polyfill.
+export const PENDING_PROJECTION_APP_IDS = [...DECLARATIONS.keys()].sort();

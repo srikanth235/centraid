@@ -114,8 +114,8 @@ describe("shell/ShellFrame", () => {
 
     it("grows the bar into a header only for the full identity lockup", () => {
       // The trigger is the META line, not the title. A title with nothing
-      // under it is naming the screen, which is what a titlebar has always
-      // done — 31px of window furniture would crowd the content below it.
+      // under it names the screen and stays at the title rung; only the full
+      // identity lockup takes the display face.
       const bare = render(<ShellFrame {...base} />);
       expect(
         bare.querySelector<HTMLElement>(".appBar")?.dataset.identity
@@ -151,7 +151,7 @@ describe("shell/ShellFrame", () => {
         />
       );
       const title = el.querySelector<HTMLButtonElement>("button.appTitle")!;
-      // Still the title: same class, same display face, same string.
+      // Still the title: same class, same title role, same string.
       expect(title.textContent).toContain("Srikanth's vault");
       expect(title.getAttribute("aria-expanded")).toBe("true");
       expect(title.getAttribute("aria-label")).toBe(

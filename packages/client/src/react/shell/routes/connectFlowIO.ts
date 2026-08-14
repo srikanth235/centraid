@@ -19,8 +19,7 @@ import { connectGateway } from "./gatewayModals.js";
  * locally as `ConnectFlowBridge` and reconciled by the integration typecheck.
  */
 
-/** The vault a fresh gateway auto-founds for its owner (issue #603). Its peer
- *  is "Shared", which is the default for everyone the owner invites. */
+/** The one vault a fresh gateway auto-founds for its owner (issue #603). */
 const PERSONAL_VAULT_NAME = "Personal";
 
 export interface ConnectFlowBridge {
@@ -106,10 +105,11 @@ export async function loadLocalVaults(): Promise<LocalVaultsResult> {
 
 /**
  * First run's "Start fresh on this Mac" commit (issue #603). The embedded
- * gateway founds "Shared" + "Personal" at construction, so there is no
+ * gateway founds one marked personal vault at construction, so there is no
  * ceremony and no vault to create here — this only makes the local gateway
- * active and addresses the owner's own vault. Throws with a user-facing
- * message the onboarding host renders inline.
+ * active and addresses the owner's own vault. Shared vaults are an explicit
+ * later owner action. Throws with a user-facing message the onboarding host
+ * renders inline.
  */
 export async function connectFreshLocalGateway(): Promise<ConnectFlowResult> {
   await ensureLocalGatewayActive();
@@ -124,9 +124,10 @@ export async function connectFreshLocalGateway(): Promise<ConnectFlowResult> {
     loaded.vaults.find((v) => v.name === PERSONAL_VAULT_NAME) ??
     null;
   // Reinstalling over existing data may find no personal vault at all (it was
-  // erased). Landing on the oldest vault is still the right place to enter,
-  // but it is "Shared", so it must NOT be flagged renamable (issue #603 C10:
-  // the fallback used to rename everyone's shared vault).
+  // erased). Landing on the oldest remaining vault is still the right place
+  // to enter, but it may be a shared/general vault, so it must NOT be flagged
+  // renamable (issue #603 C10: the fallback used to rename everyone's shared
+  // vault).
   const target = personal ?? loaded.vaults[0] ?? null;
   if (!target) {
     throw new Error(

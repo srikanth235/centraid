@@ -106,10 +106,6 @@ export const HOME_FIRST_MOVE_COPY: Readonly<Record<string, HomeFirstMoveCopy>> =
     tasks: { hint: "The next thing to do.", label: "Add a task" },
   };
 
-/** Home's own cross-app search entry point (the third of three; ⌘K and the
- *  stem's Search control are the other two). */
-export const HOME_SEARCH_EVERYTHING = "Search everything";
-
 // ── the sample ──────────────────────────────────────────────────────────────
 //
 // Every word here is doing one job: making sure nobody ever mistakes the sample

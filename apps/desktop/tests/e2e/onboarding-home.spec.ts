@@ -67,13 +67,13 @@ test("1.1 — first launch shows onboarding with the CTA disabled until a name i
   }
 });
 
-test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands on home', async () => {
+test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home', async () => {
   // Issue #603 replaced the founding ceremony (create-vault + recovery-kit
   // download + verify) with a two-option chooser. On a virgin install the
   // desktop deliberately does NOT start its local gateway until the user picks
   // "Start fresh on this Mac" — that start is what would otherwise pop an OS
-  // keychain prompt before any UI. The gateway then founds Shared + Personal
-  // itself; the profile step renames Personal to the user's display name.
+  // keychain prompt before any UI. The gateway then founds Personal itself;
+  // the profile step renames it to the user's display name.
   const { app, page } = await launchApp(env);
   try {
     const chooser = page.getByTestId("first-run-choice");
@@ -175,12 +175,12 @@ test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands 
     expect(persisted.onboardingCompletedAt).toBeTruthy();
     expect(persisted.gatewayUrl ?? "").not.toBe("");
 
-    // Two auto-founded vaults, with Personal renamed to the display name.
+    // The one auto-founded vault, renamed to the display name.
     const listed = (await page.evaluate(() =>
       window.CentraidApi.listGatewayVaults({ gatewayId: "local" })
     )) as { vaults?: Array<{ name: string }> };
     const names = (listed.vaults ?? []).map((vault) => vault.name).sort();
-    expect(names).toEqual(["Ada Lovelace", "Shared"]);
+    expect(names).toEqual(["Ada Lovelace"]);
   } finally {
     await closeApp(app);
   }

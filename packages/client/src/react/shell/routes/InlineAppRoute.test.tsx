@@ -1,5 +1,5 @@
 import { act, useEffect, useState } from "react";
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -44,8 +44,17 @@ vi.mock(import("../../../gateway-client-core.js") as Promise<unknown>, () => ({
   readJson: vi.fn<typeof TypeImport_nod2nz.readJson>(),
 }));
 vi.mock(import("../ShellFrame.js") as Promise<unknown>, () => ({
-  default: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="shell-frame">{children}</div>
+  default: ({
+    children,
+    titlebarRight,
+  }: {
+    children: ReactNode;
+    titlebarRight?: ReactNode;
+  }) => (
+    <div data-testid="shell-frame">
+      <div data-testid="shell-actions">{titlebarRight}</div>
+      {children}
+    </div>
   ),
 }));
 vi.mock(import("./AppSettingsController.js") as Promise<unknown>, () => ({
@@ -142,6 +151,8 @@ const nav: ShellNav = {
   forward: vi.fn<ShellNav["forward"]>(),
   canGoBack: false,
   canGoForward: false,
+  stemOpen: true,
+  toggleStem: vi.fn<ShellNav["toggleStem"]>(),
   route: { kind: "app", id: "tasks" },
 };
 const prefs = { sidebarOpen: true, theme: "dark" } as never;
@@ -150,11 +161,12 @@ const prefs = { sidebarOpen: true, theme: "dark" } as never;
 // cache on (appId, attempt), so reusing an id would serve a prior test's chunk.
 function routeEl(
   loader: () => Promise<{ default: InlineAppModule }>,
-  appId: string
+  appId: string,
+  routeApp: AppMetaResolvedType = app
 ): JSX.Element {
   return (
     <InlineAppRoute
-      app={app}
+      app={routeApp}
       appId={appId}
       loader={loader}
       nav={nav}
@@ -256,10 +268,40 @@ describe("InlineAppRoute suite", () => {
       expect(
         host!.querySelector('[data-testid="tasks-root"]')?.textContent
       ).toBe("Buy milk");
+      expect(host!.querySelector('[aria-label="App settings"]')).not.toBeNull();
       // Offline first paint: no gateway tool route touched.
       expect(doFetch).not.toHaveBeenCalled();
       // window.centraid is installed for the app.
       expect((window as { centraid?: unknown }).centraid).toBeDefined();
+      // Pointer typography must land on the inline app scope, including the
+      // pointer media block — never on the document root where it can bleed
+      // into shell chrome or leave the app on its touch scale.
+      const tokenStyle = document.querySelector(
+        "style[data-centraid-inline-tokens]"
+      );
+      expect(tokenStyle?.textContent).toMatch(
+        /@media \(pointer: fine\) \{\s+\.centraid-inline-scope \{/u
+      );
+    });
+
+    it("does not expose the generic app-settings sheet for Photos", async () => {
+      const photos = { ...app, id: "photos", name: "Photos" };
+      function Root({ rootRef }: InlineAppProps): JSX.Element {
+        return (
+          <div ref={rootRef} data-testid="photos-root">
+            photos
+          </div>
+        );
+      }
+      await mount(
+        routeEl(
+          async () => ({ default: makeApp(Root) }),
+          "photos-no-app-settings",
+          photos
+        )
+      );
+      expect(host!.querySelector('[data-testid="photos-root"]')).toBeTruthy();
+      expect(host!.querySelector('[aria-label="App settings"]')).toBeNull();
     });
 
     it("tears down window.centraid on unmount", async () => {
