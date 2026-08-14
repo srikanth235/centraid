@@ -23,6 +23,8 @@ describe("the default gateway capabilities", () => {
       automationTurns: true,
       multiVaultReplica: true,
       crossVaultPlacements: true,
+      automations: false,
+      connectors: false,
     });
   });
 });
@@ -56,6 +58,48 @@ describe(isGatewayCapabilities, () => {
         crossVaultPlacements: true,
       })
     ).toBe(true);
+    // Experimental flags are optional: absent reads as off, present must be
+    // boolean.
+    expect(
+      isGatewayCapabilities({
+        webSessions: true,
+        devicePairing: true,
+        tunnel: false,
+        backupWal: true,
+        assistOAuth: false,
+        automationTurns: true,
+        multiVaultReplica: true,
+        crossVaultPlacements: true,
+        automations: true,
+        connectors: false,
+      })
+    ).toBe(true);
+    expect(
+      isGatewayCapabilities({
+        webSessions: true,
+        devicePairing: true,
+        tunnel: false,
+        backupWal: true,
+        assistOAuth: false,
+        automationTurns: true,
+        multiVaultReplica: true,
+        crossVaultPlacements: true,
+        automations: "yes",
+      })
+    ).toBe(false);
+    expect(
+      isGatewayCapabilities({
+        webSessions: true,
+        devicePairing: true,
+        tunnel: false,
+        backupWal: true,
+        assistOAuth: false,
+        automationTurns: true,
+        multiVaultReplica: true,
+        crossVaultPlacements: true,
+        connectors: 1,
+      })
+    ).toBe(false);
     expect(
       isGatewayCapabilities({
         webSessions: true,

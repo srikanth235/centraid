@@ -30,6 +30,7 @@ import { buildFeatured } from "../../screens/SettingsConnectionsScreen.js";
 import type { ConnectionRowDTO } from "../../screens/SettingsConnectionsScreen.js";
 import { useShellActions } from "../actions.js";
 import PageScroll from "../PageScroll.js";
+import { useShellCapabilities } from "../useCapabilities.js";
 import { openWebhookReveal } from "../webhookReveal.js";
 import {
   loadCompileAttempts,
@@ -143,6 +144,10 @@ export default function AutomationEditorRoute({
   watchEntity?: string;
 }): JSX.Element {
   const { navigate, showToast, confirm } = useShellActions();
+  // The editor lives behind the automations gate, but connectors is its OWN
+  // gate: a gateway may run automations with no connector plane at all, and
+  // the editor degrades to "no provider accounts" rather than erroring.
+  const { connectors } = useShellCapabilities();
   // `refIdRef` is the automation's `ref` once it exists on the gateway —
   // `undefined` at mount for a brand-new create flow, set by `loadData` (edit
   // mode) or by `onSave`'s create-mode branch (first save mints the row).
@@ -348,24 +353,34 @@ export default function AutomationEditorRoute({
           }
           return entityTypeCache;
         }}
-        loadConnectorCatalog={loadEditorConnectorCatalog}
-        configureConnection={async (input) => {
-          const result = await configureConnection({
-            allowedHosts: input.allowedHosts,
-            apiKey: input.apiKey,
-            authUrl: input.authUrl,
-            clientId: input.clientId,
-            clientSecret: input.clientSecret,
-            credKind: input.credKind,
-            kind: input.connectorKind,
-            label: input.label,
-            provider: input.providerId,
-            scopes: input.scopes,
-            tokenUrl: input.tokenUrl,
-          });
-          return { connectionId: result.connectionId };
-        }}
-        beginAuthorize={beginConnectionAuthorize}
+        connectorsEnabled={connectors}
+        {...(connectors
+          ? {
+              // Withdrawn, not merely hidden (C1): with the connectors
+              // experiment off the vault connections + OAuth callback routes
+              // are unmounted, so handing the screen loaders that can only
+              // 404 would leave the failure to be discovered by request
+              // instead of stated once by the capability.
+              beginAuthorize: beginConnectionAuthorize,
+              configureConnection: async (input) => {
+                const result = await configureConnection({
+                  allowedHosts: input.allowedHosts,
+                  apiKey: input.apiKey,
+                  authUrl: input.authUrl,
+                  clientId: input.clientId,
+                  clientSecret: input.clientSecret,
+                  credKind: input.credKind,
+                  kind: input.connectorKind,
+                  label: input.label,
+                  provider: input.providerId,
+                  scopes: input.scopes,
+                  tokenUrl: input.tokenUrl,
+                });
+                return { connectionId: result.connectionId };
+              },
+              loadConnectorCatalog: loadEditorConnectorCatalog,
+            }
+          : {})}
         showToast={showToast}
         onReadSource={async () => {
           const ref = refIdRef.current;

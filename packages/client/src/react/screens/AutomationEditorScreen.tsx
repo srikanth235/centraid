@@ -388,6 +388,7 @@ export default function AutomationEditorScreen({
   onSearchEntities,
   loadEntityTypes,
   loadConnectorCatalog,
+  connectorsEnabled = true,
   configureConnection,
   beginAuthorize,
   showToast,
@@ -1545,48 +1546,57 @@ export default function AutomationEditorScreen({
             setModel(next.model);
           }}
         />
-        <button
-          type="button"
-          className={styles.instrChip}
-          data-open={String(connectorsOpen)}
-          onClick={openConnectorsPicker}
-          aria-expanded={connectorsOpen}
-          aria-haspopup="dialog"
-          title="Choose connectors this automation may use"
-        >
-          <Icon name="Plug" size={14} />
-          <span>Connectors</span>
-          <span className={styles.instrChipCount}>{connectorCount}</span>
-          <Icon name="ChevronDown" size={12} />
-        </button>
-        <span className={styles.instrHint}>
-          {connectorCount === 0
-            ? "Optional — attach Gmail, GitHub, …"
-            : `${connectorCount} selected`}
-        </span>
-        {danglingConnectorKinds.size > 0 ? (
-          <output
-            className={styles.connDanglingNote}
-            data-testid="connector-binding-dangling"
-          >
-            {[...danglingConnectorKinds].join(", ")} — the bound account is no
-            longer configured. Open Connectors and choose a replacement.
-          </output>
+        {/* Connectors are their own gated surface (C1): with the experiment
+            off this gateway mounts no connections route, so the chip, its
+            hint, and the picker leave together rather than opening a sheet
+            that can only fail. The rest of the editor is unaffected — an
+            automation without a provider account is an ordinary automation. */}
+        {connectorsEnabled ? (
+          <>
+            <button
+              type="button"
+              className={styles.instrChip}
+              data-open={String(connectorsOpen)}
+              onClick={openConnectorsPicker}
+              aria-expanded={connectorsOpen}
+              aria-haspopup="dialog"
+              title="Choose connectors this automation may use"
+            >
+              <Icon name="Plug" size={14} />
+              <span>Connectors</span>
+              <span className={styles.instrChipCount}>{connectorCount}</span>
+              <Icon name="ChevronDown" size={12} />
+            </button>
+            <span className={styles.instrHint}>
+              {connectorCount === 0
+                ? "Optional — attach Gmail, GitHub, …"
+                : `${connectorCount} selected`}
+            </span>
+            {danglingConnectorKinds.size > 0 ? (
+              <output
+                className={styles.connDanglingNote}
+                data-testid="connector-binding-dangling"
+              >
+                {[...danglingConnectorKinds].join(", ")} — the bound account is
+                no longer configured. Open Connectors and choose a replacement.
+              </output>
+            ) : null}
+            <AutomationEditorConnectorsPicker
+              open={connectorsOpen}
+              catalog={catalog}
+              loading={catalogLoading}
+              selected={selectedConnectors}
+              bindings={connectionBindings}
+              onToggleSelect={toggleConnector}
+              onBoundConnection={bindConnection}
+              onClose={() => setConnectorsOpen(false)}
+              configureConnection={configureConnection}
+              beginAuthorize={beginAuthorize}
+              onConnected={() => void refreshCatalog()}
+              showToast={showToast}
+            />
+          </>
         ) : null}
-        <AutomationEditorConnectorsPicker
-          open={connectorsOpen}
-          catalog={catalog}
-          loading={catalogLoading}
-          selected={selectedConnectors}
-          bindings={connectionBindings}
-          onToggleSelect={toggleConnector}
-          onBoundConnection={bindConnection}
-          onClose={() => setConnectorsOpen(false)}
-          configureConnection={configureConnection}
-          beginAuthorize={beginAuthorize}
-          onConnected={() => void refreshCatalog()}
-          showToast={showToast}
-        />
       </div>
     </div>
   );

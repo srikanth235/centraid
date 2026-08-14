@@ -121,7 +121,7 @@ Land C1–C3 (this doc + code that honors it on the handshake and any new cross-
 | `version` | **Product** semver — display / about only. Clients **must not** refuse connect because product strings differ. |
 | `protocolVersion` | Wire protocol integer (CapVer-style). Mutual support window with `minSupportedProtocol`. |
 | `minSupportedProtocol` | Oldest protocol this peer still speaks. |
-| `capabilities` | Required feature flags (C1) — not product version. |
+| `capabilities` | Required feature flags (C1) — not product version. The experimental-gate keys `automations` / `connectors` ([#774](https://github.com/srikanth235/centraid/issues/774)) are the one optional, absent-tolerant pair: absent reads as off, and clients wall or hide the surface rather than probing routes. |
 
 Handshake (`judgeGatewayInfo`):
 

@@ -7,17 +7,20 @@ import type {
   BrowseColumnsResult,
 } from "../../gateway-client.js";
 import {
+  censusStamp,
   countLine,
   dayLabel,
-  docRowsFrom,
+  defaultSortKey,
+  gridColumnsFrom,
+  gridRowsFrom,
   healthDetail,
-  kindGlyph,
   kindMeta,
   kindRowsFrom,
   kindSubLine,
+  kindWritten,
   relationRowsFrom,
+  sortLabel,
   tableCaption,
-  writtenText,
 } from "./atlasScreenModel.js";
 
 // The Data route's sentences (issue #765). Every one of them is a claim about
@@ -104,33 +107,41 @@ const pulse: AtlasPulsePayload = {
 
 describe("screens/atlasScreenModel", () => {
   describe("kinds", () => {
-    it("lists only written kinds, life data before plumbing", () => {
+    it("lists every kind the schema defines, fullest first inside each group", () => {
       const rows = kindRowsFrom(stats, pulse, NOW);
       expect(rows.map((r) => r.logical)).toStrictEqual([
         "core.party",
+        "core.place",
         "journal.segment",
       ]);
-      expect(rows[1]?.machinery).toBe(true);
+      // Plumbing sorts below life data, and a never-written kind sorts to the
+      // foot of its own group rather than being dropped from the list.
+      expect(rows[2]?.machinery).toBe(true);
+      expect(rows.map(kindWritten)).toStrictEqual([true, false, true]);
     });
 
-    it("says what a kind holds, and adds today's writes only when there are some", () => {
-      const [party, segment] = kindRowsFrom(stats, pulse, NOW);
+    it("says what a kind holds, whose it is, and today's writes when there are some", () => {
+      const [party, place, segment] = kindRowsFrom(stats, pulse, NOW);
       expect(kindSubLine(party!)).toBe(
-        "214 records · 1.9 MB · 12 written today"
+        "Core · 214 records · 1.9 MB · 12 written today"
       );
-      expect(kindSubLine(segment!)).toBe("9,000 records · 400 B");
+      expect(kindSubLine(segment!)).toBe("Journal · 9,000 records · 400 B");
+      // Never written says so rather than claiming a count that has moved.
+      expect(kindSubLine(place!)).toBe("Core · Never written");
     });
 
     it("reports the last write at the granularity the pulse actually has", () => {
-      const [party, segment] = kindRowsFrom(stats, pulse, NOW);
+      const [party, place, segment] = kindRowsFrom(stats, pulse, NOW);
       expect(kindMeta(party!, NOW)).toBe("Today");
       expect(kindMeta(segment!, NOW)).toBe("Quiet");
+      // "Quiet" is a lull; a kind that never held anything has had none.
+      expect(kindMeta(place!, NOW)).toBeUndefined();
     });
 
     it("says nothing about writes at all when the pulse never landed", () => {
       const [party] = kindRowsFrom(stats, null, NOW);
       expect(kindMeta(party!, NOW)).toBeUndefined();
-      expect(kindSubLine(party!)).toBe("214 records · 1.9 MB");
+      expect(kindSubLine(party!)).toBe("Core · 214 records · 1.9 MB");
     });
 
     it("counts the vault in the app bar's one line", () => {
@@ -284,64 +295,85 @@ describe("screens/atlasScreenModel", () => {
       ),
     };
 
-    it("draws the record, its own sub-kind, and when it was written", () => {
-      const [row] = docRowsFrom(
-        cols,
-        [
+    it("declares every column the store has, in the store's own order", () => {
+      expect(gridColumnsFrom(cols)).toStrictEqual([
+        { key: "note_id", label: "note_id", pk: true, register: "mono" },
+        { key: "title", label: "title" },
+        { key: "kind", label: "kind" },
+        { key: "updated_at", label: "updated_at" },
+        { key: "secret", label: "secret", sealed: true },
+      ]);
+    });
+
+    it("names what a reference points at, and puts it in the numeric register", () => {
+      const [column] = gridColumnsFrom({
+        ...cols,
+        columns: [
           {
-            note_id: "n1",
-            title: "Lease — 14 Sitwell Road",
-            kind: "pdf",
-            updated_at: new Date(Date.now() - 300_000).toISOString(),
+            ...cols.columns[1]!,
+            fkColumn: "party_id",
+            fkLogical: "core.party",
+            fkTable: "core_party",
+            name: "author_id",
           },
         ],
-        "Note"
-      );
-      expect(row).toMatchObject({
-        icon: "Folder",
-        id: "n1",
-        kind: "pdf",
-        title: "Lease — 14 Sitwell Road",
-        written: "5m ago",
+      });
+      expect(column).toStrictEqual({
+        fk: "core.party",
+        key: "author_id",
+        label: "author_id",
+        register: "mono",
       });
     });
 
-    it("falls back to the kind's own name, and leaves an unknown time empty", () => {
-      const [row] = docRowsFrom(
-        { ...cols, columns: cols.columns.slice(0, 2) },
-        [{ note_id: "n1", title: "Untitled" }],
-        "Note"
-      );
-      expect(row?.kind).toBe("Note");
-      expect(row?.written).toBe("");
+    it("passes the values through untouched — the grid is the store's reading", () => {
+      const row = { note_id: "n1", title: "Lease", updated_at: 1_700_000_000 };
+      expect(gridRowsFrom(cols, [row])).toStrictEqual([
+        { id: "n1", name: "Lease", values: row },
+      ]);
     });
 
     it("never prints a sealed value, even as a record's name", () => {
-      const [row] = docRowsFrom(
-        cols,
-        [{ note_id: "n1", title: "«sealed»" }],
-        "Note"
-      );
-      expect(row?.title).toBe("Sealed");
+      const [row] = gridRowsFrom(cols, [{ note_id: "n1", title: "«sealed»" }]);
+      expect(row?.name).toBe("Sealed");
     });
 
-    it("reads an epoch stamp as a moment", () => {
-      expect(writtenText(Math.floor((Date.now() - 3_600_000) / 1000))).toBe(
-        "1h ago"
-      );
-      expect(writtenText("not a date")).toBe("not a date");
+    it("opens on the kind's own time column, and on the keyset key without one", () => {
+      expect(defaultSortKey(cols)).toBe("updated_at");
+      expect(
+        defaultSortKey({ ...cols, columns: cols.columns.slice(0, 2) })
+      ).toBe("note_id");
     });
 
-    it("says how much of the kind is on screen, and how the rest arrives", () => {
-      expect(tableCaption(6, 1908)).toBe(
+    it("states the order in the words that fit what is being ordered", () => {
+      expect(sortLabel({ dir: "desc", key: "updated_at" }, "updated_at")).toBe(
+        "Newest first"
+      );
+      expect(sortLabel({ dir: "asc", key: "updated_at" }, "updated_at")).toBe(
+        "Oldest first"
+      );
+      expect(sortLabel({ dir: "asc", key: "title" }, "updated_at")).toBe(
+        "title A–Z"
+      );
+      expect(sortLabel({ dir: "desc", key: "title" }, "updated_at")).toBe(
+        "title Z–A"
+      );
+    });
+
+    it("says how much of the kind is on screen, in the order it is in", () => {
+      expect(tableCaption(6, 1908, "Newest first")).toBe(
         "The first 6 of 1,908, newest first. The table scrolls rather than pages, the way the drive does."
       );
+      expect(tableCaption(6, 1908, "title A–Z")).toContain("title a–z");
     });
+  });
 
-    it("gives a kind a glyph from the ontology's own vocabulary", () => {
-      expect(kindGlyph("core.party")).toBe("Users");
-      expect(kindGlyph("media.photo")).toBe("Image");
-      expect(kindGlyph("journal.segment")).toBe("Database");
+  describe("the census stamp", () => {
+    it("says when the census was read, and nothing while it has not been", () => {
+      expect(censusStamp(new Date(Date.now() - 3_600_000).toISOString())).toBe(
+        "read 1h ago"
+      );
+      expect(censusStamp(null)).toBeUndefined();
     });
   });
 });

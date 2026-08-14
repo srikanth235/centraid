@@ -15,6 +15,10 @@ import { cx } from "./cx.js";
 
 import styles from "./BarsBlock.module.css";
 
+/** Past this many columns the gutter costs more plot than it buys legibility,
+ *  and the chart tightens to the hairline gap rather than dropping columns. */
+const DENSE_COLUMNS = 30;
+
 export interface BarDatum {
   id: string;
   /** The column's own sentence, e.g. "1 failed · day 4". Surfaces as the
@@ -29,10 +33,26 @@ export interface BarDatum {
 
 export interface BarsBlockProps {
   bars: readonly BarDatum[];
-  /** The whole chart, as a sentence. "Runs per day over the last 30 days". */
+  /** The whole chart, as a sentence. "Spend per day over the last 30 days". */
   ariaLabel: string;
-  /** Exactly three: the window's start, its middle, and today. */
-  axis: readonly [string, string, string];
+  /**
+   * The marks along the axis, oldest → newest, spread evenly across the plot.
+   *
+   * TWO OR MORE, and the count is the caller's (#775). It was a fixed triple
+   * while the only marks it carried were the relative words "30 days ago /
+   * halfway / today" — words a fold into real dates has no use for, and a
+   * window that is seven days wide has no "halfway" worth naming. A chart that
+   * cannot be told what its own axis says ends up telling the reader nothing
+   * they can check a spike against.
+   */
+  axis: readonly string[];
+  /**
+   * One line under the chart naming what the eye just found — the peak day and
+   * what it cost. The chart draws the shape; the note is the only place a
+   * column's actual value is ever stated, because a plot with no value axis
+   * shows proportion and nothing else.
+   */
+  note?: string;
   /** The two outcome words. Two, because there are two outcomes. */
   legend?: { ok: string; fail: string };
   /** Shorter plot and tighter columns for the compact form factor. */
@@ -45,6 +65,7 @@ export default function BarsBlock({
   bars,
   ariaLabel,
   axis,
+  note,
   legend,
   compact,
   className,
@@ -53,6 +74,7 @@ export default function BarsBlock({
     <div
       className={cx(styles.bars, className)}
       data-compact={compact ? "true" : undefined}
+      data-dense={bars.length > DENSE_COLUMNS ? "true" : undefined}
     >
       {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- #765 an
           `<img>` cannot BE the chart: the columns are DOM elements drawn from
@@ -98,6 +120,7 @@ export default function BarsBlock({
           </span>
         ))}
       </div>
+      {note ? <p className={styles.note}>{note}</p> : null}
       {legend ? (
         <div className={styles.legend}>
           <span className={styles.legendOk}>{legend.ok}</span>

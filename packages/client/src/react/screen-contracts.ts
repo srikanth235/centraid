@@ -785,6 +785,16 @@ export interface AutomationEditorBridgeProps {
    *  Connectors picker. Optional so hosts without the connections API still
    *  typecheck; absent ⇒ picker shows an empty/unavailable state. */
   loadConnectorCatalog?: () => Promise<AuEditorCatalogConnectorDTO[]>;
+  /**
+   * Whether this gateway offers connectors at all (C1). False withdraws the
+   * Connectors chip and its picker outright — with the gate off the vault
+   * connections + OAuth routes are not mounted, so an "attach Gmail" the
+   * gateway would refuse is worse than no offer. An automation can still be
+   * written, saved and compiled; it simply binds no provider account.
+   * Optional and defaulting TRUE so a host without a handshake keeps the
+   * picker (its own absent-loader empty state still applies).
+   */
+  connectorsEnabled?: boolean;
   /** Attach BYO oauth2 client or api_key credential for a connector kind.
    *  Resolves with the new/updated `connectionId` so oauth2 can start PKCE. */
   configureConnection?: (
@@ -1557,6 +1567,14 @@ export interface AppSettingsSnapshot {
 export interface AppSettingsBridgeProps {
   /** Initial settings destination for direct recovery links from an app. */
   initialTab?: "appearance" | "vault";
+  /**
+   * Whether this gateway offers automations at all (C1). False withdraws the
+   * Automations tab — a per-app view of standing orders on a gateway that
+   * mounts no automations route would be an empty list that never explains
+   * itself. Optional and defaulting TRUE so a host without a handshake (tests,
+   * harnesses) keeps the full tab strip.
+   */
+  automationsVisible?: boolean;
   onReady: (update: (s: AppSettingsSnapshot) => void) => void;
   onClose: () => void;
   onKnobCommit: (key: string, value: string) => void;

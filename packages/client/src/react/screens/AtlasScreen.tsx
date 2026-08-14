@@ -21,7 +21,14 @@ import PanelBlock from "../ui/PanelBlock.js";
 import AtlasKindsSection from "./AtlasKindsSection.js";
 import AtlasRecordsSection from "./AtlasRecordsSection.js";
 import AtlasRelationsSection from "./AtlasRelationsSection.js";
-import { countLine, healthDetail, kindRowsFrom } from "./atlasScreenModel.js";
+import {
+  censusStamp,
+  countLine,
+  healthDetail,
+  kindRowsFrom,
+  kindWritten,
+  NEVER_WRITTEN,
+} from "./atlasScreenModel.js";
 import type { KindRow } from "./atlasScreenModel.js";
 
 import styles from "./AtlasScreen.module.css";
@@ -61,10 +68,15 @@ const FULL_AT = 8;
  *  file rather than discovered at 200k rows. */
 const EXPORT_PAGE_CAP = 40;
 
+// `all` genuinely means all (#775): the kinds list carries the never-written
+// ones too, so the chip that says "All kinds" is not quietly showing a subset.
+// `never` is the chip that isolates them — the answer to "what are the other
+// thirty-one?" that the count line asks and nothing used to answer.
 const CHIPS = [
   { id: "all", label: "All kinds" },
   { id: "largest", label: "Largest" },
   { id: "today", label: "Written today" },
+  { id: "never", label: NEVER_WRITTEN },
 ] as const;
 type ChipId = (typeof CHIPS)[number]["id"];
 
@@ -85,8 +97,11 @@ function download(text: string, filename: string): void {
 
 function filterKinds(kinds: readonly KindRow[], chip: ChipId): KindRow[] {
   if (chip === "largest")
-    return [...kinds].sort((a, b) => (b.bytes ?? 0) - (a.bytes ?? 0));
+    return [...kinds]
+      .filter(kindWritten)
+      .sort((a, b) => (b.bytes ?? 0) - (a.bytes ?? 0));
   if (chip === "today") return kinds.filter((k) => (k.writtenToday ?? 0) > 0);
+  if (chip === "never") return kinds.filter((k) => !kindWritten(k));
   return [...kinds];
 }
 
@@ -103,6 +118,10 @@ export default function AtlasScreen({
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
   const [chip, setChip] = useState<ChipId>("all");
   const [picked, setPicked] = useState<string | null>(null);
+  // When THIS PAGE last read the census. Not the payload's own `generatedAt`:
+  // the gateway may serve a cached census, and the stamp is a promise about
+  // when the page asked, which is the thing a Refresh verb changes.
+  const [censusReadAt, setCensusReadAt] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
   // Census + pulse travel together (both feed the Kinds rows). The pulse is
@@ -114,6 +133,7 @@ export default function AtlasScreen({
       if (s.status === "fulfilled") {
         setStats(s.value);
         setStatsError(null);
+        setCensusReadAt(new Date().toISOString());
       } else
         setStatsError(
           s.reason instanceof Error ? s.reason.message : String(s.reason)
@@ -151,21 +171,27 @@ export default function AtlasScreen({
     [stats, pulse]
   );
   const shown = useMemo(() => filterKinds(kinds, chip), [kinds, chip]);
+  // The kinds that hold something. A vault whose schema declares forty kinds
+  // and has written none is still an EMPTY vault, so the empty state and the
+  // records section below both count these rather than the whole list.
+  const written = useMemo(() => kinds.filter(kindWritten), [kinds]);
 
   const state =
     statsError !== null && stats === null
       ? "error"
       : stats === null
         ? "loading"
-        : kinds.length === 0
+        : written.length === 0
           ? "empty"
           : kinds.length > FULL_AT
             ? "full"
             : "ready";
 
   // The kind whose records the last section shows: the one a Browse row asked
-  // for, else the fullest kind — the page always has a table under it.
-  const selected = kinds.find((k) => k.logical === picked) ?? kinds[0] ?? null;
+  // for, else the fullest kind — the page always has a table under it. A ghost
+  // row's verb is inert, so `picked` is always a kind with records in it.
+  const selected =
+    written.find((k) => k.logical === picked) ?? written[0] ?? null;
 
   // ── The frame's two slots ────────────────────────────────────────────────
   useEffect(() => {
@@ -273,6 +299,8 @@ export default function AtlasScreen({
       <AtlasKindsSection
         kinds={shown}
         onBrowse={setPicked}
+        onRefresh={loadCensus}
+        stamp={censusStamp(censusReadAt)}
         totalKinds={stats?.totals.kinds ?? kinds.length}
       />
 

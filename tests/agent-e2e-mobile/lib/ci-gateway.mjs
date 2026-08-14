@@ -45,6 +45,9 @@ const devicePlane = makeDaemonDevicePlane({
 
 const gateway = await buildGateway({
   paths: layout,
+  // The nightly journeys drive automations and connectors, which ship gated
+  // OFF by default (v0 early feedback) — this CI host opts both in.
+  experimental: { automations: true, connectors: true },
   gatewayDatabase: database,
   deviceAccess: devicePlane.deviceAccess,
   isHostCustody: devicePlane.isHostCustody,

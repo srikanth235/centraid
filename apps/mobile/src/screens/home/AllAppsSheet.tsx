@@ -46,12 +46,15 @@ import { iconChipFinish, iconChipRadius } from "@centraid/design";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { borders, family, metrics, radii, t, useTheme } from "../../kit/theme";
 import type { Scheme, ThemeColors } from "../../kit/theme";
 import type { LauncherItem } from "./catalog";
 import { togglePlacePin, usePlacePins } from "./home-pins";
 import {
-  PLACE_COUNT,
+  enabledPlacePins,
+  enabledPlaces,
+  isPlaceEnabled,
   isPlacePinned,
   pinnedPlaces,
   searchPlaces,
@@ -109,13 +112,22 @@ export default function AllAppsSheet({
     () => items.filter((item) => matchesQuery(item.meta.name, trimmed)),
     [items, trimmed]
   );
-  const places = useMemo(() => searchPlaces(trimmed), [trimmed]);
+  // A place this gateway does not serve is not listed and not pinnable here
+  // either — the sheet is where a member would otherwise pin it back onto the
+  // band and land on a dead route. See `places.ts` for why unknown ≠ off.
+  const { features } = useReplica();
+  const places = useMemo(
+    () => searchPlaces(trimmed).filter((p) => isPlaceEnabled(p.id, features)),
+    [trimmed, features]
+  );
   // The handoff's own foot formula (:5990-5991): pinned apps (Home excluded,
   // since it carries no switch) over the total installed, then pinned places
-  // (Home included, since it counts as pinned by law) over all eleven.
+  // (Home included, since it counts as pinned by law) over the places this
+  // gateway serves — the list the member is looking at, which is all eleven
+  // unless a v0 feature gate is holding one back.
   const footText = `${pinnedSet.size} of ${items.length} apps · ${
-    pinnedPlaces(placePins).length
-  } of ${PLACE_COUNT} places`;
+    pinnedPlaces(enabledPlacePins(placePins, features)).length
+  } of ${enabledPlaces(features).length} places`;
 
   return (
     <Modal

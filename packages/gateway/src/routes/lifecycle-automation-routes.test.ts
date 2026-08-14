@@ -93,6 +93,7 @@ describe("lifecycle-automation-routes scenarios", () => {
     // compile path still exercises ledger finish + HTTP 202 without ACP.
     handle = await serve({
       paths: pathsUnder(dataDir),
+      experimental: { automations: true },
       runTurn: async () => {
         throw new Error("compiler unavailable");
       },
@@ -438,6 +439,7 @@ describe("lifecycle-automation-routes scenarios", () => {
     const attempted: string[] = [];
     handle = await serve({
       paths: pathsUnder(dataDir),
+      experimental: { automations: true },
       runTurn: async (input, config) => {
         const harness = config.prefs.kind;
         attempted.push(harness);
@@ -523,6 +525,7 @@ describe("lifecycle-automation-routes scenarios", () => {
     let sessionSequence = 0;
     handle = await serve({
       paths: pathsUnder(dataDir),
+      experimental: { automations: true },
       runTurn: async (input, config) => {
         if (input.message.startsWith("Compile this automation headlessly.")) {
           compilePrompts.push(input.message);

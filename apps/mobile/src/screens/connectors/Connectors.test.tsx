@@ -23,6 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resolveTheme } from "../../kit/theme";
 import type { ConnectionEntry } from "../../lib/connections";
+import { MOBILE_FEATURE_OFF_COPY } from "../../lib/replica/mobile-gateway-compatibility-core";
 import type { ConnectorsScreenProps } from "../../navigation";
 import {
   mountBlock,
@@ -54,6 +55,19 @@ vi.mock(import("react-native-svg"), async () => {
 });
 vi.mock(import("react-native-safe-area-context"), () => ({
   useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),
+}));
+
+// The one fact this screen reads from the session: which experimental
+// features the gateway advertised on the single `/info` answer the
+// compatibility wall already made. Mocked at the provider so the test does
+// not mount the replica machinery to state a capability.
+const session = vi.hoisted(() => ({
+  features: undefined as
+    | { automations: boolean; connectors: boolean }
+    | undefined,
+}));
+vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
+  useReplica: () => ({ online: true, ready: true, ...session }),
 }));
 
 // Each mock takes the REAL function's signature, so a wire shape that drifts
@@ -166,6 +180,9 @@ function buttonLabelled(container: HTMLElement, label: string): Element | null {
 describe(ConnectorsScreen, () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Unknown by default — the gateway has not answered — which is the state
+    // every other test in this file is written against.
+    session.features = undefined;
     wire.list.mockResolvedValue([]);
     wire.begin.mockResolvedValue(wire.authUrl);
     wire.complete.mockResolvedValue(undefined);
@@ -181,6 +198,27 @@ describe(ConnectorsScreen, () => {
   afterEach(() => {
     dispose?.();
     dispose = undefined;
+  });
+
+  // THE V0 EXPERIMENTAL GATE. Off means this gateway does not mount the
+  // connections routes, so the page must not read them and must say what is
+  // true rather than dress a 404 as a failed read.
+  it("walls the place when the gateway has connectors switched off", async () => {
+    session.features = { automations: true, connectors: false };
+    const container = await render();
+    expect(textOf(container).join(" ")).toContain(
+      MOBILE_FEATURE_OFF_COPY.connectors.title
+    );
+    expect(wire.list).not.toHaveBeenCalled();
+  });
+
+  it("draws the page when the gateway has connectors switched on", async () => {
+    session.features = { automations: false, connectors: true };
+    wire.list.mockResolvedValue([entry()]);
+    const container = await render();
+    const spans = textOf(container).join(" ");
+    expect(spans).toContain("Gmail");
+    expect(spans).not.toContain(MOBILE_FEATURE_OFF_COPY.connectors.title);
   });
 
   it("draws the row geometry while it reads, and says why", async () => {

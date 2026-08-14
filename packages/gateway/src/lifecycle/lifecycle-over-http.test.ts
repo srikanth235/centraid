@@ -65,7 +65,10 @@ async function listSessions(): Promise<string[]> {
 describe("lifecycle-over-http scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-lifecycle-${crypto.randomUUID()}-`);
-    handle = await serve({ paths: pathsUnder(dataDir) });
+    handle = await serve({
+      paths: pathsUnder(dataDir),
+      experimental: { automations: true },
+    });
   }, 30_000);
 
   afterEach(async () => {

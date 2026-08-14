@@ -24,6 +24,19 @@ export interface GatewayCapabilities {
   multiVaultReplica: boolean;
   /** Idempotent cross-vault add/move placement intents are available. */
   crossVaultPlacements: boolean;
+  /**
+   * Experimental gate (v0 early feedback): the automations surface —
+   * lifecycle, runs feed, webhook ingress, cron scheduler — is enabled on
+   * this gateway. Optional + absent-tolerant: a gateway that predates the
+   * flag reads as off. Off hides surface only; durable data stays intact.
+   */
+  automations?: boolean;
+  /**
+   * Experimental gate (v0 early feedback): the provider connectors surface
+   * (connection health/configure, PKCE consent ceremony) is enabled on this
+   * gateway. Optional + absent-tolerant, same contract as `automations`.
+   */
+  connectors?: boolean;
 }
 
 /** Default capability surface for a modern loopback/daemon gateway. */
@@ -36,7 +49,20 @@ export const DEFAULT_GATEWAY_CAPABILITIES: GatewayCapabilities = Object.freeze({
   automationTurns: true,
   multiVaultReplica: true,
   crossVaultPlacements: true,
+  // Experimental features default OFF on a fresh gateway (v0); the owner
+  // opts in via prefs or CENTRAID_EXPERIMENTAL.
+  automations: false,
+  connectors: false,
 });
+
+/**
+ * Capability keys a gateway may omit (experimental gates added after the
+ * required set froze). Absent reads as off — never a malformed handshake.
+ */
+export const OPTIONAL_GATEWAY_CAPABILITIES = [
+  "automations",
+  "connectors",
+] as const;
 
 export function isGatewayCapabilities(
   value: unknown
@@ -51,6 +77,10 @@ export function isGatewayCapabilities(
     typeof c.assistOAuth === "boolean" &&
     typeof c.automationTurns === "boolean" &&
     typeof c.multiVaultReplica === "boolean" &&
-    typeof c.crossVaultPlacements === "boolean"
+    typeof c.crossVaultPlacements === "boolean" &&
+    // Optional experimental flags: absent (old gateway) reads as off, but a
+    // present non-boolean is still a malformed map.
+    (c.automations === undefined || typeof c.automations === "boolean") &&
+    (c.connectors === undefined || typeof c.connectors === "boolean")
   );
 }

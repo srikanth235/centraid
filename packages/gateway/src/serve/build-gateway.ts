@@ -261,6 +261,8 @@ import { createDiskHealthProbe, formatBytes } from "./disk-health.js";
 import { createEnrichmentHealthProbe } from "./enrichment-health.js";
 import { EnrollmentStore } from "./enrollment-store.js";
 import { recoverPendingVaultErases } from "./erase-recovery.js";
+import { resolveExperimentalFeatures } from "./experimental-features.js";
+import type { ExperimentalFeatureSet } from "./experimental-features.js";
 import { GatewayDatabase } from "./gateway-db.js";
 import { buildDiagnosticsBundle } from "./gateway-diagnostics.js";
 import { GatewayLogStore } from "./gateway-log-store.js";
@@ -355,6 +357,15 @@ export interface BuildGatewayOptions {
    * over omission; `CENTRAID_RESOURCE_MODE` env still wins over both.
    */
   resourceMode?: ResourceMode;
+  /**
+   * Experimental feature gate (v0 early feedback). When a feature is off the
+   * gateway does not advertise its capability, mount its routes, or start
+   * its background work — durable data stays intact. Resolution per feature
+   * is env (`CENTRAID_EXPERIMENTAL`) > durable prefs
+   * (`gateway.experimental.*`) > this option > off; hosts and tests opt in
+   * here, mirroring `resourceMode`.
+   */
+  experimental?: Partial<ExperimentalFeatureSet>;
   /**
    * The cron scheduler (issue #149) is gateway-owned and in-process: one
    * scheduler PER VAULT (issue #289 — every vault's automations fire, not
@@ -873,6 +884,23 @@ export async function buildGateway(
   // identical to mode. Running-vs-desired legibility is the client comparing
   // health's structured profile with saved prefs — nothing extra here.
   const resourceKnobPrefs = parseResourceKnobPrefs(earlyPrefs);
+  // Experimental feature gate (v0 early feedback): automations + connectors
+  // ship in the binary but default OFF. Off hides surface — routes,
+  // capability advertisement, cron/event scheduling — never data. The engine
+  // seams stay wired regardless: capture OCR and semantic search fire
+  // system recognition recipes through `fireAutomation`, and the vault
+  // plane's consent outbox drains through the connection broker.
+  const experimentalResolution = resolveExperimentalFeatures({
+    env: process.env,
+    prefs: earlyPrefs,
+    ...(options.experimental ? { options: options.experimental } : {}),
+  });
+  const experimental = experimentalResolution.features;
+  for (const token of experimentalResolution.unknownEnvTokens) {
+    logger.warn(
+      `CENTRAID_EXPERIMENTAL names no known experimental feature: "${token}"`
+    );
+  }
   // Ground-truth sizing (#528 Phase E): probe cgroup CPU/memory quotas and one
   // cumulative CPU-steal sample so the resolver sizes the granted share of the
   // host, not the raw machine. All reads are failure-tolerant → nulls on a
@@ -3850,8 +3878,14 @@ export async function buildGateway(
         // not occupy scheduler registrations or bootstrap data cursors until
         // enabled. Ordinary disabled automations stay in `rows` so their
         // cursor retention semantics remain unchanged.
-        const schedulerRows = rows.filter(
-          (row) => !recognitionTemplateIds.has(row.ownerApp) || row.enabled
+        const schedulerRows = rows.filter((row) =>
+          recognitionTemplateIds.has(row.ownerApp)
+            ? row.enabled
+            : // User automations are the experimental surface (v0): with the
+              // gate off they never arm, while system recognition recipes
+              // above keep the photos pipeline (OCR, faces, embeddings)
+              // flowing through the same scheduler.
+              experimental.automations
         );
         const diff = await sched.reconcile(schedulerRows);
         if (diff.added.length || diff.updated.length || diff.removed.length) {
@@ -3946,6 +3980,10 @@ export async function buildGateway(
   const webhookHandler: RouteHandler = async (req, res) => {
     if (!req.url || !req.url.startsWith(automation.WEBHOOK_ROUTE_PREFIX))
       return false;
+    // Automations experiment off: no webhook ingress. Fall through so the
+    // host's chain answers not-found instead of durably accepting a trigger
+    // that nothing will ever fire.
+    if (!experimental.automations) return false;
     const url = new URL(req.url, "http://x");
     const slug = url.pathname
       .slice(automation.WEBHOOK_ROUTE_PREFIX.length)
@@ -4346,9 +4384,14 @@ export async function buildGateway(
           tunnel: Boolean(options.dataPlaneControl),
           backupWal: options.backup?.enabled === true,
           assistOAuth: Boolean(options.assistOAuth),
-          automationTurns: true,
+          // Experimental gates (v0): a gated-off feature is absent from the
+          // handshake, so clients wall it in ONE place (C1) instead of
+          // discovering dead routes.
+          automationTurns: experimental.automations,
           multiVaultReplica: true,
           crossVaultPlacements: true,
+          automations: experimental.automations,
+          connectors: experimental.connectors,
         },
       })
     ),
@@ -4604,14 +4647,18 @@ export async function buildGateway(
     // Broker-carried connection credentials (issue #304): health list,
     // configure, pause/resume, and the PKCE consent ceremony. Mounted
     // BEFORE the generic `_vault` handler (same prefix family).
-    forRoutePrefixes(
-      [ROUTES.vaultConnections, ROUTES.vaultOAuthCallback],
-      makeConnectionsRouteHandler(
-        vaultRegistry,
-        connectionBroker,
-        options.assistOAuth
-      )
-    ),
+    ...(experimental.connectors
+      ? [
+          forRoutePrefixes(
+            [ROUTES.vaultConnections, ROUTES.vaultOAuthCallback],
+            makeConnectionsRouteHandler(
+              vaultRegistry,
+              connectionBroker,
+              options.assistOAuth
+            )
+          ),
+        ]
+      : []),
     // Consent-derived offline replica protocol (#406). Mounted before the
     // generic owner `_vault` handler because both share that prefix. The
     // intent lane executes through the ordinary app dispatcher; the route
@@ -4761,9 +4808,14 @@ export async function buildGateway(
       })
     ),
     // The request vault's store-backed handlers (apps-store / lifecycle /
-    // automations), resolved per request off the ambient vault scope.
+    // automations), resolved per request off the ambient vault scope. With
+    // the automations experiment off, only the apps prefix dispatches — the
+    // `_automations`/`_insights` families fall through to not-found while
+    // the mixed lifecycle handler stays mounted for apps.
     forRoutePrefixes(
-      ["/centraid/_apps", "/centraid/_automations", "/centraid/_insights"],
+      experimental.automations
+        ? ["/centraid/_apps", "/centraid/_automations", "/centraid/_insights"]
+        : ["/centraid/_apps"],
       async (req, res) => {
         const host = await currentVaultHost();
         return (
@@ -5363,7 +5415,11 @@ export async function buildGateway(
 
     // Start the per-vault in-process cron schedulers as they mount. Under
     // n8n semantics they only fire while running — downtime is not
-    // backfilled (issue #149).
+    // backfilled (issue #149). The schedulers run REGARDLESS of the
+    // automations experiment: system recognition recipes (photo OCR, faces,
+    // embeddings, transcripts) ride the same cursor engine, so photos keep
+    // indexing with the experiment off. The gate lives in reconcile's row
+    // set instead — user automations never arm while off.
     schedulersStarted = true;
     for (const [, sched] of schedulers) sched.start();
 

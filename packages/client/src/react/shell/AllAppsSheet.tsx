@@ -4,6 +4,8 @@ import type { CSSProperties, JSX } from "react";
 import { iconChipRadius } from "@centraid/design";
 
 import Icon from "../ui/Icon.js";
+import { CAPABILITIES_ON } from "./capabilities.js";
+import type { ShellCapabilities } from "./capabilities.js";
 import { isPinned, searchDestinations } from "./launcherModel.js";
 import type {
   LauncherDestination,
@@ -36,6 +38,11 @@ export interface AllAppsSheetProps {
   onSelect: (destination: LauncherDestination) => void;
   onClose: () => void;
   compact?: boolean;
+  /** What this gateway offers (C1). The sheet is the complete index of the
+   *  places the shell can go, so a gated-off feature has to leave it too —
+   *  a stem that hid Automations while the sheet still listed it would be two
+   *  answers to one question. */
+  capabilities?: ShellCapabilities;
 }
 
 export default function AllAppsSheet({
@@ -44,10 +51,11 @@ export default function AllAppsSheet({
   onSelect,
   onClose,
   compact = false,
+  capabilities = CAPABILITIES_ON,
 }: AllAppsSheetProps): JSX.Element {
   const [query, setQuery] = useState("");
   const fieldRef = useRef<HTMLInputElement | null>(null);
-  const rows = searchDestinations(query);
+  const rows = searchDestinations(query, capabilities);
   const pinnedCount = rows.length
     ? Object.values(pins).filter(Boolean).length
     : 0;

@@ -15,7 +15,10 @@ import {
   PLACES,
   PLACE_COUNT,
   bandPlaces,
+  enabledPlacePins,
+  enabledPlaces,
   getPlace,
+  isPlaceEnabled,
   isPlacePinned,
   pinnedPlaces,
   searchPlaces,
@@ -105,6 +108,51 @@ describe("the eleven places", () => {
     expect(searchPlaces("ANALYTICS").map((p) => p.id)).toStrictEqual(["stats"]);
     expect(searchPlaces("")).toStrictEqual(PLACES);
     expect(searchPlaces("nothing matches this")).toHaveLength(0);
+  });
+
+  // The v0 experimental gates. Two places are surfaces the gateway may not be
+  // serving at all, and a band tab onto an unmounted route is the failure this
+  // filter exists to prevent.
+  it("drops a place whose gateway feature is switched off", () => {
+    const off = { automations: false, connectors: false };
+    expect(enabledPlaces(off).map((p) => p.id)).not.toContain("autos");
+    expect(enabledPlaces(off).map((p) => p.id)).not.toContain("conn");
+    expect(enabledPlaces(off)).toHaveLength(PLACE_COUNT - 2);
+    expect(
+      bandPlaces(enabledPlacePins(DEFAULT_PLACE_PINS, off)).map((p) => p.id)
+      // The freed band slots are taken by the next pinned places in table
+      // order — a gated place leaves no hole behind.
+    ).toStrictEqual(["home", "notifs", "stats", "data", "devices"]);
+  });
+
+  it("keeps both places when the gateway has switched them on", () => {
+    const on = { automations: true, connectors: true };
+    expect(enabledPlaces(on)).toStrictEqual(PLACES);
+    expect(enabledPlacePins(DEFAULT_PLACE_PINS, on)).toStrictEqual(
+      DEFAULT_PLACE_PINS
+    );
+    expect(
+      bandPlaces(enabledPlacePins(DEFAULT_PLACE_PINS, on)).map((p) => p.id)
+    ).toStrictEqual(bandPlaces(DEFAULT_PLACE_PINS).map((p) => p.id));
+  });
+
+  it("gates one place without gating the other", () => {
+    const halfOn = { automations: true, connectors: false };
+    expect(isPlaceEnabled("autos", halfOn)).toBe(true);
+    expect(isPlaceEnabled("conn", halfOn)).toBe(false);
+    expect(isPlaceEnabled("stats", halfOn)).toBe(true);
+  });
+
+  // The rule the whole gate hangs on: no gateway has answered yet, which is
+  // not the same as a gateway that answered "off". Hiding on silence would
+  // reshuffle the band on every offline cold start.
+  it("hides nothing while the gateway's answer is unknown", () => {
+    expect(enabledPlaces(undefined)).toStrictEqual(PLACES);
+    expect(isPlaceEnabled("autos", undefined)).toBe(true);
+    expect(isPlaceEnabled("conn", undefined)).toBe(true);
+    expect(enabledPlacePins(DEFAULT_PLACE_PINS, undefined)).toStrictEqual(
+      DEFAULT_PLACE_PINS
+    );
   });
 
   it("never lists the Assistant — it is an app, not a place (:3482)", () => {

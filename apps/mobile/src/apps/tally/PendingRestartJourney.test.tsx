@@ -217,7 +217,9 @@ vi.mock(
     }) as never
 );
 vi.mock(import("../../lib/replica/mobile-gateway-compatibility"), () => ({
-  requireMobileOfflineGateway: () => Promise.resolve(),
+  // `undefined` is the wall's "no gateway answered" answer: this journey is
+  // offline, so it learns no feature flags either.
+  requireMobileOfflineGateway: () => Promise.resolve(undefined),
 }));
 vi.mock(import("../../lib/replica/background-sync"), () => ({
   registerReplicaPushWake: () => Promise.resolve(),

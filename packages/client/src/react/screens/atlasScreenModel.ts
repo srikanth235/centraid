@@ -7,7 +7,7 @@
 // never guessed. The pulse knows which DAY a kind was last written, not which
 // minute, so the meta slot says "Today" and never "4 minutes ago".
 
-import type { IconName } from "@centraid/design";
+import type { GridColumnData, GridSortData } from "@centraid/design/blocks";
 
 import { formatBytes, relativeWhen } from "../../format.js";
 import type {
@@ -16,8 +16,13 @@ import type {
   AtlasPulsePayload,
   BrowseColumnsResult,
 } from "../../gateway-client.js";
-import type { DocTableRow } from "../ui/DocTable.js";
-import { cellText, isSealedValue, rowIdOf } from "./atlasBrowseData.js";
+import type { GridRowDef } from "../ui/GridBlock.js";
+import {
+  cellText,
+  isNumericColumn,
+  isSealedValue,
+  rowIdOf,
+} from "./atlasBrowseData.js";
 
 /** One kind, as the Kinds list needs it. */
 export interface KindRow {
@@ -50,9 +55,17 @@ export function dayLabel(day: string, now: number = Date.now()): string {
   return new Date(`${day}T00:00:00.000Z`).toLocaleDateString();
 }
 
-/** The kinds the vault has actually written, life data before plumbing and
- *  fullest first. A kind with no rows is not a row: the census sentence counts
- *  it, and the list is what you can open. */
+/**
+ * Every kind the vault's schema defines, life data before plumbing and fullest
+ * first — so the never-written ones land at the foot of their own group.
+ *
+ * A kind with no rows IS a row (#775). The census sentence counts it either
+ * way, and a list that silently dropped it left a member reading "showing 9 of
+ * 40" with no way to see the other thirty-one — which is a worse answer than
+ * an inert row, because it does not say what is missing. The unwritten ones
+ * are drawn `off`: present, reachable, and inert, since there is nothing to
+ * browse. {@link kindWritten} is the one predicate that decides which is which.
+ */
 export function kindRowsFrom(
   stats: AtlasCensusPayload,
   pulse: AtlasPulsePayload | null,
@@ -63,7 +76,6 @@ export function kindRowsFrom(
   const rows: KindRow[] = [];
   for (const pack of stats.packs) {
     for (const table of pack.tables) {
-      if (table.rows === 0) continue;
       const series = byType.get(table.logical);
       const days = series?.days ?? [];
       const lastDay = days.reduce(
@@ -90,21 +102,52 @@ export function kindRowsFrom(
   });
 }
 
-/** "1,908 records · 1.2 GB · 12 written today" — each clause only when the
- *  census/pulse carries it. */
+/** Has an app ever put a record of this kind in the vault? */
+export function kindWritten(kind: KindRow): boolean {
+  return kind.records > 0;
+}
+
+/**
+ * "Photos · 1,908 records · 1.2 GB · 12 written today" — each clause only when
+ * the census/pulse carries it.
+ *
+ * The pack leads. It is the one thing that says WHOSE kind this is, the census
+ * has always carried it, and a list of forty kinds with no owner beside them
+ * is forty rows a member has to recognise by name alone.
+ *
+ * A never-written kind says so instead of claiming "0 records", which reads as
+ * a count that has moved rather than one that never has.
+ */
 export function kindSubLine(kind: KindRow): string {
-  const parts = [`${kind.records.toLocaleString()} records`];
+  const parts = [kind.packLabel];
+  if (!kindWritten(kind)) {
+    parts.push(NEVER_WRITTEN);
+    return parts.join(" · ");
+  }
+  parts.push(`${kind.records.toLocaleString()} records`);
   if (kind.bytes !== null) parts.push(formatBytes(kind.bytes));
   if (kind.writtenToday !== null && kind.writtenToday > 0)
     parts.push(`${kind.writtenToday.toLocaleString()} written today`);
   return parts.join(" · ");
 }
 
-/** The row's one mono slot: when this kind was last written. */
+/** The words for a kind the schema defines and nothing has ever written. One
+ *  string, used by the sub line and by the chip that filters for them. */
+export const NEVER_WRITTEN = "Never written";
+
+/**
+ * The row's one mono slot: when this kind was last written.
+ *
+ * A never-written kind takes no slot at all. "Quiet" is a fact about a kind
+ * that has records and no recent ones; saying it of a kind that has never held
+ * anything would describe a lull that never happened — the sub line already
+ * says {@link NEVER_WRITTEN} and that is the whole truth about it.
+ */
 export function kindMeta(
   kind: KindRow,
   now: number = Date.now()
 ): string | undefined {
+  if (!kindWritten(kind)) return undefined;
   if (kind.lastWriteDay === null) return undefined;
   if (kind.lastWriteDay === "") return "Quiet";
   return dayLabel(kind.lastWriteDay, now);
@@ -220,28 +263,11 @@ export function relationRowsFrom(graph: AtlasGraphPayload | null): {
   return { authored: false, rows };
 }
 
-const GLYPHS: readonly { match: RegExp; icon: IconName }[] = [
-  { icon: "Users", match: /party|person|people|contact|face/u },
-  { icon: "Image", match: /photo|image|media|video/u },
-  { icon: "Calendar", match: /event|calendar|occurrence/u },
-  { icon: "EnvelopeSimple", match: /message|thread|mail|email/u },
-  { icon: "Receipt", match: /receipt|invoice|payment|money|account/u },
-  { icon: "Compass", match: /place|location|geo/u },
-  { icon: "Todo", match: /task|todo|habit/u },
-  { icon: "Folder", match: /doc|file|note|blob|attachment/u },
-];
-
-/** The row's leading 16px glyph. A vault kind is not an app, so this maps the
- *  ontology's own vocabulary rather than reusing the launcher's icons. */
-export function kindGlyph(logical: string): IconName {
-  const name = logical.toLowerCase();
-  for (const g of GLYPHS) if (g.match.test(name)) return g.icon;
-  return "Database";
-}
-
-/** Columns a record's own sub-kind might live in, most specific first. */
-const KIND_COLUMNS = ["kind", "type", "subtype", "mime_type", "content_type"];
-/** Columns a record's write time might live in, most recent-meaning first. */
+/**
+ * Which columns a record's own timestamp might live in, most recent-meaning
+ * first. Used only to pick the DEFAULT order of a kind's records: the grid
+ * shows what the store holds and never reformats a value.
+ */
 const WRITTEN_COLUMNS = [
   "updated_at",
   "written_at",
@@ -251,50 +277,113 @@ const WRITTEN_COLUMNS = [
   "at",
 ];
 
-/** Format a cell that is meant to be a moment. Anything this cannot read as a
- *  time is left as it was written rather than being coerced into a date. */
-export function writtenText(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "number") {
-    const ms = value > 1e12 ? value : value * 1000;
-    return relativeWhen(new Date(ms).toISOString());
-  }
-  const text = cellText(value);
-  if (/^\d{4}-\d{2}-\d{2}/u.test(text)) return relativeWhen(text);
-  return text;
+/**
+ * The column a kind is ordered by until a member says otherwise.
+ *
+ * The store's keyset key is the fallback and it is the honest one — it is what
+ * "newest first" means to a table with no time in it. A kind that DOES record
+ * a time is ordered by that instead, because "newest" about a record means
+ * when it was written and not when it happened to be inserted.
+ */
+export function defaultSortKey(cols: BrowseColumnsResult): string {
+  const names = new Set(cols.columns.map((c) => c.name));
+  return WRITTEN_COLUMNS.find((c) => names.has(c)) ?? cols.keysetKey;
 }
 
-/** Browse rows → table rows. The Record column is the table's own display
- *  field, the Kind column is the record's sub-kind when it has one and the
- *  kind's name when it does not, and Written is empty when the kind records no
- *  time at all — an empty cell is honest; a fabricated date is not. */
-export function docRowsFrom(
-  cols: BrowseColumnsResult,
-  rows: readonly Record<string, unknown>[],
-  kindLabel: string
-): DocTableRow[] {
-  const names = new Set(cols.columns.map((c) => c.name));
-  const kindCol = KIND_COLUMNS.find((c) => names.has(c) && c !== "kind_label");
-  const writtenCol = WRITTEN_COLUMNS.find((c) => names.has(c));
-  const icon = kindGlyph(cols.logical);
-  return rows.map((row) => {
-    const id = rowIdOf(row, cols.columns);
-    const display = row[cols.displayField];
-    const title = isSealedValue(display)
-      ? "Sealed"
-      : cellText(display) || id || cols.displayField;
-    const sub = kindCol ? cellText(row[kindCol]) : "";
+/**
+ * The record grid's columns: every column the store declares, in the store's
+ * own order, carrying the declarations a member cannot see in a value — which
+ * are the primary key, which is a reference and to what, and which the store
+ * will not print.
+ *
+ * The register is chosen from the column's SQLite affinity plus its role: keys,
+ * references and numerics are identifiers and figures, so they take the numeric
+ * register; everything else is prose until proven otherwise.
+ */
+export function gridColumnsFrom(
+  cols: BrowseColumnsResult
+): readonly GridColumnData[] {
+  return cols.columns.map((column) => {
+    const mono =
+      column.pk > 0 || column.fkTable !== null || isNumericColumn(column);
     return {
-      icon,
-      id,
-      kind: sub === "" ? kindLabel : sub,
-      title,
-      written: writtenCol ? writtenText(row[writtenCol]) : "",
+      key: column.name,
+      label: column.name,
+      ...(column.pk > 0 ? { pk: true as const } : {}),
+      ...(column.fkTable ? { fk: column.fkLogical ?? column.fkTable } : {}),
+      ...(column.sealed ? { sealed: true as const } : {}),
+      ...(mono ? { register: "mono" as const } : {}),
     };
   });
 }
 
-/** The line under the table. Verbatim shape (v9 §9) — the numbers are live. */
-export function tableCaption(shown: number, total: number): string {
-  return `The first ${shown.toLocaleString()} of ${total.toLocaleString()}, newest first. The table scrolls rather than pages, the way the drive does.`;
+/**
+ * Browse rows → grid rows. The values pass through UNTOUCHED — the grid is the
+ * store's own reading of a kind, so a timestamp stays the integer the store
+ * holds — and the only derivation is the row's identity and the name its
+ * controls are announced by.
+ *
+ * A record whose display field is sealed is named "Sealed" rather than by its
+ * id: the id is the wrong thing to read out, and the masking sentinel must
+ * never reach a screen as text.
+ */
+export function gridRowsFrom(
+  cols: BrowseColumnsResult,
+  rows: readonly Record<string, unknown>[]
+): GridRowDef[] {
+  return rows.map((row) => {
+    const id = rowIdOf(row, cols.columns);
+    const display = row[cols.displayField];
+    return {
+      id,
+      name: isSealedValue(display)
+        ? "Sealed"
+        : cellText(display) || id || cols.displayField,
+      values: row,
+    };
+  });
+}
+
+/**
+ * The section head's trailing verb for a records grid — a toggle whose label
+ * is its own readout (#775).
+ *
+ * Records were ordered newest-first and nothing could change it. Now the order
+ * is a member's, so the head has to SAY where it stands, and the words differ
+ * by what is being ordered: a time reads as newest/oldest, and anything else
+ * reads as the alphabet, because "newest first" over a display name is not a
+ * sentence about anything.
+ */
+export function sortLabel(sort: GridSortData, timeKey: string): string {
+  if (sort.key === timeKey)
+    return sort.dir === "desc" ? "Newest first" : "Oldest first";
+  return sort.dir === "desc" ? `${sort.key} Z–A` : `${sort.key} A–Z`;
+}
+
+/**
+ * The census freshness stamp — when the page last asked the gateway what the
+ * vault holds.
+ *
+ * A census is a snapshot, and a snapshot with no timestamp reads as live. The
+ * stamp is omitted rather than guessed while nothing has been read yet, which
+ * is the same rule the health sentence obeys.
+ */
+export function censusStamp(readAt: string | null): string | undefined {
+  if (readAt === null) return undefined;
+  return `read ${relativeWhen(readAt).toLowerCase()}`;
+}
+
+/**
+ * The line under the grid (v9 §9) — the numbers are live, and so is the order.
+ *
+ * "Newest first" used to be a constant in this sentence because the read was.
+ * A caption that kept saying it while a member had sorted by name would be the
+ * page telling them something they can see is false.
+ */
+export function tableCaption(
+  shown: number,
+  total: number,
+  order: string
+): string {
+  return `The first ${shown.toLocaleString()} of ${total.toLocaleString()}, ${order.toLowerCase()}. The table scrolls rather than pages, the way the drive does.`;
 }

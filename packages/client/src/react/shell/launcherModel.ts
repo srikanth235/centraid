@@ -2,6 +2,10 @@ import { DESTINATION_MARKS } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
 import type { ShellRoute } from "../../app-shell-context.js";
+import type {
+  ExperimentalCapability,
+  ShellCapabilities,
+} from "./capabilities.js";
 
 // The launcher's information architecture, as data (issue #707).
 //
@@ -68,6 +72,17 @@ export interface LauncherDestination {
   page: ShellPage;
   /** Where selecting it goes. */
   route: ShellRoute;
+  /**
+   * The gateway capability this destination needs (C1 — see
+   * `capabilities.ts`). Absent means always available, which is what all but
+   * three of them are.
+   *
+   * It is a field on the destination rather than a filter list beside this
+   * array for the same reason `route` is: the launcher is the complete set of
+   * places the shell can go, so what makes a place reachable belongs on the
+   * place. A fourth gated destination is then one line here and nothing else.
+   */
+  requires?: ExperimentalCapability;
 }
 
 /**
@@ -110,6 +125,7 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
     id: "automations",
     label: "Automations",
     page: "automations",
+    requires: "automations",
     route: { kind: "automations" },
     shortLabel: "Autos",
   },
@@ -118,6 +134,7 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
     id: "connectors",
     label: "Connectors",
     page: "connectors",
+    requires: "connectors",
     route: { kind: "connectors" },
   },
   {
@@ -132,6 +149,9 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
     id: "insights",
     label: "Analytics",
     page: "insights",
+    // Analytics counts automation runs and names them from the automation
+    // list; both of its reads live behind the automations gate.
+    requires: "automations",
     route: { kind: "insights" },
   },
   {
@@ -191,7 +211,13 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
  */
 /* Assistant is deliberately absent: #707 settled it as a PINNED APP, not a
    standing launcher row — it is a thing you talk to, reachable from the app
-   surface and ⌘K, not one of the places the frame goes. */
+   surface and ⌘K, not one of the places the frame goes.
+
+   Three of these are gated (Automations, Connectors, Analytics) and they stay
+   in the shipped set anyway: a pin is a member's arrangement, and
+   `visibleDestinations` filters what a given gateway can show. Trimming the
+   defaults instead would mean a gateway that opts in later starts with an
+   emptier launcher than one that opted in first. */
 export const DEFAULT_PINS: readonly ShellPage[] = [
   "approvals",
   "automations",
@@ -214,11 +240,35 @@ export function isPinned(pins: PinSet, id: ShellPage): boolean {
   return id === "home" || pins[id] === true;
 }
 
-/** The stem's items: pinned destinations, in launcher order. */
-export function pinnedDestinations(
-  pins: PinSet
+/**
+ * The destinations this gateway actually has, in launcher order.
+ *
+ * Every other reader here goes through this one, so a gated-off feature
+ * disappears from the stem, the band, the All-apps sheet and the ⌘K palette
+ * together — the failure mode being designed out is the sheet still listing a
+ * place the stem stopped offering.
+ *
+ * The capabilities are PASSED IN and never read from a module global: this
+ * file is data, and a model that fetched its own answer would be a second
+ * detection site (C1) as well as untestable.
+ */
+export function visibleDestinations(
+  capabilities: ShellCapabilities
 ): readonly LauncherDestination[] {
-  return LAUNCHER_DESTINATIONS.filter((d) => isPinned(pins, d.id));
+  return LAUNCHER_DESTINATIONS.filter(
+    (d) => d.requires === undefined || capabilities[d.requires]
+  );
+}
+
+/** The stem's items: pinned destinations this gateway has, in launcher order.
+ *  Gating filters the VIEW, never the stored pin — turning a feature off is
+ *  not the member unpinning it, and turning it back on restores the launcher
+ *  they arranged. */
+export function pinnedDestinations(
+  pins: PinSet,
+  capabilities: ShellCapabilities
+): readonly LauncherDestination[] {
+  return visibleDestinations(capabilities).filter((d) => isPinned(pins, d.id));
 }
 
 /**
@@ -228,11 +278,14 @@ export function pinnedDestinations(
  * All-apps sheet. A band that silently loses a pinned app would make pinning
  * feel unreliable, which is worse than one extra tap.
  */
-export function bandDestinations(pins: PinSet): {
+export function bandDestinations(
+  pins: PinSet,
+  capabilities: ShellCapabilities
+): {
   items: readonly LauncherDestination[];
   overflow: number;
 } {
-  const all = pinnedDestinations(pins);
+  const all = pinnedDestinations(pins, capabilities);
   if (all.length <= BAND_MAX_ITEMS) return { items: all, overflow: 0 };
   // One slot goes to "More", so only four of the five carry apps.
   const shown = all.slice(0, BAND_MAX_ITEMS - 1);
@@ -241,9 +294,11 @@ export function bandDestinations(pins: PinSet): {
 
 /** Case-insensitive substring filter for the All-apps sheet. */
 export function searchDestinations(
-  query: string
+  query: string,
+  capabilities: ShellCapabilities
 ): readonly LauncherDestination[] {
+  const rows = visibleDestinations(capabilities);
   const q = query.trim().toLowerCase();
-  if (!q) return LAUNCHER_DESTINATIONS;
-  return LAUNCHER_DESTINATIONS.filter((d) => d.label.toLowerCase().includes(q));
+  if (!q) return rows;
+  return rows.filter((d) => d.label.toLowerCase().includes(q));
 }

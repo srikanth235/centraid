@@ -22,6 +22,7 @@ import type { ButtonVariant } from "@centraid/design";
 import type {
   PanelActionData,
   PanelFactData,
+  PanelFigureData,
   PanelTone,
 } from "@centraid/design/blocks";
 
@@ -42,6 +43,9 @@ export interface PanelAction extends PanelActionData {
   onPress: () => void;
 }
 
+/** The one promoted fact — display type over a qualifier line. */
+export type PanelFigure = PanelFigureData;
+
 export interface PanelBlockProps {
   eyebrow?: string;
   title?: string;
@@ -49,6 +53,13 @@ export interface PanelBlockProps {
   /** Draw the body as quoted material — a leading rule and softer ink. Used
    *  for text the member did not write and is being asked to send. */
   quote?: boolean;
+  /**
+   * Promote ONE fact to display type. A page whose whole question is "did this
+   * cost $2 or $200" answers it in the type scale or it does not answer it —
+   * the same figure at the fact rung is one 13pt value among thirty. At most
+   * one per view, on the same grounds as the one filled commit.
+   */
+  figure?: PanelFigure;
   facts?: readonly PanelFact[];
   tone?: PanelTone;
   /**
@@ -75,6 +86,7 @@ export default function PanelBlock({
   title,
   body,
   quote,
+  figure,
   facts,
   tone = "neutral",
   action,
@@ -89,8 +101,12 @@ export default function PanelBlock({
       body: { color: colors.textSoft },
       eyebrow: { color: colors.textFaint },
       factKey: { color: colors.textFaint },
+      factNote: { color: colors.textFaint },
       factValue: { color: colors.text },
       factValueNet: { color: colors.net },
+      figureQualifier: { color: colors.textSoft },
+      figureValue: { color: colors.text },
+      figureValueNet: { color: colors.net },
       panel: { backgroundColor: colors.bgElev, borderColor: edge },
       quote: { borderStartColor: colors.line },
       title: { color: colors.text },
@@ -122,19 +138,47 @@ export default function PanelBlock({
           {body}
         </Text>
       ) : null}
+      {figure ? (
+        <View style={styles.figure}>
+          <Text style={[styles.eyebrow, ink.eyebrow]}>{figure.label}</Text>
+          <Text
+            style={[
+              styles.figureValue,
+              figure.net === true ? ink.figureValueNet : ink.figureValue,
+            ]}
+          >
+            {figure.value}
+          </Text>
+          {figure.qualifier ? (
+            <Text style={[styles.figureQualifier, ink.figureQualifier]}>
+              {figure.qualifier}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
       {facts && facts.length > 0 ? (
         <View style={styles.facts}>
           {facts.map((fact) => (
             <View key={fact.key} style={styles.fact}>
               <Text style={[styles.factKey, ink.factKey]}>{fact.key}</Text>
-              <Text
-                style={[
-                  styles.factValue,
-                  fact.net === true ? ink.factValueNet : ink.factValue,
-                ]}
-              >
-                {fact.value}
-              </Text>
+              <View style={styles.factCell}>
+                <Text
+                  style={[
+                    styles.factValue,
+                    fact.net === true ? ink.factValueNet : ink.factValue,
+                  ]}
+                >
+                  {fact.value}
+                </Text>
+                {/* The caveat belongs to THIS number, so it sits under it — a
+                    footnote at the foot of the panel is one the reader has to
+                    match back up to the figure it qualifies. */}
+                {fact.note ? (
+                  <Text style={[styles.factNote, ink.factNote]}>
+                    {fact.note}
+                  </Text>
+                ) : null}
+              </View>
             </View>
           ))}
         </View>

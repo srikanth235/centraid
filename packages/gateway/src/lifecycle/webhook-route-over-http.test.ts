@@ -143,7 +143,10 @@ async function createWebhookAutomation(
 describe("webhook-route-over-http scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-webhook-${crypto.randomUUID()}-`);
-    handle = await serve({ paths: pathsUnder(dataDir) });
+    handle = await serve({
+      paths: pathsUnder(dataDir),
+      experimental: { automations: true },
+    });
   });
 
   afterEach(async () => {

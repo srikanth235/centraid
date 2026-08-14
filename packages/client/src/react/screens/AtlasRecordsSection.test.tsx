@@ -226,6 +226,61 @@ describe("screens/AtlasRecordsSection", () => {
       );
     });
 
+    it("shows every column the store declares, not a three-column summary", async () => {
+      const el = await mount();
+      expect($$(el, "th[data-col]").map((n) => n.dataset.col)).toStrictEqual([
+        "party_id",
+        "display_name",
+        "home_place_id",
+        "secret",
+      ]);
+      // The declarations a member cannot read off a value.
+      expect($(el, 'th[data-col="party_id"]')?.textContent).toContain("pk");
+      expect($(el, 'th[data-col="home_place_id"]')?.textContent).toContain(
+        "fk"
+      );
+      expect($(el, 'th[data-col="home_place_id"] button')?.title).toBe(
+        "→ core.place"
+      );
+    });
+
+    it("keeps an absent value apart from a value, and never prints a sealed one", async () => {
+      const el = await mount();
+      const bob = $(el, '[data-id="p2"]');
+      expect(
+        bob?.querySelector<HTMLElement>(
+          '[data-col="home_place_id"] [data-absent]'
+        )?.dataset.absent
+      ).toBe("null");
+      expect(el.textContent).not.toContain("«sealed»");
+      expect($(el, '[data-testid="grid-sealed"]')?.textContent).toContain(
+        "sealed"
+      );
+    });
+
+    it("re-reads the kind in the order a column header asks for", async () => {
+      const el = await mount();
+      await click($(el, 'th[data-col="display_name"] button'));
+      expect(browseRowsMock.mock.calls.at(-1)?.[0]).toMatchObject({
+        dir: "asc",
+        orderBy: "display_name",
+        table: "core.party",
+      });
+      // The cursor is NOT carried across a re-sort: a keyset cursor only means
+      // anything inside the order it was minted in.
+      expect(browseRowsMock.mock.calls.at(-1)?.[0].after).toBeUndefined();
+    });
+
+    it("states the order in the head, and turns it round from there", async () => {
+      const el = await mount();
+      expect(buttonSaying(el, "Newest first")).toBeTruthy();
+      await click(buttonSaying(el, "Newest first"));
+      expect(browseRowsMock.mock.calls.at(-1)?.[0]).toMatchObject({
+        dir: "asc",
+        orderBy: "party_id",
+      });
+    });
+
     it("appends the next keyset page rather than replacing what is read", async () => {
       browseRowsMock
         .mockResolvedValueOnce(

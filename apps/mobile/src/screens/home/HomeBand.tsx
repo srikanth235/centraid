@@ -41,11 +41,13 @@ import {
 } from "../../kit/band-surface";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { borders, family, metrics, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { bandTabs } from "./band";
 import type { BandTab, BandTarget } from "./band";
 import { usePlacePins } from "./home-pins";
+import { enabledPlacePins } from "./places";
 
 export interface HomeBandProps {
   /** The tab the member is looking at. Always `home` while the band is up. */
@@ -64,7 +66,15 @@ export default function HomeBand({
   // (./places, via ./home-pins) — never a static five, now that pinning a
   // place is how a member changes what shows up here.
   const pins = usePlacePins();
-  const tabs = useMemo(() => bandTabs(pins), [pins]);
+  // …minus the places this gateway does not serve. The capability answer is
+  // the session's one `/info` read (see `ReplicaProvider.features`), not a
+  // probe from here, and it is read at RENDER because the place table itself
+  // is static — invariant 1's cap still applies to what is left.
+  const { features } = useReplica();
+  const tabs = useMemo(
+    () => bandTabs(enabledPlacePins(pins, features)),
+    [pins, features]
+  );
 
   return (
     // The home-indicator inset lifts the FLOAT, it is not padding inside the

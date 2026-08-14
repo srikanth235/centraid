@@ -27,12 +27,26 @@ vi.mock(import("../../gateway-client.js"), () => ({
       keysetKey: "party_id",
       displayField: "display_name",
       machinery: false,
+      // Both columns are DECLARED, because the grid draws the columns the
+      // store declares and nothing else — a value in a row the columns never
+      // mentioned is a value the store did not offer.
       columns: [
         {
           name: "party_id",
           type: "TEXT",
           notnull: true,
           pk: 1,
+          defaultValue: null,
+          fkTable: null,
+          fkColumn: null,
+          fkLogical: null,
+          sealed: false,
+        },
+        {
+          name: "display_name",
+          type: "TEXT",
+          notnull: true,
+          pk: 0,
           defaultValue: null,
           fkTable: null,
           fkColumn: null,
@@ -274,16 +288,43 @@ describe("screens/AtlasScreen", () => {
   };
 
   describe("the block list", () => {
-    it("lists every written kind with what it holds and when it was last written", async () => {
+    it("lists every kind the schema defines, with whose it is and what it holds", async () => {
       const el = await mount(makeProps());
       const rows = rowsUnder(el, "Kinds");
-      // Two written kinds; the never-written one is counted, not listed.
-      expect(rows).toHaveLength(2);
+      // Every kind, never-written ones included — the count and the list agree.
+      expect(rows).toHaveLength(3);
       expect(rows[0]?.textContent).toContain("Party");
+      expect(rows[0]?.textContent).toContain("Core"); // the pack, drawn at last
       expect(rows[0]?.textContent).toContain("214 records");
       expect(rows[0]?.textContent).toContain("1.9 MB");
-      expect(el.textContent).not.toContain("Place");
-      expect(el.textContent).toContain("showing 2 of 3");
+      expect(el.textContent).toContain("showing 3 of 3");
+    });
+
+    it("draws a never-written kind as an inert ghost row rather than dropping it", async () => {
+      const el = await mount(makeProps());
+      const ghost = rowsUnder(el, "Kinds").find((r) =>
+        r.textContent?.includes("Place")
+      );
+      expect(ghost?.textContent).toContain("Never written");
+      expect(ghost?.dataset.off).toBe("true");
+      const verb = ghost?.querySelector("button");
+      // The verb keeps its word and refuses: there is nothing to browse.
+      expect(verb?.textContent).toContain("Browse");
+      expect((verb as HTMLButtonElement | null)?.disabled).toBe(true);
+    });
+
+    it("stamps the census with when it was read, and reads it again on ask", async () => {
+      const loadStats = vi
+        .fn<AtlasScreenProps["loadStats"]>()
+        .mockResolvedValue(makeStats());
+      const el = await mount(makeProps({ loadStats }));
+      expect(el.textContent).toContain("read just now");
+      await click(
+        [...el.querySelectorAll("button")].find(
+          (b) => b.textContent === "Refresh"
+        )
+      );
+      expect(loadStats).toHaveBeenCalledTimes(2);
     });
 
     it("explains what a kind is, in the words the design pinned", async () => {
@@ -417,6 +458,7 @@ describe("screens/AtlasScreen", () => {
         "All kinds",
         "Largest",
         "Written today",
+        "Never written",
       ]);
       expect(rowsUnder(el, "Kinds")).toHaveLength(10);
 
@@ -425,6 +467,30 @@ describe("screens/AtlasScreen", () => {
       await click(chips.find((c) => c.textContent === "Written today"));
       expect(rowsUnder(el, "Kinds")).toHaveLength(0);
       expect(el.textContent).toContain("showing 0 of 12");
+    });
+
+    it("isolates the never-written kinds the count line names", async () => {
+      const el = await mount(makeProps());
+      const chips = $$(el, 'fieldset[aria-label="Filter kinds"] button');
+      // Three kinds is under the threshold, so this census draws no chip row —
+      // the filter is exercised on the long one, which is where it matters.
+      expect(chips).toHaveLength(0);
+
+      const full = await mount(
+        makeProps({
+          loadStats: vi
+            .fn<AtlasScreenProps["loadStats"]>()
+            .mockResolvedValue(makeFullStats()),
+        })
+      );
+      await click(
+        $$(full, 'fieldset[aria-label="Filter kinds"] button').find(
+          (c) => c.textContent === "Never written"
+        )
+      );
+      // This census has written every kind it declares, so the answer is
+      // honestly empty rather than a list of the ones that DO hold something.
+      expect(rowsUnder(full, "Kinds")).toHaveLength(0);
     });
   });
 });

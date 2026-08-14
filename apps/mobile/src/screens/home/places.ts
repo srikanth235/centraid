@@ -23,6 +23,8 @@
 import { DESTINATION_MARKS } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
+import type { MobileGatewayFeatures } from "../../lib/replica/mobile-gateway-compatibility-core";
+
 /** One of the eleven places, in the handoff's own id spelling (:3424-3436). */
 export type PlaceId =
   | "home"
@@ -165,8 +167,10 @@ export const PLACES: readonly Place[] = [
   },
 ];
 
-/** How many places there are — the All-apps foot reads "M of 11 places" (:5991)
- *  against this, so a table edit cannot drift silently from the copy. */
+/** How many places the table holds — the All-apps foot reads "M of N places"
+ *  (:5991) against `enabledPlaces` rather than this, so a gateway with a v0
+ *  feature gate on counts the list it is actually showing; this stays the
+ *  table's own size, so a table edit cannot drift silently from the copy. */
 export const PLACE_COUNT = PLACES.length;
 
 /** The place table minus Home, since Home is law rather than a pin toggle. */
@@ -215,6 +219,61 @@ export function pinnedPlaces(pins: readonly PlaceId[]): readonly Place[] {
 export function bandPlaces(pins: readonly PlaceId[]): readonly Place[] {
   const [home, ...rest] = pinnedPlaces(pins);
   return home ? [home, ...rest.slice(0, BAND_PLACE_SLOTS)] : [];
+}
+
+/* WHICH PLACES THIS GATEWAY ACTUALLY HAS (v0 experimental gates).
+ *
+ * Two of the eleven are surfaces the gateway may not be serving at all:
+ * Automations and Connectors are off by default in v0, and a gateway with
+ * them off does not mount their routes. A band tab that opens a dead route is
+ * worse than a missing one, so the table stays fixed (order is muscle memory)
+ * and the two derivations below FILTER it — the same shape the pin filters
+ * already use.
+ *
+ * The capability answer comes from the one `/info` read the compatibility
+ * wall already made (`kit/replica/ReplicaProvider`'s `features`), never from
+ * a probe of this module's own. `undefined` is UNKNOWN — no gateway has
+ * answered yet this launch — and unknown NEVER hides a place: the same rule
+ * the wall follows offline (an unanswered question is not a verdict), which
+ * also keeps the band from reshuffling on every offline cold start. */
+const PLACE_CAPABILITY: Partial<Record<PlaceId, keyof MobileGatewayFeatures>> =
+  {
+    autos: "automations",
+    conn: "connectors",
+  };
+
+/** Whether `id` is a place this gateway serves. Ungated places are always. */
+export function isPlaceEnabled(
+  id: PlaceId,
+  features: MobileGatewayFeatures | undefined
+): boolean {
+  const capability = PLACE_CAPABILITY[id];
+  if (!capability || !features) return true;
+  return features[capability];
+}
+
+/** The places this gateway serves, in the table's fixed order. */
+export function enabledPlaces(
+  features: MobileGatewayFeatures | undefined
+): readonly Place[] {
+  return PLACES.filter((p) => isPlaceEnabled(p.id, features));
+}
+
+/**
+ * A member's pins minus the places this gateway does not serve — what the
+ * band and the All-apps sheet read instead of the raw pin list. Dropping a
+ * gated pin rather than blanking its slot lets the next pinned place take it,
+ * so the band stays five wide instead of showing a hole.
+ *
+ * The pin STATE is untouched: switching a feature back on restores the place
+ * to exactly where the member had it, the same way turning a feature off on
+ * the gateway leaves its durable data intact.
+ */
+export function enabledPlacePins(
+  pins: readonly PlaceId[],
+  features: MobileGatewayFeatures | undefined
+): readonly PlaceId[] {
+  return pins.filter((id) => isPlaceEnabled(id, features));
 }
 
 /** Case-insensitive substring filter for the All-apps sheet's places section. */

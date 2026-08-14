@@ -5,11 +5,13 @@ import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { InsightsSummary } from "../screen-contracts.js";
-import InsightsScreen, {
+import {
   buildBars,
+  harnessBreakdown,
   pricingLine,
   sourceFacts,
-} from "./InsightsScreen.js";
+} from "./insights-model.js";
+import InsightsScreen from "./InsightsScreen.js";
 import type { ResourceUsageDTO } from "./resource-summary.js";
 
 // Analytics (v9, #765). The assertions are about INTENT, not the old markup:
@@ -62,6 +64,20 @@ const summary: InsightsSummary = {
     { costUsd: 0.2, date: day(0), runs: 3, tokens: 2000 },
   ],
   generatedAt: GENERATED_AT,
+  peakDay: {
+    costUsd: 0.4,
+    date: day(-1),
+    tokens: 4000,
+    topSources: [
+      {
+        costUsd: 0.4,
+        key: "a1",
+        kind: "automation",
+        label: "Daily Digest",
+        tokens: 4000,
+      },
+    ],
+  },
   kpis: {
     appsTouched: 7,
     estimatedCostUsd: 1.3,
@@ -197,13 +213,25 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     const plot = el.querySelector(".plot");
     expect(plot?.getAttribute("role")).toBe("img");
     expect(plot?.getAttribute("aria-label")).toBe(
-      "Runs per day over the last 30 days"
+      "Spend per day over the last 30 days"
     );
-    // 14 columns at 30 days; every column carries its own sentence.
+    // ONE COLUMN PER DAY (#775) — thirty days, thirty columns, so a single
+    // expensive afternoon is its own column rather than a smear over four.
     const columns = [...el.querySelectorAll(".column")];
-    expect(columns).toHaveLength(14);
+    expect(columns).toHaveLength(30);
     expect(columns.at(-1)?.getAttribute("title")).toBe(
-      "8 runs · yesterday – today"
+      "10 Jun · $0.20 · 3 runs"
+    );
+  });
+
+  it("marks the axis with real dates, and names the peak the plot cannot", () => {
+    const el = screen();
+    const marks = [...el.querySelectorAll(".axisLabel")].map(
+      (n) => n.textContent
+    );
+    expect(marks).toStrictEqual(["12 May", "27 May", "today"]);
+    expect(el.querySelector(".note")?.textContent).toBe(
+      "Busiest 9 Jun: $0.40 · 4k tokens · mostly Daily Digest"
     );
   });
 
@@ -213,7 +241,7 @@ describe("screens/InsightsScreen (v9, #765)", () => {
       windowDays: 7,
     });
     expect(el.querySelectorAll(".column")).toHaveLength(7);
-    expect(el.querySelector(".axisLabel")?.textContent).toBe("7 days ago");
+    expect(el.querySelector(".axisLabel")?.textContent).toBe("4 Jun");
   });
 
   it("claims no per-column outcome split the rollup cannot serve", () => {
@@ -225,19 +253,58 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     expect(el.textContent).toContain("42 runs · 2 failed");
   });
 
-  it("says every section, and says the source facts in the numeric register", () => {
+  it("says every section, including the four categorical breakdowns", () => {
     const el = screen();
     const labels = [...el.querySelectorAll(".label")].map((n) => n.textContent);
     expect(labels).toStrictEqual([
-      "Runs",
+      "Daily activity",
       "By source",
+      "By harness",
+      "By model",
+      "By effort",
       "Recent runs",
       "Gateway",
     ]);
+  });
+
+  it("draws the breakdowns the gateway was already computing", () => {
+    const el = screen();
+    const lists = [...el.querySelectorAll("dl[aria-label]")].map((n) =>
+      n.getAttribute("aria-label")
+    );
+    expect(lists).toStrictEqual([
+      "Spend per source",
+      "Spend by harness",
+      "Spend by model",
+      "Spend by effort",
+    ]);
+    // Every row states its share in words, not only as a bar width.
+    expect(el.textContent).toContain("claude-code");
+    expect(el.textContent).toContain("100% of spend");
+    expect(el.textContent).toContain("$2.50 · 11k · 7 runs");
+  });
+
+  it("promotes the spend to the display rung, with the honesty line under it", () => {
+    const el = screen();
+    expect(el.querySelector(".figureLabel")?.textContent).toBe(
+      "At least · 30 days"
+    );
+    expect(el.querySelector(".figureValue")?.textContent).toBe("$3.40");
+    expect(el.querySelector(".figureQualifier")?.textContent).toBe(
+      "$2.10 harness-reported · $1.30 estimated · 1 unpriced."
+    );
+    // The retries and the cost of the failures are on the wire and now on the
+    // page — a page about spend that cannot say what failure cost is missing
+    // the number a member would act on.
+    expect(el.textContent).toContain("42 · 3 retried");
+    expect(el.textContent).toContain("2 · $0.40 spent");
+  });
+
+  it("says the source facts in the numeric register", () => {
+    const el = screen();
     const facts = [...el.querySelectorAll(".fact")].map((n) => n.textContent);
-    expect(facts[0]).toBe("automations6 · 75% · $2.00");
-    expect(facts[1]).toBe("the assistant2 · 25% · $0.30");
-    expect(el.textContent).toContain("at least $3.40");
+    expect(facts).toContain("automations6 · 75% · $2.00");
+    expect(facts).toContain("the assistant2 · 25% · $0.30");
     expect(el.textContent).toContain("Daily Digest · 59% of spend");
   });
 
@@ -262,6 +329,18 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     expect(actions).toHaveLength(1);
     act(() => (actions[0] as HTMLButtonElement).click());
     expect(opened).toStrictEqual(["app/x:r2"]);
+  });
+
+  it("gives the gateway's numbers a denominator, and each row its own caveat", () => {
+    const el = screen({ resourceUsage: usage });
+    // "120s of CPU" is unremarkable over a week and alarming over a minute.
+    const heads = [...el.querySelectorAll(".meta")].map((n) => n.textContent);
+    expect(heads.some((head) => head?.startsWith("since "))).toBe(true);
+    expect(
+      [...el.querySelectorAll(".factNote")].map((n) => n.textContent)
+    ).toContain(
+      "Measured, not limited by Conserve. CPU time for harness runs isn’t separately measurable yet."
+    );
   });
 
   it("states the gateway's measured numbers, and the note that frames them", () => {
@@ -308,26 +387,47 @@ describe("screens/InsightsScreen (v9, #765)", () => {
 describe("screens/InsightsScreen — folding the rollup into columns", () => {
   it("folds by calendar offset, so a quiet week does not slide the busy days", () => {
     const bars = buildBars(summary, 30, false);
-    expect(bars).toHaveLength(14);
+    expect(bars).toHaveLength(30);
     // day(-29) is the window's first day; day(-1)/day(0) are its last.
     expect(bars[0]?.ok).toBeGreaterThan(0);
     expect(bars[1]?.ok).toBe(0);
-    expect(bars.at(-1)?.label).toBe("8 runs · yesterday – today");
+    expect(bars.at(-1)?.label).toBe("10 Jun · $0.20 · 3 runs");
   });
 
-  it("scales the columns against the window's own peak", () => {
+  it("draws SPEND, so a cheap busy day cannot outrank an expensive quiet one", () => {
     const bars = buildBars(summary, 30, false);
-    expect(Math.max(...bars.map((b) => b.ok))).toBe(100);
+    // day(-1) cost the most ($0.40) though day(0) is not far behind in runs.
+    expect(bars.at(-2)?.ok).toBe(100);
+    expect(bars.at(-1)?.ok).toBe(50);
     expect(bars.every((b) => b.ok >= 0 && b.ok <= 100)).toBe(true);
   });
 
-  it("samples to ten columns on the compact form factor", () => {
-    expect(buildBars(summary, 90, true)).toHaveLength(10);
+  it("folds only on the compact form factor, and says the span it folded", () => {
+    const folded = buildBars(summary, 90, true);
+    expect(folded).toHaveLength(10);
+    expect(folded[0]?.label).toContain(" – ");
+    // Under a pointer a ninety-day window is ninety columns.
+    expect(buildBars(summary, 90, false)).toHaveLength(90);
   });
 
   it("omits a source with no runs rather than reporting a zero", () => {
-    const facts = sourceFacts({ ...summary, bySource: [] });
-    expect(facts.map((f) => f.key)).not.toContain("automations");
-    expect(facts.map((f) => f.key)).toContain("spend");
+    expect(sourceFacts({ ...summary, bySource: [] })).toStrictEqual([]);
+    expect(sourceFacts(summary).map((f) => f.key)).toStrictEqual([
+      "automations",
+      "the assistant",
+    ]);
+  });
+
+  it("measures a fully unpriced window in tokens rather than drawing nothing", () => {
+    const unpriced = harnessBreakdown({
+      ...summary,
+      byHarness: [
+        { costUsd: 0, harness: "codex", runs: 2, tokens: 3000 },
+        { costUsd: 0, harness: "claude-code", runs: 1, tokens: 1000 },
+      ],
+    });
+    expect(unpriced.unit).toBe("of tokens");
+    expect(unpriced.meta).toBe("sorted by tokens");
+    expect(unpriced.rows.map((r) => r.weight)).toStrictEqual([3000, 1000]);
   });
 });

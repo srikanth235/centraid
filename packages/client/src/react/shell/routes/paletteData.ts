@@ -9,8 +9,13 @@ import type {
   PaletteGroupIconDTO,
   PaletteRowDTO,
 } from "../../screen-contracts.js";
+import { CAPABILITIES_ON } from "../capabilities.js";
+import type { ShellCapabilities } from "../capabilities.js";
 import { iconSvg } from "../iconSvg.js";
-import { LAUNCHER_DESTINATIONS } from "../launcherModel.js";
+import {
+  LAUNCHER_DESTINATIONS,
+  visibleDestinations,
+} from "../launcherModel.js";
 import type { PaletteConversationSearch } from "./paletteConversationSearch.js";
 import type {
   PaletteEntityHit,
@@ -30,12 +35,19 @@ import type { PaletteRecents } from "./paletteRecents.js";
 // pinned — so two lists that could disagree about a label or drop a
 // destination outright is exactly the failure to design out. A member who
 // reads "Devices" on the stem types "devices" here and gets the same row.
-const NAV_ACTIONS: { label: string; icon: string; route: ShellRoute }[] =
-  LAUNCHER_DESTINATIONS.map((destination) => ({
+// Gated destinations leave the index with the launcher (C1): the palette is
+// the KEYBOARD route to the same places, so a row here for a place the stem
+// stopped offering would be the silent no-op the capability wall exists to
+// prevent — Enter, and a page that cannot load.
+function navActions(
+  capabilities: ShellCapabilities
+): { label: string; icon: string; route: ShellRoute }[] {
+  return visibleDestinations(capabilities).map((destination) => ({
     icon: destination.icon,
     label: destination.label,
     route: destination.route,
   }));
+}
 
 export interface PaletteDeps {
   userApps: readonly UserAppMeta[];
@@ -43,6 +55,9 @@ export interface PaletteDeps {
   /** Dev flag (issue #434, Phase 3) — the "Build a new app…" create row is a
    *  builder entry point, so it only appears when the builder is enabled. */
   builderEnabled: boolean;
+  /** What this gateway offers (C1). Optional so a caller without a live
+   *  handshake (older tests, harnesses) still indexes every destination. */
+  capabilities?: ShellCapabilities;
   tileVariant: AppearancePrefs["tileVariant"];
   navigate: (route: ShellRoute) => void;
   enterBuilder: (initialPrompt?: string) => void;
@@ -229,7 +244,7 @@ export function buildPaletteGroups(
     }
   }
 
-  const navMatches = NAV_ACTIONS.filter(
+  const navMatches = navActions(deps.capabilities ?? CAPABILITIES_ON).filter(
     (n) => !q || n.label.toLowerCase().includes(q)
   );
   if (navMatches.length > 0) {

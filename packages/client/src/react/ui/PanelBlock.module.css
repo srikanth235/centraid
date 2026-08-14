@@ -61,6 +61,46 @@
   padding-inline-start: var(--sp-3);
 }
 
+/* The promoted figure (#775). The display rung is the whole mechanism: the
+   same string at the fact rung is one 13px value among thirty, and a member
+   asking "did this month cost $2 or $200" has to read to find out. The label
+   above it and the qualifier under it are the two lines that stop a big number
+   being a claim it cannot support. */
+
+.figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.figureLabel {
+  color: var(--text-faint);
+  font: var(--t-eyebrow);
+  margin: 0;
+}
+
+/* Numeric register at the display rung: a headline figure is still a number,
+   so it keeps tabular figures and its own direction. */
+.figureValue {
+  color: var(--text);
+  direction: var(--t-mono-direction);
+  font: var(--t-display);
+  font-variant-numeric: var(--t-mono-numeric);
+  margin: 0;
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+.figure[data-net="true"] .figureValue {
+  color: var(--net);
+}
+
+.figureQualifier {
+  color: var(--text-soft);
+  font: var(--t-small);
+  margin: 0;
+  text-wrap: pretty;
+}
+
 .facts {
   display: flex;
   flex-direction: column;
@@ -100,6 +140,17 @@
 
 .factValue[data-net="true"] {
   color: var(--net);
+}
+
+/* A caveat that belongs to one fact: its own line under the value, in the
+   quietest ink and OUT of the numeric register — a caveat is a sentence. */
+.factNote {
+  color: var(--text-faint);
+  display: block;
+  font: var(--t-small);
+  font-variant-numeric: normal;
+  padding-block-start: var(--sp-1);
+  text-wrap: pretty;
 }
 
 .actions {

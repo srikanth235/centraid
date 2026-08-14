@@ -21,7 +21,10 @@ import {
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "../../lib/replica/mobile-gateway-compatibility-core";
-import type { MobileCompatibilityDisposition } from "../../lib/replica/mobile-gateway-compatibility-core";
+import type {
+  MobileCompatibilityDisposition,
+  MobileGatewayFeatures,
+} from "../../lib/replica/mobile-gateway-compatibility-core";
 import { MultiVaultReplicaReader } from "../../lib/replica/multi-vault-reader";
 import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
 import { MultiVaultReplicaSession } from "../../lib/replica/multi-vault-session";
@@ -103,6 +106,14 @@ export interface ReplicaContextValue {
   refresh?: () => Promise<void>;
   /** C1(b) is a blocking wall: no route-specific degraded modes on skew. */
   compatibility?: MobileCompatibilityDisposition;
+  /**
+   * Which experimental gateway features are switched on, off the one `/info`
+   * answer the compatibility wall already fetched (C1: detected once, never
+   * per screen). `undefined` means no gateway has answered yet this launch —
+   * UNKNOWN, not off, so a surface stays visible until the gateway actually
+   * says otherwise, the same rule the wall itself follows offline.
+   */
+  features?: MobileGatewayFeatures;
   error?: string;
   /** The real signal behind the `out of room` state (#708): the driver hit
    *  SQLITE_FULL/ENOSPC opening or reading a replica. */
@@ -215,7 +226,9 @@ export function ReplicaProvider({
               }
             : await resolveIdentity(activeRef.current);
         if (cancelled) return;
-        await requireMobileOfflineGateway({
+        // The same call that raises the wall also reports what this gateway
+        // switched on — one `/info` read, not one per gated surface.
+        let features = await requireMobileOfflineGateway({
           baseUrl: identity.auth.baseUrl,
           online: identity.online,
         });
@@ -428,10 +441,14 @@ export function ReplicaProvider({
             // letting pulls proceed against a wire contract this build does
             // not speak.
             try {
-              await requireMobileOfflineGateway({
-                baseUrl: liveBase,
-                online: true,
-              });
+              // The answer that re-raises the wall is also the answer that
+              // settles the feature flags, so a gateway switched on (or off)
+              // since launch is picked up here rather than at next cold start.
+              features =
+                (await requireMobileOfflineGateway({
+                  baseUrl: liveBase,
+                  online: true,
+                })) ?? features;
             } catch (wallError) {
               if (wallError instanceof MobileGatewayCompatibilityError) {
                 setBuilt((current) =>
@@ -467,6 +484,7 @@ export function ReplicaProvider({
                   value: {
                     ...current.value,
                     ...(liveBase ? { gatewayBase: liveBase } : {}),
+                    ...(features ? { features } : {}),
                     online: connected,
                     reachability: deviceOnline
                       ? liveBase
@@ -523,6 +541,7 @@ export function ReplicaProvider({
             })),
             bootstrapProgress: [...bootstrapProgress.values()],
             ready: true,
+            ...(features ? { features } : {}),
             online: connected,
             // `device-offline`, not `gateway-asleep`: at this instant phase A
             // has looked only at disk (mount-plan.ts), so nothing is known

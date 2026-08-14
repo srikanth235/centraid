@@ -112,7 +112,10 @@ async function mountUnauthed(
 describe("build-gateway scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`build-gateway-${crypto.randomUUID()}-`);
-    gateway = await buildGateway({ paths: pathsUnder(dataDir) });
+    gateway = await buildGateway({
+      paths: pathsUnder(dataDir),
+      experimental: { automations: true, connectors: true },
+    });
   }, 30_000);
 
   afterEach(async () => {
@@ -711,6 +714,7 @@ describe("build-gateway scenarios", () => {
     const secret = "compiled-route-secret";
     gateway = await buildGateway({
       paths: pathsUnder(dataDir),
+      experimental: { automations: true, connectors: true },
       dataPlaneControl: {
         secret,
         authorize: (endpointId) => ({ allowed: endpointId === "device-a" }),

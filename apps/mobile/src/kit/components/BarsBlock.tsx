@@ -16,13 +16,25 @@ import { View } from "react-native";
 import { useTheme } from "../theme";
 import { barColumns } from "./bars-model";
 import type { BarDatum } from "./bars-model";
-import { COLUMN_COUNT, styles } from "./BarsBlock.styles";
+import { columnGap, MAX_COLUMNS, styles } from "./BarsBlock.styles";
 import { Text } from "./NativeText";
 
 export interface BarsBlockProps {
   data: readonly BarDatum[];
-  /** The three axis marks, oldest → newest. */
-  axis: readonly [string, string, string];
+  /**
+   * The marks along the axis, oldest → newest, spread across the plot.
+   *
+   * TWO OR MORE, and the count is the caller's (#775). It was a fixed triple
+   * while the only marks it carried were the relative words "30 days ago /
+   * halfway / today" — words a fold into real dates has no use for.
+   */
+  axis: readonly string[];
+  /**
+   * One line under the chart naming what the eye just found — the peak day and
+   * what it cost. The plot has no value axis, so this is the only place a
+   * column's actual magnitude is ever stated.
+   */
+  note?: string;
   /** The two outcome words. OPTIONAL as a PAIR — a chart that names one
    *  outcome and not the other has spent the colour without explaining it, so
    *  either both words are given or the legend row is not drawn (the DOM kit's
@@ -36,12 +48,18 @@ export interface BarsBlockProps {
 export default function BarsBlock({
   data,
   axis,
+  note,
   legendSucceeded,
   legendFailed,
   accessibilityLabel,
 }: BarsBlockProps): React.JSX.Element {
   const { colors } = useTheme();
-  const columns = useMemo(() => barColumns(data, COLUMN_COUNT), [data]);
+  // MAX_COLUMNS is a guard, not a fold: the caller decides how many days a
+  // column covers (`dayFold`), and at every window this phone can be asked
+  // about that is one column per day up to a month. Sampling inside the block
+  // is what made a spike disappear without the screen ever knowing (#775).
+  const columns = useMemo(() => barColumns(data, MAX_COLUMNS), [data]);
+  const gap = useMemo(() => ({ gap: columnGap(columns.length) }), [columns]);
   const ink = useMemo(
     () => ({
       block: { backgroundColor: colors.bgElev, borderColor: colors.line },
@@ -49,6 +67,7 @@ export default function BarsBlock({
       failedLabel: { color: colors.net },
       faint: { color: colors.textFaint },
       legend: { borderTopColor: colors.line },
+      noteInk: { color: colors.textSoft },
       succeeded: { backgroundColor: colors.textFaint },
     }),
     [colors]
@@ -58,7 +77,7 @@ export default function BarsBlock({
       <View
         accessibilityLabel={accessibilityLabel}
         accessibilityRole="image"
-        style={styles.chart}
+        style={[styles.chart, gap]}
       >
         {columns.map((column) => (
           <View
@@ -96,6 +115,7 @@ export default function BarsBlock({
           </Text>
         ))}
       </View>
+      {note ? <Text style={[styles.note, ink.noteInk]}>{note}</Text> : null}
       {legendSucceeded && legendFailed ? (
         <View style={[styles.legend, ink.legend]}>
           <Text style={[styles.legendLabel, ink.faint]}>{legendSucceeded}</Text>

@@ -12,6 +12,8 @@ import type { IconName } from "@centraid/design";
 
 import Icon from "../ui/Icon.js";
 import Logo from "../ui/Logo.js";
+import { CAPABILITIES_ON } from "./capabilities.js";
+import type { ShellCapabilities } from "./capabilities.js";
 import { bandDestinations, pinnedDestinations } from "./launcherModel.js";
 import type {
   LauncherDestination,
@@ -148,6 +150,11 @@ export interface StemProps {
   /** Which ramp is painting, so the icon chip's tint comes from the design
    *  package (13% light / 20% dark) rather than a literal in the stylesheet. */
   scheme?: "light" | "dark";
+  /** What this gateway offers (C1). A destination behind a gate this gateway
+   *  does not advertise is not dimmed or disabled — it is not a place, so it
+   *  does not stand in the band. Defaulted so a stem rendered outside the
+   *  shell root (tests, harnesses) shows the full launcher. */
+  capabilities?: ShellCapabilities;
 }
 
 /**
@@ -282,10 +289,11 @@ export default function Stem({
   ledger,
   compact = false,
   scheme = "dark",
+  capabilities = CAPABILITIES_ON,
 }: StemProps): JSX.Element {
   const tint = ICON_CHIP_TINT[scheme];
-  const band = bandDestinations(pins);
-  const items = compact ? band.items : pinnedDestinations(pins);
+  const band = bandDestinations(pins, capabilities);
+  const items = compact ? band.items : pinnedDestinations(pins, capabilities);
 
   return (
     <nav

@@ -78,6 +78,61 @@ describe("ui/PanelBlock", () => {
     expect(values[1]?.dataset.net).toBe("true");
   });
 
+  it("keeps a fact's caveat under the fact it qualifies, out of the numeric register", () => {
+    const el = mount(
+      <PanelBlock
+        facts={[
+          {
+            key: "harness runs",
+            mono: true,
+            note: "Measured, not limited by Conserve.",
+            value: "3 runs · 9.0s active",
+          },
+          { key: "sweeps", mono: true, value: "2 passes" },
+        ]}
+      />
+    );
+    const notes = [...el.querySelectorAll(".factNote")];
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.textContent).toBe("Measured, not limited by Conserve.");
+    // It lives inside the value it qualifies, not at the foot of the panel.
+    expect(el.querySelectorAll("dd")[0]?.contains(notes[0] ?? null)).toBe(true);
+  });
+
+  it("promotes one fact to the display rung, with what it is and what it leaves out", () => {
+    const el = mount(
+      <PanelBlock
+        figure={{
+          label: "At least · 30 days",
+          qualifier: "$2.10 harness-reported · 1 unpriced.",
+          value: "$3.40",
+        }}
+      />
+    );
+    expect(el.querySelector(".figureLabel")?.textContent).toBe(
+      "At least · 30 days"
+    );
+    expect(el.querySelector(".figureValue")?.textContent).toBe("$3.40");
+    expect(el.querySelector(".figureQualifier")?.textContent).toBe(
+      "$2.10 harness-reported · 1 unpriced."
+    );
+  });
+
+  it("draws no figure at all rather than an empty one, and tones bad news", () => {
+    const plain = mount(<PanelBlock title="Nothing promoted" />);
+    expect(plain.querySelector(".figure")).toBeNull();
+    act(() => root?.unmount());
+    root = null;
+    container?.remove();
+    const bad = mount(
+      <PanelBlock figure={{ label: "Failed", net: true, value: "12" }} />
+    );
+    expect((bad.querySelector(".figure") as HTMLElement).dataset.net).toBe(
+      "true"
+    );
+    expect(bad.querySelector(".figureQualifier")).toBeNull();
+  });
+
   it("quotes the body only when it is somebody else's words", () => {
     const quoted = mount(<PanelBlock body="Tom — the survey arrived." quote />);
     expect((quoted.querySelector(".body") as HTMLElement).dataset.quote).toBe(

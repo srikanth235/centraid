@@ -11,6 +11,7 @@ export { GATEWAY_PROTOCOL_VERSION as EXPECTED_PROTOCOL_VERSION } from "./version
 
 export {
   DEFAULT_GATEWAY_CAPABILITIES,
+  OPTIONAL_GATEWAY_CAPABILITIES,
   isGatewayCapabilities,
   type GatewayCapabilities,
 } from "./capabilities.js";

@@ -87,6 +87,9 @@ export interface InsightsKpis {
   /** Runs in the window that finished badly. Window-wide only: the daily
    *  rollup carries no per-day outcome split (see `InsightsDailyPoint`). */
   failedRuns: number;
+  /** What the failed runs cost. Money spent on work that did not land is the
+   *  one spend figure a member can act on directly. */
+  failedCostUsd: number;
   appsTouched: number;
   /** NOT served by the current gateway rollup (`InsightsKpis` in
    *  `packages/app-engine/src/insights/insights-types.ts` has no quota at
@@ -129,11 +132,32 @@ export interface InsightsAttention {
   costUsd: number;
 }
 
+export interface InsightsHarnessRow {
+  harness: string;
+  runs: number;
+  tokens: number;
+  costUsd: number;
+}
+
 export interface InsightsModelRow {
   model: string;
   runs: number;
   tokens: number;
   costUsd: number;
+}
+
+/** The window's most expensive day, and what most of it went on. */
+export interface InsightsPeakDay {
+  date: string;
+  tokens: number;
+  costUsd: number;
+  topSources: Array<{
+    key: string;
+    label: string;
+    kind: string;
+    tokens: number;
+    costUsd: number;
+  }>;
 }
 
 export interface InsightsEffortRow {
@@ -166,9 +190,11 @@ export interface InsightsSummary {
   kpis: InsightsKpis;
   daily: InsightsDailyPoint[];
   bySource: InsightsSourceRow[];
+  byHarness: InsightsHarnessRow[];
   byModel: InsightsModelRow[];
   byEffort: InsightsEffortRow[];
   recent: InsightsActivityRow[];
+  peakDay?: InsightsPeakDay;
   attention?: InsightsAttention;
 }
 

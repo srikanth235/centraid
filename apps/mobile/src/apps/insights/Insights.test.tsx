@@ -130,13 +130,15 @@ function summaryOf(over: Partial<InsightsSummary> = {}): InsightsSummary {
         tokens: 100,
       },
     ],
-    byEffort: [],
+    byEffort: [{ costUsd: 2, effort: "high", runs: 60, tokens: 100 }],
+    byHarness: [{ costUsd: 2, harness: "claude-code", runs: 60, tokens: 100 }],
     byModel: [],
     daily: [{ costUsd: 2, date: "2026-08-13", runs: 60, tokens: 100 }],
     generatedAt: ANCHOR,
     kpis: {
       appsTouched: 2,
       estimatedCostUsd: 0,
+      failedCostUsd: 0.5,
       failedRuns: 2,
       forecastCostUsd: 9,
       generations: 312,
@@ -319,9 +321,17 @@ describe(InsightsScreen, () => {
     const spans = textOf(container);
     expect(spans).toContain("312 runs · 2 failed");
     expect(ariaLabels(container)).toContain(
-      "Runs per day over the last 30 days"
+      "Spend per day over the last 30 days"
     );
-    expect(spans).toContain("30 days ago");
+    // Real dates on the axis, and the promoted figure the page opens with.
+    expect(spans).toContain("15 Jul");
+    expect(spans).toContain("Spend · 30 days");
+    expect(spans).toContain("$2.00");
+    // The breakdowns the gateway was already computing (#775).
+    expect(ariaLabels(container)).toContain("Spend by harness");
+    expect(ariaLabels(container)).toContain("Spend by effort");
+    expect(spans).toContain("claude-code");
+    expect(spans).toContain("100% of spend");
     expect(spans).toContain("automations");
     expect(spans).toContain("Recent runs");
     expect(spans).toContain("Failed · Automation · $0.42 · 1.2k tokens");
@@ -333,6 +343,31 @@ describe(InsightsScreen, () => {
     expect(spans).toContain(
       "99% of runs succeeded · The gateway has been up for 21 days."
     );
+  });
+
+  it("gives bad news a subject and a verb (#775)", async () => {
+    wire.health.mockResolvedValue({
+      ...health,
+      components: [
+        { component: "storage", errorCount: 0, status: "ok" },
+        { component: "outbox", errorCount: 3, status: "error" },
+      ],
+    });
+    const container = await render();
+    // "1 of 2 healthy" told a member something was wrong and nothing about
+    // WHAT, with nowhere to go about it.
+    const spans = textOf(container);
+    expect(spans).toContain("1 of 2 healthy");
+    expect(spans).toContain("Not healthy: outbox.");
+    press(labelled(container, "See what’s wrong"));
+    expect(navigation.navigate).toHaveBeenCalledWith("Insights", {
+      initialTab: "alerts",
+    });
+  });
+
+  it("offers no verb about the gateway when nothing is wrong with it", async () => {
+    const container = await render();
+    expect(labelled(container, "See what’s wrong")).toBeNull();
   });
 
   it("opens the automation a failed run belongs to", async () => {
@@ -356,9 +391,9 @@ describe(InsightsScreen, () => {
     const spans = textOf(container);
     expect(wire.summary).toHaveBeenLastCalledWith(7);
     expect(spans).toContain("41 runs");
-    expect(spans).toContain("7 days ago");
+    expect(spans).toContain("7 Aug");
     expect(ariaLabels(container)).toContain(
-      "Runs per day over the last 7 days"
+      "Spend per day over the last 7 days"
     );
     // And it is remembered, under the key the desktop leg reads.
     expect(wire.prefs).toHaveBeenCalledWith(
@@ -377,7 +412,7 @@ describe(InsightsScreen, () => {
     const container = await render();
     expect(wire.summary).toHaveBeenLastCalledWith(90);
     expect(ariaLabels(container)).toContain(
-      "Runs per day over the last 90 days"
+      "Spend per day over the last 90 days"
     );
   });
 

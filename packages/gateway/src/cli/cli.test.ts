@@ -178,6 +178,23 @@ describe("cli scenarios", () => {
     expect(full.harness?.binPath).toBe("/opt/bin/codex");
   });
 
+  test("validateConfig accepts a known experimental feature and rejects the rest", () => {
+    const config = validateConfig({
+      dataDir: "/tmp/x",
+      experimental: { automations: true, connectors: false },
+    });
+    expect(config.experimental).toStrictEqual({
+      automations: true,
+      connectors: false,
+    });
+    expect(() =>
+      validateConfig({ dataDir: "/tmp/x", experimental: { teleport: true } })
+    ).toThrow(DaemonConfigError);
+    expect(() =>
+      validateConfig({ dataDir: "/tmp/x", experimental: { automations: "on" } })
+    ).toThrow(DaemonConfigError);
+  });
+
   test("buildPrefsPatch clears every harness key when no harness is configured", () => {
     const patch = buildPrefsPatch({ dataDir: "/x" });
     // No harness → every key must clear to null so a removed entry in the

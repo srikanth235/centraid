@@ -1,0 +1,90 @@
+/* Distribution rows (#775) — the `Progress` recipe's first React lowering.
+
+   The recipe's rest is `--bg-sunken`, `--accent-fill`, `--r-pill`, `--dur-2`
+   and `--t-mono`, and all five appear below: the track is the sunken ground,
+   the fill is the ink action fill, both are pill-capped so a one-percent row is
+   still a shape rather than a sliver, the width settles on the entry duration
+   when the window changes under it, and every figure is in the numeric
+   register.
+
+   The label sits in `--w-key-col` — the same fixed column a panel's fact keys
+   take — so a distribution stacked under a panel lines up with it instead of
+   starting a second grid. The bar takes the space between the label and the
+   figures, which is what keeps every bar's baseline and both ends aligned down
+   the block: a bar sized by its own row would be four ragged edges. */
+
+.distribution {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: var(--sp-4);
+}
+
+.distRow {
+  align-items: center;
+  display: flex;
+  gap: var(--sp-3);
+}
+
+/* One line, always: a wrapping label would step the row off the bar. */
+.name {
+  color: var(--text);
+  flex: none;
+  font: var(--t-annot-label);
+  inline-size: var(--w-key-col);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.value {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  gap: var(--sp-3);
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.track {
+  background: var(--bg-sunken);
+  block-size: var(--sp-2);
+  border-radius: var(--r-pill);
+  display: block;
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
+.fill {
+  background: var(--accent-fill);
+  block-size: 100%;
+  border-radius: var(--r-pill);
+  display: block;
+  inline-size: calc(var(--dist-share, 0) * 1%);
+  transition: inline-size var(--dur-2) var(--ease);
+}
+
+.share {
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  text-align: end;
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+.amount {
+  color: var(--text);
+  direction: var(--t-mono-direction);
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  text-align: end;
+  unicode-bidi: var(--t-mono-bidi);
+}
