@@ -227,6 +227,61 @@ jobs:
       # their source is offline and fast, so it gates on the per-PR loop.
       - run: bun run lint:e2e-flows
 
+  # #782 — the ~19 gates in `check:push` that had NO CI job at all. They ran
+  # only on a developer's machine, and receipts (#765, #731) show `check:push`
+  # being skipped locally, so "enforced by the pre-push hook" was enforcement in
+  # name only. These are all offline, deterministic Node scripts with no
+  # toolchain beyond `bun install`, so they cost a few seconds each and belong
+  # on the required per-PR loop.
+  #
+  # Deliberately NOT here (tracked in #781 for the excluded lanes):
+  #   - `design:gallery` — needs a downloaded Playwright browser; that is an
+  #     install + network dependency, not a static check.
+  #   - `check:mobile-native-state` — a path filter that shells out to
+  #     `apps/mobile ci:native-state`, which `mobile-smoke` already runs on
+  #     exactly the diffs that matter. Duplicating it here buys nothing.
+  #   - `test:qualities` — needs every package's `dist/`, so it rides `verify`
+  #     (which already builds) rather than paying for a second full build.
+  # Everything else in `check:push` is already covered by `static` or `verify`.
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # check:ui-receipt, lint:quality-knobs and lint:schema-export resolve
+          # a merge-base against origin/main; a shallow clone has none.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Fetch origin/main for merge-base gates
+        run: git fetch --no-tags origin main 2>/dev/null || true
+      # Share/deep-link reachability: every share surface must be reachable from
+      # a route the user can actually get to (TS AST walk, no build needed).
+      - run: bun run check:reachability
+      # Design-system consumer linters. DESIGN.md is the binding rulebook; these
+      # are the machine-checkable half of it (docs/design-machinery.md).
+      - run: bun run lint:design-tokens
+      - run: bun run lint:mobile-design
+      - run: bun run lint:logical-insets
+      - run: bun run lint:hairline
+      - run: bun run lint:aria-labels
+      - run: bun run lint:container-opacity
+      - run: bun run lint:type-floor
+      - run: bun run lint:motion-rule
+      # Lints DESIGN.md itself (structure of the rulebook, not its consumers).
+      - run: bun run lint:design-md
+      # Engine/law invariants: shared engines conform to their declared
+      # contracts, and every law in the registry is wired to a real enforcer.
+      - run: bun run lint:engine-conformance
+      - run: bun run lint:law-registry
+      # Quality knobs and schema exports ratchet — tighten-only vs origin/main.
+      - run: bun run lint:quality-knobs
+      - run: bun run lint:schema-export
+      # A UI-touching PR must carry a UI receipt.
+      - run: bun run check:ui-receipt
+      # Quarantined tests must be declared, attributed, and not expired.
+      - run: bun run test:quarantine
+
   verify:
     runs-on: ubuntu-latest
     # Full V8 coverage can exceed 25 minutes on a slow hosted runner even
@@ -259,6 +314,11 @@ jobs:
       # Rust format compatibility and the language-independent byte-plane
       # lifecycle contract are non-negotiable rollout gates (N0a/N0b).
       - run: bun run --cwd packages/tunnel test:data-plane
+      # #782 — the user-facing-qualities lane (matrix cells R4/D4/U3) was a
+      # `check:push` gate with no CI job. It spawns real gateways and imports
+      # workspace packages by their published entry points, so it needs the
+      # `bun run build` above; that is why it rides here and not in `gates`.
+      - run: bun run test:qualities
       # Issue #456's real-gateway budget gate. Linux strace supplies an exact
       # fsync/write count; losing that signal is itself a benchmark failure.
       - run: sudo apt-get update && sudo apt-get install --yes strace
@@ -692,6 +752,7 @@ jobs:
       [
         changes,
         static,
+        gates,
         verify,
         mutation-pr,
         client-e2e,

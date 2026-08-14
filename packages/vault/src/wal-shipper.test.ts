@@ -6,13 +6,14 @@ import { createHash } from "node:crypto";
 // node:sqlite, real files — no mocks). Detector (G5), crash-ordering (G7)
 // and generation-lifecycle tests live in wal-shipper-detectors.test.ts.
 import {
-  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -299,7 +300,15 @@ describe("wal-shipper", () => {
       status.generation,
       "00000000"
     );
-    chmodSync(groupDir, 0o500);
+    // Fault injection that no uid can bypass: stash the group dir aside and
+    // leave a regular FILE in its place. The shipper's durable segment write
+    // starts with `mkdirSync(dirname(file), { recursive: true })`, which
+    // refuses to treat a non-directory as a directory for root exactly as for
+    // anyone else. A permission bit would not do: root ignores directory mode
+    // bits, so the write the assertions below expect to fail would succeed.
+    const stashedGroupDir = `${groupDir}.stashed`;
+    renameSync(groupDir, stashedGroupDir);
+    writeFileSync(groupDir, "");
     try {
       clock += 1000;
       const r = shipper.tick();
@@ -314,10 +323,11 @@ describe("wal-shipper", () => {
       expect(shipper.status().dbs.vault!.offset).toBe(offsetBefore);
       expect(walSize("vault")).toBe(walSizeBefore);
     } finally {
-      chmodSync(groupDir, 0o755);
+      rmSync(groupDir, { force: true });
+      renameSync(stashedGroupDir, groupDir);
     }
 
-    // After fixing permissions, the SAME range ships.
+    // With the group dir back, the SAME range ships.
     clock += 1000;
     const r2 = shipper.tick();
     expect(r2.errors).toStrictEqual([]);

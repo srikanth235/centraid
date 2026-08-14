@@ -179,7 +179,7 @@ Photos uses `@testing-library/react-native` on Vitest, not Jest, Detox, or Appiu
 
 Production application components and JS helpers stay real. Mocks are limited to native host/device seams: AsyncStorage, Expo device services, replica/data providers, `expo-image`, `react-native-svg`, and media URI resolution. A future direct `op-sqlite`, FlashList measurement, or RNGH dependency receives an import-typed seam mock; it must not replace the component or its pure model. Recognizer precedence, native modal layering, pinch/pan/swipe, keyboard alignment, and denied OS permissions remain Maestro claims.
 
-`apps/mobile/src/apps/photos/photos-fixtures.ts` is the deterministic in-process corpus shared by pure and component tests. The device seed separately provides 19 byte-bearing assets across months and years, one video, the Tahoe album/place, and named people. The five structural journeys and their under-eight-minute aggregate budget are listed in the Photos table below; `photos-budget.md` owns the tighten-only response. Offline write/reconnect replay is a separate host-network journey (#717), not a sixth Photos UI flow.
+`apps/mobile/src/apps/photos/photos-fixtures.ts` is the deterministic in-process corpus shared by pure and component tests. The device seed separately provides 19 byte-bearing assets across months and years, one video, the Tahoe album/place, and named people. The five structural journeys and their under-eight-minute aggregate budget are listed in the Photos table below; `photos-budget.md` owns the tighten-only response. Offline write/reconnect replay would be a separate host-network journey, not a sixth Photos UI flow — it is **not yet built**, and [#781](https://github.com/srikanth235/centraid/issues/781) tracks the gap (originally #717).
 
 ### Photos scenario × layer contract (#716)
 
@@ -199,7 +199,7 @@ This table is the reference instance of the app admission contract above. It rec
 | permission-refused behavior (empty-device takeover / seeded-vault continuity) | ✅ | ✅ | ✅ | access predicate/copy proves both branches; panel component and `photos-permissions.mjs` own the empty-vault takeover on a denied device grant |
 | selection trash + restore write | ✅ | — | ✅ | write batch units; `photos-select-write.mjs` |
 
-The five Photos device journeys use one gateway and paired profile and target **under eight minutes together per platform**. The denied-permission flow runs first against an explicitly purged vault; the next flow seeds the deterministic scenario for the remaining journeys through normal replica sync. The operational response to a budget breach lives beside them in [`photos-budget.md`](tests/agent-e2e-mobile/flows/photos-budget.md). Mobile offline write/reconnect replay remains a separate reliability journey because it requires host network control rather than a sixth Photos UI path; [#717](https://github.com/srikanth235/centraid/issues/717) owns that reliability contract.
+The five Photos device journeys use one gateway and paired profile and target **under eight minutes together per platform**. The denied-permission flow runs first against an explicitly purged vault; the next flow seeds the deterministic scenario for the remaining journeys through normal replica sync. The operational response to a budget breach lives beside them in [`photos-budget.md`](tests/agent-e2e-mobile/flows/photos-budget.md). Mobile offline write/reconnect replay belongs to a separate reliability journey because it requires host network control rather than a sixth Photos UI path. No such journey exists yet; [#781](https://github.com/srikanth235/centraid/issues/781) tracks the missing contract (originally #717).
 
 ## Five testing layers for the app axis (#725)
 
@@ -246,22 +246,24 @@ Timeouts come in two tiers. Node projects — the `node:sqlite` ones, which boot
 
 The deeply gated engine is vault, client replica, gateway, app-engine, automation, backup, blueprints (including its co-located app sources), design (tokens + the kit runtime), agent-runtime, plus pure libraries tunnel, protocol, and cli. Renderer screens and mobile UI are covered by extracted logic plus journeys, not by a whole-surface line percentage. `packages/client/src/replica/**` is gated independently from `packages/client/src/react/**` for that reason.
 
-Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and are consumed directly by the root Vitest config. Floors are a conservative integer margin below the latest measured `bun run coverage` run (2026-08-08; 1,065 files / 11,719 tests):
+Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and are consumed directly by the root Vitest config — that file, not this table, is the enforced contract. Floors are a conservative integer margin below the measured `bun run coverage` run that seeded them; most were seeded by the 2026-08-08 run (1,065 files / 11,719 tests **as of that run** — the suite has grown since, so treat the counts as the measurement's provenance, not a current census). A row whose floor was re-seeded by a later issue carries that issue's measurement instead, and says so.
 
 | Scope | Measured lines / branches | Floor lines / branches |
 | --- | --- | --- |
 | repo-wide (`lines`) | 63.05 / — | **62** / — |
-| `packages/vault/src/**` | 88.57 / 75.24 | **88** / **74** |
+| `packages/vault/src/**` | 87.7 / 73.9 (#638) | **87** / **73** |
 | `packages/backup/src/**` | 90.03 / 77.63 | **90** / **74** |
+| `packages/blob-format/src/**` | — / — | **98** / **96** |
 | `packages/blueprints/src/**` | 90.68 / 78.27 | **90** / **75** |
 | `packages/blueprints/apps/photos/**` | 46.82 / 42.81 | **44** / **40** |
 | `_shared` + non-graduated blueprint apps | 22.53 / 16.92 | **20** / **14** |
 | `packages/model-runtime/src/**` | 68.01 / 51.44 | **66** / **49** |
 | `packages/design/kit/**` | 49.56 / 37.27 | **49** / **37** |
-| `packages/design/src/**` | 99.03 / 71.42 | **98** / **70** |
+| `packages/design/src/**` | 95.1 / — (#709) | **94** / **70** |
 | `packages/app-engine/src/**` | 85.45 / 74.44 | **84** / **73** |
-| `packages/gateway/src/**` | 79.98 / 66.37 | **80** / **65** |
+| `packages/gateway/src/**` | 79.9 / 66.37 (#638) | **79** / **65** |
 | `packages/time-engine/src/**` | 84.5 / 67.0 | **82** / **65** |
+| `packages/client/src/*.{ts,tsx}` | — / — | **78** / **65** |
 | `packages/client/src/replica/**` | 76.82 / 63.37 | **75** / **62** |
 | `packages/client/src/react/**` | 67.58 / 56.31 | **65** / **54** |
 | `packages/automation/src/**` | 84.36 / 77.52 | **82** / **75** |
@@ -269,7 +271,10 @@ Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and ar
 | `packages/agent-runtime/src/**` | 86.4 / 76.29 | **84** / **75** |
 | `packages/cli/src/**` | 84.50 / 82.85 | **83** / **81** |
 | `packages/protocol/src/**` | 100.00 / 98.59 | **98** / **96** |
+| `apps/desktop/src/main/*-core.ts` | — / — | **96** / **89** |
 | `apps/oauth-worker/src/**` | 90.65 / 84.23 | **88** / **82** |
+
+Three rows read `—` rather than a number because the measurement that seeded them is not recorded in `tests/coverage-floors.json`; the floor is still enforced, and the next `bun run coverage` that touches those scopes is what fills the column in. `packages/vault` and `packages/gateway` carry the [#638](https://github.com/srikanth235/centraid/issues/638) re-seed (the #630 vault expansion diluted the older 88/80 seeds) and `packages/design/src` the [#709](https://github.com/srikanth235/centraid/issues/709) re-seed measured on CI verify run 30901194404; those provenance notes live in the JSON's `approvedDeviation`.
 
 The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/design/kit`. Issue #725 graduates Photos to its own scope; the remaining blend covers `_shared` and the seven apps without graduation tables yet. The split is measured on the complete 2026-08-08 run, with the down-only change from the old 17/12 blend documented in `tests/coverage-floors.json`. Real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here. The `packages/model-runtime` scope covers recognition model/build sources; its live model lane is intentionally separate from PR coverage.
 
@@ -317,7 +322,7 @@ Deterministic automation fires need no mock: their handlers run in-process again
 
 | Command / workflow | Contents |
 | --- | --- |
-| `bun run check:pr` | **Before every push:** format + oxlint + turbo lint + typecheck + lint:types + knip + lint:css + test:matrix + **test:ratchet** + **test:ratchet:unit** + **test:affected**. Superset of CI `static` (which omits `test:affected`; full vitest is on `verify`). Vitest alone is not a substitute. |
+| `bun run check:pr` | **Before every push:** `bun install --frozen-lockfile`, then `check:push` — the ~40-gate deterministic chain driven by [`scripts/ci/run-gates.mjs`](scripts/ci/run-gates.mjs), whose argument list in `package.json` is the authoritative enumeration — plus `typecheck`, `lint:types`, `lint:workflow-pins`, and `check:diff-coverage`. Do not restate the gate list here; read the script's arguments. Vitest alone is not a substitute. |
 | `bun run check:full` | `check:pr` plus affected dependents, unified coverage, affected mutation/perf, and desktop/web e2e. Required before requesting merge when shared infrastructure changed. |
 | `bun run test` | package unit + integration + contract tests; prints floors |
 | `bun run test:affected` | vitest for packages changed since `origin/main` (`turbo --filter='[origin/main]'` — changed packages only; dependents stay on full CI `verify`) |
@@ -325,7 +330,7 @@ Deterministic automation fires need no mock: their handlers run in-process again
 | `bun run test:ratchet` | coverage floors + `minimumTests` + mutation floors up-only, and perf budgets tighten-only, vs `origin/main` |
 | `bun run test:ratchet:unit` | Unit tests for the ratchet / diff-coverage pure functions (`scripts/test-report/vitest.config.ts`) |
 | `bun run test:diff-coverage` | changed instrumentable lines vs merge base must be ≥ **80%** covered (`coverage-final.json`); CI `verify` after `coverage` |
-| `bun run test:mutation` | StrykerJS on all eight property-defended seeds (nightly); writes `artifacts/mutation/scores.json` |
+| `bun run test:mutation` | StrykerJS on all sixteen property-defended seeds (nightly); writes `artifacts/mutation/scores.json` |
 | `bun run test:mutation:pr` | Per-PR: Stryker on **affected** seeds only + enforce mutation floors |
 | `bun run test:perf:pr` | Per-PR: gateway low-end budget gate (also verify CI step) |
 | `bun run coverage` | unified per-PR suite, v8 report, floor enforcement, Vitest JSON (`ci.yml` **verify** job) |
@@ -333,8 +338,10 @@ Deterministic automation fires need no mock: their handlers run in-process again
 | `bun run test:perf` | hot-path budget tests; nightly only |
 | `bun run test:scale` | deterministic volume tests; nightly only |
 | `bun run test:report` | build `dist/test-report/index.html` (+ `summary.json` / `summary.md`) from available evidence |
-| `.github/workflows/ci.yml` | parallel **static** + **verify**, required **check** aggregator (ruleset-required); **publish-report** on main only (Pages); Bun/Turbo/Cargo caches |
+| `.github/workflows/ci.yml` | parallel **static** + **gates** + **verify**, required **check** aggregator (ruleset-required); **publish-report** on main only (Pages); Bun/Turbo/Cargo caches |
 | `.github/workflows/e2e.yml` | desktop, web, mobile (iOS + Android home-loads), pairing, perf, scale, **mutation**, full report → **publish-nightly-report** on main only; red scheduled nightly → auto-issue |
+
+A gate that runs only in `check:push` is a gate nobody can be required to pass: it is skippable by pushing without it, and a broken `main` cannot be attributed. CI's `gates` job exists to close that hole — it carries the deterministic design/governance gates (reachability, the design-token/mobile-design/logical-insets/hairline/aria-label/container-opacity/type-floor/motion-rule linters, `lint:design-md`, engine-conformance, law-registry, quality-knobs, schema-export, `check:ui-receipt`, `test:quarantine`) and feeds the required `check` aggregator; `test:qualities` rides `verify` because it needs `bun run build` first. Two `check:push` gates still have **no** CI lane and are therefore local-only honour system: **`design:gallery`** (needs committed baseline images and a renderer) and **`check:mobile-native-state`** (distinct from `mobile-smoke`'s path-gated `apps/mobile ci:native-state`). [#781](https://github.com/srikanth235/centraid/issues/781) tracks both. `check:pr` remains a superset of CI in one further respect: it runs `test:affected`, where CI runs the full vitest suite on `verify` instead.
 
 ### Test-health report (main + nightly)
 
@@ -443,7 +450,7 @@ Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on 16 property-defended cor
 - `packages/tunnel` (wire frame / pair QR / sanitize)
 - `packages/app-engine` (pricing cost formula)
 
-Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts`) mutate the property-defended modules; root pointers live under `tests/mutation/`. `bun run test:mutation` writes `artifacts/mutation/scores.json` for the test-health report. Floors live in `tests/mutation-floors.json` and ratchet up-only (measured 2026-07-23/24 — see file comment).
+Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts`) mutate the property-defended modules. [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs) is canonical for where each seed's config lives: the runner resolves `seed.cwd` + `seed.config` and spawns Stryker there. The eight root pointers under `tests/mutation/` predate that seed list, cover only half the sixteen seeds, and are read by nothing — do not add a ninth expecting it to run. `bun run test:mutation` writes `artifacts/mutation/scores.json` for the test-health report. Floors live in `tests/mutation-floors.json` and ratchet up-only (measured 2026-07-23/24 — see file comment).
 
 **Per-PR mutation** (`bun run test:mutation:pr` / CI job `mutation-pr`): runs Stryker only for seeds whose `watch` paths intersect `git diff origin/main...HEAD` (or all seeds when mutation infra / floors change), then **enforces** floors on measured packages. Unrelated PRs skip Stryker in ~1s. Nightly runs the full 16-seed lane.
 
@@ -460,7 +467,7 @@ Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts
 | `commons-convergence-properties` | vault commons-convergence-properties | **3** |
 | `replica-intent-properties` | client intent-idempotency-properties | **10** |
 | `replica-payload-hash-properties` | client payload-hash-properties | **7** |
-| `scheduler-no-backfill` | automation scheduler-ledger.contract | **23** |
+| `scheduler-no-backfill` | automation scheduler-ledger.contract | **19** |
 | `backup-crypto-properties` | backup crypto-properties | **8** |
 | `backup-wal-address-properties` | backup wal-address-properties | **7** |
 | `blob-format-cbsf-properties` | blob-format cbsf-properties | **6** |

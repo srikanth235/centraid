@@ -1,5 +1,5 @@
 {
-  "approvedDeviation": "#785 records the 2026-08-14 demonstrated-red run for D7 profile contract parity after adding the attention role; the gate owner, failure condition, governance, and lane are unchanged.",
+  "approvedDeviation": "#782 re-homes closed-issue citations in tests/matrix.json while #785 records the 2026-08-14 demonstrated-red D7 run; gate ownership, failure conditions, governance, and lanes are unchanged.",
   "matrixGovernanceFingerprint": "76e4bf7392b7d75e5e510d54b5dea4c8b214314fa3a5c494bf42848c782c0db7",
   "fingerprints": {
     "packages/agent-runtime/src/backends/acp/vault-mcp-server.ts": "23bf19e215bfe3fd8a21a4dd896d06c97835d43fc3412bfcc9bb0312bd6d7ff2",
@@ -8,6 +8,6 @@
     "packages/gateway/src/serve/health-registry.ts": "d4483393bf09d7839ce995b1d6c698501f079e0c53d7e6031de268f7b642e4e6",
     "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
     "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
-    "tests/matrix.json": "b488e06ab8af5d1874f659e5e3bd6f9e7363cf12ac5c9262028818e306e35378"
+    "tests/matrix.json": "4437f1d79823841f0c5b06b75cd9c3367e7148d8be8c5695ff114f9d7a87005d"
   }
 }
