@@ -12,6 +12,7 @@
 - [x] Narration sweep list exists as child issues linked here, each fixed or explicitly deferred with a reason.
 - [x] No receipt, CHANGELOG, Evolution Log, or QUALITY `## Resolved` line is modified anywhere in the umbrella's PRs.
 - [x] Tripwire decision recorded in this issue before the umbrella closes.
+- [x] Consolidated the four handler-boundary directives into one `handler-contract` directive with named sub-checks, at the maintainer's direction.
 
 ## What changed
 
@@ -57,7 +58,7 @@ Tripwire decision recorded in this issue before the umbrella closes.
 
 ### Changed files
 
-The implementation changed or relocated: `AGENTS.md`, `ARCHITECTURE.md`, `CONSTITUTION.md`, `DESIGN.md`, `QUALITY.md`, `SECURITY.md`, `TESTING.md`, `docs/blueprint-seats.md`, `docs/decisions.md`, `docs/design-divergences.md`, `docs/design-machinery.md`, `docs/glossary.md`, `docs/logs.md`, `docs/photos/README.md`, `docs/photos/derived-ledger.md`, `docs/photos/design-notes.md`, `docs/photos/dogfood.md`, `docs/photos/places.md`, `docs/photos/switcher-walkthrough.md`, `docs/recognition-automations.md`, `docs/toolchain.md`, `packages/gateway/benchmarks/README.md`, `packages/gateway/src/serve/commons-observability.ts`, `scripts/ci/configure-sonarcloud.mjs`, and `tests/design-gallery/baselines/mo-advisory-dark.png`. The review pass additionally changed `QUALITY.md` (inserted `## Resolved` entry) and added `docs/traps/README.md`, updated `docs/dev-environment.md`, and removed `docs/photos/design-notes.md`.
+The implementation changed or relocated: `AGENTS.md`, `ARCHITECTURE.md`, `CONSTITUTION.md`, `DESIGN.md`, `QUALITY.md`, `SECURITY.md`, `TESTING.md`, `docs/blueprint-seats.md`, `docs/decisions.md`, `docs/design-divergences.md`, `docs/design-machinery.md`, `docs/glossary.md`, `docs/logs.md`, `docs/photos/README.md`, `docs/photos/derived-ledger.md`, `docs/photos/design-notes.md`, `docs/photos/dogfood.md`, `docs/photos/places.md`, `docs/photos/switcher-walkthrough.md`, `docs/recognition-automations.md`, `docs/toolchain.md`, `packages/gateway/benchmarks/README.md`, `packages/gateway/src/serve/commons-observability.ts`, `scripts/ci/configure-sonarcloud.mjs`, and `tests/design-gallery/baselines/mo-advisory-dark.png`. The review pass additionally changed `QUALITY.md` (inserted `## Resolved` entry) and added `docs/traps/README.md`, updated `docs/dev-environment.md` and `docs/multi-agent.md`, and removed `docs/photos/design-notes.md`. The directive consolidation added `.governance/packs/srikanth235/centraid/directives/handler-contract/` (`check.sh`, `constitution.md`, `directive.yaml`), removed the `query-handlers-read-only`, `actions-declare-table-writes`, `data-runtime-sqlite-separation`, and `handler-uses-ctx-primitives` directive folders, and updated `.governance/packs.lock` and `CONSTITUTION.md`.
 
 The retired source paths were `docs/docs-app-design-notes.md`, `docs/photos-derived-ledger.md`, `docs/photos-design-notes.md`, `docs/photos-dogfood.md`, `docs/photos-places.md`, `docs/photos-switcher-walkthrough.md`, `docs/plans/app-scenario-layer-template.md`, `docs/plans/commons-fixed-window-sync.md`, `docs/plans/gateway-low-end-and-rust-plane.md`, `docs/plans/photos-testing.md`, `docs/refactors/README.md`, `docs/refactors/inline-system-apps.md`, `docs/refactors/one-block-vocabulary-per-dom.md`, `docs/refactors/product-grammar.md`, and `docs/sonarcloud.md`.
 
@@ -73,9 +74,25 @@ A review pass on the PR surfaced six findings; all are fixed in this branch:
 - **Photos design-notes stub removed.** `docs/photos/design-notes.md` was a three-line redirect; `docs/photos/README.md` and `docs/design-divergences.md` now link the shared register section directly.
 - **AGENTS.md condensed to a map plus judgment rules** (113 → 35 lines): the duplicated "Where to look" section is gone, the repo summary is four sentences, conventions that restate mechanically enforced directives are dropped (the enforcement message teaches them at failure time), and the per-trap table moved to the new `docs/traps/README.md` index. At the maintainer's direction two further cuts landed: the `CLAUDE.md` symlink instruction left AGENTS.md for `docs/dev-environment.md#fresh-clone` (it is a clone-setup fact), the "Rules to follow" block was compressed to the one rule a failing hook cannot teach — that passing every gate does not make a change constitution-compliant — and the docs index collapsed from a 36-row table into grouped link lines, with the State / Decisions / Evidence / Intent layer model kept as the four lines that route everything else. A final maintainer addition records the orchestration norm: umbrella issues are worked by a root agent that owns the plan and coordinates sub-agents, since correctness lives in the plan's intricacies rather than in dispatched jobs (pointing at docs/multi-agent.md for norms and caps). docs/multi-agent.md gained the matching "Root-agent orchestration" section — slice by ownership, order as part of the plan, slice contracts for sub-agents, root-owned seam integration — since the doc previously covered only peer parallelism and the AGENTS.md pointer would otherwise promise content that was not there.
 
+### Directive consolidation (maintainer-directed)
+
+The four repo-local directives that guarded the app-handler boundary — `query-handlers-read-only`, `actions-declare-table-writes`, `data-runtime-sqlite-separation`, and `handler-uses-ctx-primitives` — are now one `handler-contract` directive with four named sub-checks (`query-read-only`, `declared-writes`, `sqlite-separation`, `ctx-primitives`). They scanned the same file set, shared one rationale and one failure signature (the mutation succeeds, the change stream stays quiet, subscribed UI goes stale with no error), and none was a load-bearing axis alone — the reasoning governance-kit already applies to its own `repo-hygiene` and `required-docs`.
+
+Consolidated the four handler-boundary directives into one `handler-contract` directive with named sub-checks, at the maintainer's direction. Surface area:
+
+- Added `.governance/packs/srikanth235/centraid/directives/handler-contract/check.sh`, `.governance/packs/srikanth235/centraid/directives/handler-contract/constitution.md`, and `.governance/packs/srikanth235/centraid/directives/handler-contract/directive.yaml`.
+- Deleted `.governance/packs/srikanth235/centraid/directives/query-handlers-read-only/`, `.governance/packs/srikanth235/centraid/directives/actions-declare-table-writes/`, `.governance/packs/srikanth235/centraid/directives/data-runtime-sqlite-separation/`, and `.governance/packs/srikanth235/centraid/directives/handler-uses-ctx-primitives/`.
+- Updated the local pack's directive list in `.governance/packs.lock`; the repo-local catalog goes 11 → 8.
+- `CONSTITUTION.md` replaces the four directive sections with one and appends the Evolution Log entry the amendment process requires, in this same commit per the cardinal rule.
+
+**No rule changed.** Same patterns, same file globs, same violation messages (now prefixed with the sub-check name for triage). Waivers are backward compatible: the new `allow-handler-contract` token and all three retired per-directive tokens are honoured, so no waiver migration was needed — and a repo-wide grep confirmed zero live waivers for the family in product code.
+
 ## Decisions
 
 - The user requested one PR, so the five child issues are tracking/disposition records linked from #767; the implementation is intentionally not split into child PRs.
+- The handler-contract consolidation is a deliberate expansion of #767's stated scope, which had listed governance directive rule changes as out of bounds. The maintainer directed it into this PR rather than a separate issue; the rules themselves are unchanged, so the exclusion's intent (no silent policy drift inside a docs PR) still holds.
+- The merged directive keeps the three retired waiver tokens working instead of migrating waivers, so no product file had to change to land a governance refactor.
+- `.governance/packs.lock` already omitted `no-hardcoded-colors` from the local pack's directive list before this change; directive discovery walks the directory tree rather than the lock, so the omission is inert. Left as found — correcting it is unrelated drift.
 - The five Photos documents remain separate under a directory because the derived ledger, dogfood ritual, Places projection, switcher walkthrough, and design entry point have different maintenance triggers.
 - The shared divergence register is the single content owner for per-app design divergences; the former Photos entry-point stub was removed in the review pass and its inbound links repointed at the register's Photos section.
 - The narration tripwire is recorded as warn-only and deferred until a baseline exists; no governance directive rules changed.
@@ -93,7 +110,11 @@ A review pass on the PR surfaced six findings; all are fixed in this branch:
 
 The issue-owned relocation comments were added before the retired sources were removed. The child issue list and tripwire disposition were recorded on #767. Existing evidence was checked by diffing the changed paths; the only receipt path is this new #767 receipt, and no CHANGELOG, Evolution Log, or QUALITY `## Resolved` line is in the diff.
 
+The consolidated directive was proved red before it was trusted green. A seeded app under `packages/blueprints/apps/_govseed/` (one violation per sub-check, staged so `git grep` could see it, then removed) produced five violations — `stmt.run()` and `db.exec()` in a query handler, a `runtime.sqlite` reference, an `openai` import, and an action with no `writes` field — each labelled with its sub-check. A second seeded run with waivers on those lines returned green, covering both the new `allow-handler-contract` token and the retired per-directive tokens. The clean tree passes.
+
 ```sh
+bash .governance/packs/srikanth235/centraid/directives/handler-contract/check.sh
+bash .governance/run.sh
 bun run check:pr
 bash .governance/run.sh internal-doc-links
 test ! -e docs/plans && test ! -e docs/refactors
