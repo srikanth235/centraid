@@ -190,6 +190,29 @@ export interface Reference {
 
 // ---------- Tiny DOM builders (the h()/el() every app copied from Docs) -----
 
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+/**
+ * Escape a string for both HTML text and quoted-attribute interpolation.
+ * Quote escaping is mandatory: kit Ask builds `placeholder="…"` / `data-id="…"`
+ * / `aria-label="…"` via string HTML, so `& < >` alone is attribute breakout XSS
+ * (CodeQL `js/incomplete-html-attribute-sanitization`, issue #678).
+ *
+ * @public
+ */
+export function escapeHtml(s: unknown): string {
+  return String(s == null ? "" : s).replace(
+    /[&<>"']/gu,
+    (c) => HTML_ESCAPES[c] ?? c
+  );
+}
+
 /** Parse an HTML string and return its first element. */
 export function el(html: string): HTMLElement {
   const t = document.createElement("template");
@@ -1258,9 +1281,7 @@ export function wireThemeToggle(
     return t.content.firstChild;
   }
   function esc(s) {
-    return String(s == null ? "" : s).replace(/[&<>]/gu, (c) => {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c];
-    });
+    return escapeHtml(s);
   }
 
   const HISTORY_ICON = kitIcon("History", 16, 1.75);

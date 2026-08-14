@@ -42,39 +42,49 @@ function setup(dir?: string): void {
   };
 }
 
+describe("the lexical gate", () => {
+  test("SELECT / WITH / EXPLAIN pass; comments and a trailing ; are fine", () => {
+    expect(readOnlySqlRefusal("SELECT 1;")).toBeUndefined();
+    expect(
+      readOnlySqlRefusal(
+        "-- top spenders\nWITH t AS (SELECT 1 AS n) SELECT * FROM t"
+      )
+    ).toBeUndefined();
+    expect(readOnlySqlRefusal("EXPLAIN SELECT 1")).toBeUndefined();
+  });
+
+  test("writes, DDL, PRAGMA, and multi-statements are refused", () => {
+    expect(
+      readOnlySqlRefusal("INSERT INTO core_party VALUES ('x')")
+    ).toBeTruthy();
+    expect(readOnlySqlRefusal("PRAGMA user_version")).toBeTruthy();
+    expect(readOnlySqlRefusal("DROP TABLE core_party")).toBeTruthy();
+    expect(readOnlySqlRefusal("SELECT 1; SELECT 2")).toBeTruthy();
+    expect(
+      readOnlySqlRefusal("WITH t AS (SELECT 1) DELETE FROM core_party")
+    ).toBeTruthy();
+    expect(readOnlySqlRefusal("")).toBeTruthy();
+  });
+
+  test("the replace() FUNCTION stays usable (only statements are screened)", () => {
+    expect(
+      readOnlySqlRefusal("SELECT replace('a-b', '-', ' ')")
+    ).toBeUndefined();
+  });
+
+  test("block comments strip in linear time, including an unclosed tail", () => {
+    expect(
+      readOnlySqlRefusal(`SELECT 1 /* ${"x".repeat(20_000)} */`)
+    ).toBeUndefined();
+    expect(readOnlySqlRefusal(`/* ${"x".repeat(20_000)}`)).toBe(
+      "empty statement"
+    );
+    expect(readOnlySqlRefusal("SELECT 1 -- trailing comment")).toBeUndefined();
+  });
+});
+
 describe("sql", () => {
   beforeEach(() => setup());
-
-  describe("the lexical gate", () => {
-    test("SELECT / WITH / EXPLAIN pass; comments and a trailing ; are fine", () => {
-      expect(readOnlySqlRefusal("SELECT 1;")).toBeUndefined();
-      expect(
-        readOnlySqlRefusal(
-          "-- top spenders\nWITH t AS (SELECT 1 AS n) SELECT * FROM t"
-        )
-      ).toBeUndefined();
-      expect(readOnlySqlRefusal("EXPLAIN SELECT 1")).toBeUndefined();
-    });
-
-    test("writes, DDL, PRAGMA, and multi-statements are refused", () => {
-      expect(
-        readOnlySqlRefusal("INSERT INTO core_party VALUES ('x')")
-      ).toBeTruthy();
-      expect(readOnlySqlRefusal("PRAGMA user_version")).toBeTruthy();
-      expect(readOnlySqlRefusal("DROP TABLE core_party")).toBeTruthy();
-      expect(readOnlySqlRefusal("SELECT 1; SELECT 2")).toBeTruthy();
-      expect(
-        readOnlySqlRefusal("WITH t AS (SELECT 1) DELETE FROM core_party")
-      ).toBeTruthy();
-      expect(readOnlySqlRefusal("")).toBeTruthy();
-    });
-
-    test("the replace() FUNCTION stays usable (only statements are screened)", () => {
-      expect(
-        readOnlySqlRefusal("SELECT replace('a-b', '-', ' ')")
-      ).toBeUndefined();
-    });
-  });
 
   describe("gateway.sql", () => {
     test("answers a join over the canonical model and receipts the read", () => {

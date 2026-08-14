@@ -52,12 +52,19 @@ export function parseAddress(raw: string | undefined): {
   email: string | null;
 } {
   if (!raw) return { name: null, email: null };
-  const angled = raw.match(/^(?<name>.*?)<(?<address>[^>]+)>/u);
-  if (angled) {
-    const name = angled.groups?.name?.trim().replace(/^"|"$/gu, "") ?? "";
+  // Index scan, not `/^(.*?)?<([^>]+)>/` — that reluctant quantifier is
+  // CodeQL `js/polynomial-redos` on crafted From headers (issue #678).
+  const open = raw.indexOf("<");
+  const close = open >= 0 ? raw.indexOf(">", open + 1) : -1;
+  if (open >= 0 && close > open) {
+    const name = raw.slice(0, open).trim().replace(/^"|"$/gu, "");
     return {
       name: name || null,
-      email: (angled.groups?.address ?? "").trim().toLowerCase() || null,
+      email:
+        raw
+          .slice(open + 1, close)
+          .trim()
+          .toLowerCase() || null,
     };
   }
   const bare = raw.trim();
@@ -182,8 +189,8 @@ export function parseMbox(text: string): MboxMessage[] {
   let current: string[] = [];
   for (const line of lines) {
     if (
-      /^From .*\d{4}/u.test(line) ||
-      (line.startsWith("From ") && current.length === 0)
+      line.startsWith("From ") &&
+      (current.length === 0 || /\d{4}/u.test(line))
     ) {
       if (current.length > 0) chunks.push(current.join("\n"));
       current = [];

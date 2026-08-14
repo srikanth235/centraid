@@ -27,6 +27,7 @@ const kitUrl = pathToFileURL(path.resolve(PKG, "kit/kit.ts")).href;
 const elementsUrl = pathToFileURL(path.resolve(PKG, "kit/elements.js")).href;
 const {
   barSpan,
+  escapeHtml,
   el,
   emptyState,
   fmtBytes,
@@ -66,6 +67,16 @@ describe("kit smoke", () => {
     expect(n.className).toBe("x");
     expect(n.textContent).toBe("hia");
     expect(el('<span id="q">z</span>').id).toBe("q");
+  });
+
+  it("escapeHtml quote-escapes attribute breakout", () => {
+    expect(escapeHtml(`x" onfocus="alert(1)`)).toBe(
+      "x&quot; onfocus=&quot;alert(1)"
+    );
+    expect(escapeHtml("<img src=x onerror=alert(1)>")).toBe(
+      "&lt;img src=x onerror=alert(1)&gt;"
+    );
+    expect(escapeHtml("it's")).toBe("it&#39;s");
   });
 
   it("letterAvatar honours color/initials and scales type", () => {

@@ -36,7 +36,10 @@ describe("sqlite-worker", () => {
     return new Promise((resolve) => {
       const before = posts.length;
       for (const fn of listeners) {
-        fn({ data: request } as MessageEvent);
+        fn({
+          data: request,
+          origin: (globalThis as { origin?: string }).origin ?? "",
+        } as MessageEvent);
       }
       const poll = () => {
         if (posts.length > before) {
@@ -63,6 +66,18 @@ describe("sqlite-worker", () => {
       expect(res.id).toBe(1);
       expect(res.ok).toBe(false);
       expect(res.error?.message).toMatch(/not been opened|not initialized/iu);
+    });
+
+    it("drops messages from a foreign origin", async () => {
+      const before = posts.length;
+      for (const fn of listeners) {
+        fn({
+          data: { id: 99, op: "status" },
+          origin: "https://evil.example",
+        } as MessageEvent);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(posts.length).toBe(before);
     });
   });
 });

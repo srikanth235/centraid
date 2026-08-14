@@ -36,6 +36,26 @@ describe("LocalBackupProvider lifecycle edge cases", () => {
     });
   });
 
+  test("prototype-polluting registry keys are refused", async () => {
+    const provider = new LocalBackupProvider({ rootDir: await tempDir() });
+    await expect(provider.getTarget("__proto__")).rejects.toMatchObject({
+      code: "invalid_request",
+    });
+    const { targetId } = await provider.createTarget({ label: "t" });
+    await expect(
+      provider.registerSnapshot(targetId, {
+        idempotencyKey: "__proto__",
+        manifestKey: "manifests/1.json",
+        manifestHash: "a".repeat(64),
+        totalBytes: 1,
+        objectCount: 1,
+        generation: 1,
+        format: "centraid-snapshot/2",
+        appMeta: {},
+      })
+    ).rejects.toMatchObject({ code: "invalid_request" });
+  });
+
   test("registration replay ignores a stale generation on the replay call", async () => {
     const provider = new LocalBackupProvider({ rootDir: await tempDir() });
     const { targetId } = await provider.createTarget({ label: "t" });

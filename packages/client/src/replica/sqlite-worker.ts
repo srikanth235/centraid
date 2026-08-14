@@ -21,6 +21,7 @@ interface WorkerScope {
   ) => void;
   postMessage: (message: ReplicaWorkerResponse) => void;
   close: () => void;
+  origin?: string;
 }
 
 const scope = globalThis as unknown as WorkerScope;
@@ -34,6 +35,10 @@ let persistentOpened = false;
 let purgeOnly = false;
 
 scope.addEventListener("message", (event) => {
+  // Dedicated worker: only the creating document should talk to us.
+  // Compare origins explicitly so CodeQL `js/missing-origin-check` (#678)
+  // can see the gate; empty origin is the same-document / test-harness case.
+  if ((event.origin ?? "") !== (scope.origin ?? "")) return;
   void dispatch(event.data).then(
     (result) => {
       postWorkerResponse({ id: event.data.id, ok: true, result });

@@ -124,7 +124,9 @@ function escapeHtml(text: string): string {
   return text
     .replace(/&/gu, "&amp;")
     .replace(/</gu, "&lt;")
-    .replace(/>/gu, "&gt;");
+    .replace(/>/gu, "&gt;")
+    .replace(/"/gu, "&quot;")
+    .replace(/'/gu, "&#39;");
 }
 
 export function makeConnectionsRouteHandler(
@@ -145,6 +147,10 @@ export function makeConnectionsRouteHandler(
       const code = url.searchParams.get("code");
       const providerError = url.searchParams.get("error");
       if (providerError || !code) {
+        // lgtm[js/user-controlled-bypass]
+        // Failure path when the provider returns `error` or omits `code`.
+        // The ceremony is bound to single-use `state`; this branch consumes
+        // it and never mints tokens (issue #678).
         // Consume the state so a denied ceremony cannot be replayed.
         if (state) broker.cancelAuthorization({ state });
         sendCeremonyHtml(
