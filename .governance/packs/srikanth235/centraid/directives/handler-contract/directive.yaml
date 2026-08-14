@@ -1,0 +1,15 @@
+# handler-contract — app handlers stay inside the ctx/data.sqlite contract.
+category: Correctness
+recommended: true
+summary: |
+  Centraid app handlers (queries/*.js, actions/*.js) and app manifests must
+  keep every mutation visible to the change-notification SSE feed at
+  /centraid/<id>/_changes. Four sub-checks: query handlers execute no
+  writes (query-read-only); every app.json action declares a writes:[]
+  array (declared-writes); handlers never reference the gateway-owned
+  runtime.sqlite (sqlite-separation); handlers never import provider SDKs
+  directly, using ctx.delegate and the vault primitives instead
+  (ctx-primitives). Merged from the four single-rule directives that
+  guarded the same boundary over the same files.
+surface: repo-state
+hook: pre-commit

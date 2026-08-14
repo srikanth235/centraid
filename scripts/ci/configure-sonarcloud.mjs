@@ -11,7 +11,7 @@
  *   bun run scripts/ci/configure-sonarcloud.mjs
  *   bun run scripts/ci/configure-sonarcloud.mjs --resolve-noise
  *
- * Policy: docs/sonarcloud.md
+ * Policy: docs/toolchain.md#sonarcloud-autoscan
  */
 
 const ORG = "centraid";
@@ -183,7 +183,7 @@ const GATE_CONDITIONS = [
 ];
 
 const RESOLVE_COMMENT =
-  "Centraid Sonar config: style/FP rule silenced project-wide (docs/sonarcloud.md).";
+  "Centraid Sonar config: style/FP rule silenced project-wide (docs/toolchain.md#sonarcloud-autoscan).";
 
 const BULK_CHUNK = 100;
 
@@ -614,7 +614,7 @@ async function main() {
   console.log(
     "Done. Next Autoscan on push/PR will honor scope + multicriteria."
   );
-  console.log("See docs/sonarcloud.md");
+  console.log("See docs/toolchain.md#sonarcloud-autoscan");
 }
 
 main().catch((error) => {

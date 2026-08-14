@@ -1,12 +1,12 @@
 # Photos dogfood ritual (D2)
 
-Settled **2026-08-07** (issue #721). The discovery and regression-detection pattern for the Photos application, and when it should run in the release cycle.
+The discovery and regression-detection pattern for the Photos application, and when it should run in the release cycle.
 
 ## Why dogfood matters
 
 Centraid ships no telemetry — no event logging, no crash reporting service, no aggregate usage heuristics. A maintainer importing their real camera roll and living in it side-by-side with native iOS Photos is therefore the **only discovery channel** for Photos defects. This is not a nice-to-have ritual; it is the quality gate.
 
-The pattern is a written checklist so that every maintainer and release lead follows the same motion and catches the same class of bugs. Findings live in `QUALITY.md` under `## Open` (per [AGENTS.md](../AGENTS.md) convention).
+The pattern is a written checklist so that every maintainer and release lead follows the same motion and catches the same class of bugs. Findings live in `QUALITY.md` under `## Open` (per [AGENTS.md](../../AGENTS.md) convention).
 
 ## The ritual (checklist)
 
@@ -58,12 +58,12 @@ Run this motion:
    - [ ] Forget a person (`media.forget_person`) and verify their regions disappear from the review queue and no photo still shows their name.
    - [ ] Check the Memories shelves (on-this-day, trip, similar) render with real dates and groupings, and show nothing rather than a wrong grouping when your library has none for a kind.
 
-10. **Check for four specific stuck states** (from prior regressions):
+10. **Check four known stuck-state classes**:
 
 - [ ] **Stuck sync bar:** a sync-in-progress indicator that never clears. Check mobile background sync — a hung upload queue or unreachable-gateway loop makes this visible. `docs/logs.md` → gateway and mobile logs should show steady progress or a clear "offline" message, never silent hangs.
 - [ ] **Quadruple offline announcements:** the offline banner appeared four times in one session. Check system notifications; background push should deliver once, not repeated. Mobile's `kit/replica/mount-plan.ts` prevents waiting for the network before opening local data — if the offline line repeats, the banner logic has drifted.
 - [ ] **Undiscoverable grain control:** the slider exists but scrolls past the bottom of the screen. Check mobile portrait orientation; the Media Viewer must keep the slider in the safe area. Desktop may scroll; phone must not.
-- [ ] **Cold start hangs on 528-row local DB:** on a launch with no reachable gateway, the timeline never opens even though 528 rows are on the device. This was the mount-plan regression; the fix was phase A disk-only planning. If this recurs, the replica mount is waiting on the network again.
+- [ ] **Cold start hangs on a populated local DB:** when no gateway is reachable, the timeline must open from local rows. The replica mount starts with disk-only planning and must not wait on the network.
 
 ## Cadence and filing
 
@@ -83,4 +83,4 @@ Move findings to `## Resolved` when:
 - The behavior is reproduced and confirmed as expected (not actually broken).
 - The issue is documented as deferred (e.g., "grain control scrolls on desktop by design").
 
-Related: [QUALITY.md](../QUALITY.md), [logs.md](logs.md).
+Related: [QUALITY.md](../../QUALITY.md), [logs](../logs.md).
