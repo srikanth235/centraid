@@ -12,7 +12,7 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 
 | Docs scenario | U | C | E | Owner / evidence |
 | --- | --- | --- | --- | --- |
-| upload a file; the document and its bytes survive a reload | — | — | ✅ | `docs-drive.spec.ts` (desktop + web): real staged-blob upload through the visible control, reload, reopen, byte-exact round-trip through the authed transport, and the reading route opens |
+| upload a file; the document and its bytes survive a reload | — | — | ✅ | `docs-drive.spec.ts` (desktop + web): real staged-blob upload through the visible control, reload, reopen, byte-exact round-trip through the authed transport, and member-visible body paint through the authenticated blob primitive |
 | drive window: folders, newest-filed-first, bounded window | ✅ | — | — | `packages/blueprints/src/docs-drive.test.ts` (filter axes, breadcrumb, window truncation) |
 | shelf strip routing and band tabs | ✅ | — | — | `packages/blueprints/src/docs-shelves.test.ts` |
 | custody mark: annotate the exception, never the norm | ✅ | — | — | `packages/blueprints/apps/docs/custody-row-mark.test.ts` |
@@ -24,4 +24,4 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 
 Vault-facing actions (`actions/*.ts`) all funnel through typed `ctx.vault.invoke` commands and return the gateway's own refusal reason on failure; the handler contracts live with the vault command suites (`packages/vault/src/gateway/gateway.contract.test.ts`) and the engine-conformance lint.
 
-Known gaps (tracked, not disguised): no mobile journey; no journey-level version-history proof; no Docs-specific journey budget file yet (the desktop/web suites' shared wall-clock ratchet is the only backpressure); and the reading view's blob-backed BODY paint is broken on both shells — `Reading.tsx` fetches the row's `/centraid/_vault/blobs/…` path relative to the shell document (file:// on desktop, the PWA origin on web), and neither shell CSP allows the `blob:` object-URL alternative in `connect-src`, so a blob-backed text document lands in the honest "could not be fetched" state (#781). The journeys therefore assert the byte round-trip through the authed transport and the reading route, not the body paint.
+Known gaps (tracked, not disguised): no mobile journey; no journey-level version-history proof; and no Docs-specific journey budget file yet (the desktop/web suites' shared wall-clock ratchet is the only backpressure). Blob-backed reading and editing use `window.centraid.blobText` on bundled inline shells, which reads the authenticated gateway response directly without weakening shell CSP; served apps retain their same-origin fetch path.

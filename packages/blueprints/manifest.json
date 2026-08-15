@@ -836,6 +836,7 @@
         "app-inline.tsx",
         "app-root.tsx",
         "app.json",
+        "blob-text.ts",
         "capabilities.ts",
         "components/Activity.module.css",
         "components/Activity.tsx",

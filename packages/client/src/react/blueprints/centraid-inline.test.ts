@@ -33,6 +33,7 @@ vi.mock(import("../../gateway-client-core.js") as Promise<unknown>, () => ({
   }),
   doFetch,
   readJson,
+  VAULT_HEADER: "x-centraid-vault",
 }));
 
 type Session = NonNullable<InstallInlineCentraidOptions["session"]>;
@@ -136,6 +137,44 @@ describe(installInlineCentraid, () => {
   beforeEach(() => {
     doFetch.mockReset();
     readJson.mockReset();
+  });
+
+  it("reads text bytes through the authenticated blob door in the mounted scope", async () => {
+    const session = fakeSession();
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "docs",
+      session,
+      queries: noQueries,
+      target,
+      scopes: [
+        {
+          scope: { id: "docs-vault", label: "Docs owner", canWrite: true },
+          session,
+        },
+      ],
+    });
+    doFetch.mockResolvedValue({
+      ok: true,
+      text: async () => "The exact document body",
+    } as Response);
+
+    const body = await (target.centraid as InlineCentraidClient).blobText(
+      "/centraid/_vault/blobs/body-sha"
+    );
+    expect(body).toBe("The exact document body");
+    expect(doFetch.mock.calls).toStrictEqual([
+      [
+        "https://gw.test",
+        "/centraid/_vault/blobs/body-sha",
+        {
+          headers: {
+            Authorization: "Bearer tok",
+            "x-centraid-vault": "docs-vault",
+          },
+        },
+      ],
+    ]);
   });
 
   it("forwards a caller intentId verbatim into session.write", async () => {

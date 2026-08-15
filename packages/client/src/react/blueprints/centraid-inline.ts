@@ -36,7 +36,7 @@ import {
 } from "../../gateway-client-core.js";
 import type { ReplicaShellSession } from "../../replica/shell-session.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
-import { authorizeBlobUrl } from "./blob-auth.js";
+import { authorizeBlobText, authorizeBlobUrl } from "./blob-auth.js";
 import { runInlineQuery } from "./inlineQueryCtx.js";
 import { placementWireFromEdge } from "./placement-wire.js";
 import {
@@ -247,6 +247,8 @@ export interface InlineCentraidClient {
   onChange: (cb: (detail: InlineChangeDetail) => void) => () => void;
   /** An authed `blob:` URL for a `/_vault/blobs/…` path in one scope. */
   blobUrl: (pathname: string, scope?: string) => Promise<string | null>;
+  /** Authed text bytes, without a CSP-governed second fetch of a blob URL. */
+  blobText: (pathname: string, scope?: string) => Promise<string | null>;
 }
 
 /** Codes on which a failed local read escalates to the gateway tool route. */
@@ -948,6 +950,11 @@ export function createInlineCentraidClient(
     blobUrl(pathname, scope) {
       const id = scope ?? primary.scope.id;
       return authorizeBlobUrl(pathname, id || undefined);
+    },
+
+    blobText(pathname, scope) {
+      const id = scope ?? primary.scope.id;
+      return authorizeBlobText(pathname, id || undefined);
     },
   };
 

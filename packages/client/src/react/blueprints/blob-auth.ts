@@ -41,6 +41,22 @@ export function blobAuthHeaders(
   return { ...authHeaders(token), ...(scope ? { [VAULT_HEADER]: scope } : {}) };
 }
 
+/** Fetch vault bytes through the shell's authenticated gateway transport. */
+async function authorizedBlobResponse(
+  pathname: string,
+  scope?: string
+): Promise<Response | null> {
+  try {
+    const { baseUrl, token } = await auth();
+    const res = await doFetch(baseUrl, pathname, {
+      headers: blobAuthHeaders(token, scope),
+    });
+    return res.ok ? res : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Fetch a `/_vault/blobs/…` pathname through the authed gateway client and hand
  * back a `blob:` object URL for it (or null if the fetch is refused). The caller
@@ -57,14 +73,21 @@ export async function authorizeBlobUrl(
   pathname: string,
   scope?: string
 ): Promise<string | null> {
-  try {
-    const { baseUrl, token } = await auth();
-    const res = await doFetch(baseUrl, pathname, {
-      headers: blobAuthHeaders(token, scope),
-    });
-    if (!res.ok) return null;
-    return URL.createObjectURL(await res.blob());
-  } catch {
-    return null;
-  }
+  const res = await authorizedBlobResponse(pathname, scope);
+  return res ? URL.createObjectURL(await res.blob()) : null;
+}
+
+/**
+ * Read a text blob through the same authenticated door as `authorizeBlobUrl`.
+ * Returning the text directly is load-bearing for inline apps: fetching the
+ * object URL again would be a second request governed by the shell's CSP,
+ * whose `connect-src` intentionally does not admit `blob:`.
+ * @public
+ */
+export async function authorizeBlobText(
+  pathname: string,
+  scope?: string
+): Promise<string | null> {
+  const res = await authorizedBlobResponse(pathname, scope);
+  return res ? res.text() : null;
 }
