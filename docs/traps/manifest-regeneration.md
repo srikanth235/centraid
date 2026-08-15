@@ -2,15 +2,17 @@
 
 ## What goes wrong
 
-Agents add or edit files under `packages/blueprints/apps/` or `automations/`, update `index.json`, and forget to regenerate **`manifest.json`**. Gallery / install catalog then omits files, serves stale `files[]`, or disagrees with disk. CI or another machine building from manifest looks "randomly" broken.
+Agents add or edit files under `packages/blueprints/apps/` or `automations/`, update `index.json`, and forget to regenerate **`manifest.json`**. The install/clone catalog then omits files, serves stale `files[]`, or disagrees with disk. CI or another machine building from manifest looks "randomly" broken.
 
 ## Source of truth chain
 
 ```
 index.json  (+ template folders on disk)
     →  scripts/build-manifest.mjs
-    →  manifest.json  (checked in; also remote GitHub-raw surface)
+    →  manifest.json  (checked in; shipped in the published package)
 ```
+
+`index.json` is the **build-time source** and `manifest.json` the **runtime catalog** — for all 36 templates, the 8 bundled apps as well as the 28 automations. The two must not drift: `packages/blueprints/src/app-manifests.test.ts` asserts the index and the template dirs agree.
 
 Commands (from `packages/blueprints` or via turbo build):
 
@@ -24,7 +26,7 @@ See `packages/blueprints/README.md`.
 
 1. **Editing only disk files** — `manifest.json` `files[]` never picks up new paths.
 2. **Editing only `manifest.json`** — next build overwrites from `index.json` + walk.
-3. **Bumping template `version` in one place** — keep index/manifest/app.json coherent per package conventions. `manifest.json` takes `version` from **`index.json`**, never from the template's own `app.json`, so bumping `app.json` alone leaves the gallery advertising the old number with nothing red. Checked by hand, not by a gate: as of #712 four templates had drifted this way (`agenda`, `notes`, `docs`, and `photos`, the one that pass fixed). If you bump an app, bump its `index.json` row in the same change.
+3. **Bumping template `version` in one place** — keep index/manifest/app.json coherent per package conventions. `manifest.json` takes `version` from **`index.json`**, never from the template's own `app.json`, so bumping `app.json` alone leaves the catalog advertising the old number with nothing red. Checked by hand, not by a gate: as of #712 four templates had drifted this way (`agenda`, `notes`, `docs`, and `photos`, the one that pass fixed). If you bump an app, bump its `index.json` row in the same change.
 4. **Adding a new generated artifact without documenting its source and regeneration path.**
 5. **Assuming install-in-place apps pick up uncommitted folder state on a remote gateway** — remote uses published/bundled tree.
 
@@ -38,4 +40,3 @@ See `packages/blueprints/README.md`.
 ## Related
 
 - `packages/blueprints/scripts/build-manifest.mjs`
-- [blueprint-csp.md](blueprint-csp.md)

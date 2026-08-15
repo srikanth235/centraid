@@ -38,8 +38,6 @@ import { mergePersistedSettings } from "./settings-merge.js";
 export interface PersistedSettings {
   /** Active gateway id. Defaults to `'local'` on a fresh install. */
   activeGatewayId: string;
-  /** Optional URL the home shelf hits for remote-template updates. */
-  remoteTemplatesUrl?: string;
   /**
    * The active vault the client addresses on each gateway (issue #289),
    * keyed by gateway id. The server no longer holds an active-vault
@@ -136,8 +134,6 @@ export interface DesktopSettings {
    * explicitly set one.
    */
   activeProfileAvatarColor: string;
-  /** UI prefs (unchanged from earlier shapes). */
-  remoteTemplatesUrl?: string;
   /**
    * ISO timestamp the user finished first-run onboarding. Absent on a
    * fresh install — the renderer gates on this to show onboarding
@@ -185,9 +181,6 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
       typeof activeRaw === "string" && activeRaw.length > 0
         ? activeRaw
         : base.activeGatewayId,
-    ...(typeof raw.remoteTemplatesUrl === "string"
-      ? { remoteTemplatesUrl: raw.remoteTemplatesUrl }
-      : {}),
     ...sanitizeVaultMap(raw.activeVaultByGateway),
     ...(typeof raw.onboardingCompletedAt === "string"
       ? { onboardingCompletedAt: raw.onboardingCompletedAt }
@@ -335,9 +328,6 @@ async function resolveEffective(
     gatewayUrl: resolved.url,
     gatewayToken: resolved.token,
     ...(activeVaultId === undefined ? {} : { activeVaultId }),
-    ...(p.remoteTemplatesUrl === undefined
-      ? {}
-      : { remoteTemplatesUrl: p.remoteTemplatesUrl }),
     ...(p.onboardingCompletedAt === undefined
       ? {}
       : { onboardingCompletedAt: p.onboardingCompletedAt }),
@@ -447,13 +437,9 @@ export async function setActiveVaultId(
 }
 
 /**
- * Where remote-fetched template copies are cached for a given gateway.
- * The cache is gateway-data disposable state, outside Electron userData.
- * Today the
- * `remoteTemplatesUrl` setting is single-valued (one feed per machine),
- * so the cache content will usually be identical across gateways —
- * the per-gateway slot future-proofs per-gateway template feeds at
- * the cost of duplicate bytes on disk in the single-feed case.
+ * Where per-gateway template copies are cached. The cache is gateway-data
+ * disposable state, outside Electron userData; a copy under it shadows the
+ * bundled template when its semver is higher.
  */
 export function templatesCacheDir(activeGatewayId: string): string {
   return gatewayTemplatesCacheDir(activeGatewayId);

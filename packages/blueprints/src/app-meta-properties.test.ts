@@ -1,14 +1,13 @@
 /**
- * App-scaffold file-map laws (#656 Layer 3 mutation seed).
+ * App id + metadata-patch laws (#656 Layer 3 mutation seed).
  *
- * `scaffold-files.ts` + `app-rewrites.ts` are how every Centraid app comes
- * into being and how every rename propagates. The existing tests assert that
- * a scaffold "has the canonical files" and that a rename "changes the title" —
- * true of a great many wrong implementations. Deleting the `_` guard from
- * `validateAppId`, replacing `replaceAll` with `replace` in `escapeHtml`,
- * emitting `actions`/`queries` as non-empty, loosening the
- * `automations/<id>/automation.json` path regex, or dropping the
- * case-insensitive duplicate-name check all survived.
+ * `app-meta.ts` guards the two things every app-owning route depends on: the
+ * id shape that keeps a write inside the app's own directory, and the
+ * changed-files-only patch the git store commits. The ordinary tests assert
+ * that a rename "changes the name" — true of a great many wrong
+ * implementations. Deleting the `_` guard from `validateAppId`, loosening the
+ * `automations/<id>/automation.json` path regex, returning unchanged files, or
+ * dropping the case-insensitive duplicate-name check all survived.
  *
  * Each test below names the law the mutant breaks.
  */
@@ -16,15 +15,9 @@ import { describe, expect, it } from "vitest";
 
 import { fc } from "@centraid/test-kit/fast-check";
 
-import { applyManifestName, rewriteTitleInHtml } from "./app-rewrites.js";
-import {
-  appPackageJson,
-  escapeHtml,
-  scaffoldAppFiles,
-  updateAppMetaFiles,
-  validateAppId,
-} from "./scaffold-files.js";
-import type { ScaffoldFile } from "./scaffold-files.js";
+import { updateAppMetaFiles, validateAppId } from "./app-meta.js";
+import { applyManifestName } from "./app-rewrites.js";
+import type { ScaffoldFile } from "./scaffold-types.js";
 
 function byPath(files: ScaffoldFile[]): Map<string, string> {
   return new Map(files.map((f) => [f.path, f.content]));
@@ -66,8 +59,10 @@ describe(validateAppId, () => {
     ];
     for (const id of rejected) {
       expect(() => validateAppId(id), id).toThrow(/Invalid app id/u);
-      // …and a rejected id never yields files.
-      expect(() => scaffoldAppFiles(id), id).toThrow(/Invalid app id/u);
+      // …and a rejected id never patches a file map either.
+      expect(() => updateAppMetaFiles([], id, { name: "X" }), id).toThrow(
+        /Invalid app id/u
+      );
     }
   });
 
@@ -76,187 +71,49 @@ describe(validateAppId, () => {
   });
 });
 
-describe(escapeHtml, () => {
-  it("escapes every occurrence, not just the first", () => {
-    // `replace` instead of `replaceAll` leaves the second angle bracket raw —
-    // which is the whole XSS.
-    expect(escapeHtml("<<>>&&\"\"''")).toBe(
-      "&lt;&lt;&gt;&gt;&amp;&amp;&quot;&quot;&#39;&#39;"
-    );
-  });
-
-  it("escapes the ampersand first, so entities are not double-escaped", () => {
-    // Escaping `<` before `&` yields `&amp;lt;` — visible garbage in the tab.
-    expect(escapeHtml("<")).toBe("&lt;");
-    expect(escapeHtml("&lt;")).toBe("&amp;lt;");
-  });
-
-  it("leaves no unescaped markup character in the output", () => {
-    fc.assert(
-      fc.property(fc.string({ maxLength: 40 }), (raw) => {
-        const escaped = escapeHtml(raw);
-        // Strip the entities we emitted; nothing dangerous may remain.
-        const residue = escaped.replaceAll(/&(?:amp|lt|gt|quot|#39);/gu, "");
-        expect(residue).not.toMatch(/[<>&"']/u);
-      }),
-      { numRuns: 150, seed: 65661 }
-    );
-  });
-
-  it("is a no-op on text with nothing to escape", () => {
-    fc.assert(
-      fc.property(fc.stringMatching(/^[a-zA-Z0-9 ._-]{0,30}$/u), (safe) => {
-        expect(escapeHtml(safe)).toBe(safe);
-      }),
-      { numRuns: 80, seed: 65662 }
-    );
-  });
-});
-
-describe(scaffoldAppFiles, () => {
-  it("emits a file map with unique, app-relative, traversal-free paths", () => {
-    fc.assert(
-      fc.property(validId, (id) => {
-        const files = scaffoldAppFiles(id);
-        const paths = files.map((f) => f.path);
-        expect(new Set(paths).size).toBe(paths.length);
-        for (const p of paths) {
-          expect(p.startsWith("/"), p).toBe(false);
-          expect(p, p).not.toContain("\\");
-          expect(p.split("/"), p).not.toContain("..");
-          expect(p.trim()).toBe(p);
-        }
-        // Nothing may be emitted empty — the git store would publish a blank.
-        for (const f of files)
-          expect(f.content.length, f.path).toBeGreaterThan(0);
-      }),
-      { numRuns: 60, seed: 65663 }
-    );
-  });
-
-  it("declares no actions and no queries until the agent writes one", () => {
-    // A non-empty default would advertise handlers that do not exist, and the
-    // shell would render dead buttons.
-    const appJson = JSON.parse(
-      byPath(scaffoldAppFiles("todos")).get("app.json") as string
-    ) as { actions: unknown[]; queries: unknown[]; manifestVersion: number };
-    expect(appJson.actions).toStrictEqual([]);
-    expect(appJson.queries).toStrictEqual([]);
-    expect(appJson.manifestVersion).toBe(1);
-  });
-
-  it("defaults the version and honours an explicit one", () => {
-    const fallback = JSON.parse(
-      byPath(scaffoldAppFiles("todos")).get("app.json") as string
-    ) as { version: string };
-    expect(fallback.version).toBe("0.1.0");
-    const explicit = JSON.parse(
-      byPath(scaffoldAppFiles("todos", { version: "2.3.4" })).get(
-        "app.json"
-      ) as string
-    ) as { version: string };
-    expect(explicit.version).toBe("2.3.4");
-  });
-
-  it("omits a blank description entirely rather than storing an empty string", () => {
-    for (const description of ["", "   ", "\n\t"]) {
-      const appJson = JSON.parse(
-        byPath(scaffoldAppFiles("todos", { description })).get(
-          "app.json"
-        ) as string
-      ) as Record<string, unknown>;
-      expect("description" in appJson, JSON.stringify(description)).toBe(false);
-    }
-  });
-
-  it("ships three non-typographic knobs with valid defaults", () => {
-    const appJson = JSON.parse(
-      byPath(scaffoldAppFiles("todos")).get("app.json") as string
-    ) as {
-      knobs: Array<{
-        key: string;
-        label: string;
-        type: string;
-        default: string;
-        options: Array<{ value: string; label: string }>;
-      }>;
-    };
-    expect(appJson.knobs).toHaveLength(3);
-    expect(appJson.knobs.map((k) => k.key)).toStrictEqual([
-      "appWidth",
-      "appRadius",
-      "appColor",
-    ]);
-    for (const knob of appJson.knobs) {
-      expect(knob.label, knob.key).not.toBe("");
-      expect(knob.options.length, knob.key).toBeGreaterThan(1);
-      // A default outside the option list renders the picker with nothing
-      // selected — the settings popover's silent-failure mode.
-      expect(
-        knob.options.map((o) => o.value),
-        knob.key
-      ).toContain(knob.default);
-      for (const option of knob.options) {
-        expect(option.label, `${knob.key}/${option.value}`).not.toBe("");
-      }
-    }
-  });
-
-  it("HTML-escapes the display name in the <title> it stamps", () => {
-    const files = byPath(
-      scaffoldAppFiles("todos", { name: '<img src=x onerror="p">' })
-    );
-    const html = files.get("index.html") as string;
-    expect(html).toContain(
-      "<title>&lt;img src=x onerror=&quot;p&quot;&gt;</title>"
-    );
-    expect(html).not.toContain("<img");
-  });
-
-  it("names the package after the id and keeps it private and ESM", () => {
-    fc.assert(
-      fc.property(validId, (id) => {
-        const pkg = JSON.parse(appPackageJson(id)) as Record<string, unknown>;
-        expect(pkg.name).toBe(`centraid-app-${id}`);
-        // Private + type:module are load-bearing: a published-by-accident app
-        // or a CJS one would not run in the app engine.
-        expect(pkg.private).toBe(true);
-        expect(pkg.type).toBe("module");
-        expect(pkg.version).toBe("0.1.0");
-      }),
-      { numRuns: 60, seed: 65664 }
-    );
-    // Emitted as pretty JSON with a trailing newline (git-store friendly).
-    expect(appPackageJson("todos").endsWith("}\n")).toBe(true);
-    expect(appPackageJson("todos")).toContain("\n  ");
-  });
-
-  it("emits app.json as pretty JSON with a trailing newline", () => {
-    const appJson = byPath(scaffoldAppFiles("todos")).get("app.json") as string;
-    expect(appJson.endsWith("}\n")).toBe(true);
-    expect(appJson).toContain("\n  ");
-  });
-});
-
 describe(updateAppMetaFiles, () => {
-  const base = (): ScaffoldFile[] =>
-    scaffoldAppFiles("todos", { name: "Todos" });
+  const base = (extra: Record<string, unknown> = {}): ScaffoldFile[] => [
+    {
+      path: "app.json",
+      content:
+        JSON.stringify(
+          {
+            manifestVersion: 1,
+            id: "todos",
+            name: "Todos",
+            version: "0.1.0",
+            iconKey: "Sparkle",
+            ...extra,
+          },
+          null,
+          2
+        ) + "\n",
+    },
+  ];
 
   it("returns ONLY the files whose content actually changed", () => {
     // Returning an unchanged file would rewrite it in the git store and put a
     // no-op commit in the app's history.
-    const changed = updateAppMetaFiles(base(), "todos", {});
-    expect(changed.map((f) => f.path)).toStrictEqual(["app.json"]);
-
-    const renamed = updateAppMetaFiles(base(), "todos", { name: "Tasks" });
-    expect(renamed.map((f) => f.path).sort()).toStrictEqual([
-      "app.json",
-      "index.html",
-    ]);
-    // Renaming to the SAME name leaves index.html byte-identical, so it must
-    // not be returned.
     expect(
-      updateAppMetaFiles(base(), "todos", { name: "Todos" }).map((f) => f.path)
+      updateAppMetaFiles(base(), "todos", {}).map((f) => f.path)
+    ).toStrictEqual(["app.json"]);
+
+    const manifest = JSON.stringify({ name: "Todos" }, null, 2) + "\n";
+    const withAutomation: ScaffoldFile[] = [
+      ...base(),
+      { path: "automations/wake/automation.json", content: manifest },
+    ];
+    expect(
+      updateAppMetaFiles(withAutomation, "todos", { name: "Tasks" })
+        .map((f) => f.path)
+        .sort()
+    ).toStrictEqual(["app.json", "automations/wake/automation.json"]);
+    // Renaming to the SAME name leaves the manifest byte-identical, so it
+    // must not be returned.
+    expect(
+      updateAppMetaFiles(withAutomation, "todos", { name: "Todos" }).map(
+        (f) => f.path
+      )
     ).toStrictEqual(["app.json"]);
   });
 
@@ -267,7 +124,6 @@ describe(updateAppMetaFiles, () => {
     expect(
       (JSON.parse(changed.get("app.json") as string) as { name: string }).name
     ).toBe("Tasks");
-    expect(changed.get("index.html")).toContain("<title>Tasks</title>");
   });
 
   it("rejects a whitespace-only name instead of clearing it", () => {
@@ -305,10 +161,7 @@ describe(updateAppMetaFiles, () => {
   });
 
   it("clears the description on a blank patch and keeps it otherwise", () => {
-    const start = scaffoldAppFiles("todos", {
-      name: "Todos",
-      description: "keep me",
-    });
+    const start = base({ description: "keep me" });
     const cleared = JSON.parse(
       byPath(updateAppMetaFiles(start, "todos", { description: "  " })).get(
         "app.json"
@@ -343,7 +196,6 @@ describe(updateAppMetaFiles, () => {
     >;
     expect(Object.keys(after).sort()).toStrictEqual(Object.keys(before).sort());
     expect(after.id).toBe(before.id);
-    expect(after.knobs).toStrictEqual(before.knobs);
     expect(after.iconKey).toBe(before.iconKey);
   });
 
@@ -391,7 +243,6 @@ describe(updateAppMetaFiles, () => {
     expect(changed.sort()).toStrictEqual([
       "app.json",
       "automations/wake/automation.json",
-      "index.html",
     ]);
   });
 
@@ -431,47 +282,6 @@ describe(updateAppMetaFiles, () => {
   it("validates the id before doing any work", () => {
     expect(() => updateAppMetaFiles(base(), "_bad", { name: "X" })).toThrow(
       /Invalid app id/u
-    );
-  });
-});
-
-describe(rewriteTitleInHtml, () => {
-  it("rewrites the first <title> and leaves any later one alone", () => {
-    const html = "<title>A</title><body><title>B</title>";
-    expect(rewriteTitleInHtml(html, "N")).toBe(
-      "<title>N</title><body><title>B</title>"
-    );
-  });
-
-  it("returns the input unchanged when there is no <title>", () => {
-    fc.assert(
-      fc.property(fc.stringMatching(/^[a-z <>/]{0,40}$/u), (html) => {
-        if (/<title>/iu.test(html)) return;
-        expect(rewriteTitleInHtml(html, "N")).toBe(html);
-      }),
-      { numRuns: 80, seed: 65670 }
-    );
-  });
-
-  it("matches a multi-line or attributed title tag case-insensitively", () => {
-    expect(rewriteTitleInHtml("<TITLE>\n  Old\n</TITLE>", "New")).toBe(
-      "<title>New</title>"
-    );
-  });
-
-  it("treats $-sequences in the new name as literal text", () => {
-    // `String.replace` with a string argument would interpret `$&` as the
-    // whole match, smuggling the old title back into the tab.
-    for (const name of ["$&", "$1", "$$", "$`"]) {
-      expect(rewriteTitleInHtml("<title>Old</title>", name), name).toBe(
-        `<title>${name.replaceAll("&", "&amp;")}</title>`
-      );
-    }
-  });
-
-  it("escapes markup in the new name", () => {
-    expect(rewriteTitleInHtml("<title>Old</title>", "<script>x</script>")).toBe(
-      "<title>&lt;script&gt;x&lt;/script&gt;</title>"
     );
   });
 });

@@ -2,7 +2,7 @@
   "name": "@centraid/blueprints",
   "version": "0.1.0",
   "private": false,
-  "description": "How a new centraid app comes into being: blank-app scaffolders, template clone, and the bundled template gallery (pre-built apps + remote-fetch resolver) the desktop offers as clone-and-deploy starting points.",
+  "description": "How centraid code comes into being: the bundled system apps installed in place, and the automation templates cloned into user-owned app code.",
   "license": "SEE LICENSE IN REPOSITORY",
   "repository": {
     "type": "git",

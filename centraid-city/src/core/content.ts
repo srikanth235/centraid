@@ -454,7 +454,7 @@ export const districts = [
         detail:
           "When a harness (or a person, via the builder UI) scaffolds a new app, the crane is the visual for that build turn: a blueprint template is copied, wired to declared handlers, and snapshotted into the vault's code store.",
         codeRef:
-          "packages/blueprints/src/scaffold.ts, scaffold-files.ts + packages/gateway/src/worktree-store/worktree-store.ts",
+          "packages/blueprints/src/clone.ts + packages/gateway/src/worktree-store/worktree-store.ts",
       },
     ],
   },

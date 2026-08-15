@@ -43,7 +43,6 @@ interface AppRow {
   name?: string;
   description?: string;
   kind?: string;
-  hasIndex?: boolean;
   iconKey?: string;
   colorKey?: string;
 }
@@ -106,13 +105,12 @@ describe("install-over-http scenarios", () => {
     ])
       expect(ids, `${id} installed at mount`).toContain(id);
 
-    // Metadata comes from the shipped blueprint dir (name + hasIndex prove the
-    // resolver read the package, not an empty code store), and the app keeps
-    // the blueprint's own id — no suggestCloneIdentityFrom minting.
+    // Metadata comes from the shipped blueprint dir (the display name proves
+    // the resolver read the package, not an empty code store), and the app
+    // keeps the blueprint's own id — no suggestCloneIdentityFrom minting.
     const row = (await listApps()).find((a) => a.id === "tasks");
     expect(row!.name).toBe("Tasks");
     expect(row!.kind).toBe("app");
-    expect(row!.hasIndex).toBe(true);
 
     // Nothing was written to the git code store — no versions exist.
     const versions = await fetch(

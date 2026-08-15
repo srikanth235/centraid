@@ -406,7 +406,6 @@ async function main() {
         appsDir,
         gatewayUrl: "http://127.0.0.1:1",
         gatewayToken: crypto.randomBytes(8).toString("hex"),
-        remoteTemplatesUrl: "",
         onboardingCompletedAt: new Date().toISOString(),
       },
       null,

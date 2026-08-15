@@ -13,13 +13,11 @@
  * ordinary "I reached for the SDK because it was the fastest way" mistake,
  * not a sabotage attempt.
  *
- * FALSE-POSITIVE GUARD: `packages/blueprints/src/scaffold-defaults.ts`
- * contains a documentation template string that MENTIONS a model id
- * (`"anthropic/claude-3-5-sonnet"`, inside `requires.model` example JSON) —
- * that is data a scaffolded `automation.json` may legitimately carry (the
- * one billed rail, `ctx.delegate`'s own model pin), not a package import, so
- * this check matches only actual `import`/`require`/`import()` specifiers,
- * never arbitrary file text.
+ * FALSE-POSITIVE GUARD: an `automation.json` may legitimately carry a model
+ * id as DATA (`requires.model`, the one billed rail's own pin on
+ * `ctx.delegate`), and prose may name a provider package. So this check
+ * matches only actual `import`/`require`/`import()` specifiers, never
+ * arbitrary file text — pinned by its own case below.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -32,9 +30,8 @@ const PACKAGE_ROOT = path.resolve(import.meta.dirname, "..");
 // Source roots a blueprint app, automation, or the package's own build/
 // scaffolding tooling lives under. node_modules and dist are build/vendor
 // output, not authored source. `src` is included (not just `apps` and
-// `automations`) because it is where the false-positive guard below lives
-// (`scaffold-defaults.ts`'s model-id template string) and where a stray
-// provider import in tooling would be just as much a third road.
+// `automations`) because a stray provider import in the package's own
+// tooling would be just as much a third road.
 const SOURCE_DIRS = ["apps", "automations", "scripts", "src", "types"] as const;
 
 // WIDENED TO THE NATIVE TREE (issue #712 E1, engine C). The doctrine says "no
@@ -162,11 +159,23 @@ describe("no blueprint imports a provider SDK directly (docs/blueprint-seats.md 
     }
   );
 
-  it("does not false-positive on scaffold-defaults.ts's model-id template string", () => {
-    const file = path.join(PACKAGE_ROOT, "src", "scaffold-defaults.ts");
-    const text = readFileSync(file, "utf8");
-    expect(text).toContain("anthropic/claude-3-5-sonnet");
-    expect(importedProviderPackages(text)).toStrictEqual([]);
+  it("does not false-positive on a provider name that is data or prose", () => {
+    // A manifest's `requires.model` pin and a comment naming the package are
+    // both legitimate; only an actual specifier is a third road.
+    expect(
+      importedProviderPackages(
+        '{ "requires": { "model": "anthropic/claude-3-5-sonnet" } }'
+      )
+    ).toStrictEqual([]);
+    expect(
+      importedProviderPackages("// never reach for openai or @anthropic-ai/sdk")
+    ).toStrictEqual([]);
+    // …and the matcher still catches a real import. The specifier is
+    // interpolated so this file does not trip its own scan above.
+    const provider = "openai";
+    expect(
+      importedProviderPackages(`import OpenAI from "${provider}";`)
+    ).toStrictEqual([provider]);
   });
 
   it.each(

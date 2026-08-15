@@ -176,10 +176,10 @@ export const MUTATION_SEEDS = [
     config: "stryker.config.mjs",
     report: "artifacts/mutation/blueprints-report.json",
     watch: [
-      "packages/blueprints/src/scaffold-files.ts",
+      "packages/blueprints/src/app-meta.ts",
       "packages/blueprints/src/app-rewrites.ts",
-      "packages/blueprints/src/scaffold-files.test.ts",
-      "packages/blueprints/src/scaffold-files-properties.test.ts",
+      "packages/blueprints/src/app-meta.test.ts",
+      "packages/blueprints/src/app-meta-properties.test.ts",
       "packages/blueprints/src/app-rewrites.test.ts",
       "packages/blueprints/stryker.config.mjs",
       "packages/blueprints/vitest.mutation.config.ts",

@@ -18,7 +18,6 @@ import path from "node:path";
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import * as automation from "@centraid/automation";
-import { scaffoldAppFiles } from "@centraid/blueprints";
 import type { ScaffoldFile } from "@centraid/blueprints";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -41,14 +40,42 @@ function auth(): Record<string, string> {
 }
 
 // A UI app (kind defaults to 'app') that owns one automation under
-// `automations/digest/`. Built from the canonical scaffold so the app.json
-// is realistic; the automation manifest is appended manually.
+// `automations/digest/`. The app.json mirrors what a published app carries;
+// the automation manifest is appended manually.
 function uiAppWithAutomation(enabled: boolean): ScaffoldFile[] {
-  const base = scaffoldAppFiles("notes", { name: "Notes" }).filter(
-    (f) => f.path !== "automations/README.md"
-  );
   return [
-    ...base,
+    {
+      path: "package.json",
+      content:
+        JSON.stringify(
+          {
+            name: "centraid-app-notes",
+            version: "0.1.0",
+            private: true,
+            type: "module",
+          },
+          null,
+          2
+        ) + "\n",
+    },
+    {
+      path: "app.json",
+      content:
+        JSON.stringify(
+          {
+            manifestVersion: 1,
+            id: "notes",
+            name: "Notes",
+            version: "0.1.0",
+            iconKey: "Sparkle",
+            colorKey: "violet",
+            actions: [],
+            queries: [],
+          },
+          null,
+          2
+        ) + "\n",
+    },
     {
       path: "automations/digest/automation.json",
       content:

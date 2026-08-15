@@ -987,7 +987,6 @@ export async function seedRemoteGateway(
       {
         activeGatewayId: env.gatewayId,
         changelogSeenVersion: "0.1.0",
-        remoteTemplatesUrl: "",
         ...(opts.onboarding
           ? {}
           : { onboardingCompletedAt: "2024-01-01T00:00:00.000Z" }),

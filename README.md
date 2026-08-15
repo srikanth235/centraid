@@ -98,7 +98,7 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `packages/agent-runtime` | Drives one turn through the Agent Client Protocol — the single path for every harness kind, with first-party adapters for CLIs that don't speak ACP ([docs/harnesses.md](docs/harnesses.md)); ships the vault-register tools and the `centraid` CLI. The package name is retained in v0 even though “agent” is now reserved for principals. |
 | `packages/automation` | Manifest schema, fire spine, in-process scheduler, webhook ingress, worker-thread handler runner. |
 | `packages/tunnel` | iroh QUIC wire protocol — device tunnel + one-time pairing; the TS reference the Swift/Kotlin mobile ports mirror. |
-| `packages/blueprints` | Template gallery: 8 blueprint apps + 27 automation templates, plus blank-app scaffolders. Renders on the kit layer of `packages/design`. |
+| `packages/blueprints` | Template catalog: 8 blueprint apps installed in place + 28 automation templates cloned into user-owned code. Renders on the kit layer of `packages/design`. |
 | `packages/design` | The design system in two layers: the **token** vocabulary (colors, type, spacing, app metadata, icons) shared across desktop and mobile, and the **kit** (`kit.css` / `kit.ts`) served to every blueprint app surface. |
 
 ## Gateway install (npm / curl|bash)

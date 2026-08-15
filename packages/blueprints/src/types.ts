@@ -54,12 +54,12 @@ export interface AppSeats {
 /**
  * Metadata for a single template entry. Mirrors @centraid/design'
  * `AppMeta` plus a `version` field (so the gallery can detect updates) and
- * a `files` list (so the remote fetcher knows what to download).
+ * a `files` list (so the clone path knows what to read).
  *
  * Two kinds share this shape:
- *   - `kind: 'app'` (default) — a full UI app like `agenda` / `notes` /
- *     `vitals`. Carries `index.html`, `app.css`, and an `app.json`
- *     manifest with optional `knobs[]`.
+ *   - `kind: 'app'` (default) — a full UI app like `agenda` / `notes`.
+ *     Carries its React modules plus an `app.json` manifest with optional
+ *     `knobs[]`.
  *   - `kind: 'automation'` — an app folder (`app.json#kind = "automation"`)
  *     with no UI assets; just `app.json` + `automations/<id>/{automation.json,handler.js}`.
  *     These live under the package's `automations/` directory; UI apps live
@@ -86,8 +86,8 @@ export interface TemplateMeta {
   version: string;
   /**
    * Files that make up the template, relative to its directory. Populated
-   * by the build script (`scripts/build-manifest.mjs`) — the remote fetcher
-   * downloads each entry from `<remoteUrl>/<id>/<file>`.
+   * by the build script (`scripts/build-manifest.mjs`) — `readTemplateFiles`
+   * reads each entry when a clone is staged.
    */
   files: string[];
   /**

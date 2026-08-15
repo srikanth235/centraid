@@ -13,7 +13,7 @@ gate loop before its commit.
 - [x] Stage 1 — retire the mobile WebView cover (AppDetail, WebView bridge, catalog compat branches, template-gate e2e flow; relocate transfer-policy to lib/upload).
 - [x] Stage 2 — retire the client iframe + builder and gateway serving wiring (AppFrame, AppViewRoute, opaque documents, builder routes, web-app-sessions, authoring skills, the lifecycle scaffold route; the draft-*preview* surface is app-engine's `/centraid/_draft/…` and retires in Stage 3 — see Decisions).
 - [ ] Stage 3 — retire app-engine UI-byte serving (static-server, app-bundle, bridge-script, css-module, asset-variants, query-bundle, app router kinds, KIT_DIR wiring, visual-harness).
-- [ ] Stage 4 — retire the blueprints blank-app scaffolder + template gallery (scaffold files/defaults, served half of app-rewrites, index.json, remote templates, index.html markers).
+- [x] Stage 4 — retire the blueprints blank-app scaffolder and the remote template fetch (scaffold files/defaults, served half of app-rewrites, per-app index.html, remote templates; index.json is KEPT and the reason is in Decisions).
 - [ ] Stage 5 — kit dissolution A: rehome the non-design kit modules to packages/client as typed TypeScript; delete the legacy Ask controller and its strangler.
 - [ ] Stage 6 — kit dissolution B: fold the DOM substrate into packages/design/src as typed modules; delete the served-sibling alias apparatus; rewrite the sibling imports to package imports; land the coverage-scope-reachability amendment in the same commit as its check change.
 - [ ] Stage 7 — custom-element endgame: replace JSX-emitted kit-* tags with React blocks, delete elements-base + element classes, prune orphaned kit.css rules; re-point the design gallery at the shell's real `#ui-preview` surface and delete the `fixtureHtml` parallel implementation; re-pin design-gallery baselines once, at the end.
@@ -170,6 +170,42 @@ false` claim. Budget movement is in Decisions.
 desktop e2e `SCENARIOS.md` / `COVERAGE_REPORT.md` now describe a single
 render path. The broad superapp repositioning stays Stage 8's.
 
+### Stage 4 — retire the blueprints blank-app scaffolder and the remote template fetch (scaffold files/defaults, served half of app-rewrites, per-app index.html, remote templates; index.json is KEPT and the reason is in Decisions).
+
+**The scaffolder is gone.** Deleted `packages/blueprints/src/scaffold.ts`,
+`scaffold-files.ts`, `scaffold-defaults.ts` and their suites
+(`scaffold-defaults.test.ts` + its snapshot, `scaffold-files.test.ts`,
+`scaffold-files-properties.test.ts`, `scaffold-boot.test.ts`,
+`update-app-meta.test.ts`), plus the eight per-app
+`packages/blueprints/apps/*/index.html` markers. `validateAppId` and
+`updateAppMetaFiles` survive in a new `packages/blueprints/src/app-meta.ts`
+with `app-meta.test.ts` and `app-meta-properties.test.ts` — `handleMeta` is
+still live at `packages/gateway/src/routes/lifecycle-routes.ts`, so only the
+function's dead `index.html` `<title>` branch went. `ScaffoldFile` rehomed to
+`scaffold-types.ts`; `AppInfo.hasIndex` removed (zero consumers — the
+gateway's same-named field is a separate inline type and is Stage 3's).
+`app-rewrites.ts` lost `rewriteTitleInHtml` / `rewriteIndexHtmlTitle` /
+`escapeHtml`; `clone.ts` dropped both `index.html` branches and absorbed
+`isDisplayNameTaken`.
+
+**Remote template fetch is gone.** `index.ts` lost `fetchRemoteTemplates`,
+`downloadTemplate`, `writeManifestAtomic`, `stripTrailingSlash` and `bestOf`;
+`packages/gateway/src/routes/templates-routes.ts` lost `remoteTemplatesUrl`,
+its injected `fetchImpl` and the fire-and-forget refresh, with the two
+remote-refresh tests replaced by one proving handler construction performs no
+network fetch. The setting unwound end to end through
+`packages/gateway/src/paths.ts`, `serve/build-gateway.ts`,
+`serve/pricing-warmer.ts` and desktop's `settings.ts`, `settings-merge.ts`,
+`embedded-gateway.ts`, `local-gateway.ts`. The desktop matrix suites kept
+their cases by swapping the field under test to `changelogSeenVersion`, the
+other `preserveOrSet` string field, rather than deleting coverage.
+
+**Matrix.** `blueprint-boot` and the `blueprints.correctness` cell move off
+the deleted `scaffold-boot.test.ts` to
+`packages/blueprints/src/app-boot-harness.ts`, and the flow name drops
+"scaffold". Rationale in the classification-ratchet deviation echoed in
+Decisions.
+
 ### Full changed-file inventory
 
 Every path in this change set, across all stages landed so far, including
@@ -179,13 +215,20 @@ deletions, renames, and this receipt:
 - `ARCHITECTURE.md`
 - `README.md`
 - `TESTING.md`
+- `apps/desktop/scripts/screenshot-automations.mjs`
+- `apps/desktop/scripts/screenshot-standing-orders.mjs`
 - `apps/desktop/src/main.ts`
 - `apps/desktop/src/main/auth-injector-core.test.ts`
 - `apps/desktop/src/main/auth-injector-core.ts`
 - `apps/desktop/src/main/auth-injector.ts`
+- `apps/desktop/src/main/embedded-gateway.ts`
 - `apps/desktop/src/main/ipc-core.test.ts`
 - `apps/desktop/src/main/ipc-core.ts`
 - `apps/desktop/src/main/ipc.ts`
+- `apps/desktop/src/main/local-gateway.ts`
+- `apps/desktop/src/main/matrix-concurrency.test.ts`
+- `apps/desktop/src/main/matrix-contracts.test.ts`
+- `apps/desktop/src/main/matrix-durability.test.ts`
 - `apps/desktop/src/main/settings-merge.test.ts`
 - `apps/desktop/src/main/settings-merge.ts`
 - `apps/desktop/src/main/settings.ts`
@@ -229,15 +272,54 @@ deletions, renames, and this receipt:
 - `apps/web/tests/e2e/perf-budgets.ts`
 - `apps/web/tests/e2e/perf-waterfall.spec.ts`
 - `apps/web/tests/e2e/web-pwa.spec.ts`
+- `centraid-city/src/core/content.ts`
 - `docs/config-ownership.md`
 - `docs/design-machinery.md`
 - `docs/glossary.md`
 - `docs/traps/blueprint-csp.md`
 - `docs/traps/design-tokens.md`
 - `docs/traps/electron-screenshot.md`
+- `docs/traps/manifest-regeneration.md`
 - `packages/app-engine/src/registry/token-purity.ts`
 - `packages/blueprints/README.md`
+- `packages/blueprints/apps/agenda/index.html`
+- `packages/blueprints/apps/docs/index.html`
+- `packages/blueprints/apps/locker/index.html`
 - `packages/blueprints/apps/locker/logic.ts`
+- `packages/blueprints/apps/notes/index.html`
+- `packages/blueprints/apps/people/index.html`
+- `packages/blueprints/apps/photos/index.html`
+- `packages/blueprints/apps/tally/index.html`
+- `packages/blueprints/apps/tasks/index.html`
+- `packages/blueprints/manifest.json`
+- `packages/blueprints/package.json`
+- `packages/blueprints/src/__snapshots__/scaffold-defaults.test.ts.snap`
+- `packages/blueprints/src/app-meta-properties.test.ts`
+- `packages/blueprints/src/app-meta.test.ts`
+- `packages/blueprints/src/app-meta.ts`
+- `packages/blueprints/src/app-rewrites-properties.test.ts`
+- `packages/blueprints/src/app-rewrites.ts`
+- `packages/blueprints/src/clone.test.ts`
+- `packages/blueprints/src/clone.ts`
+- `packages/blueprints/src/index.ts`
+- `packages/blueprints/src/matrix-concurrency.test.ts`
+- `packages/blueprints/src/matrix-contracts.test.ts`
+- `packages/blueprints/src/matrix-durability.test.ts`
+- `packages/blueprints/src/no-inference-client.test.ts`
+- `packages/blueprints/src/runtime-boundary.test.ts`
+- `packages/blueprints/src/scaffold-boot.test.ts`
+- `packages/blueprints/src/scaffold-defaults.test.ts`
+- `packages/blueprints/src/scaffold-defaults.ts`
+- `packages/blueprints/src/scaffold-files-properties.test.ts`
+- `packages/blueprints/src/scaffold-files.test.ts`
+- `packages/blueprints/src/scaffold-files.ts`
+- `packages/blueprints/src/scaffold-types.ts`
+- `packages/blueprints/src/scaffold.ts`
+- `packages/blueprints/src/shared-css.test.ts`
+- `packages/blueprints/src/types.ts`
+- `packages/blueprints/src/update-app-meta.test.ts`
+- `packages/blueprints/stryker.config.mjs`
+- `packages/blueprints/vitest.mutation.config.ts`
 - `packages/client/src/app-format.ts`
 - `packages/client/src/app-shell-context.ts`
 - `packages/client/src/centraid-api.d.ts`
@@ -330,16 +412,21 @@ deletions, renames, and this receipt:
 - `packages/client/src/vault-change-feed.ts`
 - `packages/design/src/css.ts`
 - `packages/gateway/skills/authoring-centraid-apps/SKILL.md`
+- `packages/gateway/src/lifecycle/automation-lifecycle-over-http.test.ts`
 - `packages/gateway/src/lifecycle/install-over-http.test.ts`
 - `packages/gateway/src/lifecycle/lifecycle-over-http.test.ts`
+- `packages/gateway/src/paths.ts`
 - `packages/gateway/src/routes/devices-routes.ts`
 - `packages/gateway/src/routes/lifecycle-automation-routes.ts`
 - `packages/gateway/src/routes/lifecycle-routes.ts`
 - `packages/gateway/src/routes/replica-access.ts`
 - `packages/gateway/src/routes/replica-routes.ts`
 - `packages/gateway/src/routes/route-security.ts`
+- `packages/gateway/src/routes/templates-routes.test.ts`
+- `packages/gateway/src/routes/templates-routes.ts`
 - `packages/gateway/src/runs/unified-conversation-runner.test.ts`
 - `packages/gateway/src/serve/build-gateway.ts`
+- `packages/gateway/src/serve/pricing-warmer.ts`
 - `packages/gateway/src/serve/serve.ts`
 - `packages/gateway/src/serve/web-app-sessions.contract.test.ts`
 - `packages/gateway/src/serve/web-app-sessions.ts`
@@ -359,6 +446,7 @@ deletions, renames, and this receipt:
 - `receipts/issue-799-retire-served-app-plane.md`
 - `scripts/check-share-reachability.test.mjs`
 - `scripts/lint-e2e-flows.mjs`
+- `scripts/mutation/seeds.mjs`
 - `scripts/perf/README.md`
 - `scripts/perf/summarize.mjs`
 - `tests/agent-e2e-mobile/AGENTS.md`
@@ -371,11 +459,45 @@ deletions, renames, and this receipt:
 - `tests/matrix.json`
 - `tests/perf/pwa-waterfall.perf.test.ts`
 - `tests/quality/classification-ratchet.json`
+- `tests/scale/blueprint-clones.scale.test.ts`
 - `tests/skips.json`
 - `tests/sleep-inventory.json`
 
 ## Decisions
 
+- **`packages/blueprints/index.json` is KEPT — the issue's plan for it was
+  wrong, and both offered options would have broken something.** The issue
+  treats `index.json` as part of the template gallery. It is not: it is the
+  build-time source for a runtime catalog that survives. Pruning its eight
+  `kind:"app"` rows would delete those apps from the generated
+  `manifest.json`, which bundled-app install and `InlineAppRoute`'s `bundled`
+  flag still need. Deriving the manifest from the tree instead would silently
+  change the published catalog, because `index.json` carries display metadata
+  that genuinely differs from each `app.json` — Notes is `0.4.1` / `forest`
+  in the index and `0.8.1` / `slate` in its `app.json` — and its 28
+  automation rows carry `emoji`, `category`, `triggerKind`, `triggerLabel`
+  and `integrations` that exist nowhere else and are still served by the
+  surviving `GET /centraid/_templates` to the surviving Discover and
+  automation gallery. Verified: 36 rows, 8 apps + 28 automations, with live
+  client consumers in `packages/client/src/gateway-client.ts`. The
+  index-vs-manifest roles are now written down in
+  `docs/traps/manifest-regeneration.md` instead.
+- **The Notes version/colour divergence between `index.json` and `app.json`
+  is left alone.** It is a real inconsistency but it predates this issue, has
+  nothing to do with the served-app plane, and "fixing" it would change the
+  published catalog — a product call, not a retirement.
+- **`tests/coverage-floors.json` does NOT move, because the measurement said
+  the opposite of what was predicted.** The Stage 4 slice expected the
+  `packages/blueprints/src/**` floor to fall (deleting `scaffold-defaults.ts`,
+  328 lines of top-level constants that v8 counts as covered, mechanically
+  lowers a percentage). Measured against a baseline worktree at the stage-2
+  tip with identical vitest configuration and the same two environmentally
+  broken files excluded from both sides, coverage ROSE: lines 78.29%
+  (588/751) → 86.64% (506/584), branches 65.44% (286/437) → 71.25%
+  (238/334). Deleting `scaffold.ts` took the uncovered `listAppsOnDisk` /
+  `deleteApp` with it, and the new `app-meta.ts` arrives densely covered.
+  Lowering a floor on the strength of a prediction, without measuring, would
+  have been an unforced weakening.
 - **Stage 7 additionally re-points the design gallery at the real shell —
   user-authorized scope beyond the issue text.** The user asked for this
   mid-run after reviewing the design machinery; it is not inferred from #799.
@@ -517,7 +639,7 @@ deletions, renames, and this receipt:
   `artifacts/e2e/ui-impact/issue-799-mobile-native-home.png`, since the
   retired template-gate flow can no longer carry mobile UI evidence.
 - **Stage 2's quality-knob movement**, recorded verbatim in
-  `tests/quality/classification-ratchet.json`: "#799 stage 2 retires the client iframe host, the app builder, and the gateway wiring that served them; the governed classifications move only where that deletion forces them. route-security.ts renames the /centraid/_web owner file to web-control-sessions.ts (the per-app browser-session half of it is gone, the control half is untouched), and tests/matrix.json drops the desktop-builder-journey flow with its floor transferred to desktop-app-open-journey and narrows gateway-session-boundaries 13 -> 8 because five of its cases drove the retired app-session plane. No quality grade, budget, or demonstrated-red claim weakens."
+  `tests/quality/classification-ratchet.json`: "#799 stage 2 retires the client iframe host, the app builder, and the gateway wiring that served them; the governed classifications move only where that deletion forces them. route-security.ts renames the /centraid/_web owner file to web-control-sessions.ts (the per-app browser-session half of it is gone, the control half is untouched), and tests/matrix.json drops the desktop-builder-journey flow with its floor transferred to desktop-app-open-journey and narrows gateway-session-boundaries 13 -> 8 because five of its cases drove the retired app-session plane. No quality grade, budget, or demonstrated-red claim weakens. #799 stage 4 retires the blueprints blank-app scaffolder, so the blueprint-boot flow and the blueprints.correctness cell move off the deleted scaffold-boot.test.ts to packages/blueprints/src/app-boot-harness.ts and the flow name drops the word 'scaffold'. That is a seat transfer with no floor change and it makes the claim truer, not weaker: the retired owner booted the blank scaffold's DEFAULT_APP_JS under jsdom and never booted the eight built-in apps its name advertised, while the new owner is the harness each of the eight app-boot/*.test.ts files drives. minimumTests stays 1 and countDeclaredTests reads 1 on the harness (the eight per-app files declare 0, so owning one of them would have required lowering the minimum). The matrixGovernanceFingerprint is unchanged because qualities and demonstratedRed are untouched."
 - **`tests/hygiene-budgets.json` ratcheted down**, not up: `toBeTruthyFalsy`
   413 → 409 and `toHaveBeenCalled` 844 → 811. The budgets must equal the
   measured counts, and deleting the builder/iframe test files removed that

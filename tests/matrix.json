@@ -1079,7 +1079,7 @@
       "tier": "integration"
     },
     "blueprints.correctness": {
-      "owner": "packages/blueprints/src/scaffold-boot.test.ts",
+      "owner": "packages/blueprints/src/app-boot-harness.ts",
       "tier": "integration"
     },
     "blueprints.contracts": {
@@ -2542,11 +2542,11 @@
     },
     {
       "id": "blueprint-boot",
-      "name": "All eight built-in apps scaffold and boot",
+      "name": "All eight built-in apps boot",
       "surface": "blueprints",
       "dimension": "correctness",
       "tier": "integration",
-      "owner": "packages/blueprints/src/scaffold-boot.test.ts",
+      "owner": "packages/blueprints/src/app-boot-harness.ts",
       "minimumTests": 1
     },
     {

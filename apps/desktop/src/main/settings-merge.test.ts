@@ -7,12 +7,12 @@ describe("settings-merge", () => {
     const next = mergePersistedSettings(
       {
         activeGatewayId: "local",
-        remoteTemplatesUrl: "https://example.test/feed.json",
+        changelogSeenVersion: "1.0.0",
         onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
       },
-      { remoteTemplatesUrl: "https://example.test/feed2.json" }
+      { changelogSeenVersion: "1.1.0" }
     );
-    expect(next.remoteTemplatesUrl).toBe("https://example.test/feed2.json");
+    expect(next.changelogSeenVersion).toBe("1.1.0");
     expect(next.onboardingCompletedAt).toBe("2026-01-01T00:00:00.000Z");
     expect(next.activeGatewayId).toBe("local");
   });
@@ -41,7 +41,7 @@ describe("settings-merge", () => {
         activeGatewayId: "local",
         activeVaultByGateway: { local: "v-1", "gw-2": "v-9" },
       },
-      { remoteTemplatesUrl: "https://example.test/feed.json" }
+      { changelogSeenVersion: "1.0.0" }
     );
     expect(next.activeVaultByGateway).toStrictEqual({
       local: "v-1",
@@ -76,7 +76,7 @@ describe("settings-merge", () => {
         gatewayAlertSeconds: 300,
         gatewayAlertsEnabled: false,
       },
-      { remoteTemplatesUrl: "https://example.test/feed.json" }
+      { changelogSeenVersion: "1.0.0" }
     );
     expect(carried.gatewayAlertSeconds).toBe(300);
     expect(carried.gatewayAlertsEnabled).toBe(false);
@@ -126,7 +126,7 @@ describe("settings-merge", () => {
     expect(
       mergePersistedSettings(
         { activeGatewayId: "local", launchAtLogin: true },
-        { remoteTemplatesUrl: "https://example.test/feed.json" }
+        { changelogSeenVersion: "1.0.0" }
       ).launchAtLogin
     ).toBe(true);
 

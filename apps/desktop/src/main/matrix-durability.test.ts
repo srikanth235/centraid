@@ -13,7 +13,7 @@ describe("matrix-durability", () => {
       { activeVaultByGateway: { local: "v-1", remote: "v-9" } }
     );
     state = mergePersistedSettings(state, {
-      remoteTemplatesUrl: "https://example.test/a.json",
+      changelogSeenVersion: "1.0.0",
     });
     state = mergePersistedSettings(state, {
       onboardingCompletedAt: "2026-07-01T00:00:00.000Z",
@@ -22,7 +22,7 @@ describe("matrix-durability", () => {
       local: "v-1",
       remote: "v-9",
     });
-    expect(state.remoteTemplatesUrl).toBe("https://example.test/a.json");
+    expect(state.changelogSeenVersion).toBe("1.0.0");
     expect(state.onboardingCompletedAt).toBe("2026-07-01T00:00:00.000Z");
   });
 

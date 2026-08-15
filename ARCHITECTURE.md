@@ -143,7 +143,7 @@ The Rust byte plane is a dumb, bounded byte service. TypeScript authenticates th
 │   ├── app-engine/                # @centraid/app-engine — handler loader, dispatcher, /centraid HTTP surface, stores
 │   ├── agent-runtime/             # @centraid/agent-runtime — ACP turn driver for every harness kind (docs/harnesses.md); centraid CLI bin
 │   ├── automation/                # @centraid/automation — manifest, fire spine, scheduler, webhook ingress
-│   ├── blueprints/                # @centraid/blueprints — scaffolders + bundled template gallery
+│   ├── blueprints/                # @centraid/blueprints — bundled system apps + automation templates
 │   ├── tunnel/                    # @centraid/tunnel — wire protocol + packaged Rust napi relay
 │   └── design/                    # @centraid/design — tokens layer (colors, type, spacing,
 │                                  #   icons) + kit layer (kit.css/kit.ts served to apps)

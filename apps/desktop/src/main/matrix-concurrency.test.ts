@@ -14,25 +14,21 @@ describe("matrix-concurrency", () => {
     };
     const results = Array.from({ length: 20 }, (_, i) =>
       mergePersistedSettings(base, {
-        remoteTemplatesUrl: `https://example.test/${i}.json`,
+        changelogSeenVersion: `1.0.${i}`,
         // Each call supplies its own vault map so results are not aliased.
         activeVaultByGateway: { local: `v-${i}` },
       })
     );
     for (let i = 0; i < results.length; i += 1) {
-      expect(results[i]!.remoteTemplatesUrl).toBe(
-        `https://example.test/${i}.json`
-      );
+      expect(results[i]!.changelogSeenVersion).toBe(`1.0.${i}`);
       expect(results[i]!.activeVaultByGateway).toStrictEqual({
         local: `v-${i}`,
       });
     }
     // Top-level result objects are distinct; mutating one field does not rewrite siblings.
-    results[0]!.remoteTemplatesUrl = "MUTATED";
+    results[0]!.changelogSeenVersion = "MUTATED";
     for (let i = 1; i < results.length; i += 1) {
-      expect(results[i]!.remoteTemplatesUrl).toBe(
-        `https://example.test/${i}.json`
-      );
+      expect(results[i]!.changelogSeenVersion).toBe(`1.0.${i}`);
     }
     expect(base.activeGatewayId).toBe("local");
   });

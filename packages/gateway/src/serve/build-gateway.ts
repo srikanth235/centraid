@@ -4720,12 +4720,6 @@ export async function buildGateway(
         ...(paths.templatesCacheDir
           ? { cacheDir: paths.templatesCacheDir }
           : {}),
-        // Remote template fetch is deferred for v1 (issue #434, Phase 4): the
-        // catalog serves only the shipped @centraid/blueprints. Remote install
-        // is the one case where install legitimately copies (a download), so
-        // the `remoteTemplatesUrl` refresh wiring is intentionally NOT passed
-        // here — the mechanism stays in makeTemplatesRouteHandler and returns
-        // when the remote/third-party app catalog is designed.
         // Catalog installed-state (issue #434): whether each bundled app is
         // already installed in the request's vault, so the Discover card shows
         // "Open" instead of "Install". Degrades to "nothing installed" if no

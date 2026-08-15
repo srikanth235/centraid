@@ -51,18 +51,10 @@ export interface GatewayPaths {
   /**
    * Optional per-gateway template cache dir (issue #141). When set, the
    * `GET /centraid/_templates` route resolves bundle-or-cache, letting a
-   * newer template pulled from a remote URL shadow the bundled copy. Omit
-   * for bundle-only resolution (the standalone daemon / tests).
+   * newer per-template copy shadow the bundled one. Omit for bundle-only
+   * resolution (the standalone daemon / tests).
    */
   templatesCacheDir?: string;
-
-  /**
-   * Optional remote template manifest URL (issue #141, Phase 5). When set
-   * alongside `templatesCacheDir`, the gateway refreshes the cache from this
-   * URL once on startup (best-effort, never throws) so newer remote
-   * templates shadow the bundle. Omit for bundle/cache-only resolution.
-   */
-  remoteTemplatesUrl?: string;
 
   /**
    * Optional path to the gateway-owned model catalog (`model-catalog.json`,
