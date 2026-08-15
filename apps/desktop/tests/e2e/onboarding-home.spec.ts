@@ -220,6 +220,42 @@ test("2.1 — home paints the springboard (or day-one first-moves) for first-par
     await expect(
       page.locator('[role="tablist"][aria-label="Filter your library by kind"]')
     ).toHaveCount(0);
+    await expect(page.getByTestId("home-health-ribbon")).toBeVisible();
+    // Perceived-latency budget (#785): opening is a local frame-state change,
+    // so the companion must paint within 100ms of the member gesture. Measure
+    // in the renderer to exclude Playwright transport latency.
+    const assistantOpenMs = await page.evaluate(async () => {
+      const button = document.querySelector<HTMLButtonElement>(
+        'button[aria-label="Ask Assistant"]'
+      );
+      if (!button) throw new Error("Assistant entry is missing");
+      const started = performance.now();
+      button.click();
+      await new Promise<void>((resolve) => {
+        const waitForCompanion = (): void => {
+          if (
+            document.querySelector('dialog[aria-label="Assistant companion"]')
+          )
+            resolve();
+          else requestAnimationFrame(waitForCompanion);
+        };
+        waitForCompanion();
+      });
+      return performance.now() - started;
+    });
+    expect(assistantOpenMs).toBeLessThan(100);
+    await expect(
+      page.getByRole("dialog", { name: "Assistant companion" })
+    ).toBeVisible();
+    const evidenceDir = path.resolve(
+      import.meta.dirname,
+      "../../../../artifacts/e2e/ui-impact"
+    );
+    await mkdir(evidenceDir, { recursive: true });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-785-assistant-signals.png"),
+      fullPage: true,
+    });
   } finally {
     await closeApp(app);
   }

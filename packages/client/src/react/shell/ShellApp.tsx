@@ -21,6 +21,8 @@ import type { ShellFrameProps } from "./ShellFrame.js";
 import { Store } from "./store.js";
 import { useCompactLayout } from "./useCompactLayout.js";
 
+import styles from "./ShellApp.module.css";
+
 // The navigation surface handed to the stem + outlet render-props. It exposes
 // the current route and the history verbs, so callers dispatch navigations
 // without touching the reducer.
@@ -37,6 +39,9 @@ export interface ShellNav {
   forward: () => void;
   canGoBack: boolean;
   canGoForward: boolean;
+  /** Full-bleed route-owned frames use the same Assistant state as the shell. */
+  assistantOpen?: boolean;
+  toggleAssistant?: () => void;
 }
 
 /**
@@ -87,6 +92,16 @@ export interface ShellAppProps {
   /** The one persistent status line. Full-bleed routes mount their own frame
    *  and are handed the same node directly, so this is the framed case only. */
   statusLine?: ReactNode;
+  /** The Assistant is frame state, not a route. This renderer receives the
+   *  one open state shared by app-bar controls, keyboard shortcut, and rail. */
+  renderAssistantCompanion?: (
+    nav: ShellNav,
+    state: {
+      open: boolean;
+      setOpen: (open: boolean) => void;
+      surface: "pointer" | "touch";
+    }
+  ) => ReactNode;
 }
 
 const DEFAULT_FULL_BLEED = (r: ShellRoute): boolean =>
@@ -126,6 +141,7 @@ export default function ShellApp({
   onNewApp,
   onNavReady,
   statusLine,
+  renderAssistantCompanion,
 }: ShellAppProps): JSX.Element {
   const [state, dispatch] = useReducer(routerReducer, INITIAL_ROUTER, (init) =>
     routerReducer(init, { type: "navigate", route: initialRoute })
@@ -137,6 +153,11 @@ export default function ShellApp({
   // not. Compact ignores the preference entirely: the band is the navigation
   // there, and a phone with no way to move is not a phone.
   const compact = useCompactLayout();
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const toggleAssistant = useCallback(
+    () => setAssistantOpen((open) => !open),
+    []
+  );
   const [stemOpen, setStemOpen] = useState(() =>
     Store.get<boolean>(STEM_OPEN_KEY, true)
   );
@@ -169,8 +190,20 @@ export default function ShellApp({
       forward: () => dispatch({ type: "forward" }),
       canGoBack: canBack(state),
       canGoForward: canFwd(state),
+      ...(compact && renderAssistantCompanion
+        ? { assistantOpen, toggleAssistant }
+        : {}),
     }),
-    [route, state, stemOpen, toggleStem]
+    [
+      assistantOpen,
+      compact,
+      renderAssistantCompanion,
+      route,
+      state,
+      stemOpen,
+      toggleAssistant,
+      toggleStem,
+    ]
   );
 
   useEffect(() => {
@@ -179,9 +212,29 @@ export default function ShellApp({
 
   const screen = <Outlet nav={nav} render={renderScreen} />;
 
+  const assistantCompanion = renderAssistantCompanion?.(nav, {
+    open: assistantOpen,
+    setOpen: setAssistantOpen,
+    surface: compact ? "touch" : "pointer",
+  });
+
   // Full-bleed routes render their own window frame (app view / builder),
-  // so the shell frame steps aside entirely.
-  if (isFullBleed(route)) return <>{screen}</>;
+  // so the ordinary shell frame steps aside. The Assistant remains frame
+  // state, however: this host reserves its pointer rail while the route-owned
+  // frame opens the touch sheet from its ordinary app-bar Assistant glyph.
+  if (isFullBleed(route))
+    return (
+      <div
+        className={styles.fullBleedCompanionHost}
+        data-assistant={assistantOpen ? "open" : undefined}
+        data-surface={compact ? "touch" : "pointer"}
+      >
+        <div className={styles.fullBleedStage} data-assistant-page="true">
+          {screen}
+        </div>
+        {assistantCompanion}
+      </div>
+    );
 
   const bar = renderAppBar?.(nav);
 
@@ -199,6 +252,11 @@ export default function ShellApp({
         ? {}
         : { appTitleAction: bar.titleAction })}
       statusLine={statusLine}
+      assistantCompanion={assistantCompanion}
+      assistantOpen={assistantOpen}
+      {...(compact && renderAssistantCompanion
+        ? { onToggleAssistant: toggleAssistant }
+        : {})}
       canGoBack={nav.canGoBack}
       canGoForward={nav.canGoForward}
       onBack={() => nav.back()}

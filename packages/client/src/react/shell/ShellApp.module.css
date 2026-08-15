@@ -1,0 +1,21 @@
+.fullBleedCompanionHost {
+  block-size: 100%;
+  inline-size: 100%;
+  min-block-size: 0;
+  min-inline-size: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.fullBleedStage {
+  block-size: 100%;
+  box-sizing: border-box;
+  min-block-size: 0;
+  min-inline-size: 0;
+  transition: padding-inline-end var(--dur-2) var(--ease-entry);
+}
+
+.fullBleedCompanionHost[data-assistant="open"][data-surface="pointer"]
+  .fullBleedStage {
+  padding-inline-end: 392px;
+}

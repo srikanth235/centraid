@@ -44,6 +44,7 @@ import SectionBlock from "../../kit/components/SectionBlock";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import { postStatus } from "../../kit/components/status-line";
 import TopSafeArea from "../../kit/components/TopSafeArea";
+import { VAULT_SECTION_ORDER } from "../../kit/origin-seat-layout";
 import { useTheme } from "../../kit/theme";
 import type { DataScreenProps } from "../../navigation";
 import {
@@ -63,6 +64,7 @@ import { styles } from "./Data.styles";
 import RecordSheet from "./RecordSheet";
 import { useData } from "./useData";
 import type { DataState } from "./useData";
+import { VaultCopiesSection, VaultSharingSection } from "./VaultSections";
 
 /** The place's own words. Verbatim from the reference where the payload
  *  supports them; the two error plates below are this app's, because the
@@ -72,24 +74,24 @@ const COPY = {
     "Kinds appear here as apps write records. Nothing is created until an app or an import puts something in.",
   emptyTitle: "This vault is empty",
   errorBody:
-    "The vault is encrypted and present on disk. The gateway could not open it, which is usually a permissions problem on the machine rather than damage to the data.",
+    "The vault is encrypted and present on disk. Its home machine could not open it, which is usually a permissions problem rather than damage to the data.",
   errorTitle: "Cannot open the store",
   healthEmpty: "Nothing to attend to · nothing needs you here right now.",
   healthError:
-    "This page could not load · everything else on the gateway is unaffected.",
+    "Contents could not load · everything else in the vault is unaffected.",
   healthLabel: "Everything is readable",
-  healthLoading: "Reading from the gateway",
+  healthLoading: "Reading the vault contents",
   kindsNote:
     "A kind is a shape of record an app writes. Sizes include every version kept.",
   loadingNote:
     "A row knows its shape before its content arrives, so nothing reflows when it does.",
   noGatewayBody:
-    "This phone is not paired with a gateway yet. The vault and everything in it are on your own machine, waiting; pair from Settings and its kinds appear here.",
-  noGatewayTitle: "Not connected to a gateway",
+    "This phone is not linked to a vault yet. Link it from Settings and the vault contents appear here.",
+  noGatewayTitle: "Not linked to a vault",
   relations: "How they relate",
   retry: "Try again",
   sectionKinds: "Kinds",
-  title: "Data",
+  title: "Vault",
 } as const;
 
 /** The record menu's words. `Open the record` and `Copy the id` are wired to
@@ -214,6 +216,7 @@ export default function DataScreen({
             />
           }
         >
+          <SectionBlock label={VAULT_SECTION_ORDER[0]} />
           {opsState === "loading" ? (
             <>
               <SkeletonRows accessibilityLabel="Reading what the vault holds" />
@@ -293,6 +296,14 @@ export default function DataScreen({
               ) : null}
             </>
           ) : null}
+          <VaultCopiesSection
+            openCopies={() => navigation.navigate("Devices")}
+          />
+          <VaultSharingSection
+            openSharing={() =>
+              navigation.navigate("Settings", { screen: "Sharing" })
+            }
+          />
         </ScrollView>
         {/* No inline verb: the reference's `healthAction` is '' on this page,
             and there is nothing on a census to act on in one tap. */}

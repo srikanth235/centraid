@@ -30,6 +30,11 @@ describe("shell CSS lowering", () => {
     expect(root).toContain("--target-min: 44px;");
   });
 
+  test("emits the v10 attention tone without aliasing the warning role", () => {
+    expect(blockFor(":root")).toContain("--attention: #8A6520;");
+    expect(blockFor("[data-theme='dark']")).toContain("--attention: #D8A64E;");
+  });
+
   test("emits the component metrics and both motion cases", () => {
     const root = blockFor(":root");
     expect(root).toContain("--h-control: 34px;");

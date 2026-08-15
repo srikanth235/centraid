@@ -541,6 +541,15 @@ const roleTable: RoleDef[] = [
     everywhere(lightTheme.shadowLg)
   ),
   role(
+    "--attention",
+    "color",
+    "The middle system-signal tone: needs notice but not interruption. Type, border, or a 2px rule; never a fill.",
+    "small text AA on every paper surface",
+    allSurfaces,
+    everywhere(lightTheme.attention),
+    4.5
+  ),
+  role(
     "--danger",
     "color",
     "Destructive and error status ink, solved from the same base as --net so a destructive action and a network egress read as one consequence. Outlined, never filled.",
@@ -900,6 +909,7 @@ export const DARK_THEME_ROLE_VALUES: Readonly<Record<string, string>> = {
   "--accent-hover": darkTheme.accentInkHover,
   "--accent-light": darkTheme.accentLight,
   "--accent-text": darkTheme.accentText,
+  "--attention": darkTheme.attention,
   "--bg": darkTheme.bg,
   "--danger": darkTheme.danger,
   "--focus-ring-color": darkTheme.ring,
@@ -928,6 +938,7 @@ export const NATIVE_COLOR_ROLE_MAP = {
   accentLight: "--accent-light",
   accentSoft: "--accent-soft",
   accentText: "--accent-text",
+  attention: "--attention",
   appIdentityText: "--app-identity-text",
   bg: "--bg",
   bgChrome: "--bg-chrome",

@@ -35,11 +35,11 @@ const PAIR_ERRORS: readonly (readonly [string, string])[] = [
   ],
   [
     "no_iroh_endpoint",
-    "The gateway has no network identity yet. Start it and try again.",
+    "The vault host has no network identity yet. Start it and try again.",
   ],
   [
     "device_identity_required",
-    "This device isn’t recognized by the gateway yet. Reload and try again.",
+    "This device isn’t recognized by the vault host yet. Reload and try again.",
   ],
   [
     "owner_only",

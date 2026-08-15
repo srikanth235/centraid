@@ -64,7 +64,7 @@ export interface LauncherDestination {
   /** Stable identity for keys, pins, and tests; independent of the label. */
   id: ShellPage;
   label: string;
-  /** Band label. The compact band is 1/5th of a phone wide — a long name
+  /** Band label. The compact band is 1/6th of a phone wide — a long name
    *  there truncates to nothing, so a destination whose label does not fit
    *  declares a shorter one rather than being ellipsised. */
   shortLabel?: string;
@@ -147,7 +147,7 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
   {
     icon: DESTINATION_MARKS.analytics,
     id: "insights",
-    label: "Analytics",
+    label: "Activity",
     page: "insights",
     // Analytics counts automation runs and names them from the automation
     // list; both of its reads live behind the automations gate.
@@ -157,30 +157,23 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
   {
     icon: DESTINATION_MARKS.data,
     id: "atlas",
-    label: "Data",
+    label: "Vault",
     page: "atlas",
     route: { kind: "atlas" },
   },
   {
     icon: DESTINATION_MARKS.devices,
     id: "household",
-    label: "Devices",
+    label: "Copies",
     page: "household",
     route: { kind: "household" },
   },
   {
     icon: DESTINATION_MARKS.gateway,
     id: "gateway",
-    label: "Gateway",
+    label: "System",
     page: "gateway",
     route: { kind: "gateway" },
-  },
-  {
-    icon: DESTINATION_MARKS.storage,
-    id: "storage",
-    label: "Storage",
-    page: "storage",
-    route: { kind: "storage" },
   },
   {
     icon: DESTINATION_MARKS.settings,
@@ -194,17 +187,11 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
 /**
  * The pin set a member starts with.
  *
- * This was four (plus Home), sized so the compact band never overflowed on
- * first run. That optimised the wrong surface: the DESKTOP stem is where the
- * launcher actually lives, it scrolls rather than caps, and trimming to the
- * band's budget is what silently dropped Connectors, Devices, Data and
- * Analytics out of the sidebar — four places that had standing rows before
- * #707 and that a member has no reason to expect behind a sheet.
- *
- * Overflow on the band was never the failure it was treated as: `More` exists
- * for exactly this, opens the same All-apps sheet, and the cap logic already
- * handles it. So the default is now the full working set, and the band shows
- * Home plus the first four with the rest behind `More`.
+ * The default set answers the four household questions: Home carries ambient
+ * health, Notifications what needs a decision, Activity what happened, and
+ * Vault what is held and shared. Setup destinations (Automations and
+ * Connectors), Copies, and diagnostics (System) remain in All apps and may be
+ * pinned deliberately; System is never shipped pinned.
  *
  * Home is not listed: it is pinned by law (see `isPinned`), the way a browser
  * cannot unpin its own back button.
@@ -213,22 +200,17 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
    standing launcher row — it is a thing you talk to, reachable from the app
    surface and ⌘K, not one of the places the frame goes.
 
-   Three of these are gated (Automations, Connectors, Analytics) and they stay
-   in the shipped set anyway: a pin is a member's arrangement, and
-   `visibleDestinations` filters what a given gateway can show. Trimming the
-   defaults instead would mean a gateway that opts in later starts with an
-   emptier launcher than one that opted in first. */
+   Activity is capability-gated with Automations because its live rollup is
+   served by that plane. Gating filters presentation and never mutates a
+   member's persisted pin map. */
 export const DEFAULT_PINS: readonly ShellPage[] = [
   "approvals",
-  "automations",
-  "connectors",
   "insights",
   "atlas",
-  "household",
 ];
 
-/** The compact band's hard cap, INCLUDING Home. A sixth slot would put every
- *  tab under the 44px floor, which stops being a tap target. */
+/** The compact band's destination cap, INCLUDING Home. More is a standing
+ *  sixth control and is not counted as a destination. */
 export const BAND_MAX_ITEMS = 5;
 
 export type PinSet = Readonly<Record<string, boolean>>;
@@ -287,8 +269,7 @@ export function bandDestinations(
 } {
   const all = pinnedDestinations(pins, capabilities);
   if (all.length <= BAND_MAX_ITEMS) return { items: all, overflow: 0 };
-  // One slot goes to "More", so only four of the five carry apps.
-  const shown = all.slice(0, BAND_MAX_ITEMS - 1);
+  const shown = all.slice(0, BAND_MAX_ITEMS);
   return { items: shown, overflow: all.length - shown.length };
 }
 

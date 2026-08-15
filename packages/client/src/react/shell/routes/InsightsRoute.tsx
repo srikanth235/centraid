@@ -50,12 +50,12 @@ function isWindow(value: unknown): value is number {
  *  coarsest unit that is still true. */
 export function uptimeLine(uptimeMs: number | undefined): string {
   if (uptimeMs === undefined || !Number.isFinite(uptimeMs) || uptimeMs < 0)
-    return "This gateway did not report how long it has been up.";
+    return "This vault host did not report how long it has been up.";
   const days = Math.floor(uptimeMs / DAY_MS);
   if (days >= 1)
-    return `The gateway has been up for ${days} ${days === 1 ? "day" : "days"}.`;
+    return `The vault host has been up for ${days} ${days === 1 ? "day" : "days"}.`;
   const hours = Math.max(1, Math.floor(uptimeMs / 3_600_000));
-  return `The gateway has been up for ${hours} ${hours === 1 ? "hour" : "hours"}.`;
+  return `The vault host has been up for ${hours} ${hours === 1 ? "hour" : "hours"}.`;
 }
 
 /** The app bar's count line — the window's volume and its failures. */
@@ -229,7 +229,7 @@ export default function InsightsRoute(): JSX.Element {
         <PanelBlock
           action={{ label: "Retry", onClick: () => setRetry((n) => n + 1) }}
           body="Runs are still being recorded. This page reads a rollup that is rebuilt every ten minutes, and the rebuild has not finished."
-          eyebrow="Analytics"
+          eyebrow="Activity"
           title="The run log is unavailable"
           tone="net"
         />

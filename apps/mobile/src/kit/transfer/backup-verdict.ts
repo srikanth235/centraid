@@ -25,6 +25,7 @@
 
 import { formatBytes } from "@centraid/design";
 
+import { memberFacingError } from "../member-error";
 import type { TransferQueueCounts } from "./transfer-queue";
 
 export type BackupVerdict = "complete" | "pending" | "failing" | "unreadable";
@@ -88,7 +89,9 @@ export function backupVerdictCopy(
     // below it on the screen, so nothing is hidden by the summary.
     // An EMPTY message counts as no message: `?? ` alone would leave a leading
     // " · " that reads as a rendering bug rather than as a missing reason.
-    const first = queue.failures[0]?.lastError || "no reason was recorded";
+    const first = memberFacingError(
+      queue.failures[0]?.lastError || "no reason was recorded"
+    );
     return {
       verdict,
       title: `${refused} transfer${refused === 1 ? "" : "s"} refused`,

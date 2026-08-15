@@ -32,7 +32,7 @@ export interface LocalFootprintCardProps {
   report: LocalUsageReportDTO | null;
   loadError: string | null;
   /** Full re-walk — an explicit owner action, never a poll. */
-  onRescan: () => void;
+  onRescan?: () => void;
   rescanning: boolean;
   /**
    * vaultId → owning person's label (issue #726 P1) — joined client-side from
@@ -189,20 +189,22 @@ export default function LocalFootprintCard({
     >
       <div className={gwStyles.panelHead}>
         <h2>On this machine</h2>
-        <button
-          type="button"
-          className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
-          disabled={rescanning || !report}
-          onClick={onRescan}
-        >
-          <span
-            className={styles.rescanIcon}
-            data-spin={rescanning || undefined}
+        {onRescan ? (
+          <button
+            type="button"
+            className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+            disabled={rescanning || !report}
+            onClick={onRescan}
           >
-            <Icon name={rescanning ? "Loader" : "Refresh"} size={13} />
-          </span>
-          <span>{rescanning ? "Measuring…" : "Rescan"}</span>
-        </button>
+            <span
+              className={styles.rescanIcon}
+              data-spin={rescanning || undefined}
+            >
+              <Icon name={rescanning ? "Loader" : "Refresh"} size={13} />
+            </span>
+            <span>{rescanning ? "Measuring…" : "Rescan"}</span>
+          </button>
+        ) : null}
       </div>
 
       <div className={styles.body}>

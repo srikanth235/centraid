@@ -176,7 +176,7 @@ describe("InsightsRoute suite", () => {
         state: "ready",
       });
       expect(readRouteHealth()?.text).toBe(
-        "93% of runs succeeded · The gateway has been up for 21 days."
+        "93% of runs succeeded · The vault host has been up for 21 days."
       );
     });
 
@@ -331,7 +331,7 @@ describe("InsightsRoute suite", () => {
       getGatewayHealth.mockRejectedValue(new Error("offline"));
       const el = await render();
       expect(el.querySelector(".page")).not.toBeNull();
-      expect(el.textContent).toContain("Not available from this gateway");
+      expect(el.textContent).toContain("Not available from this vault host");
       expect(readRouteHealth()?.text).toContain(
         "did not report how long it has been up"
       );
@@ -347,9 +347,11 @@ describe("InsightsRoute suite", () => {
 
     it("says uptime at the coarsest unit that is still true", () => {
       expect(uptimeLine(21 * 86_400_000)).toBe(
-        "The gateway has been up for 21 days."
+        "The vault host has been up for 21 days."
       );
-      expect(uptimeLine(3_600_000)).toBe("The gateway has been up for 1 hour.");
+      expect(uptimeLine(3_600_000)).toBe(
+        "The vault host has been up for 1 hour."
+      );
       expect(uptimeLine(undefined)).toContain("did not report");
     });
   });

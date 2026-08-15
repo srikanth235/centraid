@@ -60,6 +60,8 @@ export type ShellRoute =
   | {
       kind: "gateway";
       tab?: "overview" | "components" | "storage" | "logs" | "alerts";
+      focus?: "backups" | "capacity";
+      cause?: "backup-alert";
     }
   // The people side of this installation (issue #599, Decision 14): the member
   // roster, the devices acting for each person, and every vault this member can

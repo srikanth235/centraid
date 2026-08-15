@@ -37,6 +37,7 @@ export interface StorageScreenProps {
    * a test) still renders the footprint, unlabeled.
    */
   loadOwners?: () => Promise<GatewayOwner[]>;
+  readOnly?: boolean;
 }
 
 /** Footprint refresh cadence. Deliberately slower than the backup card's 10s:
@@ -125,7 +126,7 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
       <LocalFootprintCard
         report={report}
         loadError={footprintError}
-        onRescan={onRescan}
+        {...(props.readOnly ? {} : { onRescan })}
         rescanning={rescanning}
         ownerLabels={ownerLabels}
       />
@@ -134,6 +135,7 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
         limits={limits}
         report={report}
         onSave={onSaveLimits}
+        readOnly={props.readOnly}
       />
     </div>
   );

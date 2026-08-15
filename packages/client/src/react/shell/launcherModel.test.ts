@@ -32,7 +32,6 @@ describe("the launcher model", () => {
         "approvals",
         "gateway",
         "household",
-        "storage",
         "atlas",
         "settings",
       ])
@@ -72,25 +71,23 @@ describe("the launcher model", () => {
     expect(isPinned({}, "connectors")).toBe(false);
   });
 
-  it("ships every standing destination pinned, and lets the band overflow", () => {
-    // This used to assert the default set FIT the band (`length + 1 <=
-    // BAND_MAX_ITEMS`), which is what trimmed Connectors, Devices, Data and
-    // Analytics out of the desktop stem — the band's budget deciding the
-    // sidebar's contents. The stem scrolls and has no cap; the band's overflow
-    // goes behind `More`, which is what `More` is for.
+  it("pins the four questions and keeps setup and diagnostics behind More", () => {
+    expect(DEFAULT_PINS).toStrictEqual(["approvals", "insights", "atlas"]);
     for (const id of [
+      "automations",
       "connectors",
       "household",
-      "atlas",
-      "insights",
-    ] as const) {
-      expect(DEFAULT_PINS).toContain(id);
-    }
-    // The band still obeys its own cap — it just reaches it now.
+      "gateway",
+    ] as const)
+      expect(DEFAULT_PINS).not.toContain(id);
     const band = bandDestinations(pinsOf(...DEFAULT_PINS), CAPABILITIES_ON);
-    expect(band.items).toHaveLength(BAND_MAX_ITEMS - 1);
-    expect(band.overflow).toBeGreaterThan(0);
-    // Nothing is lost: shown + overflow accounts for every pin, Home included.
+    expect(band.items.map((destination) => destination.label)).toStrictEqual([
+      "Home",
+      "Notifications",
+      "Activity",
+      "Vault",
+    ]);
+    expect(band.overflow).toBe(0);
     expect(band.items.length + band.overflow).toBe(DEFAULT_PINS.length + 1);
   });
 
@@ -116,7 +113,7 @@ describe("the launcher model", () => {
       expect(band.overflow).toBe(0);
     });
 
-    it("never exceeds five slots, and reports what More is holding", () => {
+    it("never exceeds five destinations, and reports what More is holding", () => {
       const pins = pinsOf(
         "assistant",
         "approvals",
@@ -126,17 +123,16 @@ describe("the launcher model", () => {
         "starred"
       );
       const band = bandDestinations(pins, CAPABILITIES_ON);
-      // Four apps plus More: a sixth tab would put every target under 44px,
-      // which stops being a tap target.
-      expect(band.items).toHaveLength(BAND_MAX_ITEMS - 1);
-      expect(band.overflow).toBe(3);
+      // Home plus four destinations; standing More is rendered by the band.
+      expect(band.items).toHaveLength(BAND_MAX_ITEMS);
+      expect(band.overflow).toBe(2);
       // Nothing is dropped — overflow accounts for every pinned destination.
       expect(band.items.length + band.overflow).toBe(
         pinnedDestinations(pins, CAPABILITIES_ON).length
       );
     });
 
-    it("gives every band item a label short enough to survive a fifth of a phone", () => {
+    it("gives every band item a label short enough to survive a sixth of a phone", () => {
       for (const d of LAUNCHER_DESTINATIONS) {
         const shown = d.shortLabel ?? d.label;
         expect(shown.length, `${d.id} band label`).toBeLessThanOrEqual(11);
@@ -152,12 +148,12 @@ describe("the launcher model", () => {
     });
 
     it("matches on the label a member actually reads, case-insensitively", () => {
-      // `insights` is the internal key; "Analytics" is the word on screen.
+      // `insights` is the internal key; "Activity" is the word on screen.
       expect(
-        searchDestinations("analytics", CAPABILITIES_ON).map((d) => d.id)
+        searchDestinations("activity", CAPABILITIES_ON).map((d) => d.id)
       ).toStrictEqual(["insights"]);
       expect(
-        searchDestinations("DEVICES", CAPABILITIES_ON).map((d) => d.id)
+        searchDestinations("COPIES", CAPABILITIES_ON).map((d) => d.id)
       ).toStrictEqual(["household"]);
     });
 
@@ -212,7 +208,7 @@ describe("the launcher model", () => {
       // A gated-off feature is not the member unpinning it: the stored pin
       // survives, so turning the experiment on later restores the launcher
       // they arranged rather than an emptier one.
-      const pins = pinsOf(...DEFAULT_PINS);
+      const pins = pinsOf(...DEFAULT_PINS, "automations");
       expect(
         pinnedDestinations(pins, CAPABILITIES_OFF).map((d) => d.id)
       ).not.toContain("automations");
@@ -226,7 +222,7 @@ describe("the launcher model", () => {
       const pins = pinsOf(...DEFAULT_PINS);
       const full = bandDestinations(pins, CAPABILITIES_ON);
       const gated = bandDestinations(pins, CAPABILITIES_OFF);
-      expect(full.overflow).toBeGreaterThan(gated.overflow);
+      expect(full.overflow).toBe(gated.overflow);
       expect(gated.items.map((d) => d.id)).not.toContain("connectors");
       // Still nothing lost: shown + overflow accounts for every VISIBLE pin.
       expect(gated.items.length + gated.overflow).toBe(

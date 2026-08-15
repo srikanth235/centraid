@@ -23,9 +23,9 @@ import {
   revokeDevice,
 } from "../../lib/devices";
 import type { DeviceRow, DeviceTicket } from "../../lib/devices";
-import { GatewayError, resolveGatewayBase } from "../../lib/gateway";
+import { resolveGatewayBase } from "../../lib/gateway";
 import type { VaultRow } from "../../lib/gateway";
-import { isLastDeviceRefusal } from "./devices-model";
+import { isLastDeviceRefusal, memberDeviceError } from "./devices-model";
 
 export interface DevicesData {
   status: "loading" | "ready" | "error";
@@ -65,12 +65,6 @@ interface Loaded {
 
 const START: Loaded = { devices: [], noGateway: false, status: "loading" };
 
-function messageOf(error: unknown, fallback: string): string {
-  return error instanceof GatewayError || error instanceof Error
-    ? error.message
-    : fallback;
-}
-
 async function loadRoster(set: (next: Loaded) => void): Promise<void> {
   try {
     const base = await resolveGatewayBase();
@@ -92,7 +86,7 @@ async function loadRoster(set: (next: Loaded) => void): Promise<void> {
   } catch (error) {
     set({
       devices: [],
-      message: messageOf(error, "Could not read the devices."),
+      message: memberDeviceError(error, "Could not read the devices."),
       noGateway: false,
       status: "error",
     });
@@ -118,7 +112,10 @@ export function useDevices(): DevicesData {
       setTicket(await mintDeviceTicket());
     } catch (error) {
       postStatus(
-        messageOf(error, "The gateway could not mint a pairing ticket.")
+        memberDeviceError(
+          error,
+          "The home machine could not mint a pairing ticket."
+        )
       );
     } finally {
       setBusy(false);
@@ -140,7 +137,7 @@ export function useDevices(): DevicesData {
         }));
         return true;
       } catch (error) {
-        postStatus(messageOf(error, "The device was not renamed."));
+        postStatus(memberDeviceError(error, "The device was not renamed."));
         return false;
       } finally {
         setBusy(false);
@@ -166,7 +163,7 @@ export function useDevices(): DevicesData {
         if (confirmVaultName === undefined && isLastDeviceRefusal(error)) {
           return "stranded";
         }
-        postStatus(messageOf(error, "The device was not revoked."));
+        postStatus(memberDeviceError(error, "The device was not revoked."));
         return "failed";
       } finally {
         setBusy(false);

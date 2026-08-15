@@ -84,6 +84,13 @@ describe("shell router", () => {
     );
     expect(routeKey({ kind: "connectors" })).toBe("connectors");
     expect(routeKey({ kind: "gateway", tab: "alerts" })).toBe("gateway:alerts");
+    expect(
+      routeKey({
+        kind: "gateway",
+        focus: "backups",
+        cause: "backup-alert",
+      })
+    ).toBe("gateway:backups:backup-alert");
   });
 
   it("treats distinct parameterized routes as separate entries", () => {

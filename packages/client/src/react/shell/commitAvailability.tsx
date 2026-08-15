@@ -22,7 +22,7 @@ import type { JSX, ReactNode } from "react";
  * never drift into two different explanations of the same condition.
  */
 export const OFFLINE_COMMIT_REASON =
-  "Offline · changes stay on this device and commits are disabled until the gateway is back";
+  "Offline · changes stay on this device and commits are disabled until the vault host is back";
 
 export interface CommitAvailability {
   /** Commits are refused right now. */

@@ -65,6 +65,7 @@ function themeProps(theme: Theme): Record<string, string> {
     "--accent-light": theme.accentLight,
     "--accent-soft": `color-mix(in oklab, ${theme.accent} 8%, transparent)`,
     "--accent-text": theme.accentText,
+    "--attention": theme.attention,
     // App marks override these element-local defaults with the app's solved
     // hue, ink, and size. Keeping the defaults in the shell contract means
     // the shared CSS module is valid even before a mark receives its props.

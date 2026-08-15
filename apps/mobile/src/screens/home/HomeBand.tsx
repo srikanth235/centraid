@@ -184,7 +184,7 @@ const makeStyles = (colors: ThemeColors) =>
       // (handoff :5178 — `width:100%;min-width:0;text-overflow:ellipsis`).
       // Without it the label's box is its intrinsic width, a React Native view
       // does not clip by default, and a long name simply ran into its
-      // neighbour: "Connectors" and "Analytics" sat with no gap between them.
+      // Long neighbouring labels must not run together.
       // The handoff truncates to "Connect…" for exactly this reason.
       alignSelf: "stretch",
       color: colors.textSoft,
@@ -239,7 +239,7 @@ const makeStyles = (colors: ThemeColors) =>
       // `min-width:0;overflow:hidden`): whatever a tab holds, it cannot paint
       // outside its own sixth of the band.
       overflow: "hidden",
-      // The gutter. Without it two long labels ("Connectors", "Analytics")
+      // The gutter. Without it two long labels
       // ended flush against each other and read as one word; with it they
       // truncate instead, which is what the handoff shows ("Connect…"). The
       // gutter is on the TAB, not the label, so the 44pt touch target is

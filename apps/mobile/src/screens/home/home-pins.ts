@@ -94,11 +94,11 @@ export function usePins(): string[] {
 // ── Place pins (the Binding Layer, v4 handoff) ──────────────────────────
 //
 // The same per-device toggle-list pattern as the app pins above, for the
-// eleven places in ./places instead of the app catalog. Two differences from
-// the app list: it stores `PlaceId`s, and it starts from `DEFAULT_PLACE_PINS`
-// rather than empty, because the handoff's PLACES table ships six of the ten
-// non-Home places pinned out of the box (:3469) — an empty default here would
-// silently empty the band on first run instead of leaving it unchanged.
+// eleven stable place ids in ./places instead of the app catalog. Two
+// differences from the app list: it stores `PlaceId`s, and it starts from the
+// v10 `DEFAULT_PLACE_PINS` rather than empty — Alerts, Activity and Vault.
+// More is standing, not conditional on overflow; a fourth member pin fills the
+// last destination slot without displacing it.
 
 const PLACE_KEY = "settings.placePins";
 

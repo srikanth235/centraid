@@ -13,6 +13,7 @@ vi.mock(import("../../lib/assistant"), () => ({
 }));
 
 const {
+  assistantMessageWithPageContext,
   nextProviderConsent,
   persistAssistantSelection,
   preflightedHarnessSelection,
@@ -46,6 +47,15 @@ function config(over: Partial<AssistantConfig> = {}): AssistantConfig {
 }
 
 describe("nextProviderConsent", () => {
+  it("puts removable page context into the real ledger turn", () => {
+    expect(assistantMessageWithPageContext("What changed?", "Vault")).toBe(
+      "Current page: Vault\n\nWhat changed?"
+    );
+    expect(assistantMessageWithPageContext("What changed?", undefined)).toBe(
+      "What changed?"
+    );
+  });
+
   it("keeps earlier approvals when a consent-gated failover asks for another provider", () => {
     const first = nextProviderConsent(undefined, "claude-code");
     expect(first).toStrictEqual(["claude-code"]);

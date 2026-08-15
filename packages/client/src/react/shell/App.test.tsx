@@ -191,12 +191,13 @@ describe("App suite", () => {
       expect(stem.textContent).toContain("Search");
       expect(stem.textContent).toContain("All apps");
       expect(stem.textContent).toContain("Home");
-      expect(stem.textContent).toContain("Automations");
-      // The four the band's budget used to trim out of the sidebar.
-      expect(stem.textContent).toContain("Connectors");
-      expect(stem.textContent).toContain("Devices");
-      expect(stem.textContent).toContain("Data");
-      expect(stem.textContent).toContain("Analytics");
+      expect(stem.textContent).toContain("Notifications");
+      expect(stem.textContent).toContain("Activity");
+      expect(stem.textContent).toContain("Vault");
+      expect(stem.textContent).not.toContain("Automations");
+      expect(stem.textContent).not.toContain("Connectors");
+      expect(stem.textContent).not.toContain("Copies");
+      expect(stem.textContent).not.toContain("System");
       // Assistant is a pinned APP, not a place the frame goes (#707), so it
       // has no standing row here.
       expect(stem.textContent).not.toContain("Assistant");
@@ -237,6 +238,7 @@ describe("App suite", () => {
     });
 
     it("navigates to a pinned destination from the stem and highlights it", async () => {
+      store.set("launcher.pins", { automations: true });
       const el = await mount();
       const autoBtn = [
         ...el.querySelectorAll<HTMLButtonElement>(".stem .launchItem"),
@@ -249,6 +251,7 @@ describe("App suite", () => {
     });
 
     it("names an operational route in the bar, and lets its loader fill the count line (#765)", async () => {
+      store.set("launcher.pins", { automations: true });
       const el = await mount();
       const autoBtn = [
         ...el.querySelectorAll<HTMLButtonElement>(".stem .launchItem"),

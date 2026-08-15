@@ -65,7 +65,7 @@ const DEFS: Record<OpsPage, OpsBarDef> = {
     // not a write to the vault.
     page: "atlas",
     secondary: { label: "Export a kind" },
-    title: "Data",
+    title: "Vault",
     tone: "ok",
   },
   automations: {
@@ -88,14 +88,14 @@ const DEFS: Record<OpsPage, OpsBarDef> = {
     // The one page whose tone is `seam` — pending pairings and unaccepted
     // recovery invitations are neither an alarm nor nothing.
     secondary: { label: "Recovery" },
-    title: "Devices",
+    title: "Copies",
     tone: "seam",
   },
   insights: {
     // No commit, as above: Analytics counts what already happened.
     page: "insights",
     secondary: { label: "Export CSV" },
-    title: "Analytics",
+    title: "Activity",
     tone: "ok",
   },
 };

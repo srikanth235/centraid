@@ -94,6 +94,38 @@ describe("shell/ShellApp", () => {
       ).toBe("app");
     });
 
+    it("keeps the pointer companion mounted over a full-bleed route", () => {
+      const el = render(
+        <ShellApp
+          initialRoute={{ kind: "app", id: "todos" }}
+          renderStem={stemFor}
+          renderScreen={screenFor}
+          renderAssistantCompanion={(_nav, companion) => (
+            <button
+              type="button"
+              data-testid="companion"
+              data-open={String(companion.open)}
+              onClick={() => companion.setOpen(true)}
+            >
+              Ask
+            </button>
+          )}
+        />
+      );
+      expect(el.querySelector('[data-testid="companion"]')).not.toBeNull();
+      expect(
+        el.querySelector<HTMLElement>("[data-surface]")?.dataset.surface
+      ).toBe("pointer");
+      act(() =>
+        el
+          .querySelector<HTMLButtonElement>('[data-testid="companion"]')
+          ?.click()
+      );
+      expect(
+        el.querySelector<HTMLElement>("[data-assistant]")?.dataset.assistant
+      ).toBe("open");
+    });
+
     it("mounts the one status line inside the frame", () => {
       const el = render(
         <ShellApp
@@ -197,6 +229,48 @@ describe("shell/ShellApp", () => {
       expect(
         el.querySelector<HTMLElement>(".window")?.dataset.compact
       ).toBeUndefined();
+    });
+
+    it("hands compact full-bleed Assistant state to the route-owned app bar", () => {
+      goCompact();
+      const el = render(
+        <ShellApp
+          initialRoute={{ kind: "builder" }}
+          renderStem={stemFor}
+          renderScreen={(nav) => {
+            const handleToggleAssistant = nav.toggleAssistant;
+            return (
+              <button
+                type="button"
+                data-testid="route-assistant"
+                aria-label={
+                  nav.assistantOpen ? "Close Assistant" : "Open Assistant"
+                }
+                onClick={handleToggleAssistant}
+              >
+                Assistant
+              </button>
+            );
+          }}
+          renderAssistantCompanion={(_nav, companion) => (
+            <div data-testid="companion" data-open={String(companion.open)} />
+          )}
+        />
+      );
+      expect(el.querySelector(".touchAssistantDoor")).toBeNull();
+      const appBarButton = el.querySelector<HTMLButtonElement>(
+        '[data-testid="route-assistant"]'
+      );
+      expect(appBarButton?.getAttribute("aria-label")).toBe("Open Assistant");
+      act(() => appBarButton?.click());
+      expect(
+        el.querySelector<HTMLElement>('[data-testid="companion"]')?.dataset.open
+      ).toBe("true");
+      expect(
+        el
+          .querySelector('[data-testid="route-assistant"]')
+          ?.getAttribute("aria-label")
+      ).toBe("Close Assistant");
     });
   });
 });

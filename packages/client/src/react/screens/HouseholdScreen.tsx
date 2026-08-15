@@ -222,7 +222,7 @@ function VaultRows({
               <div className={styles.detailActions}>
                 <Button
                   commit={false}
-                  label="Storage & backups"
+                  label="System capacity & backups"
                   onClick={() => onOpenStorage()}
                   size="sm"
                   variant="secondary"
@@ -358,9 +358,9 @@ export default function HouseholdScreen(
       ) : state === "error" ? (
         <PanelBlock
           action={{ label: "Try again", onClick: roster.refresh }}
-          body="This page is being served from a cached copy. Device pairing and revocation both need the gateway, so both are unavailable until it answers."
-          eyebrow="Devices"
-          title="Cannot reach the gateway"
+          body="This page is being served from a cached copy. Device pairing and revocation both need the vault host, so both are unavailable until it answers."
+          eyebrow="Copies"
+          title="Cannot reach the vault host"
           tone="net"
           wide
         />
@@ -375,7 +375,7 @@ export default function HouseholdScreen(
         ) : null
       ) : (
         <EmptyBlock
-          body="Pairing and revocation both live on the gateway, so neither is offered here."
+          body="Pairing and revocation both live on the vault host, so neither is offered here."
           routine
           title="This connection doesn’t report a roster"
         />

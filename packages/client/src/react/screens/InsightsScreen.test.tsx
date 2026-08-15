@@ -263,7 +263,7 @@ describe("screens/InsightsScreen (v9, #765)", () => {
       "By model",
       "By effort",
       "Recent runs",
-      "Gateway",
+      "This machine",
     ]);
   });
 
@@ -355,13 +355,13 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     expect(keys).not.toContain("disk");
     expect(keys).not.toContain("compute shared");
     expect(el.textContent).toContain(
-      "The gateway is your own machine. These are its numbers, not a service’s."
+      "The vault host is your own machine. These are its numbers, not a service’s."
     );
   });
 
   it("says so when the gateway serves no resource numbers at all", () => {
     const el = screen();
-    expect(el.textContent).toContain("Not available from this gateway");
+    expect(el.textContent).toContain("Not available from this vault host");
   });
 
   it("is empty without apologising, and keeps the window reachable", () => {

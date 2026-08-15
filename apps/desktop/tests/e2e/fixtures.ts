@@ -1172,22 +1172,37 @@ function testTitle(): string {
  * button text so call sites that predate the IA pass do not go dark.
  */
 const RAIL_LABEL_ALIASES: Readonly<Record<string, string>> = {
-  Insights: "Analytics",
-  Household: "Devices",
-  "Vault Atlas": "Data",
+  Analytics: "Activity",
+  Data: "Vault",
+  Devices: "Copies",
+  Gateway: "System",
+  Household: "Copies",
+  Insights: "Activity",
+  "Vault Atlas": "Vault",
 };
 
 /** Click a stem nav item by its visible label.
  *
- *  There is no palette-only fallback any more: Discover was the one
- *  destination that needed it, and it retired with #708. Everything this
- *  helper is asked for is a pinned launcher row. Scope the lookup to the
- *  labelled stem because an app route may also render a same-named app-bar
- *  verb (for example, Automations after a template clone). */
+ *  The default launcher is deliberately short, so an E2E journey may ask for
+ *  an unpinned destination. Prefer the standing row when it exists; otherwise
+ *  use the frame's honest All apps/More door instead of teaching fixtures a
+ *  private route shortcut. Scope lookups because app routes may also render a
+ *  same-named app-bar verb (for example, Automations after a template clone). */
 export async function gotoNav(page: Page, label: string): Promise<void> {
   const railLabel = RAIL_LABEL_ALIASES[label] ?? label;
+  const stem = page.locator('nav[aria-label="Apps"]');
+  const pinned = stem.getByRole("button", { name: railLabel, exact: true });
+  if ((await pinned.count()) > 0) {
+    await pinned.click();
+    return;
+  }
+
+  const allApps = stem.getByRole("button", {
+    name: /^(?:All apps|More)$/u,
+  });
+  await allApps.click();
   await page
-    .locator('nav[aria-label="Apps"]')
+    .getByRole("dialog", { name: "All apps" })
     .getByRole("button", { name: railLabel, exact: true })
     .click();
 }

@@ -264,7 +264,7 @@ describe(InsightsScreen, () => {
     expect(textOf(container)).toContain(
       "A row knows its shape before its content arrives, so nothing reflows when it does."
     );
-    expect(textOf(container)).toContain("Reading from the gateway");
+    expect(textOf(container)).toContain("Reading vault activity");
     // The quiet verb is withdrawn while loading — there is nothing to export.
     expect(labelled(container, "Export CSV")).toBeNull();
   });
@@ -309,14 +309,14 @@ describe(InsightsScreen, () => {
     ).toBe(true);
     expect(labelled(container, "Try again")).not.toBeNull();
     expect(spans).toContain(
-      "This page could not load · everything else on the gateway is unaffected."
+      "Activity could not load · your vault contents are unaffected."
     );
     // Chips are withheld here: the window is a question about data, and there
     // is none.
     expect(spans).not.toContain("30 days");
   });
 
-  it("counts the window once, and says what the gateway itself is doing", async () => {
+  it("counts the window once without exposing machine health", async () => {
     const container = await render();
     const spans = textOf(container);
     expect(spans).toContain("312 runs · 2 failed");
@@ -327,7 +327,7 @@ describe(InsightsScreen, () => {
     expect(spans).toContain("15 Jul");
     expect(spans).toContain("Spend · 30 days");
     expect(spans).toContain("$2.00");
-    // The breakdowns the gateway was already computing (#775).
+    // The breakdowns the vault was already computing (#775).
     expect(ariaLabels(container)).toContain("Spend by harness");
     expect(ariaLabels(container)).toContain("Spend by effort");
     expect(spans).toContain("claude-code");
@@ -335,17 +335,13 @@ describe(InsightsScreen, () => {
     expect(spans).toContain("automations");
     expect(spans).toContain("Recent runs");
     expect(spans).toContain("Failed · Automation · $0.42 · 1.2k tokens");
-    expect(spans).toContain("uptime");
-    expect(spans).toContain("21d 0h");
-    expect(spans).toContain(
-      "The gateway is your own machine. These are its numbers, not a service's."
-    );
-    expect(spans).toContain(
-      "99% of runs succeeded · The gateway has been up for 21 days."
-    );
+    expect(spans).not.toContain("uptime");
+    expect(spans).not.toContain("21d 0h");
+    expect(spans.join(" ")).not.toMatch(/gateway|daemon|replica|component/iu);
+    expect(spans).toContain("99% of runs succeeded · 312 runs in this window.");
   });
 
-  it("gives bad news a subject and a verb (#775)", async () => {
+  it("keeps machine-health failures out of Origin Activity", async () => {
     wire.health.mockResolvedValue({
       ...health,
       components: [
@@ -354,15 +350,10 @@ describe(InsightsScreen, () => {
       ],
     });
     const container = await render();
-    // "1 of 2 healthy" told a member something was wrong and nothing about
-    // WHAT, with nowhere to go about it.
     const spans = textOf(container);
-    expect(spans).toContain("1 of 2 healthy");
-    expect(spans).toContain("Not healthy: outbox.");
-    press(labelled(container, "See what’s wrong"));
-    expect(navigation.navigate).toHaveBeenCalledWith("Insights", {
-      initialTab: "alerts",
-    });
+    expect(spans).not.toContain("1 of 2 healthy");
+    expect(spans).not.toContain("Not healthy: outbox.");
+    expect(labelled(container, "See what’s wrong")).toBeNull();
   });
 
   it("offers no verb about the gateway when nothing is wrong with it", async () => {

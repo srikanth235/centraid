@@ -57,13 +57,13 @@ export interface InsightsController {
   exportCsv: () => void;
 }
 
-const NOT_PAIRED = "This phone is not paired with a gateway yet.";
+const NOT_PAIRED = "This phone is not linked to a vault yet.";
 
 function describe(error: unknown): string {
   return (error instanceof GatewayError || error instanceof Error) &&
     error.message
     ? error.message
-    : "The gateway did not answer.";
+    : "Your vault's home machine did not answer.";
 }
 
 async function read(

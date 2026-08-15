@@ -20,6 +20,17 @@ import type * as TypeImport_tiles from "./homeTileContent.js";
 const getDailyBrief = vi.fn<typeof TypeImport_1gl5zx7.getDailyBrief>();
 vi.mock(import("../../../gateway-client.js"), () => ({
   getDailyBrief: () => getDailyBrief(),
+  getGatewayBackupStatus: () =>
+    Promise.resolve({
+      configured: false,
+      recoveryKit: { confirmedAt: null },
+      vaults: [],
+    }),
+  listGatewayDevices: () => Promise.resolve([]),
+}));
+
+vi.mock(import("../useGatewayRuntime.js"), () => ({
+  useGatewayStatus: () => "up",
 }));
 
 const loadHomeTileContent =

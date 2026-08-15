@@ -17,6 +17,7 @@ import {
   deviceRowCopy,
   hasOtherPeople,
   isLastDeviceRefusal,
+  memberDeviceError,
   rosterGroups,
   selfOwnerId,
   strandedVaultName,
@@ -38,6 +39,17 @@ function device(patch: Partial<DeviceRow> & { deviceId: string }): DeviceRow {
 }
 
 describe("device row copy", () => {
+  it("lowers architecture nouns out of member-facing connection errors", () => {
+    expect(memberDeviceError(new Error("Gateway returned HTTP 503"), "x")).toBe(
+      "home machine returned HTTP 503"
+    );
+    expect(
+      memberDeviceError(new Error("Replica component is unavailable"), "x")
+    ).toBe("offline copy part is unavailable");
+    expect(memberDeviceError(null, "Could not read the copies.")).toBe(
+      "Could not read the copies."
+    );
+  });
   it("names this device, what it computes and when it was paired", () => {
     const row = deviceRowCopy(
       device({
@@ -199,13 +211,13 @@ describe("the standing line", () => {
   it("says the generic sentence in the three states that have no facts", () => {
     const copy = devicesHealthCopy({ devices: [], pendingTickets: 0 });
     expect(healthLineFor("loading", copy).text).toBe(
-      "Reading the devices paired to this gateway."
+      "Reading the devices paired with this vault."
     );
     expect(healthLineFor("empty", copy).text).toBe(
       "Only this device is enrolled."
     );
     expect(healthLineFor("error", copy).text).toBe(
-      "The gateway has not answered, so this roster may be stale."
+      "Your vault's home machine has not answered, so this roster may be stale."
     );
   });
 });

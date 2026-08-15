@@ -35,7 +35,7 @@ export interface AssistantController {
   pendingConsent: PendingProviderConsent | undefined;
   attachments: AssistantAttachment[];
   attaching: boolean;
-  send: (text: string) => void;
+  send: (text: string, pageContext?: string) => void;
   stop: () => void;
   approveConsent: () => void;
   declineConsent: () => void;
@@ -66,6 +66,13 @@ export function nextProviderConsent(
 ): string[] {
   const approved = current ?? [];
   return approved.includes(provider) ? approved : [...approved, provider];
+}
+
+export function assistantMessageWithPageContext(
+  text: string,
+  pageContext: string | undefined
+): string {
+  return pageContext ? `Current page: ${pageContext}\n\n${text}` : text;
 }
 
 let counter = 0;
@@ -281,7 +288,7 @@ export function useAssistant(): AssistantController {
   );
 
   const send = useCallback(
-    (text: string): void => {
+    (text: string, pageContext?: string): void => {
       const trimmed = text.trim();
       // `sending` is React state — it only flips a render later, so two taps in
       // the same frame both got past it. The ref closes synchronously.
@@ -290,7 +297,7 @@ export function useAssistant(): AssistantController {
       inFlight.current = true;
       const assistantKey = nextKey();
       const turn: PendingTurn = {
-        text: trimmed,
+        text: assistantMessageWithPageContext(trimmed, pageContext),
         assistantKey,
         idempotencyKey: `mobile-${Date.now()}-${nextKey()}`,
         attachments,

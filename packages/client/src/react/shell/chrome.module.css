@@ -703,6 +703,15 @@
   flex-direction: column;
   min-height: 0;
   background: var(--bg);
+  box-sizing: border-box;
+  transition: padding-inline-end var(--dur-2) var(--ease-entry);
+}
+
+/* The pointer companion belongs to the frame. Its absolute rail occupies the
+   reserved trailing column while the app bar, page, and status line retain
+   their ordinary layout in the remaining stage. */
+.main[data-assistant="open"]:not([data-compact="true"]) {
+  padding-inline-end: 392px;
 }
 
 /* The per-app bar. It carries the app's identity and the app's own actions —
@@ -1372,6 +1381,11 @@
 
   .appBar {
     padding-inline: var(--sp-4);
+  }
+
+  .appBar .tbBtn {
+    min-inline-size: var(--target-min);
+    min-block-size: var(--target-min);
   }
   .appBar[data-identity="true"] .appTitle {
     /* Only the full identity block uses the display rung on compact screens. */

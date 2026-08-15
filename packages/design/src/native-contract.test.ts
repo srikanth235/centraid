@@ -22,6 +22,15 @@ describe("native product-grammar lowering", () => {
     }
   });
 
+  test("lowers the v10 attention tone on both native themes", () => {
+    expect(toNativeTheme("light").colors).toMatchObject({
+      attention: "#8A6520",
+    });
+    expect(toNativeTheme("dark").colors).toMatchObject({
+      attention: "#D8A64E",
+    });
+  });
+
   test("light native solved values stay equal to the registry cells", () => {
     const colors = toNativeTheme("light").colors;
     for (const field of [

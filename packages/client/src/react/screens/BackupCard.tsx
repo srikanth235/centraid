@@ -112,6 +112,7 @@ export interface BackupCardProps {
    * reason rather than being hidden (issue #708 A2: never buried).
    */
   onRestore?: () => void;
+  readOnly?: boolean;
 }
 
 /** Regular refresh cadence — matches useGatewayHealth's poll order of
@@ -213,6 +214,7 @@ export default function BackupCard({
   onOpenSettings,
   loadDevices,
   onRestore,
+  readOnly,
 }: BackupCardProps): JSX.Element {
   const [status, setStatus] = useState<BackupStatusDTO | null>(null);
   const [usage, setUsage] = useState<UsageInput | null>(null);
@@ -334,7 +336,7 @@ export default function BackupCard({
               <span>Protected by {status.provider}</span>
             </div>
           ) : null}
-          {onOpenSettings ? (
+          {onOpenSettings && !readOnly ? (
             <button
               type="button"
               className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
@@ -367,24 +369,42 @@ export default function BackupCard({
             <BackupCopyCards
               status={status}
               metrics={metrics}
-              onRestore={onRestore}
+              readOnly={readOnly}
+              {...(!readOnly && onRestore ? { onRestore } : {})}
             />
 
-            <RecoveryKitGate
-              configured={status.configured}
-              recoveryKit={status.recoveryKit ?? { confirmedAt: null }}
-              onConfirm={onConfirmRecoveryKit}
-              onExport={onExportRecoveryKit}
-            />
+            {readOnly ? null : (
+              <RecoveryKitGate
+                configured={status.configured}
+                recoveryKit={status.recoveryKit ?? { confirmedAt: null }}
+                onConfirm={onConfirmRecoveryKit}
+                onExport={onExportRecoveryKit}
+              />
+            )}
 
-            <details
-              className={styles.diagnostics}
-              data-testid="backup-diagnostics"
-            >
-              <summary>Diagnostics</summary>
-              <div className={styles.diagnosticsBody}>
-                <div className={styles.actions}>
-                  {onVerifyNow ? (
+            {readOnly ? null : (
+              <details
+                className={styles.diagnostics}
+                data-testid="backup-diagnostics"
+              >
+                <summary>Diagnostics</summary>
+                <div className={styles.diagnosticsBody}>
+                  <div className={styles.actions}>
+                    {onVerifyNow ? (
+                      <button
+                        type="button"
+                        className={cx(
+                          buttonCss.btn,
+                          buttonCss.sm,
+                          controlsCss.soft
+                        )}
+                        disabled={anyRunning || verifying}
+                        onClick={() => void verifyNow()}
+                      >
+                        <Icon name="CheckCircle" size={13} />
+                        <span>{verifying ? "Verifying…" : "Verify now"}</span>
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className={cx(
@@ -393,79 +413,66 @@ export default function BackupCard({
                         controlsCss.soft
                       )}
                       disabled={anyRunning || verifying}
-                      onClick={() => void verifyNow()}
+                      onClick={() => void runNow()}
                     >
-                      <Icon name="CheckCircle" size={13} />
-                      <span>{verifying ? "Verifying…" : "Verify now"}</span>
+                      <span
+                        className={styles.runIcon}
+                        data-spin={anyRunning || undefined}
+                      >
+                        <Icon name={anyRunning ? "Loader" : "Save"} size={13} />
+                      </span>
+                      <span>{anyRunning ? "Backing up…" : "Back up now"}</span>
                     </button>
+                  </div>
+                  {runError ? (
+                    <div className={styles.runError}>{runError}</div>
                   ) : null}
-                  <button
-                    type="button"
-                    className={cx(
-                      buttonCss.btn,
-                      buttonCss.sm,
-                      controlsCss.soft
-                    )}
-                    disabled={anyRunning || verifying}
-                    onClick={() => void runNow()}
-                  >
-                    <span
-                      className={styles.runIcon}
-                      data-spin={anyRunning || undefined}
+
+                  {clocks ? (
+                    <div
+                      className={styles.clockGrid}
+                      data-testid="freshness-clocks"
                     >
-                      <Icon name={anyRunning ? "Loader" : "Save"} size={13} />
-                    </span>
-                    <span>{anyRunning ? "Backing up…" : "Back up now"}</span>
-                  </button>
-                </div>
-                {runError ? (
-                  <div className={styles.runError}>{runError}</div>
-                ) : null}
-
-                {clocks ? (
-                  <div
-                    className={styles.clockGrid}
-                    data-testid="freshness-clocks"
-                  >
-                    <ClockLine
-                      label="Newest snapshot"
-                      at={clocks.lastRegisteredSnapshotAt}
-                      now={now}
-                    />
-                    <ClockLine
-                      label="Last verification"
-                      at={clocks.lastSuccessfulVerificationAt}
-                      now={now}
-                    />
-                    <ClockLine
-                      label="Newest WAL segment"
-                      at={clocks.lastAckedWalSegmentAt}
-                      now={now}
-                    />
-                    <ClockLine
-                      label="Outbox drained"
-                      at={clocks.outboxDrainedWatermarkAt}
-                      now={now}
-                    />
-                  </div>
-                ) : null}
-
-                {status.vaults.length > 0 ? (
-                  <div className={styles.vaultList}>
-                    {status.vaults.map((v) => (
-                      <VaultRow
-                        key={v.vaultId}
-                        vault={v}
+                      <ClockLine
+                        label="Newest snapshot"
+                        at={clocks.lastRegisteredSnapshotAt}
                         now={now}
-                        provider={status.provider}
-                        onUpdatePolicy={onUpdatePolicy}
-                        onVerifyBucket={onVerifyBucket}
                       />
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </details>
+                      <ClockLine
+                        label="Last verification"
+                        at={clocks.lastSuccessfulVerificationAt}
+                        now={now}
+                      />
+                      <ClockLine
+                        label="Newest WAL segment"
+                        at={clocks.lastAckedWalSegmentAt}
+                        now={now}
+                      />
+                      <ClockLine
+                        label="Outbox drained"
+                        at={clocks.outboxDrainedWatermarkAt}
+                        now={now}
+                      />
+                    </div>
+                  ) : null}
+
+                  {status.vaults.length > 0 ? (
+                    <div className={styles.vaultList}>
+                      {status.vaults.map((v) => (
+                        <VaultRow
+                          key={v.vaultId}
+                          vault={v}
+                          now={now}
+                          provider={status.provider}
+                          onUpdatePolicy={onUpdatePolicy}
+                          onVerifyBucket={onVerifyBucket}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </details>
+            )}
           </>
         ) : (
           <>
@@ -475,12 +482,14 @@ export default function BackupCard({
               configured on this gateway, databases, code, and attachments live
               only on this machine.
             </p>
-            <RecoveryKitGate
-              configured={status.configured}
-              recoveryKit={status.recoveryKit ?? { confirmedAt: null }}
-              onConfirm={onConfirmRecoveryKit}
-              onExport={onExportRecoveryKit}
-            />
+            {readOnly ? null : (
+              <RecoveryKitGate
+                configured={status.configured}
+                recoveryKit={status.recoveryKit ?? { confirmedAt: null }}
+                onConfirm={onConfirmRecoveryKit}
+                onExport={onExportRecoveryKit}
+              />
+            )}
           </>
         )}
       </div>

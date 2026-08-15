@@ -212,6 +212,10 @@ export default function AppViewRoute({
       onForward={() => nav.forward()}
       showNewChat={builderEnabled}
       onNewChat={openNewAppSheet}
+      assistantOpen={nav.assistantOpen}
+      {...(nav.toggleAssistant
+        ? { onToggleAssistant: nav.toggleAssistant }
+        : {})}
       titlebarLead={brandChip}
       titlebarRight={titlebarRight}
     >

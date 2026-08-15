@@ -24,7 +24,7 @@ import OptionSheet from "../../kit/components/OptionSheet";
 import type { SheetOption } from "../../kit/components/OptionSheet";
 import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useTheme } from "../../kit/theme";
-import type { AssistantScreenProps } from "../../navigation";
+import type { AssistantFullScreenProps } from "../../navigation";
 import { makeStyles } from "./Assistant.styles";
 import { useAssistant } from "./useAssistant";
 import type { Bubble } from "./useAssistant";
@@ -36,7 +36,7 @@ import type { Bubble } from "./useAssistant";
 // src/lib/assistant.ts for the expo/fetch upgrade path).
 export default function AssistantScreen({
   navigation,
-}: AssistantScreenProps): React.JSX.Element {
+}: AssistantFullScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();

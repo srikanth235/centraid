@@ -2,11 +2,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import type { LocalUsageReportDTO } from "../../../gateway-client-local-storage.js";
-import { getDailyBrief } from "../../../gateway-client.js";
+import {
+  getDailyBrief,
+  getGatewayBackupStatus,
+  listGatewayDevices,
+} from "../../../gateway-client.js";
+import { seat } from "../../host-platform.js";
+import HomeHealthRibbon from "../../screens/HomeHealthRibbon.js";
 import HomeSpringboard from "../../screens/HomeSpringboard.js";
 import { useShellActions } from "../actions.js";
+import { ambientSignalFor } from "../ambientStatus.js";
 import PageScroll from "../PageScroll.js";
 import { useCachedQuery } from "../queryCache.js";
+import { useGatewayStatus } from "../useGatewayRuntime.js";
 import { HOME_CONFLICTS, homeOutOfRoom } from "./homeConditions.js";
 import {
   clearHomeSample,
@@ -18,6 +26,7 @@ import {
 import type { HomeSampleProgress } from "./homeSample.js";
 import { buildHomeTiles } from "./homeTiles.js";
 import type { HomeTileContent } from "./homeTiles.js";
+import { startVisibilityTicker } from "./visibility-ticker.js";
 
 /** The whole of Home's input: which apps this vault has. Everything a tile
  *  shows is CONTENT, so the route reads it rather than taking it as a prop. */
@@ -49,6 +58,30 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     autoSeedSample = false,
     onAutoSeedStarted,
   } = props;
+  const [ambientNow, setAmbientNow] = useState(() => Date.now());
+  useEffect(
+    () => startVisibilityTicker(() => setAmbientNow(Date.now()), 60_000),
+    []
+  );
+  const gatewayStatus = useGatewayStatus();
+  const ambientQuery = useCachedQuery("home:ambient-signal", async () => {
+    const readAt = Date.now();
+    const [backup, devices] = await Promise.all([
+      getGatewayBackupStatus().catch(() => undefined),
+      listGatewayDevices().catch(() => undefined),
+    ]);
+    const lastBackupAt = backup?.vaults
+      .map((vault) => vault.lastBackupAt)
+      .filter((value): value is string => value !== undefined)
+      .map((value) => Date.parse(value))
+      .filter(Number.isFinite)
+      .sort((a, b) => b - a)[0];
+    return {
+      deviceCount: devices?.length,
+      lastBackupAt,
+      lastKnownAt: readAt,
+    };
+  });
 
   // Cached across visits (issue #659) AND across boots (#708). Home is the
   // app's front door and the most re-entered route in the shell, so it paints
@@ -244,6 +277,22 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   const outOfRoom = homeOutOfRoom(ready?.localUsage, () =>
     navigate({ kind: "storage" })
   );
+  const ambientFacts =
+    ambientQuery.state.status === "ready" ? ambientQuery.state.data : undefined;
+  const ambientSignal = ambientSignalFor({
+    gatewayStatus,
+    now: ambientNow,
+    seat: seat(),
+    ...(ambientFacts?.deviceCount === undefined
+      ? {}
+      : { deviceCount: ambientFacts.deviceCount }),
+    ...(ambientFacts?.lastBackupAt === undefined
+      ? {}
+      : { lastBackupAt: ambientFacts.lastBackupAt }),
+    ...(ambientFacts?.lastKnownAt === undefined
+      ? {}
+      : { lastKnownAt: ambientFacts.lastKnownAt }),
+  });
 
   return (
     // NOT `flush` (issue #708). `flush` drops the page gutter for a screen whose
@@ -254,29 +303,32 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     // first paint and wrong on every return, which is exactly when a member
     // notices. The springboard is an ordinary page body and takes the ordinary
     // gutter (compact-aware since `mainScroll` learned the 720px step).
-    <PageScroll>
-      <HomeSpringboard
-        conflicts={HOME_CONFLICTS}
-        // Only a SETTLED read can say a tile is empty. While the reads are in
-        // flight the springboard shows static skeletons, which is a different
-        // sentence: "still looking", not "there is nothing" — so `loading`
-        // gates the whole graded treatment rather than one branch of it.
-        loading={appsLoading || !settled}
-        justFilled={justFilled}
-        onConnect={() => navigate({ kind: "connectors" })}
-        onOpen={(id: string) => navigate({ kind: "app", id })}
-        sample={{
-          canSeed: sample.seedable.length > 0,
-          clearing,
-          filling,
-          loaded: sample.rows > 0,
-          onClear,
-          onSeed,
-          autoSeedPending,
-        }}
-        tiles={tiles}
-        {...(outOfRoom ? { outOfRoom } : {})}
-      />
-    </PageScroll>
+    <>
+      <HomeHealthRibbon signal={ambientSignal} onOpen={navigate} />
+      <PageScroll>
+        <HomeSpringboard
+          conflicts={HOME_CONFLICTS}
+          // Only a SETTLED read can say a tile is empty. While the reads are in
+          // flight the springboard shows static skeletons, which is a different
+          // sentence: "still looking", not "there is nothing" — so `loading`
+          // gates the whole graded treatment rather than one branch of it.
+          loading={appsLoading || !settled}
+          justFilled={justFilled}
+          onConnect={() => navigate({ kind: "connectors" })}
+          onOpen={(id: string) => navigate({ kind: "app", id })}
+          sample={{
+            canSeed: sample.seedable.length > 0,
+            clearing,
+            filling,
+            loaded: sample.rows > 0,
+            onClear,
+            onSeed,
+            autoSeedPending,
+          }}
+          tiles={tiles}
+          {...(outOfRoom ? { outOfRoom } : {})}
+        />
+      </PageScroll>
+    </>
   );
 }

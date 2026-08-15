@@ -65,6 +65,7 @@ function themeProps(theme: Theme): Record<string, string> {
     "--accent-light": theme.accentLight,
     "--accent-soft": "color-mix(in oklab, var(--accent) 8%, transparent)",
     "--accent-text": theme.accentText,
+    "--attention": theme.attention,
     "--app-identity": "var(--text)",
     "--app-identity-text": "var(--text)",
     "--bg": theme.bg,

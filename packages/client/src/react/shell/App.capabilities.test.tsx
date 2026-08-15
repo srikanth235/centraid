@@ -145,7 +145,7 @@ describe("the shell on a gateway without the experimental features", () => {
     const el = await mount();
     const stem = el.querySelector(".stem")!;
     expect(stem.textContent).toContain("Home");
-    expect(stem.textContent).toContain("Devices");
+    expect(stem.textContent).toContain("Vault");
     expect(stem.textContent).not.toContain("Automations");
     expect(stem.textContent).not.toContain("Connectors");
     // Analytics reads the run rollup, which lives behind the same gate.
@@ -187,7 +187,7 @@ describe("the shell on a gateway without the experimental features", () => {
     expect(el.textContent).toContain("Connectors aren’t enabled");
   });
 
-  it("keeps the gated surfaces when the gateway does advertise them", async () => {
+  it("keeps gated surfaces discoverable when the gateway advertises them", async () => {
     // The opted-in gateway, from the same seam — the launcher restores the
     // member's pins exactly as they arranged them, and nothing is walled. What
     // those routes then RENDER is App.test.tsx's ground, so this stops at the
@@ -195,10 +195,15 @@ describe("the shell on a gateway without the experimental features", () => {
     // leaves unmocked.
     caps.value = { automations: true, connectors: true };
     const el = await mount();
-    const stem = el.querySelector(".stem")!;
-    expect(stem.textContent).toContain("Automations");
-    expect(stem.textContent).toContain("Connectors");
-    expect(stem.textContent).toContain("Analytics");
+    await act(async () => {
+      el.querySelectorAll<HTMLButtonElement>(".stemAllApps").forEach((button) =>
+        button.click()
+      );
+    });
+    const sheet = document.querySelector('[aria-label="All apps"]')!;
+    expect(sheet.textContent).toContain("Automations");
+    expect(sheet.textContent).toContain("Connectors");
+    expect(sheet.textContent).toContain("Activity");
     expect(el.textContent).not.toContain("aren’t enabled on this gateway");
   });
 

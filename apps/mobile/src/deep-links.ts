@@ -11,6 +11,7 @@ import type { LinkingOptions } from "@react-navigation/native";
 import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 
+import { SYSTEM_DEEP_LINK_PATH } from "./deep-link-paths";
 import type { RootStackParamList } from "./navigation";
 
 export const LINKING: LinkingOptions<RootStackParamList> = {
@@ -72,6 +73,7 @@ export const LINKING: LinkingOptions<RootStackParamList> = {
       Assistant: "assistant",
       Automations: "automations",
       Insights: "insights",
+      SystemOnPhone: SYSTEM_DEEP_LINK_PATH,
       Settings: "settings",
       Home: "",
     },

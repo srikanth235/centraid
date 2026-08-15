@@ -15,10 +15,10 @@
 //   ├─ Capture       → CaptureScreen (preview-first universal quick add)
 //   ├─ Scan          → ScanScreen (camera/share OCR review)
 //   ├─ Automations   → AutomationsScreen (list + run the vault's automations)
-//   ├─ Insights      → InsightsScreen (gateway health + limited usage insights)
+//   ├─ Insights      → InsightsScreen (Activity; stable route id)
 //   ├─ Connectors    → ConnectorsScreen (what is allowed to reach outside)
-//   ├─ Data          → DataScreen (every store the vault keeps)
-//   ├─ Devices       → DevicesScreen (the machines holding a copy)
+//   ├─ Data          → DataScreen (Vault; stable route id)
+//   ├─ Devices       → DevicesScreen (Copies; stable route id)
 //   └─ Settings      → SettingsStack (Settings, Approvals, PhoneStorage,
 //                                     BackupHealth)
 //
@@ -131,13 +131,13 @@ export type SettingsStackParamList = {
   // Sharing (issue #726 P6): the People panel — shares in/out, link
   // propose/approve, the D9 ask surface and receive setting.
   Sharing: undefined;
-  PhoneStorage: undefined;
+  PhoneStorage: { signalCause?: string } | undefined;
   // Backup health (issue #712 B2) — a FRAME screen, beside Phone storage. It
   // used to live in the Photos stack, which was always a compromise: the policy
   // it edits governs Docs' scans and Notes' attachments too, and nothing on it
   // is Photos-specific. Photos deep-links across to it from the More sheet's
   // "Backup" row rather than keeping a copy.
-  BackupHealth: undefined;
+  BackupHealth: { signalCause?: string } | undefined;
 };
 
 export type RootStackParamList = {
@@ -162,6 +162,9 @@ export type RootStackParamList = {
   Tally: undefined;
   AppDetail: { appId: string };
   Assistant: undefined;
+  AssistantFull: undefined;
+  SystemOnPhone: undefined;
+  SignalNotification: { cause: string; detail: "phone" | "backup" };
   Automations: { automationRef?: string } | undefined;
   Insights: { initialTab?: "overview" | "alerts" } | undefined;
   // The three places promoted to screens of their own (issue #765). They are
@@ -195,6 +198,10 @@ export type PeopleScreenProps = RootScreenProps<"People">;
 export type NotesScreenProps = RootScreenProps<"Notes">;
 export type TallyScreenProps = RootScreenProps<"Tally">;
 export type AssistantScreenProps = RootScreenProps<"Assistant">;
+export type AssistantFullScreenProps = RootScreenProps<"AssistantFull">;
+export type SystemOnPhoneScreenProps = RootScreenProps<"SystemOnPhone">;
+export type SignalNotificationScreenProps =
+  RootScreenProps<"SignalNotification">;
 export type AutomationsScreenProps = RootScreenProps<"Automations">;
 export type InsightsScreenProps = RootScreenProps<"Insights">;
 export type ConnectorsScreenProps = RootScreenProps<"Connectors">;

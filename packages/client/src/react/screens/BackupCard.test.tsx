@@ -52,6 +52,7 @@ describe("screens/BackupCard", () => {
     ) => Promise<{ vaultId: string; reconciliation: BackupReconciliationDTO }>;
     loadDevices?: () => Promise<CentraidGatewayDevice[]>;
     onRestore?: () => void;
+    readOnly?: boolean;
     now?: number;
   }): Promise<HTMLDivElement> {
     container = document.createElement("div");
@@ -71,6 +72,7 @@ describe("screens/BackupCard", () => {
           onVerifyBucket={props.onVerifyBucket}
           loadDevices={props.loadDevices}
           onRestore={props.onRestore}
+          readOnly={props.readOnly}
         />
       );
     });
@@ -884,6 +886,24 @@ describe("screens/BackupCard", () => {
       expect(
         el.querySelector('[data-testid="exit-metered-note"]')
       ).not.toBeNull();
+    });
+
+    it("keeps live backup facts but removes every mutation control for a viewer", async () => {
+      const el = await mount({
+        loadStatus: vi
+          .fn<BackupCardProps["loadStatus"]>()
+          .mockResolvedValue(freshStatus),
+        onRunNow: neverRun,
+        readOnly: true,
+      });
+      expect(
+        el.querySelector('[data-testid="metric-freshness"]')
+      ).not.toBeNull();
+      expect(el.textContent).toContain("What is copied");
+      expect(el.textContent).not.toContain("Back up now");
+      expect(el.textContent).not.toContain("Verify now");
+      expect(el.textContent).not.toContain("Restore from backup");
+      expect(el.querySelector('input[type="file"]')).toBeNull();
     });
 
     it("drops the recovery-window metric when the provider promises no retention", async () => {

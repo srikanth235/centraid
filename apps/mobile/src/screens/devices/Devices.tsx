@@ -60,7 +60,7 @@ import { useDevices } from "./useDevices";
 
 /** The note under the roster — the reference's words, unchanged. */
 const OTHER_PEOPLE_NOTE =
-  "A person on your gateway reaches only what you placed in a shared space.";
+  "Another person reaches only what you placed in a shared space.";
 
 /** What a skeleton promises, said out loud (spec §10). */
 const LOADING_NOTE =
@@ -70,13 +70,13 @@ const EMPTY_TITLE = "Only this device is enrolled";
 const EMPTY_BODY =
   "Pair a phone or a laptop to reach this vault from it. Everything stays on your own machines.";
 
-const ERROR_TITLE = "Cannot reach the gateway";
+const ERROR_TITLE = "Cannot reach your vault's home machine";
 const ERROR_BODY =
-  "This page is being served from a cached copy. Device pairing and revocation both need the gateway, so both are unavailable until it answers.";
+  "This page is being served from a cached copy. Device pairing and revocation both need your vault's home machine, so both are unavailable until it answers.";
 /** The `no-gateway` degrade is the SAME visual, with the sentence that is
  *  actually true of it: nothing is cached because nothing was ever linked. */
 const UNPAIRED_BODY =
-  "This phone is not linked to a gateway yet. Pair it from Settings, and the devices sharing this vault appear here.";
+  "This phone is not linked to a vault yet. Pair it from Settings, and the devices sharing that vault appear here.";
 
 const PAIR_VERB = "Pair a device";
 
@@ -126,7 +126,7 @@ export default function DevicesScreen({
     <TopSafeArea edges={["top"]} style={{ backgroundColor: colors.bg }}>
       <View style={styles.page}>
         <PlaceHeader
-          title="Devices"
+          title="Copies"
           // The reference's gating: the filled commit is hidden while loading
           // AND while errored — minting a ticket needs the gateway that is not
           // answering. There is no quiet verb, because `Recovery` has nowhere
@@ -187,7 +187,7 @@ export default function DevicesScreen({
                 ? {
                     facts: [
                       {
-                        key: "the gateway said",
+                        key: "the connection said",
                         net: true,
                         value: devices.message,
                       },

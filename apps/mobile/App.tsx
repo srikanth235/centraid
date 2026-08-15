@@ -34,6 +34,7 @@ import {
   AgendaEvent,
   AgendaHome,
   AssistantScreen,
+  AssistantFullScreen,
   AutomationsScreen,
   DocsHome,
   DocumentViewer,
@@ -67,8 +68,10 @@ import {
   DevicesScreen,
   PhoneStorageScreen,
   ScanScreen,
+  SignalNotificationScreen,
   SettingsScreen,
   SharingScreen,
+  SystemOnPhoneScreen,
 } from "./lazy-screens";
 import { configurePhotoImageCache } from "./src/apps/photos/image-cache";
 import { LINKING } from "./src/deep-links";
@@ -515,6 +518,24 @@ export default function App(): React.JSX.Element | null {
                             <RootStack.Screen
                               name="Assistant"
                               component={AssistantScreen}
+                              options={{
+                                animation: "none",
+                                presentation: "transparentModal",
+                              }}
+                            />
+                            <RootStack.Screen
+                              name="AssistantFull"
+                              component={AssistantFullScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="SystemOnPhone"
+                              component={SystemOnPhoneScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="SignalNotification"
+                              component={SignalNotificationScreen}
                               options={COVER_OPTIONS}
                             />
                             <RootStack.Screen
