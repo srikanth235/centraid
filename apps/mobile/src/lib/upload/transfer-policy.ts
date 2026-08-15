@@ -12,7 +12,7 @@ function hasQuery(url: URL, name: string): boolean {
 
 /**
  * Resolve the current provider allowlist from the trusted gateway, then pin a
- * WebView-requested native PUT to that exact S3 temporary-object namespace.
+ * native background PUT to that exact S3 temporary-object namespace.
  */
 export async function assertGatewayMintedUploadUrl(
   candidate: string,

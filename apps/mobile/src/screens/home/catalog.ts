@@ -1,10 +1,11 @@
 // The Home launcher catalog + merge logic (issue #498, Slice B change #4).
 //
-// The springboard now shows all eight first-party apps *always*, whether or not
-// a desktop is paired: the three native covers (Photos / Docs / Agenda) plus the
+// The springboard shows all eight first-party apps always, whether or not a
+// desktop is paired: the three native covers (Photos / Docs / Agenda) plus the
 // five native domain covers (Tasks / Notes / People / Locker / Tally). All
-// eight ship in the binary and read the encrypted replica, while user-created
-// apps still open through the gateway-hosted compatibility cover.
+// eight ship in the binary and read the encrypted replica, so the grid fills
+// offline and there is no gateway-hosted app to merge in (issue #799 retired
+// the WebView cover, and with it the served-app plane on the phone).
 //
 // This module is pure (no React / navigation imports) so the merge rule stays
 // unit-testable and the routing decision lives in exactly one place.
@@ -14,9 +15,7 @@ import type { AppMetaResolved } from "@centraid/design";
 
 import { SPRINGBOARD_ORDER } from "./springboard-policy";
 
-// Where a launcher tile goes when tapped. The three native kinds map onto the
-// nested cover navigators; `app` opens a remote app's WebView cover; `pair`
-// diverts an uninstalled gateway app to Settings (pairing) instead.
+/** Where a launcher tile goes when tapped — one native cover per app. */
 export type LauncherRoute =
   | { kind: "photos" }
   | { kind: "docs" }
@@ -25,28 +24,18 @@ export type LauncherRoute =
   | { kind: "tasks" }
   | { kind: "people" }
   | { kind: "notes" }
-  | { kind: "tally" }
-  | { kind: "app"; appId: string }
-  | { kind: "pair" };
+  | { kind: "tally" };
 
 export interface LauncherItem {
   /** Tile display metadata (emblem glyph, name). */
   meta: AppMetaResolved;
   /** Where tapping the tile navigates. */
   route: LauncherRoute;
-  /** `false` renders the dimmed "on your desktop" placeholder. */
-  installed: boolean;
 }
 
-// The native covers are always installed — their UI is in the binary — so
-// they never dim. This is the product catalog, not a second mobile catalog:
-// app name, icon, colour, and description resolve through one source of truth.
+// This is the product catalog, not a second mobile catalog: app name, icon,
+// colour, and description resolve through one source of truth.
 const NATIVE_APPS: readonly AppMetaResolved[] = BUILTIN_APPS;
-
-/** Native app ids — Home uses this to drop native rows out of the live listing. */
-export const NATIVE_APP_IDS: ReadonlySet<string> = new Set(
-  NATIVE_APPS.map((a) => a.id)
-);
 
 const NATIVE_ROUTES: Record<string, LauncherRoute> = {
   photos: { kind: "photos" },
@@ -59,80 +48,27 @@ const NATIVE_ROUTES: Record<string, LauncherRoute> = {
   tally: { kind: "tally" },
 };
 
-// Every bundled blueprint now has a native cover. User-created apps discovered
-// from the gateway are appended below and keep the AppDetail compatibility path.
-const GATEWAY_CATALOG: readonly AppMetaResolved[] = [];
-
 /**
- * Compose the grid: native three, then the five catalog apps merged over the
- * live listing by id, then any extra apps the user has built that aren't in the
- * static catalog.
+ * Compose the grid: the eight first-party apps, each on its native cover.
  *
- * - A catalog app present in `remoteApps` → normal tile, opens over AppDetail
- *   (and we prefer the live metadata so a custom name/icon from the manifest
- *   wins over the catalog default).
- * - A catalog app absent from `remoteApps` (not installed, or no gateway) →
- *   dimmed placeholder that routes to pairing.
- * - A live app not in the catalog → normal tile (the user built it themselves).
- *
- * `remoteApps` must already exclude the native ids (Home filters them out).
+ * An id `NATIVE_ROUTES` does not name would have nowhere to go, so it is left
+ * out rather than routed at a guess — the two lists are the same eight ids and
+ * `catalog.test.ts` pins that they stay so.
  */
-export function buildLauncherItems(
-  remoteApps: readonly AppMetaResolved[]
-): LauncherItem[] {
-  const liveById = new Map(remoteApps.map((app) => [app.id, app]));
-
-  const items: LauncherItem[] = NATIVE_APPS.map((meta) => ({
-    installed: true,
-    meta,
-    route: NATIVE_ROUTES[meta.id] ?? { kind: "app", appId: meta.id },
-  }));
-
-  const catalogIds = new Set<string>();
-  for (const meta of GATEWAY_CATALOG) {
-    catalogIds.add(meta.id);
-    const live = liveById.get(meta.id);
-    items.push(
-      live
-        ? {
-            installed: true,
-            meta: live,
-            route: { kind: "app", appId: live.id },
-          }
-        : { installed: false, meta, route: { kind: "pair" } }
-    );
-  }
-
-  for (const app of remoteApps) {
-    if (catalogIds.has(app.id) || NATIVE_APP_IDS.has(app.id)) continue;
-    items.push({
-      installed: true,
-      meta: app,
-      route: { kind: "app", appId: app.id },
-    });
-  }
-
-  return items;
+export function buildLauncherItems(): LauncherItem[] {
+  return NATIVE_APPS.flatMap((meta) => {
+    const route = NATIVE_ROUTES[meta.id];
+    return route ? [{ meta, route }] : [];
+  });
 }
 
-/**
- * Apply the member's pin order to the grid (Tier 2: "pinning writes the home
- * grid order").
- *
- * Pinned apps come first, in the order they were pinned; everything else keeps
- * its catalog position behind them. An unpinned app is never HIDDEN — a
- * launcher you can lose an app in is not a launcher — and a pinned id that no
- * longer resolves to a listed app is simply skipped rather than repaired, so an
- * app that is temporarily unlistable keeps its pin for when it comes back.
- */
 /**
  * Put the grid into springboard order (./tile-model#SPRINGBOARD_ORDER) before
  * pins are applied.
  *
- * An app the order does not name — one the member built themselves — keeps its
- * catalog position BEHIND the eight first-party tiles rather than being dropped
- * or sorted to the front: the order is a statement about the shipped tiles, and
- * it has no opinion about an app it has never seen.
+ * An app the order does not name keeps its catalog position BEHIND the tiles it
+ * does rather than being dropped or sorted to the front: the order is a
+ * statement about the shipped tiles, and it has no opinion about anything else.
  */
 export function orderForSpringboard(
   items: readonly LauncherItem[]
@@ -150,6 +86,16 @@ export function orderForSpringboard(
     .map((entry) => entry.item);
 }
 
+/**
+ * Apply the member's pin order to the grid (Tier 2: "pinning writes the home
+ * grid order").
+ *
+ * Pinned apps come first, in the order they were pinned; everything else keeps
+ * its catalog position behind them. An unpinned app is never HIDDEN — a
+ * launcher you can lose an app in is not a launcher — and a pinned id that no
+ * longer resolves to a listed app is simply skipped rather than repaired, so an
+ * app that is temporarily unlistable keeps its pin for when it comes back.
+ */
 export function orderByPins(
   items: readonly LauncherItem[],
   pinnedIds: readonly string[]

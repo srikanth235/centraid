@@ -13,7 +13,6 @@ export function companionSubmitText(
 
 const PAGE_LABELS: Readonly<Record<string, string>> = {
   Agenda: "Agenda",
-  AppDetail: "App",
   Automations: "Automations",
   Connectors: "Connectors",
   Data: "Vault",

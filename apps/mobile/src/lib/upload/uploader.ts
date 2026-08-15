@@ -14,7 +14,6 @@
 //    thing that marks an item settled. A crash before persisting it re-begins,
 //    finds `alreadyPresent`, and settles from there.
 
-import { assertGatewayMintedUploadUrl } from "../bridge/transfer-policy";
 import { base64ToBytes } from "./bytes";
 import { sealDirectory, sealPart } from "./cbsf";
 import type { UploadCrypto } from "./crypto";
@@ -26,6 +25,7 @@ import type {
   SettlementReceipt,
 } from "./gateway-client";
 import type { UploadItem, UploadQueueStore } from "./store";
+import { assertGatewayMintedUploadUrl } from "./transfer-policy";
 
 const MAX_ATTEMPTS = 5;
 const DEFAULT_PART_CONCURRENCY = 3;

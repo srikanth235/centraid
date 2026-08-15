@@ -243,16 +243,9 @@ function AppRow({
   onOpen: () => void;
   onTogglePin: (pinned: boolean) => void;
 }): React.JSX.Element {
-  const { meta, installed } = item;
+  const { meta } = item;
   const count = countText(tile);
-  const label = installed
-    ? `Open ${meta.name}, ${count}`
-    : `${meta.name}, on your desktop — tap to pair`;
-  // Recede at the LEAF, never the container: an uninstalled entry's mark and
-  // name step down to the theme's faint tokens directly, instead of wrapping
-  // the row in an opacity-faded View. Container opacity composites every
-  // descendant and silently invalidates token-level contrast.
-  const recede = !installed;
+  const label = `Open ${meta.name}, ${count}`;
   return (
     <Pressable
       accessibilityRole="button"
@@ -260,22 +253,12 @@ function AppRow({
       onPress={onOpen}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
-      <AppMark
-        color={meta.color}
-        iconKey={meta.iconKey}
-        muted={recede}
-        size={ROW_ICON}
-      />
+      <AppMark color={meta.color} iconKey={meta.iconKey} size={ROW_ICON} />
       {/* Pinned reads full-weight ink; unpinned is a lighter name — never a
-          dimmed one. An uninstalled entry's recede state wins over both, since
-          it cannot be pinned to a grid it has no tile on. */}
+          dimmed one. */}
       <View style={styles.rowText}>
         <Text
-          style={[
-            styles.rowLabel,
-            pinned && styles.rowLabelPinned,
-            recede && styles.rowLabelRecede,
-          ]}
+          style={[styles.rowLabel, pinned && styles.rowLabelPinned]}
           numberOfLines={1}
         >
           {meta.name}
@@ -286,7 +269,6 @@ function AppRow({
       </View>
       <Switch
         value={pinned}
-        disabled={recede}
         onValueChange={onTogglePin}
         trackColor={{ false: colors.line, true: colors.accent }}
         thumbColor={pinned ? colors.textInv : colors.textFaint}
@@ -411,7 +393,6 @@ const makeStyles = (colors: ThemeColors) =>
     },
     rowLabel: { ...t("small"), color: colors.text },
     rowLabelPinned: { ...t("smallStrong"), color: colors.text },
-    rowLabelRecede: { ...t("small"), color: colors.textFaint },
     rowMeta: { ...t("mono"), color: colors.textFaint },
     rowPressed: { backgroundColor: colors.bgHover },
     rowText: { flex: 1 },

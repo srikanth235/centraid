@@ -776,7 +776,7 @@
     "desktop.security": "apps/desktop/src/main/gateway-pairing-core.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
     "web.correctness": "apps/web/src/web-host.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
     "mobile.concurrency": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "mobile.security": "apps/mobile/src/lib/bridge/transfer-policy.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "mobile.security": "apps/mobile/src/lib/upload/transfer-policy.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
     "mobile.offline": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #781 (originally #656).",
     "tunnel-pairing.correctness": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
     "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
@@ -1225,7 +1225,7 @@
       "tier": "scale"
     },
     "mobile.security": {
-      "owner": "apps/mobile/src/lib/bridge/transfer-policy.test.ts",
+      "owner": "apps/mobile/src/lib/upload/transfer-policy.test.ts",
       "tier": "unit"
     },
     "mobile.offline": {
@@ -2650,6 +2650,17 @@
       "minimumTests": 1
     },
     {
+      "id": "mobile-native-v0-resilience",
+      "name": "Native app covers survive gateway loss, restart, and cold start",
+      "surface": "mobile",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs",
+      "minimumTests": 13,
+      "replacesMinimumTestsFlow": "mobile-template-gate",
+      "approvedMinimumTestsDeviation": "#799 retired the mobile WebView app cover, and with it the served-app plane on the phone: all eight bundled apps route to native covers, so template-gate's premise (a bundled UI template rendering inside the phone's WebView) names a surface that no longer exists. Its journey coverage was ALREADY delegated to this flow — template-gate.md said so in its own scope note (\"the eight native apps are covered by the native resilience flow\") and it short-circuited to a trivial pass because its own NATIVE_ON_MOBILE set covers all eight kind:\"app\" templates in packages/blueprints/index.json, leaving it nothing to gate. The floor did not shrink: template-gate's was 7, this flow declares 13 checks and is pinned there."
+    },
+    {
       "id": "mobile-photos-permissions",
       "name": "Native Photos denied-permission empty-vault takeover",
       "surface": "mobile",
@@ -2657,15 +2668,6 @@
       "tier": "e2e",
       "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs",
       "minimumTests": 1
-    },
-    {
-      "id": "mobile-template-gate",
-      "name": "Native template gate journey (clone/install/open UI templates)",
-      "surface": "mobile",
-      "dimension": "journey",
-      "tier": "e2e",
-      "owner": "tests/agent-e2e-mobile/flows/template-gate.mjs",
-      "minimumTests": 7
     },
     {
       "id": "tunnel-wire",

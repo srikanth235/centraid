@@ -140,7 +140,7 @@ function ContentTile({
   styles: ReturnType<typeof makeStyles>;
   onPress: () => void;
 }): React.JSX.Element {
-  const { meta, installed } = item;
+  const { meta } = item;
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -153,9 +153,7 @@ function ContentTile({
     tile?.count === undefined
       ? (tile?.countLabel ?? "")
       : `${count} ${tile.countLabel}`;
-  const label = installed
-    ? `Open ${meta.name}, ${spoken}`.trim().replace(/,$/u, "")
-    : `${meta.name}, on your desktop — tap to pair`;
+  const label = `Open ${meta.name}, ${spoken}`.trim().replace(/,$/u, "");
 
   return (
     <View style={[styles.slot, isWideTile(meta.id) && styles.slotWide]}>
@@ -174,7 +172,6 @@ function ContentTile({
             <AppMark
               color={meta.color}
               iconKey={meta.iconKey}
-              muted={!installed}
               size={CHIP_SIZE}
             />
             <Text numberOfLines={1} style={styles.name}>

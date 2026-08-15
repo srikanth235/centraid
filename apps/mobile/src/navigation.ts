@@ -10,7 +10,6 @@
 //   ├─ People        → PeopleHome   (native offline contact organizer)
 //   ├─ Notes         → NotesHome    (native CommonMark + linked-data editor)
 //   ├─ Tally         → TallyHome    (native offline shared ledger)
-//   ├─ AppDetail     → AppDetailScreen (remote-app WebView cover)
 //   ├─ Assistant     → AssistantScreen (chat with the gateway assistant)
 //   ├─ Capture       → CaptureScreen (preview-first universal quick add)
 //   ├─ Scan          → ScanScreen (camera/share OCR review)
@@ -160,7 +159,6 @@ export type RootStackParamList = {
   People: undefined;
   Notes: undefined;
   Tally: undefined;
-  AppDetail: { appId: string };
   Assistant: undefined;
   AssistantFull: undefined;
   SystemOnPhone: undefined;
@@ -191,7 +189,6 @@ export type RootScreenProps<T extends keyof RootStackParamList> =
 export type HomeScreenProps = RootScreenProps<"Home">;
 export type CaptureScreenProps = RootScreenProps<"Capture">;
 export type ScanScreenProps = RootScreenProps<"Scan">;
-export type AppDetailScreenProps = RootScreenProps<"AppDetail">;
 export type LockerScreenProps = RootScreenProps<"Locker">;
 export type TasksScreenProps = RootScreenProps<"Tasks">;
 export type PeopleScreenProps = RootScreenProps<"People">;

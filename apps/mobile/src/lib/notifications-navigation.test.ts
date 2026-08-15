@@ -49,10 +49,12 @@ describe(mobileNotificationsDestination, () => {
         })
       )
     ).toStrictEqual({ kind: "outbox", itemId: "item-1" });
+    // An app-scoped notice has no per-app screen to open since #799 retired
+    // the WebView cover — it stays on the notice list rather than guessing.
     expect(
       mobileNotificationsDestination(
         notice("app", "tasks", { sourceType: "app", appId: "tasks" })
       )
-    ).toStrictEqual({ kind: "app", appId: "tasks" });
+    ).toStrictEqual({ kind: "notifications" });
   });
 });
