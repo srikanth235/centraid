@@ -42,13 +42,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { iconChipFinish, iconChipRadius } from "@centraid/design";
-
+import AppMark from "../../kit/components/AppMark";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { borders, family, metrics, radii, t, useTheme } from "../../kit/theme";
-import type { Scheme, ThemeColors } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 import type { LauncherItem } from "./catalog";
 import { togglePlacePin, usePlacePins } from "./home-pins";
 import {
@@ -99,7 +98,7 @@ export default function AllAppsSheet({
   onTogglePin,
   onClose,
 }: AllAppsSheetProps): React.JSX.Element {
-  const { colors, scheme } = useTheme();
+  const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
@@ -184,7 +183,6 @@ export default function AllAppsSheet({
               key={item.meta.id}
               item={item}
               tile={tiles.get(item.meta.id)}
-              scheme={scheme}
               colors={colors}
               styles={styles}
               pinned={pinnedSet.has(item.meta.id)}
@@ -231,7 +229,6 @@ export default function AllAppsSheet({
 function AppRow({
   item,
   tile,
-  scheme,
   colors,
   styles,
   pinned,
@@ -240,7 +237,6 @@ function AppRow({
 }: {
   item: LauncherItem;
   tile: TileData | undefined;
-  scheme: Scheme;
   colors: ThemeColors;
   styles: ReturnType<typeof makeStyles>;
   pinned: boolean;
@@ -248,7 +244,6 @@ function AppRow({
   onTogglePin: (pinned: boolean) => void;
 }): React.JSX.Element {
   const { meta, installed } = item;
-  const finish = iconChipFinish(meta.color, colors.bg, scheme);
   const count = countText(tile);
   const label = installed
     ? `Open ${meta.name}, ${count}`
@@ -265,21 +260,12 @@ function AppRow({
       onPress={onOpen}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
-      <View
-        style={[
-          styles.chip,
-          {
-            backgroundColor: recede ? colors.bgElev : finish.backgroundColor,
-            borderRadius: iconChipRadius(ROW_ICON),
-          },
-        ]}
-      >
-        <Icon
-          name={meta.iconKey}
-          size={16}
-          color={recede ? colors.textFaint : finish.markColor}
-        />
-      </View>
+      <AppMark
+        color={meta.color}
+        iconKey={meta.iconKey}
+        muted={recede}
+        size={ROW_ICON}
+      />
       {/* Pinned reads full-weight ink; unpinned is a lighter name — never a
           dimmed one. An uninstalled entry's recede state wins over both, since
           it cannot be pinned to a grid it has no tile on. */}

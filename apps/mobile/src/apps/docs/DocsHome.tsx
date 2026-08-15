@@ -7,7 +7,9 @@ import { FlatList, Modal, Pressable, ScrollView, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 
 import { OnlineOnlyError } from "@centraid/client/replica/native";
+import { apps as BUILTIN_APPS } from "@centraid/design";
 
+import AppMark from "../../kit/components/AppMark";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
@@ -41,6 +43,7 @@ import { useDocsLibrary } from "./useDocsLibrary";
 // One shared identity for the "vault unavailable" case: a fresh `[]` per render
 // would make FlatList re-diff a list it already knows is empty.
 const NO_ITEMS: DriveItem[] = [];
+const DOCS_APP = BUILTIN_APPS.find((app) => app.id === "docs");
 // GridItem/ListItem are plain function components shared with other Docs
 // screens; memoising them here is what stops every cell re-rendering when only
 // the search box or the refresh flag changed.
@@ -362,6 +365,14 @@ export default function DocsHome({
           // At the root: the shared teal grid = leave Docs for your apps.
           <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         )}
+        {DOCS_APP ? (
+          <AppMark
+            color={DOCS_APP.color}
+            iconKey={DOCS_APP.iconKey}
+            size={32}
+            testID="docs-app-mark"
+          />
+        ) : null}
         <View style={styles.headerCopy}>
           <Text style={[styles.title, { color: colors.text }]}>
             {parent?.name ?? "Docs"}

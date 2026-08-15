@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import type { LocalUsageReportDTO } from "../../../gateway-client-local-storage.js";
@@ -35,6 +35,10 @@ export interface HomeRouteProps {
   drafts: readonly DraftAppMeta[];
   /** The installed-app registry must settle before Home can call anything empty. */
   appsLoading: boolean;
+  /** First entry after onboarding should get a useful, disclosed starting point. */
+  autoSeedSample?: boolean;
+  /** Consumes the one-shot first-entry trigger at the shell root. */
+  onAutoSeedStarted?: () => void;
 }
 
 // Home (issue #708). Home is the springboard and nothing else: the app bar
@@ -47,7 +51,13 @@ export interface HomeRouteProps {
 // brief and the per-app tile content.
 export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   const { navigate } = useShellActions();
-  const { appsLoading, userApps, drafts } = props;
+  const {
+    appsLoading,
+    userApps,
+    drafts,
+    autoSeedSample = false,
+    onAutoSeedStarted,
+  } = props;
   const [ambientNow, setAmbientNow] = useState(() => Date.now());
   useEffect(
     () => startVisibilityTicker(() => setAmbientNow(Date.now()), 60_000),
@@ -151,6 +161,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
       }),
     }
   );
+  const homeReadsSettled = springboardFeed.state.status === "ready";
 
   // The sample plane (#708). Cheap, cached, and fail-soft to "no offer" — a
   // gateway that cannot answer should cost the member an offer, never the
@@ -167,6 +178,8 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   // True for the render right after a seed lands: the grid arrives staggered
   // once, as the payoff for pressing, and never again on a routine revisit.
   const [justFilled, setJustFilled] = useState(false);
+  const autoSeedStarted = useRef(false);
+  const autoSeedPending = autoSeedSample;
 
   const refreshAfterSample = useCallback(async () => {
     // Replica FIRST, refresh SECOND — the order is the fix for "I pressed the
@@ -203,6 +216,36 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
       .then(() => setJustFilled(true))
       .finally(() => setFilling(null));
   }, [sample.seedable, refreshAfterSample]);
+
+  // First-time users should see a useful Home without having to decide what a
+  // sample week is. Wait for the sample plane and initial Home reads to settle,
+  // disclose the same removable offer in its working state, then run the
+  // existing seed path. Starting after the first replica read avoids making
+  // bootstrap and the first demo writes contend for the local store.
+  // The ref protects the one-shot promise even if development Strict Mode
+  // replays an effect before the state update commits.
+  useEffect(() => {
+    if (
+      !autoSeedSample ||
+      autoSeedStarted.current ||
+      sampleQuery.state.status !== "ready" ||
+      !homeReadsSettled
+    ) {
+      return;
+    }
+    autoSeedStarted.current = true;
+    onAutoSeedStarted?.();
+    if (sample.rows > 0 || sample.seedable.length === 0) return;
+    void Promise.resolve().then(onSeed);
+  }, [
+    autoSeedSample,
+    onAutoSeedStarted,
+    onSeed,
+    sample.rows,
+    sample.seedable,
+    sampleQuery.state.status,
+    homeReadsSettled,
+  ]);
 
   const onClear = useCallback(() => {
     setClearing(true);
@@ -280,6 +323,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
             loaded: sample.rows > 0,
             onClear,
             onSeed,
+            autoSeedPending,
           }}
           tiles={tiles}
           {...(outOfRoom ? { outOfRoom } : {})}

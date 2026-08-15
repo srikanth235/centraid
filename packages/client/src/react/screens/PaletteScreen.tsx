@@ -1,7 +1,10 @@
 import { Fragment, useEffect, useReducer, useRef, useState } from "react";
 import type { CSSProperties, JSX } from "react";
 
+import type { IconName } from "@centraid/design";
+
 import type { PaletteBridgeProps, PaletteRowDTO } from "../screen-contracts.js";
+import AppMark from "../ui/AppMark.js";
 
 import styles from "./PaletteScreen.module.css";
 
@@ -34,7 +37,13 @@ function Row({
       }}
       onClick={onRun}
     >
-      {row.variant === "app" && row.tile ? (
+      {row.variant === "app" && row.appMark ? (
+        <AppMark
+          colorKey={row.appMark.colorKey}
+          iconKey={row.appMark.iconKey as IconName}
+          size={28}
+        />
+      ) : row.variant === "app" && row.tile ? (
         <div
           className={styles.rowTile}
           style={{

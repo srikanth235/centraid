@@ -173,20 +173,12 @@ export function buildPaletteGroups(
     groups.push({
       group: "Apps",
       items: appMatches.slice(0, 8).map((a): PaletteRowDTO => {
-        const finish = window.CentraidTokens.tileFinish(
-          a.color,
-          deps.tileVariant
-        );
         return {
           variant: "app",
           label: a.name,
           ...(a.desc ? { sub: a.desc } : {}),
+          appMark: { colorKey: a.colorKey, iconKey: a.iconKey },
           iconHtml: iconSvg(a.iconKey || "Sparkle"),
-          tile: {
-            background: finish.background,
-            glyphColor: finish.glyphColor,
-            boxShadow: finish.boxShadow,
-          },
           run: () => {
             deps.onClose();
             deps.navigate({ kind: "app", id: a.id });

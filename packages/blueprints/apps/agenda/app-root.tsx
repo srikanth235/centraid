@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { KeyboardEvent, ReactElement } from "react";
 
+import { SearchBarButton, countLabel } from "../_shared/app-frame.tsx";
 import { readPendingOverlay } from "../_shared/pending-overlay.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
@@ -110,7 +111,11 @@ function makeState(view: ViewKind): AppState {
   };
 }
 
-export function Root({ rootRef }: InlineAppProps): ReactElement {
+export function Root({
+  rootRef,
+  frame,
+  compact = false,
+}: InlineAppProps): ReactElement {
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const [loaded, setLoaded] = useState(false);
   const [narrow, setNarrow] = useState(false);
@@ -519,6 +524,36 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         });
 
   const events = visibleEvents(data.events);
+
+  // Agenda is a route INSIDE the host frame. Its old standalone toolbar used
+  // to repeat the app identity and the create verb beside the shell's own
+  // chrome; contribute the identity and actions through the same bounded
+  // channel as Docs and Photos instead.
+  useEffect(() => {
+    frame.setAppBar({
+      title: "Agenda",
+      count: countLabel(events.length, "events"),
+      actions: (
+        <>
+          {compact ? null : (
+            <SearchBarButton
+              label="Search agenda"
+              onSearch={() => searchInputRef.current?.focus()}
+            />
+          )}
+          <button
+            type="button"
+            className="kit-btn primary"
+            onClick={() => openCreate(null)}
+          >
+            New event
+          </button>
+        </>
+      ),
+    });
+    return () => frame.setAppBar(null);
+  }, [compact, events.length, frame, openCreate]);
+
   let canvasNode: ReactElement;
   if (state.view === "month") {
     canvasNode = (

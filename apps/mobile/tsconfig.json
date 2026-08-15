@@ -1,10 +1,26 @@
 {
+  // The mobile program reads a few blueprint APP SOURCES directly — the pure
+  // laws under `apps/_shared`, imported by `src/kit/share` so native and web
+  // share ONE rule rather than two copies (#776). Reading them means reading
+  // them the way blueprints compiles them: those files import each other by
+  // their real served extension (`./scope-kit.ts`), and they reference the
+  // browser host contract declared in blueprints' ambient `types/centraid.d.ts`.
+  // Both settings below exist for that and nothing else — `window.centraid` is
+  // a BROWSER surface no React Native screen may use; mobile reaches the
+  // gateway through the replica session.
   "extends": "../../tsconfig.expo.json",
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "jsx": "react-native",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": ["react", "react-native", "node"]
   },
-  "include": ["App.tsx", "index.ts", "src/**/*.ts", "src/**/*.tsx"],
+  "include": [
+    "App.tsx",
+    "index.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "../../packages/blueprints/types/centraid.d.ts"
+  ],
   "exclude": ["node_modules", ".expo", "dist"]
 }

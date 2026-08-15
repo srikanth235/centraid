@@ -50,6 +50,10 @@ const adapterNames = (profile: "blueprint" | "shell"): string[] =>
 export const SHELL_TOKEN_CONTRACT = [
   ...new Set([
     ...paletteNames,
+    "--app-mark-hue",
+    "--app-mark-ink",
+    "--app-mark-size",
+    "--app-mark-tint",
     ...commonScale,
     ...typeNames(type),
     ...Object.keys(typeSizeRungs(remSizeScale(type))),

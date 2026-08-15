@@ -24,6 +24,7 @@ import { useReplicaQuery } from "../hooks/useReplicaQuery";
 import { useReplica } from "../replica/ReplicaProvider";
 import { borders, radii, spacing, t, useTheme } from "../theme";
 import { useNamedShareCircles } from "./named-circles";
+import QuickAddPerson from "./QuickAddPerson";
 import {
   nativeShareTargets,
   selectionsForNativeCircle,
@@ -74,6 +75,7 @@ export default function ShareSheet({
   >({});
   const [busy, setBusy] = useState(false);
   const [selectedCircleId, setSelectedCircleId] = useState("");
+  const [rosterRevision, setRosterRevision] = useState(0);
   const [inviteHandoffs, setInviteHandoffs] = useState<InviteHandoff[]>([]);
   const openInputsRef = useRef({
     gatewayBase: replica.gatewayBase,
@@ -121,7 +123,12 @@ export default function ShareSheet({
   });
   const selected = destinations.flatMap((destination) => {
     const capability = selections[destination.id];
-    return capability ? [{ destination, capability }] : [];
+    // A person still waiting for the gateway is never part of the count, the
+    // button state, or the member array: `selectedNativeShareMembers` drops
+    // them as the law backstop, and this keeps the copy honest about it.
+    return capability && !destination.pending
+      ? [{ destination, capability }]
+      : [];
   });
   const members = selectedNativeShareMembers(destinations, selections);
   const namedCircles = useNamedShareCircles(destinations, ownerPartyId);
@@ -207,6 +214,19 @@ export default function ShareSheet({
           vault and backup.
         </Text>
 
+        <QuickAddPerson
+          busy={busy}
+          destinations={destinations}
+          key={visible ? "open" : "closed"}
+          onAdded={(next) => {
+            setSelectedCircleId(next.circleId);
+            setSelections(next.selections);
+          }}
+          onRosterChanged={() => setRosterRevision((current) => current + 1)}
+          selections={selections}
+          rosterRevision={rosterRevision}
+        />
+
         {namedCircles.length ? (
           <View style={styles.circleList}>
             <Text style={[t("small"), { color: colors.textSoft }]}>
@@ -271,11 +291,19 @@ export default function ShareSheet({
                   ]}
                 >
                   <Pressable
-                    accessibilityLabel={`Share with ${destination.label}`}
+                    accessibilityLabel={
+                      destination.pending
+                        ? `${destination.label} cannot be shared with yet`
+                        : `Share with ${destination.label}`
+                    }
                     accessibilityRole="checkbox"
-                    accessibilityState={{ checked: Boolean(capability) }}
-                    disabled={busy}
+                    accessibilityState={{
+                      checked: Boolean(capability) && !destination.pending,
+                      disabled: Boolean(destination.pending),
+                    }}
+                    disabled={busy || Boolean(destination.pending)}
                     onPress={() => {
+                      if (destination.pending) return;
                       const next = manualShareSelection(
                         selections,
                         destination.id,
@@ -286,14 +314,39 @@ export default function ShareSheet({
                     }}
                     style={styles.person}
                   >
-                    <Text style={[styles.check, { color: colors.accent }]}>
-                      {capability ? "✓" : "○"}
+                    <Text
+                      style={[
+                        styles.check,
+                        {
+                          color: destination.pending
+                            ? colors.textSoft
+                            : colors.accent,
+                        },
+                      ]}
+                    >
+                      {capability && !destination.pending ? "✓" : "○"}
                     </Text>
                     <View style={styles.personCopy}>
-                      <Text style={[styles.rowTitle, { color: colors.text }]}>
+                      <Text
+                        style={[
+                          styles.rowTitle,
+                          {
+                            color: destination.pending
+                              ? colors.textSoft
+                              : colors.text,
+                          },
+                        ]}
+                      >
                         {destination.label}
                       </Text>
-                      {destination.vaultId ? null : (
+                      {destination.pending ? (
+                        <Text
+                          style={[styles.invited, { color: colors.textSoft }]}
+                        >
+                          Saved on this device — selectable once the gateway has
+                          them
+                        </Text>
+                      ) : destination.vaultId ? null : (
                         <Text
                           style={[styles.invited, { color: colors.textSoft }]}
                         >
@@ -302,7 +355,7 @@ export default function ShareSheet({
                       )}
                     </View>
                   </Pressable>
-                  {capability ? (
+                  {capability && !destination.pending ? (
                     <View style={[styles.toggle, { borderColor: colors.line }]}>
                       {(["read", "read+write"] as const).map((candidate) => (
                         <Pressable

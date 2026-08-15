@@ -111,14 +111,10 @@ export default function VaultHeader({
   // handoff's own `color-mix(in oklab, <hue> …%, transparent)` (:5365) lowered
   // to RN, which has no `color-mix()`.
   //
-  // The initial is painted in the FULL hue rather than the handoff's solved
-  // `-text` rung (`this.hueText`, :5364): that rung is derived per named
-  // palette key (`paletteText` in packages/design/src/palette.ts) and is not
-  // exported past the design package's barrel, so mobile — outside this
-  // file's ownership — has no way to reach it for an arbitrary vault hex.
-  // `FirstMoves.tsx`'s `MoveRow` already pairs `iconChipFinish`'s wash with its
-  // own `markColor` (the full hue) for exactly this reason; this mark follows
-  // the same established precedent rather than reinventing contrast maths.
+  // `iconChipFinish` now returns the solved `-text` rung for known palette
+  // hues, while arbitrary vault hex values safely fall back to the submitted
+  // colour. The shared helper owns that distinction so this vault mark and app
+  // marks do not drift into separate contrast maths.
   const finish = iconChipFinish(hue ?? colors.text, colors.bg, scheme);
   const gateway = gatewayName?.trim();
   const line = gateway

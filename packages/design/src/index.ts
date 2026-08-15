@@ -115,6 +115,9 @@ export {
   tileFinish,
   TILE_VARIANTS,
   ICON_CHIP_TINT,
+  APP_MARK_SMALL_STROKE,
+  APP_MARK_STROKE,
+  APP_MARK_VIEWBOX,
   iconChipFinish,
 } from "./tile";
 export type { TileVariant, TileFinish, IconChipFinish } from "./tile";

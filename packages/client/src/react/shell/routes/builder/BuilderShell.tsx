@@ -3,8 +3,12 @@ import type { JSX, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 
+import type { ColorKey } from "@centraid/design";
+
+import { colorKeyForIcon } from "../../../../app-format.js";
 import type { AppearancePrefs } from "../../../../app-shell-context.js";
 import BuilderChatPane from "../../../screens/BuilderChatPane.js";
+import AppMark from "../../../ui/AppMark.js";
 import { cx } from "../../../ui/cx.js";
 import { useShellActions } from "../../actions.js";
 import { iconSvg } from "../../iconSvg.js";
@@ -152,22 +156,17 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
     return () => document.removeEventListener("keydown", onKey);
   }, [chatEligible, toggleChat]);
 
-  const finish = window.CentraidTokens.tileFinish(vm.projColor, "gradient");
+  const builderMarkColorKey = (builderInput.appContext?.colorKey ??
+    colorKeyForIcon(vm.projIcon)) as ColorKey;
 
   // ── Titlebar lead: identity lockup ──────────────────────────────────────
   const titlebarLead = (
     <span className={styles.tlIdentity}>
-      <span
+      <AppMark
         className={styles.tlAppIcon}
-        style={{
-          background: finish.background,
-          color: finish.glyphColor,
-          boxShadow: finish.boxShadow || undefined,
-        }}
-        // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
-        dangerouslySetInnerHTML={{
-          __html: iconSvg(vm.projIcon || "Sparkle", 11, 1.9),
-        }}
+        colorKey={builderMarkColorKey}
+        iconKey={vm.projIcon || "Sparkle"}
+        size={20}
       />
       {/* The rename field is a text field, so it is a real <input> — a
           contenteditable <b> claiming `role="textbox"` was neither, and it

@@ -11,8 +11,8 @@
 // facts about the vault, not about a preferences page.
 import type { JSX } from "react";
 
-import { iconChipRadius, identityHueKey } from "@centraid/design";
-import type { IconName } from "@centraid/design";
+import { identityHueKey } from "@centraid/design";
+import type { ColorKey, IconName } from "@centraid/design";
 
 import {
   HOME_FIRST_RUN_BODY,
@@ -40,6 +40,7 @@ import type {
   HomeTileBody,
   HomeTileModel,
 } from "../shell/routes/homeTiles.js";
+import AppMark from "../ui/AppMark.js";
 import Button from "../ui/Button.js";
 import { Icon } from "../ui/index.js";
 import { DevicesDisagree, OutOfRoom, WorkingState } from "../ui/states.js";
@@ -50,9 +51,6 @@ import styles from "./HomeSpringboard.module.css";
 const MARK = 30;
 const FIRST_RUN_MARK = 22;
 
-/** The app's identity hue, and the only place a tile spends one. */
-const hueOf = (colorKey: string): string => `var(--c-${colorKey})`;
-
 function Mark({
   iconKey,
   colorKey,
@@ -60,7 +58,7 @@ function Mark({
   className,
 }: {
   iconKey: IconName;
-  colorKey: string;
+  colorKey: ColorKey;
   size: number;
   /* `string | undefined`, not `string`: a CSS-module lookup is an index read,
      and the desktop's React program checks it as one. A required `string` here
@@ -70,17 +68,12 @@ function Mark({
   className: string | undefined;
 }): JSX.Element {
   return (
-    <span
+    <AppMark
       className={className}
-      aria-hidden="true"
-      style={{
-        background: hueOf(colorKey),
-        // 26% of its own size — the one radius no static token can carry.
-        borderRadius: `${iconChipRadius(size)}px`,
-      }}
-    >
-      <Icon name={iconKey} size={Math.round(size * 0.56)} strokeWidth={1.9} />
-    </span>
+      colorKey={colorKey}
+      iconKey={iconKey}
+      size={size}
+    />
   );
 }
 
@@ -345,11 +338,10 @@ function StartBand({
 /**
  * The sample offer.
  *
- * It sits BELOW the real first moves, behind a rule, phrased as a question
- * rather than a step — because ordering is an argument. Putting "fill it with
- * fake data" above "connect your account" would tell a member the demo matters
- * more than their own archive, on the one screen where that claim is being
- * made for the first time.
+ * Returning users can start it below the real first moves, behind a rule,
+ * phrased as a question rather than a step. A first visit uses the same
+ * disclosed surface while the existing seed path starts automatically, so the
+ * useful preview does not become a decision before the member has seen Home.
  *
  * The hint is not a caption; it is the disclosure, and it is placed where a
  * disclosure belongs — BEFORE the control, not underneath it as an apology.
@@ -368,9 +360,11 @@ function StartBand({
 function SampleOffer({
   seed,
   filling,
+  autoSeedPending = false,
 }: {
   seed: () => void;
   filling: HomeSampleProgress | null;
+  autoSeedPending?: boolean;
 }): JSX.Element {
   return (
     <section className={styles.offer} data-testid="home-sample-offer">
@@ -385,6 +379,11 @@ function SampleOffer({
             total: filling.total,
             unit: HOME_SAMPLE_FILLING_UNIT,
           }}
+        />
+      ) : autoSeedPending ? (
+        <WorkingState
+          className={styles.offerProgress}
+          label={HOME_SAMPLE_FILLING}
         />
       ) : (
         <Button
@@ -464,6 +463,8 @@ export interface HomeSpringboardProps {
   sample?: {
     canSeed: boolean;
     loaded: boolean;
+    /** The one first-entry run is being started automatically. */
+    autoSeedPending?: boolean;
     /** Where the fill has got to, or null when no fill is running. Not a
      *  boolean: "it is filling" is not a thing this screen can usefully say. */
     filling: HomeSampleProgress | null;
@@ -497,7 +498,11 @@ export default function HomeSpringboard({
     move.kind === "connectors" ? onConnect() : onOpen(move.id);
   const offer =
     sample?.canSeed === true && !sample.loaded ? (
-      <SampleOffer seed={sample.onSeed} filling={sample.filling} />
+      <SampleOffer
+        autoSeedPending={sample.autoSeedPending}
+        seed={sample.onSeed}
+        filling={sample.filling}
+      />
     ) : null;
   return (
     <section className={styles.section} aria-label="Your apps">

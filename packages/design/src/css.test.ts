@@ -47,6 +47,11 @@ describe("shell CSS lowering", () => {
     expect(root).toContain("--ease-entry: cubic-bezier(0.2, 0.7, 0.2, 1);");
   });
 
+  test("emits the desktop app-mark tint contract", () => {
+    expect(blockFor(":root")).toContain("--app-mark-tint: 13%;");
+    expect(blockFor("[data-theme='dark']")).toContain("--app-mark-tint: 20%;");
+  });
+
   test("follows the OS until `data-theme` is stamped", () => {
     // The un-stamped first paint has to be able to be LIGHT. While this block
     // was missing, the shell's index.html hardcoded `data-theme="dark"` to

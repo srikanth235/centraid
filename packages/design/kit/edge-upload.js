@@ -17,6 +17,8 @@ import {
   StreamingSha256,
 } from "./edge-upload-sha.js";
 
+const NATIVE_PART_WORKERS = 2;
+
 export async function sha256FileStream(file) {
   const hash = new StreamingSha256();
   if (typeof file?.stream === "function") {
@@ -270,9 +272,9 @@ async function put(url, body, transferId) {
 
 /**
  * Schedule a native background PUT without awaiting its completion. The
- * bridge posts the request synchronously, so preparing each bounded part in
- * turn keeps memory flat while all native URLSession/WorkManager transfers
- * can continue after the WebView is suspended.
+ * bridge posts the request synchronously, so the multipart caller can keep a
+ * small fixed sealing window while all native URLSession/WorkManager
+ * transfers continue after the WebView is suspended.
  */
 async function scheduleBackgroundPut(url, body, transferId) {
   const backgroundPut = globalThis.centraid?.transfer?.putBackground;
@@ -344,8 +346,6 @@ export async function stageDirectFile(file, sha256) {
       }
     } else if (plan.upload?.kind === "multipart") {
       const nativeCompletions = [];
-      // Each part is sealed and receipted in order: this bounds browser memory
-      // and makes the gateway's durable multipart ledger easy to recover.
       const uploadNextPart = async (partIndex) => {
         const target = plan.upload.parts[partIndex];
         if (target === undefined) return;
@@ -367,9 +367,10 @@ export async function stageDirectFile(file, sha256) {
           transferId
         );
         if (scheduled) {
-          nativeCompletions.push(
-            scheduled.completion.then((etag) => ({ target, etag }))
-          );
+          nativeCompletions[partIndex] = scheduled.completion.then((etag) => ({
+            target,
+            etag,
+          }));
           return uploadNextPart(partIndex + 1);
         }
         let etag;
@@ -394,7 +395,50 @@ export async function stageDirectFile(file, sha256) {
           throw new Error(`direct part receipt refused (${receipt.status})`);
         return uploadNextPart(partIndex + 1);
       };
-      await uploadNextPart(0);
+      if (typeof globalThis.centraid?.transfer?.putBackground === "function") {
+        // Seal and post at most two parts at once. This keeps the native path
+        // responsive under load without materializing every multipart body.
+        let nextPartIndex = 0;
+        const runNativeWorker = async () => {
+          const partIndex = nextPartIndex++;
+          if (partIndex >= plan.upload.parts.length) return;
+          const target = plan.upload.parts[partIndex];
+          if (target === undefined) return;
+          const index = target.partNumber - 1;
+          if (index < 0 || index >= partCount)
+            throw new Error("direct upload plan changed");
+          const body = await sealPart(
+            file,
+            sha256,
+            key,
+            index,
+            frameCount,
+            directory
+          );
+          const scheduled = await scheduleBackgroundPut(
+            target.url,
+            body,
+            `${plan.sessionId}-${target.partNumber}`
+          );
+          if (!scheduled)
+            throw new Error("native background upload unavailable");
+          nativeCompletions[partIndex] = scheduled.completion.then((etag) => ({
+            target,
+            etag,
+          }));
+          return runNativeWorker();
+        };
+        await Promise.all(
+          Array.from(
+            {
+              length: Math.min(NATIVE_PART_WORKERS, plan.upload.parts.length),
+            },
+            () => runNativeWorker()
+          )
+        );
+      } else {
+        await uploadNextPart(0);
+      }
       const nativeResults = await Promise.allSettled(nativeCompletions);
       const recordNativeReceipt = async (resultIndex) => {
         const result = nativeResults[resultIndex];

@@ -115,19 +115,17 @@ export async function connectFreshLocalGateway(): Promise<ConnectFlowResult> {
   await ensureLocalGatewayActive();
   const loaded = await loadLocalVaults();
   if (!loaded.ok) throw new Error(loaded.message);
-  // The `personal` marker is written INTO the vault at founding, so it still
-  // identifies the owner's vault after the fresh path renames it to their
-  // display name. The name match is the fallback for data dirs founded before
-  // the marker existed (v0: no migrations).
+  // The `personal` marker is written INTO the vault at founding. The name match
+  // is the fallback for data dirs founded before the marker existed (v0: no
+  // migrations).
   const personal =
     loaded.vaults.find((v) => v.personal) ??
     loaded.vaults.find((v) => v.name === PERSONAL_VAULT_NAME) ??
     null;
-  // Reinstalling over existing data may find no personal vault at all (it was
-  // erased). Landing on the oldest remaining vault is still the right place
-  // to enter, but it may be a shared/general vault, so it must NOT be flagged
-  // renamable (issue #603 C10: the fallback used to rename everyone's shared
-  // vault).
+  // Reinstalling over existing data may find no personal vault at all. Landing
+  // on the oldest remaining vault is still the right place to enter; profile
+  // and vault naming are explicit Settings actions, never an onboarding side
+  // effect.
   const target = personal ?? loaded.vaults[0] ?? null;
   if (!target) {
     throw new Error(
@@ -138,7 +136,6 @@ export async function connectFreshLocalGateway(): Promise<ConnectFlowResult> {
   return {
     displayLabel: "This Mac",
     gatewayId: "local",
-    ownerVault: personal !== null,
     vaultId: target.vaultId,
   };
 }

@@ -13,6 +13,7 @@
 .mainScroll {
   flex: 1;
   overflow-y: auto;
+  min-inline-size: 0;
   padding: 48px 56px 56px;
 }
 

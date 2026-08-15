@@ -19,6 +19,7 @@ import type {
   HomeAutoItemDTO,
   HomeMenuAnchor,
 } from "../screen-contracts.js";
+import AppMark from "../ui/AppMark.js";
 import { cx } from "../ui/cx.js";
 import { Icon, KindBadge, StatusPill } from "../ui/index.js";
 
@@ -106,15 +107,12 @@ export function AppCard({
         }}
       >
         <div className={cardCss.head}>
-          <div
-            className={cardCss.icon}
-            style={{
-              background: a.tile.background,
-              boxShadow: a.tile.boxShadow,
-              color: a.tile.glyphColor,
-            }}
-          >
-            <Icon name={a.iconKey as IconName} size={24} strokeWidth={1.9} />
+          <div className={cardCss.icon}>
+            <AppMark
+              colorKey={a.colorKey ?? "violet"}
+              iconKey={a.iconKey as IconName}
+              size={40}
+            />
             {a.tone ? (
               <span className={cardCss.iconDot} data-tone={a.tone} />
             ) : null}

@@ -2,8 +2,8 @@ import type { JSX, ReactNode } from "react";
 
 import type { InlineFrame } from "@centraid/blueprints/apps/inline-types";
 
+import AppMarkGlyph from "../../ui/AppMark.js";
 import AppBand from "../AppBand.js";
-import { iconSvg } from "../iconSvg.js";
 import { useInlineFrameChannel, useInlineFrameState } from "../inlineFrame.js";
 
 // Frame integration for an inline app (Photos v4, §3).
@@ -54,24 +54,11 @@ export interface InlineAppFrameSlots {
 }
 
 function AppMark({ app }: { app: AppMetaResolvedType }): JSX.Element {
-  const finish = window.CentraidTokens.tileFinish(app.color, "gradient");
   return (
-    <span
-      style={{
-        alignItems: "center",
-        background: finish.background,
-        blockSize: MARK_SIZE,
-        borderRadius: 8,
-        boxShadow: finish.boxShadow || undefined,
-        color: finish.glyphColor,
-        display: "inline-flex",
-        flex: "none",
-        inlineSize: MARK_SIZE,
-        justifyContent: "center",
-      }}
-      aria-hidden="true"
-      // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
-      dangerouslySetInnerHTML={{ __html: iconSvg(app.iconKey, 14, 1.9) }}
+    <AppMarkGlyph
+      colorKey={app.colorKey}
+      iconKey={app.iconKey}
+      size={MARK_SIZE}
     />
   );
 }

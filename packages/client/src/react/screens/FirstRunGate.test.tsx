@@ -84,8 +84,7 @@ describe("FirstRunGate scenarios", () => {
       clickIncludes(el, "Start fresh on this Mac");
       await flush();
       expect(el.querySelector('[data-testid="onboarding-view"]')).toBeTruthy();
-      // Never a name question first — that is asked after connecting, and
-      // only when the roster has no name for this person.
+      // A first-time user sees the connection threshold, not a profile form.
       expect(el.textContent).not.toContain("Make yourself");
     });
 

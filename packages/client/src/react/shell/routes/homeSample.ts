@@ -15,8 +15,10 @@
 //
 // Three rules follow, and the surface has to hold all three:
 //
-//   • It is OFFERED, never applied. Writing to somebody's vault uninvited is
-//     not an onboarding, whatever it looks like afterwards.
+//   • It is always DISCLOSED before it writes. First entry starts the same
+//     removable run automatically; returning users can start it explicitly.
+//     Writing to somebody's vault without that visible disclosure is not
+//     onboarding, whatever it looks like afterwards.
 //   • While it is loaded, Home SAYS SO — once, at vault level, beside the other
 //     facts about the vault, not as a badge on every tile.
 //   • Clearing it is one act and it is always in reach.

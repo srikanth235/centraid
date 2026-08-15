@@ -1,9 +1,11 @@
-// Centraid — app-tile finishes.
-// Four variants per the design system: solid · gradient · glassy · flat.
-// `tileFinish(color, variant)` returns a platform-agnostic record that both
-// CSS and RN consumers can apply directly. Hue-mixing is done in TS (not
-// CSS color-mix or RN-only color libraries) so light/dark, web/native all
-// produce the same pixels.
+// Centraid — legacy card finishes.
+// Four variants remain for non-identity card surfaces and mobile compatibility.
+// Desktop app identity is no longer a tile finish: it uses the shared
+// single-tone `AppMark` primitive and the stroke/tint tokens below.
+// `tileFinish(color, variant)` returns a platform-agnostic record that CSS and
+// RN consumers can still apply to those legacy surfaces.
+
+import { palette, paletteText } from "./palette";
 
 export type TileVariant = "solid" | "gradient" | "glassy" | "flat";
 
@@ -93,10 +95,11 @@ function shade(hex: string, amount: number): string {
 
 // ── App icon chips ─────────────────────────────────────────────────────────
 //
-// An app icon is a classic filled mark in a rounded-square container: the
-// container is the app hue at 13% (light) / 20% (dark) over the surface, the
-// mark is the full hue, and nothing else — no gradient, no gloss, no drop
-// shadow. The metaphor is a tinted paper label, not a glass button.
+// A desktop app mark is a single-tone stroke in a rounded-square container:
+// the container is the app hue at 13% (light) / 20% (dark) over the surface,
+// the solved identity text rung carries the full stroke, and nothing else — no
+// gradient, gloss, or drop shadow. The metaphor is a tinted paper label, not a
+// glass button.
 //
 // The tint is composited HERE, in TypeScript, for the same reason the hues are
 // resolved here: `color-mix(in oklab, <hue> 13%, transparent)` does not exist
@@ -109,8 +112,21 @@ export const ICON_CHIP_TINT = { dark: 0.2, light: 0.13 } as const;
 export interface IconChipFinish {
   /** Opaque container fill — the hue composited over `surface`. */
   backgroundColor: string;
-  /** The mark itself: the full hue. */
+  /** The mark itself: the solved text rung for known app hues. */
   markColor: string;
+}
+
+/** Desktop app-mark geometry from the Binding Layer handoff. */
+export const APP_MARK_VIEWBOX = 24;
+export const APP_MARK_STROKE = 1.6;
+export const APP_MARK_SMALL_STROKE = 1.75;
+
+function solvedMarkColor(hue: string, scheme: "light" | "dark"): string {
+  const entry = Object.entries(palette).find(
+    ([, base]) => base.toLowerCase() === hue.toLowerCase()
+  );
+  const key = entry?.[0] as keyof typeof paletteText.light | undefined;
+  return key ? paletteText[scheme][key] : hue;
 }
 
 /** The icon-container finish for `hue` drawn on `surface` in `scheme`. */
@@ -121,13 +137,14 @@ export function iconChipFinish(
 ): IconChipFinish {
   const fg = parseHex(hue);
   const bg = parseHex(surface);
-  if (!fg || !bg) return { backgroundColor: surface, markColor: hue };
+  const markColor = solvedMarkColor(hue, scheme);
+  if (!fg || !bg) return { backgroundColor: surface, markColor };
   const share = ICON_CHIP_TINT[scheme];
   const mixed = fg.map((channel, index) =>
     Math.round(channel * share + (bg[index] ?? channel) * (1 - share))
   );
   return {
     backgroundColor: `#${mixed.map((n) => n.toString(16).padStart(2, "0")).join("")}`,
-    markColor: hue,
+    markColor,
   };
 }
