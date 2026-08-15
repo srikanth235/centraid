@@ -1,8 +1,6 @@
-// Shared turn-stream core (issue #420) — the ONE SSE frame parser for every
-// chat surface. Canonical copy: packages/design/kit/turn-stream.js. Both
-// the kit's Ask panel (served verbatim as a native ESM sibling of kit.ts) and
-// the React shell (packages/client, which re-exports this) drive their `_turn`
-// streams through `consumeSse` here, so a wire-protocol change lands once.
+// The turn-stream core — the ONE SSE frame parser every conversation surface
+// drives its `_turn` streams through, and the ONE documented wire union those
+// surfaces speak, so a wire-protocol change lands once.
 //
 // The gateway emits each event as an SSE frame:
 //     event: <type>\n
@@ -12,18 +10,111 @@
 // the `end` frame, whose `{}` has no `type`), matching driveTurnOverSse's
 // serialization in packages/app-engine/src/http/turn-sse.ts.
 //
-// The event union (`TurnStreamEvent`) is documented in turn-stream.d.ts — the
-// single wire contract the TS client re-exports.
+// `TurnStreamEvent` mirrors `@centraid/app-engine`'s union (packages/app-engine/
+// src/conversation/runner.ts); it is declared here rather than imported so the
+// browser client carries no Node package dependency.
+
+/** The gateway's native conversation-stream event. */
+export type TurnStreamEvent =
+  | { type: "assistant.start" }
+  | { type: "assistant.delta"; delta: string }
+  | { type: "reasoning.delta"; delta: string }
+  | {
+      type: "tool.start";
+      toolCallId: string;
+      toolName: string;
+      args?: unknown;
+      sql?: string;
+      kind?: string;
+      rawJson?: string;
+    }
+  | {
+      type: "tool.result";
+      toolCallId: string;
+      toolName: string;
+      ok: boolean;
+      result?: unknown;
+      errorText?: string;
+      diffs?: Array<{ path?: string; oldText?: string; newText?: string }>;
+      locations?: Array<{ path: string; line?: number }>;
+      /** `hash` is the CAS sha256 when the runner reported one — the chip shows
+       *  it, matching the reloaded transcript's artifact chips (#567). */
+      artifacts?: Array<{
+        dataBase64: string;
+        mime: string;
+        filename?: string;
+        hash?: string;
+      }>;
+      rawJson?: string;
+    }
+  | {
+      type: "phase";
+      phase: string;
+      detail?: unknown;
+      plan?: Array<{ content: string; status?: string; priority?: string }>;
+    }
+  | { type: "final"; text: string; stopReason?: string; rawJson?: string }
+  | {
+      type: "error";
+      message: string;
+      failureClass?:
+        | "spawn"
+        | "auth"
+        | "init"
+        | "timeout"
+        | "quota"
+        | "wedge"
+        | "exit"
+        | "unknown";
+      stopReason?: string;
+      rawJson?: string;
+    }
+  | { type: "aborted" }
+  | {
+      type: "consent.required";
+      consentKind: "provider-egress";
+      provider: string;
+      reason: "direct" | "ladder";
+      message: string;
+    }
+  /** Non-fatal, human-readable notice (issue #420) — e.g. a runner that can't
+   *  read PDF attachments. Rendered in the transcript live AND persisted with
+   *  the turn, so a reload replays it (#567). */
+  | { type: "notice"; level: "warn" | "info"; code?: string; message: string }
+  | {
+      type: "usage";
+      model?: string;
+      provider?: string;
+      /** ACP-confirmed semantic thought_level; absent when unsupported/unconfirmed. */
+      effort?: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+      /** Harness-reported or catalog-estimated USD (see costSource). */
+      costUsd?: number;
+      costSource?: "harness" | "estimated";
+    }
+  /** COMPAT additive (#567): live context-window usage may move non-monotonically. */
+  | { type: "context"; used?: number; size?: number }
+  | {
+      type: "webhooks";
+      minted: Array<{
+        automationId: string;
+        ownerApp: string;
+        webhookId: string;
+        url: string;
+        secret: string;
+      }>;
+    };
 
 /**
  * Split a raw SSE frame (already delimited on the blank line) into its
  * concatenated `data:` payload. Comment frames (`:` heartbeats/banners) and
  * `event:` lines are ignored — the type lives inside the JSON. Returns '' when
  * the frame carries no data lines.
- * @param {string} rawFrame The delimited SSE frame text.
- * @returns {string} The concatenated data payload.
  */
-export function frameData(rawFrame) {
+export function frameData(rawFrame: string): string {
   let data = "";
   for (const line of rawFrame.split("\n")) {
     // `data:foo` and `data: foo` are both valid — trim one leading space.
@@ -36,15 +127,14 @@ export function frameData(rawFrame) {
  * Parse one raw frame into a `TurnStreamEvent`, or null when it carries no
  * event (a heartbeat, banner, the terminal `end` frame, or malformed JSON —
  * a bad frame is skipped, never fatal to the stream).
- * @param {string} rawFrame The delimited SSE frame text.
- * @returns {import('./turn-stream.js').TurnStreamEvent | null} The parsed event, if present.
  */
-export function parseFrame(rawFrame) {
+export function parseFrame(rawFrame: string): TurnStreamEvent | null {
   const data = frameData(rawFrame);
   if (!data) return null;
   try {
-    const evt = JSON.parse(data);
-    if (evt && typeof evt.type === "string") return evt;
+    const evt: unknown = JSON.parse(data);
+    if (evt && typeof (evt as { type?: unknown }).type === "string")
+      return evt as TurnStreamEvent;
   } catch {
     /* skip a malformed frame rather than abort the stream */
   }
@@ -57,10 +147,8 @@ export function parseFrame(rawFrame) {
  * carries no `type`, so `parseFrame` returns null for it; catch-up-on-reconnect
  * needs to tell "stream closed AFTER the server finished" (end seen) from
  * "connection dropped mid-turn" (end never seen).
- * @param {string} rawFrame The delimited SSE frame text.
- * @returns {boolean} Whether the frame terminates the stream.
  */
-export function isEndFrame(rawFrame) {
+export function isEndFrame(rawFrame: string): boolean {
   for (const line of rawFrame.split("\n")) {
     // `event:end` and `event: end` are both valid — trim one leading space.
     if (
@@ -75,11 +163,9 @@ export function isEndFrame(rawFrame) {
 /**
  * Parse a whole SSE text blob into events — the pure, stream-free core used by
  * both `consumeSse` and unit tests. Frames are separated by a blank line.
- * @param {string} text The complete SSE payload.
- * @returns {import('./turn-stream.js').TurnStreamEvent[]} The parsed stream events.
  */
-export function parseSseText(text) {
-  const out = [];
+export function parseSseText(text: string): TurnStreamEvent[] {
+  const out: TurnStreamEvent[] = [];
   for (const frame of text.split("\n\n")) {
     const evt = parseFrame(frame);
     if (evt) out.push(evt);
@@ -93,27 +179,27 @@ export function parseSseText(text) {
  * frames can be reassembled, while callers keep their frame handling pure and
  * synchronous. Keeping that contract here prevents each transport surface from
  * inventing its own raw await-in-a-loop reader.
- *
- * @param {ReadableStream<Uint8Array>} body The response body to consume.
- * @param {(rawFrame: string) => void} onFrame Receives each complete SSE frame.
- * @param {{ signal?: AbortSignal }} [opts] Optional cancellation signal.
- * @returns {Promise<void>} Resolves after the body is consumed or cancelled.
  */
-export async function consumeSseFrames(body, onFrame, opts = {}) {
+export async function consumeSseFrames(
+  body: ReadableStream<Uint8Array>,
+  onFrame: (rawFrame: string) => void,
+  opts: { signal?: AbortSignal } = {}
+): Promise<void> {
   const { signal } = opts;
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
-  async function consumeNext() {
-    if (signal && signal.aborted) return;
+  async function consumeNext(): Promise<void> {
+    if (signal?.aborted) return;
     const { done, value } = await reader.read();
     if (done) return;
     buf += decoder.decode(value, { stream: true });
-    let sep;
-    while ((sep = buf.indexOf("\n\n")) >= 0) {
+    let sep = buf.indexOf("\n\n");
+    while (sep >= 0) {
       const frame = buf.slice(0, sep);
       buf = buf.slice(sep + 2);
       onFrame(frame);
+      sep = buf.indexOf("\n\n");
     }
     return consumeNext();
   }
@@ -139,13 +225,12 @@ export async function consumeSseFrames(body, onFrame, opts = {}) {
  * mid-turn-drop signal the shell uses to trigger catch-up-from-ledger. A thrown
  * network error (connection reset) also means `ended` never became true, so the
  * caller's catch block treats a throw the same as a `false` return.
- *
- * @param {ReadableStream<Uint8Array>} body The turn response body to consume.
- * @param {(event: import('./turn-stream.js').TurnStreamEvent) => void} onEvent Receives each parsed event.
- * @param {{ signal?: AbortSignal }} [opts] Optional cancellation signal.
- * @returns {Promise<{ ended: boolean }>} Whether the terminal end frame was seen.
  */
-export async function consumeSse(body, onEvent, opts = {}) {
+export async function consumeSse(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (event: TurnStreamEvent) => void,
+  opts: { signal?: AbortSignal } = {}
+): Promise<{ ended: boolean }> {
   const { signal } = opts;
   let ended = false;
   try {
@@ -161,7 +246,7 @@ export async function consumeSse(body, onEvent, opts = {}) {
   } catch (error) {
     // An abort surfaces as an AbortError on the pending read — that's the Stop
     // button doing its job, not a stream failure. Re-throw anything else.
-    if (!(signal && signal.aborted) && !(error && error.name === "AbortError"))
+    if (!signal?.aborted && (error as Error | null)?.name !== "AbortError")
       throw error;
   }
   return { ended };

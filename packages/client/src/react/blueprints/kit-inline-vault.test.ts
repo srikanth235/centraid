@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type * as TypeImport_oycips from "../../gateway-client-core.js";
-// The inline kit is imported FIRST so its `./suppress-served-ask` side effect
-// runs before the real kit module (it suppresses kit.ts's auto-mounting Ask
-// IIFE). These suites exercise the authed vault overrides — blob staging, the
-// attach flow, and the owner-plane reference writes (issue #505 Phase 4).
+// These suites exercise the authed vault overrides — blob staging, the attach
+// flow, and the owner-plane reference writes (issue #505 Phase 4).
 import {
   createReference,
   reanchorReference,

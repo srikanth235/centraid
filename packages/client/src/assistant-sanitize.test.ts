@@ -1,28 +1,17 @@
-/* oxlint-disable typescript-eslint/ban-ts-comment -- the package tsconfig has no
-   DOM lib (blueprints "src" is node-side); this file runs the browser kit under
-   jsdom, so DOM globals are runtime-real but invisible to tsc. */
 /* oxlint-disable no-script-url -- the whole point of these tests is to feed the
    renderer dangerous `javascript:` URLs and prove they are rejected. */
-// @ts-nocheck — exercises the untyped browser kit module under jsdom.
-// @vitest-environment jsdom
-// Adversarial sanitization tests for the shared renderer (issue #420, Wave 2).
-// Model output is UNTRUSTED and injected via innerHTML / dangerouslySetInnerHTML
-// on both chat surfaces — these prove the SECURITY CONTRACT in assistant-rich.js
-// holds across the link / image / table / ref-chip / code paths. Every case
-// asserts that no live script or dangerous scheme survives into the output.
-import path from "node:path";
-import { pathToFileURL } from "node:url";
-
+// Adversarial sanitization tests for the rich-answer renderer (issue #420,
+// Wave 2). Model output is UNTRUSTED and injected via dangerouslySetInnerHTML,
+// so these prove the SECURITY CONTRACT in assistant-rich.ts holds across the
+// link / image / table / ref-chip / code paths. Every case asserts that no live
+// script or dangerous scheme survives into the output.
 import { describe, expect, it } from "vitest";
 
-const PKG = path.resolve(import.meta.dirname, "..");
-const url = pathToFileURL(path.resolve(PKG, "kit/assistant-rich.js")).href;
-const { richAnswerHtml } = await import(url);
-const gfmUrl = pathToFileURL(path.resolve(PKG, "kit/gfm.js")).href;
-const { sanitizeUrl } = await import(gfmUrl);
+import { richAnswerHtml } from "./assistant-rich.js";
+import { sanitizeUrl } from "./gfm.js";
 
 /** Render, then assert the DOM carries no executable script / dangerous href. */
-function assertInert(html: string): Document {
+function assertInert(html: string): HTMLElement {
   const host = document.createElement("div");
   host.innerHTML = html;
   // No script elements, ever.
@@ -67,10 +56,10 @@ describe("renderer sanitization — links", () => {
     );
     const host = assertInert(html);
     const [a, b] = host.querySelectorAll("a");
-    expect(a.getAttribute("rel")).toBe("noopener noreferrer");
-    expect(a.getAttribute("target")).toBe("_blank");
-    expect(b.getAttribute("href")).toBe("/centraid/vault");
-    expect(b.getAttribute("target")).toBeNull(); // relative → no new tab
+    expect(a?.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(a?.getAttribute("target")).toBe("_blank");
+    expect(b?.getAttribute("href")).toBe("/centraid/vault");
+    expect(b?.getAttribute("target")).toBeNull(); // relative → no new tab
   });
 });
 

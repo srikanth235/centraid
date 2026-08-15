@@ -1,7 +1,6 @@
 import type { InlineKitAsk } from "@centraid/blueprints/apps/inline-types";
 
-// The inline "Ask your <app>" panel — the shell-side replacement for the served
-// kit.ts ask IIFE (which is suppressed inline; see suppress-served-ask.ts). It
+// The inline "Ask your <app>" panel — the only per-app Ask surface. It
 // mounts against the gateway conversation surface: turns stream through
 // `streamTurn(appId, …, register:'ask')`. Any write the harness parks belongs to
 // the canonical Notifications; this conversational surface never forks decision state.
@@ -11,9 +10,10 @@ import type { InlineKitAsk } from "@centraid/blueprints/apps/inline-types";
 // it without awaiting and first paint never blocks on it. Everything that talks
 // to the gateway happens on user interaction.
 //
-// Scope note (issue #505 pilot): this is the single-conversation core — send,
-// stream. Conversation history, the model picker and turn
-// attachments (all present in the served panel) are follow-ups for the rollout.
+// Scope: the single-conversation core — send + stream, one conversation per
+// mount. Per-app conversation history, a per-app model picker and per-turn
+// attachments are deliberate non-goals here (#799); the assistant route owns
+// the full conversation surface.
 import { createConversation, streamTurn } from "../../gateway-client.js";
 import type { TurnStreamEvent } from "../../gateway-client.js";
 import {

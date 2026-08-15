@@ -297,64 +297,6 @@ describe("kit smoke", () => {
     expect(updates).toStrictEqual([]);
   });
 
-  it("routes parked tool outcomes to Notifications without rendering consent controls", async () => {
-    window.centraid = { appId: "todo" };
-    document.querySelector(".kit-ask-history-new").click();
-    // These are the REAL producer shapes: `runVaultInvokeTool` returns
-    // `{ ok, result: <InvokeOutcome> }` and the ACP emitters forward
-    // `call.result` unwrapped, so `result` IS the bare `InvokeOutcome`
-    // (top-level `status`, per packages/vault/src/gateway/types.ts). The
-    // third frame is the nested variant the pre-#647 `outcomeOf` also
-    // accepted: a wrapper with no top-level `status` whose `output` is the
-    // outcome.
-    const stream = [
-      'event: tool.result\ndata: {"type":"tool.result","toolName":"vault_invoke","ok":true,"result":{"status":"parked","invocationId":"inv-1","reason":"high-risk command"}}',
-      'event: tool.result\ndata: {"type":"tool.result","toolName":"vault_invoke","ok":true,"result":{"status":"denied","invocationId":"inv-2","receiptId":"rcpt-2","reason":"scope missing"}}',
-      'event: tool.result\ndata: {"type":"tool.result","toolName":"vault_invoke","ok":true,"result":{"output":{"status":"parked","invocationId":"inv-3","reason":"high-risk command"}}}',
-      "event: end\ndata: {}",
-      "",
-    ].join("\n\n");
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (input) =>
-        String(input).includes("/sessions")
-          ? new Response(JSON.stringify({ id: "conversation-1" }), {
-              status: 200,
-              headers: { "content-type": "application/json" },
-            })
-          : new Response(stream, {
-              status: 200,
-              headers: { "content-type": "text/event-stream" },
-            })
-      );
-    try {
-      const input = document.querySelector(".kit-ask-input");
-      const compose = document.querySelector(".kit-ask-compose");
-      input.value = "Send the update";
-      compose.dispatchEvent(
-        new Event("submit", { bubbles: true, cancelable: true })
-      );
-      expect(compose.dataset.busy).toBe("true");
-      await vi.waitFor(() => {
-        expect(compose.dataset.busy).toBe("false");
-      });
-      const log = document.querySelector(".kit-ask-log");
-      // Both the bare-`status` frame and the nested `output.status` frame
-      // must reach the owner — two parked lines, not one.
-      expect(
-        log.textContent.split("That decision is waiting in Notifications.")
-          .length - 1
-      ).toBe(2);
-      expect(log.textContent).toContain(
-        "The vault denied that write: scope missing"
-      );
-      expect(log.querySelector(".kit-ask-action")).toBeNull();
-    } finally {
-      fetchMock.mockRestore();
-      delete window.centraid;
-    }
-  });
-
   it("KitElement subclasses render light DOM and stamp data-kit-host", () => {
     class SmokeCard extends KitElement {
       static readonly properties = { label: { type: String } };

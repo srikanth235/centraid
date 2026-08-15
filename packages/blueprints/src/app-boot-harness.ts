@@ -59,26 +59,29 @@ import { BRAND } from "@centraid/design";
 // pending-chip assertions consume the production intent-invalidation
 // derivation, so the harness cannot invent a terminal browser signal that the
 // real coordinator would never publish.
-import { replicaIntentInvalidations } from "@centraid/design/kit/intent-invalidations.js";
 
 // Resolved from this module's own path, not process.cwd(): cwd differs
 // between a root-run vitest (repo root) and a package-run vitest (this
 // package's dir), but the file's own location never does.
 const PKG = path.resolve(import.meta.dirname, "..");
+
+// The intent-invalidation derivation is the client's (packages/client/src/
+// replica/intent-invalidations.ts). It is loaded BY PATH rather than as
+// `@centraid/client/replica/intent-invalidations` because `@centraid/client`
+// already depends on `@centraid/blueprints`: declaring the reverse edge — even
+// as a devDependency — would make Turbo's topological `^build` graph cyclic.
+// The same reason the photos boot bundles `../client/src/video-frame.ts` below.
+const { replicaIntentInvalidations } = await import(
+  pathToFileURL(
+    path.resolve(PKG, "../client/src/replica/intent-invalidations.ts")
+  ).href
+);
+
 // Apps import these as siblings (`./kit.ts`); at rest they live only in
 // `@centraid/design`'s `kit/`, and each shell's bundler resolves the sibling
 // specifier there through `inline-vite-aliases.ts`. Symlinks reproduce that
 // layout for the harness, which has no bundler doing the rewrite.
-const SHARED = [
-  "kit.ts",
-  "elements.js",
-  "edge-upload.js",
-  "turn-stream.js",
-  "assistant-rich.js",
-  "gfm.js",
-  "code-highlight.js",
-  "conversation-client.js",
-];
+const SHARED = ["kit.ts", "elements.js", "edge-upload.js"];
 
 // The harness compiles the same TS/TSX source the client bundles, using the
 // normal React automatic runtime. The esbuild CLI is used because its JS API

@@ -107,3 +107,21 @@ export function appQueryPath(appId: string, query: string): string {
 export function appDescribePath(appId: string): string {
   return `/centraid/${encodeURIComponent(appId)}/_describe`;
 }
+
+/**
+ * Build the app-scoped conversation-turn path (issue #420). `POST` opens an
+ * SSE stream driven by the app's declared-handler agent.
+ */
+export function appTurnPath(appId: string): string {
+  return `/centraid/${encodeURIComponent(appId)}/_turn`;
+}
+
+/** The shell-level vault-assistant turn surface (same SSE grammar). */
+export function assistantTurnPath(): string {
+  return `${VAULT_PLANE_PREFIX}/assistant/_turn`;
+}
+
+/** Resolve answer refs (`ref:type/id`) to renderable entity cards. */
+export function assistantResolvePath(): string {
+  return `${VAULT_PLANE_PREFIX}/assistant/resolve`;
+}

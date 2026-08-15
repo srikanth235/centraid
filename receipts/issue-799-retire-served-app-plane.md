@@ -14,7 +14,7 @@ gate loop before its commit.
 - [x] Stage 2 — retire the client iframe + builder and gateway serving wiring (AppFrame, AppViewRoute, opaque documents, builder routes, web-app-sessions, authoring skills, the lifecycle scaffold route; the draft-*preview* surface is app-engine's `/centraid/_draft/…` and retires in Stage 3 — see Decisions).
 - [x] Stage 3 — retire app-engine UI-byte serving (static-server, app-bundle, bridge-script, css-module, asset-variants, query-bundle, app router kinds, KIT_DIR wiring, visual-harness).
 - [x] Stage 4 — retire the blueprints blank-app scaffolder and the remote template fetch (scaffold files/defaults, served half of app-rewrites, per-app index.html, remote templates; index.json is KEPT and the reason is in Decisions).
-- [ ] Stage 5 — kit dissolution A: rehome the non-design kit modules to packages/client as typed TypeScript; delete the legacy Ask controller and its strangler.
+- [x] Stage 5 — kit dissolution A: rehome the non-design kit modules to packages/client as typed TypeScript; delete the legacy Ask controller and its strangler (edge-upload stays in packages/design for Stage 6 — see Decisions).
 - [ ] Stage 6 — kit dissolution B: fold the DOM substrate into packages/design/src as typed modules; delete the served-sibling alias apparatus; rewrite the sibling imports to package imports; land the coverage-scope-reachability amendment in the same commit as its check change.
 - [ ] Stage 7 — custom-element endgame: replace JSX-emitted kit-* tags with React blocks, delete elements-base + element classes, prune orphaned kit.css rules; re-point the design gallery at the shell's real `#ui-preview` surface and delete the `fixtureHtml` parallel implementation; re-pin design-gallery baselines once, at the end.
 - [ ] Stage 8 — identity + decisions sweep: superapp positioning across the root docs, one app render path in ARCHITECTURE.md, decisions.md supersessions, glossary/design-machinery/traps/test-matrix updates.
@@ -213,6 +213,41 @@ longer seeds a manifest, `index.html`, `queries/ping.js`, or publishes it —
 nothing could open it once Stage 2 deleted the iframe host, so it was dead
 fixture weight that would have read as coverage.
 
+### Stage 5 — kit dissolution A: rehome the non-design kit modules to packages/client as typed TypeScript; delete the legacy Ask controller and its strangler (edge-upload stays in packages/design for Stage 6 — see Decisions).
+
+**The legacy Ask controller is gone.** `packages/design/kit/kit.ts` loses
+lines 1231–2539 (3334 → 1984), the orphaned `outcomeOf` helper, and its
+`assistant-rich` / `conversation-client` / `icons` / `turn-stream` imports.
+The strangler `packages/client/src/react/blueprints/suppress-served-ask.ts`
+is deleted with the ordering-contract comments that pinned it in
+`kit-inline.ts` and three of its tests. The ambient `Window.KIT_ASK` and
+`Window.kitAsk` in `packages/blueprints/types/centraid.d.ts` go too — the
+deleted controller and strangler were their only readers. The
+`allow-repo-hygiene` file-size reason and the `oxlint-disable` reason on
+`kit.ts` both cited the Ask controller and are rewritten.
+
+**Five modules rehomed to `packages/client/src` as typed TypeScript**, each
+with its suite moved from `packages/design/src`: `turn-stream.ts`,
+`assistant-rich.ts` (+ `assistant-sanitize.test.ts`), `gfm.ts`,
+`code-highlight.ts`, and `conversation-routes.ts`. The ten hand-written
+`.js`/`.d.ts` pairs under `packages/design/kit` are deleted.
+`packages/client/src/replica/intent-invalidations.ts` stops re-exporting the
+kit and inlines a typed derivation over the client's own `ReplicaIntent` /
+`ReplicaInvalidation`. Three live route helpers — `appTurnPath`,
+`assistantTurnPath`, `assistantResolvePath` — graduate to
+`packages/protocol`, with coverage in `routes.test.ts` in their owning
+package.
+
+**Six symbols the brief said to keep turned out to be dead** once the
+controller went: `isSafeClientId`, `safeClientId`, `normalizeModelState`,
+`modelLabel`, `readJsonResponse` and `appModelPath` had zero consumers
+repo-wide, the controller being their only caller and the inline panel
+having no model picker. Graduating `appModelPath` to protocol as instructed
+would have landed a knip-dead export. All six are deleted, along with
+`assistant-rich`'s `defaultResolveRefs` (a same-origin `fetch` reachable
+only from the served document); `resolveRefs` is now a required option,
+which the only caller already passed.
+
 ### Stage 4 — retire the blueprints blank-app scaffolder and the remote template fetch (scaffold files/defaults, served half of app-rewrites, per-app index.html, remote templates; index.json is KEPT and the reason is in Decisions).
 
 **The scaffolder is gone.** Deleted `packages/blueprints/src/scaffold.ts`,
@@ -324,6 +359,7 @@ deletions, renames, and this receipt:
 - `docs/design-machinery.md`
 - `docs/glossary.md`
 - `docs/photos/places.md`
+- `docs/protocol.md`
 - `docs/traps/README.md`
 - `docs/traps/blueprint-csp.md`
 - `docs/traps/design-tokens.md`
@@ -402,16 +438,35 @@ deletions, renames, and this receipt:
 - `packages/blueprints/vitest.mutation.config.ts`
 - `packages/client/src/app-format.ts`
 - `packages/client/src/app-shell-context.ts`
+- `packages/client/src/assistant-rich.test.ts`
+- `packages/client/src/assistant-rich.ts`
+- `packages/client/src/assistant-sanitize.test.ts`
 - `packages/client/src/centraid-api.d.ts`
+- `packages/client/src/code-highlight.test.ts`
+- `packages/client/src/code-highlight.ts`
+- `packages/client/src/conversation-routes.test.ts`
+- `packages/client/src/conversation-routes.ts`
 - `packages/client/src/gateway-client-automations.contract.test.ts`
 - `packages/client/src/gateway-client-contract-fixtures.ts`
+- `packages/client/src/gateway-client-conversation-history.contract.test.ts`
+- `packages/client/src/gateway-client-conversation-history.ts`
+- `packages/client/src/gateway-client-conversation.ts`
 - `packages/client/src/gateway-client-core.ts`
 - `packages/client/src/gateway-client-editing.contract.test.ts`
 - `packages/client/src/gateway-client-editing.ts`
+- `packages/client/src/gateway-client-logs.ts`
 - `packages/client/src/gateway-client-seam-fixtures.ts`
+- `packages/client/src/gateway-client-storage.ts`
 - `packages/client/src/gateway-client.ts`
+- `packages/client/src/gfm.ts`
 - `packages/client/src/react/blueprints/centraid-inline.ts`
+- `packages/client/src/react/blueprints/inline-blob-images.test.ts`
 - `packages/client/src/react/blueprints/inlineQueryCtx.ts`
+- `packages/client/src/react/blueprints/kit-ask-inline.ts`
+- `packages/client/src/react/blueprints/kit-inline-vault.test.ts`
+- `packages/client/src/react/blueprints/kit-inline.test.ts`
+- `packages/client/src/react/blueprints/kit-inline.ts`
+- `packages/client/src/react/blueprints/suppress-served-ask.ts`
 - `packages/client/src/react/boot.tsx`
 - `packages/client/src/react/screen-contracts.ts`
 - `packages/client/src/react/screens/AutomationEditorScreen.tsx`
@@ -461,6 +516,9 @@ deletions, renames, and this receipt:
 - `packages/client/src/react/shell/routes/appFrameReplicaBridge.ts`
 - `packages/client/src/react/shell/routes/appSettingsData.test.ts`
 - `packages/client/src/react/shell/routes/appSettingsData.ts`
+- `packages/client/src/react/shell/routes/assistantRich.ts`
+- `packages/client/src/react/shell/routes/automationLiveMessages.ts`
+- `packages/client/src/react/shell/routes/automationTurnWatch.ts`
 - `packages/client/src/react/shell/routes/builder/BuilderAutomationConfigView.test.tsx`
 - `packages/client/src/react/shell/routes/builder/BuilderAutomationConfigView.tsx`
 - `packages/client/src/react/shell/routes/builder/BuilderAutomationPane.module.css`
@@ -495,12 +553,34 @@ deletions, renames, and this receipt:
 - `packages/client/src/react/shell/useBuilderEnabled.ts`
 - `packages/client/src/react/shell/useShellApps.test.tsx`
 - `packages/client/src/react/shell/useShellApps.ts`
+- `packages/client/src/replica/intent-invalidations.ts`
+- `packages/client/src/turn-stream.test.ts`
+- `packages/client/src/turn-stream.ts`
 - `packages/client/src/types.d.ts`
 - `packages/client/src/vault-change-feed.ts`
+- `packages/design/kit/assistant-rich.d.ts`
+- `packages/design/kit/assistant-rich.js`
+- `packages/design/kit/code-highlight.d.ts`
+- `packages/design/kit/code-highlight.js`
+- `packages/design/kit/conversation-client.d.ts`
+- `packages/design/kit/conversation-client.js`
+- `packages/design/kit/gfm.js`
+- `packages/design/kit/intent-invalidations.d.ts`
+- `packages/design/kit/intent-invalidations.js`
 - `packages/design/kit/kit.css`
 - `packages/design/kit/kit.ts`
+- `packages/design/kit/turn-stream.d.ts`
+- `packages/design/kit/turn-stream.js`
+- `packages/design/src/assistant-rich.test.ts`
+- `packages/design/src/assistant-sanitize.test.ts`
+- `packages/design/src/code-highlight.test.ts`
+- `packages/design/src/conversation-client.test.ts`
 - `packages/design/src/css.ts`
+- `packages/design/src/icons-contract.test.ts`
+- `packages/design/src/kit-smoke.test.ts`
+- `packages/design/src/kit.test.ts`
 - `packages/design/src/kit.ts`
+- `packages/design/src/turn-stream.test.ts`
 - `packages/gateway/package.json`
 - `packages/gateway/skills/authoring-centraid-apps/SKILL.md`
 - `packages/gateway/src/lifecycle/automation-lifecycle-over-http.test.ts`
@@ -548,6 +628,9 @@ deletions, renames, and this receipt:
 - `packages/gateway/src/validate-app-css.ts`
 - `packages/gateway/src/validate-manifest.ts`
 - `packages/gateway/src/worktree-store/worktree-store.ts`
+- `packages/protocol/src/index.ts`
+- `packages/protocol/src/routes.test.ts`
+- `packages/protocol/src/routes.ts`
 - `packages/tunnel/src/gateway-endpoint.ts`
 - `packages/vault/src/host.ts`
 - `receipts/issue-799-retire-served-app-plane.md`
@@ -595,6 +678,44 @@ deletions, renames, and this receipt:
   is left alone.** It is a real inconsistency but it predates this issue, has
   nothing to do with the served-app plane, and "fixing" it would change the
   published catalog — a product call, not a retirement.
+- **`edge-upload` does NOT move to `packages/client` — the issue's plan for
+  it is not executable.** The issue routes `edge-upload.js` and
+  `edge-upload-sha.js` to the client as dead served-path code. They are not
+  dead: `kit-inline.ts:167` calls `sha256File`, re-exported from
+  `kit.ts:713`, which is `edge-upload.js`'s `sha256FileStream` — the inline
+  blob-upload path consumes the module today. (The plan's evidence pointed at
+  `kit-inline.ts:120-129` skipping the edge-upload *probe*, which is a
+  different call site.) And the move is impossible in this direction anyway
+  while `kit.ts` survives, because `packages/design` is upstream of
+  `packages/client` and cannot import it. Both files stay in
+  `packages/design/kit` and fold in Stage 6, which already has to empty
+  `kit/` of `.js`/`.ts` for the coverage-scope discovery assertion. The
+  genuinely dead half — `stageDirectFile` / `stageFallbackFile`, ~450 lines —
+  dies with `kit.ts`'s served upload block in Stage 6's barrel rewrite;
+  deleting it in Stage 5 would have required exactly the `kit.ts` surgery
+  Stage 5 was scoped to avoid.
+- **`app-boot-harness` loads the client's intent-invalidations by
+  filesystem path, not by package specifier.** The plan said to repoint it at
+  `@centraid/client/replica/intent-invalidations`, but `@centraid/client`
+  already depends on `@centraid/blueprints`, so declaring the reverse edge —
+  even as a devDependency — makes Turbo's topological `^build` graph cyclic
+  and breaks `bun run build`. The codebase states that invariant twice in
+  `apps/inline-types.ts`. The harness instead bundles it by path, mirroring
+  its existing `../client/src/video-frame.ts` handling, with the reason
+  written next to the call.
+- **A false-green risk in worktree verification, and why it does not
+  invalidate stages 3–5.** Agent worktrees ship without `node_modules`, so
+  every `@centraid/*` specifier resolves up to the main checkout's sources
+  and `dist` — meaning an agent that edits one package and typechecks from a
+  consumer package can get a green that reflects the main tree, not its own.
+  Stage 5's agent found this and re-ran everything after
+  `bun install --frozen-lockfile` in its worktree. Stages 3 and 4 are
+  unaffected in substance because their work was re-verified in the main
+  checkout after integration — full `typecheck`, the package suites, and the
+  `apps/web` e2e suite — which is the same reason Stage 5's integration
+  typecheck was re-run with `--force` rather than trusted from Turbo's
+  cache (the worktree shares this checkout's cache, so a cache hit would
+  have replayed the agent's run instead of proving the merged tree).
 - **`packages/app-engine/src/**` clears its coverage floor after Stage 3, but
   thinly.** Measured locally after the deletions: lines 84.14% (2951/3507)
   against a floor of 84, branches 73.61% (2670/3627) against 73. The floor is
@@ -602,6 +723,14 @@ deletions, renames, and this receipt:
   and raising it on a 0.14-point margin would be reckless. CI is the
   enforcing copy; if it reads lower, that is a real signal to investigate
   rather than a floor to adjust.
+- **`tests/hygiene-budgets.json` ratchets down 409 → 384.** The
+  `toBeTruthy`/`toBeFalsy` budget went slack at the Stage 3 commit — the
+  retirement deleted enough tests to drop the measured count, and a slack
+  budget is a hard failure by design, because improving the suite must
+  tighten the ceiling in the same change. I missed it there by running
+  `test:ratchet` without `test:hygiene-ratchet`; Stage 5's agent caught it
+  and verified it was already red at the clean base. Reconciled with the
+  script's own `--write`, which can only ever lower a number.
 - **`tests/coverage-floors.json` does NOT move, because the measurement said
   the opposite of what was predicted.** The Stage 4 slice expected the
   `packages/blueprints/src/**` floor to fall (deleting `scaffold-defaults.ts`,
@@ -830,6 +959,20 @@ First-run: unchanged — ticket-only onboarding still lands on the native
 Home springboard; no step was added or removed.
 
 ![Mobile native Home evidence](artifacts/e2e/ui-impact/issue-799-mobile-native-home.png)
+
+**Ask loses four behaviours with the legacy served controller (stage 5).**
+The inline Ask panel is now the only Ask surface, and it is narrower than
+the controller it replaces. It has no conversation history, no model picker,
+and no turn attachments — all three were already known. The fourth was found
+while deleting: **the inline panel renders no tool outcomes at all.** It
+handles `assistant.delta`, `final`, `error` and `consent.required` only, so
+the controller's parked/denied vault narration ("That decision is waiting in
+Notifications.", "The vault denied that write: …") is gone. The underlying
+behaviour is not lost to the product — parked decisions still reach the
+owner through Notifications, which the panel header already names as the
+single decision surface — but the narration inside Ask is. This is why the
+kit-smoke test asserting that narration was deleted rather than rehomed:
+there is no surviving surface to assert it against.
 
 ## Out of scope
 

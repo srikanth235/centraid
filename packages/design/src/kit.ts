@@ -6,7 +6,7 @@
 //     and the emitters that turn them into CSS for each surface;
 //   • the KIT layer (`kit/*`) — the component substrate every blueprint app
 //     loads verbatim: `kit.css`, `kit.ts`, the chart elements, the status
-//     line and Ask controllers.
+//     line and the @-mention controllers.
 //
 // The kit used to live under the blueprints package, which read as "part of
 // the app templates" when it is really the shared UI layer the templates sit

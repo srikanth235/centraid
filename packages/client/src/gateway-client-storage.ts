@@ -20,17 +20,13 @@
 /* eslint-disable max-classes-per-file -- the two typed gate errors (recovery-kit + home-profile) are one storage-connection boundary (#436) */
 
 import {
-  consumeSseFrames,
-  frameData,
-} from "@centraid/design/kit/turn-stream.js";
-
-import {
   auth,
   authHeaders,
   doFetch,
   enc,
   readJson,
 } from "./gateway-client-core.js";
+import { consumeSseFrames, frameData } from "./turn-stream.js";
 
 /** One kind only (#436 §2): every connection is a managed provider home bundle. */
 export type StorageConnectionKind = "provider";

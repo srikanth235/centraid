@@ -1,31 +1,17 @@
-/* oxlint-disable typescript-eslint/ban-ts-comment -- the package tsconfig has no
-   DOM lib (the token layer is node-side); this file runs the browser kit under
-   jsdom, so DOM globals are runtime-real but invisible to tsc (see kit-smoke.test.ts). */
-// @ts-nocheck — exercises the untyped browser kit module under jsdom.
-// @vitest-environment jsdom
-// Unit tests for the shared assistant rich-answer renderer (issue #420) — the
-// ONE renderer both chat surfaces use, so ref-chips + typed blocks are
-// identical. Mirrors the React shell's assistantRich.test.ts against the
-// canonical kit copy (default class names).
-import path from "node:path";
-import { pathToFileURL } from "node:url";
-
+// Unit tests for the assistant rich-answer renderer (issue #420) against its
+// default class names; the React shell's assistantRich.test.ts covers the same
+// surface through the shell's scoped CSS-module class map.
 import { describe, expect, it, vi } from "vitest";
 
-const PKG = path.resolve(import.meta.dirname, "..");
-const url = pathToFileURL(path.resolve(PKG, "kit/assistant-rich.js")).href;
-const { richAnswerHtml, hydrateRefs, wireCodeCopy } = await import(url);
+import { hydrateRefs, richAnswerHtml, wireCodeCopy } from "./assistant-rich.js";
+import type { ResolvedRefCard } from "./assistant-rich.js";
 
 type ClipboardWriteTestSeam = (text: string) => Promise<void>;
 type ResolveRefsTestSeam = (
   refs: Array<{ type: string; id: string }>
-) => Promise<
-  Array<
-    { status: "live"; title: string; subtitle?: string } | { status: "missing" }
-  >
->;
+) => Promise<ResolvedRefCard[]>;
 
-describe("richAnswerHtml", () => {
+describe(richAnswerHtml, () => {
   it("renders prose paragraphs with inline formatting", () => {
     const html = richAnswerHtml("Hello **world** and `code`.");
     expect(html).toContain("asstRich");
@@ -159,7 +145,7 @@ describe("richAnswerHtml", () => {
   });
 });
 
-describe("wireCodeCopy", () => {
+describe(wireCodeCopy, () => {
   it("copies the code block text to the clipboard on click (#420)", async () => {
     const writeText = vi
       .fn<ClipboardWriteTestSeam>()
@@ -172,11 +158,11 @@ describe("wireCodeCopy", () => {
     const host = document.createElement("div");
     host.innerHTML = richAnswerHtml("```\nSELECT 1;\n```");
     wireCodeCopy(host);
-    const btn = host.querySelector(".asstCopyBtn");
-    btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const btn = host.querySelector<HTMLElement>(".asstCopyBtn");
+    btn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(writeText).toHaveBeenCalledWith("SELECT 1;");
     await Promise.resolve();
-    expect(btn.textContent).toBe("Copied");
+    expect(btn?.textContent).toBe("Copied");
   });
 
   it("is idempotent — a second wire does not double-bind", () => {
@@ -192,13 +178,13 @@ describe("wireCodeCopy", () => {
     wireCodeCopy(host);
     wireCodeCopy(host);
     host
-      .querySelector(".asstCopyBtn")
-      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      .querySelector<HTMLElement>(".asstCopyBtn")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(writeText).toHaveBeenCalledOnce();
   });
 });
 
-describe("hydrateRefs", () => {
+describe(hydrateRefs, () => {
   it("resolves chips to live card titles via the injected resolver", async () => {
     const host = document.createElement("div");
     host.innerHTML = richAnswerHtml(
@@ -215,7 +201,7 @@ describe("hydrateRefs", () => {
     expect(resolveRefs).toHaveBeenCalledWith([
       { type: "home.asset_item", id: "abc123" },
     ]);
-    const chip = host.querySelector(".asstRef");
+    const chip = host.querySelector<HTMLElement>(".asstRef");
     expect(chip?.textContent).toBe("Groceries");
     expect(chip?.dataset.resolved).toBe("true");
   });
@@ -230,6 +216,8 @@ describe("hydrateRefs", () => {
     });
     await Promise.resolve();
     await Promise.resolve();
-    expect(host.querySelector(".asstRef")?.dataset.state).toBe("missing");
+    expect(host.querySelector<HTMLElement>(".asstRef")?.dataset.state).toBe(
+      "missing"
+    );
   });
 });

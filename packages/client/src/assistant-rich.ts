@@ -1,28 +1,24 @@
-// Shared assistant rich-answer renderer (issue #420) — the ONE string→HTML
-// renderer for every chat surface. Canonical copy: packages/design/kit/
-// assistant-rich.js. Both the kit's Ask panel and the React shell render
-// assistant answers through this, so GFM, typed `block:*` blocks, code
-// highlighting, and ref-chips look identical on both. Framework-free vanilla
-// ESM (no npm dependency); the React shell re-exports it (assistantRich.ts).
+// The assistant rich-answer renderer (issue #420) — the ONE string→HTML
+// renderer for the assistant transcript. Framework-free so the memoizing shell
+// adapter (react/shell/routes/assistantRich.ts) can call it outside React.
 //
 // The shared prompt tells the model to emit `@[Title](ref:type/id)` citations
 // and ```block:table|chart|stat``` JSON fences. This renderer turns those into
 // interactive ref-chips and typed blocks; `hydrateRefs` resolves each chip to a
-// live vault card title. Wave 2 added full GFM (links, images, ordered/nested
-// lists, blockquotes, pipe tables, hr, strikethrough) via gfm.js and
-// dependency-free syntax highlighting via code-highlight.js.
+// live vault card title. Full GFM (links, images, ordered/nested lists,
+// blockquotes, pipe tables, hr, strikethrough) comes from gfm.ts and
+// dependency-free syntax highlighting from code-highlight.ts.
 //
 // ── SECURITY CONTRACT (model output is UNTRUSTED input) ──────────────────────
-// The React shell injects this renderer's output via `dangerouslySetInnerHTML`
-// and the kit via `innerHTML`, so the output must be provably safe. The
-// guarantees, audited across every path:
+// The shell injects this renderer's output via `dangerouslySetInnerHTML`, so
+// the output must be provably safe. The guarantees, audited across every path:
 //   1. Escape-by-default. Every text fragment is HTML-escaped (`escapeHtml`)
 //      BEFORE any pattern-matching or tag injection. The parser only ever adds
 //      a fixed, closed set of tags — p, h3–h6, ul, ol, li, blockquote, hr,
 //      table/thead/tbody/tr/th/td, a, img, strong, em, del, code, pre, the ref
 //      <button>, and the block:* SVG/table/stat nodes it builds itself. No text
 //      the model supplies is ever placed unescaped into markup.
-//   2. URL allowlist. Link/image hrefs pass through `sanitizeUrl` (gfm.js):
+//   2. URL allowlist. Link/image hrefs pass through `sanitizeUrl` (gfm.ts):
 //      only http/https(/mailto for links) schemes or scheme-less relative
 //      gateway paths survive; `javascript:`, `data:`, `vbscript:`, and
 //      protocol-relative `//host` are rejected (link → plain text, image →
@@ -31,18 +27,69 @@
 //      impossible: the URL is drawn from the already-escaped string, so any
 //      `"` is already `&#34;`.
 //   3. External links carry `rel="noopener noreferrer"` + `target="_blank"`.
-//   4. Syntax highlighting (code-highlight.js) is escape-by-default too: it
+//   4. Syntax highlighting (code-highlight.ts) is escape-by-default too: it
 //      emits only `<span class="hl…">` with static class names around escaped
 //      source, so a fenced code block can never inject markup.
 //   5. block:* JSON is parsed with a try/catch; a malformed block degrades to a
 //      visible (escaped) code block, never silent loss and never eval.
-// Adversarial coverage lives in packages/blueprints/src/assistant-sanitize.test.ts.
+// Adversarial coverage lives in assistant-sanitize.test.ts.
 
 import { highlightCode } from "./code-highlight.js";
 import { cx, el, blockNodes } from "./gfm.js";
 
-/** The literal class names the kit's kit.css styles. Callers may override any. */
-export const DEFAULT_CLASSES = {
+/** The renderer's class-name slots — kit.css styles the literal defaults. */
+export interface AssistantRichClasses {
+  asstRich: string;
+  asstP: string;
+  asstH: string;
+  asstUl: string;
+  asstOl: string;
+  asstQuote: string;
+  asstHr: string;
+  asstA: string;
+  asstImg: string;
+  asstDel: string;
+  asstRef: string;
+  asstBlock: string;
+  asstTableWrap: string;
+  asstTable: string;
+  asstCaption: string;
+  asstStat: string;
+  asstStatValue: string;
+  asstStatLabel: string;
+  asstStatSub: string;
+  asstChart: string;
+  asstChartPlot: string;
+  asstChartSvg: string;
+  asstChartX: string;
+  asstChartLegend: string;
+  asstPre: string;
+  asstCodeWrap: string;
+  asstCopyBtn: string;
+}
+
+/** A ref chip resolved to a renderable card (loose shape the resolver returns). */
+export interface ResolvedRefCard {
+  status?: string;
+  title?: string | null;
+  subtitle?: string | null;
+}
+
+export type ResolveRefs = (
+  refs: Array<{ type: string; id: string }>
+) => Promise<ResolvedRefCard[]>;
+
+/**
+ * A caller's class-name overrides. Values may be `undefined` (a CSS-module
+ * import is often typed `string | undefined`); the renderer falls back to the
+ * literal default for any missing/undefined slot.
+ */
+export type AssistantRichClassOverrides = Partial<
+  Record<keyof AssistantRichClasses, string | undefined>
+>;
+
+/** The literal class names kit.css styles. Callers may override any. */
+export const DEFAULT_CLASSES: AssistantRichClasses = {
   asstRich: "asstRich",
   asstP: "asstP",
   asstH: "asstH",
@@ -77,14 +124,14 @@ export const DEFAULT_CLASSES = {
  * language the `<pre>` gets escape-by-default syntax highlighting (hl… spans);
  * otherwise it stays a plain escaped text node. `wireCodeCopy` reads the
  * `<pre>`'s textContent (unchanged by the spans) on click, so copy still works.
- * @param {string} code The source text to display.
- * @param {string} lang The optional fenced-code language.
- * @param {typeof DEFAULT_CLASSES} C The resolved CSS class map.
- * @returns {HTMLElement} The wrapped code block element.
  */
-function codeBlock(code, lang, C) {
+function codeBlock(
+  code: string,
+  lang: string,
+  C: AssistantRichClasses
+): HTMLElement {
   const btn = el("button", { class: C.asstCopyBtn }, "Copy");
-  btn.type = "button";
+  (btn as HTMLButtonElement).type = "button";
   btn.setAttribute("aria-label", "Copy code");
   const highlighted = lang ? highlightCode(code, lang) : null;
   const pre = highlighted
@@ -94,7 +141,16 @@ function codeBlock(code, lang, C) {
   return el("div", { class: C.asstCodeWrap }, [btn, pre]);
 }
 
-function tableBlock(spec, C) {
+interface TableSpec {
+  columns?: unknown[];
+  rows?: unknown[];
+  caption?: unknown;
+}
+
+function tableBlock(
+  spec: TableSpec | null,
+  C: AssistantRichClasses
+): HTMLElement | null {
   if (!spec || !Array.isArray(spec.columns) || !Array.isArray(spec.rows))
     return null;
   const table = el("table", { class: C.asstTable });
@@ -130,7 +186,16 @@ function tableBlock(spec, C) {
   return wrap;
 }
 
-function statBlock(spec, C) {
+interface StatSpec {
+  value?: unknown;
+  label?: unknown;
+  sub?: unknown;
+}
+
+function statBlock(
+  spec: StatSpec | null,
+  C: AssistantRichClasses
+): HTMLElement | null {
   if (
     !spec ||
     (typeof spec.value !== "string" && typeof spec.value !== "number")
@@ -147,7 +212,22 @@ function statBlock(spec, C) {
   ]);
 }
 
-function chartBlock(spec, C) {
+interface ChartSeries {
+  label?: string;
+  values: number[];
+}
+
+interface ChartSpec {
+  type?: unknown;
+  x?: unknown[];
+  series?: unknown[];
+  title?: unknown;
+}
+
+function chartBlock(
+  spec: ChartSpec | null,
+  C: AssistantRichClasses
+): HTMLElement | null {
   if (
     !spec ||
     (spec.type !== "bar" && spec.type !== "line") ||
@@ -155,7 +235,10 @@ function chartBlock(spec, C) {
   )
     return null;
   const series = (Array.isArray(spec.series) ? spec.series : [])
-    .filter((r) => r && Array.isArray(r.values))
+    .filter(
+      (r): r is ChartSeries =>
+        Boolean(r) && Array.isArray((r as ChartSeries).values)
+    )
     .slice(0, 3);
   if (series.length === 0) return null;
   const W = 640;
@@ -167,8 +250,9 @@ function chartBlock(spec, C) {
   const max = Math.max(...all, 0);
   const min = Math.min(...all, 0);
   const span = max - min || 1;
-  const py = (v) => H - PADY - ((v - min) / span) * (H - PADY * 2);
-  const parts = [];
+  const py = (v: number): number =>
+    H - PADY - ((v - min) / span) * (H - PADY * 2);
+  const parts: string[] = [];
   if (spec.type === "bar") {
     const group = (W - PADX * 2) / Math.max(n, 1);
     const bw = Math.max(4, (group * 0.7) / series.length);
@@ -184,7 +268,8 @@ function chartBlock(spec, C) {
       });
     });
   } else {
-    const px = (i) => (n <= 1 ? W / 2 : PADX + (i / (n - 1)) * (W - PADX * 2));
+    const px = (i: number): number =>
+      n <= 1 ? W / 2 : PADX + (i / (n - 1)) * (W - PADX * 2);
     series.forEach((r, si) => {
       const pts = r.values
         .slice(0, n)
@@ -228,25 +313,31 @@ function chartBlock(spec, C) {
 /**
  * Full answer → GFM prose + typed blocks + highlighted code fences, as an HTML
  * string. Untrusted input — see the SECURITY CONTRACT above.
- * @param {string} text The untrusted assistant response text.
- * @param {Partial<typeof DEFAULT_CLASSES>} [classes] Optional CSS class overrides.
- * @returns {string} The sanitized rich-answer HTML.
  */
-export function richAnswerHtml(text, classes) {
+export function richAnswerHtml(
+  text: string,
+  classes?: AssistantRichClassOverrides
+): string {
   // Override only with truthy values so an override map with `undefined` slots
   // (e.g. a CSS-module import typed `string | undefined`) falls back to the
   // literal default rather than blanking the class name.
   let C = DEFAULT_CLASSES;
   if (classes) {
-    C = { ...DEFAULT_CLASSES };
-    for (const k in classes) if (classes[k]) C[k] = classes[k];
+    const merged = { ...DEFAULT_CLASSES };
+    for (const key of Object.keys(classes) as Array<
+      keyof AssistantRichClasses
+    >) {
+      const value = classes[key];
+      if (value) merged[key] = value;
+    }
+    C = merged;
   }
   const host = el("div", { class: C.asstRich });
   const fence =
     /```(?<tag>block:table|block:chart|block:stat|[A-Za-z0-9+#_-]*)\n(?<payload>[\s\S]*?)```/gu;
   let last = 0;
-  let m;
-  const pushProse = (seg) => {
+  let m: RegExpExecArray | null;
+  const pushProse = (seg: string): void => {
     for (const node of blockNodes(seg, C)) host.append(node);
   };
   while ((m = fence.exec(text)) !== null) {
@@ -255,15 +346,15 @@ export function richAnswerHtml(text, classes) {
     const tag = m.groups?.tag ?? "";
     const payload = m.groups?.payload ?? "";
     if (tag.startsWith("block:")) {
-      let node = null;
+      let node: HTMLElement | null = null;
       try {
-        const spec = JSON.parse(payload);
+        const spec: unknown = JSON.parse(payload);
         node =
           tag === "block:table"
-            ? tableBlock(spec, C)
+            ? tableBlock(spec as TableSpec, C)
             : tag === "block:chart"
-              ? chartBlock(spec, C)
-              : statBlock(spec, C);
+              ? chartBlock(spec as ChartSpec, C)
+              : statBlock(spec as StatSpec, C);
       } catch {
         node = null;
       }
@@ -277,46 +368,19 @@ export function richAnswerHtml(text, classes) {
 }
 
 /**
- * The kit's default ref resolver — POSTs to the shell-level vault surface
- * `/centraid/_vault/assistant/resolve`, reachable from an app iframe (same
- * origin as the other `/centraid/_vault/*` calls the Ask panel already makes).
- * Returns the resolved cards array, or [] on any failure.
- * @param {Array<{type: string, id: string}>} refs The referenced vault entities.
- * @returns {Promise<Array<{status?: string, title?: string|null, subtitle?: string|null}>>} The resolved cards.
+ * Resolve every ref chip under `host` to a live card title, batched. The shell
+ * passes its auth-aware `resolveAssistantRefs` and the scoped `asstRef` class
+ * name its CSS module minted.
  */
-export async function defaultResolveRefs(refs) {
-  if (refs.length === 0) return [];
-  try {
-    const res = await fetch("/centraid/_vault/assistant/resolve", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ refs }),
-    });
-    if (!res.ok) return [];
-    const body = await res.json();
-    return Array.isArray(body?.cards) ? body.cards : [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Resolve every ref chip under `host` to a live card title, batched. Injectable
- * `resolveRefs` (the shell passes its auth-aware `resolveAssistantRefs`; the kit
- * defaults to `defaultResolveRefs`) and `refClass` (the `asstRef` class name the
- * chips carry).
- *
- * @param {HTMLElement} host The rendered answer element containing ref chips.
- * @param {{
- *   resolveRefs?: (refs: Array<{type: string, id: string}>) => Promise<Array<{status?: string, title?: string|null, subtitle?: string|null}>>,
- *   refClass?: string,
- * }} [options] Optional resolver and class-name overrides.
- * @returns {void} Nothing; cards are hydrated asynchronously.
- */
-export function hydrateRefs(host, options = {}) {
-  const resolveRefs = options.resolveRefs ?? defaultResolveRefs;
+export function hydrateRefs(
+  host: HTMLElement,
+  options: { resolveRefs: ResolveRefs; refClass?: string }
+): void {
+  const { resolveRefs } = options;
   const refClass = options.refClass ?? DEFAULT_CLASSES.asstRef;
-  const chips = [...host.querySelectorAll(`.${refClass}:not([data-resolved])`)];
+  const chips = [
+    ...host.querySelectorAll<HTMLElement>(`.${refClass}:not([data-resolved])`),
+  ];
   if (chips.length === 0) return;
   const refs = chips.map((c) => ({
     type: c.dataset.refType ?? "",
@@ -341,24 +405,21 @@ export function hydrateRefs(host, options = {}) {
 
 /**
  * Wire one delegated click handler under `host` so every code block's hover
- * "Copy" button copies its `<pre>` text to the clipboard (issue #420). Shared
- * by both chat surfaces — the shell calls it in the answer node's ref callback
- * alongside `hydrateRefs`, the kit's Ask panel calls it after `finalizeRich`.
+ * "Copy" button copies its `<pre>` text to the clipboard (issue #420).
  * Idempotent: a `data-copy-wired` flag guards against double-binding when a
  * node is re-hydrated.
- *
- * @param {HTMLElement} host The rendered answer element containing code blocks.
- * @param {{ copyClass?: string }} [options] Optional copy-button class override.
- * @returns {void} Nothing; the delegated handler is installed once.
  */
-export function wireCodeCopy(host, options = {}) {
+export function wireCodeCopy(
+  host: HTMLElement,
+  options: { copyClass?: string } = {}
+): void {
   if (!host || host.dataset.copyWired === "true") return;
   const copyClass = options.copyClass ?? DEFAULT_CLASSES.asstCopyBtn;
   host.dataset.copyWired = "true";
   host.addEventListener("click", (ev) => {
     const target = ev.target;
     if (!(target instanceof Element)) return;
-    const btn = target.closest(`.${copyClass}`);
+    const btn = target.closest<HTMLElement>(`.${copyClass}`);
     if (!btn || !host.contains(btn)) return;
     const pre = btn.parentElement?.querySelector("pre");
     const text = pre?.textContent ?? "";

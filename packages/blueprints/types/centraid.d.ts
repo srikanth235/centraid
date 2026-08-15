@@ -444,8 +444,4 @@ interface CentraidClient {
 
 interface Window {
   centraid: CentraidClient;
-  /** Ask-panel config seeded inline by index.html before app code loads. */
-  KIT_ASK?: Record<string, unknown>;
-  /** The kit's Ask controller, mounted at kit.ts eval time. */
-  kitAsk?: Record<string, unknown>;
 }

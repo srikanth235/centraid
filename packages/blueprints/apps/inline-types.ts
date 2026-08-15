@@ -16,7 +16,7 @@ import type { ComponentType, ReactNode } from "react";
 
 import type { PendingProjectionDeclaration } from "./_shared/pending-overlay.js";
 
-/** The `window.KIT_ASK` config each app seeds — mirrors index.html's inline block. */
+/** Per-app copy for the inline Ask panel the shell installs. */
 export interface InlineKitAsk {
   scope: string;
   placeholder?: string;

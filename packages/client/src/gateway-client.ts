@@ -23,12 +23,6 @@
  * import everything from `./gateway-client.js`.
  */
 
-import {
-  consumeSse,
-  consumeSseFrames,
-  frameData,
-} from "@centraid/design/kit/turn-stream.js";
-import type { TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
 import { isGatewayCapabilities, ROUTES } from "@centraid/protocol";
 import type { GatewayCapabilities, GatewayInfo } from "@centraid/protocol";
 
@@ -39,6 +33,8 @@ import {
   enc,
   readJson,
 } from "./gateway-client-core.js";
+import { consumeSse, consumeSseFrames, frameData } from "./turn-stream.js";
+import type { TurnStreamEvent } from "./turn-stream.js";
 
 export * from "./gateway-client-core.js";
 export * from "./gateway-client-automations.js";

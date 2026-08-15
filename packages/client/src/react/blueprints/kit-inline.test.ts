@@ -8,9 +8,6 @@ import {
 import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
 import { installInlineCentraid } from "./centraid-inline.js";
-// The inline kit is imported FIRST so its `./suppress-served-ask` side effect
-// runs before the real kit module below (it suppresses kit.ts's auto-mounting
-// Ask IIFE).
 import {
   fmtMoney as inlineFmtMoney,
   onDataChange,

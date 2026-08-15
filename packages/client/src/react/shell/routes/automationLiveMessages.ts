@@ -1,5 +1,4 @@
-import type { TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
-
+import type { TurnStreamEvent } from "../../../turn-stream.js";
 import type {
   AsstMsgDTO,
   AsstToolCallDTO,

@@ -8,13 +8,12 @@
  * had no way to watch its own compile turn — it lifted out unchanged rather
  * than being reimplemented a second, subtly-different way.
  */
-import type { TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
-
 import {
   readAutomationTurnExpanded,
   streamAutomationTurn,
 } from "../../../gateway-client.js";
 import type { AutomationTurnStreamEvent } from "../../../gateway-client.js";
+import type { TurnStreamEvent } from "../../../turn-stream.js";
 import type { AsstMsgDTO, TurnWatchOutcome } from "../../screen-contracts.js";
 import {
   automationLiveMessages,

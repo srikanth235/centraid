@@ -1,29 +1,20 @@
-/* oxlint-disable typescript-eslint/ban-ts-comment -- imports the untyped browser
-   kit module; the package tsconfig has no DOM lib, so web globals (ReadableStream,
-   TextEncoder) are runtime-real but invisible to tsc (see kit-smoke.test.ts). */
-// @ts-nocheck — exercises the untyped browser kit module (plain JS + web
-// globals) directly; see kit-smoke.test.ts for the same pattern.
-// Unit tests for the shared SSE turn-stream parser (issue #420) — the ONE
-// parser both chat surfaces drive their `_turn` streams through.
-import path from "node:path";
-import { pathToFileURL } from "node:url";
-
+// Unit tests for the SSE turn-stream parser (issue #420) — the ONE parser
+// every conversation surface drives its `_turn` streams through.
 import { describe, expect, it } from "vitest";
 
-const PKG = path.resolve(import.meta.dirname, "..");
-const url = pathToFileURL(path.resolve(PKG, "kit/turn-stream.js")).href;
-const {
-  frameData,
-  parseFrame,
-  parseSseText,
+import {
   consumeSse,
   consumeSseFrames,
+  frameData,
   isEndFrame,
-} = await import(url);
+  parseFrame,
+  parseSseText,
+} from "./turn-stream.js";
+import type { TurnStreamEvent } from "./turn-stream.js";
 
 // A gateway SSE frame carries both `event: <type>` and a JSON body with `type`.
-const frame = (evt: unknown) =>
-  `event: ${(evt as { type: string }).type}\ndata: ${JSON.stringify(evt)}`;
+const frame = (evt: TurnStreamEvent): string =>
+  `event: ${evt.type}\ndata: ${JSON.stringify(evt)}`;
 
 /** A ReadableStream that yields the given string chunks as UTF-8 bytes. */
 function streamOf(chunks: string[]): ReadableStream<Uint8Array> {
@@ -63,7 +54,7 @@ describe("turn-stream frame parsing", () => {
       frame({ type: "final", text: "a" }),
       "event: end\ndata: {}",
     ].join("\n\n");
-    const types = parseSseText(blob).map((e: { type: string }) => e.type);
+    const types = parseSseText(blob).map((e) => e.type);
     expect(types).toStrictEqual([
       "assistant.start",
       "assistant.delta",
@@ -72,7 +63,7 @@ describe("turn-stream frame parsing", () => {
   });
 });
 
-describe("consumeSse", () => {
+describe(consumeSse, () => {
   it("dispatches every event, reassembling frames split across chunks", async () => {
     const full =
       [
@@ -84,7 +75,7 @@ describe("consumeSse", () => {
       ].join("\n\n") + "\n\n";
     // Split mid-frame to prove the internal buffer stitches partial frames.
     const mid = Math.floor(full.length / 2);
-    const events: Array<{ type: string }> = [];
+    const events: TurnStreamEvent[] = [];
     const res = await consumeSse(
       streamOf([full.slice(0, mid), full.slice(mid)]),
       (e) => events.push(e)
@@ -100,7 +91,7 @@ describe("consumeSse", () => {
   });
 
   it("reports ended:false when the body closes WITHOUT the end frame (mid-turn drop) (#420)", async () => {
-    const events: Array<{ type: string }> = [];
+    const events: TurnStreamEvent[] = [];
     // A stream that carries a delta then just stops — no `final`, no `end`.
     const res = await consumeSse(
       streamOf([frame({ type: "assistant.delta", delta: "partial" }) + "\n\n"]),
@@ -113,7 +104,7 @@ describe("consumeSse", () => {
   it("stops cleanly on an aborted signal, reporting ended:false (#420)", async () => {
     const controller = new AbortController();
     controller.abort();
-    const events: unknown[] = [];
+    const events: TurnStreamEvent[] = [];
     const res = await consumeSse(
       streamOf([frame({ type: "final", text: "x" }) + "\n\n"]),
       (e) => events.push(e),
@@ -123,7 +114,7 @@ describe("consumeSse", () => {
   });
 });
 
-describe("consumeSseFrames", () => {
+describe(consumeSseFrames, () => {
   it("reassembles split frames and delivers them in wire order", async () => {
     const frames: string[] = [];
     await consumeSseFrames(
@@ -134,7 +125,7 @@ describe("consumeSseFrames", () => {
   });
 });
 
-describe("isEndFrame", () => {
+describe(isEndFrame, () => {
   it('detects the terminal end frame, tolerating "event:end" and "event: end"', () => {
     expect(isEndFrame("event: end\ndata: {}")).toBe(true);
     expect(isEndFrame("event:end\ndata: {}")).toBe(true);

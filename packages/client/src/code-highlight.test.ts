@@ -1,14 +1,9 @@
 // Unit tests for the dependency-free fenced-code highlighter (issue #420, W2).
-import path from "node:path";
-import { pathToFileURL } from "node:url";
-
 import { describe, expect, it } from "vitest";
 
-const PKG = path.resolve(import.meta.dirname, "..");
-const url = pathToFileURL(path.resolve(PKG, "kit/code-highlight.js")).href;
-const { highlightCode, configFor } = await import(url);
+import { configFor, highlightCode } from "./code-highlight.js";
 
-describe("highlightCode", () => {
+describe(highlightCode, () => {
   it("returns null for an unknown language (graceful plain fallback)", () => {
     expect(highlightCode("whatever", "brainfuck")).toBeNull();
     expect(highlightCode("x", "")).toBeNull();
@@ -58,7 +53,7 @@ describe("highlightCode", () => {
     const src = `function go() { return \`a\${b}c\`; } // done`;
     const out = highlightCode(src, "ts");
     // Strip the span tags — the remaining text (entities decoded) is the source.
-    const stripped = out
+    const stripped = (out ?? "")
       .replace(/<[^>]+>/gu, "")
       .replace(/&#(?<codePoint>\d+);/gu, (_m: string, n: string) =>
         String.fromCharCode(Number(n))

@@ -35,12 +35,11 @@ describe("single icon registry", () => {
     }
   });
 
-  test("standalone kit routes icons through its browser adapter", () => {
+  test("standalone kit hand-rolls no icon markup", () => {
     const kit = readFileSync(
       path.join(ROOT, "packages/design/kit/kit.ts"),
       "utf8"
     );
-    expect(kit).toContain("kitIcon");
     expect(kit).not.toContain("<svg");
   });
 

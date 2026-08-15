@@ -22,10 +22,6 @@
 // with a replica-invalidation subscription — so the kit's debounce + table
 // filter semantics carry over with no override.
 //
-// The `./suppress-served-ask` import MUST stay first: kit.ts auto-mounts its Ask
-// panel at module-eval time, and the sentinel it sets suppresses that before the
-// kit module below is evaluated (see suppress-served-ask.ts).
-import "./suppress-served-ask.js";
 import {
   fileToDataUri,
   INLINE_ATTACH_BYTES,

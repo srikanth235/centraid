@@ -13,7 +13,7 @@ describe("design kit seam", () => {
     expect(path.basename(KIT_DIR)).toBe("kit");
     expect(existsSync(path.join(KIT_DIR, "kit.ts"))).toBe(true);
     expect(existsSync(path.join(KIT_DIR, "kit.css"))).toBe(true);
-    expect(existsSync(path.join(KIT_DIR, "conversation-client.js"))).toBe(true);
+    expect(existsSync(path.join(KIT_DIR, "elements.js"))).toBe(true);
   });
 
   it("keeps body-mounted overlays hidden and scoped to the v0 contract", () => {
