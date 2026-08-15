@@ -36,6 +36,7 @@ Changed-file inventory:
 AGENTS.md
 DESIGN.md
 apps/desktop/tests/e2e/onboarding-home.spec.ts
+apps/desktop/tests/e2e/fixtures.ts
 apps/mobile/App.tsx
 apps/mobile/lazy-screens.tsx
 apps/mobile/src/apps/assistant/Assistant.tsx
@@ -258,6 +259,9 @@ node scripts/test-report/diff-coverage.mjs --base origin/main
 - `bun run --cwd apps/mobile test` — 169 files / 1,377 tests passed.
 - `bun run --cwd apps/desktop test:e2e -- onboarding-home.spec.ts -g '2.1'` — 3
   matching Home tests passed, emitted the UI evidence, and measured the local Assistant gesture-to-paint path against its 100ms budget.
+- `bun run --cwd apps/desktop typecheck` and `bun run lint:e2e-flows` — passed after the
+  desktop journey helper was updated to reach unpinned destinations through the standing More
+  launcher and to use the v10 member-facing destination labels.
 - `bun run --cwd packages/design test -- src/css.test.ts src/native-contract.test.ts
   src/design-md.test.ts` — 37 passed.
 - `bun run --cwd packages/design typecheck` — passed.
