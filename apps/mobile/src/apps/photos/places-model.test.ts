@@ -51,24 +51,25 @@ function photo(
 }
 
 /** Lake Tahoe and a house on the same lake, ~1.5km apart: two ledger rows,
- *  one 0.1° cell. */
+ *  one 0.1° cell. The columns are `geo_lat`/`geo_lng` because that is what
+ *  `core_place` ships and the mobile timeline hands rows raw (#787). */
 const TAHOE: PlaceRow = {
   place_id: "place-tahoe",
   name: "Lake Tahoe",
-  latitude: 39.096_8,
-  longitude: -120.032_4,
+  geo_lat: 39.096_8,
+  geo_lng: -120.032_4,
 };
 const TAHOE_CABIN: PlaceRow = {
   place_id: "place-cabin",
   name: "The cabin",
-  latitude: 39.14,
-  longitude: -120.03,
+  geo_lat: 39.14,
+  geo_lng: -120.03,
 };
 const HOME: PlaceRow = {
   place_id: "place-home",
   name: "Home",
-  latitude: 37.44,
-  longitude: -122.14,
+  geo_lat: 37.44,
+  geo_lng: -122.14,
 };
 
 describe("the Places shelf's cards", () => {
@@ -102,7 +103,7 @@ describe("the Places shelf's cards", () => {
   it("cards a place whose row has no name as the unnamed place, never drops it", () => {
     const cards = placeCards(
       [photo("a", "place-home")],
-      [{ place_id: "place-home", latitude: 37.44, longitude: -122.14 }]
+      [{ place_id: "place-home", geo_lat: 37.44, geo_lng: -122.14 }]
     );
     expect(cards.map((card) => card.name)).toStrictEqual([PLACE_UNNAMED]);
   });
@@ -233,9 +234,90 @@ describe("the points the map plots", () => {
   it("gives an unnamed place a null name rather than inventing one", () => {
     const points = placePoints(
       [photo("a", "place-home")],
-      [{ place_id: "place-home", latitude: 37.44, longitude: -122.14 }]
+      [{ place_id: "place-home", geo_lat: 37.44, geo_lng: -122.14 }]
     );
     expect(points[0]!.name).toBeNull();
+  });
+});
+
+describe("the columns a place's coordinates arrive in (#787)", () => {
+  // `core_place` ships `geo_lat`/`geo_lng` and the mobile timeline hands rows
+  // raw; the shelf shipped reading `latitude ?? lat` while the map read
+  // `geo_lat` first — pins without cards. These cases pin the shared chain.
+  it("cards, opens, and plots one vault-shaped row through one key", () => {
+    const assets = [photo("a", "place-tahoe"), photo("b", "place-tahoe")];
+    const cards = placeCards(assets, [TAHOE]);
+    expect(cards.map((card) => [card.id, card.count])).toStrictEqual([
+      ["39.1:-120.0", 2],
+    ]);
+    expect(
+      assetsAtPlace(assets, [TAHOE], cards[0]!.id).map((asset) => asset.id)
+    ).toStrictEqual(["a", "b"]);
+    expect(
+      placePoints(assets, [TAHOE]).map((point) => [point.lat, point.lng])
+    ).toStrictEqual([[39.096_8, -120.032_4]]);
+  });
+
+  it("gives a row whose geo columns are explicit NULLs neither card nor pin", () => {
+    // The vault stores "no geography" as NULL columns; the web handler drops
+    // them by type (`typeof === "number"` in readPlaces), and the phone must
+    // agree — not coerce NULL and hope the NaN falls out.
+    const noGeo: PlaceRow = {
+      place_id: "place-room",
+      name: "The kitchen",
+      geo_lat: null,
+      geo_lng: null,
+    };
+    expect(placeCardKey(noGeo)).toBeNull();
+    expect(placeCards([photo("a", "place-room")], [noGeo])).toStrictEqual([]);
+    expect(placePoints([photo("a", "place-room")], [noGeo])).toStrictEqual([]);
+  });
+
+  it("drops a coordinate that is not a number, even when it would coerce", () => {
+    // Number("39.1") is finite, so a coercing read would card this row; the
+    // type guard the web applies refuses it instead.
+    const stringy: PlaceRow = {
+      place_id: "place-string",
+      name: "Typed in",
+      geo_lat: "39.1",
+      geo_lng: "-120.0",
+    };
+    expect(placeCardKey(stringy)).toBeNull();
+    expect(placePoints([photo("a", "place-string")], [stringy])).toStrictEqual(
+      []
+    );
+  });
+
+  it("still cards a legacy latitude/longitude row as a fallback", () => {
+    const legacy: PlaceRow = {
+      place_id: "place-legacy",
+      name: "Legacy",
+      latitude: 39.096_8,
+      longitude: -120.032_4,
+    };
+    expect(placeCardKey(legacy)).toBe("39.1:-120.0");
+    expect(
+      placePoints([photo("a", "place-legacy")], [legacy]).map((point) => [
+        point.lat,
+        point.lng,
+      ])
+    ).toStrictEqual([[39.096_8, -120.032_4]]);
+  });
+
+  it("still cards a legacy lat/lng row as the last fallback", () => {
+    const short: PlaceRow = {
+      place_id: "place-short",
+      name: "Short",
+      lat: 39.096_8,
+      lng: -120.032_4,
+    };
+    expect(placeCardKey(short)).toBe("39.1:-120.0");
+    expect(
+      placePoints([photo("a", "place-short")], [short]).map((point) => [
+        point.lat,
+        point.lng,
+      ])
+    ).toStrictEqual([[39.096_8, -120.032_4]]);
   });
 });
 

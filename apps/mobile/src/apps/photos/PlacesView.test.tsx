@@ -177,19 +177,21 @@ vi.mock(import("./PhotosScreen"), async () => {
 });
 
 // Two photographs at Lake Tahoe, one at home: three photographs, TWO places.
+// The rows carry `geo_lat`/`geo_lng` — the columns `core_place` actually
+// ships and the replica hands over raw (#787).
 const [TAHOE_PHOTO, HOME_PHOTO] = makePhotosFixture("place-tagged").assets;
 const PLACE_ROWS = [
   {
     place_id: "place-tahoe",
     name: "Lake Tahoe",
-    latitude: 39.096_8,
-    longitude: -120.032_4,
+    geo_lat: 39.096_8,
+    geo_lng: -120.032_4,
   },
   {
     place_id: "place-home",
     name: "Home",
-    latitude: 37.44,
-    longitude: -122.14,
+    geo_lat: 37.44,
+    geo_lng: -122.14,
   },
 ];
 

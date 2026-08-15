@@ -56,27 +56,33 @@ function placeRowsById(rows: readonly PlaceRow[]): Map<string, PlaceRow> {
 }
 
 /**
+ * A coordinate is a NUMBER column or it is nothing — the same guard the web
+ * handler applies when it renames the columns (`readPlaces` in
+ * `queries/_shared.ts`): an explicit `NULL` from the vault, a string, or any
+ * other type is dropped by type, never coerced and caught as `NaN` downstream.
+ */
+function coordOf(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
  * The key the SHELF names a place by: its coordinates rounded to one decimal.
  *
  * `null` when the row carries no usable coordinates — such a place has no card
  * and no pin, because a card standing at a coordinate nobody recorded would be
  * a claim about geography rather than a read of one.
  *
- * KNOWN DEFECT, preserved bit-for-bit by the #781 extraction: this chain reads
- * `latitude ?? lat`, but `core_place` ships `geo_lat`/`geo_lng`
- * (packages/vault/src/schema/core.ts) and only the WEB handler renames them
- * (queries/_shared.ts). `placePoints` below reads `geo_lat` first, so against
- * real vault the map draws pins while the shelf and detail see no coordinates
- * at all — every card vanishes and every detail is empty. Fixing it is a
- * product change owned by its own bug issue, not by the testing branch that
- * found it; the tests in places-model.test.ts assert the CURRENT column reads
- * so the fix must flip them consciously.
+ * Column contract (#787): `core_place` ships `geo_lat`/`geo_lng`
+ * (packages/vault/src/schema/core.ts) and the mobile timeline hands rows RAW —
+ * only the web handler renames them (queries/_shared.ts). So the physical
+ * columns are read first, with `latitude`/`lat` (and `longitude`/`lng`) kept
+ * only as legacy fixture fallbacks, the same chain `placePoints` reads.
  */
 export function placeCardKey(row: PlaceRow | undefined): string | null {
   if (!row) return null;
-  const latitude = Number(row.latitude ?? row.lat);
-  const longitude = Number(row.longitude ?? row.lon ?? row.lng);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  const latitude = coordOf(row.geo_lat ?? row.latitude ?? row.lat);
+  const longitude = coordOf(row.geo_lng ?? row.longitude ?? row.lng);
+  if (latitude === null || longitude === null) return null;
   return `${latitude.toFixed(1)}:${longitude.toFixed(1)}`;
 }
 
@@ -153,9 +159,9 @@ export function placePoints(
   for (const asset of assets) {
     const row = asset.placeId ? placeById.get(asset.placeId) : undefined;
     if (!row) continue;
-    const lat = Number(row.geo_lat ?? row.latitude ?? row.lat);
-    const lng = Number(row.geo_lng ?? row.longitude ?? row.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const lat = coordOf(row.geo_lat ?? row.latitude ?? row.lat);
+    const lng = coordOf(row.geo_lng ?? row.longitude ?? row.lng);
+    if (lat === null || lng === null) continue;
     const key = String(row.place_id);
     const existing = byPlace.get(key);
     if (existing) existing.count += 1;
