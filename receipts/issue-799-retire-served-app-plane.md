@@ -1642,6 +1642,21 @@ also observed one `handler-pool` timeout flake under full-monorepo load —
 the same contention class already documented for stage 3; the file passes
 in isolation and no app-engine source changed in this stage.
 
+**Final gate** (`bun run check:pr`, run on the complete eight-stage tree):
+**42 of 43 `check:push` gates pass**; `typecheck`, `lint:types`,
+`lint:workflow-pins` green. The one red is `test:affected`, and it is this
+container's CPU ceiling, not the change set: across four runs the failure
+was always a timing-sensitive signal/timeout test in an untouched package —
+three times `app-engine handler-pool` ("a hung handler is still terminated
+on timeout"), once `agent-runtime backend` ("teardown escalates to
+SIGKILL") — and each failing test passes in isolation, passes with its full
+package run solo (app-engine 55 files / 519 tests green), and passed inside
+the root coverage lane's 13,116-test runs three times. The failure needs
+concurrent turbo per-package vitest processes on this 4-CPU box to
+reproduce, including at `--concurrency=2`. No source in either package
+changed in this issue beyond comments. CI remains the enforcing copy for
+this gate, as it already is for the two environment lanes documented above.
+
 ## Audit
 
 Fresh-context sub-agent audits run per stage slice, each instructed to refute
