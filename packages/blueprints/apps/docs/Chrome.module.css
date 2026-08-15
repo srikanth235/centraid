@@ -86,6 +86,9 @@
 
 .side {
   composes: kit-app-side from global;
+  /* Navigation belongs to the host stem. Keeping this node mounted preserves
+     the served/inline slot contract while preventing a second desktop nav. */
+  display: none;
 }
 .brand {
   composes: kit-app-brand from global;
@@ -188,6 +191,7 @@
   /* Now a real <button> (kit-plain-btn) so the dismiss gesture is keyboard
      reachable; keep the plain-div cursor it always had. */
   cursor: default;
+  display: none;
 }
 
 /* ---------- Main (static chrome) ---------- */
@@ -201,6 +205,7 @@
 }
 .hamburger {
   composes: kit-app-hamburger from global;
+  display: none;
 }
 /* kit.css's .kit-search owns the pill/icon/input look; docs keeps only the
    layout placement (max-width, flex basis) in the topbar row. */

@@ -1,6 +1,6 @@
 /* Library tile ("RefinedAppTile") — the app/automation card shared by the
    Home shelf, the Starred grid, and the `<AppCard>` primitive. A vertical card:
-   gradient icon plate w/ status dot, name, 2-line blurb, state-aware foot
+   single-tone mark with status dot, name, 2-line blurb, state-aware foot
    strip. Shared sizing/tone values come from the `--tile-*` design tokens so
    Home and Starred tiles resolve identically.
 

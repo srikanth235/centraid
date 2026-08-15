@@ -337,6 +337,10 @@
 .zoomBar {
   display: flex;
   align-items: center;
+  /* The photograph is centred in .mediaWrap above. This footer is a separate
+     full-width sibling, so it must explicitly share that centre instead of
+     leaving the zoom controls at the stage's inline start. */
+  justify-content: center;
   gap: var(--sp-2);
 }
 .zoomChip {

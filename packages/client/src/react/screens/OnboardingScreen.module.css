@@ -1,5 +1,5 @@
 /* First-run onboarding — the fullscreen threshold that owns `#root` until the
-   member has a name (moment M15 in tests/design-grammar-matrix.json).
+   member has connected a gateway (moment M15 in tests/design-grammar-matrix.json).
 
    Migrated to the Binding Layer (issue #708). What it was: a forced-dark stage
    with a radial glow blob keyed to the member's hue, a translucent
@@ -16,10 +16,9 @@
    material rather than an effect invented for this screen: on first run there
    is no content yet, so the only honest thing to show is the paper.
 
-   The member's chosen hue survives as `--onb-accent`, spent in exactly three
-   places — the avatar disc, the selected swatch's ring, and the sheet's
-   binding edge. Not on the primary, which is filled INK like every other
-   commit control in the product, and not on type. */
+   The default ink survives as `--onb-accent`, spent on the sheet's binding
+   edge and the working mark. Profile color belongs to Settings, not this
+   threshold. */
 
 .view {
   position: fixed;
@@ -79,7 +78,7 @@
   transition: background var(--dur-2) var(--ease);
 }
 
-/* Step 2 hosts ConnectFlow's three-across method grid — wider sheet. */
+/* Pairing hosts ConnectFlow's wider details and vault panels. */
 .card[data-step="connect"] {
   inline-size: min(560px, 100%);
 }
@@ -150,151 +149,12 @@
   font: var(--t-body);
 }
 
-/* ── identity: the disc and the palette ───────────────────────────────── */
-
-/* Round, because a member's avatar is round everywhere in the product — the
-   stem foot, the roster, the turn header. The bevel, the blurred ring and the
-   4.2s pulse are gone: an avatar is ink on paper, and a first-run screen that
-   breathes at you is a first-run screen that will not sit still. */
-.avatarWrap {
-  display: inline-grid;
-  place-items: center;
-  margin-block-end: var(--sp-4);
-}
-
-.avatar {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 64px;
-  block-size: 64px;
-  border-radius: var(--r-pill);
-  color: var(--text-inv);
-  font: var(--t-display);
-  letter-spacing: var(--t-display-tracking);
-  user-select: none;
-  transition: background var(--dur-2) var(--ease);
-}
-
-.initials {
-  display: inline-block;
-}
-
 /* ── the form ─────────────────────────────────────────────────────────── */
 
 .form {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-}
-
-.fieldLabel {
-  margin-block: var(--sp-3) 0;
-  color: var(--text-faint);
-  font: var(--t-eyebrow);
-  letter-spacing: var(--t-eyebrow-tracking);
-  text-transform: var(--t-eyebrow-transform);
-}
-
-.fieldLabel:first-child {
-  margin-block-start: 0;
-}
-
-.input {
-  inline-size: 100%;
-  block-size: var(--h-control);
-  padding-inline: var(--sp-3);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-  color: var(--text);
-  font: var(--t-body);
-  outline: none;
-  transition:
-    border-color var(--dur-1) var(--ease),
-    box-shadow var(--dur-1) var(--ease);
-}
-
-.input::placeholder {
-  color: var(--text-ghost);
-}
-
-/* The shell's own focus ring, not a hue-tinted halo — a member who has picked
-   amber should not get a fainter focus ring than one who picked indigo. */
-.input:focus-visible {
-  border-color: var(--line-sel);
-  box-shadow: var(--focus-ring);
-}
-
-.swatches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-}
-
-.swatch {
-  position: relative;
-  inline-size: 28px;
-  block-size: 28px;
-  padding: 0;
-  border: none;
-  border-radius: var(--r-pill);
-  cursor: pointer;
-  transition: box-shadow var(--dur-1) var(--ease);
-}
-
-/* The selected swatch wears a ring of the PAGE with the ink outside it, so the
-   mark reads at the same weight on every hue — a white halo was invisible on
-   the pale end of the palette and glaring on the deep end. */
-.swatch[data-selected="true"] {
-  box-shadow:
-    0 0 0 2px var(--bg),
-    0 0 0 4px var(--text);
-}
-
-.swatch:has(:focus-visible) {
-  box-shadow:
-    0 0 0 2px var(--bg),
-    var(--focus-ring);
-}
-
-.importChoice,
-.importPicker {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  margin-block-start: var(--sp-3);
-  padding: var(--sp-3);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-  color: var(--text);
-  font: var(--t-small);
-  cursor: pointer;
-}
-
-.importChoice input {
-  accent-color: var(--accent);
-}
-
-.importChoice span {
-  display: grid;
-  gap: 2px;
-}
-
-.importChoice small {
-  color: var(--text-faint);
-  font: var(--t-control);
-}
-
-/* The staging target is a drop zone, so it keeps the dashed boundary that says
-   "put something here" — the one place on this screen where a border is doing
-   semantic work rather than drawing an edge. */
-.importPicker {
-  justify-content: center;
-  min-block-size: 72px;
-  border-style: dashed;
-  color: var(--text-soft);
-  font: var(--t-body-strong);
 }
 
 /* ── actions ──────────────────────────────────────────────────────────── */
@@ -369,10 +229,8 @@
   word-break: break-word;
 }
 
-/* Why the commit is disabled, said once and quietly (issue #603 UX-4). Shares
-   `.keychainNote`'s register deliberately — this is a heads-up, not a
-   validation error, so it must not read louder than the note beneath it. */
-.hint,
+/* The keychain heads-up is quiet by construction — a heads-up, not a
+   validation error. */
 .keychainNote {
   margin-block-start: var(--sp-2);
   color: var(--text-faint);

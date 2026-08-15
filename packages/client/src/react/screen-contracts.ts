@@ -10,6 +10,8 @@
 // field. The `*BridgeProps` names are retained only to avoid churning ~50
 // import sites.
 
+import type { ColorKey } from "@centraid/design";
+
 import type { ResourceUsageDTO } from "./screens/resource-summary.js";
 
 // The bridge is intentionally self-contained — it must not import the vanilla
@@ -231,7 +233,12 @@ export interface PaletteRowDTO {
   /** Pre-rendered icon SVG markup (from the vanilla `Icon` set). */
   iconHtml: string;
   variant: "action" | "app" | "chat";
-  /** For `variant: 'app'` — the gradient tile paint. */
+  /** For `variant: 'app'` — the shared single-tone desktop mark. */
+  appMark?: {
+    colorKey: ColorKey;
+    iconKey: string;
+  };
+  /** Legacy fallback for older palette bridge rows. */
   tile?: PaletteTileDTO;
   /**
    * MONO row-kind register (Binding Layer row anatomy, issue #708 §A) — a
@@ -1175,7 +1182,10 @@ export interface HomeAppItemDTO {
   name: string;
   desc: string;
   iconKey: string;
-  tile: HomeTileDTO;
+  /** App identity hue used by the shared desktop AppMark. */
+  colorKey?: ColorKey;
+  /** Legacy card-paint fallback for older screen harnesses. */
+  tile?: HomeTileDTO;
   tone: "new" | "draft" | null;
   stamp: string;
   starred: boolean;
@@ -1551,11 +1561,16 @@ export interface AppOrderDTO {
 }
 export interface AppSettingsSnapshot {
   appName: string;
-  iconSvg: string;
-  /** Gradient tile finish for the header app icon. */
-  iconBg: string;
-  iconColor: string;
-  iconShadow: string | null;
+  /** Shared single-tone desktop mark. Optional for older bridge snapshots. */
+  appMark?: {
+    colorKey: ColorKey;
+    iconKey: string;
+  };
+  iconSvg?: string;
+  /** Legacy fallback for older bridge snapshots. */
+  iconBg?: string;
+  iconColor?: string;
+  iconShadow?: string | null;
   accent: string;
   vaultVisible: boolean;
   automationsBadge: number | null;

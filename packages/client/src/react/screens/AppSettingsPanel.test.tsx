@@ -86,6 +86,19 @@ describe("screens/AppSettingsPanel", () => {
   }
 
   describe(AppSettingsPanel, () => {
+    it("renders the shared single-tone app mark when supplied", () => {
+      const el = mount(makeProps());
+      push(
+        makeSnapshot({
+          appMark: { colorKey: "rose", iconKey: "Lock" },
+        })
+      );
+      expect(el.querySelector('[data-app-mark="single-tone"]')).toBeTruthy();
+      expect(
+        el.querySelector('[data-app-mark="single-tone"] svg')
+      ).toBeTruthy();
+    });
+
     it("renders header identity and closes on the X and backdrop", () => {
       const props = makeProps();
       const el = mount(props);

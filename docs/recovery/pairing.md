@@ -7,7 +7,7 @@ Use this runbook when a gateway's first boot did not produce the vaults you expe
 There is no founding ceremony, no founding ticket, and no `uninitialized` state. A gateway founds itself:
 
 1. Start `centraid-gateway serve` (or start the desktop-controlled local gateway) on a **fresh** data dir. At construction the gateway creates one vault:
-   - **Personal** — the founder's private vault and registry default. On desktop it is renamed to the founder's display name once the profile step completes; a headless gateway that never sees a profile step keeps the name `Personal`.
+   - **Personal** — the founder's private vault and registry default. It remains `Personal` until an owner explicitly changes the vault name; profile identity is optional and belongs in Settings.
 2. The host's own device identity is enrolled to the founding **owner** on that vault (recorded in `vault_owners`), in the same `gateway.db` transaction — founding is simply the first mint (issue #726 D2). A shared vault is created later only through an explicit owner action.
 3. Nothing else happens. No kit is minted, no capability is issued, and no screen blocks the user.
 

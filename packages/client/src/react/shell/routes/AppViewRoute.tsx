@@ -3,6 +3,7 @@ import type { JSX, ReactNode } from "react";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { deleteApp, updateAppMeta } from "../../../gateway-client.js";
+import AppMark from "../../ui/AppMark.js";
 import { useShellActions } from "../actions.js";
 import { iconSvg } from "../iconSvg.js";
 import { openPrompt } from "../prompt.js";
@@ -125,18 +126,13 @@ export default function AppViewRoute({
     }
   };
 
-  const finish = window.CentraidTokens.tileFinish(app.color, "gradient");
   const brandChip = (
     <span className={styles.brandChip}>
-      <span
+      <AppMark
         className={styles.brandChipIcon}
-        style={{
-          background: finish.background,
-          color: finish.glyphColor,
-          boxShadow: finish.boxShadow || undefined,
-        }}
-        // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
-        dangerouslySetInnerHTML={{ __html: iconSvg(app.iconKey, 11, 1.9) }}
+        colorKey={app.colorKey}
+        iconKey={app.iconKey}
+        size={20}
       />
       <span className={styles.brandChipName}>{app.name}</span>
       <span className={styles.brandChipLive}>

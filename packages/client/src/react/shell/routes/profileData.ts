@@ -29,10 +29,6 @@ export interface SelfProfile {
   gatewayId: string;
 }
 
-export function isNameSet(profile: SelfProfile | undefined): boolean {
-  return (profile?.name ?? "").trim().length > 0;
-}
-
 /** Resolve the person this client acts as, via the device marked `current`. */
 export async function loadSelfProfile(): Promise<SelfProfile | undefined> {
   const [devices, auth] = await Promise.all([

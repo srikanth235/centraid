@@ -1,11 +1,11 @@
 import React, { useMemo } from "react";
 import { View, Pressable, StyleSheet } from "react-native";
 
-import { identityInk } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
-import { borders, radii, spacing, t, useTheme } from "../theme";
+import { borders, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
+import AppMark from "./AppMark";
 import Icon from "./Icon";
 import { Text } from "./NativeText";
 
@@ -37,13 +37,7 @@ export default function AppHeader({
       >
         <Icon name="ArrowLeft" size={20} color={colors.text} />
       </Pressable>
-      <View style={[styles.iconWrap, { backgroundColor: color }]}>
-        <Icon
-          name={iconKey}
-          size={16}
-          color={identityInk(color, colors.text, colors.textInv)}
-        />
-      </View>
+      <AppMark color={color} iconKey={iconKey} size={32} />
       <View style={styles.titleWrap}>
         <Text style={styles.title} numberOfLines={1}>
           {title}
@@ -71,13 +65,6 @@ const makeStyles = (colors: ThemeColors) =>
       paddingBottom: spacing[3],
       paddingHorizontal: spacing[4],
       paddingTop: spacing[3],
-    },
-    iconWrap: {
-      alignItems: "center",
-      borderRadius: radii.sm,
-      height: 32,
-      justifyContent: "center",
-      width: 32,
     },
     subtitle: { ...t("control"), color: colors.textFaint, marginTop: 2 },
     title: { ...t("bodyStrong"), color: colors.text },

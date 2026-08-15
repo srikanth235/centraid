@@ -82,13 +82,6 @@ export interface ConnectFlowResult {
   /** Every vault enrolled by the ticket; `vaultId` remains the initial focus. */
   vaultIds?: string[];
   displayLabel: string;
-  /** True only when `vaultId` is the gateway's auto-founded "Personal" vault
-   *  — i.e. a vault first run may safely rename to the owner's display name.
-   *  A reinstall over existing data has no "Personal" vault (it was already
-   *  renamed), and the fallback there is the oldest vault, which is "Shared".
-   *  Renaming THAT would rename everyone's shared vault, so the flag stays
-   *  false and the host skips the rename. */
-  ownerVault?: boolean;
 }
 
 /** Outcome of reading the local gateway's vaults (issue #603 W4). A transport

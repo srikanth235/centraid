@@ -29,11 +29,38 @@ async function foundDesktop(page: Page): Promise<void> {
     .getByTestId("first-run-choice")
     .getByRole("button", { name: /start fresh on this mac/iu })
     .click();
-  const name = page.getByRole("textbox", { name: "Your name" });
-  await name.waitFor({ state: "visible", timeout: 60_000 });
-  await name.fill("Offline Owner");
-  await page.getByRole("button", { name: "Continue" }).click();
+  // First run is now one connection act: the local path starts the embedded
+  // host and hands straight to Home. Profile identity belongs in Settings, so
+  // this fixture must not resurrect the deleted name/color gate.
+  const onboarding = page.getByTestId("onboarding-view");
+  await onboarding.waitFor({ state: "visible", timeout: 60_000 });
+  await onboarding.waitFor({ state: "detached", timeout: 60_000 });
   await waitForHome(page);
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async () => {
+          const settings = await window.CentraidApi.getSettings();
+          if (settings.activeGatewayKind !== "local" || !settings.gatewayUrl)
+            return false;
+          try {
+            const result = (await window.CentraidApi.listGatewayVaults({
+              gatewayId: "local",
+            })) as { vaults?: unknown };
+            return Array.isArray(result.vaults);
+          } catch {
+            return false;
+          }
+        }),
+      { timeout: 60_000 }
+    )
+    .toBe(true);
+  // This fixture exercises app writes after onboarding, not the background
+  // sample generators. Let the one-shot first-run fill finish so its gateway
+  // writes and replica catch-up cannot overlap the pending-write journey.
+  await expect(page.getByTestId("home-sample-note")).toBeVisible({
+    timeout: 60_000,
+  });
 }
 
 /**

@@ -58,6 +58,9 @@
   width: 36px;
   height: 36px;
   border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--text-soft);
   display: grid;
   place-items: center;
 }

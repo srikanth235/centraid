@@ -82,15 +82,10 @@
 }
 
 /* The identity mark. The ONLY place the tile spends the app's hue — never on
-   a control, and the radius is the 26% identity rule, set inline by
-   `iconChipRadius()` rather than guessed here. */
+   a control. `AppMark` owns the shared 26% radius and stroke treatment. */
 .mark {
-  block-size: 30px;
-  color: var(--text-inv);
-  display: grid;
-  flex: 0 0 auto;
-  inline-size: 30px;
-  place-items: center;
+  /* AppMark owns the chip geometry and solved single-tone ink. This class is
+     retained as the Home layout hook for existing selectors/tests. */
 }
 
 .name {
@@ -465,12 +460,7 @@
 }
 
 .moveMark {
-  block-size: 22px;
-  color: var(--text-inv);
-  display: grid;
-  flex: 0 0 auto;
-  inline-size: 22px;
-  place-items: center;
+  /* AppMark owns the chip geometry and solved single-tone ink. */
 }
 
 /* ── the sample offer ─────────────────────────────────────────────────────
@@ -684,6 +674,7 @@
    which is the box the tiles actually have to fit inside. */
 .section {
   container: home-springboard / inline-size;
+  inline-size: 100%;
   margin-block-end: var(--sp-5);
   min-inline-size: 0;
 }
@@ -702,24 +693,29 @@
 
    New tier rules go at the bottom, not the top. */
 
-/* Three columns once a tile would drop under ~200px. There was no tier here
-   before — the grid went straight from four to two at the compact step — which
-   left every pane between roughly 500 and 900px drawing four columns it could
-   not afford. A `medium` tile spans two of them, so at four columns in a 560px
-   pane a document tile gets 260px and a `small` one gets 125px, and 125px is
-   narrower than the word the heading has to fit. */
-@container home-springboard (max-width: 900px) {
+/* Handoff geometry: four columns above 1040px, three between 720–1040px. The
+   query is on the actual content pane, so the stem and any host inspector are
+   already deducted before a tier is chosen. */
+@container home-springboard (max-width: 1040px) {
   .springboard {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-/* Two columns, and large flattens to 2×1 — a 2×2 across half the screen is a
-   tile you scroll past rather than read. */
-@container home-springboard (max-width: 620px) {
+/* Two columns below 720px. Keeping the tier on the pane rather than the
+   viewport prevents a desktop window with a hidden/claimed stem from making
+   the grid choose the wrong composition. */
+@container home-springboard (max-width: 720px) {
+  .springboard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* At the narrower end of the two-column tier, large flattens to 2×1 — a 2×2
+   across half the screen is a tile you scroll past rather than read. */
+@container home-springboard (max-width: 540px) {
   .springboard {
     grid-auto-rows: minmax(152px, auto);
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .tile[data-size="large"] {
@@ -734,19 +730,5 @@
 
   .mosaicCell:nth-child(n + 5) {
     display: none;
-  }
-}
-
-/* One column. Below this a `medium` tile spanning two of two columns is the
-   whole row anyway, so the second column only exists to halve the `small`
-   tiles — and a 140px tile is a swatch, not a piece of an app. */
-@container home-springboard (max-width: 340px) {
-  .springboard {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .tile[data-size="medium"],
-  .tile[data-size="large"] {
-    grid-column: span 1;
   }
 }

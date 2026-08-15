@@ -86,7 +86,9 @@ const app = (id: string): UserAppMeta =>
 
 async function render(
   userApps: UserAppMeta[],
-  appsLoading = false
+  appsLoading = false,
+  autoSeedSample = false,
+  onAutoSeedStarted = vi.fn<() => void>()
 ): Promise<HTMLElement> {
   host = document.createElement("div");
   document.body.append(host);
@@ -94,7 +96,13 @@ async function render(
   await act(async () => {
     root!.render(
       <ShellActionsProvider value={makeActions()}>
-        <HomeRoute appsLoading={appsLoading} userApps={userApps} drafts={[]} />
+        <HomeRoute
+          appsLoading={appsLoading}
+          autoSeedSample={autoSeedSample}
+          drafts={[]}
+          onAutoSeedStarted={onAutoSeedStarted}
+          userApps={userApps}
+        />
       </ShellActionsProvider>
     );
     await flush();
@@ -195,6 +203,48 @@ describe("HomeRoute", () => {
     expect(el.querySelector('[data-testid="home-first-run"]')).toBeNull();
     expect(el.querySelector('[data-testid="home-tile"]')).toBeNull();
     expect(el.textContent).toContain("Reading your vault");
+  });
+
+  it("starts the sample week once when onboarding hands off to Home", async () => {
+    loadHomeSample.mockResolvedValue({ rows: 0, seedable: ["tasks"] });
+    seedHomeSample.mockResolvedValue(["tasks"]);
+    const onAutoSeedStarted = vi.fn<() => void>();
+    await render([app("tasks")], false, true, onAutoSeedStarted);
+    await act(async () => {
+      await flush();
+    });
+    expect(onAutoSeedStarted).toHaveBeenCalledOnce();
+    expect(seedHomeSample).toHaveBeenCalledWith(
+      ["tasks"],
+      expect.any(Function)
+    );
+  });
+
+  it("waits for the initial Home reads before auto-filling the sample week", async () => {
+    loadHomeSample.mockResolvedValue({ rows: 0, seedable: ["tasks"] });
+    seedHomeSample.mockResolvedValue(["tasks"]);
+    let settleTiles: (() => void) | undefined;
+    loadHomeTileContent.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          settleTiles = () => resolve({});
+        })
+    );
+
+    await render([app("tasks")], false, true);
+    await act(async () => {
+      await flush();
+    });
+    expect(seedHomeSample).not.toHaveBeenCalled();
+
+    await act(async () => {
+      settleTiles?.();
+      await flush();
+    });
+    expect(seedHomeSample).toHaveBeenCalledWith(
+      ["tasks"],
+      expect.any(Function)
+    );
   });
 
   it("never builds tile content before the brief has settled", async () => {

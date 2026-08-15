@@ -28,12 +28,12 @@ import styles from "./OnboardingScreen.module.css";
  *     browser tab — so it renders the ticket path directly, with no chooser
  *     and no probe.
  *
- * Both paths end at the same profile step (docs/platform-gating.md: presentation
- * branch, never an auth branch).
+ * Both paths hand off to the shell after one connection act. Profile details
+ * are optional Settings choices, not an onboarding gate.
  */
 export interface FirstRunGateProps {
-  /** Fresh path completion (identity + connected gateway) — boot writes the
-   *  profile + onboarding stamp and swaps in the app. */
+  /** Completion after the gateway connection — boot writes the stamp and
+   *  swaps in the app. */
   onOnboardingComplete: (
     input: OnboardingCompleteInput
   ) => Promise<void> | void;
