@@ -52,6 +52,7 @@ const FILES = [
   "tests/agent-e2e-mobile/flows/cold-start.mjs",
   "tests/agent-e2e-mobile/flows/home-loads.mjs",
   "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs",
+  "tests/agent-e2e-mobile/flows/places-seat.mjs",
   "tests/agent-e2e-mobile/flows/scroll-frames.mjs",
   "tests/agent-e2e-mobile/flows/template-gate.mjs",
   "tests/agent-e2e-mobile/lib/first-run.mjs",

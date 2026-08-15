@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { SourceSkips } from "@expo/fingerprint";
 import { describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import {
   EXPO_MODULES_JSI_MIN_XCODE,
@@ -297,7 +298,7 @@ EXTERNAL SOURCES:
   test("write refuses when L1–L3 dirty — unit path via recipe validators", async () => {
     // Simulate the --write gate: recipe errors present ⇒ no fingerprint write.
     // Uses a temp fingerprints file to prove we never touch it on L1 failure.
-    const dir = await mkdtemp(path.join(os.tmpdir(), "native-state-"));
+    const dir = await tempDir("native-state-");
     const fpPath = path.join(dir, "native-fingerprints.json");
     const before = { ios: "keep-me", android: "keep-me-too" };
     await writeFile(fpPath, JSON.stringify(before), "utf8");
@@ -319,7 +320,6 @@ EXTERNAL SOURCES:
     }
     const after = JSON.parse(await readFile(fpPath, "utf8"));
     expect(after).toEqual(before);
-    await rm(dir, { recursive: true, force: true });
   });
 
   test("ignores Xcode's uncommitted nested workspace metadata", () => {

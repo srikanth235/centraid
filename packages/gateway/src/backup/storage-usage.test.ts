@@ -190,11 +190,8 @@ describe("storage-usage", () => {
     now = 5000;
     const stale = await poller.usageFor(connectionId);
     expect(stale.providerReported?.backup?.bytesStored).toBe(500); // still the old number, served instantly
-    // Let the background refresh's microtasks/IO settle.
-    await new Promise((resolve) => {
-      setTimeout(resolve, 50);
-    });
-    expect(fake.requestCount()).toBe(2);
+    // Event-driven wait for the background refresh, not a fixed sleep.
+    await vi.waitFor(() => expect(fake.requestCount()).toBe(2));
   });
 
   test("a provider connection with no target yet reports null with no network call", async () => {

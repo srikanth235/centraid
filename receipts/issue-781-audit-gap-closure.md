@@ -12,21 +12,72 @@ Checklist below stays unchecked until the last category is fixed or split.
 - [ ] This issue closes only when no matrix cell, gap, or skip cites it any
       longer.
 
-Neither is checked, and neither is claimed. Wave 1 (#782) re-homed the
-citations; this wave closes **no category outright**. Both sections below are
-sub-items of the single **"Hygiene ratchets"** bullet, and that bullet names
-five things: the two count budgets (done here), the Android probe omission
-(done here), test-lint scope excluding `.test.mjs` (untouched — raw `mkdtemp`
-in 11 files and `Math.random()` in the pairing harness are still unlinted), 19
-nonzero fixed sleeps still uninventoried, and `packages/model-runtime` still
-absent from every `ci.yml` path filter. Three of five remain.
+Neither is checked, and neither is claimed: two items remain open under this
+issue after wave 3 (the device-native airplane-mode offline journey, and the
+wall-clock + desktop/web experience-budget reseeds), and citations to #781
+remain in the tree for them. This receipt accumulates wave by wave; each
+wave's paragraph below describes the state AT THAT WAVE, so the earlier
+paragraphs read as history, not as the current state — the current state is
+the Wave 3 table.
 
-Every one of #781's eleven categories is therefore still open: nightly signal,
-sharing-plane ownership, unfloored production code, missing matrix presence,
-the app-admission contract, the deterministic-env test home, stale ratchets,
-gates still outside CI, the #587 D21 rulings, hygiene ratchets (partially
-closed here), and the env-gated live/hardware lanes. Later waves on this branch
-work several of them; none of them closes with this commit.
+Wave 2a (the first two "What changed" sections) closed no category outright:
+both its sections are sub-items of the single **"Hygiene ratchets"** bullet
+(the two count budgets and the Android probe omission), leaving three of that
+bullet's five items open at the time — `.test.mjs` lint scope, the fixed-sleep
+inventory, and the `ci.yml` path filter. Wave 2b landed the path filter; wave
+3 landed the other two.
+
+**Wave 3** (the sections marked "Wave 3" below) works every remaining
+category to its honest terminal state — fixed here, or split into the
+dedicated issue #781's own acceptance criteria prescribe:
+
+- **Nightly signal** — triaged to named root causes with run-id evidence; the
+  report-side dishonesty (15 permanently-grey accessibility cells, flow ×
+  platform evidence collisions, unmapped evidence owners) is FIXED in tree;
+  the two product regressions are SPLIT (#792 Memories idle churn; #676
+  carries the mobile app-boot diagnosis, #675 the now-self-triaging companion
+  lane).
+- **Sharing plane ownership** — FIXED: the mock gateway serves the Household
+  roster/owner-scope reads, the deleted 2.12 journey is restored and executed
+  in real Electron, the roster/scope routes gain their first direct tests, and
+  the no-new-surface decision is recorded under Decisions.
+- **Unfloored production code** — FIXED: `packages/blueprints/automations`
+  tested (49 tests) and floored 90/69; the known-gap allowlist row is retired.
+- **Missing matrix presence** — FIXED: the Places Maestro flow exists and 23
+  flows register everything previously unmapped.
+- **App admission contract** — FIXED: the template is rebuilt (deleted by
+  #767's docs cleanup, not never-written), Docs and Locker have executed
+  journeys on both shells, People joins the record-only replica journey, and
+  the #717 offline write/reconnect journey finally exists; the device-native
+  airplane-mode variant stays under #781.
+- **Deterministic-env test home** — FIXED: `tests/env-red.json` + gate.
+- **Stale ratchets** — PARTIAL: the mobile reachability allowlist is
+  tightened 393 → 5 files; the wall-clock, coverage-floor, and desktop/web
+  experience-budget reseeds stay under #781 with the reseed-from-CI-artifacts
+  plan under Decisions. A full in-container coverage run was attempted for the
+  floors and came back 13,203 green / 3 red — all three container-environmental
+  (this container exports IS_SANDBOX=yes, which two launch tests inherit from
+  real process.env; the third needs the sqlite3 CLI the container lacks) — so
+  no honest summary was produced and the floors reseed from CI like the rest.
+- **Gates still outside CI** — FIXED: `design:gallery` gets its path-gated
+  lane (with the one-time Linux baseline bootstrap documented in the job);
+  `check:mobile-native-state`'s delegation to `mobile-smoke` is verified
+  complete and now documented rather than tracked.
+- **#587 D21 rulings** — FIXED here / SPLIT for devices: web bundle weight
+  measured and budgeted, the web axe lane exists and EXECUTED green in a real
+  browser; the device-lane remainder is #791.
+- **Hygiene ratchets** — FIXED: `.test.mjs` in test-lint scope, the pairing
+  harness off `Math.random()`, and the fixed-sleep inventory (38 sites,
+  down-only) close the last two items.
+- **Env-gated live/hardware lanes** — SPLIT to #790, the dedicated tracker
+  the acceptance criteria call for; the guard census backing it is
+  `tests/env-red.json`.
+
+Product defects found by this wave were filed, not fixed here: #792 (Memories
+idle churn), #793 (Collections place tile), #794 (Docs body paint + CORS),
+#795 (first-open offline write loss), #796 (Household route crash on a
+malformed gateway answer). #787 was fixed in its own prior commit with its own
+receipt.
 
 **Wave 2b** (the sections marked "Wave 2b" below) advances four of those
 categories without closing any: sharing-plane ownership gains its first three
@@ -461,6 +512,351 @@ tests/quality/classification-ratchet.json
 vitest.config.ts
 ```
 
+
+### Wave 3 — nightly signal (#781 "Nightly signal")
+
+Triage ran from real CI evidence (job logs of runs 31778386015, 31676356502,
+31299130539; artifacts were unreachable through the container proxy and every
+diagnosis says so). Outcomes:
+
+- **Mobile nightly (#676)** — not infra: the app never reaches onboarding/Home
+  on either platform, and the diagnosis (compat wall over the pre-onboarding
+  pairing screen, dev-overlay tap theft, input desync) already exists on the
+  unmerged branch `codex/ios-nightly-e2e`. The cancelled nights are the iOS
+  job's 60-minute ceiling on cache misses; `e2e.yml` raises it to 90 in this
+  wave, and the full diagnosis is posted on #676. The product fixes stay with
+  that issue — a testing branch does not merge someone else's unproven app
+  fixes.
+- **quality-performance-scale** — a real product regression, split to #792:
+  `rebuildMemories` rewrites 48,000 rows on every idle sweep tick with no
+  fingerprint short-circuit, failing the G2 no-backfill law identically three
+  nights running. The scale test is correct and untouched.
+- **The 15 grey `*:accessibility` cells** — fixed in tree as a *named,
+  budgeted absence*: `scripts/test-report/expected-grey.mjs` enumerates
+  exactly those cell ids with the #781 citation; an unregistered grey still
+  reds, real evidence always wins over the exemption, and the exemption
+  **voids itself at runtime** the night an accessibility lane-start marker
+  first appears (proven by test). `expectedLaneMarker` stops mapping tier
+  `accessibility` to `vitest`, which was a lie.
+- **Flow × platform evidence collision** — fixed structurally in
+  `tests/agent-e2e-shared/harness.mjs` (the writers live there, not in the
+  mobile lib as QUALITY.md guessed): `writeFlowVerdict` and
+  `recordQualityResult` write platform-suffixed paths when `MAESTRO_PLATFORM`
+  is set, readers merge per-owner evidence **worst-status-wins**
+  (`worstEvidenceByOwner`) so a green platform can never mask a red one, trend
+  series key per platform, and drift budgets read platform-suffixed history.
+  Platform-less lanes keep byte-identical paths. QUALITY.md's Open entry moves
+  to Resolved.
+- **Companion lane (#675)** — 21+ consecutive identical scheduled failures
+  (deterministic, not the flake it was filed as); the flow now prints the
+  popup's `#notice` pairing error, stored worker state, and console tail into
+  the job log on timeout, so the next run self-triages. Findings posted on
+  #675 with the local-relay/live-relay split recommendation.
+- **Unmapped evidence owners** — the nightly report's honest `unmapped
+  evidence` reds are closed by registration, not by silencing: 24 flows are
+  added to `tests/matrix.json` (below), including the five desktop specs, the
+  web pending-overlay spec, and the cold-start/scroll-frames probes whose
+  evidence was arriving unmapped every night.
+- `scripts/test-report/generate.test.mjs` grew past the 625-line repo-hygiene
+  limit with the new adversarial tests and is split: the #781 expected-grey
+  and platform-series describes move to
+  `scripts/test-report/generate-nightly-semantics.test.mjs` (6 tests), same
+  harness header.
+
+### Wave 3 — sharing plane finished (#781 "Sharing plane ownership")
+
+- **The mock gateway now serves the sharing plane.**
+  `apps/desktop/tests/e2e/fixtures.ts` (+344 lines, additive) mirrors nine
+  real route families — owners, devices, scopes, links + receive-setting,
+  edges, pending-edge answers, commons invitations, commons recovery, and
+  device-work status — each shape-checked against the named real handler. The
+  device-work route is the smoking gun for why journey 2.12 died: the mock's
+  absorb-all `{}` fallthrough met `getGatewayDeviceWorkStatus`'s unguarded
+  `out.vaults` and the whole Household route crashed into the error boundary
+  (reproduced live; the client defect is #796).
+- **The Household journey is restored and EXECUTED in real Electron**
+  (`apps/desktop/tests/e2e/household.spec.ts`, tests 2.12/2.13 continuing the
+  deleted journey's numbering; the original was deleted by #762's commit
+  `dee55397f`): roster groups, owned-vault scopes, the sharing card with a
+  parked ask consumed exactly once, and 2.13's seat law — another person's
+  seat changes presentation (attribution) while exposing the identical verb
+  set, authorization living in which rows the gateway returned. 2 passed in
+  ~8s under xvfb; the full 18-test onboarding-home spec re-ran green against
+  the extended mock as a regression canary.
+- **The roster/owner-scope read routes had zero direct tests**; they now have
+  11 (`owners-routes.test.ts` 5 — including a byte-identical 404 for a
+  housemate's id vs an invented one, so existence does not leak;
+  `scopes-routes.test.ts` 6 — exact wire body, owned ∩ mounted in registry
+  order, `installed` only when asked, 405 on writes). Demonstrated red both:
+  dropping the `visible` filter and dropping the owned-intersection each
+  failed the named tests; both restored byte-identical.
+- **No sharing surface row** — the decision and its grounds are under
+  Decisions.
+
+### Wave 3 — blueprints/automations tested and floored (#781 "Unfloored production code")
+
+Census first: of 28 bundle dirs, 5 are GENERATED from `packages/model-runtime`
+(banner-verified) and are carried by the bundle-drift check + upstream source
+floor — no per-file tests written for generated output. The **23
+hand-authored** connector/enricher handlers get 49 tests in four new files
+over a copy-adapted `handler-harness.ts` (blueprints must not import
+model-runtime): `outbox-send.test.ts` (10 — byte-exact RFC 2822 / RFC 5545
+staged artifacts, recipient dedup, the 10-per-run bound, refusal preserving
+earlier staged state), `pull-connectors.test.ts` + `pull-connectors-graph.test.ts` (10 + 15
+declared / 33 run — the shared 401 refusal and per-connector
+cursor/watermark/410-reset/tombstone contracts; one file split in two at the
+Microsoft Graph boundary purely for the repo's 625-line ceiling, which the
+commit hook enforced on the original 1,004-line file), `release-notes-drafter.test.ts` (6). No mocks anywhere — outcome
+assertions against the recording harness. Zero production-handler changes.
+
+Wiring: `packages/blueprints/vitest.config.ts` + `tsconfig.test.json` include
+the tree; root `vitest.config.ts` instruments
+`packages/blueprints/automations/**/handler.js` with the five generated
+bundles coverage-excluded by id. Measured 92.64 lines / 71.76 branches;
+`tests/coverage-floors.json` seeds `90/69` with provenance in its
+`approvedDeviation`. The governance allowlist's known-gap row is retired.
+**Correction found by this wave's audit — twice, ending in a gate fix.**
+Round 1: the slice demonstrated the reachability directive firing without the
+floor row, but that red predated the root agent's matrix registration — the
+directive accepts floor OR matrix owner, so after
+`connector-handler-contract`/`connector-outbox-artifact` landed, removing the
+floor row leaves the directive green. The claim that the directive enforces
+the floor is withdrawn. Round 2 then refuted the replacement claim too, and
+found a real pre-existing enforcement hole: `ratchet-floors` waived **every**
+floor decrease and deletion whenever the file's `approvedDeviation` was merely
+non-empty — and that field is a permanent provenance ledger, non-empty on
+every ratcheted file forever, so the coverage-floor ratchet could never fire
+as implemented (its own header's "cannot bypass the ratchet by deleting the
+key" did not hold; a control deletion of the base-present
+`packages/vault/src/**` floor passed green). **This wave fixes the gate**
+(`scripts/test-report/ratchet-floors.mjs`): a decrease or deletion is waived
+only when the touched file's `approvedDeviation` **changed** in the same
+change set (`deviationChanged`), for coverage floors, mutation floors, and
+perf budgets alike; the CLI now says when it waived instead of printing "no
+decreases", and the failure remedy says EXTEND the ledger, not "set" it. Four
+new adversarial unit tests pin unchanged-ledger-never-waives across all three
+families (34 ratchet tests green), and the CLI red was demonstrated: deleting
+the vault floor with the ledger unchanged vs base fails with `coverage floor
+scope "packages/vault/src/**" removed`; the same deletion with a changed
+ledger passes with an explicit `decrease(s) waived by a CHANGED
+approvedDeviation` line. Honest residual granularity: the waiver is file-level
+— a branch that legitimately extends the ledger (as this one does) could
+smuggle an unrelated decrease in the same file past the gate; per-key waivers
+would close that and are left as a #781 note rather than designed here. The
+new `handler.js` floor row itself is invisible to any vs-base ratchet until it
+merges (the base has no such key); its pre-merge guard is this receipt and
+review. Demonstrated red on the
+tests holds: removing gmail-send's sender-exclusion and github-pull's
+watermark observe each failed the named tests; restored.
+
+### Wave 3 — app admission contract (#781 "App admission contract")
+
+- **The template existed and was deleted**: #725 delivered
+  `docs/plans/app-scenario-layer-template.md`, and #767's docs cleanup retired
+  `docs/plans/` wholesale without re-homing it. It is rebuilt as a state doc
+  at `docs/app-scenario-layer-template.md` and instantiated for Docs at
+  `docs/apps/docs-scenarios.md` (which also records the app's known gaps,
+  including #794).
+- **Docs journeys, both shells, executed**: staged upload through the visible
+  control, reload, byte-exact round-trip via the transport, exactly one
+  document. Body *paint* is deliberately not asserted because it is broken in
+  the product (#794) — the specs say so in comments rather than painting
+  around it.
+- **Locker**: desktop custodian journey (setup wall, item survives relock
+  across reload); on web the honest journey is the **seat refusal** — Locker
+  declares `disabledOn: ["viewer"]`, so the spec asserts the refusal wall
+  copy and that no lock screen mounts.
+- **People joins the record-only replica journey** on both shells
+  (pending-overlay specs): offline add through the product modal, projected
+  row survives the offline reload. The specs carry an online write-readiness
+  probe first — without it the run reproduced #795's first-open offline write
+  loss deterministically.
+- **#717 offline write/reconnect exists at last**
+  (`apps/web/tests/e2e/offline-reconnect.spec.ts`, executed): offline write →
+  queued chip → offline reload restores from the outbox → reconnect settles
+  exactly once in both the UI and the canonical read, re-verified after a
+  further fresh reload. TESTING.md's two false "#781 (originally #717)"
+  assertions now point at the real owner; the device-native airplane-mode
+  variant stays under #781 (device + host-network control).
+- `apps/desktop/tests/e2e/SCENARIOS.md` re-measured (66 tests / eleven spec
+  files) with Household/Docs/Locker rows added.
+
+### Wave 3 — D21, CI lanes, allowlist (#781 "#587 D21 rulings" / "Gates still outside CI" / "Stale ratchets")
+
+- **Web bundle weight measured and budgeted**: `apps/web/dist` ships
+  10,211,472 B across 72 files, largest chunk 1,995,618 B (the Iroh WASM —
+  which ships twice; the provenance note marks that as the must-retighten
+  cut). `tests/experience-budgets/web.json` seeds `maxTotalBytes: 11010048` /
+  `maxLargestChunkBytes: 2200000` mirroring the desktop/mobile headroom;
+  `scripts/perf/app-weight.mjs` gains the web surface and
+  `extraDebugSuffixes: [".br", ".gz"]` so precompressed twins of
+  already-weighed bytes never triple-count. Red demonstrated; `test:ratchet`
+  holds the keys tighten-only from here. The `web-build` CI job weighs the
+  bundle after the smoke.
+- **The web accessibility lane exists and EXECUTED**:
+  `apps/web/tests/e2e/accessibility.spec.ts` (Playwright + axe, WCAG 2.0/2.1
+  A+AA) passes on the real browser against the cold connect screen and the
+  connected Home shell — zero violations today, falsifiability proven against
+  a seeded broken page. One devDependency added (`@axe-core/playwright`,
+  apps/web only — see Decisions). The device-lane remainder is #791.
+- **`design:gallery` gets its CI lane**: a path-gated `design-gallery` job in
+  `ci.yml` (new `design` filter, pinned-browser install, failure artifact,
+  wired into `check.needs`). The job's comment documents the measured
+  one-time bootstrap: all 22 committed baselines are darwin-rendered and diff
+  1.93–7.26% under Linux Chromium, so the first run is red until the Linux
+  baseline decision is made (see Decisions).
+- **`check:mobile-native-state` delegation verified complete**: CI's
+  `mobile-smoke` runs the identical command on a strictly wider path filter
+  (root-dependency drift triggers it where the local `apps/mobile/**` filter
+  cannot — #587 E22). The #782 exclusion from `gates` was right; TESTING.md
+  now documents the delegation instead of tracking it.
+- **Mobile reachability allowlist tightened 393 → 5**: the blanket
+  `apps/mobile` row (388 src files + 5 non-src) is replaced by two narrow
+  rows (`apps/mobile/modules`, `apps/mobile/plugins` — device-host seams the
+  node/jsdom coverage run cannot instrument, exercised by mobile-smoke and
+  the nightlies), because the src tree now holds three matrix flow owners. If
+  mobile's matrix flows ever disappear, the directive fires instead of
+  staying silent.
+
+### Wave 3 — hygiene finish (#781 "Hygiene ratchets")
+
+- **`.test.mjs` and the e2e harnesses join test-lint scope**: the
+  `no-restricted-properties`/`no-restricted-imports` seam rules in
+  `oxlint.config.ts` (`VITEST_TEST_FILES`) now cover `**/*.test.mjs` and
+  `tests/agent-e2e-*/**/*.mjs` — a widening-only edit to a protected config
+  (waivered in the commit message). Four files converted to the real
+  `tempDir()` seam (including `verify-native-state.test.mjs`, which the audit
+  had mis-filed as node:test); seven genuine node:test-lane files carry
+  justified suppressions (the kit registers vitest hooks at import and throws
+  there — the repo's documented alternative, now each with the required
+  tracker).
+- **The pairing harness is off `Math.random()`**: `crypto.randomInt(30000,
+  50000)` for the isolation-probe ports, with the reasoning at the site —
+  seeding would be wrong here, because concurrent runs sharing a seed would
+  collide on the same port, recreating the exact failure the randomness
+  prevents.
+- **Fixed sleeps are inventoried and budgeted**:
+  `scripts/test-report/sleep-inventory.mjs` + `tests/sleep-inventory.json`,
+  38 sites in 26 files, per-file counts (a file growing inside a slack total
+  still fails), down-only both directions, 16 unit tests. Three sleeps were
+  fixed outright rather than budgeted (deferred gate, `vi.waitFor`, fake
+  clock) — the seed would have been 41. Watchdog deadlines, 0ms yields, and
+  non-literal delays are deliberately out of scope, each exclusion proven by
+  a unit test.
+
+### Wave 3 — root-agent integration seams
+
+- **`tests/matrix.json`**: 24 flows registered (the sharing journey + route
+  reads, Docs/Locker/offline journeys, connector contracts, the three
+  app-weight budgets, web accessibility, the Places Maestro flow, and the
+  previously-unmapped nightly owners). `desktop.offline` upgrades skip →
+  partial because `pending-overlay.spec.ts` now genuinely owns it — the one
+  governed-cell change, covered by the approved deviation under Decisions.
+  `connector-handler-contract` (10) and `connector-handler-contract-graph`
+  (15) carry static declaration counts (the validator counts declarations;
+  `it.each` expands to 33 at run time), one flow per file after the
+  625-line split.
+- **`package.json`**: `test:env-red` and `test:sleep-inventory` scripts, wired
+  into `check:push` beside their siblings (`test:env-red` after
+  `test:quarantine`; `test:sleep-inventory` after `test:hygiene-ratchet`),
+  plus the `test:accessibility:web` convenience script. The CI `gates` job
+  runs both new gates at the matching positions.
+- **`tests/skips.json`**: the eleven env-gated rig-lane skips (launchd,
+  Clawgnition interop, byte-plane, native relay, disk-full, live failover,
+  10GiB restore) re-home 781 → 790 with split provenance in each reason, per
+  #790's charter; all six `tests/env-red.json` sites re-home the same way,
+  and #790/#791 register as open in `trackingIssues`. Plus the line-drift
+  refresh (`--write`; the assemble-runtime entry moved one line).
+- **`tests/quality/classification-ratchet.json`**: fingerprint refresh for
+  the matrix additions + the one cell upgrade; deviation quoted under
+  Decisions.
+- **QUALITY.md**: the flow × platform entry moves to Resolved; six new Open
+  observations record the small found-not-fixed items (unlinted photos flows,
+  raw coordinate shelf names, the vCard birthday shape and gcal-send
+  nondeterminism, unwired e2e tsconfigs, the shell palette click race, the
+  People pending-marker gap).
+
+### Files changed in wave 3
+
+```text
+.github/workflows/ci.yml
+.github/workflows/e2e.yml
+.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/allowlist.txt
+QUALITY.md
+TESTING.md
+apps/desktop/tests/e2e/SCENARIOS.md
+apps/desktop/tests/e2e/docs-drive.spec.ts
+apps/desktop/tests/e2e/fixtures.ts
+apps/desktop/tests/e2e/household.spec.ts
+apps/desktop/tests/e2e/locker.spec.ts
+apps/desktop/tests/e2e/pending-overlay.spec.ts
+apps/mobile/scripts/android-emulator-e2e.sh
+apps/mobile/scripts/verify-native-state.test.mjs
+apps/web/package.json
+apps/web/tests/e2e/accessibility.spec.ts
+apps/web/tests/e2e/docs-drive.spec.ts
+apps/web/tests/e2e/locker-seat.spec.ts
+apps/web/tests/e2e/offline-reconnect.spec.ts
+apps/web/tests/e2e/pending-overlay.spec.ts
+bun.lock
+docs/app-scenario-layer-template.md
+docs/apps/docs-scenarios.md
+knip.json
+oxlint.config.ts
+package.json
+packages/agent-runtime/src/models/catalog-warmer.test.ts
+packages/app-engine/src/conversation/history.test.ts
+packages/blueprints/automations/handler-harness.ts
+packages/blueprints/automations/outbox-send.test.ts
+packages/blueprints/automations/pull-connectors-graph.test.ts
+packages/blueprints/automations/pull-connectors.test.ts
+packages/blueprints/automations/release-notes-drafter.test.ts
+packages/blueprints/tsconfig.test.json
+packages/blueprints/vitest.config.ts
+packages/gateway/src/backup/storage-usage.test.ts
+packages/gateway/src/routes/owners-routes.test.ts
+packages/gateway/src/routes/scopes-routes.test.ts
+receipts/issue-781-audit-gap-closure.md
+scripts/check-share-reachability.test.mjs
+scripts/gateway-npm/native-platforms.test.mjs
+scripts/gateway-package/assemble-runtime.test.mjs
+scripts/lint-css-classes.test.mjs
+scripts/lint-e2e-flows.mjs
+scripts/lint-law-registry.test.mjs
+scripts/lint-protocol-routes.test.mjs
+scripts/lint-tsconfigs.test.mjs
+scripts/perf/app-weight.mjs
+scripts/test-report/diff-coverage-run.test.mjs
+scripts/test-report/env-red-inventory.mjs
+scripts/test-report/env-red-inventory.test.mjs
+scripts/test-report/expected-grey.mjs
+scripts/test-report/generate-nightly-semantics.test.mjs
+scripts/test-report/generate.mjs
+scripts/test-report/generate.test.mjs
+scripts/test-report/ratchet-floors.mjs
+scripts/test-report/ratchet-floors.test.mjs
+scripts/test-report/report-depth-signals.mjs
+scripts/test-report/report-signals.mjs
+scripts/test-report/report-signals.test.mjs
+scripts/test-report/sleep-inventory.mjs
+scripts/test-report/sleep-inventory.test.mjs
+tests/agent-e2e-mobile/flows/places-seat.md
+tests/agent-e2e-mobile/flows/places-seat.mjs
+tests/agent-e2e-mobile/lib/frame-report.test.mjs
+tests/agent-e2e-pairing/flows/extension-companion.mjs
+tests/agent-e2e-pairing/lib/docker-harness.mjs
+tests/agent-e2e-shared/harness.mjs
+tests/agent-e2e-shared/harness.test.mjs
+tests/coverage-floors.json
+tests/env-red.json
+tests/experience-budgets/web.json
+tests/matrix.json
+tests/quality/classification-ratchet.json
+tests/skips.json
+tests/sleep-inventory.json
+vitest.config.ts
+```
+
 ## Out of scope
 
 - The remaining #781 categories listed under Checklist above. They are separate
@@ -522,6 +918,66 @@ receipt claiming documentation that did not exist), and needs a dedicated bug
 issue. The second reported defect (Null Island) was refuted by that same
 adjudication and is withdrawn above — a testing-honesty receipt does not get to
 keep an exciting bug claim its own auditor disproved.
+
+**Wave 3: matrix additions and one cell upgrade are a receipt-approved
+deviation.** The governed classification fingerprint moved; the approved
+deviation reads, verbatim:
+
+#781 wave 3 registers 24 new flows (23 plus connector-handler-contract-graph after the pull-connectors file split for the 625-line ceiling) in tests/matrix.json, upgrades exactly one governed cell (desktop.offline, skip -> partial, now genuinely owned by apps/desktop/tests/e2e/pending-overlay.spec.ts), registers the two split trackers #790 and #791 as open in trackingIssues, and re-homes the eleven env-gated rig-lane skips plus all six env-red guard sites from #781 to #790 per the split; no other law, flow, grade, owner, or quality changed, and nothing was downgraded.
+
+**Wave 3: no sharing surface row in the matrix.** Surfaces are
+workspace-aligned evidence homes: the grading machinery derives every
+mechanical adversary from the owner file's path (coverage scopes, mutation
+seeds), and a "sharing" surface owns no workspace, no floor scope, no seed —
+its 11 cells would be graded from evidence that already backs
+vault-core/gateway/replica-sync cells, adding labels and six-plus permanent
+amber skips without one new adversary. What "no matrix surface" actually
+pointed at — zero journey evidence anywhere — is fixed by the flow rows this
+wave adds. Precedent: #587 D21 rejected exactly this per-surface duplication
+shape for supply chain.
+
+**Wave 3: one dependency was added without prior approval, flagged for
+review.** `@axe-core/playwright` (apps/web devDependency, 2-package lockfile
+diff, MPL-2.0, not on dependency-review's deny list). Without it the axe lane
+cannot exist; with it the lane EXECUTED green locally rather than arriving as
+untested YAML. If this is unwanted, reverting `apps/web/package.json` +
+`bun.lock` + the spec is a clean three-file removal.
+
+**Wave 3: the design-gallery lane ships red-until-bootstrapped, and says so.**
+All 22 committed baselines are darwin-rendered; Linux Chromium diffs them
+1.93–7.26% against the 1% ceiling (measured in-container with the pinned
+browser). The alternatives were: silently skip pixel diffs on Linux (weakens
+the gate), regenerate baselines from this container (makes an un-reviewed
+renderer canonical), or ship the lane with the bootstrap decision documented
+in the job comment for the maintainer — the first run's failure artifact IS
+the review payload. The third is chosen. Until the bootstrap, the lane only
+runs on design-path changes, so unrelated PRs are unaffected.
+
+**Wave 3: `mobile-e2e-ios` timeout 60 → 90 rather than trimming journeys.**
+Same reasoning as the Android raise in wave 2a: four nightlies were cancelled
+at exactly the 60-minute ceiling on cache misses, and a cancelled job is a red
+that cannot be attributed. The real fix for the red flows is #676's app-boot
+diagnosis; the timeout raise only stops cancellation from masquerading as
+flake.
+
+**Wave 3: the stale-ratchet reseeds are NOT done here, deliberately.** Suite
+wall clock and journey timings measured in this container (4 threads, shared
+CPU) would seed ceilings CI runners cannot honour — a dishonest seed in either
+direction. Coverage percentages ARE machine-independent, and a full
+in-container run was attempted — but it came back with 3
+container-environmental failures (IS_SANDBOX env leak into two launch tests;
+missing sqlite3 CLI), so no coverage summary was emitted and seeding from a
+red run would be dishonest. All three reseeds therefore share one plan: reseed
+from the first green CI run's own artifacts after this PR merges (CI `verify`
+computes coverage on every run). This is the one PARTIAL category of wave 3,
+and the two test-hermeticity findings from the attempted run are recorded in
+QUALITY.md.
+
+**Wave 3: product regressions found by triage are split, not patched.**
+#792 (Memories idle churn) is a product fix with a correct failing test
+already in place; patching it inside a testing PR would couple an enrichment
+behaviour change to a 70-file testing diff. The same discipline as #787 —
+which got its own commit and receipt — and #793–#796.
 
 ## Verification
 
@@ -608,6 +1064,42 @@ checks) was produced by perturbing the named file, observing the named failure,
 and restoring the source; `git diff` on every perturbed production file is
 empty in the final tree except the deliberate 3-line
 `CENTRAID_AUTOMATION_BUNDLE_ROOT` seam.
+
+### Wave 3 verification
+
+```bash
+bun run test:matrix
+# matrix: 15 surfaces × 11 dimensions, 126 canonical flows
+# matrix: 135 owned cells graded from evidence (run evidence: absent), 30 inventoried skips
+bun run lint:law-registry       # 25 laws, 44 tag sites
+bun run test:env-red            # 6 inventoried environment-guard sites, budget 6
+bun run test:sleep-inventory    # 38 sites in 26 files, budget 38
+bun run test:hygiene-ratchet    # at budget: 413 / 845
+bun run test:ratchet            # floors ok; skips 30/30
+bun run lint:quality-knobs      # no silent widening (with this receipt's deviation)
+bun run lint:e2e-flows          # 74 Maestro steps across 8 files
+bun run lint:workflow-pins      # 19 workflows clean
+bun run lint && bun run format:check && bun run knip
+bash .governance/run.sh coverage-scope-reachability
+```
+
+Executed journey evidence from the slices (each run in this container):
+desktop Playwright 66/66 across eleven spec files (xvfb, real Electron,
+includes the restored Household 2.12/2.13, Docs, Locker, pending-overlay with
+People); web Playwright 21/21 (includes Docs, Locker seat refusal,
+offline-reconnect, and the axe accessibility pair on the real browser);
+blueprints/automations 49 tests green ×2 with measured coverage 92.64/71.76;
+report-lane 21 files / 310 tests (before the generate split; 6 of those now
+live in `generate-nightly-semantics.test.mjs`, re-run green post-split);
+`GOVERNANCE_SHELL_FULL=1 bun run test:governance-shell` green on the tightened
+allowlist. Demonstrated-red evidence per slice is quoted in each Wave 3
+section above; every perturbed production file was restored byte-identical.
+
+Environment caveats stated where they bind: Maestro device execution
+(places-seat) is static-validated only (`bash -n`, `node --check`,
+`lint:e2e-flows`); the design-gallery lane is red-until-bootstrapped by
+design; CI artifacts were unreachable through the container proxy during
+nightly triage, so those diagnoses cite job logs only.
 
 ## Audit
 
@@ -898,6 +1390,333 @@ Checks 2 and 3 were re-checked against the updated text and are unaffected: no
 items remain" arithmetic are untouched and still verify, and the Checklist
 still mirrors #781's two acceptance criteria verbatim.
 
+**Wave 3 adjudication.** Fresh-context audit of the 73-file staged diff
+(+7368/−183) against the sections marked "Wave 3", the rewritten Checklist
+narrative, issue #781, and issues #790–#796. The working tree is byte-identical
+to the index (73 porcelain entries, all staged; no unstaged or untracked
+deltas), so every command below judged the index directly. The earlier waves'
+sections and recorded audit rounds were re-read only for contradiction; the
+new framing paragraph ("each wave's paragraph below describes the state AT
+THAT WAVE") resolves them cleanly and nothing in the wave-3 edits contradicts
+a prior round's finding. **Verdict: REFUTED / PASS / REFUTED.**
+
+**Check 1 — the Wave 3 sections + table faithfully describe the staged diff:
+REFUTED**, on one substantive false claim plus two accounting infidelities.
+
+- **The blueprints-floor backstop claim is false on the staged tree.** The
+  "blueprints/automations tested and floored" section says "the directive now
+  *expects* the floor and fails without it (demonstrated)", and the staged
+  allowlist comment repeats it ("the directive expects their floor scope in
+  tests/coverage-floors.json"). Reproduced against the index: deleting the
+  `packages/blueprints/automations/**/handler.js` row from
+  `tests/coverage-floors.json` leaves `bash .governance/run.sh
+  coverage-scope-reachability` **green**. Cause, read from `check.sh`: the
+  classification is allowlisted-OR-floored-OR-matrix-owned, and this same
+  wave registered two matrix flows owned inside the tree
+  (`connector-handler-contract` → `pull-connectors.test.ts`,
+  `connector-outbox-artifact` → `outbox-send.test.ts`), so the owner arm
+  absorbs the missing floor. The slice's red proof presumably predates the
+  root agent's matrix registrations — a cross-slice interaction — but as
+  staged, retiring the known-gap allowlist row bought no directive backstop:
+  the floor can be silently deleted and only `test:ratchet`'s
+  no-decrease-vs-origin check would notice, which is a different, weaker
+  property than the one claimed. (The floor-must-appear-in-`coverageInclude`
+  direction was not re-tested here; the wave-2b round proved that arm.)
+  Floors file restored via `git checkout -- tests/coverage-floors.json`;
+  `git diff` empty.
+- **The "Files changed in wave 3" block is one path short.** It lists 72
+  paths; `git diff --cached --name-only | sort` returns 73. The omission is
+  `receipts/issue-781-audit-gap-closure.md` itself, which is staged and which
+  both prior waves' blocks did list. Sorted diff shows no other minus or plus.
+- **The SPLIT rows outran the tree on citations.** Issues #790–#796 all exist
+  and their bodies match the receipt's descriptions (verified each). But no
+  citation followed any split: `tests/env-red.json` — created by this very
+  wave — cites `"issue": 781` on all 6 sites, all 30 `tests/skips.json`
+  entries (including the ~17 env-gated-lane skips #790 enumerates: launchd
+  service install, native relay, disk-full, byte-plane-over-HTTP, Clawgnition,
+  live failover, perf/10GiB opt-ins, reflink, fsync) still cite 781, and
+  `tests/` contains zero references to #790 or #791 — while #790's own body
+  states "the `tests/skips.json` / `tests/env-red.json` citations re-home
+  here", and the new `expected-grey.mjs` says the accessibility lane is
+  "tracked under #781" where the D21 row says the device-lane remainder is
+  #791. The trackers are real; the "honest terminal state … #781's own
+  acceptance criteria prescribe" framing is not, because those criteria
+  include the citations following the split.
+
+Everything else under check 1 was verified and holds. `tests/matrix.json`
+parsed HEAD vs index: exactly the 23 named flows added (ids listed in the
+deviation all present), zero flows removed or changed, `laws` byte-identical
+(25), `gaps`/`trackingIssues`/`qualities`/`dimensions`/`appEngines`
+identical, and exactly one assessment change — `desktop.offline` skip →
+partial with the new `cellOwners` entry (`pending-overlay.spec.ts`, tier e2e)
+and rewritten note. `connector-handler-contract` `minimumTests` 25 matches
+the receipt's static-declaration note. Nothing weakened anywhere:
+`tests/coverage-floors.json` gains only the 90/69 scope + provenance
+(JSON-compared key by key — no prior floor moved);
+`tests/experience-budgets/web.json` gains only new keys, desktop/mobile
+untouched; `tests/hygiene-budgets.json` untouched; `oxlint.config.ts` only
+adds `**/*.test.mjs` + `tests/agent-e2e-*/**/*.mjs` to `VITEST_TEST_FILES`;
+`tests/skips.json` is the claimed one-line drift (63 → 64); the mobile
+allowlist tighten is real (blanket `apps/mobile` → `modules` + `plugins`,
+whose lintable remainder is exactly 5 files: four `index.ts` bridges + one
+`.cjs` plugin, verified by `git ls-files` + extension filter); the
+`design-gallery` job exists path-gated behind a new `design` filter and is
+wired into `check.needs`; `test:env-red` and `test:sleep-inventory` sit in
+`check:push` and the CI `gates` job at the claimed positions; the expected-
+grey machinery reclassifies only `missing`/`owner-silent`/`lane-did-not-run`
+(real evidence wins), voids on the lane marker, and `expectedLaneMarker` no
+longer maps tier `accessibility` to `vitest` (HEAD did);
+`worstEvidenceByOwner` + `MAESTRO_PLATFORM` suffixing exist in
+`report-signals.mjs`/`harness.mjs` as described; the pairing harness uses
+`crypto.randomInt(30000, 50000)` with the reasoning at the site;
+`docs/app-scenario-layer-template.md` + `docs/apps/docs-scenarios.md` exist
+and instantiate each other; TESTING.md's two `#717` sentences now point at
+`offline-reconnect.spec.ts` with the airplane-mode variant left under #781;
+QUALITY.md moves the flow × platform entry to Resolved and adds the six Open
+observations; the iOS timeout is 60 → 90 with the cancellation rationale, and
+`places-seat.mjs` runs on both platform scripts; `generate.test.mjs` is 575
+lines post-split with the 6 moved tests green in
+`generate-nightly-semantics.test.mjs`.
+
+**Check 2 — checklist honesty: PASS**, with one reservation that belongs to
+check 1's third finding rather than to the checkboxes. No `- [x]` exists in
+the two top items (the only grep hits are audit rounds quoting the marker);
+neither acceptance criterion is claimed met. The "two items remain open"
+census was re-derived category by category against the diff and is exactly
+right as a census of *work left under #781*: every other category is fixed in
+tree or has a real dedicated issue, and the two named items (device-native
+airplane-mode journey; wall-clock + desktop/web experience-budget reseeds)
+are the only unfixed, unsplit remainders — the reseed refusal's grounds
+(container timings would seed dishonest ceilings) are sound and recorded. The
+wave-history framing paragraph resolves the earlier waves' "still open" text
+without contradiction. The reservation: the clause "citations to #781 remain
+in the tree for them" misattributes — the bulk of remaining #781 citations
+belong to categories the table calls SPLIT or FIXED (all 30 skips, all 6
+env-red sites, the accessibility matrix notes), so closing the two named
+items would not by itself unblock either checkbox; the split citations must
+re-home first, per check 1.
+
+**Check 3 — verification reproduces: REFUTED**, narrowly and for one cause.
+Every quoted command output reproduced byte-for-byte in this container:
+`test:matrix` ("15 surfaces × 11 dimensions, 125 canonical flows" / "135
+owned cells … 30 inventoried skips"), `test:env-red` ("6 inventoried
+environment-guard sites, budget 6"), `test:sleep-inventory` ("38 inventoried
+fixed-sleep sites in 26 files, budget 38"), `test:hygiene-ratchet` (at budget
+413 / 845), `test:ratchet` ("ratchet-floors: ok", skips 30/30),
+`lint:quality-knobs` ("no silent widening"), `lint:e2e-flows` ("74 Maestro
+step(s) across 8 file(s)"), `bash .governance/run.sh
+coverage-scope-reachability` (green), and the nightly-semantics suite (6/6).
+`owners-routes.test.ts` + `scopes-routes.test.ts` run 11/11;
+`outbox-send.test.ts` runs 10/10 under the blueprints config. Three
+demonstrated-red claims were independently re-produced from three different
+slices; two succeeded exactly as claimed and one failed:
+
+- **Reproduced**: a scratch `tests/env-scratch.test.ts` carrying
+  `test.skipIf(process.platform !== "darwin")` drove `test:env-red` to exit 1
+  with the named failure ("uninventoried env guard tests/env-scratch.test.ts#1
+  (line 2, platform-guard)" plus the 7-against-6 down-only budget breach);
+  scratch deleted, gate green again.
+- **Reproduced**: dropping the `.filter(visible)` roster filter in
+  `owners-routes.ts` fails exactly one test — "a device caller reads its own
+  person only — the rest of the household is absent, not forbidden" (1 of 5)
+  — the named assertion; file restored byte-identical, `git diff` empty.
+- **Not reproduced**: removing the `packages/blueprints/automations/**/handler.js`
+  floor row does NOT fail the reachability directive (check 1, first
+  finding). The Verification section's blanket "Demonstrated-red evidence per
+  slice is quoted in each Wave 3 section above" therefore vouches for at
+  least one red that does not exist on the final tree.
+
+Per the audit constraints, no Playwright/Maestro suite and no full vitest
+suite was run: the executed-journey numbers (desktop 66/66, web 21/21, the
+axe pair, blueprints 49 ×2 with 92.64/71.76 coverage, report-lane 310) are
+accepted on the slices' recorded evidence, not re-run here. The coverage-floor
+"re-measured in this wave" sentence is likewise accepted on recorded
+evidence, noting that no existing floor value changed in the diff.
+
+**Remedy for the two REFUTEDs**: either restore the demonstrated property
+(make the directive require a floor for a non-src tree that is
+coverage-included, or an equivalent backstop) or rewrite the two sentences —
+receipt and allowlist comment — to claim only what holds (the row is retired
+because the tree is now floored and matrix-owned; the directive fails only if
+both the floor and the matrix owners disappear); add the receipt to its own
+wave-3 files block; and either re-home the #790/#791 citations or say
+plainly that re-homing is still pending.
+
+**Round 2.** Re-adjudication of the updated staged diff (still 73 files;
+working tree again byte-identical to the index). Round-1 fixes 2 and 3 are
+verified; fix 1 replaced the refuted claim with another claim that also fails
+reproduction — and the reproduction attempt surfaced a systemic gate defect
+bigger than the sentence it was checking. **Round-2 verdict: REFUTED / PASS /
+REFUTED.**
+
+- **Fix 2 (files block) — verified fixed.** The "Files changed in wave 3"
+  block now lists 73 paths including the receipt; a sorted diff against
+  `git diff --cached --name-only` is empty.
+- **Fix 3 (citation re-home) — verified, with the boundary named.** Exactly
+  the eleven entries the bullet enumerates moved 781 → 790 in
+  `tests/skips.json` (live failover, Clawgnition ×2, launchd opt-in sites
+  #2/#3, byte-plane, native relay, disk-full ×3, 10GiB restore), each with
+  split provenance in its reason; all six `tests/env-red.json` sites cite
+  #790; `trackingIssues` registers #790 and #791 as open; the updated
+  classification deviation is quoted verbatim in Decisions and
+  `lint:quality-knobs`, `test:matrix`, `test:env-red`, and `test:ratchet` all
+  run green on the staged tree. Two residual inconsistencies, noted without
+  holding the verdict since the receipt's own sentence now accurately lists
+  what moved: (a) three guard sites cite #790 in env-red while their
+  `skips.json` twins for the same environment shape stay at #781
+  (`service-install#1`, `status-admin#1`, `wal-shipper-clone#1`); (b) #790's
+  charter enumerates lanes — reflink clone, fsync-count, the launchd
+  darwin-only guard, the perf-evidence/desktop-launch/pwa-waterfall opt-ins —
+  whose remaining ~9 `skips.json` entries still cite #781, so #790's "the
+  `tests/skips.json` … citations re-home here" is still only partly realized.
+- **Fix 1 (ratchet backstop) — REFUTED again, and load-bearing.** The
+  corrected sentence reads: "The floor's actual backstop is `test:ratchet`
+  (`ratchet-floors` treats a removed floor key as a decrease vs origin/main
+  and fails), verified against the staged tree." Reproduced per the round-2
+  instruction: deleting the `packages/blueprints/automations/**/handler.js`
+  row and running `bun run test:ratchet` reports **"ratchet-floors: ok (no
+  decreases vs origin/main)"** — it does not fail. Two independent causes,
+  both verified:
+  1. The key does not exist at the ratchet's base (origin/main `34bac944`
+     carries no `blueprints/automations` floor; the key lands only in this
+     staged diff), and deletion-counts-as-decrease can only fire for keys
+     present at the base. The backstop can exist only after this PR merges;
+     "verified against the staged tree" cannot have happened as described.
+  2. **The floor ratchet is currently structurally waived for the whole
+     file.** Control experiment: deleting `packages/vault/src/**` — a floor
+     that IS on origin/main at 87/73 — also leaves `test:ratchet` green with
+     the same "ok (no decreases)" message (row restored via `git checkout --
+     tests/coverage-floors.json`, diff empty, gate re-run green).
+     `ratchet-floors.mjs#ratchetFloors` clears every detected floor decrease
+     whenever `hasApprovedDeviation(headFloors)` is true — i.e. whenever the
+     file's `approvedDeviation` string is non-empty — and that field is a
+     permanent, ever-growing provenance ledger (non-empty on origin/main and
+     in every staged revision). So no coverage-floor deletion or decrease can
+     fail the gate at all, the CLI prints "no decreases" even when it waived
+     some, and the script's own header claim ("cannot bypass the ratchet by
+     deleting the key") does not hold. This contradicts the wave-2a receipt
+     text that leans on `test:ratchet` as the floors' enforcement and belongs
+     in QUALITY.md as its own defect: the waiver should require the deviation
+     text to have *changed* vs base (a reviewed reseed), not merely to exist.
+     Until then the wave-3 floor rows (90/69 and 81/78) — and every other
+     floor — are enforced only by the coverage thresholds themselves, not by
+     any deletion backstop.
+
+**Check 2 — PASS** (re-verified). Both checkboxes remain unchecked; the
+two-item census still holds — and is now *more* consistent, since the
+"coverage floors ARE re-measured here" wording round 1 flagged as
+unevidenced is replaced by the attempted-run account, folding the
+coverage-floor reseed into the reseed-from-CI plan, which matches the diff
+(no existing floor value changed). One nit: the Checklist paragraph's
+parenthetical still names the open reseed bundle as "wall-clock +
+desktop/web experience-budget" while the Wave 3 table and Decisions now
+correctly say "wall-clock, coverage-floor, and desktop/web".
+
+**Check 3 — REFUTED**, solely on fix 1's non-reproducing "verified against
+the staged tree" claim. Everything else re-verified in round 2 reproduces:
+`test:matrix` (125 flows / 135 cells / 30 skips), `test:env-red` (6/6),
+`test:ratchet` green on the intact tree, `lint:quality-knobs` clean with the
+updated deviation; the two new hermeticity paragraphs check out —
+`IS_SANDBOX=yes` fails exactly the two named tests in
+`packages/agent-runtime/src/backends/acp/launch.test.ts` ("root triggers the
+IS_SANDBOX bypass opt-in with a notice", "non-root does not force IS_SANDBOX
+or push a notice") and the file passes 6/6 with the variable unset, and
+`gateway-db-lock.integration.test.ts` does shell out to the `sqlite3` CLI
+(line 132). The 13,203/3 full-run figures are accepted as recorded (a full
+suite run is outside this audit's budget). One environmental note: this
+audit's own vitest invocations left run evidence in `artifacts/`, so
+`test:matrix` now prints "run evidence: fresh" where the receipt quotes
+"absent" — auditor contamination, not a diff defect.
+
+**Remedy for round 2**: state the floor-backstop truth — the ratchet
+backstop engages only after merge AND only once the `approvedDeviation`
+blanket waiver is fixed; today the honest sentence is that the new floors
+are enforced by the coverage run itself and nothing guards their deletion —
+and file the `ratchet-floors` waiver defect (QUALITY.md or its own issue)
+rather than citing the gate as a backstop while it cannot fire.
+
+**Round 3.** Re-adjudication after the round-2 refutation was resolved by
+fixing the gate rather than the prose. The staged set is now 75 files
+(`scripts/test-report/ratchet-floors.mjs` + its test file joined; the sorted
+delta vs the round-2 set is exactly those two paths, and every previously
+verified invariant re-checked intact: matrix still 102 → 125 flows with laws
+byte-identical, coverage-floors still exactly one added key, skips still
+11 × #790 / 19 × #781, env-red 6/6, `test:ratchet` / `lint:quality-knobs` /
+`test:env-red` green, both checkboxes still unchecked). **Round-3 verdict:
+PASS / PASS / PASS.**
+
+- **The gate fix — PASS, reproduced both ways.** The diff changes the waiver
+  condition from presence to change: `deviationChanged(base, head)` for
+  coverage floors and mutation floors, and
+  `entry.approvedDeviation !== (entry.baseApprovedDeviation ?? "")` for perf
+  budgets; deleting the `approvedDeviation` key alongside a floor also cannot
+  waive (`hasApprovedDeviation(head)` gates first). Reproduced the round-2
+  control experiment in both arms against `--base HEAD`: (a) deleting the
+  base-present `packages/vault/src/**` row with the ledger reset to the
+  base's exact string **fails** with `coverage floor scope
+  "packages/vault/src/**" removed` and the updated EXTEND-the-ledger remedy
+  text; (b) the same deletion with the working tree's changed-vs-base ledger
+  passes and prints the explicit `ratchet-floors: ok (decrease(s) waived by a
+  CHANGED approvedDeviation vs HEAD)` line — the silent-"no decreases"
+  misreport is gone. Floors restored byte-identical (`git diff` empty); the
+  intact tree runs green vs origin/main with the plain no-decreases message,
+  which is correct since this diff only adds floor keys. The ratchet unit
+  suite runs 34/34, including the four new adversarial tests pinning
+  unchanged-ledger-never-waives for a floor decrease, a floor deletion, a
+  mutation floor, and a perf widen. The header and failure-remedy text now
+  state the changed-ledger rule.
+- **The rewritten correction paragraph — PASS.** It tells both rounds
+  accurately (directive red predated matrix registration; round 2 refuted
+  the replacement claim and found the presence-only waiver with the vault
+  control deletion), claims only what the fixed gate now does, and carries
+  the two honest admissions this audit required: the waiver is file-level
+  (a ledger-extending branch — like this one — could still smuggle an
+  unrelated same-file decrease; per-key waivers left as a #781 note), and
+  the new `handler.js` row is invisible to any vs-base ratchet until merge,
+  its pre-merge guard being receipt and review. "Verified against the staged
+  tree" no longer appears as a live claim anywhere — its only occurrences
+  are round 2's quotes inside this Audit section, which stay as the record.
+- **Files block — PASS.** All 75 paths listed, including both ratchet files
+  and the receipt; sorted diff against `git diff --cached --name-only` is
+  empty.
+
+Check 2 of the original mandate (checklist honesty) is unaffected by the
+round-3 edits and stays **PASS** by reference to round 2, including its
+standing nit (the Checklist parenthetical omits "coverage-floor" from the
+reseed bundle the Wave 3 table and Decisions now name).
+
+**Round 4 (delta).** Adjudication of the mechanical split of
+`pull-connectors.test.ts` at the Microsoft Graph boundary (commit hook's
+625-line ceiling) and its staged syncs. **Verdict: PASS.**
+
+- **Content-preserving**: the four automations files run **49/49** under the
+  blueprints config, exactly the pre-split total (outbox 10 + pull 33-run +
+  release-notes 6); declarations are 10 + 15 = the original 25, with the
+  `it.each` expansion unchanged; both files sit under the ceiling (427 and
+  616 lines).
+- **Delta is exactly as stated**: the staged set is 76 paths, and the sorted
+  name delta vs round 3 is only `pull-connectors-graph.test.ts`. JSON-compare
+  of `tests/matrix.json` vs HEAD: 24 flows added (the round-1-verified 23
+  plus `connector-handler-contract-graph`, automations × correctness, tier
+  unit, owner the new file, minimumTests 15), `connector-handler-contract`
+  minimumTests corrected 25 → 10, zero flows removed, zero pre-existing flows
+  changed, laws byte-identical, still only the `desktop.offline` assessment
+  change, gaps/qualities/dimensions/appEngines/workspaceSurfaces/
+  demonstratedRed identical, #790/#791 still open in `trackingIssues`. All
+  round-3 invariants re-checked intact: skips 11 × #790 / 19 × #781, env-red
+  6/6, coverage-floors still exactly one added key, the `deviationChanged`
+  gate fix in place with its 34/34 unit tests.
+- **Receipt and governance in sync**: the updated classification deviation
+  ("24 new flows (23 plus connector-handler-contract-graph after the
+  pull-connectors file split…)") is quoted **byte-identical** in Decisions;
+  the files block lists all 76 paths (sorted diff empty); the seams bullet
+  and the Wave-3 verification quote now say 24/126, and `bun run
+  test:matrix` prints "126 canonical flows / 135 owned cells … 30
+  inventoried skips" to match; `lint:quality-knobs` and `test:ratchet` are
+  green. The Audit rounds' own "125" quotes are correctly left untouched as
+  the record. One prose nit, not verdict-holding: the blueprints section
+  still opens "49 tests in **three** new files" while now listing four.
+
 ## Session
 
 <!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
@@ -906,4 +1725,4 @@ still mirrors #781's two acceptance criteria verbatim.
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-08-14 | claude-code | 36f0a126-2d40-5128-b3ea-59456606a925 |
+| 2026-08-15 | claude-code | 36f0a126-2d40-5128-b3ea-59456606a925 |

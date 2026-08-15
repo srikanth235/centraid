@@ -33,19 +33,25 @@ describe("catalog-warmer", () => {
   test("concurrent warms for the same surface dedupe to one enumeration", async () => {
     const catalogPath = await tmpCatalogPath();
     let calls = 0;
+    // Event-driven gate instead of a fixed sleep: the enumeration stays
+    // in flight until the test has asserted the warming window, then the
+    // test releases it — no wall clock involved.
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const warmer = new CatalogWarmer({
       catalogPath,
       enumerateModels: async () => {
         calls += 1;
-        await new Promise((resolve) => {
-          setTimeout(resolve, 20);
-        });
+        await gate;
         return [{ id: "sonnet" }];
       },
     });
     const a = warmer.warm("claude-code", "models");
     expect(warmer.isWarming("claude-code", "models")).toBe(true);
     const b = warmer.warm("claude-code", "models");
+    release();
     await Promise.all([a, b]);
     expect(calls).toBe(1);
     expect(warmer.isWarming("claude-code", "models")).toBe(false);

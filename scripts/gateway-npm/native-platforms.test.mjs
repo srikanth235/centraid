@@ -86,6 +86,7 @@ test("NATIVE_PLATFORMS ids are unique and stable shape", () => {
 });
 
 test("collectNodeArtifacts + copyArtifacts merge flat and nested layouts", () => {
+  // oxlint-disable-next-line no-restricted-properties -- (#781) node --test lane: the kit's tempDirSync() registers a vitest afterAll at import time and throws here; removal is the fs.rmSync at the end of this test.
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "centraid-native-merge-"));
   const from = path.join(tmp, "from");
   const dest = path.join(tmp, "dest");

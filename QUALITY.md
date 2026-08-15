@@ -2,23 +2,45 @@
 
 ## Open
 
-- **Nightly mobile evidence is keyed by flow, not by flow × platform, so iOS
-  and Android overwrite each other.** `writeFlowVerdict` writes
-  `artifacts/e2e/<slug>.json` and `recordQualityResult` writes
-  `artifacts/scale/<owner-slug>.json`; neither path carries a platform
-  component. `test-health-report` then downloads `nightly-evidence-*` with
-  `merge-multiple: true`, so for any flow that runs on both jobs the merged
-  tree keeps whichever platform uploaded last. This already applied to
-  `home-loads`, `template-gate`, and `native-v0-resilience`; #781 extended it
-  to `cold-start` and `scroll-frames`, where the collision now silently hides
-  one platform's cold-start milliseconds and frame-drop count behind the
-  other's. It is not currently corrupting a drift gate — the `quality-history`
-  cache is restored only in `quality-performance-scale` and `restore-year3`,
-  never in the mobile jobs, so `rigDriftBudget` returns `null` on both and no
-  cross-platform samples interleave — but the merged report is already
-  under-reporting, and extending that cache to mobile would turn a display bug
-  into a false ratchet. Fix is a platform segment in both evidence paths plus a
-  reader update, which is wider than the parity slice it was found in.
+- **Two container-hermeticity defects found by an attempted in-container full
+  coverage run** (13,203 green / 3 red, all environmental): (1)
+  `packages/agent-runtime/src/backends/acp/launch.test.ts` inherits the real
+  `process.env` through `planLaunch`, so a host that exports `IS_SANDBOX`
+  (this container: `yes`) fails two assertions — the test should stub the
+  variable, not trust the host; (2)
+  `packages/gateway/src/serve/gateway-db-lock.integration.test.ts` shells out
+  to the `sqlite3` CLI, absent here — a candidate for the new
+  `tests/env-red.json` inventory (guard on CLI presence) or a rewrite against
+  `node:sqlite`.
+- **Five `photos-*.mjs` Maestro flows are unlinted.** `scripts/lint-e2e-flows.mjs`
+  `FILES` omits all five photos flows (`photos-search.mjs` even carries a
+  marker for a nonexistent rule name, `input-observed`). Adding them may
+  surface latent findings in five flows at once, so it deserves its own pass
+  rather than a drive-by (#781 wave 3 added only the new `places-seat.mjs`).
+- **`PlacesView` prints raw coordinate-shaped place names** on shelf cards
+  (`row.name` without `readableName`), while the web shelf and the phone's own
+  map refuse them — seeded places are coordinate-named, so real shelves show
+  headings like "39.0021, -120.1131". Cosmetic divergence; fix alongside the
+  next Places pass.
+- **`google-contacts-pull` renders yearless birthdays as `---09-05`** (the
+  `"--"` placeholder plus the joining `"-"`); vCard's yearless form is
+  `--09-05`. Asserted as-is with a NOTE in
+  `packages/blueprints/automations/pull-connectors.test.ts` so the fix must
+  flip a test. `google-calendar-invite-send` also uses wall-clock `new Date()`
+  (DTSTAMP) and `Math.random()` (MIME boundary) inside the published handler —
+  nondeterminism the connector lane's lint doesn't catch; its tests
+  deliberately don't assert those bytes.
+- **`apps/desktop/tests/e2e` standalone `tsc` has 13 pre-existing errors**
+  (missing `window.CentraidApi` augmentation when run outside the harness)
+  and `apps/web/tests/e2e/tsconfig.json` likewise; neither is wired to a gate,
+  so spec type rot is invisible. Wire or retire the configs.
+- **Web shell palette click race after reload**: the Search button paints
+  before its listener attaches, so early clicks are silently lost. Four web
+  e2e specs work around it with a retry poll; the product should attach before
+  paint or render disabled.
+- **People surfaces no pending-state marker** (no `kit-pending-chip` anywhere
+  in the app) and `AddPersonModal` closes only on `executed` — an offline add
+  looks like a failure while the row is in fact projected and durable.
 - **`react-native-maps` is dead weight and still ships.** Places on the phone
   now draws the shared `place-map.ts` projection through `react-native-svg`
   (see [docs/photos/places.md](docs/photos/places.md)), so nothing imports
@@ -122,6 +144,17 @@
 
 ## Resolved
 
+- #781 — Nightly mobile evidence is now keyed flow × platform.
+  `writeFlowVerdict` writes `artifacts/e2e/<slug>-<platform>.json` and
+  `recordQualityResult` writes `artifacts/<lane>/<owner-slug>-<platform>.json`
+  when `MAESTRO_PLATFORM` is set (`tests/agent-e2e-shared/harness.mjs`), with
+  the platform stamped in the JSON and the owner unchanged, so
+  `merge-multiple` keeps both platforms and matrix mapping still resolves.
+  The report now merges per-owner evidence worst-status-wins and keys trend
+  series per platform, so a green platform cannot mask a red one; drift
+  budgets read the platform-suffixed history, so cross-platform samples can
+  no longer interleave into a false ratchet. Platform-less lanes (pairing,
+  desktop, web, the test-kit writer) keep their exact prior paths.
 - #778 (with #712 E3) — Closed the band-ownership hole from both ends, so an
   inline app can no longer lose its shelf navigation to a verdict it cannot
   read. On web and desktop #778 deleted the member preference outright

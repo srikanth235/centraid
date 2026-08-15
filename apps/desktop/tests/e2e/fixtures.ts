@@ -117,6 +117,43 @@ export interface MockState {
   turnFrames: SseFrame[];
   /** SSE frames for GET /centraid/_automations/turn/events */
   automationTurnFrames: SseFrame[];
+
+  // ── Household / sharing plane (#781; the reads journey 2.12 needed) ──
+  // The desktop's bearer is the host-custody caller, so the mock mirrors the
+  // host-custody visibility of each real route: every person, every device,
+  // every mounted vault. Shapes mirror the real handlers cited on each field.
+
+  /** GET /centraid/_gateway/owners → `{owners}` (owners-routes.ts `ownerDto`). */
+  owners: Array<Record<string, unknown>>;
+  /** GET /centraid/_gateway/devices → `{devices}` (devices-routes.ts `DeviceDTO`). */
+  devices: Array<Record<string, unknown>>;
+  /** GET /centraid/_vault/scopes → `{scopes}` (scopes-routes.ts `ScopeRow`).
+   *  `installed` is answered only when the request names `?app=` — "not
+   *  asked" and "not installed" are different answers, same as the route. */
+  scopes: Array<Record<string, unknown>>;
+  /** GET /centraid/_gateway/links → `{links}` (vault-links-routes.ts `linkDto`). */
+  links: Array<Record<string, unknown>>;
+  /** D9 per-link receive settings; an absent row answers "accept", matching
+   *  `receiveSettingFor` in vault-links-routes.ts. */
+  receiveSettings: Record<string, string>;
+  /** GET /centraid/_gateway/edges → `{edges}` (edges-routes.ts `edgeWire`). */
+  edges: Array<Record<string, unknown>>;
+  /** GET /centraid/_gateway/edges/pending → `{pending}` (edge-answer-routes.ts
+   *  `pendingDto`); POST …/:edgeId/answer consumes a row. */
+  pendingEdges: Array<Record<string, unknown>>;
+  /** GET /centraid/_gateway/commons/invitations?actorVaultId= → `{invitations}`
+   *  (commons-routes.ts / `listCommonsInvitations`), filtered to the asking
+   *  vault the way the real route reads one member vault's own rows. */
+  commonsInvitations: Array<Record<string, unknown>>;
+  /** GET /centraid/_gateway/commons/recovery?actorVaultId= → the
+   *  `CommonsVaultObservability` body (commons-recovery-routes.ts →
+   *  `commonsObservabilityForVault`): `{vaultId, grants}` keyed per vault. */
+  commonsRecovery: Record<string, Array<Record<string, unknown>>>;
+  /** GET /centraid/_gateway/device-work/status → `{vaults}` (device-work-
+   *  routes.ts) — the roster's queued/leased enrichment depth. The absorb-all
+   *  `{}` fallthrough is NOT shape-compatible here: the client reads
+   *  `out.vaults`, and an undefined array crashed the whole Household route. */
+  deviceWork: Array<Record<string, unknown>>;
 }
 
 export interface MockGateway {
@@ -180,6 +217,16 @@ function defaultState(): MockState {
     nextAutomationTurnId: "turn-1",
     turnFrames: [],
     automationTurnFrames: [],
+    owners: [],
+    devices: [],
+    scopes: [],
+    links: [],
+    receiveSettings: {},
+    edges: [],
+    pendingEdges: [],
+    commonsInvitations: [],
+    commonsRecovery: {},
+    deviceWork: [],
   };
 }
 
@@ -595,6 +642,158 @@ async function route(
   if (p === "/centraid/_vault/outbox-grants" && method === "GET")
     return json(res, 200, { grants: [] });
 
+  // ---- Household / sharing plane (#781) ----
+  // Serves the roster and owner-scope reads the Household journey renders
+  // from. Each handler mirrors the real route's response shape (cited inline);
+  // the desktop bearer is the host-custody caller, so visibility is "all of
+  // it", matching each route's host-custody branch.
+
+  // owners-routes.ts GET: `sendJson(res, 200, {owners: […ownerDto]})`.
+  if (p === "/centraid/_gateway/owners" && method === "GET")
+    return json(res, 200, { owners: s.owners });
+
+  // devices-routes.ts GET: `{devices}` sorted current-first then label
+  // (`compareDevices`), one row per (device, vault) enrollment.
+  if (p === "/centraid/_gateway/devices" && method === "GET") {
+    const devices = [...s.devices].sort((a, b) => {
+      if (a.current === true && b.current !== true) return -1;
+      if (b.current === true && a.current !== true) return 1;
+      return String(a.label ?? "").localeCompare(String(b.label ?? ""));
+    });
+    return json(res, 200, { devices });
+  }
+
+  // scopes-routes.ts GET: `{scopes: ScopeRow[]}` in registry order.
+  // `installed` is present only when the request named `?app=` — with no app
+  // named the field is omitted entirely (not asked ≠ not installed).
+  if (p === "/centraid/_vault/scopes" && method === "GET") {
+    const appId = url.searchParams.get("app");
+    const scopes = s.scopes.map((row) => {
+      const { installed, ...rest } = row;
+      return appId ? { ...rest, installed: installed === true } : rest;
+    });
+    return json(res, 200, { scopes });
+  }
+
+  // vault-links-routes.ts: list, approve, and the D9 receive setting.
+  if (p === "/centraid/_gateway/links" && method === "GET")
+    return json(res, 200, { links: s.links });
+  if (seg[0] === "centraid" && seg[1] === "_gateway" && seg[2] === "links") {
+    const linkId = decodeURIComponent(seg[3] ?? "");
+    if (seg[4] === "approve" && method === "POST") {
+      // The real route approves the CALLER's side; the caller here owns the
+      // vaults the scopes plane lists, so that side is the one that flips.
+      const own = new Set(s.scopes.map((row) => row.vaultId));
+      s.links = s.links.map((link) => {
+        if (link.linkId !== linkId) return link;
+        const approvedByA =
+          link.approvedByA === true || own.has(link.vaultA as string);
+        const approvedByB =
+          link.approvedByB === true || own.has(link.vaultB as string);
+        return {
+          ...link,
+          approvedByA,
+          approvedByB,
+          approved: approvedByA && approvedByB,
+        };
+      });
+      const approved = s.links.find((link) => link.linkId === linkId) ?? null;
+      return json(res, 200, { link: approved });
+    }
+    if (seg[4] === "receive-setting") {
+      const link = s.links.find((row) => row.linkId === linkId);
+      const own = new Set(s.scopes.map((row) => row.vaultId));
+      const vaultId = own.has(link?.vaultA as string)
+        ? link?.vaultA
+        : link?.vaultB;
+      if (method === "GET") {
+        return json(res, 200, {
+          linkId,
+          vaultId,
+          setting: s.receiveSettings[linkId] ?? "accept",
+        });
+      }
+      if (method === "PUT" || method === "PATCH") {
+        const setting = safeJson(body)["setting"];
+        if (typeof setting === "string") s.receiveSettings[linkId] = setting;
+        return json(res, 200, { linkId, vaultId, setting });
+      }
+    }
+  }
+
+  // edges-routes.ts GET (`{edges}`) + edge-answer-routes.ts pending/answer.
+  if (p === "/centraid/_gateway/edges" && method === "GET")
+    return json(res, 200, { edges: s.edges });
+  if (p === "/centraid/_gateway/edges/pending" && method === "GET")
+    return json(res, 200, { pending: s.pendingEdges });
+  if (
+    seg[0] === "centraid" &&
+    seg[1] === "_gateway" &&
+    seg[2] === "edges" &&
+    seg[4] === "answer" &&
+    method === "POST"
+  ) {
+    const edgeId = decodeURIComponent(seg[3] ?? "");
+    const decision = safeJson(body)["decision"];
+    // Mirror the gateway: answering consumes the parked ask either way —
+    // accept pulls + projects (`{edgeId, decision, items}`), refuse deletes
+    // the pointer row (`{edgeId, decision: "refuse"}`).
+    s.pendingEdges = s.pendingEdges.filter((row) => row.edgeId !== edgeId);
+    return json(res, 200, {
+      edgeId,
+      decision,
+      ...(decision === "accept" ? { items: [] } : {}),
+    });
+  }
+
+  // commons-routes.ts invitations (list / claim / answer).
+  if (p === "/centraid/_gateway/commons/invitations" && method === "GET") {
+    const actorVaultId = url.searchParams.get("actorVaultId") ?? "";
+    return json(res, 200, {
+      invitations: s.commonsInvitations.filter(
+        (row) => row.memberVaultId === actorVaultId
+      ),
+    });
+  }
+  if (p === "/centraid/_gateway/commons/invitations/claim" && method === "POST")
+    return json(res, 200, { claimed: true });
+  if (
+    seg[0] === "centraid" &&
+    seg[1] === "_gateway" &&
+    seg[2] === "commons" &&
+    seg[3] === "invitations" &&
+    seg[5] === "answer" &&
+    method === "POST"
+  ) {
+    const invitationId = decodeURIComponent(seg[4] ?? "");
+    const answer = safeJson(body)["answer"];
+    const status = answer === "accept" ? "accepted" : "refused";
+    s.commonsInvitations = s.commonsInvitations.map((row) =>
+      row.invitationId === invitationId
+        ? { ...row, status, answeredAt: new Date().toISOString() }
+        : row
+    );
+    const invitation =
+      s.commonsInvitations.find((row) => row.invitationId === invitationId) ??
+      null;
+    return json(res, 200, { invitation });
+  }
+
+  // device-work-routes.ts GET status: `{vaults: [{vaultId, name, total,
+  // available, leased}]}` — the roster's "N queued · M leased" note.
+  if (p === "/centraid/_gateway/device-work/status" && method === "GET")
+    return json(res, 200, { vaults: s.deviceWork });
+
+  // commons-recovery-routes.ts GET: the `CommonsVaultObservability` body —
+  // `{vaultId, grants}`; the client keeps only the fields it renders.
+  if (p === "/centraid/_gateway/commons/recovery" && method === "GET") {
+    const actorVaultId = url.searchParams.get("actorVaultId") ?? "";
+    return json(res, 200, {
+      vaultId: actorVaultId,
+      grants: s.commonsRecovery[actorVaultId] ?? [],
+    });
+  }
+
   // ---- unified chat turn (SSE) ----
   if (seg[0] === "centraid" && seg[2] === "_turn" && method === "POST") {
     void writeSse(res, s.turnFrames);
@@ -979,6 +1178,151 @@ export function automationTurnItem(over: {
     outputTokens: 50,
     model: "tier-deep",
     harness: "test",
+  };
+}
+
+/** Build one `ownerDto` row (owners-routes.ts) for `state.owners`. */
+export function gatewayOwnerRecord(over: {
+  ownerId: string;
+  label: string;
+  vaults?: Array<{ vaultId: string; vaultName?: string }>;
+  deviceCount?: number;
+}): Record<string, unknown> {
+  return {
+    ownerId: over.ownerId,
+    label: over.label,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    vaults: over.vaults ?? [],
+    deviceCount: over.deviceCount ?? 0,
+  };
+}
+
+/** Build one `DeviceDTO` enrollment row (devices-routes.ts) for `state.devices`. */
+export function gatewayDeviceRecord(over: {
+  deviceId: string;
+  endpointId: string;
+  ownerId: string;
+  ownerLabel: string;
+  label: string;
+  vaultId: string;
+  vaultName?: string;
+  current?: boolean;
+  platform?: string;
+  revoked?: boolean;
+}): Record<string, unknown> {
+  return {
+    deviceId: over.deviceId,
+    endpointId: over.endpointId,
+    ownerId: over.ownerId,
+    ownerLabel: over.ownerLabel,
+    label: over.label,
+    ...(over.platform === undefined ? {} : { platform: over.platform }),
+    transport: "iroh",
+    vaultId: over.vaultId,
+    ...(over.vaultName === undefined ? {} : { vaultName: over.vaultName }),
+    addedAt: "2026-02-01T00:00:00.000Z",
+    lastUsedAt: "2026-02-02T00:00:00.000Z",
+    current: over.current === true,
+    revoked: over.revoked === true,
+    rememberDevice: false,
+  };
+}
+
+/** Build one `ScopeRow` (scopes-routes.ts) for `state.scopes`. */
+export function scopeRowRecord(over: {
+  vaultId: string;
+  label: string;
+  personal?: boolean;
+  installed?: boolean;
+}): Record<string, unknown> {
+  return {
+    vaultId: over.vaultId,
+    label: over.label,
+    personal: over.personal === true,
+    // Every row the route lists is owned by the caller, so it is writable —
+    // a per-row wire field sourced by the gateway, never derived client-side.
+    canWrite: true,
+    ...(over.installed === undefined ? {} : { installed: over.installed }),
+  };
+}
+
+/** Build one `linkDto` row (vault-links-routes.ts) for `state.links`. */
+export function gatewayLinkRecord(over: {
+  linkId: string;
+  vaultA: string;
+  vaultB: string;
+  labelA?: string | null;
+  labelB?: string | null;
+  approvedByA?: boolean;
+  approvedByB?: boolean;
+  remoteVaultId?: string | null;
+  revoked?: boolean;
+}): Record<string, unknown> {
+  const approvedByA = over.approvedByA === true;
+  const approvedByB = over.approvedByB === true;
+  return {
+    linkId: over.linkId,
+    vaultA: over.vaultA,
+    vaultB: over.vaultB,
+    labelA: over.labelA ?? null,
+    labelB: over.labelB ?? null,
+    partyIdA: null,
+    partyIdB: null,
+    approvedByA,
+    approvedByB,
+    approved: approvedByA && approvedByB,
+    remoteVaultId: over.remoteVaultId ?? null,
+    revoked: over.revoked === true,
+    createdAt: "2026-03-01T00:00:00.000Z",
+  };
+}
+
+/** Build one parked-ask `pendingDto` row (edge-answer-routes.ts). */
+export function pendingEdgeRecord(over: {
+  edgeId: string;
+  peerVaultId: string;
+  localVaultId: string;
+  itemType: string;
+  itemCount: number;
+}): Record<string, unknown> {
+  return {
+    edgeId: over.edgeId,
+    peerVaultId: over.peerVaultId,
+    localVaultId: over.localVaultId,
+    itemType: over.itemType,
+    itemCount: over.itemCount,
+    createdAt: "2026-03-02T00:00:00.000Z",
+  };
+}
+
+/** Build one commons observability grant (commons-observability.ts), with only
+ *  the fields the client's recovery surface renders plus honest zero counters. */
+export function commonsRecoveryGrantRecord(over: {
+  grantId: string;
+  containerType: string;
+  presence: "unknown" | "reachable" | "degraded" | "absent" | "parked";
+  stewardVaultId?: string;
+  silentForMs?: number;
+  supersededBy?: string;
+}): Record<string, unknown> {
+  return {
+    grantId: over.grantId,
+    containerType: over.containerType,
+    steward: {
+      presence: over.presence,
+      ...(over.stewardVaultId === undefined
+        ? {}
+        : { stewardVaultId: over.stewardVaultId }),
+      ...(over.silentForMs === undefined
+        ? {}
+        : { silentForMs: over.silentForMs }),
+    },
+    reachableRatio: null,
+    absence: { episodes: 0, totalMs: 0, longestMs: 0, openMs: null },
+    pullOutcomes: { noop: 0, tail: 0, snapshot: 0 },
+    ...(over.supersededBy === undefined
+      ? {}
+      : { supersededBy: over.supersededBy }),
   };
 }
 

@@ -34,6 +34,9 @@ export default nodeProject({
       "src/**/*.test.tsx",
       "apps/**/*.test.ts",
       "apps/**/*.test.tsx",
+      // Source-level suites over the hand-authored connector/enricher
+      // handlers published in automations/ (#781).
+      "automations/**/*.test.ts",
     ],
   },
 });

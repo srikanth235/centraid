@@ -146,7 +146,11 @@ jobs:
     # JSI xcframework step exits 65 with an empty "Could not resolve package
     # dependencies" footer (run 30417451436). macos-26 defaults to 26.5+.
     runs-on: macos-26
-    timeout-minutes: 60
+    # Cold macOS native build + serialized journeys exceed 60 on a cache miss;
+    # cancelled counts as red (#557), so the backstop must sit above the
+    # budget. Raised from 60 under #781 after the 08-03/04/06/13 nightlies
+    # were cancelled at exactly this ceiling.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
@@ -382,6 +386,7 @@ jobs:
           node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
           node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
           node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
+          node tests/agent-e2e-mobile/flows/places-seat.mjs || ec=$?
           exit "$ec"
       - name: Remove sensitive pairing diagnostics
         if: always()

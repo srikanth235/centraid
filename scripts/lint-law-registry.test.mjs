@@ -9,6 +9,7 @@
 // `node --test`, which is the runner this lane uses. Same pattern as
 // scripts/lint-protocol-routes.test.mjs.
 import assert from "node:assert/strict";
+// oxlint-disable-next-line no-restricted-imports -- (#781) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal is registered at creation via t.after below.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";

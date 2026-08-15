@@ -593,6 +593,14 @@
     "781": {
       "url": "https://github.com/srikanth235/centraid/issues/781",
       "state": "open"
+    },
+    "790": {
+      "url": "https://github.com/srikanth235/centraid/issues/790",
+      "state": "open"
+    },
+    "791": {
+      "url": "https://github.com/srikanth235/centraid/issues/791",
+      "state": "open"
     }
   },
   "gaps": {
@@ -705,7 +713,7 @@
     "blueprints.offline": "Partial: packages/client/src/replica/app-convergence.contract.test.ts proves deterministic replay for task/contact/expense/event blueprint writes; web/mobile journeys own the consuming offline UI. Tracked under #781 (originally #656).",
     "blueprints.compat": "Partial: packages/blueprints/src/app-manifests.test.ts validates the shipped app.json contract and mobile's protocol wall prevents an incompatible host from mounting those apps. Tracked under #781 (originally #656).",
     "desktop.scalability": "Owned by tests/scale/desktop-windows.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "desktop.offline": "Skip: desktop hosts the gateway; offline UX is mobile/web. Detached-gateway outage logging covers host-side continuity.",
+    "desktop.offline": "Owned since #781: production pending rows survive an offline Electron reload (apps/desktop/tests/e2e/pending-overlay.spec.ts). The prior skip rationale (desktop hosts the gateway) still bounds scope: detached-gateway outage logging covers host-side continuity; this cell owns the renderer's offline honesty.",
     "desktop.compat": "Partial: gateway pairing response folding and primary-first multi-vault retention are covered by apps/desktop/src/main/gateway-pairing-core.test.ts; desktop settings/schema version-skew fixtures remain tracked under #781 (originally #656).",
     "web.scalability": "Owned by tests/scale/web-tabs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "web.compat": "Partial: pairing persistence and primary-first multi-vault retention are covered by apps/web/src/web-host.test.ts; web storage/version-skew fixtures remain tracked under #781 (originally #656).",
@@ -1140,7 +1148,10 @@
       "owner": "apps/desktop/src/main/gateway-pairing-core.test.ts",
       "tier": "unit"
     },
-    "desktop.offline": null,
+    "desktop.offline": {
+      "owner": "apps/desktop/tests/e2e/pending-overlay.spec.ts",
+      "tier": "e2e"
+    },
     "desktop.compat": {
       "owner": "apps/desktop/src/main/gateway-pairing-core.test.ts",
       "tier": "unit"
@@ -1587,7 +1598,7 @@
         "performance": "partial",
         "scalability": "solid",
         "security": "partial",
-        "offline": "skip",
+        "offline": "partial",
         "compat": "partial",
         "journey": "solid",
         "accessibility": "partial"
@@ -3064,6 +3075,219 @@
       "tier": "unit",
       "owner": "apps/mobile/src/apps/photos/places-model.test.ts",
       "minimumTests": 20
+    },
+    {
+      "id": "mobile-photos-places",
+      "name": "Native Photos Places shelf and self-drawn map journey",
+      "surface": "mobile",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/places-seat.mjs",
+      "minimumTests": 1
+    },
+    {
+      "id": "connector-handler-contract",
+      "name": "Hand-authored connector handlers: cursor discipline, staging-row shape, refusal paths",
+      "surface": "automations",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/blueprints/automations/pull-connectors.test.ts",
+      "minimumTests": 10
+    },
+    {
+      "id": "connector-outbox-artifact",
+      "name": "Outbox send handlers stage byte-exact RFC 2822 / RFC 5545 artifacts",
+      "surface": "automations",
+      "dimension": "contracts",
+      "tier": "unit",
+      "owner": "packages/blueprints/automations/outbox-send.test.ts",
+      "minimumTests": 10
+    },
+    {
+      "id": "docs-drive-journey-desktop",
+      "name": "Docs byte-bearing north star: upload survives an Electron reload",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/docs-drive.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "docs-drive-journey-web",
+      "name": "Docs byte-bearing north star: upload survives a PWA reload",
+      "surface": "web",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/web/tests/e2e/docs-drive.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "locker-custodian-journey",
+      "name": "Locker custodian seat: setup, item persistence, relock/unlock",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/locker.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "locker-viewer-seat-refusal",
+      "name": "Locker refuses the viewer seat with the manifest-declared wall",
+      "surface": "web",
+      "dimension": "security",
+      "tier": "e2e",
+      "owner": "apps/web/tests/e2e/locker-seat.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "web-offline-write-reconnect",
+      "name": "Offline write survives reload and settles exactly once on reconnect",
+      "surface": "web",
+      "dimension": "offline",
+      "tier": "e2e",
+      "owner": "apps/web/tests/e2e/offline-reconnect.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "household-sharing-journey",
+      "name": "Household renders the gateway's roster and owner scopes; another seat changes presentation, never authorization",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/household.spec.ts",
+      "minimumTests": 2
+    },
+    {
+      "id": "sharing-roster-topology-hiding",
+      "name": "Owner roster read: a device sees its own person only; absence, not refusal",
+      "surface": "gateway",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "packages/gateway/src/routes/owners-routes.test.ts",
+      "minimumTests": 5
+    },
+    {
+      "id": "owner-scope-registry-read",
+      "name": "Owner-scope registry read: owned intersect mounted, canWrite from ownership, installed only when asked",
+      "surface": "gateway",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "packages/gateway/src/routes/scopes-routes.test.ts",
+      "minimumTests": 6
+    },
+    {
+      "id": "desktop-app-weight",
+      "name": "Shipped desktop artifact weight stays under its tighten-only ceiling",
+      "surface": "desktop",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "scripts/perf/app-weight.mjs"
+    },
+    {
+      "id": "web-app-weight",
+      "name": "Shipped PWA weight stays under its tighten-only ceiling",
+      "surface": "web",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "scripts/perf/app-weight.mjs"
+    },
+    {
+      "id": "mobile-app-weight",
+      "name": "Shipped mobile bundle weight stays under its tighten-only ceiling",
+      "surface": "mobile",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "scripts/perf/app-weight.mjs"
+    },
+    {
+      "id": "web-accessibility-axe",
+      "name": "Connect screen and Home shell carry no WCAG A/AA violations in a real browser",
+      "surface": "web",
+      "dimension": "accessibility",
+      "tier": "accessibility",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
+      "minimumTests": 2
+    },
+    {
+      "id": "desktop-builder-journey",
+      "name": "Builder: palette create, streamed turn, publish and failure surfaces",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/builder.spec.ts",
+      "minimumTests": 6
+    },
+    {
+      "id": "desktop-delete-app-journey",
+      "name": "Deleting draft and published apps deregisters on the gateway and clears local state",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/delete-app.spec.ts",
+      "minimumTests": 8
+    },
+    {
+      "id": "desktop-launch-time",
+      "name": "Desktop cold launch: process start to a usable Home under budget",
+      "surface": "desktop",
+      "dimension": "performance",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/launch-time.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "desktop-pending-overlay",
+      "name": "Pending rows survive an offline Electron reload across four apps",
+      "surface": "desktop",
+      "dimension": "offline",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/pending-overlay.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "desktop-settings-gateways",
+      "name": "Appearance and gateway settings apply live, persist, and survive reloads",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/settings-gateways.spec.ts",
+      "minimumTests": 12
+    },
+    {
+      "id": "web-pending-overlay",
+      "name": "PWA routes recover pending rows across four apps while still offline",
+      "surface": "web",
+      "dimension": "offline",
+      "tier": "e2e",
+      "owner": "apps/web/tests/e2e/pending-overlay.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "mobile-cold-start",
+      "name": "Mobile cold start: launch to Home ready, median and p95 under budget",
+      "surface": "mobile",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "tests/agent-e2e-mobile/flows/cold-start.mjs",
+      "minimumTests": 1
+    },
+    {
+      "id": "mobile-scroll-frames",
+      "name": "Mobile frame-drop probe during driven scroll stays under budget",
+      "surface": "mobile",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "tests/agent-e2e-mobile/flows/scroll-frames.mjs",
+      "minimumTests": 1
+    },
+    {
+      "id": "connector-handler-contract-graph",
+      "name": "Pull connectors, Graph delta half: Microsoft delta family, Linear, Notion, Todoist, Gmail cursor and shaping contracts",
+      "surface": "automations",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/blueprints/automations/pull-connectors-graph.test.ts",
+      "minimumTests": 15
     }
   ]
 }

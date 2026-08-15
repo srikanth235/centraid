@@ -2,8 +2,12 @@
 export function collectLaneSeries(results) {
   const series = {};
   for (const result of results ?? []) {
-    const owner = String(result?.owner ?? "");
-    if (!owner) continue;
+    const base = String(result?.owner ?? "");
+    if (!base) continue;
+    // Platform-keyed mobile evidence (#781): keep iOS and Android as distinct
+    // trend series instead of last-write-wins over one shared owner key.
+    const platform = String(result?.platform ?? "");
+    const owner = platform ? `${base} [${platform}]` : base;
     for (const measurement of result.measurements ?? []) {
       if (!Number.isFinite(Number(measurement?.value))) continue;
       const key = `${owner}::${String(measurement.name ?? "measurement")}`;

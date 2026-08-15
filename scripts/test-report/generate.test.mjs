@@ -566,3 +566,10 @@ describe("perf and scale trends", () => {
     expect(result.html).toContain("Perf and scale results are missing");
   });
 });
+
+/**
+ * #781 — the 15 `*:accessibility` cells have a declared owner with no
+ * evidence lane at all (a per-PR node --test gate). Registered cells become a
+ * NAMED, budgeted absence on nightly instead of unfixable red noise — and the
+ * exemption voids itself the night the accessibility lane first runs.
+ */

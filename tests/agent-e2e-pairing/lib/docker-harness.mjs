@@ -539,8 +539,13 @@ async function verifyNetworksIsolated(netA, netB, hostAddrs, fwName) {
   const probeServerName = `pairing-relay-isoprobe-${crypto.randomBytes(3).toString("hex")}`;
   // High random ports so concurrent runs on one host don't collide; `docker
   // run` fails loudly rather than silently sharing if one is already bound.
-  const hostPort = 30000 + Math.floor(Math.random() * 20000);
-  const udpHostPort = 30000 + Math.floor(Math.random() * 20000);
+  // This randomness is uniqueness across concurrent runs (like the
+  // randomBytes container-name suffix above), not exploration — a seeded draw
+  // would hand every concurrent run the same port, recreating the collision.
+  // crypto.randomInt keeps it out of Math.random's determinism seam, and the
+  // chosen port appears in every probe label this function reports.
+  const hostPort = crypto.randomInt(30000, 50000);
+  const udpHostPort = crypto.randomInt(30000, 50000);
   await sh("docker", [
     "run",
     "-d",

@@ -85,5 +85,6 @@ MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/volume-proof.mjs || e
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
+MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/places-seat.mjs || ec=$?
 set -e
 exit "$ec"
