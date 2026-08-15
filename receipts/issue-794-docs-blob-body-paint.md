@@ -46,6 +46,13 @@ exact preflight token is pinned in
 `apps/desktop/tests/e2e/docs-drive.spec.ts` asserts both body paragraphs.
 `docs/apps/docs-scenarios.md` records the repaired current-state path.
 
+The desktop owner journey now follows the current shell contracts as well:
+`apps/desktop/tests/e2e/docs-drive.spec.ts` waits for the direct Home hand-off,
+while `apps/desktop/tests/e2e/household.spec.ts` uses the shipped `Copies` frame
+title and `apps/desktop/tests/e2e/locker.spec.ts` no longer resurrects the
+removed first-run profile gate. These are test-harness alignments only; product
+behavior is unchanged.
+
 Checklist crosswalk: **Bundled inline Docs reads blob text through the
 established authenticated gateway blob transport without weakening desktop or
 web CSP.** **Served Docs retains its same-origin content-URI fetch path.**
@@ -86,6 +93,9 @@ bun run --cwd apps/mobile typecheck
 bun run --cwd apps/desktop typecheck
 bun run --cwd apps/web typecheck
 # clean
+
+bun run --cwd apps/desktop test:e2e -- tests/e2e/docs-drive.spec.ts tests/e2e/household.spec.ts tests/e2e/locker.spec.ts
+# 4 desktop journeys passed
 ```
 
 The first combined typecheck pass found the new Docs unit using the browser
@@ -110,7 +120,9 @@ receipt mirrors issue #794, names every issue-owned file, and the authenticated
 inline path, served same-origin fallback, exact CORS token, and shell body-paint
 assertions match the diff. The desktop UI artifact is captured only after both
 persisted paragraphs are visible; the tightened mock-call assertions preserve
-the same contracts (18/18 focused Docs tests passed).
+the same contracts (18/18 focused Docs tests passed). The later desktop
+journey edits are test-only contract alignment and were verified by the 4/4
+focused desktop run above.
 
 ## Session
 

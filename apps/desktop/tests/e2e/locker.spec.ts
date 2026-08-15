@@ -33,10 +33,12 @@ async function foundDesktop(page: Page): Promise<void> {
     .getByTestId("first-run-choice")
     .getByRole("button", { name: /start fresh on this mac/iu })
     .click();
-  const name = page.getByRole("textbox", { name: "Your name" });
-  await name.waitFor({ state: "visible", timeout: 60_000 });
-  await name.fill("Locker Owner");
-  await page.getByRole("button", { name: "Continue" }).click();
+  // The fresh/local path now founds Personal and hands off to Home directly;
+  // identity is optional Settings state, not a first-run gate.
+  const onboarding = page.getByTestId("onboarding-view");
+  await onboarding.waitFor({ state: "visible" });
+  await expect(page.getByRole("textbox", { name: "Your name" })).toHaveCount(0);
+  await onboarding.waitFor({ state: "detached", timeout: 60_000 });
   await waitForHome(page);
 }
 

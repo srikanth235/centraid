@@ -178,8 +178,10 @@ test("2.12 — Household renders the roster, the owner's scopes, and the sharing
     // and, now that the reads are served, counts what the roster resolved:
     // 3 devices (the MacBook's two enrollments fold into one), 2 people,
     // 1 pending decision.
+    // The route's current frame title is Copies; Devices is the body
+    // vocabulary retained in the roster sections below.
     await expect(
-      page.getByRole("heading", { name: "Devices", exact: true })
+      page.getByRole("heading", { name: "Copies", exact: true })
     ).toBeVisible();
     await expect(
       page.getByText("3 devices · 2 people · 1 pending")
