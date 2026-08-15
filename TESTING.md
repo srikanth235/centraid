@@ -112,6 +112,28 @@ The mechanism is a hybrid. The test **must carry an env guard** — `skipIf(pred
 
 What no static scan can find is the _unguarded_ instance — G4's chmod named no platform or uid. The contract is therefore about the response: the moment a deterministic environment red is diagnosed, it is either rewritten environment-independent or guarded, and a guard cannot land uninventoried.
 
+### Named live/hardware lanes (#790)
+
+An opt-in environment gate is not itself a defect: it is honest only when its required rig and invocation are named. The current inventory splits into these two states:
+
+| Lane | Current rig |
+| --- | --- |
+| Clawgnition backup interop | `interop-weekly.yml` sets `CLAWGNITION_INTEROP=1` but does not provision `CLAWGNITION_REPO` or its `.dev.vars`, so the suite collection-skips on a clean runner; no effective rig |
+| 10 GiB restore | `restore-year3` in `.github/workflows/e2e.yml` runs `CENTRAID_SCALE_RESTORE_GIB=10 node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/restore-10gib.scale.test.ts` on an isolated 90-minute Linux job |
+| vault-write fsync count | Linux PR installs `strace`, sets `CENTRAID_BENCH_REQUIRE_FSYNC=1`, and runs `bun run test:perf:pr`; nightly installs `strace` and runs `bun run test:perf`. Missing `strace` in Linux CI is a hard failure |
+| launchd install/uninstall | No named mutable macOS user-session rig; local opt-in only |
+| native QUIC relay | The Linux `verify` job builds the workspace then runs `bun run --cwd packages/tunnel test:native` (the package command sets `CENTRAID_RUN_NATIVE_TUNNEL=1`) |
+| real disk-full filesystem | No privileged APFS image or Linux loop-device rig; local Darwin opt-in only |
+| byte-plane-over-HTTP | The Linux `verify` job runs `bun run --cwd packages/tunnel test:data-plane`, including both TypeScript and built-Rust HTTP contracts |
+| live automation failover | No runner provisioned with the real harness binaries; local opt-in only |
+| mobile strict perf evidence | No uncontended native SQLite evidence runner sets `CENTRAID_PERF_EVIDENCE=1` |
+| reflink allocation | No named APFS/btrfs/xfs runner; ordinary ext4 CI proves only the byte-identical fallback |
+| desktop launch perf evidence | Nightly `desktop-e2e` runs `bun run test:e2e` in `apps/desktop` and publishes `nightly-evidence-desktop`; `quality-performance-scale` restores it and runs `bun run test:perf` |
+| PWA waterfall perf evidence | Nightly `web-e2e` runs `bun run e2e` in `apps/web` and publishes `nightly-evidence-web`; `quality-performance-scale` restores it and runs `bun run test:perf` |
+| native tunnel load perf evidence | `quality-performance-scale` runs `bun run build` to produce the host module, then `bun run test:perf`; the inverse absent-module assertion owns environments without a built native |
+
+The missing rigs remain explicit #790 blockers. Do not delete or narrow their `tests/skips.json` / `tests/env-red.json` entries merely to close the tracker; an entry shrinks only when the named rig actually runs the law or a current decision retires the claim.
+
 ### Assertion-hygiene ratchet (#781)
 
 Two matcher families are weak enough to erode a suite from the inside, and neither is wrong in isolation, so no lint rule can ban them: `toBeTruthy()` / `toBeFalsy()` accept `1`, `'x'`, `[]`, `{}` where the house style asserts an exact `toBe(true)`, and a bare `toHaveBeenCalled()` proves a call happened without proving it was the right one. [`tests/hygiene-budgets.json`](tests/hygiene-budgets.json) makes their totals **down-only** budgets under `bun run test:hygiene-ratchet`, the same shape as the skip budget: a slice may not add sites without a reviewed edit, and slack is a hard failure so the ceiling cannot drift upward by neglect. `--write` reconciles budgets with `Math.min(previous, measured)`, so the escape hatch can only lower a number, never launder a regression.
@@ -170,6 +192,8 @@ Parent backlog: [#496](https://github.com/srikanth235/centraid/issues/496).
 Playwright alone owns desktop and web regression journeys. The mobile journey layer is the committed agent-driven flows under [`tests/agent-e2e-mobile/`](tests/agent-e2e-mobile); their device-driving substrate is **Maestro**, spawned by the harness ([`lib/harness.mjs`](tests/agent-e2e-mobile/lib/harness.mjs) `runMaestroChunk` runs `maestro --udid … test <flow.yaml>` per step) against an installed development app on a booted iOS Simulator or Android emulator. The `mobile-e2e` job in [`e2e.yml`](.github/workflows/e2e.yml) installs a pinned Maestro CLI and runs those flows nightly. There is no second native suite and no Detox suite. Desktop agent-driven flows were retired after their unique restart/persistence assertions moved to Electron Playwright.
 
 React Native component tests use `@testing-library/react-native` 13 on the **same Vitest runner**. They are reserved for claims that need the RN accessibility/responder tree; pure transforms stay unit tests and recognizer/device integration stays Maestro. A component test over roughly 200ms must state what cheaper layer cannot falsify and should be consolidated with adjacent scenarios rather than spawning another cold renderer file.
+
+Accessibility ownership follows the same cheapest-falsifying-layer rule. The web Playwright lane scans the cold connection screen, the connected Home shell, and a shipped first-party app renderer with axe WCAG A/AA. Desktop deliberately reuses that owner: both desktop's Vite entry and the web host execute `packages/client/src/react/boot.tsx`, so a second Electron axe pass would scan the same DOM with the same rule engine; Electron-specific focus and keyboard journeys remain desktop Playwright claims. Mobile role, accessible-name, and state/trait semantics are RNTL claims consolidated in `apps/mobile/src/apps/photos/PhotosHome.test.tsx`; Maestro keeps device/runtime integration and does not stand in for roles or traits its text selectors cannot observe. `scripts/accessibility-contract.test.mjs` remains a fast source-level tripwire, not a matrix evidence owner.
 
 ### App admission contract
 

@@ -432,6 +432,12 @@ interface CentraidClient {
   describe?: () => Promise<unknown>;
   /** Subscribe to the change feed; returns the unsubscribe. */
   onChange: (cb: (detail: CentraidChangeDetail) => void) => () => void;
+  /**
+   * Read vault text through the shell's authenticated blob transport. Inline
+   * shells provide this because their document origin is not the gateway;
+   * served apps omit it and fetch their same-origin content URI directly.
+   */
+  blobText?: (pathname: string, scope?: string) => Promise<string | null>;
   /** Native haptics bridge (mobile shell only; feature-detected). */
   haptic?: Record<string, (() => void) | undefined>;
 }

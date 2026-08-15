@@ -25,8 +25,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { COLLECTION_SECTION_KEYS } from "./photos-collections";
 import type { CollectionSectionKey } from "./photos-collections";
-// @vitest-environment jsdom
+import { makePhotosFixture } from "./photos-fixtures";
 import PhotosCollectionsView from "./PhotosCollectionsView";
+// @vitest-environment jsdom
+import PlaceDetail from "./PlaceDetail";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -34,6 +36,7 @@ import PhotosCollectionsView from "./PhotosCollectionsView";
 
 const mocks = vi.hoisted(() => ({
   assets: [] as unknown[],
+  places: [] as unknown[],
 }));
 
 vi.mock(import("react-native"), async () => {
@@ -97,7 +100,15 @@ vi.mock(import("../../kit/components/NativeText"), async () => {
 
 vi.mock(
   import("../../kit/hooks/useReplicaQuery"),
-  () => ({ useReplicaQuery: () => ({ rows: [] }) }) as never
+  () =>
+    ({
+      useReplicaQuery: (
+        _appId: string,
+        query: { entity?: string }
+      ): { rows: unknown[] } => ({
+        rows: query.entity === "core.place" ? mocks.places : [],
+      }),
+    }) as never
 );
 
 vi.mock(
@@ -139,7 +150,46 @@ vi.mock(
     }) as never
 );
 
-vi.mock(import("./timeline-model"), () => ({ onThisDay: () => [] }) as never);
+vi.mock(import("./timeline-model"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  onThisDay: () => [],
+}));
+
+vi.mock(
+  import("../../kit/replica/ReplicaStatusBar"),
+  () => ({ default: () => null }) as never
+);
+
+vi.mock(
+  import("../../kit/replica/useReplicaRefresh"),
+  () =>
+    ({
+      useReplicaRefresh: () => ({
+        refreshing: false,
+        refreshNow: () => undefined,
+      }),
+    }) as never
+);
+
+vi.mock(import("./PhotoTimeline"), async () => {
+  const ReactModule = await import("react");
+  return {
+    default: ({ sections }: { sections: Array<{ assets: unknown[] }> }) =>
+      ReactModule.createElement(
+        "div",
+        { "data-testid": "place-photographs" },
+        sections.flatMap((section) => section.assets).length
+      ),
+  } as never;
+});
+
+vi.mock(import("./PhotosScreen"), async () => {
+  const ReactModule = await import("react");
+  return {
+    default: ({ children }: { children?: React.ReactNode }) =>
+      ReactModule.createElement(ReactModule.Fragment, null, children),
+  } as never;
+});
 
 vi.mock(
   import("./timeline-source"),
@@ -182,6 +232,29 @@ function Harness({
   );
 }
 
+function TileToDetailHarness(): React.JSX.Element {
+  const [detail, setDetail] = useState<{
+    placeKey: string;
+    placeName: string;
+  } | null>(null);
+  const navigate = (screen: string, params?: Record<string, unknown>): void => {
+    if (screen !== "PlaceDetail") return;
+    setDetail(params as { placeKey: string; placeName: string });
+  };
+  return detail ? (
+    <PlaceDetail
+      navigation={{ goBack: () => setDetail(null), navigate } as never}
+      route={{ params: detail } as never}
+    />
+  ) : (
+    <PhotosCollectionsView
+      navigation={{ navigate } as never}
+      collapsed={new Set()}
+      onToggleSection={() => undefined}
+    />
+  );
+}
+
 function render(initialCollapsed?: ReadonlySet<CollectionSectionKey>): void {
   act(() => {
     root = createRoot(container!);
@@ -210,6 +283,7 @@ describe("Collections' per-section collapse", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     mocks.assets = [];
+    mocks.places = [];
   });
 
   afterEach(() => {
@@ -298,6 +372,33 @@ describe("Collections' per-section collapse", () => {
     });
     press("Open People, 0");
     expect(navigate).toHaveBeenCalledWith("PhotosPeople");
+  });
+
+  it("a place tile opens the rounded shelf detail with every photograph its count claims", () => {
+    const [tahoe] = makePhotosFixture("place-tagged").assets;
+    mocks.assets = [tahoe, { ...tahoe, id: "place-tahoe-2" }];
+    mocks.places = [
+      {
+        place_id: "place-tahoe",
+        name: "Lake Tahoe",
+        geo_lat: 39.096_8,
+        geo_lng: -120.032_4,
+      },
+    ];
+    act(() => {
+      root = createRoot(container!);
+      root.render(<TileToDetailHarness />);
+    });
+
+    press("Lake Tahoe");
+
+    expect(container!.textContent).toContain("2 photographs");
+    expect(
+      container!.querySelector('[data-testid="place-photographs"]')?.textContent
+    ).toBe("2");
+    expect(container!.textContent).not.toContain(
+      "No photographs at Lake Tahoe yet."
+    );
   });
 
   // Issue #721 B3 — Videos joined the shelf list; its heading opens the same

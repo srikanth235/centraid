@@ -345,17 +345,25 @@ export class NativeReplicaSession implements MobileReplicaSession {
       input: input.input as Readonly<Record<string, unknown>>,
       intentId,
     });
-    const { optimistic, dependencies } = prepareReplicaWrite(
-      appId,
-      input.optimistic ?? projected.optimistic,
-      this.#catalog,
-      this.resolveShapeId.bind(this),
-      false
-    );
+    // On a first-open offline launch there is no replica catalog to validate
+    // the optimistic row against. Preserve the durable action intent and defer
+    // only its projection until canonical bootstrap data arrives.
+    const { optimistic, dependencies } =
+      this.#catalog.length === 0
+        ? { optimistic: [], dependencies: [] }
+        : prepareReplicaWrite(
+            appId,
+            input.optimistic ?? projected.optimistic,
+            this.#catalog,
+            this.resolveShapeId.bind(this),
+            false
+          );
     const baseVersions =
       input.baseVersions ??
       projected.baseVersions ??
-      (await this.#coordinator.captureBaseVersions(optimistic));
+      (this.#hasCursor
+        ? await this.#coordinator.captureBaseVersions(optimistic)
+        : []);
     const matched = await this.#coordinator.reviseIntentForProjection(
       appId,
       input.action,

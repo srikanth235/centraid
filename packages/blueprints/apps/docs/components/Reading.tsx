@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
+import { loadBlobText } from "../blob-text.ts";
 import { capabilityOn } from "../capabilities.ts";
 import { READ_OFF, THIS_DOCUMENT } from "../document-copy.ts";
 import { decodeDataUri, fmtBytes, fmtFull, typeMeta } from "../format.ts";
@@ -66,7 +67,7 @@ export function Reading({
   onClose: () => void;
 }): ReactNode {
   // The inline `data:` branch is synchronous, so it is decoded during the
-  // first render; the effect below owns only the async `blob:` fetch. Same
+  // first render; the effect below owns only the async blob-door read. Same
   // split (and same CSP reason) as the editor's.
   const inline = useMemo<{ state: LoadState; text: string } | null>(() => {
     const uri = doc.content_uri;
@@ -84,11 +85,7 @@ export function Reading({
   useEffect(() => {
     if (inline) return undefined;
     let cancelled = false;
-    fetch(doc.content_uri ?? "")
-      .then((r) => {
-        if (!r.ok) throw new Error(String(r.status));
-        return r.text();
-      })
+    loadBlobText(doc.content_uri ?? "")
       .then((text) => {
         if (cancelled) return;
         setBody(text);

@@ -37,7 +37,7 @@ Mobile reads `/centraid/_gateway/info` before constructing either foreground or 
 
 ## Offline changes and cross-vault placement
 
-Ordinary writes stay in each replica's durable intent outbox. Add/Move uses a separate device outbox keyed by a durable link token. Reconciliation always:
+Ordinary writes stay in each replica's durable intent outbox. A first-open write made before any bootstrap is also admitted there: the action input is durable immediately, while its optimistic row projection waits until bootstrap supplies the shape catalog. Add/Move uses a separate device outbox keyed by a durable link token. Reconciliation always:
 
 1. commits or confirms the target projection;
 2. records that target receipt in the gateway database;

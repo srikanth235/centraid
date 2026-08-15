@@ -257,12 +257,12 @@ describe("Photos native component coverage", () => {
     );
     await act(async () => undefined);
 
-    expect(screen.getByText("Your library starts here")).toBeTruthy();
+    expect(screen.getByText("Your library starts here")).toBeDefined();
     expect(
       screen.getByText(
         "Camera-roll photographs appear instantly; hold any one to back it up."
       )
-    ).toBeTruthy();
+    ).toBeDefined();
     expect(screen.queryByLabelText("Opening your library")).toBeNull();
   });
 
@@ -309,13 +309,53 @@ describe("Photos native component coverage", () => {
     expect(screen.getAllByRole("tab")).toHaveLength(3);
 
     fireEvent.press(screen.getByRole("tab", { name: "Months" }));
-    expect(onGrain).toHaveBeenCalledExactlyOnceWith("months");
+    expect(onGrain.mock.calls).toStrictEqual([["months"]]);
 
     screen.rerender(<TimelineGrainControl grain="months" onGrain={onGrain} />);
     await act(async () => clock.advance(60_000));
     expect(screen.getAllByRole("tab")).toHaveLength(3);
     expect(screen.getByRole("tab", { name: "Months" }).props).toMatchObject({
       accessibilityState: { selected: true },
+    });
+  });
+
+  it("publishes native roles, names, and state for the north-star library controls", () => {
+    // #791 chooses the cheapest falsifying native layer: RNTL observes the RN
+    // accessibility tree (roles/traits/state), which Maestro text selectors
+    // cannot. Device journeys continue to own recognizers and OS integration.
+    const grain = render(
+      <TimelineGrainControl
+        grain="months"
+        onGrain={vi.fn<
+          React.ComponentProps<typeof TimelineGrainControl>["onGrain"]
+        >()}
+      />
+    );
+    expect(grain.getAllByRole("tab")).toHaveLength(3);
+    expect(grain.getByRole("tab", { name: "Months" }).props).toMatchObject({
+      accessibilityState: { selected: true },
+    });
+
+    const scrub = render(
+      <ScrubRail
+        label="Aug 2026"
+        position={0.5}
+        top={0}
+        bottom={100}
+        onScrub={vi.fn<React.ComponentProps<typeof ScrubRail>["onScrub"]>()}
+        onScrubEnd={vi.fn<
+          React.ComponentProps<typeof ScrubRail>["onScrubEnd"]
+        >()}
+      />
+    );
+    expect(
+      scrub.getByLabelText("Scrub the timeline by month").props
+    ).toMatchObject({ accessibilityRole: "adjustable" });
+
+    const loading = render(<PhotosGridSkeleton rung={2} />);
+    expect(loading.getByLabelText("Opening your library").props).toMatchObject({
+      accessibilityRole: "progressbar",
+      accessibilityState: { busy: true },
     });
   });
 
@@ -340,7 +380,7 @@ describe("Photos native component coverage", () => {
     );
     expect(
       screen.getByText(/carry no capture date, so they have no year or month/u)
-    ).toBeTruthy();
+    ).toBeDefined();
   });
 
   it("maps scrub offsets to ratios and positions the month bubble", () => {
@@ -361,7 +401,7 @@ describe("Photos native component coverage", () => {
     fireEvent(rail, "responderGrant", {
       nativeEvent: { locationY: 25 },
     });
-    expect(onScrub).toHaveBeenCalledExactlyOnceWith(0.25);
+    expect(onScrub.mock.calls).toStrictEqual([[0.25]]);
     expect(
       screen
         .UNSAFE_getAllByType(View)
@@ -383,9 +423,9 @@ describe("Photos native component coverage", () => {
     expect(chip.props).toMatchObject({
       accessibilityState: { disabled: false },
     });
-    expect(screen.getByText("Select")).toBeTruthy();
+    expect(screen.getByText("Select")).toBeDefined();
     fireEvent.press(chip);
-    expect(onPress).toHaveBeenCalledOnce();
+    expect(onPress.mock.calls).toStrictEqual([[]]);
     screen.rerender(<SelectChip disabled onPress={onPress} />);
     expect(screen.getByRole("button", { name: "Select" }).props).toMatchObject({
       accessibilityState: { disabled: true },
@@ -400,7 +440,7 @@ describe("Photos native component coverage", () => {
     );
     expect(screen.getByText("Nothing matches “Atlantis”")).toBeTruthy();
     fireEvent.press(screen.getByRole("button", { name: "Clear search" }));
-    expect(onClear).toHaveBeenCalledOnce();
+    expect(onClear.mock.calls).toStrictEqual([[]]);
   });
 
   it("distinguishes the empty-query search state from no hits", () => {
@@ -428,7 +468,7 @@ describe("Photos native component coverage", () => {
       />
     );
     fireEvent.press(screen.getByRole("button", { name: "More actions" }));
-    expect(noop).toHaveBeenCalledOnce();
+    expect(noop.mock.calls).toStrictEqual([[]]);
     screen.rerender(
       <ViewerTopChrome
         colors={colors}
@@ -445,7 +485,7 @@ describe("Photos native component coverage", () => {
     );
     expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
     fireEvent.press(screen.getByRole("button", { name: "Leave" }));
-    expect(noop).toHaveBeenCalledTimes(2);
+    expect(noop.mock.calls).toStrictEqual([[], []]);
 
     const assets = makePhotosFixture("video-mixed").assets;
     const strip = render(
@@ -519,6 +559,6 @@ describe("Photos native component coverage", () => {
       screen.getByText("Photos cannot reach your camera roll")
     ).toBeTruthy();
     fireEvent.press(screen.getByRole("button", { name: "Allow access" }));
-    expect(onRequest).toHaveBeenCalledOnce();
+    expect(onRequest.mock.calls).toStrictEqual([[]]);
   });
 });

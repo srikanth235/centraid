@@ -13,13 +13,14 @@
 // as local, continuously-autosaved state through core.edit_document, the
 // same debounce/flush shape notes/components/Editor's performSave/
 // scheduleSave/registerFlush established for note bodies. A same-origin
-// blob: route (issue #296) fetches; an inline data: URI (small bodies never
+// blob route (issue #296) loads through the host-aware blob primitive; an inline data: URI (small bodies never
 // rewrite to a blob route) decodes directly via format.ts's decodeDataUri —
 // `fetch()`-ing a data: URI is blocked by the app's own CSP (`connect-src`
 // inherits `default-src 'self'`, and data: isn't 'self'), so that branch is
 // load-bearing, not an optimization.
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { loadBlobText } from "../blob-text.ts";
 import { DSAVE, refusedStatus, savedStatus } from "../document-copy.ts";
 import type { SaveOutcomeId } from "../document-copy.ts";
 import { decodeDataUri } from "../format.ts";
@@ -105,7 +106,7 @@ export function Editor({
   const savingRef = useRef<Promise<void> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Only the async blob: route is loaded here — an inline data: body was already
+  // Only the async blob route is loaded here — an inline data: body was already
   // decoded above, during the first render.
   useEffect(() => {
     if (inline) return undefined;
@@ -116,11 +117,7 @@ export function Editor({
       setLoadState("ready");
     }
     let cancelled = false;
-    fetch(doc.content_uri!)
-      .then((r) => {
-        if (!r.ok) throw new Error(String(r.status));
-        return r.text();
-      })
+    loadBlobText(doc.content_uri!)
       .then((text) => {
         if (!cancelled) loaded(text);
       })

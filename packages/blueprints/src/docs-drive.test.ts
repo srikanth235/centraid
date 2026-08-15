@@ -24,7 +24,7 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const app = (rel: string): string =>
   pathToFileURL(path.resolve(import.meta.dirname, "../apps/docs", rel)).href;
@@ -98,6 +98,9 @@ const docCopy = (await import(app("document-copy.ts"))) as {
 };
 const format = (await import(app("format.ts"))) as {
   canRender: (doc: { media_type?: string | null }) => boolean;
+};
+const blobText = (await import(app("blob-text.ts"))) as {
+  loadBlobText: (uri: string) => Promise<string>;
 };
 const shelves = (await import(app("shelves.ts"))) as {
   FOLDERS: string;
@@ -255,6 +258,50 @@ describe("the seven write outcomes (§6.3)", () => {
 });
 
 describe("what Docs can show (§10.1) and what it asks for (§4.3)", () => {
+  it("loads an inline-shell document through the authenticated blob primitive", async () => {
+    const host = globalThis as unknown as {
+      centraid: { blobText?: (uri: string) => Promise<string | null> };
+    };
+    const previous = host.centraid;
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const read = vi.fn<(uri: string) => Promise<string>>(
+      async () => "Body painted from the vault"
+    );
+    host.centraid = { blobText: read } as never;
+    try {
+      await expect(
+        blobText.loadBlobText("/centraid/_vault/blobs/body-sha")
+      ).resolves.toBe("Body painted from the vault");
+      expect(read.mock.calls).toStrictEqual([
+        ["/centraid/_vault/blobs/body-sha"],
+      ]);
+      expect(fetchSpy.mock.calls).toStrictEqual([]);
+    } finally {
+      host.centraid = previous;
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("keeps served document URIs on the same-origin fetch path", async () => {
+    const host = globalThis as unknown as {
+      centraid: { blobText?: (uri: string) => Promise<string | null> };
+    };
+    const previous = host.centraid;
+    host.centraid = {};
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("Served document body"));
+    try {
+      await expect(blobText.loadBlobText("/documents/body.txt")).resolves.toBe(
+        "Served document body"
+      );
+      expect(fetchSpy.mock.calls).toStrictEqual([["/documents/body.txt"]]);
+    } finally {
+      host.centraid = previous;
+      fetchSpy.mockRestore();
+    }
+  });
+
   it("separates the kind from whether Docs can render it", () => {
     expect(format.canRender({ media_type: "application/pdf" })).toBe(true);
     expect(format.canRender({ media_type: "text/markdown" })).toBe(true);

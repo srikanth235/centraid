@@ -208,7 +208,7 @@ function setCorsHeaders(
   );
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "authorization, content-type, x-centraid-vault, x-centraid-client-session"
+    "authorization, content-type, x-centraid-vault, x-centraid-client-session, x-content-sha256"
   );
   res.setHeader("Access-Control-Max-Age", "86400");
 }

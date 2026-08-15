@@ -15,6 +15,7 @@
 // spec's claim and stays tracked in the #781 follow-up issue.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 import { installHarnessControlTransport } from "./control-transport.js";
 
@@ -46,27 +47,7 @@ function describeViolations(
     .join("\n");
 }
 
-test("the cold connect screen has no WCAG A/AA violations", async ({
-  page,
-}) => {
-  await page.goto("/");
-  // The connect heading + pairing-ticket textbox are the cold screen's whole
-  // contract; scan only once it is actually the screen under test.
-  await page.getByRole("textbox").first().waitFor();
-
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
-  expect(
-    results.violations,
-    describeViolations(results.violations)
-  ).toStrictEqual([]);
-});
-
-test("the connected Home shell has no WCAG A/AA violations", async ({
-  page,
-}) => {
-  // Same connected-session bootstrap as web-pwa.spec.ts: cookie control
-  // session from the mock gateway, then a stored connection + completed
-  // onboarding so the reload lands on Home rather than the connect screen.
+async function connectPwa(page: Page): Promise<void> {
   await installHarnessControlTransport(page, API_URL);
   await page.goto("/");
   const control = await page.evaluate(
@@ -110,8 +91,53 @@ test("the connected Home shell has no WCAG A/AA violations", async ({
     }
   );
   await page.reload();
-  // Home is ready when the Apps navigation is on screen (#708 springboard).
   await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
+}
+
+async function openFirstParty(page: Page, name: string): Promise<void> {
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await expect
+    .poll(
+      async () => {
+        if (await palette.isVisible()) return true;
+        const search = page.getByRole("button", { name: /^Search/u });
+        if ((await search.count()) > 0) await search.first().click();
+        else await page.keyboard.press("ControlOrMeta+k");
+        return palette.isVisible();
+      },
+      { timeout: 30_000 }
+    )
+    .toBe(true);
+  await palette.locator("input").fill(name);
+  await palette.getByRole("button").filter({ hasText: name }).first().click();
+  await expect(page.getByTestId("inline-app-view")).toBeVisible();
+  await expect(page.getByText(`Loading ${name}…`, { exact: true })).toHaveCount(
+    0
+  );
+}
+
+test("the cold connect screen has no WCAG A/AA violations", async ({
+  page,
+}) => {
+  await page.goto("/");
+  // The connect heading + pairing-ticket textbox are the cold screen's whole
+  // contract; scan only once it is actually the screen under test.
+  await page.getByRole("textbox").first().waitFor();
+
+  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+  expect(
+    results.violations,
+    describeViolations(results.violations)
+  ).toStrictEqual([]);
+});
+
+test("the connected Home shell has no WCAG A/AA violations", async ({
+  page,
+}) => {
+  // Same connected-session bootstrap as web-pwa.spec.ts: cookie control
+  // session from the mock gateway, then a stored connection + completed
+  // onboarding so the reload lands on Home rather than the connect screen.
+  await connectPwa(page);
 
   const results = await new AxeBuilder({ page })
     .withTags(WCAG_TAGS)
@@ -120,6 +146,26 @@ test("the connected Home shell has no WCAG A/AA violations", async ({
     // for a fixture app's markup.
     .exclude('iframe[title="app"]')
     .analyze();
+  expect(
+    results.violations,
+    describeViolations(results.violations)
+  ).toStrictEqual([]);
+});
+
+test("a first-party blueprint has no WCAG A/AA violations in its real renderer", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await connectPwa(page);
+  await openFirstParty(page, "Docs");
+  await expect(
+    page.getByRole("heading", { name: "Docs" }).first()
+  ).toBeVisible();
+
+  // First-party apps render inline through the shared kit rather than through
+  // the custom-app iframe. The page scan therefore exercises the actual Docs
+  // tree alongside its hosting shell.
+  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
   expect(
     results.violations,
     describeViolations(results.violations)

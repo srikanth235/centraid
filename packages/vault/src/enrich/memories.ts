@@ -61,17 +61,21 @@
 // underlying data produce byte-identical `media_memory` /
 // `media_memory_member` rows regardless of when either sweep ran.
 //
-// COST. v0 keeps the rebuild simple: one full read of the source tables, an
-// in-memory group, then DELETE-ALL + REINSERT in one transaction — no
-// incremental fingerprint short-circuit like `clusters.ts`'s (issue #659
-// G1/G2). That optimization is a defensible follow-up once this sweep shows
-// up in a nightly profile; a first version over three cheap, already-indexed
-// source tables does not need it yet.
+// COST. The pass fingerprints source and persisted projection rows. Identical
+// state reuses the prior counts without regrouping; after a restart it groups
+// once, compares the desired projection, and writes only when they differ.
+// Projection rows are part of the fingerprint, so deletion/corruption still
+// invalidates the memo and is repaired on the next sweep (issue #792).
 
 import type { DatabaseSync } from "node:sqlite";
 
 import { nowIso } from "../ids.js";
 import { UnionFind } from "./clusters.js";
+import type {
+  MemoryProjectionDraft,
+  MemoryProjectionResult,
+} from "./memories-fingerprint.js";
+import { beginMemoryProjectionPass } from "./memories-fingerprint.js";
 
 /**
  * Two calendar days with a gap of this many photo-less days still count as
@@ -95,13 +99,7 @@ export const SIMILAR_MIN_GROUP_SIZE = 2;
  *  — a day with photos from only one year has no "on this day" to offer. */
 export const ON_THIS_DAY_MIN_YEARS = 2;
 
-export interface MemoriesRebuildResult {
-  onThisDay: number;
-  trips: number;
-  similar: number;
-  /** Total rows written to `media_memory_member` across every memory. */
-  members: number;
-}
+export type MemoriesRebuildResult = MemoryProjectionResult;
 
 interface AssetRow {
   asset_id: string;
@@ -116,18 +114,7 @@ interface PhashRow {
   cluster_id: string | null;
 }
 
-interface MemoryDraft {
-  memoryId: string;
-  kind: "on-this-day" | "trip" | "similar";
-  titleHint: string | null;
-  dayKey: string | null;
-  placeId: string | null;
-  startedAt: string | null;
-  endedAt: string | null;
-  /** Capture order (or, for undated members, asset_id order) — the row's
-   *  `ordinal` on insert. */
-  members: readonly string[];
-}
+type MemoryDraft = MemoryProjectionDraft;
 
 /**
  * The calendar day an asset was captured, server-side. Shifts by
@@ -406,14 +393,11 @@ function buildSimilar(
 
 /**
  * Recompute the whole Memories v0 projection over LIVE (non-deleted) media
- * assets: delete every `media_memory` / `media_memory_member` row and
- * reinsert from the three builders above, in one transaction — the module
- * header explains why this is safe (derived, never authored, deterministic
- * ids) and why v0 does not need `clusters.ts`'s incremental fingerprint yet.
+ * assets. Source and persisted logical rows short-circuit an identical pass;
+ * a mismatch deletes and reinserts both projection tables in one transaction.
  *
- * `options.now` stamps `computed_at` only; it is never read by any grouping
- * decision above, which is what keeps a rebuild byte-stable across however
- * many times it runs.
+ * `options.now` stamps `computed_at` only; it is never read by grouping or
+ * projection comparison, preserving byte-stable logical rows across sweeps.
  */
 export function rebuildMemories(
   vault: DatabaseSync,
@@ -432,15 +416,28 @@ export function rebuildMemories(
     .prepare(
       `SELECT p.asset_id AS asset_id, p.cluster_id AS cluster_id
          FROM media_asset_phash p
-        WHERE p.cluster_id IS NOT NULL`
+        WHERE p.cluster_id IS NOT NULL
+        ORDER BY p.asset_id`
     )
     .all() as unknown as PhashRow[];
 
   const homePlaceId = resolveHomePlace(vault, assets);
+  const pass = beginMemoryProjectionPass(vault, [
+    assets,
+    phashRows,
+    homePlaceId,
+  ]);
+  if (pass.reused) return pass.reused;
+
   const onThisDay = buildOnThisDay(assets);
   const trips = buildTrips(assets, homePlaceId);
   const similar = buildSimilar(assets, phashRows);
   const drafts = [...onThisDay, ...trips, ...similar];
+  const projection = pass.finish(drafts);
+  if (projection.result.reused) {
+    projection.remember();
+    return projection.result;
+  }
 
   vault.exec("BEGIN IMMEDIATE");
   try {
@@ -455,7 +452,6 @@ export function rebuildMemories(
       `INSERT INTO media_memory_member (memory_id, asset_id, ordinal)
        VALUES (?, ?, ?)`
     );
-    let members = 0;
     for (const draft of drafts) {
       insertMemory.run(
         draft.memoryId,
@@ -469,16 +465,11 @@ export function rebuildMemories(
       );
       draft.members.forEach((assetId, ordinal) => {
         insertMember.run(draft.memoryId, assetId, ordinal);
-        members += 1;
       });
     }
     vault.exec("COMMIT");
-    return {
-      onThisDay: onThisDay.length,
-      trips: trips.length,
-      similar: similar.length,
-      members,
-    };
+    projection.remember();
+    return projection.result;
   } catch (error) {
     vault.exec("ROLLBACK");
     throw error;

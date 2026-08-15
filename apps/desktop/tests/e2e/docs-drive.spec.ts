@@ -1,3 +1,6 @@
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
@@ -36,10 +39,14 @@ async function foundDesktop(page: Page): Promise<void> {
     .getByTestId("first-run-choice")
     .getByRole("button", { name: /start fresh on this mac/iu })
     .click();
-  const name = page.getByRole("textbox", { name: "Your name" });
-  await name.waitFor({ state: "visible", timeout: 60_000 });
-  await name.fill("Docs Owner");
-  await page.getByRole("button", { name: "Continue" }).click();
+  // Fresh/local setup now connects and founds Personal directly. Profile
+  // identity is optional and belongs in Settings, so this journey must wait
+  // for the streamlined onboarding hand-off rather than resurrecting the
+  // removed name gate.
+  const onboarding = page.getByTestId("onboarding-view");
+  await onboarding.waitFor({ state: "visible" });
+  await expect(page.getByRole("textbox", { name: "Your name" })).toHaveCount(0);
+  await onboarding.waitFor({ state: "detached", timeout: 60_000 });
   await waitForHome(page);
 }
 
@@ -128,9 +135,7 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
           ? atob(payload)
           : decodeURIComponent(payload);
       }
-      // The same bearer transport the desktop gateway client uses. (The
-      // renderer CSP has no `blob:` in connect-src, so reading back a
-      // blobUrl() object URL is refused — #781 tracks that shell-CSP gap.)
+      // The same bearer transport the desktop gateway client uses.
       const { baseUrl, token } = await window.CentraidApi.getGatewayAuth();
       const response = await fetch(new URL(uri, baseUrl).toString(), {
         headers: { authorization: `Bearer ${token}` },
@@ -150,6 +155,17 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
     await expect(
       reading.getByRole("heading", { name: DOC_TITLE })
     ).toBeVisible();
+    await expect(reading.getByText(DOC_BODY.split("\n\n")[0]!)).toBeVisible();
+    await expect(reading.getByText(DOC_BODY.split("\n\n")[1]!)).toBeVisible();
+    const evidenceDir = path.join(
+      import.meta.dirname,
+      "../../../../artifacts/e2e/ui-impact"
+    );
+    await mkdir(evidenceDir, { recursive: true });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-794-docs-body-paint.png"),
+      fullPage: true,
+    });
   } finally {
     await closeApp(app);
     await cleanupEnv(env);

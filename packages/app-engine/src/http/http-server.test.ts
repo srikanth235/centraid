@@ -105,7 +105,8 @@ describe("http-server", () => {
       headers: {
         Origin: "null",
         "Access-Control-Request-Method": "POST",
-        "Access-Control-Request-Headers": "authorization, content-type",
+        "Access-Control-Request-Headers":
+          "authorization, content-type, x-content-sha256",
       },
     });
     expect(res.status).toBe(204);
@@ -115,6 +116,9 @@ describe("http-server", () => {
     );
     expect(res.headers.get("access-control-allow-headers") ?? "").toMatch(
       /authorization/iu
+    );
+    expect(res.headers.get("access-control-allow-headers") ?? "").toMatch(
+      /(?:^|,\s*)x-content-sha256(?:\s*,|$)/iu
     );
   });
 

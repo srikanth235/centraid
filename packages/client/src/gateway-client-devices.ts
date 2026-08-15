@@ -327,7 +327,7 @@ export async function getGatewayDeviceWorkStatus(): Promise<
       res,
       "device work status"
     );
-    return out.vaults;
+    return out.vaults ?? [];
   } catch (error) {
     if (error instanceof GatewayClientError && error.code === "not_found")
       return [];

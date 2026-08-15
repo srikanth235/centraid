@@ -167,14 +167,21 @@ describe("memories", () => {
     addAsset({ captured_at: "2024-07-16T10:00:00.000Z" });
     addAsset({ captured_at: "2023-07-16T10:00:00.000Z" });
     const now = "2026-01-01T00:00:00.000Z";
-    rebuildMemories(db.vault, { now });
+    const cold = rebuildMemories(db.vault, { now });
+    expect(cold.reused).toBe(false);
     const first = db.vault
       .prepare(`SELECT * FROM media_memory ORDER BY memory_id`)
       .all();
     const firstMembers = db.vault
       .prepare(`SELECT * FROM media_memory_member ORDER BY memory_id, asset_id`)
       .all();
-    rebuildMemories(db.vault, { now });
+    const changesBeforeIdle = (
+      db.vault.prepare("SELECT total_changes() AS n").get() as { n: number }
+    ).n;
+    const idle = rebuildMemories(db.vault, { now });
+    const changesAfterIdle = (
+      db.vault.prepare("SELECT total_changes() AS n").get() as { n: number }
+    ).n;
     const second = db.vault
       .prepare(`SELECT * FROM media_memory ORDER BY memory_id`)
       .all();
@@ -183,6 +190,8 @@ describe("memories", () => {
       .all();
     expect(second).toStrictEqual(first);
     expect(secondMembers).toStrictEqual(firstMembers);
+    expect(idle).toStrictEqual({ ...cold, reused: true });
+    expect(changesAfterIdle - changesBeforeIdle).toBe(0);
   });
 
   test("drop and rebuild reproduces the same projection", () => {
@@ -200,8 +209,9 @@ describe("memories", () => {
         }
       ).n
     ).toBe(0);
-    rebuildMemories(db.vault, { now });
+    const repaired = rebuildMemories(db.vault, { now });
     const after = db.vault.prepare(`SELECT * FROM media_memory`).all();
+    expect(repaired.reused).toBe(false);
     expect(after).toStrictEqual(before);
   });
 

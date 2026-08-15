@@ -10,6 +10,8 @@ import { describe, expect, it } from "vitest";
 import {
   devices,
   installSeamContractHarness,
+  json,
+  respond,
   sentJson,
   wireLog,
 } from "./gateway-client-seam-fixtures.js";
@@ -61,5 +63,15 @@ describe("pairing-ticket mint seam", () => {
       vaultName: "Priya's vault",
       vaults: [{ vaultId: "v-new", vaultName: "Priya's vault" }],
     });
+  });
+});
+
+describe("device-work status seam", () => {
+  it("degrades a gateway response without vaults to an empty work list", async () => {
+    respond("GET /centraid/_gateway/device-work/status", () => json({}));
+
+    await expect(devices.getGatewayDeviceWorkStatus()).resolves.toStrictEqual(
+      []
+    );
   });
 });

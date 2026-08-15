@@ -782,21 +782,21 @@
     "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
     "tunnel-pairing.security": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
     "tunnel-pairing.compat": "packages/tunnel/src/wire-conformance.contract.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
-    "vault-core.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
-    "blob-custody.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
-    "backup-restore.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
-    "replica-sync.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
-    "gateway.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
-    "app-engine.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
-    "automations.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
-    "agent-runtime.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
-    "tunnel-pairing.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
-    "extension.accessibility": "The companion popup is interactive and inherits the shared control semantics, but its full keyboard/screen-reader browser journey remains owned by the consuming web surface. Tracked under #781 (originally #656).",
-    "oauth-worker.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
-    "blueprints.accessibility": "One 4-test contract file (scripts/accessibility-contract.test.mjs) is the only accessibility owner and nothing gates coverage of the surfaces it speaks for; the per-surface keyboard and screen-reader journeys are unowned. Tracked under #781 (originally #656).",
-    "desktop.accessibility": "Same single shared accessibility contract as every other surface, with no desktop-specific keyboard/screen-reader journey and no coverage floor behind it. Tracked under #781 (originally #656).",
-    "web.accessibility": "Same single shared accessibility contract, with no web keyboard/screen-reader journey of its own and no coverage floor behind it. Tracked under #781 (originally #656).",
-    "mobile.accessibility": "Same single shared accessibility contract; no React Native accessibility journey exists on device. Tracked under #781 (originally #656).",
+    "vault-core.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
+    "blob-custody.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
+    "backup-restore.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
+    "replica-sync.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
+    "gateway.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
+    "app-engine.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
+    "automations.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
+    "agent-runtime.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
+    "tunnel-pairing.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
+    "extension.accessibility": "The companion feeds the consuming web surface; its user-visible handoff is covered by the real shared-shell browser accessibility lane. A distinct popup keyboard journey is not claimed by this cell and remains tracked under #781.",
+    "oauth-worker.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
+    "blueprints.accessibility": "A shipped first-party blueprint is scanned in its real inline renderer by apps/web/tests/e2e/accessibility.spec.ts; static source contracts remain a separate fast PR tripwire. Broader app-state depth is tracked under #781.",
+    "desktop.accessibility": "Desktop deliberately reuses the web axe owner: both hosts compile packages/client/src/react/boot.tsx as the renderer entry, so a second axe pass over Electron would duplicate the same DOM and rules. Electron-specific keyboard depth remains tracked under #781.",
+    "web.accessibility": "The connect screen, connected Home shell, and a shipped first-party app inline renderer are scanned with axe WCAG A/AA in Chromium by apps/web/tests/e2e/accessibility.spec.ts. Broader route/state depth is tracked under #781.",
+    "mobile.accessibility": "RNTL observes native role, accessible-name, and state/trait contracts in apps/mobile/src/apps/photos/PhotosHome.test.tsx; Maestro remains the device/runtime layer because its selectors cannot falsify RN role and trait semantics. Broader screen depth is tracked under #781.",
     "web.performance": "The owning rig tests/perf/pwa-waterfall.perf.test.ts self-skips when the nightly waterfall artifact is missing, so a green run does not prove the budget ran. Tracked under #781 (originally #656).",
     "web.security": "apps/web/tests/e2e/web-pwa.spec.ts is a single test asked to carry both the session-isolation law and the journey; the isolation claim needs a test of its own. Tracked under #781 (originally #656).",
     "web.journey": "apps/web/tests/e2e/web-pwa.spec.ts is a single test shared with the security claim; the install-to-app journey has no separate owner. Tracked under #781 (originally #656).",
@@ -1316,63 +1316,63 @@
     "oauth-worker.compat": null,
     "oauth-worker.journey": null,
     "vault-core.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "tier": "accessibility"
     },
     "blob-custody.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "tier": "accessibility"
     },
     "backup-restore.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "tier": "accessibility"
     },
     "replica-sync.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "tier": "accessibility"
     },
     "gateway.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "tier": "accessibility"
     },
     "app-engine.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "tier": "accessibility"
     },
     "automations.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "tier": "accessibility"
     },
     "agent-runtime.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "tier": "accessibility"
     },
     "blueprints.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "tier": "accessibility"
     },
     "desktop.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "tier": "accessibility"
     },
     "web.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "tier": "accessibility"
     },
     "mobile.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/mobile/src/apps/photos/PhotosHome.test.tsx",
       "tier": "accessibility"
     },
     "tunnel-pairing.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "tier": "accessibility"
     },
     "extension.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "tier": "accessibility"
     },
     "oauth-worker.accessibility": {
-      "owner": "scripts/accessibility-contract.test.mjs",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "tier": "accessibility"
     }
   },
@@ -2821,6 +2821,24 @@
       "tier": "accessibility",
       "owner": "scripts/accessibility-contract.test.mjs",
       "minimumTests": 4
+    },
+    {
+      "id": "blueprint-accessibility-axe",
+      "name": "A shipped first-party app carries no WCAG A/AA violations in its real browser renderer",
+      "surface": "blueprints",
+      "dimension": "accessibility",
+      "tier": "accessibility",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "mobile-native-accessibility-tree",
+      "name": "North-star native controls expose roles, names, and selected/busy state in the RN accessibility tree",
+      "surface": "mobile",
+      "dimension": "accessibility",
+      "tier": "accessibility",
+      "owner": "apps/mobile/src/apps/photos/PhotosHome.test.tsx",
+      "minimumTests": 1
     },
     {
       "id": "backup-throughput-budget",

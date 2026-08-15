@@ -51,43 +51,6 @@ async function openFirstParty(page: Page, name: string): Promise<void> {
 
 async function connectPwa(page: Page): Promise<void> {
   await installHarnessControlTransport(page, API_URL);
-  // Harness-only transport shim, layered over the control adapter above. The
-  // adapter turns the product's iroh calls into cross-origin HTTP, and the
-  // gateway's credentialed CORS preflight allowlist does not include the
-  // staging door's optional `x-content-sha256` integrity header
-  // (`Access-Control-Allow-Headers` in app-engine http-server.ts), so the
-  // browser refuses the preflighted POST. Real iroh never issues HTTP, so no
-  // production transport hits this. Dropping the optional header keeps the
-  // product staging path real — the declared sha still travels in the query
-  // string and the gateway hashes authoritatively either way.
-  await page.addInitScript(() => {
-    const base = (
-      window as unknown as {
-        CentraidIroh?: {
-          fetch: (pathname: string, init?: RequestInit) => Promise<Response>;
-          url: (pathname: string) => Promise<string>;
-        };
-      }
-    ).CentraidIroh;
-    if (!base) return;
-    const wrapped = {
-      fetch: async (pathname: string, init: RequestInit = {}) => {
-        let finalInit = init;
-        if (finalInit.headers) {
-          const headers = new Headers(finalInit.headers);
-          headers.delete("x-content-sha256");
-          finalInit = { ...finalInit, headers };
-        }
-        return base.fetch(pathname, finalInit);
-      },
-      url: (pathname: string) => base.url(pathname),
-    };
-    Object.defineProperty(window, "CentraidIroh", {
-      configurable: true,
-      get: () => wrapped,
-      set: () => undefined,
-    });
-  });
   await page.goto("/");
   const control = await page.evaluate(
     async ({ apiUrl, token }) => {
@@ -254,13 +217,8 @@ test("Docs uploads a real file and its bytes survive a PWA reload", async ({
   }, contentUri!);
   expect(roundTrip).toBe(DOC_BODY);
 
-  // Opening the document routes to the reading view (text renders on paper,
-  // §1.8). The BODY paint is deliberately not asserted here: the web shell's
-  // CSP (`connect-src` without `blob:`, web-ui-server.ts) blocks the reading
-  // view's fetch of the authorized blob object URL, so the body lands in the
-  // honest "could not be fetched" state on the viewer seat today. #781 tracks
-  // that defect; the byte round-trip above is the content-survival proof, and
-  // the desktop journey owns the member-visible paint.
+  // Opening the document routes to the reading view and paints the exact body
+  // through the inline shell's authenticated blob primitive.
   await page
     .getByRole("button", { name: `Preview ${DOC_TITLE}` })
     .first()
@@ -268,4 +226,6 @@ test("Docs uploads a real file and its bytes survive a PWA reload", async ({
   const reading = page.getByRole("article", { name: DOC_TITLE });
   await expect(reading).toBeVisible({ timeout: 30_000 });
   await expect(reading.getByRole("heading", { name: DOC_TITLE })).toBeVisible();
+  await expect(reading.getByText(DOC_BODY.split("\n\n")[0]!)).toBeVisible();
+  await expect(reading.getByText(DOC_BODY.split("\n\n")[1]!)).toBeVisible();
 });

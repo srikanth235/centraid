@@ -1,5 +1,5 @@
 {
-  "approvedDeviation": "#781 waves 2-3 add six laws and 32 flows, upgrade desktop.offline from skip to partial, register split trackers #790/#791, and re-home env-gated evidence to #790; #782 re-homes closed citations and #785 records the 2026-08-14 demonstrated-red D7 run. No other governed cell, owner, or lane changed and nothing was downgraded.",
+  "approvedDeviation": "#791 moves every accessibility cell from the static contract to real Playwright or RNTL runtime-tree owners, adds blueprint/mobile evidence flows while retaining the four-test static tripwire floor, and corrects the web owner wording to the actual inline renderer; no quality grade, budget, or demonstrated-red claim is weakened.",
   "matrixGovernanceFingerprint": "76e4bf7392b7d75e5e510d54b5dea4c8b214314fa3a5c494bf42848c782c0db7",
   "fingerprints": {
     "packages/agent-runtime/src/backends/acp/vault-mcp-server.ts": "23bf19e215bfe3fd8a21a4dd896d06c97835d43fc3412bfcc9bb0312bd6d7ff2",
@@ -8,6 +8,6 @@
     "packages/gateway/src/serve/health-registry.ts": "d4483393bf09d7839ce995b1d6c698501f079e0c53d7e6031de268f7b642e4e6",
     "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
     "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
-    "tests/matrix.json": "599dd7c9007365b854a03dc41389239c8fe05a212ce20d3c64180ec054707fa5"
+    "tests/matrix.json": "c4610296329e758698bc0880d88616a8b06c24d177f08852ec9c247650fd1229"
   }
 }
