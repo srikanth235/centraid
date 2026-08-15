@@ -64,10 +64,6 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
     )
   );
   await fs.writeFile(
-    path.join(appDir, "index.html"),
-    "<!doctype html><title>git-store</title>OK"
-  );
-  await fs.writeFile(
     path.join(appDir, "queries", "ping.js"),
     "export default async () => ({ pong: true });\n"
   );
@@ -85,7 +81,7 @@ describe("serve-git-store scenarios", () => {
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  test("serves an app from the git-store main worktree, not versions/", async () => {
+  test("runs an app from the git-store main worktree, not versions/", async () => {
     handle = await serve({ paths: pathsUnder(dataDir) });
 
     // The ACTIVE vault owns the code store (#280) — seed through it, then
@@ -102,14 +98,8 @@ describe("serve-git-store scenarios", () => {
     const apps = (await list.json()) as Array<{ id: string }>;
     expect(apps.some((a) => a.id === "gitapp")).toBeTruthy();
 
-    // Static serve reads index.html from worktrees/main/<sha>/apps/gitapp/.
-    const html = await fetch(`${handle.url}/centraid/gitapp/`, {
-      headers: { Authorization: `Bearer ${handle.token}` },
-    });
-    expect(html.status).toBe(200);
-    await expect(html.text()).resolves.toMatch(/git-store/u);
-
-    // App RPC dispatch resolves the query handler from the worktree.
+    // App RPC dispatch resolves the query handler from
+    // worktrees/main/<sha>/apps/gitapp/, not from versions/.
     const read = await fetch(`${handle.url}/centraid/gitapp/queries/ping`, {
       method: "POST",
       headers: {

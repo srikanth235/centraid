@@ -93,9 +93,9 @@ describe("useShellApps", () => {
         { id: "todos", name: "Todos", iconKey: "Todo", color: "#1" },
       ]);
       listApps.mockResolvedValue([
-        { id: "todos", name: "Todos", kind: "app", hasIndex: false },
-        { id: "wip", name: "WIP", kind: "app", hasIndex: true },
-        { id: "auto1", name: "Cron", kind: "automation", hasIndex: false },
+        { id: "todos", name: "Todos", kind: "app" },
+        { id: "wip", name: "WIP", kind: "app" },
+        { id: "auto1", name: "Cron", kind: "automation" },
       ]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["todos"]);
@@ -107,9 +107,9 @@ describe("useShellApps", () => {
       // have to arrive as installed apps, which is what left Home empty on a
       // vault that owned all eight. Any other row is not this shell's to open.
       listApps.mockResolvedValue([
-        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
-        { id: "tasks", name: "Tasks", kind: "app", hasIndex: true },
-        { id: "wip", name: "WIP", kind: "app", hasIndex: true },
+        { id: "photos", name: "Photos", kind: "app" },
+        { id: "tasks", name: "Tasks", kind: "app" },
+        { id: "wip", name: "WIP", kind: "app" },
       ]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos", "tasks"]);
@@ -119,7 +119,7 @@ describe("useShellApps", () => {
       // They are DERIVED from the gateway on every pass. Writing them back
       // would make them outlive the vault that has them.
       listApps.mockResolvedValue([
-        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
+        { id: "photos", name: "Photos", kind: "app" },
       ]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos"]);
@@ -131,7 +131,7 @@ describe("useShellApps", () => {
         { id: "photos", name: "Photos", iconKey: "Todo", color: "#1" },
       ]);
       listApps.mockResolvedValue([
-        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
+        { id: "photos", name: "Photos", kind: "app" },
       ]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos"]);
@@ -142,9 +142,7 @@ describe("useShellApps", () => {
         { id: "todos", name: "Todos", iconKey: "Todo", color: "#1" },
         { id: "gone", name: "Gone", iconKey: "Todo", color: "#2" },
       ]);
-      listApps.mockResolvedValue([
-        { id: "todos", name: "Todos", kind: "app", hasIndex: false },
-      ]);
+      listApps.mockResolvedValue([{ id: "todos", name: "Todos", kind: "app" }]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["todos"]);
       expect(store.get("home.userApps") as unknown[]).toHaveLength(1);
@@ -161,7 +159,6 @@ describe("useShellApps", () => {
           kind: "app",
           iconKey: "Habit",
           colorKey: "teal",
-          hasIndex: false,
         },
       ]);
       await mount();
@@ -188,7 +185,6 @@ describe("useShellApps", () => {
           name: "Agenda Renamed",
           description: "New desc",
           kind: "app",
-          hasIndex: false,
         },
       ]);
       await mount();
@@ -207,9 +203,7 @@ describe("useShellApps", () => {
       store.set("home.userApps", [
         { id: "notes", name: "Notes", iconKey: "Todo", color: "#1" },
       ]);
-      listApps.mockResolvedValue([
-        { id: "notes", name: "Notes", kind: "app", hasIndex: false },
-      ]);
+      listApps.mockResolvedValue([{ id: "notes", name: "Notes", kind: "app" }]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["notes"]);
 
@@ -221,9 +215,7 @@ describe("useShellApps", () => {
 
       // Back to A: the pin is restored, not pruned.
       (window as unknown as { CentraidApi: unknown }).CentraidApi = api("A");
-      listApps.mockResolvedValue([
-        { id: "notes", name: "Notes", kind: "app", hasIndex: false },
-      ]);
+      listApps.mockResolvedValue([{ id: "notes", name: "Notes", kind: "app" }]);
       await act(async () => ctl.refresh());
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["notes"]);
     });
@@ -238,8 +230,8 @@ describe("useShellApps", () => {
       });
       (window as unknown as { CentraidApi: unknown }).CentraidApi = api("A");
       listApps.mockResolvedValue([
-        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
-        { id: "tasks", name: "Tasks", kind: "app", hasIndex: true },
+        { id: "photos", name: "Photos", kind: "app" },
+        { id: "tasks", name: "Tasks", kind: "app" },
       ]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos", "tasks"]);
@@ -260,7 +252,7 @@ describe("useShellApps", () => {
       });
       (window as unknown as { CentraidApi: unknown }).CentraidApi = api("A");
       listApps.mockResolvedValue([
-        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
+        { id: "photos", name: "Photos", kind: "app" },
       ]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos"]);
@@ -283,9 +275,7 @@ describe("useShellApps", () => {
       store.set("home.userApps", [
         { id: "notes", name: "Notes", iconKey: "Todo", color: "#1" },
       ]);
-      listApps.mockResolvedValue([
-        { id: "notes", name: "Notes", kind: "app", hasIndex: false },
-      ]);
+      listApps.mockResolvedValue([{ id: "notes", name: "Notes", kind: "app" }]);
       await mount();
       expect(store.get("home.userApps.vault")).toBe("A");
 
@@ -307,7 +297,7 @@ describe("useShellApps", () => {
         getGatewayAuth: async () => ({ baseUrl: "", vaultId: "A" }),
       };
       listApps.mockResolvedValue([
-        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
+        { id: "photos", name: "Photos", kind: "app" },
       ]);
       await mount();
       expect(store.get("home.installedApps.byVault")).toBeDefined();

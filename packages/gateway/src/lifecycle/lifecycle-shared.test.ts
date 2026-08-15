@@ -51,9 +51,6 @@ function makeOpts(): LifecycleRouteOptions {
     ensureRegistered: async () => {
       calls.push("ensureRegistered");
     },
-    preparePublishedApp: async () => {
-      calls.push("preparePublishedApp");
-    },
     deregister: async () => {
       calls.push("deregister");
     },
@@ -91,7 +88,6 @@ describe("lifecycle-shared", () => {
     expect(calls).toStrictEqual([
       "publish",
       "ensureRegistered",
-      "preparePublishedApp",
       "reconcile",
       "closeSession",
     ]);
@@ -110,12 +106,7 @@ describe("lifecycle-shared", () => {
       message: "publish notes",
     });
 
-    expect(calls).toStrictEqual([
-      "publish",
-      "ensureRegistered",
-      "preparePublishedApp",
-      "reconcile",
-    ]);
+    expect(calls).toStrictEqual(["publish", "ensureRegistered", "reconcile"]);
   });
 
   test("publishAndReconcile rejects an invalid manifest before publishing", async () => {

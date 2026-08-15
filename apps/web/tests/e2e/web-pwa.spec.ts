@@ -83,7 +83,9 @@ test("boots as a PWA and establishes a cookie control session", async ({
     return { status: response.status, text: await response.text() };
   }, API_URL);
   expect(appsProbe.status, appsProbe.text).toBe(200);
-  expect(appsProbe.text).toContain("web-e2e");
+  // The proxied listing is the gateway's own, not a canned body: every vault
+  // mounts the eight bundled system apps, so `tasks` must be in it.
+  expect(appsProbe.text).toContain('"tasks"');
 
   // Home is the content springboard (#708) — custom apps open via the command
   // palette, not a library card on Home.

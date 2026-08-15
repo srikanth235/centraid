@@ -25,9 +25,9 @@ export interface InlineKitAsk {
 }
 
 /**
- * The context an inline query handler receives — the shell reproduces the
- * served bridge's `ctx` shape (packages/app-engine bridge-script.ts
- * `runLocalQuery`). Typed loosely at this boundary (the concrete surface is
+ * The context an inline query handler receives, built by the shell
+ * (packages/client inlineQueryCtx.ts). Typed loosely at this boundary (the
+ * concrete surface is
  * `HandlerCtx`/`VaultApi` in blueprints' ambient `types/centraid.d.ts`, invisible
  * to the client tsconfig) so the same descriptor type-checks on both sides.
  */

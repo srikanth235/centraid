@@ -247,10 +247,10 @@ function checkCustody(_root, files) {
 //
 // `apps/_shared/consent-gate.ts` types `domain` as `EnrichDomain`, so a Locker
 // consent gate is already a TYPE error at the call site (C4). The type alone
-// is not enough for one reason: blueprint apps are served straight to a browser
-// (`static-server.ts` esbuild-transforms `.ts` on request) and never go through
-// the package's `tsc`, so a `domain="locker"` in an app `.tsx` can ship without
-// a typechecker ever having an opinion. This is the check that has one.
+// is not enough for one reason: the blueprint app tree carries its own ambient
+// globals and is compiled by each shell's bundler, not by the package's own
+// `tsc`, so a `domain="locker"` in an app `.tsx` can ship without a typechecker
+// ever having an opinion. This is the check that has one.
 
 const CONSENT_GATE_PATH = path.join(
   "packages",

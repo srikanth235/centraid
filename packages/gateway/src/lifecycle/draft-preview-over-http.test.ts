@@ -3,13 +3,14 @@ import crypto from "node:crypto";
  * Draft preview through the gateway (issue #141, "preview first").
  *
  * With `appsStoreRoot` set, `serve()` wires a `draftCodeDir` resolver that
- * points an app's code dir at its OPEN session worktree. A request under
- * `/centraid/_draft/<sessionId>/<appId>/…` then serves the STAGED draft —
- * static + handlers — against the app's live data, without publishing.
+ * points an app's code dir at its OPEN session worktree. An RPC request
+ * under `/centraid/_draft/<sessionId>/<appId>/…` then runs the STAGED
+ * handlers against the app's live data, without publishing. #799 retired
+ * the UI-byte half of this surface; the handler half is what remains.
  *
- * We seed + publish an app, then open a session and overwrite its
- * index.html + query handler (the draft). The live path keeps serving the
- * published version; the `_draft` path serves the staged edits.
+ * We seed + publish an app, then open a session and overwrite its query
+ * handler (the draft). The live path keeps running the published handler;
+ * the `_draft` path runs the staged one.
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -85,19 +86,15 @@ describe("draft-preview-over-http scenarios", () => {
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  test("serves a staged draft (static + handlers) while live keeps the published version", async () => {
+  test("runs a staged draft handler while live keeps the published one", async () => {
     handle = await serve({ paths: pathsUnder(dataDir) });
     const store = await handle.appsStore();
     await seedApp(store, "app");
     await handle.syncApps();
 
-    // Open a session and stage a draft: new HTML + a changed query handler.
+    // Open a session and stage a draft: a changed query handler.
     await store.openSession("draft1");
     const draftDir = await store.snapshotSessionAppDir("draft1", "app");
-    await fs.writeFile(
-      path.join(draftDir, "index.html"),
-      "<!doctype html><head></head>DRAFT"
-    );
     await fs.writeFile(
       path.join(draftDir, "queries", "ping.js"),
       "export default async () => ({ marker: 'draft' });\n"
@@ -105,13 +102,7 @@ describe("draft-preview-over-http scenarios", () => {
 
     const auth = { Authorization: `Bearer ${handle.token}` };
 
-    // Live path: unchanged published static + handler.
-    const liveHtml = await fetch(`${handle.url}/centraid/app/`, {
-      headers: auth,
-    });
-    expect(liveHtml.status).toBe(200);
-    await expect(liveHtml.text()).resolves.toMatch(/PUBLISHED/u);
-
+    // Live path: the published handler.
     const liveRead = await fetch(`${handle.url}/centraid/app/queries/ping`, {
       method: "POST",
       headers: { ...auth, "Content-Type": "application/json" },
@@ -121,17 +112,7 @@ describe("draft-preview-over-http scenarios", () => {
       marker: "published",
     });
 
-    // Draft path: staged static + the staged handler, against the same data.
-    const draftHtml = await fetch(`${handle.url}/centraid/_draft/draft1/app/`, {
-      headers: auth,
-    });
-    expect(draftHtml.status).toBe(200);
-    const draftBody = await draftHtml.text();
-    expect(draftBody).toMatch(/DRAFT/u);
-    // The injected bridge must route app RPC calls through the draft prefix so
-    // the draft's handlers run (not the live ones).
-    expect(draftBody).toMatch(/\/centraid\/_draft\/draft1\/app\//u);
-
+    // Draft path: the staged handler, against the same data.
     const draftRead = await fetch(
       `${handle.url}/centraid/_draft/draft1/app/queries/ping`,
       {
@@ -144,14 +125,53 @@ describe("draft-preview-over-http scenarios", () => {
     await expect(draftRead.json()).resolves.toStrictEqual({ marker: "draft" });
   });
 
-  test("an unknown draft session yields 503 (no live fallback)", async () => {
+  test("an unknown draft session runs the app's published handler", async () => {
+    // The draft resolver returns `undefined` for a session it cannot
+    // snapshot, and the dispatcher then resolves the app's live code dir.
+    // A stale/mistyped session id therefore reads live data through the live
+    // handler rather than erroring — it never reaches another app's code,
+    // because the app id is still the one in the path.
     handle = await serve({ paths: pathsUnder(dataDir) });
     await seedApp(await handle.appsStore(), "app");
     await handle.syncApps();
 
-    const res = await fetch(`${handle.url}/centraid/_draft/ghost/app/`, {
-      headers: { Authorization: `Bearer ${handle.token}` },
-    });
-    expect(res.status).toBe(503);
+    const res = await fetch(
+      `${handle.url}/centraid/_draft/ghost/app/queries/ping`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${handle.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ input: {} }),
+      }
+    );
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toStrictEqual({ marker: "published" });
+  });
+
+  test("the retired UI-byte draft surface is not a route", async () => {
+    handle = await serve({ paths: pathsUnder(dataDir) });
+    const store = await handle.appsStore();
+    await seedApp(store, "app");
+    await handle.syncApps();
+    await store.openSession("draft1");
+
+    const auth = { Authorization: `Bearer ${handle.token}` };
+    const retired = [
+      "/centraid/app/",
+      "/centraid/app/index.html",
+      "/centraid/_draft/draft1/app/",
+      "/centraid/_draft/draft1/app/index.html",
+    ];
+    const statuses = await Promise.all(
+      retired.map(async (url) => ({
+        url,
+        status: (await fetch(`${handle.url}${url}`, { headers: auth })).status,
+      }))
+    );
+    expect(statuses).toStrictEqual(
+      retired.map((url) => ({ url, status: 404 }))
+    );
   });
 });

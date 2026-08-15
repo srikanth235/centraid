@@ -7,17 +7,17 @@ export { type ResourceMode } from "./resource-mode.js";
 export type HardwareClass = "constrained" | "standard";
 
 /**
- * The six prioritized throughput knobs the resolver attributes a source to
- * (#528 Phase F). The first four accept a durable UI override; the two static
- * compression qualities are env-or-preset only (no prefs key).
+ * The prioritized throughput knobs the resolver attributes a source to
+ * (#528 Phase F). Each accepts a durable UI override. The pair of static
+ * compression qualities that used to sit here retired with the gateway's
+ * UI-byte plane (#799): every body the gateway compresses now is dynamic
+ * JSON, which is fixed at `DYNAMIC_QUALITY`.
  */
 export type ResourceKnobName =
   | "workerMaxConcurrent"
   | "workerMaxOldGenerationMb"
   | "workerPoolSize"
-  | "replicationConcurrency"
-  | "staticBrotliQuality"
-  | "staticGzipQuality";
+  | "replicationConcurrency";
 
 /**
  * Per-knob provenance the client renders as Linked ('preset'), Custom
@@ -38,8 +38,6 @@ export const RESOURCE_KNOB_BOUNDS: Record<
   workerMaxOldGenerationMb: { min: 8, max: 1_024 },
   workerPoolSize: { min: 0, max: 8 },
   replicationConcurrency: { min: 1, max: 8 },
-  staticBrotliQuality: { min: 0, max: 11 },
-  staticGzipQuality: { min: 0, max: 9 },
 };
 
 /** The operator env var that pins each knob (source-attribution + publish). */
@@ -48,8 +46,6 @@ const RESOURCE_KNOB_ENV_VARS: Record<ResourceKnobName, string> = {
   workerMaxOldGenerationMb: "CENTRAID_WORKER_MAX_OLD_GENERATION_MB",
   workerPoolSize: "CENTRAID_WORKER_POOL_SIZE",
   replicationConcurrency: "CENTRAID_REPLICATION_CONCURRENCY",
-  staticBrotliQuality: "CENTRAID_STATIC_BROTLI_QUALITY",
-  staticGzipQuality: "CENTRAID_STATIC_GZIP_QUALITY",
 };
 
 export interface GatewayHardwareProfile {
@@ -72,15 +68,13 @@ export interface GatewayHardwareProfile {
   workerMaxOldGenerationMb: number;
   workerPoolSize: number;
   replicationConcurrency: number;
-  staticBrotliQuality: number;
-  staticGzipQuality: number;
   /** Lazy mount remains gated by A5's scheduler index; correctness selects eager. */
   vaultMountStrategy: "eager";
   vaultSweepIntervalMs: number;
   outboxIdleIntervalMs: number;
   /** Budget preset framed as the share of the granted host it claims (#528 Phase E). */
   budget: { cpuShare: number; memoryCapMb: number };
-  /** Per-knob provenance (env/prefs/preset) for the six prioritized knobs (#528 Phase F). */
+  /** Per-knob provenance (env/prefs/preset) for the prioritized knobs (#528 Phase F). */
   sources: Record<ResourceKnobName, ResourceKnobSource>;
 }
 
@@ -102,8 +96,6 @@ interface BudgetPreset {
   workerMaxOldGenerationMb: number;
   workerPoolSize: number;
   replicationConcurrency: number;
-  staticBrotliQuality: number;
-  staticGzipQuality: number;
   vaultSweepIntervalMs: number;
   outboxIdleIntervalMs: number;
 }
@@ -115,8 +107,6 @@ const BUDGET_PRESETS: Record<BudgetPresetName, BudgetPreset> = {
     workerMaxOldGenerationMb: 128,
     workerPoolSize: 0,
     replicationConcurrency: 1,
-    staticBrotliQuality: 5,
-    staticGzipQuality: 6,
     vaultSweepIntervalMs: 2 * 60 * 60 * 1000,
     outboxIdleIntervalMs: 2 * 60 * 1000,
   },
@@ -126,8 +116,6 @@ const BUDGET_PRESETS: Record<BudgetPresetName, BudgetPreset> = {
     workerMaxOldGenerationMb: 256,
     workerPoolSize: 2,
     replicationConcurrency: 3,
-    staticBrotliQuality: 10,
-    staticGzipQuality: 9,
     vaultSweepIntervalMs: 60 * 60 * 1000,
     outboxIdleIntervalMs: 60 * 1000,
   },
@@ -137,8 +125,6 @@ const BUDGET_PRESETS: Record<BudgetPresetName, BudgetPreset> = {
     workerMaxOldGenerationMb: 384,
     workerPoolSize: 4,
     replicationConcurrency: 4,
-    staticBrotliQuality: 10,
-    staticGzipQuality: 9,
     vaultSweepIntervalMs: 60 * 60 * 1000,
     outboxIdleIntervalMs: 60 * 1000,
   },
@@ -243,8 +229,6 @@ export interface StructuredResourceProfile {
     workerMaxOldGenerationMb: number;
     workerPoolSize: number;
     replicationConcurrency: number;
-    staticBrotliQuality: number;
-    staticGzipQuality: number;
     sqliteSynchronous: "FULL" | "NORMAL";
     vaultSweepIntervalMs: number;
     outboxIdleIntervalMs: number;
@@ -275,8 +259,6 @@ export function toStructuredResourceProfile(
       workerMaxOldGenerationMb: profile.workerMaxOldGenerationMb,
       workerPoolSize: profile.workerPoolSize,
       replicationConcurrency: profile.replicationConcurrency,
-      staticBrotliQuality: profile.staticBrotliQuality,
-      staticGzipQuality: profile.staticGzipQuality,
       sqliteSynchronous: profile.sqliteSynchronous,
       vaultSweepIntervalMs: profile.vaultSweepIntervalMs,
       outboxIdleIntervalMs: profile.outboxIdleIntervalMs,
@@ -302,7 +284,6 @@ export function formatHardwareProfileDetail(
     `class=${profile.class}; sqlite=${profile.sqliteSynchronous}; ` +
     `workers=${profile.workerMaxConcurrent}x${profile.workerMaxOldGenerationMb}MB; ` +
     `pool=${profile.workerPoolSize}; replication=${profile.replicationConcurrency}; ` +
-    `compression=br${profile.staticBrotliQuality}/gz${profile.staticGzipQuality}; ` +
     `mount=${profile.vaultMountStrategy}; sweep=${profile.vaultSweepIntervalMs}ms${shareNote}`
   );
 }
@@ -438,12 +419,6 @@ export function resolveGatewayHardwareProfile(
     preset.replicationConcurrency,
     prefsOverrides.replicationConcurrency
   );
-  // The two compression qualities have no prefs key — env or preset only.
-  const staticBrotliQuality = knob(
-    "staticBrotliQuality",
-    preset.staticBrotliQuality
-  );
-  const staticGzipQuality = knob("staticGzipQuality", preset.staticGzipQuality);
 
   return {
     class: hardwareClass,
@@ -459,15 +434,11 @@ export function resolveGatewayHardwareProfile(
     workerMaxOldGenerationMb: workerMaxOldGenerationMb.value,
     workerPoolSize: workerPoolSize.value,
     replicationConcurrency: replicationConcurrency.value,
-    staticBrotliQuality: staticBrotliQuality.value,
-    staticGzipQuality: staticGzipQuality.value,
     sources: {
       workerMaxConcurrent: workerMaxConcurrent.source,
       workerMaxOldGenerationMb: workerMaxOldGenerationMb.source,
       workerPoolSize: workerPoolSize.source,
       replicationConcurrency: replicationConcurrency.source,
-      staticBrotliQuality: staticBrotliQuality.source,
-      staticGzipQuality: staticGzipQuality.source,
     },
     vaultMountStrategy: "eager",
     vaultSweepIntervalMs: preset.vaultSweepIntervalMs,

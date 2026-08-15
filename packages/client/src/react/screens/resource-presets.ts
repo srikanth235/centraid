@@ -20,8 +20,6 @@ export interface ResourcePreset {
   workerMaxOldGenerationMb: number;
   workerPoolSize: number;
   replicationConcurrency: number;
-  staticBrotliQuality: number;
-  staticGzipQuality: number;
   sqliteSynchronous: "FULL" | "NORMAL";
   vaultSweepIntervalMs: number;
   outboxIdleIntervalMs: number;
@@ -37,8 +35,6 @@ export const RESOURCE_PRESETS: Record<PresetMode, ResourcePreset> = {
     workerMaxOldGenerationMb: 128,
     workerPoolSize: 0,
     replicationConcurrency: 1,
-    staticBrotliQuality: 5,
-    staticGzipQuality: 6,
     sqliteSynchronous: "NORMAL",
     vaultSweepIntervalMs: 2 * HOUR,
     outboxIdleIntervalMs: 2 * MIN,
@@ -49,8 +45,6 @@ export const RESOURCE_PRESETS: Record<PresetMode, ResourcePreset> = {
     workerMaxOldGenerationMb: 256,
     workerPoolSize: 2,
     replicationConcurrency: 3,
-    staticBrotliQuality: 10,
-    staticGzipQuality: 9,
     sqliteSynchronous: "FULL",
     vaultSweepIntervalMs: HOUR,
     outboxIdleIntervalMs: MIN,
@@ -61,8 +55,6 @@ export const RESOURCE_PRESETS: Record<PresetMode, ResourcePreset> = {
     workerMaxOldGenerationMb: 384,
     workerPoolSize: 4,
     replicationConcurrency: 4,
-    staticBrotliQuality: 10,
-    staticGzipQuality: 9,
     sqliteSynchronous: "FULL",
     vaultSweepIntervalMs: HOUR,
     outboxIdleIntervalMs: MIN,
@@ -167,12 +159,6 @@ export function resourceCompareRows(): CompareRow[] {
       label: "Outbox poll",
       hint: "How often the outbox checks for work when idle.",
       values: byPreset((p) => formatInterval(p.outboxIdleIntervalMs)),
-    },
-    {
-      key: "compression",
-      label: "Compression",
-      hint: "Static-asset compression effort — higher is smaller on the wire but costs more CPU.",
-      values: byPreset((p) => `brotli q${p.staticBrotliQuality}`),
     },
     {
       key: "durability",

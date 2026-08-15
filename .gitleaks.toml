@@ -21,7 +21,6 @@ paths = [
   # Governance pack lock digests look like high-entropy tokens; not secrets.
   '''(?i)\.governance/''',
   # Blueprint / harness mocks and e2e pairing fixtures use placeholder secrets.
-  '''(?i)packages/blueprints/visual-harness/''',
   '''(?i)packages/blueprints/kit/''',
   '''(?i)tests/agent-e2e-pairing/''',
   '''(?i)tests/agent-e2e-mobile/''',

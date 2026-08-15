@@ -9,7 +9,7 @@ Centraid is personal software over a sovereign vault. Its backend is a single ho
 
 `serve()` boots a gateway and fronts it with a loopback HTTP listener plus Bearer auth; `buildGateway()` constructs the same host-agnostic graph without a socket. The mobile app (`apps/mobile`, Expo) embeds no gateway — it connects to one over HTTP. `@centraid/design` is the cross-surface shared package; per-runtime TypeScript settings live in the root `tsconfig.base.json` / `tsconfig.electron.json` / `tsconfig.expo.json` files.
 
-The web app (`apps/web`) is an installable Vite PWA and, like mobile, embeds no backend. It shares the browser-safe React shell in `packages/client` with desktop. Gateway connections are iroh-only through the Rust/WASM client; browsers have no UDP access, so the browser transport is relay-only. A service-worker bridge carries generated-app documents, assets, and streams over the same tunnel; their one-time app sessions remain vault- and app-scoped.
+The web app (`apps/web`) is an installable Vite PWA and, like mobile, embeds no backend. It shares the browser-safe React shell in `packages/client` with desktop. Gateway connections are iroh-only through the Rust/WASM client; browsers have no UDP access, so the browser transport is relay-only. A service-worker bridge carries the shell's own requests and streams over the same tunnel; its control session remains vault-scoped.
 
 Centraid Assist (`apps/oauth-worker`) is a separate stateless Cloudflare ceremony edge, not another backend. Google redirects to its one public callback; it returns a short-lived code to desktop/PWA and attaches the confidential Web-client secret only for gateway-originated exchange/refresh requests. State, PKCE, connection rows, imported data, and durable tokens stay on the gateway. There are no Worker storage bindings. See [docs/oauth-assist.md](docs/oauth-assist.md) and the threat model in [SECURITY.md](SECURITY.md#centraid-assist-oauth-model-b-code-courier).
 
@@ -110,10 +110,10 @@ The bundled blueprint guardrail in `packages/blueprints/src/app-manifests.test.t
 
 ## App render paths
 
-An app UI reaches the screen one way. The second path — the served iframe — is mid-retirement under #799: its client host is already gone, its gateway serving is not yet.
+An app UI reaches the screen one way. #799 retired the served-iframe path end to end: the client host, the builder that authored for it, and the gateway's UI-byte serving are all gone. The gateway serves an app's **data**, never its bytes.
 
-- **Inline** — the default for the 8 bundled system apps (Tasks, Agenda, Tally, People, Notes, Docs, Locker, Photos). The app mounts as a **React route inside the shared shell** (`packages/client/src/react/shell/routes/InlineAppRoute.tsx`), lazy-loading the co-located `packages/blueprints/apps/<app>/app-inline.tsx` chunk. There is no iframe, no opaque document, no postMessage bridge, and no second React runtime — the app is shell code with the shell's principal, inheriting design tokens synchronously. Data flows through the device **replica** (`ReplicaShellSession`): reads/subscriptions hit replica invalidations and writes ride the replica intent dispatch carrying `intentId` (the #406 idempotency contract), so a bundled app renders **fully offline from the local replica** with the gateway unreachable. Membership in `packages/client/src/react/shell/routes/inlineApps.ts` is the typed render-path signal; an id that is not listed is one this shell cannot open.
-- **Served (iframe), retiring** — the gateway still bakes an HTML document and serves it plus a prebuilt `_bundle.<hash>.js` (`packages/app-engine/src/http/static-server.ts`), injecting `bridge-script.ts` for `window.centraid` and isolating the app as an **opaque, same-origin document** under the blueprint CSP. **Nothing loads it any more**: #799 retired the desktop/PWA iframe host, the app builder that authored for it, and the per-app browser sessions that let a frame reach the gateway, and no client asks for these bytes. The serving code itself comes out in the same issue. See [docs/traps/blueprint-csp.md](docs/traps/blueprint-csp.md).
+- **Inline** — the render path for the 8 bundled system apps (Tasks, Agenda, Tally, People, Notes, Docs, Locker, Photos). The app mounts as a **React route inside the shared shell** (`packages/client/src/react/shell/routes/InlineAppRoute.tsx`), lazy-loading the co-located `packages/blueprints/apps/<app>/app-inline.tsx` chunk. There is no iframe, no opaque document, no postMessage bridge, and no second React runtime — the app is shell code with the shell's principal, inheriting design tokens synchronously. Data flows through the device **replica** (`ReplicaShellSession`): reads/subscriptions hit replica invalidations and writes ride the replica intent dispatch carrying `intentId` (the #406 idempotency contract), so a bundled app renders **fully offline from the local replica** with the gateway unreachable. Membership in `packages/client/src/react/shell/routes/inlineApps.ts` is the typed render-path signal; an id that is not listed is one this shell cannot open.
+- **Native (Expo)** — the same 8 apps on mobile, as React Native screens over the same app RPC and replica planes. `apps/mobile/src/screens/` owns the covers; there is no WebView in the app path.
 
 ## Performance and byte-plane boundary
 
@@ -146,7 +146,7 @@ The Rust byte plane is a dumb, bounded byte service. TypeScript authenticates th
 │   ├── blueprints/                # @centraid/blueprints — bundled system apps + automation templates
 │   ├── tunnel/                    # @centraid/tunnel — wire protocol + packaged Rust napi relay
 │   └── design/                    # @centraid/design — tokens layer (colors, type, spacing,
-│                                  #   icons) + kit layer (kit.css/kit.ts served to apps)
+│                                  #   icons) + kit layer (kit.css/kit.ts, the app substrate)
 ├── tsconfig.base.json             # shared TS compilerOptions (electron/expo variants extend it)
 ├── turbo.json                     # task graph (build / dev / typecheck / lint / test)
 └── package.json                   # workspaces, top-level scripts, devDependencies

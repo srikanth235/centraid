@@ -49,10 +49,6 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
       version: "0.1.0",
     })
   );
-  await fs.writeFile(
-    path.join(appDir, "index.html"),
-    `<!doctype html><title>${appId}</title>`
-  );
   await store.publish({ sessionId: `seed-${appId}`, appId, message: "seed" });
   await store.closeSession(`seed-${appId}`);
 }
@@ -121,10 +117,14 @@ describe("serve-vault-addressing scenarios", () => {
     expect(bApps.map((a) => a.id)).toContain("app-b");
     expect(bApps.map((a) => a.id)).not.toContain("app-a");
 
-    // Static serve resolves each vault's own live `main` worktree.
-    const html = await get("/centraid/app-b/", { "x-centraid-vault": vaultB });
-    expect(html.status).toBe(200);
-    await expect(html.text()).resolves.toMatch(/<title>app-b<\/title>/u);
+    // The app plane resolves each vault's own live `main` worktree.
+    const described = await get("/centraid/app-b/_describe", {
+      "x-centraid-vault": vaultB,
+    });
+    expect(described.status).toBe(200);
+    await expect(described.json()).resolves.toMatchObject({
+      manifest: { id: "app-b" },
+    });
 
     // No header → the default vault; nothing changed server-side after B's requests.
     const defaulted = (await (await get("/centraid/_vault/status")).json()) as {

@@ -14,9 +14,11 @@
 // colour, hairline, radius and face in `kit.css` is a contract token — so the
 // two layers belong in one package with one owner.
 //
-// The kit is SERVED, not imported: the app-engine hands these files to app
-// surfaces over HTTP (see `sharedAssetsDir` in app-engine's static server), so
-// what the rest of the repo needs from this layer is a path, not a module.
+// The kit is still addressed as a PATH rather than a module: apps import its
+// files as siblings (`./kit.ts`) and each shell's bundler rewrites that
+// specifier to this dir through `inline-vite-aliases.ts`. That shape is a
+// leftover of the serving plane #799 retired; the same issue folds these files
+// into the token layer as ordinary typed modules.
 
 import path from "node:path";
 
@@ -27,8 +29,7 @@ const PACKAGE_ROOT = path.resolve(__dirname, "..");
 
 /**
  * Absolute path to the canonical shared kit dir (`kit.ts` / `kit.css`).
- * Apps carry no per-app copies; the app-engine runtime serves these as the
- * fallback for `/centraid/<id>/kit.{js,css}`. Hosts pass this as the
- * runtime's `sharedAssetsDir`.
+ * Apps carry no per-app copies; the build configs alias their sibling
+ * `./kit.*` imports here, and the design gallery reads `kit.css` from it.
  */
 export const KIT_DIR: string = path.join(PACKAGE_ROOT, "kit");

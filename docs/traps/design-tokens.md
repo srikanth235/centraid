@@ -103,6 +103,6 @@ A loose `gap: 2px` is indistinguishable from someone eyeballing a rung; `var(--s
 `packages/design` is one package with two layers, and the distinction matters when you are deciding where a change belongs:
 
 - **Token layer** (`src/`, imported as `@centraid/design`) — the typed values and the emitters (`toCss()` for the shell, `toBlueprintCss()` for app surfaces). Every visual decision lives here. It is IMPORTED.
-- **Kit layer** (`kit/`, referenced as `@centraid/design/kit`) — the component substrate app surfaces load: `kit.css`, `kit.ts`, chart elements, toast and Ask controllers. It is SERVED, not bundled: the app-engine hands these files to app surfaces over HTTP via `sharedAssetsDir` (`KIT_DIR`).
+- **Kit layer** (`kit/`, referenced as `@centraid/design/kit`) — the component substrate app surfaces load: `kit.css`, `kit.ts`, chart elements, toast and Ask controllers. Apps import it as a sibling (`./kit.ts`); each shell's bundler rewrites that specifier to this dir through `inline-vite-aliases.ts`. The raw-`.js`-plus-hand-written-`.d.ts` shape it still carries is a leftover of the retired serving plane (#799) and dissolves into the token layer under the same issue.
 
 The kit holds **no design decisions of its own** (#672) — every colour, hairline, radius and face in `kit.css` is a contract token. If you find yourself adding a literal or a new `--name` there, the value belongs in the token layer and the name belongs in `src/contract.ts`.

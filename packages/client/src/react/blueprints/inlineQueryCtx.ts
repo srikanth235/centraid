@@ -5,10 +5,8 @@ import type {
   ShellReplicaReadRequest,
   ShellReplicaSearchRequest,
 } from "../../replica/shell-session.js";
-// Reproduce the served bridge's local-query execution (packages/app-engine
-// bridge-script.ts `runLocalQuery` / `localVault`, lines ~158-263) for the
-// INLINE path — but backed directly by the shell replica session instead of the
-// `centraid:replica-read` MessagePort round-trip. A blueprint query module
+// Local-query execution for the inline app path, backed directly by the shell
+// replica session. A blueprint query module
 // (`queries/<name>.ts`) is a pure function of `{ input, ctx }`; here `ctx.vault`
 // reads/searches the local replica, shapes the wire envelopes into the
 // `{ rows, receiptId }` the query expects, and marks an online-only guard the

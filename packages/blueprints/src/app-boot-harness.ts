@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit cohesive jsdom boot harness; the fetch/module shims, .module.css-as-JS rewrite, and per-app boot assertions must move together to mirror the gateway serve path
+// governance: allow-repo-hygiene file-size-limit cohesive jsdom boot harness; the fetch/module shims, .module.css-as-JS rewrite, and per-app boot assertions must move together to mirror the shell bundle path
 /* oxlint-disable typescript-eslint/ban-ts-comment -- the package tsconfig has
    no DOM lib (this "src" is node-side); this harness drives the browser apps
    under jsdom, so DOM globals are runtime-real but invisible to tsc. */
@@ -65,9 +65,10 @@ import { replicaIntentInvalidations } from "@centraid/design/kit/intent-invalida
 // between a root-run vitest (repo root) and a package-run vitest (this
 // package's dir), but the file's own location never does.
 const PKG = path.resolve(import.meta.dirname, "..");
-// Apps import these as siblings (`./kit.ts`); at rest they live only in `kit/`,
-// and the gateway serves them from a shared dir (SHARED_ASSET_FILES in
-// app-engine/src/http/static-server.ts). Symlinks reproduce that layout.
+// Apps import these as siblings (`./kit.ts`); at rest they live only in
+// `@centraid/design`'s `kit/`, and each shell's bundler resolves the sibling
+// specifier there through `inline-vite-aliases.ts`. Symlinks reproduce that
+// layout for the harness, which has no bundler doing the rewrite.
 const SHARED = [
   "kit.ts",
   "elements.js",
@@ -103,16 +104,16 @@ function transformInlineSource(source: string, rel = "app.tsx"): string {
   );
   return (
     code
-      // The gateway serves a `*.module.css` request as JS at that same URL. Vite/
-      // Vitest, however, owns the `.module.css` extension and would run its own
-      // CSS-modules transform over the harness's compiled JS (see
-      // compileModuleCssLikeTheGateway) — garbage-parsing it and handing the app
-      // a bogus class map with none of the `<style data-centraid-css-module>`
-      // injection. So the harness serves that JS from a sibling
-      // `*.module.css.js` file (written in beforeAll) and rewrites every relative
-      // `*.module.css` import specifier to match — the `.js` tail is what keeps
-      // Vite from hijacking it. Behaviour is identical to the gateway; only the
-      // scratch filename differs from the app source.
+      // A `*.module.css` import resolves to JS: a style-injecting module that
+      // default-exports the class map. Vite/Vitest, however, owns the
+      // `.module.css` extension and would run its own CSS-modules transform
+      // over the harness's compiled JS (see compileModuleCss) — garbage-parsing
+      // it and handing the app a bogus class map with none of the `<style
+      // data-centraid-css-module>` injection. So the harness serves that JS
+      // from a sibling `*.module.css.js` file (written in beforeAll) and
+      // rewrites every relative `*.module.css` import specifier to match — the
+      // `.js` tail is what keeps Vite from hijacking it. Behaviour matches the
+      // shell bundle; only the scratch filename differs from the app source.
       .replace(
         /(?<quote>["'])(?<spec>(?:\.\.?\/)[^"']*\.module\.css)\k<quote>/gu,
         (_m, quote: string, spec: string) => `${quote}${spec}.js${quote}`
@@ -120,13 +121,13 @@ function transformInlineSource(source: string, rel = "app.tsx"): string {
   );
 }
 
-// Compile a `*.module.css` to the same style-injecting, class-map-exporting JS
-// module the gateway serves (app-engine's css-module.ts). Mirrored minimally
-// via the esbuild CLI — esbuild's JS API refuses to load under jsdom (see the
-// note above transformInlineSource), but the CLI is a subprocess and is
-// unaffected. The CLI emits the JS class-map module and the compiled CSS as
-// two files into a temp outdir; we compose the served body from both.
-function compileModuleCssLikeTheGateway(
+// Compile a `*.module.css` to the style-injecting, class-map-exporting JS
+// module each shell's bundler produces for it. Mirrored minimally via the
+// esbuild CLI — esbuild's JS API refuses to load under jsdom (see the note
+// above transformInlineSource), but the CLI is a subprocess and is unaffected.
+// The CLI emits the JS class-map module and the compiled CSS as two files into
+// a temp outdir; we compose the module body from both.
+function compileModuleCss(
   absFile: string,
   appRoot: string,
   scratch: string
@@ -289,7 +290,7 @@ const NON_UI_DIRS = new Set(["queries", "actions", "automations"]);
 
 /** All browser-source files of an app, as relative posix paths: `.js`/`.jsx`
  * and their TS counterparts `.ts`/`.tsx`, plus `*.module.css` (a CSS module is
- * imported by the page as JS — see compileModuleCssLikeTheGateway). */
+ * imported by the page as JS — see compileModuleCss). */
 function collectSources(root: string, rel = ""): string[] {
   const out: string[] = [];
   for (const e of readdirSync(path.join(root, rel), { withFileTypes: true })) {
@@ -371,8 +372,8 @@ function consentBannerShown(): boolean {
 
 /**
  * Mirror one source tree into the boot scratch dir the way the client bundles
- * it: TypeScript stripped, CSS modules compiled to the class-map JS the gateway
- * serves, everything else copied verbatim.
+ * it: TypeScript stripped, CSS modules compiled to their class-map JS,
+ * everything else copied verbatim.
  */
 function mirrorSources(srcRoot: string, destRoot: string): void {
   mkdirSync(destRoot, { recursive: true });
@@ -390,11 +391,7 @@ function mirrorSources(srcRoot: string, destRoot: string): void {
     } else if (rel.endsWith(".module.css")) {
       writeFileSync(
         `${out}.js`,
-        compileModuleCssLikeTheGateway(
-          path.join(srcRoot, rel),
-          srcRoot,
-          destRoot
-        )
+        compileModuleCss(path.join(srcRoot, rel), srcRoot, destRoot)
       );
     } else {
       cpSync(path.join(srcRoot, rel), out);
@@ -430,7 +427,7 @@ export function describeAppBoot(
       // Each app gets its own scratch ROOT, laid out like `apps/` itself:
       // `<root>/<app>` beside `<root>/_shared`. An app importing a cross-app
       // module by its real specifier (`../_shared/…`, issue #599) then resolves
-      // exactly as it does when served — and because the shared copy lives
+      // exactly as it does in a shell bundle — and because the shared copy lives
       // inside the app's own root, two app-boot files running in parallel never
       // write the same path.
       bootRoot = path.join(PKG, ".app-boot", app);

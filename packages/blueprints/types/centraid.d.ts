@@ -5,9 +5,9 @@
 // import crosses the app/kit boundary at runtime (esbuild would 404 a plain
 // import of a types-only module; `import type` is stripped, but a global spares
 // the ceremony entirely). Grounded in the real surfaces:
-//   - `window.centraid` — the injected change-bridge client
-//     (packages/app-engine/src/http/bridge-script.ts) and its faithful mock
-//     (packages/blueprints/visual-harness/mock-centraid.js): read/write/onChange.
+//   - `window.centraid` — the shell-provided app client
+//     (packages/client/src/react/blueprints/centraid-inline.ts):
+//     read/write/onChange.
 //   - `ctx.vault` — the handler-side vault RPC surface
 //     (packages/app-engine/src/worker/runner.ts `ScopedVault`,
 //     packages/app-engine/src/types.ts `CommonHandlerArgs`/`ActionResult`).

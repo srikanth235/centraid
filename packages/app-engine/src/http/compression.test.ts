@@ -6,12 +6,9 @@ import { describe, expect, it } from "vitest";
 import {
   compress,
   DYNAMIC_QUALITY,
-  isCompressibleType,
   MIN_COMPRESS_BYTES,
   negotiateEncoding,
   sendJsonNegotiated,
-  staticQualityForHost,
-  STATIC_QUALITY,
 } from "./compression.js";
 
 interface Captured {
@@ -81,38 +78,11 @@ describe("compression", () => {
     });
   });
 
-  describe(isCompressibleType, () => {
-    it("accepts text, json, js, and svg", () => {
-      expect(isCompressibleType("text/html; charset=utf-8")).toBe(true);
-      expect(isCompressibleType("application/json; charset=utf-8")).toBe(true);
-      expect(isCompressibleType("application/javascript; charset=utf-8")).toBe(
-        true
-      );
-      expect(isCompressibleType("image/svg+xml")).toBe(true);
-    });
-
-    it("rejects already-encoded media and fonts", () => {
-      expect(isCompressibleType("image/png")).toBe(false);
-      expect(isCompressibleType("font/woff2")).toBe(false);
-      expect(isCompressibleType("image/webp")).toBe(false);
-    });
-
-    it("rejects text/event-stream (SSE must never be buffered/compressed)", () => {
-      expect(isCompressibleType("text/event-stream; charset=utf-8")).toBe(
-        false
-      );
-    });
-
-    it("rejects an undefined type", () => {
-      expect(isCompressibleType(undefined)).toBe(false);
-    });
-  });
-
   describe("compress — round-trips", () => {
     const payload = Buffer.from('{"rows":[' + '"x",'.repeat(2000) + '"end"]}');
 
     it("brotli output decompresses to the original", async () => {
-      const out = await compress(payload, "br", STATIC_QUALITY);
+      const out = await compress(payload, "br", DYNAMIC_QUALITY);
       expect(out.length).toBeLessThan(payload.length);
       expect(zlib.brotliDecompressSync(out).equals(payload)).toBe(true);
     });
@@ -184,23 +154,5 @@ describe("compression", () => {
       expect(data.headers["Content-Encoding"]).toBeUndefined();
       expect(JSON.parse(data.body.toString("utf8"))).toStrictEqual(small);
     });
-  });
-
-  it("low-end hosts choose bounded static compression quality", () => {
-    expect(
-      staticQualityForHost({ cores: 4, totalMemoryBytes: 2 * 1024 ** 3 })
-    ).toStrictEqual({
-      brotli: 5,
-      gzip: 6,
-    });
-    expect(
-      staticQualityForHost({ cores: 8, totalMemoryBytes: 16 * 1024 ** 3 })
-    ).toStrictEqual(STATIC_QUALITY);
-    expect(
-      staticQualityForHost(
-        { cores: 8, totalMemoryBytes: 16 * 1024 ** 3 },
-        { CENTRAID_RESOLVED_HARDWARE_PROFILE: "constrained" }
-      )
-    ).toStrictEqual({ brotli: 5, gzip: 6 });
   });
 });

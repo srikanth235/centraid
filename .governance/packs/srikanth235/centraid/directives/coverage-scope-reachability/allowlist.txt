@@ -33,9 +33,6 @@ packages/test-kit
 # resolve an app-relative `./kit.ts` to packages/design/kit, which is floored.
 # It declares no behaviour of its own.
 packages/blueprints/types
-# The visual-verification harness: a mock window.centraid and a dev server,
-# never shipped and never loaded by the runtime.
-packages/blueprints/visual-harness
 # Renderer / installable clients: e2e + extracted units, not line floors.
 apps/desktop
 apps/extension

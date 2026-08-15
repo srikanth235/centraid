@@ -158,9 +158,9 @@ export class WorktreeStore {
   }
 
   /**
-   * App ids on main plus their `app.json` metadata + `hasIndex` flag,
-   * read from the materialized-main worktree. Replaces the desktop's
-   * legacy `listProjects(workspaceDir)` scan.
+   * App ids on main plus their `app.json` metadata, read from the
+   * materialized-main worktree. Replaces the desktop's legacy
+   * `listProjects(workspaceDir)` scan.
    */
   async listAppsWithMeta(): Promise<
     Array<{
@@ -168,7 +168,6 @@ export class WorktreeStore {
       name?: string;
       description?: string;
       kind?: "app" | "automation";
-      hasIndex: boolean;
       iconKey?: string;
       colorKey?: string;
     }>
@@ -183,7 +182,6 @@ export class WorktreeStore {
         const manifest: Record<string, unknown> = await readJson(
           path.join(appDir, "app.json")
         ).catch(() => ({}));
-        const hasIndex = await pathExists(path.join(appDir, "index.html"));
         return {
           id,
           ...(typeof manifest.name === "string" ? { name: manifest.name } : {}),
@@ -193,7 +191,6 @@ export class WorktreeStore {
           ...(manifest.kind === "automation" || manifest.kind === "app"
             ? { kind: manifest.kind as "app" | "automation" }
             : {}),
-          hasIndex,
           // Tile identity (issue #263) — pass-through strings; the shells
           // validate against the design-tokens sets before rendering.
           ...(typeof manifest.iconKey === "string"

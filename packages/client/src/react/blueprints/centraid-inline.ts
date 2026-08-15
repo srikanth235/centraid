@@ -5,9 +5,8 @@ import type {
   InlineAppModule,
   InlineScope,
 } from "@centraid/blueprints/apps/inline-types";
-// The inline `window.centraid` — the shell-side replacement for the served
-// bridge's `w.centraid` client (packages/app-engine bridge-script.ts). Backed
-// by the shell replica session: reads run the app's query modules locally
+// The inline `window.centraid` — the app client every blueprint app talks to.
+// Backed by the shell replica session: reads run the app's query modules locally
 // (inlineQueryCtx), writes go through the replica intent dispatch carrying the
 // caller's `intentId` verbatim (#406 dedupe lives in the session/route — never
 // re-minted here), and `onChange` is a replica-invalidation subscription mapped

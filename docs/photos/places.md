@@ -46,7 +46,7 @@ Consequences worth knowing:
 
 Under the pins is a grid at a chosen degree step, a scale bar, and a north mark. There is no land.
 
-That is a deliberate non-goal. A browser basemap means requesting tiles from a third-party server, and **every tile URL is a location** — `/z/x/y` at z16–18 pins a viewer to roughly 150m, one request per tile per pan. Served blueprints get `img-src 'self' data:` ([`security.ts`](../../packages/app-engine/src/http/security.ts)), and [blueprint-csp.md](../traps/blueprint-csp.md) keeps this boundary explicit.
+That is a deliberate non-goal. A browser basemap means requesting tiles from a third-party server, and **every tile URL is a location** — `/z/x/y` at z16–18 pins a viewer to roughly 150m, one request per tile per pan. The shell's own CSP is what holds the line now that #799 retired the per-app blueprint CSP; `PlaceMap.test.tsx` asserts the product claim directly — every pin source is same-origin or inline.
 
 The phone draws the shared projection as well. The `react-native-maps` dependency remains in `package.json` pending a native rebuild; the open quality item is recorded in [QUALITY.md](../../QUALITY.md).
 

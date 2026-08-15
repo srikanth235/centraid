@@ -25,21 +25,17 @@ export interface ResourceProfileResolved {
   workerMaxOldGenerationMb: number;
   workerPoolSize: number;
   replicationConcurrency: number;
-  staticBrotliQuality: number;
-  staticGzipQuality: number;
   sqliteSynchronous: "FULL" | "NORMAL";
   vaultSweepIntervalMs: number;
   outboxIdleIntervalMs: number;
 }
 
-/** Knob keys the resolver derives; the first four are owner-tunable (issue #528 Phase F). */
+/** Knob keys the resolver derives; all are owner-tunable (issue #528 Phase F). */
 export type ResourceKnobKey =
   | "workerMaxConcurrent"
   | "workerMaxOldGenerationMb"
   | "workerPoolSize"
-  | "replicationConcurrency"
-  | "staticBrotliQuality"
-  | "staticGzipQuality";
+  | "replicationConcurrency";
 
 /** Provenance of one resolved knob, from `resourceProfile.sources` (issue #528 Phase F). */
 export interface ResourceKnobSource {
@@ -216,10 +212,6 @@ export function resolvedKnobRows(
       label: "Outbox idle poll",
       value: `every ${formatFriendlyMs(r.outboxIdleIntervalMs)}`,
     },
-    {
-      label: "Compression",
-      value: `brotli q${r.staticBrotliQuality} · gzip q${r.staticGzipQuality}`,
-    },
   ];
 }
 
@@ -356,8 +348,7 @@ export function subsystemUsageRows(
 // ── L3 "Tune" rung: advanced knobs (issue #528 Phase F) ─────────────────────
 // The four owner-tunable knobs, their prefs plumbing, and the pure validation
 // used by ResourceAdvancedKnobs. Kept React-free so the bounds/warning math
-// stays unit-testable and the component stays under the 500-line cap. Only the
-// first four knobs are tunable; compression quality stays resolver-only.
+// stays unit-testable and the component stays under the 500-line cap.
 
 /** The four owner-tunable knob keys, in the order the L3 rung renders them. */
 export type TunableKnobKey =

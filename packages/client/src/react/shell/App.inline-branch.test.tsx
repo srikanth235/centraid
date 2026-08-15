@@ -54,8 +54,8 @@ vi.mock(import("../../gateway-client.js"), () => ({
   saveUserPrefs: () => Promise.resolve({}),
   listApps: () =>
     Promise.resolve([
-      { id: "tasks", name: "Tasks", kind: "app", hasIndex: true },
-      { id: "todos", name: "Todos", kind: "app", hasIndex: true },
+      { id: "tasks", name: "Tasks", kind: "app" },
+      { id: "todos", name: "Todos", kind: "app" },
     ]),
   listAutomations: () => Promise.resolve([]),
   listAutomationTurnsByLane: () => Promise.resolve([]),

@@ -146,7 +146,6 @@ export const AUTHED_DEVICE_HEADER = "x-centraid-authed-device";
  */
 export const AUTHED_PLANE_HEADER = "x-centraid-authed-plane";
 const WEB_APP_HEADER = "x-centraid-web-app";
-const WEB_SHELL_ORIGIN_HEADER = "x-centraid-web-shell-origin";
 
 /** What a presented bearer resolved to — the shared landlord token, or one tenant's device. */
 export type BearerAuthorization =
@@ -334,7 +333,6 @@ export async function startRuntimeHttpServer(
     delete req.headers[AUTHED_PLANE_HEADER];
     delete req.headers[COMPANION_GRANTS_HEADER];
     delete req.headers[WEB_APP_HEADER];
-    delete req.headers[WEB_SHELL_ORIGIN_HEADER];
     const raw = (req.headers.authorization ?? "").replace(/^Bearer\s+/iu, "");
     const resolveAuthorization = (): BearerAuthorization | undefined => {
       if (opts.authorizeBearer || opts.authorizeRequest) {

@@ -155,7 +155,6 @@ export interface AppMetaEntry {
   name?: string;
   description?: string;
   kind?: "app" | "automation";
-  hasIndex: boolean;
   /** Tile identity from `app.json` (issue #263) — raw strings; validate
    *  against the design-tokens sets before rendering. */
   iconKey?: string;
@@ -166,8 +165,8 @@ export interface AppMetaEntry {
  * Apps published on `main`, with the metadata the home shelf reads. The
  * git store is the source of truth post-#137 — there's no local worktree
  * to stat — so this returns the registry-backed metadata row, not the
- * legacy `CentraidAppInfo` (the renderer only reads id/name/desc/kind/
- * hasIndex off it).
+ * legacy `CentraidAppInfo` (the renderer only reads id/name/desc/kind
+ * off it).
  */
 export async function listApps(): Promise<AppMetaEntry[]> {
   const { baseUrl, token } = await auth();

@@ -39,9 +39,10 @@ describe("parseRoute — app RPC routes (issue #505)", () => {
   });
 
   it("rejects non-POST action/query invocation", () => {
-    // A GET under actions/queries falls through to static serving, not RPC.
+    // #799 retired UI-byte serving, so a GET no longer falls through to a
+    // static read — the RPC plane is POST-only and everything else 404s.
     expect(parseRoute("GET", "/centraid/todos/queries/upcoming").kind).toBe(
-      "app-static"
+      "not-found"
     );
     expect(parseRoute("PUT", "/centraid/todos/actions/add").kind).toBe(
       "not-found"
@@ -66,43 +67,40 @@ describe("parseRoute — app RPC routes (issue #505)", () => {
 
 describe("parseRoute — old per-app routes are gone (issue #107)", () => {
   it("GET /centraid/<id>/_data/<name> no longer dispatches", () => {
-    // It falls through to app-static, which then 404s when the file
-    // doesn't exist. The substantive guarantee is that the response is
-    // not "execute a handler" — the route kind is not `app-data`.
     const r = parseRoute("GET", "/centraid/todos/_data/list");
     expect(r.kind).not.toBe("app-data" as never);
+    expect(r.kind).toBe("not-found");
   });
 
   it("POST /centraid/<id>/_run no longer dispatches", () => {
     const r = parseRoute("POST", "/centraid/todos/_run");
     expect(r.kind).not.toBe("app-run" as never);
-    // It also can't fall through to app-static because that's GET-only.
     expect(r.kind).toBe("not-found");
   });
 });
 
+describe("parseRoute — UI-byte routes are gone (issue #799)", () => {
+  it("the app index is no longer a route", () => {
+    expect(parseRoute("GET", "/centraid/todos").kind).toBe("not-found");
+    expect(parseRoute("GET", "/centraid/todos/").kind).toBe("not-found");
+  });
+
+  it("an app-relative file path is no longer a route", () => {
+    expect(parseRoute("GET", "/centraid/todos/app.css").kind).toBe("not-found");
+    expect(parseRoute("GET", "/centraid/todos/kit.ts").kind).toBe("not-found");
+    expect(parseRoute("GET", "/centraid/todos/nested/thing.js").kind).toBe(
+      "not-found"
+    );
+  });
+
+  it("the browser query-bundle module is no longer a route", () => {
+    expect(parseRoute("GET", "/centraid/todos/_query/upcoming.mjs").kind).toBe(
+      "not-found"
+    );
+  });
+});
+
 describe("parseRoute — unaffected routes still work", () => {
-  it("parses the query-only browser module route", () => {
-    const r = parseRoute("GET", "/centraid/todos/_query/upcoming.mjs");
-    expect(r).toStrictEqual({
-      kind: "app-query-bundle",
-      appId: "todos",
-      queryName: "upcoming",
-    });
-  });
-
-  it("never falls malformed query-module routes through to static serving", () => {
-    expect(parseRoute("GET", "/centraid/todos/_query/upcoming.js").kind).toBe(
-      "not-found"
-    );
-    expect(parseRoute("POST", "/centraid/todos/_query/upcoming.mjs").kind).toBe(
-      "not-found"
-    );
-    expect(parseRoute("GET", "/centraid/todos/_query/a/b.mjs").kind).toBe(
-      "not-found"
-    );
-  });
-
   it("parses /_changes", () => {
     const r = parseRoute("GET", "/centraid/todos/_changes");
     expect(r.kind).toBe("app-changes");
@@ -112,56 +110,37 @@ describe("parseRoute — unaffected routes still work", () => {
     const r = parseRoute("POST", "/centraid/todos/_turn");
     expect(r.kind).toBe("app-chat");
   });
-
-  it("parses static asset", () => {
-    const r = parseRoute("GET", "/centraid/todos/app.css");
-    expect(r.kind).toBe("app-static");
-  });
-
-  it("parses index", () => {
-    const r = parseRoute("GET", "/centraid/todos");
-    expect(r.kind).toBe("app-index");
-  });
 });
 
 describe("parseWithDraft — draft-preview prefix (issue #141)", () => {
   it("passes a non-draft URL through unchanged with no session id", () => {
-    const { route, draftSessionId } = parseWithDraft("GET", "/centraid/todos/");
+    const { route, draftSessionId } = parseWithDraft(
+      "POST",
+      "/centraid/todos/queries/upcoming"
+    );
     expect(draftSessionId).toBeUndefined();
-    expect(route.kind).toBe("app-index");
+    expect(route.kind).toBe("app-query");
   });
 
-  it("peels the draft prefix off an index request", () => {
+  it("peels the draft prefix off an app action invocation", () => {
     const { route, draftSessionId } = parseWithDraft(
-      "GET",
-      "/centraid/_draft/s1/todos/"
+      "POST",
+      "/centraid/_draft/s1/todos/actions/add"
     );
     expect(draftSessionId).toBe("s1");
-    expect(route.kind).toBe("app-index");
+    expect(route.kind).toBe("app-action");
     expect((route as { appId: string }).appId).toBe("todos");
+    expect((route as { action: string }).action).toBe("add");
   });
 
-  it("peels the draft prefix off a static asset request", () => {
+  it("peels the draft prefix off a _describe request", () => {
     const { route, draftSessionId } = parseWithDraft(
       "GET",
-      "/centraid/_draft/s1/todos/app.css"
+      "/centraid/_draft/s1/todos/_describe"
     );
     expect(draftSessionId).toBe("s1");
-    expect(route.kind).toBe("app-static");
-    expect((route as { rel: string }).rel).toBe("app.css");
-  });
-
-  it("peels the draft prefix off a query bundle request", () => {
-    const { route, draftSessionId } = parseWithDraft(
-      "GET",
-      "/centraid/_draft/s1/todos/_query/upcoming.mjs"
-    );
-    expect(draftSessionId).toBe("s1");
-    expect(route).toStrictEqual({
-      kind: "app-query-bundle",
-      appId: "todos",
-      queryName: "upcoming",
-    });
+    expect(route.kind).toBe("app-describe");
+    expect((route as { appId: string }).appId).toBe("todos");
   });
 
   it("peels the draft prefix off an app query invocation and preserves the inner shape", () => {
@@ -178,11 +157,11 @@ describe("parseWithDraft — draft-preview prefix (issue #141)", () => {
   it("preserves the query string when rewriting", () => {
     const { route } = parseWithDraft(
       "GET",
-      "/centraid/_draft/s1/todos?theme=dark"
+      "/centraid/_draft/s1/todos/_describe?action=add"
     );
-    expect(route.kind).toBe("app-index");
+    expect(route.kind).toBe("app-describe");
     expect((route as { query: Record<string, string> }).query).toStrictEqual({
-      theme: "dark",
+      action: "add",
     });
   });
 

@@ -169,11 +169,11 @@ describe("ext-band-over-http scenarios", () => {
     await store.openSession("draft1");
     await writeWorktreeFiles("draft1", {
       "app.json": manifest(EXT_V1),
-      "index.html": "<!doctype html>gym",
     });
-    const preview = await fetch(`${handle.url}/centraid/_draft/draft1/gym/`, {
-      headers: auth(),
-    });
+    const preview = await fetch(
+      `${handle.url}/centraid/_draft/draft1/gym/_describe`,
+      { headers: auth() }
+    );
     expect(preview.status).toBe(200);
     expect(
       plainRows(ownerSql("SELECT notes FROM extdraft_gym_workout"))

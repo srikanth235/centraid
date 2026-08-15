@@ -127,7 +127,7 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
   if (path.endsWith("/settings"))
     return json({ settings: { timezone: "UTC" } });
   if (path === "/centraid/_apps" && method === "GET")
-    return json([{ id: "daily", hasIndex: true }]);
+    return json([{ id: "daily" }]);
   if (path === "/centraid/_templates") return json([]);
   if (path === "/_centraid-user/id") return json({ id: "user-1" });
   if (path === "/_centraid-user/prefs")

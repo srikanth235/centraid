@@ -19,9 +19,7 @@ import {
   COMPANION_GRANTS_HEADER,
   companionHandlerAllowed,
 } from "./http/internal-headers.js";
-import { serveQueryBundle } from "./http/query-bundle.js";
 import { parseWithDraft } from "./http/router.js";
-import { serveStatic } from "./http/static-server.js";
 import type { TurnLimiter } from "./http/turn-limiter.js";
 import { handleTurnRoute, parseTurnSubRoute } from "./http/turn-routes.js";
 import type { AskModelPrefs } from "./http/turn-routes.js";
@@ -29,12 +27,10 @@ import { appDataDir } from "./registry/app-paths.js";
 import { cleanupDeregisteredApp } from "./registry/deregister-cleanup.js";
 import { Registry, RegistryError } from "./registry/registry.js";
 import { readAppSettings } from "./settings/app-settings.js";
-import { buildSettingsInject } from "./settings/settings-merge.js";
 import type { PrefsStore } from "./stores/prefs-store.js";
 import type { AppRef, RegistryEntry } from "./types.js";
 
 const WEB_APP_HEADER = "x-centraid-web-app";
-const WEB_SHELL_ORIGIN_HEADER = "x-centraid-web-shell-origin";
 
 export interface RuntimeLogger {
   info: (message: string) => void;
@@ -50,14 +46,6 @@ export interface RuntimeOptions {
    * whole app surface; the runtime keeps one `Registry` per resolved dir.
    */
   appsDir: string | (() => string);
-  /**
-   * Optional canonical dir for assets shared verbatim by every app
-   * (`kit.ts` / `kit.css`). Apps no longer ship their own copy; a request
-   * for `/centraid/<id>/kit.ts` that the app folder can't satisfy is served
-   * from here. Hosts point this at `@centraid/design/kit`'s `KIT_DIR`.
-   * Omit to disable the fallback.
-   */
-  sharedAssetsDir?: string;
   logger?: RuntimeLogger;
   /**
    * Optional change bus. When omitted the runtime constructs an internal
@@ -67,13 +55,9 @@ export interface RuntimeOptions {
   changeBus?: ChangeBus;
   /**
    * Optional device-prefs store (a JSON file — #280 killed the identity
-   * DB). When provided, the runtime reads the gateway-wide prefs during
-   * `app-index` and bakes them into the served HTML (merged with the app's
-   * own `__centraid_settings` table and any URL-query overrides). Without
-   * it, app-index falls back to URL-query-only injection so
-   * single-app/standalone setups still work. Hosts (the standalone daemon,
-   * desktop local-runtime) construct the store themselves and additionally
-   * mount `/_centraid-user/*` for the desktop to read/write prefs.
+   * DB). Hosts (the standalone daemon, desktop local-runtime) construct the
+   * store themselves and mount `/_centraid-user/*` for the shells to
+   * read/write prefs.
    */
   userStore?: PrefsStore;
   /**
@@ -121,7 +105,7 @@ export interface RuntimeOptions {
   harnessStatus?: (opts?: HarnessStatusOptions) => Promise<HarnessStatus>;
   /**
    * Optional code-dir resolver (issue #137). When provided, the runtime
-   * serves handlers + static files from whatever dir this returns for an
+   * runs handlers from whatever dir this returns for an
    * app id — the gateway injects an apps-store-backed resolver pointing
    * at the live git worktree (`worktrees/main/<sha>/apps/<id>/`) instead
    * of the legacy `<appsDir>/<id>/versions/<active>/`. `entry.path` (the
@@ -131,13 +115,12 @@ export interface RuntimeOptions {
   codeDirOverride?: (appId: string) => Promise<string | undefined>;
   /**
    * Optional DRAFT code-dir resolver (issue #141, draft preview). When
-   * provided, requests under `/centraid/_draft/<sessionId>/<appId>/…` serve
-   * static files + run handlers from whatever dir this returns for
-   * `(appId, sessionId)` — the gateway injects an apps-store-backed
-   * resolver pointing at the session worktree's `apps/<id>/`. Returns
-   * `undefined` for an unknown session/app (→ 404/503), so the live
-   * serving path is wholly unaffected when no draft resolver is
-   * configured.
+   * provided, RPC requests under `/centraid/_draft/<sessionId>/<appId>/…`
+   * run handlers from whatever dir this returns for `(appId, sessionId)` —
+   * the gateway injects an apps-store-backed resolver pointing at the
+   * session worktree's `apps/<id>/`. Returns `undefined` for an unknown
+   * session/app, which falls back to the app's live code dir, so the live
+   * path is wholly unaffected when no draft resolver is configured.
    */
   draftCodeDir?: (
     appId: string,
@@ -280,9 +263,8 @@ export class Runtime {
    */
   readonly changeBus: ChangeBus;
   /**
-   * Optional device-prefs store. Hosts mount it both here (so app-index can
-   * bake prefs into HTML) and on their own HTTP surface as `/_centraid-user/*`
-   * (so the desktop can read/write prefs over HTTP).
+   * Optional device-prefs store. Hosts mount it on their own HTTP surface as
+   * `/_centraid-user/*` so the shells can read/write prefs over HTTP.
    */
   readonly userStore?: PrefsStore;
   /** Optional conversation-history store. See `RuntimeOptions.conversationHistoryStore`. */
@@ -309,7 +291,6 @@ export class Runtime {
    * host's post-switch `bootstrap()` call before requests hit it).
    */
   private readonly registries = new Map<string, Registry>();
-  private readonly sharedAssetsDir?: string;
   private readonly logger: RuntimeLogger;
   private readonly codeDirOverride?: (
     appId: string
@@ -336,7 +317,6 @@ export class Runtime {
               dir
           )(opts.appsDir)
         : opts.appsDir;
-    if (opts.sharedAssetsDir) this.sharedAssetsDir = opts.sharedAssetsDir;
     this.logger = opts.logger ?? noopLogger;
     this.changeBus = opts.changeBus ?? new ChangeBus({ logger: this.logger });
     this.userStore = opts.userStore;
@@ -406,9 +386,10 @@ export class Runtime {
   }
 
   /**
-   * Build the change-emitter that the per-app chat runner uses for assistant
-   * writes. The harness path needs to thread per-tool-call provenance through
-   * so the iframe can correlate refreshes with chat pills.
+   * Build the change-emitter that the per-app conversation runner uses for
+   * assistant writes. The harness path needs to thread per-tool-call
+   * provenance through so a subscriber can correlate refreshes with the item
+   * that caused them.
    */
   assistantEmitForApp(
     appId: string
@@ -480,8 +461,9 @@ export class Runtime {
    * `ToolResult` to HTTP: success → 200 with `structuredContent`; `isError`
    * → status from `statusForToolError` with `{code, message, path?}`.
    *
-   * This is the only path non-MCP callers (browser UI, scripts, the mobile
-   * bridge, the Companion extension) take to invoke handlers.
+   * This is the only path non-MCP callers (the shells' inline app routes,
+   * native mobile screens, scripts, the Companion extension) take to invoke
+   * handlers.
    */
   private async handleAppRpc(
     req: IncomingMessage,
@@ -653,25 +635,14 @@ export class Runtime {
    * app-engine does not enforce its own auth.
    */
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    // Draft preview (issue #141): a `/centraid/_draft/<sessionId>/…` request
+    // runs the session worktree's handlers against the app's live data. The
+    // session id rides through to the RPC/describe cases, which resolve it
+    // via `draftOverride`.
     const { route, draftSessionId } = parseWithDraft(
       req.method ?? "GET",
       req.url ?? "/"
     );
-
-    // Draft preview (issue #141): a `/centraid/_draft/<sessionId>/…` request
-    // serves the session worktree's code (static + handlers) against the
-    // app's live data. Resolve the draft code dir once here; the
-    // code-dependent cases below prefer it over the live `resolveCodeDir`.
-    // A draft request with no resolver configured (or an unknown
-    // session/app) yields `undefined`, which those cases surface as
-    // 503/404 — the live path is never affected when `draftSessionId` is
-    // absent.
-    const draftCodeDirFor = async (
-      appId: string
-    ): Promise<string | undefined> =>
-      draftSessionId && this.draftCodeDir
-        ? this.draftCodeDir(appId, draftSessionId)
-        : undefined;
 
     try {
       switch (route.kind) {
@@ -726,105 +697,6 @@ export class Runtime {
 
         case "app-logs": {
           await handleLogsRoute(res, this.registry, route.appId, route.query);
-          return;
-        }
-
-        case "app-query-bundle": {
-          const webApp = req.headers[WEB_APP_HEADER];
-          if (typeof webApp === "string" && webApp !== route.appId) {
-            sendError(
-              res,
-              403,
-              "app_session_scope",
-              "This browser session is scoped to another app."
-            );
-            return;
-          }
-          const entry = this.registry.get(route.appId);
-          if (!entry) {
-            sendError(res, 404, "not_found", "App not registered.");
-            return;
-          }
-          const codeDir = draftSessionId
-            ? await draftCodeDirFor(entry.id)
-            : await this.resolveCodeDir(entry);
-          if (!codeDir) {
-            sendError(
-              res,
-              503,
-              "no_active_version",
-              "App has no active version yet."
-            );
-            return;
-          }
-          await serveQueryBundle(req, res, {
-            codeDir,
-            appId: entry.id,
-            queryName: route.queryName,
-          });
-          return;
-        }
-
-        case "app-index":
-        case "app-static": {
-          const entry = this.registry.get(route.appId);
-          if (!entry) {
-            sendError(res, 404, "not_found", "App not registered.");
-            return;
-          }
-          const codeDir = draftSessionId
-            ? await draftCodeDirFor(entry.id)
-            : await this.resolveCodeDir(entry);
-          if (!codeDir) {
-            sendError(
-              res,
-              503,
-              "no_active_version",
-              "App has no active version yet."
-            );
-            return;
-          }
-          // In draft mode the served HTML's bridge must pin the app id +
-          // route tool calls through the draft shim (the path's first
-          // segment is `_draft`, so the live `location.pathname` sniff
-          // would mis-read it). Passed through to `serveStatic`.
-          const draftServe = draftSessionId
-            ? { draft: { appId: entry.id, sessionId: draftSessionId } }
-            : {};
-          // Kit assets (kit.ts / kit.css) are served from the shared canonical
-          // dir when the app folder doesn't ship its own copy.
-          const sharedServe = this.sharedAssetsDir
-            ? { sharedAssetsDir: this.sharedAssetsDir }
-            : {};
-          const rel = route.kind === "app-index" ? "index.html" : route.rel;
-          if (route.kind === "app-index") {
-            // Merge global prefs (gateway-side store) with this app's own
-            // settings.json and any URL-query overrides, then bake the
-            // result into the served HTML so the iframe paints in the
-            // right shape before any script runs.
-            const globalPrefs = this.userStore?.getAllPrefs();
-            const appSettings = readAppSettings(entry.path);
-            const queryOverrides = route.query as Record<string, unknown>;
-            const settingsInject = buildSettingsInject([
-              globalPrefs,
-              appSettings,
-              queryOverrides,
-            ]);
-            const shellOrigin = req.headers[WEB_SHELL_ORIGIN_HEADER];
-            await serveStatic(req, res, codeDir, rel, {
-              settingsInject,
-              ...(typeof shellOrigin === "string"
-                ? { frameAncestor: shellOrigin }
-                : {}),
-              ...draftServe,
-              ...sharedServe,
-            });
-          } else {
-            await serveStatic(req, res, codeDir, rel, {
-              ...draftServe,
-              ...sharedServe,
-            });
-          }
           return;
         }
 

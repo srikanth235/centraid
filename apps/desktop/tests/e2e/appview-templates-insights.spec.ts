@@ -105,7 +105,6 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
       name: "Daily Digest",
       description: "Summarize the day",
       kind: "automation",
-      hasIndex: true,
     },
     template: gateway.state.templates[0],
     webhooks: [],

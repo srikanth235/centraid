@@ -334,24 +334,6 @@ export default defineConfig({
         "prefer-promise-reject-errors": "off",
       },
     },
-    {
-      // This large ES5-style in-page store is fixture data for the visual
-      // harness and is never shipped. Rewriting its syntax would add risk
-      // without improving the product; keep the useful runtime undefined-name
-      // check while leaving style to the fixture's established form.
-      files: ["packages/blueprints/visual-harness/mock-centraid.js"],
-      env: {
-        browser: true,
-        es2024: true,
-        node: false,
-      },
-      rules: {
-        ...Object.fromEntries(
-          Object.keys(core.rules ?? {}).map((rule) => [rule, "off"])
-        ),
-        "no-undef": "error",
-      },
-    },
     // The vitest preset applies through `overrides`, and an extended preset's
     // overrides outrank the consumer's — so extending it leaves no way to say
     // "not these files". Its single override is therefore spliced in here

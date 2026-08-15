@@ -12,7 +12,7 @@ gate loop before its commit.
 
 - [x] Stage 1 — retire the mobile WebView cover (AppDetail, WebView bridge, catalog compat branches, template-gate e2e flow; relocate transfer-policy to lib/upload).
 - [x] Stage 2 — retire the client iframe + builder and gateway serving wiring (AppFrame, AppViewRoute, opaque documents, builder routes, web-app-sessions, authoring skills, the lifecycle scaffold route; the draft-*preview* surface is app-engine's `/centraid/_draft/…` and retires in Stage 3 — see Decisions).
-- [ ] Stage 3 — retire app-engine UI-byte serving (static-server, app-bundle, bridge-script, css-module, asset-variants, query-bundle, app router kinds, KIT_DIR wiring, visual-harness).
+- [x] Stage 3 — retire app-engine UI-byte serving (static-server, app-bundle, bridge-script, css-module, asset-variants, query-bundle, app router kinds, KIT_DIR wiring, visual-harness).
 - [x] Stage 4 — retire the blueprints blank-app scaffolder and the remote template fetch (scaffold files/defaults, served half of app-rewrites, per-app index.html, remote templates; index.json is KEPT and the reason is in Decisions).
 - [ ] Stage 5 — kit dissolution A: rehome the non-design kit modules to packages/client as typed TypeScript; delete the legacy Ask controller and its strangler.
 - [ ] Stage 6 — kit dissolution B: fold the DOM substrate into packages/design/src as typed modules; delete the served-sibling alias apparatus; rewrite the sibling imports to package imports; land the coverage-scope-reachability amendment in the same commit as its check change.
@@ -170,6 +170,49 @@ false` claim. Budget movement is in Decisions.
 desktop e2e `SCENARIOS.md` / `COVERAGE_REPORT.md` now describe a single
 render path. The broad superapp repositioning stays Stage 8's.
 
+### Stage 3 — retire app-engine UI-byte serving (static-server, app-bundle, bridge-script, css-module, asset-variants, query-bundle, app router kinds, KIT_DIR wiring, visual-harness).
+
+**app-engine stops serving bytes.** Deleted
+`packages/app-engine/src/http/static-server.ts` + `.test.ts`,
+`app-bundle.ts` + `.test.ts`, `app-bundled-index.ts`, `asset-variants.ts`,
+`bridge-script.ts` + `.test.ts`, `css-module.ts`, `query-bundle.ts` +
+`.test.ts`, and `bounded-cache.ts` + `.test.ts` (its only consumers were the
+bundlers). `router.ts` lost the `app-index`, `app-static` and
+`app-query-bundle` route kinds: `/centraid/<id>` now names no endpoint at
+all, and an app is reachable only through the named RPC and stream
+sub-routes. `http-server.ts`, `runtime.ts`, `index.ts`, `security.ts`,
+`compression.ts`, `changes-sse.ts` and `settings/settings-merge.ts` follow.
+The whole change is 11,539 deleted lines against 357 added.
+
+**Draft preview retires as predicted in Stage 2.** `/centraid/_draft/…` no
+longer serves a session worktree's code; `parseWithDraft` survives so a draft
+session can run its worktree's *handlers*, which is the surviving RPC claim.
+`packages/gateway/src/lifecycle/draft-preview-over-http.test.ts` narrows to
+that. `app-prewarm-errors.ts` + `.test.ts` deleted with the prewarm path they
+described; `build-gateway.ts`, `lifecycle-shared.ts`, `apps-store-routes.ts`,
+`worktree-store.ts` and `hardware-profile.ts` dropped the UI-byte wiring, the
+latter losing the resource dimension that only sized a static-asset cache —
+with `resource-presets.ts` / `resource-summary.ts` in the client following so
+the knob stops being offered.
+
+**The visual harness is gone**, and with it three policy exemptions that
+existed only for it: its `oxlint.config.ts` override, its `.gitleaks.toml`
+path, and its `coverage-scope-reachability` allowlist entry. Removing a dead
+exemption tightens enforcement — none of the three was relaxed, all three
+were deleted.
+
+**Docs.** `docs/traps/blueprint-csp.md` is deleted outright rather than
+edited: the entire trap described the serving plane. Its index row in
+`docs/traps/README.md` goes with it, and Stage 4 removed the inbound link
+from `docs/traps/manifest-regeneration.md`. `ARCHITECTURE.md`,
+`docs/config-ownership.md`, `docs/glossary.md`, `docs/photos/places.md` and
+`docs/traps/design-tokens.md` follow.
+
+**The `web-e2e` fixture app is swept.** `apps/web/tests/e2e/server.ts` no
+longer seeds a manifest, `index.html`, `queries/ping.js`, or publishes it —
+nothing could open it once Stage 2 deleted the iframe host, so it was dead
+fixture weight that would have read as coverage.
+
 ### Stage 4 — retire the blueprints blank-app scaffolder and the remote template fetch (scaffold files/defaults, served half of app-rewrites, per-app index.html, remote templates; index.json is KEPT and the reason is in Decisions).
 
 **The scaffolder is gone.** Deleted `packages/blueprints/src/scaffold.ts`,
@@ -212,6 +255,8 @@ Every path in this change set, across all stages landed so far, including
 deletions, renames, and this receipt:
 
 - `.github/workflows/e2e.yml`
+- `.gitleaks.toml`
+- `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/allowlist.txt`
 - `ARCHITECTURE.md`
 - `README.md`
 - `TESTING.md`
@@ -271,19 +316,49 @@ deletions, renames, and this receipt:
 - `apps/web/tests/e2e/accessibility.spec.ts`
 - `apps/web/tests/e2e/perf-budgets.ts`
 - `apps/web/tests/e2e/perf-waterfall.spec.ts`
+- `apps/web/tests/e2e/server.ts`
 - `apps/web/tests/e2e/web-pwa.spec.ts`
+- `bun.lock`
 - `centraid-city/src/core/content.ts`
 - `docs/config-ownership.md`
 - `docs/design-machinery.md`
 - `docs/glossary.md`
+- `docs/photos/places.md`
+- `docs/traps/README.md`
 - `docs/traps/blueprint-csp.md`
 - `docs/traps/design-tokens.md`
 - `docs/traps/electron-screenshot.md`
 - `docs/traps/manifest-regeneration.md`
+- `oxlint.config.ts`
+- `packages/app-engine/src/http/app-bundle.test.ts`
+- `packages/app-engine/src/http/app-bundle.ts`
+- `packages/app-engine/src/http/app-bundled-index.ts`
+- `packages/app-engine/src/http/asset-variants.ts`
+- `packages/app-engine/src/http/bounded-cache.test.ts`
+- `packages/app-engine/src/http/bounded-cache.ts`
+- `packages/app-engine/src/http/bridge-script.test.ts`
+- `packages/app-engine/src/http/bridge-script.ts`
+- `packages/app-engine/src/http/changes-sse.ts`
+- `packages/app-engine/src/http/compression.test.ts`
+- `packages/app-engine/src/http/compression.ts`
+- `packages/app-engine/src/http/css-module.ts`
+- `packages/app-engine/src/http/http-server.ts`
+- `packages/app-engine/src/http/query-bundle.test.ts`
+- `packages/app-engine/src/http/query-bundle.ts`
+- `packages/app-engine/src/http/router.test.ts`
+- `packages/app-engine/src/http/router.ts`
+- `packages/app-engine/src/http/security.ts`
+- `packages/app-engine/src/http/static-server.test.ts`
+- `packages/app-engine/src/http/static-server.ts`
+- `packages/app-engine/src/index.ts`
 - `packages/app-engine/src/registry/token-purity.ts`
+- `packages/app-engine/src/runtime.ts`
+- `packages/app-engine/src/settings/settings-merge.ts`
 - `packages/blueprints/README.md`
+- `packages/blueprints/apps/_shared/placement-registry.ts`
 - `packages/blueprints/apps/agenda/index.html`
 - `packages/blueprints/apps/docs/index.html`
+- `packages/blueprints/apps/inline-types.ts`
 - `packages/blueprints/apps/locker/index.html`
 - `packages/blueprints/apps/locker/logic.ts`
 - `packages/blueprints/apps/notes/index.html`
@@ -294,6 +369,7 @@ deletions, renames, and this receipt:
 - `packages/blueprints/manifest.json`
 - `packages/blueprints/package.json`
 - `packages/blueprints/src/__snapshots__/scaffold-defaults.test.ts.snap`
+- `packages/blueprints/src/app-boot-harness.ts`
 - `packages/blueprints/src/app-meta-properties.test.ts`
 - `packages/blueprints/src/app-meta.test.ts`
 - `packages/blueprints/src/app-meta.ts`
@@ -319,6 +395,10 @@ deletions, renames, and this receipt:
 - `packages/blueprints/src/types.ts`
 - `packages/blueprints/src/update-app-meta.test.ts`
 - `packages/blueprints/stryker.config.mjs`
+- `packages/blueprints/types/centraid.d.ts`
+- `packages/blueprints/visual-harness/README.md`
+- `packages/blueprints/visual-harness/mock-centraid.js`
+- `packages/blueprints/visual-harness/server.mjs`
 - `packages/blueprints/vitest.mutation.config.ts`
 - `packages/client/src/app-format.ts`
 - `packages/client/src/app-shell-context.ts`
@@ -330,6 +410,8 @@ deletions, renames, and this receipt:
 - `packages/client/src/gateway-client-editing.ts`
 - `packages/client/src/gateway-client-seam-fixtures.ts`
 - `packages/client/src/gateway-client.ts`
+- `packages/client/src/react/blueprints/centraid-inline.ts`
+- `packages/client/src/react/blueprints/inlineQueryCtx.ts`
 - `packages/client/src/react/boot.tsx`
 - `packages/client/src/react/screen-contracts.ts`
 - `packages/client/src/react/screens/AutomationEditorScreen.tsx`
@@ -339,8 +421,13 @@ deletions, renames, and this receipt:
 - `packages/client/src/react/screens/BuilderChatPane.tsx`
 - `packages/client/src/react/screens/LibraryCards.test.tsx`
 - `packages/client/src/react/screens/LibraryCards.tsx`
+- `packages/client/src/react/screens/ResourceAdvancedKnobs.test.tsx`
+- `packages/client/src/react/screens/ResourceModeCard.test.tsx`
 - `packages/client/src/react/screens/StarredScreen.test.tsx`
 - `packages/client/src/react/screens/StarredScreen.tsx`
+- `packages/client/src/react/screens/resource-presets.ts`
+- `packages/client/src/react/screens/resource-summary.test.ts`
+- `packages/client/src/react/screens/resource-summary.ts`
 - `packages/client/src/react/shell/App.inline-branch.test.tsx`
 - `packages/client/src/react/shell/App.test.tsx`
 - `packages/client/src/react/shell/App.tsx`
@@ -410,12 +497,22 @@ deletions, renames, and this receipt:
 - `packages/client/src/react/shell/useShellApps.ts`
 - `packages/client/src/types.d.ts`
 - `packages/client/src/vault-change-feed.ts`
+- `packages/design/kit/kit.css`
+- `packages/design/kit/kit.ts`
 - `packages/design/src/css.ts`
+- `packages/design/src/kit.ts`
+- `packages/gateway/package.json`
 - `packages/gateway/skills/authoring-centraid-apps/SKILL.md`
 - `packages/gateway/src/lifecycle/automation-lifecycle-over-http.test.ts`
+- `packages/gateway/src/lifecycle/draft-preview-over-http.test.ts`
+- `packages/gateway/src/lifecycle/ext-band-over-http.test.ts`
 - `packages/gateway/src/lifecycle/install-over-http.test.ts`
 - `packages/gateway/src/lifecycle/lifecycle-over-http.test.ts`
+- `packages/gateway/src/lifecycle/lifecycle-shared.test.ts`
+- `packages/gateway/src/lifecycle/lifecycle-shared.ts`
 - `packages/gateway/src/paths.ts`
+- `packages/gateway/src/routes/apps-store-routes.test.ts`
+- `packages/gateway/src/routes/apps-store-routes.ts`
 - `packages/gateway/src/routes/devices-routes.ts`
 - `packages/gateway/src/routes/lifecycle-automation-routes.ts`
 - `packages/gateway/src/routes/lifecycle-routes.ts`
@@ -425,8 +522,17 @@ deletions, renames, and this receipt:
 - `packages/gateway/src/routes/templates-routes.test.ts`
 - `packages/gateway/src/routes/templates-routes.ts`
 - `packages/gateway/src/runs/unified-conversation-runner.test.ts`
+- `packages/gateway/src/serve/app-prewarm-errors.test.ts`
+- `packages/gateway/src/serve/app-prewarm-errors.ts`
 - `packages/gateway/src/serve/build-gateway.ts`
+- `packages/gateway/src/serve/hardware-profile.budget.test.ts`
+- `packages/gateway/src/serve/hardware-profile.test.ts`
+- `packages/gateway/src/serve/hardware-profile.ts`
+- `packages/gateway/src/serve/health-registry.test.ts`
 - `packages/gateway/src/serve/pricing-warmer.ts`
+- `packages/gateway/src/serve/serve-git-store.test.ts`
+- `packages/gateway/src/serve/serve-multiclient.test.ts`
+- `packages/gateway/src/serve/serve-vault-addressing.test.ts`
 - `packages/gateway/src/serve/serve.ts`
 - `packages/gateway/src/serve/web-app-sessions.contract.test.ts`
 - `packages/gateway/src/serve/web-app-sessions.ts`
@@ -441,11 +547,14 @@ deletions, renames, and this receipt:
 - `packages/gateway/src/validate-app-css.test.ts`
 - `packages/gateway/src/validate-app-css.ts`
 - `packages/gateway/src/validate-manifest.ts`
+- `packages/gateway/src/worktree-store/worktree-store.ts`
 - `packages/tunnel/src/gateway-endpoint.ts`
 - `packages/vault/src/host.ts`
 - `receipts/issue-799-retire-served-app-plane.md`
 - `scripts/check-share-reachability.test.mjs`
+- `scripts/ci/configure-sonarcloud.mjs`
 - `scripts/lint-e2e-flows.mjs`
+- `scripts/lint-engine-conformance.mjs`
 - `scripts/mutation/seeds.mjs`
 - `scripts/perf/README.md`
 - `scripts/perf/summarize.mjs`
@@ -486,6 +595,13 @@ deletions, renames, and this receipt:
   is left alone.** It is a real inconsistency but it predates this issue, has
   nothing to do with the served-app plane, and "fixing" it would change the
   published catalog — a product call, not a retirement.
+- **`packages/app-engine/src/**` clears its coverage floor after Stage 3, but
+  thinly.** Measured locally after the deletions: lines 84.14% (2951/3507)
+  against a floor of 84, branches 73.61% (2670/3627) against 73. The floor is
+  not moved in either direction — lowering it is unjustified when it passes,
+  and raising it on a 0.14-point margin would be reckless. CI is the
+  enforcing copy; if it reads lower, that is a real signal to investigate
+  rather than a floor to adjust.
 - **`tests/coverage-floors.json` does NOT move, because the measurement said
   the opposite of what was predicted.** The Stage 4 slice expected the
   `packages/blueprints/src/**` floor to fall (deleting `scaffold-defaults.ts`,

@@ -13,10 +13,11 @@
 //      re-measure and TIGHTEN these — the whole point of the budgets is to
 //      lock in the win and catch a future regression that re-inflates it.
 //
-// The harness app (`web-e2e`) is a deliberately tiny fixture, so the absolute
-// numbers are small. Their VALUE is the methodology + the regression fence:
-// the ratios (warm-vs-cold, connect-vs-stream) hold regardless of app size,
-// and the absolute ceilings move with the fixture, not with production apps.
+// The app-open budgets are measured against a real bundled system app opening
+// inline in the shell (#799 retired the tiny served fixture the earlier
+// numbers were taken from). Their VALUE is the methodology + the regression
+// fence: the ratios (warm-vs-cold, connect-vs-stream) hold regardless of which
+// app is measured, and the absolute ceilings move with its chunk graph.
 //
 // Timing budgets hard-fail when `enforceTiming` is true (issue #468 L5).
 // Request-count and byte budgets remain hard gates regardless.

@@ -12,9 +12,6 @@ export type Route =
   | { kind: "app-settings-read"; appId: string }
   | { kind: "app-settings-write"; appId: string }
   | { kind: "app-logs"; appId: string; query: Record<string, string> }
-  | { kind: "app-index"; appId: string; query: Record<string, string> }
-  | { kind: "app-static"; appId: string; rel: string }
-  | { kind: "app-query-bundle"; appId: string; queryName: string }
   | { kind: "app-changes"; appId: string }
   | { kind: "app-action"; appId: string; action: string }
   | { kind: "app-query"; appId: string; query: string }
@@ -36,7 +33,7 @@ const DRAFT_PREFIX = "/centraid/_draft/";
  * (issue #141). A `/centraid/_draft/<sessionId>/<inner…>` URL is rewritten
  * to its inner `/centraid/<inner…>` form (query string preserved) and
  * parsed normally, with the session id returned alongside so the caller
- * can serve the session worktree's code instead of the live version. A
+ * can run the session worktree's handlers instead of the live ones. A
  * URL without the prefix parses exactly as before with no session id.
  */
 export function parseWithDraft(
@@ -121,14 +118,9 @@ export function parseRoute(method: string, rawUrl: string): Route {
   const appId = decodeURIComponent(segments[0] ?? "");
   if (!appId || appId.startsWith("_")) return { kind: "not-found" };
 
-  // /centraid/<id> or /centraid/<id>/
-  if (segments.length === 1) {
-    if (m === "GET") {
-      const query = Object.fromEntries(url.searchParams.entries());
-      return { kind: "app-index", appId, query };
-    }
-    return { kind: "not-found" };
-  }
+  // `/centraid/<id>` names no endpoint. #799 retired the UI-byte plane, so an
+  // app is reached only through the named RPC/stream sub-routes below.
+  if (segments.length === 1) return { kind: "not-found" };
 
   const second = decodeURIComponent(segments[1] ?? "");
 
@@ -139,28 +131,10 @@ export function parseRoute(method: string, rawUrl: string): Route {
     return { kind: "app-changes", appId };
   }
 
-  // /centraid/<id>/_query/<name>.mjs — the only browser-readable handler
-  // surface. Runtime validation requires <name> to be a declared query and
-  // bundles a graph contained wholly within queries/. Any malformed shape is
-  // intercepted here instead of falling through to raw static serving.
-  if (second === "_query") {
-    if (m !== "GET" || segments.length !== 3) return { kind: "not-found" };
-    const moduleName = decodeURIComponent(segments[2] ?? "");
-    if (!moduleName.endsWith(".mjs") || moduleName.length === ".mjs".length) {
-      return { kind: "not-found" };
-    }
-    return {
-      kind: "app-query-bundle",
-      appId,
-      queryName: moduleName.slice(0, -".mjs".length),
-    };
-  }
-
   // /centraid/<id>/actions/<action> and /centraid/<id>/queries/<query> — the
   // app RPC plane (issue #505, retiring the `/centraid/_tool/centraid_*`
   // shim). A `POST` invokes the declared handler with a `{ input?, intentId? }`
-  // body; the app id + handler name live in the path. GETs under these
-  // segments still fall through to static serving below, exactly as before.
+  // body; the app id + handler name live in the path.
   if (second === "actions" && m === "POST" && segments.length === 3) {
     const action = decodeURIComponent(segments[2] ?? "");
     if (!action) return { kind: "not-found" };
@@ -188,8 +162,5 @@ export function parseRoute(method: string, rawUrl: string): Route {
     return { kind: "app-chat", appId, segments: segments.slice(1) };
   }
 
-  // Anything else under /centraid/<id>/... is a static asset request.
-  if (m !== "GET") return { kind: "not-found" };
-  const rel = segments.slice(1).join("/");
-  return { kind: "app-static", appId, rel };
+  return { kind: "not-found" };
 }

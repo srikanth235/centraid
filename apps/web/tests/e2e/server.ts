@@ -75,43 +75,9 @@ controlStore.establish({
   shellOrigin: "http://127.0.0.1:4173",
 });
 
-const store = await handle.appsStore();
-const session = await store.openSession("seed-web-e2e");
-const appDir = path.join(session.worktreePath, "apps", "web-e2e");
-await fs.mkdir(path.join(appDir, "queries"), { recursive: true });
-await fs.writeFile(
-  path.join(appDir, "app.json"),
-  JSON.stringify({
-    manifestVersion: 1,
-    id: "web-e2e",
-    name: "Web E2E App",
-    description: "A browser-isolation fixture.",
-    version: "0.1.0",
-    tables: [],
-    actions: [],
-    queries: [
-      {
-        name: "ping",
-        description: "Returns a stable browser smoke result.",
-        input: { type: "object", properties: {}, additionalProperties: false },
-      },
-    ],
-  })
-);
-await fs.writeFile(
-  path.join(appDir, "index.html"),
-  '<!doctype html><html><head><meta charset="utf-8"><title>Web E2E App</title></head><body><h1>Web E2E App</h1><p id="ready">generated app ready</p></body></html>'
-);
-await fs.writeFile(
-  path.join(appDir, "queries", "ping.js"),
-  "export default async () => ({ pong: true, surface: 'web' });\n"
-);
-await store.publish({
-  sessionId: "seed-web-e2e",
-  appId: "web-e2e",
-  message: "seed web e2e",
-});
-await store.closeSession("seed-web-e2e");
+// No code-store fixture app is seeded. #799 retired the served-app plane, so
+// the only openable apps are the eight bundled system apps the gateway installs
+// into every vault at mount — which is exactly what the specs drive.
 await handle.syncApps();
 
 async function close(): Promise<void> {

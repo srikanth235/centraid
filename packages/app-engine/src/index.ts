@@ -113,7 +113,6 @@ export {
   GATEWAY_MAX_CONNECTIONS,
   GATEWAY_SHUTDOWN_GRACE_MS,
 } from "./http/server-tuning.js";
-export { prewarmAppAssets } from "./http/app-bundle.js";
 export { negotiateEncoding, type Encoding } from "./http/compression.js";
 
 // Public handler types — apps written in TypeScript import these to type
@@ -418,8 +417,8 @@ export {
 } from "./stores/prefs-store.js";
 
 // Per-app `settings.json` reader and the settings-merge pipeline that
-// turns layered prefs/settings into the `SettingsInject` payload baked into
-// each app's index.html.
+// turns layered prefs/settings into the `SettingsInject` payload a host
+// applies to its app surface.
 export {
   readAppSettings,
   readAppSetting,
@@ -429,8 +428,11 @@ export {
   APP_SETTINGS_FILE,
   RUNTIME_KEY_PREFIX,
 } from "./settings/app-settings.js";
-export { buildSettingsInject, KNOWN_KEYS } from "./settings/settings-merge.js";
-export type { SettingsInject } from "./http/static-server.js";
+export {
+  buildSettingsInject,
+  KNOWN_KEYS,
+  type SettingsInject,
+} from "./settings/settings-merge.js";
 
 // Conversation ledger + ctx.state store (issue #190). The five tables
 // (`conversations`, `turns`, `items`, `attachments`, `automation_state`)

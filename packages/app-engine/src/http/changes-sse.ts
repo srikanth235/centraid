@@ -7,20 +7,22 @@
  *     data: {"tables":["todos"],"ts":1715812345678}
  *
  * Plus a periodic heartbeat comment line (`: ping\n\n`) every 55s so
- * proxies / browsers don't time the idle connection out. The client side
- * pattern in app code is just:
+ * proxies / browsers don't time the idle connection out. The subscriber
+ * pattern is just:
  *
  *     const es = new EventSource('/centraid/<id>/_changes');
  *     es.addEventListener('change', (e) => {
  *       const { tables } = JSON.parse(e.data);
- *       // re-fetch your queries that touch these tables
+ *       // re-fetch the queries that touch these tables
  *     });
  *
  * Auth lives in the surrounding HTTP server (loopback bearer for the
- * embedded local runtime, gateway auth for the standalone daemon). For the
- * desktop iframe specifically, Electron's `webRequest.onBeforeSendHeaders`
- * injects the bearer token automatically — `EventSource` doesn't support
- * custom headers natively but it doesn't need to.
+ * embedded local runtime, gateway auth for the standalone daemon).
+ *
+ * This is the change bus's HTTP face. The shells consume the same bus over
+ * their own transports — replica intent invalidations on desktop/web, the
+ * native change feed on mobile — so the endpoint currently has no in-repo
+ * subscriber; it stays as the engine's host-agnostic notification surface.
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -40,7 +42,7 @@ const HEARTBEAT_MS = 55_000;
  * one `_automations` stream, a handful of devices), `_changes` is per-app
  * and a user can legitimately have several windows/tabs of the SAME app
  * open — so the cap is scoped PER APPID, not global: a runaway reconnect
- * loop in one app's injected script can't starve every other app's stream.
+ * loop against one app can't starve every other app's stream.
  */
 export const CHANGES_SSE_MAX_SUBSCRIBERS_PER_APP = 16;
 

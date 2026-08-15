@@ -22,8 +22,6 @@ export interface CentraidAppInfo {
    * id-prefix convention as the automation signal.
    */
   kind?: "app" | "automation";
-  /** Whether the app root has an `index.html` (preview-ready). */
-  hasIndex?: boolean;
 }
 
 export interface CentraidPublishResult {
@@ -1467,9 +1465,7 @@ export type CentraidResourceKnobKey =
   | "workerMaxConcurrent"
   | "workerMaxOldGenerationMb"
   | "workerPoolSize"
-  | "replicationConcurrency"
-  | "staticBrotliQuality"
-  | "staticGzipQuality";
+  | "replicationConcurrency";
 
 /** Structured resource contract on health metrics (issue #528 Phase A). */
 export interface CentraidResourceProfile {
@@ -1485,8 +1481,6 @@ export interface CentraidResourceProfile {
     workerMaxOldGenerationMb: number;
     workerPoolSize: number;
     replicationConcurrency: number;
-    staticBrotliQuality: number;
-    staticGzipQuality: number;
     sqliteSynchronous: "FULL" | "NORMAL";
     vaultSweepIntervalMs: number;
     outboxIdleIntervalMs: number;
