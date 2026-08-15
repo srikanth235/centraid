@@ -1,8 +1,8 @@
 # Centraid
 
-**Personal software. Your data. Your apps. Your devices.**
+**Personal software. Your data. Your devices.**
 
-Install an app and a local gateway runs it — on your desktop, browser, and phone — or add an automation that works your data in the background. Every app is a thin projection over one **vault** on your machine — a shared personal ontology where your people, money, documents and plans live once, accessed through grants you sign. App code is a folder of HTML + JS handlers versioned in a local git store; apps serve from the shipped release and update with it, and are authored through a harness (the builder that does that ships hidden for v1).
+Centraid is a personal, local-first **superapp**: one shell wrapping many first-party apps — on your desktop, browser, and phone — plus automations that work your data in the background. Every app is a thin projection over one **vault** on your machine — a shared personal ontology where your people, money, documents and plans live once, accessed through grants you sign. The apps ship in the release and update with it; the gateway serves their **data**, never their UI bytes. Automations are the one thing you author yourself: a template is cloned into a user-owned folder of JS handlers, versioned in a local git store, and the compile harness edits it.
 
 [Docs](https://centraid.dev/docs/) · [Get started](https://centraid.dev/docs/start/) · [Architecture](ARCHITECTURE.md) · [Agents map](AGENTS.md) · [Contributing](CONTRIBUTING.md)
 
@@ -98,8 +98,8 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `packages/agent-runtime` | Drives one turn through the Agent Client Protocol — the single path for every harness kind, with first-party adapters for CLIs that don't speak ACP ([docs/harnesses.md](docs/harnesses.md)); ships the vault-register tools and the `centraid` CLI. The package name is retained in v0 even though “agent” is now reserved for principals. |
 | `packages/automation` | Manifest schema, fire spine, in-process scheduler, webhook ingress, worker-thread handler runner. |
 | `packages/tunnel` | iroh QUIC wire protocol — device tunnel + one-time pairing; the TS reference the Swift/Kotlin mobile ports mirror. |
-| `packages/blueprints` | Template catalog: 8 blueprint apps installed in place + 28 automation templates cloned into user-owned code. Renders on the kit layer of `packages/design`. |
-| `packages/design` | The design system in two layers: the **token** vocabulary (colors, type, spacing, app metadata, icons) shared across desktop and mobile, and the **kit** (`kit.css` / `kit.ts`) served to every blueprint app surface. |
+| `packages/blueprints` | The superapp's catalogue: 8 first-party system apps installed in place + 28 automation templates cloned into user-owned code. Renders on the element layer of `packages/design`. |
+| `packages/design` | The design system in two layers: the **token** vocabulary (colors, type, spacing, app metadata, icons) shared across desktop and mobile, and the **element** layer (`src/elements/**`, `kit.css`) — the browser substrate every app renders on, bundled with the client rather than served. |
 
 ## Gateway install (npm / curl|bash)
 
@@ -229,7 +229,7 @@ See [docs/toolchain.md](docs/toolchain.md) for the stable command API, rule rubr
 
 Desktop e2e: 55 Playwright tests across the current desktop specs, driving the real Electron app against local and remote gateway paths — see [apps/desktop/tests/e2e](apps/desktop/tests/e2e/README.md).
 
-Web e2e: `bun run --cwd apps/web build && bun run --cwd apps/web e2e` drives the production PWA against a real gateway and verifies pairing, preview/publish, app execution, and session isolation.
+Web e2e: `bun run --cwd apps/web build && bun run --cwd apps/web e2e` drives the production PWA against a real gateway and verifies pairing, inline app execution, offline reconnect, the pending-write overlay, and session isolation.
 
 Companion: `bun run --cwd apps/extension package` emits Chrome and Firefox ZIPs; its real-browser pairing/fill/revoke flow lives in [tests/agent-e2e-pairing/flows/extension-companion.md](tests/agent-e2e-pairing/flows/extension-companion.md).
 

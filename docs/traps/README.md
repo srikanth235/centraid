@@ -7,6 +7,6 @@ Read the matching trap before working near its area; each one was paid for once.
 | [design-tokens.md](design-tokens.md) | Token source of truth vs hardcoded CSS; the two layers of `packages/design` |
 | [worktrees.md](worktrees.md) | Install/build/data isolation in worktrees |
 | [wal-checkpoint.md](wal-checkpoint.md) | Unsafe SQLite/WAL copies |
-| [electron-screenshot.md](electron-screenshot.md) | Preview capture / Playwright screenshots |
+| [electron-screenshot.md](electron-screenshot.md) | Electron `capturePage` / Playwright screenshots |
 | [manifest-regeneration.md](manifest-regeneration.md) | `manifest.json` / vendor rebuilds |
 | [mobile-native-state.md](mobile-native-state.md) | Mobile recipe completeness vs fingerprint ratchet (L1–L4) |

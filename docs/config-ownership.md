@@ -56,10 +56,11 @@ Baseline inputs now describe the **granted share of the host, not the raw machin
 
 | Surface | Owner |
 | --- | --- |
-| Shipped / git-store `app.json`, handlers | Code store / release / Publish |
+| Bundled system app `app.json`, handlers | The release — shipped source in `packages/blueprints/apps/`, never editable at runtime |
+| Cloned automation `app.json`, handlers | The vault's `code/` store, via the clone + publish flow |
 | Consent grants, install rows | Vault runtime (install sheet, revoke) |
 
-Editing `app.json` in a draft worktree does not change production grants until Publish / install flows say so.
+Editing a cloned automation's `app.json` in a draft worktree does not change production grants until the publish / install flows say so.
 
 ### Model catalog — runtime wins when file present
 

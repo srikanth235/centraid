@@ -110,7 +110,7 @@ Per [centraid#131](https://github.com/srikanth235/centraid/issues/131), the daem
 - No mDNS / Bonjour discovery; pair with a one-time ticket.
 - Single user. Multi-user identity is a larger design and lands separately.
 - No daemon auto-update. Bumping the gateway is `git pull` + `bun install` + restart, by design.
-- The CLI daemon runs the **legacy tarball-upload** code backend (no `appsStoreRoot`), so it has no draft worktree and uses the data-only chat harness rather than the unified builder chat the desktop gets.
+- The CLI daemon runs the **legacy tarball-upload** code backend (no `appsStoreRoot`), so it has no draft worktree and uses the data-only chat harness rather than the unified workspace-capable chat the desktop gets.
 
 ## Tests
 

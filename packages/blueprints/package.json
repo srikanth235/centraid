@@ -2,7 +2,7 @@
   "name": "@centraid/blueprints",
   "version": "0.1.0",
   "private": false,
-  "description": "How centraid code comes into being: the bundled system apps installed in place, and the automation templates cloned into user-owned app code.",
+  "description": "The superapp's catalogue: the bundled first-party system apps installed in place, and the automation templates cloned into user-owned automation code.",
   "license": "SEE LICENSE IN REPOSITORY",
   "repository": {
     "type": "git",

@@ -14,7 +14,7 @@
     },
     "BI": {
       "profile": "blueprint",
-      "renderer": "kit-inline",
+      "renderer": "react-inline",
       "host": "shell"
     },
     "MO": {

@@ -173,7 +173,7 @@ export class ReplicaWorkerClient implements ReplicaStore {
     }
   }
 
-  /** Structured-cloneable rows for shell → iframe RPC; guard them in the iframe. */
+  /** Structured-cloneable rows for the shell → replica-worker RPC hop; guard them on the far side. */
   readWire(
     request: ReplicaReadRequest,
     mutations: OptimisticMutation[] = []
@@ -181,7 +181,7 @@ export class ReplicaWorkerClient implements ReplicaStore {
     return this.rpc("read", { request, mutations });
   }
 
-  /** Structured-cloneable local search rows for shell → iframe RPC. */
+  /** Structured-cloneable local search rows for the shell → replica-worker RPC hop. */
   searchWire(
     request: ReplicaSearchRequest,
     mutations: OptimisticMutation[] = []

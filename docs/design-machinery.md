@@ -9,7 +9,7 @@ Inventory and ownership map for the visual system across desktop, PWA, blueprint
 | Product grammar | `DESIGN.md` | Binding values, roles, surface rules, and component behavior |
 | Typed registry | `packages/design/src` | Theme ramps, semantic roles, type, spacing, radii, density, motion, icons, app identity, and recipe inventory |
 | Shell lowering | `toCss()` | CSS custom properties for the shared React shell used by desktop and PWA |
-| Blueprint lowering | `toBlueprintCss()` | CSS custom properties for sandboxed app surfaces |
+| Blueprint lowering | `toBlueprintCss()` | CSS custom properties for the system apps' scoped surfaces (`:where(.centraid-inline-scope)`) — scoping, not sandboxing: since #799 an app is shell code in the shell's own document |
 | Native lowering | `toNativeTheme()` | Concrete React Native values with no CSS parsing or runtime override layer |
 | Native adapter | `apps/mobile/src/kit/theme/native.ts` | Expo font-family names and `em` tracking converted to React Native points |
 | Headless block layer | `packages/design/src/blocks` (`@centraid/design/blocks`) | The block vocabulary's logic with no renderer in it, shared by every kit |

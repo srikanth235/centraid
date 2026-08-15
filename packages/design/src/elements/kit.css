@@ -190,8 +190,8 @@
 
 /* The `hidden` attribute must hide kit-owned content even when a component
    class sets `display:`. Scope the guard to the two roots that load this
-   stylesheet: a loose served app or an inline app mounted in the host. A
-   document-global rule would leak into host chrome and third-party content. */
+   stylesheet: an app's own chrome shell and the inline scope it mounts under
+   in the host. A document-global rule would leak into host chrome. */
 :where(.kit-app-shell [hidden]),
 :where(.centraid-inline-scope [hidden]) {
   display: none !important;

@@ -446,15 +446,16 @@ export const districts = [
       },
       {
         id: "apps-crane",
-        name: "Builder Crane",
+        name: "Automation Crane",
         kind: "crane",
         pos: { x: 112, z: 40 },
         size: { w: 8, h: 13, d: 8 },
-        blurb: "Where a harness scaffolds a brand-new app from a blueprint.",
+        blurb:
+          "Where the compile harness clones a new automation from a template.",
         detail:
-          "When a harness (or a person, via the builder UI) scaffolds a new app, the crane is the visual for that build turn: a blueprint template is copied, wired to declared handlers, and snapshotted into the vault's code store.",
+          "The apps themselves are not built here — #799 retired the app builder, and the eight system apps ship in the release. What the crane still lifts is an automation: a template is cloned into a fresh, non-colliding (id, name), scaffolded into the vault's code store, and the headless compile harness fills in the manifest and handler.",
         codeRef:
-          "packages/blueprints/src/clone.ts + packages/gateway/src/worktree-store/worktree-store.ts",
+          "packages/blueprints/src/clone.ts + packages/automation/src/scaffold/scaffold.ts + packages/gateway/src/worktree-store/worktree-store.ts",
       },
     ],
   },

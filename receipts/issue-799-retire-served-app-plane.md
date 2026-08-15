@@ -17,7 +17,7 @@ gate loop before its commit.
 - [x] Stage 5 — kit dissolution A: rehome the non-design kit modules to packages/client as typed TypeScript; delete the legacy Ask controller and its strangler (edge-upload stays in packages/design for Stage 6 — see Decisions).
 - [x] Stage 6 — kit dissolution B: fold the DOM substrate into packages/design/src as typed modules; delete the served-sibling alias apparatus; rewrite the sibling imports to package imports; land the coverage-scope-reachability amendment in the same commit as its check change.
 - [x] Stage 7 — custom-element endgame: replace JSX-emitted kit-* tags with React blocks, delete elements-base + element classes, prune orphaned kit.css rules; re-point the design gallery at the shell's real `#ui-preview` surface and delete the `fixtureHtml` parallel implementation; re-pin design-gallery baselines once, at the end.
-- [ ] Stage 8 — identity + decisions sweep: superapp positioning across the root docs, one app render path in ARCHITECTURE.md, decisions.md supersessions, glossary/design-machinery/traps/test-matrix updates.
+- [x] Stage 8 — identity + decisions sweep: superapp positioning across the root docs, one app render path in ARCHITECTURE.md, decisions.md supersessions, glossary/design-machinery/traps/test-matrix updates.
 
 ## What changed
 
@@ -415,6 +415,55 @@ reads the product. Baselines re-pinned exactly once, at the end:
 container — the `design:gallery` lane that #781 documented as known-red on
 Linux is green here (the darwin side is the open question; see Decisions).
 
+### Stage 8 — identity + decisions sweep: superapp positioning across the root docs, one app render path in ARCHITECTURE.md, decisions.md supersessions, glossary/design-machinery/traps/test-matrix updates.
+
+**Centraid is a superapp everywhere the repo speaks.** The "personal app
+builder" framing is gone from every live surface: `AGENTS.md`'s opening
+sentence, the root and workspace `package.json` descriptions (blueprints,
+agent-runtime, automation, design, app-engine, and desktop's stale
+React-migration claim), `README.md`, the docs-site `<meta name="description">`
+in `DocsLayout.astro`, and `og-docs.svg`'s false "agent-built apps" claim
+(now "first-party apps"). `ARCHITECTURE.md` describes one app render path
+under a renamed `## App render path` heading (the sole inbound deep link in
+`docs/decisions.md` updated with it). `docs/decisions.md` gained the
+2026-08-15 product-positioning ruling, supersession rows for the #505
+served-app plane, the #690/#765 custom elements, and the builder
+positioning, plus the gallery-product-capture ruling (SH/SH-c screenshot
+the built shell with self-hosted Instrument Sans; BI/MO are deliberate
+token-lowering lanes; per-platform baseline directories, never a widened
+tolerance — this discharges #781's pending font decision).
+
+**The dead `"BS"` surface left the type system.** `packages/design/src/roles.ts`
+dropped the union member, `allSurfaces`, `blueprintSurfaces`,
+`--app-identity-text`, and its `profileForSurface` arm with the matching
+`roles.test.ts` case. `tests/design-grammar-matrix.json`'s BI renderer
+renamed `kit-inline` → `react-inline` (matching its `react-native`/`client`
+siblings) — metadata-only, verified by re-running the gallery gate at 8/8,
+0.00%.
+
+**The line between retired-builder prose and live vocabulary was drawn
+explicitly, not blanket-replaced.** `kind='build'` survives reworded as the
+workspace-capable assistant thread (it is live in `gateway-db.ts`'s CHECK
+and the unified conversation runner); the automation *compiler* keeps the
+"builder" word with a scope note at the head of `automation-authoring/SKILL.md`;
+literal artifact names (`.centraid-builder-state.json`, `"by":
+"centraid-builder"`) are untouched; `centraid-city`'s crane landmark keeps
+its id with its meaning repurposed to the real automation clone+compile.
+Comments citing the served plane as *history that explains a live shape*
+stay; the seven comments asserting a currently-false live fact (locker
+logic ×2, docs blob-text, kit.css, the replica store/worker "shell → iframe
+RPC", preload-core, kit-ask-inline) were corrected. `DESIGN.md`'s mandated
+`scoped≡served` parity test — which no longer has a possible subject — is
+retired in prose citing #799.
+
+**One CONSTITUTION amendment rode along**: `handler-contract`'s rationale
+text (a stale path and failure signature) was corrected in `CONSTITUTION.md`
+and mirrored verbatim into the pack's `constitution.md` in the same change,
+with a dated Evolution Log entry; `check.sh` needed no edit, so the
+same-commit rule is satisfied by the pair of prose files alone.
+
+
+
 ### Full changed-file inventory
 
 Every path in this change set, across all stages landed so far, including
@@ -427,10 +476,15 @@ deletions, renames, and this receipt:
 - `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/check.sh`
 - `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/constitution.md`
 - `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/directive.yaml`
+- `.governance/packs/srikanth235/centraid/directives/handler-contract/constitution.md`
+- `AGENTS.md`
 - `ARCHITECTURE.md`
 - `CONSTITUTION.md`
+- `DESIGN.md`
 - `README.md`
+- `SECURITY.md`
 - `TESTING.md`
+- `apps/desktop/package.json`
 - `apps/desktop/scripts/screenshot-automations.mjs`
 - `apps/desktop/scripts/screenshot-standing-orders.mjs`
 - `apps/desktop/src/main.ts`
@@ -445,6 +499,7 @@ deletions, renames, and this receipt:
 - `apps/desktop/src/main/matrix-concurrency.test.ts`
 - `apps/desktop/src/main/matrix-contracts.test.ts`
 - `apps/desktop/src/main/matrix-durability.test.ts`
+- `apps/desktop/src/main/preload-core.ts`
 - `apps/desktop/src/main/settings-merge.test.ts`
 - `apps/desktop/src/main/settings-merge.ts`
 - `apps/desktop/src/main/settings.ts`
@@ -494,11 +549,16 @@ deletions, renames, and this receipt:
 - `apps/web/tests/e2e/web-pwa.spec.ts`
 - `apps/web/vite.config.ts`
 - `bun.lock`
+- `centraid-city/SPEC.md`
 - `centraid-city/src/core/content.ts`
+- `centraid-city/src/sim/sim.ts`
+- `docs/apps/docs-scenarios.md`
+- `docs/client-keying.md`
 - `docs/config-ownership.md`
 - `docs/decisions.md`
 - `docs/design-machinery.md`
 - `docs/glossary.md`
+- `docs/harnesses.md`
 - `docs/photos/places.md`
 - `docs/protocol.md`
 - `docs/traps/README.md`
@@ -509,6 +569,10 @@ deletions, renames, and this receipt:
 - `knip.json`
 - `oxfmt.config.ts`
 - `oxlint.config.ts`
+- `package.json`
+- `packages/agent-runtime/package.json`
+- `packages/app-engine/README.md`
+- `packages/app-engine/package.json`
 - `packages/app-engine/src/http/app-bundle.test.ts`
 - `packages/app-engine/src/http/app-bundle.ts`
 - `packages/app-engine/src/http/app-bundled-index.ts`
@@ -533,6 +597,9 @@ deletions, renames, and this receipt:
 - `packages/app-engine/src/registry/token-purity.ts`
 - `packages/app-engine/src/runtime.ts`
 - `packages/app-engine/src/settings/settings-merge.ts`
+- `packages/automation/README.md`
+- `packages/automation/package.json`
+- `packages/backup/FORMAT.md`
 - `packages/blueprints/README.md`
 - `packages/blueprints/apps/_shared/Avatar.tsx`
 - `packages/blueprints/apps/_shared/LoadingSkeleton.tsx`
@@ -553,6 +620,7 @@ deletions, renames, and this receipt:
 - `packages/blueprints/apps/agenda/index.html`
 - `packages/blueprints/apps/agenda/logic.ts`
 - `packages/blueprints/apps/docs/app-root.tsx`
+- `packages/blueprints/apps/docs/blob-text.ts`
 - `packages/blueprints/apps/docs/components/BulkBar.tsx`
 - `packages/blueprints/apps/docs/components/Details.tsx`
 - `packages/blueprints/apps/docs/components/Sidebar.tsx`
@@ -810,6 +878,8 @@ deletions, renames, and this receipt:
 - `packages/client/src/react/ui/KindBadge.module.css`
 - `packages/client/src/react/ui/StatusPill.module.css`
 - `packages/client/src/replica/intent-invalidations.ts`
+- `packages/client/src/replica/store.ts`
+- `packages/client/src/replica/worker-client.ts`
 - `packages/client/src/turn-stream.test.ts`
 - `packages/client/src/turn-stream.ts`
 - `packages/client/src/types.d.ts`
@@ -884,12 +954,16 @@ deletions, renames, and this receipt:
 - `packages/design/src/kit.ts`
 - `packages/design/src/moment-matrix.test.ts`
 - `packages/design/src/native-contract.test.ts`
+- `packages/design/src/roles.test.ts`
+- `packages/design/src/roles.ts`
 - `packages/design/src/turn-stream.test.ts`
 - `packages/design/tsconfig.elements.json`
 - `packages/design/tsconfig.json`
 - `packages/design/tsconfig.test.json`
+- `packages/gateway/README.md`
 - `packages/gateway/package.json`
 - `packages/gateway/skills/authoring-centraid-apps/SKILL.md`
+- `packages/gateway/skills/automation-authoring/SKILL.md`
 - `packages/gateway/src/lifecycle/automation-lifecycle-over-http.test.ts`
 - `packages/gateway/src/lifecycle/draft-preview-over-http.test.ts`
 - `packages/gateway/src/lifecycle/ext-band-over-http.test.ts`
@@ -946,6 +1020,14 @@ deletions, renames, and this receipt:
 - `scripts/ci/configure-sonarcloud.mjs`
 - `scripts/design-gallery-lowering.mjs`
 - `scripts/design-gallery.mjs`
+- `scripts/docs-site/public/assets/og-docs.svg`
+- `scripts/docs-site/src/content/apps.html`
+- `scripts/docs-site/src/content/backups.html`
+- `scripts/docs-site/src/content/data.html`
+- `scripts/docs-site/src/content/devices.html`
+- `scripts/docs-site/src/content/ontology-body.html`
+- `scripts/docs-site/src/layouts/DocsLayout.astro`
+- `scripts/docs-site/src/pages/understand.astro`
 - `scripts/lint-aria-labels.mjs`
 - `scripts/lint-container-opacity.mjs`
 - `scripts/lint-design-tokens.mjs`
@@ -1428,6 +1510,17 @@ the composed type roles instead of accidental line-heights.
   vault/consent surface.
 - Historical ledgers (CHANGELOG, COSTS, STEERING, receipts) are append-only
   and were not rewritten.
+- Three stage-8 findings are recorded here, deliberately unactioned (the
+  issue forbids follow-up issues; these are observations, not scope):
+  `origin='generated'` is a dead value in `consent.ts`'s CHECK that nothing
+  writes — dropping it is a schema migration; the builder *code* plane
+  (`BuilderChatPane`, `builderEnabled` #434 default-off, the withheld
+  `builder` routing lane, desktop `app-sessions.ts`) still exists behind
+  its flag even though the product framing is gone; and
+  `packages/vault/package.json` misspells its own description ("Duaility").
+- Cross-platform gallery-baseline agreement awaits one darwin `check:push`
+  run (see Decisions); the CI comment prescribes per-platform baseline
+  directories if a delta appears.
 
 ## Verification
 
@@ -1536,6 +1629,18 @@ every one of the 23 floor scopes measured above its floor —
 classes removed a below-average slab), and the three new uncovered React
 components sit in the blueprint-apps blend scope at 28.34/23.64 against
 20/14. Governance 22/22 with the change set staged.
+
+**Stage 8 verification** (main checkout, after integrating the sub-agent's
+worktree patch and adding the gallery/lowering rulings to
+`docs/decisions.md`): `turbo typecheck --force` 35/35 uncached; lint,
+format, knip, matrix, ratchet, hygiene-ratchet (381/811 at budget),
+sleep-inventory (36/36), skips 25/25 all green;
+`bun scripts/design-gallery.mjs` re-verified 8/8 at 0.00% after the
+`kit-inline` → `react-inline` renderer rename, confirming it is
+metadata-only; governance 22/22 with the change set staged. The sub-agent
+also observed one `handler-pool` timeout flake under full-monorepo load —
+the same contention class already documented for stage 3; the file passes
+in isolation and no app-engine source changed in this stage.
 
 ## Audit
 

@@ -10,7 +10,7 @@ It owns:
 - **Manifest** (`automation.json`) — `Manifest` schema, validator, cron/webhook trigger helpers, output-schema validation.
 - **On-disk model** — the `<appCodeDir>/automations/<id>/` layout, the globally-unique `<appId>/<id>` handle (`Ref`), and reads/writes (`list`, `readAppAt`, …).
 - **Host interface + scheduling** — the `Host` contract that every "thing that fires automations on a schedule" implements.
-- **Webhook ingress** and the **app scaffolders** (`scaffoldApp`).
+- **Webhook ingress** and the **automation-app scaffolder** (`scaffoldApp` — the minimal folder the compile harness then fills in; it scaffolds automations only, never UI apps).
 
 ## What it depends on
 

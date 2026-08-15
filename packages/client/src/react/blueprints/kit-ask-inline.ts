@@ -125,8 +125,9 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
         );
         const provider = requiredProvider;
         if (!provider) return;
-        // Inline apps mount into the SHELL document (the iframe is builder-only,
-        // issue #505), so the shell's own confirm dialog is reachable here.
+        // Apps mount into the SHELL document — there is no iframe anywhere in
+        // the app path (#505, #799) — so the shell's own confirm dialog is
+        // reachable here.
         const approved = await openConfirm({
           confirmLabel: "Allow provider",
           title: `Send to ${provider}?`,

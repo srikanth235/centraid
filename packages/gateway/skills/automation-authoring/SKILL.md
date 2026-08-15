@@ -7,6 +7,8 @@ description: How to author a centraid automation app — the automation.json man
 
 You are working inside a centraid **automation app** — an app folder that runs a scheduled, deterministic job with no human in the loop. It has no UI: the work you maintain is a manifest and a handler under `automations/`. Read this section before making changes.
 
+> **"Builder" below means the automation compiler only** — the surface that clones a template, provisions webhooks, runs the publish gate, and shows the user the config pane. Centraid is a superapp, not an app builder: the UI apps are first-party code shipped in the release and are never authored here (issue #799). Automations are the one thing an owner authors, and this skill is that flow.
+
 ### App layout (canonical)
 
 ```

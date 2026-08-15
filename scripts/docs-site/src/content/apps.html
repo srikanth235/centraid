@@ -178,7 +178,7 @@
             <div>
               └── kit.js&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span
                 style="color: var(--amber)"
-                >shared UX kit, served canonically to every app</span
+                >shared UX kit, bundled canonically with every app</span
               >
             </div>
           </div>
@@ -324,14 +324,14 @@
           <p>
             Apps are responsive by rule, mobile layout first: the same HTML that fills a desktop
             window reflows to the phone, and desktop-only flourishes gate themselves on width
-            instead of forking the code. That responsive shell is how your <b>installed apps</b>
-            travel — on the phone they open in a WebView and render over the peer-to-peer tunnel,
-            same handlers, same grants, live updates over SSE, with an approvals surface so a parked
-            command is answerable from your pocket.
+            instead of forking the code. Every app is a React route inside the shell — no iframe,
+            no second runtime — so an app inherits the shell's tokens, principal and offline replica
+            directly, with an approvals surface so a parked command is answerable from your pocket.
           </p>
           <p>
-            Three of the blueprints go further. <b>Photos</b>, <b>Docs</b> and <b>Agenda</b> ship as
-            <i>native</i> mobile apps drawing on a consent-scoped copy of the vault held on the
+            On the phone the same apps are <i>native</i> screens rather than a web view of the
+            desktop. <b>Photos</b>, <b>Docs</b> and <b>Agenda</b> lean hardest on the
+            consent-scoped copy of the vault held on the
             phone, so they work in airplane mode: a timeline, a document library with offline
             search, a calendar that expands recurrence locally. Writes you make offline queue as
             intents and settle exactly once when you reconnect — the gateway is still the only

@@ -331,7 +331,7 @@ export function createSim(content: Pick<CityContent, "scenarios">): Sim {
     rates.automationWrite = (0.8 + pulses.cron * 4) * kAuto * kWrite;
     bump("automation", rates.automation * 0.012);
 
-    // --- crane (app builder)
+    // --- crane (automation clone + compile)
     pulses.crane = Math.max(pulses.crane * 0.94, cfg.crane ? 1 : 0.12);
 
     // decay transient pulses

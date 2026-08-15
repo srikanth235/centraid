@@ -34,7 +34,7 @@ See `packages/blueprints/README.md`.
 
 - [ ] `index.json` entry present for new templates
 - [ ] `build:manifest` run; `manifest.json` diff reviewed
-- [ ] Handlers committed as **source**, with no compile step on clone/install — `.js` for a builder-generated app, `.ts` for a TS-authored one. Both are first-class: `resolveHandlerFile` (packages/app-engine/src/handlers/dispatcher.ts) probes `.ts` first and falls through to `.js`, and the worker registers an esbuild loader hook for the `.ts` graph. What is still banned is a **built artifact** — nothing under `dist/` may appear in a template's `files[]`.
+- [ ] Handlers committed as **source**, with no compile step on clone/install — `.js` for a compiler-authored automation, `.ts` for a TS-authored one. Both are first-class: `resolveHandlerFile` (packages/app-engine/src/handlers/dispatcher.ts) probes `.ts` first and falls through to `.js`, and the worker registers an esbuild loader hook for the `.ts` graph. What is still banned is a **built artifact** — nothing under `dist/` may appear in a template's `files[]`.
 - [ ] CI build path exercised if you touched vendor scripts
 
 ## Related

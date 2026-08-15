@@ -1,4 +1,4 @@
-# Trap: Electron screenshot / preview capture
+# Trap: Electron and Playwright screenshot capture
 
 ## What goes wrong
 

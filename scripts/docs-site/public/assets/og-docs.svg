@@ -19,6 +19,6 @@
   <text x="90" y="302" fill="#20261f" font-family="Fraunces, Georgia, serif" font-size="76" font-weight="500">Your data. Your apps.</text>
   <text x="90" y="390" fill="#0d7263" font-family="Fraunces, Georgia, serif" font-size="76" font-style="italic" font-weight="600">Your devices.</text>
   <text x="94" y="470" fill="#55604f" font-family="Newsreader, Georgia, serif" font-size="34">Local-first personal software with one private vault,</text>
-  <text x="94" y="514" fill="#55604f" font-family="Newsreader, Georgia, serif" font-size="34">agent-built apps, and peer-to-peer devices.</text>
+  <text x="94" y="514" fill="#55604f" font-family="Newsreader, Georgia, serif" font-size="34">first-party apps, and peer-to-peer devices.</text>
   <path d="M914 126h154M914 166h116M914 206h154M914 246h94" stroke="#b3690e" stroke-width="8" stroke-linecap="round" opacity="0.85" />
 </svg>

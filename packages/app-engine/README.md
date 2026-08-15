@@ -1,6 +1,6 @@
 # @centraid/app-engine
 
-Transport-agnostic runtime for Centraid apps. It owns the app registry, declared-handler execution, app-scoped HTTP routes, and the conversation ledger used by chat, builder, and automation turns. [`@centraid/gateway`](../gateway) supplies paths, vault access, auth, and host services.
+Transport-agnostic runtime for Centraid apps. It owns the app registry, declared-handler execution, app-scoped HTTP routes, and the conversation ledger used by chat, workspace, and automation turns. [`@centraid/gateway`](../gateway) supplies paths, vault access, auth, and host services.
 
 ## Runtime surface
 
@@ -8,11 +8,11 @@ Transport-agnostic runtime for Centraid apps. It owns the app registry, declared
 
 - app registry and per-app settings/logs;
 - declared `actions` and `queries`, validated with Ajv and executed in workers ([dispatcher.ts](src/handlers/dispatcher.ts));
-- app static files and change notifications over SSE;
+- change notifications over SSE;
 - app-scoped conversation turns over SSE; and
 - conversation/user routes mounted alongside the app routes.
 
-The old `/centraid/_tool/centraid_*` and `_sql` surfaces are gone. App publishing and the git code store belong to the gateway; built-in system apps are compiled into the client.
+The old `/centraid/_tool/centraid_*` and `_sql` surfaces are gone, and so is UI-byte serving — #799 retired the served plane, so the engine serves an app's **data**, never its bytes. The git code store (cloned automation sources) belongs to the gateway; the bundled system apps are compiled into the client.
 
 ## Conversation ledger
 

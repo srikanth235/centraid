@@ -31,7 +31,13 @@ import {
 import { fontStacks, type, typeKeyToKebab } from "./typography";
 
 export type Profile = "blueprint" | "native" | "shell";
-export type Surface = "BI" | "BS" | "MO" | "SH" | "SH-c";
+/**
+ * The contracted lowering surfaces. Four, not five: #799 retired the served
+ * blueprint plane, so `BS` (`kit-served` into an `iframe-webview`) has no
+ * renderer, no capture lane, and no row in `tests/design-grammar-matrix.json`.
+ * A blueprint app now paints one way — inline, in the shell's own document.
+ */
+export type Surface = "BI" | "MO" | "SH" | "SH-c";
 export type RoleCategory =
   | "color"
   | "component"
@@ -63,9 +69,9 @@ export interface RoleDef {
   by: Record<Profile, ProfileValue>;
 }
 
-const allSurfaces: readonly Surface[] = ["SH", "SH-c", "BI", "BS", "MO"];
+const allSurfaces: readonly Surface[] = ["SH", "SH-c", "BI", "MO"];
 const shellAndNative: readonly Surface[] = ["SH", "SH-c", "MO"];
-const blueprintSurfaces: readonly Surface[] = ["BI", "BS"];
+const blueprintSurfaces: readonly Surface[] = ["BI"];
 
 const literal = (value: string | number): ProfileValue => ({
   kind: "literal",
@@ -756,7 +762,7 @@ const roleTable: RoleDef[] = [
     "color",
     "The identity colour as type. An app that declares no identity renders in ink, which is the system default.",
     "identity text clears AA on its local surface",
-    ["BI", "BS", "SH", "SH-c"],
+    ["BI", "SH", "SH-c"],
     {
       blueprint: literal("var(--text)"),
       native: solved(lightTheme.text),
@@ -863,7 +869,7 @@ export const PROFILE_SURFACES: Record<Profile, readonly Surface[]> = {
 };
 
 export const profileForSurface = (surface: Surface): Profile => {
-  if (surface === "BI" || surface === "BS") return "blueprint";
+  if (surface === "BI") return "blueprint";
   if (surface === "MO") return "native";
   return "shell";
 };

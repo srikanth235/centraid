@@ -2,6 +2,18 @@
 
 This file is the adjudication layer over the repository's append-only evidence. It records the decisions that are in force, deliberate non-goals, and supersession chains that keep old evidence from being mistaken for current truth. The linked issues and receipts carry the rationale and implementation history; this file carries the current answer. Update a row when the answer changes and link the issue that settles the change.
 
+## Product positioning
+
+Centraid is a personal, local-first **superapp**: one shell wrapping many first-party apps whose content characters could not be more different. The shell, the vault, and the apps ship together as one product — the owner installs Centraid, not apps into Centraid.
+
+Ruled 2026-08-15 by [#799](https://github.com/srikanth235/centraid/issues/799), which retired the serving plane that made the older "personal app builder" framing true:
+
+- **Not an app builder.** There is no authoring surface, no scaffolder a person points at a blank app, and no build-and-publish loop. `conversation.kind='build'` names the workspace-capable assistant thread, not a retired app-authoring product.
+- **Not a platform.** There is no third-party, user-built, or generated app plane, no code store, and no install-from-elsewhere path. The catalogue is the bundled system apps this repo ships.
+- **The gateway serves data, never UI bytes.** Every app UI is first-party code in the release: an inline React route in the shared shell, or the same app as an Expo screen on mobile. See [Inline system apps](#inline-system-apps).
+
+Automations remain owner-authored — the automation compiler is a live "builder" in the narrow, internal sense and keeps that word ([blueprints README](../packages/blueprints/README.md)). Retired positioning vocabulary and its replacements are in [glossary.md](glossary.md#forbidden--discouraged-synonyms-broader); the binding design statement of the same idea is [DESIGN.md](../DESIGN.md).
+
 ## Foundational decisions
 
 | Id | Current decision |
@@ -35,6 +47,9 @@ This file is the adjudication layer over the repository's append-only evidence. 
 | **#298 erase posture** | Superseded and amended by [#555](https://github.com/srikanth235/centraid/issues/555) and [#603](https://github.com/srikanth235/centraid/issues/603); current erase/restore behavior is the backup-plane `centraid-gateway recover` contract. |
 | **#599 member/role model** | Superseded by [#726](https://github.com/srikanth235/centraid/issues/726); current authority is one owner per vault. |
 | **#724 enrichment service** | Superseded by [#731](https://github.com/srikanth235/centraid/issues/731); current recognition runs inside bundled handlers. |
+| **#505 served-app plane** | Superseded by [#799](https://github.com/srikanth235/centraid/issues/799); an app UI reaches the screen one way — an inline React route in the shared shell, or the same app as an Expo screen on mobile. |
+| **#690 / #765 DOM custom elements** | Superseded by [#799](https://github.com/srikanth235/centraid/issues/799); the third rendering technology is gone and every DOM composition is a React block. |
+| **"personal app builder" positioning** | Superseded by [#799](https://github.com/srikanth235/centraid/issues/799); Centraid is a personal, local-first **superapp** — see [Product positioning](#product-positioning). |
 
 ## Defaults (so nobody has to ask)
 
@@ -90,11 +105,13 @@ The design contract is binding in [DESIGN.md](../DESIGN.md) and lowered by `@cen
 
 The seat and north-star contract is orthogonal to form factor: mobile is `origin`, desktop is `custodian`, and web/PWA is `viewer`; record-only apps use replica data, byte-bearing apps use the custody triple. Locker is disabled on the viewer seat, and Photos uses a merged timeline plus automatic frame-owned backup. See [blueprint seats](blueprint-seats.md).
 
+The design-gallery gate screenshots the product, not a fixture. Ruled 2026-08-15 under [#799](https://github.com/srikanth235/centraid/issues/799): the SH and SH-c lanes capture the built web shell's `#ui-preview` surface, and every capture renders the product's self-hosted Instrument Sans woff2 faces — loaded from the same `FONT_FILES` manifest the shell serves, gated by `document.fonts.ready` plus an explicit resolution probe so no fallback face can be baked into a baseline. This supersedes the `system-ui` bootstrap fixture and discharges the one-time maintainer baseline decision recorded against [#781](https://github.com/srikanth235/centraid/issues/781): baselines are Linux-captured and byte-deterministic there; if a darwin run shows a residual rasterizer delta, the remedy is per-platform baseline directories, never a widened diff tolerance. BI and MO are deliberately token-lowering lanes, not component screenshots: MO has no DOM, and photographing the shell's React blocks under the blueprint lowering would depict components no blueprint app renders (the two DOM compositions merge under [#765](https://github.com/srikanth235/centraid/issues/765)). A lane's narrower claim is stated in the gallery manifest's `laneClaims` rather than left to be misread as component coverage.
+
 System state follows the signal ladder settled in [#785](https://github.com/srikanth235/centraid/issues/785): ambient ribbon → glance destination → push only for a human decision → cause-focused drill-down. The signal vocabulary is exactly quiet, attention, and urgent; healthy state earns no hue or animation. Persisted route ids remain stable while member-facing destinations are Vault, Activity, System, and On this phone. Seat filtering is presentation only, and omitted launcher destinations remain deep-link reachable with an explanatory state. The Assistant remains a full route and also appears as a frame companion; its pointer rail reserves content width rather than reproducing the reference prototype's overlay limitation. See [assistant companion and system signals](system-signals.md).
 
-## Inline system apps and served apps
+## Inline system apps
 
-The eight bundled system apps are inline React routes in the shared shell. Their reads, subscriptions, and writes use `ReplicaShellSession`; writes carry `intentId`, and the apps render from the replica offline. Served builder/code-store apps remain opaque iframe documents with the existing bridge, CSP, and postMessage settings path. The app-scoped RPC surface is `/centraid/<app>/actions|queries/<name>`; the former shared admin token plane is retired in favor of revocable owner enrollment. Full render-path details live in [ARCHITECTURE.md](../ARCHITECTURE.md#app-render-paths). Settled by [#505](https://github.com/srikanth235/centraid/issues/505).
+The eight bundled system apps are inline React routes in the shared shell. Their reads, subscriptions, and writes use `ReplicaShellSession`; writes carry `intentId`, and the apps render from the replica offline. There is no second render path: the served-iframe plane, its bridge and blueprint CSP, the postMessage settings path, and the gateway's UI-byte serving were retired end to end on 2026-08-15 by [#799](https://github.com/srikanth235/centraid/issues/799). The app-scoped RPC surface is `/centraid/<app>/actions|queries/<name>`; the former shared admin token plane is retired in favor of revocable owner enrollment. Full render-path details live in [ARCHITECTURE.md](../ARCHITECTURE.md#app-render-path). Settled by [#505](https://github.com/srikanth235/centraid/issues/505) and narrowed to one path by [#799](https://github.com/srikanth235/centraid/issues/799).
 
 ## Performance and Rust byte plane
 

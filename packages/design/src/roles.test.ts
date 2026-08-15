@@ -38,7 +38,8 @@ describe("product-grammar role registry", () => {
   });
 
   test("surface mapping is total and profile contracts are non-empty", () => {
-    for (const surface of ["SH", "SH-c", "BI", "BS", "MO"] as const) {
+    // Four surfaces, not five — #799 retired `BS` with the served plane.
+    for (const surface of ["SH", "SH-c", "BI", "MO"] as const) {
       const profile = profileForSurface(surface);
       expect(PROFILE_SURFACES[profile]).toContain(surface);
       expect(contractForProfile(profile).length).toBeGreaterThan(0);

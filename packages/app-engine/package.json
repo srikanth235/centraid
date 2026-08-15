@@ -2,7 +2,7 @@
   "name": "@centraid/app-engine",
   "version": "0.1.0",
   "private": false,
-  "description": "Centraid runtime engine — handler loader, sqlite-backed apps, versioned uploads, and the /centraid HTTP surface. Transport-agnostic; consumed by the standalone daemon and the desktop in-process runtime.",
+  "description": "Centraid runtime engine — handler loader, sqlite-backed apps, and the /centraid HTTP surface. It serves an app's data, never its UI bytes. Transport-agnostic; consumed by the standalone daemon and the desktop in-process runtime.",
   "license": "SEE LICENSE IN REPOSITORY",
   "repository": {
     "type": "git",
