@@ -35,8 +35,8 @@
       "kind": "env-gate",
       "line": 858,
       "snippet": "const strict = process.env.CENTRAID_PERF_EVIDENCE === \"1\";",
-      "issue": 781,
-      "reason": "Product latency budgets only bind on the dedicated evidence lane; the shared vitest fan-out keeps a 15x smoke ceiling so CPU contention cannot fake a regression (originally #659)."
+      "issue": 790,
+      "reason": "Product latency budgets only bind on the dedicated evidence lane; the shared vitest fan-out keeps a 15x smoke ceiling so CPU contention cannot fake a regression (rig lane split to #790 by #781; originally #659)."
     },
     "apps/web/tests/e2e/perf-waterfall.spec.ts#1": {
       "kind": "static-skip",
@@ -84,8 +84,8 @@
       "kind": "runtime-skip",
       "line": 40,
       "snippet": "t.skip(\"launchd e2e only runs on darwin\");",
-      "issue": 781,
-      "reason": "Real launchctl bootstrap/bootout exists only on darwin; other platforms have no equivalent service manager to assert against (originally #656)."
+      "issue": 790,
+      "reason": "Real launchctl bootstrap/bootout exists only on darwin; other platforms have no equivalent service manager to assert against (rig lane split to #790 by #781; originally #656)."
     },
     "packages/gateway/src/cli/service-install.integration.test.ts#2": {
       "kind": "env-gate",
@@ -134,14 +134,14 @@
       "line": 66,
       "snippet": "describe.skipIf(!enabled)(",
       "issue": 790,
-      "reason": "The byte-plane conformance suite needs a built Rust byte plane or an external base URL; opt-in via CENTRAID_RUN_BYTE_PLANE_CONTRACT=1 (rig lane split to #790 by #781; originally #656)."
+      "reason": "The byte-plane conformance suite is opt-in for ordinary local Vitest runs; the required Linux verify job invokes packages/tunnel test:data-plane and runs both the TypeScript and built-Rust HTTP contracts (rig audit #790; originally #656)."
     },
     "packages/tunnel/src/native-relay.test.ts#1": {
       "kind": "conditional-skip",
       "line": 24,
       "snippet": "describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== \"1\")(",
       "issue": 790,
-      "reason": "Requires the vendored native QUIC module; opt-in via CENTRAID_RUN_NATIVE_TUNNEL=1 because CI images do not carry the dylib (rig lane split to #790 by #781; originally #656)."
+      "reason": "Requires the built native QUIC module, so ordinary local Vitest runs stay opt-in; the required Linux verify job builds the workspace then invokes packages/tunnel test:native with CENTRAID_RUN_NATIVE_TUNNEL=1 (rig audit #790; originally #656)."
     },
     "packages/vault/src/blob/disk-full.integration.test.ts#1": {
       "kind": "runtime-skip",
@@ -168,8 +168,8 @@
       "kind": "conditional-skip",
       "line": 61,
       "snippet": "test.skipIf(process.platform !== \"darwin\")(",
-      "issue": 781,
-      "reason": "Reflink cloning can only be asserted unconditionally on APFS; ext4 cannot clone at all, so the law is darwin-only (originally #656)."
+      "issue": 790,
+      "reason": "Reflink cloning can only be asserted unconditionally on APFS; ext4 cannot clone at all, so the law is darwin-only (rig lane split to #790 by #781; originally #656)."
     },
     "scripts/gateway-package/assemble-runtime.test.mjs#1": {
       "kind": "runtime-skip",
@@ -182,29 +182,29 @@
       "kind": "conditional-skip",
       "line": 80,
       "snippet": "test.skipIf(!report)(",
-      "issue": 781,
-      "reason": "#659 R3b. The REAL Electron launch is measured by apps/desktop/tests/e2e/launch-time.spec.ts (vitest cannot start Electron on a display-less runner) and handed to this lane as nightly-evidence-desktop. A missing input is a HARD failure under CI — see the throw above the describe — and a skip locally, exactly like pwa-waterfall (originally #659)."
+      "issue": 790,
+      "reason": "#659 R3b. The REAL Electron launch is measured by apps/desktop/tests/e2e/launch-time.spec.ts (vitest cannot start Electron on a display-less runner) and handed to this lane as nightly-evidence-desktop. A missing input is a HARD failure under CI — see the throw above the describe — and a skip locally, exactly like pwa-waterfall (rig lane split to #790 by #781; originally #659)."
     },
     "tests/perf/pwa-waterfall.perf.test.ts#1": {
       "kind": "conditional-skip",
       "line": 61,
       "snippet": "test.skipIf(!waterfall)(",
-      "issue": 781,
-      "reason": "The rig consumes a waterfall report published by the nightly web-e2e job; a missing input is a hard failure under CI and a local skip otherwise (originally #659)."
+      "issue": 790,
+      "reason": "The rig consumes a waterfall report published by the nightly web-e2e job; a missing input is a hard failure under CI and a local skip otherwise (rig lane split to #790 by #781; originally #659)."
     },
     "tests/perf/tunnel-native.perf.test.ts#1": {
       "kind": "conditional-skip",
       "line": 32,
       "snippet": "test.skipIf(!hasNative)(",
-      "issue": 781,
-      "reason": "Cold-load budget for the native QUIC dylib; skipped where the vendored module is not built (originally #659)."
+      "issue": 790,
+      "reason": "Cold-load budget for the native QUIC dylib; skipped where the vendored module is not built (rig lane split to #790 by #781; originally #659)."
     },
     "tests/perf/tunnel-native.perf.test.ts#2": {
       "kind": "conditional-skip",
       "line": 77,
       "snippet": "test.skipIf(hasNative)(",
-      "issue": 781,
-      "reason": "The inverse arm: it asserts the absent-module fallback path, so it is skipped exactly when the dylib is present (originally #659)."
+      "issue": 790,
+      "reason": "The inverse arm: it asserts the absent-module fallback path, so it is skipped exactly when the dylib is present (rig lane split to #790 by #781; originally #659)."
     },
     "tests/scale/restore-10gib.scale.test.ts#1": {
       "kind": "conditional-skip",

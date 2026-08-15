@@ -140,15 +140,15 @@ describe("owners-routes roster scoping", () => {
     const body = (await response.json()) as {
       owners: Array<{ ownerId: string; label: string }>;
     };
-    expect(
-      body.owners
-        .map((owner) => [owner.ownerId, owner.label])
-        .sort(([left], [right]) => left.localeCompare(right))
-    ).toStrictEqual(
-      [
-        [ada, "Ada"],
-        [sam, "Sam"],
-      ].sort(([left], [right]) => left.localeCompare(right))
+    const owners = body.owners
+      .map((owner): [string, string] => [owner.ownerId, owner.label])
+      .sort(([left], [right]) => left.localeCompare(right));
+    const expected: Array<[string, string]> = [
+      [ada, "Ada"],
+      [sam, "Sam"],
+    ];
+    expect(owners).toStrictEqual(
+      expected.sort(([left], [right]) => left.localeCompare(right))
     );
   });
 
