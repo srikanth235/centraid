@@ -5,8 +5,8 @@
 // app.tsx and the components can both call them without a circular import.
 // Same role as tasks/format.ts and notes/format.ts.
 import { identityColor } from "@centraid/design";
+import { fmtMoney, localDayKey } from "@centraid/design/elements";
 
-import { fmtMoney, localDayKey } from "./kit.ts";
 import type {
   BalLabel,
   ExpenseModel,

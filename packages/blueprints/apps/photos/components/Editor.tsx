@@ -24,8 +24,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 
+import { isPendingOffsite, stageFileBytes } from "@centraid/design/elements";
+
 import { safeMediaUrl } from "../../_shared/untrusted.ts";
-import { isPendingOffsite, stageFileBytes } from "../kit.ts";
 import { BLOB_PENDING_ATTR } from "../media-observer.ts";
 import { act, narrate, notice } from "../outcomes.ts";
 import type { Asset } from "../types.ts";

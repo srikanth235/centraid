@@ -36,10 +36,11 @@ export const coverageProjects = [
 export const coverageInclude = [
   "packages/*/src/**/*.{ts,tsx,js,jsx,mjs,cjs}",
   "apps/*/src/**/*.{ts,tsx,js,jsx,mjs,cjs}",
-  // Bundled apps and their shared browser runtime are production code
-  // co-located outside packages/blueprints/src (issue #630 Wave 0).
+  // The bundled apps are production code co-located outside
+  // packages/blueprints/src (issue #630 Wave 0). The browser substrate they
+  // render on needs no row of its own since #799 folded it into
+  // packages/design/src/elements, which the conventional pattern above covers.
   "packages/blueprints/apps/**/*.{ts,tsx}",
-  "packages/design/kit/**/*.{ts,js}",
   // The hand-authored source of the published recognition automations. It
   // lives outside packages/model-runtime/src because it is bundled per handler
   // rather than compiled with the package (issue #781). Only `.js` is

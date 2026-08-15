@@ -631,7 +631,7 @@ describe("blueprint token contrast floors", () => {
 // replaces it as the model of "report state in the ink ramp, not a hue".
 describe("kit.css honours the ink contract for filled states", () => {
   const css = readFileSync(
-    path.resolve(import.meta.dirname, "../kit/kit.css"),
+    path.resolve(import.meta.dirname, "elements/kit.css"),
     "utf8"
   );
 

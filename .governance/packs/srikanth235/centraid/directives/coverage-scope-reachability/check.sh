@@ -10,11 +10,18 @@
 # package's. A floor on `packages/<pkg>/src/**` cannot instrument a sibling
 # tree, so collapsing the two would let any non-`src` runtime tree ride into
 # "floored" on a floor that never measures it. This is why the bundled
-# blueprint `apps/` and shared `kit/` runtimes are separate scopes (#630,
-# #725) — and, since #781, why every such tree is discovered rather than
-# named: `packages/model-runtime/automation-handlers` (the hand-authored
-# source of the published recognition bundles) was invisible for exactly this
-# reason while `packages/model-runtime/src/**` reported the package "floored".
+# blueprint `apps/` runtime is a separate scope (#630, #725) — and, since
+# #781, why every such tree is discovered rather than named:
+# `packages/model-runtime/automation-handlers` (the hand-authored source of
+# the published recognition bundles) was invisible for exactly this reason
+# while `packages/model-runtime/src/**` reported the package "floored".
+#
+# The shared browser substrate was a second named tree (`packages/design/kit`)
+# until #799 folded it into `packages/design/src/elements`. A tree that moves
+# INTO `src/` stops being a scope of its own and rides its package's `src/**`
+# floor and the conventional coverage include — so the named assertion below
+# is one line shorter, and the generic discovery keeps watch over whatever
+# lands outside `src/` next.
 #
 # Also: every coverage-floors.json path-scope must sit under packages/ or
 # apps/.
@@ -81,16 +88,13 @@ PY
 )"
 
 # Vitest coverage include must still instrument the conventional source roots
-# plus both non-standard blueprint runtime roots.
+# plus the non-standard blueprint runtime root.
 if [[ -f "$VITEST_CFG" ]]; then
     if ! grep -q "packages/\*/src/\*\*" "$VITEST_CFG" && ! grep -q 'packages/*/src/**' "$VITEST_CFG"; then
         violation "vitest.config.ts coverage.include must cover packages/*/src/** (floors would be unreachable)"
     fi
     if ! grep -Fq "packages/blueprints/apps/**" "$VITEST_CFG"; then
         violation "vitest.config.ts coverage.include must cover packages/blueprints/apps/** (bundled app code would be invisible)"
-    fi
-    if ! grep -Fq "packages/design/kit/**" "$VITEST_CFG"; then
-        violation "vitest.config.ts coverage.include must cover packages/design/kit/** (shared blueprint runtime would be invisible)"
     fi
 fi
 
@@ -141,8 +145,8 @@ PKG_IDS="$(
 )"
 
 # Executable trees co-located OUTSIDE `src/` inside a package or app, e.g.
-# packages/blueprints/apps, packages/design/kit,
-# packages/model-runtime/automation-handlers. Discovered, not enumerated
+# packages/blueprints/apps, packages/model-runtime/automation-handlers.
+# Discovered, not enumerated
 # (#781): a hardcoded list only ever names the trees someone already thought
 # about, and the next one lands invisible. Each is its own scope id, so the
 # package's `src/**` floor cannot satisfy it.

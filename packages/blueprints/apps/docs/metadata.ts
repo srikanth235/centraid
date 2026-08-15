@@ -7,7 +7,8 @@
 // hygiene — versions.ts/popovers.ts's exact factory pattern: closes over
 // app.tsx's own `data`/`refresh` plus logic.ts's own `act`/`narrate`
 // (passed in, never re-implemented).
-import { statusLine } from "./kit.ts";
+import { statusLine } from "@centraid/design/elements";
+
 import type { ActivityEvent, DriveDoc } from "./types.ts";
 
 interface ActivityResult {

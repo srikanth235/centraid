@@ -39,18 +39,20 @@ test("shell announcements and destructive confirms keep their accessibility cont
   assert.match(confirm, /e\.key === "Enter" && !opts\.danger/u);
 });
 
-test("the blueprint kit's status line (toast's replacement) keeps its accessibility contract", async () => {
+test("the element layer's status line (toast's replacement) keeps its accessibility contract", async () => {
   // #707 Phase 3: the floating `.kit-toast` stack is retired in favour of
   // ONE persistent `<kit-status-line>`, updated in place — this pins the
   // same role/aria-live contract the retired toast carried, on its
   // replacement, so the CONTRACT strength never lapses across the rename.
-  const statusLine = await source("packages/design/kit/kit-status-line.js");
+  const statusLine = await source(
+    "packages/design/src/elements/kit-status-line.ts"
+  );
   assert.match(statusLine, /setAttribute\("role", "status"\)/u);
   assert.match(statusLine, /setAttribute\("aria-live", "polite"\)/u);
   assert.doesNotMatch(
-    await source("packages/design/kit/elements.js"),
-    /kit-toast\.js/u,
-    "elements.js still registers the retired kit-toast component"
+    await source("packages/design/src/elements/index.ts"),
+    /kit-toast/u,
+    "the element barrel still registers the retired kit-toast component"
   );
 });
 

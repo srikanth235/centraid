@@ -30,6 +30,8 @@
 // tick both and send a batch to the wrong one (issue #599).
 import type { ReactNode } from "react";
 
+import { observeWidth } from "@centraid/design/elements";
+
 import { canWriteScope, mountedScopes } from "../_shared/scope-kit.ts";
 import {
   pruneSelection,
@@ -46,7 +48,6 @@ import {
   SelectionBottomBar,
 } from "./components/SelectionBar.tsx";
 import { $ } from "./dom.ts";
-import { observeWidth } from "./kit.ts";
 import { writeTarget } from "./outcomes.ts";
 import { runBatchAddToAlbum } from "./selection-actions.ts";
 import type { Album, Asset } from "./types.ts";

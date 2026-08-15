@@ -1,5 +1,5 @@
 {
-  "_budget": 37,
+  "_budget": 36,
   "sites": {
     "apps/mobile/src/lib/replica/native-session.test.ts": 1,
     "apps/web/tests/e2e/perf-waterfall.spec.ts": 3,
@@ -8,7 +8,6 @@
     "packages/automation/src/fire/cursor-invariants.test.ts": 1,
     "packages/backup/src/interop-clawgnition.test.ts": 3,
     "packages/blueprints/src/download-on-demand.test.ts": 1,
-    "packages/client/src/react/blueprints/kit-inline.test.ts": 1,
     "packages/client/src/react/screens/AutomationEditorAnchorMention.test.tsx": 1,
     "packages/client/src/react/screens/AutomationEditorScreen.test.tsx": 1,
     "packages/client/src/react/shell/confirm.test.ts": 1,

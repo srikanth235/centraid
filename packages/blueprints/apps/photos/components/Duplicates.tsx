@@ -1,5 +1,7 @@
 import type { FC } from "react";
 
+import { armConfirm, fmtBytes } from "@centraid/design/elements";
+
 // The duplicates shelf (issue #352 / #299's deferred duplicates shelf): one
 // row per cluster, its assets laid out side by side so the owner can eyeball
 // which copy to keep, checkbox-select the redundant ones, and trash them in
@@ -18,7 +20,6 @@ import type { FC } from "react";
 import { parseAssetKey } from "../asset-key.ts";
 import { DUPLICATES } from "../constants.ts";
 import { assetBytes } from "../format.ts";
-import { armConfirm, fmtBytes } from "../kit.ts";
 import { justify, rungHeight } from "../layout.ts";
 import type { Rung } from "../layout.ts";
 import type { Asset, DuplicateCluster } from "../types.ts";

@@ -1,9 +1,10 @@
+// @vitest-environment jsdom
 // Laws for the one canonical browser video poster/thumb pipeline (#656 Layer
-// 1B — the module had no test file). This is the client's only hardware-decoded
-// capture path, so the laws are about RESOURCE DISCIPLINE as much as output: a
-// capture never throws at its caller (a thumbnail is best-effort), the object
-// URL is always revoked, and the element is always torn down — otherwise a
-// photo import leaks one decoded video per file.
+// 1B — the module had no test file). This is the only hardware-decoded capture
+// path either shell has, so the laws are about RESOURCE DISCIPLINE as much as
+// output: a capture never throws at its caller (a thumbnail is best-effort),
+// the object URL is always revoked, and the element is always torn down —
+// otherwise a photo import leaks one decoded video per file.
 
 import { afterEach, describe, expect, it } from "vitest";
 

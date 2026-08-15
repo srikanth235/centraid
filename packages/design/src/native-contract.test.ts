@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+
 import { describe, expect, test } from "vitest";
 
 import { contrastRatio } from "./color.js";
@@ -8,6 +11,61 @@ import {
   assertNativeColorRoleContract,
 } from "./roles.js";
 import { type } from "./typography.js";
+
+describe("Expo reachability", () => {
+  // The package's `.` export carries a `react-native` condition straight to
+  // `src/index.ts`, so EVERY module the barrel can reach is loaded by Metro on
+  // a device that has no `document`, no `window`, and no `customElements`. The
+  // element layer (`src/elements/**`, the `./elements` export) is the DOM half
+  // and deliberately carries no such condition.
+  //
+  // Two independent guards, because each catches what the other cannot:
+  // `tsconfig.json` compiles the token layer with `lib: ["ES2023"]` and no DOM
+  // (a bare `document.x` is a type error there), and this walk catches the
+  // reference the type system cannot see — a `globalThis` cast, or a plain
+  // re-export of the element barrel from `index.ts`.
+  const SRC = path.resolve(import.meta.dirname);
+  const DOM_GLOBALS =
+    /\b(?:document|customElements|HTMLElement|ResizeObserver|FileReader|MutationObserver|localStorage)\b/u;
+
+  /** The source file a relative specifier names, extensionless or `.js`. */
+  function resolveSpec(dir: string, spec: string): string {
+    const base = path.resolve(dir, spec.replace(/\.js$/u, ""));
+    for (const candidate of [`${base}.ts`, path.join(base, "index.ts")])
+      if (existsSync(candidate)) return candidate;
+    throw new Error(`unresolvable design specifier: ${spec} from ${dir}`);
+  }
+
+  function reachableFrom(entry: string, seen = new Set<string>()): string[] {
+    if (seen.has(entry)) return [];
+    seen.add(entry);
+    const source = readFileSync(entry, "utf8");
+    const dir = path.dirname(entry);
+    for (const match of source.matchAll(
+      /from\s+"(?<spec>\.[^"]*)"|import\s+"(?<bare>\.[^"]*)"/gu
+    )) {
+      const spec = match.groups?.spec ?? match.groups?.bare;
+      if (!spec) continue;
+      reachableFrom(resolveSpec(dir, spec), seen);
+    }
+    return [...seen];
+  }
+
+  test("nothing the root barrel reaches touches a DOM global", () => {
+    for (const file of reachableFrom(path.join(SRC, "index.ts"))) {
+      const body = readFileSync(file, "utf8")
+        // Prose may name the browser; only live code may not reach for it.
+        .replaceAll(/\/\*[\s\S]*?\*\//gu, "")
+        .replaceAll(/\/\/.*$/gmu, "");
+      expect(body, path.relative(SRC, file)).not.toMatch(DOM_GLOBALS);
+    }
+  });
+
+  test("the root barrel does not re-export the element layer", () => {
+    const barrel = readFileSync(path.join(SRC, "index.ts"), "utf8");
+    expect(barrel).not.toContain("./elements");
+  });
+});
 
 describe("native product-grammar lowering", () => {
   test("every emitted native color is backed by a renderable role", () => {

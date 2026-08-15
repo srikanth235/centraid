@@ -16,6 +16,13 @@ package's `src/**` floor, which cannot instrument it. #781 found
 production handlers — hidden by exactly that conflation, so the trees are now
 discovered from the tracked file list instead of named in this script.
 
+The rule runs both ways. A tree that moves INTO `src/` stops being a scope of
+its own: the conventional include instruments it and the package's `src/**`
+floor measures it, so a named assertion for it would then be pinning a path
+that no longer holds code. #799 folded the shared browser substrate from
+`packages/design/kit` into `packages/design/src/elements` on exactly that
+basis.
+
 **Fix:** add a floor scope for the runtime tree, add a matrix flow owner under
 that path, or (for deliberate journey-only surfaces) append the exact scope id
 to this directive's allowlist with a TESTING.md note.

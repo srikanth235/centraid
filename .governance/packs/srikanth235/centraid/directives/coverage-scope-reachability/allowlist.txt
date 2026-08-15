@@ -29,10 +29,6 @@ packages/test-kit
 # the published copies are the same program; instrumenting the minified copy
 # would double-count it (the same reasoning excludes them from SonarCloud in
 # scripts/ci/configure-sonarcloud.mjs).
-# One re-export bridge (types/virtual-kit/kit.ts) that exists so TypeScript can
-# resolve an app-relative `./kit.ts` to packages/design/kit, which is floored.
-# It declares no behaviour of its own.
-packages/blueprints/types
 # Renderer / installable clients: e2e + extracted units, not line floors.
 apps/desktop
 apps/extension

@@ -4,8 +4,8 @@
 // a plain projection of its arguments so app.tsx and the components can both
 // call them without a circular import.
 import { identityInitials } from "@centraid/design";
+import { localDayKey } from "@centraid/design/elements";
 
-import { localDayKey } from "./kit.ts";
 import type { AgEvent, Calendar, DaySegment, LaidSegment } from "./types.ts";
 
 export const DAY_MS = 24 * 60 * 60 * 1000;

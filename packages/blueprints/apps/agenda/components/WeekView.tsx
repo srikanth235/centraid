@@ -6,6 +6,8 @@
 import { useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 
+import { localDayKey } from "@centraid/design/elements";
+
 import {
   bucketByDay,
   fmtRange,
@@ -13,7 +15,6 @@ import {
   segTimeText,
   startOfWeek,
 } from "../format.ts";
-import { localDayKey } from "../kit.ts";
 import type { AgEvent, DaySegment } from "../types.ts";
 
 import styles from "./WeekView.module.css";

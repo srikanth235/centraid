@@ -17,6 +17,13 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 
+import {
+  observeWidth,
+  onDataChange,
+  onFocusRefresh,
+  readFailed,
+} from "@centraid/design/elements";
+
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { LockerDetail } from "./components/Detail.tsx";
@@ -25,12 +32,6 @@ import { Generator } from "./components/Generator.tsx";
 import { LockerList } from "./components/List.tsx";
 import { LockScreen } from "./components/LockScreen.tsx";
 import { LockerSidebar } from "./components/Sidebar.tsx";
-import {
-  observeWidth,
-  onDataChange,
-  onFocusRefresh,
-  readFailed,
-} from "./kit.ts";
 import {
   clearSecretClipboard,
   copy,

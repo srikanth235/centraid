@@ -1,4 +1,3 @@
-import { CAT_ORDER, byTitle, catOf } from "./format.ts";
 // Non-visual business logic: vault IO (write/act), item CRUD, nav/search,
 // the clipboard-clear timer and the pure list/sidebar derivations.
 // `createLogic` closes over app.tsx's own `state`/`data` (mutated in place,
@@ -6,7 +5,13 @@ import { CAT_ORDER, byTitle, catOf } from "./format.ts";
 // the same factory shape tasks/notes/agenda's logic.ts use. The pure
 // derivations (`currentPool`/`sidebarCounts`/`catCounts`/`sidebarTags`) need
 // no closure and are exported standalone so components can call them too.
-import { debounce, outcomeMessage, statusLine } from "./kit.ts";
+import {
+  debounce,
+  outcomeMessage,
+  statusLine,
+} from "@centraid/design/elements";
+
+import { CAT_ORDER, byTitle, catOf } from "./format.ts";
 import { genPassword } from "./totp.ts";
 import type {
   AppData,

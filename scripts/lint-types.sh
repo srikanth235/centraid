@@ -193,10 +193,11 @@ done
 
 # Executable TypeScript outside workspace src/ trees has its own compiler
 # program and explicit source/test profile. These targets close the historical
-# gap for blueprint apps/kit, repository scripts/tests, and Playwright e2e.
+# gap for the blueprint apps, repository scripts/tests, and Playwright e2e.
+# (The shared browser substrate no longer needs a row: it lives at
+# packages/design/src/elements and rides the package loop above.)
 EXTRA_TARGETS=(
   "blueprint-apps|packages/blueprints/tsconfig.apps.json|packages/blueprints/apps|source"
-  "blueprint-kit|packages/blueprints/tsconfig.apps.json|packages/design/kit|source"
   "repository-scripts|scripts/tsconfig.json|scripts|source"
   "repository-tests|tests/tsconfig.json|tests|test"
   "desktop-e2e|apps/desktop/tests/e2e/tsconfig.json|apps/desktop/tests/e2e|test"

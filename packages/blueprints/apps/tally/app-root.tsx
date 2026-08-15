@@ -8,6 +8,12 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 
 import { identityColor } from "@centraid/design";
+import {
+  observeWidth,
+  onDataChange,
+  onFocusRefresh,
+  readFailed,
+} from "@centraid/design/elements";
 
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
@@ -26,12 +32,6 @@ import { SettleModal } from "./components/SettleModal.tsx";
 import { KitSkeleton } from "./components/Shared.tsx";
 import { FriendsNav, GroupsNav, SmartNav } from "./components/Sidebar.tsx";
 import { first, money } from "./format.ts";
-import {
-  observeWidth,
-  onDataChange,
-  onFocusRefresh,
-  readFailed,
-} from "./kit.ts";
 import { createLogic } from "./logic.ts";
 import { tallySearchGroups } from "./search-groups.ts";
 import type {

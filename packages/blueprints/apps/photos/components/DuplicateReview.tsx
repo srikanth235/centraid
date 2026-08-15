@@ -1,3 +1,5 @@
+import { armConfirm, fmtBytes } from "@centraid/design/elements";
+
 // THE DUPLICATE REVIEW (v4 handoff proto :4291-:4303, the `dupereview` tab).
 //
 // The shelf lists clusters; this is where one is actually resolved. The
@@ -25,7 +27,6 @@
 import { parseAssetKey } from "../asset-key.ts";
 import { decideCluster } from "../duplicate-decision.ts";
 import { assetBytes } from "../format.ts";
-import { armConfirm, fmtBytes } from "../kit.ts";
 import { justify, rungHeight } from "../layout.ts";
 import type { Rung } from "../layout.ts";
 import type { Asset, DuplicateCluster } from "../types.ts";

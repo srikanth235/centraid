@@ -1,13 +1,23 @@
-import { KitElement } from "./elements-base.js";
+import type { KitProperties } from "./base.js";
+import { KitElement } from "./base.js";
 
+/** Horizontal proportion bar: `<kit-meter ratio tone>`. */
 export class KitMeter extends KitElement {
-  static properties = { ratio: { type: Number }, tone: { type: String } };
+  static override properties: KitProperties = {
+    ratio: { type: Number },
+    tone: { type: String },
+  };
+
+  declare ratio: number;
+  declare tone: string;
+
   constructor() {
     super();
     this.ratio = 0;
     this.tone = "";
   }
-  render() {
+
+  override render(): HTMLElement {
     const pct = Math.max(0, Math.min(1, Number(this.ratio) || 0)) * 100;
     const bar = document.createElement("span");
     bar.className = "kit-bar";

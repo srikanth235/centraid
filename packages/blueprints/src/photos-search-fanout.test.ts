@@ -7,8 +7,8 @@
 // that `createSearch` (apps/photos/search.ts) actually consumes them instead
 // of the old binary `allScopesReached` collapse. Loaded by file URL like
 // `tasks-scope-fanout.test.ts`, since `search.ts` reads `window.centraid`
-// live; the `./kit.ts` import resolves through this package's own
-// `vitest.config.ts` plugin to `packages/design/kit/kit.ts`.
+// live; its `@centraid/design/elements` import resolves to that package's
+// source through this package's own `vitest.config.ts` alias.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 

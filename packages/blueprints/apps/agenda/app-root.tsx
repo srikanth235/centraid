@@ -8,6 +8,19 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { KeyboardEvent, ReactElement } from "react";
 
+import {
+  closePopover,
+  h,
+  observeWidth,
+  onDataChange,
+  onFocusRefresh,
+  openPopover,
+  readFailed,
+  subscribeReadUpdates,
+  wireAttachInput,
+} from "@centraid/design/elements";
+import type { ReadSubscription } from "@centraid/design/elements";
+
 import { SearchBarButton, countLabel } from "../_shared/app-frame.tsx";
 import { readPendingOverlay } from "../_shared/pending-overlay.ts";
 import type { InlineAppProps } from "../inline-types.ts";
@@ -29,18 +42,6 @@ import {
   startOfWeek,
   weekRange,
 } from "./format.ts";
-import {
-  closePopover,
-  h,
-  observeWidth,
-  onDataChange,
-  onFocusRefresh,
-  openPopover,
-  readFailed,
-  subscribeReadUpdates,
-  wireAttachInput,
-} from "./kit.ts";
-import type { ReadSubscription } from "./kit.ts";
 import { createLogic } from "./logic.ts";
 import type {
   AgEvent,

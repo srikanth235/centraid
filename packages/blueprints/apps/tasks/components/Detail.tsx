@@ -6,9 +6,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 
+import { renderAttachments } from "@centraid/design/elements";
+
 import { flagLevel, plusDays, todayStr } from "../format.ts";
 import { I } from "../icons.ts";
-import { renderAttachments } from "../kit.ts";
 import type { ActivityEntry, EditPatch, Task } from "../types.ts";
 import { Icon } from "./Shared.tsx";
 

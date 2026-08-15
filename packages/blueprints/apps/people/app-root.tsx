@@ -16,6 +16,15 @@ import {
 import type { KeyboardEvent, ReactElement } from "react";
 
 import { identityColor } from "@centraid/design";
+import {
+  closePopover,
+  debounce,
+  isPopoverOpen,
+  observeWidth,
+  onDataChange,
+  onFocusRefresh,
+  readFailed,
+} from "@centraid/design/elements";
 
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
@@ -38,15 +47,6 @@ import { StatusChips } from "./components/Toolbar.tsx";
 import { TrashCard } from "./components/TrashCard.tsx";
 import { avatarColor, listName } from "./format.ts";
 import { I } from "./icons.ts";
-import {
-  closePopover,
-  debounce,
-  isPopoverOpen,
-  observeWidth,
-  onDataChange,
-  onFocusRefresh,
-  readFailed,
-} from "./kit.ts";
 import { createLogic } from "./logic.ts";
 import type { AppData, AppState, Nav, Person, PersonList } from "./types.ts";
 

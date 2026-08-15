@@ -41,7 +41,7 @@ export function Checkbox({
 }
 
 // The vault FTS hit snippet (`⟦hit⟧`-marked) as JSX `<mark>` spans — the
-// React analogue of kit.ts's `snippetInto()`, which mutates a container's DOM
+// React analogue of the element layer's `snippetInto()`, which mutates a container's DOM
 // directly and must never target a React-owned node.
 export function Snippet({
   snippet,

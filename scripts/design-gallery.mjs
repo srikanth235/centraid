@@ -26,7 +26,7 @@ const ACTUAL_DIR = path.join(ROOT, "artifacts/design-gallery/actual");
 const MANIFEST_FILE = path.join(ROOT, "tests/design-gallery/manifest.json");
 const MATRIX_FILE = path.join(ROOT, "tests/design-grammar-matrix.json");
 const KIT_CSS = readFileSync(
-  path.join(ROOT, "packages/design/kit/kit.css"),
+  path.join(ROOT, "packages/design/src/elements/kit.css"),
   "utf8"
 );
 const MATRIX = JSON.parse(readFileSync(MATRIX_FILE, "utf8"));

@@ -9,9 +9,9 @@
 // see meanwhile, and what happens if the grant comes back).
 //
 // It keeps `id="consentBanner"` on its root. That id is a CONTRACT, not
-// decoration: the shared kit's `onFocusRefresh` looks for it to decide whether
-// a window focus is a recovery from a just-granted permission and must re-read
-// immediately (packages/design/kit/kit.ts). The element moved and was redrawn;
+// decoration: the element layer's `onFocusRefresh` looks for it to decide
+// whether a window focus is a recovery from a just-granted permission and must
+// re-read immediately (packages/design/src/elements/refresh.ts). The element moved and was redrawn;
 // the hook's question did not change.
 //
 // ONE FILLED ELEMENT (§18): the ask. `VaultAccessButton` is the shared control

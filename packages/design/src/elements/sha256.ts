@@ -1,9 +1,14 @@
-import { CBSF_MAGIC } from "@centraid/blob-format";
-
-export const FRAME_BYTES = 4 * 1024 * 1024;
-export const FRAMES_PER_PART = 4;
-export const MAGIC = new TextEncoder().encode(CBSF_MAGIC);
-export const FALLBACK_CHUNK_BYTES = 16 * 1024 * 1024;
+// Incremental SHA-256 over a browser File, with bounded memory.
+//
+// SubtleCrypto has no streaming digest API, so a `crypto.subtle.digest` of a
+// large upload would materialize the whole file in one buffer. This pure-JS
+// compressor consumes the File's stream a chunk at a time, which is what makes
+// the upload path's sha-preflight (declare the hash, skip the bytes when the
+// CAS already has them) affordable on a phone-sized photo library.
+//
+// The native mobile shell reimplements the same contract over Expo's file
+// primitives in `apps/mobile/src/lib/upload/crypto.ts` — neither runtime can
+// import the other's, so the two are kept behaviourally identical instead.
 
 const SHA_INITIAL = [
   0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c,
@@ -23,18 +28,23 @@ const SHA_K = [
   0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
-function rotateRight(value, bits) {
+function rotateRight(value: number, bits: number): number {
   return (value >>> bits) | (value << (32 - bits));
 }
 
+/** A resumable SHA-256 state: `update()` any number of times, then digest. */
 export class StreamingSha256 {
-  constructor(source) {
+  private words: number[];
+  private bytes: number;
+  private pending: Uint8Array;
+
+  constructor(source?: StreamingSha256) {
     this.words = source ? [...source.words] : [...SHA_INITIAL];
     this.bytes = source?.bytes ?? 0;
     this.pending = source ? source.pending.slice() : new Uint8Array(0);
   }
 
-  update(input) {
+  update(input: Uint8Array): void {
     if (input.byteLength === 0) return;
     this.bytes += input.byteLength;
     const joined = new Uint8Array(this.pending.byteLength + input.byteLength);
@@ -48,7 +58,9 @@ export class StreamingSha256 {
     this.pending = joined.slice(offset);
   }
 
-  digestHex() {
+  digestHex(): string {
+    // Padding mutates the state, so digest a clone: the caller may keep
+    // updating the original after reading an intermediate digest.
     const clone = new StreamingSha256(this);
     const paddingLength =
       clone.pending.byteLength < 56
@@ -67,24 +79,43 @@ export class StreamingSha256 {
       .join("");
   }
 
-  compress(block) {
+  private compress(block: Uint8Array): void {
     const schedule = new Uint32Array(64);
     const view = new DataView(block.buffer, block.byteOffset, block.byteLength);
     for (let index = 0; index < 16; index += 1)
       schedule[index] = view.getUint32(index * 4, false);
     for (let index = 16; index < 64; index += 1) {
-      const a = schedule[index - 15];
-      const b = schedule[index - 2];
+      const a = schedule[index - 15] as number;
+      const b = schedule[index - 2] as number;
       const s0 = rotateRight(a, 7) ^ rotateRight(a, 18) ^ (a >>> 3);
       const s1 = rotateRight(b, 17) ^ rotateRight(b, 19) ^ (b >>> 10);
       schedule[index] =
-        (schedule[index - 16] + s0 + schedule[index - 7] + s1) >>> 0;
+        ((schedule[index - 16] as number) +
+          s0 +
+          (schedule[index - 7] as number) +
+          s1) >>>
+        0;
     }
-    let [a, b, c, d, e, f, g, h] = this.words;
+    let [a, b, c, d, e, f, g, h] = this.words as [
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+    ];
     for (let index = 0; index < 64; index += 1) {
       const s1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25);
       const choose = (e & f) ^ (~e & g);
-      const t1 = (h + s1 + choose + SHA_K[index] + schedule[index]) >>> 0;
+      const t1 =
+        (h +
+          s1 +
+          choose +
+          (SHA_K[index] as number) +
+          (schedule[index] as number)) >>>
+        0;
       const s0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22);
       const majority = (a & b) ^ (a & c) ^ (b & c);
       const t2 = (s0 + majority) >>> 0;
@@ -99,9 +130,36 @@ export class StreamingSha256 {
     }
     const next = [a, b, c, d, e, f, g, h];
     for (let index = 0; index < 8; index += 1) {
-      this.words[index] = (this.words[index] + next[index]) >>> 0;
+      this.words[index] =
+        ((this.words[index] as number) + (next[index] as number)) >>> 0;
     }
   }
 }
 
 /** Hash a File with bounded memory; SubtleCrypto has no streaming digest API. */
+export async function sha256FileStream(file: File): Promise<string> {
+  const hash = new StreamingSha256();
+  if (typeof file?.stream === "function") {
+    const reader = file.stream().getReader();
+    const readNextChunk = async (): Promise<void> => {
+      const { done, value } = await reader.read();
+      if (done) return;
+      hash.update(value);
+      return readNextChunk();
+    };
+    await readNextChunk();
+  } else {
+    hash.update(new Uint8Array(await file.arrayBuffer()));
+  }
+  return hash.digestHex();
+}
+
+/**
+ * Incremental SHA-256 over a File, or `null` when the value cannot be read as
+ * one. Callers opt in because hashing is a full read pass; memory stays
+ * bounded and the upload body itself still streams from the File afterwards.
+ */
+export async function sha256File(file: File): Promise<string | null> {
+  if (typeof file?.arrayBuffer !== "function") return null;
+  return sha256FileStream(file);
+}

@@ -8,9 +8,9 @@
 // resolve `node:path` at all, and a preload that fails to load takes the whole
 // desktop app with it (issue #707).
 //
-// This module mirrors `kit.ts`. The kit is SERVED, not imported, and so are
-// the fonts: what the rest of the repo needs from this layer is a PATH, not a
-// module to bundle. Hosts pass `FONTS_DIR` to their static server and inject
+// The fonts are the one part of this package that is SERVED rather than
+// imported: what the rest of the repo needs from them is a PATH, not a module
+// to bundle. Hosts pass `FONTS_DIR` to their static server and inject
 // `toFontFaceCss(baseUrl)` from `./font-faces`.
 //
 // The `.woff2` files under `../fonts` are vendored copies of the `@fontsource`

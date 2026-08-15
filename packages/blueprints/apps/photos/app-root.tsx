@@ -35,6 +35,8 @@ import {
 } from "react";
 import type { FC, ReactElement, ReactNode } from "react";
 
+import { debounce, observeWidth } from "@centraid/design/elements";
+
 import { publishOutcome } from "../_shared/app-frame.tsx";
 import {
   mountedScopes,
@@ -78,7 +80,6 @@ import { createEnrichmentGate } from "./enrichment-gate.ts";
 import { filterByKind, scopeIsOn, writeScopeFor } from "./filters.ts";
 import type { KindFilter } from "./filters.ts";
 import { appBar, bandClaim } from "./frame.tsx";
-import { debounce, observeWidth } from "./kit.ts";
 import { gridWidthFallback, RAIL_WIDTH, rungHeight } from "./layout.ts";
 import {
   createRefetchScheduler,

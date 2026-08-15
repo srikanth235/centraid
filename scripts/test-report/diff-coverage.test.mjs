@@ -51,7 +51,7 @@ describe("isInstrumentableSource", () => {
       )
     ).toBe(true);
     expect(
-      isInstrumentableSource("packages/design/kit/centraid-inline.js")
+      isInstrumentableSource("packages/design/src/elements/kit-avatar.ts")
     ).toBe(true);
     expect(
       isInstrumentableSource(

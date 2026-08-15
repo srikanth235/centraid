@@ -1,15 +1,12 @@
 // Lightweight vault-blob authorizer (issue #505 Phase 4 / boot-size fix).
 //
-// `authorizeBlobUrl` used to live in `kit-inline.ts`, but that module is a
-// barrel (`export * from '@centraid/design/kit/kit.js'`, resolved to the
-// TypeScript source by the toolchain) — importing ONE
-// symbol from it dragged the entire served kit into whatever chunk the importer
-// landed in. Because `inline-blob-images.ts` (eager via InlineAppRoute → App)
-// imports `authorizeBlobUrl`, the full kit was being pulled into the shell's
-// boot chunk, regressing initial-load JS. This function needs nothing from the
-// kit — only the authed gateway client — so it lives here as its own leaf
-// module. `kit-inline.ts` re-exports it, so the served-kit consumers are
-// unchanged; `inline-blob-images.ts` imports it directly and stays kit-free.
+// A leaf module on purpose: `inline-blob-images.ts` is eager (InlineAppRoute →
+// App), so anything it imports lands in the shell's boot chunk. Reaching
+// `authorizeBlobUrl` through a barrel used to drag the whole app substrate in
+// with it and regress initial-load JS. Nothing here needs that substrate —
+// only the authed gateway client — so it stands alone, and every caller
+// (`inline-blob-images`, `blob-staging`, `homeTileContent`, the host client's
+// `blobUrl`/`blobText`) imports it directly.
 import {
   auth,
   authHeaders,

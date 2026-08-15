@@ -308,8 +308,8 @@ export default function HomeScreen({
    * (packages/client/src/gateway-client-vault.ts) already speak for desktop —
    * this file cannot import that module. `packages/client`'s only mobile-
    * reachable subpaths are `home-copy`, `capture`, `replica/native`,
-   * `receipt-capture`, `version-handshake` and `video-frame` (see that
-   * package's `exports` map); the bare package barrel that carries
+   * `receipt-capture` and `version-handshake` (see that package's `exports`
+   * map); the bare package barrel that carries
    * `vaultDemoLoad` also pulls in `pdfjs-dist`/`@sqlite.org/sqlite-wasm` and
    * other web-only weight Metro has no business bundling into the phone app.
    * Editing that map is outside the files this pass owns, so this speaks the

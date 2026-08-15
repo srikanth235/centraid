@@ -1,8 +1,9 @@
 /* ============================================================================
-   Centraid blueprint kit — shared UX primitives for every template app.
-   Canonical (and ONLY) copy: packages/design/kit/kit.css. Apps don't carry
-   their own copies — each shell loads this one stylesheet from KIT_DIR. Edit
-   here and every app picks it up on the next build.
+   Centraid element layer — shared UX primitives for every blueprint app.
+   Canonical (and ONLY) copy: packages/design/src/elements/kit.css, beside the
+   elements it dresses. Apps carry no copies: the shell route host loads this
+   one stylesheet once (`@centraid/design/kit.css`) and every app picks up an
+   edit here on the next build.
 
    ── DESIGN LANGUAGE: "Field notebook" ──────────────────────────────────────
    Calm, instrument-grade, personal. Humanist system sans for content; system

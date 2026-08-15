@@ -16,8 +16,12 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 // eslint-disable-next-line import/default -- Vite's ?url loader synthesizes the default URL export; governance: allow-no-unjustified-suppressions upstream module has no source-level default (#414)
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 
+// The shared browser capture pipeline. It sits on the blueprints side of the
+// package edge because Photos' upload path needs it too and blueprints must
+// never import `@centraid/client` — see that module's header.
+import { captureVideoFrames } from "@centraid/blueprints/apps/_shared/video-frame";
+
 import type { DeviceEnrichmentLease } from "./gateway-client-devices.js";
-import { captureVideoFrames } from "./video-frame.js";
 
 const MAX_TEXT_CHARS = 1_000_000;
 const MAX_PDF_PAGES = 2_000;

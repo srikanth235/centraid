@@ -66,7 +66,7 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const BUDGETS = {
   "packages/client/src": 21,
   "packages/blueprints": 4,
-  "packages/design/kit": 12,
+  "packages/design/src/elements": 12,
 };
 
 const SKIP_DIRS = new Set([

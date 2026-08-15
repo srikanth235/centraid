@@ -5,6 +5,8 @@
 // through the `on*` callback props; nothing here calls the vault itself.
 import type { ReactNode } from "react";
 
+import { fmtMoney } from "@centraid/design/elements";
+
 import {
   cadence,
   daysSince,
@@ -16,7 +18,6 @@ import {
   statusOf,
 } from "../format.ts";
 import { I } from "../icons.ts";
-import { fmtMoney } from "../kit.ts";
 import type { DetailPerson } from "../types.ts";
 import {
   DateAddRow,

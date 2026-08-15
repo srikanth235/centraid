@@ -1,20 +1,28 @@
-import { KitElement } from "./elements-base.js";
+import type { KitProperties } from "./base.js";
+import { KitElement } from "./base.js";
 
 // The Binding Layer's fifth invariant: ONE persistent status line, updated
 // in place. This element is mounted once by `ensureStatusLineHost()` in
-// kit.ts and reused for every call — there is no stack, no per-message
+// feedback.ts and reused for every call — there is no stack, no per-message
 // element, and no entry/exit animation. `text`/`undoLabel`/`done`/`total`
 // are reactive properties (re-render on set); `onUndo` is a plain instance
 // property the inline action reads at click time, not a reactive prop or a
 // dispatched event — a persistent, reused host must never accumulate
 // `addEventListener` calls across updates.
 export class KitStatusLine extends KitElement {
-  static properties = {
+  static override properties: KitProperties = {
     text: { type: String },
     undoLabel: { type: String, attribute: "undo-label" },
     done: { type: Number },
     total: { type: Number },
   };
+
+  declare text: string;
+  declare undoLabel: string;
+  declare done: number | null;
+  declare total: number | null;
+  onUndo: (() => void) | undefined;
+
   constructor() {
     super();
     this.text = "";
@@ -23,7 +31,8 @@ export class KitStatusLine extends KitElement {
     this.total = null;
     this.onUndo = undefined;
   }
-  render() {
+
+  override render(): HTMLElement {
     const line = document.createElement("div");
     line.className = "kit-status-line";
     line.setAttribute("role", "status");

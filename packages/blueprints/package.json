@@ -32,6 +32,7 @@
     "typecheck:apps": "tsc -p tsconfig.apps.json --noEmit"
   },
   "dependencies": {
+    "@centraid/blob-format": "workspace:*",
     "@centraid/design": "workspace:*",
     "pdfjs-dist": "6.1.200",
     "tldts": "7.4.9"

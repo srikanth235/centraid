@@ -6,11 +6,10 @@
 // injection, exactly as M0.2 did for op-sqlite — a native module imported
 // statically into a logic module breaks under vitest.
 //
-// The default implementation targets the WebCrypto `SubtleCrypto` API, which
-// is what `packages/design/kit/edge-upload.js` already seals with in the
-// WebView. That makes it real (not a stub) in node/vitest today, and on device
-// it needs only a `globalThis.crypto.subtle` polyfill installed at boot — see
-// `index.ts`. No sealing logic changes between the two.
+// The default implementation targets the WebCrypto `SubtleCrypto` API. That
+// makes it real (not a stub) in node/vitest today, and on device it needs only
+// a `globalThis.crypto.subtle` polyfill installed at boot — see `index.ts`. No
+// sealing logic changes between the two.
 
 export interface UploadCrypto {
   /** AES-256-GCM. Returns `ciphertext || tag(16)`, matching WebCrypto. */

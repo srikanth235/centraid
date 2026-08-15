@@ -11,7 +11,6 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -70,18 +69,11 @@ const PKG = path.resolve(import.meta.dirname, "..");
 // `@centraid/client/replica/intent-invalidations` because `@centraid/client`
 // already depends on `@centraid/blueprints`: declaring the reverse edge — even
 // as a devDependency — would make Turbo's topological `^build` graph cyclic.
-// The same reason the photos boot bundles `../client/src/video-frame.ts` below.
 const { replicaIntentInvalidations } = await import(
   pathToFileURL(
     path.resolve(PKG, "../client/src/replica/intent-invalidations.ts")
   ).href
 );
-
-// Apps import these as siblings (`./kit.ts`); at rest they live only in
-// `@centraid/design`'s `kit/`, and each shell's bundler resolves the sibling
-// specifier there through `inline-vite-aliases.ts`. Symlinks reproduce that
-// layout for the harness, which has no bundler doing the rewrite.
-const SHARED = ["kit.ts", "elements.js", "edge-upload.js"];
 
 // The harness compiles the same TS/TSX source the client bundles, using the
 // normal React automatic runtime. The esbuild CLI is used because its JS API
@@ -441,30 +433,6 @@ export function describeAppBoot(
       const sharedDir = path.join(PKG, "apps", "_shared");
       if (existsSync(sharedDir))
         mirrorSources(sharedDir, path.join(bootRoot, "_shared"));
-      for (const file of SHARED) {
-        if (!existsSync(path.join(dir, file))) {
-          // The kit layer lives in the design package (#672); the app-engine
-          // serves it at the app-relative path this mirrors.
-          symlinkSync(
-            path.join(PKG, "..", "design", "kit", file),
-            path.join(dir, file)
-          );
-        }
-      }
-      if (app === "photos") {
-        execFileSync(
-          ESBUILD_BIN,
-          [
-            path.resolve(PKG, "../client/src/video-frame.ts"),
-            "--bundle",
-            "--format=esm",
-            "--platform=browser",
-            "--log-level=silent",
-            `--outfile=${path.join(dir, "video-frame.js")}`,
-          ],
-          { encoding: "utf8" }
-        );
-      }
 
       process.on("unhandledRejection", push);
       process.on("uncaughtException", push);

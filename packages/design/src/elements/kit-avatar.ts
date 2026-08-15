@@ -1,8 +1,10 @@
-import { KitElement } from "./elements-base.js";
-import { identityColor, identityInitials } from "./identity.js";
+import { identityColor, identityInitials } from "../identity.js";
+import type { KitProperties } from "./base.js";
+import { KitElement } from "./base.js";
 
+/** A monogram tile: `<kit-avatar name size shape src color initials>`. */
 export class KitAvatar extends KitElement {
-  static properties = {
+  static override properties: KitProperties = {
     name: { type: String },
     size: { type: String },
     shape: { type: String },
@@ -10,6 +12,13 @@ export class KitAvatar extends KitElement {
     color: { type: String },
     initials: { type: String },
   };
+
+  declare name: string;
+  declare size: string;
+  declare shape: string;
+  declare src: string;
+  declare color: string;
+  declare initials: string;
 
   constructor() {
     super();
@@ -21,7 +30,7 @@ export class KitAvatar extends KitElement {
     this.initials = "";
   }
 
-  render() {
+  override render(): HTMLElement {
     const text = String(this.name ?? "?").trim() || "?";
     const fill = this.color || identityColor(text);
     const span = document.createElement("span");

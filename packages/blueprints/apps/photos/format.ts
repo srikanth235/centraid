@@ -1,7 +1,8 @@
 // Pure formatting/predicate helpers over an asset row — no DOM, no vault IO,
 // no app state. Shared by app.tsx's own orchestrators (refresh/matchesSearch)
 // and by every component file that needs to format or classify an asset.
-import { fmtBytes, localDayKey } from "./kit.ts";
+import { fmtBytes, localDayKey } from "@centraid/design/elements";
+
 import type { Asset, CustodyMeta, ExifRow } from "./types.ts";
 
 export function dayKey(iso: string | number | Date | null | undefined): string {

@@ -15,7 +15,7 @@ gate loop before its commit.
 - [x] Stage 3 — retire app-engine UI-byte serving (static-server, app-bundle, bridge-script, css-module, asset-variants, query-bundle, app router kinds, KIT_DIR wiring, visual-harness).
 - [x] Stage 4 — retire the blueprints blank-app scaffolder and the remote template fetch (scaffold files/defaults, served half of app-rewrites, per-app index.html, remote templates; index.json is KEPT and the reason is in Decisions).
 - [x] Stage 5 — kit dissolution A: rehome the non-design kit modules to packages/client as typed TypeScript; delete the legacy Ask controller and its strangler (edge-upload stays in packages/design for Stage 6 — see Decisions).
-- [ ] Stage 6 — kit dissolution B: fold the DOM substrate into packages/design/src as typed modules; delete the served-sibling alias apparatus; rewrite the sibling imports to package imports; land the coverage-scope-reachability amendment in the same commit as its check change.
+- [x] Stage 6 — kit dissolution B: fold the DOM substrate into packages/design/src as typed modules; delete the served-sibling alias apparatus; rewrite the sibling imports to package imports; land the coverage-scope-reachability amendment in the same commit as its check change.
 - [ ] Stage 7 — custom-element endgame: replace JSX-emitted kit-* tags with React blocks, delete elements-base + element classes, prune orphaned kit.css rules; re-point the design gallery at the shell's real `#ui-preview` surface and delete the `fixtureHtml` parallel implementation; re-pin design-gallery baselines once, at the end.
 - [ ] Stage 8 — identity + decisions sweep: superapp positioning across the root docs, one app render path in ARCHITECTURE.md, decisions.md supersessions, glossary/design-machinery/traps/test-matrix updates.
 
@@ -284,6 +284,83 @@ the deleted `scaffold-boot.test.ts` to
 "scaffold". Rationale in the classification-ratchet deviation echoed in
 Decisions.
 
+### Stage 6 — kit dissolution B: fold the DOM substrate into packages/design/src as typed modules; delete the served-sibling alias apparatus; rewrite the sibling imports to package imports; land the coverage-scope-reachability amendment in the same commit as its check change.
+
+**`packages/design/kit/` no longer exists.** The DOM substrate folded into
+`packages/design/src/elements/` as typed modules: `base.ts`, `host.ts`,
+`dom.ts`, `feedback.ts`, `formatters.ts`, `refresh.ts`, `popover.ts`,
+`attachments.ts`, `index.ts` (the barrel), the four surviving element
+classes (`kit-avatar.ts`, `kit-meter.ts`, `kit-skeleton.ts`,
+`kit-status-line.ts`), `sha256.ts` (the hashing half of `edge-upload-sha.js`),
+and `kit.css`. All 29 app-facing names now come from one specifier,
+`@centraid/design/elements`; the stylesheet export is
+`@centraid/design/kit.css`.
+
+**The alias apparatus is deleted.** `packages/blueprints/types/virtual-kit/`
+(the re-export bridge), the `rootDirs` block in
+`packages/blueprints/tsconfig.apps.json`, the `blueprint-component-kit`
+vitest resolver plugin, `packages/client/src/react/blueprints/inline-vite-aliases.ts`,
+and the harness symlink machinery in `app-boot-harness.ts` and
+`locker-online-only.test.ts` are all gone. The 60 blueprint app files that
+imported a sibling `./kit.ts` now import `@centraid/design/elements`
+directly. `kit-inline.ts` and its two suites are replaced by
+`blob-staging.ts` + `blob-staging.test.ts`: the transport lives in
+packages/client and is reached through the ambient host object
+(`centraid-inline.ts` installs `stageBlob`/`stageDerivative`;
+`packages/blueprints/types/centraid.d.ts` declares them), because a package
+edge in either direction would cycle Turbo's `^build` — the routing the
+issue sketched for the seven client-bound symbols is impossible as written
+(see Decisions).
+
+**Dead code died instead of moving.** Stage 5's Ask deletion orphaned far
+more of the kit than estimated: `letterAvatar`, the chart family
+(`lineChart`, `barSpan`, `barChart`, `chart-utils.js`), `emptyState`,
+`snippetInto`, `wireThemeToggle`, `localMonthKey`, `BLOB_ROUTE`,
+`entityKindLabel`, `PICK_KIND_LABELS`, `svgEl`, `kitIcon`, and the entire
+cross-referencing block (`mentionChip`, `renderReferenceStrip`, mention
+popover/field wiring, `createReference`/`removeReference`/`reanchorReference`
+in both copies) had no surviving consumer and were deleted. Four of the
+eight custom elements went with them — `kit-line-chart`, `kit-bar-chart`,
+`kit-mention-chip`, `kit-reference-strip` had no JSX site and no surviving
+factory — so Stage 7's conversion set is four elements, not eight (and
+includes `kit-status-line`, which `statusLine()` still mounts;
+`docs/design-machinery.md` records this). Of `edge-upload.js`'s 602 lines,
+only `StreamingSha256` + `sha256FileStream` survive as `sha256.ts`;
+`stageDirectFile`/`stageFallbackFile` and the CBSF sealing helpers are gone,
+and `packages/design` drops its `@centraid/blob-format` dependency.
+`video-frame.ts` moved to `packages/blueprints/apps/_shared/` with its
+contract suite — the side of the blueprints↔client edge that
+`inline-types.ts` documents as correct for a module both sides need.
+
+**The coverage-scope-reachability amendment landed with its check change in
+this commit.** `CONSTITUTION.md` (directive + rationale + Evolution Log
+entry) and the pack's `constitution.md` state the both-ways rule — a tree
+moving into `src/` stops being a scope of its own; `check.sh` drops the hard
+`packages/design/kit/**` grep, `directive.yaml` updates its summary, and
+`vitest.config.ts` removes the kit pattern from `coverageInclude`. The
+allowlist row for `packages/blueprints/types` went with the bridge file that
+was its whole subject.
+
+**Coverage.** The `packages/design/kit/**` floor scope (49/37) is removed —
+its directory no longer exists and every surviving line moved into the
+stricter `packages/design/src/**` scope (94/70); the removal is waived by
+the extended `approvedDeviation` in `tests/coverage-floors.json`, echoed in
+Decisions. Four new suites (`elements.test.ts`, `attachments.test.ts`,
+`feedback.test.ts`, `refresh.test.ts`, `sha256.test.ts`) cover the folded
+tree — design is at 374 tests, up from 348. Two real bugs were found while
+writing them: `feedback.ts` only *type*-imported the element modules it
+instantiated (registration depended on another importer; it now imports
+them for effect), and `photos-asset-key.test.ts`'s sibling-file kit stub
+silently stopped stubbing under a bare specifier (it now rewrites the
+specifier while copying).
+
+**Ratchets.** `tests/hygiene-budgets.json` `toBeTruthyFalsy` 384 → 383 and
+`tests/sleep-inventory.json` 37 → 36 (the deleted `kit-inline.test.ts`
+carried one fixed sleep; its surviving test now uses `vi.waitFor`), both via
+the scripts' own down-only `--write`. `toHaveBeenCalled` stays at 811: two
+new assertions that would have raised it were rewritten to plain counters
+instead.
+
 ### Full changed-file inventory
 
 Every path in this change set, across all stages landed so far, including
@@ -292,7 +369,11 @@ deletions, renames, and this receipt:
 - `.github/workflows/e2e.yml`
 - `.gitleaks.toml`
 - `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/allowlist.txt`
+- `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/check.sh`
+- `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/constitution.md`
+- `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/directive.yaml`
 - `ARCHITECTURE.md`
+- `CONSTITUTION.md`
 - `README.md`
 - `TESTING.md`
 - `apps/desktop/scripts/screenshot-automations.mjs`
@@ -318,6 +399,7 @@ deletions, renames, and this receipt:
 - `apps/desktop/tests/e2e/builder.spec.ts`
 - `apps/desktop/tests/e2e/delete-app.spec.ts`
 - `apps/desktop/tests/e2e/fixtures.ts`
+- `apps/desktop/vite.config.ts`
 - `apps/mobile/App.tsx`
 - `apps/mobile/lazy-screens.tsx`
 - `apps/mobile/scripts/android-emulator-e2e.sh`
@@ -334,6 +416,8 @@ deletions, renames, and this receipt:
 - `apps/mobile/src/lib/notifications-navigation.test.ts`
 - `apps/mobile/src/lib/notifications-navigation.ts`
 - `apps/mobile/src/lib/phone-link.ts`
+- `apps/mobile/src/lib/upload/cbsf.ts`
+- `apps/mobile/src/lib/upload/crypto.ts`
 - `apps/mobile/src/lib/upload/expo-native.ts`
 - `apps/mobile/src/lib/upload/transfer-policy.test.ts`
 - `apps/mobile/src/lib/upload/transfer-policy.ts`
@@ -353,6 +437,7 @@ deletions, renames, and this receipt:
 - `apps/web/tests/e2e/perf-waterfall.spec.ts`
 - `apps/web/tests/e2e/server.ts`
 - `apps/web/tests/e2e/web-pwa.spec.ts`
+- `apps/web/vite.config.ts`
 - `bun.lock`
 - `centraid-city/src/core/content.ts`
 - `docs/config-ownership.md`
@@ -365,6 +450,8 @@ deletions, renames, and this receipt:
 - `docs/traps/design-tokens.md`
 - `docs/traps/electron-screenshot.md`
 - `docs/traps/manifest-regeneration.md`
+- `knip.json`
+- `oxfmt.config.ts`
 - `oxlint.config.ts`
 - `packages/app-engine/src/http/app-bundle.test.ts`
 - `packages/app-engine/src/http/app-bundle.ts`
@@ -392,16 +479,85 @@ deletions, renames, and this receipt:
 - `packages/app-engine/src/settings/settings-merge.ts`
 - `packages/blueprints/README.md`
 - `packages/blueprints/apps/_shared/placement-registry.ts`
+- `packages/blueprints/apps/_shared/video-frame.contract.test.ts`
+- `packages/blueprints/apps/_shared/video-frame.ts`
+- `packages/blueprints/apps/agenda/app-root.tsx`
+- `packages/blueprints/apps/agenda/components/CreateModal.tsx`
+- `packages/blueprints/apps/agenda/components/EventDrawer.tsx`
+- `packages/blueprints/apps/agenda/components/EventEditor.tsx`
+- `packages/blueprints/apps/agenda/components/HeaderBar.tsx`
+- `packages/blueprints/apps/agenda/components/MonthView.tsx`
+- `packages/blueprints/apps/agenda/components/ScheduleView.tsx`
+- `packages/blueprints/apps/agenda/components/Sidebar.tsx`
+- `packages/blueprints/apps/agenda/components/WeekView.tsx`
+- `packages/blueprints/apps/agenda/format.ts`
 - `packages/blueprints/apps/agenda/index.html`
+- `packages/blueprints/apps/agenda/logic.ts`
+- `packages/blueprints/apps/docs/app-root.tsx`
+- `packages/blueprints/apps/docs/components/BulkBar.tsx`
+- `packages/blueprints/apps/docs/components/Details.tsx`
+- `packages/blueprints/apps/docs/components/Sidebar.tsx`
+- `packages/blueprints/apps/docs/format.ts`
 - `packages/blueprints/apps/docs/index.html`
+- `packages/blueprints/apps/docs/logic.ts`
+- `packages/blueprints/apps/docs/metadata.ts`
+- `packages/blueprints/apps/docs/popovers.ts`
+- `packages/blueprints/apps/docs/upload.ts`
+- `packages/blueprints/apps/docs/versions.ts`
 - `packages/blueprints/apps/inline-types.ts`
+- `packages/blueprints/apps/locker/app-root.tsx`
+- `packages/blueprints/apps/locker/components/ItemFields.tsx`
 - `packages/blueprints/apps/locker/index.html`
 - `packages/blueprints/apps/locker/logic.ts`
+- `packages/blueprints/apps/notes/app-root.tsx`
+- `packages/blueprints/apps/notes/components/Card.tsx`
+- `packages/blueprints/apps/notes/components/Editor.tsx`
+- `packages/blueprints/apps/notes/components/History.tsx`
+- `packages/blueprints/apps/notes/components/Toolbar.tsx`
 - `packages/blueprints/apps/notes/index.html`
+- `packages/blueprints/apps/notes/logic.ts`
+- `packages/blueprints/apps/notes/types.ts`
+- `packages/blueprints/apps/people/app-root.tsx`
+- `packages/blueprints/apps/people/components/ContactChannels.tsx`
+- `packages/blueprints/apps/people/components/DetailSections.tsx`
+- `packages/blueprints/apps/people/components/Details.tsx`
+- `packages/blueprints/apps/people/components/History.tsx`
+- `packages/blueprints/apps/people/components/Shared.tsx`
+- `packages/blueprints/apps/people/components/Sidebar.tsx`
 - `packages/blueprints/apps/people/index.html`
+- `packages/blueprints/apps/people/logic.ts`
+- `packages/blueprints/apps/photos/albums-actions.ts`
+- `packages/blueprints/apps/photos/app-root.tsx`
+- `packages/blueprints/apps/photos/components/AlbumBar.tsx`
+- `packages/blueprints/apps/photos/components/DuplicateReview.tsx`
+- `packages/blueprints/apps/photos/components/Duplicates.tsx`
+- `packages/blueprints/apps/photos/components/Editor.tsx`
+- `packages/blueprints/apps/photos/components/EmptyTrash.tsx`
+- `packages/blueprints/apps/photos/components/LightboxInfo.tsx`
+- `packages/blueprints/apps/photos/components/Permission.tsx`
+- `packages/blueprints/apps/photos/components/SelectionBar.tsx`
+- `packages/blueprints/apps/photos/components/Storage.tsx`
+- `packages/blueprints/apps/photos/duplicates-actions.ts`
+- `packages/blueprints/apps/photos/format.ts`
 - `packages/blueprints/apps/photos/index.html`
+- `packages/blueprints/apps/photos/library-reads.ts`
+- `packages/blueprints/apps/photos/outcomes.ts`
+- `packages/blueprints/apps/photos/search.ts`
+- `packages/blueprints/apps/photos/selection-actions.ts`
+- `packages/blueprints/apps/photos/selection.tsx`
+- `packages/blueprints/apps/photos/upload.ts`
+- `packages/blueprints/apps/tally/app-root.tsx`
+- `packages/blueprints/apps/tally/components/Shared.tsx`
+- `packages/blueprints/apps/tally/format.ts`
 - `packages/blueprints/apps/tally/index.html`
+- `packages/blueprints/apps/tally/logic.ts`
+- `packages/blueprints/apps/tasks/app-root.tsx`
+- `packages/blueprints/apps/tasks/components/Detail.tsx`
+- `packages/blueprints/apps/tasks/components/Shared.tsx`
+- `packages/blueprints/apps/tasks/format.ts`
 - `packages/blueprints/apps/tasks/index.html`
+- `packages/blueprints/apps/tasks/logic.ts`
+- `packages/blueprints/apps/tasks/types.ts`
 - `packages/blueprints/manifest.json`
 - `packages/blueprints/package.json`
 - `packages/blueprints/src/__snapshots__/scaffold-defaults.test.ts.snap`
@@ -414,10 +570,15 @@ deletions, renames, and this receipt:
 - `packages/blueprints/src/clone.test.ts`
 - `packages/blueprints/src/clone.ts`
 - `packages/blueprints/src/index.ts`
+- `packages/blueprints/src/locker-online-only.test.ts`
 - `packages/blueprints/src/matrix-concurrency.test.ts`
 - `packages/blueprints/src/matrix-contracts.test.ts`
 - `packages/blueprints/src/matrix-durability.test.ts`
 - `packages/blueprints/src/no-inference-client.test.ts`
+- `packages/blueprints/src/photos-asset-key.test.ts`
+- `packages/blueprints/src/photos-media.test.ts`
+- `packages/blueprints/src/photos-search-fanout.test.ts`
+- `packages/blueprints/src/photos-shelves-v4.test.ts`
 - `packages/blueprints/src/runtime-boundary.test.ts`
 - `packages/blueprints/src/scaffold-boot.test.ts`
 - `packages/blueprints/src/scaffold-defaults.test.ts`
@@ -428,14 +589,20 @@ deletions, renames, and this receipt:
 - `packages/blueprints/src/scaffold-types.ts`
 - `packages/blueprints/src/scaffold.ts`
 - `packages/blueprints/src/shared-css.test.ts`
+- `packages/blueprints/src/token-purity.test.ts`
 - `packages/blueprints/src/types.ts`
 - `packages/blueprints/src/update-app-meta.test.ts`
 - `packages/blueprints/stryker.config.mjs`
+- `packages/blueprints/tsconfig.apps.json`
+- `packages/blueprints/types/browser-runtime.d.ts`
 - `packages/blueprints/types/centraid.d.ts`
+- `packages/blueprints/types/virtual-kit/kit.ts`
 - `packages/blueprints/visual-harness/README.md`
 - `packages/blueprints/visual-harness/mock-centraid.js`
 - `packages/blueprints/visual-harness/server.mjs`
+- `packages/blueprints/vitest.config.ts`
 - `packages/blueprints/vitest.mutation.config.ts`
+- `packages/client/package.json`
 - `packages/client/src/app-format.ts`
 - `packages/client/src/app-shell-context.ts`
 - `packages/client/src/assistant-rich.test.ts`
@@ -446,6 +613,7 @@ deletions, renames, and this receipt:
 - `packages/client/src/code-highlight.ts`
 - `packages/client/src/conversation-routes.test.ts`
 - `packages/client/src/conversation-routes.ts`
+- `packages/client/src/device-enrichment-compute.ts`
 - `packages/client/src/gateway-client-automations.contract.test.ts`
 - `packages/client/src/gateway-client-contract-fixtures.ts`
 - `packages/client/src/gateway-client-conversation-history.contract.test.ts`
@@ -459,8 +627,15 @@ deletions, renames, and this receipt:
 - `packages/client/src/gateway-client-storage.ts`
 - `packages/client/src/gateway-client.ts`
 - `packages/client/src/gfm.ts`
+- `packages/client/src/react/blueprints/blob-auth.ts`
+- `packages/client/src/react/blueprints/blob-staging.test.ts`
+- `packages/client/src/react/blueprints/blob-staging.ts`
 - `packages/client/src/react/blueprints/centraid-inline.ts`
+- `packages/client/src/react/blueprints/inline-app-module-stub.d.ts`
 - `packages/client/src/react/blueprints/inline-blob-images.test.ts`
+- `packages/client/src/react/blueprints/inline-blob-images.ts`
+- `packages/client/src/react/blueprints/inline-change-feed.test.ts`
+- `packages/client/src/react/blueprints/inline-vite-aliases.ts`
 - `packages/client/src/react/blueprints/inlineQueryCtx.ts`
 - `packages/client/src/react/blueprints/kit-ask-inline.ts`
 - `packages/client/src/react/blueprints/kit-inline-vault.test.ts`
@@ -480,6 +655,7 @@ deletions, renames, and this receipt:
 - `packages/client/src/react/screens/ResourceModeCard.test.tsx`
 - `packages/client/src/react/screens/StarredScreen.test.tsx`
 - `packages/client/src/react/screens/StarredScreen.tsx`
+- `packages/client/src/react/screens/composerMentions.ts`
 - `packages/client/src/react/screens/resource-presets.ts`
 - `packages/client/src/react/screens/resource-summary.test.ts`
 - `packages/client/src/react/screens/resource-summary.ts`
@@ -558,29 +734,79 @@ deletions, renames, and this receipt:
 - `packages/client/src/turn-stream.ts`
 - `packages/client/src/types.d.ts`
 - `packages/client/src/vault-change-feed.ts`
+- `packages/client/src/video-frame.contract.test.ts`
+- `packages/client/src/video-frame.ts`
+- `packages/client/vitest.config.ts`
+- `packages/client/vitest.mutation.config.ts`
 - `packages/design/kit/assistant-rich.d.ts`
 - `packages/design/kit/assistant-rich.js`
+- `packages/design/kit/chart-utils.js`
 - `packages/design/kit/code-highlight.d.ts`
 - `packages/design/kit/code-highlight.js`
 - `packages/design/kit/conversation-client.d.ts`
 - `packages/design/kit/conversation-client.js`
+- `packages/design/kit/edge-upload-sha.js`
+- `packages/design/kit/edge-upload.js`
+- `packages/design/kit/elements-base.js`
+- `packages/design/kit/elements.js`
+- `packages/design/kit/format.js`
 - `packages/design/kit/gfm.js`
+- `packages/design/kit/icons.js`
+- `packages/design/kit/identity.js`
 - `packages/design/kit/intent-invalidations.d.ts`
 - `packages/design/kit/intent-invalidations.js`
+- `packages/design/kit/kit-avatar.js`
+- `packages/design/kit/kit-bar-chart.js`
+- `packages/design/kit/kit-line-chart.js`
+- `packages/design/kit/kit-mention-chip.js`
+- `packages/design/kit/kit-meter.js`
+- `packages/design/kit/kit-reference-strip.js`
+- `packages/design/kit/kit-skeleton.js`
+- `packages/design/kit/kit-status-line.js`
 - `packages/design/kit/kit.css`
 - `packages/design/kit/kit.ts`
 - `packages/design/kit/turn-stream.d.ts`
 - `packages/design/kit/turn-stream.js`
+- `packages/design/package.json`
 - `packages/design/src/assistant-rich.test.ts`
 - `packages/design/src/assistant-sanitize.test.ts`
 - `packages/design/src/code-highlight.test.ts`
+- `packages/design/src/contrast.test.ts`
 - `packages/design/src/conversation-client.test.ts`
 - `packages/design/src/css.ts`
+- `packages/design/src/edge-upload.test.ts`
+- `packages/design/src/elements/attachments.test.ts`
+- `packages/design/src/elements/attachments.ts`
+- `packages/design/src/elements/base.ts`
+- `packages/design/src/elements/dom.ts`
+- `packages/design/src/elements/elements.test.ts`
+- `packages/design/src/elements/feedback.test.ts`
+- `packages/design/src/elements/feedback.ts`
+- `packages/design/src/elements/formatters.ts`
+- `packages/design/src/elements/host.ts`
+- `packages/design/src/elements/index.ts`
+- `packages/design/src/elements/kit-avatar.ts`
+- `packages/design/src/elements/kit-meter.ts`
+- `packages/design/src/elements/kit-skeleton.ts`
+- `packages/design/src/elements/kit-status-line.ts`
+- `packages/design/src/elements/kit.css`
+- `packages/design/src/elements/popover.ts`
+- `packages/design/src/elements/refresh.test.ts`
+- `packages/design/src/elements/refresh.ts`
+- `packages/design/src/elements/sha256.test.ts`
+- `packages/design/src/elements/sha256.ts`
+- `packages/design/src/focus-ring-contrast.test.ts`
+- `packages/design/src/fonts.ts`
 - `packages/design/src/icons-contract.test.ts`
+- `packages/design/src/kit-css.test.ts`
 - `packages/design/src/kit-smoke.test.ts`
 - `packages/design/src/kit.test.ts`
 - `packages/design/src/kit.ts`
+- `packages/design/src/native-contract.test.ts`
 - `packages/design/src/turn-stream.test.ts`
+- `packages/design/tsconfig.elements.json`
+- `packages/design/tsconfig.json`
+- `packages/design/tsconfig.test.json`
 - `packages/gateway/package.json`
 - `packages/gateway/skills/authoring-centraid-apps/SKILL.md`
 - `packages/gateway/src/lifecycle/automation-lifecycle-over-http.test.ts`
@@ -634,19 +860,30 @@ deletions, renames, and this receipt:
 - `packages/tunnel/src/gateway-endpoint.ts`
 - `packages/vault/src/host.ts`
 - `receipts/issue-799-retire-served-app-plane.md`
+- `scripts/accessibility-contract.test.mjs`
 - `scripts/check-share-reachability.test.mjs`
 - `scripts/ci/configure-sonarcloud.mjs`
+- `scripts/design-gallery.mjs`
+- `scripts/lint-aria-labels.mjs`
+- `scripts/lint-container-opacity.mjs`
+- `scripts/lint-design-tokens.mjs`
 - `scripts/lint-e2e-flows.mjs`
 - `scripts/lint-engine-conformance.mjs`
+- `scripts/lint-motion-rule.mjs`
+- `scripts/lint-type-floor.mjs`
+- `scripts/lint-types.sh`
 - `scripts/mutation/seeds.mjs`
 - `scripts/perf/README.md`
 - `scripts/perf/summarize.mjs`
+- `scripts/test-report/diff-coverage.mjs`
+- `scripts/test-report/diff-coverage.test.mjs`
 - `tests/agent-e2e-mobile/AGENTS.md`
 - `tests/agent-e2e-mobile/README.md`
 - `tests/agent-e2e-mobile/flows/native-v0-resilience.md`
 - `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`
 - `tests/agent-e2e-mobile/flows/template-gate.md`
 - `tests/agent-e2e-mobile/flows/template-gate.mjs`
+- `tests/coverage-floors.json`
 - `tests/hygiene-budgets.json`
 - `tests/matrix.json`
 - `tests/perf/pwa-waterfall.perf.test.ts`
@@ -654,6 +891,7 @@ deletions, renames, and this receipt:
 - `tests/scale/blueprint-clones.scale.test.ts`
 - `tests/skips.json`
 - `tests/sleep-inventory.json`
+- `vitest.config.ts`
 
 ## Decisions
 
@@ -946,6 +1184,51 @@ deletions, renames, and this receipt:
   `lifecycle-over-http` failures seen in one full-suite run did not reproduce
   in isolation or on re-run — parallel-execution interference between
   gateway-spawning integration suites, not a regression.
+- **Stage 6: the issue's routing for the seven "client" symbols is
+  impossible as written.** `renderAttachments`, `wireAttachInput`,
+  `stageFileBytes`, `stageDerivative`, the three reference writes and
+  `StagedBlob` cannot "resolve to packages/client" from blueprint app code:
+  `@centraid/client` depends on `@centraid/blueprints`, and
+  `packages/blueprints/apps/inline-types.ts` states the rule outright —
+  blueprints must never import `@centraid/client`; the edge would cycle
+  Turbo's `^build`. The issue's own second option was taken instead: the
+  transport lives in `packages/client/src/react/blueprints/blob-staging.ts`
+  and is reached through the ambient host object (`window.centraid.stageBlob`
+  / `stageDerivative`, declared in `types/centraid.d.ts`), the seam
+  `blobText` already used. `video-frame.ts` hit the same wall in the other
+  direction and moved to `packages/blueprints/apps/_shared/`.
+- **Stage 6: `kitIcon` was deleted, not collapsed into `src/icons.ts`.** The
+  brief's collapse would have created a zero-caller export for knip to flag —
+  its only users died with the stage-5 Ask controller. The parity test that
+  mirrored the standalone kit dictionary went with it (no second dictionary
+  is left to mirror); the sibling guard survives, re-pointed to assert no
+  `<svg` literal anywhere in `packages/design/src/elements/**`.
+- **Stage 6: the DOM-lib gate moved from tsconfig topology to a module-graph
+  test.** `lint-types.sh` drives one config per package, so a second scoped
+  typecheck program would leave the elements files outside the program
+  oxlint uses. The build program (`tsconfig.json`) still excludes
+  `src/elements/**` and still has no DOM lib — a stray `document` in a token
+  module still fails `bun run build` — while `tsconfig.elements.json` builds
+  the DOM subtree and `native-contract.test.ts` now walks the real module
+  graph reachable from `src/index.ts`, failing on any DOM global and
+  asserting the barrel does not re-export `./elements`. That assertion is
+  stronger than the old `lib` topology: it catches a `globalThis` cast no
+  `lib` setting ever would.
+- **Stage 6 coverage-floors deviation, echoed from
+  `tests/coverage-floors.json` (user-approved 2026-08-15):** #799 stage 6
+  removes the packages/design/kit/** floor scope (49/37) because the
+  directory it floors no longer exists: the surviving element classes, DOM
+  substrate, and sha256 hasher folded into packages/design/src/elements/**
+  where the existing packages/design/src/** floor (94/70) governs them, and
+  the rest of the kit was deleted as dead code. A scope ceasing to exist,
+  not a floor lowering: every surviving line moved INTO the stricter scope.
+  Measured on the merged tree before this edit landed.
+- **Stage 6: two #630 file-size waivers moved to line 1 of their files.**
+  `apps/people/logic.ts` and `apps/tasks/logic.ts` carry
+  `governance: allow-repo-hygiene file-size-limit`; `has_file_waiver` reads
+  only the first 10 lines, and oxfmt's re-sort of the longer package-import
+  block pushed both markers to ~line 23. Moved, not added, removed, or
+  reworded.
 
 ## User impact
 
@@ -973,6 +1256,18 @@ owner through Notifications, which the panel header already names as the
 single decision surface — but the narration inside Ask is. This is why the
 kit-smoke test asserting that narration was deleted rather than rehomed:
 there is no surviving surface to assert it against.
+
+**The web/desktop shells lose the presigned direct-to-CAS upload path
+(#414) with stage 6** — `stageDirectFile`/`stageFallbackFile` and the CBSF
+sealing helpers are deleted. This is not a behaviour change on the surviving
+surfaces: the inline kit never called them, so inline uploads already went
+through the gateway's authoritative POST; only retired served apps ever took
+the device→provider path. The consequences are that a large browser upload
+now streams through the gateway rather than directly to the object store,
+and a dropped connection restarts the upload instead of resuming at the
+fsynced offset. The server side (`packages/vault`'s direct-transfer
+sessions and blob routes) is untouched, and mobile's independent CBSF
+uploader is unaffected.
 
 ## Out of scope
 
@@ -1054,6 +1349,29 @@ identical on a clean tree:
    isolation.
 
 CI remains the enforcing copy for all three.
+
+**Stage 6 verification** (main checkout, after integrating the sub-agent's
+worktree patch): `turbo typecheck --force` 35/35 uncached; lint, format,
+knip green (config hints pre-existing); `test:matrix` ok; `test:ratchet` ok
+with the kit-floor removal waived by the changed `approvedDeviation`;
+hygiene-ratchet 383/811 at budget; sleep inventory 36/36; skips 25/25;
+`lint:quality-knobs` "no silent widening"; governance 22/22 with the
+change set staged (`coverage-scope-reachability` reads `git ls-files`, so
+deletions must be staged for it to read the true tree). The full-repo
+coverage lane was run on the merged tree and required three environment
+repairs to go green, none touching the change set: `IS_SANDBOX=yes` leaks
+from this container into three `agent-runtime/launch.test.ts` assertions
+(removed from the child environment), the `sqlite3` CLI was missing for
+`gateway-db-lock.integration.test.ts` (installed), and
+`apps/mobile/.../PendingRestartJourney.test.tsx` fails to load under this
+runner ("Cannot bundle node:sqlite") — verified to fail identically on a
+pristine `origin/main` worktree in this container, so it was sidelined for
+the measurement window only and restored after (the stage-4 both-sides
+methodology). Final lane: 1200 files / 13,114 tests, 0 failed. Every floor
+scope measured above its floor; the one at genuine risk,
+`packages/design/src/**` with ~1,150 folded `elements/**` lines newly in
+scope, measured 95.85 lines / 82.27 branches against 94/70 — the sub-agent's
+new element suites carried it. No floor moved.
 
 ## Audit
 

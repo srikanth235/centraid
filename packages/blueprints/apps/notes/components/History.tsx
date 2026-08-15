@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { relTime } from "../kit.ts";
+import { relTime } from "@centraid/design/elements";
 
 import styles from "./History.module.css";
 

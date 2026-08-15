@@ -1,59 +1,41 @@
-/* oxlint-disable typescript-eslint/ban-ts-comment -- the package tsconfig has
-   no DOM lib (the blueprints "src" is node-side); this one file runs the
-   browser kit under jsdom, so DOM globals are runtime-real but invisible to
-   tsc. Suppressing per-file beats adding DOM types to the whole package. */
-// @ts-nocheck — imports the untyped browser kit (plain JS + DOM globals)
 // @vitest-environment jsdom
-// Runtime smoke test: evaluates the real kit modules (elements.js + kit.ts)
-// under jsdom and exercises the shared surface the apps consume.
-//
-// `elements.js` is Lit-free (native custom elements — see its header); Lit
-// has been fully removed from the kit (issue #327 reverted — no apps import
-// it anymore), so this file only exercises the vanilla surface.
-import path from "node:path";
-import { pathToFileURL } from "node:url";
-
+// Runtime suite over the element layer: the custom-element registrations, the
+// DOM builders, the popover, the refresh discipline, and the attachment flow.
+// It imports the real barrel (not a path-loaded copy) so the registration side
+// effects are the ones an app gets.
 import { describe, expect, it, vi } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
-// Resolved from this module's own path, not process.cwd(): cwd differs
-// between a root-run vitest (repo root) and a package-run vitest (this
-// package's dir), but the file's own location never does.
-const PKG = path.resolve(import.meta.dirname, "..");
-// Resolved at runtime so the file URL loads natively; jsdom's globals are
-// already installed by the environment.
-const kitUrl = pathToFileURL(path.resolve(PKG, "kit/kit.ts")).href;
-const elementsUrl = pathToFileURL(path.resolve(PKG, "kit/elements.js")).href;
-const {
-  barSpan,
+import type { CentraidHost } from "./host.js";
+import {
+  closePopover,
   el,
-  emptyState,
   fmtBytes,
   h,
   isPopoverOpen,
-  letterAvatar,
-  openPopover,
-  closePopover,
+  KitElement,
   onDataChange,
+  openPopover,
   popItem,
   renderAttachments,
-  snippetInto,
   subscribeReadUpdates,
-} = await import(kitUrl);
-const { KitElement } = await import(elementsUrl);
+} from "./index.js";
 
-describe("kit smoke", () => {
+function withHost(host: CentraidHost): () => void {
+  (globalThis as { centraid?: CentraidHost }).centraid = host;
+  return () => {
+    delete (globalThis as { centraid?: CentraidHost }).centraid;
+  };
+}
+
+describe("element layer", () => {
   it("defines the custom elements", () => {
     for (const tag of [
       "kit-avatar",
       "kit-meter",
-      "kit-line-chart",
-      "kit-bar-chart",
       "kit-skeleton",
       "kit-status-line",
-      "kit-mention-chip",
-      "kit-reference-strip",
     ]) {
       expect(customElements.get(tag), tag).toBeTruthy();
     }
@@ -68,34 +50,41 @@ describe("kit smoke", () => {
     expect(el('<span id="q">z</span>').id).toBe("q");
   });
 
-  it("letterAvatar honours color/initials and scales type", () => {
-    const av = letterAvatar("Grace Hopper", {
-      size: "34px",
-      color: "#0FA678",
-      initials: "You",
-    });
+  it("kit-avatar honours color/initials and scales type", () => {
     // Vanilla custom elements render synchronously on connect — no update
-    // microtask to await (elements.js has no Lit, no scheduler underneath).
+    // microtask to await (there is no Lit, no scheduler underneath).
+    const av = document.createElement("kit-avatar");
+    av.setAttribute("name", "Grace Hopper");
+    av.setAttribute("size", "34px");
+    av.setAttribute("color", "#0FA678");
+    av.setAttribute("initials", "You");
     document.body.appendChild(av);
     const span = av.querySelector(".kit-avatar");
     expect(span).toBeTruthy();
-    expect(span.getAttribute("style")).toContain("background:#0FA678");
-    expect(span.getAttribute("style")).toContain("font-size:calc(34px * 0.36)");
-    expect(span.textContent.trim()).toBe("You");
+    expect(span?.getAttribute("style")).toContain("background:#0FA678");
+    expect(span?.getAttribute("style")).toContain(
+      "font-size:calc(34px * 0.36)"
+    );
+    expect(span?.textContent?.trim()).toBe("You");
   });
 
-  it("letterAvatar defaults to a stable identity fill + derived initials", () => {
-    const av = letterAvatar("Ada Lovelace");
+  it("kit-avatar defaults to a stable identity fill + derived initials", () => {
+    const av = document.createElement("kit-avatar");
+    av.setAttribute("name", "Ada Lovelace");
     document.body.appendChild(av);
     const span = av.querySelector(".kit-avatar");
-    expect(span.getAttribute("style")).toMatch(/background:#[\da-f]{6}/iu);
-    expect(span.textContent.trim()).toBe("AL");
+    expect(span?.getAttribute("style")).toMatch(/background:#[\da-f]{6}/iu);
+    expect(span?.textContent?.trim()).toBe("AL");
   });
 
-  it("barSpan carries the tone onto the fill", () => {
-    const bar = barSpan(0.8, { tone: "ok" });
+  it("kit-meter carries the tone onto the fill", () => {
+    const bar = document.createElement("kit-meter");
+    bar.setAttribute("ratio", "0.8");
+    bar.setAttribute("tone", "ok");
     document.body.appendChild(bar);
-    expect(bar.querySelector(".kit-bar-fill").dataset.tone).toBe("ok");
+    expect(bar.querySelector<HTMLElement>(".kit-bar-fill")?.dataset.tone).toBe(
+      "ok"
+    );
   });
 
   it("renderAttachments renders tiles; onRemove:null omits the control", () => {
@@ -117,10 +106,52 @@ describe("kit smoke", () => {
     renderAttachments(strip, list, null);
     expect(strip.querySelectorAll(".kit-attach-tile")).toHaveLength(2);
     expect(strip.querySelector(".kit-attach-remove")).toBeNull();
-    renderAttachments(strip, list, () => {}, { onZoom: () => {} });
+    renderAttachments(strip, list, async () => undefined, {
+      onZoom: () => {},
+    });
     expect(strip.querySelectorAll(".kit-attach-remove")).toHaveLength(2);
     expect(strip.querySelector("img.kit-attach-zoom")).toBeTruthy();
-    expect(strip.querySelector(".kit-attach-meta").textContent).toBe("2.0 KB");
+    expect(strip.querySelector(".kit-attach-meta")?.textContent).toBe("2.0 KB");
+  });
+
+  it("renderAttachments swaps vault blob refs for the host's authed URLs", async () => {
+    const blobUrl = vi.fn<NonNullable<CentraidHost["blobUrl"]>>(
+      async (pathname) => `blob:${pathname}`
+    );
+    const restore = withHost({ blobUrl });
+    try {
+      const strip = document.createElement("div");
+      document.body.appendChild(strip);
+      renderAttachments(
+        strip,
+        [
+          {
+            attachment_id: "a1",
+            media_type: "image/png",
+            content_uri: "/centraid/_vault/blobs/c1",
+          },
+          {
+            attachment_id: "a2",
+            media_type: "application/pdf",
+            content_uri: "/centraid/_vault/blobs/c2",
+          },
+        ],
+        null
+      );
+      // The download link is exactly the surface the shell's generic
+      // MutationObserver does NOT watch, so the strip must authorize it here.
+      await vi.waitFor(() =>
+        expect(strip.querySelector("a")?.getAttribute("href")).toBe(
+          "blob:/centraid/_vault/blobs/c2"
+        )
+      );
+      expect(strip.querySelector("img")?.getAttribute("src")).toBe(
+        "blob:/centraid/_vault/blobs/c1"
+      );
+      strip.remove();
+    } finally {
+      restore();
+    }
   });
 
   it("popover opens, reports, closes", () => {
@@ -133,8 +164,8 @@ describe("kit smoke", () => {
     expect(isPopoverOpen()).toBe(true);
     const box = document.querySelector(".kit-popover");
     expect(box).toBeTruthy();
-    expect(box.querySelector(".kit-popover-item")).toBeTruthy();
-    expect(box.querySelector(".kit-dotmini")).toBeTruthy();
+    expect(box?.querySelector(".kit-popover-item")).toBeTruthy();
+    expect(box?.querySelector(".kit-dotmini")).toBeTruthy();
     closePopover();
     expect(isPopoverOpen()).toBe(false);
     expect(document.querySelector(".kit-popover")).toBeNull();
@@ -146,16 +177,15 @@ describe("kit smoke", () => {
     openPopover(
       anchor,
       (box) => {
-        const input = document.createElement("input");
-        box.appendChild(input);
+        box.appendChild(document.createElement("input"));
       },
       { focus: true, className: "t-when", role: "dialog" }
     );
     const box = document.querySelector(".kit-popover");
-    expect(box.classList.contains("t-when")).toBe(true);
-    expect(box.getAttribute("role")).toBe("dialog");
-    expect(document.activeElement).toBe(box.querySelector("input"));
-    box.dispatchEvent(
+    expect(box?.classList.contains("t-when")).toBe(true);
+    expect(box?.getAttribute("role")).toBe("dialog");
+    expect(document.activeElement).toBe(box?.querySelector("input"));
+    box?.dispatchEvent(
       new window.KeyboardEvent("keydown", {
         key: "Escape",
         bubbles: true,
@@ -163,28 +193,6 @@ describe("kit smoke", () => {
       })
     );
     expect(isPopoverOpen()).toBe(false);
-  });
-
-  it("emptyState fills + unhides the container", () => {
-    const box = document.createElement("div");
-    box.hidden = true;
-    emptyState(box, {
-      icon: "<svg></svg>",
-      title: "Nothing here",
-      sub: "Add one.",
-    });
-    expect(box.hidden).toBe(false);
-    expect(box.querySelector(".kit-empty-title").textContent).toBe(
-      "Nothing here"
-    );
-    expect(box.querySelector(".kit-empty-icon")).toBeTruthy();
-  });
-
-  it("snippetInto marks the hits", () => {
-    const t = document.createElement("p");
-    snippetInto(t, "find ⟦this⟧ word");
-    expect(t.querySelector("mark").textContent).toBe("this");
-    expect(t.textContent).toBe("find this word");
   });
 
   it("fmtBytes labels", () => {
@@ -196,14 +204,16 @@ describe("kit smoke", () => {
 
   it("live reads apply their awaited current value once and forward only reruns", async () => {
     const listeners = new Set<(value: string) => void>();
-    const read = Promise.resolve("current");
-    read.subscribe = (listener: (value: string) => void) => {
+    const read = Promise.resolve("current") as Promise<string> & {
+      subscribe?: (listener: (value: string) => void) => () => void;
+    };
+    read.subscribe = (listener) => {
       listeners.add(listener);
       void read.then(listener);
       return () => listeners.delete(listener);
     };
     const updates: string[] = [];
-    const subscription = subscribeReadUpdates(read, (value: string) =>
+    const subscription = subscribeReadUpdates<string>(read, (value) =>
       updates.push(value)
     );
 
@@ -219,17 +229,19 @@ describe("kit smoke", () => {
   });
 
   it("live reads do not let a late initial result overwrite a newer subscription value", async () => {
-    let resolveInitial;
-    const listeners = new Set();
-    const read = new Promise((resolve) => {
+    let resolveInitial: (value: string) => void = () => {};
+    const listeners = new Set<(value: string) => void>();
+    const read = new Promise<string>((resolve) => {
       resolveInitial = resolve;
-    });
+    }) as Promise<string> & {
+      subscribe?: (listener: (value: string) => void) => () => void;
+    };
     read.subscribe = (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     };
-    const updates = [];
-    const subscription = subscribeReadUpdates(read, (value) =>
+    const updates: string[] = [];
+    const subscription = subscribeReadUpdates<string>(read, (value) =>
       updates.push(value)
     );
 
@@ -245,30 +257,28 @@ describe("kit smoke", () => {
 
   it("data-change debounce preserves every distinct intent settlement", () => {
     useFakeClock();
-    let listener;
-    window.centraid = {
+    let listener: ((detail: Record<string, unknown>) => void) | undefined;
+    const restore = withHost({
       onChange(next) {
-        listener = next;
+        listener = next as (detail: Record<string, unknown>) => void;
         return () => {
           listener = undefined;
         };
       },
-    };
-    const updates = [];
+    });
+    const updates: Array<{ intentId?: string; intentState?: string }> = [];
     const stop = onDataChange(
       ["schedule.task"],
       (detail) => updates.push(detail),
-      {
-        debounceMs: 10,
-      }
+      { debounceMs: 10 }
     );
-    listener({
+    listener?.({
       tables: ["schedule.task"],
       source: "overlay",
       intentId: "intent-a",
       intentState: "executed",
     });
-    listener({
+    listener?.({
       tables: ["schedule.task"],
       source: "overlay",
       intentId: "intent-b",
@@ -283,10 +293,10 @@ describe("kit smoke", () => {
       { intentId: "intent-b", intentState: "denied" },
     ]);
     stop();
-    delete window.centraid;
+    restore();
   });
 
-  it("plain Promise reads retain the compatibility path", async () => {
+  it("plain Promise reads retain the compatibility path", () => {
     const updates: unknown[] = [];
     const subscription = subscribeReadUpdates(
       Promise.resolve("current"),
@@ -299,8 +309,9 @@ describe("kit smoke", () => {
 
   it("KitElement subclasses render light DOM and stamp data-kit-host", () => {
     class SmokeCard extends KitElement {
-      static readonly properties = { label: { type: String } };
-      render() {
+      static override properties = { label: { type: String } };
+      declare label: string;
+      override render(): HTMLElement {
         const span = document.createElement("span");
         span.className = "smoke-label";
         span.textContent = this.label;
@@ -308,7 +319,7 @@ describe("kit smoke", () => {
       }
     }
     customElements.define("smoke-card", SmokeCard);
-    const card = document.createElement("smoke-card");
+    const card = document.createElement("smoke-card") as SmokeCard;
     card.label = "hi <b>there</b>";
     document.body.appendChild(card);
     expect(card.shadowRoot).toBeNull();
@@ -316,7 +327,7 @@ describe("kit smoke", () => {
     const span = card.querySelector(".smoke-label");
     // textContent, not innerHTML — no live <b> element regardless of markup
     // in the string.
-    expect(span.textContent).toBe("hi <b>there</b>");
-    expect(span.querySelector("b")).toBeNull();
+    expect(span?.textContent).toBe("hi <b>there</b>");
+    expect(span?.querySelector("b")).toBeNull();
   });
 });

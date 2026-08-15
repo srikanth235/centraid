@@ -1,10 +1,11 @@
+import { localDayKey } from "@centraid/design/elements";
+
 // The sidebar's two dynamic regions — the mini-month navigator and the "My
 // calendars" visibility list — mounted at their own React roots. The brand
 // row, "Create event" button and the trust footer line are static HTML in
 // index.html (stable, no per-render data), wired once in chrome.ts.
 import { bucketByDay, colorForCalendar, startOfWeek } from "../format.ts";
 import { I } from "../icons.ts";
-import { localDayKey } from "../kit.ts";
 import type { AgEvent, Calendar } from "../types.ts";
 import { Icon } from "./Shared.tsx";
 

@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 
+import { outcomeMessage } from "@centraid/design/elements";
+
 import { displayText } from "../../_shared/untrusted.ts";
 import { toIsoUtc, toLocalInput } from "../format.ts";
-import { outcomeMessage } from "../kit.ts";
 import type {
   AgEvent,
   Calendar,

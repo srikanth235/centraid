@@ -7,6 +7,14 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { KeyboardEvent, ReactElement } from "react";
 
+import {
+  observeWidth,
+  onDataChange,
+  onFocusRefresh,
+  readFailed,
+  wireAttachInput,
+} from "@centraid/design/elements";
+
 import { readPendingOverlay } from "../_shared/pending-overlay.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
@@ -14,13 +22,6 @@ import { Editor } from "./components/Editor.tsx";
 import { SidebarFoot, SidebarNav } from "./components/Sidebar.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
 import { Wall } from "./components/Wall.tsx";
-import {
-  observeWidth,
-  onDataChange,
-  onFocusRefresh,
-  readFailed,
-  wireAttachInput,
-} from "./kit.ts";
 import {
   buildWall,
   createLogic,

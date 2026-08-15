@@ -7,8 +7,9 @@
 // file-size cap); the "+ add" mini-forms live in AddRows.tsx.
 import { useState } from "react";
 
+import { armConfirm } from "@centraid/design/elements";
+
 import { I } from "../icons.ts";
-import { armConfirm } from "../kit.ts";
 import type { DetailPerson, Person } from "../types.ts";
 import { Sections } from "./DetailSections.tsx";
 import { History } from "./History.tsx";

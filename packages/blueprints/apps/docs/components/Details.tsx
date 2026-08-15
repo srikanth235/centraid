@@ -13,6 +13,8 @@
 // second copy of it here.
 import { useEffect, useRef, useState } from "react";
 
+import { armConfirm } from "@centraid/design/elements";
+
 import { mountedScopes } from "../../_shared/scope-kit.ts";
 import { ShareSheet } from "../../_shared/ShareSheet.tsx";
 import { RAIL_NOTES, RAIL_TABS } from "../document-copy.ts";
@@ -28,7 +30,6 @@ import {
   typeMeta,
 } from "../format.ts";
 import { I, RENAME_ICON } from "../icons.ts";
-import { armConfirm } from "../kit.ts";
 import type { CustodyTone, DriveDoc, VersionEntry } from "../types.ts";
 import { FactsTab, NamesTab, PropsTab } from "./DetailsTabs.tsx";
 import { Icon } from "./Shared.tsx";

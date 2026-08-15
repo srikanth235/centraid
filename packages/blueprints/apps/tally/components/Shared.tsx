@@ -97,7 +97,7 @@ export function ModalBackdrop({
 }
 
 // Confirm-to-act delete button: first click arms (label swap, auto-disarm
-// after `timeout`), second click confirms. kit.ts's `armConfirm` mutates a
+// after `timeout`), second click confirms. the element layer's `armConfirm` mutates a
 // button's textContent directly, which a React-owned node must never take —
 // React apps use a local, remount-reset armed flag instead (see
 // notes/components/Toolbar.tsx's DeleteButton for the icon-only analogue);

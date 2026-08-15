@@ -1,13 +1,14 @@
+// One note card in the masonry/list wall. `.card` (was `.nt-card`) stays a
+// DIRECT child of the wall (CSS columns) — no wrapper div, matching
+// tasks/components/Row.jsx's note about display:contents not being an option
+// here either (CSS multi-col breaks on the child it sees, not a wrapper).
+import { relTime } from "@centraid/design/elements";
+
 import { readPendingOverlay } from "../../_shared/pending-overlay.ts";
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
 import { checkStats, notebookColorVar, previewText } from "../format.ts";
 import { I } from "../icons.ts";
-// One note card in the masonry/list wall. `.card` (was `.nt-card`) stays a
-// DIRECT child of the wall (CSS columns) — no wrapper div, matching
-// tasks/components/Row.jsx's note about display:contents not being an option
-// here either (CSS multi-col breaks on the child it sees, not a wrapper).
-import { relTime } from "../kit.ts";
 import type { Note } from "../types.ts";
 import { Highlighted, Icon } from "./Shared.tsx";
 

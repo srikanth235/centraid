@@ -36,12 +36,13 @@
 // (`scope.personal`, viewer.ts's `scopeMeaning`), never from its name.
 import { useEffect, useRef, useState } from "react";
 
+import { fmtBytes } from "@centraid/design/elements";
+
 import { mountedScopes } from "../../_shared/scope-kit.ts";
 import { buildActivity } from "../activity.ts";
 import { renderFaces } from "../faces.ts";
 import { assetBytes, custodyMeta, toLocalInputValue } from "../format.ts";
 import { CloseIcon } from "../icons.tsx";
-import { fmtBytes } from "../kit.ts";
 // Every command on this panel edits the OPEN asset, so each is addressed at
 // the scope that asset is shown from (issue #599) rather than the chip
 // selection — including the album/tag/place ones, whose collection ids are

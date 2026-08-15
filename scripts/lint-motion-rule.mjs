@@ -21,11 +21,7 @@ import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
-const TARGETS = [
-  "packages/client/src",
-  "packages/design/kit",
-  "packages/design/src",
-];
+const TARGETS = ["packages/client/src", "packages/design/src"];
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
 const EXTENSIONS = /\.(?:css|ts|tsx)$/u;
 // Test files assert the sanctioned sources' own content (e.g.

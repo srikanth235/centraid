@@ -9,10 +9,11 @@ import {
 } from "react";
 import type { JSX, ReactNode } from "react";
 
-// The kit's :global(.kit-*) vocabulary (buttons, segmented chips, search,
-// banners, ask panel) that blueprint component modules reference. Loaded once,
-// globally, by the route host — same as the served path's <link rel=kit.css>.
-import "@centraid/design/kit/kit.css";
+// The element layer's :global(.kit-*) vocabulary (buttons, segmented chips,
+// search, banners, ask panel) that blueprint component modules reference.
+// Loaded once, globally, by the route host: the classes are global strings, so
+// exactly one loader may own them.
+import "@centraid/design/kit.css";
 import type {
   InlineAppModule,
   InlineFrame,
