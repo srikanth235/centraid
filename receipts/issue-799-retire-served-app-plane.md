@@ -585,8 +585,16 @@ identical on a clean tree:
    container's renderer canonical — a maintainer call, not a gate to "fix".
 2. `packages/gateway/src/serve/gateway-db-lock.integration.test.ts` — shells
    out to the `sqlite3` CLI, which this container does not have installed.
+3. `packages/app-engine/src/handlers/handler-pool.test.ts` — one case fails
+   only inside a full-monorepo `test:affected` run, where it takes 65s; the
+   file is 8/8 in 1.36s on its own and the package is 60 files / 632 tests
+   green. It is a concurrency test ("a burst beyond cap+queue fails fast"),
+   so it is timing-sensitive under CPU contention. The only app-engine change
+   in this set is a comment in `registry/token-purity.ts`, which cannot reach
+   it. Same class as the three `lifecycle-over-http` cases that pass 9/9 in
+   isolation.
 
-CI remains the enforcing copy for both.
+CI remains the enforcing copy for all three.
 
 ## Audit
 
