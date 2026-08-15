@@ -7,6 +7,7 @@ import path from "node:path";
 // lines, not worth a split.
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { makeConversationRouteHandler } from "../http/conversation-routes.js";
@@ -931,11 +932,12 @@ describe(ConversationHistoryStore, () => {
     expect(store.getSession(APP, s.id)).toBeUndefined();
   });
 
-  it("listSessions orders by updatedAt desc", async () => {
+  it("listSessions orders by updatedAt desc", () => {
+    // Freeze only Date (the store stamps rows with Date.now()) and jump it
+    // between creates — deterministic ordering with no fixed sleep.
+    const clock = useFakeClock(undefined, { toFake: ["Date"] });
     const a = store.createSession(APP, "A");
-    await new Promise((resolve) => {
-      setTimeout(resolve, 4);
-    });
+    clock.set(clock.now() + 10);
     const b = store.createSession(APP, "B");
     const list = store.listSessions(APP);
     expect(list[0]!.id).toBe(b.id);

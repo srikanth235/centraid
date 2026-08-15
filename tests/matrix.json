@@ -580,45 +580,57 @@
     },
     "656": {
       "url": "https://github.com/srikanth235/centraid/issues/656",
-      "state": "open"
+      "state": "closed"
     },
     "657": {
       "url": "https://github.com/srikanth235/centraid/issues/657",
-      "state": "open"
+      "state": "closed"
     },
     "659": {
       "url": "https://github.com/srikanth235/centraid/issues/659",
+      "state": "closed"
+    },
+    "781": {
+      "url": "https://github.com/srikanth235/centraid/issues/781",
+      "state": "open"
+    },
+    "790": {
+      "url": "https://github.com/srikanth235/centraid/issues/790",
+      "state": "open"
+    },
+    "791": {
+      "url": "https://github.com/srikanth235/centraid/issues/791",
       "state": "open"
     }
   },
   "gaps": {
     "extension.offline": {
-      "trackingIssue": 656
+      "trackingIssue": 781
     },
     "extension.journey": {
-      "trackingIssue": 656
+      "trackingIssue": 781
     }
   },
   "revisitTriggers": {
     "blob-custody.compat": {
       "glob": "packages/blob-format/src/**/*.ts",
       "contains": "COMPAT\\(|SCHEMA_VERSION|FORMAT_VERSION_2",
-      "trackingIssue": 656
+      "trackingIssue": 781
     },
     "gateway.compat": {
       "glob": "packages/gateway/src/**/*.ts",
       "contains": "COMPAT\\(",
-      "trackingIssue": 656
+      "trackingIssue": 781
     },
     "app-engine.compat": {
       "glob": "packages/app-engine/src/**/*.ts",
       "contains": "COMPAT\\(",
-      "trackingIssue": 656
+      "trackingIssue": 781
     },
     "automations.compat": {
       "glob": "packages/automation/src/**/*.ts",
       "contains": "COMPAT\\(",
-      "trackingIssue": 656
+      "trackingIssue": 781
     }
   },
   "workspaceSurfaces": {
@@ -645,37 +657,37 @@
     "packages/model-runtime": "gateway"
   },
   "notes": {
-    "web.concurrency": "Partial\u2192stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic. Tracked under #656.",
-    "mobile.performance": "Partial: tests/scale/large-vault.scale.test.ts pins the readiness data-volume/read budgets and native long lists are mechanically required to stay virtualized; a device-frame budget would strengthen this cell. Tracked under #659.",
-    "replica-sync.performance": "Partial: tests/perf/replica-sync-io.perf.test.ts exercises store/bootstrap/IO budget (replaces deleted in-memory fake). Tracked under #659.",
+    "web.concurrency": "Partial→stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic. Tracked under #781 (originally #656).",
+    "mobile.performance": "Partial: tests/scale/large-vault.scale.test.ts pins the readiness data-volume/read budgets and native long lists are mechanically required to stay virtualized; a device-frame budget would strengthen this cell. Tracked under #781 (originally #659).",
+    "replica-sync.performance": "Partial: tests/perf/replica-sync-io.perf.test.ts exercises store/bootstrap/IO budget (replaces deleted in-memory fake). Tracked under #781 (originally #659).",
     "tunnel-pairing.performance": "JS fallback floor remains in tunnel-throughput.perf.test.ts; native QUIC budget is tests/perf/tunnel-native.perf.test.ts (nightly when native module present).",
     "blob-custody.durability": "Owned by packages/vault/src/blob/enospc-custody.integration.test.ts (always-on fault-injected ENOSPC). Real hdiutil path remains in disk-full.integration.test.ts behind CENTRAID_DISKFULL_E2E=1 (darwin).",
-    "agent-runtime.journey": "packages/agent-runtime/src/backends/acp/journey.integration.test.ts carries two tests while also standing in for the app-engine journey and the three skipped desktop copilot specs; it is too thin for what it is asked to represent. Tracked under #656 (copilot rig under #657).",
-    "builder.publish": "Punted (#496): builder is not in v0. builder.spec.ts \"Publish posts to the gateway\" stays skipped with this product reason \u2014 declared gap, not fake solid.",
-    "desktop.copilot-e2e": "Unconditional Playwright skips in appview-templates-insights (7.2\u20137.4) target removed FAB UI; journey owned at agent-runtime.journey until #470 mock blueprint serving.",
+    "agent-runtime.journey": "packages/agent-runtime/src/backends/acp/journey.integration.test.ts carries two tests while also standing in for the app-engine journey and the three skipped desktop copilot specs; it is too thin for what it is asked to represent. Tracked under #781 (originally #656; copilot rig originally #657).",
+    "builder.publish": "Punted (#496): builder is not in v0. builder.spec.ts \"Publish posts to the gateway\" stays skipped with this product reason — declared gap, not fake solid.",
+    "desktop.copilot-e2e": "Unconditional Playwright skips in appview-templates-insights (7.2–7.4) target removed FAB UI; journey owned at agent-runtime.journey until #470 mock blueprint serving.",
     "mobile.scalability": "Owned by tests/agent-e2e-mobile/flows/volume-proof.mjs; records a nightly scalability budget and durable numeric measurements.",
-    "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom). Tracked under #659.",
-    "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume \u2014 one missed entry per auto per gap; not live fire). Tracked under #659.",
-    "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy \u2014 not full Electron launch). Tracked under #659.",
+    "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom). Tracked under #781 (originally #659).",
+    "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume — one missed entry per auto per gap; not live fire). Tracked under #781 (originally #659).",
+    "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy — not full Electron launch). Tracked under #781 (originally #659).",
     "G4.mutation": "StrykerJS nightly on property-defended core packages: vault, client/replica, automation, backup, blob-format, protocol, tunnel, app-engine, gateway, agent-runtime (#532/#545). Floors in tests/mutation-floors.json; scores in artifacts/mutation/ via e2e.yml mutation-testing job. Not per-PR.",
     "G5.interop": "packages/backup test:interop runs via .github/workflows/interop-weekly.yml (schedule + workflow_dispatch, CLAWGNITION_INTEROP=1). Not part of test:quality:nightly (perf+scale+report only).",
     "client.react.floor": "packages/client/src/react/** floors at 65/35 in coverage-floors.json (#587 sustained-level ratchet); journeys + extracted pure modules remain the primary owners.",
     "search": "Flow vault-search owns search over ext/FTS (packages/vault/src/gateway/search.test.ts).",
-    "enrichment": "Flow vault-enrichment owns device enrichment \u2192 searchable transcript (packages/gateway/src/routes/device-work-routes.test.ts).",
+    "enrichment": "Flow vault-enrichment owns device enrichment → searchable transcript (packages/gateway/src/routes/device-work-routes.test.ts).",
     "cross-linking": "Flow vault-cross-link owns core.link_entities (packages/vault/src/gateway/ext.test.ts).",
     "people": "Flow people-crm owns people.* commands (packages/vault/src/commands/people.test.ts).",
     "blank-machine-restore": "Product blank-machine journey is recover.integration.test.ts (recover() + kit). Backup primitive round-trips live under packages/backup engine tests.",
-    "agent-runtime.contracts": "Coverable-today suite (#535): owned by packages/agent-runtime/src/matrix-contracts.test.ts. Tracked under #656.",
-    "agent-runtime.durability": "Coverable-today suite (#535): owned by packages/agent-runtime/src/matrix-durability.test.ts. Tracked under #656.",
-    "agent-runtime.concurrency": "Coverable-today suite (#535): owned by packages/agent-runtime/src/matrix-concurrency.test.ts. Tracked under #656.",
-    "blueprints.contracts": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-contracts.test.ts. Tracked under #656.",
-    "blueprints.durability": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-durability.test.ts. Tracked under #656.",
-    "blueprints.concurrency": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-concurrency.test.ts. Tracked under #656.",
-    "desktop.contracts": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-contracts.test.ts. Tracked under #656.",
-    "desktop.durability": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-durability.test.ts. Tracked under #656.",
-    "desktop.concurrency": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-concurrency.test.ts. Tracked under #656.",
-    "web.contracts": "Coverable-today suite (#535): owned by apps/web/src/matrix-contracts.test.ts. Tracked under #656.",
-    "web.durability": "Coverable-today suite (#535): owned by apps/web/src/matrix-durability.test.ts. Tracked under #656.",
+    "agent-runtime.contracts": "Coverable-today suite (#535): owned by packages/agent-runtime/src/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
+    "agent-runtime.durability": "Coverable-today suite (#535): owned by packages/agent-runtime/src/matrix-durability.test.ts. Tracked under #781 (originally #656).",
+    "agent-runtime.concurrency": "Coverable-today suite (#535): owned by packages/agent-runtime/src/matrix-concurrency.test.ts. Tracked under #781 (originally #656).",
+    "blueprints.contracts": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
+    "blueprints.durability": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-durability.test.ts. Tracked under #781 (originally #656).",
+    "blueprints.concurrency": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-concurrency.test.ts. Tracked under #781 (originally #656).",
+    "desktop.contracts": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
+    "desktop.durability": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-durability.test.ts. Tracked under #781 (originally #656).",
+    "desktop.concurrency": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-concurrency.test.ts. Tracked under #781 (originally #656).",
+    "web.contracts": "Coverable-today suite (#535): owned by apps/web/src/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
+    "web.durability": "Coverable-today suite (#535): owned by apps/web/src/matrix-durability.test.ts. Tracked under #781 (originally #656).",
     "vault-core.offline": "Skip: vault is a storage primitive; offline UX is exercised by mobile.offline + web.offline consuming surfaces.",
     "vault-core.compat": "Owned by packages/vault/src/schema/migrate.test.ts: the forward-only ladder replays from older frontiers with owner rows intact, the COMPAT( repairs are idempotent, and a file whose user_version is ahead is refused untouched.",
     "vault-core.journey": "Skip: no end-user vault journey surface; blank-machine restore owns backup-restore.journey and search/enrichment flows own vault correctness paths.",
@@ -696,31 +708,31 @@
     "agent-runtime.performance": "Owned by tests/perf/harness-turn.perf.test.ts; records a nightly performance budget and durable numeric measurements.",
     "agent-runtime.scalability": "Owned by tests/scale/harness-sessions.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "agent-runtime.offline": "Skip: harnesses require a live CLI/ACP process; offline is not a runtime dimension (client offline owns UX).",
-    "blueprints.performance": "Partial: tests/scale/large-vault.scale.test.ts exercises the daily-use entity reads behind Photos, People, Agenda, and Notes at the #630 fixture sizes; a rendered interaction budget would strengthen this cell. Tracked under #659.",
+    "blueprints.performance": "Partial: tests/scale/large-vault.scale.test.ts exercises the daily-use entity reads behind Photos, People, Agenda, and Notes at the #630 fixture sizes; a rendered interaction budget would strengthen this cell. Tracked under #781 (originally #659).",
     "blueprints.scalability": "Owned by tests/scale/blueprint-clones.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "blueprints.offline": "Partial: packages/client/src/replica/app-convergence.contract.test.ts proves deterministic replay for task/contact/expense/event blueprint writes; web/mobile journeys own the consuming offline UI. Tracked under #656.",
-    "blueprints.compat": "Partial: packages/blueprints/src/app-manifests.test.ts validates the shipped app.json contract and mobile's protocol wall prevents an incompatible host from mounting those apps. Tracked under #656.",
+    "blueprints.offline": "Partial: packages/client/src/replica/app-convergence.contract.test.ts proves deterministic replay for task/contact/expense/event blueprint writes; web/mobile journeys own the consuming offline UI. Tracked under #781 (originally #656).",
+    "blueprints.compat": "Partial: packages/blueprints/src/app-manifests.test.ts validates the shipped app.json contract and mobile's protocol wall prevents an incompatible host from mounting those apps. Tracked under #781 (originally #656).",
     "desktop.scalability": "Owned by tests/scale/desktop-windows.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "desktop.offline": "Skip: desktop hosts the gateway; offline UX is mobile/web. Detached-gateway outage logging covers host-side continuity.",
-    "desktop.compat": "Partial: gateway pairing response folding and primary-first multi-vault retention are covered by apps/desktop/src/main/gateway-pairing-core.test.ts; desktop settings/schema version-skew fixtures remain tracked under #656.",
+    "desktop.offline": "Owned since #781: production pending rows survive an offline Electron reload (apps/desktop/tests/e2e/pending-overlay.spec.ts). The prior skip rationale (desktop hosts the gateway) still bounds scope: detached-gateway outage logging covers host-side continuity; this cell owns the renderer's offline honesty.",
+    "desktop.compat": "Partial: gateway pairing response folding and primary-first multi-vault retention are covered by apps/desktop/src/main/gateway-pairing-core.test.ts; desktop settings/schema version-skew fixtures remain tracked under #781 (originally #656).",
     "web.scalability": "Owned by tests/scale/web-tabs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "web.compat": "Partial: pairing persistence and primary-first multi-vault retention are covered by apps/web/src/web-host.test.ts; web storage/version-skew fixtures remain tracked under #656.",
-    "mobile.contracts": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts states the update-wall contract, but apps/mobile has no coverage floor behind it and the same file also carries the compat claim. Tracked under #656.",
-    "mobile.compat": "Shares its only owner with mobile.contracts and has no coverage floor behind it; old-app/new-gateway skew is proven in one direction only. Tracked under #656.",
+    "web.compat": "Partial: pairing persistence and primary-first multi-vault retention are covered by apps/web/src/web-host.test.ts; web storage/version-skew fixtures remain tracked under #781 (originally #656).",
+    "mobile.contracts": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts states the update-wall contract, but apps/mobile has no coverage floor behind it and the same file also carries the compat claim. Tracked under #781 (originally #656).",
+    "mobile.compat": "Shares its only owner with mobile.contracts and has no coverage floor behind it; old-app/new-gateway skew is proven in one direction only. Tracked under #781 (originally #656).",
     "tunnel-pairing.durability": "Skip: pairing tickets are intentionally ephemeral; hygiene journey burns wrong-secret/expiry. Durable custody is vault/blob, not tickets.",
     "tunnel-pairing.scalability": "Owned by tests/scale/tunnel-pairs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "extension.correctness": "Owned by apps/extension/src/origin-matching.test.ts: loopback origin matching accepts true 127.0.0.0/8 and rejects lookalike hostnames. Malformed cross-context payload handling has no owner. Tracked under #656.",
-    "extension.contracts": "Owned by apps/extension/src/credential-gesture.test.ts: only a browser-trusted gesture releases a credential and secret-bearing message properties are dropped after use. Browser-version and gateway protocol-skew fixtures have no owner. Tracked under #656.",
+    "extension.correctness": "Owned by apps/extension/src/origin-matching.test.ts: loopback origin matching accepts true 127.0.0.0/8 and rejects lookalike hostnames. Malformed cross-context payload handling has no owner. Tracked under #781 (originally #656).",
+    "extension.contracts": "Owned by apps/extension/src/credential-gesture.test.ts: only a browser-trusted gesture releases a credential and secret-bearing message properties are dropped after use. Browser-version and gateway protocol-skew fixtures have no owner. Tracked under #781 (originally #656).",
     "extension.durability": "Structural N/A: the extension owns no durable state; paired credentials are browser storage and gateway-owned.",
     "extension.concurrency": "Structural N/A for v0: one active popup/worker transaction is admitted per browser profile.",
     "extension.performance": "Structural N/A for v0: the companion performs no user-visible compute or transfer hot path.",
     "extension.scalability": "Structural N/A for v0: one companion serves one browser profile; fleet scale belongs to the gateway.",
-    "extension.security": "Owned by apps/extension/src/page-fields.test.ts: fills resolve at gesture time and never write into detached or hidden inputs. Hostile-page and revoked-pairing browser journeys have no owner. Tracked under #656.",
-    "extension.offline": "Tracked gap (#656): the MV3 companion has no network-loss and reconnect journey.",
+    "extension.security": "Owned by apps/extension/src/page-fields.test.ts: fills resolve at gesture time and never write into detached or hidden inputs. Hostile-page and revoked-pairing browser journeys have no owner. Tracked under #781 (originally #656).",
+    "extension.offline": "Tracked gap (#781, originally #656): the MV3 companion has no network-loss and reconnect journey.",
     "extension.compat": "Structural N/A until a versioned extension storage format exists; gateway protocol contracts own wire compatibility.",
-    "extension.journey": "Tracked gap (#656): install-to-paired extension journey evidence is not implemented.",
-    "oauth-worker.correctness": "Courier route tests cover valid exchanges; provider-specific negative responses remain under #587. Tracked under #656.",
-    "oauth-worker.contracts": "Request/response contract tests cover the courier envelope; version-skew fixtures remain under #587. Tracked under #656.",
+    "extension.journey": "Tracked gap (#781, originally #656): install-to-paired extension journey evidence is not implemented.",
+    "oauth-worker.correctness": "Courier route tests cover valid exchanges; provider-specific negative responses remain under #587. Tracked under #781 (originally #656).",
+    "oauth-worker.contracts": "Request/response contract tests cover the courier envelope; version-skew fixtures remain under #587. Tracked under #781 (originally #656).",
     "oauth-worker.durability": "Structural N/A: the OAuth courier intentionally holds no durable application state.",
     "oauth-worker.concurrency": "Structural N/A: stateless Cloudflare Worker isolates provide request concurrency; no shared mutable state exists.",
     "oauth-worker.performance": "Structural N/A: provider and edge latency dominate the stateless one-shot code courier.",
@@ -728,69 +740,69 @@
     "oauth-worker.offline": "Structural N/A: an edge OAuth callback service has no offline product mode.",
     "oauth-worker.compat": "Structural N/A: the courier exposes one versionless, short-lived exchange contract owned by contract tests.",
     "oauth-worker.journey": "Structural N/A: end-user OAuth journeys are owned by the consuming desktop/web surfaces; the worker is a stateless courier.",
-    "vault-core.durability": "packages/vault/src/wal-shipper.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #656.",
-    "vault-core.concurrency": "packages/vault/src/enrich/leases.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #656.",
-    "vault-core.performance": "tests/perf/vault-write.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #659.",
-    "vault-core.scalability": "tests/scale/ontology.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #659.",
-    "blob-custody.concurrency": "packages/vault/src/blob/outbox-drain.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #656.",
-    "blob-custody.performance": "tests/perf/blob-egress.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #659.",
-    "blob-custody.scalability": "tests/scale/blob-gc.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #659.",
-    "blob-custody.security": "packages/vault/src/blob/seal.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #656.",
-    "backup-restore.concurrency": "Skip: restore into a LIVE gateway was deleted with the founding plane (#603) \u2014 restore is the offline `recover` verb, so concurrent restore has no surface.",
-    "backup-restore.scalability": "tests/scale/backup-restore.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #659.",
-    "backup-restore.journey": "packages/gateway/src/backup/backup.integration.test.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #656.",
-    "replica-sync.durability": "packages/client/src/replica/sqlite-store.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #656.",
-    "replica-sync.scalability": "tests/scale/replica-bootstrap.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #659.",
-    "replica-sync.security": "packages/client/src/replica/shell-session-admission.contract.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #656.",
-    "replica-sync.offline": "packages/client/src/replica/shell-session.test.ts proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #656.",
-    "replica-sync.compat": "packages/vault/src/replica/change-log.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #656.",
-    "replica-sync.journey": "apps/web/tests/e2e/web-pwa.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #656.",
-    "gateway.durability": "packages/gateway/src/serve/disk-health.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #656.",
-    "gateway.concurrency": "packages/gateway/src/serve/serve-multiclient.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #656.",
-    "gateway.performance": "tests/perf/gateway-request.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #659.",
-    "gateway.journey": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #656.",
-    "app-engine.durability": "packages/app-engine/src/conversation/archive/archive.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #656.",
-    "app-engine.concurrency": "packages/app-engine/src/handlers/handler-pool.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #656.",
-    "app-engine.scalability": "tests/scale/conversation-ledger.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #659.",
-    "automations.durability": "packages/automation/src/fire/scheduler-ledger.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #656.",
-    "automations.concurrency": "packages/automation/src/fire/in-process-scheduler.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #656.",
-    "automations.security": "packages/automation/src/handler/lint.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #656.",
-    "agent-runtime.correctness": "packages/agent-runtime/src/backends/acp/backend.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #656.",
-    "agent-runtime.security": "packages/agent-runtime/src/preflight.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #656.",
-    "agent-runtime.compat": "packages/agent-runtime/src/backends/acp/enumerate-models.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #656.",
-    "blueprints.security": "packages/blueprints/src/untrusted-rendering.test.ts proves the current happy path; missing broader adversarial input and authorization cases. Tracked under #656.",
-    "blueprints.journey": "apps/desktop/tests/e2e/appview-templates-insights.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #657.",
-    "desktop.correctness": "apps/desktop/src/main/gateway-supervisor-core.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #656.",
-    "desktop.security": "apps/desktop/src/main/gateway-pairing-core.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #656.",
-    "web.correctness": "apps/web/src/web-host.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #656.",
-    "mobile.concurrency": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #656.",
-    "mobile.security": "apps/mobile/src/lib/bridge/transfer-policy.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #656.",
-    "mobile.offline": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #656.",
-    "tunnel-pairing.correctness": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #656.",
-    "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #656.",
-    "tunnel-pairing.security": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs proves the current happy path; missing adversarial input and authorization cases. Tracked under #656.",
-    "tunnel-pairing.compat": "packages/tunnel/src/wire-conformance.contract.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #656.",
-    "vault-core.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #656.",
-    "blob-custody.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #656.",
-    "backup-restore.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #656.",
-    "replica-sync.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #656.",
-    "gateway.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #656.",
-    "app-engine.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #656.",
-    "automations.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #656.",
-    "agent-runtime.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #656.",
-    "tunnel-pairing.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #656.",
-    "extension.accessibility": "The companion popup is interactive and inherits the shared control semantics, but its full keyboard/screen-reader browser journey remains owned by the consuming web surface. Tracked under #656.",
-    "oauth-worker.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #656.",
-    "blueprints.accessibility": "One 4-test contract file (scripts/accessibility-contract.test.mjs) is the only accessibility owner and nothing gates coverage of the surfaces it speaks for; the per-surface keyboard and screen-reader journeys are unowned. Tracked under #656.",
-    "desktop.accessibility": "Same single shared accessibility contract as every other surface, with no desktop-specific keyboard/screen-reader journey and no coverage floor behind it. Tracked under #656.",
-    "web.accessibility": "Same single shared accessibility contract, with no web keyboard/screen-reader journey of its own and no coverage floor behind it. Tracked under #656.",
-    "mobile.accessibility": "Same single shared accessibility contract; no React Native accessibility journey exists on device. Tracked under #656.",
-    "web.performance": "The owning rig tests/perf/pwa-waterfall.perf.test.ts self-skips when the nightly waterfall artifact is missing, so a green run does not prove the budget ran. Tracked under #656.",
-    "web.security": "apps/web/tests/e2e/web-pwa.spec.ts is a single test asked to carry both the session-isolation law and the journey; the isolation claim needs a test of its own. Tracked under #656.",
-    "web.journey": "apps/web/tests/e2e/web-pwa.spec.ts is a single test shared with the security claim; the install-to-app journey has no separate owner. Tracked under #656.",
-    "mobile.correctness": "apps/mobile has no coverage floor scope, so nothing gates the replica session code these unit owners exercise. Tracked under #656.",
-    "mobile.durability": "apps/mobile/src/lib/upload/crash.test.ts proves upload crash recovery, but apps/mobile has no coverage floor gating the storage code around it. Tracked under #656.",
-    "mobile.journey": "tests/agent-e2e-mobile/flows/home-loads.mjs runs on iOS only, so the Android journey is unproven and the flow declares three checks. Tracked under #656."
+    "vault-core.durability": "packages/vault/src/wal-shipper.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
+    "vault-core.concurrency": "packages/vault/src/enrich/leases.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
+    "vault-core.performance": "tests/perf/vault-write.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #781 (originally #659).",
+    "vault-core.scalability": "tests/scale/ontology.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
+    "blob-custody.concurrency": "packages/vault/src/blob/outbox-drain.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
+    "blob-custody.performance": "tests/perf/blob-egress.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #781 (originally #659).",
+    "blob-custody.scalability": "tests/scale/blob-gc.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
+    "blob-custody.security": "packages/vault/src/blob/seal.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "backup-restore.concurrency": "Skip: restore into a LIVE gateway was deleted with the founding plane (#603) — restore is the offline `recover` verb, so concurrent restore has no surface.",
+    "backup-restore.scalability": "tests/scale/backup-restore.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
+    "backup-restore.journey": "packages/gateway/src/backup/backup.integration.test.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #656).",
+    "replica-sync.durability": "packages/client/src/replica/sqlite-store.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
+    "replica-sync.scalability": "tests/scale/replica-bootstrap.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
+    "replica-sync.security": "packages/client/src/replica/shell-session-admission.contract.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "replica-sync.offline": "packages/client/src/replica/shell-session.test.ts proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #781 (originally #656).",
+    "replica-sync.compat": "packages/vault/src/replica/change-log.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
+    "replica-sync.journey": "apps/web/tests/e2e/web-pwa.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #656).",
+    "gateway.durability": "packages/gateway/src/serve/disk-health.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
+    "gateway.concurrency": "packages/gateway/src/serve/serve-multiclient.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
+    "gateway.performance": "tests/perf/gateway-request.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #781 (originally #659).",
+    "gateway.journey": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #656).",
+    "app-engine.durability": "packages/app-engine/src/conversation/archive/archive.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
+    "app-engine.concurrency": "packages/app-engine/src/handlers/handler-pool.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
+    "app-engine.scalability": "tests/scale/conversation-ledger.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
+    "automations.durability": "packages/automation/src/fire/scheduler-ledger.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
+    "automations.concurrency": "packages/automation/src/fire/in-process-scheduler.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
+    "automations.security": "packages/automation/src/handler/lint.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "agent-runtime.correctness": "packages/agent-runtime/src/backends/acp/backend.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
+    "agent-runtime.security": "packages/agent-runtime/src/preflight.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "agent-runtime.compat": "packages/agent-runtime/src/backends/acp/enumerate-models.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
+    "blueprints.security": "packages/blueprints/src/untrusted-rendering.test.ts proves the current happy path; missing broader adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "blueprints.journey": "apps/desktop/tests/e2e/appview-templates-insights.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #657).",
+    "desktop.correctness": "apps/desktop/src/main/gateway-supervisor-core.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
+    "desktop.security": "apps/desktop/src/main/gateway-pairing-core.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "web.correctness": "apps/web/src/web-host.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
+    "mobile.concurrency": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
+    "mobile.security": "apps/mobile/src/lib/bridge/transfer-policy.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "mobile.offline": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #781 (originally #656).",
+    "tunnel-pairing.correctness": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
+    "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
+    "tunnel-pairing.security": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "tunnel-pairing.compat": "packages/tunnel/src/wire-conformance.contract.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
+    "vault-core.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
+    "blob-custody.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
+    "backup-restore.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
+    "replica-sync.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
+    "gateway.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
+    "app-engine.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
+    "automations.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
+    "agent-runtime.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
+    "tunnel-pairing.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
+    "extension.accessibility": "The companion popup is interactive and inherits the shared control semantics, but its full keyboard/screen-reader browser journey remains owned by the consuming web surface. Tracked under #781 (originally #656).",
+    "oauth-worker.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts. Tracked under #781 (originally #656).",
+    "blueprints.accessibility": "One 4-test contract file (scripts/accessibility-contract.test.mjs) is the only accessibility owner and nothing gates coverage of the surfaces it speaks for; the per-surface keyboard and screen-reader journeys are unowned. Tracked under #781 (originally #656).",
+    "desktop.accessibility": "Same single shared accessibility contract as every other surface, with no desktop-specific keyboard/screen-reader journey and no coverage floor behind it. Tracked under #781 (originally #656).",
+    "web.accessibility": "Same single shared accessibility contract, with no web keyboard/screen-reader journey of its own and no coverage floor behind it. Tracked under #781 (originally #656).",
+    "mobile.accessibility": "Same single shared accessibility contract; no React Native accessibility journey exists on device. Tracked under #781 (originally #656).",
+    "web.performance": "The owning rig tests/perf/pwa-waterfall.perf.test.ts self-skips when the nightly waterfall artifact is missing, so a green run does not prove the budget ran. Tracked under #781 (originally #656).",
+    "web.security": "apps/web/tests/e2e/web-pwa.spec.ts is a single test asked to carry both the session-isolation law and the journey; the isolation claim needs a test of its own. Tracked under #781 (originally #656).",
+    "web.journey": "apps/web/tests/e2e/web-pwa.spec.ts is a single test shared with the security claim; the install-to-app journey has no separate owner. Tracked under #781 (originally #656).",
+    "mobile.correctness": "apps/mobile has no coverage floor scope, so nothing gates the replica session code these unit owners exercise. Tracked under #781 (originally #656).",
+    "mobile.durability": "apps/mobile/src/lib/upload/crash.test.ts proves upload crash recovery, but apps/mobile has no coverage floor gating the storage code around it. Tracked under #781 (originally #656).",
+    "mobile.journey": "tests/agent-e2e-mobile/flows/home-loads.mjs runs on iOS only, so the Android journey is unproven and the flow declares three checks. Tracked under #781 (originally #656)."
   },
   "cellOwners": {
     "vault-core.correctness": {
@@ -1136,7 +1148,10 @@
       "owner": "apps/desktop/src/main/gateway-pairing-core.test.ts",
       "tier": "unit"
     },
-    "desktop.offline": null,
+    "desktop.offline": {
+      "owner": "apps/desktop/tests/e2e/pending-overlay.spec.ts",
+      "tier": "e2e"
+    },
     "desktop.compat": {
       "owner": "apps/desktop/src/main/gateway-pairing-core.test.ts",
       "tier": "unit"
@@ -1583,7 +1598,7 @@
         "performance": "partial",
         "scalability": "solid",
         "security": "partial",
-        "offline": "skip",
+        "offline": "partial",
         "compat": "partial",
         "journey": "solid",
         "accessibility": "partial"
@@ -1747,7 +1762,7 @@
       "flow": "enrichment-service-contract"
     },
     "backup-round-trip": {
-      "statement": "A restored snapshot reproduces the vault byte-identically \u2014 same files, same directory tree, plus the quarantine marker.",
+      "statement": "A restored snapshot reproduces the vault byte-identically — same files, same directory tree, plus the quarantine marker.",
       "owner": "packages/backup/src/engine.test.ts",
       "flow": "backup-round-trip"
     },
@@ -1762,7 +1777,7 @@
       "flow": "backup-round-trip"
     },
     "backup-restore-refusal": {
-      "statement": "Restore refuses a non-empty destination, a newer vaultUserVersion, an unknown format, and a manifest whose hash does not verify \u2014 and refuses before fetching or materializing anything.",
+      "statement": "Restore refuses a non-empty destination, a newer vaultUserVersion, an unknown format, and a manifest whose hash does not verify — and refuses before fetching or materializing anything.",
       "owner": "packages/backup/src/engine.test.ts",
       "flow": "backup-round-trip"
     },
@@ -1770,6 +1785,36 @@
       "statement": "Verification detects a deleted chunk and a corrupted chunk, and reports a clean snapshot as clean.",
       "owner": "packages/backup/src/engine.test.ts",
       "flow": "backup-round-trip"
+    },
+    "share-closure-confinement": {
+      "statement": "A share closure carries only the rows reachable from the items it names — no other row, derivative or blob of the origin vault crosses — and an item the origin does not hold refuses the whole read rather than yielding a partial closure.",
+      "owner": "packages/vault/src/share/closure-confinement.contract.test.ts",
+      "flow": "share-closure-confinement"
+    },
+    "share-receipt-authority": {
+      "statement": "A cross-vault access receipt exists exactly when an edge's rows landed at the audience, naming the authorised origin scope and the audience ids created, once per edge; a refused, parked, revoked or peer-handed-off edge leaves none, and a malformed scope refuses the transition atomically.",
+      "owner": "packages/gateway/src/serve/share-receipt-authority.contract.test.ts",
+      "flow": "share-receipt-authority"
+    },
+    "share-outbox-obligation": {
+      "statement": "Every share obligation is durable and keyed by what it is about: a replayed enqueue reuses the row without rewinding its retry clock, a human-awaiting obligation is never machine-claimed, an unreadable row never blocks its neighbours, and a failed attempt backs off while a progressed transfer does not.",
+      "owner": "packages/gateway/src/serve/share-outbox-obligation.contract.test.ts",
+      "flow": "share-outbox-obligation"
+    },
+    "experimental-gate-parity": {
+      "statement": "An experimental feature is advertised in the C1 handshake exactly when its own routes are mounted: gated off it is absent from capabilities and its surfaces are unowned; gated on, and only then, they answer.",
+      "owner": "packages/gateway/src/serve/experimental-gating.test.ts",
+      "flow": "gateway-experimental-gate-law"
+    },
+    "insights-rollup-render-or-withhold": {
+      "statement": "Every field of the gateway's insights rollup is rendered on Analytics or withheld on the record with a stated reason; a field that is neither is a silent deletion.",
+      "owner": "packages/client/src/react/screens/InsightsScreen.test.tsx",
+      "flow": "insights-rollup-law"
+    },
+    "native-block-flag-marks": {
+      "statement": "Every semantic flag the shared block contracts declare produces a mark on the phone that the unflagged form does not — accepting a flag and drawing the ordinary control is not parity.",
+      "owner": "apps/mobile/src/kit/components/blockParity.test.tsx",
+      "flow": "mobile-block-parity-law"
     }
   },
   "appEngines": {
@@ -1780,10 +1825,26 @@
         "label": "Placement",
         "flow": "blueprint-placement-law"
       },
-      { "id": "custody", "label": "Custody", "flow": "blueprint-custody-law" },
-      { "id": "consent", "label": "Consent", "flow": "blueprint-consent-law" },
-      { "id": "triage", "label": "Triage", "flow": "blueprint-triage-law" },
-      { "id": "search", "label": "Search", "flow": "blueprint-search-law" },
+      {
+        "id": "custody",
+        "label": "Custody",
+        "flow": "blueprint-custody-law"
+      },
+      {
+        "id": "consent",
+        "label": "Consent",
+        "flow": "blueprint-consent-law"
+      },
+      {
+        "id": "triage",
+        "label": "Triage",
+        "flow": "blueprint-triage-law"
+      },
+      {
+        "id": "search",
+        "label": "Search",
+        "flow": "blueprint-search-law"
+      },
       {
         "id": "enrichment",
         "label": "Enrichment boundary",
@@ -1837,9 +1898,18 @@
       {
         "id": "docs",
         "engines": {
-          "placement": { "status": "pass", "flow": "blueprint-placement-law" },
-          "custody": { "status": "pass", "flow": "blueprint-custody-law" },
-          "consent": { "status": "pass", "flow": "blueprint-consent-law" },
+          "placement": {
+            "status": "pass",
+            "flow": "blueprint-placement-law"
+          },
+          "custody": {
+            "status": "pass",
+            "flow": "blueprint-custody-law"
+          },
+          "consent": {
+            "status": "pass",
+            "flow": "blueprint-consent-law"
+          },
           "triage": {
             "status": "skip",
             "reason": "Docs has no shipped correction-proposal queue.",
@@ -1868,7 +1938,10 @@
             "reason": "Locker is structurally excluded from placement.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "custody": { "status": "pass", "flow": "blueprint-custody-law" },
+          "custody": {
+            "status": "pass",
+            "flow": "blueprint-custody-law"
+          },
           "consent": {
             "status": "skip",
             "reason": "Locker is outside the closed enrichment-domain union.",
@@ -1897,8 +1970,14 @@
       {
         "id": "notes",
         "engines": {
-          "placement": { "status": "pass", "flow": "blueprint-placement-law" },
-          "custody": { "status": "pass", "flow": "blueprint-custody-law" },
+          "placement": {
+            "status": "pass",
+            "flow": "blueprint-placement-law"
+          },
+          "custody": {
+            "status": "pass",
+            "flow": "blueprint-custody-law"
+          },
           "consent": {
             "status": "skip",
             "reason": "Notes is outside the closed enrichment-domain union.",
@@ -1965,11 +2044,26 @@
       {
         "id": "photos",
         "engines": {
-          "placement": { "status": "pass", "flow": "blueprint-placement-law" },
-          "custody": { "status": "pass", "flow": "blueprint-custody-law" },
-          "consent": { "status": "pass", "flow": "blueprint-consent-law" },
-          "triage": { "status": "pass", "flow": "blueprint-triage-law" },
-          "search": { "status": "pass", "flow": "blueprint-search-law" },
+          "placement": {
+            "status": "pass",
+            "flow": "blueprint-placement-law"
+          },
+          "custody": {
+            "status": "pass",
+            "flow": "blueprint-custody-law"
+          },
+          "consent": {
+            "status": "pass",
+            "flow": "blueprint-consent-law"
+          },
+          "triage": {
+            "status": "pass",
+            "flow": "blueprint-triage-law"
+          },
+          "search": {
+            "status": "pass",
+            "flow": "blueprint-search-law"
+          },
           "enrichment": {
             "status": "pass",
             "flow": "blueprint-enrichment-law"
@@ -1983,7 +2077,10 @@
       {
         "id": "tally",
         "engines": {
-          "placement": { "status": "pass", "flow": "blueprint-placement-law" },
+          "placement": {
+            "status": "pass",
+            "flow": "blueprint-placement-law"
+          },
           "custody": {
             "status": "skip",
             "reason": "Tally is record-only; its receipt-photo origin edge does not import custody.",
@@ -1999,7 +2096,10 @@
             "reason": "Tally declares no proposal queue.",
             "citation": "docs/blueprint-seats.md#engine-contracts"
           },
-          "search": { "status": "pass", "flow": "blueprint-search-law" },
+          "search": {
+            "status": "pass",
+            "flow": "blueprint-search-law"
+          },
           "enrichment": {
             "status": "pass",
             "flow": "blueprint-enrichment-law"
@@ -2302,7 +2402,7 @@
       "tier": "contract",
       "owner": "packages/gateway/src/backup/backup-service.contract.test.ts",
       "minimumTests": 16,
-      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: the no-change and incremental round-trip laws were restated here on top of packages/backup/src/engine.test.ts, which is now their sole owner. The two gateway restatements were deleted only after engine.test.ts was strengthened to cover what they uniquely asserted (bounded incremental put count; restore refusal proven to abort before the dest dir is created). This file keeps fencing, policy echo, and CLI-restore->adopt->quarantine. The round-trip contract did not shrink \u2014 only its restatements did."
+      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: the no-change and incremental round-trip laws were restated here on top of packages/backup/src/engine.test.ts, which is now their sole owner. The two gateway restatements were deleted only after engine.test.ts was strengthened to cover what they uniquely asserted (bounded incremental put count; restore refusal proven to abort before the dest dir is created). This file keeps fencing, policy echo, and CLI-restore->adopt->quarantine. The round-trip contract did not shrink — only its restatements did."
     },
     {
       "id": "backup-crash-recovery",
@@ -2429,7 +2529,7 @@
       "tier": "contract",
       "owner": "packages/automation/src/fire/scheduler-ledger.contract.test.ts",
       "minimumTests": 19,
-      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: removed four example tests whose property twins in the same file already own the law \u2014 'records ONE entry per automation for a gap spanning several missed fire times' (subsumed by 'property: at most one missed entry per automation per gap'), 'returns nothing for a fast-restart gap under the grace margin' (subsumed by 'property: sub-grace gaps never emit misses', whose generator was widened to seconds so the 2.5min fast restart is inside its range), and 'returns nothing for an ordinary tick-to-tick gap' + 'records nothing across ordinary consecutive ticks' (both subsumed by 'property: successive ordinary ticks accumulate zero misses'). The no-backfill contract did not shrink \u2014 only its redundant restatements did; the disabled-only-registry example was deliberately retained because its property twin never generates a zero-enabled registry."
+      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: removed four example tests whose property twins in the same file already own the law — 'records ONE entry per automation for a gap spanning several missed fire times' (subsumed by 'property: at most one missed entry per automation per gap'), 'returns nothing for a fast-restart gap under the grace margin' (subsumed by 'property: sub-grace gaps never emit misses', whose generator was widened to seconds so the 2.5min fast restart is inside its range), and 'returns nothing for an ordinary tick-to-tick gap' + 'records nothing across ordinary consecutive ticks' (both subsumed by 'property: successive ordinary ticks accumulate zero misses'). The no-backfill contract did not shrink — only its redundant restatements did; the disabled-only-registry example was deliberately retained because its property twin never generates a zero-enabled registry."
     },
     {
       "id": "harness-provider-compat",
@@ -2596,7 +2696,7 @@
     },
     {
       "id": "gateway-journey",
-      "name": "Auto-founded gateway \u2192 pair ticket \u2192 phone joins Shared (#603)",
+      "name": "Auto-founded gateway → pair ticket → phone joins Shared (#603)",
       "surface": "gateway",
       "dimension": "journey",
       "tier": "e2e",
@@ -2614,7 +2714,7 @@
     },
     {
       "id": "harness-conversation-journey",
-      "name": "Conversation message \u2192 vault side effect \u2192 transcript (fake ACP harness)",
+      "name": "Conversation message → vault side effect → transcript (fake ACP harness)",
       "surface": "agent-runtime",
       "dimension": "journey",
       "tier": "integration",
@@ -2624,13 +2724,13 @@
     },
     {
       "id": "blank-machine-restore",
-      "name": "Blank-machine recover: kit + api-key \u2192 mountable vault (recover())",
+      "name": "Blank-machine recover: kit + api-key → mountable vault (recover())",
       "surface": "backup-restore",
       "dimension": "journey",
       "tier": "integration",
       "owner": "packages/gateway/src/backup/recover.integration.test.ts",
       "minimumTests": 2,
-      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: the separate 'recovery refuses a snapshot written by newer software BEFORE any byte is fetched' test re-ran the whole ~45s seedMachineA fixture to restate the restore-refusal law owned by packages/backup/src/engine.test.ts. It was FOLDED INTO the blank-machine test rather than dropped \u2014 its unique assertions (no vault dir, no .recover-staging-* residue, no keyring escrowed) now run there against the already-seeded machine A. The journey lost no assertion; the test count fell only because two tests became one."
+      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: the separate 'recovery refuses a snapshot written by newer software BEFORE any byte is fetched' test re-ran the whole ~45s seedMachineA fixture to restate the restore-refusal law owned by packages/backup/src/engine.test.ts. It was FOLDED INTO the blank-machine test rather than dropped — its unique assertions (no vault dir, no .recover-staging-* residue, no keyring escrowed) now run there against the already-seeded machine A. The journey lost no assertion; the test count fell only because two tests became one."
     },
     {
       "id": "vault-search",
@@ -2903,6 +3003,291 @@
       "tier": "unit",
       "owner": "packages/app-engine/src/handlers/dispatcher.test.ts",
       "minimumTests": 9
+    },
+    {
+      "id": "share-closure-confinement",
+      "name": "A share closure exposes only its named items' reach",
+      "surface": "vault-core",
+      "dimension": "security",
+      "tier": "contract",
+      "owner": "packages/vault/src/share/closure-confinement.contract.test.ts",
+      "minimumTests": 5
+    },
+    {
+      "id": "share-receipt-authority",
+      "name": "Cross-vault access receipts match what actually landed",
+      "surface": "gateway",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/gateway/src/serve/share-receipt-authority.contract.test.ts",
+      "minimumTests": 4
+    },
+    {
+      "id": "share-outbox-obligation",
+      "name": "Share effect outbox: one obligation, never lost, never spinning",
+      "surface": "gateway",
+      "dimension": "durability",
+      "tier": "contract",
+      "owner": "packages/gateway/src/serve/share-outbox-obligation.contract.test.ts",
+      "minimumTests": 4
+    },
+    {
+      "id": "gateway-experimental-gate-law",
+      "name": "Experimental gate: handshake and mounted surfaces agree",
+      "surface": "gateway",
+      "dimension": "contracts",
+      "tier": "integration",
+      "owner": "packages/gateway/src/serve/experimental-gating.test.ts",
+      "minimumTests": 10
+    },
+    {
+      "id": "insights-rollup-law",
+      "name": "Analytics renders or withholds every rollup field",
+      "surface": "web",
+      "dimension": "contracts",
+      "tier": "unit",
+      "owner": "packages/client/src/react/screens/InsightsScreen.test.tsx",
+      "minimumTests": 22
+    },
+    {
+      "id": "mobile-block-parity-law",
+      "name": "Native block kit draws every shared contract flag",
+      "surface": "mobile",
+      "dimension": "contracts",
+      "tier": "unit",
+      "owner": "apps/mobile/src/kit/components/blockParity.test.tsx",
+      "minimumTests": 11
+    },
+    {
+      "id": "web-block-parity",
+      "name": "Web block kit draws every shared contract flag",
+      "surface": "web",
+      "dimension": "contracts",
+      "tier": "unit",
+      "owner": "packages/client/src/react/ui/blockParity.test.tsx",
+      "minimumTests": 12
+    },
+    {
+      "id": "mobile-places-seat",
+      "name": "Places on the phone: cards, map pins and details name the same places",
+      "surface": "mobile",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "apps/mobile/src/apps/photos/places-model.test.ts",
+      "minimumTests": 20
+    },
+    {
+      "id": "mobile-photos-places",
+      "name": "Native Photos Places shelf and self-drawn map journey",
+      "surface": "mobile",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/places-seat.mjs",
+      "minimumTests": 1
+    },
+    {
+      "id": "connector-handler-contract",
+      "name": "Hand-authored connector handlers: cursor discipline, staging-row shape, refusal paths",
+      "surface": "automations",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/blueprints/automations/pull-connectors.test.ts",
+      "minimumTests": 10
+    },
+    {
+      "id": "connector-outbox-artifact",
+      "name": "Outbox send handlers stage byte-exact RFC 2822 / RFC 5545 artifacts",
+      "surface": "automations",
+      "dimension": "contracts",
+      "tier": "unit",
+      "owner": "packages/blueprints/automations/outbox-send.test.ts",
+      "minimumTests": 10
+    },
+    {
+      "id": "docs-drive-journey-desktop",
+      "name": "Docs byte-bearing north star: upload survives an Electron reload",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/docs-drive.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "docs-drive-journey-web",
+      "name": "Docs byte-bearing north star: upload survives a PWA reload",
+      "surface": "web",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/web/tests/e2e/docs-drive.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "locker-custodian-journey",
+      "name": "Locker custodian seat: setup, item persistence, relock/unlock",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/locker.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "locker-viewer-seat-refusal",
+      "name": "Locker refuses the viewer seat with the manifest-declared wall",
+      "surface": "web",
+      "dimension": "security",
+      "tier": "e2e",
+      "owner": "apps/web/tests/e2e/locker-seat.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "web-offline-write-reconnect",
+      "name": "Offline write survives reload and settles exactly once on reconnect",
+      "surface": "web",
+      "dimension": "offline",
+      "tier": "e2e",
+      "owner": "apps/web/tests/e2e/offline-reconnect.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "household-sharing-journey",
+      "name": "Household renders the gateway's roster and owner scopes; another seat changes presentation, never authorization",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/household.spec.ts",
+      "minimumTests": 2
+    },
+    {
+      "id": "sharing-roster-topology-hiding",
+      "name": "Owner roster read: a device sees its own person only; absence, not refusal",
+      "surface": "gateway",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "packages/gateway/src/routes/owners-routes.test.ts",
+      "minimumTests": 5
+    },
+    {
+      "id": "owner-scope-registry-read",
+      "name": "Owner-scope registry read: owned intersect mounted, canWrite from ownership, installed only when asked",
+      "surface": "gateway",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "packages/gateway/src/routes/scopes-routes.test.ts",
+      "minimumTests": 6
+    },
+    {
+      "id": "desktop-app-weight",
+      "name": "Shipped desktop artifact weight stays under its tighten-only ceiling",
+      "surface": "desktop",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "scripts/perf/app-weight.mjs"
+    },
+    {
+      "id": "web-app-weight",
+      "name": "Shipped PWA weight stays under its tighten-only ceiling",
+      "surface": "web",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "scripts/perf/app-weight.mjs"
+    },
+    {
+      "id": "mobile-app-weight",
+      "name": "Shipped mobile bundle weight stays under its tighten-only ceiling",
+      "surface": "mobile",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "scripts/perf/app-weight.mjs"
+    },
+    {
+      "id": "web-accessibility-axe",
+      "name": "Connect screen and Home shell carry no WCAG A/AA violations in a real browser",
+      "surface": "web",
+      "dimension": "accessibility",
+      "tier": "accessibility",
+      "owner": "apps/web/tests/e2e/accessibility.spec.ts",
+      "minimumTests": 2
+    },
+    {
+      "id": "desktop-builder-journey",
+      "name": "Builder: palette create, streamed turn, publish and failure surfaces",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/builder.spec.ts",
+      "minimumTests": 6
+    },
+    {
+      "id": "desktop-delete-app-journey",
+      "name": "Deleting draft and published apps deregisters on the gateway and clears local state",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/delete-app.spec.ts",
+      "minimumTests": 8
+    },
+    {
+      "id": "desktop-launch-time",
+      "name": "Desktop cold launch: process start to a usable Home under budget",
+      "surface": "desktop",
+      "dimension": "performance",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/launch-time.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "desktop-pending-overlay",
+      "name": "Pending rows survive an offline Electron reload across four apps",
+      "surface": "desktop",
+      "dimension": "offline",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/pending-overlay.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "desktop-settings-gateways",
+      "name": "Appearance and gateway settings apply live, persist, and survive reloads",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/settings-gateways.spec.ts",
+      "minimumTests": 12
+    },
+    {
+      "id": "web-pending-overlay",
+      "name": "PWA routes recover pending rows across four apps while still offline",
+      "surface": "web",
+      "dimension": "offline",
+      "tier": "e2e",
+      "owner": "apps/web/tests/e2e/pending-overlay.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "mobile-cold-start",
+      "name": "Mobile cold start: launch to Home ready, median and p95 under budget",
+      "surface": "mobile",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "tests/agent-e2e-mobile/flows/cold-start.mjs",
+      "minimumTests": 1
+    },
+    {
+      "id": "mobile-scroll-frames",
+      "name": "Mobile frame-drop probe during driven scroll stays under budget",
+      "surface": "mobile",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "tests/agent-e2e-mobile/flows/scroll-frames.mjs",
+      "minimumTests": 1
+    },
+    {
+      "id": "connector-handler-contract-graph",
+      "name": "Pull connectors, Graph delta half: Microsoft delta family, Linear, Notion, Todoist, Gmail cursor and shaping contracts",
+      "surface": "automations",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/blueprints/automations/pull-connectors-graph.test.ts",
+      "minimumTests": 15
     }
   ]
 }

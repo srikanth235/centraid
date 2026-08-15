@@ -13,10 +13,22 @@ const GATEWAY_ENDPOINT_TICKET = "web-e2e-control-transport";
 const CONTROL_SESSION = "web-e2e-control-session";
 
 async function openFirstParty(page: Page, name: string): Promise<void> {
-  const search = page.getByRole("button", { name: /^Search/u });
-  if ((await search.count()) > 0) await search.first().click();
-  else await page.keyboard.press("ControlOrMeta+k");
+  // Re-click until the palette actually opens: right after a reload the Search
+  // button can paint before its React listener attaches, and a click that
+  // lands in that window is silently lost.
   const palette = page.getByRole("dialog", { name: "Command palette" });
+  await expect
+    .poll(
+      async () => {
+        if (await palette.isVisible()) return true;
+        const search = page.getByRole("button", { name: /^Search/u });
+        if ((await search.count()) > 0) await search.first().click();
+        else await page.keyboard.press("ControlOrMeta+k");
+        return palette.isVisible();
+      },
+      { timeout: 30_000 }
+    )
+    .toBe(true);
   await palette.waitFor({ state: "visible" });
   await palette.locator("input").fill(name);
   await palette.getByRole("button").filter({ hasText: name }).first().click();
@@ -226,14 +238,59 @@ async function prepareAgenda(page: Page): Promise<void> {
   expect(outcome.status).toBe("executed");
 }
 
-test("production PWA routes recover Tally, Tasks, and Agenda pending rows while still offline", async ({
+test("production PWA routes recover Tally, Tasks, People, and Agenda pending rows while still offline", async ({
   page,
 }) => {
   test.setTimeout(180_000);
   await connectPwa(page);
   await prepareTally(page);
   await prepareAgenda(page);
+  // Prove Tasks' and People's write rails are up BEFORE severing the
+  // gateway: their replica sessions bootstrap asynchronously, an offline
+  // session can never finish bootstrapping, and a write issued before it
+  // does throws not-bootstrapped instead of queueing. Each probe targets a
+  // row that does not exist, so the vault refuses it without minting one.
   await openFirstParty(page, "Tasks");
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          try {
+            const outcome = await window.centraid.write({
+              action: "set-status",
+              input: { task_id: "pwa-overlay-readiness-probe", status: "done" },
+              intentId: "pwa-overlay-tasks-readiness-probe",
+            });
+            return outcome.status;
+          } catch {
+            return "replica-not-ready";
+          }
+        }),
+      { timeout: 30_000 }
+    )
+    .not.toBe("replica-not-ready");
+  await openFirstParty(page, "People");
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          try {
+            const outcome = await window.centraid.write({
+              action: "set-cadence",
+              input: {
+                party_id: "pwa-overlay-readiness-probe",
+                cadence_days: 30,
+              },
+              intentId: "pwa-overlay-people-readiness-probe",
+            });
+            return outcome.status;
+          } catch {
+            return "replica-not-ready";
+          }
+        }),
+      { timeout: 30_000 }
+    )
+    .not.toBe("replica-not-ready");
   await openFirstParty(page, "Tally");
   await openFirstParty(page, "Agenda");
   await expect(
@@ -246,6 +303,26 @@ test("production PWA routes recover Tally, Tasks, and Agenda pending rows while 
   await page.getByRole("button", { name: "Today", exact: true }).click();
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByText("Offline task", { exact: true })).toBeVisible();
+
+  // People shares the same replica ⊃ outbox rails: an offline add-person
+  // projects pending core.party/people.profile rows (people/
+  // pending-projection.ts). The modal deliberately stays open on a queued
+  // outcome (narrate() only closes on `executed`), so dismiss it and assert
+  // the projected person is already in the list.
+  await openFirstParty(page, "People");
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Add person" }).click();
+  await page.getByRole("textbox", { name: "Name" }).fill("Offline Neighbor");
+  const addPersonModal = page.locator(".kit-modal");
+  await addPersonModal
+    .getByRole("button", { name: "Add person", exact: true })
+    .click();
+  await addPersonModal
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+  await expect(
+    page.getByText("Offline Neighbor", { exact: true }).first()
+  ).toBeVisible();
 
   await openFirstParty(page, "Tally");
   await page.getByText("Offline Journey", { exact: true }).first().click();
@@ -287,6 +364,12 @@ test("production PWA routes recover Tally, Tasks, and Agenda pending rows while 
   await openFirstParty(page, "Tasks");
   await expect(page.getByText("Offline task", { exact: true })).toBeVisible();
   await expect(page.locator(".kit-pending-chip")).toHaveText("queued");
+
+  // The People pending person also came back from the durable outbox.
+  await openFirstParty(page, "People");
+  await expect(
+    page.getByText("Offline Neighbor", { exact: true }).first()
+  ).toBeVisible();
 
   await openFirstParty(page, "Tally");
   await page.getByText("Offline Journey", { exact: true }).first().click();

@@ -1,209 +1,217 @@
 {
   "_comment": "The skip budget (#656 Layer 2). Every deliberate hole in the suite — test.skip / describe.skipIf / .todo / runtime t.skip() / a CENTRAID_* or CLAWGNITION_* opt-in env gate — is inventoried here with an OPEN tracking issue and a reason. scripts/test-report/skip-inventory.mjs discovers the population by scanning; validate-matrix.mjs (in check:pr) fails on an uninventoried skip, on a stale entry, and whenever the count differs from _budget. _budget is DOWN-ONLY: deleting a skip must lower it in the same change, and adding one costs an explicit hand edit plus an issue. Keys are <path>#<ordinal> (nth skip site in that file) so they survive line drift; `line` is informational and refreshed by `node scripts/test-report/skip-inventory.mjs --write`. A skip site also forbids its file from backing a computed-solid matrix cell — see scripts/test-report/matrix-grades.mjs.",
-  "_budget": 29,
+  "_budget": 30,
+  "approvedDeviation": "#782 — reviewed increase 29 → 30. The scan globs were single-segment (scripts/*.test.mjs), so the runtime t.skip in scripts/gateway-package/assemble-runtime.test.mjs was never discovered. Widening the globs to scripts/**/*.test.mjs and apps/*/scripts/**/*.test.mjs surfaced it; the budget rises to the population that was always there rather than the one the globs happened to see. No new skip was added to the suite.",
   "sites": {
     "apps/desktop/tests/e2e/appview-templates-insights.spec.ts#1": {
       "kind": "static-skip",
       "line": 99,
       "snippet": "test.skip(\"7.2 — the chat FAB opens the copilot panel\", async () => {",
-      "issue": 657,
-      "reason": "Desktop e2e mock cannot serve blueprint apps, so the copilot FAB never mounts; the rig, not the product, is the blocker (originally #470)."
+      "issue": 781,
+      "reason": "Desktop e2e mock cannot serve blueprint apps, so the copilot FAB never mounts; the rig, not the product, is the blocker (originally #470 → #657)."
     },
     "apps/desktop/tests/e2e/appview-templates-insights.spec.ts#2": {
       "kind": "static-skip",
       "line": 111,
       "snippet": "test.skip(\"7.3 — a chat turn streams an assistant reply and a SQL tool result\", async () => {",
-      "issue": 657,
-      "reason": "Same rig hole as 7.2: no served blueprint app in the desktop e2e mock, so no copilot turn can stream (originally #470)."
+      "issue": 781,
+      "reason": "Same rig hole as 7.2: no served blueprint app in the desktop e2e mock, so no copilot turn can stream (originally #470 → #657)."
     },
     "apps/desktop/tests/e2e/appview-templates-insights.spec.ts#3": {
       "kind": "static-skip",
       "line": 179,
       "snippet": "test.skip(\"7.4 — the copilot past-chats history lists prior sessions and filters by search\", async () => {",
-      "issue": 657,
-      "reason": "Same rig hole as 7.2/7.3: copilot history needs a served app the desktop e2e mock cannot provide (originally #470)."
+      "issue": 781,
+      "reason": "Same rig hole as 7.2/7.3: copilot history needs a served app the desktop e2e mock cannot provide (originally #470 → #657)."
     },
     "apps/desktop/tests/e2e/builder.spec.ts#1": {
       "kind": "static-skip",
       "line": 123,
       "snippet": "test.skip(\"4.4 — Publish posts to the gateway and returns to home on success\", async () => {",
-      "issue": 657,
-      "reason": "Builder publish is a hidden, out-of-v0 surface; the skip is a product decision awaiting the pre-v0 purge (originally #471 / #496 P8)."
+      "issue": 781,
+      "reason": "Builder publish is a hidden, out-of-v0 surface; the skip is a product decision awaiting the pre-v0 purge (originally #471 / #496 P8 → #657)."
     },
     "apps/mobile/src/lib/replica/multi-vault-reader.test.ts#1": {
       "kind": "env-gate",
       "line": 858,
       "snippet": "const strict = process.env.CENTRAID_PERF_EVIDENCE === \"1\";",
-      "issue": 659,
-      "reason": "Product latency budgets only bind on the dedicated evidence lane; the shared vitest fan-out keeps a 15x smoke ceiling so CPU contention cannot fake a regression."
+      "issue": 781,
+      "reason": "Product latency budgets only bind on the dedicated evidence lane; the shared vitest fan-out keeps a 15x smoke ceiling so CPU contention cannot fake a regression (originally #659)."
     },
     "apps/web/tests/e2e/perf-waterfall.spec.ts#1": {
       "kind": "static-skip",
       "line": 639,
       "snippet": "test.skip(",
-      "issue": 656,
-      "reason": "The iroh request counter only exists in a freshly built bundle; the assertion self-skips against a stale dist instead of failing, which is why this owner cannot back a solid cell."
+      "issue": 781,
+      "reason": "The iroh request counter only exists in a freshly built bundle; the assertion self-skips against a stale dist instead of failing, which is why this owner cannot back a solid cell (originally #656)."
     },
     "packages/agent-runtime/src/automation/live-automation-failover.test.ts#1": {
       "kind": "conditional-skip",
       "line": 32,
       "snippet": "test.skipIf(process.env.CENTRAID_LIVE_AUTOMATION !== \"1\")(",
-      "issue": 656,
-      "reason": "Drives real harness binaries, so it is opt-in via CENTRAID_LIVE_AUTOMATION=1 and cannot run on a hermetic PR lane."
+      "issue": 790,
+      "reason": "Drives real harness binaries, so it is opt-in via CENTRAID_LIVE_AUTOMATION=1 and cannot run on a hermetic PR lane (rig lane split to #790 by #781; originally #656)."
     },
     "packages/app-engine/src/http/app-bundle.test.ts#1": {
       "kind": "conditional-skip",
       "line": 529,
       "snippet": "it.skipIf(!existsSync(photosDir) || !existsSync(kitDir))(",
-      "issue": 656,
-      "reason": "Asserts against the shipped Photos app and kit directories; skips when the blueprints workspace is absent from the checkout."
+      "issue": 781,
+      "reason": "Asserts against the shipped Photos app and kit directories; skips when the blueprints workspace is absent from the checkout (originally #656)."
     },
     "packages/backup/src/interop-clawgnition.test.ts#1": {
       "kind": "env-gate",
       "line": 107,
       "snippet": "if (process.env.CLAWGNITION_INTEROP !== \"1\") {",
-      "issue": 656,
-      "reason": "Cross-repo interop against a Clawgnition checkout; opt-in via CLAWGNITION_INTEROP=1 because the peer repo is not available on CI."
+      "issue": 790,
+      "reason": "Cross-repo interop against a Clawgnition checkout; opt-in via CLAWGNITION_INTEROP=1 because the peer repo is not available on CI (rig lane split to #790 by #781; originally #656)."
     },
     "packages/backup/src/interop-clawgnition.test.ts#2": {
       "kind": "conditional-skip",
       "line": 367,
       "snippet": "describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {",
-      "issue": 656,
-      "reason": "The collection-time gate for the same cross-repo interop suite; skips the whole describe (including beforeAll) with a named reason instead of failing."
+      "issue": 790,
+      "reason": "The collection-time gate for the same cross-repo interop suite; skips the whole describe (including beforeAll) with a named reason instead of failing (rig lane split to #790 by #781; originally #656)."
     },
     "packages/gateway/src/cli/cli.test.ts#1": {
       "kind": "runtime-skip",
-      "line": 244,
+      "line": 261,
       "snippet": "t.skip(",
-      "issue": 656,
-      "reason": "The serve-subcommand boot spawns tsx from the root install; skips when node_modules/.bin/tsx is absent rather than failing a partial checkout."
+      "issue": 781,
+      "reason": "The serve-subcommand boot spawns tsx from the root install; skips when node_modules/.bin/tsx is absent rather than failing a partial checkout (originally #656)."
     },
     "packages/gateway/src/cli/service-install.integration.test.ts#1": {
       "kind": "runtime-skip",
       "line": 40,
       "snippet": "t.skip(\"launchd e2e only runs on darwin\");",
-      "issue": 656,
-      "reason": "Real launchctl bootstrap/bootout exists only on darwin; other platforms have no equivalent service manager to assert against."
+      "issue": 781,
+      "reason": "Real launchctl bootstrap/bootout exists only on darwin; other platforms have no equivalent service manager to assert against (originally #656)."
     },
     "packages/gateway/src/cli/service-install.integration.test.ts#2": {
       "kind": "env-gate",
       "line": 43,
       "snippet": "if (process.env.CENTRAID_LAUNCHD_E2E !== \"1\") {",
-      "issue": 656,
-      "reason": "Mutates real user launchd state, so it is opt-in via CENTRAID_LAUNCHD_E2E=1 even on darwin."
+      "issue": 790,
+      "reason": "Mutates real user launchd state, so it is opt-in via CENTRAID_LAUNCHD_E2E=1 even on darwin (rig lane split to #790 by #781; originally #656)."
     },
     "packages/gateway/src/cli/service-install.integration.test.ts#3": {
       "kind": "runtime-skip",
       "line": 44,
       "snippet": "t.skip(",
-      "issue": 656,
-      "reason": "The runtime half of the CENTRAID_LAUNCHD_E2E opt-in: it reports the skip to the runner so the report never shows a false green."
+      "issue": 790,
+      "reason": "The runtime half of the CENTRAID_LAUNCHD_E2E opt-in: it reports the skip to the runner so the report never shows a false green (rig lane split to #790 by #781; originally #656)."
     },
     "packages/gateway/src/cli/status-admin.test.ts#1": {
       "kind": "conditional-skip",
       "line": 78,
       "snippet": "test.skipIf(servicePlatform)(",
-      "issue": 656,
-      "reason": "Service status paths exist only on darwin and linux; the skipIf keeps the hole visible to the report instead of a bare return."
+      "issue": 781,
+      "reason": "Service status paths exist only on darwin and linux; the skipIf keeps the hole visible to the report instead of a bare return (originally #656)."
     },
     "packages/gateway/src/cli/status-admin.test.ts#2": {
       "kind": "conditional-skip",
       "line": 107,
       "snippet": "test.skipIf(servicePlatform)(",
-      "issue": 656,
-      "reason": "Same darwin/linux-only service surface as site #1 (status --json against a never-installed unit)."
+      "issue": 781,
+      "reason": "Same darwin/linux-only service surface as site #1 (status --json against a never-installed unit) (originally #656)."
     },
     "packages/gateway/src/cli/status-admin.test.ts#3": {
       "kind": "conditional-skip",
       "line": 161,
       "snippet": "test.skipIf(servicePlatform)(",
-      "issue": 656,
-      "reason": "Same darwin/linux-only service surface as site #1 (installed-unit status reporting)."
+      "issue": 781,
+      "reason": "Same darwin/linux-only service surface as site #1 (installed-unit status reporting) (originally #656)."
     },
     "packages/gateway/src/cli/status-admin.test.ts#4": {
       "kind": "conditional-skip",
       "line": 180,
       "snippet": "test.skipIf(servicePlatform)(",
-      "issue": 656,
-      "reason": "Same darwin/linux-only service surface as site #1 (status against an unreachable listener)."
+      "issue": 781,
+      "reason": "Same darwin/linux-only service surface as site #1 (status against an unreachable listener) (originally #656)."
     },
     "packages/gateway/src/lifecycle/byte-plane-over-http.test.ts#1": {
       "kind": "conditional-skip",
       "line": 66,
       "snippet": "describe.skipIf(!enabled)(",
-      "issue": 656,
-      "reason": "The byte-plane conformance suite needs a built Rust byte plane or an external base URL; opt-in via CENTRAID_RUN_BYTE_PLANE_CONTRACT=1."
+      "issue": 790,
+      "reason": "The byte-plane conformance suite needs a built Rust byte plane or an external base URL; opt-in via CENTRAID_RUN_BYTE_PLANE_CONTRACT=1 (rig lane split to #790 by #781; originally #656)."
     },
     "packages/tunnel/src/native-relay.test.ts#1": {
       "kind": "conditional-skip",
       "line": 24,
       "snippet": "describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== \"1\")(",
-      "issue": 656,
-      "reason": "Requires the vendored native QUIC module; opt-in via CENTRAID_RUN_NATIVE_TUNNEL=1 because CI images do not carry the dylib."
+      "issue": 790,
+      "reason": "Requires the vendored native QUIC module; opt-in via CENTRAID_RUN_NATIVE_TUNNEL=1 because CI images do not carry the dylib (rig lane split to #790 by #781; originally #656)."
     },
     "packages/vault/src/blob/disk-full.integration.test.ts#1": {
       "kind": "runtime-skip",
       "line": 44,
       "snippet": "t.skip(\"disk-full e2e only runs on darwin (hdiutil)\");",
-      "issue": 656,
-      "reason": "The real full-filesystem rig is built with hdiutil, which exists only on darwin."
+      "issue": 790,
+      "reason": "The real full-filesystem rig is built with hdiutil, which exists only on darwin (rig lane split to #790 by #781; originally #656)."
     },
     "packages/vault/src/blob/disk-full.integration.test.ts#2": {
       "kind": "env-gate",
       "line": 47,
       "snippet": "if (process.env.CENTRAID_DISKFULL_E2E !== \"1\") {",
-      "issue": 656,
-      "reason": "Attaching and filling a real disk image is destructive and slow, so it is opt-in via CENTRAID_DISKFULL_E2E=1."
+      "issue": 790,
+      "reason": "Attaching and filling a real disk image is destructive and slow, so it is opt-in via CENTRAID_DISKFULL_E2E=1 (rig lane split to #790 by #781; originally #656)."
     },
     "packages/vault/src/blob/disk-full.integration.test.ts#3": {
       "kind": "runtime-skip",
       "line": 48,
       "snippet": "t.skip(",
-      "issue": 656,
-      "reason": "The runtime half of the CENTRAID_DISKFULL_E2E opt-in: it reports the skip so a green run never implies the ENOSPC law ran."
+      "issue": 790,
+      "reason": "The runtime half of the CENTRAID_DISKFULL_E2E opt-in: it reports the skip so a green run never implies the ENOSPC law ran (rig lane split to #790 by #781; originally #656)."
     },
     "packages/vault/src/wal-shipper-clone.test.ts#1": {
       "kind": "conditional-skip",
       "line": 61,
       "snippet": "test.skipIf(process.platform !== \"darwin\")(",
-      "issue": 656,
-      "reason": "Reflink cloning can only be asserted unconditionally on APFS; ext4 cannot clone at all, so the law is darwin-only."
+      "issue": 781,
+      "reason": "Reflink cloning can only be asserted unconditionally on APFS; ext4 cannot clone at all, so the law is darwin-only (originally #656)."
+    },
+    "scripts/gateway-package/assemble-runtime.test.mjs#1": {
+      "kind": "runtime-skip",
+      "line": 64,
+      "snippet": "t.skip(\"gateway package dist missing — build @centraid/gateway first\");",
+      "issue": 781,
+      "reason": "The assembleRuntime link/resolution assertions need a built @centraid/gateway dist, so the test self-skips on a checkout that has not run the gateway build; it was invisible to the budget until the scan globs went recursive (surfaced by #782)."
     },
     "tests/perf/desktop-launch.perf.test.ts#1": {
       "kind": "conditional-skip",
       "line": 80,
       "snippet": "test.skipIf(!report)(",
-      "issue": 659,
-      "reason": "#659 R3b. The REAL Electron launch is measured by apps/desktop/tests/e2e/launch-time.spec.ts (vitest cannot start Electron on a display-less runner) and handed to this lane as nightly-evidence-desktop. A missing input is a HARD failure under CI — see the throw above the describe — and a skip locally, exactly like pwa-waterfall."
+      "issue": 781,
+      "reason": "#659 R3b. The REAL Electron launch is measured by apps/desktop/tests/e2e/launch-time.spec.ts (vitest cannot start Electron on a display-less runner) and handed to this lane as nightly-evidence-desktop. A missing input is a HARD failure under CI — see the throw above the describe — and a skip locally, exactly like pwa-waterfall (originally #659)."
     },
     "tests/perf/pwa-waterfall.perf.test.ts#1": {
       "kind": "conditional-skip",
       "line": 61,
       "snippet": "test.skipIf(!waterfall)(",
-      "issue": 659,
-      "reason": "The rig consumes a waterfall report published by the nightly web-e2e job; a missing input is a hard failure under CI and a local skip otherwise."
+      "issue": 781,
+      "reason": "The rig consumes a waterfall report published by the nightly web-e2e job; a missing input is a hard failure under CI and a local skip otherwise (originally #659)."
     },
     "tests/perf/tunnel-native.perf.test.ts#1": {
       "kind": "conditional-skip",
       "line": 32,
       "snippet": "test.skipIf(!hasNative)(",
-      "issue": 659,
-      "reason": "Cold-load budget for the native QUIC dylib; skipped where the vendored module is not built."
+      "issue": 781,
+      "reason": "Cold-load budget for the native QUIC dylib; skipped where the vendored module is not built (originally #659)."
     },
     "tests/perf/tunnel-native.perf.test.ts#2": {
       "kind": "conditional-skip",
       "line": 77,
       "snippet": "test.skipIf(hasNative)(",
-      "issue": 659,
-      "reason": "The inverse arm: it asserts the absent-module fallback path, so it is skipped exactly when the dylib is present."
+      "issue": 781,
+      "reason": "The inverse arm: it asserts the absent-module fallback path, so it is skipped exactly when the dylib is present (originally #659)."
     },
     "tests/scale/restore-10gib.scale.test.ts#1": {
       "kind": "conditional-skip",
       "line": 114,
       "snippet": "test.skipIf(!ENABLED)(",
-      "issue": 659,
-      "reason": "#659 S3. Ten GiB of chunk + AEAD + restore is ~5 minutes and ~25 GiB of scratch; it has its own nightly job (restore-year3 in e2e.yml) which sets CENTRAID_SCALE_RESTORE_GIB=10. Skipping loudly when unset is deliberate — the alternative is silently shrinking to a size that proves nothing."
+      "issue": 790,
+      "reason": "#659 S3. Ten GiB of chunk + AEAD + restore is ~5 minutes and ~25 GiB of scratch; it has its own nightly job (restore-year3 in e2e.yml) which sets CENTRAID_SCALE_RESTORE_GIB=10. Skipping loudly when unset is deliberate — the alternative is silently shrinking to a size that proves nothing (rig lane split to #790 by #781; originally #659)."
     }
   }
 }

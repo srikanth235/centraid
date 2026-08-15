@@ -7,9 +7,11 @@
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { EXPECTED_GREY } from "./expected-grey.mjs";
 import {
   calculateFlakeRates,
   agedInfraMismatches,
+  applyExpectedGrey,
   cellIdentityRegressions,
   cellsMissingRatchet,
   collectLaneSeries,
@@ -27,6 +29,7 @@ import {
   scopeMatcher,
   sustainedRatchetCandidates,
   summarizeCellStates,
+  worstEvidenceByOwner,
 } from "./report-signals.mjs";
 import {
   coverageScopesBelowFloor,
@@ -138,10 +141,18 @@ const enrichmentLive = buildEnrichmentLive(enrichmentLiveResult, {
   runUrl,
 });
 const appEngineGrid = buildAppEngineGrid(matrix, evidence);
-const cells = buildCells(matrix, evidence, validation.errors, {
-  laneMarkers,
-  reportScope,
-});
+// #781 — reclassify registered no-lane absences AFTER normal cell states are
+// derived, so real evidence always wins and only enumerated no-evidence cells
+// become expected-grey (void the moment their lane has a start marker).
+const expectedGrey = applyExpectedGrey(
+  buildCells(matrix, evidence, validation.errors, {
+    laneMarkers,
+    reportScope,
+  }),
+  EXPECTED_GREY,
+  laneMarkers
+);
+const cells = expectedGrey.cells;
 const qualities = buildQualities(matrix.qualities, evidence);
 const coverageRows = collectCoverage(coverage, floors);
 const vitestFiles = await collectVitestFiles(vitest);
@@ -160,7 +171,14 @@ const unmapped = findUnmappedEvidence(
 );
 const unmatchedOwners =
   reportScope === "nightly"
-    ? findUnmatchedOwners(evidence, matrix, { normalizeOwner: normalizeFile })
+    ? findUnmatchedOwners(evidence, matrix, {
+        normalizeOwner: normalizeFile,
+        // #781 — owners of registered expected-grey cells have no lane to
+        // produce evidence in; their silence is the recorded absence, not a
+        // second failure. Void once the lane exists (applyExpectedGrey drops
+        // them from this set when the lane marker appears).
+        ignoreOwners: expectedGrey.expectedAbsentOwners,
+      })
     : [];
 const qualityOpen = await readQualityOpen(path.join(root, "QUALITY.md"));
 const jobConclusions = await readJson(
@@ -190,6 +208,9 @@ const summary = {
   cellsLaneDidNotRun: cellStateCounts.cellsLaneDidNotRun,
   cellsInfraMismatch: cellStateCounts.cellsInfraMismatch,
   cellsEvidenceUnmatched: cellStateCounts.cellsEvidenceUnmatched,
+  // #781 — named, budgeted absences (no lane exists); never inside cellsMissing.
+  cellsExpectedGrey: cellStateCounts.cellsExpectedGrey,
+  expectedGreyCellIds: expectedGrey.applied,
   missingCellIds: cells
     .filter((cell) =>
       [
@@ -604,6 +625,8 @@ function collectEvidence(
           wallClock?.unit === "ms" ? wallClock.value : (result.durationMs ?? 0),
         lastAt,
         source,
+        // #781 — platform-keyed mobile evidence carries which side produced it.
+        platform: result.platform ?? null,
         error: result.error ?? result.message ?? null,
         measurements: result.measurements ?? [],
         runUrl: freshness.runUrl,
@@ -678,9 +701,11 @@ function normalizeStatus(status) {
 
 function buildAppEngineGrid(manifest, evidenceItems) {
   const flows = new Map((manifest.flows ?? []).map((flow) => [flow.id, flow]));
-  const evidenceByOwner = new Map(
-    evidenceItems.map((item) => [normalizeFile(item.owner), item])
-  );
+  // Worst-status-wins: platform-keyed evidence (#781) records one item per
+  // platform under the same owner, and a green platform must not mask a red one.
+  const evidenceByOwner = worstEvidenceByOwner(evidenceItems, {
+    normalizeOwner: normalizeFile,
+  });
   return {
     engines: manifest.appEngines?.engines ?? [],
     apps: (manifest.appEngines?.apps ?? []).map((app) => ({
@@ -722,9 +747,9 @@ function buildCells(
       .filter((error) => error.includes("owner does not exist:"))
       .map((error) => error.split("owner does not exist: ")[1])
   );
-  const evidenceByOwner = new Map(
-    evidenceItems.map((item) => [item.owner, item])
-  );
+  // Worst-status-wins across platform-keyed evidence files (#781): the same
+  // owner may report per-platform items and the cell must show the worst.
+  const evidenceByOwner = worstEvidenceByOwner(evidenceItems);
   return manifest.surfaces.flatMap((surface) =>
     manifest.dimensions.map((dimension) => {
       const cellId = `${surface.id}.${dimension.id}`;
@@ -850,6 +875,10 @@ function buildQualities(manifestQualities = [], evidenceItems = []) {
 function expectedLaneMarker(owner) {
   if (owner.tier === "perf") return "perf";
   if (owner.tier === "scale") return "scale";
+  // #781 — the accessibility owner is a per-PR node --test gate, not a vitest
+  // file: the vitest marker existing never meant this owner's lane ran, and
+  // mapping it to "vitest" mislabelled every nightly as "owner-silent".
+  if (owner.tier === "accessibility") return "accessibility";
   if (owner.owner.startsWith("apps/web/tests/e2e/")) return "web-playwright";
   if (owner.owner.startsWith("apps/desktop/tests/e2e/"))
     return "desktop-playwright";
@@ -1237,11 +1266,23 @@ function render(modelLocal) {
       `<p class="lede" style="color:var(--red)">Infrastructure mismatch exceeded its three-run maximum age: ${escapeHtml(modelLocal.summary.agedInfraMismatchCellIds.join(", "))}</p>`
     );
   }
+  if ((modelLocal.summary.expectedGreyCellIds ?? []).length) {
+    const registration = (modelLocal.cells ?? []).find(
+      (cell) => cell.state === "expected-grey"
+    )?.expectedGrey;
+    honestyBanners.push(
+      `<p class="lede" style="color:var(--grey)">Named absences (#781 — no evidence lane exists yet): ${modelLocal.summary.expectedGreyCellIds.length} cell(s)${
+        registration?.issue
+          ? ` · <a href="${escapeHtml(registration.issue)}" style="color:var(--blue)">tracking issue</a>`
+          : ""
+      }. These go red the night their lane first runs.</p>`
+    );
+  }
 
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Centraid test health</title><style>
-:root{color-scheme:dark;--text:#ecf3ee;--text-soft:#8f9f98;--panel:#111713;--line:#273129;--bg:#090d0b;--green:#5bd697;--red:#ff766f;--amber:#e9b95c;--blue:#72a9ff;--violet:#b39cff;--cyan:#69d8d0;--grey:#738079;--sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 90% -10%,#173126 0,transparent 35%),var(--bg);color:var(--text);font:14px/1.5 var(--sans)}main{width:min(1480px,calc(100% - 40px));margin:auto;padding:56px 0 80px}.eyebrow{color:var(--green);font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}h1{font-size:clamp(34px,5vw,66px);letter-spacing:-.055em;line-height:.95;margin:14px 0 16px;max-width:780px}.lede{color:#afbbb5;font-size:16px;max-width:720px;margin:0}.hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:44px;align-items:end;margin-bottom:42px}.summary{display:grid;grid-template-columns:repeat(3,92px);gap:8px}.stat{background:#101612;border:1px solid var(--line);border-radius:4px;padding:15px 12px}.stat b{display:block;font-size:25px}.stat small,.muted,small{color:var(--text-soft)}.matrix-shell,.card{background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:6px}.matrix-head{display:flex;justify-content:space-between;gap:24px;align-items:center;padding:18px 20px;border-bottom:1px solid var(--line)}.matrix-head h2,.card h2{font-size:15px;margin:0;letter-spacing:-.01em}.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--text-soft);font-size:12px}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}.dot.passed{background:var(--green)}.dot.partial{background:var(--cyan)}.dot.failed,.dot.infra-mismatch{background:var(--red)}.dot.flaky{background:var(--violet)}.dot.skipped{background:var(--amber)}.dot.gap{background:#ff9e64}.dot.evidence-unmatched{background:#ff8a65}.dot.owner-silent{background:#ffcb6b}.dot.lane-did-not-run,.dot.stale{background:var(--grey)}.matrix-scroll{overflow:auto;padding:10px}table{border-collapse:separate;border-spacing:4px;width:100%}.heatmap th{font-size:11px;color:var(--text-soft);font-weight:650;text-align:left;min-width:68px}.heatmap thead th:not(:first-child){height:98px;vertical-align:bottom}.heatmap thead th span{display:block;writing-mode:vertical-rl;transform:rotate(180deg);height:74px}.heatmap thead th small{display:none}.heatmap tbody th{min-width:230px;color:#bdc9c3}.cell{width:100%;min-width:52px;height:40px;border:1px solid transparent;border-radius:3px;color:#07110c;display:flex;justify-content:space-between;align-items:center;padding:0 9px;font:700 13px var(--sans);cursor:pointer;transition:transform .16s,border-color .16s,filter .16s;animation:rise .34s both;animation-delay:calc(var(--row)*28ms)}.cell small{color:inherit;opacity:.65}.cell:hover,.cell:focus-visible{transform:translateY(-2px);filter:brightness(1.12);outline:none;border-color:#fff8}.cell.passed{background:var(--green)}.cell.passed.assessment-partial{background:var(--cyan)}.cell.failed,.cell.infra-mismatch{background:var(--red)}.cell.flaky{background:var(--violet)}.cell.skipped{background:var(--amber)}.cell.gap{background:#ff9e64}.cell.evidence-unmatched{background:#ff8a65}.cell.owner-silent{background:#ffcb6b}.cell.missing,.cell.stale,.cell.lane-did-not-run{background:#46534c;color:#f0f4f1}.inspector{display:grid;grid-template-columns:220px minmax(0,1fr);gap:22px;padding:20px;border-top:1px solid var(--line);min-height:126px}.inspector .kicker{color:var(--text-soft);font-size:12px}.inspector h3{margin:4px 0 0;font-size:18px}.flow-list{display:grid;gap:8px}.flow{display:grid;grid-template-columns:minmax(150px,.45fr) 78px 84px 84px minmax(230px,1fr);gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #202923}.flow:last-child{border-bottom:0}.tier{color:var(--blue);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.result{font-size:11px;font-weight:750;text-transform:uppercase}.result.passed{color:var(--green)}.result.failed,.result.infra-mismatch{color:var(--red)}.result.flaky{color:var(--violet)}.result.skipped{color:var(--amber)}.result.evidence-unmatched{color:#ff8a65}.result.missing,.result.stale,.result.owner-silent,.result.lane-did-not-run{color:var(--text-soft)}.path{color:#a8b7af;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.card{padding:20px;overflow:auto}.card h2{margin-bottom:14px}.data{border-spacing:0;width:100%}.data th,.data td{text-align:left;border-bottom:1px solid #202923;padding:8px 7px;font-size:12px}.data th{color:var(--text-soft);font-weight:650}.metric.passed{color:var(--green)}.metric.failed{color:var(--red)}.metric.missing{color:var(--text-soft)}.wide{grid-column:1/-1}.trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}.trend{display:flex;justify-content:space-between;gap:12px;align-items:center;background:#0c110e;border:1px solid #202923;padding:12px}.trend strong,.trend small{display:block}.spark{width:120px;height:40px}.spark polyline{fill:none;stroke:var(--green);stroke-width:2;vector-effect:non-scaling-stroke}.empty{color:var(--text-soft);border:1px dashed #334038;padding:24px;margin:0}.foot{margin-top:20px;color:var(--text-soft);font-size:12px}@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@media(max-width:900px){main{width:min(100% - 22px,1480px);padding-top:30px}.hero{grid-template-columns:1fr}.summary{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}.wide{grid-column:auto}.inspector{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.matrix-head{align-items:flex-start;flex-direction:column}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+:root{color-scheme:dark;--text:#ecf3ee;--text-soft:#8f9f98;--panel:#111713;--line:#273129;--bg:#090d0b;--green:#5bd697;--red:#ff766f;--amber:#e9b95c;--blue:#72a9ff;--violet:#b39cff;--cyan:#69d8d0;--grey:#738079;--sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 90% -10%,#173126 0,transparent 35%),var(--bg);color:var(--text);font:14px/1.5 var(--sans)}main{width:min(1480px,calc(100% - 40px));margin:auto;padding:56px 0 80px}.eyebrow{color:var(--green);font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}h1{font-size:clamp(34px,5vw,66px);letter-spacing:-.055em;line-height:.95;margin:14px 0 16px;max-width:780px}.lede{color:#afbbb5;font-size:16px;max-width:720px;margin:0}.hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:44px;align-items:end;margin-bottom:42px}.summary{display:grid;grid-template-columns:repeat(3,92px);gap:8px}.stat{background:#101612;border:1px solid var(--line);border-radius:4px;padding:15px 12px}.stat b{display:block;font-size:25px}.stat small,.muted,small{color:var(--text-soft)}.matrix-shell,.card{background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:6px}.matrix-head{display:flex;justify-content:space-between;gap:24px;align-items:center;padding:18px 20px;border-bottom:1px solid var(--line)}.matrix-head h2,.card h2{font-size:15px;margin:0;letter-spacing:-.01em}.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--text-soft);font-size:12px}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}.dot.passed{background:var(--green)}.dot.partial{background:var(--cyan)}.dot.failed,.dot.infra-mismatch{background:var(--red)}.dot.flaky{background:var(--violet)}.dot.skipped{background:var(--amber)}.dot.gap{background:#ff9e64}.dot.evidence-unmatched{background:#ff8a65}.dot.owner-silent{background:#ffcb6b}.dot.lane-did-not-run,.dot.stale,.dot.expected-grey{background:var(--grey)}.matrix-scroll{overflow:auto;padding:10px}table{border-collapse:separate;border-spacing:4px;width:100%}.heatmap th{font-size:11px;color:var(--text-soft);font-weight:650;text-align:left;min-width:68px}.heatmap thead th:not(:first-child){height:98px;vertical-align:bottom}.heatmap thead th span{display:block;writing-mode:vertical-rl;transform:rotate(180deg);height:74px}.heatmap thead th small{display:none}.heatmap tbody th{min-width:230px;color:#bdc9c3}.cell{width:100%;min-width:52px;height:40px;border:1px solid transparent;border-radius:3px;color:#07110c;display:flex;justify-content:space-between;align-items:center;padding:0 9px;font:700 13px var(--sans);cursor:pointer;transition:transform .16s,border-color .16s,filter .16s;animation:rise .34s both;animation-delay:calc(var(--row)*28ms)}.cell small{color:inherit;opacity:.65}.cell:hover,.cell:focus-visible{transform:translateY(-2px);filter:brightness(1.12);outline:none;border-color:#fff8}.cell.passed{background:var(--green)}.cell.passed.assessment-partial{background:var(--cyan)}.cell.failed,.cell.infra-mismatch{background:var(--red)}.cell.flaky{background:var(--violet)}.cell.skipped{background:var(--amber)}.cell.gap{background:#ff9e64}.cell.evidence-unmatched{background:#ff8a65}.cell.owner-silent{background:#ffcb6b}.cell.missing,.cell.stale,.cell.lane-did-not-run{background:#46534c;color:#f0f4f1}.cell.expected-grey{background:#39423d;color:#cfd8d2;border:1px dashed #738079}.inspector{display:grid;grid-template-columns:220px minmax(0,1fr);gap:22px;padding:20px;border-top:1px solid var(--line);min-height:126px}.inspector .kicker{color:var(--text-soft);font-size:12px}.inspector h3{margin:4px 0 0;font-size:18px}.flow-list{display:grid;gap:8px}.flow{display:grid;grid-template-columns:minmax(150px,.45fr) 78px 84px 84px minmax(230px,1fr);gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #202923}.flow:last-child{border-bottom:0}.tier{color:var(--blue);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.result{font-size:11px;font-weight:750;text-transform:uppercase}.result.passed{color:var(--green)}.result.failed,.result.infra-mismatch{color:var(--red)}.result.flaky{color:var(--violet)}.result.skipped{color:var(--amber)}.result.evidence-unmatched{color:#ff8a65}.result.missing,.result.stale,.result.owner-silent,.result.lane-did-not-run,.result.expected-grey{color:var(--text-soft)}.path{color:#a8b7af;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.card{padding:20px;overflow:auto}.card h2{margin-bottom:14px}.data{border-spacing:0;width:100%}.data th,.data td{text-align:left;border-bottom:1px solid #202923;padding:8px 7px;font-size:12px}.data th{color:var(--text-soft);font-weight:650}.metric.passed{color:var(--green)}.metric.failed{color:var(--red)}.metric.missing{color:var(--text-soft)}.wide{grid-column:1/-1}.trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}.trend{display:flex;justify-content:space-between;gap:12px;align-items:center;background:#0c110e;border:1px solid #202923;padding:12px}.trend strong,.trend small{display:block}.spark{width:120px;height:40px}.spark polyline{fill:none;stroke:var(--green);stroke-width:2;vector-effect:non-scaling-stroke}.empty{color:var(--text-soft);border:1px dashed #334038;padding:24px;margin:0}.foot{margin-top:20px;color:var(--text-soft);font-size:12px}@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@media(max-width:900px){main{width:min(100% - 22px,1480px);padding-top:30px}.hero{grid-template-columns:1fr}.summary{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}.wide{grid-column:auto}.inspector{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.matrix-head{align-items:flex-start;flex-direction:column}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 .qualities-shell{margin-bottom:14px;padding:14px 20px;background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:6px}.qualities-shell h2{font-size:15px;margin:0 0 10px}.quality-row{border-top:1px solid var(--line)}.quality-row summary{display:grid;grid-template-columns:14px 180px minmax(0,1fr) 72px;gap:10px;align-items:center;padding:11px 0;cursor:pointer}.quality-row summary b{text-align:right}.quality-light{width:9px;height:9px;border-radius:50%;background:var(--grey)}.quality-light.passed{background:var(--green)}.quality-light.partial{background:var(--cyan)}.quality-light.failed{background:var(--red)}.quality-gates{padding:0 0 10px 24px}.quality-gates>div{display:grid;grid-template-columns:12px minmax(180px,.7fr) minmax(260px,1fr);gap:8px;align-items:center;padding:5px 0}.quality-gates code{color:var(--text-soft);overflow-wrap:anywhere}.quality-debt{color:var(--text-soft);font-size:12px;margin:10px 0 0}@media(max-width:900px){.quality-row summary,.quality-gates>div{grid-template-columns:14px 1fr}.quality-row summary span:nth-of-type(2),.quality-row summary b,.quality-gates code{grid-column:2}}
 </style></head><body><main>
 <header class="hero"><div><div class="eyebrow">Centraid · test intelligence</div><h1>Product health, with the gaps left visible.</h1><p class="lede">One view across per-PR correctness and nightly journey, performance, and scale evidence. Every absence is classified: wiring, a silent owner, or a lane that did not run.</p>${honestyBanners.join("")}${
@@ -1255,7 +1296,7 @@ function render(modelLocal) {
   }</div><div class="summary"><div class="stat"><b>${modelLocal.summary.passed}</b><small>evidence passed</small></div><div class="stat"><b>${modelLocal.summary.failed}</b><small>evidence failed</small></div><div class="stat"><b>${modelLocal.summary.cellsSolid ?? 0}</b><small>solid</small></div><div class="stat"><b>${modelLocal.summary.cellsPartial ?? 0}</b><small>partial</small></div><div class="stat"><b>${modelLocal.summary.cellsGap ?? 0}</b><small>declared gaps</small></div><div class="stat"><b>${modelLocal.summary.cellsNotApplicable ?? 0}</b><small>n/a by design</small></div><div class="stat"><b>${modelLocal.summary.cellsMissing ?? 0}</b><small>unproven cells</small></div><div class="stat"><b>${modelLocal.summary.cellsFlaky ?? 0}</b><small>flaky cells</small></div><div class="stat"><b>${modelLocal.summary.unhandledErrors ?? 0}</b><small>unhandled errors</small></div></div></header>
 <section class="qualities-shell"><h2>User-facing qualities</h2>${qualityRows}<p class="quality-debt">${existingQualityGates} of ${totalQualityGates} gates exist.</p></section>
 <section class="card wide"><h2>Blueprint app × shared engine</h2><div class="matrix-scroll"><table class="data"><thead><tr><th>App</th>${appEngineHeaders}</tr></thead><tbody>${appEngineRows}</tbody></table></div></section>
-<section class="matrix-shell"><div class="matrix-head"><h2>Surface × quality dimension</h2><div class="legend"><span><i class="dot passed"></i>solid passed</span><span><i class="dot partial"></i>partial passed</span><span><i class="dot failed"></i>product failed</span><span><i class="dot flaky"></i>flaky</span><span><i class="dot gap"></i>tracked gap</span><span><i class="dot skipped"></i>n/a by design</span><span><i class="dot missing"></i>missing (PR-only)</span><span><i class="dot evidence-unmatched"></i>evidence unmatched</span><span><i class="dot owner-silent"></i>owner silent</span><span><i class="dot lane-did-not-run"></i>lane did not run / stale</span><span><i class="dot infra-mismatch"></i>infra mismatch</span></div></div><div class="matrix-scroll"><table class="heatmap"><thead><tr><th>Product surface</th>${dimensionHeaders}</tr></thead><tbody>${rows}</tbody></table></div><div class="inspector" aria-live="polite"><div><span class="kicker" id="inspector-kicker">Select a matrix cell</span><h3 id="inspector-title">Evidence inspector</h3></div><div class="flow-list" id="inspector-flows"><p class="muted">Choose any cell to see its canonical flow owner, tier, lane, latest result, and first error.</p></div></div></section>
+<section class="matrix-shell"><div class="matrix-head"><h2>Surface × quality dimension</h2><div class="legend"><span><i class="dot passed"></i>solid passed</span><span><i class="dot partial"></i>partial passed</span><span><i class="dot failed"></i>product failed</span><span><i class="dot flaky"></i>flaky</span><span><i class="dot gap"></i>tracked gap</span><span><i class="dot skipped"></i>n/a by design</span><span><i class="dot missing"></i>missing (PR-only)</span><span><i class="dot evidence-unmatched"></i>evidence unmatched</span><span><i class="dot owner-silent"></i>owner silent</span><span><i class="dot lane-did-not-run"></i>lane did not run / stale</span><span><i class="dot expected-grey"></i>named absence (no lane exists, #781)</span><span><i class="dot infra-mismatch"></i>infra mismatch</span></div></div><div class="matrix-scroll"><table class="heatmap"><thead><tr><th>Product surface</th>${dimensionHeaders}</tr></thead><tbody>${rows}</tbody></table></div><div class="inspector" aria-live="polite"><div><span class="kicker" id="inspector-kicker">Select a matrix cell</span><h3 id="inspector-title">Evidence inspector</h3></div><div class="flow-list" id="inspector-flows"><p class="muted">Choose any cell to see its canonical flow owner, tier, lane, latest result, and first error.</p></div></div></section>
 <section class="grid"><article class="card wide"><h2>Weekly real-model evidence · eight-day freshness</h2><table class="data"><thead><tr><th>Owner</th><th>Status</th><th>Captured</th><th>Evidence</th></tr></thead><tbody>${enrichmentLiveRow}</tbody></table></article><article class="card"><h2>Coverage vs ratchet floor</h2><table class="data"><thead><tr><th>Scope</th><th>Lines</th><th>Branches</th></tr></thead><tbody>${coverageRowsLocal}</tbody></table></article><article class="card"><h2>Mutation vs ratchet floor</h2><table class="data"><thead><tr><th>Package</th><th>Score</th><th>Status</th></tr></thead><tbody>${mutationRowsLocal}</tbody></table></article><article class="card"><h2>Per-package wall clock</h2><table class="data"><thead><tr><th>Package</th><th>Runtime</th></tr></thead><tbody>${runtimeRows}</tbody></table></article><article class="card wide"><h2>Slowest 10 test files · bloat watch</h2><table class="data"><thead><tr><th>#</th><th>File</th><th>Runtime</th><th>Skipped</th><th>Env-gated</th></tr></thead><tbody>${slowRows}</tbody></table></article><article class="card wide"><h2>Environment-gated matrix owners</h2>${
     (modelLocal.summary.envGatedOwners ?? []).length
       ? `<table class="data"><thead><tr><th>Cell</th><th>Owner</th><th>Env</th><th>Kind</th></tr></thead><tbody>${(
@@ -1319,6 +1360,7 @@ function symbol(state) {
       "lane-did-not-run": "○",
       "infra-mismatch": "⚙",
       "evidence-unmatched": "↯",
+      "expected-grey": "◌",
     }[state] ?? "·"
   );
 }

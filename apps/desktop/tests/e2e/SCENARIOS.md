@@ -1,19 +1,22 @@
 # Desktop E2E scenarios
 
-_Updated: 2026-08-11. The suite has 56 tests across eight spec files._
+_Updated: 2026-08-15. The suite has 66 tests across eleven spec files (full local run)._
 
 This is the current, executable coverage map for the real Electron app. A scenario is listed as covered only when a current Playwright spec proves it; older coverage claims are intentionally not carried forward.
 
 | Area | Spec | Tests | Covered behavior |
 | --- | --- | --: | --- |
 | Launch | `launch-time.spec.ts` | 1 | Cold process start through usable Home |
-| Onboarding and Home | `onboarding-home.spec.ts` | 10 | First-run CTA, auto-founded `Personal`, returning user, tiles/badges, empty state, rename, tile menu, app open, sidebar, command palette |
+| Onboarding and Home | `onboarding-home.spec.ts` | 18 | First-run CTA, auto-founded `Personal`, returning user, tiles/badges, empty state, rename, tile menu, app open, sidebar, command palette |
 | Delete | `delete-app.spec.ts` | 8 | Draft/published delete, offline/404 behavior, cancel/Escape/Enter/backdrop dismissal |
-| Builder | `builder.spec.ts` | 6 | New builder turn and tool pill, publish failure, preview iframe, existing-app edit, Code file tree, Logs filtering |
-| App view / automation templates / Analytics | `appview-templates-insights.spec.ts` | 4 | System app renders inline with no iframe, automation clone survives a restart, independent drafts, Analytics runs chart |
+| Builder | `builder.spec.ts` | 7 | New builder turn and tool pill, publish failure, preview iframe, existing-app edit, Code file tree, Logs filtering |
+| App view / automation templates / Analytics | `appview-templates-insights.spec.ts` | 7 | System app renders inline with no iframe, automation clone survives a restart, independent drafts, Analytics runs chart |
 | Automations | `automations.spec.ts` | 12 | List/error/retry, create/edit, enable/disable, webhook URL, delete, run viewer, success/failure timeline, nested tool transcript, rerun |
 | Settings / gateways | `settings-gateways.spec.ts` | 12 | Theme and system mode persistence, dark restart, Agents page, pairing-only enrollment, switch/rename/remove gateway, unreachable/auth errors, Cmd+K |
-| Pending writes | `pending-overlay.spec.ts` | 1 | Production inline Tally, Tasks, and Agenda routes over the real local gateway; visible offline add/RSVP controls and replica ⊕ outbox recovery across an Electron reload |
+| Pending writes | `pending-overlay.spec.ts` | 1 | Production inline Tally, Tasks, People, and Agenda routes over the real local gateway; visible offline add/RSVP controls and replica ⊕ outbox recovery across an Electron reload |
+| Household | `household.spec.ts` | 2 | Roster, the owner's scopes and sharing surface as served; another person's seat changes presentation, never authorization |
+| Docs journey | `docs-drive.spec.ts` | 1 | Byte-bearing north star (docs/apps/docs-scenarios.md): real staged upload through the visible control, Electron reload, byte-exact round-trip through the bearer transport, reading route opens |
+| Locker journey | `locker.spec.ts` | 1 | Custodian-seat admission: first-open passphrase setup, item add over the live local gateway, relock on reload, item invisible until the same passphrase unlocks |
 
 ## Current architecture assumptions
 

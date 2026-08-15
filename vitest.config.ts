@@ -40,6 +40,20 @@ export const coverageInclude = [
   // co-located outside packages/blueprints/src (issue #630 Wave 0).
   "packages/blueprints/apps/**/*.{ts,tsx}",
   "packages/design/kit/**/*.{ts,js}",
+  // The hand-authored source of the published recognition automations. It
+  // lives outside packages/model-runtime/src because it is bundled per handler
+  // rather than compiled with the package (issue #781). Only `.js` is
+  // instrumented: the tree's `.ts` files are its suites and their harness.
+  "packages/model-runtime/automation-handlers/**/*.js",
+  // The hand-authored connector/enricher handlers published under
+  // packages/blueprints/automations (#781). Only the `handler.js` files are
+  // product runtime; app.json/automation.json are manifests and the tree's
+  // `.ts` files are its suites and their harness. The five GENERATED
+  // recognition bundles are excluded below — their source is instrumented
+  // and floored under packages/model-runtime/automation-handlers, and
+  // bundle-drift.test.ts proves the published copies are the same program,
+  // so instrumenting the minified copy would double-count it.
+  "packages/blueprints/automations/**/handler.js",
   // The PWA service worker is load-bearing production offline/caching code that
   // lives outside src/ only because it must be served from the PWA root. Named
   // file, not `apps/*/public/**` — the rest of public/ is static assets (issue
@@ -59,6 +73,10 @@ export const coverageExclude = [
   "apps/web/src/generated/**",
   // In-tree ACP fake harness used by agent-runtime tests, not product code.
   "packages/agent-runtime/src/backends/acp/fake-acp-harness.mjs",
+  // Generated recognition bundles: source-floored upstream (see the
+  // packages/blueprints/automations include note above). The id list matches
+  // packages/model-runtime/build-automation-handlers.ts.
+  "packages/blueprints/automations/{embed-image,embed-text,faces,photo-ocr,transcript}/**",
 ];
 
 // Root config: aggregates every package as a Vitest project so `vitest run`

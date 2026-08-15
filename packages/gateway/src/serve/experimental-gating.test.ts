@@ -18,9 +18,40 @@ import type { GatewayInfo } from "@centraid/protocol";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import type { GatewayPaths } from "../paths.ts";
-import { EXPERIMENTAL_FEATURE_PREF_KEYS } from "./experimental-features.ts";
+import {
+  EXPERIMENTAL_FEATURE_PREF_KEYS,
+  EXPERIMENTAL_FEATURES,
+} from "./experimental-features.ts";
+import type {
+  ExperimentalFeature,
+  ExperimentalFeatureSet,
+} from "./experimental-features.ts";
 import { serve } from "./serve.ts";
 import type { GatewayServeHandle, ServeOptions } from "./serve.ts";
+
+/**
+ * The URLs each feature's gate owns — reachable only while that feature is on.
+ *
+ * `Record<ExperimentalFeature, …>` is exhaustive by type: a feature added to
+ * the registry does not compile here until it says what it mounts, so a new
+ * gate cannot ship advertising a capability whose surface nothing checks.
+ */
+const GATED_SURFACES: Record<ExperimentalFeature, readonly string[]> = {
+  automations: [
+    "/centraid/_automations",
+    "/centraid/_insights/summary?windowDays=30",
+  ],
+  connectors: [ROUTES.vaultConnections, ROUTES.vaultOAuthCallback],
+};
+
+/** Exactly one feature on. Full (not `Partial`) so a third feature breaks the
+ *  build here rather than being quietly left off. */
+function onlyGateOpen(open: ExperimentalFeature): ExperimentalFeatureSet {
+  return {
+    automations: open === "automations",
+    connectors: open === "connectors",
+  };
+}
 
 let dataDir: string;
 let handle: GatewayServeHandle | undefined;
@@ -57,6 +88,57 @@ async function status(pathname: string): Promise<number> {
   return res.status;
 }
 
+/** What a client can see about the gates from one boot. */
+interface GateObservation {
+  gateOpen: ExperimentalFeature;
+  advertises: Record<string, unknown>;
+  mounts: Record<string, boolean>;
+}
+
+/** Boot with exactly one gate open, and record both halves of what that gate
+ *  is supposed to control: the handshake, and which surfaces are owned. */
+async function observeGate(
+  open: ExperimentalFeature
+): Promise<GateObservation> {
+  const gate = await boot({ experimental: onlyGateOpen(open) });
+  const caps = await capabilities();
+  const probes = EXPERIMENTAL_FEATURES.flatMap(
+    (feature) => GATED_SURFACES[feature]
+  );
+  const codes = await Promise.all(probes.map((surface) => status(surface)));
+  await gate.close();
+  handle = undefined;
+  return {
+    advertises: Object.fromEntries(
+      EXPERIMENTAL_FEATURES.map((feature) => [feature, caps[feature]] as const)
+    ),
+    gateOpen: open,
+    // 404 is the mounted-ness signal: an unmounted family is owned by nothing,
+    // while a mounted route answers on its own terms — 200, or a refusal it
+    // authored itself.
+    mounts: Object.fromEntries(
+      probes.map((surface, index) => [surface, codes[index] !== 404] as const)
+    ),
+  };
+}
+
+/** The same shape, as the gate contract says it must be. */
+function expectedWith(open: ExperimentalFeature): GateObservation {
+  return {
+    advertises: Object.fromEntries(
+      EXPERIMENTAL_FEATURES.map((feature) => [feature, feature === open])
+    ),
+    gateOpen: open,
+    mounts: Object.fromEntries(
+      EXPERIMENTAL_FEATURES.flatMap((feature) =>
+        GATED_SURFACES[feature].map(
+          (surface) => [surface, feature === open] as const
+        )
+      )
+    ),
+  };
+}
+
 describe("experimental-gating scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`experimental-gating-${crypto.randomUUID()}-`);
@@ -66,6 +148,28 @@ describe("experimental-gating scenarios", () => {
     await handle?.close().catch(() => undefined);
     handle = undefined;
     await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  /*
+   * The law the scenarios below each prove one half of: the handshake and the
+   * router must agree, per feature, in both directions. A capability
+   * advertised over a surface that was deleted is the shape of the #765
+   * regression — the client mounts a place whose routes 404 — and a surface
+   * mounted under no capability is a feature shipping in the dark.
+   *
+   * Enumerated over the registry rather than the two names we happen to have,
+   * so a third experiment inherits the law instead of needing a new test.
+   */
+  test("[law:experimental-gate-parity] a feature is advertised exactly when its own surface is mounted", async () => {
+    // One boot per feature, keyed by a full `Record<ExperimentalFeature, …>`
+    // so a third experiment does not compile until it is observed here too.
+    const observed: Record<ExperimentalFeature, GateObservation> = {
+      automations: await observeGate("automations"),
+      connectors: await observeGate("connectors"),
+    };
+    for (const open of EXPERIMENTAL_FEATURES) {
+      expect(observed[open]).toStrictEqual(expectedWith(open));
+    }
   });
 
   test("a default gateway advertises neither experiment", async () => {

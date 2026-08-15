@@ -63,6 +63,7 @@ jobs:
       extension: ${{ steps.filter.outputs.extension }}
       oauth-worker: ${{ steps.filter.outputs.oauth-worker }}
       mobile: ${{ steps.filter.outputs.mobile }}
+      design: ${{ steps.filter.outputs.design }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
@@ -105,6 +106,12 @@ jobs:
               - 'packages/tunnel/**'
               - 'packages/design/**'
               - 'packages/blob-format/**'
+              # #781 — the recognition automations the packaged gateway ships
+              # under packages/blueprints/automations are BUILT from
+              # packages/model-runtime/automation-handlers, so a source-only
+              # change there still changes what the artifact runs. Listed with
+              # the other engine packages for the same reason they are.
+              - 'packages/model-runtime/**'
               - 'Dockerfile'
               - '.dockerignore'
               - 'flake.nix'
@@ -141,6 +148,16 @@ jobs:
               - 'packages/blueprints/**'
               - 'packages/design/**'
               - '.github/workflows/ci.yml'
+            # #781 — everything `bun run design:gallery` reads: the design
+            # registry + lowerings it renders, the kit css it inlines, the
+            # blueprint app manifests it captures, the gallery script itself,
+            # and the committed baselines/manifest it compares against.
+            design:
+              - 'packages/design/**'
+              - 'packages/blueprints/apps/*/app.json'
+              - 'scripts/design-gallery.mjs'
+              - 'tests/design-gallery/**'
+              - 'tests/design-grammar-matrix.json'
 
   static:
     runs-on: ubuntu-latest
@@ -227,6 +244,75 @@ jobs:
       # their source is offline and fast, so it gates on the per-PR loop.
       - run: bun run lint:e2e-flows
 
+  # #782 — the ~19 gates in `check:push` that had NO CI job at all. They ran
+  # only on a developer's machine, and receipts (#765, #731) show `check:push`
+  # being skipped locally, so "enforced by the pre-push hook" was enforcement in
+  # name only. These are all offline, deterministic Node scripts with no
+  # toolchain beyond `bun install`, so they cost a few seconds each and belong
+  # on the required per-PR loop.
+  #
+  # Deliberately NOT here (tracked in #781 for the excluded lanes):
+  #   - `design:gallery` — needs a downloaded Playwright browser; that is an
+  #     install + network dependency, not a static check.
+  #   - `check:mobile-native-state` — a path filter that shells out to
+  #     `apps/mobile ci:native-state`, which `mobile-smoke` already runs on
+  #     exactly the diffs that matter. Duplicating it here buys nothing.
+  #   - `test:qualities` — needs every package's `dist/`, so it rides `verify`
+  #     (which already builds) rather than paying for a second full build.
+  # Everything else in `check:push` is already covered by `static` or `verify`.
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # check:ui-receipt, lint:quality-knobs and lint:schema-export resolve
+          # a merge-base against origin/main; a shallow clone has none.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Fetch origin/main for merge-base gates
+        run: git fetch --no-tags origin main 2>/dev/null || true
+      # Share/deep-link reachability: every share surface must be reachable from
+      # a route the user can actually get to (TS AST walk, no build needed).
+      - run: bun run check:reachability
+      # Design-system consumer linters. DESIGN.md is the binding rulebook; these
+      # are the machine-checkable half of it (docs/design-machinery.md).
+      - run: bun run lint:design-tokens
+      - run: bun run lint:mobile-design
+      - run: bun run lint:logical-insets
+      - run: bun run lint:hairline
+      - run: bun run lint:aria-labels
+      - run: bun run lint:container-opacity
+      - run: bun run lint:type-floor
+      - run: bun run lint:motion-rule
+      # Lints DESIGN.md itself (structure of the rulebook, not its consumers).
+      - run: bun run lint:design-md
+      # Engine/law invariants: shared engines conform to their declared
+      # contracts, and every law in the registry is wired to a real enforcer.
+      - run: bun run lint:engine-conformance
+      - run: bun run lint:law-registry
+      # Quality knobs and schema exports ratchet — tighten-only vs origin/main.
+      - run: bun run lint:quality-knobs
+      - run: bun run lint:schema-export
+      # A UI-touching PR must carry a UI receipt.
+      - run: bun run check:ui-receipt
+      # Quarantined tests must be declared, attributed, and not expired.
+      - run: bun run test:quarantine
+      # Deterministically-environment-red tests (#781): every environment-
+      # predicate guard (platform/arch/uid) in a test file must be inventoried
+      # in tests/env-red.json with an open issue and an expiry or revisit
+      # trigger; the budget is down-only.
+      - run: bun run test:env-red
+      # Assertion-hygiene counts (toBeTruthy/toBeFalsy and the non-negated
+      # toHaveBeenCalled family) are down-only budgets in
+      # tests/hygiene-budgets.json — the enforcement the lint preset cannot
+      # give, since neither matcher is wrong in isolation (#781).
+      - run: bun run test:hygiene-ratchet
+      # Fixed sleeps in tests are a down-only budget in
+      # tests/sleep-inventory.json — wall-clock waits priced per site, with
+      # fake clocks / event-driven waits as the remedy (#781).
+      - run: bun run test:sleep-inventory
+
   verify:
     runs-on: ubuntu-latest
     # Full V8 coverage can exceed 25 minutes on a slow hosted runner even
@@ -259,6 +345,11 @@ jobs:
       # Rust format compatibility and the language-independent byte-plane
       # lifecycle contract are non-negotiable rollout gates (N0a/N0b).
       - run: bun run --cwd packages/tunnel test:data-plane
+      # #782 — the user-facing-qualities lane (matrix cells R4/D4/U3) was a
+      # `check:push` gate with no CI job. It spawns real gateways and imports
+      # workspace packages by their published entry points, so it needs the
+      # `bun run build` above; that is why it rides here and not in `gates`.
+      - run: bun run test:qualities
       # Issue #456's real-gateway budget gate. Linux strace supplies an exact
       # fsync/write count; losing that signal is itself a benchmark failure.
       - run: sudo apt-get update && sudo apt-get install --yes strace
@@ -532,6 +623,10 @@ jobs:
       - uses: ./.github/actions/setup
       - run: bun run web:build
       - run: bun run web:smoke
+      # #781 (#587 D21) — weigh the shipped PWA. Ceilings live in
+      # tests/experience-budgets/web.json and are tighten-only.
+      - name: Weigh the shipped web bundle
+        run: bun run perf:app-weight -- --surface web
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: web-dist
@@ -687,11 +782,54 @@ jobs:
   # `skipped` is a PASS on purpose: that is what a path-gated lane reports when
   # the diff does not touch it. `cancelled` is a FAIL — a dead runner is not a
   # green build. publish-report is best-effort UX and is deliberately absent.
+  # #781 — `design:gallery` was one of the two `check:push` gates with NO CI
+  # lane. #782 left it out of `gates` because it needs a downloaded Playwright
+  # browser — an install + network dependency, not a static check. This
+  # path-gated job pays that install only when a design-relevant path changes,
+  # mirroring how lane-client-e2e.yml provisions the same pinned browser.
+  #
+  # ONE-TIME BOOTSTRAP REQUIRED: the committed baselines under
+  # tests/design-gallery/baselines were captured on darwin arm64, and the
+  # fixtures render `system-ui` — Linux Chromium rasterizes that differently.
+  # Measured 2026-08-15 on linux x64, Chromium 141 via playwright 1.62.0: all
+  # 22 baselines diff 1.93%-7.26% against the 1% ceiling, so this job is red
+  # until Linux-rendered baselines exist. First run: download the
+  # design-gallery-actual artifact, review the captures, and either commit
+  # them as the baselines (making CI's renderer canonical) or land
+  # per-platform baseline directories in scripts/design-gallery.mjs so darwin
+  # `check:push` and this lane each compare against their own renderer.
+  design-gallery:
+    needs: changes
+    if: needs.changes.outputs.design == 'true' || needs.changes.outputs.all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      # Same pinned-browser convention as lane-client-e2e.yml: `bunx
+      # playwright install` resolves the CLI from the root lockfile's
+      # `playwright` pin, so the downloaded Chromium revision is exactly the
+      # one that version ships — no floating browser.
+      - run: bunx playwright install --with-deps chromium
+      # The gallery runs under bun (imports packages/design/src TS directly)
+      # and needs no package build; kit.css and the baselines are committed.
+      - run: bun run design:gallery
+      # On failure the actual captures are the rebaseline/review payload —
+      # without them a red pixel diff is undebuggable from the log alone.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: design-gallery-actual
+          path: artifacts/design-gallery/actual/
+          retention-days: 7
+
   check:
     needs:
       [
         changes,
         static,
+        gates,
+        design-gallery,
         verify,
         mutation-pr,
         client-e2e,

@@ -1,8 +1,9 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { afterAll, describe, expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import {
   changedFiles,
@@ -95,11 +96,8 @@ describe("projectNameOf", () => {
     path.dirname(new URL(import.meta.url).pathname),
     "../.."
   );
-  const fixtureRoot = mkdtempSync(path.join(tmpdir(), "diff-coverage-run-"));
+  const fixtureRoot = tempDirSync("diff-coverage-run-");
   const relFixture = path.relative(repoRoot, fixtureRoot);
-  afterAll(() => {
-    rmSync(fixtureRoot, { recursive: true, force: true });
-  });
 
   test("a workspace with a vitest config reports its package name", () => {
     const dir = path.join(fixtureRoot, "with-vitest");

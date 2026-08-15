@@ -56,7 +56,9 @@ export function extractUnhandledErrors(vitest) {
 
 /**
  * Summarize matrix cell states so "lane ran and failed" is distinct from
- * "no evidence / not run" in the report model.
+ * "no evidence / not run" in the report model. `expected-grey` (#781) is a
+ * named, budgeted absence — counted on its own, never inside `cellsMissing`,
+ * so the nightly zero-grey exit stays red for every UNregistered grey.
  */
 export function summarizeCellStates(cells) {
   const counts = {
@@ -70,6 +72,7 @@ export function summarizeCellStates(cells) {
     cellsLaneDidNotRun: 0,
     cellsInfraMismatch: 0,
     cellsEvidenceUnmatched: 0,
+    cellsExpectedGrey: 0,
   };
   for (const cell of cells ?? []) {
     if (cell.state === "passed") counts.cellsPassed += 1;
@@ -90,8 +93,102 @@ export function summarizeCellStates(cells) {
     if (cell.state === "lane-did-not-run") counts.cellsLaneDidNotRun += 1;
     if (cell.state === "infra-mismatch") counts.cellsInfraMismatch += 1;
     if (cell.state === "evidence-unmatched") counts.cellsEvidenceUnmatched += 1;
+    if (cell.state === "expected-grey") counts.cellsExpectedGrey += 1;
   }
   return counts;
+}
+
+/**
+ * Worst-status-wins precedence for evidence items that share an owner path.
+ * Platform-keyed evidence (#781: `MAESTRO_PLATFORM` suffixes the artifact
+ * filename, not the owner) yields one item per platform for the same owner —
+ * a naive `Map` kept whichever file sorted last, so a green Android verdict
+ * silently masked a red iOS one. Lower index = worse.
+ */
+const EVIDENCE_SEVERITY = [
+  "infra-mismatch",
+  "failed",
+  "flaky",
+  "stale",
+  "missing",
+  "skipped",
+  "passed",
+];
+
+function evidenceSeverityRank(status) {
+  const rank = EVIDENCE_SEVERITY.indexOf(String(status ?? ""));
+  // Unknown statuses sort like "missing": never able to mask a real result.
+  return rank === -1 ? EVIDENCE_SEVERITY.indexOf("missing") : rank;
+}
+
+/**
+ * Map owner path → the WORST evidence item recorded for that owner, so a
+ * multi-platform owner (one flow, iOS + Android verdicts) reports its worst
+ * platform rather than its last-written file.
+ */
+export function worstEvidenceByOwner(items, { normalizeOwner } = {}) {
+  const norm =
+    typeof normalizeOwner === "function"
+      ? normalizeOwner
+      : (value) => String(value ?? "").replaceAll("\\", "/");
+  const byOwner = new Map();
+  for (const item of items ?? []) {
+    const owner = norm(item?.owner);
+    if (!owner) continue;
+    const current = byOwner.get(owner);
+    if (
+      !current ||
+      evidenceSeverityRank(item.status) < evidenceSeverityRank(current.status)
+    ) {
+      byOwner.set(owner, item);
+    }
+  }
+  return byOwner;
+}
+
+/**
+ * Reclassify registered no-evidence cells as `expected-grey` (#781): a named,
+ * budgeted absence for cells whose owner has no evidence lane at all. The
+ * exemption is deliberately narrow so it cannot weaken the zero-grey gate:
+ *
+ * - void for a registration whose lane HAS a start marker (the lane exists —
+ *   a grey cell under a real lane stays red);
+ * - only the no-evidence states qualify; real evidence (pass/fail/flaky/
+ *   stale) always keeps its state;
+ * - only enumerated cell ids qualify — an unregistered grey cell stays red.
+ *
+ * Returns the (mutated-copy) cells plus the applied ids and the owners whose
+ * silence is expected while their lane does not exist.
+ */
+export function applyExpectedGrey(cells, registrations, laneMarkers = {}) {
+  const reclassifiable = new Set([
+    "missing",
+    "owner-silent",
+    "lane-did-not-run",
+  ]);
+  const applied = [];
+  const expectedAbsentOwners = new Set();
+  const byCellId = new Map();
+  for (const registration of registrations ?? []) {
+    if (laneMarkers[registration.lane]) continue; // lane exists — void
+    for (const id of registration.cells ?? []) byCellId.set(id, registration);
+    if (registration.owner) expectedAbsentOwners.add(registration.owner);
+  }
+  const next = (cells ?? []).map((cell) => {
+    const registration = byCellId.get(cell.id);
+    if (!registration || !reclassifiable.has(cell.state)) return cell;
+    applied.push(cell.id);
+    return {
+      ...cell,
+      state: "expected-grey",
+      expectedGrey: {
+        lane: registration.lane,
+        issue: registration.issue,
+        reason: registration.reason,
+      },
+    };
+  });
+  return { cells: next, applied: applied.sort(), expectedAbsentOwners };
 }
 
 /**
@@ -349,11 +446,16 @@ export function findUnmappedEvidence(
   };
 }
 
-/** Declared owners for which a full run produced no evidence key at all. */
+/**
+ * Declared owners for which a full run produced no evidence key at all.
+ * `ignoreOwners` names owners whose silence is a registered, budgeted absence
+ * (#781 expected-grey): they are excluded only while their lane does not
+ * exist — the caller must not pass them once the lane has a start marker.
+ */
 export function findUnmatchedOwners(
   results,
   manifest,
-  { normalizeOwner } = {}
+  { normalizeOwner, ignoreOwners } = {}
 ) {
   const norm =
     typeof normalizeOwner === "function"
@@ -362,9 +464,10 @@ export function findUnmatchedOwners(
   const observed = new Set(
     (results ?? []).map((result) => norm(result?.owner)).filter(Boolean)
   );
+  const ignored = new Set([...(ignoreOwners ?? [])].map(norm));
   return [...collectRegisteredOwners(manifest)]
     .map(norm)
-    .filter((owner) => owner && !observed.has(owner))
+    .filter((owner) => owner && !observed.has(owner) && !ignored.has(owner))
     .sort();
 }
 

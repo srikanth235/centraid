@@ -5,8 +5,9 @@
 // established for People, via `PhotoStateView`'s "person" mode. `PhotoStateView`
 // has no "place" mode and is owned by another agent mid-flight — rather than
 // grow a file that is not this issue's to edit, the filter lives here,
-// grouping by the same 0.1°-proximity key `PlacesView` and `PlacesMap` use, so
-// all three name the same place the same way.
+// grouping by the same 0.1° key `PlacesView` mints for its cards
+// (`places-model.ts`), so a card's count and this screen's count cannot
+// disagree about which photographs were taken here.
 
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -20,6 +21,7 @@ import { spacing, t, useTheme } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
+import { assetsAtPlace } from "./places-model";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
 
@@ -34,25 +36,11 @@ export default function PlaceDetail({
     "photos",
     useMemo(() => ({ entity: "core.place" }), [])
   );
-  const placeById = useMemo(
-    () => new Map(places.rows.map((row) => [String(row.place_id), row])),
-    [places.rows]
-  );
   const { placeKey, placeName } = route.params;
 
   const assets = useMemo(
-    () =>
-      timelineAssets.filter((asset) => {
-        if (asset.deleted || !asset.placeId) return false;
-        const row = placeById.get(asset.placeId);
-        if (!row) return false;
-        const latitude = Number(row.latitude ?? row.lat);
-        const longitude = Number(row.longitude ?? row.lon ?? row.lng);
-        if (!Number.isFinite(latitude) || !Number.isFinite(longitude))
-          return false;
-        return `${latitude.toFixed(1)}:${longitude.toFixed(1)}` === placeKey;
-      }),
-    [timelineAssets, placeById, placeKey]
+    () => assetsAtPlace(timelineAssets, places.rows, placeKey),
+    [timelineAssets, places.rows, placeKey]
   );
 
   return (

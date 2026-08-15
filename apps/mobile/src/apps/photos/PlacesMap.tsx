@@ -39,10 +39,6 @@ import {
   projectPlaces,
   readableName,
 } from "@centraid/blueprints/apps/photos/place-map";
-import type {
-  MapPin,
-  PlacePoint,
-} from "@centraid/blueprints/apps/photos/place-map";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
@@ -52,21 +48,8 @@ import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
+import { pinLabel, pinSize, placePoints, PIN_MAX } from "./places-model";
 import { usePhotoTimeline } from "./timeline-source";
-
-/** Matches the web map's pin ramp: AREA tracks the count, so nine photographs
- *  read as three times one rather than nine times it. The floor is a fingertip
- *  and also the smallest a photograph can be and still be recognised — which
- *  is the entire point of drawing one. */
-const PIN_MIN = 44;
-const PIN_MAX = 76;
-
-function pinSize(count: number, largest: number): number {
-  if (largest <= 1) return PIN_MIN;
-  return Math.round(
-    PIN_MIN + (PIN_MAX - PIN_MIN) * (Math.sqrt(count) / Math.sqrt(largest))
-  );
-}
 
 export default function PlacesMap({
   navigation,
@@ -81,44 +64,17 @@ export default function PlacesMap({
   );
   const { assets } = usePhotoTimeline();
 
-  // One PlacePoint per place, counted over the loaded window. The grouping
-  // that used to live here — a hand-rolled 0.1° bucket — is gone: proximity is
-  // a question about the drawing, and `projectPlaces` answers it in pixels
-  // against the box actually being drawn. The old fixed degree bucket merged
-  // two towns on a country-wide map and split one street on a city one.
-  const points: PlacePoint[] = useMemo(() => {
-    // The id→row lookup is built INSIDE the memo. Hoisting it out rebuilt it
-    // every render, which made it useless as a dependency and forced a lint
-    // suppression to paper over that; the rows are what actually decide
-    // whether this recomputes.
-    const placeById = new Map(
-      places.rows.map((row) => [String(row.place_id), row])
-    );
-    const byPlace = new Map<string, PlacePoint>();
-    for (const asset of assets) {
-      const row = asset.placeId ? placeById.get(asset.placeId) : undefined;
-      if (!row) continue;
-      const lat = Number(row.geo_lat ?? row.latitude ?? row.lat);
-      const lng = Number(row.geo_lng ?? row.longitude ?? row.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-      const key = String(row.place_id);
-      const existing = byPlace.get(key);
-      if (existing) existing.count += 1;
-      else
-        byPlace.set(key, {
-          key,
-          lat,
-          lng,
-          count: 1,
-          name: row.name ? String(row.name) : null,
-          // The first asset seen for this place, and the timeline hands them
-          // over newest first — so a pin shows the most recent photograph
-          // taken there rather than an arbitrary one.
-          thumb: asset.uri,
-        });
-    }
-    return [...byPlace.values()];
-  }, [assets, places.rows]);
+  // One PlacePoint per place, counted over the loaded window — the arithmetic
+  // lives in `places-model.ts` beside the shelf's own, where the two groupings
+  // can be read (and falsified) side by side. The id→row lookup is built
+  // inside it rather than in a memo of its own: hoisting it out rebuilt it
+  // every render, which made it useless as a dependency and forced a lint
+  // suppression to paper over that; the rows are what actually decide whether
+  // this recomputes.
+  const points = useMemo(
+    () => placePoints(assets, places.rows),
+    [assets, places.rows]
+  );
 
   const mapWidth = Math.max(1, width - spacing[4] * 2);
   const mapHeight = Math.round(mapWidth * 0.9);
@@ -141,13 +97,6 @@ export default function PlacesMap({
     (max, pin) => Math.max(max, pin.count),
     1
   );
-  const label = (pin: MapPin): string => {
-    const where = readableName(pin.name) ?? "an unnamed place";
-    const photographs = `${pin.count} ${pin.count === 1 ? "photograph" : "photographs"}`;
-    return pin.places > 1
-      ? `${where} and ${pin.places - 1} more nearby, ${photographs}`
-      : `${where}, ${photographs}`;
-  };
   const readingPin = projection.pins.find((pin) => pin.key === reading) ?? null;
 
   return (
@@ -243,7 +192,7 @@ export default function PlacesMap({
               return (
                 <Pressable
                   key={`hit-${pin.key}`}
-                  accessibilityLabel={label(pin)}
+                  accessibilityLabel={pinLabel(pin)}
                   accessibilityRole="button"
                   onPress={() => setReading(pin.key)}
                   style={[

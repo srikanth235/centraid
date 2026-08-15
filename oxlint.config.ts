@@ -101,8 +101,18 @@ const TEST_SEAM_IMPORTS = {
 // back off in the last override.
 const VITEST_TEST_FILES = [
   "**/*.{test,spec}.{ts,tsx}",
+  // #781 — `.test.mjs` was invisible to the seam rules (11 files carried raw
+  // mkdtemp*). Widened, not carved: node:test-runner files that genuinely
+  // cannot import the kit (tempDir() registers a vitest afterAll at import
+  // time) suppress per-line with a justification instead of being excluded
+  // here wholesale.
+  "**/*.test.mjs",
   "**/*.test-fixtures.ts",
   "tests/helpers/**/*.ts",
+  // #781 — the agent-e2e harness/flow sources drive the nightly journeys and
+  // had the same seam exposure (Math.random ports in the pairing harness);
+  // they are test infrastructure, so the seam rules apply.
+  "tests/agent-e2e-*/**/*.mjs",
 ];
 
 // Hermes compatibility, kept separate so the mobile/time-engine *test* files

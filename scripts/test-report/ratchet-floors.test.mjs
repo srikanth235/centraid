@@ -330,6 +330,65 @@ describe("ratchetFloors", () => {
     expect(errors).toEqual([]);
   });
 
+  test("an UNCHANGED approvedDeviation does not waive a floor decrease (#781)", () => {
+    const ledger = "permanent provenance ledger text carried since #565";
+    const { errors, waived } = ratchetFloors({
+      baseFloors: { lines: 30, approvedDeviation: ledger },
+      headFloors: { lines: 20, approvedDeviation: ledger },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+    });
+    expect(waived).toBe(false);
+    expect(errors.some((e) => e.includes("decreased 30"))).toBe(true);
+  });
+
+  test("an UNCHANGED approvedDeviation does not waive a floor deletion (#781)", () => {
+    const ledger = "permanent provenance ledger text carried since #565";
+    const { errors } = ratchetFloors({
+      baseFloors: {
+        "packages/vault/src/**": { lines: 90 },
+        approvedDeviation: ledger,
+      },
+      headFloors: { approvedDeviation: ledger },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+    });
+    expect(errors.some((e) => e.includes("removed"))).toBe(true);
+  });
+
+  test("an UNCHANGED mutation approvedDeviation does not waive (#781)", () => {
+    const ledger = "mutation ledger";
+    const { errors, waived } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 30 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+      baseMutation: { "packages/vault": 80, approvedDeviation: ledger },
+      headMutation: { "packages/vault": 70, approvedDeviation: ledger },
+    });
+    expect(waived).toBe(false);
+    expect(errors.some((e) => e.includes("mutation floor"))).toBe(true);
+  });
+
+  test("an UNCHANGED perf approvedDeviation does not waive a widen (#781)", () => {
+    const { errors } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 30 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+      perfBudgets: [
+        {
+          label: "tests/suite-wall-clock.json",
+          base: { totalMs: 100 },
+          head: { totalMs: 999 },
+          approvedDeviation: "same ledger text",
+          baseApprovedDeviation: "same ledger text",
+        },
+      ],
+    });
+    expect(errors.some((e) => e.includes("widened"))).toBe(true);
+  });
+
   test("fails floor decrease without waiver", () => {
     const { errors } = ratchetFloors({
       baseFloors: { lines: 30 },

@@ -2,23 +2,45 @@
 
 ## Open
 
-- **`wal-shipper` [G4] fails on the current tree.** `packages/vault/src/wal-shipper.test.ts`
-  > `[G4] a failed segment write reports an error, moves nothing, and retries
-  the same range` fails in a full `bun run test` (the rest of the package is
-  green: 1275 passed, 2 skipped). It is not a regression from any recent
-  sharing work — `wal-shipper.ts` and its test are byte-identical to their
-  state at `e0a8ed51` (#642) and were untouched by #726, #731, #741, #745,
-  #749, and #750. Recorded here because a red test nobody has written down
-  stops reading as a signal: every agent that has run the vault suite since
-  has had to re-derive that it is pre-existing. Whoever picks it up should
-  first check whether the failure is environment-shaped before assuming the
-  shipper logic is wrong. **It is**: the test injects a write failure with
-  `chmodSync(dir, 0o500)`, and root ignores directory permissions, so the
-  write it expects to fail succeeds. Every agent session in this container
-  runs as root, which is why it reproduces here and not on a developer
-  machine. The fix is to inject the failure by a means root cannot bypass,
-  not to change the shipper.
-
+- **Two container-hermeticity defects found by an attempted in-container full
+  coverage run** (13,203 green / 3 red, all environmental): (1)
+  `packages/agent-runtime/src/backends/acp/launch.test.ts` inherits the real
+  `process.env` through `planLaunch`, so a host that exports `IS_SANDBOX`
+  (this container: `yes`) fails two assertions — the test should stub the
+  variable, not trust the host; (2)
+  `packages/gateway/src/serve/gateway-db-lock.integration.test.ts` shells out
+  to the `sqlite3` CLI, absent here — a candidate for the new
+  `tests/env-red.json` inventory (guard on CLI presence) or a rewrite against
+  `node:sqlite`.
+- **Five `photos-*.mjs` Maestro flows are unlinted.** `scripts/lint-e2e-flows.mjs`
+  `FILES` omits all five photos flows (`photos-search.mjs` even carries a
+  marker for a nonexistent rule name, `input-observed`). Adding them may
+  surface latent findings in five flows at once, so it deserves its own pass
+  rather than a drive-by (#781 wave 3 added only the new `places-seat.mjs`).
+- **`PlacesView` prints raw coordinate-shaped place names** on shelf cards
+  (`row.name` without `readableName`), while the web shelf and the phone's own
+  map refuse them — seeded places are coordinate-named, so real shelves show
+  headings like "39.0021, -120.1131". Cosmetic divergence; fix alongside the
+  next Places pass.
+- **`google-contacts-pull` renders yearless birthdays as `---09-05`** (the
+  `"--"` placeholder plus the joining `"-"`); vCard's yearless form is
+  `--09-05`. Asserted as-is with a NOTE in
+  `packages/blueprints/automations/pull-connectors.test.ts` so the fix must
+  flip a test. `google-calendar-invite-send` also uses wall-clock `new Date()`
+  (DTSTAMP) and `Math.random()` (MIME boundary) inside the published handler —
+  nondeterminism the connector lane's lint doesn't catch; its tests
+  deliberately don't assert those bytes.
+- **`apps/desktop/tests/e2e` standalone `tsc` has 13 pre-existing errors**
+  (missing `window.CentraidApi` augmentation when run outside the harness)
+  and `apps/web/tests/e2e/tsconfig.json` likewise; neither is wired to a gate,
+  so spec type rot is invisible. Wire or retire the configs.
+- **Web shell palette click race after reload**: the Search button paints
+  before its listener attaches, so early clicks are silently lost. Four web
+  e2e specs work around it with a retry poll; the product should attach before
+  paint or render disabled.
+- **People surfaces no pending-state marker** (no `kit-pending-chip` anywhere
+  in the app) and `AddPersonModal` closes only on `executed` — an offline add
+  looks like a failure while the row is in fact projected and durable.
 - **`react-native-maps` is dead weight and still ships.** Places on the phone
   now draws the shared `place-map.ts` projection through `react-native-svg`
   (see [docs/photos/places.md](docs/photos/places.md)), so nothing imports
@@ -34,17 +56,6 @@
   landed: that host's CocoaPods 1.16.2 aborts under Ruby 4.0.3 with
   `Unicode Normalization not appropriate for ASCII-8BIT`. Until it happens the
   app bundles a native map SDK it never calls.
-- **An inline app cannot read the frame's band owner, so a compact pane can
-  lose its shelf navigation.** The shell keeps `shell.bandOwner.<appId>` in
-  `packages/client/src/react/shell/useBandOwner.ts`, but `InlineFrame`
-  (`packages/blueprints/apps/inline-types.ts`) exposes nothing about it. An app
-  can claim the band; it cannot ask whether the claim was honoured. Docs hides
-  its shelf strip on compact and claims unconditionally, so if the member hands
-  the band back to the shell there is no shelf navigation left at all. Photos
-  papers over the same hole by keeping a second copy of the preference. The fix
-  is one field on the frame contract — the shell already has the verdict, it
-  simply does not pass it down — after which Photos' duplicate copy can go.
-
 - **The daily rollup has no per-day failure split, so the bars carry one
   segment.** The automations and insights surfaces draw a bar per day, and the
   v9 bar block stacks succeeded-then-failed with a fail-first clamp
@@ -114,9 +125,13 @@
   `check:pr`, product journey owners (chat/ENOSPC/restore/multi-writer), matrix
   honesty, Android home-loads, CI latency pins, and hygiene chip-away
   (`toHaveBeenCalled` / fixed sleeps). See [TESTING.md](TESTING.md) Nightly SLA
-  + confidence map. Residual hygiene debt: ~600 `toHaveBeenCalled*` sites
-  (~116 bare `toHaveBeenCalled()` after #545 E1/E2) and remaining fixed
-  sleeps; continue per-file chip-away.
+  + confidence map. Residual hygiene debt (measured 2026-08-14 over
+  `**/*.test.{ts,tsx}`): 1,023 `toHaveBeenCalled*` sites, of which 186 are
+  bare `toHaveBeenCalled()` — and **all 186 are negated**
+  `.not.toHaveBeenCalled()`, where naming arguments would weaken the
+  assertion rather than sharpen it. Zero positive bare calls remain. The
+  chip-away therefore continues against the argument-bearing forms and the
+  remaining fixed sleeps, per file.
 - #212 — Testing strategy ([TESTING.md](TESTING.md)) follow-up: the three
   per-layer workstreams (`assert.*` → `expect`, coverage-floor ratchet, desktop
   renderer logic-extraction) landed under #214; the **desktop Playwright e2e
@@ -128,6 +143,46 @@
   near-duplicate `relativeTime` still need consolidation / floors — #545 D5/B8).
 
 ## Resolved
+
+- #781 — Nightly mobile evidence is now keyed flow × platform.
+  `writeFlowVerdict` writes `artifacts/e2e/<slug>-<platform>.json` and
+  `recordQualityResult` writes `artifacts/<lane>/<owner-slug>-<platform>.json`
+  when `MAESTRO_PLATFORM` is set (`tests/agent-e2e-shared/harness.mjs`), with
+  the platform stamped in the JSON and the owner unchanged, so
+  `merge-multiple` keeps both platforms and matrix mapping still resolves.
+  The report now merges per-owner evidence worst-status-wins and keys trend
+  series per platform, so a green platform cannot mask a red one; drift
+  budgets read the platform-suffixed history, so cross-platform samples can
+  no longer interleave into a false ratchet. Platform-less lanes (pairing,
+  desktop, web, the test-kit writer) keep their exact prior paths.
+- #778 (with #712 E3) — Closed the band-ownership hole from both ends, so an
+  inline app can no longer lose its shelf navigation to a verdict it cannot
+  read. On web and desktop #778 deleted the member preference outright
+  (`packages/client/src/react/shell/useBandOwner.ts` is gone): a first-party
+  app's claim is now honoured on exactly the structural condition the app
+  already knows — first-party **and** compact — in
+  `packages/client/src/react/shell/routes/inlineAppFrame.tsx`, with no
+  hand-back toggle for a member to flip, so Docs claiming unconditionally
+  while hiding its compact shelf strip is safe by construction rather than by
+  luck. On mobile the latch survives as a member preference but is no longer
+  Photos' private copy: #712 E3 moved it to the frame's own
+  `apps/mobile/src/kit/band/band-owner.ts` under the same
+  `shell.bandOwner.<appId>` key, and the claiming screens read the verdict
+  through `useBandOwner(appId)` instead of duplicating it. The originally
+  proposed fix — a field on the `InlineFrame` contract — turned out to be
+  unnecessary: removing the disagreement was cheaper than reporting it.
+
+- #782 — Fixed the environment-shaped `[G4]` failure in
+  `packages/vault/src/wal-shipper.test.ts` (`a failed segment write reports an
+  error, moves nothing, and retries the same range`). The test injected its
+  write failure with `chmodSync(dir, 0o500)`, and root ignores directory
+  permissions, so the write the assertion needed to fail succeeded instead —
+  red for every agent session in this container, green on a developer machine,
+  and pre-existing rather than a regression from any sharing work. The fault is
+  now path-shaped: a regular file sits where the group directory belongs, so
+  `mkdir` throws for every uid, root included. The shipper is unchanged, which
+  is the point — the defect was in how the test bought its failure, never in
+  the code under test.
 
 - #767 (PR #773) — The committed `tests/design-gallery/baselines/mo-advisory-dark.png`
   baseline had drifted against the current `toNativeTheme()` lowering on main

@@ -5,6 +5,7 @@
   "description": "Shared, dev-only test infrastructure for Centraid packages and quality lanes.",
   "type": "module",
   "exports": {
+    "./automation-handler-harness": "./src/automation-handler-harness.ts",
     "./fake-clock": "./src/fake-clock.ts",
     "./flush": "./src/flush.ts",
     "./sequential": "./src/sequential.ts",

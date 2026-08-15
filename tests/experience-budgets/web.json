@@ -54,9 +54,21 @@
       "probe": "NONE TODAY. Needs a deterministic stub runner in apps/web/tests/e2e/server.ts that emits a first token on a fixed delay, so the measurement is the client's dead time and not the provider's."
     },
     "appWeight": {
-      "status": "unmeasured",
-      "volume": "n/a — build artifact",
-      "probe": "apps/web/dist is already fenced by transfer-byte ceilings in perf-budgets.ts (shell.maxTransferBytes); a second weigh-in here would be a duplicate owner"
+      "status": "measured",
+      "volume": "n/a — build artifact, independent of vault size",
+      "probe": "scripts/perf/app-weight.mjs --surface web (weighs apps/web/dist produced by `bun run web:build`), run in CI after the web build",
+      "maxTotalBytes": 11010048,
+      "maxLargestChunkBytes": 2200000,
+      "_provenance": {
+        "at": "2026-08-15",
+        "host": "linux x64 worktree, `bun run web:build` (vite build + precompress)",
+        "observedShippedBytes": 10211472,
+        "observedShippedFiles": 72,
+        "observedLargestChunkBytes": 1995618,
+        "observedLargestChunk": "centraid_web_iroh_bg-*.wasm",
+        "note": "MEASURED by `node scripts/perf/app-weight.mjs --surface web --report` (#781, closing the #587 D21 web gap). The earlier 'a weigh-in here would be a duplicate owner' claim was wrong: perf-budgets.ts shell.maxTransferBytes fences what the BROWSER transfers on the e2e shell journey (compressed, journey-scoped), not what `web:build` ships on disk — the two can diverge by megabytes without either gate noticing the other's regression. Source maps plus the .br/.gz precompress sidecars (19.7 MB together) are excluded as diagnostics/alternate encodings of already-weighed bytes. The Iroh WASM binding ships TWICE (assets/ copy + centraid-worker-iroh.wasm worker copy, 2.0 MB each) — de-duplicating it is the single biggest cut available, and when it lands these ceilings must be re-measured and TIGHTENED. Next largest: pdf.worker.min.mjs 1.30 MB, boot.js 1.24 MB, sqlite3.wasm 865 kB.",
+        "headroom": "observed + ~8% total; largest chunk + ~10% (mirrors the desktop/mobile seeds)"
+      }
     }
   }
 }

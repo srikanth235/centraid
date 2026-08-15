@@ -107,7 +107,8 @@
         "react",
         "react-dom",
         "@types/react",
-        "@types/react-dom"
+        "@types/react-dom",
+        "@axe-core/playwright"
       ]
     },
     "apps/mobile": {

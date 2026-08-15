@@ -1,5 +1,6 @@
 # Intentionally ungated surfaces (#532 / TESTING.md). One package or app id per
-# line (e.g. packages/protocol, apps/desktop). Comments start with #.
+# line (e.g. packages/protocol, apps/desktop). A row also covers that id's
+# non-`src` executable trees. Comments start with #.
 # Dev-only / tiny packages without a whole-tree floor:
 # packages/blob-format is NO LONGER ungated (#656 Layer 1F): its source was one
 # `src/index.ts`, which the root `coverageExclude` `**/index.ts` erased, so the
@@ -10,8 +11,50 @@ packages/test-kit
 # each carry their own floor — replica/**, react/**, and the top-level
 # *.{ts,tsx} gateway-client seam. The allowlist row it used to hold is gone on
 # purpose, so a future client tree with no floor fails this directive.
+# Non-`src` trees first surfaced by the #781 scope discovery. Each is a
+# deliberate exception, not an oversight:
+#
+# packages/blueprints/automations is NO LONGER allowlisted (#781, second
+# tree): the 23 HAND-AUTHORED connector/enricher handlers now carry
+# source-level suites in the tree itself (pull-connectors, outbox-send,
+# release-notes-drafter beside handler-harness.ts), are instrumented via the
+# root coverageInclude `packages/blueprints/automations/**/handler.js`, and
+# the directive expects their floor scope in tests/coverage-floors.json. The
+# five GENERATED recognition bundles (photo-ocr, embed-image, embed-text,
+# faces, transcript — the id list in
+# packages/model-runtime/build-automation-handlers.ts) need no row of their
+# own: they are excluded from instrumentation by the root coverageExclude
+# because their SOURCE is floored under
+# packages/model-runtime/automation-handlers and bundle-drift.test.ts proves
+# the published copies are the same program; instrumenting the minified copy
+# would double-count it (the same reasoning excludes them from SonarCloud in
+# scripts/ci/configure-sonarcloud.mjs).
+# One re-export bridge (types/virtual-kit/kit.ts) that exists so TypeScript can
+# resolve an app-relative `./kit.ts` to packages/design/kit, which is floored.
+# It declares no behaviour of its own.
+packages/blueprints/types
+# The visual-verification harness: a mock window.centraid and a dev server,
+# never shipped and never loaded by the runtime.
+packages/blueprints/visual-harness
 # Renderer / installable clients: e2e + extracted units, not line floors.
 apps/desktop
 apps/extension
-apps/mobile
 apps/web
+# apps/mobile is NO LONGER blanket-exempt (#781). The whole-app row hid 388
+# non-test source files behind "intentionally ungated" while 150 of them had
+# real co-located Vitest/RNTL suites (164 test files). The src tree is now
+# visible through tests/matrix.json flow ownership instead —
+# apps/mobile/src/lib/upload/crash.test.ts,
+# apps/mobile/src/kit/components/blockParity.test.tsx, and the #781 Places
+# suite apps/mobile/src/apps/photos/places-model.test.ts — so if mobile's
+# matrix flows ever disappear, this directive fires instead of staying quiet.
+# The honest remainder below is 5 files, not 388: the four Expo native-module
+# TS bridges (device-host seams, exercised by mobile-smoke's Metro export +
+# Android compile and the nightly Maestro journeys, uninstrumentable by the
+# node/jsdom coverage run) and the one build-time Expo config plugin (.cjs,
+# runs inside `expo prebuild`, never in the app). The remaining ~238 untested
+# screen/kit files are the documented renderer-UI policy (TESTING.md: screens
+# are covered by extracted logic plus journeys, not whole-surface line
+# percentages) — a per-app floor for apps/mobile stays tracked under #781.
+apps/mobile/modules
+apps/mobile/plugins

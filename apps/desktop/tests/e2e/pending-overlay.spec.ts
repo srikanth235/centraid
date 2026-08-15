@@ -177,7 +177,7 @@ async function prepareAgenda(page: Page): Promise<string> {
   return String(prepared.eventId);
 }
 
-test("production Tally, Tasks, and Agenda pending rows survive an offline Electron reload", async () => {
+test("production Tally, Tasks, People, and Agenda pending rows survive an offline Electron reload", async () => {
   test.setTimeout(180_000);
   const env = await makeEnv();
   const { app, page } = await launchApp(env);
@@ -189,6 +189,7 @@ test("production Tally, Tasks, and Agenda pending rows survive an offline Electr
     // Warm each production inline bundle before the browser context loses its
     // network. The local outbox, query engine, and app routes remain real.
     await openFirstParty(page, "Tasks");
+    await openFirstParty(page, "People");
     await openFirstParty(page, "Tally");
     await openFirstParty(page, "Agenda");
     await expect(
@@ -204,6 +205,26 @@ test("production Tally, Tasks, and Agenda pending rows survive an offline Electr
     await page.getByRole("button", { name: "Add", exact: true }).click();
     await expect(page.getByText("Offline task", { exact: true })).toBeVisible();
     await expect(page.locator(".kit-pending-chip")).toHaveText("queued");
+
+    // People shares the same replica ⊃ outbox rails: an offline add-person
+    // projects pending core.party/people.profile rows (people/
+    // pending-projection.ts). The modal deliberately stays open on a queued
+    // outcome (narrate() only closes on `executed`), so dismiss it and
+    // assert the projected person is already in the list.
+    await openFirstParty(page, "People");
+    await page.getByRole("button", { name: "New", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Add person" }).click();
+    await page.getByRole("textbox", { name: "Name" }).fill("Offline Neighbor");
+    const addPersonModal = page.locator(".kit-modal");
+    await addPersonModal
+      .getByRole("button", { name: "Add person", exact: true })
+      .click();
+    await addPersonModal
+      .getByRole("button", { name: "Cancel", exact: true })
+      .click();
+    await expect(
+      page.getByText("Offline Neighbor", { exact: true }).first()
+    ).toBeVisible();
 
     await openFirstParty(page, "Tally");
     await page.getByText("Offline Journey", { exact: true }).first().click();
@@ -252,6 +273,12 @@ test("production Tally, Tasks, and Agenda pending rows survive an offline Electr
     await openFirstParty(page, "Tasks");
     await expect(page.getByText("Offline task", { exact: true })).toBeVisible();
     await expect(page.locator(".kit-pending-chip")).toHaveText("queued");
+
+    // The People pending person also came back from the durable outbox.
+    await openFirstParty(page, "People");
+    await expect(
+      page.getByText("Offline Neighbor", { exact: true }).first()
+    ).toBeVisible();
 
     await openFirstParty(page, "Tally");
     await page.getByText("Offline Journey", { exact: true }).first().click();

@@ -20,6 +20,7 @@
     "react-dom": "19.2.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@centraid/test-kit": "workspace:*",
     "@playwright/test": "^1.62.0",
     "@types/react": "~19.2.17",

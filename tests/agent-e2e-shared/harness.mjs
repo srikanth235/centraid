@@ -11,14 +11,33 @@ export function defaultRunId() {
   return `${stamp}-${crypto.randomBytes(3).toString("hex")}`;
 }
 
+/**
+ * Platform segment for evidence keys (#781, QUALITY.md "keyed by flow, not
+ * flow × platform"). The mobile jobs export `MAESTRO_PLATFORM=ios|android`;
+ * suffixing the artifact filename with it stops the iOS and Android uploads
+ * of the same flow from last-write-winning over each other after the report
+ * job's `merge-multiple` download. Platform-less lanes (pairing, desktop,
+ * web) see an empty segment and keep their exact current paths.
+ */
+export function evidencePlatform(env = process.env) {
+  return String(env.MAESTRO_PLATFORM ?? "")
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/gu, "");
+}
+
+/** `<owner-slug>` filename stem, platform-suffixed when MAESTRO_PLATFORM is set. */
+function evidenceSlug(owner) {
+  const slug = owner.replaceAll(/[^a-z0-9]+/giu, "-").replace(/^-|-$/gu, "");
+  const platform = evidencePlatform();
+  return platform ? `${slug}-${platform}` : slug;
+}
+
 /** JavaScript-lane counterpart of @centraid/test-kit's recordQualityResult. */
 export async function recordQualityResult(repoRoot, result) {
   const directory = path.join(repoRoot, "artifacts", result.lane);
-  const slug = result.owner
-    .replaceAll(/[^a-z0-9]+/giu, "-")
-    .replace(/^-|-$/gu, "");
   await fs.mkdir(directory, { recursive: true });
-  const file = path.join(directory, `${slug}.json`);
+  const platform = evidencePlatform();
+  const file = path.join(directory, `${evidenceSlug(result.owner)}.json`);
   let history = [];
   try {
     history = JSON.parse(await fs.readFile(file, "utf8")).history ?? [];
@@ -31,6 +50,7 @@ export async function recordQualityResult(repoRoot, result) {
     `${JSON.stringify(
       {
         ...result,
+        ...(platform ? { platform } : {}),
         capturedAt,
         history: [
           ...history,
@@ -84,11 +104,13 @@ async function trailingMedianBudget(
   minimumSamples,
   multiplier
 ) {
-  const slug = owner.replaceAll(/[^a-z0-9]+/giu, "-").replace(/^-|-$/gu, "");
+  // Same platform-keyed path recordQualityResult writes, so an iOS budget is
+  // computed over iOS samples only — cross-platform samples never interleave
+  // into a false ratchet (#781, QUALITY.md).
   try {
     const previous = JSON.parse(
       await fs.readFile(
-        path.join(repoRoot, "artifacts", lane, `${slug}.json`),
+        path.join(repoRoot, "artifacts", lane, `${evidenceSlug(owner)}.json`),
         "utf8"
       )
     );
@@ -155,9 +177,14 @@ export async function writeFlowVerdict({
   if (owner) {
     const evidenceDir = path.join(repoRoot, "artifacts", "e2e");
     await fs.mkdir(evidenceDir, { recursive: true });
+    // Platform-keyed filename (#781): iOS and Android runs of the same flow
+    // must not overwrite each other in the merged nightly evidence tree. The
+    // owner INSIDE the JSON stays the flow file, so matrix mapping is
+    // unchanged and the report's worst-status merge sees both platforms.
+    const platform = evidencePlatform();
     await fs.writeFile(
-      path.join(evidenceDir, `${slug}.json`),
-      `${JSON.stringify({ lane: "e2e", owner, name: slug, status: pass ? "passed" : "failed", capturedAt: new Date().toISOString(), measurements: [{ name: "wall clock", value: elapsedMs, unit: "ms" }] }, null, 2)}\n`
+      path.join(evidenceDir, `${platform ? `${slug}-${platform}` : slug}.json`),
+      `${JSON.stringify({ lane: "e2e", owner, name: slug, status: pass ? "passed" : "failed", ...(platform ? { platform } : {}), capturedAt: new Date().toISOString(), measurements: [{ name: "wall clock", value: elapsedMs, unit: "ms" }] }, null, 2)}\n`
     );
   }
   console.log(`[runFlow] ${slug} ${pass ? "PASS" : "FAIL"} in ${elapsedMs}ms`);
