@@ -16,7 +16,7 @@ gate loop before its commit.
 - [ ] Stage 4 — retire the blueprints blank-app scaffolder + template gallery (scaffold files/defaults, served half of app-rewrites, index.json, remote templates, index.html markers).
 - [ ] Stage 5 — kit dissolution A: rehome the non-design kit modules to packages/client as typed TypeScript; delete the legacy Ask controller and its strangler.
 - [ ] Stage 6 — kit dissolution B: fold the DOM substrate into packages/design/src as typed modules; delete the served-sibling alias apparatus; rewrite the sibling imports to package imports; land the coverage-scope-reachability amendment in the same commit as its check change.
-- [ ] Stage 7 — custom-element endgame: replace JSX-emitted kit-* tags with React blocks, delete elements-base + element classes, prune orphaned kit.css rules, re-pin design-gallery baselines.
+- [ ] Stage 7 — custom-element endgame: replace JSX-emitted kit-* tags with React blocks, delete elements-base + element classes, prune orphaned kit.css rules; re-point the design gallery at the shell's real `#ui-preview` surface and delete the `fixtureHtml` parallel implementation; re-pin design-gallery baselines once, at the end.
 - [ ] Stage 8 — identity + decisions sweep: superapp positioning across the root docs, one app render path in ARCHITECTURE.md, decisions.md supersessions, glossary/design-machinery/traps/test-matrix updates.
 
 ## What changed
@@ -376,6 +376,22 @@ deletions, renames, and this receipt:
 
 ## Decisions
 
+- **Stage 7 additionally re-points the design gallery at the real shell —
+  user-authorized scope beyond the issue text.** The user asked for this
+  mid-run after reviewing the design machinery; it is not inferred from #799.
+  It belongs in this issue rather than a follow-up because the issue forbids
+  follow-ups and because the gallery must change here anyway: `fixtureHtml()`
+  in `scripts/design-gallery.mjs` styles itself with `kit.css`, which Stage 6
+  folds away and Stage 7 prunes. The finding that motivates it: the gate
+  screenshots a hand-written HTML fixture with a hand-written stylesheet
+  (`.kit-panel`, `.kit-btn`, `.row`, `.notice`) parameterised only by the token
+  lowering — so the 22 baselines fence the lowerings, which is real value, and
+  not one product component. Meanwhile
+  `packages/client/src/react/ui/Gallery.tsx` already renders the real block
+  vocabulary through the real components, and `packages/client/src/react/boot.tsx`
+  already mounts it in the live shell behind the `#ui-preview` hash. Stage 7
+  points the gate at that and deletes the fixture, which removes a parallel
+  design implementation rather than porting one.
 - **The app-open perf budgets are re-seeded, and one ceiling genuinely
   widens.** The subject changed rather than regressed: an app open is no
   longer a fixture iframe document but a dynamic import of an inline route's
