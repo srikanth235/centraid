@@ -392,6 +392,32 @@ deletions, renames, and this receipt:
   already mounts it in the live shell behind the `#ui-preview` hash. Stage 7
   points the gate at that and deletes the fixture, which removes a parallel
   design implementation rather than porting one.
+- **The design gallery will render the product's own self-hosted faces, not
+  `system-ui` — maintainer-authorized.** `scripts/design-gallery.mjs:86` and
+  `:93` hardcode `system-ui`, while `packages/design/src/typography.ts:3`
+  states "ONE RAMP, ONE FACE… Instrument Sans" and the product self-hosts ten
+  woff2 faces through the `centraid-fonts` Vite plugin. Every committed
+  baseline therefore depicts a typeface the product never ships, and because
+  `system-ui` resolves to a different physical font per OS, that is also the
+  root cause of the `design:gallery` lane being red on Linux against
+  darwin-captured baselines. Self-hosting the same faces is expected to fix
+  the fidelity bug and the cross-platform redness together. This is distinct
+  from re-pinning baselines to bless whichever renderer the CI container
+  happens to have — the call `.github/workflows/ci.yml` reserves for a
+  maintainer (#781) — and the maintainer authorized it directly. Stage 7 must
+  verify the portability claim with measured per-entry diffs rather than
+  asserting it, must fail loudly if a face does not load rather than
+  screenshotting a fallback, and must not absorb any residual delta by
+  widening the diff tolerance without an explicit deviation.
+- **The MO gallery lane stays lowering-only, deliberately.** React Native has
+  no DOM to screenshot, so MO is captured from `nativeTokenCss(scheme)`. That
+  fences the native lowering against the registry, which is a real claim, and
+  it is the honest limit of what a headless browser can assert about a native
+  surface. Rendering a DOM approximation of a React Native screen to make the
+  surface grid look uniform would produce a baseline depicting something the
+  platform never draws — a narrower true claim beats a broader false one. The
+  limit is stated in the gallery contract so the MO row cannot be misread as
+  component coverage.
 - **The app-open perf budgets are re-seeded, and one ceiling genuinely
   widens.** The subject changed rather than regressed: an app open is no
   longer a fixture iframe document but a dynamic import of an inline route's
