@@ -46,6 +46,7 @@ import type {
   CollectionSectionKey,
   CollectionTile,
 } from "./photos-collections";
+import { placeCardKey } from "./places-model";
 import { onThisDay } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
 
@@ -306,10 +307,18 @@ export default function PhotosCollectionsView({
     return buildCollectionSections({
       assets,
       albums,
-      places: places.rows.map((row) => ({
-        placeId: String(row.place_id),
-        name: String(row.name ?? "Place"),
-      })),
+      places: places.rows.flatMap((row) => {
+        const key = placeCardKey(row);
+        return key === null
+          ? []
+          : [
+              {
+                placeId: String(row.place_id),
+                key,
+                name: String(row.name ?? "Place"),
+              },
+            ];
+      }),
       people: [...byParty.entries()].map(([partyId, entry]) => ({
         partyId,
         ...entry,

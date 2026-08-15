@@ -50,6 +50,25 @@ describe("buildCollectionSections — every section, always, in order", () => {
       ...COLLECTION_SECTION_KEYS,
     ]);
   });
+
+  it("uses the rounded shelf key for a place tile, not its raw place id", () => {
+    const sections = buildCollectionSections(
+      facts({
+        places: [
+          {
+            placeId: "raw-place-id",
+            key: "39.1:-120.0",
+            name: "Lake Tahoe",
+          },
+        ],
+      })
+    );
+    const places = sections.find((section) => section.key === "places")!;
+    expect(places.tiles[0]).toMatchObject({
+      id: "39.1:-120.0",
+      label: "Lake Tahoe",
+    });
+  });
 });
 
 describe("buildCollectionSections — album covers honor the member's choice (issue #721 B5)", () => {

@@ -136,6 +136,8 @@ export interface AlbumRow {
 
 export interface PlaceRow {
   placeId: string;
+  /** Rounded shelf key shared by the place tile and its detail. */
+  key: string;
   name: string;
 }
 
@@ -344,7 +346,7 @@ export function buildCollectionSections(
           live.filter((asset) => asset.placeId === place.placeId)
         );
         return {
-          id: place.placeId,
+          id: place.key,
           label: place.name,
           ...(front ? { uri: front.uri, originalUri: front.originalUri } : {}),
         };
