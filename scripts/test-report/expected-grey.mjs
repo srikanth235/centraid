@@ -22,39 +22,8 @@
  *   no-evidence states (`missing`, `owner-silent`, `lane-did-not-run`) can be
  *   reclassified as expected-grey.
  *
- * The single current registration: the 15 `*:accessibility` cells. Their
- * declared owner, `scripts/accessibility-contract.test.mjs`, is a per-PR
- * `node --test` gate (`bun run test:accessibility` inside `check:push`) that
- * writes no evidence artifact and never appears in the nightly Vitest JSON,
- * so every nightly since 2026-08-01 red-flagged the same 15 cells
- * (`nightly zero-grey contract: 15 cell(s) have no evidence` +
- * `declared owner produced no evidence key`) without any of that red being
- * actionable. The accessibility lane itself is tracked under #781
- * (accepted as a follow-up lane in #587 D21).
+ * There are currently no named absences. #791 moved every accessibility cell
+ * to a real Playwright or RNTL evidence owner; the static source contract is
+ * still a fast PR tripwire, but no longer stands in for a runtime tree.
  */
-export const EXPECTED_GREY = [
-  {
-    lane: "accessibility",
-    issue: "https://github.com/srikanth235/centraid/issues/781",
-    reason:
-      "scripts/accessibility-contract.test.mjs is a per-PR node --test gate with no evidence artifact; the accessibility evidence lane does not exist yet (#587 D21 follow-up, tracked by #781).",
-    owner: "scripts/accessibility-contract.test.mjs",
-    cells: [
-      "vault-core:accessibility",
-      "blob-custody:accessibility",
-      "backup-restore:accessibility",
-      "replica-sync:accessibility",
-      "gateway:accessibility",
-      "app-engine:accessibility",
-      "automations:accessibility",
-      "agent-runtime:accessibility",
-      "blueprints:accessibility",
-      "desktop:accessibility",
-      "web:accessibility",
-      "mobile:accessibility",
-      "tunnel-pairing:accessibility",
-      "extension:accessibility",
-      "oauth-worker:accessibility",
-    ],
-  },
-];
+export const EXPECTED_GREY = [];

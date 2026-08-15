@@ -43,6 +43,7 @@ export default function PhotosGridSkeleton({
     <View
       accessibilityLabel="Opening your library"
       accessibilityRole="progressbar"
+      accessibilityState={{ busy: true }}
       style={styles.skeleton}
       pointerEvents="none"
     >

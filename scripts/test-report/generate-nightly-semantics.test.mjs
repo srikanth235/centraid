@@ -127,7 +127,7 @@ function runGenerate(root, args = []) {
   };
 }
 
-describe("expected grey (#781)", () => {
+describe("accessibility has no expected-grey escape (#791)", () => {
   const ACCESSIBILITY_OWNER = "scripts/accessibility-contract.test.mjs";
 
   function accessibilityMatrix() {
@@ -178,23 +178,18 @@ describe("expected grey (#781)", () => {
     return root;
   }
 
-  test("a registered no-lane cell is a named absence, not nightly red", () => {
+  test("a static accessibility owner with no evidence is nightly red", () => {
     const root = accessibilityRoot();
     const result = runGenerate(root, ["--scope", "nightly"]);
-    expect(result.status).toBe(0);
-    expect(result.summary.cellsExpectedGrey).toBe(1);
-    expect(result.summary.expectedGreyCellIds).toStrictEqual([
-      "vault-core:accessibility",
-    ]);
-    expect(result.summary.cellsMissing).toBe(0);
-    expect(result.stderr).not.toContain(
-      "declared owner produced no evidence key"
+    expect(result.status).toBe(1);
+    expect(result.summary.cellsExpectedGrey).toBe(0);
+    expect(result.summary.cellsMissing).toBe(1);
+    expect(result.stderr).toContain(
+      `declared owner produced no evidence key: ${ACCESSIBILITY_OWNER}`
     );
-    expect(result.html).toContain("Named absences (#781");
-    expect(result.html).toContain("issues/781");
   });
 
-  test("the exemption voids itself once the accessibility lane has run", () => {
+  test("a started accessibility lane names a silent owner", () => {
     const root = accessibilityRoot();
     writeJson(root, "markers/lane-starts.json", {
       accessibility: CAPTURED_AT,
