@@ -16,7 +16,7 @@ gate loop before its commit.
 - [x] Stage 4 — retire the blueprints blank-app scaffolder and the remote template fetch (scaffold files/defaults, served half of app-rewrites, per-app index.html, remote templates; index.json is KEPT and the reason is in Decisions).
 - [x] Stage 5 — kit dissolution A: rehome the non-design kit modules to packages/client as typed TypeScript; delete the legacy Ask controller and its strangler (edge-upload stays in packages/design for Stage 6 — see Decisions).
 - [x] Stage 6 — kit dissolution B: fold the DOM substrate into packages/design/src as typed modules; delete the served-sibling alias apparatus; rewrite the sibling imports to package imports; land the coverage-scope-reachability amendment in the same commit as its check change.
-- [ ] Stage 7 — custom-element endgame: replace JSX-emitted kit-* tags with React blocks, delete elements-base + element classes, prune orphaned kit.css rules; re-point the design gallery at the shell's real `#ui-preview` surface and delete the `fixtureHtml` parallel implementation; re-pin design-gallery baselines once, at the end.
+- [x] Stage 7 — custom-element endgame: replace JSX-emitted kit-* tags with React blocks, delete elements-base + element classes, prune orphaned kit.css rules; re-point the design gallery at the shell's real `#ui-preview` surface and delete the `fixtureHtml` parallel implementation; re-pin design-gallery baselines once, at the end.
 - [ ] Stage 8 — identity + decisions sweep: superapp positioning across the root docs, one app render path in ARCHITECTURE.md, decisions.md supersessions, glossary/design-machinery/traps/test-matrix updates.
 
 ## What changed
@@ -361,11 +361,66 @@ the scripts' own down-only `--write`. `toHaveBeenCalled` stays at 811: two
 new assertions that would have raised it were rewritten to plain counters
 instead.
 
+### Stage 7 — custom-element endgame: replace JSX-emitted kit-* tags with React blocks, delete elements-base + element classes, prune orphaned kit.css rules; re-point the design gallery at the shell's real `#ui-preview` surface and delete the `fixtureHtml` parallel implementation; re-pin design-gallery baselines once, at the end.
+
+**No custom elements remain.** `base.ts` (the `KitElement` substrate) and the
+four element classes are deleted; nothing calls `customElements.define()`
+anywhere in the repo, and `elements.test.ts` now asserts that inversion
+rather than silently losing the old registration test. `Avatar.tsx` and
+`Meter.tsx` are React blocks in `packages/blueprints/apps/_shared/`
+(`Skeleton` joined the existing `LoadingSkeleton.tsx`); 17 blueprint call
+sites converted. `statusLine()` and `showSkeleton` build plain DOM — and the
+rewrite fixed a real a11y defect: the old element re-created its
+`role="status"` live-region div on every render, and a replaced live region
+is not reliably announced; the div is now persistent with children swapped
+per update. A second a11y defect fell out of the People conversion: the
+avatar took `onClick` on a `display:contents` host inside an `aria-hidden`
+tile — a click target no keyboard could reach. Where the row already had a
+stretched "Open {name}" button the redundant handler was removed; where the
+avatar was the only way in (Activity, Journal), `Avatar` renders a real
+`<button className="kit-avatar" aria-label>`.
+
+**kit.css shrank 2731 → 1575 lines.** The inherited `.kit-ask-*` orphans
+plus the rest of the retired assistant plane, the `.kit-msg`/`asstRich`
+parallel copy, `.kit-chart*`, `.kit-mention-*` (except `.kit-mention-pop`,
+live via `popover.ts`), `.kit-ref-*`, unused skeleton variants, orphaned
+keyframes, and the custom-element host list are gone. `[data-kit-host]`
+survives deliberately — `locker/Chrome.tsx:102` sets it by hand to position
+its overlay layer (see Decisions). `kit-css.test.ts` gained two assertions
+stronger than the two it lost: an exact allowlist of live `.kit-ask-*`
+classes with the retired families banned, and a no-element-host-rules check.
+
+**The design gallery screenshots the product.** `fixtureHtml` and its
+embedded stylesheet are deleted. SH (new lane — none existed) and SH-c
+build the real web shell and navigate to `/#ui-preview`; BI and MO are
+honest token-lowering sheets rendered from resolved custom properties (BI
+deliberately so — see Decisions); BS is dropped with its 16 baselines and
+its four reference states migrated to BI in
+`tests/design-grammar-matrix.json`. Every capture loads the vendored
+Instrument Sans woff2 faces through the same `FONT_FILES` manifest the
+product serves, gated by `document.fonts.ready` + `document.fonts.check()`
++ a width probe against the UA last-resort face, so no fallback can be
+baked into a baseline. `validateGalleryContract`'s claims were re-expressed
+against the real DOM, several strengthened (the fixture's "exactly one
+primary action" became the M4 invariant that no non-primary variant may
+paint the accent fill). The script split at the hygiene limit into
+`design-gallery.mjs` (541 lines) + `design-gallery-lowering.mjs` (155).
+
+**Pointing the gate at the product found four type-scale bugs**: `AppCard`'s
+name/desc/footTime and `StatusPill`/`KindBadge` set size and weight
+piecemeal while line-height inherited or sat at a bare `1.4`; all now use
+the composed `--t-*` roles. `Button.tsx` gained `data-variant` so the gate
+reads the product. Baselines re-pinned exactly once, at the end:
+8/8 verified at 0.00% diff, byte-identical across re-runs, on this Linux
+container — the `design:gallery` lane that #781 documented as known-red on
+Linux is green here (the darwin side is the open question; see Decisions).
+
 ### Full changed-file inventory
 
 Every path in this change set, across all stages landed so far, including
 deletions, renames, and this receipt:
 
+- `.github/workflows/ci.yml`
 - `.github/workflows/e2e.yml`
 - `.gitleaks.toml`
 - `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/allowlist.txt`
@@ -441,6 +496,7 @@ deletions, renames, and this receipt:
 - `bun.lock`
 - `centraid-city/src/core/content.ts`
 - `docs/config-ownership.md`
+- `docs/decisions.md`
 - `docs/design-machinery.md`
 - `docs/glossary.md`
 - `docs/photos/places.md`
@@ -478,6 +534,9 @@ deletions, renames, and this receipt:
 - `packages/app-engine/src/runtime.ts`
 - `packages/app-engine/src/settings/settings-merge.ts`
 - `packages/blueprints/README.md`
+- `packages/blueprints/apps/_shared/Avatar.tsx`
+- `packages/blueprints/apps/_shared/LoadingSkeleton.tsx`
+- `packages/blueprints/apps/_shared/Meter.tsx`
 - `packages/blueprints/apps/_shared/placement-registry.ts`
 - `packages/blueprints/apps/_shared/video-frame.contract.test.ts`
 - `packages/blueprints/apps/_shared/video-frame.ts`
@@ -505,10 +564,14 @@ deletions, renames, and this receipt:
 - `packages/blueprints/apps/docs/upload.ts`
 - `packages/blueprints/apps/docs/versions.ts`
 - `packages/blueprints/apps/inline-types.ts`
+- `packages/blueprints/apps/locker/Chrome.tsx`
 - `packages/blueprints/apps/locker/app-root.tsx`
+- `packages/blueprints/apps/locker/components/Generator.tsx`
 - `packages/blueprints/apps/locker/components/ItemFields.tsx`
+- `packages/blueprints/apps/locker/components/Shared.tsx`
 - `packages/blueprints/apps/locker/index.html`
 - `packages/blueprints/apps/locker/logic.ts`
+- `packages/blueprints/apps/locker/totp.ts`
 - `packages/blueprints/apps/notes/app-root.tsx`
 - `packages/blueprints/apps/notes/components/Card.tsx`
 - `packages/blueprints/apps/notes/components/Editor.tsx`
@@ -518,12 +581,17 @@ deletions, renames, and this receipt:
 - `packages/blueprints/apps/notes/logic.ts`
 - `packages/blueprints/apps/notes/types.ts`
 - `packages/blueprints/apps/people/app-root.tsx`
+- `packages/blueprints/apps/people/components/Activity.tsx`
 - `packages/blueprints/apps/people/components/ContactChannels.tsx`
 - `packages/blueprints/apps/people/components/DetailSections.tsx`
 - `packages/blueprints/apps/people/components/Details.tsx`
+- `packages/blueprints/apps/people/components/Grid.tsx`
 - `packages/blueprints/apps/people/components/History.tsx`
+- `packages/blueprints/apps/people/components/Journal.tsx`
+- `packages/blueprints/apps/people/components/List.tsx`
 - `packages/blueprints/apps/people/components/Shared.tsx`
 - `packages/blueprints/apps/people/components/Sidebar.tsx`
+- `packages/blueprints/apps/people/components/TrashCard.tsx`
 - `packages/blueprints/apps/people/index.html`
 - `packages/blueprints/apps/people/logic.ts`
 - `packages/blueprints/apps/photos/albums-actions.ts`
@@ -547,7 +615,14 @@ deletions, renames, and this receipt:
 - `packages/blueprints/apps/photos/selection.tsx`
 - `packages/blueprints/apps/photos/upload.ts`
 - `packages/blueprints/apps/tally/app-root.tsx`
+- `packages/blueprints/apps/tally/components/Activity.tsx`
+- `packages/blueprints/apps/tally/components/Dashboard.tsx`
+- `packages/blueprints/apps/tally/components/DetailModal.tsx`
+- `packages/blueprints/apps/tally/components/ExpenseModal.tsx`
+- `packages/blueprints/apps/tally/components/GroupManager.tsx`
+- `packages/blueprints/apps/tally/components/Ledger.tsx`
 - `packages/blueprints/apps/tally/components/Shared.tsx`
+- `packages/blueprints/apps/tally/components/Sidebar.tsx`
 - `packages/blueprints/apps/tally/format.ts`
 - `packages/blueprints/apps/tally/index.html`
 - `packages/blueprints/apps/tally/logic.ts`
@@ -729,6 +804,11 @@ deletions, renames, and this receipt:
 - `packages/client/src/react/shell/useBuilderEnabled.ts`
 - `packages/client/src/react/shell/useShellApps.test.tsx`
 - `packages/client/src/react/shell/useShellApps.ts`
+- `packages/client/src/react/ui/AppCard.module.css`
+- `packages/client/src/react/ui/Button.tsx`
+- `packages/client/src/react/ui/Gallery.tsx`
+- `packages/client/src/react/ui/KindBadge.module.css`
+- `packages/client/src/react/ui/StatusPill.module.css`
 - `packages/client/src/replica/intent-invalidations.ts`
 - `packages/client/src/turn-stream.test.ts`
 - `packages/client/src/turn-stream.ts`
@@ -802,6 +882,7 @@ deletions, renames, and this receipt:
 - `packages/design/src/kit-smoke.test.ts`
 - `packages/design/src/kit.test.ts`
 - `packages/design/src/kit.ts`
+- `packages/design/src/moment-matrix.test.ts`
 - `packages/design/src/native-contract.test.ts`
 - `packages/design/src/turn-stream.test.ts`
 - `packages/design/tsconfig.elements.json`
@@ -863,6 +944,7 @@ deletions, renames, and this receipt:
 - `scripts/accessibility-contract.test.mjs`
 - `scripts/check-share-reachability.test.mjs`
 - `scripts/ci/configure-sonarcloud.mjs`
+- `scripts/design-gallery-lowering.mjs`
 - `scripts/design-gallery.mjs`
 - `scripts/lint-aria-labels.mjs`
 - `scripts/lint-container-opacity.mjs`
@@ -884,6 +966,33 @@ deletions, renames, and this receipt:
 - `tests/agent-e2e-mobile/flows/template-gate.md`
 - `tests/agent-e2e-mobile/flows/template-gate.mjs`
 - `tests/coverage-floors.json`
+- `tests/design-gallery/README.md`
+- `tests/design-gallery/baselines/bi-dark.png`
+- `tests/design-gallery/baselines/bi-light.png`
+- `tests/design-gallery/baselines/bs-agenda-dark.png`
+- `tests/design-gallery/baselines/bs-agenda-light.png`
+- `tests/design-gallery/baselines/bs-docs-dark.png`
+- `tests/design-gallery/baselines/bs-docs-light.png`
+- `tests/design-gallery/baselines/bs-locker-dark.png`
+- `tests/design-gallery/baselines/bs-locker-light.png`
+- `tests/design-gallery/baselines/bs-notes-dark.png`
+- `tests/design-gallery/baselines/bs-notes-light.png`
+- `tests/design-gallery/baselines/bs-people-dark.png`
+- `tests/design-gallery/baselines/bs-people-light.png`
+- `tests/design-gallery/baselines/bs-photos-dark.png`
+- `tests/design-gallery/baselines/bs-photos-light.png`
+- `tests/design-gallery/baselines/bs-tally-dark.png`
+- `tests/design-gallery/baselines/bs-tally-light.png`
+- `tests/design-gallery/baselines/bs-tasks-dark.png`
+- `tests/design-gallery/baselines/bs-tasks-light.png`
+- `tests/design-gallery/baselines/mo-advisory-dark.png`
+- `tests/design-gallery/baselines/mo-advisory-light.png`
+- `tests/design-gallery/baselines/sh-c-dark.png`
+- `tests/design-gallery/baselines/sh-c-light.png`
+- `tests/design-gallery/baselines/sh-dark.png`
+- `tests/design-gallery/baselines/sh-light.png`
+- `tests/design-gallery/manifest.json`
+- `tests/design-grammar-matrix.json`
 - `tests/hygiene-budgets.json`
 - `tests/matrix.json`
 - `tests/perf/pwa-waterfall.perf.test.ts`
@@ -1223,6 +1332,37 @@ deletions, renames, and this receipt:
   the rest of the kit was deleted as dead code. A scope ceasing to exist,
   not a floor lowering: every surviving line moved INTO the stricter scope.
   Measured on the merged tree before this edit landed.
+- **Stage 7: BI stays a token-lowering lane in the gallery; it is NOT
+  photographed through the shell's `#ui-preview` components.** Extending
+  `Gallery.tsx` to serve BI would baseline the *shell's* React blocks
+  (`packages/client/src/react/ui`) under the *blueprint* lowering — two
+  separate React DOM implementations per `docs/design-machinery.md` (#765
+  tracks the merge) — so the capture would depict components no blueprint
+  app renders: the same fixture-pretending-to-be-product failure the
+  re-point exists to kill, and the exact thing the MO ruling forbids. The
+  lane's narrower claim is stated in the manifest's `laneClaims`, the
+  gallery README, and the script header.
+- **Stage 7: `[data-kit-host]` survives the elements-base deletion.** It is
+  not element apparatus: `locker/Chrome.tsx` sets the attribute by hand so
+  the lock screen / generator / edit modal position against the app frame.
+  A class-name-only orphan audit would have deleted it — attribute selectors
+  need their own pass. The rule now carries a comment naming its one setter.
+- **Stage 7: baselines are Linux-captured; the darwin delta is unmeasured,
+  not asserted away.** Self-hosting the woff2 faces removes the font as a
+  cross-platform variable, but no darwin capture exists to diff against, and
+  comparing the new baselines to the old darwin ones measures nothing (every
+  lane's content changed completely). No diff tolerance was widened. If a
+  residual rasterizer delta appears on a darwin `check:push`, the CI comment
+  prescribes per-platform baseline directories, never a widened ceiling.
+  That one darwin run is the outstanding maintainer action (#781's decision
+  is otherwise discharged).
+- **Stage 7: the brief's gallery ground truth was wrong in three places,
+  corrected in place.** BS was *not* already gone (16 baselines, 16 script
+  entries, and a matrix surface still existed — removed, reference states
+  migrated `bs-*` → `bi-*`); no SH lane existed at all (added); and the
+  `[data-role]`/`[data-gallery-surface]` selectors attributed to
+  `validateGalleryContract` actually lived in `main()` (both sets preserved
+  and re-expressed).
 - **Stage 6: two #630 file-size waivers moved to line 1 of their files.**
   `apps/people/logic.ts` and `apps/tasks/logic.ts` carry
   `governance: allow-repo-hygiene file-size-limit`; `has_file_waiver` reads
@@ -1268,6 +1408,16 @@ and a dropped connection restarts the upload instead of resuming at the
 fsynced offset. The server side (`packages/vault`'s direct-transfer
 sessions and blob routes) is untouched, and mobile's independent CBSF
 uploader is unaffected.
+
+**Stage 7 is visually neutral and behaviourally positive.** The React
+blocks emit the same markup and classes the elements rendered, fenced
+pixel-wise by the re-pinned baselines. Users gain: status-line updates are
+now reliably announced by screen readers (the live region is persistent
+instead of re-created per render), People's avatar-opens-details gesture is
+keyboard-reachable for the first time (a real button with an accessible
+name in Activity and Journal, where it was the only way in), and five
+components (`AppCard` name/desc/footTime, `StatusPill`, `KindBadge`) sit on
+the composed type roles instead of accidental line-heights.
 
 ## Out of scope
 
@@ -1372,6 +1522,20 @@ scope measured above its floor; the one at genuine risk,
 `packages/design/src/**` with ~1,150 folded `elements/**` lines newly in
 scope, measured 95.85 lines / 82.27 branches against 94/70 — the sub-agent's
 new element suites carried it. No floor moved.
+
+**Stage 7 verification** (main checkout, after integrating the sub-agent's
+worktree patch): `turbo typecheck --force` 35/35 uncached; lint, format,
+knip, matrix, ratchet, sleep-inventory, quality-knobs green;
+hygiene-ratchet reconciled down-only 383 → 381 (two more toBeTruthy/Falsy
+sites died with the element tests); design 32/372, blueprints 105/3736,
+client 245/2205, scripts 5/46 all green; `bun scripts/design-gallery.mjs`
+verified 8/8 baselines at 0.00% in this checkout; the full coverage lane
+(same environment repairs as stage 6) ran 13,116 tests with 0 failures and
+every one of the 23 floor scopes measured above its floor —
+`packages/design/src/**` rose to 96.09 / 83.48 (deleting the element
+classes removed a below-average slab), and the three new uncovered React
+components sit in the blueprint-apps blend scope at 28.34/23.64 against
+20/14. Governance 22/22 with the change set staged.
 
 ## Audit
 

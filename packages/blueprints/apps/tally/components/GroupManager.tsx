@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 
+import { Avatar } from "../../_shared/Avatar.tsx";
 import { mountedScopes } from "../../_shared/scope-kit.ts";
 import { ShareSheet } from "../../_shared/ShareSheet.tsx";
 import type { Friend, GroupMeta, Member } from "../types.ts";
-import { ArmedButton, KitAvatar } from "./Shared.tsx";
+import { ArmedButton } from "./Shared.tsx";
 
 import styles from "./GroupManager.module.css";
 
@@ -82,7 +83,7 @@ export function GroupManager({
       <div className={styles.members}>
         {members.map((member) => (
           <div className={styles.member} key={member.party_id}>
-            <KitAvatar
+            <Avatar
               name={member.name}
               size="28px"
               color={member.color}

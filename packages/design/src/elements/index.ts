@@ -7,8 +7,8 @@
 //     reachable from Expo through the package's `react-native` condition.
 //   • the ELEMENT layer (this subtree, the `@centraid/design/elements`
 //     export) — the browser substrate every blueprint app renders on: the
-//     custom elements, the status line, confirm-to-act, the popover, the
-//     formatters, the refresh discipline, and the attachment flow.
+//     status line, confirm-to-act, the popover, the formatters, the refresh
+//     discipline, and the attachment flow.
 //
 // This subpath deliberately carries NO `react-native` condition and is never
 // re-exported from `src/index.ts`: the token layer must stay importable by a
@@ -16,16 +16,13 @@
 // separation rather than trusting it, and this subtree is the only part of
 // `src/**` compiled with the DOM lib (`tsconfig.elements.json`).
 //
-// Importing this module runs the `customElements.define()` calls below, so an
-// app that renders `<kit-avatar>`/`<kit-meter>`/`<kit-skeleton>` as JSX gets
-// them registered by the same import that gives it `statusLine`.
-
-export { KitElement } from "./base.js";
-export type { KitProperties, KitPropertyConfig } from "./base.js";
-export { KitAvatar } from "./kit-avatar.js";
-export { KitMeter } from "./kit-meter.js";
-export { KitSkeleton } from "./kit-skeleton.js";
-export { KitStatusLine } from "./kit-status-line.js";
+// There are NO custom elements here any more. #799 retired the last four
+// (`kit-avatar`, `kit-meter`, `kit-skeleton`, `kit-status-line`) and the
+// `KitElement` base they shared: the presentation primitives are React blocks
+// in `packages/blueprints/apps/_shared/`, and the status line is plain DOM
+// built by `feedback.ts`. Nothing in this subtree calls
+// `customElements.define()`, so importing it registers nothing — it is an
+// ordinary module graph of functions.
 
 export { el, h } from "./dom.js";
 export {

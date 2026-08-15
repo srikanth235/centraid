@@ -1,6 +1,5 @@
 // Small shared presentational bits used across Sidebar/Grid/List/Details/
 // Journal/Activity. Pure functions of props — no app state.
-import type { CSSProperties, FC, MouseEvent, ReactNode } from "react";
 
 // A trusted static SVG string rendered inline, with no wrapper box in the
 // layout (`display:contents`) — see icons.ts for the glyph strings.
@@ -59,17 +58,3 @@ export function Snippet({
     </div>
   );
 }
-
-// `<kit-avatar>` is a native custom element (kit/elements.js): a monogram tile
-// that reads name/size/color as attributes. TSX has no intrinsic-element type
-// for it, so we render it through a value typed as a component — at runtime
-// this IS the string 'kit-avatar', so the emitted DOM is identical to the JSX
-// original (React sets name/size/color as attributes on the custom element).
-export const KitAvatar = "kit-avatar" as unknown as FC<{
-  name?: string;
-  size?: string;
-  color?: string;
-  style?: CSSProperties;
-  onClick?: (e: MouseEvent<HTMLElement>) => void;
-  children?: ReactNode;
-}>;

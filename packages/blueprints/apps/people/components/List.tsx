@@ -1,3 +1,4 @@
+import { Avatar } from "../../_shared/Avatar.tsx";
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
 // List view: each row (#list root's mapped children), the head row
@@ -11,7 +12,7 @@ import {
 } from "../format.ts";
 import { I } from "../icons.ts";
 import type { AppData, Person } from "../types.ts";
-import { Icon, KitAvatar, Snippet } from "./Shared.tsx";
+import { Icon, Snippet } from "./Shared.tsx";
 
 import styles from "./List.module.css";
 
@@ -59,16 +60,11 @@ export function ListRow({
       >
         {selected ? <Icon svg={I.check} /> : null}
       </button>
-      <KitAvatar
-        style={{ cursor: "pointer", position: "relative" }}
-        name={name}
-        size="34px"
-        color={color}
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenDetails(p.party_id);
-        }}
-      />
+      {/* Decorative: the row's own stretched "Open <name>" button already
+          carries this gesture, so the tile needs no duplicate handler of its
+          own — #799 removed the aria-hidden one it had, which no keyboard
+          could reach anyway. */}
+      <Avatar color={color} name={name} size="34px" />
       <div className={styles.rowMain}>
         <div className={styles.rowTitle}>
           {name}

@@ -7,11 +7,11 @@
   align-items: center;
   flex: 0 0 auto;
   gap: 5px;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
+  /* The micro role whole. Family + size + weight set separately left the
+     line-height inheriting whatever the card gave it (#799). */
+  font: var(--t-control);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  font-weight: 600;
   color: var(--text-faint);
 }
 .status[data-tone="new"] {

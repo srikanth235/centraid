@@ -4,14 +4,6 @@
 
 import { applyInOrder } from "./dom.js";
 import { haptic } from "./host.js";
-// VALUE imports, not `import type`: these modules' `customElements.define()`
-// calls are what make the two `document.createElement` calls below produce a
-// real element instead of an inert `HTMLUnknownElement`. A type-only import is
-// erased, which would leave this module silently depending on some other
-// importer having registered them first.
-import "./kit-skeleton.js";
-import type { KitStatusLine } from "./kit-status-line.js";
-import "./kit-status-line.js";
 
 export type VaultOutcomeStatus =
   | "executed"
@@ -53,22 +45,84 @@ export interface StatusLineOptions {
 // Retired the floating `toast` stack (#707 Phase 3 — the Binding Layer's
 // fifth invariant): state is reported on ONE persistent line docked to the
 // bottom of the frame, updated IN PLACE. There is no stack, no per-call
-// element, and no entry/exit animation — a single `<kit-status-line>` is
-// mounted once and its properties change under it. A duration still clears
-// the message back to quiet, but the line itself never leaves the DOM.
+// element, and no entry/exit animation — a single `.kit-status-line` element
+// is mounted once and its children swap under it. A duration still clears the
+// message back to quiet, but the line itself never leaves the DOM.
+//
+// #799 retired the `<kit-status-line>` custom element that used to wrap this:
+// the host is now the live region itself. That is stronger than the element
+// was — the element re-created the `role="status"`/`aria-live` div on every
+// render, and a live region that is replaced rather than mutated is not
+// reliably announced.
 
-let statusLineHost: KitStatusLine | null = null;
+let statusLineHost: HTMLElement | null = null;
 // Module-level, not per-call: the host is reused across every `statusLine()`
 // call, so the pending auto-clear timer has to be shared too — a per-call
 // local would let an OLDER call's timer fire later and wipe a NEWER (or
 // sticky, duration 0) message it knows nothing about.
 let statusLineTimer = 0;
+// Read at CLICK time by the inline action, never captured at render time, so
+// a stale render's button can never invoke a superseded handler.
+let statusLineUndo: (() => void) | undefined;
 
-function ensureStatusLineHost(): KitStatusLine {
+function ensureStatusLineHost(): HTMLElement {
   if (statusLineHost) return statusLineHost;
-  statusLineHost = document.createElement("kit-status-line") as KitStatusLine;
-  document.body.appendChild(statusLineHost);
-  return statusLineHost;
+  const host = document.createElement("div");
+  host.className = "kit-status-line";
+  host.setAttribute("role", "status");
+  host.setAttribute("aria-live", "polite");
+  document.body.appendChild(host);
+  statusLineHost = host;
+  return host;
+}
+
+/** Paint the one line's contents. Called for every update; never re-mounts. */
+function renderStatusLine(
+  host: HTMLElement,
+  {
+    text,
+    undoLabel,
+    done,
+    total,
+  }: {
+    text: string;
+    undoLabel: string;
+    done: number | null;
+    total: number | null;
+  }
+): void {
+  const children: HTMLElement[] = [];
+
+  const dot = document.createElement("span");
+  dot.className = "kit-status-line-dot";
+  dot.setAttribute("aria-hidden", "true");
+  children.push(dot);
+
+  const span = document.createElement("span");
+  span.className = "kit-status-line-text";
+  span.textContent = text;
+  children.push(span);
+
+  if (total != null && total > 0) {
+    const track = document.createElement("span");
+    track.className = "kit-status-line-track";
+    const fill = document.createElement("span");
+    fill.className = "kit-status-line-fill";
+    fill.style.width = `${Math.round(Math.max(0, Math.min(1, (done ?? 0) / total)) * 100)}%`;
+    track.appendChild(fill);
+    children.push(track);
+  }
+
+  if (undoLabel) {
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "kit-status-line-action";
+    action.textContent = undoLabel;
+    action.addEventListener("click", () => statusLineUndo?.());
+    children.push(action);
+  }
+
+  host.replaceChildren(...children);
 }
 
 /**
@@ -96,27 +150,31 @@ export function statusLine(
   const line = ensureStatusLineHost();
   const clear = (): void => {
     clearTimeout(statusLineTimer);
-    line.text = "";
-    line.undoLabel = "";
-    line.onUndo = undefined;
-    line.done = null;
-    line.total = null;
+    statusLineUndo = undefined;
+    renderStatusLine(line, {
+      text: "",
+      undoLabel: "",
+      done: null,
+      total: null,
+    });
   };
-  line.text = text;
-  line.undoLabel = undoLabel && onUndo ? undoLabel : "";
-  // The button reads `this.onUndo` at CLICK time, not at render time, so
-  // setting it in any order relative to the other properties above is safe —
-  // there is only ever one live handler, never a stack of accumulated
-  // listeners the way a `addEventListener` on a reused host would leak.
-  line.onUndo =
-    undoLabel && onUndo
+  const label = undoLabel && onUndo ? undoLabel : "";
+  // Assigned before the render so the freshly built button's click handler —
+  // which reads this module slot rather than closing over a handler — always
+  // sees the handler belonging to the message it is painted beside.
+  statusLineUndo =
+    label && onUndo
       ? () => {
           clear();
           onUndo();
         }
       : undefined;
-  line.done = progress ? progress.done : null;
-  line.total = progress ? progress.total : null;
+  renderStatusLine(line, {
+    text,
+    undoLabel: label,
+    done: progress ? progress.done : null,
+    total: progress ? progress.total : null,
+  });
   clearTimeout(statusLineTimer);
   // A determinate operation clears itself when the caller reports it done
   // (done >= total) or is left running; a plain message reverts on its own
@@ -157,14 +215,21 @@ export function outcomeMessage(
 
 // ---------- Loading and read-error states ----------
 
-/** Fill a container with shimmer rows while the first read is in flight. */
+/**
+ * Fill a container with placeholder rows while the first read is in flight.
+ * The React surfaces render the same `.kit-skeleton` rows through
+ * `_shared/LoadingSkeleton.tsx`; this is the imperative twin for the DOM
+ * surfaces that have no React tree (#799 retired the `<kit-skeleton>` element
+ * both used to go through).
+ */
 export function showSkeleton(container: Element, rows = 3): void {
-  container.innerHTML = "";
-  const skeleton = document.createElement("kit-skeleton") as HTMLElement & {
-    rows: number;
-  };
-  skeleton.rows = rows;
-  container.appendChild(skeleton);
+  container.replaceChildren(
+    ...Array.from({ length: Math.max(0, rows) }, () => {
+      const row = document.createElement("div");
+      row.className = "kit-skeleton";
+      return row;
+    })
+  );
 }
 
 /**

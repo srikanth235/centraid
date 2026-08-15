@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
-// Runtime suite over the element layer: the custom-element registrations, the
-// DOM builders, the popover, the refresh discipline, and the attachment flow.
-// It imports the real barrel (not a path-loaded copy) so the registration side
-// effects are the ones an app gets.
+// Runtime suite over the element layer: the DOM builders, the popover, the
+// refresh discipline, and the attachment flow. It imports the real barrel (not
+// a path-loaded copy) so it exercises exactly the module graph an app gets.
+//
+// There are no custom elements left to register here — #799 retired the last
+// four and the `KitElement` base; `kit-css.test.ts` pins that the stylesheet
+// lost their host rules with them.
 import { describe, expect, it, vi } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -14,7 +17,6 @@ import {
   fmtBytes,
   h,
   isPopoverOpen,
-  KitElement,
   onDataChange,
   openPopover,
   popItem,
@@ -30,14 +32,14 @@ function withHost(host: CentraidHost): () => void {
 }
 
 describe("element layer", () => {
-  it("defines the custom elements", () => {
+  it("registers no custom elements — the barrel is plain functions", () => {
     for (const tag of [
       "kit-avatar",
       "kit-meter",
       "kit-skeleton",
       "kit-status-line",
     ]) {
-      expect(customElements.get(tag), tag).toBeTruthy();
+      expect(customElements.get(tag), tag).toBeUndefined();
     }
   });
 
@@ -48,43 +50,6 @@ describe("element layer", () => {
     expect(n.className).toBe("x");
     expect(n.textContent).toBe("hia");
     expect(el('<span id="q">z</span>').id).toBe("q");
-  });
-
-  it("kit-avatar honours color/initials and scales type", () => {
-    // Vanilla custom elements render synchronously on connect — no update
-    // microtask to await (there is no Lit, no scheduler underneath).
-    const av = document.createElement("kit-avatar");
-    av.setAttribute("name", "Grace Hopper");
-    av.setAttribute("size", "34px");
-    av.setAttribute("color", "#0FA678");
-    av.setAttribute("initials", "You");
-    document.body.appendChild(av);
-    const span = av.querySelector(".kit-avatar");
-    expect(span).toBeTruthy();
-    expect(span?.getAttribute("style")).toContain("background:#0FA678");
-    expect(span?.getAttribute("style")).toContain(
-      "font-size:calc(34px * 0.36)"
-    );
-    expect(span?.textContent?.trim()).toBe("You");
-  });
-
-  it("kit-avatar defaults to a stable identity fill + derived initials", () => {
-    const av = document.createElement("kit-avatar");
-    av.setAttribute("name", "Ada Lovelace");
-    document.body.appendChild(av);
-    const span = av.querySelector(".kit-avatar");
-    expect(span?.getAttribute("style")).toMatch(/background:#[\da-f]{6}/iu);
-    expect(span?.textContent?.trim()).toBe("AL");
-  });
-
-  it("kit-meter carries the tone onto the fill", () => {
-    const bar = document.createElement("kit-meter");
-    bar.setAttribute("ratio", "0.8");
-    bar.setAttribute("tone", "ok");
-    document.body.appendChild(bar);
-    expect(bar.querySelector<HTMLElement>(".kit-bar-fill")?.dataset.tone).toBe(
-      "ok"
-    );
   });
 
   it("renderAttachments renders tiles; onRemove:null omits the control", () => {
@@ -305,29 +270,5 @@ describe("element layer", () => {
     expect(subscription.managed).toBe(false);
     subscription.unsubscribe();
     expect(updates).toStrictEqual([]);
-  });
-
-  it("KitElement subclasses render light DOM and stamp data-kit-host", () => {
-    class SmokeCard extends KitElement {
-      static override properties = { label: { type: String } };
-      declare label: string;
-      override render(): HTMLElement {
-        const span = document.createElement("span");
-        span.className = "smoke-label";
-        span.textContent = this.label;
-        return span;
-      }
-    }
-    customElements.define("smoke-card", SmokeCard);
-    const card = document.createElement("smoke-card") as SmokeCard;
-    card.label = "hi <b>there</b>";
-    document.body.appendChild(card);
-    expect(card.shadowRoot).toBeNull();
-    expect(Object.hasOwn(card.dataset, "kitHost")).toBe(true);
-    const span = card.querySelector(".smoke-label");
-    // textContent, not innerHTML — no live <b> element regardless of markup
-    // in the string.
-    expect(span?.textContent).toBe("hi <b>there</b>");
-    expect(span?.querySelector("b")).toBeNull();
   });
 });

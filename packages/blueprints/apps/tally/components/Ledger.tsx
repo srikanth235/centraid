@@ -1,10 +1,11 @@
+import { Avatar } from "../../_shared/Avatar.tsx";
 // A group or friend ledger: the group's per-member balance panel (friend
 // view has none — a friend ledger is just the two of you) plus the expense
 // list itself.
 import { first, money } from "../format.ts";
 import type { LedgerRow, Member, ViewData } from "../types.ts";
 import { ExpenseRow } from "./ExpenseRow.tsx";
-import { ExplistSkeleton, KitAvatar } from "./Shared.tsx";
+import { ExplistSkeleton } from "./Shared.tsx";
 
 import styles from "./Ledger.module.css";
 import shared from "./shared.module.css";
@@ -23,12 +24,7 @@ function BalChip({ m, currency }: { m: Member; currency: string }) {
         : `${who} ${verb.o} ${money(v, currency)}`;
   return (
     <span className={styles.balchip}>
-      <KitAvatar
-        name={m.name}
-        size="22px"
-        color={m.color}
-        initials={m.initials}
-      />
+      <Avatar name={m.name} size="22px" color={m.color} initials={m.initials} />
       <span>
         {text}
         {m.departed ? " · Departed" : ""}

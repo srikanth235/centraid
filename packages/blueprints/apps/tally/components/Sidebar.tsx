@@ -1,3 +1,4 @@
+import { Avatar } from "../../_shared/Avatar.tsx";
 // Sidebar region: the smart-section nav (Dashboard / Activity), the groups
 // list and the friends list — three React roots (#smartNav, #groupsNav,
 // #friendsNav). The brand row, "Add an expense" button and the
@@ -7,7 +8,7 @@
 import { balLabelFriend, balLabelGroup, tint } from "../format.ts";
 import { I } from "../icons.ts";
 import type { BalLabel, Friend, Group, NavPatch, View } from "../types.ts";
-import { Icon, KitAvatar } from "./Shared.tsx";
+import { Icon } from "./Shared.tsx";
 
 import shared from "./shared.module.css";
 import styles from "./Sidebar.module.css";
@@ -122,7 +123,7 @@ export function FriendsNav({
               onSelect({ view: "friend", friendId: f.party_id, search: "" })
             }
           >
-            <KitAvatar
+            <Avatar
               name={f.name}
               size="28px"
               color={f.color}

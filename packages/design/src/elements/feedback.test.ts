@@ -17,7 +17,7 @@ import {
 import type { CentraidHost } from "./host.js";
 
 function line(): HTMLElement | null {
-  return document.body.querySelector("kit-status-line");
+  return document.body.querySelector(".kit-status-line");
 }
 
 function text(): string {
@@ -69,7 +69,7 @@ describe("status line", () => {
   it("mounts exactly one host and reuses it for every later call", () => {
     statusLine("first");
     statusLine("second");
-    expect(document.body.querySelectorAll("kit-status-line")).toHaveLength(1);
+    expect(document.body.querySelectorAll(".kit-status-line")).toHaveLength(1);
     expect(text()).toBe("second");
   });
 
@@ -155,14 +155,15 @@ describe("status line", () => {
 });
 
 describe("stand-in states", () => {
-  it("showSkeleton replaces the container's contents with one element", () => {
+  it("showSkeleton replaces the container's contents with the asked-for rows", () => {
     const box = document.createElement("div");
     box.innerHTML = "<p>stale</p>";
     showSkeleton(box, 5);
     expect(box.querySelector("p")).toBeNull();
-    const skeleton = box.firstElementChild as HTMLElement & { rows: number };
-    expect(skeleton.tagName.toLowerCase()).toBe("kit-skeleton");
-    expect(skeleton.rows).toBe(5);
+    // The same `.kit-skeleton` rows `_shared/LoadingSkeleton.tsx` renders in
+    // React — #799 retired the `<kit-skeleton>` element both went through.
+    expect(box.querySelectorAll(".kit-skeleton")).toHaveLength(5);
+    expect(box.children).toHaveLength(5);
   });
 
   it("readFailed says the vault is unreachable rather than leaving it blank", () => {

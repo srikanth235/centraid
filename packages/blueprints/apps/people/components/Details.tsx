@@ -9,11 +9,12 @@ import { useState } from "react";
 
 import { armConfirm } from "@centraid/design/elements";
 
+import { Avatar } from "../../_shared/Avatar.tsx";
 import { I } from "../icons.ts";
 import type { DetailPerson, Person } from "../types.ts";
 import { Sections } from "./DetailSections.tsx";
 import { History } from "./History.tsx";
-import { Icon, KitAvatar } from "./Shared.tsx";
+import { Icon } from "./Shared.tsx";
 
 import styles from "./Details.module.css";
 import shared from "./shared.module.css";
@@ -113,7 +114,7 @@ export function Details({
                 boxShadow: `0 8px 22px -6px color-mix(in oklab, ${color} 60%, transparent)`,
               }}
             >
-              <KitAvatar name={nameGuess} size="72px" color={color} />
+              <Avatar color={color} name={nameGuess} size="72px" />
             </span>
           </div>
           {editing ? (

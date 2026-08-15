@@ -6,9 +6,8 @@
   align-items: center;
   flex: 0 0 auto;
   gap: 5px;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  font-weight: 600;
+  /* The micro role whole — see StatusPill for why the pieces were wrong. */
+  font: var(--t-control);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-faint);

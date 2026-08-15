@@ -15,6 +15,7 @@ import {
   readFailed,
 } from "@centraid/design/elements";
 
+import { Skeleton } from "../_shared/LoadingSkeleton.tsx";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import type { ChromeAvatar } from "./Chrome.tsx";
@@ -29,7 +30,6 @@ import { GroupModal } from "./components/GroupModal.tsx";
 import { Ledger } from "./components/Ledger.tsx";
 import { SearchResults } from "./components/Search.tsx";
 import { SettleModal } from "./components/SettleModal.tsx";
-import { KitSkeleton } from "./components/Shared.tsx";
 import { FriendsNav, GroupsNav, SmartNav } from "./components/Sidebar.tsx";
 import { first, money } from "./format.ts";
 import { createLogic } from "./logic.ts";
@@ -400,7 +400,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         }
       />
     ) : (
-      <KitSkeleton rows={4} />
+      <Skeleton rows={4} />
     );
   } else if (state.view === "activity") {
     content = (

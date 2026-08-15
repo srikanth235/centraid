@@ -1,9 +1,10 @@
+import { Avatar } from "../../_shared/Avatar.tsx";
 // Grid view card (#grid root's mapped children).
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { avatarColor, metaLine, statusOf } from "../format.ts";
 import { I } from "../icons.ts";
 import type { Person } from "../types.ts";
-import { Icon, KitAvatar } from "./Shared.tsx";
+import { Icon } from "./Shared.tsx";
 
 import styles from "./Grid.module.css";
 
@@ -38,7 +39,7 @@ export function GridCard({
         className={styles.cardTop}
         style={{ background: `color-mix(in oklab, ${color} 12%, transparent)` }}
       >
-        <KitAvatar name={p.name} size="58px" color={color} />
+        <Avatar color={color} name={p.name} size="58px" />
       </div>
       <button
         type="button"

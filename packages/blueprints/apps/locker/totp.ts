@@ -150,7 +150,7 @@ export interface Strength {
 }
 
 // Length + character-class score, 0..5 → { ratio, tone, label, color } for a
-// kit-meter + label. Mirrors the server's strengthScore so the meter agrees
+// `Meter` + label. Mirrors the server's strengthScore so the meter agrees
 // with Watchtower's "weak".
 export function strength(pw: string | null | undefined): Strength {
   if (!pw) return { ratio: 0, tone: "", label: "", color: "var(--text-faint)" };

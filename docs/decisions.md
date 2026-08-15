@@ -104,7 +104,7 @@ Node remains the gateway runtime until Bun supports `node:sqlite` and passes the
 
 The product grammar is the current design contract, not a migration plan: semantic roles, lowerings, recipes, icon/identity/formatter contracts, and reference states are enforced by [DESIGN.md](../DESIGN.md), [design machinery](design-machinery.md), and their tests. The former plan's durable outcome is that app identity and action colour remain separate, host appearance owns appearance, and mobile consumes `toNativeTheme()` without CSS parsing. See [#690](https://github.com/srikanth235/centraid/issues/690) and its review closure [#695](https://github.com/srikanth235/centraid/issues/695).
 
-The headless block logic lives in `@centraid/design/blocks`. React DOM composition is still split between shell and inline blueprint markup; the consolidation remains a follow-up tracked by [#765](https://github.com/srikanth235/centraid/issues/765). Served custom elements are a distinct rendering technology and keep their own implementation.
+The headless block logic lives in `@centraid/design/blocks`. React DOM composition is still split between shell and inline blueprint markup; the consolidation remains a follow-up tracked by [#765](https://github.com/srikanth235/centraid/issues/765). The DOM custom elements that used to be a third rendering technology are gone ([#799](https://github.com/srikanth235/centraid/issues/799)): `Avatar`, `Meter` and `Skeleton` are React blocks in `packages/blueprints/apps/_shared`, and the status line is plain DOM in `packages/design/src/elements/feedback.ts`.
 
 ## Related docs
 

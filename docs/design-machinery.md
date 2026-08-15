@@ -41,7 +41,9 @@ Where the block implementations live today:
 | React Native | `apps/mobile/src/kit/components` | every mobile screen — one implementation, as the rule requires |
 | React DOM | `packages/client/src/react/ui` | the shell's operational routes and screens |
 | React DOM | `packages/blueprints/apps/_shared` | the eight inline system apps |
-| DOM custom elements | `packages/design/src/elements/kit-*.ts` + `kit.css` | `<kit-avatar>` in tally/people, `<kit-meter>` in locker, `<kit-skeleton>` in photos and `_shared/LoadingSkeleton.tsx`, and the one `<kit-status-line>` the frame docks — retiring under #799 in favour of React blocks |
+| Imperative DOM | `packages/design/src/elements` + `kit.css` | the surfaces with no React tree: the one status line the frame docks, `showSkeleton`, the popover, the attachment strip |
+
+There are no DOM custom elements left. [Issue #799](https://github.com/srikanth235/centraid/issues/799) retired the last four (`kit-avatar`, `kit-meter`, `kit-skeleton`, `kit-status-line`) and the `KitElement` base they shared: `Avatar`, `Meter` and `Skeleton` are React blocks in `packages/blueprints/apps/_shared`, and the status line is plain DOM built by `elements/feedback.ts`. They all emit the same `.kit-*` classes, so `kit.css` styles them unchanged — the elements' `display: contents` hosts contributed no layout of their own.
 
 The two React DOM rows remain the one composition follow-up: the shell and inline blueprint apps share the headless logic but still own separate markup and stylesheets. The compatibility audit found only `--w-key-col` missing from the blueprint lowering; the consolidation is tracked in [issue #765](https://github.com/srikanth235/centraid/issues/765).
 

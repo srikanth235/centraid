@@ -1,7 +1,6 @@
-import type { FC } from "react";
-
 import { armConfirm, fmtBytes } from "@centraid/design/elements";
 
+import { Skeleton } from "../../_shared/LoadingSkeleton.tsx";
 // The duplicates shelf (issue #352 / #299's deferred duplicates shelf): one
 // row per cluster, its assets laid out side by side so the owner can eyeball
 // which copy to keep, checkbox-select the redundant ones, and trash them in
@@ -27,11 +26,6 @@ import { duplicatesLede, emptyCopy } from "../view-copy.ts";
 import { Tile } from "./Tile.tsx";
 
 import styles from "./Duplicates.module.css";
-
-// The genuine <kit-skeleton> custom element, rendered as ordinary JSX — the
-// runtime value stays the string 'kit-skeleton', so the emitted DOM is
-// identical (pilot custom-element pattern).
-const KitSkeleton = "kit-skeleton" as unknown as FC<{ rows?: number }>;
 
 // A cluster is a decision, not a browse: nothing here opens, and every tile
 // starts inside select mode, so these two Tile callbacks never actually fire.
@@ -173,7 +167,7 @@ export function DuplicatesView({
   onTrashSelected: () => void;
 }) {
   if (clusters == null || loading) {
-    return <KitSkeleton rows={4} />;
+    return <Skeleton rows={4} />;
   }
   return (
     <div className={styles.shelf}>

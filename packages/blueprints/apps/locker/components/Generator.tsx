@@ -1,3 +1,4 @@
+import { Meter } from "../../_shared/Meter.tsx";
 // The password generator modal — kit-owned overlay markup (`.kit-modal-back`
 // / `.kit-modal`). Its length/symbols/numbers/value live in app.tsx's module
 // state (not local component state) because they must survive being reopened
@@ -5,7 +6,7 @@
 // value back into whichever field opened it — see logic.ts's
 // `openGenerator`/`closeGen`.
 import { strength } from "../totp.ts";
-import { Icon, KitMeter } from "./Shared.tsx";
+import { Icon } from "./Shared.tsx";
 
 import styles from "./Generator.module.css";
 import shared from "./shared.module.css";
@@ -96,7 +97,7 @@ export function Generator({
         </div>
 
         <div className={shared.strength}>
-          <KitMeter ratio={st.ratio} tone={st.tone} />
+          <Meter ratio={st.ratio} tone={st.tone} />
           <span
             style={{ font: "var(--t-mono)", fontSize: "10px", color: st.color }}
           >

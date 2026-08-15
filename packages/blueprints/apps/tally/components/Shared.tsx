@@ -2,23 +2,11 @@
 // functions of props — no app state. Same role as tasks/notes'
 // components/Shared.tsx.
 import { useEffect, useRef, useState } from "react";
-import type { FC, ReactNode } from "react";
+import type { ReactNode } from "react";
+
+import { Skeleton } from "../../_shared/LoadingSkeleton.tsx";
 
 import shared from "./shared.module.css";
-
-// The kit's native custom elements (`<kit-avatar>`, `<kit-skeleton>`, defined
-// in kit/elements.js). TSX has no intrinsic-element type for them, so we render
-// them through values typed as components — at runtime each IS the host tag
-// string, so `jsx('kit-avatar', props)` emits the exact same DOM the JSX
-// original did (React sets the props as attributes on the custom element). The
-// cast is the one place the host tag becomes typed (pilot addendum 4).
-export const KitAvatar = "kit-avatar" as unknown as FC<{
-  name?: string;
-  size?: string;
-  color?: string;
-  initials?: string;
-}>;
-export const KitSkeleton = "kit-skeleton" as unknown as FC<{ rows?: number }>;
 
 // A trusted static SVG string rendered inline, with no wrapper box in the
 // layout (`display:contents`) — see icons.ts for the glyph strings.
@@ -32,13 +20,12 @@ export function Icon({ svg }: { svg: string }) {
   );
 }
 
-// A view is still loading: routed through the template itself, matching the
-// old `skeletonTpl()` — the genuine `<kit-skeleton>` custom element, rendered
-// as ordinary JSX (see photos/app.tsx for the same convention).
+// A view is still loading: the shared placeholder rows inside this app's own
+// list frame.
 export function ExplistSkeleton({ rows }: { rows: number }) {
   return (
     <div className={shared.explist}>
-      <KitSkeleton rows={rows} />
+      <Skeleton rows={rows} />
     </div>
   );
 }

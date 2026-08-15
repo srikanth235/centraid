@@ -17,11 +17,6 @@
       "renderer": "kit-inline",
       "host": "shell"
     },
-    "BS": {
-      "profile": "blueprint",
-      "renderer": "kit-served",
-      "host": "iframe-webview"
-    },
     "MO": {
       "profile": "native",
       "renderer": "react-native",
@@ -67,7 +62,7 @@
       "shared": ["ask-entry", "assistant-destination", "sse-contract"],
       "adapted": ["sheet-vs-panel"],
       "local": ["message-prose"],
-      "referenceStates": ["sh-dark-ask", "bs-light-ask"]
+      "referenceStates": ["sh-dark-ask", "bi-light-ask"]
     },
     "M6": {
       "name": "Row to detail",
@@ -170,7 +165,7 @@
         "sh-light-first-run",
         "sh-dark-compat",
         "mo-light-pairing",
-        "bs-dark-offline-wall"
+        "bi-dark-offline-wall"
       ]
     },
     "M16": {
@@ -225,7 +220,7 @@
       "referenceStates": [
         "sh-dark-upload",
         "mo-light-upload",
-        "bs-light-background-work"
+        "bi-light-background-work"
       ]
     },
     "M20": {
@@ -237,7 +232,7 @@
         "sh-light-capture",
         "sh-compact-capture",
         "mo-dark-capture",
-        "bs-light-share-target"
+        "bi-light-share-target"
       ]
     }
   },
@@ -315,9 +310,9 @@
       "viewport": "1440x900"
     },
     {
-      "id": "bs-light-ask",
+      "id": "bi-light-ask",
       "moment": "M5",
-      "surface": "BS",
+      "surface": "BI",
       "scheme": "light",
       "state": "sheet",
       "viewport": "1024x768"
@@ -491,9 +486,9 @@
       "viewport": "390x844"
     },
     {
-      "id": "bs-dark-offline-wall",
+      "id": "bi-dark-offline-wall",
       "moment": "M15",
-      "surface": "BS",
+      "surface": "BI",
       "scheme": "dark",
       "state": "offline-wall",
       "viewport": "1024x768"
@@ -587,9 +582,9 @@
       "viewport": "390x844"
     },
     {
-      "id": "bs-light-background-work",
+      "id": "bi-light-background-work",
       "moment": "M19",
-      "surface": "BS",
+      "surface": "BI",
       "scheme": "light",
       "state": "background",
       "viewport": "1024x768"
@@ -619,9 +614,9 @@
       "viewport": "390x844"
     },
     {
-      "id": "bs-light-share-target",
+      "id": "bi-light-share-target",
       "moment": "M20",
-      "surface": "BS",
+      "surface": "BI",
       "scheme": "light",
       "state": "share-target",
       "viewport": "1024x768"
