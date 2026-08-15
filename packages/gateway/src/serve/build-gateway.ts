@@ -334,7 +334,7 @@ import { VaultLinksStore } from "./vault-links-store.js";
 import type { InstallScopeBlock, VaultPlane } from "./vault-plane.js";
 import { openVaultRegistry } from "./vault-registry.js";
 import type { VaultRegistry } from "./vault-registry.js";
-import { WebAppSessions } from "./web-app-sessions.js";
+import { WebControlSessions } from "./web-control-sessions.js";
 import { WebControlSessionStore } from "./web-session-store.js";
 
 export type { DeviceAccess } from "./vault-context.js";
@@ -468,7 +468,7 @@ export interface BuildGatewayOptions {
   };
   /**
    * Durable PWA control sessions (issue #376). When `controlsFile` is set,
-   * `WebAppSessions` persists CONTROL cookies there so a web pairing
+   * `WebControlSessions` persists CONTROL cookies there so a web pairing
    * survives a gateway restart / the sliding 30-day idle window instead of
    * forcing a fresh pairing ticket every 12h. `isDeviceValid` propagates
    * `devices revoke` to live control/app cookies (a revoked device's cookie
@@ -746,7 +746,7 @@ export interface BuiltGateway {
    */
   syncApps: (vaultId?: string) => Promise<void>;
   /** Scoped cookie sessions used only by generated apps embedded in the browser PWA. */
-  webAppSessions: WebAppSessions;
+  webControlSessions: WebControlSessions;
   /**
    * Route handlers run after auth, before `runtime.handle` (vault routes,
    * templates, agents, then the request vault's store-backed handlers).
@@ -943,7 +943,7 @@ export async function buildGateway(
     "hardware-profile",
     formatHardwareProfileDetail(hardwareProfile)
   );
-  const webAppSessions = new WebAppSessions({
+  const webControlSessions = new WebControlSessions({
     ...options.webSessions,
     controlStore:
       options.webSessions?.controlStore ??
@@ -4357,7 +4357,7 @@ export async function buildGateway(
   const routeEntries: RoutePrefixRegistration[] = [
     forRoutePrefixes(
       ["/centraid/_web", "/centraid/_apps"],
-      webAppSessions.handler
+      webControlSessions.handler
     ),
     // Gateway identity + version handshake (issue #289): cheap static
     // JSON, mounted first — health polling hits it every few seconds.
@@ -5402,7 +5402,7 @@ export async function buildGateway(
     pushWakeRelay.start();
     // Web/control session expiry reclamation on the gateway clock instead of
     // on every HTTP request (issue #659 G3).
-    webAppSessions.startSweeping();
+    webControlSessions.startSweeping();
     // Peer-plane background delivery (#726 P3 gaps 2 & 3) on the gateway clock.
     peerPlaneSweep.start();
 
@@ -5477,7 +5477,7 @@ export async function buildGateway(
   const stop = async (): Promise<void> => {
     unsubscribeLateMount();
     pushWakeRelay.stop();
-    webAppSessions.stopSweeping();
+    webControlSessions.stopSweeping();
     peerPlaneSweep.stop();
     // A mount notification may already be building its code host. Let that
     // bounded work settle before closing vault databases or removing temp
@@ -5526,7 +5526,7 @@ export async function buildGateway(
     appsStore: async () => (await currentVaultHost()).store,
     codeAppsDir: () => currentSettledHost().codeAppsDir(),
     syncApps,
-    webAppSessions,
+    webControlSessions,
     extraHandlers,
     composedHandler,
     webhookHandler,

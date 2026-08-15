@@ -41,7 +41,7 @@ Where the block implementations live today:
 | React Native | `apps/mobile/src/kit/components` | every mobile screen — one implementation, as the rule requires |
 | React DOM | `packages/client/src/react/ui` | the shell's operational routes and screens |
 | React DOM | `packages/blueprints/apps/_shared` | the eight inline system apps |
-| DOM custom elements | `packages/design/kit/kit-*.js` + `kit.css` | apps served over HTTP to the builder/code-store surface, which resolve no bare package specifiers |
+| DOM custom elements | `packages/design/kit/kit-*.js` + `kit.css` | the served-app surface, retiring under #799 — HTTP-served apps resolve no bare package specifiers |
 
 The two React DOM rows remain the one composition follow-up: the shell and inline blueprint apps share the headless logic but still own separate markup and stylesheets. The compatibility audit found only `--w-key-col` missing from the blueprint lowering; the consolidation is tracked in [issue #765](https://github.com/srikanth235/centraid/issues/765). The served custom-element kit is intentionally a separate rendering technology with its own implementation and is not part of the React DOM consolidation.
 

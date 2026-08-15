@@ -238,9 +238,7 @@ export function toCss(): string {
   // until this existed the shell's index.html hardcoded `data-theme="dark"` to
   // stop a light flash — which made "follow the system" unreachable, because
   // the attribute always won. The blueprint sheet has emitted exactly this pair
-  // since it shipped (`blueprint.ts`), and `skills/ui-grounding.ts` already
-  // TELLS app authors the token baseline handles both; the shell sheet was the
-  // asymmetry.
+  // since it shipped (`blueprint.ts`); the shell sheet was the asymmetry.
   //
   // No specificity contest with the `[data-theme='…']` blocks appended below:
   // `:not([data-theme])` simply stops matching the moment the attribute is

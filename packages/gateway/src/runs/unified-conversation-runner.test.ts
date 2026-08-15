@@ -70,7 +70,7 @@ describe("unified-conversation-runner", () => {
     await fs.rm(root, { recursive: true, force: true });
   });
 
-  test("runs the turn in the draft worktree with the union of tools + builder prompt", async () => {
+  test("runs the turn in the draft worktree with the union of tools + the route preamble", async () => {
     let captured: { input: TurnInput; config: TurnConfig } | undefined;
     const events: TurnStreamEvent[] = [];
 
@@ -101,16 +101,12 @@ describe("unified-conversation-runner", () => {
     expect(captured?.input.toolContext?.appId).toBe("notes");
     expect(captured?.input.toolContext?.dispatcher).toBe(dispatcher);
 
-    // Unified prompt: the data preamble is kept AND the builder authoring
-    // block is folded in (app kind → CENTRAID_APPEND_PROMPT).
-    expect(captured!.input.extraSystemPrompt).toMatch(/BASE_DATA_PREAMBLE/u);
-    expect(
-      captured!.input.extraSystemPrompt.length >
-        "BASE_DATA_PREAMBLE".length + 100
-    ).toBeTruthy();
+    // Unified prompt: the route's data preamble is kept verbatim. An `app`
+    // kind adds no authoring contract since #799 — only an automation does.
+    expect(captured!.input.extraSystemPrompt).toBe("BASE_DATA_PREAMBLE");
 
-    // This IS the builder surface — the route reads `runKind` to persist its
-    // turns as `kind: 'build'` in the ledger (#181).
+    // The route reads `runKind` to persist its turns as `kind: 'build'` in the
+    // ledger (#181).
     expect(runner.runKind).toBe("build");
 
     // Resume handle round-trips back to the route.

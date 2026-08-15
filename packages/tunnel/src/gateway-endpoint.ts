@@ -431,9 +431,9 @@ class GatewayEndpoint {
       headers[DATA_PLANE_RELAY_HEADER] = this.options.nativeControl.secret;
     }
     headers.host = base.host;
-    // Browser-generated apps carry a one-app cookie minted by WebAppSessions.
-    // Omitting the broad device bearer lets the HTTP authorizer apply that
-    // cookie's route scope. The marker itself is always stripped upstream.
+    // A browser hop that marks itself `web-session` carries its own gateway
+    // cookie. Omitting the broad device bearer lets the HTTP authorizer apply
+    // that cookie's own scope. The marker itself is always stripped upstream.
     if (authMode === TUNNEL_AUTH_WEB_SESSION) delete headers.authorization;
     else headers.authorization = `Bearer ${upstream.token}`;
     await new Promise<void>((resolve) => {

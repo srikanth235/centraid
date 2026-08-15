@@ -439,7 +439,7 @@ export async function setVaultChangeShapeIds(
   feeds.get(key)?.setShapeIds(shapeIds);
 }
 
-// Scope switches keep mounted AppFrame components alive. Re-bind their
+// Scope switches keep mounted app routes alive. Re-bind their
 // subscriptions so the old vault/gateway stream is closed and the new scope
 // gets exactly one stream as well. gateway-client-core registered its auth
 // cache reset handlers before these listeners because it is imported above.

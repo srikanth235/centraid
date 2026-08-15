@@ -90,7 +90,6 @@ describe(hostCapabilities, () => {
   it("always reports desktop platform, with transcript permanently false (issue #724 W6)", () => {
     expect(hostCapabilities()).toMatchObject({
       platform: "desktop",
-      appSessions: false,
       compute: {
         previews: true,
         transcript: false,

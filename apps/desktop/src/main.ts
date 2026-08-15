@@ -75,12 +75,6 @@ if (gotSingleInstanceLock) {
   // (appId: dev.centraid.desktop — electron-builder/app-id.json).
   const ICON_PATH = path.join(__dirname, "..", "icon.png");
 
-  // The builder preview iframe is served by the gateway itself (issue #141,
-  // Phase 4): it points at `/centraid/_draft/<sessionId>/<id>/`, a real HTTP
-  // origin the main-process auth-injector authenticates. No custom local
-  // scheme is needed anymore — the old `centraid-preview://` path-mode
-  // protocol was retired so local == remote serving.
-
   let flushWindowState: (() => void) | undefined;
 
   const canOpenExternal = (url: string): boolean => {

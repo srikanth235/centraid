@@ -74,10 +74,7 @@ vi.mock(import("./appSettingsData.js") as Promise<unknown>, () => ({
 vi.mock(import("../actions.js") as Promise<unknown>, () => ({
   useShellActions: () => ({
     confirm: vi.fn<ShellActions["confirm"]>(async () => true),
-    enterBuilder: vi.fn<ShellActions["enterBuilder"]>(),
-    openNewAppSheet: vi.fn<ShellActions["openNewAppSheet"]>(),
     showToast: vi.fn<ShellActions["showToast"]>(),
-    builderEnabled: false,
   }),
 }));
 vi.mock(import("../iconSvg.js") as Promise<unknown>, () => ({

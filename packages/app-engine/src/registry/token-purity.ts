@@ -3,12 +3,11 @@
  *
  * `packages/design` owns every colour, radius, spacing rung, and type face in
  * the product; app CSS is supposed to *consume* those names through
- * `var(--token)` and never restate them. Until now that rule reached
- * harness-authored apps only as prose in the system prompt
- * (`packages/gateway/src/skills/ui-grounding.ts`) — nothing checked the CSS an
- * harness actually wrote. Checked-in blueprint apps have a vitest ratchet
- * (`packages/blueprints/src/token-purity.test.ts`); this module is the runtime
- * equivalent, run at the publish gate.
+ * `var(--token)` and never restate them. Checked-in blueprint apps have a
+ * vitest ratchet (`packages/blueprints/src/token-purity.test.ts`); this module
+ * was the runtime equivalent for harness-authored app CSS at the publish gate.
+ * Its caller retired with the served-app plane (issue #799) — it now has no
+ * live consumer and comes out with the rest of the serving path.
  *
  * Pure and dependency-free on purpose: the design contract's own property
  * names are *injected* (`contractProps`) by the caller that already depends on

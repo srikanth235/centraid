@@ -181,8 +181,7 @@ HIGH  vault/backup/replica contracts, handler isolation, web offline/PWA,
       harness conversation journey (fake ACP integration)
 MED   desktop Playwright, mobile Maestro iOS + Android home-loads, perf/scale
       (generous), tunnel native when module present, multi-writer double-write
-SOFT  desktop copilot UI e2e (blocked on #470), builder publish (punted v0),
-      mobile on-device perf/scale (honest skip), nightly red → human action
+SOFT  mobile on-device perf/scale (honest skip), nightly red → human action
 ```
 
 Parent backlog: [#496](https://github.com/srikanth235/centraid/issues/496).
@@ -341,7 +340,7 @@ These suites encode product law and are cataloged by name. The matrix validator 
 3. Blob custody / CAS state machine — `packages/vault/src/blob/custody-proven.contract.test.ts`
 4. Replica convergence, intent identity, and multi-writer admission — `packages/client/src/replica/intents.contract.test.ts` and `packages/client/src/replica/multi-writer.contract.test.ts`
 5. Handler validation and worker isolation — `packages/app-engine/src/handlers/handler-runner.contract.test.ts`
-6. Control/app/device session boundaries — `packages/gateway/src/serve/web-app-sessions.contract.test.ts`
+6. Control/device session boundaries — `packages/gateway/src/serve/web-control-sessions.contract.test.ts`
 7. Scheduler no-backfill semantics — `packages/automation/src/fire/scheduler-ledger.contract.test.ts`
 8. Conversation digest → archive → custody-gated prune — `packages/app-engine/src/conversation/archive/archive.contract.test.ts`
 9. Pending-write projection, seat parity, settlement, and exclusions — `scripts/lint-engine-conformance.test.mjs`, `packages/blueprints/apps/_shared/pending-overlay.test.ts`, and `packages/client/src/replica/intents.contract.test.ts`

@@ -1,16 +1,21 @@
 import crypto from "node:crypto";
 /*
  * Gateway-owned app lifecycle over HTTP (issue #141, Phase 2). The
- * deterministic builder — scaffold / clone / update-meta / automation
- * create+toggle+delete — moved off the desktop and into the gateway, so
- * the renderer states intent and the gateway does the work (scaffolders,
- * webhook minting, session writes, publish). This boots a real git-store
- * gateway and drives those endpoints end to end:
+ * deterministic lifecycle — clone / install / update-meta / automation
+ * create+toggle+delete — lives in the gateway, so the renderer states
+ * intent and the gateway does the work (scaffolders, webhook minting,
+ * session writes, publish). This boots a real git-store gateway and drives
+ * those endpoints end to end:
  *
- *   - create stages a draft (no `main` entry, registered + previewable),
- *     and `publish:true` lands it on `main`;
+ *   - a create stages a draft (no `main` entry, registered) and
+ *     `publish:true` lands it on `main`;
  *   - automation create mints a webhook secret (returned once) and the
  *     toggled/deleted automation flows through publish.
+ *
+ * The blank-app scaffold route (`POST /centraid/_apps`) retired with the
+ * served-app plane in #799, so the shared session/publish laws below are
+ * driven through the automation create that still rides the same
+ * `prepareLifecycleSession` + `stageAndMaybePublish` path.
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -54,6 +59,25 @@ async function listApps(): Promise<
   }>;
 }
 
+/** Create a code-store app the only way left: as an automation app. */
+async function createApp(
+  body: Record<string, unknown>
+): Promise<{ status: number; json: Record<string, unknown> }> {
+  const res = await fetch(`${handle.url}/centraid/_automations`, {
+    method: "POST",
+    headers: auth({ "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      prompt: "summarize the day",
+      triggers: [{ kind: "cron", expr: "0 9 * * *" }],
+      ...body,
+    }),
+  });
+  return {
+    status: res.status,
+    json: (await res.json()) as Record<string, unknown>,
+  };
+}
+
 async function listSessions(): Promise<string[]> {
   const res = await fetch(`${handle.url}/centraid/_apps/_sessions`, {
     headers: auth(),
@@ -76,93 +100,8 @@ describe("lifecycle-over-http scenarios", () => {
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  test("POST /_apps stages a draft, and publish:true lands it on main", async () => {
-    // Stage-only create: the app is registered (previewable) but NOT on `main`.
-    // Uses a non-bundled id — bundled ids (issue #434) are reserved and a
-    // scaffold of one is refused (see the reservation test below).
-    const staged = await fetch(`${handle.url}/centraid/_apps`, {
-      method: "POST",
-      headers: auth({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ id: "jotter", name: "Jotter" }),
-    });
-    expect(staged.status).toBe(201);
-    const stagedBody = (await staged.json()) as {
-      sessionId: string;
-      staged: boolean;
-    };
-    expect(stagedBody.staged).toBe(true);
-    expect(stagedBody.sessionId).toBeTypeOf("string");
-    expect(stagedBody.sessionId.length).toBeGreaterThan(0);
-    expect((await listApps()).some((a) => a.id === "jotter")).toBe(false);
-
-    // The staged draft serves through the runtime (issue #141 draft preview).
-    const draft = await fetch(
-      `${handle.url}/centraid/_draft/${stagedBody.sessionId}/jotter/app.json`,
-      { headers: auth() }
-    );
-    expect(draft.status).toBe(200);
-    const manifest = (await draft.json()) as { id: string; name: string };
-    expect(manifest.id).toBe("jotter");
-
-    // Publishing a second create lands it on `main` and the home list shows it.
-    const published = await fetch(`${handle.url}/centraid/_apps`, {
-      method: "POST",
-      headers: auth({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ id: "planner", name: "Planner", publish: true }),
-    });
-    expect(published.status).toBe(201);
-    const pubBody = (await published.json()) as { staged: boolean };
-    expect(pubBody.staged).toBe(false);
-    const apps = await listApps();
-    const row = apps.find((a) => a.id === "planner");
-    expect(row).toBeDefined();
-    expect(row?.name).toBe("Planner");
-  });
-
-  test("POST /_apps stamps the tile identity into app.json and the listing (#263)", async () => {
-    // Explicit keys pass through; omitted keys fall back to Sparkle/violet.
-    const published = await fetch(`${handle.url}/centraid/_apps`, {
-      method: "POST",
-      headers: auth({ "Content-Type": "application/json" }),
-      body: JSON.stringify({
-        id: "todos",
-        name: "Todos",
-        iconKey: "Todo",
-        publish: true,
-      }),
-    });
-    expect(published.status).toBe(201);
-    const rows = (await (
-      await fetch(`${handle.url}/centraid/_apps`, { headers: auth() })
-    ).json()) as Array<{ id: string; iconKey?: string; colorKey?: string }>;
-    const row = rows.find((a) => a.id === "todos")!;
-    expect(row.iconKey).toBe("Todo");
-    expect(row.colorKey).toBe("violet");
-  });
-
-  test("POST /_apps rejects a collision with an app already on main", async () => {
-    const first = await fetch(`${handle.url}/centraid/_apps`, {
-      method: "POST",
-      headers: auth({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ id: "dup", name: "Dup", publish: true }),
-    });
-    expect(first.status).toBe(201);
-    const clash = await fetch(`${handle.url}/centraid/_apps`, {
-      method: "POST",
-      headers: auth({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ id: "dup", name: "Dup Again", publish: true }),
-    });
-    expect(clash.status).toBe(409);
-    const err = (await clash.json()) as { error: string };
-    expect(err.error).toBe("already_exists");
-  });
-
   test("POST /_apps/<id>/meta renames an app on main", async () => {
-    await fetch(`${handle.url}/centraid/_apps`, {
-      method: "POST",
-      headers: auth({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ id: "journal", name: "Journal", publish: true }),
-    });
+    await createApp({ id: "journal", name: "Journal", publish: true });
     const res = await fetch(`${handle.url}/centraid/_apps/journal/meta`, {
       method: "POST",
       headers: auth({ "Content-Type": "application/json" }),
@@ -280,11 +219,7 @@ describe("lifecycle-over-http scenarios", () => {
   });
 
   test("DELETE /_apps/<id> tears down the app data dir, not just the code", async () => {
-    await fetch(`${handle.url}/centraid/_apps`, {
-      method: "POST",
-      headers: auth({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ id: "shelf", name: "Shelf", publish: true }),
-    });
+    await createApp({ id: "shelf", name: "Shelf", publish: true });
     // Seed the app's data dir (data.sqlite + ledgers live under appsDir).
     const dataAppDir = path.join(vaultAppsDir(), "shelf");
     await fs.mkdir(dataAppDir, { recursive: true });
@@ -303,13 +238,9 @@ describe("lifecycle-over-http scenarios", () => {
   });
 
   test("DELETE /_apps/<id> deletes a never-published draft without a no_changes error", async () => {
-    // Stage-only create: the draft is registered + previewable but never
-    // landed on `main`, so it has no code subtree there.
-    const staged = await fetch(`${handle.url}/centraid/_apps`, {
-      method: "POST",
-      headers: auth({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ id: "scratch", name: "Scratch" }),
-    });
+    // Stage-only create: the draft is registered but never landed on `main`,
+    // so it has no code subtree there.
+    const staged = await createApp({ id: "scratch", name: "Scratch" });
     expect(staged.status).toBe(201);
     // Seed the draft's data dir the way ensureRegistered would.
     const dataAppDir = path.join(vaultAppsDir(), "scratch");
@@ -343,10 +274,10 @@ describe("lifecycle-over-http scenarios", () => {
     // Scaffold + publish without supplying a sessionId: the gateway defaults to
     // `lifecycle-<id>`. That session is a one-shot — it must be closed once the
     // baseline lands, not left dangling (clone/create both ride this path).
-    const res = await fetch(`${handle.url}/centraid/_apps`, {
-      method: "POST",
-      headers: auth({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ id: "ledger", name: "Ledger", publish: true }),
+    const res = await createApp({
+      id: "ledger",
+      name: "Ledger",
+      publish: true,
     });
     expect(res.status).toBe(201);
     expect((await listApps()).some((a) => a.id === "ledger")).toBe(true);
@@ -361,15 +292,11 @@ describe("lifecycle-over-http scenarios", () => {
       headers: auth({ "Content-Type": "application/json" }),
       body: JSON.stringify({ sessionId: "desktop-board" }),
     });
-    const res = await fetch(`${handle.url}/centraid/_apps`, {
-      method: "POST",
-      headers: auth({ "Content-Type": "application/json" }),
-      body: JSON.stringify({
-        id: "board",
-        name: "Board",
-        sessionId: "desktop-board",
-        publish: true,
-      }),
+    const res = await createApp({
+      id: "board",
+      name: "Board",
+      sessionId: "desktop-board",
+      publish: true,
     });
     expect(res.status).toBe(201);
     await expect(listSessions()).resolves.toContain("desktop-board");
@@ -388,10 +315,10 @@ describe("lifecycle-over-http scenarios", () => {
 
     // Now create `relics` for real via the defaulting path. Pre-fix this hit
     // `session_exists` and reused the stale worktree; post-fix it opens fresh.
-    const res = await fetch(`${handle.url}/centraid/_apps`, {
-      method: "POST",
-      headers: auth({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ id: "relics", name: "Relics", publish: true }),
+    const res = await createApp({
+      id: "relics",
+      name: "Relics",
+      publish: true,
     });
     expect(res.status).toBe(201);
     expect((await listApps()).some((a) => a.id === "relics")).toBe(true);

@@ -1,31 +1,28 @@
 /*
- * Renderer-side app *editing* + *lifecycle* over direct HTTP (issue #141,
+ * Renderer-side app *session* + *lifecycle* over direct HTTP (issue #141,
  * Phase 2). Split out of `gateway-client.ts` (repo file-size limit); the
  * barrel re-exports these so call sites still `import … from
  * './gateway-client.js'`.
  *
- * The draft-editing surface (sessions / files / publish) and the
- * deterministic lifecycle (create / clone / install / meta) the gateway now
- * owns. The renderer states intent; the gateway scaffolds, stages into a
- * session worktree, and publishes. Automation CRUD lives next door in
- * `gateway-client-automation-editing.ts`.
+ * What is left here after the served-app plane retired (issue #799): the
+ * `desktop-<id>` editing session (opened/closed lazily and shared with the
+ * automation-authoring harness), and the deterministic lifecycle the gateway
+ * owns — clone / install / meta / delete. Automation CRUD lives next door in
+ * `gateway-client-automation-editing.ts` and is the remaining writer of the
+ * code store. The app-file editing surface (draft files, publish, preview
+ * URLs, scaffolding a blank app) went with the builder that drove it.
  *
  * Two lifecycles meet here, and the difference is *where the code comes
  * from* (#434). A bundled app `install`s: the gateway records consent and
  * serves it from the shipped release — nothing is copied, no git, and it
- * upgrades with the software. Generated code (automations) and forks still
- * `create`/`clone` with `publish: true` to land a *baseline* version on
- * `main` (the app's "git init"), because code that exists nowhere else has
- * to live in the vault's code store. Those then stage chat- and file-driven
- * edits in the `desktop-<id>` draft worktree — the builder preview reads
- * that draft via `draftPreviewUrl` and an explicit Publish flips the next
- * version live. So "auto-publish" is the one-time baseline only, not
- * per-edit.
+ * upgrades with the software. Generated code (automations) still `clone`s
+ * with `publish: true` to land a *baseline* version on `main` (its "git
+ * init"), because code that exists nowhere else has to live in the vault's
+ * code store.
  */
 
 import {
   GatewayClientError,
-  appSessionUrl,
   auth,
   authHeaders,
   doFetch,
@@ -111,183 +108,7 @@ export async function dropAppSession(appId: string): Promise<void> {
   }).catch(() => undefined);
 }
 
-/**
- * Draft-preview URL for an app's editing session, served through the
- * gateway runtime (issue #141, Phase 4). The staged worktree is previewed
- * faithfully (static assets + handlers) under
- * `/centraid/_draft/<sessionId>/<appId>/` so the builder iframe reflects
- * chat/file edits *before* an explicit Publish flips them live — honoring
- * #137's "everything serves through the store, never a local path shortcut"
- * invariant. The iframe authenticates the same way the live-URL iframe
- * does: the main-process auth-injector stamps the Bearer header onto every
- * gateway-origin request (top navigation + subresources).
- *
- * Returns `available` so the builder can keep showing its "building"
- * skeleton until the draft actually has an index.html (fresh apps mid-
- * generation have an open session but no page yet → the draft index 404s).
- * The returned `url` carries a cache-buster so re-resolving after a save
- * forces the iframe to re-navigate.
- */
-export async function draftPreviewUrl(
-  appId: string
-): Promise<{ url: string; available: boolean }> {
-  const sessionId = await ensureAppSession(appId);
-  const { baseUrl, token } = await auth();
-  const draftPath = `/centraid/_draft/${enc(sessionId)}/${enc(appId)}/`;
-  let available = false;
-  try {
-    const res = await doFetch(baseUrl, draftPath, {
-      method: "GET",
-      headers: authHeaders(token),
-    });
-    available = res.ok;
-    await res.text().catch(() => undefined); // drain so the socket frees
-  } catch {
-    available = false;
-  }
-  // Stable path + per-resolve cache-buster (the iframe src must change to
-  // re-navigate after a staged edit). `parseWithDraft` preserves the query
-  // string and the inner app-index route ignores unknown params.
-  const launchUrl = await appSessionUrl(appId, draftPath, sessionId);
-  const url = `${launchUrl}${launchUrl.includes("?") ? "&" : "?"}t=${Date.now()}`;
-  return { url, available };
-}
-
-/** Read the app's draft files from its editing session. */
-export async function readAppFiles(input: {
-  id: string;
-}): Promise<{ path: string; content: string }[]> {
-  const sessionId = await ensureAppSession(input.id);
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_apps/${enc(input.id)}/files?sessionId=${enc(sessionId)}`,
-    { method: "GET", headers: authHeaders(token) }
-  );
-  const out = await readJson<{ files: { path: string; content: string }[] }>(
-    res,
-    "read files"
-  );
-  return out.files ?? [];
-}
-
-/** Overwrite a single text file in the app's draft session. */
-export async function writeAppFile(input: {
-  id: string;
-  path: string;
-  content: string;
-}): Promise<{ path: string; size: number }> {
-  const sessionId = await ensureAppSession(input.id);
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_apps/${enc(input.id)}/files/${enc(input.path)}?sessionId=${enc(sessionId)}`,
-    {
-      method: "PUT",
-      headers: authHeaders(token, "text/plain; charset=utf-8"),
-      body: input.content,
-    }
-  );
-  return readJson<{ path: string; size: number }>(res, "write file");
-}
-
-/** Explicit Publish: validate + merge the draft session onto `main`. */
-export async function publish(input: {
-  id: string;
-  skipBuild?: boolean;
-}): Promise<{
-  id: string;
-  versionId: string;
-  sha256: string;
-  activated: boolean;
-  files: number;
-  bytes: number;
-  migrationsApplied: number[];
-}> {
-  void input.skipBuild;
-  const sessionId = await ensureAppSession(input.id);
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_apps/${enc(input.id)}/publish`,
-    {
-      method: "POST",
-      headers: authHeaders(token, "application/json"),
-      body: JSON.stringify({ sessionId, message: `publish ${input.id}` }),
-    }
-  );
-  const out = await readJson<{ id: string; versionTag: string; sha: string }>(
-    res,
-    "publish"
-  );
-  // Shape into the renderer's CentraidPublishResult: the git backend ships
-  // no per-version files/bytes aggregates, and publish == merge into main.
-  return {
-    id: out.id,
-    versionId: out.versionTag,
-    sha256: out.sha,
-    activated: true,
-    files: 0,
-    bytes: 0,
-    migrationsApplied: [],
-  };
-}
-
-/**
- * Reset the app's draft data from a fresh prod snapshot + replay its pending
- * migrations (issue #144). Backs the preview-pane "Reset data from prod"
- * control: a no-op once a draft copy exists is rebuilt from live, and a
- * migration incompatible with prod rows rejects with the SQL error (HTTP
- * 422) — surfacing the publish conflict in preview before publishing.
- */
-export async function resetAppData(input: {
-  id: string;
-}): Promise<{ id: string; seeded: boolean; migrationsApplied: number[] }> {
-  const sessionId = await ensureAppSession(input.id);
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_apps/${enc(input.id)}/reset-data`,
-    {
-      method: "POST",
-      headers: authHeaders(token, "application/json"),
-      body: JSON.stringify({ sessionId }),
-    }
-  );
-  return readJson<{ id: string; seeded: boolean; migrationsApplied: number[] }>(
-    res,
-    "reset-data"
-  );
-}
-
 // ───────────────────────── lifecycle ─────────────────────
-
-/** Scaffold a fresh app (staged + published for immediate preview). */
-export async function createApp(input: {
-  id: string;
-  name?: string;
-  version?: string;
-  /** Tile identity stamped into the scaffold's `app.json` (issue #263);
-   *  the gateway defaults to Sparkle/violet when omitted. */
-  iconKey?: string;
-  colorKey?: string;
-  /** The vault the new app is created in (issue #599). A creation flow names
-   *  its target explicitly; omitted falls back to the internal default. */
-  scopeId?: string;
-}): Promise<{ id: string; name?: string; kind?: "app" | "automation" }> {
-  const { scopeId, ...body } = input;
-  const sessionId = await ensureAppSession(input.id);
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_apps`, {
-    method: "POST",
-    headers: scopedAuthHeaders(token, scopeId, "application/json"),
-    body: JSON.stringify({ ...body, sessionId, publish: true }),
-  });
-  const out = await readJson<{
-    app: { id: string; name?: string; kind?: "app" | "automation" };
-  }>(res, "create app");
-  return out.app;
-}
 
 /** Template display metadata echoed back by the clone endpoint. */
 interface ClonedTemplateMeta {

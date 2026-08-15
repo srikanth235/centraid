@@ -663,8 +663,6 @@
     "tunnel-pairing.performance": "JS fallback floor remains in tunnel-throughput.perf.test.ts; native QUIC budget is tests/perf/tunnel-native.perf.test.ts (nightly when native module present).",
     "blob-custody.durability": "Owned by packages/vault/src/blob/enospc-custody.integration.test.ts (always-on fault-injected ENOSPC). Real hdiutil path remains in disk-full.integration.test.ts behind CENTRAID_DISKFULL_E2E=1 (darwin).",
     "agent-runtime.journey": "packages/agent-runtime/src/backends/acp/journey.integration.test.ts carries two tests while also standing in for the app-engine journey and the three skipped desktop copilot specs; it is too thin for what it is asked to represent. Tracked under #781 (originally #656; copilot rig originally #657).",
-    "builder.publish": "Punted (#496): builder is not in v0. builder.spec.ts \"Publish posts to the gateway\" stays skipped with this product reason — declared gap, not fake solid.",
-    "desktop.copilot-e2e": "Unconditional Playwright skips in appview-templates-insights (7.2–7.4) target removed FAB UI; journey owned at agent-runtime.journey until #470 mock blueprint serving.",
     "mobile.scalability": "Owned by tests/agent-e2e-mobile/flows/volume-proof.mjs; records a nightly scalability budget and durable numeric measurements.",
     "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom). Tracked under #781 (originally #659).",
     "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume — one missed entry per auto per gap; not live fire). Tracked under #781 (originally #659).",
@@ -949,7 +947,7 @@
       "tier": "integration"
     },
     "gateway.contracts": {
-      "owner": "packages/gateway/src/serve/web-app-sessions.contract.test.ts",
+      "owner": "packages/gateway/src/serve/web-control-sessions.contract.test.ts",
       "tier": "contract"
     },
     "gateway.durability": {
@@ -2469,12 +2467,13 @@
     },
     {
       "id": "gateway-session-boundaries",
-      "name": "Control, app and device sessions remain isolated",
+      "name": "Control and device sessions remain isolated",
       "surface": "gateway",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "packages/gateway/src/serve/web-app-sessions.contract.test.ts",
-      "minimumTests": 13
+      "owner": "packages/gateway/src/serve/web-control-sessions.contract.test.ts",
+      "minimumTests": 8,
+      "approvedMinimumTestsDeviation": "#799 stage 2 retired the per-app browser session plane (the `__centraid_app_*` cookie minted at /centraid/_apps/<id>/web-session for a sandboxed app iframe). Five of this flow's thirteen cases drove ONLY that plane — app-scoped path grants, forged scope headers, app-cookie origin binding, revocation and expiry of an active app session — and they were deleted with the surface, not weakened. The eight remaining cases are the whole of the surviving control-session boundary: establish, origin binding, service-worker wake, persistence, logout, proxied DELETE, device-identity fail-closed, and control-cookie revocation."
     },
     {
       "id": "gateway-request-budget",
@@ -2558,6 +2557,17 @@
       "tier": "e2e",
       "owner": "apps/desktop/tests/e2e/onboarding-home.spec.ts",
       "minimumTests": 13
+    },
+    {
+      "id": "desktop-app-open-journey",
+      "name": "Opening, renaming and managing an installed app from Home",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/onboarding-home.spec.ts",
+      "minimumTests": 6,
+      "replacesMinimumTestsFlow": "desktop-builder-journey",
+      "approvedMinimumTestsDeviation": "#799 stage 2 deleted the app builder and apps/desktop/tests/e2e/builder.spec.ts with it: five of desktop-builder-journey's six cases (palette Create, streamed builder turn, failed Publish, Preview iframe, Code tab, Cloud Logs) drove surfaces that no longer exist. Its one surviving premise — reaching an installed app and acting on it from Home — is already exercised by onboarding-home.spec.ts's app-lifecycle half (open a tile, open from the palette, rename, the tile context menu, the Photos seat), so the floor of 6 transfers here rather than evaporating. onboarding-home.spec.ts declares 18 cases against a combined floor of 19; the split names which duties each flow carries."
     },
     {
       "id": "web-real-journey",
@@ -3227,15 +3237,6 @@
       "tier": "accessibility",
       "owner": "apps/web/tests/e2e/accessibility.spec.ts",
       "minimumTests": 2
-    },
-    {
-      "id": "desktop-builder-journey",
-      "name": "Builder: palette create, streamed turn, publish and failure surfaces",
-      "surface": "desktop",
-      "dimension": "journey",
-      "tier": "e2e",
-      "owner": "apps/desktop/tests/e2e/builder.spec.ts",
-      "minimumTests": 6
     },
     {
       "id": "desktop-delete-app-journey",

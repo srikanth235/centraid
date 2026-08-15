@@ -20,15 +20,22 @@ interface WaterfallReport {
     cold: { requestCount: number; transferBytes: number };
     warmToColdByteRatio: number;
   };
+  // An app open is an inline route in the shell window (#799 retired the
+  // served-app iframe). `grandTotalTransferBytes` is what came off the WIRE and
+  // is 0 while the service worker answers the app's chunks from Cache Storage;
+  // `encodedBodyBytes` is the compressed weight of those same bodies and is the
+  // number that grows when an app gets heavier. Both are gated.
   appOpen: {
     cold: {
       requestCount: number;
       grandTotalTransferBytes: number;
+      encodedBodyBytes: number;
       elapsedMs: number;
     };
     warm: {
       requestCount: number;
       grandTotalTransferBytes: number;
+      encodedBodyBytes: number;
       elapsedMs: number;
     };
     warmToColdByteRatio: number;
@@ -75,10 +82,17 @@ describe("pwa-waterfall.perf", () => {
           perfBudgets.appOpen.cold.maxRequests &&
         report.appOpen.cold.grandTotalTransferBytes <=
           perfBudgets.appOpen.cold.maxTransferBytes &&
+        report.appOpen.cold.encodedBodyBytes <=
+          perfBudgets.appOpen.cold.maxEncodedBytes &&
+        // A cold open that loaded nothing is a broken measurement, not a fast
+        // one — without this every ceiling above passes on an empty report.
+        report.appOpen.cold.encodedBodyBytes > 0 &&
         report.appOpen.warm.requestCount <=
           perfBudgets.appOpen.warm.maxRequests &&
         report.appOpen.warm.grandTotalTransferBytes <=
           perfBudgets.appOpen.warm.maxTransferBytes &&
+        report.appOpen.warm.encodedBodyBytes <=
+          perfBudgets.appOpen.warm.maxEncodedBytes &&
         report.appOpen.warmToColdByteRatio <=
           perfBudgets.appOpen.maxWarmToColdByteRatio;
       const withinDrift =
@@ -118,6 +132,12 @@ describe("pwa-waterfall.perf", () => {
             value: report.appOpen.cold.grandTotalTransferBytes,
             unit: "bytes",
             budget: perfBudgets.appOpen.cold.maxTransferBytes,
+          },
+          {
+            name: "cold app encoded",
+            value: report.appOpen.cold.encodedBodyBytes,
+            unit: "bytes",
+            budget: perfBudgets.appOpen.cold.maxEncodedBytes,
           },
         ],
       });

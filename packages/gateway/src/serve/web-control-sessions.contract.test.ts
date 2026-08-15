@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#608) cohesive browser-session contract shares one production gateway and app fixture
 import { promises as fs } from "node:fs";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { IncomingMessage } from "node:http";
 import path from "node:path";
 import { Readable } from "node:stream";
 
@@ -14,8 +14,7 @@ import type { GatewayPaths } from "../paths.js";
 import type { WorktreeStore } from "../worktree-store/index.js";
 import { serve } from "./serve.js";
 import type { GatewayServeHandle } from "./serve.js";
-import { runWithVaultContext } from "./vault-context.js";
-import { WebAppSessions } from "./web-app-sessions.js";
+import { WebControlSessions } from "./web-control-sessions.js";
 import {
   WebControlSessionStore,
   hashControlToken,
@@ -67,7 +66,7 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
   await store.closeSession(sessionId);
 }
 
-describe("web-app-sessions.contract scenarios", () => {
+describe("web-control-sessions.contract scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`web-session-${crypto.randomUUID()}-`);
     handle = await serve({ paths: pathsUnder(dataDir) });
@@ -80,135 +79,6 @@ describe("web-app-sessions.contract scenarios", () => {
   afterEach(async () => {
     await handle.close().catch(() => undefined);
     await fs.rm(dataDir, { recursive: true, force: true });
-  });
-
-  async function launch(
-    appId: string
-  ): Promise<{ cookie: string; location: string }> {
-    const minted = await fetch(
-      `${handle.url}/centraid/_apps/${appId}/web-session`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${handle.token}`,
-          Origin: "http://127.0.0.1:4173",
-          "content-type": "application/json",
-        },
-        body: "{}",
-      }
-    );
-    expect(minted.status).toBe(200);
-    const { launchPath } = (await minted.json()) as { launchPath: string };
-    const redeemed = await fetch(new URL(launchPath, handle.url), {
-      redirect: "manual",
-    });
-    expect(redeemed.status).toBe(303);
-    const setCookie = redeemed.headers.get("set-cookie") ?? "";
-    expect(setCookie).toContain("HttpOnly");
-    expect(setCookie).toContain("SameSite=Strict");
-    return {
-      cookie: setCookie.split(";")[0] ?? "",
-      location: redeemed.headers.get("location") ?? "",
-    };
-  }
-
-  test("one-time launch establishes a cookie session that can load only its app", async () => {
-    const session = await launch("alpha");
-    expect(session.location).toBe("/centraid/alpha/");
-
-    const alpha = await fetch(new URL(session.location, handle.url), {
-      headers: { Cookie: session.cookie },
-    });
-    expect(alpha.status).toBe(200);
-    await expect(alpha.text()).resolves.toContain("alpha");
-    expect(alpha.headers.get("content-security-policy")).toContain(
-      "frame-ancestors 'self' http://127.0.0.1:4173"
-    );
-
-    const beta = await fetch(`${handle.url}/centraid/beta/`, {
-      headers: { Cookie: session.cookie },
-    });
-    expect(beta.status).toBe(401);
-
-    const admin = await fetch(`${handle.url}/centraid/_apps`, {
-      headers: { Cookie: session.cookie },
-    });
-    expect(admin.status).toBe(401);
-  });
-
-  test("app-session RPC calls are forced to the session app", async () => {
-    const session = await launch("alpha");
-    const correct = await fetch(`${handle.url}/centraid/alpha/queries/ping`, {
-      method: "POST",
-      headers: { Cookie: session.cookie, "content-type": "application/json" },
-      body: JSON.stringify({ input: {} }),
-    });
-    expect(correct.status).toBe(200);
-    await expect(correct.json()).resolves.toStrictEqual({ app: "alpha" });
-
-    // App RPC now rides under the app's own prefix (issue #505), so a cross-app
-    // path fails the session's path gate outright — it never reaches the runtime.
-    const crossApp = await fetch(`${handle.url}/centraid/beta/queries/ping`, {
-      method: "POST",
-      headers: { Cookie: session.cookie, "content-type": "application/json" },
-      body: JSON.stringify({ input: {} }),
-    });
-    expect(crossApp.status).toBe(401);
-  });
-
-  test("app sessions permit blob staging but not the wider vault surface", async () => {
-    const session = await launch("alpha");
-    const staged = await fetch(
-      `${handle.url}/centraid/_vault/blobs?filename=sample.txt`,
-      {
-        method: "POST",
-        headers: { Cookie: session.cookie, "content-type": "text/plain" },
-        body: "sample document",
-      }
-    );
-    expect(staged.status).toBe(200);
-    await expect(staged.json()).resolves.toMatchObject({
-      byteSize: 15,
-      mediaType: "text/plain",
-    });
-
-    const otherVaultRoute = await fetch(
-      `${handle.url}/centraid/_vault/anything`,
-      {
-        headers: { Cookie: session.cookie },
-      }
-    );
-    expect(otherVaultRoute.status).toBe(401);
-  });
-
-  test("active app session rejects a foreign Origin but still passes on shell/same/no origin", async () => {
-    const session = await launch("alpha");
-
-    // Same-origin as the gateway/API (app-iframe direct-HTTP mode): Origin host
-    // equals the request host. Must pass.
-    const sameOrigin = await fetch(new URL(session.location, handle.url), {
-      headers: { Cookie: session.cookie, Origin: handle.url },
-    });
-    expect(sameOrigin.status).toBe(200);
-
-    // The PWA shell origin (shellOrigin) must pass.
-    const shellOrigin = await fetch(new URL(session.location, handle.url), {
-      headers: { Cookie: session.cookie, Origin: "http://127.0.0.1:4173" },
-    });
-    expect(shellOrigin.status).toBe(200);
-
-    // No Origin header (Iroh bridge / same-origin GET subresource) must pass.
-    const noOrigin = await fetch(new URL(session.location, handle.url), {
-      headers: { Cookie: session.cookie },
-    });
-    expect(noOrigin.status).toBe(200);
-
-    // A foreign origin — e.g. another port on the same host riding the cookie
-    // through credentialed CORS — must be rejected.
-    const foreign = await fetch(new URL(session.location, handle.url), {
-      headers: { Cookie: session.cookie, Origin: "http://127.0.0.1:9999" },
-    });
-    expect(foreign.status).toBe(401);
   });
 
   test("pairing a second control session does not invalidate the first", async () => {
@@ -236,36 +106,6 @@ describe("web-app-sessions.contract scenarios", () => {
       );
       expect(proxied.status).toBe(200);
     });
-  });
-
-  test("launch codes are single-use and forged scope headers do not authenticate", async () => {
-    const minted = await fetch(
-      `${handle.url}/centraid/_apps/alpha/web-session`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${handle.token}`,
-          Origin: "http://127.0.0.1:4173",
-        },
-      }
-    );
-    const { launchPath } = (await minted.json()) as { launchPath: string };
-    expect(
-      (await fetch(new URL(launchPath, handle.url), { redirect: "manual" }))
-        .status
-    ).toBe(303);
-    expect(
-      (await fetch(new URL(launchPath, handle.url), { redirect: "manual" }))
-        .status
-    ).toBe(403);
-
-    const forged = await fetch(`${handle.url}/centraid/alpha/`, {
-      headers: {
-        "x-centraid-web-app": "alpha",
-        "x-centraid-web-shell-origin": "http://127.0.0.1:4173",
-      },
-    });
-    expect(forged.status).toBe(401);
   });
 
   test("control session keeps the bearer out of browser storage and enforces its shell Origin", async () => {
@@ -439,10 +279,10 @@ describe("web-app-sessions.contract scenarios", () => {
   });
 
   // ── Revocation propagation for device-bound sessions ──────────────────────
-  // These drive `WebAppSessions` directly: the e2e serve() rig has no device
-  // plane, so a bearer-established session never carries a deviceKey. Seeding a
-  // deviceKey-bound session in isolation is the only way to exercise the
-  // `isDeviceValid` gate the daemon wires in cli.ts.
+  // These drive `WebControlSessions` directly: the e2e serve() rig has no
+  // device plane, so a bearer-established session never carries a deviceKey.
+  // Seeding a deviceKey-bound session in isolation is the only way to exercise
+  // the `isDeviceValid` gate the daemon wires in cli.ts.
 
   function req(init: {
     url: string;
@@ -459,21 +299,6 @@ describe("web-app-sessions.contract scenarios", () => {
     return stream as unknown as IncomingMessage;
   }
 
-  class MockRes {
-    statusCode = 200;
-    body = "";
-    private readonly outHeaders = new Map<string, string>();
-    setHeader(name: string, value: string): void {
-      this.outHeaders.set(name.toLowerCase(), value);
-    }
-    getHeader(name: string): string | undefined {
-      return this.outHeaders.get(name.toLowerCase());
-    }
-    end(chunk?: string): void {
-      if (chunk) this.body += chunk;
-    }
-  }
-
   test("a revoked device key kills a live CONTROL cookie and evicts its row", async () => {
     const token = "control-secret-token";
     const hash = hashControlToken(token);
@@ -487,7 +312,7 @@ describe("web-app-sessions.contract scenarios", () => {
     });
 
     let enrolled = true;
-    const sessions = new WebAppSessions({
+    const sessions = new WebControlSessions({
       controlStore,
       isDeviceValid: () => enrolled,
     });
@@ -507,88 +332,5 @@ describe("web-app-sessions.contract scenarios", () => {
     enrolled = false;
     expect(sessions.authorize(control())).toBeUndefined();
     expect(controlStore.find(hash)).toBeUndefined();
-  });
-
-  test("a revoked device key kills a live ACTIVE app session", async () => {
-    let enrolled = true;
-    const sessions = new WebAppSessions({ isDeviceValid: () => enrolled });
-
-    // Mint a launch code inside a device-scoped vault context, then redeem it
-    // for an app cookie — mirrors the mint→redeem HTTP flow, but lets us inject
-    // the deviceKey the serve() rig can't.
-    const mintRes = new MockRes();
-    await runWithVaultContext({ vaultId: "v1", deviceKey: "dev-1" }, () =>
-      sessions.handler(
-        req({
-          url: "/centraid/_apps/alpha/web-session",
-          method: "POST",
-          headers: { origin: SHELL },
-          body: "{}",
-        }),
-        mintRes as unknown as ServerResponse
-      )
-    );
-    const { launchPath } = JSON.parse(mintRes.body) as { launchPath: string };
-
-    const redeemRes = new MockRes();
-    await sessions.handler(
-      req({ url: launchPath, method: "GET" }),
-      redeemRes as unknown as ServerResponse
-    );
-    const appCookie =
-      (redeemRes.getHeader("set-cookie") ?? "").split(";")[0] ?? "";
-    expect(appCookie).toContain("__centraid_app_");
-
-    const appReq = (): IncomingMessage =>
-      req({ url: "/centraid/alpha/", headers: { cookie: appCookie } });
-    // Enrolled → authorizes.
-    expect(sessions.authorize(appReq())).toStrictEqual({
-      plane: "device",
-      deviceKey: "dev-1",
-    });
-    // Revoked → the live app cookie is dead.
-    enrolled = false;
-    expect(sessions.authorize(appReq())).toBeUndefined();
-  });
-
-  // Issue #659 G3 moved expiry reclamation off the per-request path. Expiry is
-  // therefore only correct if `authorize()` checks it itself — this is the law
-  // that stops a future refactor from re-deriving liveness from "the sweep ran".
-  test("an expired app session stops authorizing even though nothing swept", async () => {
-    let now = 1_700_000_000_000;
-    const sessions = new WebAppSessions({ now: () => now });
-
-    const mintRes = new MockRes();
-    await runWithVaultContext({ vaultId: "v1", deviceKey: "dev-1" }, () =>
-      sessions.handler(
-        req({
-          url: "/centraid/_apps/alpha/web-session",
-          method: "POST",
-          headers: { origin: SHELL },
-          body: "{}",
-        }),
-        mintRes as unknown as ServerResponse
-      )
-    );
-    const { launchPath } = JSON.parse(mintRes.body) as { launchPath: string };
-    const redeemRes = new MockRes();
-    await sessions.handler(
-      req({ url: launchPath, method: "GET" }),
-      redeemRes as unknown as ServerResponse
-    );
-    const appCookie =
-      (redeemRes.getHeader("set-cookie") ?? "").split(";")[0] ?? "";
-    const appReq = (): IncomingMessage =>
-      req({ url: "/centraid/alpha/", headers: { cookie: appCookie } });
-
-    expect(sessions.authorize(appReq())).toStrictEqual({
-      plane: "device",
-      deviceKey: "dev-1",
-    });
-    // Past the 12h app-session wall, with no sweep in between.
-    now += 12 * 60 * 60 * 1000 + 1;
-    expect(sessions.authorize(appReq())).toBeUndefined();
-    // The origin allowlist must not keep advertising a dead session's origin.
-    expect(sessions.knownShellOrigins()).not.toContain(SHELL);
   });
 });

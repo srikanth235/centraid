@@ -43,7 +43,7 @@ export const ROUTE_SECURITY_REGISTRY: readonly RouteSecurityRegistration[] = [
     `
     /_centraid-conversations|conversation-routes
     /_centraid-user|user-store-routes
-    /centraid/_web|web-app-sessions
+    /centraid/_web|web-control-sessions
     /centraid/_apps|apps-store-routes.ts
     /centraid/_automations|automations-routes.ts
     /centraid/_insights|automations-routes.ts

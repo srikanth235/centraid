@@ -986,7 +986,6 @@ export async function seedRemoteGateway(
     JSON.stringify(
       {
         activeGatewayId: env.gatewayId,
-        builderEnabled: true,
         changelogSeenVersion: "0.1.0",
         remoteTemplatesUrl: "",
         ...(opts.onboarding
@@ -1419,21 +1418,6 @@ export async function openAppFromPalette(
     .filter({ hasText: appName })
     .first()
     .click();
-}
-
-/** Start a new builder session with an initial prompt via the palette Create row. */
-export async function startBuilderFromPalette(
-  page: Page,
-  prompt: string
-): Promise<void> {
-  await openCommandPalette(page);
-  const palette = page.getByRole("dialog", { name: "Command palette" });
-  await palette.locator("input").fill(prompt);
-  // Curly quotes match paletteData's `Build “${trimmed}”` label.
-  await palette
-    .getByRole("button", { name: new RegExp(`Build [“"]${prompt}[”"]`, "u") })
-    .click();
-  await page.getByTestId("builder-body").waitFor({ state: "visible" });
 }
 
 /** How long a test waits for a well-behaved Electron shutdown before forcing it. */

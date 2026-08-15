@@ -130,7 +130,7 @@ test("3.2 — deleting a published app deregisters on the gateway and clears loc
     await expect(page.getByTestId("app-view")).toHaveCount(0);
 
     // Durable proof is the gateway DELETE. Local pin storage may still hold
-    // the id until the next listing reconcile (AppViewRoute delete does not
+    // the id until the next listing reconcile (the app route's delete does not
     // rewrite home.userApps itself).
     expect(deletes(gateway, id).length).toBeGreaterThanOrEqual(1);
   } finally {

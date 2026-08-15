@@ -167,7 +167,6 @@ export function keychainPromptExpected(host: {
  */
 export function hostCapabilities(): {
   platform: "desktop";
-  appSessions: false;
   compute: {
     previews: true;
     poster: true;
@@ -181,7 +180,6 @@ export function hostCapabilities(): {
 } {
   return {
     platform: "desktop",
-    appSessions: false,
     compute: {
       previews: true,
       poster: true,

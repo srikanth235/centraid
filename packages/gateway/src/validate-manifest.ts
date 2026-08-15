@@ -11,7 +11,6 @@ import { ManifestError, parseAppManifest } from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
 
 import { fileExists } from "./routes/route-helpers.js";
-import { validateAppCssAt } from "./validate-app-css.js";
 
 function findFirstInOrder<T, R>(
   values: readonly T[],
@@ -91,11 +90,11 @@ export async function validateManifestAt(
       : await lintAutomationHandlersAt(appDir);
     if (handlerError) return handlerError;
   }
-  // Design token contract (issue #686 D3): app CSS must consume
-  // `packages/design`'s tokens, never restate them. Prompt grounding alone
-  // never held, so the publish gate enforces it — last, so structural manifest
-  // problems still surface first.
-  return validateAppCssAt(appDir);
+  // The design-token contract check that used to run last here retired with
+  // the served-app plane (issue #799): a code-store app ships no stylesheet
+  // for a gateway to serve, and the eight bundled apps' CSS is checked in this
+  // repo by the design gates instead.
+  return undefined;
 }
 
 /**

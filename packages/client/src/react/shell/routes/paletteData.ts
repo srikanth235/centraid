@@ -51,16 +51,11 @@ function navActions(
 
 export interface PaletteDeps {
   userApps: readonly UserAppMeta[];
-  drafts: readonly DraftAppMeta[];
-  /** Dev flag (issue #434, Phase 3) — the "Build a new app…" create row is a
-   *  builder entry point, so it only appears when the builder is enabled. */
-  builderEnabled: boolean;
   /** What this gateway offers (C1). Optional so a caller without a live
    *  handshake (older tests, harnesses) still indexes every destination. */
   capabilities?: ShellCapabilities;
   tileVariant: AppearancePrefs["tileVariant"];
   navigate: (route: ShellRoute) => void;
-  enterBuilder: (initialPrompt?: string) => void;
   onClose: () => void;
   /**
    * Async conversation FTS source (issue #420). `buildPaletteGroups` reads its
@@ -165,8 +160,7 @@ export function buildPaletteGroups(
     }
   }
 
-  const allApps: AppMetaResolvedType[] = [...deps.userApps, ...deps.drafts];
-  const appMatches = allApps.filter(
+  const appMatches = deps.userApps.filter(
     (a) => !q || a.name.toLowerCase().includes(q)
   );
   if (appMatches.length > 0) {
@@ -253,27 +247,6 @@ export function buildPaletteGroups(
           },
         })
       ),
-    });
-  }
-
-  // The "Build a new app…" create row is a builder entry point (issue #434,
-  // Phase 3) — omitted entirely when the builder is hidden.
-  if (deps.builderEnabled) {
-    const trimmed = query.trim();
-    groups.push({
-      group: "Create",
-      items: [
-        {
-          variant: "action",
-          accent: true,
-          label: trimmed ? `Build “${trimmed}”` : "Build a new app…",
-          iconHtml: iconSvg("Plus"),
-          run: () => {
-            deps.onClose();
-            deps.enterBuilder(trimmed || undefined);
-          },
-        },
-      ],
     });
   }
 

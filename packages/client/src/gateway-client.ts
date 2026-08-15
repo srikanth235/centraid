@@ -13,9 +13,9 @@
  *
  * This module ports the pure `fetch` methods that previously lived in the
  * desktop's `main/*-client.ts` modules and its old builder gateway client.
- * It covers the app read surface (logs / settings / deregister / live
- * URL — the schema/table-rows/query trio died with the per-app
- * data.sqlite, issue #286 phase 2), version history (list / activate), the
+ * It covers the app read surface (logs / settings / deregister — the
+ * schema/table-rows/query trio died with the per-app data.sqlite, issue
+ * #286 phase 2), version history (list / activate), the
  * `/_centraid-user` identity + prefs surface, and the automation
  * read/run/analytics + insights surface. The shared fetch infrastructure
  * lives in `gateway-client-core.ts`; the app-editing + lifecycle surface
@@ -33,7 +33,6 @@ import { isGatewayCapabilities, ROUTES } from "@centraid/protocol";
 import type { GatewayCapabilities, GatewayInfo } from "@centraid/protocol";
 
 import {
-  appSessionUrl,
   auth,
   authHeaders,
   doFetch,
@@ -60,13 +59,6 @@ export async function readGatewayCapabilities(): Promise<
   return isGatewayCapabilities(info.capabilities)
     ? info.capabilities
     : undefined;
-}
-
-/** URL the renderer loads in an app iframe. */
-export async function appLiveUrl(input: {
-  id: string;
-}): Promise<{ url: string }> {
-  return { url: await appSessionUrl(input.id, `/centraid/${enc(input.id)}/`) };
 }
 
 /** Newest-first tail of persistent handler logs. */

@@ -405,7 +405,7 @@ export function copy(text: string, label?: string, secret?: boolean) {
   // writeText returns a promise — a sync try/catch never sees its rejection
   // (it surfaced as an unhandled NotAllowedError pageerror: the shell's app
   // iframe carries no clipboard-write permissions policy, see
-  // apps/desktop/src/renderer/react/shell/routes/AppFrame.tsx). Update the
+  // the retired desktop iframe host). Update the
   // status line only once the write actually lands; otherwise say so instead
   // of claiming a copy that never happened.
   const okStatus = () =>

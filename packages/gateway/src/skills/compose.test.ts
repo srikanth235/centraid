@@ -8,13 +8,12 @@ import {
 } from "./compose.js";
 
 describe("compose", () => {
-  test("skillsDir resolves to an existing catalog with the two authoring skills", () => {
+  test("skillsDir resolves to an existing catalog with the authoring skill", () => {
+    // One skill since #799: app front ends are no longer harness-authored, so
+    // `authoring-centraid-apps` retired with the served-app plane.
     const skills = listSkills(skillsDir());
     const names = skills.map((s) => s.name).sort();
-    expect(names).toStrictEqual([
-      "authoring-centraid-apps",
-      "automation-authoring",
-    ]);
+    expect(names).toStrictEqual(["automation-authoring"]);
     for (const s of skills) {
       expect(s.description.length > 0).toBeTruthy();
     }
@@ -30,18 +29,19 @@ describe("compose", () => {
   });
 
   test("composeSkills returns the authoring contract body, frontmatter removed", () => {
-    const composed = composeSkills(["authoring-centraid-apps"]);
-    expect(composed.startsWith("## Centraid app authoring")).toBeTruthy();
+    const composed = composeSkills(["automation-authoring"]);
+    expect(
+      composed.startsWith("## Centraid automation authoring")
+    ).toBeTruthy();
     expect(!composed.includes("---\nname:")).toBeTruthy();
-    expect(composed.includes("### Folder layout (canonical)")).toBeTruthy();
   });
 
-  test("composeSkills joins multiple skills with a blank line", () => {
+  test("composeSkills joins the named skills with a blank line", () => {
     const composed = composeSkills([
-      "authoring-centraid-apps",
+      "automation-authoring",
       "automation-authoring",
     ]);
-    expect(composed.includes("## Centraid app authoring")).toBeTruthy();
-    expect(composed.includes("## Centraid automation authoring")).toBeTruthy();
+    const first = composeSkills(["automation-authoring"]);
+    expect(composed).toBe(`${first}\n\n${first}`);
   });
 });

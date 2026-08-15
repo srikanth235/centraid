@@ -2,7 +2,7 @@
 
 ## Scope: served (iframe) path only
 
-This trap applies to the **served** app path — the opaque, same-origin app document the gateway bakes and serves (builder preview of edited apps). Since #505 the 8 bundled system apps render **inline** in the shell instead (see [App render paths](../../ARCHITECTURE.md#app-render-paths)): inline apps run in the shell document under the **shell's own CSP**, not the per-app blueprint CSP, so the symptoms below (blank iframed previews, blocked inline scripts, denied `frame-src`) now surface **only in the builder preview**. If a bundled system app misbehaves inline, the blueprint CSP is not the layer — look at the shell.
+This trap applies to the **served** app path — the opaque, same-origin app document the gateway bakes and serves. That path is retiring under #799: since #505 the 8 bundled system apps render **inline** in the shell (see [App render paths](../../ARCHITECTURE.md#app-render-paths)), and #799 removed the last clients that could load a served document at all. Inline apps run in the shell document under the **shell's own CSP**, not the per-app blueprint CSP, so the symptoms below (blank iframed previews, blocked inline scripts, denied `frame-src`) have no live surface left. If a bundled system app misbehaves inline, the blueprint CSP is not the layer — look at the shell.
 
 ## What goes wrong
 

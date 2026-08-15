@@ -1,5 +1,4 @@
 import {
-  appLiveUrl,
   appSettings,
   appSettingWrite,
   approveVaultGrant,
@@ -12,13 +11,16 @@ import {
   vaultDemoStatus,
   vaultParked,
   vaultStatus,
+  auth,
+  authHeaders,
+  doFetch,
+  enc,
 } from "../../../gateway-client.js";
 import type { VaultDemoApp, VaultScope } from "../../../gateway-client.js";
 import type {
   VaultBlockDTO,
   VaultBridgeProps,
 } from "../../screen-contracts.js";
-import { appFramePostMessageOrigin } from "./appFramePostMessage.js";
 
 // The gateway I/O + manifest parsing behind the React app-settings popover —
 // the successor to the helpers that lived in the deleted app-appview.ts /
@@ -38,14 +40,22 @@ export interface AppKnobsManifest {
   knobs: AppKnob[];
 }
 
-/** Fetch the app's own `app.json` (next to its index.html), or null. */
+/**
+ * Fetch the app's own `app.json` (next to its index.html), or null. Read
+ * straight off the gateway with the renderer's own credential (issue #799):
+ * the per-app browser session that used to front this read retired with the
+ * iframe host, and the manifest is the source for the appearance knobs and
+ * the vault consent block the settings popover renders.
+ */
 export async function fetchAppManifestRaw(
   appId: string
 ): Promise<Record<string, unknown> | null> {
   try {
-    const live = await appLiveUrl({ id: appId });
-    const url = `${live.url.replace(/\/?$/u, "/")}app.json`;
-    const res = await fetch(url);
+    const { baseUrl, token } = await auth();
+    const res = await doFetch(baseUrl, `/centraid/${enc(appId)}/app.json`, {
+      method: "GET",
+      headers: authHeaders(token),
+    });
     if (!res.ok) return null;
     const parsed = (await res.json()) as unknown;
     return parsed && typeof parsed === "object"
@@ -116,32 +126,12 @@ function appKnobKebab(key: string): string {
   return `app-${tail.charAt(0).toLowerCase()}${tail.slice(1).replace(/[A-Z]/gu, (c) => `-${c.toLowerCase()}`)}`;
 }
 
-/** The single visible sandboxed app iframe (only one app-view is mounted). */
-function appFrame(): HTMLIFrameElement | null {
-  return document.querySelector<HTMLIFrameElement>("iframe[data-centraid-app]");
-}
-
-/** Live-push a knob to the running app frame (no reload). */
-export function pushKnobToAppFrame(key: string, value: string): void {
-  const frame = appFrame();
-  if (!frame) return;
-  const name = appKnobKebab(key);
-  // Keys ending Color/Accent are continuous colour values → CSS vars; the rest
-  // are discrete states → data attributes. Keeps live edit + reload identical.
-  const isCss = /(?:Color|Accent)$/u.test(key);
-  const dataAttrs = isCss ? {} : { [name]: value };
-  const cssVars = isCss ? { [name]: value } : {};
-  frame.contentWindow?.postMessage(
-    { type: "centraid:settings", dataAttrs, cssVars },
-    appFramePostMessageOrigin(frame)
-  );
-}
-
 /**
- * Live-push a knob to an INLINE app's root element (issue #505). Same
- * kebab/CSS-var-vs-data-attr split as `pushKnobToAppFrame`, but applied straight
- * to the element the inline app reads (no iframe, no postMessage). The app's own
- * CSS + `data-app-*` reads react in place.
+ * Live-push a knob to an inline app's root element (issue #505). Keys ending
+ * Color/Accent are continuous colour values → CSS vars; the rest are discrete
+ * states → data attributes, which keeps a live edit and a reload identical.
+ * Applied straight to the element the inline app reads: the app's own CSS +
+ * `data-app-*` reads react in place.
  */
 export function pushKnobToInlineRoot(
   root: HTMLElement,
@@ -152,15 +142,6 @@ export function pushKnobToInlineRoot(
   if (/(?:Color|Accent)$/u.test(key))
     root.style.setProperty(`--${name}`, value);
   else root.setAttribute(`data-${name}`, value);
-}
-
-/** Hard-reload the app frame — its vault access just changed under it. */
-export function reloadAppFrame(): void {
-  const frame = appFrame();
-  if (!frame) return;
-  // Re-setting src is the one reload a cross-origin frame permits.
-  const src = frame.src;
-  frame.src = src;
 }
 
 /** Poll a just-started automation run to completion (6-minute ceiling). */

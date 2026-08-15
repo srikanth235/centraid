@@ -17,7 +17,7 @@ Never claim both are durable writers without a merge strategy — Centraid does 
 
 | Path | Owner | Notes |
 | --- | --- | --- |
-| `<userData>/centraid-settings.json` | Desktop main process / Settings UI | Active gateway pointer, builder gate, remote templates URL, per-gateway vault selection. Hand-edits while the app runs can be overwritten on next save. |
+| `<userData>/centraid-settings.json` | Desktop main process / Settings UI | Active gateway pointer, remote templates URL, per-gateway vault selection. Hand-edits while the app runs can be overwritten on next save. |
 
 Code: `apps/desktop/src/main/settings.ts`.
 

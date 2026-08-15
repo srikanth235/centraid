@@ -28,30 +28,39 @@ console.log(
   `harness: ${report.harness.apiUrl}  app: ${report.harness.appId}\n`
 );
 
+// `transfer` is wire bytes; `encoded` is the compressed weight of the same
+// bodies whether they came off the wire or out of the service-worker cache.
+// An app open on a warm shell transfers 0 and still loads real weight, so the
+// two columns are both shown rather than collapsed (the app-open warm/cold
+// ratio is over `encoded` — see apps/web/tests/e2e/perf-budgets.ts).
 const rows = [
-  ["phase", "requests", "transfer", "warm/cold"],
+  ["phase", "requests", "transfer", "encoded", "warm/cold"],
   [
     "shell cold",
     report.shell.cold.requestCount,
     kb(report.shell.cold.transferBytes),
+    "",
     "",
   ],
   [
     "shell warm",
     report.shell.warm.requestCount,
     kb(report.shell.warm.transferBytes),
+    "",
     String(report.shell.warmToColdByteRatio),
   ],
   [
     "app cold",
     report.appOpen.cold.requestCount,
     kb(report.appOpen.cold.grandTotalTransferBytes),
+    kb(report.appOpen.cold.encodedBodyBytes),
     "",
   ],
   [
     "app warm",
     report.appOpen.warm.requestCount,
     kb(report.appOpen.warm.grandTotalTransferBytes),
+    kb(report.appOpen.warm.encodedBodyBytes),
     String(report.appOpen.warmToColdByteRatio),
   ],
 ];

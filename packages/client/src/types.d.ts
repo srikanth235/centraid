@@ -119,18 +119,6 @@ declare global {
   }
 
   /**
-   * An app that exists on disk under `<appsDir>/<id>/` but has not
-   * been published or pinned to home yet. Rendered with a "DRAFT" badge —
-   * clicking the tile opens the builder in update mode.
-   */
-  interface DraftAppMeta extends AppMetaResolved {
-    /** True for drafts. The home grid's tile/menu logic keys off this. */
-    __draft: true;
-    /** Whether the app has an `index.html` (preview-ready). */
-    hasIndex: boolean;
-  }
-
-  /**
    * Where the home/sidebar context menu should anchor. `point` is a raw
    * cursor location (right-click); `rect` is a trigger element's bounding
    * box (the hover-revealed `•••` button) so the menu drops below it with

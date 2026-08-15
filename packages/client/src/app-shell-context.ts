@@ -95,15 +95,10 @@ export type ShellRoute =
   | { automationId: string; kind: "automation-view" }
   | { automationId: string; kind: "run-view"; runId: string }
   | { id: string; kind: "app" }
-  | {
-      appContext?: AppMetaResolvedType;
-      initialPrompt?: string;
-      kind: "builder";
-    }
   // `seedMessage`, when set, is the editor's "compile" handoff — a first
-  // message posted into the builder chat on open (mirrors `builder`'s
-  // `initialPrompt`). Optional because most automation-builder entries
-  // (overview "New automation", thread's "Edit") open the chat cold.
+  // message posted into the editor chat on open. Optional because most
+  // automation-builder entries (overview "New automation", thread's "Edit")
+  // open the chat cold.
   | { automationId: string; kind: "automation-builder"; seedMessage?: string };
 
 // Compact summary of the active gateway, fed into the vault identity control.

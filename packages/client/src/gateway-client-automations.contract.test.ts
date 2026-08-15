@@ -12,7 +12,6 @@ import {
   editing,
   fetchMock,
   installGatewayContractHarness,
-  state,
 } from "./gateway-client-contract-fixtures.js";
 
 installGatewayContractHarness();
@@ -65,14 +64,6 @@ describe("renderer gateway automation contracts", () => {
     await expect(client.readGatewayCapabilities()).resolves.toMatchObject({
       automationTurns: true,
     });
-    await expect(client.appLiveUrl({ id: "daily" })).resolves.toStrictEqual({
-      url: "https://gateway.test/centraid/daily/",
-    });
-    state.hostAppSessions = true;
-    await expect(client.appLiveUrl({ id: "daily" })).resolves.toStrictEqual({
-      url: "https://gateway.test/centraid/_web/session/launch-1",
-    });
-
     await client.appLogs({ id: "daily", limit: 7, sinceTs: 1, level: "info" });
     await client.appSettings({ id: "daily" });
     await client.appSettingWrite({
@@ -97,12 +88,6 @@ describe("renderer gateway automation contracts", () => {
     await client.pauseBackgroundWork(60_000);
     await client.pauseBackgroundWork();
     await client.resumeBackgroundWork();
-
-    // On a host with `appSessions`, the live URL is minted by the gateway —
-    // never synthesised client-side from the app origin.
-    expect(transcript().map((request) => request.path)).toContain(
-      "/centraid/_apps/daily/web-session"
-    );
   });
 
   it("covers the automation turn surface", async () => {

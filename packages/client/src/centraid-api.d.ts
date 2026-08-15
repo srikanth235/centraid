@@ -109,18 +109,6 @@ export interface CentraidSettings {
    * (onboarding will offer). Explicit false = declined; true = opted in.
    */
   offerGatewayService?: boolean;
-  /**
-   * DEV FLAG (issue #434, Phase 3) — reveal the in-app builder and every
-   * surface that reaches it: the Home composer, "Build new", the ⌘K "Build a
-   * new app…" row, draft apps + their menus, "Edit with Centraid", and the
-   * `builder` / `automation-builder` routes. The builder is hidden from the
-   * first release — the first-party apps ship installed, not authored here — but
-   * the machinery stays fully wired (the builder is also the headless
-   * automations compiler), so this only gates UI reachability. There is no
-   * settings-screen toggle for v1: hand-edit the settings JSON (set
-   * `"builderEnabled": true`) and relaunch. Absent → disabled.
-   */
-  builderEnabled?: boolean;
 }
 
 /** A single published release shown in the "What's new" modal. */
@@ -705,7 +693,6 @@ interface CentraidApi {
   /** Host capabilities used where browser security differs from Electron. */
   getHostCapabilities?: () => Promise<{
     platform: "desktop" | "web";
-    appSessions: boolean;
     compute?: {
       previews: boolean;
       poster: boolean;
@@ -727,21 +714,18 @@ interface CentraidApi {
   /** Desktop protocol courier. Values are delivered in-memory and never logged. */
   onDeepLink?: (cb: (url: string) => void) => () => void;
 
-  // App list/create/files/write/delete/update-meta + publish moved to the
-  // renderer's direct HTTP client (renderer/gateway-client.ts) under the
-  // thin-client pivot. The preview iframe points at the gateway draft URL
-  // (Phase 4: renderer-side `draftPreviewUrl`), so only the local-only
-  // reveal-in-Finder stays on IPC.
+  // App list/delete/update-meta moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) under the thin-client pivot, so only the
+  // local-only reveal-in-Finder stays on IPC.
   openAppFolder: (input: { id: string }) => Promise<{ ok: true }>;
 
-  // The in-process builder IPC surface retired with the unified conversation (issue
-  // #141, Phase 3): the builder streams `/centraid/<id>/_turn` SSE directly
-  // (renderer/gateway-client-conversation.ts), so there are no main-side turn
-  // lifecycle IPC methods.
+  // The in-process authoring IPC surface retired with the unified conversation
+  // (issue #141, Phase 3): the renderer streams `/centraid/<id>/_turn` SSE
+  // directly (renderer/gateway-client-conversation.ts), so there are no
+  // main-side turn lifecycle IPC methods.
 
-  // publish moved to the renderer's direct HTTP client. appLiveUrl /
-  // appLogs / deregisterApp / listVersions / activateVersion moved there
-  // too (pure git-store reads + the editing-session publish, no main-side
+  // appLogs / deregisterApp / listVersions / activateVersion moved to the
+  // renderer's direct HTTP client too (pure git-store reads, no main-side
   // state). The appSchema / appTableRows / appQuery trio died with the
   // per-app data.sqlite (issue #286 phase 2); per-app knob values now
   // ride appSettings / appSettingWrite over the app's settings.json.

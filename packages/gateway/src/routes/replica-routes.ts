@@ -529,7 +529,7 @@ function accessFor(
   vaultId: string,
   enrollments?: EnrollmentStore
 ): ReplicaRequestAccess | undefined {
-  const resolution = resolveReplicaAccess(req, url, vaultId, enrollments);
+  const resolution = resolveReplicaAccess(url, vaultId, enrollments);
   if (!resolution.ok) {
     sendJson(res, resolution.status, resolution.body);
     return undefined;
@@ -674,7 +674,7 @@ async function streamChanges(
     // destroyed the response). Re-read every pass, including after a `continue`
     // from a multi-page drain and after the wake below.
     if (closed) break;
-    const access = resolveReplicaAccess(req, url, vaultId, options.enrollments);
+    const access = resolveReplicaAccess(url, vaultId, options.enrollments);
     if (!access.ok) {
       sendSseRebootstrap(
         stream,

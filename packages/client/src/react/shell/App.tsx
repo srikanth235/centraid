@@ -69,14 +69,12 @@ import { openPrompt } from "./prompt.js";
 import { resetQueryCache } from "./queryCache.js";
 import { routeKey } from "./router.js";
 import ApprovalsRoute from "./routes/ApprovalsRoute.js";
-import AppViewRoute from "./routes/AppViewRoute.js";
 import type { AssistantConversationEntry } from "./routes/AssistantConversations.js";
 import AssistantConversations from "./routes/AssistantConversations.js";
 import AssistantRoute from "./routes/AssistantRoute.js";
 import AutomationEditorRoute from "./routes/AutomationEditorRoute.js";
 import AutomationsRoute from "./routes/AutomationsRoute.js";
 import AutomationViewRoute from "./routes/AutomationViewRoute.js";
-import BuilderRoute from "./routes/BuilderRoute.js";
 import ConnectFlowModal from "./routes/ConnectFlowModal.js";
 import ConnectorsRoute from "./routes/ConnectorsRoute.js";
 import { downloadConversation } from "./routes/conversationExport.js";
@@ -121,7 +119,6 @@ import { useAppearance } from "./useAppearance.js";
 import { useAssistantConversations } from "./useAssistantConversations.js";
 import { useAsyncData } from "./useAsyncData.js";
 import { useNotificationsCounts } from "./useBlockingCount.js";
-import { useBuilderEnabled } from "./useBuilderEnabled.js";
 import {
   CapabilitiesProvider,
   useGatewayCapabilities,
@@ -151,23 +148,14 @@ import chrome from "./chrome.module.css";
 function makeActions(
   nav: ShellNav,
   openCommandPalette: () => void,
-  refreshAssistantThreads: () => void,
-  builderEnabled: boolean
+  refreshAssistantThreads: () => void
 ): ShellActions {
   return {
     showToast: postStatus,
-    builderEnabled,
     confirm: openConfirm,
     navigate: nav.navigate,
     replace: nav.replace,
     refreshAssistantThreads,
-    enterBuilder: (opts) =>
-      nav.navigate({
-        kind: "builder",
-        ...(opts.appContext ? { appContext: opts.appContext } : {}),
-        ...(opts.initialPrompt ? { initialPrompt: opts.initialPrompt } : {}),
-      }),
-    openNewAppSheet: () => nav.navigate({ kind: "builder" }),
     openCommandPalette,
     openContextMenu: () => {
       /* the home app-card context menu is wired inside HomeRoute */
@@ -235,7 +223,6 @@ function activePageFor(route: ShellRoute): ShellPage | undefined {
       // Legacy deep link Settings → Connections → promote highlight to Connectors.
       return route.page === "connections" ? "connectors" : "settings";
     case "app":
-    case "builder":
     case "run-view":
     case "automation-view":
     case "automation-builder":
@@ -251,22 +238,6 @@ function activePageFor(route: ShellRoute): ShellPage | undefined {
 /** Compact error-message extractor for status-line copy. */
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-// Drafts are builder artifacts (issue #434, Phase 3) — when the builder is
-// hidden they never render anywhere. A shared frozen empty list keeps the
-// gated-off case referentially stable so the render callbacks don't churn.
-const NO_DRAFTS: readonly DraftAppMeta[] = [];
-
-// Guard for a `builder` / `automation-builder` route reached while the builder
-// is hidden (issue #434, Phase 3) — e.g. a stale persisted/programmatic route.
-// Swaps the current history entry for Home in place (replace, not navigate) so
-// there's no dead builder frame to Back into, and renders nothing meanwhile.
-export function BuilderRouteRedirect({ nav }: { nav: ShellNav }): JSX.Element {
-  useEffect(() => {
-    nav.replace({ kind: "home" });
-  }, [nav]);
-  return <PageEmpty message="" />;
 }
 
 /**
@@ -314,13 +285,7 @@ export default function App({
   // context menu (App info / Rename / Uninstall), which left with the
   // springboard rewrite. The hook keeps it because the optimistic
   // rename/uninstall path (#659) is what re-homing those actions will need.
-  const {
-    userApps,
-    drafts,
-    loading: appsLoading,
-    refresh,
-    setUserApps,
-  } = useShellApps();
+  const { userApps, loading: appsLoading, refresh } = useShellApps();
   const assistantConversations = useAssistantConversations();
   // Conversations mid-undo-window after a delete — optimistically hidden from
   // the ledger until the grace timer commits or the reader undoes (§3).
@@ -431,11 +396,6 @@ export default function App({
   // shell root renders a pill and a banner, and re-rendering the active screen
   // every five seconds to redraw them was the entire cost (issue #659).
   const gatewayStatus = useGatewayStatus();
-  // Dev flag (issue #434, Phase 3): the builder + every entry point into it are
-  // hidden from the first release unless this is set. Threaded into ShellActions
-  // (menus/palette read it), used to gate drafts + the "Build new" affordances
-  // here, and to redirect the builder routes below.
-  const builderEnabled = useBuilderEnabled();
   // The ONE read of the gateway's capability map (C1, docs/platform-gating.md).
   // Everything gated below — the launcher, the palette, the ops bar's verbs,
   // the route wall — reads this value; nothing asks the gateway again.
@@ -1259,10 +1219,6 @@ export default function App({
 
   const renderRoute = useCallback(
     (nav: ShellNav): JSX.Element => {
-      // Drafts are builder artifacts — hide them everywhere when the builder is
-      // off (issue #434, Phase 3). Gated once here so Home, Starred, the app
-      // lookup, and the launcher all agree.
-      const visibleDrafts = builderEnabled ? drafts : NO_DRAFTS;
       // The capability wall (C1). Deep links, stale history entries and the
       // `window.Centraid.openAutomations` shim all still ADDRESS these routes
       // after the launcher stops offering them, and every one of them must be
@@ -1284,7 +1240,6 @@ export default function App({
             <HomeRoute
               appsLoading={appsLoading}
               userApps={userApps}
-              drafts={visibleDrafts}
               autoSeedSample={autoSeedSample}
               onAutoSeedStarted={onAutoSeedStarted}
             />
@@ -1381,70 +1336,38 @@ export default function App({
           );
         case "app": {
           const id = nav.route.id;
-          const app = [...userApps, ...visibleDrafts].find((a) => a.id === id);
+          const app = userApps.find((a) => a.id === id);
           if (!app) return <PageEmpty message="App not found." />;
-          const ua = userApps.find((a) => a.id === id);
-          const appId = ua?.centraidAppId ?? app.id;
-          // Bundled (blueprint) apps converted to an inline route render
-          // in-shell (no iframe) and offline-capable, REGARDLESS of builder
-          // state. The builder is a separate route (`kind: 'builder'`) reached
-          // via the Build button — which InlineAppRoute itself renders — and it
-          // remixes a blueprint into a NEW user app with its own id; it never
-          // edits the shipped blueprint source in place, so the inline and
-          // served paths render identical code and there is no divergence to
-          // protect against here. User apps have no inline loader and fall
-          // through to AppViewRoute as before (issue #505).
+          const appId = app.centraidAppId ?? app.id;
+          // Every app is an inline route rendered by this shell (issue #799):
+          // the served-app plane — the sandboxed iframe host and the builder
+          // that produced apps for it — is retired, so an id with no inline
+          // loader is nothing this client can open.
           const inlineLoader = inlineAppLoader(appId);
-          if (inlineLoader) {
-            return (
-              <InlineAppRoute
-                app={app}
-                appId={appId}
-                loader={inlineLoader}
-                nav={nav}
-                renderStem={renderStem}
-                statusLine={statusLine}
-                prefs={prefs}
-                compact={compact}
-              />
-            );
-          }
+          if (!inlineLoader) return <PageEmpty message="App not found." />;
           return (
-            <AppViewRoute
+            <InlineAppRoute
               app={app}
               appId={appId}
+              loader={inlineLoader}
               nav={nav}
               renderStem={renderStem}
               statusLine={statusLine}
               prefs={prefs}
+              compact={compact}
             />
           );
         }
         case "automation-builder":
-          // Builder handoff route — gated with the builder (issue #434, Phase
-          // 3). Normal automation editing lives on `automation-editor`.
-          if (!builderEnabled) return <BuilderRouteRedirect nav={nav} />;
+          // The assistant's automation handoff route. Normal automation
+          // editing lives on `automation-editor`; both render the same editor.
           return (
             <AutomationEditorRoute automationId={nav.route.automationId} />
-          );
-        case "builder":
-          if (!builderEnabled) return <BuilderRouteRedirect nav={nav} />;
-          return (
-            <BuilderRoute
-              route={nav.route}
-              nav={nav}
-              userApps={userApps}
-              setUserApps={setUserApps}
-              renderStem={renderStem}
-              statusLine={statusLine}
-              prefs={prefs}
-            />
           );
         case "starred":
           return (
             <StarredRoute
               userApps={userApps}
-              drafts={visibleDrafts}
               tileVariant={prefs.tileVariant}
               isStarred={isStarred}
               toggleStar={toggleStar}
@@ -1459,15 +1382,12 @@ export default function App({
     },
     [
       userApps,
-      drafts,
       appsLoading,
-      builderEnabled,
       capabilities,
       capabilitiesResolved,
       prefs,
       isStarred,
       toggleStar,
-      setUserApps,
       renderStem,
       statusLine,
       assistantLedger,
@@ -1493,12 +1413,7 @@ export default function App({
   const renderScreen = useCallback(
     (nav: ShellNav) => (
       <ShellActionsProvider
-        value={makeActions(
-          nav,
-          openCommandPalette,
-          refreshAssistantThreads,
-          builderEnabled
-        )}
+        value={makeActions(nav, openCommandPalette, refreshAssistantThreads)}
       >
         {renderRoute(nav)}
         {/* Inside the provider, not beside it: the dialog's pages use
@@ -1520,7 +1435,6 @@ export default function App({
     ),
     [
       account,
-      builderEnabled,
       closePairDevice,
       closeSettings,
       dropGatewayConnection,
@@ -1589,9 +1503,6 @@ export default function App({
             navRef.current = nav;
           }}
           renderScreen={renderScreen}
-          {...(builderEnabled
-            ? { onNewApp: () => navRef.current?.navigate({ kind: "builder" }) }
-            : {})}
         />
         {allAppsOpen ? (
           <AllAppsSheet
@@ -1629,16 +1540,9 @@ export default function App({
             buildGroups={(query) =>
               buildPaletteGroups(query, {
                 userApps,
-                drafts: builderEnabled ? drafts : NO_DRAFTS,
-                builderEnabled,
                 capabilities,
                 tileVariant: prefs.tileVariant,
                 navigate: (route) => navRef.current?.navigate(route),
-                enterBuilder: (initialPrompt) =>
-                  navRef.current?.navigate({
-                    kind: "builder",
-                    ...(initialPrompt ? { initialPrompt } : {}),
-                  }),
                 onClose: closePalette,
                 conversationSearch: paletteConversationSearch,
                 entitySearch: paletteEntitySearch,
@@ -1648,16 +1552,9 @@ export default function App({
             suggestions={() =>
               buildPaletteSuggestions({
                 userApps,
-                drafts: builderEnabled ? drafts : NO_DRAFTS,
-                builderEnabled,
                 capabilities,
                 tileVariant: prefs.tileVariant,
                 navigate: (route) => navRef.current?.navigate(route),
-                enterBuilder: (initialPrompt) =>
-                  navRef.current?.navigate({
-                    kind: "builder",
-                    ...(initialPrompt ? { initialPrompt } : {}),
-                  }),
                 onClose: closePalette,
                 recents: paletteRecents,
               })

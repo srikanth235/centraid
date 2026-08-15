@@ -17,7 +17,6 @@ const appItems: HomeAppItemDTO[] = [
     tone: null,
     stamp: "2h ago",
     starred: true,
-    draft: false,
   },
 ];
 const automationItems: HomeAutoItemDTO[] = [
@@ -43,7 +42,6 @@ function makeProps(over: Partial<StarredScreenProps> = {}): StarredScreenProps {
     appItems,
     automationItems,
     onOpenApp: vi.fn<StarredScreenProps["onOpenApp"]>(),
-    onEnterDraft: vi.fn<StarredScreenProps["onEnterDraft"]>(),
     onAppContext: vi.fn<StarredScreenProps["onAppContext"]>(),
     onOpenAutomation: vi.fn<StarredScreenProps["onOpenAutomation"]>(),
     onAutomationMenu: vi.fn<StarredScreenProps["onAutomationMenu"]>(),

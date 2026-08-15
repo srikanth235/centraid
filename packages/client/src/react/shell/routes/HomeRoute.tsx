@@ -32,7 +32,6 @@ import { startVisibilityTicker } from "./visibility-ticker.js";
  *  shows is CONTENT, so the route reads it rather than taking it as a prop. */
 export interface HomeRouteProps {
   userApps: readonly UserAppMeta[];
-  drafts: readonly DraftAppMeta[];
   /** The installed-app registry must settle before Home can call anything empty. */
   appsLoading: boolean;
   /** First entry after onboarding should get a useful, disclosed starting point. */
@@ -54,7 +53,6 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   const {
     appsLoading,
     userApps,
-    drafts,
     autoSeedSample = false,
     onAutoSeedStarted,
   } = props;
@@ -256,10 +254,9 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
       .finally(() => setClearing(false));
   }, [refreshAfterSample]);
 
-  const apps: AppMetaResolvedType[] = [...userApps, ...drafts];
   /** The gateway app id (a bundled install keeps its own id). */
-  const gatewayAppId = (app: AppMetaResolvedType): string =>
-    (app as UserAppMeta).centraidAppId ?? app.id;
+  const gatewayAppId = (app: UserAppMeta): string =>
+    app.centraidAppId ?? app.id;
 
   // The springboard's tiles are the FIRST-PARTY apps this vault actually has.
   // Since #708 that is all eight: the gateway installs every bundled app at
@@ -272,7 +269,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   const settled = ready !== undefined;
   const tiles = buildHomeTiles({
     content: ready?.tileContent ?? {},
-    installedIds: apps.map((app) => gatewayAppId(app)),
+    installedIds: userApps.map((app) => gatewayAppId(app)),
   });
   const outOfRoom = homeOutOfRoom(ready?.localUsage, () =>
     navigate({ kind: "storage" })

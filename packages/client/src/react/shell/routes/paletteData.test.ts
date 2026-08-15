@@ -34,61 +34,36 @@ describe("paletteData", () => {
           desc: "Tasks",
         },
       ],
-      drafts: [
-        {
-          id: "d1",
-          name: "Draft One",
-          color: "teal",
-          iconKey: "Sparkle",
-          __draft: true,
-        },
-      ],
-      builderEnabled: true,
       tileVariant: "gradient",
       navigate: vi.fn<PaletteDeps["navigate"]>(),
-      enterBuilder: vi.fn<PaletteDeps["enterBuilder"]>(),
       onClose: vi.fn<PaletteDeps["onClose"]>(),
       ...over,
     } as PaletteDeps;
   }
 
   describe(buildPaletteGroups, () => {
-    it("lists apps + drafts, nav targets, and a create row when the query is empty", () => {
+    it("lists apps and nav targets when the query is empty", () => {
       const groups = buildPaletteGroups("", deps());
-      expect(groups.map((g) => g.group)).toStrictEqual([
-        "Apps",
-        "Go to",
-        "Create",
-      ]);
-      const apps = groups[0]!.items.map((r) => r.label);
-      expect(apps).toContain("Todos");
-      expect(apps).toContain("Draft One");
+      expect(groups.map((g) => g.group)).toStrictEqual(["Apps", "Go to"]);
+      expect(groups[0]!.items.map((r) => r.label)).toContain("Todos");
       expect(groups[1]!.items.map((r) => r.label)).toContain("Settings");
-      expect(groups[2]!.items[0]!.label).toBe("Build a new app…");
     });
 
-    it("filters apps + nav by the query but always keeps a create row", () => {
+    it("filters apps + nav by the query, and never offers a create row (#799)", () => {
       const groups = buildPaletteGroups("todo", deps());
       expect(
         groups.find((g) => g.group === "Apps")?.items.map((r) => r.label)
       ).toStrictEqual(["Todos"]);
       // No nav target matches "todo", so that group is dropped.
       expect(groups.find((g) => g.group === "Go to")).toBeUndefined();
-      const create = groups.find((g) => g.group === "Create")!.items[0]!;
-      expect(create.label).toBe("Build “todo”");
-    });
-
-    it("omits the Create/build row when the builder is disabled (#434)", () => {
-      // The "Build a new app…" row is a builder entry point — gone when hidden.
-      const groups = buildPaletteGroups("", deps({ builderEnabled: false }));
-      expect(groups.map((g) => g.group)).toStrictEqual(["Apps", "Go to"]);
+      // The served-app plane retired with the builder that produced apps for
+      // it: no query resurrects a "Build a new app…" row.
       expect(groups.find((g) => g.group === "Create")).toBeUndefined();
-      // A query still never resurrects it.
-      const filtered = buildPaletteGroups(
-        "budget tracker",
-        deps({ builderEnabled: false })
-      );
-      expect(filtered.find((g) => g.group === "Create")).toBeUndefined();
+      expect(
+        buildPaletteGroups("budget tracker", deps()).find(
+          (g) => g.group === "Create"
+        )
+      ).toBeUndefined();
     });
 
     it("an app row navigates to the app and closes on run", () => {
@@ -98,16 +73,6 @@ describe("paletteData", () => {
       groups[0]!.items[0]!.run();
       expect(onClose).toHaveBeenCalledOnce();
       expect(navigate).toHaveBeenCalledWith({ kind: "app", id: "todos" });
-    });
-
-    it("the create row enters the builder seeded with the trimmed query", () => {
-      const enterBuilder = vi.fn<PaletteDeps["enterBuilder"]>();
-      const groups = buildPaletteGroups(
-        "  budget tracker  ",
-        deps({ enterBuilder })
-      );
-      groups.find((g) => g.group === "Create")!.items[0]!.run();
-      expect(enterBuilder).toHaveBeenCalledWith("budget tracker");
     });
 
     it("adds a Conversations group from the search source and deep-links on run (#420)", () => {

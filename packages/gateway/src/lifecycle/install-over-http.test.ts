@@ -404,16 +404,19 @@ describe("install-over-http scenarios", () => {
     expect(after.find((t) => t.id === "notes")?.installed).toBe(true);
   });
 
-  test("the listing is a union — installed bundled app + code-store scaffold, no duplicates", async () => {
+  test("the listing is a union — installed bundled app + code-store app, no duplicates", async () => {
     await install("tasks");
 
-    // Scaffold + publish a code-store app the old way.
-    const create = await fetch(`${handle.url}/centraid/_apps`, {
+    // Publish a code-store app. Automations are the only code the store still
+    // takes since #799 retired the blank-app scaffold with the served plane.
+    const create = await fetch(`${handle.url}/centraid/_automations`, {
       method: "POST",
       headers: jsonAuth(),
       body: JSON.stringify({
         id: "myscratch",
         name: "My Scratch",
+        prompt: "summarize the day",
+        triggers: [{ kind: "cron", expr: "0 9 * * *" }],
         publish: true,
       }),
     });
@@ -426,11 +429,17 @@ describe("install-over-http scenarios", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  test("bundled ids are reserved — scaffold and clone of a bundled id are refused", async () => {
-    const scaffold = await fetch(`${handle.url}/centraid/_apps`, {
+  test("bundled ids are reserved — a code-store create and clone of a bundled id are refused", async () => {
+    const scaffold = await fetch(`${handle.url}/centraid/_automations`, {
       method: "POST",
       headers: jsonAuth(),
-      body: JSON.stringify({ id: "tasks", name: "Impostor", publish: true }),
+      body: JSON.stringify({
+        id: "tasks",
+        name: "Impostor",
+        prompt: "impersonate",
+        triggers: [{ kind: "cron", expr: "0 9 * * *" }],
+        publish: true,
+      }),
     });
     expect(scaffold.status).toBe(409);
 

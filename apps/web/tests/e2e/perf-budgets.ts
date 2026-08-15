@@ -28,6 +28,22 @@ export interface OpenBudget {
   maxTransferBytes: number;
 }
 
+export interface AppOpenBudget extends OpenBudget {
+  /**
+   * Max summed `encodedBodySize` in bytes for SAME-ORIGIN resources.
+   *
+   * `transferSize` is 0 for anything the service worker answers out of Cache
+   * Storage, and by the time an app can be opened the SW has precached the
+   * whole dist — so wire bytes for an inline app open are 0 and cannot fence
+   * WEIGHT. `encodedBodySize` is the compressed size of the same bodies
+   * whether they came from the wire or the cache, so it is what grows when an
+   * app's chunk grows. The two ceilings fence different regressions:
+   * `maxTransferBytes` says "an open must not go back to the network",
+   * `maxEncodedBytes` says "an open must not get heavier".
+   */
+  maxEncodedBytes: number;
+}
+
 export interface ShellBudget extends OpenBudget {
   /**
    * A warm reload must serve the shell bundle from the SW/HTTP cache — the
@@ -39,15 +55,24 @@ export interface ShellBudget extends OpenBudget {
 export interface PerfBudgets {
   /** The shell page (Vite bundles + tokens) measured COLD on the app origin (4173). */
   shell: ShellBudget;
-  /** The generated-app iframe, measured from inside the iframe's own origin. */
+  /**
+   * An inline app route open, measured as the SAME-ORIGIN tail of the shell
+   * page's own resource timeline between the palette click and the mounted app
+   * (issue #799 retired the served-app iframe, so there is no second window and
+   * no navigation entry). What it fences is the shell's per-app lazy-chunk
+   * cost: the app's `app-inline` chunk, its CSS, and whatever shared chunks it
+   * is the first route to pull in.
+   */
   appOpen: {
-    cold: OpenBudget;
-    warm: OpenBudget;
+    cold: AppOpenBudget;
+    warm: AppOpenBudget;
     /**
-     * Warm re-open must transfer far fewer bytes than cold — a working
-     * validator cache (ETag/304 on the gateway HTTP path) collapses the
-     * transferred body to conditional-request overhead. Ratio, not absolute,
-     * so it survives fixture changes.
+     * Warm re-open must load far fewer bytes than cold. On the inline path the
+     * module registry already holds the descriptor, so a healthy re-open pulls
+     * NOTHING — the ratio (over `encodedBodySize`, since wire bytes are 0 on
+     * both sides behind the SW cache) sits at 0 and the ceiling catches a
+     * change that makes re-opening an app re-pay its payload. Ratio, not
+     * absolute, so it survives fixture changes.
      */
     maxWarmToColdByteRatio: number;
   };
@@ -111,7 +136,7 @@ export interface PerfBudgets {
 // re-baseline would have needed. `maxTransferBytes` tightens 1,250,000 ->
 // 470,000 in the same edit — a genuine tightening against both measurements.
 export const approvedDeviation =
-  "Binding Layer font fan-out re-baseline in #707/#708/#709. CI web-e2e on PR #709 head 88ab442f measured cold same-origin shell requests=16 transfer=495485B (PWA WATERFALL SUMMARY). The +4 requests / +~74 KB vs the prior 12 / 470_000 ceilings were the ten self-hosted woff2 faces served from /fonts by the centraid-fonts Vite plugin; they are intentional product identity, not accidental chunk bloat. v8 cuts that fan-out to FOUR files (Instrument Sans 400/600, latin + latin-ext); Source Serif 4 and the 500 cut are withdrawn, numerics remain tabular Sans, and code takes the platform stack, which downloads nothing. The ceilings below are NOT re-baselined here, because they are measured in CI rather than derived: the next web-e2e run should measure the smaller payload before this ratchet is tightened. Prior Vite 8 note (#565) still holds for JS chunking: going below the JS half still needs a web-host.ts source change. maxRequests widens 12 -> 17 (measured 16 + 1); maxTransferBytes widens 470_000 -> 520_000 (measured 495_485 + ~5% headroom). #738 adds the durable pending-write read/presentation engine to the common shell; PR #745 CI measured 525304B before its replacement path was split behind retry/edit. Maintainer-approved maxTransferBytes 520_000 -> 528_000 preserves a 2696B ceiling above that measured run while keeping request count and all app-open/warm budgets unchanged. Tighten when the shared pending metadata grammar or font payload is reduced.";
+  "Binding Layer font fan-out re-baseline in #707/#708/#709. CI web-e2e on PR #709 head 88ab442f measured cold same-origin shell requests=16 transfer=495485B (PWA WATERFALL SUMMARY). The +4 requests / +~74 KB vs the prior 12 / 470_000 ceilings were the ten self-hosted woff2 faces served from /fonts by the centraid-fonts Vite plugin; they are intentional product identity, not accidental chunk bloat. v8 cuts that fan-out to FOUR files (Instrument Sans 400/600, latin + latin-ext); Source Serif 4 and the 500 cut are withdrawn, numerics remain tabular Sans, and code takes the platform stack, which downloads nothing. The ceilings below are NOT re-baselined here, because they are measured in CI rather than derived: the next web-e2e run should measure the smaller payload before this ratchet is tightened. Prior Vite 8 note (#565) still holds for JS chunking: going below the JS half still needs a web-host.ts source change. maxRequests widens 12 -> 17 (measured 16 + 1); maxTransferBytes widens 470_000 -> 520_000 (measured 495_485 + ~5% headroom). #738 adds the durable pending-write read/presentation engine to the common shell; PR #745 CI measured 525304B before its replacement path was split behind retry/edit. Maintainer-approved maxTransferBytes 520_000 -> 528_000 preserves a 2696B ceiling above that measured run while keeping request count and all app-open/warm budgets unchanged. Tighten when the shared pending metadata grammar or font payload is reduced. #799 stage 2 RE-SEEDS the appOpen budgets, because the subject changed rather than regressed: the served-app iframe is deleted, so an app open is now a dynamic import of an inline route's lazy chunk inside the shell window, measured as the same-origin tail of the shell's own resource timeline. Measured (local `bun run --cwd apps/web build` dist, headless Chromium, 2026-08-15) opening Tasks: cold 8-9 requests / 0 transfer B / 112_759 encoded B, warm 0 requests / 0 B. Two ceilings WIDEN and are the whole of the deviation: appOpen.cold.maxRequests 8 -> 10 (the old 8 fenced a fixture iframe with ZERO subresources; the inline route legitimately pulls eight same-origin chunks, plus a ninth worker entry that races the mark) and, structurally, the byte fence moves onto a new `maxEncodedBytes` key (120_000 cold) because `transferSize` is 0 for anything the service worker answers from Cache Storage and so can no longer fence weight at all. Everything else TIGHTENS in the same edit: appOpen.warm.maxRequests 8 -> 2, both maxTransferBytes 20_000 -> 8_000 (measured 0; the ceiling now fences 'an open must not go back to the network'), and maxWarmToColdByteRatio 1.2 -> 0.1 (the 1.2 existed only because the retired app document was no-store and re-transferred in full every open). The spec also gains a cold-open anti-vacuity assertion so an empty measurement can no longer satisfy these ceilings. Re-measure and tighten maxEncodedBytes when the shared inline chunk graph shrinks.";
 
 export const perfBudgets: PerfBudgets = {
   shell: {
@@ -141,26 +166,44 @@ export const perfBudgets: PerfBudgets = {
   },
   appOpen: {
     cold: {
-      // MEASURED cold app iframe (web-e2e fixture): 0 subresource requests, the
-      // no-store HTML doc is ~1978 B of navigation transfer (runtime is inlined,
-      // no external assets). The request-count ceiling is the real fence here.
-      // The byte ceiling is deliberately generous — a bare fixture doc — so a
-      // heavier real app or the bundling workstream lands without a spurious
-      // red; re-measure and TIGHTEN both when a richer app fixture is wired.
-      maxRequests: 8,
-      maxTransferBytes: 20_000,
+      // RE-SEEDED for the inline app route (#799) — rationale in
+      // approvedDeviation above. MEASURED first open of Tasks against a fresh
+      // `bun run --cwd apps/web build` dist: 0 transfer bytes and 112_759
+      // encoded bytes across eight deterministic same-origin chunks (the
+      // app-inline chunk 52_192 B, its CSS 13_498 B, `untrusted` 42_913 B,
+      // plus scope-merge / scope-kit / search-scaffold / PendingWriteActions /
+      // LoadingSkeleton). A ninth entry — the sqlite worker script, 0 encoded
+      // bytes — lands on either side of the pre-open mark depending on how the
+      // replica bootstrap races, so the observed count is 8 or 9.
+      //
+      // Read `maxEncodedBytes` as UNCOMPRESSED weight: Cache Storage holds
+      // decoded bodies, so `encodedBodySize` for an SW-served chunk is its raw
+      // size. It is a weight ratchet, not a wire-cost estimate.
+      //
+      // Ceilings = measured + 1 request / ~6% byte headroom for CI jitter.
+      maxRequests: 10,
+      // Measured 0: the SW precache crawl (apps/web/public/sw.js) finishes
+      // during install, and the probe waits for `serviceWorker.controller`
+      // before opening, so every chunk is answered from Cache Storage. The
+      // ceiling is not 0 because a single conditional revalidation is legal;
+      // it is small enough that re-fetching one app chunk fails the build.
+      maxTransferBytes: 8_000,
+      maxEncodedBytes: 120_000,
     },
     warm: {
-      // Warm re-open: the app HTML is no-store (per-response nonce) so the doc
-      // re-transfers (~1977 B); any cacheable subresource is served from cache.
-      maxRequests: 8,
-      maxTransferBytes: 20_000,
+      // MEASURED warm re-open: 0 requests, 0 bytes of either kind — the
+      // descriptor and every chunk it pulled are already in the module
+      // registry, so a re-open loads nothing at all. The ceilings leave room
+      // for one or two small chunks rather than demanding an exact zero.
+      maxRequests: 2,
+      maxTransferBytes: 8_000,
+      maxEncodedBytes: 8_000,
     },
-    // The web-e2e HTML is no-store, so its doc bytes re-transfer every open —
-    // the warm/cold total ratio stays near 1 for THIS fixture. 1.2 tolerates
-    // that while catching a regression that INFLATES the warm open. The
-    // aggressive cache proof lives in the SW-tunnel path (swTunnelCache, 0.2).
-    maxWarmToColdByteRatio: 1.2,
+    // MEASURED 0.0 — a warm re-open re-pays none of the app's payload. The
+    // ceiling catches a change that makes it re-pay some. (The old 1.2 existed
+    // because the retired served-app document was `no-store` and re-transferred
+    // in full on every open; nothing on the inline path does that.)
+    maxWarmToColdByteRatio: 0.1,
   },
   swTunnelCache: {
     // Warm tunnel-fetched bytes < 20% of cold — the SW serves assets/blobs
@@ -178,7 +221,8 @@ export const perfBudgets: PerfBudgets = {
     minStreamsForProof: 3,
   },
   timing: {
-    // Generous — headless CI cold open of the shell + iframe. Log-only.
+    // Generous — headless CI wall clock for one inline app open (palette click
+    // → mounted app), which on a cold open includes the replica handshake.
     coldOpenMsSoftCeiling: 15_000,
     warmOpenMsSoftCeiling: 8_000,
   },

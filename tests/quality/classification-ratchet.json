@@ -1,13 +1,13 @@
 {
-  "approvedDeviation": "#799 stage 1 retires the mobile WebView app cover; tests/matrix.json transfers template-gate's matrix seat to the existing native-v0-resilience flow via replacesMinimumTestsFlow with the declared-check floor raised 7 -> 13, weakening no quality grade, budget, or demonstrated-red claim.",
+  "approvedDeviation": "#799 stage 2 retires the client iframe host, the app builder, and the gateway wiring that served them; the governed classifications move only where that deletion forces them. route-security.ts renames the /centraid/_web owner file to web-control-sessions.ts (the per-app browser-session half of it is gone, the control half is untouched), and tests/matrix.json drops the desktop-builder-journey flow with its floor transferred to desktop-app-open-journey and narrows gateway-session-boundaries 13 -> 8 because five of its cases drove the retired app-session plane. No quality grade, budget, or demonstrated-red claim weakens.",
   "matrixGovernanceFingerprint": "76e4bf7392b7d75e5e510d54b5dea4c8b214314fa3a5c494bf42848c782c0db7",
   "fingerprints": {
     "packages/agent-runtime/src/backends/acp/vault-mcp-server.ts": "23bf19e215bfe3fd8a21a4dd896d06c97835d43fc3412bfcc9bb0312bd6d7ff2",
     "packages/automation/src/manifest/manifest.ts": "e133e7233a6e3ac541f4972772aa803706b4bb7cf9590308b87c762402e5c509",
-    "packages/gateway/src/routes/route-security.ts": "47cf64c574a44bab45b78ef57ef41e84a7e830220b19dc89c514daf773246ee4",
+    "packages/gateway/src/routes/route-security.ts": "e47530529e8a4594ef32725f38c0d6e0cf6eda07a497e21ff6945fbe6dca49e7",
     "packages/gateway/src/serve/health-registry.ts": "d4483393bf09d7839ce995b1d6c698501f079e0c53d7e6031de268f7b642e4e6",
     "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
     "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
-    "tests/matrix.json": "5fa9817f71a15c1425a079af6588455205d58ee03c85c3884f6afdd33d9b866f"
+    "tests/matrix.json": "3e697b204938f6f7bec1437c4301ae370893c493bda6a8527a3f33c06f8f5c9e"
   }
 }

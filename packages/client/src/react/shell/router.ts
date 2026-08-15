@@ -61,10 +61,6 @@ export function routeKey(route: ShellRoute): string {
       return `app:${route.id}`;
     case "automation-builder":
       return `automation-builder:${route.automationId}`;
-    case "builder":
-      return route.appContext
-        ? `builder:${route.appContext.id}`
-        : `builder:new:${route.initialPrompt ?? ""}`;
   }
 }
 

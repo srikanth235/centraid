@@ -302,7 +302,7 @@ export interface EnrolledApp {
   /**
    * The host-side enrollment key (Centraid app id) — NOT the pretty name.
    * A wide swath of the desktop renderer key-equates this to the app's
-   * slug (folder id, `appLiveUrl`, grant lookups); the pretty name a
+   * slug (folder id, asset paths, grant lookups); the pretty name a
    * consent surface shows lives on `consent_app.display_name` instead,
    * surfaced through `ParkedSummary.caller` (`gateway.ts#callerName`),
    * never through this field.
