@@ -93,6 +93,28 @@ tunnel (`phone-link.ts`, `resolveGatewayBase()`) untouched.
   weakened. template-gate had short-circuited to a trivial pass because its
   own `NATIVE_ON_MOBILE` set covers all 8 `kind: "app"` templates in
   `packages/blueprints/index.json`, leaving it nothing to gate.
+- **Quality-knob movement recorded through the sanctioned deviation channel**
+  (`tests/quality/classification-ratchet.json`, same mechanism as #791's
+  entry): "#799 stage 1 retires the mobile WebView app cover; tests/matrix.json transfers template-gate's matrix seat to the existing native-v0-resilience flow via replacesMinimumTestsFlow with the declared-check floor raised 7 -> 13, weakening no quality grade, budget, or demonstrated-red claim."
+- **UI-impact evidence emitter added to the surviving flow**:
+  `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs` (companion doc
+  `tests/agent-e2e-mobile/flows/native-v0-resilience.md`) now publishes its
+  post-restart Home frame to
+  `artifacts/e2e/ui-impact/issue-799-mobile-native-home.png`, since the
+  retired template-gate flow can no longer carry mobile UI evidence.
+
+## User impact
+
+Mobile users see no visible change from stage 1: the launcher was already
+all-native (`GATEWAY_CATALOG = []`), so the retired WebView cover was
+reachable only for user-built apps — a set of size zero. App-scoped
+notifications now open the notifications list instead of a (previously
+empty) generic app screen.
+
+First-run: unchanged — ticket-only onboarding still lands on the native
+Home springboard; no step was added or removed.
+
+![Mobile native Home evidence](artifacts/e2e/ui-impact/issue-799-mobile-native-home.png)
 
 ## Out of scope
 
@@ -122,7 +144,17 @@ bun run lint:e2e-flows
 bun run test:matrix
 bun run test:ratchet
 bash .governance/run.sh
+bun run lint:quality-knobs
+bun run check:ui-receipt
 ```
+
+Two `check:push` lanes fail for environment reasons unrelated to the diff,
+verified identical on a clean tree: `design:gallery` (all 22 baseline
+entries mismatch uniformly under this container's substituted Playwright
+headless-shell build; CI's path-gated `design-gallery` job with the pinned
+browser is authoritative) and the mobile suite's pre-existing
+`PendingRestartJourney.test.tsx` "Cannot bundle node:sqlite" failure. CI
+remains the enforcing copy for both.
 
 ## Audit
 
