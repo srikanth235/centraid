@@ -271,7 +271,7 @@ describe("shell-session", () => {
 
       await session.sync();
 
-      expect(syncNow).toHaveBeenCalledOnce();
+      expect(syncNow.mock.calls).toStrictEqual([[]]);
       await session.close();
     });
 
@@ -319,8 +319,8 @@ describe("shell-session", () => {
 
       await session.close();
 
-      expect(coordinator.close).toHaveBeenCalledOnce();
-      expect(coordinator.purge).toHaveBeenCalledTimes(0);
+      expect(vi.mocked(coordinator.close).mock.calls).toStrictEqual([[]]);
+      expect(coordinator.purge).not.toHaveBeenCalled();
       expect(listRememberedReplicaIdentities()).toStrictEqual([identity]);
       localStorage.clear();
     });
@@ -645,6 +645,62 @@ describe("shell-session", () => {
         ],
       });
       expect(coordinator.claimNextIntent).toHaveBeenCalledTimes(0);
+      await session.close();
+    });
+
+    test("queues a first-open offline write before a replica catalog exists", async () => {
+      const captureBaseVersions = vi
+        .fn<NonNullable<ShellReplicaCoordinator["captureBaseVersions"]>>()
+        .mockRejectedValue(new Error("must not read an unbootstrapped store"));
+      const coordinator = fakeCoordinator({
+        catalog: vi
+          .fn<ShellReplicaCoordinator["catalog"]>()
+          .mockResolvedValue([]),
+        captureBaseVersions,
+      });
+      const session = new ReplicaShellSession(
+        { baseUrl: "https://gateway.example", vaultId: "vault" },
+        coordinator,
+        { eventTarget: new EventTarget(), isOnline: () => false }
+      );
+      await session.start({
+        mode: "memory",
+        cursor: null,
+        schemaEpoch: null,
+        coverage: "partial",
+        durability: "memory",
+      });
+
+      await expect(
+        session.write("todos", {
+          action: "complete",
+          input: { taskId: "task-1" },
+          optimistic: [
+            {
+              op: "upsert",
+              entity: "core.task",
+              rowId: "task-1",
+              values: { title: "Saved before bootstrap" },
+            },
+          ],
+        })
+      ).resolves.toStrictEqual({
+        intentId: "intent-1",
+        status: "queued",
+        reason: "waiting for a connection",
+      });
+      expect(captureBaseVersions.mock.calls).toStrictEqual([]);
+      expect(vi.mocked(coordinator.enqueue).mock.calls).toStrictEqual([
+        [
+          {
+            appId: "todos",
+            action: "complete",
+            input: { taskId: "task-1" },
+            dependencies: [],
+            optimistic: [],
+          },
+        ],
+      ]);
       await session.close();
     });
 

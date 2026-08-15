@@ -406,6 +406,44 @@ describe(createNativeReplicaSession, () => {
     }
   });
 
+  test("durably queues a first-open offline write before bootstrap", async () => {
+    const gateway = createGateway();
+    const feed = createFeed();
+    const session = await createNativeReplicaSession({
+      gatewayAuth,
+      fetcher: gateway.fetcher,
+      changeFeed: feed,
+      driver: new NodeSqliteDriver(),
+      digest: nodeDigest,
+      idFactory: sequentialIds(),
+      isConnected: () => false,
+    });
+    try {
+      await expect(
+        session.write("photos", {
+          action: "photos.favorite",
+          input: { assetId: "asset-1", favorite: true },
+        })
+      ).resolves.toStrictEqual({
+        intentId: "intent-1",
+        status: "queued",
+        reason: "waiting for a connection",
+      });
+
+      await expect(session.coordinator.intents.list()).resolves.toMatchObject([
+        {
+          intentId: "intent-1",
+          state: "queued",
+          input: { assetId: "asset-1", favorite: true },
+          optimistic: [],
+        },
+      ]);
+      expect(gateway.pathnames).toStrictEqual([]);
+    } finally {
+      await session.close();
+    }
+  });
+
   test("bootstraps a multi-page window and converges from the page-1 cursor", async () => {
     const rows = (id: string): ReplicaSnapshotRow[] => [
       {

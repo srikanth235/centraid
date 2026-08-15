@@ -315,16 +315,24 @@ export class ReplicaShellSession {
         "The pending row is no longer available to edit"
       );
     }
-    const { optimistic, dependencies } = prepareReplicaWrite(
-      appId,
-      input.optimistic,
-      this.#catalog,
-      this.resolveShapeId.bind(this),
-      false
-    );
+    // A first-open offline session has no catalog yet. The action intent is
+    // still durable and replayable; only its local projection must wait for
+    // bootstrap to reveal the shape contract.
+    const { optimistic, dependencies } =
+      this.#catalog.length === 0
+        ? { optimistic: [], dependencies: [] }
+        : prepareReplicaWrite(
+            appId,
+            input.optimistic,
+            this.#catalog,
+            this.resolveShapeId.bind(this),
+            false
+          );
     const baseVersions =
       input.baseVersions ??
-      (await this.coordinator.captureBaseVersions?.(optimistic)) ??
+      (this.#hasCursor
+        ? await this.coordinator.captureBaseVersions?.(optimistic)
+        : undefined) ??
       [];
     const matched = await this.coordinator.reviseIntentForProjection?.(
       appId,
