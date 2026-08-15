@@ -20,6 +20,18 @@ wave's paragraph below describes the state AT THAT WAVE, so the earlier
 paragraphs read as history, not as the current state — the current state is
 the Wave 3 table.
 
+## User impact
+
+This testing audit intentionally preserves product behavior while making the
+existing Household, Places, Docs, Locker, People, and offline/reconnect
+experiences fail visibly when their contracts regress.
+
+First-run: onboarding and the fresh Home remain unchanged; the audit adds no
+prompt, migration, or background work. The changed Electron pending-overlay
+journey emits the user-facing evidence at
+`artifacts/e2e/ui-impact/issue-738-pending-write-overlay.png`, showing the
+durable offline row and its explicit pending state after reload.
+
 Wave 2a (the first two "What changed" sections) closed no category outright:
 both its sections are sub-items of the single **"Hygiene ratchets"** bullet
 (the two count budgets and the Android probe omission), leaving three of that
@@ -599,8 +611,11 @@ Census first: of 28 bundle dirs, 5 are GENERATED from `packages/model-runtime`
 (banner-verified) and are carried by the bundle-drift check + upstream source
 floor — no per-file tests written for generated output. The **23
 hand-authored** connector/enricher handlers get 49 tests in four new files
-over a copy-adapted `handler-harness.ts` (blueprints must not import
-model-runtime): `outbox-send.test.ts` (10 — byte-exact RFC 2822 / RFC 5545
+over the repository-owned recording rails in
+`packages/test-kit/src/automation-handler-harness.ts`; the local
+`handler-harness.ts` retains only connector cursor semantics and published
+module loading (blueprints must not import model-runtime):
+`outbox-send.test.ts` (10 — byte-exact RFC 2822 / RFC 5545
 staged artifacts, recipient dedup, the 10-per-run bound, refusal preserving
 earlier staged state), `pull-connectors.test.ts` + `pull-connectors-graph.test.ts` (10 + 15
 declared / 33 run — the shared 401 refusal and per-connector
@@ -615,6 +630,25 @@ the tree; root `vitest.config.ts` instruments
 bundles coverage-excluded by id. Measured 92.64 lines / 71.76 branches;
 `tests/coverage-floors.json` seeds `90/69` with provenance in its
 `approvedDeviation`. The governance allowlist's known-gap row is retired.
+
+**CI follow-up:** SonarCloud measured 29.2% duplication on new code because
+the recognition and connector trees each carried a copy of the recording
+vault rails (quality-gate ceiling: 3%). `packages/test-kit/package.json` now
+exports the single implementation above; both package-local
+`handler-harness.ts` files are thin adapters, preserving the recognition
+suite's empty invoke output and the connector suite's staged `item-<n>`
+receipts. This removes the three reported duplication blocks (31, 74, and 29
+lines) rather than suppressing or excluding them. `TESTING.md`'s shared test
+infrastructure catalog now names these recording rails and their neutral
+owner. The extraction also applies Sonar's four maintainability findings in
+the affected logic: membership uses `.includes()`, unsupported vault query
+operators and cursor value shapes throw `TypeError`, and fresh module load
+numbering is a standalone assignment. The shared query error now carries the
+neutral `automation-handler-harness` diagnostic prefix instead of either
+package-local prefix. Rebasing onto `main` also
+activated its newer type-aware sorting rule for the wave's owner-route test;
+both tuple sorts now carry the same explicit owner-id comparator.
+
 **Correction found by this wave's audit — twice, ending in a gate fix.**
 Round 1: the slice demonstrated the reachability directive firing without the
 floor row, but that red predated the root agent's matrix registration — the
@@ -816,6 +850,9 @@ packages/blueprints/vitest.config.ts
 packages/gateway/src/backup/storage-usage.test.ts
 packages/gateway/src/routes/owners-routes.test.ts
 packages/gateway/src/routes/scopes-routes.test.ts
+packages/model-runtime/automation-handlers/handler-harness.ts
+packages/test-kit/package.json
+packages/test-kit/src/automation-handler-harness.ts
 receipts/issue-781-audit-gap-closure.md
 scripts/check-share-reachability.test.mjs
 scripts/gateway-npm/native-platforms.test.mjs
@@ -924,6 +961,20 @@ deviation.** The governed classification fingerprint moved; the approved
 deviation reads, verbatim:
 
 #781 wave 3 registers 24 new flows (23 plus connector-handler-contract-graph after the pull-connectors file split for the 625-line ceiling) in tests/matrix.json, upgrades exactly one governed cell (desktop.offline, skip -> partial, now genuinely owned by apps/desktop/tests/e2e/pending-overlay.spec.ts), registers the two split trackers #790 and #791 as open in trackingIssues, and re-homes the eleven env-gated rig-lane skips plus all six env-red guard sites from #781 to #790 per the split; no other law, flow, grade, owner, or quality changed, and nothing was downgraded.
+
+**Rebase reconciliation: the combined matrix history remains an approved
+deviation.** Rebasing onto `main` combined the wave-2/wave-3 additions with
+#782's citation repair and #785's demonstrated-red record. The recomputed
+fingerprint note reads, verbatim:
+
+#781 waves 2-3 add six laws and 32 flows, upgrade desktop.offline from skip to partial, register split trackers #790/#791, and re-home env-gated evidence to #790; #782 re-homes closed citations and #785 records the 2026-08-14 demonstrated-red D7 run. No other governed cell, owner, or lane changed and nothing was downgraded.
+
+**CI follow-up: share the recording rails; do not suppress duplication.**
+The automation suites need the same in-memory vault, invoke, delegate, and
+fetch recorder. `packages/test-kit` is their neutral test-infrastructure
+owner, while each package retains only its behavior-specific adapter. A
+Sonar exclusion or duplicated local implementations would leave the ownership
+problem intact.
 
 **Wave 3: no sharing surface row in the matrix.** Surfaces are
 workspace-aligned evidence homes: the grading machinery derives every
@@ -1101,7 +1152,45 @@ Environment caveats stated where they bind: Maestro device execution
 design; CI artifacts were unreachable through the container proxy during
 nightly triage, so those diagnoses cite job logs only.
 
+### CI follow-up verification
+
+```bash
+bun run build
+bun run lint:quality-knobs
+bun run --cwd packages/test-kit test
+bun run --cwd packages/test-kit typecheck
+bun run --cwd packages/model-runtime test
+bun run --cwd packages/model-runtime typecheck
+bun run --cwd packages/blueprints test automations/outbox-send.test.ts automations/pull-connectors.test.ts automations/pull-connectors-graph.test.ts automations/release-notes-drafter.test.ts
+bun run --cwd packages/blueprints typecheck
+bun run test:ratchet:unit
+bun run lint:types
+bun run lint:workflow-pins
+bun run check:diff-coverage
+bun run test:affected
+```
+
+The build completed across the workspace. The focused suites passed 66
+test-kit tests, 152 model-runtime tests, and all 49 blueprint automation
+tests; all three package typechecks passed. The ratchet suite passed all 314
+tests when run without the full 43-gate contention that caused its earlier
+five-second timeout. Type-aware lint and workflow pinning passed; diff coverage
+was 100% (84/84 changed executable lines). The affected run completed 26/26
+tasks across 12 selected packages; its largest suite, gateway, passed 1,527
+tests with six intentional skips.
+
 ## Audit
+
+**CI follow-up audit.** A fresh-context agent compared the staged delta, this
+receipt, and issue #781. Round 1 returned **REFUTED / PASS / PASS**: the harness
+semantics and verification were sound, and the checklist remained honest, but
+the follow-up narrative omitted the `TESTING.md` catalog hunk and the shared
+query exception's class/prefix change. Both omissions were corrected above;
+the re-adjudication returned **PASS / PASS / PASS**, confirming both disclosures
+now account for the staged delta. A narrow round 3 after adding `## User
+impact` also returned **PASS**: the first-run statement is honest and the
+changed pending-overlay journey emits the named screenshot after asserting the
+reloaded offline row and its explicit pending state.
 
 Fresh-context correspondence audit against `git diff --cached` and issue #781.
 The working tree carries unstaged sibling-slice files; everything below was

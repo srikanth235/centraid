@@ -141,12 +141,14 @@ describe("owners-routes roster scoping", () => {
       owners: Array<{ ownerId: string; label: string }>;
     };
     expect(
-      body.owners.map((owner) => [owner.ownerId, owner.label]).sort()
+      body.owners
+        .map((owner) => [owner.ownerId, owner.label])
+        .sort(([left], [right]) => left.localeCompare(right))
     ).toStrictEqual(
       [
         [ada, "Ada"],
         [sam, "Sam"],
-      ].sort()
+      ].sort(([left], [right]) => left.localeCompare(right))
     );
   });
 

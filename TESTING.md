@@ -333,6 +333,7 @@ Generated-state properties cover blob custody and replica intent idempotency. Th
 - `seededRandom()` for deterministic draws;
 - `bootstrappedVault()`, plus bootstrapped `createTestVault()` and listener-free `buildTestGateway()`;
 - node and jsdom+JSX+CSS-module Vitest presets;
+- the recording automation-handler rails shared by recognition and published connector/enricher source suites;
 - deterministic parties, photos, conversations, turns, and blob custody volume fixtures;
 - perf/scale JSON result emission.
 
