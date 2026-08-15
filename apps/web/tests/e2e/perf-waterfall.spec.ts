@@ -81,10 +81,11 @@ interface OpenSummary {
   // service worker answered out of Cache Storage. By the time an app can be
   // opened the SW has already precached the whole dist, so an inline app open
   // transfers 0 bytes — true, and useless as a weight fence. `encodedBodySize`
-  // is the compressed weight of the same bodies whether they were served from
-  // the wire or from the cache, so it is the number that actually grows when
-  // an app's chunk grows. Both are budgeted: transfer fences "an open must not
-  // go back to the network", encoded fences "an open must not get heavier".
+  // is populated whether a body was served from the wire or from the cache, so
+  // it is the number that actually grows when an app's chunk grows. Both are
+  // budgeted: transfer fences "an open must not go back to the network",
+  // encoded fences "an open must not get heavier". Read encoded as DECODED
+  // (raw) weight, never as a wire figure — Cache Storage holds decoded bodies.
   sameOriginEncodedBytes: number;
   // The HTML document itself is a `navigation` entry, not a `resource`, so a
   // whole-page measurement has to add it in by hand. An inline app open makes
@@ -310,11 +311,16 @@ async function establishSession(page: Page): Promise<void> {
     .toBe(true);
 }
 
-/** Open a bundled app via the command palette. */
-async function openFromPalette(page: Page): Promise<void> {
-  // Re-click until the palette actually opens: right after a reload the Search
-  // button can paint before its React listener attaches, and a click that
-  // lands in that window is silently lost (same shape as docs-drive.spec.ts).
+/**
+ * Get the command palette open. Deliberately SEPARATE from the pick below, and
+ * called before the open timer starts: right after a reload the Search button
+ * can paint before its React listener attaches, and a click that lands in that
+ * window is silently lost (same shape as docs-drive.spec.ts). Retrying that is
+ * correct, but its 30s ceiling must not be inside a measurement budgeted at
+ * 15s — one retry cycle would then hard-fail the timing gate on shell startup
+ * jitter that has nothing to do with app-open cost.
+ */
+async function openPalette(page: Page): Promise<void> {
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await expect
     .poll(
@@ -328,6 +334,11 @@ async function openFromPalette(page: Page): Promise<void> {
       { timeout: 30_000 }
     )
     .toBe(true);
+}
+
+/** Pick the app out of an already-open palette. This is the timed action. */
+async function pickAppFromPalette(page: Page): Promise<void> {
+  const palette = page.getByRole("dialog", { name: "Command palette" });
   await palette.locator("input").fill(APP_NAME);
   await palette
     .getByRole("button")
@@ -351,9 +362,20 @@ async function openAppAndMeasure(
   page: Page
 ): Promise<{ summary: OpenSummary; elapsedMs: number }> {
   const origin = new URL(page.url()).origin;
+  // Getting the palette up is shell-startup cost, not app-open cost: do it
+  // before the mark and before the clock, so neither the byte delta nor the
+  // timing ceiling is charged for it.
+  await openPalette(page);
+  // …and let its own chunks finish landing before marking. The palette resolves
+  // when the dialog is VISIBLE, which does not mean its lazy imports have
+  // settled; a chunk still in flight at the mark gets charged to the app open.
+  // Skipping this settle produced a reproducible-looking 112_759 B with an
+  // occasional 179_759 B outlier — a 67 KB swing that would flake any honest
+  // ceiling. Measure from a quiet timeline instead of padding the budget.
+  await settleResourceTimeline(page, 5_000);
   const sinceIndex = await resourceMark(page);
   const started = Date.now();
-  await openFromPalette(page);
+  await pickAppFromPalette(page);
   await expect(page.getByTestId("inline-app-view")).toBeVisible();
   await expect(
     page.getByText(`Loading ${APP_NAME}…`, { exact: true })
@@ -373,17 +395,35 @@ async function openAppAndMeasure(
 }
 
 /**
- * The byte total an app open is budgeted on: same-origin resources plus the
- * navigation entry. Inline opens contribute no navigation, so this is the
- * asset download; the field is summed rather than dropped so the report's
- * `grandTotalTransferBytes` keeps meaning "everything that came down".
+ * The byte total an app open is budgeted on: SAME-ORIGIN resources plus the
+ * navigation entry. Inline opens contribute no navigation, so in practice this
+ * is the asset download; the field is summed rather than dropped so a future
+ * whole-page measurement reusing this helper still counts its document.
+ *
+ * Same-origin only, deliberately: in this harness the gateway answers on
+ * another port with no Timing-Allow-Origin header, so every control / replica
+ * / query call an app makes reports 0 bytes and would silently dilute the
+ * total. Cross-origin REQUEST COUNT is still real, and is fenced separately by
+ * `maxTotalRequests` — see the budgets file.
  */
 function openBytes(s: OpenSummary): number {
   return s.sameOriginTransferBytes + s.navTransferBytes;
 }
 
+/**
+ * Leave the app. This must prove the app actually UNMOUNTED, not merely that
+ * Home painted: `nav[aria-label="Apps"]` renders inside InlineAppRoute's own
+ * ShellFrame too (Stem.tsx), so waiting on it alone is satisfied while the app
+ * is still up — and `window.centraid` stays installed until React unmounts
+ * (centraid-inline.ts teardown). A warm re-open measured from that state would
+ * "prove liveness" against the cold open's residue instead of its own mount.
+ */
 async function goHome(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Home", exact: true }).click();
+  await expect(page.getByTestId("inline-app-view")).toBeHidden();
+  await expect
+    .poll(() => page.evaluate(() => window.centraid === undefined))
+    .toBe(true);
   await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
 }
 
@@ -435,13 +475,18 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
   const openReport = (label: string, s: OpenSummary, elapsedMs: number) => ({
     label,
     requestCount: s.sameOriginRequestCount,
+    // The all-origin count is published too, and budgeted: bytes are
+    // unmeasurable cross-origin here, but requests are not, and an app open
+    // that starts firing extra gateway round-trips must not be invisible just
+    // because the byte fences cannot see them.
+    totalRequestCount: s.requestCount,
     resourceTransferBytes: s.sameOriginTransferBytes,
     // Structurally 0 for an inline open — no navigation happens. Kept so the
     // report shape (and `grandTotalTransferBytes`, which every consumer reads)
     // stays stable across the served-app → inline-route change.
     navTransferBytes: s.navTransferBytes,
     grandTotalTransferBytes: openBytes(s),
-    // The weight fence (see OpenSummary): compressed body bytes, wire or cache.
+    // The weight fence (see OpenSummary): decoded body bytes, wire or cache.
     encodedBodyBytes: s.sameOriginEncodedBytes,
     elapsedMs,
     resources: s.resources
@@ -530,12 +575,18 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
   // every app-open ceiling below would then pass on an empty measurement.
   expect(
     cold.summary.sameOriginEncodedBytes,
-    "cold app open measured (>0 encoded bytes)"
-  ).toBeGreaterThan(0);
+    "cold app open measured (>=floor encoded bytes)"
+  ).toBeGreaterThanOrEqual(perfBudgets.appOpen.cold.minEncodedBytes);
   expect(
     cold.summary.sameOriginRequestCount,
     "cold app request count"
   ).toBeLessThanOrEqual(perfBudgets.appOpen.cold.maxRequests);
+  // All-origin count, including the byte-blind cross-origin gateway calls the
+  // same-origin byte fences cannot see.
+  expect(
+    cold.summary.requestCount,
+    "cold app all-origin request count"
+  ).toBeLessThanOrEqual(perfBudgets.appOpen.cold.maxTotalRequests);
   expect(
     cold.summary.sameOriginEncodedBytes,
     "cold app encoded bytes"
@@ -551,6 +602,10 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
     warm.summary.sameOriginRequestCount,
     "warm app request count"
   ).toBeLessThanOrEqual(perfBudgets.appOpen.warm.maxRequests);
+  expect(
+    warm.summary.requestCount,
+    "warm app all-origin request count"
+  ).toBeLessThanOrEqual(perfBudgets.appOpen.warm.maxTotalRequests);
   expect(
     warm.summary.sameOriginEncodedBytes,
     "warm app encoded bytes"

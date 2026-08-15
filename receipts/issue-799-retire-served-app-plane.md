@@ -150,7 +150,11 @@ than deleted. It now opens a bundled inline app (Tasks) from the palette and
 charges it the same-origin tail of the shell page's own resource timeline,
 proving the app *mounted* (`inline-app-view` visible, the Suspense fallback
 gone, `window.centraid` published) so a chunking change that ships a blank
-route cannot post the best numbers in the file. `collect()` grew a
+route cannot post the best numbers in the file. `goHome` now proves the app
+*unmounted* too: `nav[aria-label="Apps"]` renders inside `InlineAppRoute`'s
+own `ShellFrame`, so waiting on it alone was satisfied while the app was
+still up — and `window.centraid` stays installed until React unmounts, which
+made the warm re-open's liveness check pass on the cold open's residue. `collect()` grew a
 `sinceIndex`/`navigation` option to delta one window instead of reading two;
 the duplicated count-stable polling folded into `settleResourceTimeline()`,
 which retired a fixed sleep (`tests/sleep-inventory.json` 38 → 37).
@@ -221,6 +225,7 @@ deletions, renames, and this receipt:
 - `apps/mobile/src/screens/home/catalog.test.ts`
 - `apps/mobile/src/screens/home/catalog.ts`
 - `apps/web/src/web-host.ts`
+- `apps/web/tests/e2e/accessibility.spec.ts`
 - `apps/web/tests/e2e/perf-budgets.ts`
 - `apps/web/tests/e2e/perf-waterfall.spec.ts`
 - `apps/web/tests/e2e/web-pwa.spec.ts`
@@ -398,10 +403,41 @@ deletions, renames, and this receipt:
   regression ("an open must not go back to the network"); a new
   `maxEncodedBytes` over `encodedBodySize` (cold 120,000, warm 8,000) fences
   weight, since Cache Storage populates that field either way. It reads as
-  uncompressed weight because Cache Storage holds decoded bodies — noted
-  inline so nobody compares it to a wire figure. A cold-open anti-vacuity
-  assertion (`> 0` encoded bytes) was added so an empty measurement cannot
-  satisfy the ceilings.
+  **decoded (raw)** weight — Cache Storage holds decoded bodies, measured
+  directly: a 50,020-byte script served from the SW cache reports
+  `transferSize: 0, encodedBodySize: 50,020`. Brotli would put the same chunk
+  near a quarter of that, so re-seeding this ceiling off a compressed number
+  would set it ~4x too tight.
+- **The app-open assertions narrowed from all-origin to same-origin, which
+  the ratchet cannot see, so the scope change is disclosed and separately
+  fenced.** `main` asserted app-open requests and bytes over *all* origins;
+  the re-pointed spec asserts them over same-origin. That makes
+  `warm.maxRequests` 8 → 2 and both `maxTransferBytes` 20,000 → 8,000
+  measurements against a strictly smaller population, not the pure
+  tightenings their numbers suggest — `ratchet-floors.mjs` sees only the
+  number and would have waved it through. Same-origin is the right subject
+  (the harness gateway answers on another port with no Timing-Allow-Origin
+  header, so its calls report 0 bytes and would dilute the total), but on its
+  own it left cross-origin traffic unfenced, so a new `maxTotalRequests`
+  gates the all-origin count: cold 30, warm 14, from measured 20–24 and 6–9
+  over 13 runs. Cross-origin *bytes* remain unfenceable in this harness; that
+  is a limit of the rig, stated rather than papered over.
+- **The `> 0` anti-vacuity guard was replaced by a real floor.** `> 0` fences
+  only exactly zero, so it would not catch the realistic failure: a future
+  shell change modulepreloading the app chunk, or the bundling workstream
+  folding `app-inline` into `boot` (the stated goal in
+  `scripts/perf/README.md`), collapsing the cold delta to one incidental byte
+  while every ceiling still passes. `minEncodedBytes` (cold 90,000) is an
+  up-only ratchet — `ratchet-floors.mjs` already treats `min*` keys as floors
+  — so the rig cannot quietly stop measuring the app.
+- **The measurement had a 67 KB race, fixed rather than padded over.** The
+  mark is now taken after the palette's own chunks settle. Without that,
+  cold read 112,759 B with an occasional 179,759 B outlier as an in-flight
+  palette chunk was charged to the app open. Widening the ceiling to cover
+  the outlier would have bought a stable build at the cost of a budget that
+  fenced nothing; 13 runs now measure 112,759 B exactly. Getting the palette
+  open also moved outside the timed window, so its 30s retry poll can no
+  longer hard-fail a 15s timing ceiling on shell-startup jitter.
 - **The `appOpen` ceilings are seeded from a local build, not from CI.** The
   neighbouring shell ceilings carry an explicit note that they are
   CI-measured; these are not. The local environment matches CI's (same
@@ -598,11 +634,43 @@ CI remains the enforcing copy for all three.
 
 ## Audit
 
-Fresh-context sub-agent audits run per stage commit; the verdict below
-reflects the latest audited change set (stage 1: mobile WebView cover
-retirement).
+Fresh-context sub-agent audits run per stage slice, each instructed to refute
+rather than confirm.
 
-Verdict: PASS
+**Stage 1 — mobile WebView cover.** Verdict: PASS.
+
+**Stage 2 — client iframe, builder, gateway wiring.** Round 1: REFUTED, three
+substantive findings, all fixed before the commit — the `REPLICA_APP_PATHS`
+rationale was stated backwards (it was a restriction narrowing the retiring
+per-app session, not a dependency of the surviving one); the draft-preview
+scope item was checked off without being realized, when in fact the issue
+misidentifies the surface (corrected in Decisions, and the real one is stage
+3's); and the "complete" file inventory was one path short of the staged set.
+Two comments still citing the deleted `BuilderAutomationTriggers.tsx` were
+fixed with them.
+
+**Stage 2, perf slice.** Round 1: REFUTED, five findings, all fixed:
+1. `encodedBodySize` was called *compressed* in five places, including the
+   JSDoc on the very key the `approvedDeviation` introduces. It is decoded;
+   the auditor confirmed with a Chromium probe. A maintainer re-seeding off
+   "compressed" would have set the ceiling ~4x too tight.
+2. The assertions silently narrowed from all-origin to same-origin, which no
+   ratchet can detect — two ceilings presented as tightenings were measured
+   against a smaller population, leaving cross-origin request growth
+   completely unfenced. Disclosed in the ledger and fenced by a new
+   `maxTotalRequests`.
+3. The `> 0` anti-vacuity guard could not protect the weight ratchet it
+   guarded. Replaced with a `minEncodedBytes` floor.
+4. The warm open's mount proof was defeatable by the cold open's residue.
+   `goHome` now asserts unmount.
+5. Stale prose (`openBytes`, the summarizer's `NaN KB` on pre-#799 reports)
+   plus the last live `iframe[title="app"]` selector in the tree, a dead axe
+   `.exclude()` in `accessibility.spec.ts`.
+
+The auditor separately reproduced 112,759 B byte-exactly from the dist,
+confirmed the ratchet sees exactly one widen, and could not refute the
+"ninth entry — the sqlite worker, 0 encoded bytes" claim it had flagged as a
+likely fabrication: SW-served, that worker genuinely reports 0.
 
 ## Session
 

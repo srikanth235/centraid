@@ -12,7 +12,7 @@
     },
     "apps/web/tests/e2e/perf-waterfall.spec.ts#1": {
       "kind": "static-skip",
-      "line": 762,
+      "line": 817,
       "snippet": "test.skip(",
       "issue": 781,
       "reason": "The iroh request counter only exists in a freshly built bundle; the assertion self-skips against a stale dist instead of failing, which is why this owner cannot back a solid cell (originally #656)."
@@ -159,7 +159,7 @@
     },
     "tests/perf/pwa-waterfall.perf.test.ts#1": {
       "kind": "conditional-skip",
-      "line": 68,
+      "line": 71,
       "snippet": "test.skipIf(!waterfall)(",
       "issue": 790,
       "reason": "The rig consumes a waterfall report published by the nightly web-e2e job; a missing input is a hard failure under CI and a local skip otherwise (rig lane split to #790 by #781; originally #659)."

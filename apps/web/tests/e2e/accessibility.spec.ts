@@ -139,13 +139,7 @@ test("the connected Home shell has no WCAG A/AA violations", async ({
   // onboarding so the reload lands on Home rather than the connect screen.
   await connectPwa(page);
 
-  const results = await new AxeBuilder({ page })
-    .withTags(WCAG_TAGS)
-    // The sandboxed app iframe is a separate document owned by the app under
-    // test, not by the shell; scanning it here would blame the shell's cell
-    // for a fixture app's markup.
-    .exclude('iframe[title="app"]')
-    .analyze();
+  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
   expect(
     results.violations,
     describeViolations(results.violations)
@@ -162,9 +156,9 @@ test("a first-party blueprint has no WCAG A/AA violations in its real renderer",
     page.getByRole("heading", { name: "Docs" }).first()
   ).toBeVisible();
 
-  // First-party apps render inline through the shared kit rather than through
-  // the custom-app iframe. The page scan therefore exercises the actual Docs
-  // tree alongside its hosting shell.
+  // Apps render as inline routes in the shell document (#799 retired the
+  // served-app iframe), so a plain page scan reaches the actual Docs tree
+  // alongside its hosting shell — no frame traversal, and nothing to exclude.
   const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
   expect(
     results.violations,
