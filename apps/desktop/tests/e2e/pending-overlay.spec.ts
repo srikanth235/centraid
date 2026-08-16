@@ -146,12 +146,15 @@ async function prepareAgenda(page: Page): Promise<string> {
             ]);
             return { upcoming, parties };
           });
-          return true;
+          return Boolean(
+            setup?.upcoming.calendars[0]?.calendar_id &&
+            setup.parties.parties.some((party) => party.is_you)
+          );
         } catch {
           return false;
         }
       },
-      { timeout: 30_000 }
+      { timeout: 60_000 }
     )
     .toBe(true);
   // Propose can land while the replica is still re-bootstrapping after
@@ -182,7 +185,7 @@ async function prepareAgenda(page: Page): Promise<string> {
         }, setup!);
         return prepared.status;
       },
-      { timeout: 30_000 }
+      { timeout: 60_000, intervals: [2_000] }
     )
     .toBe("executed");
   expect(prepared?.eventId).toEqual(expect.any(String));
@@ -196,6 +199,8 @@ test("production Tally, Tasks, People, and Agenda pending rows survive an offlin
   try {
     await foundDesktop(page);
     const groupId = await prepareTally(page);
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await expect(page.getByTestId("inline-app-view")).toHaveCount(0);
     const eventId = await prepareAgenda(page);
 
     // Warm each production inline bundle before the browser context loses its
