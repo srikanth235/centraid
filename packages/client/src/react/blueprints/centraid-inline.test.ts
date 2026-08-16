@@ -853,4 +853,28 @@ describe(installInlineCentraid, () => {
     teardown();
     expect(target.centraid).toBe("prior");
   });
+
+  it("does not restore a remounted client's predecessor after the live mount tears down", () => {
+    const session = fakeSession();
+    const target: { centraid?: unknown } = {};
+    const first = installInlineCentraid({
+      appId: "tasks",
+      session,
+      queries: noQueries,
+      target,
+    });
+    const firstClient = target.centraid;
+    const second = installInlineCentraid({
+      appId: "tasks",
+      session,
+      queries: noQueries,
+      target,
+    });
+    const secondClient = target.centraid;
+    expect(secondClient).not.toBe(firstClient);
+    first();
+    expect(target.centraid).toBe(secondClient);
+    second();
+    expect(target.centraid).toBeUndefined();
+  });
 });

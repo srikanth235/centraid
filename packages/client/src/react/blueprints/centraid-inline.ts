@@ -1005,6 +1005,11 @@ export interface InstallInlineCentraidOptions extends CreateInlineCentraidOption
   onInstalled?: (client: InlineCentraidClient) => void;
 }
 
+const installStacks = new WeakMap<
+  object,
+  { stack: unknown[]; original: unknown }
+>();
+
 /** Install `window.centraid` for one inline app mount; returns the teardown. */
 export function installInlineCentraid(
   options: InstallInlineCentraidOptions
@@ -1012,14 +1017,26 @@ export function installInlineCentraid(
   const target = (options.target ?? (window as unknown)) as {
     centraid?: unknown;
   };
-  const previous = target.centraid;
   const client = createInlineCentraidClient(options);
+  const held = installStacks.get(target) ?? {
+    stack: [],
+    original: target.centraid,
+  };
+  held.stack.push(client);
+  installStacks.set(target, held);
   target.centraid = client;
   options.onInstalled?.(client);
   return () => {
-    // Only restore if we are still the installed client: a remount (a new scope
-    // set) installs its own client first, and clobbering that with a stale
-    // `previous` would leave the fresh mount without a client at all.
-    if (target.centraid === client) target.centraid = previous;
+    // Scope-set remounts install the new client before the old mount's
+    // cleanup runs. A last-writer `previous` restore then puts the stale
+    // client back on `window` after the live mount unmounts (Home), so
+    // goHome's `window.centraid === undefined` poll hangs. The stack is the
+    // live installs; teardown publishes the remaining top, or the original.
+    const current = installStacks.get(target);
+    if (!current) return;
+    const index = current.stack.lastIndexOf(client);
+    if (index >= 0) current.stack.splice(index, 1);
+    target.centraid = current.stack.at(-1) ?? current.original;
+    if (current.stack.length === 0) installStacks.delete(target);
   };
 }
