@@ -1,6 +1,6 @@
 /*
  * Renderer-side client for the gateway's storage-connection surface (issue
- * #367 §C1/§D — `packages/gateway/src/routes/storage-routes.ts`). Backs the
+ * #367 §C1/§D — `packages/server/src/routes/storage-routes.ts`). Backs the
  * Gateway page's Storage card (read-only: status + usage) and the Settings
  * → Storage screen (full CRUD + test + the per-vault attach flow).
  *

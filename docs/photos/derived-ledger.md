@@ -30,7 +30,7 @@ The automation fire gate checks the owner's `enrich_policy` tier before model wo
 
 ## sqlite-vec: two rules
 
-The vault open path exposes a `loadExtensions` hook ([`packages/vault/src/db.ts`](../../packages/vault/src/db.ts), following the `previewCodec` injection precedent — `packages/vault` itself stays dependency-light), and the gateway injects [`packages/gateway/src/enrich/sqlite-vec.ts`](../../packages/gateway/src/enrich/sqlite-vec.ts). Two rules hold:
+The vault open path exposes a `loadExtensions` hook ([`packages/vault/src/db.ts`](../../packages/vault/src/db.ts), following the `previewCodec` injection precedent — `packages/vault` itself stays dependency-light), and the gateway injects [`packages/server/src/enrich/sqlite-vec.ts`](../../packages/server/src/enrich/sqlite-vec.ts). Two rules hold:
 
 1. **Re-disable immediately after loading.** `enableLoadExtension(true)` → `loadExtension(...)` → `enableLoadExtension(false)`, with the revoke in a `finally` so even a half-load closes the door. The owner's `vault_sql` surface runs SQL against this same handle, and `load_extension()` must never be reachable from it.
 2. **Loading is per-connection, in the open path.** `DatabaseProvider` handles may resolve to a _different_ connection across vault switches; a one-time boot-step load would silently yield a vec-less handle after a switch.
@@ -70,8 +70,8 @@ A third rebuildable projection beside the phash `cluster_id`, same mold exactly:
 - [`packages/vault/src/schema/enrich.ts`](../../packages/vault/src/schema/enrich.ts) — DDL for `enrich_embedding`, `enrich_request`, `enrich_policy`, `media_asset_phash`.
 - [`packages/blueprints/automations`](../../packages/blueprints/automations) — recognition handlers.
 - [recognition automations](../recognition-automations.md) — the model-execution and local-asset design.
-- [`packages/gateway/src/enrich/sqlite-vec.ts`](../../packages/gateway/src/enrich/sqlite-vec.ts) — sqlite-vec extension lifecycle for semantic search.
-- [`packages/automation/src/fire/enrich-gate.ts`](../../packages/automation/src/fire/enrich-gate.ts) — tier ordering and consent scopes.
+- [`packages/server/src/enrich/sqlite-vec.ts`](../../packages/server/src/enrich/sqlite-vec.ts) — sqlite-vec extension lifecycle for semantic search.
+- [`packages/server/src/automation/fire/enrich-gate.ts`](../../packages/server/src/automation/fire/enrich-gate.ts) — tier ordering and consent scopes.
 - [`packages/vault/src/enrich/model-id.ts`](../../packages/vault/src/enrich/model-id.ts) — the `<name>@<version>` model-identity convention.
 - [`packages/vault/src/enrich/similarity.ts`](../../packages/vault/src/enrich/similarity.ts) — the brute-force cosine fallback ranker.
 - [`packages/vault/src/enrich/memories.ts`](../../packages/vault/src/enrich/memories.ts) — Memories v0's rebuild sweep.

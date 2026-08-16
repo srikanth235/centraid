@@ -18,7 +18,7 @@
  * resolver picks bundle-or-cache per template by higher semver version.
  *
  * Depends only on `@centraid/design` — no engine, no store. Consumed by
- * `@centraid/gateway` (lifecycle routes) and `@centraid/automation` (the
+ * `@centraid/server` (lifecycle routes) and `@centraid/server/automation` (the
  * `ScaffoldFile` contract for automation scaffolding).
  *
  * Catalog surface:
@@ -219,7 +219,7 @@ function compareSemver(a: string, b: string): number {
 }
 
 // ---------------------------------------------------------------------------
-// Template clone + app metadata edits (moved out of @centraid/app-engine in
+// Template clone + app metadata edits (moved out of @centraid/server/engine in
 // #151). The gateway lifecycle routes use the file-map (`*Files`) variants;
 // the disk wrappers back the local paths.
 // ---------------------------------------------------------------------------

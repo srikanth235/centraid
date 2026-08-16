@@ -8,9 +8,9 @@
 // plus `: <comment>\n\n` banner/heartbeat frames and a closing
 // `event: end\ndata: {}\n\n`. We read the type off the parsed JSON (robust to
 // the `end` frame, whose `{}` has no `type`), matching driveTurnOverSse's
-// serialization in packages/app-engine/src/http/turn-sse.ts.
+// serialization in packages/server/src/engine/http/turn-sse.ts.
 //
-// `TurnStreamEvent` mirrors `@centraid/app-engine`'s union (packages/app-engine/
+// `TurnStreamEvent` mirrors `@centraid/server/engine`'s union (packages/server/
 // src/conversation/runner.ts); it is declared here rather than imported so the
 // browser client carries no Node package dependency.
 

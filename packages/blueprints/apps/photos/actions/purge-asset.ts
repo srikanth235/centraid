@@ -7,7 +7,7 @@
  * copy must go first, so its record of where it came from never becomes a
  * lie. Risk high; the confirmation is the caller's, before this fires.
  *
- * @type {import('@centraid/app-engine').ActionHandler}
+ * @type {import('@centraid/server/engine').ActionHandler}
  */
 export default async function purgeAsset({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;

@@ -7,7 +7,7 @@
  * downtime-alert gap: poll a cheap gateway route, fire an OS notification
  * on what's new. The gateway's `/centraid/_reminders/due` is deliberately
  * stateless (recomputed live from `remind_before_min`/`reminders_json` each
- * call — see packages/gateway/src/reminders/due-reminders.ts); THIS module
+ * call — see packages/server/src/reminders/due-reminders.ts); THIS module
  * owns "have I already notified for this one" — an in-memory, per-launch
  * Set of reminder keys, pruned so a long-running process doesn't grow it
  * forever.

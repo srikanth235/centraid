@@ -1,6 +1,6 @@
 # Experience budgets (issue #659 R2)
 
-One file per shipping surface, written in **what the vault owner feels** — not in what the machine spends. A ceiling here answers "how long until I can use it", never "how many bytes did we transfer". The byte/request/CPU ceilings still exist and still gate; they live in [`apps/web/tests/e2e/perf-budgets.ts`](../../apps/web/tests/e2e/perf-budgets.ts), [`packages/gateway/benchmarks/low-end-budgets.json`](../../packages/gateway/benchmarks/low-end-budgets.json) and [`tests/quality-rig-budgets.json`](../quality-rig-budgets.json). This directory is the layer above them: the same regressions, stated as symptoms.
+One file per shipping surface, written in **what the vault owner feels** — not in what the machine spends. A ceiling here answers "how long until I can use it", never "how many bytes did we transfer". The byte/request/CPU ceilings still exist and still gate; they live in [`apps/web/tests/e2e/perf-budgets.ts`](../../apps/web/tests/e2e/perf-budgets.ts), [`packages/server/benchmarks/low-end-budgets.json`](../../packages/server/benchmarks/low-end-budgets.json) and [`tests/quality-rig-budgets.json`](../quality-rig-budgets.json). This directory is the layer above them: the same regressions, stated as symptoms.
 
 | File                           | Surface                                   |
 | ------------------------------ | ----------------------------------------- |

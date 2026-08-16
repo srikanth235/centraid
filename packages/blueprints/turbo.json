@@ -4,6 +4,9 @@
   "tasks": {
     "build": {
       "outputs": ["dist/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build", "@centraid/server#build"]
     }
   }
 }

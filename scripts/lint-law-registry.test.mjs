@@ -18,7 +18,7 @@ import test from "node:test";
 import { checkLawRegistry, collectLawTags } from "./lint-law-registry.mjs";
 
 const OWNER = "packages/backup/src/engine.test.ts";
-const OTHER = "packages/gateway/src/backup/backup-service.contract.test.ts";
+const OTHER = "packages/server/src/backup/backup-service.contract.test.ts";
 
 function fixture(t, files) {
   const root = mkdtempSync(path.join(tmpdir(), "centraid-law-registry-"));

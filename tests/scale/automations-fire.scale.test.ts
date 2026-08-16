@@ -15,7 +15,7 @@ import { describe, expect, test } from "vitest";
  */
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
-import { computeMissedWindows } from "../../packages/automation/src/fire/scheduler-ledger.js";
+import { computeMissedWindows } from "../../packages/server/src/automation/fire/scheduler-ledger.js";
 import { rigBudgetMs, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/automations-fire.scale.test.ts";

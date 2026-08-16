@@ -2,7 +2,7 @@ import React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
-import { describeRecurrence, expandRecurrence } from "@centraid/time-engine";
+import { describeRecurrence, expandRecurrence } from "@centraid/core/time";
 
 import { Text } from "../../kit/components/NativeText";
 import { t } from "../../kit/theme";

@@ -5,7 +5,7 @@
  * The handlers in this directory are the source; `bun run build:automations`
  * bundles them into `packages/blueprints/automations/<id>/automations/<id>/
  * handler.js`, which is what the runtime actually executes and what
- * `packages/automation/src/manifest/enricher-templates.test.ts` drives. If the
+ * `packages/server/src/automation/manifest/enricher-templates.test.ts` drives. If the
  * committed bundle stops being the build of the committed source, that suite
  * keeps passing while it tests a program nobody can produce again — and the
  * source-level suites here would be testing code that never ships.

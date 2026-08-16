@@ -10,8 +10,8 @@
 // (`VaultSchemaAheadError`, thrown when a file's version exceeds what this
 // build's ladder knows how to reach) and it is the "schema version this
 // build understands" reported by the gateway's backup/recovery provenance
-// (`packages/gateway/src/backup/backup-service.ts`,
-// `packages/gateway/src/backup/recover-internals.ts` read
+// (`packages/server/src/backup/backup-service.ts`,
+// `packages/server/src/backup/recover-internals.ts` read
 // `VAULT_MIGRATIONS.length`). The ladder mechanism earns its keep even at
 // one rung; the next post-release migration is a second array element away.
 

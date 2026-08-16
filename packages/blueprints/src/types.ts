@@ -40,7 +40,7 @@ export interface AppKnobsManifest {
  * The seat profile block (docs/blueprint-seats.md, decisions S1/S2/S5),
  * bundled from a template's `app.json#seats` the same way `appKnobs` is
  * bundled from `app.json#knobs` — see `scripts/build-manifest.mjs`. Mirrors
- * `@centraid/app-engine`'s `ManifestSeatsBlock`; duplicated here (rather
+ * `@centraid/server/engine`'s `ManifestSeatsBlock`; duplicated here (rather
  * than imported) because blueprints must never depend on app-engine at the
  * package-manifest layer.
  */

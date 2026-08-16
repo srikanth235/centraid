@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { GATEWAY_PROTOCOL_VERSION } from "@centraid/protocol";
+import { GATEWAY_PROTOCOL_VERSION } from "@centraid/core/protocol";
 
 import { GW_PAIR_ALPN } from "./gateway-endpoint.js";
 import {

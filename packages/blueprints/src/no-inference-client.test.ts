@@ -44,7 +44,7 @@ const SOURCE_DIRS = ["apps", "automations", "scripts", "src", "types"] as const;
 // one check for one rule beats two that drift.
 const EXTRA_ROOTS = [
   path.resolve(PACKAGE_ROOT, "../../apps/mobile/src"),
-  path.resolve(PACKAGE_ROOT, "../automation/src"),
+  path.resolve(PACKAGE_ROOT, "../server/src/automation"),
 ] as const;
 
 // Known third-party inference/provider SDK package names (and their scoped

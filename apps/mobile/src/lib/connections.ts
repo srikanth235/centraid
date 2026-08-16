@@ -8,7 +8,7 @@
 // summary read does.
 //
 // The list endpoint answers in the DB's raw snake_case column shape (see
-// `listConnections` in `packages/gateway/src/routes/connections-routes.ts`) —
+// `listConnections` in `packages/server/src/routes/connections-routes.ts`) —
 // this module maps it onto camelCase once, at the boundary, so no screen ever
 // sees a wire name. The mapping and the field set are the same call
 // `packages/client/src/gateway-client-connections.ts` makes for the shell;

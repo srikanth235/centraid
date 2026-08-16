@@ -67,8 +67,8 @@ describe("run", () => {
 
 describe("workspaceDirOf", () => {
   test("maps packages/ and apps/ sources to their workspace dir", () => {
-    expect(workspaceDirOf("packages/gateway/src/serve/build-gateway.ts")).toBe(
-      "packages/gateway"
+    expect(workspaceDirOf("packages/server/src/serve/build-gateway.ts")).toBe(
+      "packages/server"
     );
     expect(workspaceDirOf("apps/mobile/src/lib/upload/enqueue.ts")).toBe(
       "apps/mobile"
@@ -146,9 +146,9 @@ describe("projectNameOf", () => {
 describe("vitestProjectNames", () => {
   test("adds the React Native transform companion to the mobile package", () => {
     expect(
-      vitestProjectNames(["@centraid/gateway", "@centraid/mobile"])
+      vitestProjectNames(["@centraid/server", "@centraid/mobile"])
     ).toStrictEqual([
-      "@centraid/gateway",
+      "@centraid/server",
       "@centraid/mobile",
       "@centraid/mobile-rn",
     ]);

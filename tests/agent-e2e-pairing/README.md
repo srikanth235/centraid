@@ -17,7 +17,7 @@ The first two run gateway + device as plain processes on the same host with the 
 
 That's the whole loop for the first two flows. The harness:
 
-1. Runs a scoped build (`turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel`, dependency graph included) if `packages/gateway/dist` or `packages/tunnel/dist` is missing (turbo-cached, cheap when fresh).
+1. Runs a scoped build (`turbo run build --filter=@centraid/server --filter=@centraid/tunnel`, dependency graph included) if `packages/server/dist` or `packages/tunnel/dist` is missing (turbo-cached, cheap when fresh).
 2. Creates `runs/<flow>-<timestamp>/workspace/gateway/` as the daemon's `--data-dir` — every run is a factory-fresh gateway.
 3. Spawns `centraid-gateway serve`, waits for the HTTP listener + iroh endpoint identity, streams daemon output to `runs/<runId>/gateway.log`.
 4. Runs the flow body with a `ctx` of ceremony verbs (see below).
@@ -72,8 +72,8 @@ tests/agent-e2e-pairing/
 
 | Layer | What it proves |
 | --- | --- |
-| `packages/gateway/src/serve/device-plane.test.ts` | durable `gateway.db` grant/enrollment semantics |
-| `packages/gateway/src/cli/admin.test.ts` | CLI arg parsing + in-process command output |
+| `packages/server/src/serve/device-plane.test.ts` | durable `gateway.db` grant/enrollment semantics |
+| `packages/server/src/cli/admin.test.ts` | CLI arg parsing + in-process command output |
 | `packages/tunnel/src/gateway-endpoint.test.ts` | iroh ALPN protocol against FAKE stores |
 | `device-pairing-lifecycle` / `pairing-ticket-hygiene` | the real ceremony across real processes, loopback transport. `device-pairing-lifecycle` also owns the `gateway.journey` matrix cell since #603: fresh daemon auto-founds one marked `Personal` vault, and a ticket for it is minted and redeemed |
 | `cross-network-relay` | the same ceremony over the real n0 relay/hole-punch transport |

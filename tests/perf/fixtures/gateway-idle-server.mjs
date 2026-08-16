@@ -7,7 +7,7 @@
 // window (≥5 s, longer than the ~1 s idle-poll period the low-end audit flagged)
 // and hands the deltas back over IPC. That is portable (darwin + Linux) and
 // honest: it measures exactly the process whose idle timers we care about.
-import { serve } from "../../../packages/gateway/dist/index.js";
+import { serve } from "../../../packages/server/dist/index.js";
 
 const root = process.argv[2];
 if (!root) throw new Error("gateway idle fixture needs a root directory");

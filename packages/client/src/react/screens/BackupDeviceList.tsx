@@ -20,7 +20,7 @@ import styles from "./BackupCard.module.css";
 // never needed representing before an owner needed to reason about them as
 // backup surface. Both columns fall back to honest "not reported" copy
 // instead of a guessed number; closing the seam is enrollment-plane work
-// (`packages/gateway/src/routes/devices-routes.ts`), not a client reshape.
+// (`packages/server/src/routes/devices-routes.ts`), not a client reshape.
 
 function lastSeenLabel(iso: string | undefined, now: number): string {
   if (!iso) return "never";

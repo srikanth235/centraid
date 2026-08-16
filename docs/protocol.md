@@ -132,7 +132,7 @@ ok iff peer.protocolVersion >= local.minSupported
 
 Product skew (desktop 0.6 talking to gateway labeled 0.4) is **allowed** when protocol matches. Surfaces may skip shipping a product version without breaking connect.
 
-Constants live in `@centraid/protocol` (`GATEWAY_VERSION`, `GATEWAY_PROTOCOL_VERSION`, `GATEWAY_MIN_PROTOCOL_VERSION`).
+Constants live in `@centraid/core/protocol` (`GATEWAY_VERSION`, `GATEWAY_PROTOCOL_VERSION`, `GATEWAY_MIN_PROTOCOL_VERSION`).
 
 `GATEWAY_PROTOCOL_VERSION` and `GATEWAY_MIN_PROTOCOL_VERSION` both moved to `3` for the member→owner wire rename (#726 P0 — ownership replaces roles) — a hard floor bump, no COMPAT window; an old client sees the update wall. See [decisions.md](decisions.md).
 
@@ -140,9 +140,9 @@ Constants live in `@centraid/protocol` (`GATEWAY_VERSION`, `GATEWAY_PROTOCOL_VER
 
 ### A second, independent handshake: the peer plane (issue #726 P3)
 
-Two owners' gateways speaking directly over a link (see [ARCHITECTURE.md](../ARCHITECTURE.md#vault-ownership-and-sharing-726) and [SECURITY.md](../SECURITY.md#the-peer-plane-726-p3)) are not the gateway↔client relationship the numbers above govern, so they get their own version pair rather than reusing `GATEWAY_PROTOCOL_VERSION`: `PEER_PROTOCOL_VERSION` / `PEER_MIN_PROTOCOL_VERSION` in `packages/protocol/src/version.ts`, currently `1` / `1`. The two pairs are deliberately uncoupled — two linked gateways upgrade their peer protocol on their own owners' schedules, independent of whatever protocol version each speaks to its own clients.
+Two owners' gateways speaking directly over a link (see [ARCHITECTURE.md](../ARCHITECTURE.md#vault-ownership-and-sharing-726) and [SECURITY.md](../SECURITY.md#the-peer-plane-726-p3)) are not the gateway↔client relationship the numbers above govern, so they get their own version pair rather than reusing `GATEWAY_PROTOCOL_VERSION`: `PEER_PROTOCOL_VERSION` / `PEER_MIN_PROTOCOL_VERSION` in `packages/core/src/protocol/version.ts`, currently `1` / `1`. The two pairs are deliberately uncoupled — two linked gateways upgrade their peer protocol on their own owners' schedules, independent of whatever protocol version each speaks to its own clients.
 
-`judgePeerHandshake` (`packages/protocol/src/peer.ts`) implements the same C1 two-contract shape as the client handshake, applied to a peer instead: parse always succeeds, then the mutual version window is judged, then either the link forms or the peer sees exactly one typed refusal (`protocol_refused`) — never a parse error, never a silent downgrade. It is a hard floor with no COMPAT shim, consistent with the rest of #726's no-fallback posture. One detail worth naming because it is easy to get backwards: the peer-plane link **ceremony** judges this version window _before_ a presented link ticket is looked up or touched at all, so a peer running an incompatible protocol cannot burn a real ticket by attempting redemption and failing the handshake.
+`judgePeerHandshake` (`packages/core/src/protocol/peer.ts`) implements the same C1 two-contract shape as the client handshake, applied to a peer instead: parse always succeeds, then the mutual version window is judged, then either the link forms or the peer sees exactly one typed refusal (`protocol_refused`) — never a parse error, never a silent downgrade. It is a hard floor with no COMPAT shim, consistent with the rest of #726's no-fallback posture. One detail worth naming because it is easy to get backwards: the peer-plane link **ceremony** judges this version window _before_ a presented link ticket is looked up or touched at all, so a peer running an incompatible protocol cannot burn a real ticket by attempting redemption and failing the handshake.
 
 Everything on `/centraid/_peer/*` is gateway↔GATEWAY. No client, phone, or browser ever speaks it, and `packages/tunnel/fixtures/wire-golden.json` — the Swift/Kotlin client conformance fixture — was deliberately left unchanged when the peer plane landed: a phone has no links, so adding the peer ALPN there would falsely tell mobile it owes an implementation.
 
@@ -157,7 +157,7 @@ Until 1.0:
 
 ## RPC / API naming (`/centraid/_*` planes)
 
-Issue #504 batch 1. **Mechanical:** route constants live in `@centraid/protocol`; `scripts/lint-protocol-routes.mjs` (via `check:pr`) flags hard-coded known paths in extension + product CLI.
+Issue #504 batch 1. **Mechanical:** route constants live in `@centraid/core/protocol`; `scripts/lint-protocol-routes.mjs` (via `check:pr`) flags hard-coded known paths in extension + product CLI.
 
 ### Plane scheme (de-facto, freeze carefully)
 
@@ -183,13 +183,13 @@ Handler invocation is **not** a plane — it is addressed under the invoking app
 | `GET /centraid/<appId>/_describe` | `centraid_describe` | — | Returns the app's manifest; `?action=<name>`/`?query=<name>` narrows to one handler. |
 | `POST /centraid/<appId>/_turn` | — | conversation turn | Opens the app's SSE conversation stream; `appTurnPath`. |
 
-The `/centraid/_tool/centraid_*` shim these replaced was deleted outright — v0 ships no dual-route compat window ([decisions.md](decisions.md)). Path builders `appActionPath` / `appQueryPath` / `appDescribePath` / `appTurnPath` live in `@centraid/protocol`, alongside the vault-plane `assistantTurnPath` / `assistantResolvePath`. The persisted-conversation family (`/_centraid-conversations/apps/<appId>/…`) is a flat top-level name that rule 1 below forbids for new protocol entries, so its builders stay in `packages/client/src/conversation-routes.ts`. Auth, consent, vault scoping (`x-centraid-vault`), Companion grants, and browser-session scoping are unchanged — the reshape moved routing keys from the body into the path but kept every gate.
+The `/centraid/_tool/centraid_*` shim these replaced was deleted outright — v0 ships no dual-route compat window ([decisions.md](decisions.md)). Path builders `appActionPath` / `appQueryPath` / `appDescribePath` / `appTurnPath` live in `@centraid/core/protocol`, alongside the vault-plane `assistantTurnPath` / `assistantResolvePath`. The persisted-conversation family (`/_centraid-conversations/apps/<appId>/…`) is a flat top-level name that rule 1 below forbids for new protocol entries, so its builders stay in `packages/client/src/conversation-routes.ts`. Auth, consent, vault scoping (`x-centraid-vault`), Companion grants, and browser-session scoping are unchanged — the reshape moved routing keys from the body into the path but kept every gate.
 
 ### Rules
 
 1. **No new flat names** under `/centraid/<word>` without a plane underscore segment and a migration plan. (`<appId>` is a path parameter, not a reserved word — it addresses the app's own surface.)
 2. Request/response pairs stay under one plane; do not invent parallel `/v2` trees without epoch bump.
-3. Clients import `ROUTES` (and the app-path builders) from `@centraid/protocol` rather than string-copying paths.
+3. Clients import `ROUTES` (and the app-path builders) from `@centraid/core/protocol` rather than string-copying paths.
 4. Wire schemas stay structural (C3); normalization is a named post-pass.
 
 ### Blueprint-readiness feature contracts (#630)
@@ -214,4 +214,4 @@ Do not treat the live stream as the sole source of truth after a gap — re-fetc
 - [decisions.md](decisions.md) — C1, F1
 - [SECURITY.md](../SECURITY.md) — transport trust boundaries
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — gateway HTTP surface
-- `@centraid/protocol` — version, capabilities, route constants
+- `@centraid/core/protocol` — version, capabilities, route constants

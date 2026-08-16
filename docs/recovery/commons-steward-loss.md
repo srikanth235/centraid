@@ -1,6 +1,6 @@
 # Recovery: a Commons steward is gone
 
-When the single steward vault of a shared space (Commons plane, issue #731/#750) stops answering — lost device, wiped machine, person unreachable — and the group needs to keep going. Product paths: `packages/vault/src/share/commons-recovery.ts` (the ceremony), `packages/gateway/src/routes/commons-recovery-routes.ts` (the doors), `packages/gateway/src/serve/commons-recovery-invites.ts` (delivery), `packages/gateway/src/serve/commons-notices.ts` (the card that starts this).
+When the single steward vault of a shared space (Commons plane, issue #731/#750) stops answering — lost device, wiped machine, person unreachable — and the group needs to keep going. Product paths: `packages/vault/src/share/commons-recovery.ts` (the ceremony), `packages/server/src/routes/commons-recovery-routes.ts` (the doors), `packages/server/src/serve/commons-recovery-invites.ts` (delivery), `packages/server/src/serve/commons-notices.ts` (the card that starts this).
 
 ## Invariants (do not violate while recovering)
 

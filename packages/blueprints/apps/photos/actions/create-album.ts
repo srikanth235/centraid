@@ -1,7 +1,7 @@
 /**
  * Start a new album through media.create_album. Risk low.
  *
- * @type {import('@centraid/app-engine').ActionHandler}
+ * @type {import('@centraid/server/engine').ActionHandler}
  */
 export default async function createAlbum({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;

@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_GATEWAY_CAPABILITIES } from "@centraid/protocol";
+import { DEFAULT_GATEWAY_CAPABILITIES } from "@centraid/core/protocol";
 
 import type * as TypeImport_1mc1xey from "./App.js";
 

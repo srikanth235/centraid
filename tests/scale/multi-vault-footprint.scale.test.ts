@@ -32,7 +32,7 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
  * that ceiling in aggregate.
  *
  * Asserted against the `openVaultDb` contract, NOT against the gateway plane
- * layer: `packages/gateway/src/serve/vault-plane.ts` is concurrently gaining a
+ * layer: `packages/server/src/serve/vault-plane.ts` is concurrently gaining a
  * host-level total, and a rig pinned to a moving seam measures the seam rather
  * than the property.
  *

@@ -1,8 +1,8 @@
 // Renderer-side transport for the gateway's edge/ask surface (#726 P2/P4 —
-// `packages/gateway/src/routes/edges-routes.ts` and `edge-answer-routes.ts`),
+// `packages/server/src/routes/edges-routes.ts` and `edge-answer-routes.ts`),
 // mirroring `links-transport.ts`'s shape. Mobile's own People/Sharing screen
 // data source, independent of any one app mount.
-import { ROUTES } from "@centraid/protocol";
+import { ROUTES } from "@centraid/core/protocol";
 
 import { authHeader } from "../gateway";
 

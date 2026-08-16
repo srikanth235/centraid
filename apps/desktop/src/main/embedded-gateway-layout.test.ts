@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { describe, afterEach, expect, test } from "vitest";
 
-import { serve } from "@centraid/gateway";
+import { serve } from "@centraid/server";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { aesGcmKeyProtector, KeyStore } from "@centraid/vault";

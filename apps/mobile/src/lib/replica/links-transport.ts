@@ -1,5 +1,5 @@
 // Renderer-side transport for the gateway's link surface (#726 P2/P3 —
-// `packages/gateway/src/routes/vault-links-routes.ts`), mirroring
+// `packages/server/src/routes/vault-links-routes.ts`), mirroring
 // `placement-transport.ts`'s shape. Mobile's own People/Sharing screen data
 // source — a link is the ceremony a cross-owner edge needs before it may
 // cross, same-machine or across the world alike (D3).

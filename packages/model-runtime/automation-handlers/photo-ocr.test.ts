@@ -1,7 +1,7 @@
 /*
  * Source-level contract for the OCR recognition handler (#781).
  *
- * `packages/automation/src/manifest/enricher-templates.test.ts` owns the
+ * `packages/server/src/automation/manifest/enricher-templates.test.ts` owns the
  * bundled copy's spine: the deterministic batch write and re-arm, seeding from
  * an existing stamp, the born-digital PDF path against the real pdf.js, and
  * the delegate turn's box stripping plus ACP identity stamp. This file owns

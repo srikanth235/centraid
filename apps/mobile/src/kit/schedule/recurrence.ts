@@ -4,11 +4,11 @@ import {
   parseWallIso,
   shiftTemporal,
   wallEpoch,
-} from "@centraid/time-engine";
+} from "@centraid/core/time";
 import type {
   RecurrenceException,
   RecurrenceSemantics,
-} from "@centraid/time-engine";
+} from "@centraid/core/time";
 
 export interface AgendaEventModel {
   id: string;

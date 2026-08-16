@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Directive: gateway-engine-mode-agnostic - packages/app-engine/ must
+# Directive: gateway-engine-mode-agnostic - packages/server/ must
 # never branch on gateway mode. Mode-specific code belongs at the
 # entrypoints (apps/desktop/src/main/ for the embedded gateway,
 # packages/openclaw-plugin/src/ for the OpenClaw gateway). The "same
@@ -9,7 +9,7 @@
 # Detection: gateway-mode-discriminator identifiers (gatewayMode,
 # gatewayKind, isEmbeddedGateway, isOpenClawGateway, isLocalGateway,
 # isRemoteGateway, deploymentMode) appearing in any tracked
-# packages/app-engine/ source file. The pattern is intentionally
+# packages/server/ source file. The pattern is intentionally
 # narrow - it avoids flagging the unrelated `kind: 'openclaw'` adapter
 # discriminator (which is about agent runtime, not gateway mode) and
 # generic names like `isLocal` (which could legitimately mean "is local
@@ -34,6 +34,6 @@ while IFS=: read -r file line_no match; do
     has_waiver "$file" "$line_no" "gateway-engine-mode-agnostic" && continue
     ident=$(printf '%s' "$match" | grep -oE "$PATTERN" | head -1)
     violation "$file:$line_no - app-engine branches on gateway mode via '$ident' (move to apps/desktop/src/main/ or packages/openclaw-plugin/src/)"
-done < <(git grep -nE "$PATTERN" -- 'packages/app-engine/src/**/*.ts' 'packages/app-engine/src/**/*.tsx' 'packages/app-engine/src/**/*.js' ':!**/*.test.ts' ':!**/*.test.tsx' ':!**/*.spec.ts' ':!**/dist/**' 2>/dev/null || true)
+done < <(git grep -nE "$PATTERN" -- 'packages/server/src/engine/**/*.ts' 'packages/server/src/engine/**/*.tsx' 'packages/server/src/engine/**/*.js' ':!**/*.test.ts' ':!**/*.test.tsx' ':!**/*.spec.ts' ':!**/dist/**' 2>/dev/null || true)
 
 directive_end

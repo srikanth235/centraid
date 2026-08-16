@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { deflateRawSync, zstdCompressSync } from "node:zlib";
 
-import { cbsfFrameAad } from "@centraid/blob-format";
+import { cbsfFrameAad } from "@centraid/core/blob";
 
 import { deriveDataKey } from "../../backup/src/crypto.ts";
 import type { Keyring } from "../../backup/src/crypto.ts";

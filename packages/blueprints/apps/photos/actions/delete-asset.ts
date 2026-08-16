@@ -4,7 +4,7 @@
  * and the bytes soft-delete only when nothing else references them —
  * re-uploading the same file restores the photo. Risk low.
  *
- * @type {import('@centraid/app-engine').ActionHandler}
+ * @type {import('@centraid/server/engine').ActionHandler}
  */
 export default async function deleteAsset({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;

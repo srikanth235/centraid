@@ -23,7 +23,7 @@ test("one mobile path among non-mobile paths still triggers the run", () => {
   assert.equal(
     mobileAffected([
       "README.md",
-      "packages/gateway/src/x.ts",
+      "packages/server/src/x.ts",
       "apps/mobile/app.json",
     ]),
     true

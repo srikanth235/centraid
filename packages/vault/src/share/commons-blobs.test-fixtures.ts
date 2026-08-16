@@ -2,7 +2,7 @@
 //
 // Production never takes this path: a seat that is not on the steward's
 // filesystem pulls the snapshot's and the increment's bytes over the peer
-// plane (`packages/gateway/src/serve/peer-commons-client.ts`). These helpers
+// plane (`packages/server/src/serve/peer-commons-client.ts`). These helpers
 // exist so a test can put two real vaults on one disk and move exactly the
 // bytes a wire frame names — which is why they are filed as fixtures rather
 // than as a vault capability with no production caller.

@@ -1,7 +1,7 @@
 /**
  * Retitle an album through media.rename_album. Risk low.
  *
- * @type {import('@centraid/app-engine').ActionHandler}
+ * @type {import('@centraid/server/engine').ActionHandler}
  */
 export default async function renameAlbum({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;

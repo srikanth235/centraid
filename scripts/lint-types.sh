@@ -34,20 +34,15 @@ done < <(node scripts/lint-types-rules.mjs blueprint)
 # Every workspace with src/ and a TypeScript program. Keep this explicit list
 # so adding a workspace forces a conscious coverage decision.
 TARGETS=(
-  packages/agent-runtime
-  packages/app-engine
-  packages/automation
   packages/backup
-  packages/blob-format
   packages/blueprints
   packages/cli
   packages/client
+  packages/core
   packages/design
-  packages/gateway
   packages/model-runtime
-  packages/protocol
+  packages/server
   packages/test-kit
-  packages/time-engine
   packages/tunnel
   packages/vault
   apps/desktop

@@ -188,8 +188,21 @@ test("an offline write survives a reload and settles exactly once on reconnect",
   await setHarnessControlOnline(page, false);
   await page.getByRole("textbox", { name: "Task title" }).fill(TASK_TITLE);
   await page.getByRole("button", { name: "Today", exact: true }).click();
-  await page.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(page.getByText(TASK_TITLE, { exact: true })).toBeVisible();
+  // Severing the harness can race a replica rebootstrap ("not-bootstrapped")
+  // against the Add click. Retry the product control until the outbox
+  // projects the row — a single click that lands in the gap throws instead
+  // of queueing, and getByText never sees a list item.
+  const queuedRow = page.getByText(TASK_TITLE, { exact: true });
+  await expect
+    .poll(
+      async () => {
+        if (await queuedRow.isVisible()) return true;
+        await page.getByRole("button", { name: "Add", exact: true }).click();
+        return queuedRow.isVisible();
+      },
+      { timeout: 30_000 }
+    )
+    .toBe(true);
   await expect(page.locator(".kit-pending-chip")).toHaveText("queued");
 
   // The queued write is durable: a full reload while STILL offline must

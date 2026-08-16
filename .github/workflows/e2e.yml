@@ -234,14 +234,14 @@ jobs:
       - name: Build and start the tokenless mobile test gateway
         # Scoped to the gateway's dependency subgraph instead of a full
         # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.mjs imports only
-        # packages/gateway/dist, and turbo pulls every workspace dependency
+        # packages/server/dist, and turbo pulls every workspace dependency
         # (vault, app-engine, agent-runtime, automation, backup, blueprints,
         # tunnel, client, web, design) in transitively — nothing
         # the mobile job needs is dropped. The saving is narrow but real, and
         # comes almost entirely from dropping @centraid/desktop (skills and
         # data-plane folded into gateway/tunnel in #495).
         run: |
-          bun run turbo run build --filter=@centraid/gateway
+          bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
           nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
@@ -469,7 +469,7 @@ jobs:
         run: bun run turbo run build --filter=@centraid/mobile...
       - name: Build and start the tokenless mobile test gateway
         run: |
-          bun run turbo run build --filter=@centraid/gateway
+          bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
           nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
@@ -612,7 +612,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
-      - run: bun run turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: bun run turbo run build --filter=@centraid/server --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
       - run: node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -639,7 +639,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
-      - run: bun run turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: bun run turbo run build --filter=@centraid/server --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
       - run: node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -667,7 +667,7 @@ jobs:
         with:
           turbo-cache: "true"
       - run: docker info
-      - run: bun run turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: bun run turbo run build --filter=@centraid/server --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
       # Production must never silently fall back to the JS byte pump.
       - run: test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node

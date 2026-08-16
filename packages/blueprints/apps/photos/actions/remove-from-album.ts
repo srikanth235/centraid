@@ -2,7 +2,7 @@
  * Take a photo out of an album through media.remove_from_album; the photo
  * itself stays in the library. Risk low.
  *
- * @type {import('@centraid/app-engine').ActionHandler}
+ * @type {import('@centraid/server/engine').ActionHandler}
  */
 export default async function removeFromAlbum({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;

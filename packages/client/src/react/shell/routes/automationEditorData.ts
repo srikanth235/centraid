@@ -46,7 +46,7 @@ const DEFAULT_EDITOR_LOAD: AutomationEditorLoadResult = {
  *  that the renderer's ambient `CentraidAutomationManifest` type
  *  (`centraid-api.d.ts`) doesn't declare yet — `requires.secrets`,
  *  `connector`, and `vault` all validate server-side
- *  (`packages/automation/src/manifest/manifest.ts`) but haven't been added
+ *  (`packages/server/src/automation/manifest/manifest.ts`) but haven't been added
  *  to the renderer's stale mirror. Same "cast past a stale ambient type"
  *  pattern as the `prompt` cast below; drop once the ambient type catches
  *  up. */

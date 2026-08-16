@@ -3,7 +3,7 @@
   "version": 1,
   "demonstratedRed": {
     "T1": {
-      "command": "bun run --cwd packages/gateway test -- recover.integration.test.ts",
+      "command": "bun run --cwd packages/server test -- recover.integration.test.ts",
       "seed": "corrupt the recovery-kit integrity before the product restore",
       "failure": "restore rejects the corrupt kit before swapping the vault"
     },
@@ -28,7 +28,7 @@
       "failure": "release preparation exits non-zero"
     },
     "F2": {
-      "command": "bun run --cwd packages/app-engine test -- model-pricing.test.ts",
+      "command": "bun run --cwd packages/server test -- model-pricing.test.ts",
       "seed": "resolve an unknown model in strict test mode",
       "failure": "pricing resolution throws instead of recording zero cost"
     },
@@ -108,7 +108,7 @@
       "failure": "SQL-enumerated and rendered capability sets diverge"
     },
     "L1": {
-      "command": "bun run --cwd packages/gateway test -- import-routes.test.ts",
+      "command": "bun run --cwd packages/server test -- import-routes.test.ts",
       "seed": "tamper with or incompletely reimport the portable archive",
       "failure": "the HTTP round trip rejects before committing the fresh target"
     },
@@ -162,7 +162,7 @@
         {
           "id": "T1",
           "name": "erase → product-path restore",
-          "owner": "packages/gateway/src/backup/recover.integration.test.ts",
+          "owner": "packages/server/src/backup/recover.integration.test.ts",
           "evidence": "HTTP erase → blank-machine product recovery",
           "lane": "restore-year3",
           "wallClockCost": "high",
@@ -199,7 +199,7 @@
           "evidence": "T4:",
           "lane": "vitest",
           "wallClockCost": "low",
-          "knob": "packages/gateway/src/routes/route-security.ts",
+          "knob": "packages/server/src/routes/route-security.ts",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
         },
@@ -235,11 +235,11 @@
         {
           "id": "F2",
           "name": "runtime pricing coverage",
-          "owner": "packages/app-engine/src/model-pricing.test.ts",
+          "owner": "packages/server/src/engine/model-pricing.test.ts",
           "evidence": "F2 runtime pricing gate",
           "lane": "vitest",
           "wallClockCost": "low",
-          "knob": "packages/app-engine/src/model-pricing.ts",
+          "knob": "packages/server/src/engine/model-pricing.ts",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
         },
@@ -301,7 +301,7 @@
           "evidence": "R3: every expected health component",
           "lane": "vitest",
           "wallClockCost": "low",
-          "knob": "packages/gateway/src/serve/health-registry.ts",
+          "knob": "packages/server/src/serve/health-registry.ts",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
         },
@@ -466,7 +466,7 @@
           "evidence": "T2/F1:",
           "lane": "vitest",
           "wallClockCost": "low",
-          "knob": "packages/agent-runtime/src/backends/acp/vault-mcp-server.ts",
+          "knob": "packages/server/src/acp/backends/acp/vault-mcp-server.ts",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
         },
@@ -502,7 +502,7 @@
         {
           "id": "L1",
           "name": "HTTP export round trip",
-          "owner": "packages/gateway/src/routes/import-routes.test.ts",
+          "owner": "packages/server/src/routes/import-routes.test.ts",
           "evidence": "HTTP export → staged reimport → HTTP re-export",
           "lane": "nightly",
           "wallClockCost": "medium",
@@ -613,40 +613,35 @@
   },
   "revisitTriggers": {
     "blob-custody.compat": {
-      "glob": "packages/blob-format/src/**/*.ts",
+      "glob": "packages/core/src/blob/**/*.ts",
       "contains": "COMPAT\\(|SCHEMA_VERSION|FORMAT_VERSION_2",
       "trackingIssue": 781
     },
     "gateway.compat": {
-      "glob": "packages/gateway/src/**/*.ts",
+      "glob": "packages/server/src/**/*.ts",
       "contains": "COMPAT\\(",
       "trackingIssue": 781
     },
     "app-engine.compat": {
-      "glob": "packages/app-engine/src/**/*.ts",
+      "glob": "packages/server/src/engine/**/*.ts",
       "contains": "COMPAT\\(",
       "trackingIssue": 781
     },
     "automations.compat": {
-      "glob": "packages/automation/src/**/*.ts",
+      "glob": "packages/server/src/automation/**/*.ts",
       "contains": "COMPAT\\(",
       "trackingIssue": 781
     }
   },
   "workspaceSurfaces": {
-    "packages/agent-runtime": "agent-runtime",
-    "packages/app-engine": "app-engine",
-    "packages/automation": "automations",
+    "packages/server": "gateway",
+    "packages/core": "gateway",
     "packages/backup": "backup-restore",
-    "packages/blob-format": "blob-custody",
     "packages/blueprints": "blueprints",
     "packages/cli": "gateway",
     "packages/client": "replica-sync",
     "packages/design": "web",
-    "packages/gateway": "gateway",
-    "packages/protocol": "gateway",
     "packages/test-kit": "gateway",
-    "packages/time-engine": "automations",
     "packages/tunnel": "tunnel-pairing",
     "packages/vault": "vault-core",
     "apps/desktop": "desktop",
@@ -662,7 +657,7 @@
     "replica-sync.performance": "Partial: tests/perf/replica-sync-io.perf.test.ts exercises store/bootstrap/IO budget (replaces deleted in-memory fake). Tracked under #781 (originally #659).",
     "tunnel-pairing.performance": "JS fallback floor remains in tunnel-throughput.perf.test.ts; native QUIC budget is tests/perf/tunnel-native.perf.test.ts (nightly when native module present).",
     "blob-custody.durability": "Owned by packages/vault/src/blob/enospc-custody.integration.test.ts (always-on fault-injected ENOSPC). Real hdiutil path remains in disk-full.integration.test.ts behind CENTRAID_DISKFULL_E2E=1 (darwin).",
-    "agent-runtime.journey": "packages/agent-runtime/src/backends/acp/journey.integration.test.ts carries two tests while also standing in for the app-engine journey and the three skipped desktop copilot specs; it is too thin for what it is asked to represent. Tracked under #781 (originally #656; copilot rig originally #657).",
+    "agent-runtime.journey": "packages/server/src/acp/backends/acp/journey.integration.test.ts carries two tests while also standing in for the app-engine journey and the three skipped desktop copilot specs; it is too thin for what it is asked to represent. Tracked under #781 (originally #656; copilot rig originally #657).",
     "mobile.scalability": "Owned by tests/agent-e2e-mobile/flows/volume-proof.mjs; records a nightly scalability budget and durable numeric measurements.",
     "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom). Tracked under #781 (originally #659).",
     "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume — one missed entry per auto per gap; not live fire). Tracked under #781 (originally #659).",
@@ -671,13 +666,13 @@
     "G5.interop": "packages/backup test:interop runs via .github/workflows/interop-weekly.yml (schedule + workflow_dispatch, CLAWGNITION_INTEROP=1). Not part of test:quality:nightly (perf+scale+report only).",
     "client.react.floor": "packages/client/src/react/** floors at 65/35 in coverage-floors.json (#587 sustained-level ratchet); journeys + extracted pure modules remain the primary owners.",
     "search": "Flow vault-search owns search over ext/FTS (packages/vault/src/gateway/search.test.ts).",
-    "enrichment": "Flow vault-enrichment owns device enrichment → searchable transcript (packages/gateway/src/routes/device-work-routes.test.ts).",
+    "enrichment": "Flow vault-enrichment owns device enrichment → searchable transcript (packages/server/src/routes/device-work-routes.test.ts).",
     "cross-linking": "Flow vault-cross-link owns core.link_entities (packages/vault/src/gateway/ext.test.ts).",
     "people": "Flow people-crm owns people.* commands (packages/vault/src/commands/people.test.ts).",
     "blank-machine-restore": "Product blank-machine journey is recover.integration.test.ts (recover() + kit). Backup primitive round-trips live under packages/backup engine tests.",
-    "agent-runtime.contracts": "Coverable-today suite (#535): owned by packages/agent-runtime/src/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
-    "agent-runtime.durability": "Coverable-today suite (#535): owned by packages/agent-runtime/src/matrix-durability.test.ts. Tracked under #781 (originally #656).",
-    "agent-runtime.concurrency": "Coverable-today suite (#535): owned by packages/agent-runtime/src/matrix-concurrency.test.ts. Tracked under #781 (originally #656).",
+    "agent-runtime.contracts": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
+    "agent-runtime.durability": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-durability.test.ts. Tracked under #781 (originally #656).",
+    "agent-runtime.concurrency": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-concurrency.test.ts. Tracked under #781 (originally #656).",
     "blueprints.contracts": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
     "blueprints.durability": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-durability.test.ts. Tracked under #781 (originally #656).",
     "blueprints.concurrency": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-concurrency.test.ts. Tracked under #781 (originally #656).",
@@ -748,26 +743,26 @@
     "blob-custody.security": "packages/vault/src/blob/seal.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
     "backup-restore.concurrency": "Skip: restore into a LIVE gateway was deleted with the founding plane (#603) — restore is the offline `recover` verb, so concurrent restore has no surface.",
     "backup-restore.scalability": "tests/scale/backup-restore.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
-    "backup-restore.journey": "packages/gateway/src/backup/backup.integration.test.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #656).",
+    "backup-restore.journey": "packages/server/src/backup/backup.integration.test.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #656).",
     "replica-sync.durability": "packages/client/src/replica/sqlite-store.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
     "replica-sync.scalability": "tests/scale/replica-bootstrap.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
     "replica-sync.security": "packages/client/src/replica/shell-session-admission.contract.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
     "replica-sync.offline": "packages/client/src/replica/shell-session.test.ts proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #781 (originally #656).",
     "replica-sync.compat": "packages/vault/src/replica/change-log.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
     "replica-sync.journey": "apps/web/tests/e2e/web-pwa.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #656).",
-    "gateway.durability": "packages/gateway/src/serve/disk-health.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
-    "gateway.concurrency": "packages/gateway/src/serve/serve-multiclient.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
+    "gateway.durability": "packages/server/src/serve/disk-health.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
+    "gateway.concurrency": "packages/server/src/serve/serve-multiclient.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
     "gateway.performance": "tests/perf/gateway-request.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #781 (originally #659).",
     "gateway.journey": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #656).",
-    "app-engine.durability": "packages/app-engine/src/conversation/archive/archive.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
-    "app-engine.concurrency": "packages/app-engine/src/handlers/handler-pool.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
+    "app-engine.durability": "packages/server/src/engine/conversation/archive/archive.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
+    "app-engine.concurrency": "packages/server/src/engine/handlers/handler-pool.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
     "app-engine.scalability": "tests/scale/conversation-ledger.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
-    "automations.durability": "packages/automation/src/fire/scheduler-ledger.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
-    "automations.concurrency": "packages/automation/src/fire/in-process-scheduler.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "automations.security": "packages/automation/src/handler/lint.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
-    "agent-runtime.correctness": "packages/agent-runtime/src/backends/acp/backend.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
-    "agent-runtime.security": "packages/agent-runtime/src/preflight.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
-    "agent-runtime.compat": "packages/agent-runtime/src/backends/acp/enumerate-models.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
+    "automations.durability": "packages/server/src/automation/fire/scheduler-ledger.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
+    "automations.concurrency": "packages/server/src/automation/fire/in-process-scheduler.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
+    "automations.security": "packages/server/src/automation/handler/lint.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "agent-runtime.correctness": "packages/server/src/acp/backends/acp/backend.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
+    "agent-runtime.security": "packages/server/src/acp/preflight.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "agent-runtime.compat": "packages/server/src/acp/backends/acp/enumerate-models.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
     "blueprints.security": "packages/blueprints/src/untrusted-rendering.test.ts proves the current happy path; missing broader adversarial input and authorization cases. Tracked under #781 (originally #656).",
     "blueprints.journey": "apps/desktop/tests/e2e/appview-templates-insights.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #657).",
     "desktop.correctness": "apps/desktop/src/main/gateway-supervisor-core.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
@@ -873,11 +868,11 @@
       "tier": "unit"
     },
     "backup-restore.contracts": {
-      "owner": "packages/gateway/src/backup/backup-service.contract.test.ts",
+      "owner": "packages/server/src/backup/backup-service.contract.test.ts",
       "tier": "contract"
     },
     "backup-restore.durability": {
-      "owner": "packages/gateway/src/backup/wal.integration.test.ts",
+      "owner": "packages/server/src/backup/wal.integration.test.ts",
       "tier": "integration"
     },
     "backup-restore.concurrency": null,
@@ -890,7 +885,7 @@
       "tier": "scale"
     },
     "backup-restore.security": {
-      "owner": "packages/gateway/src/backup/restore-verify-sealkey.test.ts",
+      "owner": "packages/server/src/backup/restore-verify-sealkey.test.ts",
       "tier": "integration"
     },
     "backup-restore.offline": null,
@@ -899,7 +894,7 @@
       "tier": "unit"
     },
     "backup-restore.journey": {
-      "owner": "packages/gateway/src/backup/backup.integration.test.ts",
+      "owner": "packages/server/src/backup/backup.integration.test.ts",
       "tier": "integration"
     },
     "replica-sync.correctness": {
@@ -943,19 +938,19 @@
       "tier": "e2e"
     },
     "gateway.correctness": {
-      "owner": "packages/gateway/src/serve/serve.test.ts",
+      "owner": "packages/server/src/serve/serve.test.ts",
       "tier": "integration"
     },
     "gateway.contracts": {
-      "owner": "packages/gateway/src/serve/web-control-sessions.contract.test.ts",
+      "owner": "packages/server/src/serve/web-control-sessions.contract.test.ts",
       "tier": "contract"
     },
     "gateway.durability": {
-      "owner": "packages/gateway/src/serve/disk-health.test.ts",
+      "owner": "packages/server/src/serve/disk-health.test.ts",
       "tier": "integration"
     },
     "gateway.concurrency": {
-      "owner": "packages/gateway/src/serve/serve-multiclient.test.ts",
+      "owner": "packages/server/src/serve/serve-multiclient.test.ts",
       "tier": "integration"
     },
     "gateway.performance": {
@@ -967,7 +962,7 @@
       "tier": "scale"
     },
     "gateway.security": {
-      "owner": "packages/gateway/src/serve/authz-matrix.smoke.test.ts",
+      "owner": "packages/server/src/serve/authz-matrix.smoke.test.ts",
       "tier": "integration"
     },
     "gateway.offline": null,
@@ -977,19 +972,19 @@
       "tier": "e2e"
     },
     "app-engine.correctness": {
-      "owner": "packages/app-engine/src/handlers/dispatcher.test.ts",
+      "owner": "packages/server/src/engine/handlers/dispatcher.test.ts",
       "tier": "unit"
     },
     "app-engine.contracts": {
-      "owner": "packages/app-engine/src/handlers/handler-runner.contract.test.ts",
+      "owner": "packages/server/src/engine/handlers/handler-runner.contract.test.ts",
       "tier": "contract"
     },
     "app-engine.durability": {
-      "owner": "packages/app-engine/src/conversation/archive/archive.contract.test.ts",
+      "owner": "packages/server/src/engine/conversation/archive/archive.contract.test.ts",
       "tier": "contract"
     },
     "app-engine.concurrency": {
-      "owner": "packages/app-engine/src/handlers/handler-pool.test.ts",
+      "owner": "packages/server/src/engine/handlers/handler-pool.test.ts",
       "tier": "integration"
     },
     "app-engine.performance": {
@@ -1001,26 +996,26 @@
       "tier": "scale"
     },
     "app-engine.security": {
-      "owner": "packages/app-engine/src/handlers/vault-bridge.test.ts",
+      "owner": "packages/server/src/engine/handlers/vault-bridge.test.ts",
       "tier": "unit"
     },
     "app-engine.offline": null,
     "app-engine.compat": null,
     "app-engine.journey": null,
     "automations.correctness": {
-      "owner": "packages/automation/src/fire/fire.test.ts",
+      "owner": "packages/server/src/automation/fire/fire.test.ts",
       "tier": "unit"
     },
     "automations.contracts": {
-      "owner": "packages/automation/src/fire/scheduler-ledger.contract.test.ts",
+      "owner": "packages/server/src/automation/fire/scheduler-ledger.contract.test.ts",
       "tier": "contract"
     },
     "automations.durability": {
-      "owner": "packages/automation/src/fire/scheduler-ledger.contract.test.ts",
+      "owner": "packages/server/src/automation/fire/scheduler-ledger.contract.test.ts",
       "tier": "contract"
     },
     "automations.concurrency": {
-      "owner": "packages/automation/src/fire/in-process-scheduler.test.ts",
+      "owner": "packages/server/src/automation/fire/in-process-scheduler.test.ts",
       "tier": "integration"
     },
     "automations.performance": {
@@ -1032,7 +1027,7 @@
       "tier": "scale"
     },
     "automations.security": {
-      "owner": "packages/automation/src/handler/lint.test.ts",
+      "owner": "packages/server/src/automation/handler/lint.test.ts",
       "tier": "unit"
     },
     "automations.offline": null,
@@ -1042,19 +1037,19 @@
       "tier": "e2e"
     },
     "agent-runtime.correctness": {
-      "owner": "packages/agent-runtime/src/backends/acp/backend.test.ts",
+      "owner": "packages/server/src/acp/backends/acp/backend.test.ts",
       "tier": "unit"
     },
     "agent-runtime.contracts": {
-      "owner": "packages/agent-runtime/src/matrix-contracts.test.ts",
+      "owner": "packages/server/src/acp/matrix-contracts.test.ts",
       "tier": "unit"
     },
     "agent-runtime.durability": {
-      "owner": "packages/agent-runtime/src/matrix-durability.test.ts",
+      "owner": "packages/server/src/acp/matrix-durability.test.ts",
       "tier": "unit"
     },
     "agent-runtime.concurrency": {
-      "owner": "packages/agent-runtime/src/matrix-concurrency.test.ts",
+      "owner": "packages/server/src/acp/matrix-concurrency.test.ts",
       "tier": "unit"
     },
     "agent-runtime.performance": {
@@ -1066,16 +1061,16 @@
       "tier": "scale"
     },
     "agent-runtime.security": {
-      "owner": "packages/agent-runtime/src/preflight.test.ts",
+      "owner": "packages/server/src/acp/preflight.test.ts",
       "tier": "unit"
     },
     "agent-runtime.offline": null,
     "agent-runtime.compat": {
-      "owner": "packages/agent-runtime/src/backends/acp/enumerate-models.test.ts",
+      "owner": "packages/server/src/acp/backends/acp/enumerate-models.test.ts",
       "tier": "unit"
     },
     "agent-runtime.journey": {
-      "owner": "packages/agent-runtime/src/backends/acp/journey.integration.test.ts",
+      "owner": "packages/server/src/acp/backends/acp/journey.integration.test.ts",
       "tier": "integration"
     },
     "blueprints.correctness": {
@@ -1791,17 +1786,17 @@
     },
     "share-receipt-authority": {
       "statement": "A cross-vault access receipt exists exactly when an edge's rows landed at the audience, naming the authorised origin scope and the audience ids created, once per edge; a refused, parked, revoked or peer-handed-off edge leaves none, and a malformed scope refuses the transition atomically.",
-      "owner": "packages/gateway/src/serve/share-receipt-authority.contract.test.ts",
+      "owner": "packages/server/src/serve/share-receipt-authority.contract.test.ts",
       "flow": "share-receipt-authority"
     },
     "share-outbox-obligation": {
       "statement": "Every share obligation is durable and keyed by what it is about: a replayed enqueue reuses the row without rewinding its retry clock, a human-awaiting obligation is never machine-claimed, an unreadable row never blocks its neighbours, and a failed attempt backs off while a progressed transfer does not.",
-      "owner": "packages/gateway/src/serve/share-outbox-obligation.contract.test.ts",
+      "owner": "packages/server/src/serve/share-outbox-obligation.contract.test.ts",
       "flow": "share-outbox-obligation"
     },
     "experimental-gate-parity": {
       "statement": "An experimental feature is advertised in the C1 handshake exactly when its own routes are mounted: gated off it is absent from capabilities and its surfaces are unowned; gated on, and only then, they answer.",
-      "owner": "packages/gateway/src/serve/experimental-gating.test.ts",
+      "owner": "packages/server/src/serve/experimental-gating.test.ts",
       "flow": "gateway-experimental-gate-law"
     },
     "insights-rollup-render-or-withhold": {
@@ -2227,7 +2222,7 @@
       "surface": "automations",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "packages/automation/src/manifest/enricher-templates.test.ts",
+      "owner": "packages/server/src/automation/manifest/enricher-templates.test.ts",
       "minimumTests": 8
     },
     {
@@ -2326,7 +2321,7 @@
       "surface": "blob-custody",
       "dimension": "correctness",
       "tier": "unit",
-      "owner": "packages/blob-format/src/cbsf-properties.test.ts",
+      "owner": "packages/core/src/blob/cbsf-properties.test.ts",
       "minimumTests": 6
     },
     {
@@ -2335,7 +2330,7 @@
       "surface": "gateway",
       "dimension": "correctness",
       "tier": "unit",
-      "owner": "packages/protocol/src/handshake-properties.test.ts",
+      "owner": "packages/core/src/protocol/handshake-properties.test.ts",
       "minimumTests": 9
     },
     {
@@ -2362,7 +2357,7 @@
       "surface": "app-engine",
       "dimension": "correctness",
       "tier": "unit",
-      "owner": "packages/app-engine/src/pricing/cost-properties.test.ts",
+      "owner": "packages/server/src/engine/pricing/cost-properties.test.ts",
       "minimumTests": 7
     },
     {
@@ -2398,7 +2393,7 @@
       "surface": "backup-restore",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "packages/gateway/src/backup/backup-service.contract.test.ts",
+      "owner": "packages/server/src/backup/backup-service.contract.test.ts",
       "minimumTests": 16,
       "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: the no-change and incremental round-trip laws were restated here on top of packages/backup/src/engine.test.ts, which is now their sole owner. The two gateway restatements were deleted only after engine.test.ts was strengthened to cover what they uniquely asserted (bounded incremental put count; restore refusal proven to abort before the dest dir is created). This file keeps fencing, policy echo, and CLI-restore->adopt->quarantine. The round-trip contract did not shrink — only its restatements did."
     },
@@ -2408,7 +2403,7 @@
       "surface": "backup-restore",
       "dimension": "durability",
       "tier": "integration",
-      "owner": "packages/gateway/src/backup/wal.integration.test.ts",
+      "owner": "packages/server/src/backup/wal.integration.test.ts",
       "minimumTests": 28
     },
     {
@@ -2471,7 +2466,7 @@
       "surface": "gateway",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "packages/gateway/src/serve/web-control-sessions.contract.test.ts",
+      "owner": "packages/server/src/serve/web-control-sessions.contract.test.ts",
       "minimumTests": 8,
       "approvedMinimumTestsDeviation": "#799 stage 2 retired the per-app browser session plane (the `__centraid_app_*` cookie minted at /centraid/_apps/<id>/web-session for a sandboxed app iframe). Five of this flow's thirteen cases drove ONLY that plane — app-scoped path grants, forged scope headers, app-cookie origin binding, revocation and expiry of an active app session — and they were deleted with the surface, not weakened. The eight remaining cases are the whole of the surviving control-session boundary: establish, origin binding, service-worker wake, persistence, logout, proxied DELETE, device-identity fail-closed, and control-cookie revocation."
     },
@@ -2499,7 +2494,7 @@
       "surface": "app-engine",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "packages/app-engine/src/handlers/handler-runner.contract.test.ts",
+      "owner": "packages/server/src/engine/handlers/handler-runner.contract.test.ts",
       "minimumTests": 4
     },
     {
@@ -2508,7 +2503,7 @@
       "surface": "app-engine",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "packages/app-engine/src/conversation/archive/archive.contract.test.ts",
+      "owner": "packages/server/src/engine/conversation/archive/archive.contract.test.ts",
       "minimumTests": 4
     },
     {
@@ -2526,7 +2521,7 @@
       "surface": "automations",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "packages/automation/src/fire/scheduler-ledger.contract.test.ts",
+      "owner": "packages/server/src/automation/fire/scheduler-ledger.contract.test.ts",
       "minimumTests": 19,
       "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: removed four example tests whose property twins in the same file already own the law — 'records ONE entry per automation for a gap spanning several missed fire times' (subsumed by 'property: at most one missed entry per automation per gap'), 'returns nothing for a fast-restart gap under the grace margin' (subsumed by 'property: sub-grace gaps never emit misses', whose generator was widened to seconds so the 2.5min fast restart is inside its range), and 'returns nothing for an ordinary tick-to-tick gap' + 'records nothing across ordinary consecutive ticks' (both subsumed by 'property: successive ordinary ticks accumulate zero misses'). The no-backfill contract did not shrink — only its redundant restatements did; the disabled-only-registry example was deliberately retained because its property twin never generates a zero-enabled registry."
     },
@@ -2536,7 +2531,7 @@
       "surface": "agent-runtime",
       "dimension": "compat",
       "tier": "unit",
-      "owner": "packages/agent-runtime/src/backends/acp/enumerate-models.test.ts",
+      "owner": "packages/server/src/acp/backends/acp/enumerate-models.test.ts",
       "minimumTests": 6,
       "approvedMinimumTestsDeviation": "#743 vocabulary-only flow ID rename; the six-test floor is unchanged."
     },
@@ -2728,7 +2723,7 @@
       "surface": "agent-runtime",
       "dimension": "journey",
       "tier": "integration",
-      "owner": "packages/agent-runtime/src/backends/acp/journey.integration.test.ts",
+      "owner": "packages/server/src/acp/backends/acp/journey.integration.test.ts",
       "minimumTests": 2,
       "approvedMinimumTestsDeviation": "#743 vocabulary-only flow ID rename; the two-test floor is unchanged."
     },
@@ -2738,7 +2733,7 @@
       "surface": "backup-restore",
       "dimension": "journey",
       "tier": "integration",
-      "owner": "packages/gateway/src/backup/recover.integration.test.ts",
+      "owner": "packages/server/src/backup/recover.integration.test.ts",
       "minimumTests": 2,
       "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: the separate 'recovery refuses a snapshot written by newer software BEFORE any byte is fetched' test re-ran the whole ~45s seedMachineA fixture to restate the restore-refusal law owned by packages/backup/src/engine.test.ts. It was FOLDED INTO the blank-machine test rather than dropped — its unique assertions (no vault dir, no .recover-staging-* residue, no keyring escrowed) now run there against the already-seeded machine A. The journey lost no assertion; the test count fell only because two tests became one."
     },
@@ -2757,7 +2752,7 @@
       "surface": "gateway",
       "dimension": "correctness",
       "tier": "integration",
-      "owner": "packages/gateway/src/routes/device-work-routes.test.ts",
+      "owner": "packages/server/src/routes/device-work-routes.test.ts",
       "minimumTests": 4
     },
     {
@@ -2793,7 +2788,7 @@
       "surface": "gateway",
       "dimension": "security",
       "tier": "integration",
-      "owner": "packages/gateway/src/serve/authz-matrix.smoke.test.ts",
+      "owner": "packages/server/src/serve/authz-matrix.smoke.test.ts",
       "minimumTests": 2
     },
     {
@@ -2802,7 +2797,7 @@
       "surface": "gateway",
       "dimension": "security",
       "tier": "integration",
-      "owner": "packages/gateway/src/serve/secret-log.smoke.test.ts",
+      "owner": "packages/server/src/serve/secret-log.smoke.test.ts",
       "minimumTests": 3
     },
     {
@@ -2865,7 +2860,7 @@
       "surface": "backup-restore",
       "dimension": "security",
       "tier": "integration",
-      "owner": "packages/gateway/src/backup/restore-verify-sealkey.test.ts",
+      "owner": "packages/server/src/backup/restore-verify-sealkey.test.ts",
       "minimumTests": 2
     },
     {
@@ -2883,7 +2878,7 @@
       "surface": "app-engine",
       "dimension": "security",
       "tier": "unit",
-      "owner": "packages/app-engine/src/handlers/vault-bridge.test.ts",
+      "owner": "packages/server/src/engine/handlers/vault-bridge.test.ts",
       "minimumTests": 7
     },
     {
@@ -2892,7 +2887,7 @@
       "surface": "automations",
       "dimension": "correctness",
       "tier": "unit",
-      "owner": "packages/automation/src/fire/fire.test.ts",
+      "owner": "packages/server/src/automation/fire/fire.test.ts",
       "minimumTests": 11
     },
     {
@@ -3020,7 +3015,7 @@
       "surface": "gateway",
       "dimension": "correctness",
       "tier": "integration",
-      "owner": "packages/gateway/src/serve/serve.test.ts",
+      "owner": "packages/server/src/serve/serve.test.ts",
       "minimumTests": 18
     },
     {
@@ -3029,7 +3024,7 @@
       "surface": "app-engine",
       "dimension": "correctness",
       "tier": "unit",
-      "owner": "packages/app-engine/src/handlers/dispatcher.test.ts",
+      "owner": "packages/server/src/engine/handlers/dispatcher.test.ts",
       "minimumTests": 9
     },
     {
@@ -3047,7 +3042,7 @@
       "surface": "gateway",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "packages/gateway/src/serve/share-receipt-authority.contract.test.ts",
+      "owner": "packages/server/src/serve/share-receipt-authority.contract.test.ts",
       "minimumTests": 4
     },
     {
@@ -3056,7 +3051,7 @@
       "surface": "gateway",
       "dimension": "durability",
       "tier": "contract",
-      "owner": "packages/gateway/src/serve/share-outbox-obligation.contract.test.ts",
+      "owner": "packages/server/src/serve/share-outbox-obligation.contract.test.ts",
       "minimumTests": 4
     },
     {
@@ -3065,7 +3060,7 @@
       "surface": "gateway",
       "dimension": "contracts",
       "tier": "integration",
-      "owner": "packages/gateway/src/serve/experimental-gating.test.ts",
+      "owner": "packages/server/src/serve/experimental-gating.test.ts",
       "minimumTests": 10
     },
     {
@@ -3191,7 +3186,7 @@
       "surface": "gateway",
       "dimension": "security",
       "tier": "unit",
-      "owner": "packages/gateway/src/routes/owners-routes.test.ts",
+      "owner": "packages/server/src/routes/owners-routes.test.ts",
       "minimumTests": 5
     },
     {
@@ -3200,7 +3195,7 @@
       "surface": "gateway",
       "dimension": "security",
       "tier": "unit",
-      "owner": "packages/gateway/src/routes/scopes-routes.test.ts",
+      "owner": "packages/server/src/routes/scopes-routes.test.ts",
       "minimumTests": 6
     },
     {

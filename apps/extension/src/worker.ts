@@ -1,4 +1,4 @@
-import { ROUTES } from "@centraid/protocol";
+import { ROUTES } from "@centraid/core/protocol";
 
 import { handleCompanionRequest } from "./companion-api.js";
 import { pageCaptureFromTab } from "./content-core.js";

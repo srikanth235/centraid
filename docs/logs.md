@@ -18,8 +18,8 @@ Also redirected by OS service units (when H5 installed): stdout/stderr paths fro
 
 Code pointers:
 
-- `packages/gateway/src/paths.ts` — `logsDir`
-- `packages/gateway/src/cli/paths.ts` — daemon `gateway-logs/`
+- `packages/server/src/paths.ts` — `logsDir`
+- `packages/server/src/cli/paths.ts` — daemon `gateway-logs/`
 - `apps/desktop/src/main/local-gateway.ts` — desktop `logsDir` wiring
 
 ## Desktop crash log
@@ -55,9 +55,9 @@ Steward-absence detection and local Commons sync instrumentation — no network 
 
 | Surface | Path | Contents |
 | --- | --- | --- |
-| Diagnostics bundle | `GET /centraid/_gateway/diagnostics` → `config.commons` | Every mounted vault's `CommonsVaultObservability[]` (`packages/gateway/src/serve/commons-observability.ts`), assembled in `build-gateway.ts`'s `buildDiagnostics` closure. |
-| Owner-tier recovery door | `GET /centraid/_gateway/commons/recovery?actorVaultId=…` | The same per-grant observability, scoped to one vault (`packages/gateway/src/routes/commons-recovery-routes.ts`). |
-| Peer-plane sweep log | wherever `logger.warn` lands (see "Gateway process logs" above) | One line per pull whose steward status is `degraded`, `absent`, `link-down`, or `parked` — `commons steward <presence> for grant <id> (member <vaultId>, steward <vaultId>) — silent <ms>ms, <n> consecutive failures` (or `fault <tag>` when parked). Emitted by `logStewardConcern` in `packages/gateway/src/serve/peer-commons-sweep.ts`; `reachable`/`unknown` pulls stay silent. |
+| Diagnostics bundle | `GET /centraid/_gateway/diagnostics` → `config.commons` | Every mounted vault's `CommonsVaultObservability[]` (`packages/server/src/serve/commons-observability.ts`), assembled in `build-gateway.ts`'s `buildDiagnostics` closure. |
+| Owner-tier recovery door | `GET /centraid/_gateway/commons/recovery?actorVaultId=…` | The same per-grant observability, scoped to one vault (`packages/server/src/routes/commons-recovery-routes.ts`). |
+| Peer-plane sweep log | wherever `logger.warn` lands (see "Gateway process logs" above) | One line per pull whose steward status is `degraded`, `absent`, `link-down`, or `parked` — `commons steward <presence> for grant <id> (member <vaultId>, steward <vaultId>) — silent <ms>ms, <n> consecutive failures` (or `fault <tag>` when parked). Emitted by `logStewardConcern` in `packages/server/src/serve/peer-commons-sweep.ts`; `reachable`/`unknown` pulls stay silent. |
 
 Each grant's entry carries: `steward` (the escalating presence + silence duration), `reachableRatio` (contacts / attempts), `absence` (episode count, total/longest/open duration), `pullOutcomes` (noop/tail/snapshot/tombstone/parked/unreachable counts), `opLog` (row count, last/checkpoint sequence, rows beyond checkpoint — the first go/no-go number in the [Commons decision](decisions.md#commons)), `memberLag` (member count, max/p50 ops behind, count beyond the K=256 window — the second go/no-go number), and `intentDwellMs` (parked-intent submitted→settled latency).
 

@@ -11,9 +11,9 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { validateAppManifest } from "@centraid/app-engine";
-import type { AppManifest } from "@centraid/app-engine";
 import { apps as designApps } from "@centraid/design";
+import { validateAppManifest } from "@centraid/server/engine";
+import type { AppManifest } from "@centraid/server/engine";
 
 const PACKAGE_ROOT = path.resolve(import.meta.dirname, "..");
 const quotedSource = (value: string) =>

@@ -23,8 +23,8 @@
  * import everything from `./gateway-client.js`.
  */
 
-import { isGatewayCapabilities, ROUTES } from "@centraid/protocol";
-import type { GatewayCapabilities, GatewayInfo } from "@centraid/protocol";
+import { isGatewayCapabilities, ROUTES } from "@centraid/core/protocol";
+import type { GatewayCapabilities, GatewayInfo } from "@centraid/core/protocol";
 
 import {
   auth,

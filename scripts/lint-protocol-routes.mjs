@@ -3,7 +3,7 @@
  * Route-literal drift check (issue #504 batch 2).
  *
  * Fails when apps/extension (or packages/cli) hard-codes a path that is
- * already defined in @centraid/protocol ROUTES, instead of importing it.
+ * already defined in @centraid/core/protocol ROUTES, instead of importing it.
  * Gateway/app-engine still contain many historical literals — those migrate
  * gradually; the extension + product CLI are the drift-prone consumers.
  */
@@ -13,7 +13,7 @@ import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
 
-// Keep in sync with packages/protocol/src/routes.ts ROUTES values.
+// Keep in sync with packages/core/src/protocol/routes.ts ROUTES values.
 const ROUTE_PATHS = [
   "/centraid/_gateway/info",
   "/centraid/_gateway/health",
@@ -77,7 +77,7 @@ export function findRouteLiterals(scanRoot = root, scopes = SCOPES) {
         );
         if (re.test(text)) {
           violations.push(
-            `${path.relative(scanRoot, file)}: hard-coded ${route} (import ROUTES from @centraid/protocol)`
+            `${path.relative(scanRoot, file)}: hard-coded ${route} (import ROUTES from @centraid/core/protocol)`
           );
         }
       }

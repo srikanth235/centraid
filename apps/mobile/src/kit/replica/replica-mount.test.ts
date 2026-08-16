@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
-} from "@centraid/protocol";
+} from "@centraid/core/protocol";
 
 const resolveGatewayBase = vi.hoisted(() =>
   vi.fn<() => Promise<string | undefined>>()

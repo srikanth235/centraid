@@ -1257,7 +1257,7 @@ describe("enrich", () => {
     // instead. The gate half of this law (that `device` actually keeps
     // refusing gateway-lane fires, and that raising the tier is what
     // unblocks them) is pinned end-to-end in
-    // `packages/gateway/src/serve/enrich-tier-control.test.ts`, the one
+    // `packages/server/src/serve/enrich-tier-control.test.ts`, the one
     // package that depends on both this read and `decideEnrichmentGate`.
     test("[C5 sabotage] a legacy 'local' row reads as device, not gateway", () => {
       // Simulate a vault that was already running before the rename: its

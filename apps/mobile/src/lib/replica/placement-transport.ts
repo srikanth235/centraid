@@ -1,4 +1,4 @@
-import { ROUTES } from "@centraid/protocol";
+import { ROUTES } from "@centraid/core/protocol";
 
 import { authHeader } from "../gateway";
 import type { PlacementIntent, PlacementRecord } from "./multi-vault-reader";

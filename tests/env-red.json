@@ -2,7 +2,7 @@
   "_comment": "Deterministically-environment-red inventory (#781). A test whose law cannot hold in a known environment — the wal-shipper [G4] class, fixed as an instance in #782 — is neither a flake (tests/quarantine.json) nor merely a declared skip (tests/skips.json): quarantine would exclude it everywhere to silence one environment, and the skip budget records the hole without the environment shape or a revisit discipline. The mechanism is therefore a REQUIRED env guard (skipIf / runtime t.skip — which also lands in the skip budget) plus this ledger: every environment-predicate guard site (process.platform / process.arch / process.getuid comparisons in test files, discovered by scripts/test-report/env-red-inventory.mjs over the same globs as skip-inventory) must be recorded here with the guarded test, the human-readable predicate, the guard mechanism, an OPEN tracking issue, and an expiresAt date or a revisitTrigger sentence. An expired entry is a hard failure; _budget is DOWN-ONLY — the way to shrink this file is the #782 move: rewrite the test so the environment stops mattering. Keys are <path>#<ordinal>; `line` is informational and refreshed by `node scripts/test-report/env-red-inventory.mjs --write`.",
   "_budget": 6,
   "sites": {
-    "packages/gateway/src/cli/service-install.integration.test.ts#1": {
+    "packages/server/src/cli/service-install.integration.test.ts#1": {
       "kind": "platform-guard",
       "line": 39,
       "snippet": "if (process.platform !== \"darwin\") {",
@@ -12,7 +12,7 @@
       "issue": 790,
       "revisitTrigger": "Revisit if the service layer gains a systemd --user e2e rig — that would make the install/uninstall law assertable on linux runners (rig tracker: #790)."
     },
-    "packages/gateway/src/cli/status-admin.test.ts#1": {
+    "packages/server/src/cli/status-admin.test.ts#1": {
       "kind": "platform-guard",
       "line": 72,
       "snippet": "process.platform !== \"darwin\" && process.platform !== \"linux\";",

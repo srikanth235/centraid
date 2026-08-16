@@ -63,11 +63,11 @@ export interface AutomationThreadLoadResult {
 // Every automation fire rides ONE enrolled agent identity, keyed by the
 // automation's OWNING APP FOLDER, not its row id/ref:
 //   - `reconcileScheduler` enrolls one agent per `row.ownerApp`
-//     (packages/gateway/src/serve/build-gateway.ts:1157-1166:
+//     (packages/server/src/serve/build-gateway.ts:1157-1166:
 //     `vaultRegistry.enrollAutomationAgent(appId, nameByOwnerApp.get(appId))`
 //     where `appId` iterates `new Set(rows.map((r) => r.ownerApp))`).
 //   - `enrollAutomationAgent` calls `ensureAgentEnrolled(db, appId, {
-//     displayName })` (packages/gateway/src/serve/vault-plane.ts:520-526),
+//     displayName })` (packages/server/src/serve/vault-plane.ts:520-526),
 //     which stores `appId` as `consent_agent.enrollment_key` and `displayName`
 //     (== the automation's manifest `name`, same value `row.name` carries)
 //     as `core_party.display_name` — self-healing on rename

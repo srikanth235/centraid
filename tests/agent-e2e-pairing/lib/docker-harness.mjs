@@ -102,7 +102,7 @@ const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const RUNS_DIR = path.join(__dirname, "..", "runs");
 const NODE_IMAGE = "node:22-bookworm-slim";
-const GATEWAY_CLI_REL = "packages/gateway/dist/cli/cli.js";
+const GATEWAY_CLI_REL = "packages/server/dist/cli/cli.js";
 const DEVICE_SCRIPT_REL = "tests/agent-e2e-pairing/lib/device-redeem.mjs";
 const GW_DATA_DIR = "/tmp/gw-data";
 // The ONLY UDP destination port anything here legitimately needs: 53, or the

@@ -49,7 +49,7 @@ handler_waived() {
 }
 
 # ── query-read-only ─────────────────────────────────────────────────────────
-# `.run()` is ScopedDb's write API (packages/app-engine/src/types.ts) and
+# `.run()` is ScopedDb's write API (packages/server/src/engine/types.ts) and
 # db.exec() accepts arbitrary SQL including DML/DDL. git grep -E is POSIX ERE
 # with no \b, so db.exec is anchored on its `db.` qualifier instead.
 while IFS=: read -r file line_no match; do

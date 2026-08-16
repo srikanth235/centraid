@@ -23,7 +23,7 @@ import {
   appTurnPath,
   assistantTurnPath,
   assistantResolvePath,
-} from "@centraid/protocol";
+} from "@centraid/core/protocol";
 
 import type {
   CentraidHarnessesStatus,

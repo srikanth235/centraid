@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_GATEWAY_CAPABILITIES } from "@centraid/protocol";
+import { DEFAULT_GATEWAY_CAPABILITIES } from "@centraid/core/protocol";
 
 import {
   assembleReport,

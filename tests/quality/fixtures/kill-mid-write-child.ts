@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 
-import { ConversationStore } from "../../../packages/app-engine/src/conversation/store.js";
-import { ensureConversationLedger } from "../../../packages/app-engine/src/stores/gateway-db.js";
-import { buildGateway } from "../../../packages/gateway/src/serve/build-gateway.js";
+import { ConversationStore } from "../../../packages/server/src/engine/conversation/store.js";
+import { ensureConversationLedger } from "../../../packages/server/src/engine/stores/gateway-db.js";
+import { buildGateway } from "../../../packages/server/src/serve/build-gateway.js";
 
 const [root, faultPoint, mode = "crash"] = process.argv.slice(2);
 if (!root || !faultPoint) throw new Error("root and fault point required");

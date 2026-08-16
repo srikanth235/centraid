@@ -18,7 +18,7 @@
 // side but has no mobile surface, and is deliberately not typed here.
 //
 // Wire shapes mirror the route's own `DeviceDTO` as lean local interfaces
-// (mobile depends on neither `@centraid/gateway` nor `@centraid/client` — the
+// (mobile depends on neither `@centraid/server` nor `@centraid/client` — the
 // `lib/insights.ts` convention). Two fields the DTO declares but `toDto` never
 // emits (`lastUsedAt`, and the transport discriminator, which is always
 // `iroh`) are left out rather than typed as facts the screen would then have

@@ -50,6 +50,28 @@ Automations remain owner-authored — the automation compiler is a live "builder
 | **#505 served-app plane** | Superseded by [#799](https://github.com/srikanth235/centraid/issues/799); an app UI reaches the screen one way — an inline React route in the shared shell, or the same app as an Expo screen on mobile. |
 | **#690 / #765 DOM custom elements** | Superseded by [#799](https://github.com/srikanth235/centraid/issues/799); the third rendering technology is gone and every DOM composition is a React block. |
 | **"personal app builder" positioning** | Superseded by [#799](https://github.com/srikanth235/centraid/issues/799); Centraid is a personal, local-first **superapp** — see [Product positioning](#product-positioning). |
+| **16-package workspace split** | Superseded by [#801](https://github.com/srikanth235/centraid/issues/801); see [Package boundaries](#package-boundaries-801). |
+
+## Package boundaries (#801)
+
+Ruled 2026-08-16 by [#801](https://github.com/srikanth235/centraid/issues/801). A workspace package exists only if it has a **distribution** split, a **hard technical wall** (native build, zero-runtime-dep, React Native `src` resolution), or an **independently published contract**. Architectural seams that meet none of those (automation must not import an ACP backend; engine imports nothing above it) are enforced by import-boundary lint and tests, not extra package.json edges.
+
+Kept packages and why:
+
+| Package | Test | Why it stays |
+| --- | --- | --- |
+| `core` | distribution + technical wall | Thin clients consume protocol/blob/time without server code; RN `src`; zero-dep |
+| `server` | distribution | The backend unit; desktop and `centraid-gateway` consume it whole |
+| `vault` | distribution + published ontology | Desktop consumes it directly |
+| `backup` | technical wall + published format | Node builtins only; `centraid-storage-provider/1` + `centraid-snapshot/2` |
+| `blueprints` | distribution | Server needs manifests/handlers; client/mobile need UI chunks |
+| `design` | distribution + RN `src` | Shared by every app |
+| `client` | distribution | Browser-safe React shell for desktop/web/mobile |
+| `tunnel` | native wall | Rust data plane + napi |
+| `cli` | distribution (deliberate) | Depends only on contracts to prove wire parity |
+| `test-kit` / `model-runtime` | private leaves | Shared tests; pinned native inference |
+
+Supersedes any prior rationale that treated `protocol`, `blob-format`, `time-engine`, `gateway`, `app-engine`, `automation`, or `agent-runtime` as independently publishable workspace packages. Those names remain historical in receipts and changelogs.
 
 ## Defaults (so nobody has to ask)
 

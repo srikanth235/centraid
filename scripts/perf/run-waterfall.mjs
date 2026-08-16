@@ -8,7 +8,7 @@
 // apps/web/test-results/perf-waterfall-report.json.
 //
 // PREREQUISITE: the package dists the harness loads (gateway, app-engine) must
-// already be built — run `bun run build` (or `bun run --cwd packages/gateway
+// already be built — run `bun run build` (or `bun run --cwd packages/server
 // build`) from the repo root first, exactly like the e2e job does. This script
 // only rebuilds the WEB dist, which is the piece the perf spec's instrumentation
 // depends on.

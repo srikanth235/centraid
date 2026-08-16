@@ -3,7 +3,7 @@
  * the end of the album's running order. Already a member is a 'failed'
  * outcome (a precondition, not an error), which the UI narrates. Risk low.
  *
- * @type {import('@centraid/app-engine').ActionHandler}
+ * @type {import('@centraid/server/engine').ActionHandler}
  */
 export default async function addToAlbum({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;

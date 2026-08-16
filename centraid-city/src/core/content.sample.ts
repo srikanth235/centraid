@@ -94,7 +94,7 @@ export const districts = [
         blurb: "Routes every request into the right vault scope.",
         detail:
           "The front desk terminates HTTP and SSE, authenticates the caller, and enters an AsyncLocalStorage vault scope for the (gateway, vault) pair before any handler runs.",
-        codeRef: "packages/gateway/src",
+        codeRef: "packages/server/src",
       },
       {
         id: "registry",
@@ -105,7 +105,7 @@ export const districts = [
         blurb: "Knows every vault this gateway serves.",
         detail:
           "The registry tracks vault paths, open handles and per-vault HTTP scoping.",
-        codeRef: "packages/gateway/src/vaults",
+        codeRef: "packages/server/src/vaults",
       },
     ],
   },

@@ -53,8 +53,8 @@ export interface AnswerAvailability {
 
 /**
  * The domains `enrich_policy` is keyed by — restated from
- * `packages/automation/src/fire/enrich-gate.ts`'s `ENRICH_DOMAINS`, not
- * imported from it: `@centraid/automation` depends on `@centraid/blueprints`
+ * `packages/server/src/automation/fire/enrich-gate.ts`'s `ENRICH_DOMAINS`, not
+ * imported from it: `@centraid/server/automation` depends on `@centraid/blueprints`
  * (see its package.json), so the reverse import would be a cycle, and
  * blueprint apps are served as browser ES modules that may not pull in a
  * Node-only package regardless (the same constraint documented at the top of

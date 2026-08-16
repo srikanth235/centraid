@@ -47,7 +47,7 @@ Per-kind notes worth not rediscovering:
 
 ## One integration path: ACP
 
-Since issue #479 there is **exactly one** turn-driving transport: the generic Agent Client Protocol client in [`packages/agent-runtime/src/backends/acp/backend.ts`](../packages/agent-runtime/src/backends/acp/backend.ts). The bespoke `runCodexTurn` (codex `app-server` JSON-RPC) and `runClaudeTurn` (in-process `@anthropic-ai/claude-agent-sdk`) backends are **deleted**. Anything that branches on harness kind above the registry is a bug.
+Since issue #479 there is **exactly one** turn-driving transport: the generic Agent Client Protocol client in [`packages/server/src/acp/backends/acp/backend.ts`](../packages/server/src/acp/backends/acp/backend.ts). The bespoke `runCodexTurn` (codex `app-server` JSON-RPC) and `runClaudeTurn` (in-process `@anthropic-ai/claude-agent-sdk`) backends are **deleted**. Anything that branches on harness kind above the registry is a bug.
 
 The connection and protocol frames come from the pinned stable entrypoint of `@agentclientprotocol/sdk`; the old handwritten `json-rpc.ts` is gone and the experimental v2 entrypoint is forbidden. One `AcpConnection` owns one ACP session actor for its lifetime, including framing, request correlation, and notifications. `HARNESSES` is launch data (`HarnessSpec`), not a second set of per-kind implementations.
 
@@ -64,7 +64,7 @@ Native is the overwhelming majority and the cheap case; the adapter flavour exis
 
 Both flavours read **one** launch-env field, `AcpTurnConfig.env` (`env` on the registry spec), applied to whatever process is spawned. A headless preset (codex's `INITIAL_AGENT_MODE`) and a self-update suppressor (auggie's `AUGMENT_DISABLE_AUTO_UPDATE`) are the same fact — "this kind needs these vars at launch" — so there is no adapter-only env path to keep in sync. It is applied _after_ `harnessSpawnEnv`, so a kind can override an inherited var but never the sanitized `PATH`.
 
-Neither Claude Code nor Codex has an ACP mode of its own, so each is driven through its Apache-2.0 adapter — `@agentclientprotocol/claude-agent-acp` and `@agentclientprotocol/codex-acp`. Both are **pinned dependencies** of `@centraid/agent-runtime`, resolved from `node_modules` by [`adapter-bin.ts`](../packages/agent-runtime/src/backends/acp/adapter-bin.ts). Never `npx -y` an adapter at run time: that puts a network fetch and an unpinned version in the middle of every turn and every test.
+Neither Claude Code nor Codex has an ACP mode of its own, so each is driven through its Apache-2.0 adapter — `@agentclientprotocol/claude-agent-acp` and `@agentclientprotocol/codex-acp`. Both are **pinned dependencies** of `@centraid/server/acp`, resolved from `node_modules` by [`adapter-bin.ts`](../packages/server/src/acp/backends/acp/adapter-bin.ts). Never `npx -y` an adapter at run time: that puts a network fetch and an unpinned version in the middle of every turn and every test.
 
 `defaultBin` always names the **user-facing CLI** (`claude`, `codex`), even for adapter-backed kinds. That is what the user installs and authenticates, what preflight probes with `--version`, and what the install hint talks about. The adapter is our implementation detail and is never surfaced.
 
@@ -72,7 +72,7 @@ Likewise, `HarnessPrefs.binPath` means **"the harness CLI"**, not "the process w
 
 ## Adding a new harness
 
-One registry entry in [`registry.ts`](../packages/agent-runtime/src/registry.ts), plus its `HarnessKind` literal in `@centraid/app-engine`. Nothing else branches on the kind — `runTurn`, preflight, model enumeration, the gateway's status route, the daemon config validator, the Agents console cards, and the per-subsystem pins all read the registry or the gateway's list. Adding `opencode`, `grok` and `kimi` needed exactly those two edits, and so did the later batch of eight (`copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`, `droid`) — the only extra work was generalising the adapter-only launch-env field into the shared `env` above, because `auggie` and `droid` are the first _native_ kinds that need launch env. This section is accurate because it was followed.
+One registry entry in [`registry.ts`](../packages/server/src/acp/registry.ts), plus its `HarnessKind` literal in `@centraid/server/engine`. Nothing else branches on the kind — `runTurn`, preflight, model enumeration, the gateway's status route, the daemon config validator, the Agents console cards, and the per-subsystem pins all read the registry or the gateway's list. Adding `opencode`, `grok` and `kimi` needed exactly those two edits, and so did the later batch of eight (`copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`, `droid`) — the only extra work was generalising the adapter-only launch-env field into the shared `env` above, because `auggie` and `droid` are the first _native_ kinds that need launch env. This section is accurate because it was followed.
 
 One **cosmetic, optional** client-side map exists. It never gates anything — a kind absent from it still renders a complete card off the gateway's wire `label`/`version`/`hint`:
 
@@ -115,7 +115,7 @@ const barHarness = makeAcpHarness({
 });
 ```
 
-An adapter-backed kind also needs the adapter added with `bun add` in `packages/agent-runtime` (pinned dep, never a runtime `npx -y`). Either way, assert the launch config in `registry.test.ts` — `acpConfigFor` returns it without spawning anything, so the tests stay hermetic and need no real binary.
+An adapter-backed kind also needs the adapter added with `bun add` in `packages/server` (pinned dep, never a runtime `npx -y`). Either way, assert the launch config in `registry.test.ts` — `acpConfigFor` returns it without spawning anything, so the tests stay hermetic and need no real binary.
 
 ### Headless policy
 
@@ -160,7 +160,7 @@ The primary workspace is one durable, conversation-scoped Centraid root: `vault-
 
 ### Vault tools
 
-`vault_sql` / `vault_invoke` / `vault_content` reach the harness as a **real MCP server over loopback HTTP**, named in the `mcpServers` array of `session/new` / `session/load` ([`vault-mcp-server.ts`](../packages/agent-runtime/src/backends/acp/vault-mcp-server.ts)). This replaces the retired per-CLI wiring (a Claude in-process MCP server; codex `dynamicTools`) with one mechanism, so **every** kind gets vault access — including `gemini` and `qwen`, which never had it.
+`vault_sql` / `vault_invoke` / `vault_content` reach the harness as a **real MCP server over loopback HTTP**, named in the `mcpServers` array of `session/new` / `session/load` ([`vault-mcp-server.ts`](../packages/server/src/acp/backends/acp/vault-mcp-server.ts)). This replaces the retired per-CLI wiring (a Claude in-process MCP server; codex `dynamicTools`) with one mechanism, so **every** kind gets vault access — including `gemini` and `qwen`, which never had it.
 
 The client-hosted `type: "acp"` MCP transport would avoid the socket entirely, but it is flagged experimental in the spec and **neither** first-party adapter implements it (`mcpCapabilities.acp: false` in both). `mcpCapabilities.http` is what they do advertise, so HTTP it is. The wire entry is ACP's `McpServerHttp`: `{ type: 'http', name, url, headers: [{ name, value }] }` — both adapters map it identically (claude → `claude-agent-sdk` `mcpServers`, codex → a `[mcp_servers.*]` config entry with `http_headers`).
 
@@ -178,7 +178,7 @@ A turn with no vault tools advertises **no** MCP server. A harness without `mcpC
 
 ### Attachments
 
-Mapped to ACP prompt content blocks by [`multimodal.ts`](../packages/agent-runtime/src/multimodal.ts), gated on the `promptCapabilities` the harness advertised in `initialize`. Text is baseline and ungated; images need `image`; audio needs `audio`; any other binary (PDFs, archives) rides an `EmbeddedResource`, which needs `embeddedContext`. Both first-party adapters advertise `{ image: true, embeddedContext: true }`, so images and PDFs reach codex and claude-code.
+Mapped to ACP prompt content blocks by [`multimodal.ts`](../packages/server/src/acp/multimodal.ts), gated on the `promptCapabilities` the harness advertised in `initialize`. Text is baseline and ungated; images need `image`; audio needs `audio`; any other binary (PDFs, archives) rides an `EmbeddedResource`, which needs `embeddedContext`. Both first-party adapters advertise `{ image: true, embeddedContext: true }`, so images and PDFs reach codex and claude-code.
 
 Note the field names are ACP's, not Anthropic's: `ImageContent { data, mimeType }`, **not** a nested `source.media_type`. Only attachments the harness genuinely can't accept (or that can't be read) produce an `attachment_unsupported` notice, and the notice **names** them.
 
@@ -223,7 +223,7 @@ Recorded honestly so nobody rediscovers them as bugs:
 
 ## Tool catalog (transport-neutral registration)
 
-Issue #504 batch 4. The **single registration surface** for vault tools is the backend-neutral constants in [`packages/agent-runtime/src/vault-sql-tool.ts`](../packages/agent-runtime/src/vault-sql-tool.ts):
+Issue #504 batch 4. The **single registration surface** for vault tools is the backend-neutral constants in [`packages/server/src/acp/vault-sql-tool.ts`](../packages/server/src/acp/vault-sql-tool.ts):
 
 | Export               | Role                        |
 | -------------------- | --------------------------- |
@@ -231,7 +231,7 @@ Issue #504 batch 4. The **single registration surface** for vault tools is the b
 | `VAULT_INVOKE_TOOL`  | Typed vault commands        |
 | `VAULT_CONTENT_TOOL` | Document text by content id |
 
-**MCP is one adapter**, not the catalog itself — [`vault-mcp-server.ts`](../packages/agent-runtime/src/backends/acp/vault-mcp-server.ts) wraps those constants for ACP harnesses. Do **not** add a second per-harness tool adapter matrix (#479 killed that path).
+**MCP is one adapter**, not the catalog itself — [`vault-mcp-server.ts`](../packages/server/src/acp/backends/acp/vault-mcp-server.ts) wraps those constants for ACP harnesses. Do **not** add a second per-harness tool adapter matrix (#479 killed that path).
 
 ### Add a tool
 

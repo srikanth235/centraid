@@ -3,7 +3,7 @@
  *
  * The bundled copy's spine — the typed `enrich.upsert_embedding` command and
  * the honest failure when a preview cannot be read — is owned by
- * `packages/automation/src/manifest/enricher-templates.test.ts`. This file
+ * `packages/server/src/automation/manifest/enricher-templates.test.ts`. This file
  * owns the model-availability gate, cursor seeding and the model-change
  * rewalk, the kind filter, and the shape of the write.
  */

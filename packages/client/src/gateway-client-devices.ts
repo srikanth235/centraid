@@ -1,6 +1,6 @@
 /*
  * Renderer-side client for the gateway's paired-device surface (issue #376 —
- * `packages/gateway/src/routes/devices-routes.ts`). Backs the Gateway page's
+ * `packages/server/src/routes/devices-routes.ts`). Backs the Gateway page's
  * Devices card (list + revoke).
  *
  *   GET    /centraid/_gateway/devices

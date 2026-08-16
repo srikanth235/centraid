@@ -16,7 +16,7 @@ import {
   describeRecurrence,
   expandRecurrence,
   shiftTemporal,
-} from "@centraid/time-engine";
+} from "@centraid/core/time";
 
 type VaultReadTestSeam = (input: {
   entity?: string;

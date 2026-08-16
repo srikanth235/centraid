@@ -8,7 +8,7 @@ How Centraid ships. One home for the ritual; skills are thin shims that point he
 | --- | --- | --- |
 | **Product version** | What users see (`0.4.0`) — changelog, installers, npm, about screens | Root `package.json`; stamped on **every** workspace package via `sync-versions` |
 | **Build number** | What stores demand (iOS `buildNumber`, Android `versionCode`) | Script-derived: `major*1e6 + minor*1e3 + patch` (`apps/mobile/src/version-core.cjs`). Never hand-set. Resubmit = cut a new **patch** product version |
-| **Protocol version** | What correctness depends on | `GATEWAY_PROTOCOL_VERSION` / `GATEWAY_MIN_PROTOCOL_VERSION` in `@centraid/protocol`. **Only** number runtime connect may compare |
+| **Protocol version** | What correctness depends on | `GATEWAY_PROTOCOL_VERSION` / `GATEWAY_MIN_PROTOCOL_VERSION` in `@centraid/core/protocol`. **Only** number runtime connect may compare |
 
 **Rules:**
 
@@ -100,7 +100,7 @@ Supporting scripts:
 - [ ] GitHub Release body matches changelog
 - [ ] **Desktop** (if shipped): multi-OS package jobs green; installers attached **only when signing enrolled**
 - [ ] **Gateway image** (if shipped): GHCR job green; `latest` only if non-beta
-- [ ] **Gateway npm** (if shipped): `gateway-npm` lane multi-OS native matrix + pack; publish when `NPM_TOKEN` enrolled. Required natives: linux-x64, darwin-arm64, win32-x64 (#511). Install: `scripts/install-gateway.sh` (Unix) or `npm i -g @centraid/gateway` (Windows). Does **not** replace H5 `service install`.
+- [ ] **Gateway npm** (if shipped): `gateway-npm` lane multi-OS native matrix + pack; publish when `NPM_TOKEN` enrolled. Required natives: linux-x64, darwin-arm64, win32-x64 (#511). Install: `scripts/install-gateway.sh` (Unix) or `npm i -g @centraid/server` (Windows). Does **not** replace H5 `service install`.
 - [ ] **Mobile** (if shipped): `release.yml` dispatched with `surfaces: mobile`; store tracks checked
 - [ ] **Web** continuous host deploys from `main` when CF secrets present (not a tag checklist item)
 
@@ -118,7 +118,7 @@ The release agent **asserts** classification from the changelog headings; it doe
 
 - **Desktop beta:** tags `v0.x.y-beta.n` → GitHub **pre-release**, electron-updater channel `beta`. Never move the stable download target.
 - **Gateway image:** `ghcr.io/<owner>/centraid-gateway:<tag>`; **`latest` only for non-beta tags**.
-- **Gateway npm:** `@centraid/gateway` (+ publish-set) when `NPM_TOKEN` set; curl|bash via `scripts/install-gateway.sh` (Unix). Multi-platform tunnel NAPI matrix: `scripts/gateway-npm/native-platforms.mjs` + `lane-release-gateway-npm.yml` job `build-native` (#511).
+- **Gateway npm:** `@centraid/server` (+ publish-set) when `NPM_TOKEN` set; curl|bash via `scripts/install-gateway.sh` (Unix). Multi-platform tunnel NAPI matrix: `scripts/gateway-npm/native-platforms.mjs` + `lane-release-gateway-npm.yml` job `build-native` (#511).
 - **Mobile beta:** TestFlight / Play internal track (`release.yml` → `lane-release-mobile.yml`, EAS profiles `preview` / `production`). **No** `eas update` in CI (J7).
 - **Web:** continuously deployed public origin **`https://app.centraid.dev`** (scaffold; CF secrets required). The gateway-served PWA remains the LAN / always-on fallback. No beta tag ritual.
 

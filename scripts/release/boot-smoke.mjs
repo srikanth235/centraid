@@ -103,7 +103,7 @@ ok(
   "web wrangler.json present (app.centraid.dev)"
 );
 ok(
-  existsSync(path.join(root, "packages/gateway/Dockerfile")),
+  existsSync(path.join(root, "packages/server/Dockerfile")),
   "gateway Dockerfile present"
 );
 

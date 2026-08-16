@@ -1,6 +1,6 @@
 /*
  * Renderer-side client for the gateway's owner surface (issue #726 —
- * `packages/gateway/src/routes/owners-routes.ts`, formerly `members-routes.ts`).
+ * `packages/server/src/routes/owners-routes.ts`, formerly `members-routes.ts`).
  * Backs the Devices card's own-person header and the profile rename flow.
  *
  *   GET    /centraid/_gateway/owners

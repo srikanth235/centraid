@@ -15,7 +15,7 @@
 // It holds no React so the launcher model (which is data, not a component) can
 // import the type without importing a renderer.
 
-import type { GatewayCapabilities } from "@centraid/protocol";
+import type { GatewayCapabilities } from "@centraid/core/protocol";
 
 /** The two gates a surface can require. Absent from a destination or a route
  *  means it is always available. */

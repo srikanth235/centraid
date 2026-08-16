@@ -376,7 +376,7 @@ export async function runFlow(slug, fn) {
   const mintPairingTicket = async (gatewayUrl, gatewayToken) => {
     const dataDir = process.env.MAESTRO_GATEWAY_DATA_DIR;
     if (dataDir) {
-      const cli = path.join(REPO_ROOT, "packages/gateway/dist/cli/cli.js");
+      const cli = path.join(REPO_ROOT, "packages/server/dist/cli/cli.js");
       const port = new URL(gatewayUrl).port;
       // A daemon started with a pinned `CENTRAID_GATEWAY_TOKEN` rejects the
       // bearer the CLI would otherwise derive from `keys/endpoint-key.bin`, so

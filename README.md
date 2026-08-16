@@ -92,24 +92,22 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `apps/mobile` | Expo app for iOS / Android / web. Connects to a gateway over HTTP; embeds nothing. |
 | `apps/oauth-worker` | Stateless Cloudflare Worker for Centraid Assist callback, confidential exchange, and refresh; no per-user storage. |
 | `packages/client` | Browser-safe gateway client plus the React shell/UI shared by desktop and web. |
-| `packages/gateway` | Host-agnostic gateway: wires everything below against injected paths/secrets. Ships the `centraid-gateway` daemon. |
+| `packages/core` | Zero-dependency shared contracts: wire protocol, CBSF blob codecs, civil-time recurrence (`@centraid/core/protocol`, `/blob`, `/time`). |
+| `packages/server` | One backend: gateway daemon (`centraid-gateway`), app engine, automation fire spine, and ACP turn driver (`centraid-acp`). |
 | `packages/vault` | The personal ontology: `vault.db` + `journal.db` DDL, consent gateway, typed commands, sealed columns, sync/outbox spine. |
-| `packages/app-engine` | Runtime engine: handler loader, declared-handler dispatcher, conversation ledger, `/centraid` HTTP surface. |
-| `packages/agent-runtime` | Drives one turn through the Agent Client Protocol — the single path for every harness kind, with first-party adapters for CLIs that don't speak ACP ([docs/harnesses.md](docs/harnesses.md)); ships the vault-register tools and the `centraid` CLI. The package name is retained in v0 even though “agent” is now reserved for principals. |
-| `packages/automation` | Manifest schema, fire spine, in-process scheduler, webhook ingress, worker-thread handler runner. |
 | `packages/tunnel` | iroh QUIC wire protocol — device tunnel + one-time pairing; the TS reference the Swift/Kotlin mobile ports mirror. |
 | `packages/blueprints` | The superapp's catalogue: 8 first-party system apps installed in place + 28 automation templates cloned into user-owned code. Renders on the element layer of `packages/design`. |
 | `packages/design` | The design system in two layers: the **token** vocabulary (colors, type, spacing, app metadata, icons) shared across desktop and mobile, and the **element** layer (`src/elements/**`, `kit.css`) — the browser substrate every app renders on, bundled with the client rather than served. |
 
 ## Gateway install (npm / curl|bash)
 
-Host **gateway only** (not desktop/mobile). OpenClaw-style stages: Node ≥ 22 → npm install `@centraid/gateway` → `centraid-gateway` on PATH. **No silent OS service** — use `centraid-gateway service install` when you want H5.
+Host **gateway only** (not desktop/mobile). OpenClaw-style stages: Node ≥ 22 → npm install `@centraid/server` → `centraid-gateway` on PATH. **No silent OS service** — use `centraid-gateway service install` when you want H5.
 
 ### Platforms
 
 | OS | Arch | Install | First-party tunnel NAPI |
 | --- | --- | --- | --- |
-| **Linux** | x64 | curl\|bash or `npm i -g @centraid/gateway` | **Required** in published packs |
+| **Linux** | x64 | curl\|bash or `npm i -g @centraid/server` | **Required** in published packs |
 | **Linux** | arm64 | same | Best-effort CI (`ubuntu-24.04-arm`) |
 | **macOS** | arm64 (Apple Silicon) | curl\|bash or npm | **Required** |
 | **macOS** | x64 (Intel) | curl\|bash or npm | Best-effort CI (`macos-15-intel`); preferred over `@number0/iroh` (no darwin-x64 iroh package) |
@@ -138,10 +136,10 @@ bash scripts/install-gateway.sh --prefix /tmp/centraid-gw --from-pack-dir artifa
 Use Node 22+ and npm (PowerShell or cmd). The curl\|bash installer is Unix-oriented.
 
 ```powershell
-npm install -g @centraid/gateway
+npm install -g @centraid/server
 centraid-gateway --help
 # Prefix install (no global):
-npm install --prefix $env:USERPROFILE\.centraid @centraid/gateway
+npm install --prefix $env:USERPROFILE\.centraid @centraid/server
 ```
 
 - **Publish set:** `scripts/gateway-npm/publish-set.json` (gateway + workspace deps). Pack: `bun run gateway:npm:pack`. Publish: `bun run gateway:npm:publish` (requires `NPM_TOKEN`; dry-runs without it).

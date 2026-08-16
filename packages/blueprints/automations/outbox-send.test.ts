@@ -8,7 +8,7 @@
  * RFC 5545 rendering, the per-fire staging bound, skip-vs-heal
  * discipline, and the refusal path.
  *
- * `packages/automation/src/manifest/enricher-templates.test.ts` owns the
+ * `packages/server/src/automation/manifest/enricher-templates.test.ts` owns the
  * enricher spine (doc-*, obligation-extractor, renewal-reminders) and
  * `packages/blueprints/src/pull-handlers.test.ts` owns its six named pull
  * flows; nothing here restates either.

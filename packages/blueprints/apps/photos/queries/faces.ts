@@ -13,7 +13,7 @@
  * (`N of M reviewed`) counts what is left here, so it must not count them
  * either.
  *
- * @type {import('@centraid/app-engine').QueryHandler}
+ * @type {import('@centraid/server/engine').QueryHandler}
  */
 
 interface RawRegion {

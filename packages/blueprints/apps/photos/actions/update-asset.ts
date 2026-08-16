@@ -10,7 +10,7 @@
  * its count have existed on the client the whole time with no door that
  * worked; forwarding the field is that door.
  *
- * @type {import('@centraid/app-engine').ActionHandler}
+ * @type {import('@centraid/server/engine').ActionHandler}
  */
 export default async function updateAsset({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;

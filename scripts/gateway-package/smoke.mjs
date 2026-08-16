@@ -11,7 +11,7 @@
  *   node scripts/gateway-package/smoke.mjs --base-url http://127.0.0.1:8787
  *
  * Prefer an already-built gateway for host mode:
- *   bun run --cwd packages/gateway build
+ *   bun run --cwd packages/server build
  *   node scripts/gateway-package/smoke.mjs
  */
 
@@ -50,7 +50,7 @@ async function hostMode() {
   const host = "127.0.0.1";
   const gatewayBin =
     arg("--gateway-bin", null) ??
-    path.join(root, "packages/gateway/dist/cli/cli.js");
+    path.join(root, "packages/server/dist/cli/cli.js");
 
   const useBunSrc =
     !path.basename(gatewayBin).endsWith(".js") || gatewayBin.includes("cli.ts");

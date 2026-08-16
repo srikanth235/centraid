@@ -35,37 +35,37 @@
       "entry": ["src/index.ts"],
       "project": ["src/**/*.{ts,tsx}"]
     },
-    "packages/agent-runtime": {
-      "entry": ["src/index.ts", "src/cli/centraid-cli.ts"],
-      "project": ["src/**/*.{ts,tsx}"],
+    "packages/core": {
+      "entry": [
+        "src/protocol/index.ts",
+        "src/blob/index.ts",
+        "src/time/index.ts",
+        "zero-dep-guard.ts"
+      ],
+      "project": ["src/**/*.{ts,tsx}", "zero-dep-guard.ts"]
+    },
+    "packages/server": {
+      "entry": [
+        "src/index.ts",
+        "src/engine/index.ts",
+        "src/automation/index.ts",
+        "src/acp/index.ts",
+        "src/cli/cli.ts",
+        "src/acp/cli/centraid-cli.ts",
+        "src/engine/worker/runner.ts",
+        "src/engine/worker/ts-loader-hooks.ts",
+        "src/automation/worker/runner.ts",
+        "scripts/*.mjs"
+      ],
+      "project": ["src/**/*.{ts,tsx}", "scripts/*.{mjs,ts}"],
+      "ignoreUnresolved": ["/usr/bin/security", "/sbin/mount"],
       "ignoreDependencies": [
         "@agentclientprotocol/claude-agent-acp",
         "@agentclientprotocol/codex-acp"
       ]
     },
-    "packages/gateway": {
-      "entry": ["src/index.ts", "src/cli/cli.ts", "scripts/*.mjs"],
-      "project": ["src/**/*.{ts,tsx}", "scripts/*.mjs"],
-      "ignoreUnresolved": ["/usr/bin/security", "/sbin/mount"]
-    },
-    "packages/protocol": {
-      "entry": ["src/index.ts"],
-      "project": ["src/**/*.{ts,tsx}"]
-    },
     "packages/cli": {
       "entry": ["src/cli.ts"],
-      "project": ["src/**/*.{ts,tsx}"]
-    },
-    "packages/app-engine": {
-      "entry": [
-        "src/index.ts",
-        "src/worker/runner.ts",
-        "src/worker/ts-loader-hooks.ts"
-      ],
-      "project": ["src/**/*.{ts,tsx}"]
-    },
-    "packages/automation": {
-      "entry": ["src/index.ts", "src/worker/runner.ts"],
       "project": ["src/**/*.{ts,tsx}"]
     },
     "packages/client": {
@@ -84,7 +84,8 @@
       "entry": ["src/index.ts"],
       "project": ["src/**/*.{ts,tsx}"],
       "ignoreDependencies": [
-        "@centraid/blob-format",
+        "@centraid/core",
+        "@centraid/server",
         "esbuild",
         "pdfjs-dist",
         "tldts"

@@ -1,7 +1,7 @@
 /*
  * Pure backoff + crash-loop bookkeeping for the embedded local gateway
  * (issue #351). Extracted from local-gateway.ts so it's unit-testable
- * without pulling in `@centraid/gateway`'s `serve()`.
+ * without pulling in `@centraid/server`'s `serve()`.
  *
  * Before this module, every failed `serve()` call during lazy startup
  * (settings read, gateway switch, …) was retried immediately and

@@ -1,4 +1,4 @@
-import { canonicalizeRrule } from "@centraid/time-engine";
+import { canonicalizeRrule } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";

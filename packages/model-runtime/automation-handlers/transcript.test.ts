@@ -1,7 +1,7 @@
 /*
  * Source-level contract for the ASR recognition handler (#781).
  *
- * `packages/automation/src/manifest/enricher-templates.test.ts` owns the
+ * `packages/server/src/automation/manifest/enricher-templates.test.ts` owns the
  * bundled copy's spine: the typed `core.set_extracted_text` write against the
  * bounded original, the oversized-original permanent skip, the empty-speech
  * skip, and the throw when the original cannot be read. This file owns the

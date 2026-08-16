@@ -4,7 +4,7 @@ import {
   GATEWAY_PROTOCOL_VERSION,
   judgeGatewayInfo,
   readProtocolFromInfo,
-} from "@centraid/protocol";
+} from "@centraid/core/protocol";
 
 export type MobileCompatibilityDisposition =
   | "update-gateway"

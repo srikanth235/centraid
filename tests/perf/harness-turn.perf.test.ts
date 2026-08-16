@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import { HARNESSES, runTurn } from "@centraid/agent-runtime";
-import type { TurnConfig, TurnInput } from "@centraid/agent-runtime";
+import { HARNESSES, runTurn } from "@centraid/server/acp";
+import type { TurnConfig, TurnInput } from "@centraid/server/acp";
 import {
   qualityRegressionBudget,
   recordQualityResult,

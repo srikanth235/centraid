@@ -1,6 +1,6 @@
 /*
  * Renderer-side client for the gateway's link surface (#726 P2/P3 —
- * `packages/gateway/src/routes/vault-links-routes.ts`). A link is the
+ * `packages/server/src/routes/vault-links-routes.ts`). A link is the
  * same-machine "ceremony" a cross-owner edge needs before it may cross; it is
  * also what a remote pair's ticket redemption lands as (D3: locality is
  * routing, not semantics — one link table serves both).
@@ -20,7 +20,7 @@
  * paste- or QR-able); `redeemGatewayLinkTicket` hands one back and the
  * gateway dials the peer itself.
  *
- * Not centralized in `@centraid/protocol`'s `ROUTES` table: the gateway route
+ * Not centralized in `@centraid/core/protocol`'s `ROUTES` table: the gateway route
  * itself exports its own local `LINKS_PATH` constant rather than a shared one
  * (same precedent as the edges-answer sub-paths), so this module mirrors that
  * choice instead of adding a new shared route name for a single consumer.

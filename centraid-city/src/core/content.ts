@@ -113,7 +113,7 @@ export const districts = [
         blurb: "The HTTP/SSE server every API request lands on first.",
         detail:
           "One Node HTTP server accepts every API request — REST calls for conversations, turns, and settings, plus long-lived SSE streams for live turn output. It settles the Host check, CORS, and bearer auth, and strips every client-supplied identity header so the gateway can re-stamp device and companion-grant headers from the authenticated enrollment. Static PWA assets are served separately.",
-        codeRef: "packages/app-engine/src/http/http-server.ts",
+        codeRef: "packages/server/src/engine/http/http-server.ts",
       },
       {
         id: "gateway-router",
@@ -125,7 +125,7 @@ export const districts = [
         detail:
           "The router fans requests out to conversation routes, turn/SSE routes, the blueprint app bundle server, and prefs — each a focused handler module rather than one sprawling switch. It is host-agnostic: the same router runs identically whether the gateway is a detached desktop child or a standalone daemon.",
         codeRef:
-          "packages/gateway/src/serve/build-gateway.ts (composedHandler) + packages/app-engine/src/http/router.ts",
+          "packages/server/src/serve/build-gateway.ts (composedHandler) + packages/server/src/engine/http/router.ts",
       },
       {
         id: "gateway-vaultregistry",
@@ -136,7 +136,7 @@ export const districts = [
         blurb: "The warm map of every mounted vault plane under this gateway.",
         detail:
           "Each vault is a sovereign 'plane' living in its own directory holding vault.db and journal.db; the registry keeps a warm in-memory map of mounted planes keyed by vault id and resolves the active vault from ambient request context, so two clients on two different vaults never collide.",
-        codeRef: "packages/gateway/src/serve/vault-registry.ts",
+        codeRef: "packages/server/src/serve/vault-registry.ts",
       },
       {
         id: "gateway-health",
@@ -148,7 +148,7 @@ export const districts = [
         detail:
           "A health registry tracks 24 named components — the event loop, vaults, disk, the storage limit and quota, connections, the broker, the scheduler, enrichment, vault integrity, backups, and a dozen more like the outbox, the model catalog, and automation runs — and surfaces them to the runtime page so an operator sees a down subsystem before a user does. Twelve are pulled by a probe; the rest report their own failures where they happen. The set is enumerable, which is what lets a test drive every one of them unhealthy.",
         codeRef:
-          "packages/gateway/src/serve/health-registry.ts (EXPECTED_HEALTH_COMPONENTS), build-gateway.ts (registerProbe), disk-health.ts",
+          "packages/server/src/serve/health-registry.ts (EXPECTED_HEALTH_COMPONENTS), build-gateway.ts (registerProbe), disk-health.ts",
       },
     ],
   },
@@ -170,7 +170,7 @@ export const districts = [
         detail:
           "Every conversation — typed, automation-fired, or builder — holds turns, and each turn appends an ordered trace of items, starting with the inbound message itself at ordinal 0. This ledger is the spine of everything a harness does. It is not the spine of the whole system: ordinary reads and writes, and device-to-device sync, appear to complete without a turn ever being opened here.",
         codeRef:
-          "packages/app-engine/src/stores/gateway-db.ts + packages/app-engine/src/conversation/store-sql.ts",
+          "packages/server/src/engine/stores/gateway-db.ts + packages/server/src/engine/conversation/store-sql.ts",
       },
       {
         id: "runtime-acp1",
@@ -182,7 +182,7 @@ export const districts = [
           "One ACP harness process per turn, reused warm per conversation.",
         detail:
           "Harnesses run through the Agent Client Protocol: a harness spawns the backing CLI/SDK, streams its output as items, and hands it a per-turn loopback MCP endpoint as its only door back into the vault. Provider-agnostic by design — a dozen-plus harness kinds share this one seam.",
-        codeRef: "packages/agent-runtime/src/backends/acp",
+        codeRef: "packages/server/src/acp/backends/acp",
       },
       {
         id: "runtime-acp2",
@@ -194,7 +194,7 @@ export const districts = [
         detail:
           "Automation fires are not a special code path — they are turns on an automation-kind conversation, dispatched through the same harness chat uses, so cost accounting and the item ledger work identically whether a human or a cron tick started the turn.",
         codeRef:
-          "packages/automation/src/fire/fire.ts + packages/agent-runtime/src/automation/run-automation-live-dispatch.ts",
+          "packages/server/src/automation/fire/fire.ts + packages/server/src/acp/automation/run-automation-live-dispatch.ts",
       },
       {
         id: "runtime-registry",
@@ -206,7 +206,7 @@ export const districts = [
           "Which harness kinds the runtime can drive, and at what minimum version.",
         detail:
           "Enumerates every ACP harness kind the runtime can drive — around seventeen of them — and the minimum CLI version each has been verified against, so a harness whose event or flag schema has drifted is refused rather than half-driven. What is actually installed on this machine is probed separately, at preflight.",
-        codeRef: "packages/agent-runtime/src/registry.ts + preflight.ts",
+        codeRef: "packages/server/src/acp/registry.ts + preflight.ts",
       },
       {
         id: "runtime-models",
@@ -217,7 +217,7 @@ export const districts = [
         blurb: "The model catalog harnesses select from, enumerated live.",
         detail:
           "Holds the model catalog harnesses select from, enumerated live over ACP from what each harness reports rather than baked into a list here, plus the capability-tier indirection — smart, balanced, fast — which so far only the Claude Code harness declares. Pricing and per-turn metering live over in app-engine, not here.",
-        codeRef: "packages/agent-runtime/src/models",
+        codeRef: "packages/server/src/acp/models",
       },
     ],
   },
@@ -240,7 +240,7 @@ export const districts = [
         detail:
           "Every harness tool call — vault_sql, vault_invoke, vault_content — is checked against the caller's grants before it reaches the vault. A grant names scopes, and each scope carries a verb (read, read+act, act, reveal) plus row filters and a field mask. No grant covering the verb means the call stops here.",
         codeRef:
-          "packages/vault/src/gateway/consent.ts, gateway.ts + packages/agent-runtime/src/backends/acp/vault-mcp-server.ts",
+          "packages/vault/src/gateway/consent.ts, gateway.ts + packages/server/src/acp/backends/acp/vault-mcp-server.ts",
       },
       {
         id: "consent-parking",
@@ -252,7 +252,7 @@ export const districts = [
         detail:
           "A high-risk command from a non-owner caller is not executed outright — it parks: a pending-approval row is written and the client's Approvals screen lists it to allow or deny. The harness gets a `parked` outcome to report, not an error to retry, and approving later executes the stored invocation directly rather than resuming the turn.",
         codeRef:
-          "packages/vault/src/gateway/gateway.ts + packages/gateway/src/serve/vault-plane.ts (confirmParked)",
+          "packages/vault/src/gateway/gateway.ts + packages/server/src/serve/vault-plane.ts (confirmParked)",
       },
       {
         id: "consent-ledger",
@@ -376,7 +376,7 @@ export const districts = [
         detail:
           "Bundles committed WAL frames into segments and drains them to the backup provider, so a restore lands a bounded number of frames behind the primary vault instead of needing a full copy each time. Device replicas are fed differently, over in the harbor. The shipper reads the log and nothing else — it never asks a harness what to send.",
         codeRef:
-          "packages/vault/src/wal-shipper.ts + packages/gateway/src/backup/wal-uploader.ts",
+          "packages/vault/src/wal-shipper.ts + packages/server/src/backup/wal-uploader.ts",
       },
     ],
   },
@@ -455,7 +455,7 @@ export const districts = [
         detail:
           "The apps themselves are not built here — #799 retired the app builder, and the eight system apps ship in the release. What the crane still lifts is an automation: a template is cloned into a fresh, non-colliding (id, name), scaffolded into the vault's code store, and the headless compile harness fills in the manifest and handler.",
         codeRef:
-          "packages/blueprints/src/clone.ts + packages/automation/src/scaffold/scaffold.ts + packages/gateway/src/worktree-store/worktree-store.ts",
+          "packages/blueprints/src/clone.ts + packages/server/src/automation/scaffold/scaffold.ts + packages/server/src/worktree-store/worktree-store.ts",
       },
     ],
   },
@@ -476,7 +476,7 @@ export const districts = [
         detail:
           "The cron cursor resolves schedules against real IANA timezones through a tiered resolution strategy, with an explicit, tested policy for DST gaps and overlaps rather than leaving them to whatever the host OS does.",
         codeRef:
-          "packages/automation/src/cron-timezone.ts + packages/automation/src/fire/cron-cursor.ts, cron-match.ts",
+          "packages/server/src/automation/cron-timezone.ts + packages/server/src/automation/fire/cron-cursor.ts, cron-match.ts",
       },
       {
         id: "automation-shed1",
@@ -488,7 +488,7 @@ export const districts = [
           "Fires on a vault row matching a condition, polled on its own gate.",
         detail:
           "Alongside cron, automations can fire on a data condition — a consented vault read polled on the trigger's gate rather than hooked into the write itself, with each matched row hashed whole so it fires once and stays quiet until that row's content changes.",
-        codeRef: "packages/automation/src/fire/condition.ts",
+        codeRef: "packages/server/src/automation/fire/condition.ts",
       },
       {
         id: "automation-line",
@@ -500,7 +500,7 @@ export const districts = [
         detail:
           "An automation handler is ordinary JavaScript in a worker thread with five ctx rails — vault, fetch, state, runs, delegate — and only ctx.delegate is billed. Of the 27 bundled automations, 19 never touch it: they run for free and the same way every time. The eight that do are the ones that genuinely need judgment — captioning a photo, extracting text, drafting notes.",
         codeRef:
-          "packages/automation/src/handler/runner.ts (delegateDispatcher) + packages/blueprints/automations",
+          "packages/server/src/automation/handler/runner.ts (delegateDispatcher) + packages/blueprints/automations",
       },
       {
         id: "automation-scheduler",
@@ -512,7 +512,7 @@ export const districts = [
         detail:
           "The scheduler is in-process and deliberately does not backfill: minutes the timer slept through are skipped, and this ledger is the record of that — one bounded entry per automation per gap, so a restart can say what it missed instead of pretending it missed nothing. Durable trigger positions live separately, in the cursor engine, which is at-least-once.",
         codeRef:
-          "packages/automation/src/fire/scheduler-ledger.ts, cursor-engine.ts",
+          "packages/server/src/automation/fire/scheduler-ledger.ts, cursor-engine.ts",
       },
     ],
   },
@@ -628,7 +628,7 @@ export const districts = [
         detail:
           "Multiple devices can pair to the same vault; each keeps its own replica cursor and reconciles independently, so one device going offline never blocks another's sync. Convergence is server-authoritative rather than merged: an intent carries the base versions it read, and the gateway rejects it as a conflict if the row has moved since. No model judgment anywhere in it.",
         codeRef:
-          "packages/gateway/src/routes/replica-intent-route.ts + packages/client/src/replica/store-core.ts",
+          "packages/server/src/routes/replica-intent-route.ts + packages/client/src/replica/store-core.ts",
       },
     ],
   },

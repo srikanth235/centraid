@@ -95,7 +95,7 @@ const report = {
     buildNumber:
       "Script-derived major*1e6+minor*1e3+patch; resubmit needs a new patch.",
     protocol:
-      "Connect gate only; see GATEWAY_PROTOCOL_VERSION in @centraid/protocol.",
+      "Connect gate only; see GATEWAY_PROTOCOL_VERSION in @centraid/core/protocol.",
   },
   surfaces: {
     defaultShip,
