@@ -237,7 +237,7 @@ describe("attachments", () => {
     expect(strip.querySelector(".kit-attach-tile")).not.toBeNull();
 
     rm!.click();
-    await vi.waitFor(() => expect(onRemove).toHaveBeenCalledWith("a1"));
+    await vi.waitFor(() => expect(onRemove.mock.calls).toStrictEqual([["a1"]]));
     await vi.waitFor(() =>
       expect(strip.querySelector(".kit-attach-tile")).toBeNull()
     );
@@ -267,7 +267,7 @@ describe("attachments", () => {
     const rm = strip.querySelector<HTMLButtonElement>(".kit-attach-remove")!;
     rm.click();
     rm.click();
-    await vi.waitFor(() => expect(onRemove).toHaveBeenCalledWith("a2"));
+    await vi.waitFor(() => expect(onRemove.mock.calls).toStrictEqual([["a2"]]));
     expect(strip.querySelector(".kit-attach-tile")).not.toBeNull();
     strip.remove();
   });

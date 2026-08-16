@@ -477,7 +477,11 @@ in `delete-app.spec.ts`, `launch-time.spec.ts`, `onboarding-home.spec.ts`,
 and `settings-gateways.spec.ts` drive the live inline-app/App-settings
 surface instead of retired `app-view` / `Build a new app` / draft-delete
 paths; extra `app-meta-properties` assertions kill enough blueprints
-mutants to stay at or above floor 74.
+mutants to stay at or above floor 74. The matrix journey name for
+`desktop-delete-app-journey` moved with that retarget, so
+`tests/quality/classification-ratchet.json` reseeds the
+`tests/matrix.json` fingerprint (file
+`tests/quality/classification-ratchet.json`).
 
 ### Full changed-file inventory
 
