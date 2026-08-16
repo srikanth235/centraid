@@ -154,27 +154,39 @@ async function prepareAgenda(page: Page): Promise<string> {
       { timeout: 30_000 }
     )
     .toBe(true);
-  const prepared = await page.evaluate(async (ready) => {
-    const client = window.centraid;
-    const start = new Date(Date.now() + 86_400_000);
-    const event = await client.write({
-      action: "propose",
-      input: {
-        summary: "Offline RSVP planning",
-        calendar_id: ready.upcoming.calendars[0]!.calendar_id,
-        dtstart: start.toISOString(),
-        dtend: new Date(start.getTime() + 3_600_000).toISOString(),
-        start_tz: "UTC",
-        attendee_party_ids: [
-          ready.parties.parties.find((party) => party.is_you)!.party_id,
-        ],
+  // Propose can land while the replica is still re-bootstrapping after
+  // Tally's writes (CI: ReplicaRebootstrapRequiredError / HTTP 500 pull).
+  // Retry the write until the rail is up — a failed propose does not
+  // persist an event, so a later executed write is the only durable row.
+  let prepared: { status: string; eventId?: unknown } | undefined;
+  await expect
+    .poll(
+      async () => {
+        prepared = await page.evaluate(async (ready) => {
+          const client = window.centraid;
+          const start = new Date(Date.now() + 86_400_000);
+          const event = await client.write({
+            action: "propose",
+            input: {
+              summary: "Offline RSVP planning",
+              calendar_id: ready.upcoming.calendars[0]!.calendar_id,
+              dtstart: start.toISOString(),
+              dtend: new Date(start.getTime() + 3_600_000).toISOString(),
+              start_tz: "UTC",
+              attendee_party_ids: [
+                ready.parties.parties.find((party) => party.is_you)!.party_id,
+              ],
+            },
+          });
+          return { status: event.status, eventId: event.output?.["event_id"] };
+        }, setup!);
+        return prepared.status;
       },
-    });
-    return { status: event.status, eventId: event.output?.["event_id"] };
-  }, setup!);
-  expect(prepared.status).toBe("executed");
-  expect(prepared.eventId).toEqual(expect.any(String));
-  return String(prepared.eventId);
+      { timeout: 30_000 }
+    )
+    .toBe("executed");
+  expect(prepared?.eventId).toEqual(expect.any(String));
+  return String(prepared!.eventId);
 }
 
 test("production Tally, Tasks, People, and Agenda pending rows survive an offline Electron reload", async () => {

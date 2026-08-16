@@ -485,7 +485,9 @@ mutants to stay at or above floor 74. The matrix journey name for
 desktop-e2e run showed the mock gateway does not mark Tasks bundled, so
 Manage still offers Delete; 2.5 / 3.3 assert that live surface, and 3.5b
 cancels Delete instead of clicking the gear through the settings
-backdrop.
+backdrop. `pending-overlay.spec.ts` now retries Agenda `propose` until
+the replica rail is up — CI was failing `prepareAgenda` on
+`ReplicaRebootstrapRequiredError` after Tally writes.
 
 ### Full changed-file inventory
 
@@ -534,6 +536,7 @@ deletions, renames, and this receipt:
 - `apps/desktop/tests/e2e/fixtures.ts`
 - `apps/desktop/tests/e2e/launch-time.spec.ts`
 - `apps/desktop/tests/e2e/onboarding-home.spec.ts`
+- `apps/desktop/tests/e2e/pending-overlay.spec.ts`
 - `apps/desktop/tests/e2e/settings-gateways.spec.ts`
 - `apps/desktop/vite.config.ts`
 - `apps/mobile/App.tsx`
