@@ -531,9 +531,16 @@ tests/quality/user-facing-qualities.test.ts
   the harness preflight text — replica-protocol and harness plumbing
   vocabulary, not screen copy. The `"s columns: SPEND per day…"` inventory
   item is a doc-comment fragment, a false twin.
-- Slice C found one pre-existing failure unrelated to copy:
+- One pre-existing failure, unrelated to copy:
   `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` cannot bundle
-  `node:sqlite`; it fails identically on the base tree.
+  `node:sqlite`. Verified against the base tree (nothing on this branch
+  touches that driver, the vitest config, or mobile's dependencies) and now
+  tracked in [QUALITY.md](../QUALITY.md); fixing it is a bundler-seam
+  change, outside this umbrella's copy scope.
+- `design:gallery` cannot run in the authoring container: the repo pins a
+  Playwright build whose `chrome-headless-shell` (1234) is absent, while the
+  image ships 1194. A browser-binary mismatch, independent of this diff; CI
+  runs the gate.
 
 ## Out of scope
 
