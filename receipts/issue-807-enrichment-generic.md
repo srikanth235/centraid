@@ -74,6 +74,8 @@ is the pre-release, single-rung, edit-in-place base (`schema/migrate.ts`), where
 a file written by an older shape is re-created rather than migrated. The
 `profile` DEFAULT is what keeps every existing stamp call site byte-identical.
 
+#807 Wave 1 registers the read-only /centraid/_enrich prefix in route-security.ts (device auth, none vault scope) for the engine-profiles listing; the classified owner file changes only by that registration row, no existing route's auth class changes, and no quality grade, budget, or demonstrated-red claim weakens. Prior: #801 (chain preserved in receipts/issue-801-package-consolidation.md and git history of this file).
+
 **Wave 1 deviations.** (1) Engine variants are `built-in`/`delegate` (repo
 vocabulary), not `builtin`/`provider`. (2) Built-in profile identity is
 `(capability, "built-in")` rather than per-capability minted ids, matching the
@@ -152,6 +154,7 @@ unnarrated) were folded into `## What changed` after the audit.
 - `packages/server/src/enrich/capability-registry.ts`
 - `packages/server/src/enrich/capability-registry.test.ts`
 - `tests/schema-export-fingerprint.json`
+- `tests/quality/classification-ratchet.json`
 - `tests/experience-budgets/client-query-counts.json`
 - `docs/photos/derived-ledger.md`
 - `docs/decisions.md`
