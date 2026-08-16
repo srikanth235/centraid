@@ -5,7 +5,7 @@ import { describe, expect, onTestFinished, test } from "vitest";
 
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
-import { runConversationArchival } from "../../packages/app-engine/src/conversation/archive/index.js";
+import { runConversationArchival } from "../../packages/server/src/engine/conversation/archive/index.js";
 import {
   countTurns,
   daysAgo,
@@ -14,7 +14,7 @@ import {
   openTempJournal,
   seedConversation,
   seedTurn,
-} from "../../packages/app-engine/src/conversation/archive/test-fixtures.js";
+} from "../../packages/server/src/engine/conversation/archive/test-fixtures.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/conversation-ledger.scale.test.ts";

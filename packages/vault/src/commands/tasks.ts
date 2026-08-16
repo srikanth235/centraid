@@ -5,7 +5,7 @@
 // (needs-action → in-process → completed | cancelled), priority 0 means
 // unset and 1 is highest (RFC 5545 §3.8.1.9).
 
-import { nextOccurrence } from "@centraid/time-engine";
+import { nextOccurrence } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";

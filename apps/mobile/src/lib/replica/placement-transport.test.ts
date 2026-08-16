@@ -7,7 +7,7 @@ vi.mock(import("../gateway") as Promise<unknown>, () => ({
   authHeader: () => ({}),
 }));
 
-import { ROUTES } from "@centraid/protocol";
+import { ROUTES } from "@centraid/core/protocol";
 
 import type { PlacementIntent } from "./multi-vault-reader";
 import {

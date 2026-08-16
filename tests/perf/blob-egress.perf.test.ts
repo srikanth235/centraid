@@ -7,7 +7,7 @@ import { describe, expect, onTestFinished, test } from "vitest";
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-import { openVaultRegistry } from "../../packages/gateway/src/serve/vault-registry.js";
+import { openVaultRegistry } from "../../packages/server/src/serve/vault-registry.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/perf/blob-egress.perf.test.ts";

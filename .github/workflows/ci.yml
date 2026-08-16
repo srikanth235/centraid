@@ -88,24 +88,24 @@ jobs:
             client:
               - 'apps/web/**'
               - 'apps/desktop/**'
-              - 'packages/gateway/**'
-              - 'packages/app-engine/**'
+              - 'packages/server/**'
+              - 'packages/server/**'
               - 'packages/client/**'
               - 'packages/blueprints/**'
               - 'packages/design/**'
             gateway:
-              - 'packages/gateway/**'
-              - 'packages/app-engine/**'
-              - 'packages/protocol/**'
+              - 'packages/server/**'
+              - 'packages/server/**'
+              - 'packages/core/**'
               - 'packages/cli/**'
-              - 'packages/agent-runtime/**'
-              - 'packages/automation/**'
+              - 'packages/server/**'
+              - 'packages/server/**'
               - 'packages/vault/**'
               - 'packages/backup/**'
               - 'packages/blueprints/**'
               - 'packages/tunnel/**'
               - 'packages/design/**'
-              - 'packages/blob-format/**'
+              - 'packages/core/**'
               # #781 — the recognition automations the packaged gateway ships
               # under packages/blueprints/automations are BUILT from
               # packages/model-runtime/automation-handlers, so a source-only
@@ -129,15 +129,15 @@ jobs:
               - 'apps/extension/**'
               - 'apps/web/iroh-wasm/**'
               - 'apps/web/src/generated/**'
-              - 'packages/app-engine/**'
+              - 'packages/server/**'
               - 'packages/blueprints/apps/locker/**'
-              - 'packages/gateway/**'
+              - 'packages/server/**'
               - 'packages/tunnel/**'
               - 'packages/vault/**'
               - 'tests/agent-e2e-pairing/**'
             oauth-worker:
               - 'apps/oauth-worker/**'
-              - 'packages/gateway/src/serve/assist-oauth.ts'
+              - 'packages/server/src/serve/assist-oauth.ts'
             # #587 E22/F26/F27 — Bun workspace resolution means a root-only
             # dependency change can break Metro or the committed native trees.
             mobile:
@@ -690,7 +690,7 @@ jobs:
       # The focused blueprint test imports the shared recurrence engine but
       # intentionally bypasses Turbo's dependency graph, so build that package
       # explicitly on a clean runner before invoking Vitest directly.
-      - run: bun run --filter @centraid/time-engine build
+      - run: bun run --filter @centraid/core/time build
       - run: bun run --filter @centraid/blueprints test -- src/query-handlers.test.ts
 
   # #526 — stateless Assist ceremony edge. The protected production deploy of

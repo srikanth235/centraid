@@ -306,22 +306,22 @@ test("an allowlist entry without a reason is a config error", (t) => {
 
 test("test classification follows the TESTING.md path conventions", () => {
   for (const p of [
-    "packages/gateway/src/serve/vault-plane.test.ts",
-    "packages/gateway/src/serve/gateway-db-lock.integration.test.ts",
+    "packages/server/src/serve/vault-plane.test.ts",
+    "packages/server/src/serve/gateway-db-lock.integration.test.ts",
     "packages/client/src/web-control-sessions.contract.test.ts",
     "apps/web/tests/e2e/share.spec.ts",
-    "packages/gateway/src/serve/peer-give.test-fixtures.ts",
-    "packages/gateway/src/serve/outbox-executor-test-kit.ts",
+    "packages/server/src/serve/peer-give.test-fixtures.ts",
+    "packages/server/src/serve/outbox-executor-test-kit.ts",
     "packages/vault/src/share/placement-fixture.ts",
     "packages/test-kit/src/sqlite.ts",
     "tests/perf/commons.perf.test.ts",
-    "packages/gateway/benchmarks/low-end.ts",
+    "packages/server/benchmarks/low-end.ts",
   ]) {
     assert.equal(isTestPath(p), true, `${p} should classify as test`);
   }
   for (const p of [
     "packages/vault/src/share/placement.ts",
-    "packages/gateway/src/serve/peer-link-client.ts",
+    "packages/server/src/serve/peer-link-client.ts",
     "apps/desktop/src/main.ts",
   ]) {
     assert.equal(isTestPath(p), false, `${p} should classify as production`);

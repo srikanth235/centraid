@@ -32,15 +32,13 @@
     "typecheck:apps": "tsc -p tsconfig.apps.json --noEmit"
   },
   "dependencies": {
-    "@centraid/blob-format": "workspace:*",
+    "@centraid/core": "workspace:*",
     "@centraid/design": "workspace:*",
     "pdfjs-dist": "6.1.200",
     "tldts": "7.4.9"
   },
   "devDependencies": {
-    "@centraid/app-engine": "workspace:*",
     "@centraid/test-kit": "workspace:*",
-    "@centraid/time-engine": "workspace:*",
     "@types/node": "^26.1.2",
     "@types/react": "~19.2.17",
     "esbuild": "^0.28.1",

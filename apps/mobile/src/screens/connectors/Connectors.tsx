@@ -22,7 +22,7 @@
 // ATTACHED DATA SYNCS IS OMITTED, ON PURPOSE.
 // The reference's second section lists per-connection syncs. The gateway
 // serves no such plane: the connections routes carry connections and their
-// health (`packages/gateway/src/routes/connections-routes.ts`), and a "sync"
+// health (`packages/server/src/routes/connections-routes.ts`), and a "sync"
 // is an automation grown from a pull blueprint whose rows
 // (`lib/automations.ts`) carry no connection handle to join on. Rendering the
 // section from a name-matching guess would put a claim about what leaves this

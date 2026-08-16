@@ -113,7 +113,7 @@ The registry lives in `tests/matrix.json#laws` as `{ [tag]: { statement, owner, 
 | `const j = read(); j.x = 1; write(j)` in a route | `store.setX(1)` / `store.update(…)` that locks and writes |
 | Two handlers each rewriting the same JSON | One store method with a single persist path |
 
-**Mechanical vs judgment:** judgment-only in review; prefer existing store methods in `packages/gateway/src/serve/*-store.ts`.
+**Mechanical vs judgment:** judgment-only in review; prefer existing store methods in `packages/server/src/serve/*-store.ts`.
 
 ## Nothing O(vault-size) on the request path
 

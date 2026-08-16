@@ -3,14 +3,14 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { EnrollmentStore } from "../../../../packages/gateway/dist/serve/enrollment-store.js";
-import { GatewayDatabase } from "../../../../packages/gateway/dist/serve/gateway-db.js";
-import { PairingTicketStore } from "../../../../packages/gateway/dist/serve/pairing-store.js";
-import { serve } from "../../../../packages/gateway/dist/serve/serve.js";
+import { EnrollmentStore } from "../../../../packages/server/dist/serve/enrollment-store.js";
+import { GatewayDatabase } from "../../../../packages/server/dist/serve/gateway-db.js";
+import { PairingTicketStore } from "../../../../packages/server/dist/serve/pairing-store.js";
+import { serve } from "../../../../packages/server/dist/serve/serve.js";
 import {
   WebControlSessionStore,
   hashControlToken,
-} from "../../../../packages/gateway/dist/serve/web-session-store.js";
+} from "../../../../packages/server/dist/serve/web-session-store.js";
 
 const dataDir = await fs.mkdtemp(
   path.join(os.tmpdir(), `centraid-web-e2e-${crypto.randomUUID()}-`)

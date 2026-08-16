@@ -31,7 +31,7 @@
       "dependencies": {
         "@centraid/client": "workspace:*",
         "@centraid/design": "workspace:*",
-        "@centraid/gateway": "workspace:*",
+        "@centraid/server": "workspace:*",
         "@centraid/tunnel": "workspace:*",
         "@centraid/vault": "workspace:*",
         "electron-updater": "^6.6.2",
@@ -57,8 +57,8 @@
       "name": "@centraid/extension",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/core": "workspace:*",
         "@centraid/design": "workspace:*",
-        "@centraid/protocol": "workspace:*",
         "tldts": "7.4.9",
       },
       "devDependencies": {
@@ -74,9 +74,8 @@
         "@babel/runtime": "^7.25.0",
         "@centraid/blueprints": "workspace:*",
         "@centraid/client": "workspace:*",
+        "@centraid/core": "workspace:*",
         "@centraid/design": "workspace:*",
-        "@centraid/protocol": "workspace:*",
-        "@centraid/time-engine": "workspace:*",
         "@expo-google-fonts/instrument-sans": "^0.4.2",
         "@op-engineering/op-sqlite": "17.1.3",
         "@react-native-async-storage/async-storage": "2.2.0",
@@ -174,52 +173,6 @@
         "vite": "^8.1.5",
       },
     },
-    "packages/agent-runtime": {
-      "name": "@centraid/agent-runtime",
-      "version": "0.1.0",
-      "bin": {
-        "centraid": "./dist/cli/centraid-cli.js",
-      },
-      "dependencies": {
-        "@agentclientprotocol/claude-agent-acp": "0.63.0",
-        "@agentclientprotocol/codex-acp": "1.1.7",
-        "@agentclientprotocol/sdk": "1.3.0",
-        "@centraid/app-engine": "workspace:*",
-        "@centraid/automation": "workspace:*",
-      },
-      "devDependencies": {
-        "@centraid/test-kit": "workspace:*",
-        "@types/node": "^26.1.2",
-        "typescript": "catalog:",
-      },
-    },
-    "packages/app-engine": {
-      "name": "@centraid/app-engine",
-      "version": "0.1.0",
-      "dependencies": {
-        "ajv": "^8.17.1",
-        "esbuild": "^0.28.1",
-      },
-      "devDependencies": {
-        "@centraid/test-kit": "workspace:*",
-        "@types/node": "^26.1.2",
-        "typescript": "catalog:",
-      },
-    },
-    "packages/automation": {
-      "name": "@centraid/automation",
-      "version": "0.1.0",
-      "dependencies": {
-        "@centraid/app-engine": "workspace:*",
-        "@centraid/blueprints": "workspace:*",
-        "@centraid/time-engine": "workspace:*",
-      },
-      "devDependencies": {
-        "@centraid/test-kit": "workspace:*",
-        "@types/node": "^26.1.2",
-        "typescript": "catalog:",
-      },
-    },
     "packages/backup": {
       "name": "@centraid/backup",
       "version": "0.1.0",
@@ -229,26 +182,19 @@
         "typescript": "catalog:",
       },
     },
-    "packages/blob-format": {
-      "name": "@centraid/blob-format",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@centraid/test-kit": "workspace:*",
-        "typescript": "catalog:",
-      },
-    },
     "packages/blueprints": {
       "name": "@centraid/blueprints",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/core": "workspace:*",
         "@centraid/design": "workspace:*",
         "pdfjs-dist": "6.1.200",
         "tldts": "7.4.9",
       },
       "devDependencies": {
-        "@centraid/app-engine": "workspace:*",
+        "@centraid/core": "workspace:*",
+        "@centraid/server": "workspace:*",
         "@centraid/test-kit": "workspace:*",
-        "@centraid/time-engine": "workspace:*",
         "@types/node": "^26.1.2",
         "@types/react": "~19.2.17",
         "esbuild": "^0.28.1",
@@ -264,7 +210,7 @@
         "centraid": "./dist/cli.js",
       },
       "dependencies": {
-        "@centraid/protocol": "workspace:*",
+        "@centraid/core": "workspace:*",
       },
       "devDependencies": {
         "@centraid/test-kit": "workspace:*",
@@ -276,10 +222,9 @@
       "name": "@centraid/client",
       "version": "0.1.0",
       "dependencies": {
-        "@centraid/blob-format": "workspace:*",
         "@centraid/blueprints": "workspace:*",
+        "@centraid/core": "workspace:*",
         "@centraid/design": "workspace:*",
-        "@centraid/protocol": "workspace:*",
         "@sqlite.org/sqlite-wasm": "3.53.0-build1",
         "pdfjs-dist": "6.1.200",
         "qrcode": "^1.5.4",
@@ -295,11 +240,19 @@
         "typescript": "catalog:",
       },
     },
+    "packages/core": {
+      "name": "@centraid/core",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@centraid/test-kit": "workspace:*",
+        "@types/node": "^26.1.2",
+        "typescript": "catalog:",
+      },
+    },
     "packages/design": {
       "name": "@centraid/design",
       "version": "0.1.0",
       "dependencies": {
-        "@centraid/blob-format": "workspace:*",
         "@fontsource/instrument-sans": "5.2.5",
       },
       "devDependencies": {
@@ -308,22 +261,33 @@
         "typescript": "catalog:",
       },
     },
-    "packages/gateway": {
-      "name": "@centraid/gateway",
+    "packages/model-runtime": {
+      "name": "@centraid/model-runtime",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@centraid/test-kit": "workspace:*",
+        "@types/node": "^26.1.2",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/server": {
+      "name": "@centraid/server",
       "version": "0.1.0",
       "bin": {
         "centraid-gateway": "./dist/cli/cli.js",
+        "centraid-acp": "./dist/acp/cli/centraid-cli.js",
       },
       "dependencies": {
-        "@centraid/agent-runtime": "workspace:*",
-        "@centraid/app-engine": "workspace:*",
-        "@centraid/automation": "workspace:*",
+        "@agentclientprotocol/claude-agent-acp": "0.63.0",
+        "@agentclientprotocol/codex-acp": "1.1.7",
+        "@agentclientprotocol/sdk": "1.3.0",
         "@centraid/backup": "workspace:*",
         "@centraid/blueprints": "workspace:*",
-        "@centraid/protocol": "workspace:*",
-        "@centraid/time-engine": "workspace:*",
+        "@centraid/core": "workspace:*",
         "@centraid/tunnel": "workspace:*",
         "@centraid/vault": "workspace:*",
+        "ajv": "^8.17.1",
+        "esbuild": "^0.28.1",
         "jpeg-js": "^0.4.4",
         "pngjs": "7.0.0",
         "qrcode": "^1.5.4",
@@ -342,24 +306,6 @@
         "typescript": "catalog:",
       },
     },
-    "packages/model-runtime": {
-      "name": "@centraid/model-runtime",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@centraid/test-kit": "workspace:*",
-        "@types/node": "^26.1.2",
-        "typescript": "catalog:",
-      },
-    },
-    "packages/protocol": {
-      "name": "@centraid/protocol",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@centraid/test-kit": "workspace:*",
-        "@types/node": "^26.1.2",
-        "typescript": "catalog:",
-      },
-    },
     "packages/test-kit": {
       "name": "@centraid/test-kit",
       "version": "0.1.0",
@@ -371,15 +317,6 @@
         "typescript": "catalog:",
       },
     },
-    "packages/time-engine": {
-      "name": "@centraid/time-engine",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@centraid/test-kit": "workspace:*",
-        "@types/node": "^26.1.2",
-        "typescript": "catalog:",
-      },
-    },
     "packages/tunnel": {
       "name": "@centraid/tunnel",
       "version": "0.1.0",
@@ -387,7 +324,7 @@
         "@number0/iroh": "1.1.0",
       },
       "devDependencies": {
-        "@centraid/protocol": "workspace:*",
+        "@centraid/core": "workspace:*",
         "@centraid/test-kit": "workspace:*",
         "@types/node": "^26.1.2",
         "typescript": "catalog:",
@@ -398,8 +335,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@centraid/backup": "workspace:*",
-        "@centraid/blob-format": "workspace:*",
-        "@centraid/time-engine": "workspace:*",
+        "@centraid/core": "workspace:*",
         "hash-wasm": "^4.12.0",
         "uuid": "^14.0.1",
       },
@@ -678,15 +614,7 @@
 
     "@capsizecss/unpack": ["@capsizecss/unpack@4.0.1", "", { "dependencies": { "fontkitten": "^1.0.3" } }, "sha512-CuNiSqg7+e1cO/GjffyMOm5Tt2jUF9CWHHnvQ/UkqvtkGfHdgwEC0wpmq7fkN3gxwpRnrAN0WzO3vREKmNolMQ=="],
 
-    "@centraid/agent-runtime": ["@centraid/agent-runtime@workspace:packages/agent-runtime"],
-
-    "@centraid/app-engine": ["@centraid/app-engine@workspace:packages/app-engine"],
-
-    "@centraid/automation": ["@centraid/automation@workspace:packages/automation"],
-
     "@centraid/backup": ["@centraid/backup@workspace:packages/backup"],
-
-    "@centraid/blob-format": ["@centraid/blob-format@workspace:packages/blob-format"],
 
     "@centraid/blueprints": ["@centraid/blueprints@workspace:packages/blueprints"],
 
@@ -694,13 +622,13 @@
 
     "@centraid/client": ["@centraid/client@workspace:packages/client"],
 
+    "@centraid/core": ["@centraid/core@workspace:packages/core"],
+
     "@centraid/design": ["@centraid/design@workspace:packages/design"],
 
     "@centraid/desktop": ["@centraid/desktop@workspace:apps/desktop"],
 
     "@centraid/extension": ["@centraid/extension@workspace:apps/extension"],
-
-    "@centraid/gateway": ["@centraid/gateway@workspace:packages/gateway"],
 
     "@centraid/mobile": ["@centraid/mobile@workspace:apps/mobile"],
 
@@ -708,11 +636,9 @@
 
     "@centraid/oauth-worker": ["@centraid/oauth-worker@workspace:apps/oauth-worker"],
 
-    "@centraid/protocol": ["@centraid/protocol@workspace:packages/protocol"],
+    "@centraid/server": ["@centraid/server@workspace:packages/server"],
 
     "@centraid/test-kit": ["@centraid/test-kit@workspace:packages/test-kit"],
-
-    "@centraid/time-engine": ["@centraid/time-engine@workspace:packages/time-engine"],
 
     "@centraid/tunnel": ["@centraid/tunnel@workspace:packages/tunnel"],
 

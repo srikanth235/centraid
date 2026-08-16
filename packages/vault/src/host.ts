@@ -201,7 +201,7 @@ export function updateBlobStoreSettings(
  * `device` (the member's own phone/laptop, plus deterministic gateway
  * work), `gateway` (the member's own gateway may additionally do whatever
  * it is already wired to, including a model turn — see
- * `packages/automation/src/fire/enrich-gate.ts` for what that widens and
+ * `packages/server/src/automation/fire/enrich-gate.ts` for what that widens and
  * does not). Absent means `gateway`, the seeded bootstrap default.
  */
 export type EnrichTier = "off" | "device" | "gateway";

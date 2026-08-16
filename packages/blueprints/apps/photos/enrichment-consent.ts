@@ -216,7 +216,7 @@ export type AnswerAvailability = SharedAnswerAvailability;
  * execution path: enrichment automations fired and took model turns
  * whatever the tier said, which is why this module could only ever hedge.
  * The gate is server-side, at the one place enrichment automations are
- * fired (`packages/automation/src/fire/fire.ts`, deciding through
+ * fired (`packages/server/src/automation/fire/fire.ts`, deciding through
  * `fire/enrich-gate.ts` on the vault tier read by
  * `packages/vault/src/enrich/policy.ts`): `off` refuses the run, `device`
  * refuses any run that would need the `gateway` lane — and seals `ctx.delegate`

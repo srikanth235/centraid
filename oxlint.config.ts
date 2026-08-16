@@ -91,7 +91,7 @@ const TEST_SEAM_IMPORTS = {
     {
       group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
       message:
-        "Import from the package root barrel (e.g. '@centraid/app-engine'), not its internals — keeps each package's public surface the real contract. See governance: no-deep-imports.",
+        "Import from the package root barrel (e.g. '@centraid/server/engine'), not its internals — keeps each package's public surface the real contract. See governance: no-deep-imports.",
     },
   ],
 };
@@ -222,7 +222,7 @@ export default defineConfig({
           {
             group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
             message:
-              "Import from the package root barrel (e.g. '@centraid/app-engine'), not its internals \u2014 keeps each package's public surface the real contract. See governance: no-deep-imports.",
+              "Import from the package root barrel (e.g. '@centraid/server/engine'), not its internals \u2014 keeps each package's public surface the real contract. See governance: no-deep-imports.",
           },
         ],
       },
@@ -449,24 +449,7 @@ export default defineConfig({
       },
     },
     {
-      files: ["packages/app-engine/**/*.ts"],
-      rules: {
-        "no-restricted-imports": [
-          "error",
-          {
-            patterns: [
-              {
-                group: ["@centraid/*"],
-                message:
-                  "app-engine is the stable core of the dependency DAG \u2014 it must not import other @centraid packages. Mode/runtime specifics belong at entrypoints (desktop main, gateway CLI). See governance: module-layering.",
-              },
-            ],
-          },
-        ],
-      },
-    },
-    {
-      files: ["packages/automation/**/*.ts"],
+      files: ["packages/server/src/engine/**/*.ts"],
       rules: {
         "no-restricted-imports": [
           "error",
@@ -474,13 +457,36 @@ export default defineConfig({
             patterns: [
               {
                 group: [
-                  "@centraid/agent-runtime",
-                  "@centraid/agent-runtime/*",
-                  "@centraid/gateway",
-                  "@centraid/gateway/*",
+                  "@centraid/*",
+                  "../automation",
+                  "../automation/*",
+                  "../acp",
+                  "../acp/*",
                 ],
                 message:
-                  "automation must not depend on a harness backend \u2014 execution and scheduling are injected callbacks (it depends on app-engine, never on agent-runtime/gateway). See governance: module-layering.",
+                  "engine is the stable core of the server DAG — it must not import automation, acp, or other @centraid packages. Seams are path-based after #801.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      files: ["packages/server/src/automation/**/*.ts"],
+      rules: {
+        "no-restricted-imports": [
+          "error",
+          {
+            patterns: [
+              {
+                group: [
+                  "@centraid/server/acp",
+                  "@centraid/server/acp/*",
+                  "../acp",
+                  "../acp/*",
+                ],
+                message:
+                  "automation must not import the ACP turn driver — execution is an injected callback. Seams are path-based after #801.",
               },
               {
                 group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
@@ -499,7 +505,7 @@ export default defineConfig({
       // redbox in the exact-HEAD journey, and time-engine is bundled into
       // native Agenda/Tally. Keep compatibility mechanical rather than relying
       // on Node-based unit tests, whose newer Array prototype masks the bug.
-      files: ["apps/mobile/src/**", "packages/time-engine/src/**"],
+      files: ["apps/mobile/src/**", "packages/core/src/time/**"],
       rules: {
         "no-restricted-properties": ["error", ...HERMES_ARRAY_PROPERTIES],
       },
@@ -522,8 +528,8 @@ export default defineConfig({
       files: [
         "apps/mobile/src/**/*.{test,spec}.{ts,tsx}",
         "apps/mobile/src/**/*.test-fixtures.ts",
-        "packages/time-engine/src/**/*.{test,spec}.{ts,tsx}",
-        "packages/time-engine/src/**/*.test-fixtures.ts",
+        "packages/core/src/time/**/*.{test,spec}.{ts,tsx}",
+        "packages/core/src/time/**/*.test-fixtures.ts",
       ],
       rules: {
         "no-restricted-properties": [

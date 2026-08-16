@@ -1,4 +1,4 @@
-import { appActionPath, appQueryPath } from "@centraid/protocol";
+import { appActionPath, appQueryPath } from "@centraid/core/protocol";
 
 import initWasm, {
   BrowserEndpoint,

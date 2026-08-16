@@ -5,7 +5,7 @@
  * inline data: URI. Identical bytes collapse onto one asset, and
  * re-uploading a deleted photo restores it. Risk low.
  *
- * @type {import('@centraid/app-engine').ActionHandler}
+ * @type {import('@centraid/server/engine').ActionHandler}
  */
 export default async function upload({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;

@@ -1,0 +1,91 @@
+{
+  "name": "@centraid/server",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Centraid backend: host-agnostic gateway plus the app engine, automation fire spine, and ACP turn driver. Ships the `centraid-gateway` daemon and the `centraid-acp` harness bin.",
+  "license": "SEE LICENSE IN REPOSITORY",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/srikanth235/centraid.git",
+    "directory": "packages/server"
+  },
+  "bin": {
+    "centraid-acp": "./dist/acp/cli/centraid-cli.js",
+    "centraid-gateway": "./dist/cli/cli.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./engine": {
+      "types": "./dist/engine/index.d.ts",
+      "import": "./dist/engine/index.js",
+      "default": "./dist/engine/index.js"
+    },
+    "./automation": {
+      "types": "./dist/automation/index.d.ts",
+      "import": "./dist/automation/index.js",
+      "default": "./dist/automation/index.js"
+    },
+    "./acp": {
+      "types": "./dist/acp/index.d.ts",
+      "import": "./dist/acp/index.js",
+      "default": "./dist/acp/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/embed-web.mjs && mkdir -p dist/acp/backends/acp dist/engine/pricing dist/acp/cli && cp src/acp/backends/acp/vault-mcp-stdio-proxy.mjs dist/acp/backends/acp/ && cp src/engine/pricing/litellm-snapshot.json dist/engine/pricing/ && cp dist/acp/cli/centraid-cli.js dist/acp/cli/centraid-acp && chmod +x dist/acp/cli/centraid-acp",
+    "clean": "rm -rf dist",
+    "perf:low-end": "node scripts/bench-low-end.mjs --check",
+    "perf:runtime-probe": "node scripts/probe-runtime-sqlite.mjs",
+    "probe:all-harnesses": "bun scripts/probe-all-harnesses.ts",
+    "test": "vitest run",
+    "test:live-automation-failover": "CENTRAID_LIVE_AUTOMATION=1 vitest run src/acp/automation/live-automation-failover.test.ts",
+    "test:live-harnesses": "bun scripts/live-harness-smoke.ts",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit"
+  },
+  "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "0.63.0",
+    "@agentclientprotocol/codex-acp": "1.1.7",
+    "@agentclientprotocol/sdk": "1.3.0",
+    "@centraid/backup": "workspace:*",
+    "@centraid/blueprints": "workspace:*",
+    "@centraid/core": "workspace:*",
+    "@centraid/tunnel": "workspace:*",
+    "@centraid/vault": "workspace:*",
+    "ajv": "^8.17.1",
+    "esbuild": "^0.28.1",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "7.0.0",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.35.3",
+    "sqlite-vec": "^0.1.9",
+    "wasm-vips": "^0.0.18",
+    "web-push": "3.6.7"
+  },
+  "devDependencies": {
+    "@centraid/test-kit": "workspace:*",
+    "@centraid/web": "workspace:*",
+    "@types/node": "^26.1.2",
+    "@types/pngjs": "^6.0.5",
+    "@types/qrcode": "^1.5.5",
+    "@types/web-push": "3.6.4",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}

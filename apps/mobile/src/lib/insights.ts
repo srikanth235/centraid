@@ -13,7 +13,7 @@
 //
 // Mobile doesn't depend on the gateway package, so the wire shapes are mirrored
 // here as lean local interfaces (exactly as lib/gateway + lib/automations do).
-// Source of truth: packages/gateway/src/serve/health-registry.ts (HealthSnapshot)
+// Source of truth: packages/server/src/serve/health-registry.ts (HealthSnapshot)
 // and packages/client/src/react/screen-contracts.ts (InsightsSummary).
 
 import {
@@ -92,7 +92,7 @@ export interface InsightsKpis {
   failedCostUsd: number;
   appsTouched: number;
   /** NOT served by the current gateway rollup (`InsightsKpis` in
-   *  `packages/app-engine/src/insights/insights-types.ts` has no quota at
+   *  `packages/server/src/engine/insights/insights-types.ts` has no quota at
    *  all). Left in the mirror because removing a field is not this screen's
    *  call; nothing reads it, and nothing should until a gateway sends one. */
   quotaTokens: number;

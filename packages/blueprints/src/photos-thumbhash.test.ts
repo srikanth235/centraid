@@ -32,7 +32,7 @@ function gradient(w: number, h: number): Uint8Array {
 
 describe("photos-thumbhash", () => {
   test("client encoder matches the gateway codec byte-for-byte on the same RGBA", () => {
-    // Identical fixtures to packages/gateway/src/preview/codec.test.ts — client
+    // Identical fixtures to packages/server/src/preview/codec.test.ts — client
     // and gateway are the same reference algorithm, so a photo staged at upload
     // and one filled by the backstop carry the same placeholder.
     expect(thumbHashFromRgba(64, 64, gradient(64, 64))).toBe(

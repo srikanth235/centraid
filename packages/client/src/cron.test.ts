@@ -11,7 +11,7 @@ import {
 } from "./cron.js";
 
 // Cron is evaluated against the LOCAL calendar (the basis the scheduler in
-// `packages/automation/src/fire/cron-match.ts` matches on), so these assert on
+// `packages/server/src/automation/fire/cron-match.ts` matches on), so these assert on
 // local wall-clock fields rather than ISO strings. Constructing the clock from
 // local components and reading it back the same way keeps the suite green in
 // any TZ — an ISO literal would only pass on a UTC runner.

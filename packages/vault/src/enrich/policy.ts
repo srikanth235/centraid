@@ -10,7 +10,7 @@
 // `ctx.delegate` regardless of the tier.
 //
 // This is the tier read the enforcement choke point uses (see
-// `packages/automation/src/fire/enrich-gate.ts` for the decision and
+// `packages/server/src/automation/fire/enrich-gate.ts` for the decision and
 // `runFire` for where it is applied). It is deliberately host-plane — a raw
 // `DatabaseSync`, not the consent-checked app bridge — because a guard must
 // never depend on the grants of the party it guards: an enricher whose vault

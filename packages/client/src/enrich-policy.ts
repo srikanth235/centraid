@@ -9,7 +9,7 @@
  * These three values are a mirror of the vault's enum
  * (`packages/vault/src/host.ts` `EnrichTier`, CHECK-constrained in
  * `enrich_policy`'s DDL) and of the gate's
- * (`packages/automation/src/fire/enrich-gate.ts`). They are restated rather
+ * (`packages/server/src/automation/fire/enrich-gate.ts`). They are restated rather
  * than imported because the client does not depend on either package; the
  * route rejects anything outside the enum with a 400, so a drift here fails
  * loudly at the seam instead of silently widening what the owner may set.

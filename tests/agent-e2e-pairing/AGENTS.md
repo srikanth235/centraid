@@ -46,5 +46,5 @@ Verdict at `runs/<runId>/verdict.md`; daemon output at `runs/<runId>/gateway.log
 - [lib/device-redeem.mjs](lib/device-redeem.mjs) — the device role, run standalone inside the device container by `cross-network-relay`.
 - [flows/device-pairing-lifecycle.mjs](flows/device-pairing-lifecycle.mjs) — canonical example of the loopback-flow shape.
 - [flows/cross-network-relay.mjs](flows/cross-network-relay.mjs) — canonical example of the Docker-flow shape.
-- [`packages/gateway/src/serve/pairing-store.ts`](../../packages/gateway/src/serve/pairing-store.ts), [`enrollment-store.ts`](../../packages/gateway/src/serve/enrollment-store.ts), [`../cli/endpoint-host.ts`](../../packages/gateway/src/cli/endpoint-host.ts) — the policy under test.
+- [`packages/server/src/serve/pairing-store.ts`](../../packages/server/src/serve/pairing-store.ts), [`enrollment-store.ts`](../../packages/server/src/serve/enrollment-store.ts), [`../cli/endpoint-host.ts`](../../packages/server/src/cli/endpoint-host.ts) — the policy under test.
 - [`packages/tunnel/src/gateway-endpoint.ts`](../../packages/tunnel/src/gateway-endpoint.ts) — the ALPNs and pair protocol frames.

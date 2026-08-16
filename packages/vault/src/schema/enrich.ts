@@ -93,7 +93,7 @@
 //     backfilled below for vaults that predate this table.
 //
 //     TIER RENAME (issue #712 C5): `off|local|model` became
-//     `off|device|gateway` — see `packages/automation/src/fire/enrich-gate.ts`
+//     `off|device|gateway` — see `packages/server/src/automation/fire/enrich-gate.ts`
 //     for the axis and `packages/vault/src/enrich/policy.ts` for the
 //     COMPAT read-time mapping of legacy stored values. The CHECK below
 //     keeps accepting the legacy tokens: this is a pre-release,

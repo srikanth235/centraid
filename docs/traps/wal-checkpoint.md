@@ -16,7 +16,7 @@ Copying `vault.db` (and `journal.db`) with `cp` while SQLite is in WAL mode, or 
 1. **`cp vault.db vault.db.bak` while the gateway is running** — WAL frames not in the main file; restore is incomplete.
 2. **Copying only `vault.db` without `journal.db` / WAL sidecars** when the process was not cleanly checkpointed.
 3. **Calling checkpoint APIs as non-owner** or from a random script — custody refuses or fights the shipper.
-4. **Treating filesystem snapshot of a live dataDir as a backup product** — use `backup` / `recover` paths (`packages/gateway` backup service, `@centraid/backup`).
+4. **Treating filesystem snapshot of a live dataDir as a backup product** — use `backup` / `recover` paths (`packages/server` backup service, `@centraid/backup`).
 5. **Deleting `gateway-logs` or enrollment files** thinking they are WAL — different subsystem ([logs.md](../logs.md)).
 
 ## Safe patterns

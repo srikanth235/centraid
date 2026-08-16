@@ -1,8 +1,8 @@
 // The `_centraid-conversations/apps/<id>/…` route builders (issue #420) — the
 // persisted-conversation surface the shell's conversation client reads and
-// writes. These stay here rather than in `@centraid/protocol` because they are
+// writes. These stay here rather than in `@centraid/core/protocol` because they are
 // a flat top-level name with no plane prefix, which the protocol table forbids
-// for new names (see packages/protocol/src/routes.ts and docs/protocol.md).
+// for new names (see packages/core/src/protocol/routes.ts and docs/protocol.md).
 // Transport (auth headers, baseUrl) stays with the caller; only the URLs live
 // here, so a route change lands once.
 

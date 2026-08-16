@@ -3,7 +3,7 @@
 // integers and recurring materialization is deterministic + idempotent, so two
 // offline devices may enqueue the same occurrence without minting duplicates.
 
-import { describeRecurrence, expandRecurrence } from "@centraid/time-engine";
+import { describeRecurrence, expandRecurrence } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";

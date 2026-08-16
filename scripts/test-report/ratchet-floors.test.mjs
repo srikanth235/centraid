@@ -58,8 +58,8 @@ describe("diffMutationFloors", () => {
   test("flags a package mutation score decrease", () => {
     expect(
       diffMutationFloors(
-        { "packages/vault": 80, "packages/automation": 70 },
-        { "packages/vault": 75, "packages/automation": 70 }
+        { "packages/vault": 80, "packages/server/src/automation": 70 },
+        { "packages/vault": 75, "packages/server/src/automation": 70 }
       )
     ).toEqual(['mutation floor "packages/vault" decreased 80 → 75']);
   });

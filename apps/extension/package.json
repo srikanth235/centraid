@@ -10,8 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@centraid/core": "workspace:*",
     "@centraid/design": "workspace:*",
-    "@centraid/protocol": "workspace:*",
     "tldts": "7.4.9"
   },
   "devDependencies": {

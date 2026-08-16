@@ -3,8 +3,8 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
-import { runFire } from "@centraid/automation";
-import type { OpenDispatch } from "@centraid/automation";
+import { runFire } from "@centraid/server/automation";
+import type { OpenDispatch } from "@centraid/server/automation";
 import {
   qualityRegressionBudget,
   recordQualityResult,

@@ -24,7 +24,7 @@ import type {
 // `installInlineCentraid` publishes it on `window.centraid` and returns a
 // teardown that restores whatever was there before. Only one inline app is
 // mounted at a time, so a single module-level install is still enough.
-import { appActionPath, appQueryPath, ROUTES } from "@centraid/protocol";
+import { appActionPath, appQueryPath, ROUTES } from "@centraid/core/protocol";
 
 import {
   auth,

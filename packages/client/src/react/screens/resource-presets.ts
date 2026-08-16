@@ -1,5 +1,5 @@
 // Client-side mirror of the gateway's BUDGET_PRESETS
-// (packages/gateway/src/serve/hardware-profile.ts). The gateway resolves only
+// (packages/server/src/serve/hardware-profile.ts). The gateway resolves only
 // the ACTIVE mode against the host and reports it on health
 // (`resourceProfile.resolved`); to let an owner SEE what each mode grants
 // before committing, the Compare dialog needs every preset's baseline. These

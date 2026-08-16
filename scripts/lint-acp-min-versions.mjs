@@ -10,7 +10,7 @@ import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
 const registry = readFileSync(
-  path.join(root, "packages/agent-runtime/src/registry.ts"),
+  path.join(root, "packages/server/src/acp/registry.ts"),
   "utf8"
 );
 const runnersDoc = readFileSync(path.join(root, "docs/harnesses.md"), "utf8");

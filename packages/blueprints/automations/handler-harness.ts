@@ -47,7 +47,7 @@ export function createHarness(
 }
 
 // Same observable semantics as `cursorManager` in
-// packages/automation/src/worker/runner.ts: provider cursors are live opaque
+// packages/server/src/automation/worker/runner.ts: provider cursors are live opaque
 // tokens; high-water cursors only move upward and refuse type changes.
 export interface CursorHarness {
   cursor: {

@@ -2,7 +2,7 @@
 
 Erase is the **most destructive** gesture the product exposes and the only one that deliberately destroys key material. This is the runbook for a stranded erase and for the restore that follows one.
 
-Product paths: `packages/gateway/src/routes/vault-routes.ts` (the ceremony), `packages/gateway/src/serve/erase-recovery.ts` (boot roll-forward), `packages/gateway/src/backup/recover.ts` (the restore).
+Product paths: `packages/server/src/routes/vault-routes.ts` (the ceremony), `packages/server/src/serve/erase-recovery.ts` (boot roll-forward), `packages/server/src/backup/recover.ts` (the restore).
 
 ## What erase actually does
 

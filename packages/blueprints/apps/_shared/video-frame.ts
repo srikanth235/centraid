@@ -5,7 +5,7 @@
 // the shell's device-enrichment compute in `packages/client` — and blueprints
 // must never import `@centraid/client`, so the shared module has to sit on the
 // blueprints side of that edge and be reached the other way.
-import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from "@centraid/blob-format";
+import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from "@centraid/core/blob";
 
 export const VIDEO_POSTER_EDGE = BLOB_MEDIUM_EDGE;
 export const VIDEO_THUMB_EDGE = BLOB_TINY_EDGE;

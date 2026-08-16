@@ -35,7 +35,7 @@ Per [docs/coding-standards.md](../../docs/coding-standards.md) ("Scale rigs are 
 
 ```sh
 # From the repo root: build the package dists the harness loads (once).
-bun run --cwd packages/app-engine build && bun run --cwd packages/gateway build
+bun run --cwd packages/server build && bun run --cwd packages/server build
 
 # Then, the one-command perf run (rebuilds web dist + runs the spec):
 node scripts/perf/run-waterfall.mjs

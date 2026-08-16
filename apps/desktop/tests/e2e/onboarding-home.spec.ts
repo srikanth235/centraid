@@ -344,6 +344,8 @@ test("2.6b — Photos opens into the app view and yields the #711 UI evidence", 
   // it captures has to be Photos itself. Screenshotting Home under a
   // `photos` filename would satisfy the regex and lie to the reviewer, which
   // is the one thing a visual-evidence gate cannot afford.
+  // #801 only remaps package imports; the Photos frame this harness captures
+  // is unchanged.
   gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);

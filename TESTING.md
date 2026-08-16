@@ -57,7 +57,7 @@ If you are reviewing agent-authored test work, spend your attention here and let
 
 ### Opt-in live adapter smoke
 
-`bun run --cwd packages/agent-runtime test:live-harnesses` launches the configured external ACP harnesses and is intentionally outside CI: it needs local CLI installs and credentials. Run it monthly and before releases or ACP adapter changes; ordinary PR validation uses the deterministic adapter tests instead.
+`bun run --cwd packages/server test:live-harnesses` launches the configured external ACP harnesses and is intentionally outside CI: it needs local CLI installs and credentials. Run it monthly and before releases or ACP adapter changes; ordinary PR validation uses the deterministic adapter tests instead.
 
 ### PR vs nightly (L1 / E2)
 
@@ -65,8 +65,8 @@ Decided in [#468](https://github.com/srikanth235/centraid/issues/468); cite [doc
 
 | Lane | Runs |
 | --- | --- |
-| **Every PR** | Unit, integration, contract; matrix validation + **floors ratchet** via `check:pr`; **affected-package vitest** (`turbo run test --filter='[origin/main]'` — changed packages only, not the full dependent graph); **boot-the-artifact smoke** when the `client` filter triggers (includes `packages/gateway` + `packages/app-engine` paths — #496 E7); **path-filtered client e2e** (the `client-e2e` lane of `ci.yml` since #557) |
-| **Path filters (client e2e)** | **Web** e2e when `apps/web`, `packages/client`, or service-worker files change; **desktop** e2e when `apps/desktop` changes; **boot-smoke** also when gateway/app-engine change. Shard to keep wall-clock roughly under ten minutes. |
+| **Every PR** | Unit, integration, contract; matrix validation + **floors ratchet** via `check:pr`; **affected-package vitest** (`turbo run test --filter='[origin/main]'` — changed packages only, not the full dependent graph); **boot-the-artifact smoke** when the `client` filter triggers (includes `packages/server` paths — #496 E7); **path-filtered client e2e** (the `client-e2e` lane of `ci.yml` since #557) |
+| **Path filters (client e2e)** | **Web** e2e when `apps/web`, `packages/client`, or service-worker files change; **desktop** e2e when `apps/desktop` changes; **boot-smoke** also when `packages/server` changes. Shard to keep wall-clock roughly under ten minutes. |
 | **Nightly** | Full cross-client suites, perf budgets, mobile (**iOS + Android home-loads**), pairing journeys, scale, **mutation (Stryker)** |
 | **Weekly / release opt-in** | Real-weight enrichment goldens: pinned runtime + weights, capability handshake, OCR text, embedding cosine tolerance, face count/geometry, and licence pins. This lane is scheduled, manually dispatchable, and required after model/preprocessing changes; it never joins PR CI. |
 
@@ -86,7 +86,7 @@ Soft SLA (auto-issue, not a hard age gate):
 
 ### Floors ratchet (#496 E4, extended #532)
 
-`tests/coverage-floors.json` values, matrix flow `minimumTests`, and `tests/mutation-floors.json` scores **move only upward**. Perf budget files (`apps/web/tests/e2e/perf-budgets.ts`, `packages/gateway/benchmarks/low-end-budgets.json`) are **tighten-only**: ceilings may drop freely; widening a ceiling or lowering a `min*` floor fails. CI and `bun run test:ratchet` / `check:pr` fail on any decrease/widen unless:
+`tests/coverage-floors.json` values, matrix flow `minimumTests`, and `tests/mutation-floors.json` scores **move only upward**. Perf budget files (`apps/web/tests/e2e/perf-budgets.ts`, `packages/server/benchmarks/low-end-budgets.json`) are **tighten-only**: ceilings may drop freely; widening a ceiling or lowering a `min*` floor fails. CI and `bun run test:ratchet` / `check:pr` fail on any decrease/widen unless:
 
 - top-level `approvedDeviation` on `coverage-floors.json` or `mutation-floors.json`,
 - per-flow `approvedMinimumTestsDeviation` on the lowered flow, or
@@ -298,35 +298,35 @@ Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and ar
 | repo-wide (`lines`) | 63.05 / — | **62** / — |
 | `packages/vault/src/**` | 87.7 / 73.9 (#638) | **87** / **73** |
 | `packages/backup/src/**` | 90.03 / 77.63 | **90** / **74** |
-| `packages/blob-format/src/**` | — / — | **98** / **96** |
+| `packages/core/src/blob/**` | — / — | **98** / **96** |
 | `packages/blueprints/src/**` | 90.68 / 78.27 | **90** / **75** |
 | `packages/blueprints/apps/photos/**` | 46.82 / 42.81 | **44** / **40** |
 | `_shared` + non-graduated blueprint apps | 22.53 / 16.92 | **20** / **14** |
 | `packages/model-runtime/src/**` | 68.01 / 51.44 | **66** / **49** |
 | `packages/design/src/**` | 95.1 / — (#709) | **94** / **70** |
-| `packages/app-engine/src/**` | 85.45 / 74.44 | **84** / **73** |
-| `packages/gateway/src/**` | 79.9 / 66.37 (#638) | **79** / **65** |
-| `packages/time-engine/src/**` | 84.5 / 67.0 | **82** / **65** |
+| `packages/server/src/engine/**` | 85.45 / 74.44 | **84** / **73** |
+| former gateway dirs under `packages/server/src/` | 79.9 / 66.37 (#638) | **79** / **65** |
+| `packages/core/src/time/**` | 84.5 / 67.0 | **82** / **65** |
 | `packages/client/src/*.{ts,tsx}` | — / — | **78** / **65** |
 | `packages/client/src/replica/**` | 76.82 / 63.37 | **75** / **62** |
 | `packages/client/src/react/**` | 67.58 / 56.31 | **65** / **54** |
-| `packages/automation/src/**` | 84.36 / 77.52 | **82** / **75** |
+| `packages/server/src/automation/**` | 84.36 / 77.52 | **82** / **75** |
 | `packages/tunnel/src/**` | 72.06 / 52.24 | **70** / **51** |
-| `packages/agent-runtime/src/**` | 86.4 / 76.29 | **84** / **75** |
+| `packages/server/src/acp/**` | 86.4 / 76.29 | **84** / **75** |
 | `packages/cli/src/**` | 84.50 / 82.85 | **83** / **81** |
-| `packages/protocol/src/**` | 100.00 / 98.59 | **98** / **96** |
+| `packages/core/src/protocol/**` | 100.00 / 98.59 | **98** / **96** |
 | `apps/desktop/src/main/*-core.ts` | — / — | **96** / **89** |
 | `apps/oauth-worker/src/**` | 90.65 / 84.23 | **88** / **82** |
 
-Three rows read `—` rather than a number because the measurement that seeded them is not recorded in `tests/coverage-floors.json`; the floor is still enforced, and the next `bun run coverage` that touches those scopes is what fills the column in. `packages/vault` and `packages/gateway` carry the [#638](https://github.com/srikanth235/centraid/issues/638) re-seed (the #630 vault expansion diluted the older 88/80 seeds) and `packages/design/src` the [#709](https://github.com/srikanth235/centraid/issues/709) re-seed measured on CI verify run 30901194404; those provenance notes live in the JSON's `approvedDeviation`.
+Three rows read `—` rather than a number because the measurement that seeded them is not recorded in `tests/coverage-floors.json`; the floor is still enforced, and the next `bun run coverage` that touches those scopes is what fills the column in. `packages/vault` and the former-gateway scopes under `packages/server/src` carry the [#638](https://github.com/srikanth235/centraid/issues/638) re-seed (the #630 vault expansion diluted the older 88/80 seeds) and `packages/design/src` the [#709](https://github.com/srikanth235/centraid/issues/709) re-seed measured on CI verify run 30901194404; those provenance notes live in the JSON's `approvedDeviation`.
 
 The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/design/kit`. Issue #725 graduates Photos to its own scope; the remaining blend covers `_shared` and the seven apps without graduation tables yet. The split is measured on the complete 2026-08-08 run, with the down-only change from the old 17/12 blend documented in `tests/coverage-floors.json`. Real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here. The `packages/model-runtime` scope covers recognition model/build sources; its live model lane is intentionally separate from PR coverage.
 
 `bun run test` prints the active floors after package tests so the local loop never hides the CI contract; `bun run coverage` measures and enforces them. Floors move only upward (`bun run test:ratchet`).
 
-### agent-runtime coverage strategy
+### ACP coverage strategy
 
-`packages/agent-runtime` keeps a **high branch floor (~85%)**. The line floor sat at the 27%-era seed long after measured coverage cleared it; the 2026-07-31 audit (#656) found sustained 86.4% lines, so the floor now follows the standard ratchet policy (two points under sustained level ⇒ **84**) — the "dedicated coverage campaign" the old note demanded had already happened.
+`packages/server/src/acp` keeps a **high branch floor (~85%)**. The line floor sat at the 27%-era seed long after measured coverage cleared it; the 2026-07-31 audit (#656) found sustained 86.4% lines, so the floor now follows the standard ratchet policy (two points under sustained level ⇒ **84**) — the "dedicated coverage campaign" the old note demanded had already happened.
 
 Do **not** lower any engine floor in this table without an explicit issue + receipt. Prefer new pure modules (like `safe-stdin-write`) with unit tests over expanding spawn-heavy turn drivers for coverage alone.
 
@@ -335,13 +335,13 @@ Do **not** lower any engine floor in this table without an explicit issue + rece
 These suites encode product law and are cataloged by name. The matrix validator also records their current minimum test count so a contract cannot silently shrink in CI.
 
 1. Vault consent gateway and journalled writes — `packages/vault/src/gateway/gateway.contract.test.ts`
-2. Backup/restore round-trip and fencing — `packages/gateway/src/backup/backup-service.contract.test.ts`
+2. Backup/restore round-trip and fencing — `packages/server/src/backup/backup-service.contract.test.ts`
 3. Blob custody / CAS state machine — `packages/vault/src/blob/custody-proven.contract.test.ts`
 4. Replica convergence, intent identity, and multi-writer admission — `packages/client/src/replica/intents.contract.test.ts` and `packages/client/src/replica/multi-writer.contract.test.ts`
-5. Handler validation and worker isolation — `packages/app-engine/src/handlers/handler-runner.contract.test.ts`
-6. Control/device session boundaries — `packages/gateway/src/serve/web-control-sessions.contract.test.ts`
-7. Scheduler no-backfill semantics — `packages/automation/src/fire/scheduler-ledger.contract.test.ts`
-8. Conversation digest → archive → custody-gated prune — `packages/app-engine/src/conversation/archive/archive.contract.test.ts`
+5. Handler validation and worker isolation — `packages/server/src/engine/handlers/handler-runner.contract.test.ts`
+6. Control/device session boundaries — `packages/server/src/serve/web-control-sessions.contract.test.ts`
+7. Scheduler no-backfill semantics — `packages/server/src/automation/fire/scheduler-ledger.contract.test.ts`
+8. Conversation digest → archive → custody-gated prune — `packages/server/src/engine/conversation/archive/archive.contract.test.ts`
 9. Pending-write projection, seat parity, settlement, and exclusions — `scripts/lint-engine-conformance.test.mjs`, `packages/blueprints/apps/_shared/pending-overlay.test.ts`, and `packages/client/src/replica/intents.contract.test.ts`
 
 Generated-state properties cover blob custody and replica intent idempotency. The replica admission contract owns the multi-tab/same-id writer race.
@@ -361,7 +361,7 @@ Generated-state properties cover blob custody and replica intent idempotency. Th
 
 Do not add another local helper when the shared package already owns the seam — for `mkdtemp`, fake timers, and `Math.random` this is enforced by lint, not left to review (see [Test-kit seams](#test-kit-seams-656-layer-4)).
 
-Deterministic automation fires need no mock: their handlers run in-process against the parent-side `ctx.vault` / `ctx.fetch` / `ctx.state` rails, and only `ctx.delegate` reaches a provider. In tests that provider turn is faked through the ACP fake-harness fixture (`packages/agent-runtime/src/backends/acp/fake-acp-harness.mjs`), the same seam conversation turns use — there is no automation-specific mock LLM (the `@centraid/mock-llm` package was removed with the `ctx.tool` rail).
+Deterministic automation fires need no mock: their handlers run in-process against the parent-side `ctx.vault` / `ctx.fetch` / `ctx.state` rails, and only `ctx.delegate` reaches a provider. In tests that provider turn is faked through the ACP fake-harness fixture (`packages/server/src/acp/backends/acp/fake-acp-harness.mjs`), the same seam conversation turns use — there is no automation-specific mock LLM (the `@centraid/mock-llm` package was removed with the `ctx.tool` rail).
 
 ## Lane schedule and commands
 
@@ -488,18 +488,18 @@ Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on 16 property-defended cor
 
 - `packages/vault` (custody)
 - `packages/client/src/replica` (intents + payload-hash)
-- `packages/automation` (scheduler ledger)
+- `packages/server/src/automation` (scheduler ledger)
 - `packages/backup` (AES-GCM seal + WAL address keys)
-- `packages/blob-format` (CBSF directory codec)
-- `packages/protocol` (handshake judge)
+- `packages/core/src/blob` (CBSF directory codec)
+- `packages/core/src/protocol` (handshake judge)
 - `packages/tunnel` (wire frame / pair QR / sanitize)
-- `packages/app-engine` (pricing cost formula)
+- `packages/server/src/engine` (pricing cost formula)
 
 Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts`) mutate the property-defended modules. [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs) is canonical for where each seed's config lives: the runner resolves `seed.cwd` + `seed.config` and spawns Stryker there. The eight root pointers under `tests/mutation/` predate that seed list, cover only half the sixteen seeds, and are read by nothing — do not add a ninth expecting it to run. `bun run test:mutation` writes `artifacts/mutation/scores.json` for the test-health report. Floors live in `tests/mutation-floors.json` and ratchet up-only (measured 2026-07-23/24 — see file comment).
 
 **Per-PR mutation** (`bun run test:mutation:pr` / CI job `mutation-pr`): runs Stryker only for seeds whose `watch` paths intersect `git diff origin/main...HEAD` (or all seeds when mutation infra / floors change), then **enforces** floors on measured packages. Unrelated PRs skip Stryker in ~1s. Nightly runs the full 16-seed lane.
 
-**Per-PR perf** (`bun run test:perf:pr` / verify step): gateway low-end budget gate (`packages/gateway` `perf:low-end`, fsync-required on Linux). Perf budget _numbers_ also tighten-only via `test:ratchet`. Full `test:perf` / Playwright waterfall remains nightly.
+**Per-PR perf** (`bun run test:perf:pr` / verify step): gateway low-end budget gate (`packages/server` `perf:low-end`, fsync-required on Linux). Perf budget _numbers_ also tighten-only via `test:ratchet`. Full `test:perf` / Playwright waterfall remains nightly.
 
 ### Property contracts (fast-check, #532)
 

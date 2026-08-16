@@ -33,7 +33,7 @@
  *    `created_at` column, so that fact does not exist in this schema today.
  *    Capture date is the closest true substitute, not an invented one.
  *
- * @type {import('@centraid/app-engine').QueryHandler}
+ * @type {import('@centraid/server/engine').QueryHandler}
  */
 import { srcOf } from "./_shared.ts";
 

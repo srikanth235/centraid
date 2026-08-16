@@ -9,8 +9,8 @@
 //     (packages/client/src/react/blueprints/centraid-inline.ts):
 //     read/write/onChange.
 //   - `ctx.vault` — the handler-side vault RPC surface
-//     (packages/app-engine/src/worker/runner.ts `ScopedVault`,
-//     packages/app-engine/src/types.ts `CommonHandlerArgs`/`ActionResult`).
+//     (packages/server/src/engine/worker/runner.ts `ScopedVault`,
+//     packages/server/src/engine/types.ts `CommonHandlerArgs`/`ActionResult`).
 //   - `VaultOutcome` — the typed-command result the element layer narrates
 //     (packages/design/src/elements/feedback.ts `outcomeMessage`).
 //

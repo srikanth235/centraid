@@ -16,7 +16,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
-} from "@centraid/protocol";
+} from "@centraid/core/protocol";
 
 import { resolveToken } from "./auth.ts";
 import { main } from "./cli.ts";

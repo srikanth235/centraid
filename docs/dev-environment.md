@@ -61,10 +61,10 @@ The desktop app controls a local gateway, detached by default so it survives the
    centraid-gateway serve --data-dir "<data-dir>" --host 127.0.0.1 --port 17832
    ```
 
-   The gateway serves the **API** on `--port` and the **web UI on a second port** — read the exact `web app: http://127.0.0.1:<p>` line it prints on startup. The web UI it serves is the **build-time snapshot** embedded in `packages/gateway/dist/web`. To preview _uncommitted client edits_, rebuild and re-embed first (no full gateway rebuild needed):
+   The gateway serves the **API** on `--port` and the **web UI on a second port** — read the exact `web app: http://127.0.0.1:<p>` line it prints on startup. The web UI it serves is the **build-time snapshot** embedded in `packages/server/dist/web`. To preview _uncommitted client edits_, rebuild and re-embed first (no full gateway rebuild needed):
 
    ```sh
-   bun run --cwd apps/web build && node packages/gateway/scripts/embed-web.mjs
+   bun run --cwd apps/web build && node packages/server/scripts/embed-web.mjs
    ```
 
 2. **Mint a pairing ticket** for the vault (one line; redeems only over the iroh pairing ALPN `centraid/gw-pair/1` — the HTTP `POST /centraid/_gateway/pair` twin was removed in #555):

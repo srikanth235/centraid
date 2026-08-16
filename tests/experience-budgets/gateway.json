@@ -1,5 +1,5 @@
 {
-  "_comment": "Perceived-latency budgets for gateway-backed flows, stated from the vault owner's seat. The gateway's MACHINE-cost budgets (request p99, RSS, event-loop lag, fsyncs per write, idle churn) already live in packages/gateway/benchmarks/low-end-budgets.json and stay there — this file is the symptom layer above them. See README.md for the status vocabulary and the year-3 volume table. Ratcheted tighten-only via PERF_BUDGET_SOURCES.",
+  "_comment": "Perceived-latency budgets for gateway-backed flows, stated from the vault owner's seat. The gateway's MACHINE-cost budgets (request p99, RSS, event-loop lag, fsyncs per write, idle churn) already live in packages/server/benchmarks/low-end-budgets.json and stay there — this file is the symptom layer above them. See README.md for the status vocabulary and the year-3 volume table. Ratcheted tighten-only via PERF_BUDGET_SOURCES.",
   "surface": "gateway",
   "metrics": {
     "sendToFirstToken": {
@@ -21,7 +21,7 @@
         "at": "2026-07-19",
         "host": "darwin arm64, gateway in a forked child (tests/perf/fixtures/gateway-idle-server.mjs)",
         "observedP95Ms": 40,
-        "note": "Pre-existing measurement, restated here in owner terms and NOT re-derived. Ceiling is ~3x observed. The volume is EMPTY — this number says nothing about a year-3 vault, and the honest reading is that it fences a transport regression, not a scale one. packages/gateway/benchmarks/low-end-budgets.json holds the matching machine-cost ceiling (requestP99Ms 250) for the low-end host profile.",
+        "note": "Pre-existing measurement, restated here in owner terms and NOT re-derived. Ceiling is ~3x observed. The volume is EMPTY — this number says nothing about a year-3 vault, and the honest reading is that it fences a transport regression, not a scale one. packages/server/benchmarks/low-end-budgets.json holds the matching machine-cost ceiling (requestP99Ms 250) for the low-end host profile.",
         "headroom": "~3x observed"
       }
     },

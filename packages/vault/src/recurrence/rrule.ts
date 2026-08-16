@@ -2,10 +2,10 @@ import {
   expandRecurrence,
   nextOccurrence as nextSharedOccurrence,
   parseRrule as parseSharedRrule,
-} from "@centraid/time-engine";
-import type { ParsedRrule } from "@centraid/time-engine";
+} from "@centraid/core/time";
+import type { ParsedRrule } from "@centraid/core/time";
 
-export type { ParsedRrule } from "@centraid/time-engine";
+export type { ParsedRrule } from "@centraid/core/time";
 
 export function parseRrule(value: string): ParsedRrule | null {
   const parsed = parseSharedRrule(value);

@@ -48,7 +48,7 @@
  * A consent denial is a first-class outcome, not an error: the UI renders it
  * as the permission screen (§13).
  *
- * @type {import('@centraid/app-engine').QueryHandler}
+ * @type {import('@centraid/server/engine').QueryHandler}
  */
 import { groupPeopleFaces } from "../../_shared/people-counts.ts";
 import { srcOf } from "./_shared.ts";

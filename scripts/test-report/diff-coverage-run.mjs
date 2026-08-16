@@ -95,7 +95,7 @@ export function changedFiles(baseRef) {
 /**
  * Map a repo-relative source path to the workspace directory owning it.
  * @param {string} filePath Repo-relative path.
- * @returns {string | null} e.g. "packages/gateway", or null.
+ * @returns {string | null} e.g. "packages/server", or null.
  */
 export function workspaceDirOf(filePath) {
   const m = /^(?<workspaceDir>(?:packages|apps|tools)\/[^/]+)\//u.exec(

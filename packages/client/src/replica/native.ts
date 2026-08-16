@@ -42,4 +42,4 @@ export {
   isGatewayCapabilities,
   type GatewayCapabilities,
   type GatewayInfo,
-} from "@centraid/protocol";
+} from "@centraid/core/protocol";

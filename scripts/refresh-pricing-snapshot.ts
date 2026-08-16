@@ -3,7 +3,7 @@
  *
  * Fetches BerriAI/litellm's `model_prices_and_context_window.json` (MIT),
  * filters it through the SAME `filterLiteLLM` the gateway warmer uses, and
- * writes `packages/app-engine/src/pricing/litellm-snapshot.json`. Run
+ * writes `packages/server/src/engine/pricing/litellm-snapshot.json`. Run
  * manually when refreshing bundled prices — this is NOT wired into CI (the
  * live disk-cached warmer handles day-to-day drift at runtime).
  *
@@ -13,7 +13,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { filterLiteLLM } from "../packages/app-engine/src/pricing/filter.ts";
+import { filterLiteLLM } from "../packages/server/src/engine/pricing/filter.ts";
 
 const LITELLM_URL =
   "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
@@ -32,8 +32,9 @@ async function main(): Promise<void> {
     here,
     "..",
     "packages",
-    "app-engine",
+    "server",
     "src",
+    "engine",
     "pricing",
     "litellm-snapshot.json"
   );

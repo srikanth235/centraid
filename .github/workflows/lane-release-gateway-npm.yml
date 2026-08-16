@@ -92,7 +92,7 @@ jobs:
           node-version-file: .node-version
           registry-url: "https://registry.npmjs.org"
       - name: Build gateway publish graph (TS; host native optional here)
-        run: bun run turbo run build --filter=@centraid/gateway...
+        run: bun run turbo run build --filter=@centraid/server...
         env:
           # Host build may produce linux-x64; multi-arch comes from merge step.
           CENTRAID_REQUIRE_NATIVE_TUNNEL: "1"

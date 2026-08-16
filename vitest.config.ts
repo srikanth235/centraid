@@ -8,17 +8,12 @@ import coverageFloors from "./tests/coverage-floors.json";
 // touches, so the two configs cannot drift into disagreeing about what exists.
 export const coverageProjects = [
   "vitest.quality.config.ts",
-  "packages/agent-runtime",
-  "packages/app-engine",
-  "packages/automation",
+  "packages/core",
+  "packages/server",
   "packages/backup",
-  "packages/blob-format",
   "packages/blueprints",
   "packages/client",
   "packages/design",
-  "packages/gateway",
-  "packages/protocol",
-  "packages/time-engine",
   "packages/cli",
   "packages/tunnel",
   "packages/test-kit",
@@ -73,7 +68,7 @@ export const coverageExclude = [
   // wasm-bindgen glue for the web iroh transport — generated, not hand-owned.
   "apps/web/src/generated/**",
   // In-tree ACP fake harness used by agent-runtime tests, not product code.
-  "packages/agent-runtime/src/backends/acp/fake-acp-harness.mjs",
+  "packages/server/src/acp/backends/acp/fake-acp-harness.mjs",
   // Generated recognition bundles: source-floored upstream (see the
   // packages/blueprints/automations include note above). The id list matches
   // packages/model-runtime/build-automation-handlers.ts.

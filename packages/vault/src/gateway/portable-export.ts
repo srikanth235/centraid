@@ -12,6 +12,9 @@
 // answered a face proposal (a rejection stopped being a row deletion). A
 // restore that dropped it would hand the owner back a review queue they had
 // already worked through.
+// Schema/export audit #801: the schema fingerprint moved on import remaps
+// (`@centraid/time-engine` → `@centraid/core/time`) with no table or adapter
+// change.
 // Schema/export audit #721: the schema fingerprint moved on comment-only edits
 // to schema/enrich.ts (the model-versioning convention is documented in its
 // header; no table, column, or CHECK changed). `enrich_embedding` and its

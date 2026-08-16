@@ -41,7 +41,7 @@
  * comparisons exclude) live only in the uncursored first window — the same
  * tail bucket the merge treats separately.
  *
- * @type {import('@centraid/app-engine').QueryHandler}
+ * @type {import('@centraid/server/engine').QueryHandler}
  */
 import { readAssetJoins, readPlaces, srcOf } from "./_shared.ts";
 

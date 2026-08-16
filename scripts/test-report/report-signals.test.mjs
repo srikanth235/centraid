@@ -248,7 +248,7 @@ describe("renderSummaryMarkdown", () => {
         cellsMissing: 3,
         unhandledErrors: 1,
         unhandledErrorMessages: ["write EPIPE"],
-        coverageBelowFloor: ["packages/gateway/**"],
+        coverageBelowFloor: ["packages/server/**"],
         validationErrorCount: 0,
         generatedAt: "2026-07-19T00:00:00.000Z",
       },

@@ -68,7 +68,7 @@ export const palette = { requests, harness, wal, dirty, consent, sync, blob, aut
 export const districts = [ { id, name, blurb, color, plate: {x, z, w, d},
   buildings: [ { id, name, kind /* tower|hall|slab|shed|arch|crane|bridge|tank|bunker */,
     pos: {x, z}, size: {w, h, d}, blurb, detail /* 2-4 sentences, accurate */,
-    codeRef /* e.g. "packages/gateway/src/…" */ } ] } ];
+    codeRef /* e.g. "packages/server/src/…" */ } ] } ];
 export const tour = [ { id, section /* "walkthrough" | "scenarios" */, title,
   districtId, buildingId?, scenarioId?, body /* 3-5 sentences */ } ];
 export const scenarios = [ { id, name, blurb } ];

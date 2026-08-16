@@ -57,25 +57,25 @@ describe("MUTATION_SEEDS", () => {
     expect(MUTATION_SEEDS.map((s) => s.id).sort()).toEqual(
       [
         "apps/oauth-worker",
-        "packages/agent-runtime",
-        "packages/app-engine",
-        "packages/automation",
+        "packages/server/src/acp",
+        "packages/server/src/engine",
+        "packages/server/src/automation",
         "packages/backup",
-        "packages/blob-format",
+        "packages/core/src/blob",
         "packages/blueprints",
         "packages/cli",
         "packages/client/src/replica",
         "packages/design",
-        "packages/gateway",
-        "packages/protocol",
-        "packages/time-engine",
+        "packages/server",
+        "packages/core/src/protocol",
+        "packages/core/src/time",
         "packages/tunnel",
         "packages/vault",
         "packages/model-runtime",
       ].sort()
     );
     for (const seed of MUTATION_SEEDS) {
-      expect(seed.config).toBe("stryker.config.mjs");
+      expect(seed.config).toMatch(/^stryker(?:\.[a-z]+)?\.config\.mjs$/u);
       expect(
         seed.cwd.startsWith("packages/") || seed.cwd.startsWith("apps/"),
         seed.id
@@ -92,10 +92,13 @@ describe("MUTATION_SEEDS", () => {
     const labels = MUTATION_SEEDS.map((s) => s.label);
     expect(new Set(labels).size).toBe(labels.length);
     for (const seed of MUTATION_SEEDS) {
-      expect(seed.watch, seed.id).toContain(`${seed.cwd}/stryker.config.mjs`);
-      expect(seed.watch, seed.id).toContain(
-        `${seed.cwd}/vitest.mutation.config.ts`
-      );
+      expect(seed.watch, seed.id).toContain(`${seed.cwd}/${seed.config}`);
+      expect(
+        seed.watch.some((file) =>
+          /vitest\..*mutation\.config\.ts$/u.test(file)
+        ),
+        seed.id
+      ).toBe(true);
       expect(seed.report, seed.id).toBe(
         `artifacts/mutation/${seed.label}-report.json`
       );
@@ -128,7 +131,9 @@ describe("buildScoresArtifact", () => {
 
 describe("selectAffectedSeeds", () => {
   test("returns only seeds whose watch paths appear in the diff", () => {
-    const hit = selectAffectedSeeds(["packages/protocol/src/handshake.ts"]);
+    const hit = selectAffectedSeeds([
+      "packages/core/src/protocol/handshake.ts",
+    ]);
     expect(hit.map((s) => s.label)).toEqual(["protocol"]);
   });
 

@@ -1,6 +1,6 @@
 # Recovery: backup / restore / recover
 
-When backup, restore, or blank-machine `recover` strands mid-flight. Product paths live in `packages/gateway` backup service and `@centraid/backup`.
+When backup, restore, or blank-machine `recover` strands mid-flight. Product paths live in `packages/server` backup service and `@centraid/backup`.
 
 ## Invariants (do not violate while recovering)
 
@@ -81,5 +81,5 @@ Phases (conceptually): `discovering → fetching → replaying → fencing → a
 ## Related
 
 - ARCHITECTURE — restore/recover summary
-- `packages/gateway/src/backup/recover.ts`
+- `packages/server/src/backup/recover.ts`
 - `receipts/issue-439-restore-as-product.md`

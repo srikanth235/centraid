@@ -19,7 +19,7 @@
  * null`, which the surface must render as "nobody has looked yet" rather than
  * as a row of honest-looking zeroes.
  *
- * @type {import('@centraid/app-engine').QueryHandler}
+ * @type {import('@centraid/server/engine').QueryHandler}
  */
 
 /** The buckets the vault projection writes. Kept in step with

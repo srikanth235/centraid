@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import path from "node:path";
 
-import type { GatewayServeHandle } from "@centraid/gateway";
+import type { GatewayServeHandle } from "@centraid/server";
 
 import { desktopSessionIdFor } from "./app-sessions.js";
 import {
@@ -42,7 +42,7 @@ import { templatesCacheDir } from "./settings.js";
  * `/centraid/_gateway/info` answers. Set `CENTRAID_EMBEDDED_GATEWAY=1`
  * to keep the legacy in-process `serve()` path (E2E / tests).
  *
- * Electron-only layer on top of `@centraid/gateway`:
+ * Electron-only layer on top of `@centraid/server`:
  *   - per-gateway lifecycle (`handles` map + `starting` dedupe)
  *   - safeStorage-backed secrets (remote profiles; a local detached daemon
  *     uses the desktop-minted per-launch loopback token, issue #505 phase 7)

@@ -10,7 +10,7 @@ import {
   ASSISTANT_APP_ID,
   ConversationHistoryStore,
   ensureConversationLedger,
-} from "@centraid/app-engine";
+} from "@centraid/server/engine";
 import {
   isSealedValue,
   sealAad,
@@ -34,21 +34,21 @@ import {
 import {
   startVaultMcpServer,
   VAULT_MCP_TOOL_REGISTRY,
-} from "../../packages/agent-runtime/src/backends/acp/vault-mcp-server.js";
-import { HARNESS_KINDS } from "../../packages/app-engine/src/conversation/turn.js";
-import { runFire } from "../../packages/automation/src/fire/fire.js";
+} from "../../packages/server/src/acp/backends/acp/vault-mcp-server.js";
+import { runFire } from "../../packages/server/src/automation/fire/fire.js";
 import {
   AUTOMATION_TRIGGER_KINDS,
   AUTOMATION_TRIGGER_REGISTRY,
-} from "../../packages/automation/src/manifest/manifest.js";
-import { makeAssistantRouteHandler } from "../../packages/gateway/src/routes/assistant-routes.js";
+} from "../../packages/server/src/automation/manifest/manifest.js";
+import { HARNESS_KINDS } from "../../packages/server/src/engine/conversation/turn.js";
+import { makeAssistantRouteHandler } from "../../packages/server/src/routes/assistant-routes.js";
 import {
   assertRouteSecurityCoverage,
   ROUTE_SECURITY_REGISTRY,
-} from "../../packages/gateway/src/routes/route-security.js";
-import { buildGateway } from "../../packages/gateway/src/serve/build-gateway.js";
-import { EXPECTED_HEALTH_COMPONENTS } from "../../packages/gateway/src/serve/health-registry.js";
-import { openVaultPlane } from "../../packages/gateway/src/serve/vault-plane.js";
+} from "../../packages/server/src/routes/route-security.js";
+import { buildGateway } from "../../packages/server/src/serve/build-gateway.js";
+import { EXPECTED_HEALTH_COMPONENTS } from "../../packages/server/src/serve/health-registry.js";
+import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import { forEachSequentially } from "../../packages/test-kit/src/sequential.js";
 import { tempDir } from "../../packages/test-kit/src/temp-dir.js";
 import {

@@ -16,7 +16,7 @@
  * dual-written: the column is the only source of truth.
  *
  * NOT a query itself — the dispatcher resolves a query name straight to
- * `queries/<name>.js` (never a directory scan: packages/app-engine/src/
+ * `queries/<name>.js` (never a directory scan: packages/server/src/engine/
  * handlers/dispatcher.ts), so a plain helper module beside the handlers is
  * invisible to it and to build-manifest.mjs's install-copy walk; nothing
  * needs to know this file exists besides the two callers that import it.

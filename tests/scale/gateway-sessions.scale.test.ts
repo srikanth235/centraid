@@ -11,8 +11,8 @@ import { recordQualityResult } from "@centraid/test-kit/quality-result";
  */
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-import { serve } from "../../packages/gateway/src/serve/serve.js";
-import type { GatewayServeHandle } from "../../packages/gateway/src/serve/serve.js";
+import { serve } from "../../packages/server/src/serve/serve.js";
+import type { GatewayServeHandle } from "../../packages/server/src/serve/serve.js";
 import { rigBudgetMs, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/gateway-sessions.scale.test.ts";

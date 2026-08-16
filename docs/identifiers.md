@@ -19,7 +19,7 @@
 - Keep **`.mobile`** (not `.app`) so naming pairs with **`.desktop`** and renames stay a prefix substitution across mobile projects, `os-scheduler` labels, and test docs that hardcode package names in `simctl` / `adb`.
 - **No hyphen** in share extension id: Android package segments cannot contain hyphens.
 - Debug suffix is **`.debug`**, not `.dev` (would read as a TLD typo against `centraid.dev`).
-- Default LaunchAgent label already in code: `dev.centraid.gateway` (`packages/gateway/src/cli/service-unit.ts`).
+- Default LaunchAgent label already in code: `dev.centraid.gateway` (`packages/server/src/cli/service-unit.ts`).
 
 ## HSTS / cleartext constraint (J3)
 

@@ -10,12 +10,12 @@ import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { generateVolumeFixture } from "@centraid/test-kit/volume-fixture";
 
-import { makeReplicaRouteHandler } from "../../packages/gateway/src/routes/replica-routes.js";
-import { EnrollmentStore } from "../../packages/gateway/src/serve/enrollment-store.js";
-import { runWithVaultContext } from "../../packages/gateway/src/serve/vault-context.js";
-import { openVaultPlane } from "../../packages/gateway/src/serve/vault-plane.js";
-import type { VaultPlane } from "../../packages/gateway/src/serve/vault-plane.js";
-import type { VaultRegistry } from "../../packages/gateway/src/serve/vault-registry.js";
+import { makeReplicaRouteHandler } from "../../packages/server/src/routes/replica-routes.js";
+import { EnrollmentStore } from "../../packages/server/src/serve/enrollment-store.js";
+import { runWithVaultContext } from "../../packages/server/src/serve/vault-context.js";
+import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
+import type { VaultPlane } from "../../packages/server/src/serve/vault-plane.js";
+import type { VaultRegistry } from "../../packages/server/src/serve/vault-registry.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 import { exerciseWindowedBootstrap } from "../quality/replica-bootstrap-fixture.js";
 

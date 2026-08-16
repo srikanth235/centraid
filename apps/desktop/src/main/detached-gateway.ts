@@ -27,7 +27,7 @@ import { createRequire } from "node:module";
 import net from "node:net";
 import path from "node:path";
 
-import { landlordBearerForDataDir } from "@centraid/gateway";
+import { landlordBearerForDataDir } from "@centraid/server";
 import { endpointIdForSecret } from "@centraid/tunnel";
 
 import {
@@ -109,17 +109,17 @@ export async function getOrCreateDesktopOwnerId(): Promise<string> {
  */
 export function resolveGatewayCliPath(): string {
   try {
-    const pkgJson = require.resolve("@centraid/gateway/package.json");
+    const pkgJson = require.resolve("@centraid/server/package.json");
     const candidate = path.join(path.dirname(pkgJson), "dist", "cli", "cli.js");
     return candidate;
   } catch {
     // fall through
   }
   const here = import.meta.dirname;
-  // apps/desktop/dist/main → ../../../packages/gateway/dist/cli/cli.js
+  // apps/desktop/dist/main → ../../../packages/server/dist/cli/cli.js
   const monorepo = path.resolve(
     here,
-    "../../../packages/gateway/dist/cli/cli.js"
+    "../../../packages/server/dist/cli/cli.js"
   );
   return monorepo;
 }

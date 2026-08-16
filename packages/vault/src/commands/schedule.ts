@@ -3,7 +3,7 @@
 // and receipted end to end. Command implementations are domain-owned; the
 // gateway hosts and checks them (§10 negative space).
 
-import { canonicalizeRrule } from "@centraid/time-engine";
+import { canonicalizeRrule } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";

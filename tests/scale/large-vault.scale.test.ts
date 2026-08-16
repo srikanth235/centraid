@@ -16,7 +16,7 @@ import {
   sealValue,
 } from "@centraid/vault";
 
-import { ensureConversationLedger } from "../../packages/app-engine/src/stores/gateway-db.js";
+import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/large-vault.scale.test.ts";

@@ -4,7 +4,7 @@
 # From a clone (full options, including --from-pack-dir):
 #   bash scripts/install-gateway.sh --no-global
 #
-# After @centraid/gateway is on npm (OpenClaw-style one-liner):
+# After @centraid/server is on npm (OpenClaw-style one-liner):
 #   curl -fsSL --proto '=https' --tlsv1.2 \
 #     https://raw.githubusercontent.com/srikanth235/centraid/main/scripts/install-gateway.sh \
 #     | bash -s -- --version latest
@@ -79,7 +79,7 @@ else
   mkdir -p "$PREFIX"
   NPM_ARGS+=(--prefix "$PREFIX")
 fi
-NPM_ARGS+=("@centraid/gateway@${VERSION}")
+NPM_ARGS+=("@centraid/server@${VERSION}")
 
 echo "==> Centraid gateway install (piped npm mode, node $(node -v))"
 echo "==> npm ${NPM_ARGS[*]}"

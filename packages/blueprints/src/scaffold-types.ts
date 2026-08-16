@@ -1,6 +1,6 @@
 /**
  * Types shared by the app clone path here and the automation scaffolder in
- * `@centraid/automation`. `AppScaffoldError` carries a machine-readable `code`
+ * `@centraid/server/automation`. `AppScaffoldError` carries a machine-readable `code`
  * the gateway maps to an HTTP status.
  */
 

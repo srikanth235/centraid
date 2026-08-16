@@ -56,7 +56,7 @@ type TriggerDraft = {
   event: string;
   filterRepo: string;
 };
-// Mirrors packages/automation/src/manifest/manifest.ts `CONDITION_OPS` — kept
+// Mirrors packages/server/src/automation/manifest/manifest.ts `CONDITION_OPS` — kept
 // in sync by hand since the renderer bundle doesn't pull in the automation
 // runtime package (main-process-only dependency today).
 const CONDITION_OPS = [

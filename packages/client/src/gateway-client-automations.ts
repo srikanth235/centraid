@@ -7,7 +7,7 @@
  * import fires the recognition automations once per photo, so that single
  * window could fill entirely with recognition runs and leave a member's own
  * "Recent activity" empty. `listAutomationTurnsByLane` adds the
- * `?systemLane=` param the route (`packages/gateway/src/routes/
+ * `?systemLane=` param the route (`packages/server/src/routes/
  * automations-routes.ts`) uses to fetch each lane as its own SQL-filtered,
  * independently-bounded query, so the two callers in `automationsData.ts`
  * each get their own window.

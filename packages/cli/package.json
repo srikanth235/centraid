@@ -19,7 +19,7 @@
     "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
-    "@centraid/protocol": "workspace:*"
+    "@centraid/core": "workspace:*"
   },
   "devDependencies": {
     "@centraid/test-kit": "workspace:*",

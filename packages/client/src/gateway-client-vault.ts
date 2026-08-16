@@ -508,7 +508,7 @@ export async function vaultConnectionSetStatus(
  * This is the OWNER's copy of the setting — the authoritative writer is
  * `updateEnrichSettings` (packages/vault/src/host.ts), which also refreshes
  * the app-readable `enrich_policy` mirror the enforcement gate reads
- * (packages/automation/src/fire/enrich-gate.ts). Apps never reach this route;
+ * (packages/server/src/automation/fire/enrich-gate.ts). Apps never reach this route;
  * they read the mirror through `ctx.vault` and cannot write it at all, which
  * is why raising the tier can only happen from an owner surface.
  */

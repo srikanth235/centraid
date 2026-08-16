@@ -7,7 +7,7 @@
 //
 // All four are vault-SCOPED owner census reads (`apiHeaders()` — bearer + the
 // active vault), computed on request from the live schema by
-// `packages/gateway/src/routes/vault-routes.ts`. Nothing here is derived,
+// `packages/server/src/routes/vault-routes.ts`. Nothing here is derived,
 // cached or estimated on the phone: a count this app shows is a count the
 // gateway counted.
 //

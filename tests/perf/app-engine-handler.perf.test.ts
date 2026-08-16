@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
-import { runHandler } from "@centraid/app-engine";
+import { runHandler } from "@centraid/server/engine";
 import {
   qualityRegressionBudget,
   recordQualityResult,

@@ -1,7 +1,7 @@
 // Per-turn usage/cost formatting for the assistant transcript (issue #420,
 // Wave 2). Two paths feed the "this turn cost X" line:
 //   • Reloaded from the ledger — the gateway froze the exact `costUsd` at write
-//     time (packages/app-engine/src/model-pricing.ts) and ships it on the turn.
+//     time (packages/server/src/engine/model-pricing.ts) and ships it on the turn.
 //   • Live-streamed — the `usage` event arrives already priced server-side at
 //     the SSE seam (same model-pricing.ts), flagged `estimated` until the
 //     authoritative frozen cost replaces it on reload. The client never holds

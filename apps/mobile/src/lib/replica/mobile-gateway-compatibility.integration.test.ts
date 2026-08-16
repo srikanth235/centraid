@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
-} from "@centraid/protocol";
+} from "@centraid/core/protocol";
 
 import { requireMobileOfflineGateway } from "./mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "./mobile-gateway-compatibility-core";

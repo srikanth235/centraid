@@ -17,7 +17,7 @@
       "issue": 781,
       "reason": "The iroh request counter only exists in a freshly built bundle; the assertion self-skips against a stale dist instead of failing, which is why this owner cannot back a solid cell (originally #656)."
     },
-    "packages/agent-runtime/src/automation/live-automation-failover.test.ts#1": {
+    "packages/server/src/acp/automation/live-automation-failover.test.ts#1": {
       "kind": "conditional-skip",
       "line": 32,
       "snippet": "test.skipIf(process.env.CENTRAID_LIVE_AUTOMATION !== \"1\")(",
@@ -38,63 +38,63 @@
       "issue": 790,
       "reason": "The collection-time gate for the same cross-repo interop suite; skips the whole describe (including beforeAll) with a named reason instead of failing (rig lane split to #790 by #781; originally #656)."
     },
-    "packages/gateway/src/cli/cli.test.ts#1": {
+    "packages/server/src/cli/cli.test.ts#1": {
       "kind": "runtime-skip",
       "line": 261,
       "snippet": "t.skip(",
       "issue": 781,
       "reason": "The serve-subcommand boot spawns tsx from the root install; skips when node_modules/.bin/tsx is absent rather than failing a partial checkout (originally #656)."
     },
-    "packages/gateway/src/cli/service-install.integration.test.ts#1": {
+    "packages/server/src/cli/service-install.integration.test.ts#1": {
       "kind": "runtime-skip",
       "line": 40,
       "snippet": "t.skip(\"launchd e2e only runs on darwin\");",
       "issue": 790,
       "reason": "Real launchctl bootstrap/bootout exists only on darwin; other platforms have no equivalent service manager to assert against (rig lane split to #790 by #781; originally #656)."
     },
-    "packages/gateway/src/cli/service-install.integration.test.ts#2": {
+    "packages/server/src/cli/service-install.integration.test.ts#2": {
       "kind": "env-gate",
       "line": 43,
       "snippet": "if (process.env.CENTRAID_LAUNCHD_E2E !== \"1\") {",
       "issue": 790,
       "reason": "Mutates real user launchd state, so it is opt-in via CENTRAID_LAUNCHD_E2E=1 even on darwin (rig lane split to #790 by #781; originally #656)."
     },
-    "packages/gateway/src/cli/service-install.integration.test.ts#3": {
+    "packages/server/src/cli/service-install.integration.test.ts#3": {
       "kind": "runtime-skip",
       "line": 44,
       "snippet": "t.skip(",
       "issue": 790,
       "reason": "The runtime half of the CENTRAID_LAUNCHD_E2E opt-in: it reports the skip to the runner so the report never shows a false green (rig lane split to #790 by #781; originally #656)."
     },
-    "packages/gateway/src/cli/status-admin.test.ts#1": {
+    "packages/server/src/cli/status-admin.test.ts#1": {
       "kind": "conditional-skip",
       "line": 78,
       "snippet": "test.skipIf(servicePlatform)(",
       "issue": 781,
       "reason": "Service status paths exist only on darwin and linux; the skipIf keeps the hole visible to the report instead of a bare return (originally #656)."
     },
-    "packages/gateway/src/cli/status-admin.test.ts#2": {
+    "packages/server/src/cli/status-admin.test.ts#2": {
       "kind": "conditional-skip",
       "line": 107,
       "snippet": "test.skipIf(servicePlatform)(",
       "issue": 781,
       "reason": "Same darwin/linux-only service surface as site #1 (status --json against a never-installed unit) (originally #656)."
     },
-    "packages/gateway/src/cli/status-admin.test.ts#3": {
+    "packages/server/src/cli/status-admin.test.ts#3": {
       "kind": "conditional-skip",
       "line": 161,
       "snippet": "test.skipIf(servicePlatform)(",
       "issue": 781,
       "reason": "Same darwin/linux-only service surface as site #1 (installed-unit status reporting) (originally #656)."
     },
-    "packages/gateway/src/cli/status-admin.test.ts#4": {
+    "packages/server/src/cli/status-admin.test.ts#4": {
       "kind": "conditional-skip",
       "line": 180,
       "snippet": "test.skipIf(servicePlatform)(",
       "issue": 781,
       "reason": "Same darwin/linux-only service surface as site #1 (status against an unreachable listener) (originally #656)."
     },
-    "packages/gateway/src/lifecycle/byte-plane-over-http.test.ts#1": {
+    "packages/server/src/lifecycle/byte-plane-over-http.test.ts#1": {
       "kind": "conditional-skip",
       "line": 66,
       "snippet": "describe.skipIf(!enabled)(",
@@ -139,9 +139,9 @@
     "scripts/gateway-package/assemble-runtime.test.mjs#1": {
       "kind": "runtime-skip",
       "line": 64,
-      "snippet": "t.skip(\"gateway package dist missing — build @centraid/gateway first\");",
+      "snippet": "t.skip(\"gateway package dist missing — build @centraid/server first\");",
       "issue": 781,
-      "reason": "The assembleRuntime link/resolution assertions need a built @centraid/gateway dist, so the test self-skips on a checkout that has not run the gateway build; it was invisible to the budget until the scan globs went recursive (surfaced by #782)."
+      "reason": "The assembleRuntime link/resolution assertions need a built @centraid/server dist, so the test self-skips on a checkout that has not run the gateway build; it was invisible to the budget until the scan globs went recursive (surfaced by #782)."
     },
     "tests/perf/desktop-launch.perf.test.ts#1": {
       "kind": "conditional-skip",

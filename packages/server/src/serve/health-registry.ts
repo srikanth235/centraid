@@ -1,0 +1,651 @@
+// governance: allow-repo-hygiene file-size-limit (#679) component state, registry enumeration, failure induction, and snapshot aggregation form one health contract whose completeness is audited together
+/*
+ * Component-level health for a self-hosted gateway. Uptime says "the
+ * process answers"; this says WHICH subsystem stopped working and what
+ * its last error was — the difference between "it broke" and a bug
+ * report a self-hoster can act on.
+ *
+ * Two feeds converge here:
+ *   - PUSH: subsystems mark themselves ok/degraded/error at their own
+ *     success/failure points (outbox drain, scheduler reconcile, fires),
+ *     and `loggerFor(component)` wraps a `RuntimeLogger` so existing
+ *     `warn`/`error` calls land in the ring buffer as structured,
+ *     component-tagged events without touching call sites.
+ *   - PULL: `registerProbe` adds a check run at snapshot time for state
+ *     nobody pushes (e.g. "are the vault planes mounted").
+ *
+ * Semantics chosen for v0:
+ *   - a logged `warn` records an event but does NOT flip component
+ *     status (transient warns must not leave a component sticky-red);
+ *     a logged `error` flips it to error until the next explicit ok.
+ *   - probe status wins for probed components — it reflects "now".
+ *   - overall = worst component (error > degraded > ok).
+ */
+
+import type { RuntimeLogger } from "@centraid/server/engine";
+
+import type { StructuredResourceProfile } from "./hardware-profile.js";
+import type { PowerContextState } from "./power-context.js";
+import type { ResourceUsageActuals } from "./resource-accounting.js";
+import {
+  formatBackgroundPausedDetail,
+  formatBackgroundResumedDetail,
+  formatLoadShedClearedDetail,
+  formatLoadShedDeferringDetail,
+  formatLoadShedForcedPassDetail,
+} from "./resource-mode.js";
+import type { RouteLatencySummary } from "./route-latency.js";
+
+/** Owner-triggered background-pause window (#528 Phase B) — in-memory only. */
+export interface BackgroundPauseState {
+  paused: boolean;
+  /** ISO timestamp when the pause auto-lifts; `null` when indefinite or not paused. */
+  until: string | null;
+}
+
+/** Longest a single background pause may last before it auto-lifts (24h). */
+export const MAX_BACKGROUND_PAUSE_MS = 86_400_000;
+
+const BACKGROUND_PAUSE_COMPONENT = "background-pause";
+
+export interface ExpectedHealthComponent {
+  readonly component: string;
+  readonly owner: string;
+  readonly induction: "probe" | "report-error" | "logger";
+  readonly waiver?: string;
+}
+
+function defineExpectedHealthGroup(
+  owner: string,
+  induction: ExpectedHealthComponent["induction"],
+  components: readonly string[]
+): readonly ExpectedHealthComponent[] {
+  return components.map((component) => ({ component, owner, induction }));
+}
+
+/**
+ * Expected production health surface. The drill iterates this list rather
+ * than whatever happened to register, so a deleted registration is visible.
+ */
+export const EXPECTED_HEALTH_COMPONENTS: readonly ExpectedHealthComponent[] = [
+  ...defineExpectedHealthGroup("build-gateway", "report-error", [
+    "harness-failover",
+    "automation-runs",
+    "automations",
+    "filesystem",
+    "hardware-profile",
+    "instance",
+    "power-posture",
+    "storage-latency",
+  ]),
+  ...defineExpectedHealthGroup("backup-service", "probe", ["backups"]),
+  ...defineExpectedHealthGroup("vault-plane", "report-error", ["blob-sweep"]),
+  ...defineExpectedHealthGroup("build-gateway", "probe", [
+    "broker",
+    "connections",
+    "disk",
+    "enrichment",
+    "event-loop",
+    "scheduler",
+    "storage-limit",
+    "storage-quota",
+    "vault-integrity",
+    "vaults",
+  ]),
+  ...defineExpectedHealthGroup("build-gateway", "logger", [
+    "catalog",
+    "outbox",
+    "pricing",
+  ]),
+  ...defineExpectedHealthGroup("health-registry", "report-error", [
+    "load-shed",
+  ]),
+].toSorted((left, right) => left.component.localeCompare(right.component));
+
+export type ComponentStatus = "ok" | "degraded" | "error";
+
+export interface ComponentHealth {
+  component: string;
+  status: ComponentStatus;
+  /** Human-oriented "what this looks like right now" (counts, mode). */
+  detail?: string;
+  lastOkAt?: string;
+  lastErrorAt?: string;
+  lastError?: string;
+  /** Errors since gateway start (events + explicit reportError). */
+  errorCount: number;
+}
+
+export interface HealthEvent {
+  at: string;
+  component: string;
+  level: "warn" | "error";
+  message: string;
+}
+
+/**
+ * Coarse numeric signals (issue #351 tier 3) — deliberately separate from
+ * `ComponentHealth.detail`, which stays a plain human-readable string (an
+ * existing contract kept as-is). Everything here is a raw number a
+ * self-hoster's own monitoring can graph without parsing prose.
+ */
+export interface HealthMetrics {
+  /** `process.memoryUsage().rss` at snapshot time. */
+  rssBytes: number;
+  /** Outbox items awaiting drain, summed across mounted vaults. */
+  outboxPending: number;
+  /**
+   * Live SSE subscriber count across every open run stream. Optional and
+   * commonly absent: it needs a global counter on `RunEventBus`, which a
+   * sibling change (the SSE subscriber cap) is adding — wire this up once
+   * that lands (see `build-gateway.ts`'s `setMetricsSource` call).
+   */
+  sseClients?: number;
+  /**
+   * Mounted vault planes (issue #659 L8). Present so `rssBytes` has a
+   * denominator: the per-plane memory RESERVATION is now flat in vault count,
+   * but each mounted plane still costs real resident memory (connection state,
+   * bootstrap DDL) that the pragmas do not bound. Without this, a household
+   * that grows from one vault to five looks like a leak.
+   */
+  mountedVaults?: number;
+  /** Rolling event-loop delay window from `perf_hooks.monitorEventLoopDelay`. */
+  eventLoopLagP50Ms?: number;
+  eventLoopLagP99Ms?: number;
+  eventLoopLagMaxMs?: number;
+  /** Highest rolling-window p99 observed since process start. */
+  eventLoopLagPeakP99Ms?: number;
+  eventLoopLagSamples?: number;
+  /** Boot-time durability-barrier latency for one 4 KiB write. */
+  storageFsyncMs?: number;
+  /**
+   * Per-route request-duration percentiles (issue #659 R5) — fixed-bucket
+   * histograms, so "which route is slow on THIS gateway" is answerable from a
+   * production health snapshot instead of only from a bench rig.
+   */
+  routeLatency?: RouteLatencySummary[];
+  /**
+   * Resolved hardware class (`constrained` | `standard`) and owner Resource
+   * mode (`auto` | `conserve` | `balanced` | `performance`) — issue #521.
+   * Present once `buildGateway` publishes them via the metrics source.
+   */
+  hardwareProfileClass?: string;
+  resourceMode?: string;
+  /**
+   * Machine-readable resolved Resource profile (#528 Phase A) — the host
+   * class, owner mode, detected host facts, and every resolved knob. Present
+   * once `buildGateway` publishes it via the metrics source; the string
+   * `hardwareProfileClass`/`resourceMode` fields above stay for compatibility.
+   */
+  resourceProfile?: StructuredResourceProfile;
+  /**
+   * Measured per-subsystem resource ACTUALS (#528 Phase C) — replication,
+   * backup, sweep, worker-pool, and harness-run counts/bytes/busyMs, plus
+   * process CPU/RSS. Honest measured proxies only (no modeled energy).
+   * Present once `buildGateway` publishes it via the metrics source.
+   */
+  resourceUsage?: ResourceUsageActuals;
+  /**
+   * Host power-context posture (#528 Phase D) — battery/mains/server, whether
+   * background work is being courteously deferred, and why. Present once
+   * `buildGateway` publishes it via the metrics source.
+   */
+  powerContext?: PowerContextState;
+  /**
+   * Owner-triggered background-pause window (#528 Phase B). Always present;
+   * `paused` is false with `until: null` when nothing is paused.
+   */
+  backgroundPause: BackgroundPauseState;
+  uptimeMs: number;
+}
+
+/** What a host-injected metrics source contributes — `rssBytes`/`uptimeMs` are computed here. */
+export type MetricsSourceResult = Partial<
+  Pick<
+    HealthMetrics,
+    | "outboxPending"
+    | "sseClients"
+    | "mountedVaults"
+    | "hardwareProfileClass"
+    | "resourceMode"
+    | "resourceProfile"
+    | "resourceUsage"
+    | "powerContext"
+  >
+>;
+export type MetricsSource = () => MetricsSourceResult;
+
+export type PerformanceMetricsSourceResult = Partial<
+  Pick<
+    HealthMetrics,
+    | "eventLoopLagP50Ms"
+    | "eventLoopLagP99Ms"
+    | "eventLoopLagMaxMs"
+    | "eventLoopLagPeakP99Ms"
+    | "eventLoopLagSamples"
+    | "storageFsyncMs"
+    | "routeLatency"
+  >
+>;
+export type PerformanceMetricsSource = () => PerformanceMetricsSourceResult;
+
+export interface HealthSnapshot {
+  /** Worst component status — `ok` when every component is ok. */
+  status: ComponentStatus;
+  startedAt: string;
+  uptimeMs: number;
+  components: ComponentHealth[];
+  /** Newest-first structured log tail (warns + errors), bounded. */
+  recentEvents: HealthEvent[];
+  /**
+   * Coarse numeric signals — see `HealthMetrics`. Always present:
+   * `rssBytes`/`uptimeMs` need no host wiring; `outboxPending` defaults to 0
+   * until a host calls `setMetricsSource`; `sseClients` stays absent until
+   * one is supplied.
+   */
+  metrics: HealthMetrics;
+}
+
+/** A snapshot-time check for state no subsystem pushes. */
+export type HealthProbe = () => Promise<{
+  status: ComponentStatus;
+  detail?: string;
+}>;
+
+const SEVERITY: Record<ComponentStatus, number> = {
+  ok: 0,
+  degraded: 1,
+  error: 2,
+};
+
+const worseOf = (a: ComponentStatus, b: ComponentStatus): ComponentStatus =>
+  SEVERITY[a] >= SEVERITY[b] ? a : b;
+
+export interface HealthRegistryOptions {
+  /** Ring-buffer bound for `recentEvents`. */
+  maxEvents?: number;
+  /** Clock override (tests). */
+  now?: () => number;
+  /** Longest continuous lag interval before one bounded background pass is forced. */
+  maxLoadShedMs?: number;
+}
+
+interface ComponentState {
+  status: ComponentStatus;
+  detail?: string;
+  lastOkAt?: number;
+  lastErrorAt?: number;
+  lastError?: string;
+  errorCount: number;
+}
+
+const DEFAULT_MAX_EVENTS = 100;
+const DEFAULT_MAX_LOAD_SHED_MS = 5 * 60 * 1_000;
+
+export class HealthRegistry {
+  private readonly components = new Map<string, ComponentState>();
+  private readonly probes = new Map<string, HealthProbe>();
+  private readonly registrations = new Map<
+    string,
+    Set<ExpectedHealthComponent["induction"]>
+  >();
+  private readonly events: HealthEvent[] = [];
+  private readonly maxEvents: number;
+  private readonly now: () => number;
+  private readonly startedAtMs: number;
+  private readonly maxLoadShedMs: number;
+  private loadShedSinceMs?: number;
+  private metricsSource?: MetricsSource;
+  private performanceMetricsSource?: PerformanceMetricsSource;
+  private resetPerformanceMetricsSource?: () => void;
+  private backgroundPaused = false;
+  /** Wall-clock ms when the pause auto-lifts; `undefined` when indefinite. */
+  private backgroundPauseUntilMs?: number;
+
+  constructor(options: HealthRegistryOptions = {}) {
+    this.maxEvents = options.maxEvents ?? DEFAULT_MAX_EVENTS;
+    this.now = options.now ?? Date.now;
+    this.startedAtMs = this.now();
+    this.maxLoadShedMs = options.maxLoadShedMs ?? DEFAULT_MAX_LOAD_SHED_MS;
+  }
+
+  /**
+   * Register the host's numeric-metrics source (issue #351 tier 3) — called
+   * once at `buildGateway()` time. Only `outboxPending`/`sseClients` come
+   * from here; `rssBytes`/`uptimeMs` are computed inside `snapshot()`
+   * itself, needing no host wiring at all.
+   */
+  setMetricsSource(source: MetricsSource): void {
+    this.metricsSource = source;
+  }
+
+  setPerformanceMetricsSource(
+    source: PerformanceMetricsSource,
+    reset?: () => void
+  ): void {
+    this.performanceMetricsSource = source;
+    this.resetPerformanceMetricsSource = reset;
+  }
+
+  /** Start a fresh metrics epoch; used by the in-process benchmark after warmup. */
+  resetPerformanceMetrics(): void {
+    this.resetPerformanceMetricsSource?.();
+  }
+
+  /** Runtime backpressure signal shared by every background subsystem (issue #456 A6). */
+  shouldDeferBackgroundWork(maxP99Ms = 50): boolean {
+    const p99 = this.performanceMetricsSource?.().eventLoopLagP99Ms;
+    const now = this.now();
+    if (p99 === undefined || p99 < maxP99Ms) {
+      if (this.loadShedSinceMs !== undefined) {
+        this.loadShedSinceMs = undefined;
+        this.reportOk("load-shed", formatLoadShedClearedDetail());
+      }
+      return false;
+    }
+
+    this.loadShedSinceMs ??= now;
+    const deferredMs = now - this.loadShedSinceMs;
+    if (deferredMs < this.maxLoadShedMs) {
+      // Keep the component detail current while deferring so Diagnostics
+      // shows owner-facing copy, not only the forced-pass line.
+      this.reportDegraded("load-shed", formatLoadShedDeferringDetail(p99));
+      return true;
+    }
+
+    // Never silently starve WAL/outbox/backup work forever. Permit one caller
+    // through per max-age interval and retain a degraded health signal until
+    // event-loop pressure clears.
+    this.reportDegraded(
+      "load-shed",
+      formatLoadShedForcedPassDetail(p99, deferredMs)
+    );
+    this.loadShedSinceMs = now;
+    return false;
+  }
+
+  /**
+   * Owner-triggered "pause background work" control (#528 Phase B). A
+   * `durationMs` of `undefined` pauses indefinitely ("until I resume").
+   * Callers validate the bound; this stores it verbatim. In-memory only —
+   * a restart resumes normally, and this NEVER touches durable prefs or
+   * flips a Resource mode. The returned window (and `shouldPauseBackgroundWork`)
+   * gate only the safe loops — vault sweeps and backup retention — never
+   * WAL/fsync durability, the consent outbox, or request-path work.
+   */
+  pauseBackgroundWork(durationMs?: number): BackgroundPauseState {
+    this.backgroundPaused = true;
+    this.backgroundPauseUntilMs =
+      durationMs === undefined ? undefined : this.now() + durationMs;
+    const state = this.readBackgroundPause();
+    const detail = formatBackgroundPausedDetail(state.until);
+    this.reportDegraded(BACKGROUND_PAUSE_COMPONENT, detail);
+    this.pushEvent(BACKGROUND_PAUSE_COMPONENT, "warn", detail);
+    return state;
+  }
+
+  /** Lift an active pause; idempotent when nothing is paused. */
+  resumeBackgroundWork(): BackgroundPauseState {
+    if (this.backgroundPaused) this.clearBackgroundPause();
+    return this.readBackgroundPause();
+  }
+
+  /** Current pause window; an expired `until` auto-lifts on read. */
+  backgroundPauseState(): BackgroundPauseState {
+    return this.readBackgroundPause();
+  }
+
+  /** True while a pause is active — the signal safe background loops honor. */
+  shouldPauseBackgroundWork(): boolean {
+    return this.readBackgroundPause().paused;
+  }
+
+  private readBackgroundPause(): BackgroundPauseState {
+    if (
+      this.backgroundPaused &&
+      this.backgroundPauseUntilMs !== undefined &&
+      this.now() >= this.backgroundPauseUntilMs
+    ) {
+      this.clearBackgroundPause();
+    }
+    return {
+      paused: this.backgroundPaused,
+      until:
+        this.backgroundPauseUntilMs === undefined
+          ? null
+          : new Date(this.backgroundPauseUntilMs).toISOString(),
+    };
+  }
+
+  private clearBackgroundPause(): void {
+    this.backgroundPaused = false;
+    this.backgroundPauseUntilMs = undefined;
+    const detail = formatBackgroundResumedDetail();
+    this.reportOk(BACKGROUND_PAUSE_COMPONENT, detail);
+    this.pushEvent(BACKGROUND_PAUSE_COMPONENT, "warn", detail);
+  }
+
+  reportOk(component: string, detail?: string): void {
+    this.noteRegistration(component, "report-error");
+    const state = this.stateFor(component);
+    state.status = "ok";
+    state.lastOkAt = this.now();
+    if (detail !== undefined) state.detail = detail;
+  }
+
+  /** Register a push-reported production component before its first failure. */
+  registerPush(component: string): void {
+    this.noteRegistration(component, "report-error");
+    this.stateFor(component);
+  }
+
+  /** Install the push half of the exported expected-components registry. */
+  registerExpectedPushComponents(): void {
+    for (const expected of EXPECTED_HEALTH_COMPONENTS)
+      if (expected.induction === "report-error")
+        this.registerPush(expected.component);
+  }
+
+  reportDegraded(component: string, detail: string): void {
+    this.noteRegistration(component, "report-error");
+    const state = this.stateFor(component);
+    state.status = "degraded";
+    state.detail = detail;
+  }
+
+  reportError(component: string, message: string): void {
+    this.noteRegistration(component, "report-error");
+    const state = this.stateFor(component);
+    state.status = "error";
+    state.lastErrorAt = this.now();
+    state.lastError = message;
+    state.errorCount += 1;
+    this.pushEvent(component, "error", message);
+  }
+
+  /**
+   * Wrap a `RuntimeLogger` so a component's existing log calls feed the
+   * registry: `warn` → event only, `error` → event + error status.
+   */
+  loggerFor(component: string, base: RuntimeLogger): RuntimeLogger {
+    this.noteRegistration(component, "logger");
+    return {
+      info: (m) => base.info(m),
+      warn: (m) => {
+        this.stateFor(component);
+        this.pushEvent(component, "warn", m);
+        base.warn(m);
+      },
+      error: (m) => {
+        this.reportError(component, m);
+        base.error(m);
+      },
+    };
+  }
+
+  /** Snapshot-time check; its result wins the component's status. */
+  registerProbe(component: string, probe: HealthProbe): void {
+    this.noteRegistration(component, "probe");
+    this.stateFor(component);
+    this.probes.set(component, probe);
+  }
+
+  /** Expected production components absent from their declared registration seam. */
+  expectedRegistrationGaps(): ExpectedHealthComponent[] {
+    return EXPECTED_HEALTH_COMPONENTS.filter(
+      ({ component, induction }) =>
+        !this.registrations.get(component)?.has(induction)
+    );
+  }
+
+  /**
+   * Deterministic health-drill seam. Probe components replace the *registered
+   * production probe* for one snapshot; push/logger components drive the same
+   * report path production failures use. Missing registration throws, making
+   * a deleted probe a red gate rather than an invisible omission.
+   */
+  induceExpectedFailureForTest(component: string): () => void {
+    if (process.env.NODE_ENV !== "test")
+      throw new Error("health failure induction is test-only");
+    const expected = EXPECTED_HEALTH_COMPONENTS.find(
+      (entry) => entry.component === component
+    );
+    if (!expected) throw new Error(`unexpected health component: ${component}`);
+    if (!this.registrations.get(component)?.has(expected.induction))
+      throw new Error(
+        `health component ${component} is not registered through ${expected.induction}`
+      );
+    const currentState = this.components.get(component);
+    const priorState = currentState ? { ...currentState } : undefined;
+    const priorProbe = this.probes.get(component);
+    if (expected.induction === "probe" || priorProbe) {
+      if (!priorProbe)
+        throw new Error(
+          `health component ${component} has no production probe`
+        );
+      this.probes.set(component, async () => ({
+        status: "error",
+        detail: "seeded production-probe failure",
+      }));
+    } else {
+      this.reportError(component, "seeded production failure");
+    }
+    return () => {
+      if (priorProbe) this.probes.set(component, priorProbe);
+      else this.probes.delete(component);
+      if (priorState) this.components.set(component, { ...priorState });
+      else this.components.delete(component);
+    };
+  }
+
+  private noteRegistration(
+    component: string,
+    kind: ExpectedHealthComponent["induction"]
+  ): void {
+    const current = this.registrations.get(component) ?? new Set();
+    current.add(kind);
+    this.registrations.set(component, current);
+  }
+
+  async snapshot(): Promise<HealthSnapshot> {
+    await Promise.all(
+      [...this.probes].map(async ([component, probe]) => {
+        const state = this.stateFor(component);
+        try {
+          const result = await probe();
+          state.status = result.status;
+          if (result.detail !== undefined) state.detail = result.detail;
+          if (result.status === "ok") state.lastOkAt = this.now();
+        } catch (error) {
+          this.reportError(
+            component,
+            error instanceof Error ? error.message : String(error)
+          );
+        }
+      })
+    );
+
+    const components: ComponentHealth[] = [...this.components.entries()]
+      .map(([component, s]) => ({
+        component,
+        status: s.status,
+        ...(s.detail === undefined ? {} : { detail: s.detail }),
+        ...(s.lastOkAt === undefined
+          ? {}
+          : { lastOkAt: new Date(s.lastOkAt).toISOString() }),
+        ...(s.lastErrorAt === undefined
+          ? {}
+          : { lastErrorAt: new Date(s.lastErrorAt).toISOString() }),
+        ...(s.lastError === undefined ? {} : { lastError: s.lastError }),
+        errorCount: s.errorCount,
+      }))
+      .sort((a, b) => a.component.localeCompare(b.component));
+
+    const nowMs = this.now();
+    const uptimeMs = nowMs - this.startedAtMs;
+    const sourced = this.metricsSource?.() ?? {};
+    const performance = this.performanceMetricsSource?.() ?? {};
+    return {
+      status: components.reduce<ComponentStatus>(
+        (acc, c) => worseOf(acc, c.status),
+        "ok"
+      ),
+      startedAt: new Date(this.startedAtMs).toISOString(),
+      uptimeMs,
+      components,
+      recentEvents: this.events.toReversed(),
+      metrics: {
+        rssBytes: process.memoryUsage().rss,
+        outboxPending: sourced.outboxPending ?? 0,
+        ...(sourced.sseClients === undefined
+          ? {}
+          : { sseClients: sourced.sseClients }),
+        ...(sourced.mountedVaults === undefined
+          ? {}
+          : { mountedVaults: sourced.mountedVaults }),
+        ...(sourced.hardwareProfileClass === undefined
+          ? {}
+          : { hardwareProfileClass: sourced.hardwareProfileClass }),
+        ...(sourced.resourceMode === undefined
+          ? {}
+          : { resourceMode: sourced.resourceMode }),
+        ...(sourced.resourceProfile === undefined
+          ? {}
+          : { resourceProfile: sourced.resourceProfile }),
+        ...(sourced.resourceUsage === undefined
+          ? {}
+          : { resourceUsage: sourced.resourceUsage }),
+        ...(sourced.powerContext === undefined
+          ? {}
+          : { powerContext: sourced.powerContext }),
+        backgroundPause: this.readBackgroundPause(),
+        ...performance,
+        uptimeMs,
+      },
+    };
+  }
+
+  private stateFor(component: string): ComponentState {
+    let state = this.components.get(component);
+    if (!state) {
+      state = { status: "ok", errorCount: 0 };
+      this.components.set(component, state);
+    }
+    return state;
+  }
+
+  private pushEvent(
+    component: string,
+    level: "warn" | "error",
+    message: string
+  ): void {
+    this.events.push({
+      at: new Date(this.now()).toISOString(),
+      component,
+      level,
+      message,
+    });
+    if (this.events.length > this.maxEvents)
+      this.events.splice(0, this.events.length - this.maxEvents);
+  }
+}

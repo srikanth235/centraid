@@ -1,4 +1,4 @@
-import { ROUTES } from "@centraid/protocol";
+import { ROUTES } from "@centraid/core/protocol";
 
 import { anchoredCaptureText, documentCaptureTitle } from "./capture.js";
 import { isEligiblePageUrl, matchesOrigin } from "./origin-matching.js";

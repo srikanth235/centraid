@@ -17,7 +17,7 @@ on:
     branches: [main]
     paths:
       - "apps/oauth-worker/**"
-      - "packages/gateway/src/serve/assist-oauth.ts"
+      - "packages/server/src/serve/assist-oauth.ts"
       - ".github/workflows/oauth-worker.yml"
       - "package.json"
       - "bun.lock"

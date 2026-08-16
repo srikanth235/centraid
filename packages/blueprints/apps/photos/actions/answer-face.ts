@@ -17,7 +17,7 @@
  *
  * Risk low, like everything else in this loop: it curates DERIVED data.
  *
- * @type {import('@centraid/app-engine').ActionHandler}
+ * @type {import('@centraid/server/engine').ActionHandler}
  */
 export default async function answerFace({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;

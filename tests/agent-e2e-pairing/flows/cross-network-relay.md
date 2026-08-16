@@ -4,7 +4,7 @@ The pairing ceremony (issue #289) forced over the REAL iroh relay/hole-punch pat
 
 ## Why this flow exists
 
-`device-pairing-lifecycle` and `pairing-ticket-hygiene` both run the gateway daemon and the device identity on the SAME host, and both call `createTunnelClient({ relays: 'disabled' })` (see `lib/harness.mjs`'s `newDevice()`). That's correct for what they're proving (ceremony semantics, ticket hygiene) but it means every request in those two flows dials a loopback address directly — `@number0/iroh`'s QUIC hole-punching and n0 relay fallback never run. Production pairing depends on exactly that code path (`packages/tunnel/src/client.ts`'s `createTunnelClient()` defaults to the n0 production preset unless `relays: 'disabled'` is passed, and the gateway's own endpoint — `packages/gateway/src/cli/endpoint-host.ts` via `startGatewayEndpoint` — always binds with that preset, no CLI knob to turn it off). This flow is the one that actually exercises it.
+`device-pairing-lifecycle` and `pairing-ticket-hygiene` both run the gateway daemon and the device identity on the SAME host, and both call `createTunnelClient({ relays: 'disabled' })` (see `lib/harness.mjs`'s `newDevice()`). That's correct for what they're proving (ceremony semantics, ticket hygiene) but it means every request in those two flows dials a loopback address directly — `@number0/iroh`'s QUIC hole-punching and n0 relay fallback never run. Production pairing depends on exactly that code path (`packages/tunnel/src/client.ts`'s `createTunnelClient()` defaults to the n0 production preset unless `relays: 'disabled'` is passed, and the gateway's own endpoint — `packages/server/src/cli/endpoint-host.ts` via `startGatewayEndpoint` — always binds with that preset, no CLI knob to turn it off). This flow is the one that actually exercises it.
 
 ## How it forces the real path
 
@@ -82,11 +82,11 @@ Worth noting, because the asymmetry looks suspicious: the TCP host-routed probe 
 
 - **The container needs the LINUX build of `@number0/iroh`'s native addon.** The host's `bun install` only resolves `optionalDependencies` for the HOST's own platform (e.g. `@number0/iroh-darwin-arm64` on a Mac) — a `node:22-bookworm-slim` container needs `@number0/iroh-linux-<arch>-gnu`. `ensureNativeAddon()` detects this and fetches the missing package additively (`npm pack` + extract into a new `node_modules/@number0/*` sibling — nothing is removed, the host's own platform package is untouched) if it isn't already present, then verifies `require('@centraid/tunnel')` actually loads inside a throwaway container before trusting the rest of the flow to it.
 - **`docker run` with no `--platform` matches the Docker daemon's host architecture**, not necessarily the arch this repo's `bun install` targeted. On GitHub Actions `ubuntu-latest` these are the same machine (the workflow's own `bun install --frozen-lockfile` runs on the same amd64 runner that later runs the containers), so the native addon already matches and `ensureNativeAddon()` is a no-op there. On an Apple Silicon Mac with OrbStack, the containers default to `linux/arm64` while the host's own `bun install` produced `darwin-arm64` — that's the case `ensureNativeAddon()` exists for.
-- **The gateway daemon shells out to a real `git` binary** (`packages/gateway/src/worktree-store/git.ts`) on boot, for the code worktree store. `node:22-bookworm-slim` doesn't ship one — the gateway container's startup command `apt-get install`s it before starting `serve`.
+- **The gateway daemon shells out to a real `git` binary** (`packages/server/src/worktree-store/git.ts`) on boot, for the code worktree store. `node:22-bookworm-slim` doesn't ship one — the gateway container's startup command `apt-get install`s it before starting `serve`.
 
 ## Steps
 
-1. Build (scoped to `@centraid/gateway` + `@centraid/tunnel`, same as the sibling flows) if `dist/` is missing.
+1. Build (scoped to `@centraid/server` + `@centraid/tunnel`, same as the sibling flows) if `dist/` is missing.
 2. `ensureNativeAddon()` — see above.
 3. Two isolated networks + isolation proof (see above).
 4. Start the gateway container on a fresh data dir; it auto-founds one marked `Personal` vault at construction.

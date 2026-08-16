@@ -117,11 +117,11 @@ describe("filterFloorConfigEntries", () => {
       _comment: "seed floors",
       approvedDeviation: { reason: "x" },
       lines: 70,
-      "packages/gateway/**": { lines: 80 },
+      "packages/server/**": { lines: 80 },
     });
     expect(entries.map(([k]) => k).sort()).toEqual([
       "lines",
-      "packages/gateway/**",
+      "packages/server/**",
     ]);
   });
 });
@@ -136,11 +136,11 @@ describe("scopeMatcher", () => {
   });
 
   test("`**` crosses segments and also matches zero of them", () => {
-    const match = scopeMatcher("packages/gateway/src/**");
-    expect(match("packages/gateway/src/serve/vault-plane-wal.test.ts")).toBe(
+    const match = scopeMatcher("packages/server/src/**");
+    expect(match("packages/server/src/serve/vault-plane-wal.test.ts")).toBe(
       true
     );
-    expect(match("packages/gateway/src/index.ts")).toBe(true);
+    expect(match("packages/server/src/index.ts")).toBe(true);
     expect(match("packages/vault/src/index.ts")).toBe(false);
   });
 
@@ -152,7 +152,7 @@ describe("scopeMatcher", () => {
   });
 
   test("dots are literal, not wildcards", () => {
-    const match = scopeMatcher("packages/protocol/src/**");
+    const match = scopeMatcher("packages/core/src/protocol/**");
     expect(match("packagesXprotocol/src/a.ts")).toBe(false);
   });
 });

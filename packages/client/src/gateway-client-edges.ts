@@ -1,6 +1,6 @@
 /*
  * Renderer-side client for snapshot edges and circle-backed commons (#731 —
- * `packages/gateway/src/routes/edges-routes.ts` and `edge-answer-routes.ts`).
+ * `packages/server/src/routes/edges-routes.ts` and `edge-answer-routes.ts`).
  * An edge is a one-shot copy of a fixed item set. Ongoing co-owned sharing
  * uses the commons route below.
  *

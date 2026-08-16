@@ -1,7 +1,7 @@
 /*
  * Source-level contract for the face-detection recognition handler (#781).
  *
- * `packages/automation/src/manifest/enricher-templates.test.ts` owns the
+ * `packages/server/src/automation/manifest/enricher-templates.test.ts` owns the
  * bundled copy's spine: a per-item consent request derives and drains, and a
  * target-less request walks the vault behind its own cursor. This file owns
  * the model-availability gate, the consent-queue edge cases (missing target,

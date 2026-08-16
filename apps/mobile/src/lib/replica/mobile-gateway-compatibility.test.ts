@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
-} from "@centraid/protocol";
+} from "@centraid/core/protocol";
 
 import {
   MOBILE_APP_UPDATE_MESSAGE,

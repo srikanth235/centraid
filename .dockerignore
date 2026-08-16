@@ -50,7 +50,7 @@ dist
 
 # Large / non-runtime docs and ledgers
 *.md
-!packages/gateway/README.md
+!packages/server/README.md
 COSTS.md
 STEERING.md
 QUALITY.md
