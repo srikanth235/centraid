@@ -546,8 +546,14 @@ tests/quality/user-facing-qualities.test.ts
   behaviour-neutral here — the four unchanged gallery surfaces render 0.00%
   different against baselines captured with the newer browser. The four
   shell baselines `tests/design-gallery/baselines/sh-light.png`,
-  `sh-dark.png`, `sh-c-light.png` and `sh-c-dark.png` are refreshed because
+  `tests/design-gallery/baselines/sh-dark.png`,
+  `tests/design-gallery/baselines/sh-c-light.png` and
+  `tests/design-gallery/baselines/sh-c-dark.png` are refreshed because
   shorter copy makes shorter full-page screenshots.
+- `apps/desktop/tests/e2e/automations.spec.ts` pinned the scheduler-error
+  card's second sentence ("Automations are stored on the gateway and are
+  safe"), which is exactly the reassurance clause slice C cut. The assertion
+  now pins the consequence sentence that replaced it.
 
 ## Out of scope
 

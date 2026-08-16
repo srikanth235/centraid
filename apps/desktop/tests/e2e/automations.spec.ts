@@ -103,11 +103,11 @@ test("8.2 — a list load failure shows the error panel and Reconnect recovers",
   try {
     await openAutomations(page);
     const errorCard = page.getByTestId("automations-error");
-    // v9 error shape (#765): what failed, what is still safe, one way forward.
+    // v9 error shape (#765): what failed, then the consequence. The old
+    // "stored on the gateway and are safe" reassurance was cut by #805 —
+    // the queue sentence is what now carries "nothing was lost".
     await expect(errorCard).toContainText("The scheduler is not answering");
-    await expect(errorCard).toContainText(
-      "Automations are stored on the gateway and are safe"
-    );
+    await expect(errorCard).toContainText("queue until the scheduler is back");
     const retry = errorCard.getByRole("button", { name: "Reconnect" });
     // Error UI must settle before we rewire the mock — a mid-flight reload
     // would still see 500 and re-paint the card under the cursor.
