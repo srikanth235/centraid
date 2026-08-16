@@ -145,3 +145,55 @@ describe("enrichment cascade seam", () => {
     ).rejects.toThrow(/enrichment rule/u);
   });
 });
+
+// The EGRESS-CONSENT ledger (issue #807, Wave 3). Its seam laws are the
+// cascade's, one turn stricter: the client only ever READS the ledger and
+// POSTS an answer to it — the rows themselves are written by the vault's one
+// journalled command — and a decline is carried back exactly like a grant,
+// because a consent surface that only reported the yeses would be a record of
+// half the answers.
+describe("enrichment egress-consent seam", () => {
+  it("law: the ledger is read whole from the owner plane, declines included", async () => {
+    await expect(vaultOwner.listEnrichEgressConsent()).resolves.toStrictEqual([
+      {
+        capability: "faces",
+        egress: "provider",
+        scopeRef: "",
+        decision: "declined",
+        decidedAt: "2026-08-15T10:00:00.000Z",
+        receiptId: null,
+      },
+    ]);
+    expect(sent("GET /centraid/_vault/enrich/consent").method).toBe("GET");
+  });
+
+  it("law: an answer names one capability, one egress class and one decision", async () => {
+    const recorded = await vaultOwner.recordEnrichEgressConsent({
+      capability: "faces",
+      egress: "provider",
+      decision: "granted",
+    });
+
+    expect(sentJson("POST /centraid/_vault/enrich/consent")).toStrictEqual({
+      capability: "faces",
+      egress: "provider",
+      decision: "granted",
+    });
+    // What came back is the vault's row, not the answer that was sent.
+    expect(recorded?.decidedAt).toBe("2026-08-16T00:00:00.000Z");
+  });
+
+  it("law: an answer the vault refused throws, never a silent grant", async () => {
+    respond("POST /centraid/_vault/enrich/consent", () =>
+      json({ error: "not_recorded", message: "parked for the owner" }, 409)
+    );
+
+    await expect(
+      vaultOwner.recordEnrichEgressConsent({
+        capability: "faces",
+        egress: "provider",
+        decision: "granted",
+      })
+    ).rejects.toThrow(/egress consent/u);
+  });
+});

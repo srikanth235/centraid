@@ -26,6 +26,7 @@ import {
   resolveEnrichmentPolicy,
 } from "./enrich-gate.js";
 import type {
+  EnrichConsentRecord,
   EnrichLane,
   EnrichTier,
   ResolveEnrichPolicy,
@@ -284,9 +285,11 @@ describe("enrichment tier gate", () => {
 
   it("refuses a profile whose egress reaches further than the vault's ceiling", async () => {
     const { outcome, opened } = await fire({
-      lane: "gateway",
+      // A device-lane enricher under a device tier: the lane fits, so the
+      // refusal below is the CEILING's, not the lane comparison's.
+      lane: "device",
       resolveEnrichPolicy: (request) => ({
-        tier: "gateway",
+        tier: "device",
         rules: [
           {
             scope: { type: "domain", ref: request.domain },
@@ -307,6 +310,109 @@ describe("enrichment tier gate", () => {
     expect(outcome.error).toContain("no further than");
     expect(opened).toStrictEqual([]);
   });
+
+  // ── egress consent on the fire path (issue #807, Wave 3) ─────────────────
+  // The tier says how far work may RUN; the egress-consent ledger says whether
+  // the member ever agreed to a provider. Both are asked, independently, at
+  // the one gate.
+
+  /** A cascade that pins a provider-backed engine under a `gateway` vault. */
+  function providerCascade(consent?: EnrichConsentRecord | null) {
+    return ((request) => ({
+      tier: "gateway" as const,
+      rules: [
+        {
+          scope: { type: "domain" as const, ref: request.domain },
+          capability: request.capability,
+          enabled: true,
+          profile: "provider-vlm",
+          trigger: null,
+          updatedAt: "2026-08-16T00:00:00.000Z",
+        },
+      ],
+      egressForProfile: () => "provider" as const,
+      egressConsent: () => consent ?? null,
+    })) satisfies ResolveEnrichPolicy;
+  }
+
+  it("refuses a provider engine when this vault holds no egress answer", async () => {
+    const { outcome, opened } = await fire({
+      lane: "gateway",
+      resolveEnrichPolicy: providerCascade(null),
+    });
+
+    expect(outcome.skipped).toBe(true);
+    // Capability-scoped, and honest about what an absent answer is.
+    expect(outcome.error).toContain("faces");
+    expect(outcome.error).toContain("no egress consent");
+    expect(outcome.error).toContain("an absent answer is not a grant");
+    expect(opened).toStrictEqual([]);
+  });
+
+  it("refuses a provider engine the member declined, naming when they said so", async () => {
+    const { outcome, opened } = await fire({
+      lane: "gateway",
+      resolveEnrichPolicy: providerCascade({
+        capability: "faces",
+        egress: "provider",
+        scopeRef: "",
+        decision: "declined",
+        decidedAt: "2026-08-14T09:00:00.000Z",
+        receiptId: null,
+      }),
+    });
+
+    expect(outcome.skipped).toBe(true);
+    expect(outcome.error).toContain("was declined on 2026-08-14T09:00:00.000Z");
+    expect(opened).toStrictEqual([]);
+  });
+
+  it("runs a provider engine once the member granted that egress", async () => {
+    const { outcome, opened } = await fire({
+      lane: "gateway",
+      resolveEnrichPolicy: providerCascade({
+        capability: "faces",
+        egress: "provider",
+        scopeRef: "",
+        decision: "granted",
+        decidedAt: "2026-08-14T09:00:00.000Z",
+        receiptId: "receipt-1",
+      }),
+      handler: `export default async ({ ctx }) => ({ output: await ctx.delegate({ prompt: 'find faces' }) });`,
+    });
+
+    expect(outcome.ok).toBe(true);
+    expect(opened).toHaveLength(1);
+  });
+
+  // THE BACK-COMPAT LAW, proved rather than asserted in prose: the nine
+  // enrichers this build ships run under tier-only vaults that hold NO consent
+  // rows at all, and #807 must not turn a single one of them into a refusal.
+  // The tier IS the standing consent for the two classes it can express.
+  it.each(["device", "gateway"] as const)(
+    "runs a tier-only vault's own engine under %s with an empty consent ledger",
+    async (tier) => {
+      const asked: string[] = [];
+      const { outcome, opened } = await fire({
+        lane: tier === "device" ? "device" : "gateway",
+        resolveEnrichPolicy: () => ({
+          tier,
+          rules: [],
+          egressForProfile: () => (tier === "device" ? "on-device" : "gateway"),
+          egressConsent: (egress) => {
+            asked.push(egress);
+            return null; // an empty ledger, exactly as a legacy vault has
+          },
+        }),
+      });
+
+      expect(outcome.ok).toBe(true);
+      expect(opened).toHaveLength(1);
+      // And the ledger was never even consulted for those classes: the tier
+      // already answered them.
+      expect(asked).toStrictEqual([]);
+    }
+  );
 
   it("asks the host for the firing capability's own scope chain", async () => {
     const asked: unknown[] = [];

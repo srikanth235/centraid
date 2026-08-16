@@ -1,5 +1,6 @@
 import { relativeTime } from "../../../app-format.js";
 import { APPROVALS_HEALTH_DETAIL } from "../../../approvals-copy.js";
+import type { EnrichConsentRecord } from "../../../enrich-policy.js";
 import type {
   OutboxGrant,
   OutboxItem,
@@ -9,6 +10,7 @@ import type {
 } from "../../../gateway-client-outbox.js";
 import type { VaultParkedEntry } from "../../../gateway-client-vault.js";
 import type {
+  ApprovalsEnrichConsentRowDTO,
   ApprovalsGrantRowDTO,
   ApprovalsNeedsAuthRowDTO,
   ApprovalsOutboxRowDTO,
@@ -313,4 +315,46 @@ export function collapseAdjacentActivity(
     }
   }
   return out;
+}
+
+/*
+ * The egress-consent ledger's rows (issue #807, Wave 3).
+ *
+ * The Privacy page reads the vault's answers back; it does not re-ask them.
+ * So this maps a stored answer to words and nothing else: no "revoke" verb, no
+ * inferred state, and a declined answer rendered exactly as plainly as a
+ * granted one — a consent surface that hid its refusals would be a record of
+ * only the yeses.
+ */
+
+/** What each egress class means where a member reads it. */
+const EGRESS_PHRASE: Record<EnrichConsentRecord["egress"], string> = {
+  "on-device": "on this device",
+  gateway: "on your gateway",
+  provider: "at a third-party provider",
+};
+
+/** The capability id as a sentence-cased label — the same treatment activity
+ *  rows give an unmapped verb, so a capability this build never heard of still
+ *  reads as English. */
+export function enrichCapabilityLabel(capability: string): string {
+  const spaced = capability.replace(/[._-]+/gu, " ").trim();
+  if (spaced.length === 0) return capability;
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Map one wire `EnrichConsentRecord` to the screen's row DTO. */
+export function buildEnrichConsentRow(
+  record: EnrichConsentRecord
+): ApprovalsEnrichConsentRowDTO {
+  const answer = record.decision === "granted" ? "Granted" : "Declined";
+  const where = EGRESS_PHRASE[record.egress];
+  const scope =
+    record.scopeRef.length > 0 ? ` · ${record.scopeRef}` : " · this vault";
+  return {
+    id: `${record.capability}:${record.egress}:${record.scopeRef}`,
+    meta: record.egress,
+    sub: `${answer} · ${where}${scope} · ${relativeTime(record.decidedAt)}`,
+    title: enrichCapabilityLabel(record.capability),
+  };
 }

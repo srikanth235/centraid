@@ -39,6 +39,7 @@
 
 import { BUILT_IN_PROFILE } from "@centraid/vault";
 import type {
+  EnrichConsentRecord,
   EnrichEgressClass,
   EnrichPolicyRule,
   EnrichScope,
@@ -141,6 +142,22 @@ export interface EnrichPolicyResolution {
   readonly egressForProfile?: (
     profileId: string
   ) => EnrichEgressClass | undefined;
+  /**
+   * The vault's standing egress ANSWER for this capability (issue #807, Wave
+   * 3), walked over the same scope chain the rules were: most specific first,
+   * the vault-wide `''` row last. `null` means the question was never asked,
+   * which is not a grant.
+   *
+   * A SECOND LOOKUP, NOT A SECOND POLICY PATH: the cascade above says which
+   * engine a scope prefers; this says whether the member ever agreed to that
+   * engine's egress class. `decideEnrichmentGate` is still the only place
+   * either answer becomes a decision. A host that omits it fails closed for
+   * the one class that needs it (`provider`) and changes nothing for the two
+   * the tier already answers.
+   */
+  readonly egressConsent?: (
+    egress: EnrichEgressClass
+  ) => EnrichConsentRecord | null | undefined;
 }
 
 /** The seam's full type — see `RunFireOptions.resolveEnrichPolicy`. */

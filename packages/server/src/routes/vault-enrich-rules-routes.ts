@@ -11,6 +11,8 @@
  *   GET    /centraid/_vault/enrich                      — { enrich, rules }
  *   PUT    /centraid/_vault/enrich/rules                — write one scope's rule
  *   DELETE /centraid/_vault/enrich/rules?scope=&ref=&capability=
+ *   GET    /centraid/_vault/enrich/consent              — the egress-consent ledger
+ *   POST   /centraid/_vault/enrich/consent              — record one answer (issue #807 Wave 3)
  *   GET    /centraid/_vault/enrich/effective?domain=&capability=&scope=
  *
  * WHAT THIS SURFACE MUST NOT BECOME. `effective` REPORTS what
@@ -27,15 +29,19 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
+  ENRICH_EGRESS_CLASSES,
   ENRICH_SCOPE_TYPES,
   ENRICH_TRIGGERS,
   deleteEnrichPolicyRule,
+  listEnrichConsent,
   listEnrichPolicyRules,
   putEnrichPolicyRule,
+  readEnrichConsent,
   readEnrichPolicyResolutionInput,
   readEnrichPolicyRule,
 } from "@centraid/vault";
 import type {
+  EnrichEgressClass,
   EnrichPolicyRule,
   EnrichScope,
   EnrichScopeType,
@@ -220,6 +226,67 @@ export async function handleEnrichCascadeRoute(input: {
       );
     deleteEnrichPolicyRule(plane.db.vault, parsed.scope, capability);
     return sendJson(res, 200, { deleted: true });
+  }
+
+  // ── the egress-consent ledger (issue #807, Wave 3) ──────────────────────
+  // A read and an answer, never a toggle. The GET is the Privacy audit's
+  // source (`ApprovalsScreen`'s enrichment consent section); the POST is the
+  // owner-plane door onto the ONE writer — the journalled
+  // `enrich.record_consent` command, invoked with the owner credential, so a
+  // route can never write the ledger itself.
+  if (segments[0] === "consent" && method === "GET") {
+    return sendJson(res, 200, {
+      consent: listEnrichConsent(plane.db.vault),
+    });
+  }
+
+  if (segments[0] === "consent" && method === "POST") {
+    const body = await readJson(req);
+    const capability = body["capability"];
+    if (typeof capability !== "string" || !capabilityKnown(capability))
+      return badRequest(
+        res,
+        `capability must be one of ${ENRICH_CAPABILITY_IDS.join(", ")}`
+      );
+    const egress = body["egress"];
+    if (
+      typeof egress !== "string" ||
+      !(ENRICH_EGRESS_CLASSES as readonly string[]).includes(egress)
+    )
+      return badRequest(
+        res,
+        `egress must be one of ${ENRICH_EGRESS_CLASSES.join(", ")}`
+      );
+    const decision = body["decision"];
+    if (decision !== "granted" && decision !== "declined")
+      return badRequest(res, "decision must be granted or declined");
+    const scopeRef = body["scopeRef"] ?? "";
+    if (typeof scopeRef !== "string")
+      return badRequest(res, "scopeRef must be text");
+    // The owner credential, deliberately: recording an answer is a
+    // consent-state act (`confirm: true` on the command), so an app or agent
+    // reaching this verb parks instead of answering for the member.
+    const outcome = await plane.invoke(plane.ownerCredential, {
+      command: "enrich.record_consent",
+      input: { capability, egress, scope_ref: scopeRef, decision },
+      purpose: "dpv:ServiceProvision",
+    });
+    if (outcome.status !== "executed")
+      return sendJson(res, 409, {
+        error: "not_recorded",
+        message:
+          "reason" in outcome && typeof outcome.reason === "string"
+            ? outcome.reason
+            : `the vault ${outcome.status} the answer`,
+      });
+    // Read back, never echo — same law as the rule write above.
+    return sendJson(res, 200, {
+      consent: readEnrichConsent(plane.db.vault, {
+        capability,
+        egress: egress as EnrichEgressClass,
+        scopeRef,
+      }),
+    });
   }
 
   if (segments[0] === "effective" && method === "GET") {

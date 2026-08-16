@@ -155,6 +155,24 @@ export interface ApprovalsActivityRowDTO {
   action: string;
 }
 
+/**
+ * One row of the EGRESS-CONSENT ledger (issue #807, Wave 3) — an answer the
+ * member gave once about how far work for one capability may travel. Display
+ * only: this screen is where an answer is READ BACK, never re-given, so the
+ * row carries no action. A declined answer renders exactly as legibly as a
+ * granted one; the record of a refusal is the point.
+ */
+export interface ApprovalsEnrichConsentRowDTO {
+  /** Stable row id — capability × egress × scope. */
+  id: string;
+  /** The capability the answer is about, as the member's words. */
+  title: string;
+  /** "Granted · on this device · 3 days ago" — the whole answer, in a line. */
+  sub: string;
+  /** The egress class, as the row's compact meta. */
+  meta: string;
+}
+
 export interface NoticeRowDTO {
   noticeId: string;
   kind: string;
@@ -184,6 +202,12 @@ export interface ApprovalsScreenProps {
    * zero holders (rendered as "reachable by nothing").
    */
   storeGrants: readonly StoreGroup[];
+  /**
+   * The enrichment egress answers on record (issue #807, Wave 3). Reference
+   * material, like the grants ledger above it: the page shows what was
+   * answered, and answering again happens where the question is asked.
+   */
+  enrichConsent?: readonly ApprovalsEnrichConsentRowDTO[];
   activity: readonly ApprovalsActivityRowDTO[];
   notices?: readonly NoticeRowDTO[];
   /** Whether the review feed was truncated at the current limit — drives the
@@ -240,6 +264,11 @@ export interface ApprovalsScreenProps {
 // is desktop's alone.
 const LEDGER_NOTE =
   "Everything an app can reach — revoking takes effect at once.";
+
+/** The enrichment ledger's note (issue #807). It states the rule the rows
+ *  obey: each is an answer, asked once and recorded, not a switch on a page. */
+const ENRICH_CONSENT_NOTE =
+  "Asked once, answered once, recorded — including the answers that were no. Where the question was asked is where it is answered again.";
 
 /** The waiting-queue filter, shown only when the queue is full enough to need
  *  one. Ids are the v9 chip set; the labels are its copy. */
@@ -591,6 +620,7 @@ export default function ApprovalsScreen(
     scopeRequests,
     grants,
     storeGrants,
+    enrichConsent = [],
     activity,
     notices = [],
     activityTruncated = false,
@@ -1198,6 +1228,25 @@ export default function ApprovalsScreen(
               </div>
             );
           })}
+        </div>
+      ) : null}
+
+      {enrichConsent.length > 0 ? (
+        <div data-testid="enrichment-consent">
+          <SectionBlock
+            label="Enrichment egress answers"
+            meta={String(enrichConsent.length)}
+          />
+          <NoteBlock>{ENRICH_CONSENT_NOTE}</NoteBlock>
+          <RowsBlock
+            ariaLabel="Enrichment egress answers"
+            rows={enrichConsent.map((row) => ({
+              id: row.id,
+              meta: row.meta,
+              sub: row.sub,
+              title: row.title,
+            }))}
+          />
         </div>
       ) : null}
 

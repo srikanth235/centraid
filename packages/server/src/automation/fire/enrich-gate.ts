@@ -80,7 +80,7 @@
  * precisely the pre-#807 decision.
  */
 
-import type { EnrichEgressClass } from "@centraid/vault";
+import type { EnrichConsentRecord, EnrichEgressClass } from "@centraid/vault";
 
 import { egressWithinCeiling } from "./enrich-resolve.js";
 import type { ResolvedEnrichPolicy } from "./enrich-resolve.js";
@@ -92,6 +92,7 @@ export {
   resolveEnrichmentPolicy,
   tierEgressCeiling,
 } from "./enrich-resolve.js";
+export type { EnrichConsentRecord, EnrichEgressClass } from "@centraid/vault";
 export type {
   EnrichEgressCeiling,
   EnrichPolicyRequest,
@@ -154,7 +155,24 @@ export interface EnrichGateInput {
    * is present.
    */
   readonly profileEgress?: EnrichEgressClass | undefined;
+  /**
+   * The vault's ANSWER on record for this capability at an egress class
+   * (issue #807, Wave 3) — `null` when the question was never asked, and a
+   * `declined` record when it was asked and refused. Read only for the
+   * `provider` class; see {@link decideEnrichmentGate}'s consent step for why
+   * the other two classes are answered by the tier itself.
+   *
+   * A LOOKUP, NOT A GRANT: the host hands over what the vault holds
+   * (`packages/server/src/enrich/egress-consent-lookup.ts` walks the scope
+   * chain), and this gate decides. A host that wires nothing fails closed.
+   */
+  readonly egressConsent?: EnrichEgressConsentLookup;
 }
+
+/** What the host answers "does this vault hold an egress answer" with. */
+export type EnrichEgressConsentLookup = (
+  egress: EnrichEgressClass
+) => EnrichConsentRecord | null | undefined;
 
 export type EnrichGateDecision =
   | {
@@ -165,12 +183,13 @@ export type EnrichGateDecision =
        */
       readonly sealModelTurns: boolean;
       /**
-       * EGRESS-CONSENT SEAM (issue #807, Wave 3). The egress class the
-       * selected engine profile will actually use — the key Wave 3 looks up in
-       * `enrich_consent` (capability, egress, scope) before the work runs. This
-       * gate does NOT check consent yet; it names what would have to be
-       * consented to, so the check lands here and nowhere else. Present only on
-       * profile-aware decisions.
+       * The egress class the selected engine profile will actually use — the
+       * key this gate looked up in `enrich_consent` (capability, egress,
+       * scope) when the class needed an answer (issue #807, Wave 3). The check
+       * itself already happened: an allowed decision carrying `provider` here
+       * means a granted row was found. Present only on profile-aware
+       * decisions; downstream surfaces read it to say what an allowed run's
+       * egress WAS, never to decide anything again.
        */
       readonly egressConsentNeeded?: EnrichEgressClass;
     }
@@ -238,7 +257,22 @@ export function decideEnrichmentGate(
         `"${policy.profileId}", which this gateway does not carry.`,
     };
   }
-  if (!egressWithinCeiling(egress, policy.egressCeiling)) {
+  // THE CEILING, then THE ANSWER — two independent questions, in that order.
+  //
+  // `provider` is the one class no standing tier ever answers for (see
+  // `enrich-resolve.ts`: the legacy tiers migrate to `off | on-device |
+  // gateway` and stop there). A `gateway` ceiling means this vault's own
+  // gateway may take a `ctx.delegate` turn, which is the lane provider egress
+  // travels in — so the ceiling does not refuse it; the EGRESS-CONSENT LEDGER
+  // decides, per capability, from an answer the member gave once. Below a
+  // `gateway` ceiling the tier still refuses first, because a vault that never
+  // allowed work to leave the device is not asking a consent question at all.
+  const providerOverGatewayCeiling =
+    egress === "provider" && policy.egressCeiling === "gateway";
+  if (
+    !egressWithinCeiling(egress, policy.egressCeiling) &&
+    !providerOverGatewayCeiling
+  ) {
     return {
       allowed: false,
       reason:
@@ -246,6 +280,34 @@ export function decideEnrichmentGate(
         `enrichment policy for "${input.domain}" allows no further than "${policy.egressCeiling}". ` +
         `A rule on a collection or item can choose an engine, never one that reaches further than the vault allows.`,
     };
+  }
+  if (egress === "provider") {
+    // Evaluated INDEPENDENTLY of everything above: the cascade picked an
+    // engine, and this asks whether the member ever agreed to that engine's
+    // egress class for this capability. `on-device` and `gateway` are not
+    // asked here — the standing tier IS their recorded answer (a vault set to
+    // `gateway` has already said its own gateway may do this work), which is
+    // why every enricher shipped before #807 keeps running with no rows at
+    // all.
+    const record = input.egressConsent?.(egress) ?? null;
+    if (record === null) {
+      return {
+        allowed: false,
+        reason:
+          `${who} refused: engine profile "${policy.profileId}" reaches a third-party provider, and this vault holds ` +
+          `no egress consent for "${input.capability}" at "provider". That answer is asked once, per capability, and ` +
+          `recorded — an absent answer is not a grant, and choosing this engine cannot write one.`,
+      };
+    }
+    if (record.decision !== "granted") {
+      return {
+        allowed: false,
+        reason:
+          `${who} refused: provider egress for "${input.capability}" was declined on ${record.decidedAt}, and a ` +
+          `declined answer stands until the member answers again. A rule that picks a provider-backed engine cannot ` +
+          `overturn it.`,
+      };
+    }
   }
   return {
     allowed: true,

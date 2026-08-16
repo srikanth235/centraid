@@ -205,6 +205,71 @@ describe("vault enrichment cascade routes", () => {
     });
   });
 
+  // ── the egress-consent ledger (issue #807, Wave 3) ──────────────────────
+
+  const postConsent = (base: string, body: unknown) =>
+    fetch(`${base}/centraid/_vault/enrich/consent`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  test("records an answer through the vault's one writer and reads it back", async () => {
+    const base = await setup();
+
+    const empty = await fetch(`${base}/centraid/_vault/enrich/consent`);
+    expect(empty.status).toBe(200);
+    await expect(empty.json()).resolves.toStrictEqual({ consent: [] });
+
+    const recorded = await postConsent(base, {
+      capability: "faces",
+      egress: "provider",
+      decision: "granted",
+    });
+    expect(recorded.status).toBe(200);
+    await expect(recorded.json()).resolves.toMatchObject({
+      consent: {
+        capability: "faces",
+        egress: "provider",
+        scopeRef: "",
+        decision: "granted",
+      },
+    });
+
+    // A decline is a RECORD, not a deletion — the ledger keeps the answer.
+    const declined = await postConsent(base, {
+      capability: "faces",
+      egress: "provider",
+      decision: "declined",
+    });
+    expect(declined.status).toBe(200);
+    const listed = await fetch(`${base}/centraid/_vault/enrich/consent`);
+    const body = (await listed.json()) as {
+      consent: { decision: string; decidedAt: string }[];
+    };
+    expect(body.consent).toHaveLength(1);
+    expect(body.consent[0]?.decision).toBe("declined");
+    expect(body.consent[0]?.decidedAt).toStrictEqual(expect.any(String));
+  });
+
+  test("refuses an answer to a question this build cannot ask", async () => {
+    const base = await setup();
+
+    await forEachSequentially(
+      [
+        { capability: "invented", egress: "provider", decision: "granted" },
+        { capability: "faces", egress: "the-moon", decision: "granted" },
+        { capability: "faces", egress: "provider", decision: "maybe" },
+      ],
+      async (body) => {
+        const res = await postConsent(base, body);
+        expect(res.status).toBe(400);
+      }
+    );
+    const listed = await fetch(`${base}/centraid/_vault/enrich/consent`);
+    await expect(listed.json()).resolves.toStrictEqual({ consent: [] });
+  });
+
   test("an unknown domain or capability is a 400, never an empty answer", async () => {
     const base = await setup();
 

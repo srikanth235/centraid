@@ -3,7 +3,8 @@
 GitHub issue: [#807](https://github.com/srikanth235/centraid/issues/807)
 
 Umbrella receipt. Waves land as PR waves under this one issue; each wave appends
-to the sections below rather than opening a receipt of its own.
+to the sections below rather than opening a receipt of its own. Landing order:
+Wave 0 → 1 → 2 (with a main merge) → 3+6 together → 4, 5 → docs and audit.
 
 ## Checklist
 

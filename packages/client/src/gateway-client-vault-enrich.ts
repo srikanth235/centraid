@@ -6,7 +6,9 @@
  */
 
 import type {
+  EnrichConsentRecord,
   EnrichDomain,
+  EnrichEgressClass,
   EnrichPolicy,
   EnrichPolicyRule,
   EnrichScopeType,
@@ -159,4 +161,52 @@ export async function getEffectiveEnrichPolicy(input: {
     rules: EnrichPolicyRule[];
     effective: ResolvedEnrichPolicy | null;
   }>(res, "read effective enrichment policy");
+}
+
+/*
+ * The EGRESS-CONSENT ledger (issue #807, Wave 3) — capability × egress class,
+ * asked once, answered once, recorded. A READ surface here: the ledger's one
+ * writer is the vault's journalled `enrich.record_consent` command, reached
+ * through the owner-plane POST below, and no client ever writes the rows.
+ */
+
+/** Every egress answer this vault holds — the Privacy audit's source. */
+export async function listEnrichEgressConsent(): Promise<
+  EnrichConsentRecord[]
+> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, "/centraid/_vault/enrich/consent", {
+    method: "GET",
+    headers: authHeaders(token),
+  });
+  const body = await readJson<{ consent: EnrichConsentRecord[] }>(
+    res,
+    "read enrichment egress consent"
+  );
+  return body.consent;
+}
+
+/**
+ * Record one answer. Returns the row the VAULT holds afterwards — read back,
+ * never echoed, so a refused or parked write can never render as an answer.
+ * A decline is recorded exactly like a grant; this is not a toggle.
+ */
+export async function recordEnrichEgressConsent(input: {
+  capability: string;
+  egress: EnrichEgressClass;
+  decision: "granted" | "declined";
+  /** Omit for the vault-wide answer. */
+  scopeRef?: string;
+}): Promise<EnrichConsentRecord | null> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, "/centraid/_vault/enrich/consent", {
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
+    body: JSON.stringify(input),
+  });
+  const body = await readJson<{ consent: EnrichConsentRecord | null }>(
+    res,
+    "record enrichment egress consent"
+  );
+  return body.consent;
 }

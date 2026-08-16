@@ -130,6 +130,7 @@ import { openStorageConnectionStore } from "../backup/storage-connections.js";
 import { makeStorageCredentialsResolver } from "../backup/storage-credentials.js";
 import { StorageUsagePoller } from "../backup/storage-usage.js";
 import { makeCaptureOcrRecognizer } from "../capture/capture-ocr.js";
+import { readEnrichConsentForChain } from "../enrich/egress-consent-lookup.js";
 import {
   readEngineProfile,
   validateEngineProfilePatch,
@@ -2378,6 +2379,16 @@ export async function buildGateway(
               readEngineProfile(snapshot, profileId, request.capability, {
                 laneFor: () => request.lane,
               })?.egress,
+            // The egress ANSWER, read from the same owner-plane vault handle
+            // and never from the automation's grants (#807 Wave 3). A read
+            // only: `enrich_consent` has exactly one writer, and it is the
+            // journalled `enrich.record_consent` command inside the vault.
+            egressConsent: (egress) =>
+              readEnrichConsentForChain(vaultRegistry.current().db.vault, {
+                capability: request.capability,
+                egress,
+                scopeChain: request.scopeChain,
+              }),
           };
         },
         rearm: ({ automationRef: ref, completedRunId }) => {

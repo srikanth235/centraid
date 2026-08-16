@@ -181,6 +181,30 @@ const ROUTES: Record<string, Responder> = {
         egressCeiling: "on-device",
       },
     }),
+  // The egress-consent ledger (#807 Wave 3). The POST answers with the row the
+  // VAULT holds — the route reads it back after the one writer wrote it.
+  "GET /centraid/_vault/enrich/consent": () =>
+    json({
+      consent: [
+        {
+          capability: "faces",
+          egress: "provider",
+          scopeRef: "",
+          decision: "declined",
+          decidedAt: "2026-08-15T10:00:00.000Z",
+          receiptId: null,
+        },
+      ],
+    }),
+  "POST /centraid/_vault/enrich/consent": (request) =>
+    json({
+      consent: {
+        ...(JSON.parse(String(request.body)) as Record<string, unknown>),
+        scopeRef: "",
+        decidedAt: "2026-08-16T00:00:00.000Z",
+        receiptId: null,
+      },
+    }),
   "PUT /centraid/_vault/enrich": (request) =>
     json({
       enrich: {

@@ -72,6 +72,35 @@ export interface EnrichPolicyRule {
 export type EnrichEgressCeiling = "off" | "on-device" | "gateway" | "provider";
 
 /**
+ * How far an engine's work travels — a fact about the ENGINE, never about who
+ * asked. Mirrors `packages/vault/src/enrich/egress-consent.ts`.
+ */
+export const ENRICH_EGRESS_CLASSES = [
+  "on-device",
+  "gateway",
+  "provider",
+] as const;
+export type EnrichEgressClass = (typeof ENRICH_EGRESS_CLASSES)[number];
+
+/**
+ * ONE ANSWERED QUESTION in the egress-consent ledger (issue #807, Wave 3):
+ * did the member ever agree that work for this capability may run on an engine
+ * that reaches this far. A `declined` row is an ANSWER, kept on purpose — the
+ * Privacy audit shows both, because "asked and told no" and "never asked" are
+ * different facts and the second is not a grant either.
+ */
+export interface EnrichConsentRecord {
+  capability: string;
+  egress: EnrichEgressClass;
+  /** `''` when the answer covers the whole vault. */
+  scopeRef: string;
+  decision: "granted" | "declined";
+  decidedAt: string;
+  /** The `consent_receipt` this answer was receipted by, when one is linked. */
+  receiptId: string | null;
+}
+
+/**
  * What the gateway's ONE resolver folds the cascade into. Reported by
  * `GET /_vault/enrich/effective`; it is a report, never permission — the
  * runtime gate decides, and this is what it would see.

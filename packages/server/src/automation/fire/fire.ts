@@ -50,6 +50,7 @@ import {
 } from "./enrich-gate.js";
 import type {
   EnrichDomain,
+  EnrichEgressConsentLookup,
   EnrichTier,
   ResolveEnrichPolicy,
   ResolvedEnrichPolicy,
@@ -402,6 +403,8 @@ export async function runFire(
     let tier: EnrichTier | undefined;
     let policy: ResolvedEnrichPolicy | undefined;
     let profileEgress: EnrichEgressClass | undefined;
+    /** The vault's standing egress answer, when the host wired the lookup. */
+    let egressConsent: EnrichEgressConsentLookup | undefined;
     try {
       const answer = await opts.resolveEnrichPolicy?.({
         domain: enrich.domain,
@@ -419,6 +422,11 @@ export async function runFire(
           enrich.capability
         );
         if (policy) profileEgress = answer.egressForProfile?.(policy.profileId);
+        // The egress-consent lookup rides the SAME host answer as the tier and
+        // the rules (issue #807, Wave 3), so one seam still answers the whole
+        // gate. A throwing lookup lands in the catch below with everything
+        // else and refuses; an absent one fails closed inside the gate.
+        egressConsent = answer.egressConsent;
       }
     } catch (error) {
       onLog(
@@ -427,6 +435,7 @@ export async function runFire(
       );
       tier = undefined;
       policy = undefined;
+      egressConsent = undefined;
     }
     const decision = decideEnrichmentGate({
       automationRef: opts.automationRef,
@@ -435,6 +444,7 @@ export async function runFire(
       lane: enrich.lane,
       tier,
       ...(policy ? { policy, profileEgress } : {}),
+      ...(egressConsent ? { egressConsent } : {}),
     });
     if (!decision.allowed) {
       onLog("warn", decision.reason);

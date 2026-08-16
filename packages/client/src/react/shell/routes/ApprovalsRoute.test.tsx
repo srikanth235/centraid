@@ -18,6 +18,9 @@ const subscribeNotificationsChanges =
   vi.fn<OutboxModule["subscribeNotificationsChanges"]>();
 const decideOutboxItem =
   vi.fn<(input: unknown) => ReturnType<OutboxModule["decideOutboxItem"]>>();
+const listEnrichEgressConsent = vi
+  .fn<VaultModule["listEnrichEgressConsent"]>()
+  .mockResolvedValue([]);
 const enableWebPushWake = vi.fn<PushModule["enableWebPushWake"]>();
 const syncWebNotifications = vi.fn<PushModule["syncWebNotifications"]>();
 vi.mock(import("../../../gateway-client-outbox.js"), () => ({
@@ -38,6 +41,9 @@ vi.mock(import("../../../gateway-client-vault.js"), () => ({
   confirmVaultParked: vi.fn<VaultModule["confirmVaultParked"]>(),
   vaultApps: () => vaultApps(),
   listAgents: () => listAgents(),
+  // The egress-consent ledger (issue #807, Wave 3) — reference material this
+  // route reads alongside the queue.
+  listEnrichEgressConsent: () => listEnrichEgressConsent(),
   revokeVaultGrant: vi.fn<VaultModule["revokeVaultGrant"]>(),
 }));
 vi.mock(import("../../../gateway-client-push.js"), () => ({

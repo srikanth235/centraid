@@ -28,6 +28,7 @@ import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
 import { readEnrichSettings, updateEnrichSettings } from "../host.js";
 import { VISION_SCHEME_URI } from "../schema/enrich.js";
+import { listEnrichConsent, readEnrichConsent } from "./egress-consent.js";
 import {
   leaseNextEnrichmentRequest,
   queueDeviceEnrichmentRequest,
@@ -1413,6 +1414,101 @@ describe("enrich", () => {
         capability: string | null;
       };
       expect(broadcast.capability).toBeNull();
+    });
+
+    // EGRESS CONSENT, RE-KEYED (issue #807, Wave 3). The photos consent panel
+    // has exactly one write, and it is this verb — so the answer it carries
+    // becomes a row in the egress-consent ledger too, keyed capability ×
+    // egress class, where Privacy reads it back and the fire gate consults it.
+    test("a manual request re-keys the member's answer into the egress ledger", () => {
+      expect(
+        invoke(owner, "enrich.request_enrichment", {
+          entity_type: "media.asset",
+          reason: "manual",
+          capability: "faces",
+        }).status
+      ).toBe("executed");
+
+      const answer = readEnrichConsent(db.vault, {
+        capability: "faces",
+        egress: "on-device",
+      });
+      expect(answer?.decision).toBe("granted");
+      // The panel's answer is the ON-DEVICE one. Nothing about it agrees to a
+      // gateway or provider engine, which stay unasked — and unasked is not a
+      // grant.
+      expect(
+        readEnrichConsent(db.vault, { capability: "faces", egress: "gateway" })
+      ).toBeNull();
+      expect(
+        readEnrichConsent(db.vault, { capability: "faces", egress: "provider" })
+      ).toBeNull();
+
+      // A system signal is not an answer, so it re-keys nothing.
+      invoke(owner, "enrich.request_enrichment", {
+        entity_type: "media.asset",
+        reason: "on-view",
+      });
+      expect(listEnrichConsent(db.vault)).toHaveLength(1);
+    });
+  });
+
+  // ── the egress-consent ledger's one writer (issue #807, Wave 3) ──────────
+  describe("enrich.record_consent", () => {
+    test("records an answer, and a re-answer replaces it rather than piling up", () => {
+      const first = invoke(owner, "enrich.record_consent", {
+        capability: "ocr",
+        egress: "provider",
+        decision: "granted",
+      });
+      expect(first.status).toBe("executed");
+      expect(
+        readEnrichConsent(db.vault, { capability: "ocr", egress: "provider" })
+          ?.decision
+      ).toBe("granted");
+
+      const again = invoke(owner, "enrich.record_consent", {
+        capability: "ocr",
+        egress: "provider",
+        decision: "declined",
+      });
+      expect(again.status).toBe("executed");
+      const rows = listEnrichConsent(db.vault);
+      expect(rows).toHaveLength(1);
+      // A mind changed is a new DECISION, not a second row — and the decline
+      // is kept, because "asked and told no" must stay distinguishable from
+      // "never asked".
+      expect(rows[0]?.decision).toBe("declined");
+    });
+
+    test("scopes an answer without widening the vault-wide one", () => {
+      invoke(owner, "enrich.record_consent", {
+        capability: "faces",
+        egress: "gateway",
+        scope_ref: "album-7",
+        decision: "granted",
+      });
+      expect(
+        readEnrichConsent(db.vault, {
+          capability: "faces",
+          egress: "gateway",
+          scopeRef: "album-7",
+        })?.decision
+      ).toBe("granted");
+      // The vault-wide question stays unasked: a narrow yes is not a broad one.
+      expect(
+        readEnrichConsent(db.vault, { capability: "faces", egress: "gateway" })
+      ).toBeNull();
+    });
+
+    test("an app or agent cannot answer for the member — it parks", () => {
+      const outcome = invoke(agent, "enrich.record_consent", {
+        capability: "faces",
+        egress: "provider",
+        decision: "granted",
+      });
+      expect(outcome.status).toBe("parked");
+      expect(listEnrichConsent(db.vault)).toStrictEqual([]);
     });
   });
 
