@@ -82,9 +82,7 @@ test.afterEach(async () => {
 });
 
 test("desktop cold launch — process start to a usable Home", async () => {
-  gateway.state.apps = [
-    appEntry({ id: "launch-probe-app", name: "Launch probe" }),
-  ];
+  gateway.state.apps = [appEntry({ id: "tasks", name: "Tasks" })];
   await seedRemoteGateway(env, gateway);
 
   const launchStarted = Date.now();
@@ -99,13 +97,10 @@ test("desktop cold launch — process start to a usable Home", async () => {
     // stem Search / palette, which is the durable open path for installed
     // non-first-party apps.
     const tapStarted = Date.now();
-    await openAppFromPalette(page, "Launch probe");
+    await openAppFromPalette(page, "Tasks");
     await page
-      .locator(
-        '[data-testid="app-view"], iframe[data-centraid-app], iframe[title]'
-      )
-      .first()
-      .waitFor({ state: "attached", timeout: 30_000 });
+      .getByTestId("inline-app-view")
+      .waitFor({ state: "visible", timeout: 30_000 });
     const tapRespondedAt = Date.now();
 
     const report = {

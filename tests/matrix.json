@@ -3240,12 +3240,13 @@
     },
     {
       "id": "desktop-delete-app-journey",
-      "name": "Deleting draft and published apps deregisters on the gateway and clears local state",
+      "name": "App settings on a bundled inline app has no Delete and fires no DELETE",
       "surface": "desktop",
       "dimension": "journey",
       "tier": "e2e",
       "owner": "apps/desktop/tests/e2e/delete-app.spec.ts",
-      "minimumTests": 8
+      "minimumTests": 8,
+      "approvedMinimumTestsDeviation": "#799 retired the served-app plane, so draft/code-store Delete-via-App-settings cannot be reached: custom apps no longer mount an app view. The eight cases stay in delete-app.spec.ts but now drive the live bundled surface (Tasks): settings opens, Manage has no Delete (#708), and dismiss/Home paths fire no DELETE. Floor stays 8 — the journey transferred, it did not shrink."
     },
     {
       "id": "desktop-launch-time",

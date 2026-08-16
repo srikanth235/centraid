@@ -84,6 +84,27 @@ const CONTENT_TYPES = {
 };
 
 /**
+ * `apps/web/vite.config.ts` imports `@centraid/design/font-faces`, which the
+ * package export map resolves to `packages/design/dist/font-faces.js`. A
+ * fresh CI checkout has no dist; the rest of the shell also imports
+ * workspace packages at their `dist` entry (protocol, client, …). Build
+ * `@centraid/web`'s package dependencies — not the web app itself — so
+ * vite.config can load and the subsequent vite build can resolve them.
+ */
+function ensureWebShellInputs() {
+  execFileSync(
+    "bun",
+    ["run", "turbo", "run", "build", "--filter=@centraid/web^..."],
+    { cwd: ROOT, stdio: "inherit" }
+  );
+  const fontFaces = path.join(ROOT, "packages/design/dist/font-faces.js");
+  if (!existsSync(fontFaces))
+    throw new Error(
+      "web dependency build produced no packages/design/dist/font-faces.js (required by apps/web vite.config)"
+    );
+}
+
+/**
  * Rebuild the web dist before every run. The alternative — trusting whatever
  * `apps/web/dist` happens to hold — is how a "verified" baseline ends up
  * photographing a bundle nobody has built since the change under review.
@@ -91,6 +112,7 @@ const CONTENT_TYPES = {
  * reason. It costs about five seconds.
  */
 function buildWebShell() {
+  ensureWebShellInputs();
   execFileSync("bunx", ["vite", "build", "--logLevel", "warn"], {
     cwd: WEB_DIR,
     stdio: "inherit",

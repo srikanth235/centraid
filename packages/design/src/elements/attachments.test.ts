@@ -8,10 +8,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   INLINE_ATTACH_BYTES,
   isPendingOffsite,
+  renderAttachments,
   stageDerivative,
   stageFileBytes,
   wireAttachInput,
 } from "./attachments.js";
+import type { VaultOutcome } from "./feedback.js";
 import type { CentraidHost, StagedBlob } from "./host.js";
 
 type AttachHandlers = Parameters<typeof wireAttachInput>[2];
@@ -207,5 +209,66 @@ describe("attachments", () => {
     input.dispatchEvent(new Event("change"));
     await Promise.resolve();
     expect(act).not.toHaveBeenCalled();
+  });
+
+  it("drops a tile only after a confirmed executed onRemove", async () => {
+    const strip = document.createElement("div");
+    document.body.appendChild(strip);
+    const onRemove = vi.fn<
+      (attachmentId: string) => Promise<VaultOutcome | undefined>
+    >(async () => ({ status: "executed" }));
+    renderAttachments(
+      strip,
+      [
+        {
+          attachment_id: "a1",
+          media_type: "text/plain",
+          title: "note.txt",
+          byte_size: 4,
+        },
+      ],
+      onRemove
+    );
+
+    const rm = strip.querySelector<HTMLButtonElement>(".kit-attach-remove");
+    expect(rm).not.toBeNull();
+    rm!.click();
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(strip.querySelector(".kit-attach-tile")).not.toBeNull();
+
+    rm!.click();
+    await vi.waitFor(() => expect(onRemove).toHaveBeenCalledWith("a1"));
+    await vi.waitFor(() =>
+      expect(strip.querySelector(".kit-attach-tile")).toBeNull()
+    );
+    strip.remove();
+  });
+
+  it("keeps the tile when onRemove does not execute", async () => {
+    const strip = document.createElement("div");
+    document.body.appendChild(strip);
+    const onRemove = vi.fn<
+      (attachmentId: string) => Promise<VaultOutcome | undefined>
+    >(async () => ({ status: "denied" }));
+    renderAttachments(
+      strip,
+      [
+        {
+          attachment_id: "a2",
+          media_type: "image/png",
+          title: "shot.png",
+          content_uri: "data:image/png;base64,xx",
+          byte_size: 12,
+        },
+      ],
+      onRemove
+    );
+
+    const rm = strip.querySelector<HTMLButtonElement>(".kit-attach-remove")!;
+    rm.click();
+    rm.click();
+    await vi.waitFor(() => expect(onRemove).toHaveBeenCalledWith("a2"));
+    expect(strip.querySelector(".kit-attach-tile")).not.toBeNull();
+    strip.remove();
   });
 });

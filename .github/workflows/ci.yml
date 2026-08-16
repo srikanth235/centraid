@@ -818,15 +818,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
       # Same pinned-browser convention as lane-client-e2e.yml: `bunx
       # playwright install` resolves the CLI from the root lockfile's
       # `playwright` pin, so the downloaded Chromium revision is exactly the
       # one that version ships — no floating browser.
       - run: bunx playwright install --with-deps chromium
       # The gallery runs under bun (it imports packages/design/src TS
-      # directly) and builds the web dist itself — it photographs the SHELL,
-      # so it refuses to trust a dist it did not just produce. No separate
-      # package build step is needed.
+      # directly for the lowering lanes) and builds the web dist itself — it
+      # photographs the SHELL, so it refuses to trust a dist it did not just
+      # produce. `scripts/design-gallery.mjs` builds `@centraid/web`'s package
+      # dependencies first (`turbo --filter=@centraid/web^...`) because
+      # `apps/web/vite.config.ts` imports `@centraid/design/font-faces`, which
+      # resolves to `packages/design/dist/font-faces.js`.
       - run: bun run design:gallery
       # On failure the actual captures are the rebaseline/review payload —
       # without them a red pixel diff is undebuggable from the log alone.

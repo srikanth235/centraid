@@ -215,10 +215,15 @@ export function renderAttachments(
       rm.title = "Remove";
       rm.setAttribute("aria-label", "Remove attachment");
       rm.dataset.kitAttachmentId = String(a.attachment_id);
-      rm.addEventListener("click", async () => {
-        if (!armConfirm(rm, { armedLabel: "Sure?" })) return;
-        const outcome = await onRemove(a.attachment_id);
-        if (outcome?.status === "executed") tile.remove();
+      // Click listeners must be void: an `async` listener returns a Promise
+      // where DOM expects void (`typescript(no-misused-promises)`). Same
+      // fire-and-forget shape as `wireAttachInput`.
+      rm.addEventListener("click", () => {
+        void (async () => {
+          if (!armConfirm(rm, { armedLabel: "Sure?" })) return;
+          const outcome = await onRemove(a.attachment_id);
+          if (outcome?.status === "executed") tile.remove();
+        })();
       });
       if (armed.has(String(a.attachment_id)))
         armConfirm(rm, { armedLabel: "Sure?" });

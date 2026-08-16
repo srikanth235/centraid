@@ -17,10 +17,21 @@ import { fc } from "@centraid/test-kit/fast-check";
 
 import { updateAppMetaFiles, validateAppId } from "./app-meta.js";
 import { applyManifestName } from "./app-rewrites.js";
+import { AppScaffoldError } from "./scaffold-types.js";
 import type { ScaffoldFile } from "./scaffold-types.js";
 
 function byPath(files: ScaffoldFile[]): Map<string, string> {
   return new Map(files.map((f) => [f.path, f.content]));
+}
+
+function thrownScaffold(fn: () => void): AppScaffoldError {
+  try {
+    fn();
+  } catch (error) {
+    if (error instanceof AppScaffoldError) return error;
+    throw error;
+  }
+  throw new Error("expected AppScaffoldError");
 }
 
 const validId = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/u);
@@ -68,6 +79,12 @@ describe(validateAppId, () => {
 
   it("names the offending id in the error so the operator can see the typo", () => {
     expect(() => validateAppId("Bad Id")).toThrow(/"Bad Id"/u);
+  });
+
+  it("tags every rejected id with the invalid_id code the gateway maps", () => {
+    expect(thrownScaffold(() => validateAppId("_private")).code).toBe(
+      "invalid_id"
+    );
   });
 });
 
@@ -132,6 +149,10 @@ describe(updateAppMetaFiles, () => {
         /cannot be empty/u
       );
     }
+    expect(
+      thrownScaffold(() => updateAppMetaFiles(base(), "todos", { name: "  " }))
+        .code
+    ).toBe("invalid_id");
   });
 
   it("compares duplicate display names case- and whitespace-insensitively", () => {
@@ -148,6 +169,13 @@ describe(updateAppMetaFiles, () => {
       ),
       { numRuns: 20, seed: 65665 }
     );
+    expect(
+      thrownScaffold(() =>
+        updateAppMetaFiles(base(), "todos", { name: "other" }, [
+          { id: "sibling", name: "Other" },
+        ])
+      ).code
+    ).toBe("already_exists");
     // A sibling with no name at all is not a collision.
     expect(() =>
       updateAppMetaFiles(base(), "todos", { name: "Other" }, [{ id: "s" }])
@@ -179,8 +207,30 @@ describe(updateAppMetaFiles, () => {
     // An absent `description` key leaves the existing value alone.
     const untouched = JSON.parse(
       byPath(updateAppMetaFiles(start, "todos", {})).get("app.json") as string
-    ) as { description: string };
+    ) as { description: string; name: string };
     expect(untouched.description).toBe("keep me");
+
+    // Description-only must not invent a name (kills `if (renameTo)` → true).
+    expect(untouched.name).toBe("Todos");
+    expect(
+      (
+        JSON.parse(
+          byPath(
+            updateAppMetaFiles(start, "todos", { description: "next" })
+          ).get("app.json") as string
+        ) as { name: string }
+      ).name
+    ).toBe("Todos");
+  });
+
+  it("emits pretty app.json with a trailing newline even when rewriting from nothing", () => {
+    const fromEmpty = updateAppMetaFiles([], "todos", { name: "Tasks" });
+    expect(fromEmpty).toHaveLength(1);
+    expect(fromEmpty[0]!.content.endsWith("}\n")).toBe(true);
+    expect(JSON.parse(fromEmpty[0]!.content)).toStrictEqual({ name: "Tasks" });
+
+    const rewritten = updateAppMetaFiles(base(), "todos", { name: "Tasks" });
+    expect(rewritten[0]!.content.endsWith("}\n")).toBe(true);
   });
 
   it("preserves every other app.json key across a rename", () => {

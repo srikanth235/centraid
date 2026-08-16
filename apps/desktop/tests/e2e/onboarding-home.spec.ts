@@ -9,7 +9,6 @@ import {
   closeApp,
   launchApp,
   makeEnv,
-  markUserApp,
   openAppFromPalette,
   openCommandPalette,
   openTile,
@@ -282,42 +281,39 @@ test("2.2 — day-one Home offers first-moves rather than a shelf-empty card", a
   }
 });
 
-test("2.3 — opening a custom app via the palette lands in the app view", async () => {
-  const id = "rename-me";
-  gateway.state.apps = [appEntry({ id, name: "Old Name" })];
+test("2.3 — opening a first-party app via the palette lands in the inline app view", async () => {
+  gateway.state.apps = [appEntry({ id: "tasks", name: "Tasks" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await markUserApp(page, { id, name: "Old Name" });
-    await page.reload();
-    await waitForHome(page);
-    // Home no longer hosts library cards (#708); the palette is the open path.
-    await openAppFromPalette(page, "Old Name");
-    await expect(page.getByTestId("app-view")).toBeVisible();
+    // Home no longer hosts library cards (#708); the palette is the open path
+    // for any installed app. Custom served apps are gone (#799); Tasks is a
+    // bundled inline route.
+    await openAppFromPalette(page, "Tasks");
+    await expect(page.getByTestId("inline-app-view")).toBeVisible();
   } finally {
     await closeApp(app);
   }
 });
 
-test("2.5 — App settings exposes Delete app for a code-store install", async () => {
-  const id = "menu-app";
-  gateway.state.apps = [appEntry({ id, name: "Menu App" })];
+test("2.5 — App settings on a bundled app has Manage and no Delete app", async () => {
+  gateway.state.apps = [appEntry({ id: "tasks", name: "Tasks" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await markUserApp(page, { id, name: "Menu App" });
-    await page.reload();
-    await waitForHome(page);
-    await openAppFromPalette(page, "Menu App");
+    await openAppFromPalette(page, "Tasks");
+    await expect(page.getByTestId("inline-app-view")).toBeVisible();
     await page.getByRole("button", { name: "App settings" }).click();
     const settings = page.getByRole("dialog", { name: "App settings" });
     await settings.waitFor({ state: "visible" });
     await settings.getByRole("button", { name: "Manage", exact: true }).click();
+    // Bundled apps reinstall at every vault mount (#708) — Delete would undo
+    // itself. The danger zone is code-store only, and that plane is gone.
     await expect(
       settings.getByRole("button", { name: /Delete app/iu })
-    ).toBeVisible();
+    ).toHaveCount(0);
   } finally {
     await closeApp(app);
   }
@@ -533,7 +529,7 @@ test("2.8 — the command palette opens from the stem Search control", async () 
 
 // Extra declared journeys keep desktop-real-journey minimumTests (13) met after
 // the Binding Layer removed the library-card suite from this file.
-test("2.9 — palette Create row opens when the builder is enabled", async () => {
+test("2.9 — palette has no Build a new app row after the builder retired", async () => {
   gateway.state.apps = [];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
@@ -543,7 +539,7 @@ test("2.9 — palette Create row opens when the builder is enabled", async () =>
     const palette = page.getByRole("dialog", { name: "Command palette" });
     await expect(
       palette.getByRole("button", { name: /Build a new app/iu })
-    ).toBeVisible();
+    ).toHaveCount(0);
   } finally {
     await closeApp(app);
   }

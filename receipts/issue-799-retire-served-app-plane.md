@@ -464,6 +464,21 @@ same-commit rule is satisfied by the pair of prose files alone.
 
 
 
+### PR #800 CI follow-up
+
+The first `ci` run on this branch (31921007894) was red on `static`,
+`design-gallery`, `client-e2e / web-e2e`, `client-e2e / desktop-e2e`, and
+`mutation-pr`. The follow-up keeps the #799 retirement and fixes the
+gates: `renderAttachments` no longer returns a Promise from a DOM click
+listener; `design:gallery` builds `@centraid/web`'s package dependencies
+before vite so `@centraid/design/font-faces` resolves; the cold-open
+`minEncodedBytes` floor reseeds from the CI-measured 80561 B; desktop e2e
+in `delete-app.spec.ts`, `launch-time.spec.ts`, `onboarding-home.spec.ts`,
+and `settings-gateways.spec.ts` drive the live inline-app/App-settings
+surface instead of retired `app-view` / `Build a new app` / draft-delete
+paths; extra `app-meta-properties` assertions kill enough blueprints
+mutants to stay at or above floor 74.
+
 ### Full changed-file inventory
 
 Every path in this change set, across all stages landed so far, including
@@ -509,6 +524,9 @@ deletions, renames, and this receipt:
 - `apps/desktop/tests/e2e/builder.spec.ts`
 - `apps/desktop/tests/e2e/delete-app.spec.ts`
 - `apps/desktop/tests/e2e/fixtures.ts`
+- `apps/desktop/tests/e2e/launch-time.spec.ts`
+- `apps/desktop/tests/e2e/onboarding-home.spec.ts`
+- `apps/desktop/tests/e2e/settings-gateways.spec.ts`
 - `apps/desktop/vite.config.ts`
 - `apps/mobile/App.tsx`
 - `apps/mobile/lazy-screens.tsx`
