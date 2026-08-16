@@ -130,6 +130,7 @@ import { openStorageConnectionStore } from "../backup/storage-connections.js";
 import { makeStorageCredentialsResolver } from "../backup/storage-credentials.js";
 import { StorageUsagePoller } from "../backup/storage-usage.js";
 import { makeCaptureOcrRecognizer } from "../capture/capture-ocr.js";
+import { validateEngineProfilePatch } from "../enrich/engine-profiles.js";
 import {
   isSystemRecognitionRef,
   SYSTEM_RECOGNITION_TEMPLATE_IDS,
@@ -192,6 +193,10 @@ import { makeDevicesRouteHandler } from "../routes/devices-routes.js";
 import { makeDiagnosticsRouteHandler } from "../routes/diagnostics-routes.js";
 import { makeEdgeAnswerRouteHandler } from "../routes/edge-answer-routes.js";
 import { EDGES_PATH, makeEdgesRouteHandler } from "../routes/edges-routes.js";
+import {
+  ENRICH_PROFILES_PREFIX,
+  makeEnrichProfilesRouteHandler,
+} from "../routes/enrich-profiles-routes.js";
 import {
   SEMANTIC_SEARCH_PATH,
   makeEnrichSearchRouteHandler,
@@ -4696,6 +4701,13 @@ export async function buildGateway(
         },
       })
     ),
+    // Engine profiles (issue #807): the derived built-ins plus whatever the
+    // member created, read straight off gateway prefs. Writes ride the generic
+    // prefs API, whose `validatePatch` below is the one gate.
+    forRoutePrefixes(
+      ENRICH_PROFILES_PREFIX,
+      makeEnrichProfilesRouteHandler({ readPrefs: () => prefs.getAllPrefs() })
+    ),
     // Harness detection (codex/claude credentials on the gateway host).
     forRoutePrefixes(
       "/centraid/_harnesses",
@@ -4808,6 +4820,10 @@ export async function buildGateway(
     () => currentWorkspace().ownerPartyId,
     {
       validatePatch: async (patch, before) => {
+        // Engine profiles first: the check is pure and cheap, so a malformed
+        // profile is refused without spawning a harness preflight (#807).
+        const profileRejection = validateEngineProfilePatch(patch);
+        if (profileRejection) return profileRejection;
         const next = patchedPrefs(before, patch);
         const switches: Array<ModelSubsystem | undefined> = [];
         if (Object.hasOwn(patch, "harness.kind")) switches.push(undefined);

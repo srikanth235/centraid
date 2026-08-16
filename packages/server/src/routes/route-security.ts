@@ -82,6 +82,7 @@ export const ROUTE_SECURITY_REGISTRY: readonly RouteSecurityRegistration[] = [
     `
     /centraid/_gateway/health|health-routes.ts
     /centraid/_templates|templates-routes.ts
+    /centraid/_enrich|enrich-profiles-routes.ts|engine profiles are gateway prefs, not vault state — the listing reads no vault
   `
   ),
   ...defineRouteGroup(

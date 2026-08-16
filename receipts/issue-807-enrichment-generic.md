@@ -8,6 +8,7 @@ to the sections below rather than opening a receipt of its own.
 ## Checklist
 
 - [x] Wave 0 — schema and contracts
+- [x] Wave 1 — engine profiles
 
 ## What changed
 
@@ -31,6 +32,26 @@ re-enrichment stays backfill, never destructive. `schema/poly-refs.ts` records
 cascade level, not the polymorphic entity shape, so rules are not swept on
 purge — a rule whose collection is gone matches nothing and is inert.
 
+**Wave 1 — engine profiles.** `packages/server/src/enrich/engine-profiles.ts`
+is the profile model over the existing prefs/harness machinery: one immutable
+built-in profile per capability (id `built-in`, derived from the capability
+registry — the exact value `stampDerivation` has always written), and member
+profiles stored one per prefs key `enrich.profile.<id>` (JSON: capability,
+label, harness, model, configPins, promptRev). Egress class is computed, never
+stored: built-in profiles read their enricher lane (`device` → `on-device`,
+`gateway` → `gateway`; the gateway is the member's own infrastructure, not
+egress), delegate profiles are `provider` via a `delegateEgress` seam that a
+future local-inference harness would answer. Faces is structurally excluded
+from delegate profiles (`capabilityAllowsDelegate`). Writes ride the existing
+`PUT /_centraid-user/prefs` path: `validateEngineProfilePatch` is wired into
+the gateway's `validatePatch` hook in
+`packages/server/src/serve/build-gateway.ts` (refusal → 409, mirroring
+harness-pin preflight). Read surface: `GET /centraid/_enrich/profiles`
+(`packages/server/src/routes/enrich-profiles-routes.ts`, registered
+device-auth/no-vault in `packages/server/src/routes/route-security.ts`).
+`docs/config-ownership.md` documents the new `enrich.profile.*` prefs surface
+and its single writer.
+
 ## Decisions
 
 #807 Wave 0 registers two new enrichment tables (enrich.policy_rule, enrich.consent) in schema/tables.ts, and the Atlas census counts one row-count query per REGISTERED table: the measured SQL baseline rises 138 -> 140, with no additional HTTP request and no new query per table beyond that count. Registration is what carries both tables through portable export and the replica change log, so the two statements are the price of them being real vault rows rather than a side store. Prior: #731 Atlas now counts the registered Commons control tables during its bounded first-paint census; the measured SQL baseline rises from 128 to 138 with no additional HTTP request.
@@ -53,6 +74,18 @@ is the pre-release, single-rung, edit-in-place base (`schema/migrate.ts`), where
 a file written by an older shape is re-created rather than migrated. The
 `profile` DEFAULT is what keeps every existing stamp call site byte-identical.
 
+**Wave 1 deviations.** (1) Engine variants are `built-in`/`delegate` (repo
+vocabulary), not `builtin`/`provider`. (2) Built-in profile identity is
+`(capability, "built-in")` rather than per-capability minted ids, matching the
+ledger's `BUILT_IN_PROFILE`; `readEngineProfile` takes an optional capability
+to resolve it. (3) Enricher lane is injected via `laneFor`, defaulting to
+`gateway` (the same fail-safe `manifest.ts` applies) — no filesystem reads on
+a pure config path. (4) The profiles route reports no harness availability
+(no probes); Settings pairs it with `/_harnesses/status`. (5) Reader lenient /
+writer strict on malformed optional fields. (6) New route module instead of
+growing harnesses-routes. (7) `delegateEgress(harness)` ignores its argument
+today — the seam is the point, not a knob.
+
 ## Out of scope
 
 Waves 1–6 (engine profiles, policy cascade + gate resolver, consent re-keying,
@@ -72,6 +105,16 @@ bun run lint                                # clean
 bun run lint:schema-export                  # ratchet green
 bun run test:qualities                      # 24 passed
 bun run format:check                        # clean
+```
+
+Wave 1:
+
+```sh
+bun run --cwd packages/server test -- engine-profiles        # 28 passed
+bun run --cwd packages/server test -- enrich-profiles-routes # 3 passed
+bun run --cwd packages/server test -- build-gateway.test     # 24 passed
+bunx turbo run typecheck --filter=@centraid/server           # 19/19
+bun run lint && bun run format:check && bun run lint:protocol-routes  # clean
 ```
 
 ## Audit
@@ -112,6 +155,14 @@ unnarrated) were folded into `## What changed` after the audit.
 - `tests/experience-budgets/client-query-counts.json`
 - `docs/photos/derived-ledger.md`
 - `docs/decisions.md`
+- `packages/server/src/enrich/engine-profiles.ts`
+- `packages/server/src/enrich/engine-profiles.test.ts`
+- `packages/server/src/routes/enrich-profiles-routes.ts`
+- `packages/server/src/routes/enrich-profiles-routes.test.ts`
+- `packages/server/src/serve/build-gateway.ts`
+- `packages/server/src/serve/build-gateway.test.ts`
+- `packages/server/src/routes/route-security.ts`
+- `docs/config-ownership.md`
 
 ## Session
 
