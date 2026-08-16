@@ -340,7 +340,7 @@ export default function PhotosLibrary({
         ListEmptyComponent={
           <View style={styles.pageSection}>
             <Text style={[styles.empty, { color: colors.textSoft }]}>
-              No albums yet. Tap + to create one.
+              No albums yet — tap + to create one.
             </Text>
           </View>
         }

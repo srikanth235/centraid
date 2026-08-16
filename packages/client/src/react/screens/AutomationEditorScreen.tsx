@@ -1022,8 +1022,8 @@ export default function AutomationEditorScreen({
                     data-testid="cron-timezone"
                   />
                   <span className={styles.trigHint}>
-                    IANA name (e.g. America/New_York). Empty uses the gateway
-                    default, then the host clock.
+                    IANA name (e.g. America/New_York); empty follows the gateway
+                    default.
                   </span>
                 </label>
                 {preview.length > 0 ? (
@@ -1729,8 +1729,8 @@ export default function AutomationEditorScreen({
               <div>
                 <h2 className={styles.sectionTitle}>Triggers</h2>
                 <p className={styles.sectionHint}>
-                  Optional. Without a trigger, this only runs when you fire it
-                  by hand.
+                  Optional — without one, this runs only when you fire it by
+                  hand.
                 </p>
               </div>
               {addTriggerMenu}

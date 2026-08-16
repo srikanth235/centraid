@@ -40,8 +40,7 @@ const photosInlineApp: InlineAppModule = {
   kitAsk: {
     scope: "photos",
     placeholder: "Ask your photos…",
-    intro:
-      "Ask me to find photos, make an album, or share a set. Albums and shares show for your approval before anything is saved.",
+    intro: "Ask me to find photos, make an album, or share a set.",
     suggest: [
       "Make an album of Saturday’s photos",
       "Find beach photos",

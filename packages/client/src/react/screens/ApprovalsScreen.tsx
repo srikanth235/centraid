@@ -239,7 +239,7 @@ export interface ApprovalsScreenProps {
 // surfaces stopped keeping separate copies. Only the store-ledger note below
 // is desktop's alone.
 const LEDGER_NOTE =
-  "Everything an app can reach, and nothing it cannot. Revoking takes effect at once — the app keeps no copy of what it read.";
+  "Everything an app can reach — revoking takes effect at once.";
 
 /** The waiting-queue filter, shown only when the queue is full enough to need
  *  one. Ids are the v9 chip set; the labels are its copy. */

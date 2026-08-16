@@ -36,7 +36,7 @@ export const PLACE_UNNAMED = "A place with no name yet";
  */
 export function duplicatesLede(clusterCount: number): string {
   const noun = clusterCount === 1 ? "cluster" : "clusters";
-  return `${clusterCount} ${noun} of near-identical photographs. Selecting a copy marks it for trash; the one you keep stays where it is, in the album and the timeline it is already in.`;
+  return `${clusterCount} ${noun} of near-identical photographs — selecting a copy marks it for trash.`;
 }
 
 // ── Copy both surfaces render, promoted here by issue #805 ──────────────────

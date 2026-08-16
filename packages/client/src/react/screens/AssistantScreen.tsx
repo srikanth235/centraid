@@ -634,7 +634,7 @@ export default function AssistantScreen({
                   (attachment) => attachment.state === "ready"
                 )
               }
-              placeholder="Ask your vault anything…  (@ to mention, / for commands)"
+              placeholder="Ask your vault anything…"
               ariaLabel="Ask your vault"
               onKeyDown={(event) => {
                 // The autocomplete menu gets first crack at Arrow/Enter/Tab/Esc.

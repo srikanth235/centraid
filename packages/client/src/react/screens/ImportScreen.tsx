@@ -349,10 +349,9 @@ export default function ImportScreen({
       <div className={appSettingsCss.appSettingsSection}>
         <div className={vault.label}>{`Import into · ${state.vaultName}`}</div>
         <Note>
-          Calendar (.ics), contacts (.vcf), mail (.mbox), bank statements
-          (.csv), Markdown notes (.md), or a Google Takeout (.zip). Files stage
-          with mapping and conflict previews — validation never changes the
-          vault, and nothing lands until you publish.
+          Calendar (.ics), contacts (.vcf), mail (.mbox), statements (.csv),
+          notes (.md), or a Google Takeout (.zip) — files stage for review
+          before they land.
         </Note>
         <div className={vault.demoActions}>
           <button
@@ -412,9 +411,8 @@ export default function ImportScreen({
       <div className={appSettingsCss.appSettingsSection}>
         <div className={vault.label}>Take everything with you</div>
         <Note>
-          Download a verified bundle with every canonical row, document version,
-          folder, tag, content byte, and readable ICS, vCard, CSV, and Markdown
-          adapters. The manifest hashes every file.
+          A verified bundle of every row, version, folder, tag and byte, with
+          readable adapters and a manifest that hashes every file.
         </Note>
         <button
           type="button"

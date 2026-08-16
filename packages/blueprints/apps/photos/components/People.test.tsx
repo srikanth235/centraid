@@ -98,7 +98,7 @@ describe("the People shelf's consent gate", () => {
   it("renders the ordinary grid/note when `gate` is absent, unchanged", () => {
     const html = markup({ unmatchedCount: 3 });
     expect(html).toContain(
-      "3 faces are not matched to anyone. Face review proposes them one at a time, and nothing is named until you name it."
+      "3 faces are not matched to anyone — face review proposes them one at a time."
     );
     expect(html).not.toContain(ON_DEVICE_PANEL.action);
   });

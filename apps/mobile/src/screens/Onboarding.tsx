@@ -207,7 +207,7 @@ function ConnectionStep({
       if (next.granted) return setScanning(true);
       setShowPaste(true);
       setError(
-        "Camera access is off for Centraid. Turn it on in Settings, or paste a code below."
+        "Camera access is off — enable it in Settings, or paste a code below."
       );
     };
     void run();
@@ -307,8 +307,8 @@ function ConnectionStep({
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {available ? null : (
         <Text style={styles.note}>
-          Pairing needs a development build — the tunnel isn&apos;t available in
-          Expo Go. You can pair later from Settings.
+          The tunnel isn&apos;t available in Expo Go — pair later from Settings,
+          on a development build.
         </Text>
       )}
 
@@ -396,8 +396,8 @@ function ProfileStep({
         Who&apos;s using <Text style={styles.h1Accent}>this phone</Text>?
       </Text>
       <Text style={styles.lede}>
-        Your name and colour show on your avatar here and to anyone you share a
-        vault with. You can change both later in Settings.
+        Your name and colour show on your avatar, here and to anyone you share a
+        vault with.
       </Text>
 
       <View style={styles.identity}>
@@ -467,8 +467,7 @@ function Done({
         You&apos;re all set, <Text style={styles.h1Accent}>{greet}</Text>.
       </Text>
       <Text style={[styles.lede, styles.center]}>
-        Your vault is ready. Everything you build lands on your home screen —
-        yours, on this phone.
+        Everything you build lands on your home screen — yours, on this phone.
       </Text>
       <PrimaryButton label="Enter Centraid" onPress={onEnter} />
     </View>

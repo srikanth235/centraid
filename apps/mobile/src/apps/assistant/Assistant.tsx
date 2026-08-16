@@ -103,7 +103,7 @@ export default function AssistantScreen({
   const submit = (): void => {
     const text = draft.trim();
     if ((!text && attachments.length === 0) || sending) return;
-    send(text || "Please review the attached file.");
+    send(text || "Review the attached file.");
     setDraft("");
   };
 
@@ -190,8 +190,7 @@ export default function AssistantScreen({
           <Icon name="cpu" size={30} color={colors.accent} />
           <Text style={styles.emptyTitle}>Not connected</Text>
           <Text style={styles.emptyBody}>
-            Connect your desktop to chat with your assistant. Pair it in
-            Settings.
+            Pair your desktop in Settings to chat with your assistant.
           </Text>
         </View>
       ) : (
@@ -223,8 +222,7 @@ export default function AssistantScreen({
                       {loadError ? "Couldn't load history" : "Say hello"}
                     </Text>
                     <Text style={styles.emptyBody}>
-                      {loadError ??
-                        "Ask your assistant anything about your vault to get started."}
+                      {loadError ?? "Ask anything about your vault."}
                     </Text>
                   </>
                 )}

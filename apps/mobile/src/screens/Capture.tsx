@@ -181,8 +181,8 @@ export default function CaptureScreen({
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[styles.help, { color: colors.textSoft }]}>
-          Type naturally. Centraid routes obvious captures offline and asks the
-          configured local harness only when the destination is ambiguous.
+          Centraid routes obvious captures offline, and asks the local harness
+          only when the destination is unclear.
         </Text>
         <TextInput
           autoFocus

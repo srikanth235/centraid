@@ -78,7 +78,7 @@ export default function SettingsAppearanceScreen({
       <DrawerGroup label="Theme">
         <DrawerRow
           label="Appearance"
-          hint="Centraid Light, Centraid Dark, or whatever your OS is using. Apps stay in their own light/dark palette."
+          hint="Centraid Light, Centraid Dark, or your OS setting."
         >
           <Segmented
             ariaLabel="Appearance"

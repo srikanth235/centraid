@@ -214,16 +214,13 @@ export default function InsightsScreen({
           facts={gatewayFacts(resourceUsage)}
         />
       ) : (
-        <PanelBlock body="Not available from this vault host. Update the host to see what it actually used." />
+        <PanelBlock body="Not available from this vault host — update it to see." />
       )}
       <NoteBlock>
         Measured proxies only — CPU time, bytes moved, and time spent active.
-        Harness runs are measured but not limited by Conserve, and no wattage
-        appears because software alone cannot measure power draw.
       </NoteBlock>
       <NoteBlock>
-        The vault host is your own machine. These are its numbers, not a
-        service’s.
+        These are your own machine’s numbers, not a service’s.
       </NoteBlock>
     </div>
   );

@@ -268,7 +268,7 @@ describe("HouseholdScreen suite", () => {
       const text = el.textContent ?? "";
       expect(text).toContain("Cannot reach the vault host");
       expect(text).toContain(
-        "This page is being served from a cached copy. Device pairing and revocation both need the vault host, so both are unavailable until it answers."
+        "Pairing and revocation need the vault host — this page is a cached copy."
       );
       expect(button(el, "Try again")).toBeTruthy();
       expect(readVitals("household")?.state).toBe("error");

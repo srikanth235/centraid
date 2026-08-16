@@ -76,11 +76,11 @@ const EMPTY_BODY = DEVICES_EMPTY_BODY;
 
 const ERROR_TITLE = "Cannot reach your vault's home machine";
 const ERROR_BODY =
-  "This page is being served from a cached copy. Device pairing and revocation both need your vault's home machine, so both are unavailable until it answers.";
+  "Served from a cached copy — pairing and revocation need your vault's home machine.";
 /** The `no-gateway` degrade is the SAME visual, with the sentence that is
  *  actually true of it: nothing is cached because nothing was ever linked. */
 const UNPAIRED_BODY =
-  "This phone is not linked to a vault yet. Pair it from Settings, and the devices sharing that vault appear here.";
+  "Pair this phone from Settings to see the devices sharing that vault.";
 
 const PAIR_VERB = "Pair a device";
 

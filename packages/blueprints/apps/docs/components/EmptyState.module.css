@@ -39,9 +39,3 @@
   gap: var(--sp-2);
   margin-block-start: var(--sp-2);
 }
-
-.note {
-  margin: var(--sp-3) 0 0;
-  font: var(--t-small);
-  color: var(--text-faint);
-}

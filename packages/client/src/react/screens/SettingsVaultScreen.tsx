@@ -122,9 +122,7 @@ export default function SettingsVaultScreen({
     <div className={drawerGroupCss.group}>
       <div className={drawerGroupCss.groupBody}>
         <div className={controlsCss.note}>
-          This vault holds its own apps, conversations, and data. Switch between
-          your vaults, or add another, from the switcher at the top of the
-          sidebar (⌘⇧G).
+          This vault holds its own apps, conversations, and data.
         </div>
 
         <div className={vaultModalStyles.profModalPreview}>
@@ -217,8 +215,8 @@ export default function SettingsVaultScreen({
           <div className={drawerGroupCss.groupLabel}>On this device</div>
           <div className={drawerGroupCss.groupBody}>
             <div className={controlsCss.note}>
-              Stop reaching this vault from this device. It stays intact on its
-              host, and you can connect to it again from the switcher.
+              Stop reaching this vault from this device — it stays intact on its
+              host.
             </div>
             <button
               type="button"

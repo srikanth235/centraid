@@ -1205,8 +1205,10 @@ describe("issue #679 user-facing quality gates", () => {
     // down. Raising it means new verbose copy shipped, which is the regression
     // the gate exists to stop. Slice C (shared-string promotion) took it to
     // 216 — 40 seeds deleted, one added for the deny sheet's allowlisted
-    // destructive-confirm sentences.
-    const COPY_SEED_CEILING = 216;
+    // destructive-confirm sentences. Audit slices D1–D5 drained the rest: the
+    // 31 that remain are all consent, destructive-confirm, or
+    // security/privacy disclosures — the deliberate residue, not debt.
+    const COPY_SEED_CEILING = 31;
     const allowlistFile = await json("tests/quality/copy-allowlist.json");
     const ratchet = allowlistFile["copyRatchet"] as {
       maxEntries: number;

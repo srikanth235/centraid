@@ -50,8 +50,7 @@ import { usePhotoTimeline } from "./timeline-source";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 /** The web picker's own sentence (`components/Picker.tsx`), verbatim. */
-const REFERS_NOT_COPIES =
-  "An album refers to a photograph where it lives; nothing moves and nothing is copied.";
+const REFERS_NOT_COPIES = "An album refers to a photograph where it lives.";
 
 /** The web picker's empty copy, verbatim. */
 const NOTHING_LEFT = "Everything in your library is already in this album.";

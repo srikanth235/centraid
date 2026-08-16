@@ -9,687 +9,142 @@
   ],
   "copyRatchet": {
     "_comment": "U4 copy-density ratchet (#805). Every entry is a user-facing string literal the walk in tests/quality/user-facing-qualities.test.ts flags as over 120 chars, two or more sentences, or carrying banned filler. Seeded green on day one so the gate lands without rewriting copy; TIGHTEN-ONLY from here. Audit slices D1..D5 rewrite the copy, DELETE the entry, and lower maxEntries by the same count; the gate fails on any entry that no longer matches a real string, so seeds cannot outlive the copy they excuse. maxEntries is capped in turn by COPY_SEED_CEILING in the owning test, which may only ever fall.",
-    "maxEntries": 216,
+    "maxEntries": 31,
     "entries": [
-      {
-        "file": "apps/extension/src/pair.ts",
-        "literal": "Paired. You can close this tab.",
-        "reason": "seeded #805 — pending audit slice D5"
-      },
-      {
-        "file": "apps/extension/src/pair.ts",
-        "literal": "QR scanning is unavailable here. Paste the code in the Companion popup.",
-        "reason": "seeded #805 — pending audit slice D5"
-      },
-      {
-        "file": "apps/extension/src/popup.ts",
-        "literal": "Paired. This device now follows your Centraid grants.",
-        "reason": "seeded #805 — pending audit slice D5"
-      },
-      {
-        "file": "apps/extension/src/transport-core.ts",
-        "literal": "This device was revoked. Pair it again from Centraid Settings.",
-        "reason": "seeded #805 — pending audit slice D5"
-      },
-      {
-        "file": "apps/mobile/src/apps/agenda/AgendaHome.tsx",
-        "literal": "No cached events in this range. Reconnect to check the vault.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/assistant/Assistant.tsx",
-        "literal": "Please review the attached file.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/assistant/assistant-companion.ts",
-        "literal": "Assistant is checking the selected harness. No provider receives this turn and nothing has been added to your Assistant ledger.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/automations/Automations.tsx",
-        "literal": "Nothing has run yet. Open an automation and run it once, or wait for its trigger.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/automations/useAutomations.ts",
-        "literal": "This phone is not linked to a gateway yet. Pair it from Settings, and the automations on it appear here.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
       {
         "file": "apps/mobile/src/apps/docs/DocsItemActions.tsx",
         "literal": "Only an empty folder can be deleted. Documents, trashed items, and subfolders are never removed with it.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/locker/LockerHome.tsx",
-        "literal": "Locker stays locked while the gateway is unreachable. Reconnect to reveal secrets.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/locker/LockerHome.tsx",
-        "literal": "The saved biometric credential changed. Unlock with your primary passphrase.",
-        "reason": "seeded #805 — pending audit slice D4"
+        "reason": "destructive confirm — folder delete states what is and is not removed"
       },
       {
         "file": "apps/mobile/src/apps/locker/LockerUnlockScreen.tsx",
         "literal": "Create a primary passphrase of at least 12 characters. It never leaves this online authentication request.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/locker/LockerUnlockScreen.tsx",
-        "literal": "Enter your primary passphrase. Each secret asks for user presence again before reveal.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/people/PeopleHome.tsx",
-        "literal": "Contact deleted. You can restore it now.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/people/PeopleHome.tsx",
-        "literal": "Contact saved. The previous value can be restored.",
-        "reason": "seeded #805 — pending audit slice D4"
+        "reason": "security — Locker passphrase creation discloses where the passphrase goes"
       },
       {
         "file": "apps/mobile/src/apps/people/PeopleHome.tsx",
         "literal": "This folds every reference into the survivor and deletes the duplicate. It cannot be undone.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/CameraRollImportOffer.tsx",
-        "literal": "Staged for review and published one at a time, the same way an import from a file works — nothing else on this device is touched.",
-        "reason": "seeded #805 — pending audit slice D4"
+        "reason": "destructive confirm — people merge states the fold is irreversible"
       },
       {
         "file": "apps/mobile/src/apps/photos/DuplicatesShelf.tsx",
         "literal": "The copy you keep stays in every album it is already in. The device original is never deleted by this action.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/MemoriesView.tsx",
-        "literal": "Memories appear here on their own: a day that has an earlier year behind it, a run of days away from home, or a burst of near-identical photographs. Nothing is generated — they are your own photographs, noticed.",
-        "reason": "seeded #805 — pending audit slice D4"
+        "reason": "destructive confirm — duplicate trash states what survives and what is untouched"
       },
       {
         "file": "apps/mobile/src/apps/photos/PhotoStateView.tsx",
         "literal": "Deleting forever frees the space these hold. It cannot be undone.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/PhotosHome.tsx",
-        "literal": "Camera-roll photographs remain available. Reconnect to check the vault.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/people-model.ts",
-        "literal": "Enrichment is switched off for photographs, so nothing may look at them. You can change that in Privacy.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/people-model.ts",
-        "literal": "Face detection runs when you ask for it, never on its own. Once it has, the people it finds wait here for you to name — and nobody is named until you name them.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/people-model.ts",
-        "literal": "Face detection was asked for and has not finished. Photographs are read on this gateway, and nothing leaves it.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/people-model.ts",
-        "literal": "Photographs are set to be enriched on this device only. Face detection runs on the gateway, so it stays unavailable until you allow that in Privacy.",
-        "reason": "seeded #805 — pending audit slice D4"
+        "reason": "destructive confirm — empty trash states the purge is irreversible"
       },
       {
         "file": "apps/mobile/src/apps/photos/photo-access.ts",
         "literal": "Photos reads the photographs on this device to show them back to you. It reads them where they are and moves nothing.",
-        "reason": "seeded #805 — pending audit slice D4"
+        "reason": "privacy disclosure — camera-roll grant panel is where the grant is decided"
       },
       {
         "file": "apps/mobile/src/apps/photos/photo-access.ts",
         "literal": "Photos reads the photographs on this device to show them back to you. Nothing has been read yet, and nothing will be until you say so.",
-        "reason": "seeded #805 — pending audit slice D4"
+        "reason": "privacy disclosure — camera-roll grant panel is where the grant is decided"
       },
       {
         "file": "apps/mobile/src/apps/photos/photo-access.ts",
         "literal": "The grant that let Photos read the photographs on this device has been refused. Nothing has been lost: the photographs are still here, and the app goes dark rather than showing you a stale copy.",
-        "reason": "seeded #805 — pending audit slice D4"
+        "reason": "privacy disclosure — camera-roll grant panel is where the grant is decided"
       },
       {
         "file": "apps/mobile/src/apps/photos/photo-access.ts",
-        "literal": "You gave Photos a chosen set of photographs rather than the whole camera roll. Everything below is what that means: Photos will not pretend to have looked at the rest.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/photos-backup.ts",
-        "literal": "Waiting for the gateway. Nothing is lost meanwhile.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/photos-band.ts",
-        "literal": "Everything Photos can show. The vault mark in the head goes back to the rest of Centraid.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/photos-collections.ts",
-        "literal": "A memory appears here when a day in your library has an earlier year behind it. Nothing is generated — it is your own photographs, on this day.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/photos-collections.ts",
-        "literal": "A place appears here when a photograph carries where it was taken. Nothing is looked up over the network to put it there.",
-        "reason": "seeded #805 — pending audit slice D4"
+        "literal": "You gave Photos a chosen set of photographs rather than the whole camera roll. Photos will not pretend to have looked at the rest.",
+        "reason": "privacy disclosure — camera-roll grant panel is where the grant is decided"
       },
       {
         "file": "apps/mobile/src/apps/photos/photos-collections.ts",
         "literal": "Faces are proposed on a photograph you open, and a name is only ever yours to confirm. Nobody is named until you name them.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/photos-collections.ts",
-        "literal": "Photographs that look like each other are grouped here for you to decide about. Nothing is ever deleted for you.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/viewer-model.ts",
-        "literal": "Reachable by nothing. Copy it somewhere shared to let someone see it.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/viewer-model.ts",
-        "literal": "The original is on the gateway and this connection is metered. Fetching a full-quality copy is always your choice, never automatic.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/viewer-model.ts",
-        "literal": "The original is on this device. Nothing is fetched to open it.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/apps/photos/viewer-model.ts",
-        "literal": "This device moved the original off to free space. Fetching it back is your choice, and it happens once.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/kit/hooks/share-ingest.ts",
-        "literal": "This file ingest path only accepts photos, videos, audio, and documents. Text and links must open Quick capture for review.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/kit/replica/ReplicaStateCard.tsx",
-        "literal": "Pair or reconnect a gateway. An unavailable vault is never treated as an empty one.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/kit/security/AppLock.tsx",
-        "literal": "The biometric key changed. Reinstall Centraid to reset this protected local replica.",
-        "reason": "seeded #805 — pending audit slice D4"
+        "reason": "privacy disclosure — faces promise, named in DESIGN.md as the one home for it"
       },
       {
         "file": "apps/mobile/src/kit/storage/free-up-space.ts",
-        "literal": "Everything stays browsable: thumbnails and previews are untouched, and the timeline does not change. Fetching a full-quality original back stays explicit — you ask for it, and it comes over the network under the transfer rules above.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/kit/storage/free-up-space.ts",
-        "literal": "Not yet computed. Your gateway's storage sweep has not run here, so nothing can be offered for release yet.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/kit/storage/free-up-space.ts",
-        "literal": "Nothing to free. Every original on this machine is either the only proven copy or is already gone from here.",
-        "reason": "seeded #805 — pending audit slice D4"
+        "literal": "Everything stays browsable — thumbnails and previews are untouched. Fetching a full-quality original back stays explicit: you ask for it, and it comes over the network under the transfer rules above.",
+        "reason": "destructive disclosure — free-up-space states cause and consequence before deleting local originals"
       },
       {
         "file": "apps/mobile/src/kit/storage/free-up-space.ts",
         "literal": "These originals are held on your gateway and on this machine at once. The rollup proved the remote copy, so the local one is a duplicate.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/kit/transfer/backup-verdict.ts",
-        "literal": "Nothing queued has been lost. Free up phone storage and reopen this screen.",
-        "reason": "seeded #805 — pending audit slice D4"
+        "reason": "destructive disclosure — free-up-space states cause and consequence before deleting local originals"
       },
       {
         "file": "apps/mobile/src/kit/transfer/transfer-consent.ts",
         "literal": "Centraid copies each photograph and video on this device to your gateway, then keeps doing it by itself. You are never asked per photograph, and the originals stay on the phone until you free up space yourself.",
-        "reason": "consent — transfer-consent.ts disclosure; seeded #805 — pending audit slice D4"
+        "reason": "consent — transfer-consent discloses what leaves the device, and how to stop"
       },
       {
         "file": "apps/mobile/src/kit/transfer/transfer-consent.ts",
         "literal": "New photographs stop being copied to the gateway. Everything already backed up stays in the vault, anything still queued finishes, and no original is deleted from this device.",
-        "reason": "consent — transfer-consent.ts disclosure; seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/kit/transfer/transfer-consent.ts",
-        "literal": "Not backing up automatically. New photographs stay on this device only.",
-        "reason": "consent — transfer-consent.ts disclosure; seeded #805 — pending audit slice D4"
+        "reason": "consent — transfer-consent discloses what leaves the device, and how to stop"
       },
       {
         "file": "apps/mobile/src/kit/transfer/transfer-consent.ts",
         "literal": "Stop backing up, on this screen. Photographs already in the vault stay there.",
-        "reason": "consent — transfer-consent.ts disclosure; seeded #805 — pending audit slice D4"
+        "reason": "consent — transfer-consent discloses what leaves the device, and how to stop"
       },
       {
         "file": "apps/mobile/src/kit/transfer/transfer-consent.ts",
         "literal": "Your gateway's content store. They leave this device over the network to get there.",
-        "reason": "consent — transfer-consent.ts disclosure; seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/kit/transfer/transfer-policy.ts",
-        "literal": "Never. Nothing leaves this device until you change that.",
-        "reason": "consent — transfer-policy.ts disclosure; seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/lib/connection-reauth.ts",
-        "literal": "The provider could not finish authorizing. Start Reconnect again.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/lib/connection-reauth.ts",
-        "literal": "You declined the consent screen. Start Reconnect again when ready.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/lib/gateway.ts",
-        "literal": "Not connected to a desktop. Pair with your desktop in Settings.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/lib/replica/mobile-gateway-compatibility-core.ts",
-        "literal": "This gateway has not switched automations on. Turn them on from the desktop to see the rules that run here.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/lib/replica/mobile-gateway-compatibility-core.ts",
-        "literal": "This gateway has not switched connectors on. Turn them on from the desktop to manage what is allowed to reach outside.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/lib/replica/mobile-gateway-compatibility-core.ts",
-        "literal": "Update the Centraid gateway on your desktop, then reconnect. This mobile version requires the current protocol, multi-vault offline sync, and cross-vault placements.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/lib/replica/mobile-gateway-compatibility-core.ts",
-        "literal": "Update the Centraid mobile app from the App Store or Google Play. Mobile updates are store-only on this installation.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/lib/replica/replica-storage-error.ts",
-        "literal": "Phone storage is full. Centraid paused replica sync without deleting local data or pending changes. Free space, clear the thumbnail cache if needed, then try again.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/screens/BackupHealth.custody.tsx",
-        "literal": "Release the copies from the app that holds them — Photos re-hashes every device original before deleting it, so a photograph edited since backup is never lost.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/screens/BackupHealth.tsx",
-        "literal": "Nothing moved. The queue is empty, or the transfer rules below are not met right now.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/screens/Onboarding.tsx",
-        "literal": "Camera access is off for Centraid. Turn it on in Settings, or paste a code below.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/screens/PhoneStorage.tsx",
-        "literal": "The upload ledger is still on this phone. Reopen this page after making room.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/screens/PhoneStorage.tsx",
-        "literal": "These stay on this phone until their uploads finish. Free up space never removes them.",
-        "reason": "seeded #805 — pending audit slice D4"
+        "reason": "consent — transfer-consent discloses what leaves the device, and how to stop"
       },
       {
         "file": "apps/mobile/src/screens/Scan.tsx",
         "literal": "Captured with on-device OCR. The source image was not stored in Locker.",
-        "reason": "seeded #805 — pending audit slice D4"
+        "reason": "security — Locker scan note discloses the source image was not stored"
       },
       {
         "file": "apps/mobile/src/screens/Settings.tsx",
         "literal": "The encrypted link will be removed from this phone. The gateway and its vaults stay intact.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/screens/approvals/approvals-model.ts",
-        "literal": "Future writes matching this actor, verb and target send without stopping here. Revoking the grant it mints lives further down this page.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/screens/data/Data.tsx",
-        "literal": "The vault is encrypted and present on disk. Its home machine could not open it, which is usually a permissions problem rather than damage to the data.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/screens/data/Data.tsx",
-        "literal": "This phone is not linked to a vault yet. Link it from Settings and the vault contents appear here.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/screens/data/VaultSections.tsx",
-        "literal": "Sharing could not be read. Your vault contents are unchanged.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/screens/devices/Devices.tsx",
-        "literal": "This page is being served from a cached copy. Device pairing and revocation both need your vault's home machine, so both are unavailable until it answers.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/screens/devices/Devices.tsx",
-        "literal": "This phone is not linked to a vault yet. Pair it from Settings, and the devices sharing that vault appear here.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/screens/signal-notification.ts",
-        "literal": "Some content still exists only on this phone. It stays protected here, but another device cannot recover it yet.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/screens/signal-notification.ts",
-        "literal": "The latest verified copy is incomplete. Review the backup facts before relying on recovery.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/mobile/src/screens/system-on-phone.ts",
-        "literal": "System is available on the machine that runs your vault. This phone has no gateway process, disk, or backup job to inspect.",
-        "reason": "seeded #805 — pending audit slice D4"
-      },
-      {
-        "file": "apps/web/src/web-chrome.ts",
-        "literal": "You’re offline. Centraid will reconnect to your gateway when the network returns.",
-        "reason": "seeded #805 — pending audit slice D5"
+        "reason": "destructive confirm — unpair states what is removed and what survives"
       },
       {
         "file": "packages/blueprints/apps/_shared/capture-consent.ts",
         "literal": "Declining saves the scan without extracted text, stated on the scan itself — search and receipt-splitting need the text, but nothing else about saving changes.",
-        "reason": "consent — capture-consent.ts disclosure; seeded #805 — pending audit slice D3"
+        "reason": "consent — OCR decline disclosure; full sentences allowed"
       },
       {
         "file": "packages/blueprints/apps/_shared/capture-consent.ts",
         "literal": "Not a separate choice: the gateway backstop runs automatically, only when on-device extraction can't. Answering the on-device question above covers both.",
-        "reason": "consent — capture-consent.ts disclosure; seeded #805 — pending audit slice D3"
+        "reason": "consent — OCR gateway-backstop disclosure; full sentences allowed"
       },
       {
         "file": "packages/blueprints/apps/_shared/capture-consent.ts",
         "literal": "Text extraction reads the words on the page so a scan can be found by search and, for a receipt, split automatically. It never changes the image you captured, and it runs once, right after you take or choose it.",
-        "reason": "consent — capture-consent.ts disclosure; seeded #805 — pending audit slice D3"
+        "reason": "consent — OCR capture disclosure; full sentences allowed"
       },
       {
         "file": "packages/blueprints/apps/_shared/capture-consent.ts",
         "literal": "Used automatically, only when on-device extraction cannot run on this phone. The image goes to your own gateway and nowhere else — never a third-party provider — capped in size so a single scan cannot overwhelm it.",
-        "reason": "consent — capture-consent.ts disclosure; seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/agenda/app-inline.tsx",
-        "literal": "Ask me to schedule, move, find or explain events. Proposed events show for your approval before they touch the vault.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/app-inline.tsx",
-        "literal": "Ask me to find a file, upload one, or file it away. Writes show for your approval before they touch the vault.",
-        "reason": "seeded #805 — pending audit slice D3"
+        "reason": "consent — OCR gateway-backstop disclosure; full sentences allowed"
       },
       {
         "file": "packages/blueprints/apps/docs/capabilities.ts",
-        "literal": "All four are off. Each is a separate consent with its own receipt. None changes a document: each writes something beside it that you can delete.",
-        "reason": "seeded #805 — pending audit slice D3"
+        "literal": "All four are off. Each is a separate consent with its own receipt. None changes a document: each writes something beside it, and that is yours to delete.",
+        "reason": "consent — Docs capabilities screen disclosure; full sentences allowed"
       },
       {
         "file": "packages/blueprints/apps/docs/capabilities.ts",
         "literal": "Read a new document and propose where it belongs. It never files anything on its own.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/document-copy.ts",
-        "literal": "A summary, the people this document names and the dates it contains each need a capability you have not turned on. Stated once, here.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/document-copy.ts",
-        "literal": "Closing now keeps the draft here and commits nothing. The document in the library is unchanged.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/document-copy.ts",
-        "literal": "Committed as a new version. The receipt is in this document's history, and version 6 is still there in full.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/document-copy.ts",
-        "literal": "Cut: Activity as its own screen. What happened to a document and which version it produced are one spine. The third column records whether a member, an app or a machine did it.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/document-copy.ts",
-        "literal": "Everything here is about one row. Select another and the rail follows it.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/document-copy.ts",
-        "literal": "The body you saved is byte-identical to version 7. A no-op is not a version: nothing was written, and the history is not one entry longer.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/document-copy.ts",
-        "literal": "The command has left this device and has not been acknowledged. Nothing else is queued behind it.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/document-copy.ts",
-        "literal": "The rule that refused it can be named: a body can only be set on a text document. This is a different refusal from \"not permitted\", which names a person to ask instead of a rule.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/document-copy.ts",
-        "literal": "The write is legitimate and it is being held until the owner consents. It is in Notifications, and it commits the moment they do. This is not the same state as queued.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/document-copy.ts",
-        "literal": "The write is legitimate and nobody has to approve it. It is on this device, in order, and it goes the moment the gateway is back. Nothing is lost and nothing is discarded to make room.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/view-copy.ts",
-        "literal": "Docs can read expiries, renewals and deadlines out of a document and stage them as tentative appointments. It is switched off, so this shelf is empty for a reason rather than because nothing is due.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/view-copy.ts",
-        "literal": "Documents you bring in are held in this vault. The originals stay on your gateway, and nothing is read by a machine until you say so.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/view-copy.ts",
-        "literal": "Each document is purged 30 days after it was deleted, on the date shown. Restoring one puts its folder and its star back exactly as they were.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/view-copy.ts",
-        "literal": "Everything Docs can show. The vault mark in the head goes back to the rest of Centraid.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/view-copy.ts",
-        "literal": "Everything here is on this gateway and on this device. A mark appears only on a document held on this device and nowhere else.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/view-copy.ts",
-        "literal": "Five empty states: a new drive (this one), an empty folder, an empty shelf, a filter with no matches, a search with no matches. Only this one gets a display serif.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/view-copy.ts",
-        "literal": "One star for the whole product. A photograph starred in Photos shows here.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/view-copy.ts",
-        "literal": "Ordered by last change, newest first. A machine reading the contents counts as a change.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/view-copy.ts",
-        "literal": "Soft delete. Each document carries its own purge date.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/view-copy.ts",
-        "literal": "The filters compose, so each one narrows what the last one left. Clearing them puts the whole shelf back.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/view-copy.ts",
-        "literal": "The folder exists and it is empty. Anything moved here keeps its star, its tags and its history.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/view-copy.ts",
-        "literal": "The gateway is unreachable. Titles, folders, filing, tags and stars are read from this device, so the drive still lists everything — but most documents cannot be opened, and search is not available on this surface. Anything you write stays here, in order, until the gateway is back.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/docs/view-copy.ts",
-        "literal": "Titles, folders, filing and stars are read from this device. A document whose bytes are not here says so on the row.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/locker/app-inline.tsx",
-        "literal": "Ask me to find a login, add a card, or generate a strong password. Writes show for your approval before they touch the vault — secrets never leave a field unless you copy or reveal them.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/notes/app-inline.tsx",
-        "literal": "Ask me to write, find, summarise or file a note. New notes show for your approval before they touch the vault.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/people/app-inline.tsx",
-        "literal": "Ask me to add someone, log a call, or find who you owe a reply. Writes show for your approval before they touch the vault.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/app-inline.tsx",
-        "literal": "Ask me to find photos, make an album, or share a set. Albums and shares show for your approval before anything is saved.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/components/Import.tsx",
-        "literal": "Identical bytes become one photograph. These point at photographs already in your library — captions, albums and dates were left as they were.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/components/Import.tsx",
-        "literal": "These were in your trash. Bringing the same bytes back in took them out of it, on the day they were taken rather than today.",
-        "reason": "seeded #805 — pending audit slice D2"
+        "reason": "consent — Docs capability disclosure; full sentences allowed"
       },
       {
         "file": "packages/blueprints/apps/photos/enrichment-consent.ts",
-        "literal": "Faster, and the photographs leave this device. Choosing it is a separate consent with its own receipt, and you can revoke the grant afterwards.",
-        "reason": "consent — enrichment-consent.ts disclosure; seeded #805 — pending audit slice D2"
+        "literal": "Faster, and the photographs leave this device. Choosing it is a separate consent with its own receipt, and the grant is revocable afterwards.",
+        "reason": "consent — enrichment-consent disclosure panel; full sentences are the sanctioned register (DESIGN.md § Copy)"
       },
       {
         "file": "packages/blueprints/apps/photos/enrichment-consent.ts",
         "literal": "Not available: this build has no device-side face detector. The Faces recognition recipe runs only on the gateway, which this vault’s device-only policy does not allow.",
-        "reason": "consent — enrichment-consent.ts disclosure; seeded #805 — pending audit slice D2"
+        "reason": "consent — enrichment-consent disclosure panel; full sentences are the sanctioned register (DESIGN.md § Copy)"
       },
       {
         "file": "packages/blueprints/apps/photos/enrichment-consent.ts",
         "literal": "This is not a settings toggle. It is asked once, answered once, and receipted — and the answer is visible in Privacy afterwards.",
-        "reason": "consent — enrichment-consent.ts disclosure; seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/view-copy.ts",
-        "literal": "Deleted photographs stay here for 30 days, then they are purged. Anything restored goes back to the day it was taken.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/view-copy.ts",
-        "literal": "Emptying the trash is the one thing here that frees bytes. What stays is browsable either way: meaning lives in your library, and fetching an original is always an explicit choice.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/view-copy.ts",
-        "literal": "Faces are not matched to anyone yet. Face review proposes them one at a time, and nothing is named until you name it.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/view-copy.ts",
-        "literal": "It lives on the gateway. Nothing below has been searched for you — what you can see is the match over the photographs already loaded on this device, which is a smaller question than the one you asked.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/view-copy.ts",
-        "literal": "No original held here has a proved copy elsewhere, so there is nothing that could be released without becoming the last copy of something.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/view-copy.ts",
-        "literal": "No people yet. Faces are proposed on a photograph you open, and a name is only ever yours to confirm.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/view-copy.ts",
-        "literal": "Nobody has counted your originals yet. That answer comes from the gateway, and this screen will not guess it.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/view-copy.ts",
-        "literal": "Not the photographs that happen to be loaded. Try one of these.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/view-copy.ts",
-        "literal": "Photographs you bring in are held in your library. The originals stay on your gateway and nothing is copied anywhere you have not asked for.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/view-copy.ts",
-        "literal": "Photos reads your library to show it back to you. Until the owner approves that, this screen is all there is — nothing has been read, and nothing has been sent anywhere.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/view-copy.ts",
-        "literal": "The gateway is unreachable. Everything you see here is read from this device — captions, dates, albums, people. Photographs whose bytes are not cached show their shape and their colour instead.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/view-copy.ts",
-        "literal": "The owner has not approved the reads this app asked for. The exact list is in the owner’s settings, beside every other app.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/photos/viewer.ts",
-        "literal": "No copy of the original can be found. The record — the caption, the date, the albums it is in — is still here, and it is what a restored copy would attach to.",
-        "reason": "seeded #805 — pending audit slice D2"
-      },
-      {
-        "file": "packages/blueprints/apps/tally/app-inline.tsx",
-        "literal": "Ask me to add an expense, settle up, or see who owes whom. Writes show for your approval before they touch the vault.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/tally/components/Search.tsx",
-        "literal": "Every group, friend and expense description — not just what's loaded. Try one of these.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/tally/components/Search.tsx",
-        "literal": "Expense search runs on the gateway, which is unreachable. Nothing below has been searched for you.",
-        "reason": "seeded #805 — pending audit slice D3"
-      },
-      {
-        "file": "packages/blueprints/apps/tasks/app-inline.tsx",
-        "literal": "Ask me to add, complete, reschedule or find tasks. I’ll show the change for your approval before it touches the vault.",
-        "reason": "seeded #805 — pending audit slice D3"
+        "reason": "consent — enrichment-consent disclosure panel; full sentences are the sanctioned register (DESIGN.md § Copy)"
       },
       {
         "file": "packages/client/src/approvals-copy.ts",
@@ -697,399 +152,19 @@
         "reason": "Deny sheet — a destructive confirm, the one surface DESIGN.md's Copy budget gives full sentences, because what a denial DOES is the decision being made. Promoted from two surfaces to one home (#805)."
       },
       {
-        "file": "packages/client/src/assist-oauth-handoff.ts",
-        "literal": "Centraid Assist could not complete authorization. Start Connect again.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/assist-oauth-handoff.ts",
-        "literal": "This Centraid Assist return link is incomplete. Start Connect again.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/home-copy.ts",
-        "literal": "Bring your photographs and documents in and this becomes the front of your own archive. Everything you import stays on this device.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/home-copy.ts",
-        "literal": "Invented content in the real structure — a week of events, notes, photos, documents, people and expenses. Nothing leaves this device, and one tap clears all of it.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/home-copy.ts",
-        "literal": "The rows below are made up, so you can see Home working. Clearing them leaves anything you have added yourself untouched.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/ApprovalsScreen.tsx",
-        "literal": "Everything an app can reach, and nothing it cannot. Revoking takes effect at once — the app keeps no copy of what it read.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/AtlasRecordsSection.tsx",
-        "literal": "This is a machinery band — browsing only. Editing plumbing rows can brick invariants.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/AtlasScreen.tsx",
-        "literal": "The vault is encrypted and present on disk. Its host could not open it, which is usually a permissions problem on the machine rather than damage to the data.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/AutomationCompilePane.tsx",
-        "literal": "Compile successfully first",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/AutomationCompilePane.tsx",
-        "literal": "The instructions changed since the last compile. Recompile to apply them.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/AutomationEditorConnectorsPicker.tsx",
-        "literal": "No connector catalog available. Open Connectors in the sidebar to add providers.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/DevicePairPanel.tsx",
-        "literal": "The new device joins as you, with your current access. Nothing you can’t already reach.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/HouseholdScreen.tsx",
-        "literal": "This page is being served from a cached copy. Device pairing and revocation both need the vault host, so both are unavailable until it answers.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/InsightsScreen.tsx",
-        "literal": "Not available from this vault host. Update the host to see what it actually used.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/OnboardingScreen.tsx",
-        "literal": "Centraid couldn't start on this Mac. This is usually temporary — try again, and if it keeps happening, quit Centraid completely and reopen it.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/OnboardingScreen.tsx",
-        "literal": "Couldn't finish setting up Centraid. Try again.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/OnboardingScreen.tsx",
-        "literal": "Starting Centraid on this Mac and preparing your vaults. This takes a moment the first time.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/OnboardingScreen.tsx",
-        "literal": "Your data is safe — nothing was created. Everything here runs on this Mac, so retrying is worth trying before anything else.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/RecoveryKitGate.tsx",
-        "literal": "That file is not valid JSON. Re-select the recovery kit you just saved.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/ResourceModeCard.tsx",
-        "literal": "Saved. Applies fully on the next gateway restart.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/SettingsAppearanceScreen.tsx",
-        "literal": "Centraid Light, Centraid Dark, or whatever your OS is using. Apps stay in their own light/dark palette.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/SettingsConnectionsScreen.tsx",
-        "literal": "A connection with this label already exists — saving will update it. Rename to add a separate account.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/SettingsConnectionsScreen.tsx",
-        "literal": "Assist keeps the shared Google client secret in a stateless Cloudflare Worker. Your gateway alone stores tokens.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/SettingsConnectionsScreen.tsx",
-        "literal": "Connect with your own Google / Microsoft / Dropbox OAuth client. You will sign in at the provider after saving credentials.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/SettingsConnectionsScreen.tsx",
-        "literal": "Name this connection. Use a distinct label per account to connect more than one.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/SettingsConnectionsScreen.tsx",
-        "literal": "Paste an API key or personal token. Review scopes before connecting.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/SettingsConnectionsScreen.tsx",
-        "literal": "Register a Web application OAuth client with this gateway’s redirect URI, paste Client ID + secret here, then authorize in the browser.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/SettingsConnectionsScreen.tsx",
-        "literal": "Remove this connection entirely — deletes it and its credential. Refused if it still has undecided outbox items or sync history.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/SettingsConnectionsScreen.tsx",
-        "literal": "Tokens never pass through the browser, URL fragments, deep links, or Cloudflare storage. BYO remains available under Advanced.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/SettingsStorageScreen.tsx",
-        "literal": "Everything stays on this machine. Connect a storage provider above to turn on hosted storage.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/SettingsStorageScreen.tsx",
-        "literal": "Everything stays on this machine. Switch to Hosted to keep an encrypted offsite copy.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/StorageLimitsPanel.tsx",
-        "literal": "How much of this machine Centraid may use. You’ll be warned as it fills — nothing is ever blocked or deleted for you.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/StorageLimitsPanel.tsx",
-        "literal": "Past this size, conversations and audit rows older than the active window are sealed into the content-addressed store early. Nothing inside the last 7 days is ever archived.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/VaultScreen.tsx",
-        "literal": "Load a sample scenario to try the app on realistic data. Demo rows are marked, never fire automations, and reset in one click.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/device-errors.ts",
-        "literal": "One of the chosen vaults is no longer available. Reload and try again.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/device-errors.ts",
-        "literal": "Something went wrong choosing vaults for this ticket. Try again.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/device-errors.ts",
-        "literal": "The vault host has no network identity yet. Start it and try again.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/device-errors.ts",
-        "literal": "This device isn’t recognized by the vault host yet. Reload and try again.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/device-errors.ts",
-        "literal": "You can only pair a device for yourself. Ask that person to pair their own device — adding someone else is arriving in a later release.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/localUsageView.ts",
-        "literal": "Harness scratch space. Derived — safe to delete at any time.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/networkCalls.ts",
-        "literal": "Device pairing and sync ride the relay-only Iroh transport (the default n0 relay, unless you run your own). It can see that a connection exists and its volume, never its content.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/networkCalls.ts",
-        "literal": "Model calls (chat, automations, enrichment) go straight to whichever provider you've set up — Centraid never sits in that path.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/networkCalls.ts",
-        "literal": "Only when you connect a Google account with Assist: a stateless Cloudflare Worker ferries the authorization code. It never sees your tokens, vault data, or identity.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/resource-presets.ts",
-        "literal": "SQLite fsync durability. Relaxed trades a little crash-safety for less disk churn.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/screens/resource-summary.ts",
-        "literal": "Measured, not limited by Conserve. CPU time for harness runs isn’t separately measurable yet.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/CaptureOverlay.tsx",
-        "literal": "The local harness is unavailable. Choose the destination before saving.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/CaptureScanPanel.tsx",
-        "literal": "Captured with local OCR. The source image was not stored in Locker.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
         "file": "packages/client/src/react/shell/routes/ApprovalsRoute.tsx",
         "literal": "Nothing will be sent. This can’t be undone.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/routes/AssistantRoute.tsx",
-        "literal": "Connection lost and the turn didn't come back. You can resend.",
-        "reason": "seeded #805 — pending audit slice D1"
+        "reason": "destructive confirm — outbox discard sheet states the consequence at the point of no return"
       },
       {
         "file": "packages/client/src/react/shell/routes/AutomationEditorRoute.tsx",
         "literal": "This invalidates the current secret — any caller using it starts failing until updated. The webhook URL stays the same.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/routes/AutomationEditorRoute.tsx",
-        "literal": "This secret is shown once. Copy it now — you won't see it again.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/routes/AutomationEditorRoute.tsx",
-        "literal": "This secret is shown once. Update your caller now — you won't see it again.",
-        "reason": "seeded #805 — pending audit slice D1"
+        "reason": "destructive confirm — webhook secret rotation names the callers it breaks"
       },
       {
         "file": "packages/client/src/react/shell/routes/AutomationViewRoute.tsx",
         "literal": "This invalidates the current secret — any caller using it starts failing until updated. The webhook URL stays the same.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/routes/AutomationViewRoute.tsx",
-        "literal": "This secret is shown once. Update your caller now — you won't see it again.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/routes/ConnectTicketPanel.tsx",
-        "literal": "Paste or scan the pairing ticket for the vaults you want to join. The first grant becomes your initial focus.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/routes/SettingsRoute.tsx",
-        "literal": "The coding tools the gateway can drive, plus which model each one uses by default and per conversation surface. Detection checks whether each tool is runnable on the gateway’s host — Centraid is agnostic to how they authenticate.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/routes/SettingsRoute.tsx",
-        "literal": "Theme and card surface for Centraid chrome. Apps keep their own light/dark palette.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/routes/SettingsRoute.tsx",
-        "literal": "Your name and color, as the rest of your household sees them. The name lives on the household roster, not on this device.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/routes/StarredRoute.tsx",
-        "literal": "Nothing starred yet. Hover an app tile and tap the star.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/routes/StorageRoute.tsx",
-        "literal": "Capacity, disk use, and backups now live together in System. This link still works so saved places and older notifications never dead-end.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/routes/TemplatesRoute.tsx",
-        "literal": "Proven automations, pre-wired with triggers and integrations. Adopt one and tune it to your workflow.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/routes/gatewayModals.ts",
-        "literal": "The host sent back something unexpected. Try again in a moment.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/routes/runViewData.ts",
-        "literal": "This automation was deleted. Its instructions are no longer available.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/shell/webhookReveal.ts",
-        "literal": "This secret is shown once. Copy it now — you won't see it again.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/ui/Gallery.tsx",
-        "literal": "Nothing is sent. The automation is told it was refused.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/ui/Gallery.tsx",
-        "literal": "The first 3 of 1,908, newest first. The table scrolls rather than pages.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/ui/Gallery.tsx",
-        "literal": "The gateway answered, but the queue that holds staged writes did not. Nothing has been approved or denied in the meantime.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/client/src/react/ui/Gallery.tsx",
-        "literal": "This host is the only copy. Pair a second device and the vault has somewhere to go.",
-        "reason": "seeded #805 — pending audit slice D1"
-      },
-      {
-        "file": "packages/server/src/routes/connection-providers.ts",
-        "literal": "Name it (e.g. \"my-centraid\"), set supported account types to \"Accounts in any organizational directory and personal Microsoft accounts\", and add the redirect URI Centraid shows you (Web).",
-        "reason": "seeded #805 — pending audit slice D5"
-      },
-      {
-        "file": "packages/server/src/routes/connection-providers.ts",
-        "literal": "Note: Google Photos is NOT reachable this way — Google restricted the Photos API in 2025 to app-created content. Photos come in via Takeout file-drop, which Centraid already imports.",
-        "reason": "seeded #805 — pending audit slice D5"
-      },
-      {
-        "file": "packages/server/src/routes/connection-providers.ts",
-        "literal": "Paste it here. The connector lists active tasks only — completed history is not bulk-imported.",
-        "reason": "seeded #805 — pending audit slice D5"
-      },
-      {
-        "file": "packages/server/src/routes/connection-providers.ts",
-        "literal": "Paste the token here as the credential. No OAuth dance needed — this is the whole setup.",
-        "reason": "seeded #805 — pending audit slice D5"
-      },
-      {
-        "file": "packages/server/src/routes/connection-providers.ts",
-        "literal": "Paste the token here. Self-hosted GitLab needs a host pin change later — this preset targets gitlab.com.",
-        "reason": "seeded #805 — pending audit slice D5"
-      },
-      {
-        "file": "packages/server/src/routes/connection-providers.ts",
-        "literal": "Paste the token here. This is read-only — the connector never posts.",
-        "reason": "seeded #805 — pending audit slice D5"
-      },
-      {
-        "file": "packages/server/src/routes/connection-providers.ts",
-        "literal": "Paste them here and authorize. The connector lists folder metadata only — it does not download file bytes.",
-        "reason": "seeded #805 — pending audit slice D5"
-      },
-      {
-        "file": "packages/server/src/routes/connection-providers.ts",
-        "literal": "Scope it to the repositories you want in the vault, with read-only permissions (Contents, Issues, Pull requests, Metadata).",
-        "reason": "seeded #805 — pending audit slice D5"
-      },
-      {
-        "file": "packages/server/src/routes/connections-routes.ts",
-        "literal": "Google could not complete authorization. Start Connect again.",
-        "reason": "seeded #805 — pending audit slice D5"
-      },
-      {
-        "file": "packages/server/src/routes/connections-routes.ts",
-        "literal": "You declined Google access. Start Connect again when ready.",
-        "reason": "seeded #805 — pending audit slice D5"
-      },
-      {
-        "file": "packages/server/src/routes/connections-routes.ts",
-        "literal": "You declined the consent screen. Start Connect again when ready.",
-        "reason": "seeded #805 — pending audit slice D5"
+        "reason": "destructive confirm — webhook secret rotation names the callers it breaks"
       }
     ]
   }

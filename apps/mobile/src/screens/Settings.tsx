@@ -279,8 +279,8 @@ export default function SettingsScreen({
                 {tunnelStatusLabel(tunnelStatus)}
               </Text>
               <Text style={styles.help}>
-                Switch between your connected vaults from the vault menu on
-                Home. Pair another desktop or gateway to add its vault here too.
+                Switch vaults from the vault menu on Home — pair another desktop
+                to add one here.
               </Text>
               <View style={styles.linkAction}>
                 {tunnelAvailable ? (
@@ -345,9 +345,8 @@ export default function SettingsScreen({
                 </>
               ) : (
                 <Text style={styles.unavailable}>
-                  Pairing needs a development build — the tunnel module isn't
-                  available in Expo Go. Use the Advanced section below to point
-                  at a dev gateway instead.
+                  The tunnel module isn't available in Expo Go — point at a dev
+                  gateway in Advanced, below.
                 </Text>
               )}
               {pairError ? (
@@ -532,8 +531,7 @@ function PairScanner({
         <View style={styles.scanDenied}>
           <Text style={styles.emptyTitle}>Camera access needed.</Text>
           <Text style={styles.help}>
-            Allow camera access to scan the pairing QR code. You can enable it
-            in system settings.
+            Allow camera access in system settings to scan the pairing code.
           </Text>
           <Button label="Back" variant="secondary" onPress={onCancel} />
         </View>

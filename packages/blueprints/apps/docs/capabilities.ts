@@ -74,7 +74,7 @@ export const DCAPS: readonly Capability[] = [
 export const CAPABILITIES_TITLE =
   "Four things Docs can do, each asked for on its own";
 export const CAPABILITIES_BODY =
-  "All four are off. Each is a separate consent with its own receipt. None changes a document: each writes something beside it that you can delete.";
+  "All four are off. Each is a separate consent with its own receipt. None changes a document: each writes something beside it, and that is yours to delete.";
 
 /**
  * Is a capability switched on?

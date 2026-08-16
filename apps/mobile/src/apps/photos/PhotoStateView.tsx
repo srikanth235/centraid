@@ -372,7 +372,6 @@ export default function PhotoStateView({
               with the count for the same breath. */}
           <Text style={[styles.note, { color: colors.textSoft }]}>
             Deleted photographs stay here for 30 days, then they are purged.
-            Anything restored goes back to the day it was taken.
           </Text>
           {/* What the head's control does, said once, where the promise
               above it is — and the refusal in its place when it cannot fire,

@@ -407,7 +407,7 @@ export function LightboxShell({
             status={originStatus(asset, gatewayName)}
             onLoadOriginal={() =>
               notice(
-                `Fetching the original from ${gatewayName}. It stays on this device once it lands.`
+                `Fetching the original from ${gatewayName} — it stays once it lands.`
               )
             }
           />

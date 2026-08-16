@@ -477,11 +477,7 @@ export default function BackupCard({
         ) : (
           <>
             {lossSummary ? <BackupLossSummary summary={lossSummary} /> : null}
-            <p className={styles.notConfigured}>
-              Your data isn’t backed up offsite yet. Until backup custody is
-              configured on this gateway, databases, code, and attachments live
-              only on this machine.
-            </p>
+            <p className={styles.notConfigured}>Not backed up offsite yet.</p>
             {readOnly ? null : (
               <RecoveryKitGate
                 configured={status.configured}

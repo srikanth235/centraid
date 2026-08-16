@@ -94,13 +94,13 @@ export const SHELF_LABELS: Readonly<Record<string, string>> = {
  * everything else the set has to say, it says here.
  */
 const CAPTION_ALL =
-  "Everything here is on this gateway and on this device. A mark appears only on a document held on this device and nowhere else.";
+  "Everything here is on this gateway and on this device; a mark means this device only.";
 const CAPTION_OFFLINE =
-  "Titles, folders, filing and stars are read from this device. A document whose bytes are not here says so on the row.";
+  "Titles, folders, filing and stars are read from this device; a row says what will not open.";
 const CAPTION_RECENT =
-  "Ordered by last change, newest first. A machine reading the contents counts as a change.";
+  "Ordered by last change, newest first — a machine reading the contents counts as a change.";
 const CAPTION_TRASH =
-  "Each document is purged 30 days after it was deleted, on the date shown. Restoring one puts its folder and its star back exactly as they were.";
+  "Each document is purged 30 days after deletion, on the date shown.";
 const CAPTION_SEARCH =
   "318 documents could not be looked inside; they were matched on title and filing only.";
 
@@ -182,15 +182,10 @@ const DRIVE_EMPTY: EmptyCopy = {
   variant: "drive",
   display: true,
   title: "Nothing here yet",
-  body: "Documents you bring in are held in this vault. The originals stay on your gateway, and nothing is read by a machine until you say so.",
+  body: "Documents you bring in are held in this vault.",
   action: "Upload documents",
   action2: "Scan a document",
 };
-
-/** §4.6's note, rendered under the first-run state so the model is stated
- *  where it is true rather than only in a spec. */
-export const EMPTY_MODEL_NOTE =
-  "Five empty states: a new drive (this one), an empty folder, an empty shelf, a filter with no matches, a search with no matches. Only this one gets a display serif.";
 
 /** How each shelf is empty ON ITS OWN TERMS (§2's Note column, verbatim). A
  *  shelf that is empty because nothing has been starred says something
@@ -206,13 +201,13 @@ const SHELF_EMPTY: Readonly<Record<string, EmptyCopy>> = {
     variant: "shelf",
     display: false,
     title: "Nothing starred yet",
-    body: "One star for the whole product. A photograph starred in Photos shows here.",
+    body: "One star across Centraid — a photograph starred in Photos shows here.",
   },
   [TRASH]: {
     variant: "shelf",
     display: false,
     title: "Trash is empty",
-    body: "Soft delete. Each document carries its own purge date.",
+    body: "Each document carries its own purge date.",
   },
   [FOLDERS]: {
     variant: "shelf",
@@ -224,7 +219,7 @@ const SHELF_EMPTY: Readonly<Record<string, EmptyCopy>> = {
     variant: "shelf",
     display: false,
     title: "Nothing has been read out of your documents yet",
-    body: "Docs can read expiries, renewals and deadlines out of a document and stage them as tentative appointments. It is switched off, so this shelf is empty for a reason rather than because nothing is due.",
+    body: "Reading dates out of documents is switched off, so nothing is staged here.",
   },
 };
 
@@ -235,7 +230,7 @@ export function folderEmpty(name: string): EmptyCopy {
     variant: "folder",
     display: false,
     title: `Nothing is filed under ‘${name}’ yet`,
-    body: "The folder exists and it is empty. Anything moved here keeps its star, its tags and its history.",
+    body: "Anything moved here keeps its star, its tags and its history.",
     action: "Move documents here",
     action2: "Delete this folder",
   };
@@ -261,7 +256,7 @@ export const FILTER_EMPTY: EmptyCopy = {
   variant: "filter",
   display: false,
   title: "Nothing matches these filters",
-  body: "The filters compose, so each one narrows what the last one left. Clearing them puts the whole shelf back.",
+  body: "Filters compose, so each one narrows what the last one left.",
   action: "Clear filters",
 };
 
@@ -385,7 +380,7 @@ export function rowStateMark(input: RowStateInput): RowStateMark | null {
 /** The sheet's own title and the sentence that closes it (§1.5, verbatim). */
 export const MORE_TITLE = "More in Docs";
 export const MORE_FOOTER =
-  "Everything Docs can show. The vault mark in the head goes back to the rest of Centraid.";
+  "Everything Docs can show — the vault mark goes back to the rest of Centraid.";
 
 /**
  * One row of §1.5's table. `meta` is the spec's own prose where the prose is a
@@ -433,9 +428,13 @@ export const MORE_ROWS: readonly (MoreRow & { live: boolean })[] = [
 // Banners and status (§11)
 // ---------------------------------------------------------------------------
 
-/** §11's offline banner, verbatim. One paragraph, one action. */
+/** §11's offline banner, compressed to the banner budget (DESIGN.md → Copy):
+ *  one sentence, the state plus its one consequence, and one action. The
+ *  spec's paragraph also promised that queued writes survive; that promise
+ *  belongs where the write is made (`document-copy.ts` DSAVE.queued), not on
+ *  every screen. */
 export const OFFLINE_BANNER =
-  "The gateway is unreachable. Titles, folders, filing, tags and stars are read from this device, so the drive still lists everything — but most documents cannot be opened, and search is not available on this surface. Anything you write stays here, in order, until the gateway is back.";
+  "Gateway unreachable — filing works from this device, opening and search do not.";
 export const OFFLINE_BANNER_ACTION = "Retry";
 
 /** §2 row 5's rule, said once where the shelf is: Recent is recently

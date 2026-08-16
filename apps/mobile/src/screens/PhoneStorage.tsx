@@ -161,8 +161,8 @@ export default function PhoneStorage({
             </Text>
             <Text style={[styles.attentionBody, { color: colors.textSoft }]}>
               {queueReadable
-                ? "These stay on this phone until their uploads finish. Free up space never removes them."
-                : "The upload ledger is still on this phone. Reopen this page after making room."}
+                ? "These stay on this phone until their uploads finish."
+                : "The upload ledger is still here — reopen this page after making room."}
             </Text>
           </View>
         ) : null}

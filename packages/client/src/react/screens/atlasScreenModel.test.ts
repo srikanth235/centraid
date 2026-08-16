@@ -362,7 +362,7 @@ describe("screens/atlasScreenModel", () => {
 
     it("says how much of the kind is on screen, in the order it is in", () => {
       expect(tableCaption(6, 1908, "Newest first")).toBe(
-        "The first 6 of 1,908, newest first. The table scrolls rather than pages, the way the drive does."
+        "The first 6 of 1,908, newest first — the table scrolls rather than pages."
       );
       expect(tableCaption(6, 1908, "title A–Z")).toContain("title a–z");
     });

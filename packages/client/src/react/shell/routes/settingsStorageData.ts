@@ -67,7 +67,7 @@ export async function createStorageConnection(
       return {
         ok: false,
         code: "error",
-        message: `This provider can’t be a home for your data.${missing} A home needs to keep snapshots, store your sealed files, meter usage, and prove restores work.`,
+        message: `This provider can’t be a home for your data.${missing}`,
       };
     }
     return {

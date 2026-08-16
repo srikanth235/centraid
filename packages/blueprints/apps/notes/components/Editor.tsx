@@ -621,7 +621,7 @@ export function Editor({
             <textarea
               ref={textareaRef}
               className={styles.editorTextarea}
-              placeholder="Start writing. Markdown and - [ ] checklists work."
+              placeholder="Start writing — Markdown and - [ ] checklists work"
               aria-label="Note body"
               value={body}
               onChange={(e) => updateBody(e.target.value)}

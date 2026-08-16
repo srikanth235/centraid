@@ -84,7 +84,7 @@ const COPY = {
   emptyBody: ATLAS_EMPTY_BODY,
   emptyTitle: ATLAS_EMPTY_TITLE,
   errorBody:
-    "The vault is encrypted and present on disk. Its home machine could not open it, which is usually a permissions problem rather than damage to the data.",
+    "The vault is on disk, but its home machine could not open it — usually permissions, not damage.",
   errorTitle: "Cannot open the store",
   healthEmpty: EMPTY_HEALTH,
   healthError: "Contents could not load",
@@ -92,8 +92,7 @@ const COPY = {
   healthLoading: "Reading the vault contents",
   kindsNote: ATLAS_KINDS_NOTE,
   loadingNote: SKELETON_NOTE,
-  noGatewayBody:
-    "This phone is not linked to a vault yet. Link it from Settings and the vault contents appear here.",
+  noGatewayBody: "Link this phone from Settings to see the vault contents.",
   noGatewayTitle: "Not linked to a vault",
   relations: "How they relate",
   retry: RETRY_ACTION,

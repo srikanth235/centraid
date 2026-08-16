@@ -359,7 +359,7 @@ export default function HouseholdScreen(
       ) : state === "error" ? (
         <PanelBlock
           action={{ label: "Try again", onClick: roster.refresh }}
-          body="This page is being served from a cached copy. Device pairing and revocation both need the vault host, so both are unavailable until it answers."
+          body="Pairing and revocation need the vault host — this page is a cached copy."
           eyebrow="Copies"
           title="Cannot reach the vault host"
           tone="net"

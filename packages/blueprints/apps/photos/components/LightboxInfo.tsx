@@ -417,9 +417,8 @@ export function LightboxInfo({
             Could not {refusal.tried}. {refusal.reason}
           </p>
           <p className={styles.refusalNote}>
-            What you typed is still on this device and has not been sent
-            anywhere. Try again, or ask whoever owns this library for the access
-            to change it.
+            What you typed is still on this device — ask whoever owns this
+            library for access.
           </p>
         </output>
       ) : null}

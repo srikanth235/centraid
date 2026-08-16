@@ -84,14 +84,14 @@ const IMPORT_COPY = {
   dedupedTitle: (n: number) =>
     n === 1 ? "1 of these was already here" : `${n} of these were already here`,
   dedupedBody:
-    "Identical bytes become one photograph. These point at photographs already in your library — captions, albums and dates were left as they were.",
+    "Identical bytes become one photograph — these point at photographs already in your library.",
   dedupedHappened: (n: number) =>
     `${n} ${n === 1 ? "file" : "files"} matched photographs already here`,
   restoredEyebrow: "Restored",
   restoredTitle: (n: number) =>
     n === 1 ? "1 of these you had deleted" : `${n} of these you had deleted`,
   restoredBody:
-    "These were in your trash. Bringing the same bytes back in took them out of it, on the day they were taken rather than today.",
+    "These were in your trash — the same bytes brought them back out, on the day they were taken.",
   restoredHappened: (n: number) =>
     `${n} ${n === 1 ? "file" : "files"} matched something in the trash`,
   changedLabel: "what changed",

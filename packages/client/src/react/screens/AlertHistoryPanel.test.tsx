@@ -69,7 +69,7 @@ describe("screens/AlertHistoryPanel", () => {
       await act(async () => {
         root.render(<AlertHistoryPanel rows={[]} />);
       });
-      expect(host.textContent).toContain("No alerts recorded yet");
+      expect(host.textContent).toContain("No alerts yet");
     });
   });
 });

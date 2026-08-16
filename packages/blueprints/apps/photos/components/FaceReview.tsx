@@ -359,8 +359,7 @@ export function FaceReview({
         </h3>
         <p className={styles.body}>
           {proposedName ? photosFaceMatchedOn(current.matchCount) : ""}
-          Nothing is written until you confirm, and a rejection is remembered so
-          the same face is not proposed twice.
+          A rejection is remembered, so the same face is not proposed twice.
         </p>
         <PendingWriteActions
           row={current as unknown as Record<string, unknown>}

@@ -144,7 +144,7 @@ describe("DevicePairPanel suite", () => {
           )
       );
       await generate(el);
-      expect(el.textContent).toContain("only pair a device for yourself");
+      expect(el.textContent).toContain("pairs only for its own owner");
     });
 
     it("reads no_iroh_endpoint back as an honest, actionable sentence", async () => {

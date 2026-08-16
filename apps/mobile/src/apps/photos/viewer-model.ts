@@ -324,13 +324,13 @@ export interface VaultLine {
 }
 
 const PERSONAL_MEANING =
-  "Reachable by nothing. Copy it somewhere shared to let someone see it.";
+  "Reachable by nothing — copy it somewhere shared to let someone see it.";
 
 export function vaultLine(personal: boolean, label: string): VaultLine {
   return {
     meaning: personal
       ? PERSONAL_MEANING
-      : `Anyone with access to ${label} can see this photograph. Take it out and it stops being shared.`,
+      : `Anyone with access to ${label} can see this photograph — take it out and it stops being shared.`,
     value: label,
   };
 }
@@ -604,12 +604,12 @@ export function originalStatus(
  */
 export function originalWhereabouts(status: OriginalStatus): string {
   if (status.placement === "on-device")
-    return "The original is on this device. Nothing is fetched to open it.";
+    return "The original is on this device.";
   if (status.placement === "offloaded")
-    return "This device moved the original off to free space. Fetching it back is your choice, and it happens once.";
+    return "This device moved the original off to free space — fetching it back is your choice, once.";
   if (status.placement === "metered")
-    return "The original is on the gateway and this connection is metered. Fetching a full-quality copy is always your choice, never automatic.";
-  return "The original is on the gateway. Opening this photograph reads a smaller copy; fetching the full-quality one is your choice.";
+    return "The original is on the gateway and this connection is metered — fetching a full-quality copy is your choice.";
+  return "The original is on the gateway — opening reads a smaller copy, and fetching the full-quality one is your choice.";
 }
 
 // ---------------------------------------------------------------------------

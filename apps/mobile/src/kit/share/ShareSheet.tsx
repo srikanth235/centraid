@@ -209,8 +209,8 @@ export default function ShareSheet({
         </View>
 
         <Text style={[styles.note, { color: colors.textSoft }]}>
-          Pick people. Everyone who joins gets the full shared item in their own
-          vault and backup.
+          Everyone who joins gets the full shared item in their own vault and
+          backup.
         </Text>
 
         <QuickAddPerson
@@ -404,8 +404,8 @@ export default function ShareSheet({
               Send these one-time invitations
             </Text>
             <Text style={[t("small"), { color: colors.textSoft }]}>
-              Each person installs Centraid, creates a vault, connects to you if
-              remote, redeems this invitation, then accepts its size.
+              One per person — each is redeemed once, in the receiver's own
+              vault.
             </Text>
             {inviteHandoffs.map((handoff, index) => (
               <View

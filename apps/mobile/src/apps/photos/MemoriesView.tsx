@@ -60,7 +60,7 @@ import { usePhotoTimeline } from "./timeline-source";
 const RAIL_PREVIEW_LIMIT = 30;
 
 const NOTHING_YET =
-  "Memories appear here on their own: a day that has an earlier year behind it, a run of days away from home, or a burst of near-identical photographs. Nothing is generated — they are your own photographs, noticed.";
+  "Your own photographs, noticed — a year behind a day, a trip, a burst.";
 
 function TileRail({
   assets,

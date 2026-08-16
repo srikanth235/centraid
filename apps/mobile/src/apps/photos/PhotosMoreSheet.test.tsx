@@ -216,9 +216,7 @@ describe("the More sheet's rows, meta and foot", () => {
 
   it("renders the exact spec foot copy, and no invented eyebrow", () => {
     renderSheet();
-    expect(container!.textContent).toContain(
-      "Everything Photos can show. The vault mark in the head goes back to the rest of Centraid."
-    );
+    expect(container!.textContent).toContain("Everything Photos can show.");
     // The old header was a bare "More" eyebrow with nothing else on its line;
     // the foot sentence itself does not contain that word, so this also
     // guards against it creeping back in as a separate heading.

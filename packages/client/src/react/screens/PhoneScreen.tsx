@@ -144,7 +144,7 @@ export default function PhoneScreen({
               src={pairing.info.qrDataUrl}
             />
             <div className={appSettingsCss.appSettingsNote}>
-              {`Open the Centraid app on your phone → Settings → Pair with desktop, and scan this code. It works once and expires at ${expiresLabel}.`}
+              {`Open Centraid on your phone → Settings → Pair with desktop, and scan this code (expires ${expiresLabel}).`}
             </div>
             <button
               type="button"
@@ -157,9 +157,8 @@ export default function PhoneScreen({
         ) : (
           <>
             <div className={appSettingsCss.appSettingsNote}>
-              Your phone connects directly to this desktop over an end-to-end
-              encrypted tunnel — from any network, with the gateway never
-              exposed. Publish an app here, open it there.
+              Your phone reaches this desktop over an end-to-end encrypted
+              tunnel, from any network — publish an app here, open it there.
             </div>
             <button
               type="button"
@@ -184,8 +183,7 @@ export default function PhoneScreen({
           ))
         ) : (
           <Note>
-            No phones paired yet. Scan the QR code from the Centraid mobile app
-            to connect one.
+            No phones paired yet — scan the QR code from the mobile app.
           </Note>
         )}
       </div>

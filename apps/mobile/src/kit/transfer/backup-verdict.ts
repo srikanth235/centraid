@@ -76,8 +76,7 @@ export function backupVerdictCopy(
       // The ledger is intact; only this view of it failed. Saying "healthy"
       // here would be a reassurance we cannot support.
       title: "The queue could not be read on this phone",
-      detail:
-        "Nothing queued has been lost. Free up phone storage and reopen this screen.",
+      detail: "Free up phone storage, then reopen this screen.",
       net: false,
       icon: "alert-circle",
     };

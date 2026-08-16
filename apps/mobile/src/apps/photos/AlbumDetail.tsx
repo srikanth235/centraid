@@ -534,8 +534,7 @@ export default function AlbumDetail({
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Nothing in this album yet.</Text>
           <Text style={styles.emptyBody}>
-            An album refers to a photograph where it lives; it never moves or
-            copies anything.
+            An album refers to a photograph where it lives.
           </Text>
         </View>
       )}

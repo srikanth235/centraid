@@ -262,7 +262,7 @@ export default function StorageLimitsPanel({
               id="budget"
               title="Disk budget"
               icon="Gauge"
-              description="How much of this machine Centraid may use. You’ll be warned as it fills — nothing is ever blocked or deleted for you."
+              description="How much of this machine Centraid may use."
               value={limits.totalLimitBytes}
               presets={BUDGET_PRESETS}
               floorBytes={256 * 1024 ** 2}
@@ -282,7 +282,7 @@ export default function StorageLimitsPanel({
               id="ledger"
               title="Ledger limit"
               icon="Journal"
-              description="Past this size, conversations and audit rows older than the active window are sealed into the content-addressed store early. Nothing inside the last 7 days is ever archived."
+              description="Past this size, rows older than the last 7 days seal into the store early."
               value={limits.journalLimitBytes}
               presets={LEDGER_PRESETS}
               floorBytes={64 * 1024 ** 2}

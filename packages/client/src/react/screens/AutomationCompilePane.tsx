@@ -311,7 +311,7 @@ export default function AutomationCompilePane({
           ? dirty
             ? {
                 detail:
-                  "The instructions changed since the last compile. Recompile to apply them.",
+                  "Instructions changed since the last compile — recompile to apply.",
                 label: "Plan is stale",
                 tone: "paused",
               }
@@ -415,7 +415,7 @@ export default function AutomationCompilePane({
               title={
                 latest?.status === "ok"
                   ? "Run the compiled plan once, here"
-                  : "Compile successfully first"
+                  : "Compile first"
               }
               onClick={doTest}
             >

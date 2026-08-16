@@ -410,7 +410,7 @@ describe("AutomationEditorRoute", () => {
       expect(helpers.openWebhookReveal).toHaveBeenCalledWith(
         { id: "hook-1", secret: "minted", url: "https://gateway.test/hook-1" },
         {
-          note: "This secret is shown once. Copy it now — you won't see it again.",
+          note: "Shown once — copy it now.",
           title: "Webhook minted",
         }
       );

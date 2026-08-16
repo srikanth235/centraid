@@ -206,8 +206,7 @@ export default function PhotosPeopleView({
             </View>
           ) : (
             <Text style={styles.empty}>
-              No people yet. Faces are proposed on a photograph you open, and a
-              name is only ever yours to confirm.
+              No people yet — faces are proposed on a photograph you open.
             </Text>
           )
         }
@@ -233,9 +232,8 @@ export default function PhotosPeopleView({
               </View>
             ) : null}
             <Text style={styles.note}>
-              {shelf.pendingTotal} faces are not matched to anyone. Face review
-              proposes them one at a time, and nothing is named until you name
-              it.
+              {shelf.pendingTotal} faces are not matched to anyone — face review
+              proposes them one at a time.
             </Text>
           </View>
         }

@@ -163,7 +163,7 @@ describe("screens/RunViewScreen", () => {
           crumbName: "digest/main",
           headerName: "digest/main",
           promptInstr:
-            "This automation was deleted. Its instructions are no longer available.",
+            "This automation was deleted — its instructions are gone.",
         })
       );
       expect(el.textContent).toContain("This automation was deleted");

@@ -290,9 +290,8 @@ export function PhotoInfoSheet(
                 {refusal.because}
               </Text>
               <Text style={[styles.refusalText, { color: colors.textSoft }]}>
-                What you typed is still here on this device and has not been
-                sent anywhere. Ask the vault&rsquo;s owner for write access,
-                then try again.
+                Read-only vault — ask its owner for write access, then try
+                again.
               </Text>
             </View>
           ) : null}

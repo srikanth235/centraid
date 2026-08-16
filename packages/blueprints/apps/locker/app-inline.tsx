@@ -31,8 +31,7 @@ const lockerInlineApp: InlineAppModule = {
   kitAsk: {
     scope: "locker",
     placeholder: "Ask your locker…",
-    intro:
-      "Ask me to find a login, add a card, or generate a strong password. Writes show for your approval before they touch the vault — secrets never leave a field unless you copy or reveal them.",
+    intro: "Ask me to find a login, add a card, or generate a strong password.",
     suggest: [
       "Find my GitHub login",
       "Add a new credit card",

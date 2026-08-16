@@ -322,8 +322,7 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Redeem a shared-space invite</h3>
           <p className={deviceStyles.meta}>
-            Create your vault first. If the sharer is remote, connect with them,
-            then paste the one-time invitation here.
+            Create your vault first, then paste the one-time invitation here.
           </p>
           <div className={styles.proposeForm}>
             <select

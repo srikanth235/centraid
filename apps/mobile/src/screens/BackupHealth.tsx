@@ -190,7 +190,7 @@ export default function BackupHealth({
         postStatus(
           moved > 0
             ? `${moved} settled on your vault's home machine.`
-            : "Nothing moved. The queue is empty, or the transfer rules below are not met right now."
+            : "Nothing moved — the queue is empty, or the transfer rules below are not met."
         );
         void Store.hydrate<string | undefined>(
           LAST_SUCCESSFUL_SYNC_KEY,

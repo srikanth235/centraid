@@ -54,6 +54,6 @@ export function shouldRetryCompanionRequest(input: {
 /** Map a gateway HTTP failure into the companionJson error message. */
 export function companionHttpError(status: number, bodyText: string): string {
   if (status === 401)
-    return "This device was revoked. Pair it again from Centraid Settings.";
+    return "This device was revoked — pair it again in Centraid Settings.";
   return bodyText || `Gateway returned HTTP ${status}.`;
 }

@@ -134,7 +134,7 @@ export function DevicesDisagree({
           Two devices changed “{subject}”
         </h2>
         <p className={styles.disagreeSub}>
-          Both edits are safe. Pick which one this vault should carry.
+          Pick which one this vault should carry.
         </p>
       </div>
       <div className={styles.versions}>

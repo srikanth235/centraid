@@ -65,7 +65,7 @@ export default function SettingsDeviceScreen({
       <div className={drawerGroupCss.groupBody}>
         <div className={controlsCss.note}>
           {gatewayLabel
-            ? `This browser is paired with ${gatewayLabel}. The pairing is stored on this device and survives closing the browser — you only need a new ticket if you forget it here or revoke it from Household → Devices.`
+            ? `This browser is paired with ${gatewayLabel}; the pairing survives closing it.`
             : "This browser is not paired with a gateway yet."}
         </div>
         {/* The question pairing no longer asks. It defaults ON and lives here

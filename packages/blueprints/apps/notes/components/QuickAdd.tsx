@@ -74,7 +74,7 @@ export function QuickAdd({
         <div className={styles.qaMore}>
           <textarea
             className={styles.qaBody}
-            placeholder="Write something. Use - [ ] for a checklist."
+            placeholder="Write something — - [ ] makes a checklist"
             aria-label="Note body"
             value={body}
             onChange={(e) => setBody(e.target.value)}

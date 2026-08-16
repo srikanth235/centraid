@@ -269,10 +269,7 @@ export default function AtlasRelationsTab({
         <span className={styles.emptyIcon}>
           <Icon name="Globe" size={22} />
         </span>
-        <p className={styles.emptyText}>
-          The relations graph hasn’t loaded. It maps every kind by how much each
-          structural reference actually carries.
-        </p>
+        <p className={styles.emptyText}>The relations graph hasn’t loaded.</p>
       </div>
     );
   }

@@ -360,7 +360,7 @@ async function readRemoveOutcome(
   if (res.status === 401 || res.status === 403) {
     throw new GatewayClientError(
       "auth_required",
-      `${op}: gateway rejected request (HTTP ${res.status}). Check your gateway token in Settings.`
+      `${op}: gateway rejected the request (HTTP ${res.status}) — check your token in Settings.`
     );
   }
   if (res.status === 404) {

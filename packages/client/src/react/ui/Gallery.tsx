@@ -131,7 +131,7 @@ export default function Gallery(): JSX.Element {
               action: { label: "Deny", onClick: () => {} },
               dangerous: true,
               id: "r3",
-              sub: "Nothing is sent. The automation is told it was refused.",
+              sub: "Nothing is sent — the automation is told it was refused.",
               title: "Deny this write",
             },
             {
@@ -144,8 +144,7 @@ export default function Gallery(): JSX.Element {
           ]}
         />
         <NoteBlock>
-          A standing grant skips this page for one narrow thing. Revoking one
-          takes effect on the next run.
+          A standing grant skips this page for one narrow thing.
         </NoteBlock>
       </Section>
 
@@ -172,7 +171,7 @@ export default function Gallery(): JSX.Element {
         />
         <PanelBlock
           action={{ label: "Try again", onClick: () => {} }}
-          body="The gateway answered, but the queue that holds staged writes did not. Nothing has been approved or denied in the meantime."
+          body="The gateway answered; the queue that holds staged writes did not."
           eyebrow="Could not reach the consent store"
           tone="net"
           wide
@@ -201,7 +200,7 @@ export default function Gallery(): JSX.Element {
         />
         <EmptyBlock
           action={{ label: "Pair a device", onClick: () => {} }}
-          body="This host is the only copy. Pair a second device and the vault has somewhere to go."
+          body="This host is the only copy of the vault."
           title="Nothing has a copy yet"
         />
         <EmptyBlock
@@ -215,7 +214,7 @@ export default function Gallery(): JSX.Element {
       <Section stack title="Blocks · records table">
         <DocTable
           ariaLabel="Records"
-          caption="The first 3 of 1,908, newest first. The table scrolls rather than pages."
+          caption="The first 3 of 1,908, newest first — the table scrolls rather than pages."
           headers={{ kind: "Kind", record: "Record", written: "Written" }}
           menu={[
             { icon: "Eye", id: "open", label: "Open the record" },

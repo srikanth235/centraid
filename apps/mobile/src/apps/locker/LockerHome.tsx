@@ -156,7 +156,7 @@ export default function LockerHome({
             : {
                 kind: "offline",
                 message:
-                  "Locker stays locked while the gateway is unreachable. Reconnect to reveal secrets.",
+                  "Locker stays locked while the gateway is unreachable — reconnect to reveal secrets.",
               }
         );
       }
@@ -268,7 +268,7 @@ export default function LockerHome({
           kind: "locked",
           configured: true,
           message:
-            "The saved biometric credential changed. Unlock with your primary passphrase.",
+            "Biometric credential changed — unlock with your primary passphrase.",
         });
         return;
       }
@@ -489,7 +489,7 @@ export default function LockerHome({
         return (
           <StateCard
             title="Locker is empty"
-            message="Add your first password, card, secure note, identity, Wi-Fi login, or standalone password."
+            message="Add your first password, card, note, identity, or Wi-Fi login."
             styles={styles}
           />
         );
@@ -519,7 +519,7 @@ export default function LockerHome({
                       Use biometrics for Locker
                     </Text>
                     <Text style={styles.biometricCopy}>
-                      Store a device-only credential. Your primary passphrase
+                      Stores a device-only credential; your primary passphrase
                       remains the recovery path.
                     </Text>
                   </Pressable>

@@ -53,7 +53,7 @@ ${retryableTapCommands("Open map")}
 # The map's resting sentence — the privacy claim the screen makes about
 # itself — plus its own "drawn of held" count, both map-only copy.
 - extendedWaitUntil:
-    visible: "Plotted from your own photographs. Nothing is fetched."
+    visible: "Plotted from your own photographs."
     timeout: 30000
 - assertVisible: "[1-9][0-9]* of [1-9][0-9]*"
 # Press a pin (each is a Pressable labelled "<where>, N photographs?") and
@@ -63,7 +63,7 @@ ${retryableTapCommands("Open map")}
 - extendedWaitUntil:
     visible: ".* · [0-9]+"
     timeout: 15000
-- assertNotVisible: "Plotted from your own photographs. Nothing is fetched."
+- assertNotVisible: "Plotted from your own photographs."
 - takeScreenshot: places-map-readout
 `,
     "places-shelf-and-map"

@@ -521,10 +521,7 @@ export default function AutomationsOverviewScreen({
           {v.runs.length > 0 ? (
             <RowsBlock ariaLabel="Recent runs" rows={runRows(v.runs)} />
           ) : (
-            <NoteBlock>
-              Nothing has run yet. Open an automation and run it once, or wait
-              for its trigger.
-            </NoteBlock>
+            <NoteBlock>Nothing has run yet.</NoteBlock>
           )}
         </>
       )}

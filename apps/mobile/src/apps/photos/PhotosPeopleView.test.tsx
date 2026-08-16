@@ -351,7 +351,7 @@ describe("the people roster's grid and card behaviour", () => {
     renderView();
     // f3 and f4 are unconfirmed — 2, not the mock's 54.
     expect(container!.textContent).toContain(
-      "2 faces are not matched to anyone. Face review proposes them one at a time, and nothing is named until you name it."
+      "2 faces are not matched to anyone — face review proposes them one at a time."
     );
   });
 
@@ -393,7 +393,7 @@ describe("the people roster's consent gate (issue 712 C2)", () => {
     expect(
       container!.querySelector('[data-testid="consent-gate"]')
     ).toBeTruthy();
-    expect(container!.textContent).not.toContain("No people yet.");
+    expect(container!.textContent).not.toContain("No people yet");
   });
 
   it("falls back to the plain empty copy once the question is declined", () => {
@@ -407,7 +407,7 @@ describe("the people roster's consent gate (issue 712 C2)", () => {
     expect(
       container!.querySelector('[data-testid="consent-gate"]')
     ).toBeFalsy();
-    expect(container!.textContent).toContain("No people yet.");
+    expect(container!.textContent).toContain("No people yet");
     expect(mocks.session.write).not.toHaveBeenCalled();
     expect(mocks.postStatus).toHaveBeenCalledOnce();
   });

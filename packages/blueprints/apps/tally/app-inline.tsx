@@ -33,8 +33,7 @@ const tallyInlineApp: InlineAppModule = {
   kitAsk: {
     scope: "tally",
     placeholder: "Ask about your expenses…",
-    intro:
-      "Ask me to add an expense, settle up, or see who owes whom. Writes show for your approval before they touch the vault.",
+    intro: "Ask me to add an expense, settle up, or see who owes whom.",
     suggest: ["Split dinner four ways", "Who do I owe?", "Settle up with Alex"],
   },
   Root,

@@ -248,8 +248,8 @@ export function PlaceMap({
         })}
       </div>
       <figcaption className={styles.caption}>
-        Arranged by where each photograph was taken. Nothing is fetched — no map
-        data leaves this device.
+        Arranged by where each photograph was taken — no map data leaves this
+        device.
       </figcaption>
     </figure>
   );

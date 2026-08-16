@@ -144,8 +144,8 @@ export default function GatewayServiceTip({
         <p className={styles.headline}>Keep your vault reachable</p>
         <p className={styles.copy}>
           A small background service keeps this gateway up when Centraid is
-          closed, so your phone and other devices can still reach your vault.
-          Off by default — nothing is installed unless you ask.
+          closed, so your phone can still reach your vault. Nothing is installed
+          unless you ask.
         </p>
         {errorLine}
       </div>

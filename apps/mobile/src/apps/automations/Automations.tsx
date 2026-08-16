@@ -103,7 +103,7 @@ const SUGGESTIONS_NOTE = AUTOMATIONS_SUGGESTIONS_NOTE;
 
 /** What the run feed says when the vault has automations but no history. */
 const NO_RUNS_NOTE =
-  "Nothing has run yet. Open an automation and run it once, or wait for its trigger.";
+  "Nothing has run yet — run an automation once, or wait for its trigger.";
 
 export default function AutomationsScreen({
   navigation,

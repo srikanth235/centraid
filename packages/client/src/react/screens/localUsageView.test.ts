@@ -231,7 +231,7 @@ describe("formatBytes / parseBytes", () => {
 });
 
 describe(budgetSummary, () => {
-  it("says nothing is blocked when over budget", () => {
+  it("says how far over budget the machine is", () => {
     const over = report({
       limits: {
         totalLimitBytes: 5 * GB,
@@ -245,8 +245,8 @@ describe(budgetSummary, () => {
         limitBytes: 5 * GB,
       },
     });
-    expect(budgetSummary(over, over.limits)).toContain(
-      "Nothing is being blocked"
+    expect(budgetSummary(over, over.limits)).toBe(
+      "10.0 GB of your 5.0 GB budget — over."
     );
   });
 

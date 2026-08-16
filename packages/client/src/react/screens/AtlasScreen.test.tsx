@@ -431,7 +431,7 @@ describe("screens/AtlasScreen", () => {
       const el = await mount(makeProps({ loadStats }));
       expect(el.textContent).toContain("Cannot open the store");
       expect(el.textContent).toContain(
-        "The vault is encrypted and present on disk. Its host could not open it, which is usually a permissions problem on the machine rather than damage to the data."
+        "The host could not open the vault — usually a permissions problem on this machine."
       );
       expect(readVitals("atlas")?.state).toBe("error");
 

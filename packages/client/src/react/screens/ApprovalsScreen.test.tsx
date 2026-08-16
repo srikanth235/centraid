@@ -651,7 +651,7 @@ describe("screens/ApprovalsScreen", () => {
       expect(el.textContent).toContain("Locker");
       expect(el.textContent).toContain("reachable by nothing");
       expect(el.textContent).toContain(
-        "Everything an app can reach, and nothing it cannot."
+        "Everything an app can reach — revoking takes effect at once."
       );
       // The footer names every real call the product makes off this device.
       expect(el.textContent).toContain("Your configured AI provider");

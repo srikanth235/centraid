@@ -13,9 +13,11 @@
 // Keeping them here means the tests read the same answers the components do,
 // and no rule is expressed twice.
 //
-// COPY IS FINAL. Every string below is the handoff's, verbatim. It lives with
-// the rule that selects it rather than in view-copy.ts, whose shape is a
-// per-shelf table keyed by `ShelfId` — the stage has no shelf.
+// COPY IS FINAL. Every string below is the handoff's, at DESIGN.md `## Copy`
+// budgets — the custody paragraphs lost the reassuring second sentence the
+// handoff gave each of them (issue #805). It lives with the rule that selects
+// it rather than in view-copy.ts, whose shape is a per-shelf table keyed by
+// `ShelfId` — the stage has no shelf.
 //
 // The storage noun never appears in a user-visible string: what a member reads
 // for a vault is `scope.label`, which the shell owns and the owner may rename.
@@ -323,18 +325,17 @@ export const DEFAULT_GATEWAY_NAME = "the gateway";
  * and "nobody has looked" is one of them.
  */
 const ORIGIN_PARAGRAPHS: Record<string, (gatewayName: string) => string> = {
-  replicated: (gateway) =>
-    `The original is on this device and on ${gateway}. Either copy can serve it, so losing one does not lose the photograph.`,
+  replicated: (gateway) => `The original is on this device and on ${gateway}.`,
   "remote-only": (gateway) =>
-    `The original is on ${gateway} and not on this device. Opening it at full quality fetches it, which is why that is a choice and not something this screen does for you.`,
+    `The original is on ${gateway}, not on this device — opening it at full quality fetches it.`,
   missing: () =>
-    `No copy of the original can be found. The record — the caption, the date, the albums it is in — is still here, and it is what a restored copy would attach to.`,
+    `No copy of the original can be found — its caption, date and albums are still here.`,
   // Distinct from local-only: an upload is OUTSTANDING (a `blob_outbox` row),
   // which is a different fact from "there is nowhere to copy it to".
   "pending-offsite": (gateway) =>
-    `The original is on this device only. A copy to ${gateway} is queued and has not finished, so for now this device is the one place it exists.`,
-  "local-only": (gateway) =>
-    `The original is on this device and nowhere else. Nothing is queued to copy it to ${gateway}, so losing this device loses the photograph.`,
+    `The original is on this device only; a copy to ${gateway} is queued.`,
+  "local-only": () =>
+    `The original is on this device and nowhere else — losing this device loses the photograph.`,
 };
 
 export function originParagraph(asset: Asset, gatewayName: string): string {
@@ -343,7 +344,7 @@ export function originParagraph(asset: Asset, gatewayName: string): string {
   // `blob_custody_state`; before it has run there is nothing to report, and
   // saying so is the only honest sentence available.
   if (!line)
-    return `Where the original is kept has not been checked yet. ${gatewayName} works this out on its own schedule; until it has, this panel will not guess.`;
+    return `Where the original is kept has not been checked yet — ${gatewayName} works that out on its own schedule.`;
   return line(gatewayName);
 }
 

@@ -85,7 +85,7 @@ describe("Duplicates never names the issue that shipped it", () => {
 
   it("gets the grammar right for exactly one cluster", () => {
     expect(duplicatesLede(1)).toBe(
-      "1 cluster of near-identical photographs. Selecting a copy marks it for trash; the one you keep stays where it is, in the album and the timeline it is already in."
+      "1 cluster of near-identical photographs — selecting a copy marks it for trash."
     );
     expect(duplicatesLede(6)).toContain("6 clusters of near-identical");
   });

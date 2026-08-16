@@ -191,7 +191,7 @@ export default function PaletteScreen({
             className={styles.input}
             type="text"
             autoComplete="off"
-            placeholder="Search everything · use notes: or people: to filter"
+            placeholder="Search everything · notes: people:"
             value={query}
             onChange={(e) => {
               setActive(0);

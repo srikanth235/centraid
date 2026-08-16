@@ -108,7 +108,7 @@ export default function SettingsProfileScreen({
             autoComplete="name"
             spellCheck={false}
             aria-label="Display name"
-            placeholder="What should we call you?"
+            placeholder="Your name"
             onChange={(event) => {
               setName(event.target.value);
               setStatus(null);

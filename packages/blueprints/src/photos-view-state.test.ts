@@ -178,9 +178,14 @@ describe("offline is explained, never left as a grey mosaic (§14)", () => {
 
   it("names what still renders, and never says the meaning is gone", () => {
     // README §14: "A grey mosaic with no explanation is a bug." The banner is
-    // the explanation, and it is explicit about what is still true.
-    for (const word of ["captions", "dates", "albums", "people"]) {
-      expect(OFFLINE_COPY.banner).toContain(word);
+    // the explanation, and it is explicit about what is still true — in one
+    // sentence since issue #805, which is why it names the class of thing that
+    // still renders rather than listing captions, dates, albums and people.
+    for (const phrase of [
+      "meaning reads from this device",
+      "shape and colour",
+    ]) {
+      expect(OFFLINE_COPY.banner).toContain(phrase);
     }
     expect(OFFLINE_COPY.status).toContain("local replica");
   });
@@ -215,10 +220,7 @@ describe("the empty state is the right object, and says where the bytes go", () 
   it("states where the originals stay, on a new library", () => {
     const view = emptyStateView({ loaded: true, count: 0, shelf: null });
     expect(view.title).toBe("Nothing here yet");
-    expect(view.body).toContain("The originals stay on your gateway");
-    expect(view.body).toContain(
-      "nothing is copied anywhere you have not asked"
-    );
+    expect(view.body).toContain("the originals stay on your gateway");
   });
 
   it("offers Import where importing would land a photograph, and nowhere else", () => {

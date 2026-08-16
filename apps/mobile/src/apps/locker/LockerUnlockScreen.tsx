@@ -44,7 +44,7 @@ export function LockerUnlockScreen({
       </Text>
       <Text style={styles.stateCopy}>
         {configured
-          ? "Enter your primary passphrase. Each secret asks for user presence again before reveal."
+          ? "Each secret asks for user presence again before reveal."
           : "Create a primary passphrase of at least 12 characters. It never leaves this online authentication request."}
       </Text>
       <TextInput

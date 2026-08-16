@@ -297,7 +297,7 @@ export function LinkTicketPanel({
           <textarea
             aria-label="Pasted link ticket"
             className={styles.linkTicketPaste}
-            placeholder="Paste the ticket they showed you"
+            placeholder="Their link ticket"
             value={pasted}
             disabled={busy}
             onChange={(event) => setPasted(event.target.value)}

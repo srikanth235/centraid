@@ -245,7 +245,7 @@ export interface AutomaticBackupState {
 
 const POLICY_BLOCKED =
   "Waiting for a connection that matches the transfer rules below.";
-const GATEWAY_BLOCKED = "Waiting for the gateway. Nothing is lost meanwhile.";
+const GATEWAY_BLOCKED = "Waiting for the gateway.";
 
 interface SweepScope {
   session: MobileReplicaSession;

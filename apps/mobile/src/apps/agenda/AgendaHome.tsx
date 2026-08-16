@@ -344,7 +344,7 @@ export default function AgendaHome({
               {agenda.loading
                 ? "Opening your calendar…"
                 : agenda.connection === "offline"
-                  ? "No cached events in this range. Reconnect to check the vault."
+                  ? "No cached events here — reconnect to check the vault."
                   : "Nothing scheduled in this range."}
             </Text>
           )

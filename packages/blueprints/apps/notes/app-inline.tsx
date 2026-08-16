@@ -31,8 +31,7 @@ const notesInlineApp: InlineAppModule = {
   kitAsk: {
     scope: "notes",
     placeholder: "Ask your notes…",
-    intro:
-      "Ask me to write, find, summarise or file a note. New notes show for your approval before they touch the vault.",
+    intro: "Ask me to write, find, summarise or file a note.",
     suggest: [
       "Summarise my Q3 roadmap note",
       "New note from this",

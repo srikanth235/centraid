@@ -41,7 +41,7 @@ const ALBUM_BAR = "../apps/photos/components/AlbumBar.tsx";
 const TIMELINE = "../apps/photos/components/Timeline.tsx";
 const VIEW_COPY = "../apps/photos/view-copy.ts";
 
-const REASON = "You can view Tom’s library but not add to it.";
+const REASON = "Tom’s library is read-only here.";
 
 const ASSETS = [
   {

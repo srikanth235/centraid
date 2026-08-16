@@ -483,7 +483,7 @@ export default function TasksHome({
         ListEmptyComponent={
           queryState.loading ? null : (
             <Text style={[styles.empty, { color: colors.textFaint }]}>
-              Nothing here yet. Changes remain available offline.
+              Nothing here yet.
             </Text>
           )
         }

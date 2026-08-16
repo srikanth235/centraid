@@ -129,8 +129,8 @@ export default function BackupCopyCards({
           </button>
           {onRestore ? null : (
             <p className={styles.restoreSeamNote} id={restoreReasonId}>
-              Restoring from an offsite copy isn’t wired into the app yet —
-              today it’s a gateway-side recovery act. See the recovery runbook.
+              Restoring from an offsite copy is a gateway-side act today — see
+              the recovery runbook.
             </p>
           )}
         </div>

@@ -510,7 +510,7 @@ export default function AutomationViewRoute({
               automationId: row.ref,
             });
             await openWebhookReveal(webhook, {
-              note: "This secret is shown once. Update your caller now — you won't see it again.",
+              note: "Shown once — update your caller now.",
               title: "New webhook secret",
             });
             showToast("Webhook secret regenerated");

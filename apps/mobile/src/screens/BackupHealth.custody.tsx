@@ -104,8 +104,7 @@ export function CustodyBlock({
   if (custody === null)
     return (
       <Text style={[styles.note, { color: colors.textSoft }]}>
-        Your vault&apos;s storage status could not be read. Nothing is wrong
-        with the originals; only this view of them failed.
+        Your vault&apos;s storage status could not be read.
       </Text>
     );
   if (custody === undefined)
@@ -231,7 +230,7 @@ export function FreeUpBlock({
  * label.
  */
 const FREE_UP_WHERE =
-  "Release the copies from the app that holds them — Photos re-hashes every device original before deleting it, so a photograph edited since backup is never lost.";
+  "Release the copies from the app that holds them — Photos re-hashes each device original before deleting it.";
 
 /** Shared with the screen's header, which prints the last successful sync in
  *  the same register. Local to this pair of files by design: a date format is

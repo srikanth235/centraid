@@ -269,8 +269,7 @@ export default function SharingScreen({
 
         <Section title="Redeem a shared-space invite" colors={colors}>
           <Text style={[t("small"), { color: colors.textSoft }]}>
-            Create your vault first. If the sharer is remote, connect with them,
-            then paste the one-time invitation here.
+            Create your vault first, then paste the one-time invitation here.
           </Text>
           <TextInput
             accessibilityLabel="Shared-space invitation"

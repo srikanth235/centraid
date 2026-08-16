@@ -163,7 +163,7 @@ export function resourceCompareRows(): CompareRow[] {
     {
       key: "durability",
       label: "Data durability",
-      hint: "SQLite fsync durability. Relaxed trades a little crash-safety for less disk churn.",
+      hint: "Relaxed trades a little crash-safety for less disk churn.",
       values: byPreset((p) =>
         p.sqliteSynchronous === "NORMAL" ? "Relaxed" : "Full"
       ),

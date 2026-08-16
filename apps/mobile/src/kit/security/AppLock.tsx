@@ -61,7 +61,7 @@ export function AppLockProvider({
       if (await authenticateAppLock()) setUnlocked(true);
       else
         setError(
-          "The biometric key changed. Reinstall Centraid to reset this protected local replica."
+          "Biometric key changed — reinstall Centraid to reset this local replica."
         );
     } catch (caughtError) {
       setError(

@@ -187,7 +187,7 @@ describe(describeTransferPolicy, () => {
   it("says `never` outright, without a network clause it would contradict", () => {
     expect(
       describeTransferPolicy({ ...DEFAULT_TRANSFER_POLICY, never: true })
-    ).toBe("Never. Nothing leaves this device until you change that.");
+    ).toBe("Never — nothing leaves this device.");
   });
 
   it("names roaming only when roaming is on the table", () => {

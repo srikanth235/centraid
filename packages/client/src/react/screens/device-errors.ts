@@ -21,25 +21,19 @@
 const PAIR_ERRORS: readonly (readonly [string, string])[] = [
   [
     "owner_vaults_only",
-    "You can only pair a device for yourself. Ask that person to pair their own device — adding someone else is arriving in a later release.",
+    "A device pairs only for its own owner — ask them to pair theirs.",
   ],
   ["vaults_required", "Choose at least one vault this device may reach."],
   ["vault_required", "Choose at least one vault this device may reach."],
-  [
-    "invalid_vault_ids",
-    "Something went wrong choosing vaults for this ticket. Try again.",
-  ],
-  [
-    "not_found",
-    "One of the chosen vaults is no longer available. Reload and try again.",
-  ],
+  ["invalid_vault_ids", "Vault choice didn’t take — try again."],
+  ["not_found", "One of the chosen vaults is gone — reload."],
   [
     "no_iroh_endpoint",
-    "The vault host has no network identity yet. Start it and try again.",
+    "The vault host has no network identity yet — start it.",
   ],
   [
     "device_identity_required",
-    "This device isn’t recognized by the vault host yet. Reload and try again.",
+    "The vault host doesn’t recognize this device yet — reload.",
   ],
   [
     "owner_only",

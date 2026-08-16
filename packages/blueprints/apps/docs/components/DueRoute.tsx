@@ -51,8 +51,8 @@ export function DueRoute(): ReactNode {
         </dl>
       </section>
       <p className={styles.note}>
-        Agenda owns the event. Docs would show the date, the document and the
-        link — never a second copy of the event.
+        Agenda owns the event; Docs would show the date, the document and the
+        link.
       </p>
     </div>
   );

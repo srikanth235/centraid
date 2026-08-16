@@ -519,9 +519,8 @@ export default function SettingsHarnessesScreen({
     <>
       <DrawerGroup label="Routing">
         <div className={controlsCss.note}>
-          Each surface picks its own agent and model. A lane left on “Use
-          default” follows the default lane below, so you can run Automations on
-          one agent and everything else on another.
+          Each surface picks its own agent and model; a lane left on “Use
+          default” follows the default lane below.
         </div>
         {status === null ? (
           <div className={controlsCss.note}>Reading agent status…</div>

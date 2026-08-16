@@ -51,8 +51,7 @@ export default function AppearanceSection(): React.JSX.Element {
         })}
       </View>
       <Text style={styles.help}>
-        Choose how Centraid looks. System follows your phone&apos;s light or
-        dark setting.
+        System follows your phone&apos;s light or dark setting.
       </Text>
     </SettingsSection>
   );

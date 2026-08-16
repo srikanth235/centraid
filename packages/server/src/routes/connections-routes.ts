@@ -115,7 +115,7 @@ function sendCeremonyHtml(
     `<!doctype html><meta charset="utf-8"><title>Centraid</title>` +
       `<main><h2>${ok ? "Connected" : "Not connected"}</h2>` +
       `<p>${escapeHtml(message)}</p>` +
-      (ok ? `<p>You can close this window.</p>` : "") +
+      (ok ? `<p>Close this window.</p>` : "") +
       `</main>`
   );
 }
@@ -151,7 +151,7 @@ export function makeConnectionsRouteHandler(
           res,
           false,
           providerError === "access_denied"
-            ? "You declined the consent screen. Start Connect again when ready."
+            ? "Consent declined — start Connect again."
             : `The provider answered with an error: ${providerError ?? "missing code"}.`
         );
         return true;
@@ -302,8 +302,8 @@ export function makeConnectionsRouteHandler(
               : "provider_error",
           message:
             providerError === "access_denied"
-              ? "You declined Google access. Start Connect again when ready."
-              : "Google could not complete authorization. Start Connect again.",
+              ? "Google access declined — start Connect again."
+              : "Google could not complete authorization — start Connect again.",
         });
         return true;
       }

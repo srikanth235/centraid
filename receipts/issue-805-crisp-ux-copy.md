@@ -15,12 +15,12 @@ and cross-slice invariants; sub-agents work file-disjoint slices.
 - [x] A — the rulebook
 - [x] B — the ratchet
 - [x] C — the shared copy seam
-- [ ] D1 — audit: client shell + Settings + Onboarding
-- [ ] D2 — audit: blueprints Photos
-- [ ] D3 — audit: blueprints Docs + Notes + remaining apps
-- [ ] D4 — audit: mobile screens + kit
-- [ ] D5 — audit: server-surfaced strings + desktop/web/extension shells
-- [ ] design-divergences register updated for any slice-kept divergence
+- [x] D1 — audit: client shell + Settings + Onboarding
+- [x] D2 — audit: blueprints Photos
+- [x] D3 — audit: blueprints Docs + Notes + remaining apps
+- [x] D4 — audit: mobile screens + kit
+- [x] D5 — audit: server-surfaced strings + desktop/web/extension shells
+- [x] design-divergences register updated for any slice-kept divergence
 
 ## What changed
 
@@ -226,6 +226,287 @@ tests/quality/copy-allowlist.json
 tests/quality/user-facing-qualities.test.ts
 ```
 
+### Slices D1–D5 — the full audit (2026-08-16)
+
+Every user-facing string in the app read once against the rulebook;
+violations rewritten, compliant strings byte-identical, consent/destructive/
+security surfaces allowlisted by name. Counts per slice are in the Audit
+counts table. The allowlist drained 255 → 31 entries; every survivor names
+its surface class (`maxEntries` and the in-test ceiling now 31).
+
+- **D1 — audit: client shell + Settings + Onboarding** — 119 rewrites across
+  86 files in `packages/client/src` (62 seeds + 57 judgment: placeholders,
+  JSX prose, interpolated literals the ratchet cannot see). 3 kept as
+  destructive confirms (outbox discard, webhook secret rotation ×2). 13
+  pinned-copy test files updated.
+- **D2 — audit: blueprints Photos** — 38 rewrites across
+  `packages/blueprints/apps/photos` (16 seeds + 22 judgment); 3 kept as the
+  enrichment-consent disclosure panel. 6 pinned test files updated; module
+  header comments corrected where they claimed handoff-verbatim text.
+- **D3 — audit: blueprints Docs + Notes + remaining apps** — 45 rewrites (3
+  deletions: the `EMPTY_MODEL_NOTE` spec leak, the `TRASH_ASK` "no destroy
+  verb" essay and its fact rows — the design rationale now lives in a code
+  comment beside the constants). 6 kept: the four OCR capture-consent
+  disclosures and two Docs capability disclosures. The seven `app-inline.tsx`
+  intros lost their repeated approval-reassurance sentence — it lives where
+  the decision is made.
+- **D4 — audit: mobile screens + kit** — 96 rewrites across 73 files in
+  `apps/mobile/src` (58 seeds + 38 judgment; 922 literals + 31 JSX text
+  nodes audited). 18 kept: transfer/enrichment consent, camera-roll grant
+  and faces privacy disclosures, Locker security notes, and the
+  destructive confirms (merge, empty trash, duplicate trash, unpair,
+  free-up-space). 12 pinned test files updated, including re-splitting the
+  storage-full error contract across the exports the screen renders.
+- **D5 — audit: server-surfaced strings + desktop/web/extension shells** —
+  22 rewrites across 8 files; 0 kept. Connector setup steps split rather
+  than padded; OAuth outcome pages, extension pairing, web offline banner
+  and desktop notifications aligned to the error/banner budgets; the
+  assistant `notice` strings (verified to render in the member transcript)
+  lost their defensive second sentences.
+- **Root seam closes (cross-slice, held by the orchestrator)** — the
+  `tests/agent-e2e-mobile/flows/places-seat.mjs` pin follows the Places map
+  rewrite; the share-invitation handoff note and redeem hint converge on one
+  wording across `packages/blueprints/apps/_shared/ShareSheet.tsx`,
+  `apps/mobile/src/kit/share/ShareSheet.tsx`,
+  `packages/client/src/react/screens/SharingCard.tsx` and
+  `apps/mobile/src/screens/Sharing.tsx`; the write-target read-only reasons
+  converge on the client's phrasing across
+  `packages/blueprints/apps/_shared/write-target.ts` and its four pinned
+  suites; `home-copy.ts`'s three remaining flagged strings and the Photos
+  `duplicatesLede` tightened to budget; the
+  design-divergences register updated for any slice-kept divergence —
+  `docs/design-divergences.md` gains the desktop crash-loop notification hold
+  and the Docs two-action empty states.
+
+### Wave 3 file inventory
+
+Every file waves D1–D5 + root integration touched (generated from the diff):
+
+```
+apps/desktop/src/main/gateway-monitor.ts
+apps/extension/src/pair.ts
+apps/extension/src/popup.ts
+apps/extension/src/transport-core.ts
+apps/mobile/src/apps/agenda/AgendaCreateModal.tsx
+apps/mobile/src/apps/agenda/AgendaEvent.tsx
+apps/mobile/src/apps/agenda/AgendaHome.tsx
+apps/mobile/src/apps/assistant/Assistant.tsx
+apps/mobile/src/apps/assistant/assistant-companion.test.ts
+apps/mobile/src/apps/assistant/assistant-companion.ts
+apps/mobile/src/apps/automations/Automations.tsx
+apps/mobile/src/apps/automations/useAutomations.ts
+apps/mobile/src/apps/docs/DocsHome.tsx
+apps/mobile/src/apps/locker/LockerHome.tsx
+apps/mobile/src/apps/locker/LockerUnlockScreen.tsx
+apps/mobile/src/apps/notes/NotesHome.tsx
+apps/mobile/src/apps/people/PeopleHome.tsx
+apps/mobile/src/apps/photos/AlbumDetail.tsx
+apps/mobile/src/apps/photos/CameraRollImportOffer.tsx
+apps/mobile/src/apps/photos/MemoriesView.tsx
+apps/mobile/src/apps/photos/PhotoGrainView.tsx
+apps/mobile/src/apps/photos/PhotoInfoSheet.tsx
+apps/mobile/src/apps/photos/PhotoPicker.tsx
+apps/mobile/src/apps/photos/PhotoStateView.tsx
+apps/mobile/src/apps/photos/PhotosHome.test.tsx
+apps/mobile/src/apps/photos/PhotosHome.tsx
+apps/mobile/src/apps/photos/PhotosLibrary.tsx
+apps/mobile/src/apps/photos/PhotosMoreSheet.test.tsx
+apps/mobile/src/apps/photos/PhotosPeopleView.test.tsx
+apps/mobile/src/apps/photos/PhotosPeopleView.tsx
+apps/mobile/src/apps/photos/PhotosSearchRestingState.tsx
+apps/mobile/src/apps/photos/PlacesMap.test.tsx
+apps/mobile/src/apps/photos/PlacesMap.tsx
+apps/mobile/src/apps/photos/PlacesView.test.tsx
+apps/mobile/src/apps/photos/PlacesView.tsx
+apps/mobile/src/apps/photos/people-model.ts
+apps/mobile/src/apps/photos/photo-access.ts
+apps/mobile/src/apps/photos/photos-backup.ts
+apps/mobile/src/apps/photos/photos-band.ts
+apps/mobile/src/apps/photos/photos-collections.ts
+apps/mobile/src/apps/photos/viewer-model.test.ts
+apps/mobile/src/apps/photos/viewer-model.ts
+apps/mobile/src/apps/tally/TallyHome.tsx
+apps/mobile/src/apps/tasks/TasksHome.tsx
+apps/mobile/src/kit/hooks/share-ingest.ts
+apps/mobile/src/kit/replica/ReplicaStateCard.tsx
+apps/mobile/src/kit/security/AppLock.tsx
+apps/mobile/src/kit/share/ShareSheet.tsx
+apps/mobile/src/kit/storage/free-up-space.ts
+apps/mobile/src/kit/transfer/backup-verdict.ts
+apps/mobile/src/kit/transfer/transfer-consent.ts
+apps/mobile/src/kit/transfer/transfer-policy.test.ts
+apps/mobile/src/kit/transfer/transfer-policy.ts
+apps/mobile/src/lib/connection-reauth.ts
+apps/mobile/src/lib/gateway.ts
+apps/mobile/src/lib/replica/mobile-gateway-compatibility-core.ts
+apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts
+apps/mobile/src/lib/replica/replica-storage-error.test.ts
+apps/mobile/src/lib/replica/replica-storage-error.ts
+apps/mobile/src/screens/BackupHealth.custody.tsx
+apps/mobile/src/screens/BackupHealth.tsx
+apps/mobile/src/screens/Capture.tsx
+apps/mobile/src/screens/Onboarding.tsx
+apps/mobile/src/screens/PhoneStorage.tsx
+apps/mobile/src/screens/Settings.tsx
+apps/mobile/src/screens/Sharing.tsx
+apps/mobile/src/screens/approvals/approvals-model.ts
+apps/mobile/src/screens/data/Data.tsx
+apps/mobile/src/screens/data/VaultSections.tsx
+apps/mobile/src/screens/devices/Devices.tsx
+apps/mobile/src/screens/home/TileBody.tsx
+apps/mobile/src/screens/home/VaultsSwitcher.tsx
+apps/mobile/src/screens/settings/AppearanceSection.tsx
+apps/mobile/src/screens/settings/BandSection.tsx
+apps/mobile/src/screens/signal-notification.ts
+apps/mobile/src/screens/system-on-phone.test.ts
+apps/mobile/src/screens/system-on-phone.ts
+apps/web/src/web-chrome.ts
+docs/design-divergences.md
+packages/blueprints/apps/_shared/ShareSheet.tsx
+packages/blueprints/apps/_shared/write-target.ts
+packages/blueprints/apps/agenda/app-inline.tsx
+packages/blueprints/apps/agenda/components/CreateModal.tsx
+packages/blueprints/apps/docs/app-inline.tsx
+packages/blueprints/apps/docs/capabilities.ts
+packages/blueprints/apps/docs/components/DueRoute.tsx
+packages/blueprints/apps/docs/components/EmptyState.module.css
+packages/blueprints/apps/docs/components/EmptyState.tsx
+packages/blueprints/apps/docs/components/FoldersRoute.tsx
+packages/blueprints/apps/docs/components/TrashAsk.tsx
+packages/blueprints/apps/docs/document-copy.ts
+packages/blueprints/apps/docs/drive-copy.ts
+packages/blueprints/apps/docs/view-copy.ts
+packages/blueprints/apps/locker/app-inline.tsx
+packages/blueprints/apps/notes/app-inline.tsx
+packages/blueprints/apps/notes/components/Editor.tsx
+packages/blueprints/apps/notes/components/QuickAdd.tsx
+packages/blueprints/apps/notes/components/WikiLinks.tsx
+packages/blueprints/apps/people/app-inline.tsx
+packages/blueprints/apps/photos/app-inline.tsx
+packages/blueprints/apps/photos/components/Editor.tsx
+packages/blueprints/apps/photos/components/FaceReview.tsx
+packages/blueprints/apps/photos/components/Import.tsx
+packages/blueprints/apps/photos/components/Lightbox.tsx
+packages/blueprints/apps/photos/components/LightboxInfo.tsx
+packages/blueprints/apps/photos/components/People.test.tsx
+packages/blueprints/apps/photos/components/Picker.tsx
+packages/blueprints/apps/photos/components/PlaceMap.tsx
+packages/blueprints/apps/photos/enrichment-consent.ts
+packages/blueprints/apps/photos/selection.tsx
+packages/blueprints/apps/photos/shared-copy.ts
+packages/blueprints/apps/photos/view-copy.ts
+packages/blueprints/apps/photos/viewer.ts
+packages/blueprints/apps/tally/app-inline.tsx
+packages/blueprints/apps/tally/components/Dashboard.tsx
+packages/blueprints/apps/tally/components/GroupManager.tsx
+packages/blueprints/apps/tally/components/Search.tsx
+packages/blueprints/apps/tasks/app-inline.tsx
+packages/blueprints/src/docs-drive.test.ts
+packages/blueprints/src/docs-shelves.test.ts
+packages/blueprints/src/photos-duplicates.test.ts
+packages/blueprints/src/photos-people.test.ts
+packages/blueprints/src/photos-picker.test.ts
+packages/blueprints/src/photos-readonly-album.test.ts
+packages/blueprints/src/photos-selection-bar.test.ts
+packages/blueprints/src/photos-shelves-v4.test.ts
+packages/blueprints/src/photos-view-state.test.ts
+packages/blueprints/src/scope-kit.test.ts
+packages/blueprints/src/write-target.test.ts
+packages/client/src/assist-oauth-handoff.ts
+packages/client/src/gateway-client-connections.ts
+packages/client/src/gateway-client-core.ts
+packages/client/src/home-copy.ts
+packages/client/src/react/blueprints/centraid-inline.ts
+packages/client/src/react/screens/AlertHistoryPanel.test.tsx
+packages/client/src/react/screens/AlertHistoryPanel.tsx
+packages/client/src/react/screens/ApprovalsScreen.test.tsx
+packages/client/src/react/screens/ApprovalsScreen.tsx
+packages/client/src/react/screens/AssistantScreen.tsx
+packages/client/src/react/screens/AtlasRecordsSection.test.tsx
+packages/client/src/react/screens/AtlasRecordsSection.tsx
+packages/client/src/react/screens/AtlasRelationsTab.tsx
+packages/client/src/react/screens/AtlasScreen.test.tsx
+packages/client/src/react/screens/AtlasScreen.tsx
+packages/client/src/react/screens/AutomationCompilePane.tsx
+packages/client/src/react/screens/AutomationEditorConnectorsPicker.tsx
+packages/client/src/react/screens/AutomationEditorScreen.test.tsx
+packages/client/src/react/screens/AutomationEditorScreen.tsx
+packages/client/src/react/screens/AutomationThreadScreen.tsx
+packages/client/src/react/screens/AutomationsOverviewScreen.tsx
+packages/client/src/react/screens/BackupCard.test.tsx
+packages/client/src/react/screens/BackupCard.tsx
+packages/client/src/react/screens/BackupCopyCards.tsx
+packages/client/src/react/screens/BackupInventoryPanel.tsx
+packages/client/src/react/screens/DevicePairPanel.test.tsx
+packages/client/src/react/screens/DevicePairPanel.tsx
+packages/client/src/react/screens/GatewayAlertsTab.tsx
+packages/client/src/react/screens/GatewayScreen.test.tsx
+packages/client/src/react/screens/GatewayScreen.tsx
+packages/client/src/react/screens/GatewayServiceTip.tsx
+packages/client/src/react/screens/HouseholdScreen.test.tsx
+packages/client/src/react/screens/HouseholdScreen.tsx
+packages/client/src/react/screens/ImportScreen.tsx
+packages/client/src/react/screens/InsightsScreen.test.tsx
+packages/client/src/react/screens/InsightsScreen.tsx
+packages/client/src/react/screens/LinkRow.tsx
+packages/client/src/react/screens/OnboardingScreen.test.tsx
+packages/client/src/react/screens/OnboardingScreen.tsx
+packages/client/src/react/screens/PaletteScreen.tsx
+packages/client/src/react/screens/PhoneScreen.tsx
+packages/client/src/react/screens/RecoveryKitGate.tsx
+packages/client/src/react/screens/ResourceCompareDialog.tsx
+packages/client/src/react/screens/ResourceModeCard.test.tsx
+packages/client/src/react/screens/ResourceModeCard.tsx
+packages/client/src/react/screens/RunViewScreen.test.tsx
+packages/client/src/react/screens/SettingsAppearanceScreen.tsx
+packages/client/src/react/screens/SettingsConnectionsScreen.test.tsx
+packages/client/src/react/screens/SettingsConnectionsScreen.tsx
+packages/client/src/react/screens/SettingsDeviceScreen.tsx
+packages/client/src/react/screens/SettingsHarnessesScreen.tsx
+packages/client/src/react/screens/SettingsProfileScreen.tsx
+packages/client/src/react/screens/SettingsStorageScreen.test.tsx
+packages/client/src/react/screens/SettingsStorageScreen.tsx
+packages/client/src/react/screens/SettingsVaultScreen.tsx
+packages/client/src/react/screens/SharingCard.tsx
+packages/client/src/react/screens/StorageLimitsPanel.tsx
+packages/client/src/react/screens/VaultScreen.tsx
+packages/client/src/react/screens/atlasScreenModel.test.ts
+packages/client/src/react/screens/atlasScreenModel.ts
+packages/client/src/react/screens/device-errors.ts
+packages/client/src/react/screens/localUsageView.test.ts
+packages/client/src/react/screens/localUsageView.ts
+packages/client/src/react/screens/networkCalls.ts
+packages/client/src/react/screens/resource-presets.ts
+packages/client/src/react/screens/resource-summary.ts
+packages/client/src/react/shell/CaptureOverlay.tsx
+packages/client/src/react/shell/CaptureScanPanel.tsx
+packages/client/src/react/shell/assistant-companion/assistantCompanionModel.ts
+packages/client/src/react/shell/routes/AssistantRoute.tsx
+packages/client/src/react/shell/routes/AutomationEditorRoute.test.tsx
+packages/client/src/react/shell/routes/AutomationEditorRoute.tsx
+packages/client/src/react/shell/routes/AutomationViewRoute.tsx
+packages/client/src/react/shell/routes/ConnectFlowDetailsStep.tsx
+packages/client/src/react/shell/routes/ConnectFlowVaultStep.tsx
+packages/client/src/react/shell/routes/ConnectTicketPanel.tsx
+packages/client/src/react/shell/routes/SettingsRoute.tsx
+packages/client/src/react/shell/routes/StarredRoute.tsx
+packages/client/src/react/shell/routes/StorageRoute.tsx
+packages/client/src/react/shell/routes/TemplatesRoute.tsx
+packages/client/src/react/shell/routes/gatewayModals.ts
+packages/client/src/react/shell/routes/runViewData.ts
+packages/client/src/react/shell/routes/settingsStorageData.ts
+packages/client/src/react/shell/webhookReveal.test.ts
+packages/client/src/react/shell/webhookReveal.ts
+packages/client/src/react/ui/Gallery.tsx
+packages/client/src/react/ui/states.tsx
+packages/server/src/acp/backends/acp/backend.ts
+packages/server/src/routes/connection-providers.ts
+packages/server/src/routes/connections-routes.ts
+tests/agent-e2e-mobile/flows/places-seat.mjs
+tests/quality/copy-allowlist.json
+tests/quality/user-facing-qualities.test.ts
+```
+
 ## Decisions
 
 - The U4 scanner skips template literals containing `${…}` — a spliced value
@@ -288,6 +569,18 @@ bun run lint && bun run format:check            # clean
 # bundling break in PendingRestartJourney.test.tsx, identical on base.
 ```
 
+Slices D1–D5 + root integration (root re-ran on the integrated tree):
+
+```sh
+bun run test:qualities        # 24 passed — U4 green at 31 entries, no stale
+bunx turbo run typecheck --filter=@centraid/client --filter=@centraid/blueprints --filter=@centraid/server  # green
+cd apps/mobile && bun run typecheck && bun run lint   # clean
+# package-filtered vitest green per slice: client 245 files/2206, blueprints
+# 105 files/3740 (+56 seam tests re-run at root), mobile 1415 (the one
+# failure is the pre-existing node:sqlite bundling break, identical on base).
+bun run check:pr              # full PR gate — result recorded in the PR
+```
+
 ## Audit counts (workstream D contract)
 
 Per-slice audited / rewritten / allowlisted counts land here as D slices
@@ -295,59 +588,54 @@ complete.
 
 | Slice | Audited | Rewritten | Allowlisted (reason) |
 | --- | --- | --- | --- |
-| D1 | — | — | — |
-| D2 | — | — | — |
-| D3 | — | — | — |
-| D4 | — | — | — |
-| D5 | — | — | — |
+| D1 | 922 literals + ~73 JSX/template sites | 119 | 3 (destructive confirms) |
+| D2 | 19 seeds + full photos sweep (~15 files) | 38 | 3 (enrichment consent) |
+| D3 | 38 seeds + full non-photos blueprint sweep | 45 | 6 (OCR + capability consent) |
+| D4 | 922 literals + 31 JSX nodes across 574 files | 96 | 18 (consent/privacy/security/destructive) |
+| D5 | 16 seeds + ~120 judgment-audited strings | 22 | 0 |
 
 ## Audit
 
-Slice A and B (rulebook and ratchet) verified by an independent fresh-context
-sub-agent against `git diff --cached`, this receipt, and issue #805. All three
-audit criteria pass.
+Two rounds of independent fresh-context attestation, both **PASS** on all
+three criteria. Round 1 (waves A+B, recorded at the first commit) verified the
+rulebook and ratchet against the then-staged diff. Round 2, below, audited
+waves D1–D5 + root integration against `git diff --cached`, this receipt, and
+issue #805.
 
-### 1. "What changed" describes the diff faithfully — **PASS**
+### 1. "What changed" describes D1–D5 and the wave-3 diff faithfully — **PASS**
 
-Slice A files present:
-
-```sh
-git diff --cached --stat | grep -E "AGENTS.md|DESIGN.md|decisions.md|glossary.md|design-md.test.ts"
-# AGENTS.md 2 ± · DESIGN.md 45 ± · docs/decisions.md +14 · docs/glossary.md 2 ±
-# packages/design/src/design-md.test.ts +1
-```
-
-- DESIGN.md: Copy section present between Components and Responsive Behavior;
-  budget table, reassurance rule, banned-filler list, and 4 worked pairs
-  verified.
-- docs/decisions.md: Copy governance section with 5 U-rulings verified.
-- docs/glossary.md: concession split — judgment on **word choice**, not on
-  **length** — cross-linked to DESIGN.md § Copy.
-- AGENTS.md: umbrella bullet carries the one-issue/no-child-issues sentence.
-- design-md.test.ts: Copy added to the canonical section list.
-
-Slice B files present; seed breakdown re-measured from the staged tree:
+File inventory and ratchet state re-measured from the staged tree:
 
 ```sh
-git diff --cached tests/quality/copy-allowlist.json | grep '"reason":' | grep -o 'D[1-5]' | sort | uniq -c
-#  83 D1 · 21 D2 · 40 D3 · 95 D4 · 16 D5   (total 255 — matches receipt)
+git diff --cached --stat | tail -1            # 223 files changed
+git diff --cached --name-only | grep -c "^packages/client/src"        # 87 (D1)
+git diff --cached --name-only | grep -c "^packages/blueprints/apps/photos"  # 14 (D2)
+git diff --cached --name-only | grep "^packages/blueprints" | grep -cv photos  # 29 (D3)
+git diff --cached --name-only | grep -c "^apps/mobile/src"            # 73 (D4)
+jq '.copyRatchet.entries | length' tests/quality/copy-allowlist.json  # 31
+jq '.copyRatchet.maxEntries' tests/quality/copy-allowlist.json        # 31
+jq '.copyRatchet.entries[].reason' tests/quality/copy-allowlist.json | grep -c "seeded #805"  # 0
+# every unique remaining reason names consent / destructive / privacy / security
 ```
 
-U4 walks the COPY_SCOPE paths, flags >120 chars / ≥2 sentences / banned
-filler, prunes stale entries, and caps growth via maxEntries + in-test
-ceiling.
+Spot-checked rewrites confirmed in the diff for every slice (D1
+SettingsConnectionsScreen label hints; D2 enrichment-consent filler removal;
+D3 the TRASH_ASK rationale moving to a code comment; D4 people-model faces
+empty state; D5 the desktop notification body), plus the root seam closes:
+the places-seat.mjs pin, the ShareSheet/SharingCard/Sharing convergence, and
+the design-divergences register rows.
 
-### 2. Each `[x]` Checklist item is realized in the diff — **PASS**
+### 2. Each `[x]` Checklist item is realized in the branch — **PASS**
 
-A (rulebook): all five components present as described. B (ratchet): U4 test +
-255 slice-tagged seeds + tighten-only ceiling + stale-entry detection
-verified.
+A, B, C live in commits `dede29340` and `4f1dc9e1b`; D1–D5 and the
+divergences-register item are present in the staged diff with rewrites
+verified by spot-check.
 
-### 3. Checklist mirrors the issue's checklist — **PASS**
+### 3. Checklist mirrors the issue's execution-order checklist — **PASS**
 
-Issue #805 execution-order checkboxes map to the receipt checklist: A and B
-checked; C and D1–D5 unchecked as expected for the first wave; the
-design-divergences item mirrors the issue's final checkbox.
+Nine items map one-to-one onto issue #805's execution-order checkboxes (A ←
+A1–A3, B ← B1–B3, C ← C1–C3, D1–D5, divergences register), all checked at
+closure.
 
 ## Session
 

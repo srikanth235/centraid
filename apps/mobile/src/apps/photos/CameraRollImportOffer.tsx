@@ -107,7 +107,7 @@ export default function CameraRollImportOffer({
       <Text style={[styles.body, { color: colors.textSoft }]}>
         {running
           ? importSummary(progress)
-          : "Staged for review and published one at a time, the same way an import from a file works — nothing else on this device is touched."}
+          : "Staged for review and published one at a time — nothing else on this device is touched."}
       </Text>
       {running ? (
         <View

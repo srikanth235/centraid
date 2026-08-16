@@ -14,9 +14,14 @@
  * one settled amendment (S6, docs/decisions.md): the handoff's storage noun
  * "vault" is replaced with "library" — the scope's human label — because
  * Photos mounts over several scopes and "this vault" stops being unambiguous
- * the moment a household exists (#599 vocabulary gate). Do not "improve" the
- * strings beyond that swap: every fact below is a promise about what the
- * library will and will not do, and a paraphrase is a different promise.
+ * the moment a household exists (#599 vocabulary gate), and one banned-word
+ * repair (issue #805): the cloud panel's "you can revoke the grant afterwards"
+ * reads "the grant is revocable afterwards", DESIGN.md `## Copy` banning "you
+ * can" on every surface, consent included. Do not "improve" the strings beyond
+ * those two: every fact below is a promise about what the library will and
+ * will not do, and a paraphrase is a different promise. This is a consent
+ * surface, so full sentences are correct here — the budgets that compress the
+ * rest of Photos do not apply to the disclosure.
  *
  * Deliberately import-free but for the shared gate shape below. Native
  * bundles this file straight out of the blueprints package (the same way
@@ -97,7 +102,7 @@ export const CLOUD_PANEL: ConsentPanelCopy = {
   eyebrow: "The other option",
   net: true,
   title: "Run on the gateway’s cloud helper",
-  body: "Faster, and the photographs leave this device. Choosing it is a separate consent with its own receipt, and you can revoke the grant afterwards.",
+  body: "Faster, and the photographs leave this device. Choosing it is a separate consent with its own receipt, and the grant is revocable afterwards.",
   facts: [
     { label: "where it would run", value: "a cloud helper you have named" },
     {

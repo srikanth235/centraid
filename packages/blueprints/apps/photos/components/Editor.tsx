@@ -316,8 +316,7 @@ export function EditorView({
       >
         {loadError ? (
           <p className={styles.loadError}>
-            This photograph could not be opened for editing. Its record is
-            untouched, and nothing has been written.
+            This photograph could not be opened for editing.
           </p>
         ) : (
           <canvas ref={canvasRef} className={styles.canvas} />

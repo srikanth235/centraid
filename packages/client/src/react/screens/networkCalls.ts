@@ -18,7 +18,7 @@ export const NETWORK_CALLS: readonly NetworkCallDTO[] = [
   {
     label: "Your configured AI provider",
     detail:
-      "Model calls (chat, automations, enrichment) go straight to whichever provider you've set up — Centraid never sits in that path.",
+      "Model calls go straight to the provider you set up — Centraid never sits in that path.",
     source: "docs/decisions.md (provider-agnostic inference)",
   },
   {
@@ -30,13 +30,13 @@ export const NETWORK_CALLS: readonly NetworkCallDTO[] = [
   {
     label: "The pairing relay",
     detail:
-      "Device pairing and sync ride the relay-only Iroh transport (the default n0 relay, unless you run your own). It can see that a connection exists and its volume, never its content.",
+      "Pairing and sync ride the Iroh relay, which sees connection volume but never content.",
     source: "SECURITY.md — Threat model: pairing, relay, and gateway (F2)",
   },
   {
     label: "The Centraid Assist OAuth Worker",
     detail:
-      "Only when you connect a Google account with Assist: a stateless Cloudflare Worker ferries the authorization code. It never sees your tokens, vault data, or identity.",
+      "A stateless Cloudflare Worker ferries Google authorization codes — never tokens or vault data.",
     source: "docs/oauth-assist.md",
   },
 ];

@@ -303,8 +303,7 @@ export function ShareSheet(props: ShareSheetProps) {
       <div className="kit-modal" style={{ maxWidth: "420px" }}>
         <h2>Share</h2>
         <p className={styles.note}>
-          Pick people. Each person who joins stores a full copy in their vault
-          and backup.
+          Each person who joins stores a full copy in their vault and backup.
         </p>
         {destinations === null ? (
           <p className={styles.note}>Finding people…</p>
@@ -400,8 +399,8 @@ export function ShareSheet(props: ShareSheetProps) {
           <section className={styles.handoffs} aria-label="Share invitations">
             <h3>Send these one-time invitations</h3>
             <p className={styles.note}>
-              Each person installs Centraid, creates a vault, connects to you if
-              remote, redeems this invitation, then accepts its size.
+              One per person — each is redeemed once, in the receiver's own
+              vault.
             </p>
             {inviteHandoffs.map((handoff, index) => {
               const message = commonsInviteMessage(handoff.uri);

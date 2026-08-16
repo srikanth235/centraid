@@ -131,9 +131,9 @@ export const PHOTOS_MORE_ROWS: readonly MoreRow[] = [
   { key: "backup", label: "Backup", icon: "archive" },
 ];
 
-/** The sheet's foot line (proto:4979), verbatim. */
-export const PHOTOS_MORE_FOOT =
-  "Everything Photos can show. The vault mark in the head goes back to the rest of Centraid.";
+/** The sheet's foot line (proto:4979), cut to its first clause: the second
+ *  sentence narrated a control the member is looking at (#805). */
+export const PHOTOS_MORE_FOOT = "Everything Photos can show.";
 
 /**
  * Where a More-sheet row goes. Kept as a pure mapping, in this

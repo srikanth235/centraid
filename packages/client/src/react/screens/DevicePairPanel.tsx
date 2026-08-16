@@ -225,7 +225,7 @@ export default function DevicePairPanel({
       <p className={styles.roleHint}>
         {forPerson
           ? "This mints them a vault of their own, hosted on this machine — not a grant into any vault you already own."
-          : "The new device joins as you, with your current access. Nothing you can’t already reach."}
+          : "The new device joins as you, with your current access."}
       </p>
       <div className={styles.pairForm}>
         {forPerson ? (

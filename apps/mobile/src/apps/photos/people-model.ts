@@ -138,21 +138,23 @@ export interface PeopleFacts {
 }
 
 /**
- * The empty state. Same grammar as every other shelf on the Collections page:
- * say what would put something here, then say what this product does NOT do on
- * its own — which for faces is the whole point.
+ * The empty state. One sentence (DESIGN.md `## Copy`): what would put someone
+ * here, and that detection only ever runs on request. The faces disclosure
+ * proper lives on the Collections People shelf
+ * (`photos-collections.ts`), which is where the member decides — repeating it
+ * here would be the fourth copy of one promise, not a stronger one.
  */
 export const PEOPLE_EMPTY =
-  "Face detection runs when you ask for it, never on its own. Once it has, the people it finds wait here for you to name — and nobody is named until you name them.";
+  "Face detection runs when you ask for it — the people it finds wait here for you to name.";
 
 /** Shown when the owner has asked but nothing has been detected yet. */
 export const PEOPLE_PENDING_EMPTY =
-  "Face detection was asked for and has not finished. Photographs are read on this gateway, and nothing leaves it.";
+  "Face detection is still running on the gateway.";
 
 const DETECT_REASONS = {
-  off: "Enrichment is switched off for photographs, so nothing may look at them. You can change that in Privacy.",
+  off: "Enrichment is off for photographs — change that in Privacy.",
   device:
-    "Photographs are set to be enriched on this device only. Face detection runs on the gateway, so it stays unavailable until you allow that in Privacy.",
+    "Photographs are enriched on this device only — allow gateway enrichment in Privacy.",
   unknown: "This library has not said yet how far enrichment may run.",
 } as const;
 

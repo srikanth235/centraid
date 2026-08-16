@@ -188,7 +188,7 @@ describe("the vault a photograph is in", () => {
   test("the member's own vault is reachable by nothing", () => {
     expect(vaultLine(true, "My vault")).toStrictEqual({
       meaning:
-        "Reachable by nothing. Copy it somewhere shared to let someone see it.",
+        "Reachable by nothing — copy it somewhere shared to let someone see it.",
       value: "My vault",
     });
   });
@@ -413,7 +413,7 @@ describe("where the original is", () => {
     expect(status.text).toContain("spends mobile data");
     // The bytes never move on their own: the action is the only way through.
     expect(status.action).toBe(LOAD_THE_ORIGINAL);
-    expect(originalWhereabouts(status)).toContain("always your choice");
+    expect(originalWhereabouts(status)).toContain("your choice");
   });
 
   test("the tap is consent for this photograph, and it holds", () => {

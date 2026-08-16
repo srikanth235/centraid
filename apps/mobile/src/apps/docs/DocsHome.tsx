@@ -571,7 +571,7 @@ export default function DocsHome({
                     ? "Reconnect to check the vault or pull newer documents."
                     : filter === "trash"
                       ? "Deleted documents will remain recoverable here."
-                      : "Import a file or create a folder to get started."}
+                      : "Import a file, or create a folder."}
               </Text>
             </View>
           )

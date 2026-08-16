@@ -513,7 +513,7 @@ export default function TallyHome({
         removeClippedSubviews
         ListEmptyComponent={
           <Text style={[styles.empty, { color: colors.textFaint }]}>
-            No expenses yet. Your offline queue is shown above.
+            No expenses yet.
           </Text>
         }
         renderItem={renderExpense}

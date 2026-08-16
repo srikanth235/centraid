@@ -37,8 +37,7 @@ export default function ReplicaStateCard({
     ? `${noun} is not connected`
     : `${noun} could not be loaded`;
   const message = unavailable
-    ? (unavailableReason ??
-      "Pair or reconnect a gateway. An unavailable vault is never treated as an empty one.")
+    ? (unavailableReason ?? "Pair or reconnect a gateway.")
     : (error ?? "");
   return (
     <View

@@ -89,7 +89,7 @@ export {
   SKELETON_NOTE as LOADING_NOTE,
 } from "@centraid/client/surface-copy";
 export const ALWAYS_SUB =
-  "Future writes matching this actor, verb and target send without stopping here. Revoking the grant it mints lives further down this page.";
+  "Future writes matching this actor, verb and target send without stopping here.";
 /** The one sentence that says where the reconnection ceremony finishes. */
 export const RECONNECT_NOTE =
   "Opens a secure browser inside Centraid — stay here until it closes.";

@@ -22,7 +22,7 @@ import styles from "./ConnectFlow.module.css";
  *  rendered here because each host styles its own lede (onboarding's card
  *  sub vs the modal's note), but they must say the same thing. */
 export const CONNECT_TICKET_INTRO =
-  "Paste or scan the pairing ticket for the vaults you want to join. The first grant becomes your initial focus.";
+  "Paste or scan the pairing ticket for the vaults you are joining.";
 
 const TICKET_ONLY: readonly ConnectMethod[] = ["gateway"];
 

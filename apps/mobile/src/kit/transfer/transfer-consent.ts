@@ -156,7 +156,7 @@ export const AUTOMATIC_BACKUP_ON = "Backing up this device automatically";
 
 /** …and while it is shut. Says what the member is carrying, not a scolding. */
 export const AUTOMATIC_BACKUP_OFF =
-  "Not backing up automatically. New photographs stay on this device only.";
+  "Not backing up — new photographs stay on this device.";
 
 export const STOP_BACKING_UP_ACTION = "Stop backing up";
 

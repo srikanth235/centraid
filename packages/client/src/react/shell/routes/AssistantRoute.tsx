@@ -987,7 +987,7 @@ export default function AssistantRoute({
         );
         m.current.msgs.push({
           kind: "ai",
-          text: "Connection lost and the turn didn't come back. You can resend.",
+          text: "Connection lost — the turn didn’t come back.",
           error: true,
           failedText: opts.text,
           idempotencyKey: opts.idempotencyKey,

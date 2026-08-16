@@ -199,11 +199,7 @@ export function createSelection({
       if (canWriteScope(scopeId || null)) continue;
       const scope = scopes.find((s) => s.id === scopeId);
       const label = scope?.label ?? "This library";
-      return (
-        `Favorite, Add to album and Trash are unavailable: this is ${label} ` +
-        "and your grant is read and download only. Copying into a place of " +
-        `your own is not a write on ${label}.`
-      );
+      return `${label} is read and download only — Favorite, Add to album and Trash are unavailable.`;
     }
     return null;
   }

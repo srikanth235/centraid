@@ -85,8 +85,7 @@ const ALL_PAGES: readonly PageDef[] = [
     label: "Appearance",
     section: "Workspace",
     icon: "Mood",
-    subtitle:
-      "Theme and card surface for Centraid chrome. Apps keep their own light/dark palette.",
+    subtitle: "Theme and card surface for Centraid chrome.",
   },
   {
     id: "workspace",
@@ -100,8 +99,7 @@ const ALL_PAGES: readonly PageDef[] = [
     label: "Profile",
     section: "Account",
     icon: "User",
-    subtitle:
-      "Your name and color, as the rest of your household sees them. The name lives on the household roster, not on this device.",
+    subtitle: "Your name and color, as the rest of your household sees them.",
   },
   {
     id: "vault",
@@ -109,7 +107,7 @@ const ALL_PAGES: readonly PageDef[] = [
     section: "Account",
     icon: "Users",
     subtitle:
-      "This vault’s presentation — name, icon, color, and description, plus whether it stays on this device. Switch between reachable vaults from the sidebar switcher (⌘⇧G).",
+      "This vault’s name, icon, color, and description, plus where it lives.",
   },
   // Web only: on desktop the gateway runs in-process, so "this device" has no
   // separate pairing to forget; the desktop case is the active vault's own
@@ -148,7 +146,7 @@ const ALL_PAGES: readonly PageDef[] = [
     section: "Models",
     icon: "Sparkle",
     subtitle:
-      "The coding tools the gateway can drive, plus which model each one uses by default and per conversation surface. Detection checks whether each tool is runnable on the gateway’s host — Centraid is agnostic to how they authenticate.",
+      "The coding tools the gateway can drive, and the model each one uses.",
   },
 ];
 const HIDDEN = new Set(["workspace", "import", "storage"]);

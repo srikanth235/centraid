@@ -156,32 +156,24 @@ export const CLEAR_FILTERS = "Clear filters";
 // ---------------------------------------------------------------------------
 
 /**
- * THE ASK, NOT THE VERB. "There is no destroy verb in the platform today;
- * destruction happens only on the purge schedule." (§4.3, verbatim.) So this
- * panel is what Docs asks FOR — and the shelf draws it instead of a control it
- * could not honour. The eyebrow says which kind of thing it is so a member
- * never mistakes it for a button that failed.
+ * THE ASK, NOT THE VERB — and on screen it is a label plus one sentence.
+ *
+ * THE RATIONALE, which this panel used to print at a member standing in
+ * Trash: "There is no destroy verb in the platform today; destruction happens
+ * only on the purge schedule." (§4.3, verbatim.) Photos shipped an emptiable
+ * trash and Docs is where it matters most — a scanned passport should be gone
+ * when a member says so — so what is asked for is two typed commands (destroy
+ * one document, destroy everything in trash), confirmed exactly as Photos
+ * confirms it: an outlined --net button, the count named, no default. If the
+ * ask is refused, the shelf says once, plainly, why destruction is scheduled.
+ *
+ * That is a design note, and a design note is not copy (DESIGN.md → Copy). The
+ * shelf shows the eyebrow — so the title is never mistaken for a control that
+ * failed — the title, and `TRASH_FALLBACK`'s one sentence.
  */
 export const TRASH_ASK = {
-  eyebrow: "An ask · (b)",
-  title: "Trash needs Delete forever and Empty trash",
-  body: "There is no destroy verb in the platform today; destruction happens only on the purge schedule. Photos shipped an emptiable trash, and Docs is where it matters most — a scanned passport should be gone when a member says so.",
-  facts: [
-    {
-      key: "what is asked",
-      value:
-        "two typed commands: destroy one document, destroy everything in trash",
-    },
-    {
-      key: "confirmation",
-      value:
-        "exactly as Photos confirms it — an outlined --net button, the count named, no default",
-    },
-    {
-      key: "the fallback if it is refused",
-      value: "the shelf says once, plainly, why destruction is scheduled",
-    },
-  ],
+  eyebrow: "Not available yet",
+  title: "Delete forever and Empty trash",
 } as const;
 
 /** §14's fallback wording — the sentence the shelf says while the ask stands. */
