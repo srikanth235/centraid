@@ -167,7 +167,12 @@ async function prepareAgenda(page: Page): Promise<string> {
       async () => {
         prepared = await page.evaluate(async (ready) => {
           const client = window.centraid;
-          const start = new Date(Date.now() + 86_400_000);
+          // Seed occupies days 0–7 at fixed local hours and refuses ANY
+          // busy overlap. now+1d around 06:00 UTC collides with
+          // "Morning run" (day+1 06:30). Ten days out at 03:17 UTC
+          // cannot hit that week.
+          const start = new Date(Date.now() + 10 * 86_400_000);
+          start.setUTCHours(3, 17, 0, 0);
           const event = await client.write({
             action: "propose",
             input: {

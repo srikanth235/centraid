@@ -485,10 +485,9 @@ mutants to stay at or above floor 74. The matrix journey name for
 desktop-e2e run showed the mock gateway does not mark Tasks bundled, so
 Manage still offers Delete; 2.5 / 3.3 assert that live surface, and 3.5b
 cancels Delete instead of clicking the gear through the settings
-backdrop. `pending-overlay.spec.ts` now waits for a real calendar + you-party
-before proposing, goes Home between Tally and Agenda, and retries
-`propose` on a 2s interval — CI was proposing with an empty calendar
-list while the replica was still catching up.
+backdrop. `pending-overlay.spec.ts` proposes ten days out at 03:17 UTC so the
+event cannot overlap the Agenda seed week (`propose_event` refuses any
+busy slot; CI around 06:00 UTC was colliding with "Morning run").
 
 ### Full changed-file inventory
 
