@@ -107,6 +107,13 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
       path: path.join(evidenceDir, "issue-686-design-consistency.png"),
       fullPage: true,
     });
+    // #805: first-run Home is where the rewritten shell copy lands — the
+    // one-sentence HOME_FIRST_RUN_BODY and the sample-data offer hint, both
+    // cut to budget by the copy audit.
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-805-crisp-ux-copy.png"),
+      fullPage: true,
+    });
     await page.screenshot({
       path: path.join(evidenceDir, "issue-multi-vault-sync-hardening.png"),
       fullPage: true,

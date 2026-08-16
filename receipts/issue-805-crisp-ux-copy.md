@@ -541,6 +541,24 @@ Per the issue's non-goals: no i18n framework, no new lint infrastructure, no
 churn on compliant strings, no tone flattening of consent/destructive/security
 copy, no copy changes to developer-facing prose.
 
+## User impact
+
+Every user-facing string in the app was read against the new copy budgets and
+320 of them were rewritten. Nothing moved, disappeared, or changed behaviour —
+the same screens, controls and states, said in one glance instead of two. The
+house voice is intact: "your own photographs, noticed" stays; the restatement
+after it is gone. Reassurance now lives only where the risk decision is made,
+so consent screens, destructive confirms and security disclosures keep their
+full sentences while the empty states, banners, toasts and settings
+descriptions that merely echoed them lost their second sentence.
+
+First-run: unchanged in structure. Home's first-run body is now one sentence
+about what Home becomes, with custody stated where imports are decided rather
+than repeated on the springboard; the sample-data offer hint and Onboarding's
+start and failure copy are cut to budget. Evidence:
+`artifacts/e2e/ui-impact/issue-805-crisp-ux-copy.png`, emitted by the
+first-run Home case in `apps/desktop/tests/e2e/onboarding-home.spec.ts`.
+
 ## Verification
 
 Slice A + B (root re-ran after integration):
