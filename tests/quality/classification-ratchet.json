@@ -1,5 +1,5 @@
 {
-  "approvedDeviation": "#799 stage 2 retires the client iframe host, the app builder, and the gateway wiring that served them; the governed classifications move only where that deletion forces them. route-security.ts renames the /centraid/_web owner file to web-control-sessions.ts (the per-app browser-session half of it is gone, the control half is untouched), and tests/matrix.json drops the desktop-builder-journey flow with its floor transferred to desktop-app-open-journey and narrows gateway-session-boundaries 13 -> 8 because five of its cases drove the retired app-session plane. No quality grade, budget, or demonstrated-red claim weakens. #799 stage 4 retires the blueprints blank-app scaffolder, so the blueprint-boot flow and the blueprints.correctness cell move off the deleted scaffold-boot.test.ts to packages/blueprints/src/app-boot-harness.ts and the flow name drops the word 'scaffold'. That is a seat transfer with no floor change and it makes the claim truer, not weaker: the retired owner booted the blank scaffold's DEFAULT_APP_JS under jsdom and never booted the eight built-in apps its name advertised, while the new owner is the harness each of the eight app-boot/*.test.ts files drives. minimumTests stays 1 and countDeclaredTests reads 1 on the harness (the eight per-app files declare 0, so owning one of them would have required lowering the minimum). The matrixGovernanceFingerprint is unchanged because qualities and demonstratedRed are untouched.",
+  "approvedDeviation": "#802 removes two spent replacesMinimumTestsFlow markers left on main by #800 (desktop-builder-journey, mobile-template-gate). They are one-shot: once the predecessors left main, ratchet-floors fails on the base branch against itself. The matrixGovernanceFingerprint is unchanged because qualities and demonstratedRed are untouched. No quality grade, budget, or demonstrated-red claim weakens.",
   "matrixGovernanceFingerprint": "76e4bf7392b7d75e5e510d54b5dea4c8b214314fa3a5c494bf42848c782c0db7",
   "fingerprints": {
     "packages/agent-runtime/src/backends/acp/vault-mcp-server.ts": "23bf19e215bfe3fd8a21a4dd896d06c97835d43fc3412bfcc9bb0312bd6d7ff2",
@@ -8,6 +8,6 @@
     "packages/gateway/src/serve/health-registry.ts": "d4483393bf09d7839ce995b1d6c698501f079e0c53d7e6031de268f7b642e4e6",
     "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
     "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
-    "tests/matrix.json": "4bfddbcab97ef22908731614d583a0f1435f25fce5e7657196b0fb1d89763f2d"
+    "tests/matrix.json": "64fbb17c0214eb9de32583e8514cfb2f3b1e1efd86fdf7b9f4b3cfcb82c05a0b"
   }
 }
