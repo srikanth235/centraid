@@ -136,7 +136,7 @@
     "oxlint": "1.76.0",
     "oxlint-tsgolint": "7.0.2001",
     "pagefind": "^1.5.2",
-    "playwright": "1.62.0",
+    "playwright": "1.56.0",
     "pngjs": "7.0.0",
     "sherif": "^1.13.0",
     "turbo": "2.10.7",

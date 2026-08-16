@@ -537,10 +537,17 @@ tests/quality/user-facing-qualities.test.ts
   touches that driver, the vitest config, or mobile's dependencies) and now
   tracked in [QUALITY.md](../QUALITY.md); fixing it is a bundler-seam
   change, outside this umbrella's copy scope.
-- `design:gallery` cannot run in the authoring container: the repo pins a
-  Playwright build whose `chrome-headless-shell` (1234) is absent, while the
-  image ships 1194. A browser-binary mismatch, independent of this diff; CI
-  runs the gate.
+- `design:gallery` could not run in the authoring container: the repo pinned
+  Playwright 1.62, whose Chromium (1234) must be downloaded, while the image
+  ships 1194. Resolved by pinning Playwright to 1.56.0 — the release that
+  ships 1194 — in `package.json`, `apps/desktop/package.json`,
+  `apps/web/package.json`, `apps/extension/package.json` and `bun.lock`.
+  Exact, not caret: `^1.56.0` resolves back up to 1.62. The downgrade is
+  behaviour-neutral here — the four unchanged gallery surfaces render 0.00%
+  different against baselines captured with the newer browser. The four
+  shell baselines `tests/design-gallery/baselines/sh-light.png`,
+  `sh-dark.png`, `sh-c-light.png` and `sh-c-dark.png` are refreshed because
+  shorter copy makes shorter full-page screenshots.
 
 ## Out of scope
 
