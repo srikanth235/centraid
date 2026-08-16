@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-16T18:02:32.625Z",
+  "generatedAt": "2026-08-16T19:00:25.543Z",
   "passed": 1203,
   "failed": 0,
   "skipped": 0,
@@ -180,8 +180,8 @@
     "coverage:packages/client/src/replica/**:branches": 66.31,
     "coverage:packages/client/src/*.{ts,tsx}:lines": 80.35,
     "coverage:packages/client/src/*.{ts,tsx}:branches": 67.82,
-    "coverage:packages/server/src/{backup,brief,capture,cli,enrich,lifecycle,preview,push,reminders,routes,runs,serve,skills,worktree-store}/**:lines": 81.14,
-    "coverage:packages/server/src/{backup,brief,capture,cli,enrich,lifecycle,preview,push,reminders,routes,runs,serve,skills,worktree-store}/**:branches": 67.95,
+    "coverage:packages/server/src/{backup,brief,capture,cli,enrich,lifecycle,preview,push,reminders,routes,runs,serve,skills,worktree-store}/**:lines": 81.13,
+    "coverage:packages/server/src/{backup,brief,capture,cli,enrich,lifecycle,preview,push,reminders,routes,runs,serve,skills,worktree-store}/**:branches": 67.96,
     "coverage:packages/server/src/*.{ts,js}:lines": 90.67,
     "coverage:packages/server/src/*.{ts,js}:branches": 75.61,
     "coverage:packages/core/src/time/**:lines": 97.09,
