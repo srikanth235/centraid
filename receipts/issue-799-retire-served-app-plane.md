@@ -481,7 +481,11 @@ mutants to stay at or above floor 74. The matrix journey name for
 `desktop-delete-app-journey` moved with that retarget, so
 `tests/quality/classification-ratchet.json` reseeds the
 `tests/matrix.json` fingerprint (file
-`tests/quality/classification-ratchet.json`).
+`tests/quality/classification-ratchet.json`). A follow-up CI
+desktop-e2e run showed the mock gateway does not mark Tasks bundled, so
+Manage still offers Delete; 2.5 / 3.3 assert that live surface, and 3.5b
+cancels Delete instead of clicking the gear through the settings
+backdrop.
 
 ### Full changed-file inventory
 

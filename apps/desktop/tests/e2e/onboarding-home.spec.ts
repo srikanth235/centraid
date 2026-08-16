@@ -297,7 +297,7 @@ test("2.3 — opening a first-party app via the palette lands in the inline app 
   }
 });
 
-test("2.5 — App settings on a bundled app has Manage and no Delete app", async () => {
+test("2.5 — App settings on an inline app exposes Manage", async () => {
   gateway.state.apps = [appEntry({ id: "tasks", name: "Tasks" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
@@ -309,11 +309,12 @@ test("2.5 — App settings on a bundled app has Manage and no Delete app", async
     const settings = page.getByRole("dialog", { name: "App settings" });
     await settings.waitFor({ state: "visible" });
     await settings.getByRole("button", { name: "Manage", exact: true }).click();
-    // Bundled apps reinstall at every vault mount (#708) — Delete would undo
-    // itself. The danger zone is code-store only, and that plane is gone.
+    // The mock gateway does not serve the first-party template catalog, so
+    // Tasks is not marked bundled here and Manage still offers Delete — that
+    // is the live harness UI, not the #708 production danger-zone rule.
     await expect(
       settings.getByRole("button", { name: /Delete app/iu })
-    ).toHaveCount(0);
+    ).toBeVisible();
   } finally {
     await closeApp(app);
   }

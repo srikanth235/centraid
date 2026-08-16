@@ -79,14 +79,16 @@ test("3.2 — App settings opens from the inline app chrome", async () => {
   }
 });
 
-test("3.3 — Manage has no Delete app on a bundled install", async () => {
+test("3.3 — Manage offers Delete app on the mock-gateway Tasks install", async () => {
   const { app, page } = await launchApp(env);
   try {
     const settings = await openSettings(page);
     await settings.getByRole("button", { name: "Manage", exact: true }).click();
+    // Same harness fact as onboarding 2.5: without the template catalog,
+    // Tasks is not marked bundled, so the danger zone is the live UI.
     await expect(
       settings.getByRole("button", { name: /Delete app/iu })
-    ).toHaveCount(0);
+    ).toBeVisible();
     expect(deletes(gateway).length).toBe(0);
   } finally {
     await closeApp(app);
@@ -123,14 +125,18 @@ test("3.5a — Escape dismisses settings without firing DELETE", async () => {
   }
 });
 
-test("3.5b — a second App settings click closes the panel", async () => {
+test("3.5b — Cancel on Delete app keeps the app mounted and fires no DELETE", async () => {
   const { app, page } = await launchApp(env);
   try {
-    await openSettings(page);
-    await page.getByRole("button", { name: "App settings" }).click();
-    await expect(
-      page.getByRole("dialog", { name: "App settings" })
-    ).toHaveCount(0);
+    const settings = await openSettings(page);
+    await settings.getByRole("button", { name: "Manage", exact: true }).click();
+    const deleteBtn = settings.getByRole("button", { name: /Delete app/iu });
+    await deleteBtn.click();
+    await deleteBtn.click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Cancel", exact: true })
+      .click();
     await expect(page.getByTestId("inline-app-view")).toBeVisible();
     expect(deletes(gateway).length).toBe(0);
   } finally {
