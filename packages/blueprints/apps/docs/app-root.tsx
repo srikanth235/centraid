@@ -27,6 +27,7 @@ import {
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
 import { mountedScopes } from "../_shared/scope-kit.ts";
+import { SAVED_TO_MY_VAULT } from "../_shared/shared-copy.ts";
 import { ShareSheet } from "../_shared/ShareSheet.tsx";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
@@ -519,7 +520,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       });
       // Outcomes go through ONE door (§11): the frame's single status line.
       publishOutcome(frame, {
-        text: "Saved to my vault. This copy survives if the share ends.",
+        text: SAVED_TO_MY_VAULT,
       });
     } catch (error) {
       publishOutcome(frame, {

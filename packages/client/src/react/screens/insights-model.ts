@@ -24,6 +24,7 @@ import type {
   PanelFigureData,
 } from "@centraid/design/blocks";
 
+import { INSIGHTS_FORECAST_NOTE } from "../../insights-copy.js";
 import { insK, insUsd, relativeTime } from "../format.js";
 import type { InsightsSummary } from "../screen-contracts.js";
 import type { BarDatum } from "../ui/BarsBlock.js";
@@ -195,7 +196,7 @@ export function spendFacts(summary: InsightsSummary): PanelFact[] {
     {
       key: "forecast",
       mono: true,
-      note: "A 30-day run rate at this window's pace, not a bill.",
+      note: INSIGHTS_FORECAST_NOTE,
       value: insUsd(kpis.forecastCostUsd),
     },
   ];

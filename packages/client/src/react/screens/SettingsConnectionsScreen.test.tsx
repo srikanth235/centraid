@@ -225,7 +225,7 @@ describe("screens/SettingsConnectionsScreen", () => {
       const el = await mount(makeProps({ loadConnections }));
       expect(el.textContent).toContain("THIS PAGE COULD NOT LOAD");
       expect(el.textContent).toContain(
-        "Existing connections keep working — this page reads their status from the gateway, and only the status is unavailable. Nothing has been paused."
+        "Connection health is unavailable; the connections themselves keep working."
       );
       expect(signals.at(-1)?.state).toBe("error");
 

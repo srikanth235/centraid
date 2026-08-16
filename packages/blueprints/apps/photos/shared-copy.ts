@@ -38,3 +38,75 @@ export function duplicatesLede(clusterCount: number): string {
   const noun = clusterCount === 1 ? "cluster" : "clusters";
   return `${clusterCount} ${noun} of near-identical photographs. Selecting a copy marks it for trash; the one you keep stays where it is, in the album and the timeline it is already in.`;
 }
+
+// ── Copy both surfaces render, promoted here by issue #805 ──────────────────
+//
+// Each of these was written out twice: once in this package's web views and
+// once in `apps/mobile/src/apps/photos/*`, byte for byte. `photo-edit-model.ts`
+// said so in a comment — "lifting them into a leaf module both packages can
+// import is the real fix, and is reported upstream" — and this is that lift.
+
+/** The Favorites shelf, empty. One sentence, one gesture. */
+export const PHOTOS_EMPTY_FAVORITES =
+  "No favorites yet — tap the heart on any photograph.";
+
+/** The Duplicates shelf, empty. */
+export const PHOTOS_EMPTY_DUPLICATES =
+  "No near-identical clusters in your library.";
+
+/** Search's placeholder: a noun phrase naming what search reaches, not an
+ *  instruction. */
+export const PHOTOS_SEARCH_PLACEHOLDER =
+  "Search photographs, people, places, albums";
+
+/** A playing video names what it is playing FROM: the display copy, which is
+ *  the byte actually on screen. */
+export const PHOTOS_VIDEO_STATUS =
+  "Video · playing from the display copy on this device";
+
+/** Custody for an asset whose original has not been fetched yet. The gateway's
+ *  own name rides along, because "the gateway" is not a place a member knows. */
+export function photosOriginalNotFetched(gatewayName: string): string {
+  return `Original on ${gatewayName} · a full-quality copy has not been fetched`;
+}
+
+/** The editor's commit, worded as what it DOES. */
+export const PHOTOS_SAVE_AS_NEW = "Save as a new photograph";
+
+/**
+ * The explanation beside it, at the point of decision.
+ *
+ * A non-destructive edit is a risk decision, so it keeps its reassurance — but
+ * ONE clause of it. It used to close "The original is not touched, and nothing
+ * is overwritten", which is the same promise twice.
+ */
+export const PHOTOS_SAVE_AS_NEW_EXPLANATION =
+  "Saving writes a new photograph dated today; the original is not touched.";
+
+/** After the write lands. A toast is a fragment — the explanation above
+ *  already made the promise, at the moment it was still a decision. */
+export const PHOTOS_SAVED_AS_NEW = "Saved as a new photograph";
+
+/** Face review's lead: how much evidence stands behind a proposal. */
+export function photosFaceMatchedOn(matchCount: number): string {
+  return `Matched on ${matchCount} other photograph${matchCount === 1 ? "" : "s"}. `;
+}
+
+/** What a map pin announces: where it is, how many places merged into it, and
+ *  how many photographs stand behind it. */
+export function photosPinLabel(
+  where: string,
+  places: number,
+  photographs: string
+): string {
+  return places > 1
+    ? `${where} and ${places - 1} more nearby, ${photographs}`
+    : `${where}, ${photographs}`;
+}
+
+/** Trash's purge countdown, in the tile's state slot. */
+export function photosPurgeNote(days: number): string {
+  return days === 0
+    ? "purges today"
+    : `purges in ${days} ${days === 1 ? "day" : "days"}`;
+}

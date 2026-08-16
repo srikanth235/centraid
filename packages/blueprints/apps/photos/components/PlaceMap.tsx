@@ -1,3 +1,5 @@
+import { projectPlaces, readableName } from "../place-map.ts";
+import type { MapPin, PlacePoint } from "../place-map.ts";
 // The Places map — YOUR OWN PHOTOGRAPHS, arranged by where they were taken.
 //
 // Every pixel here comes from `place-map.ts`'s arithmetic over coordinates the
@@ -26,8 +28,7 @@
 // tap opens the place's section, so they must be real focusable controls with
 // accessible names, and an <img> in a button is a great deal less machinery
 // than an SVG <image> in a <clipPath> with hand-rolled hit testing.
-import { projectPlaces, readableName } from "../place-map.ts";
-import type { MapPin, PlacePoint } from "../place-map.ts";
+import { photosPinLabel } from "../shared-copy.ts";
 
 import styles from "./PlaceMap.module.css";
 
@@ -141,9 +142,7 @@ export function PlaceMap({
   const label = (pin: MapPin): string => {
     const where = readableName(pin.name) ?? "an unnamed place";
     const photographs = `${pin.count} ${pin.count === 1 ? "photograph" : "photographs"}`;
-    return pin.places > 1
-      ? `${where} and ${pin.places - 1} more nearby, ${photographs}`
-      : `${where}, ${photographs}`;
+    return photosPinLabel(where, pin.places, photographs);
   };
 
   return (

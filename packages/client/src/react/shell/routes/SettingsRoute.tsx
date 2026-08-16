@@ -4,6 +4,7 @@ import type { JSX } from "react";
 import type { IconName } from "@centraid/design";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
+import { forgetDeviceMessage } from "../../../devices-copy.js";
 import { isWebHost } from "../../host-platform.js";
 import ImportScreen from "../../screens/ImportScreen.js";
 import SettingsAppearanceScreen from "../../screens/SettingsAppearanceScreen.js";
@@ -322,8 +323,7 @@ export default function SettingsRoute({
       const ok = await confirm({
         confirmLabel: "Forget",
         danger: true,
-        message:
-          "This browser drops its device key, offline copy, and cached previews, and returns to onboarding. Your vault is untouched — the enrollment stays on its host until you revoke it from Household → Devices.",
+        message: forgetDeviceMessage("browser"),
         title: "Forget this device?",
       });
       if (!ok) return;

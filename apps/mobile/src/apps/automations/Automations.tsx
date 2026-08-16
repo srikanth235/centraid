@@ -40,6 +40,9 @@ import React, { useCallback, useMemo, useRef } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 import type { LayoutChangeEvent } from "react-native";
 
+import { AUTOMATIONS_SUGGESTIONS_NOTE } from "@centraid/client/automations-copy";
+import { SKELETON_NOTE } from "@centraid/client/surface-copy";
+
 import Button from "../../kit/components/Button";
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
@@ -83,8 +86,7 @@ import { RECENT_CAP, useAutomations } from "./useAutomations";
 import type { AutomationsController } from "./useAutomations";
 
 /** Why a skeleton, said once, under the skeleton (spec §10). */
-const LOADING_NOTE =
-  "A row knows its shape before its content arrives, so nothing reflows when it does.";
+const LOADING_NOTE = SKELETON_NOTE;
 
 /**
  * The suggestions note.
@@ -97,8 +99,7 @@ const LOADING_NOTE =
  * verbatim; the provenance half states the provenance this product has. Same
  * words as the desktop screen, so both surfaces make one promise.
  */
-const SUGGESTIONS_NOTE =
-  "Suggestions come from the template catalogue, not from watching you. They are never created for you.";
+const SUGGESTIONS_NOTE = AUTOMATIONS_SUGGESTIONS_NOTE;
 
 /** What the run feed says when the vault has automations but no history. */
 const NO_RUNS_NOTE =

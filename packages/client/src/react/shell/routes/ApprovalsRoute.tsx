@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import {
+  APPROVALS_ERROR_BODY,
+  APPROVALS_ERROR_TITLE,
+} from "../../../approvals-copy.js";
+import {
   decideOutboxItem,
   decideScopeRequest,
   getNotifications,
@@ -21,6 +25,7 @@ import {
   revokeVaultGrant,
   vaultApps,
 } from "../../../gateway-client-vault.js";
+import { RETRY_ACTION } from "../../../surface-copy.js";
 import ApprovalsScreen from "../../screens/ApprovalsScreen.js";
 import { groupGrantsByStore } from "../../screens/privacyStores.js";
 import type { StoreHolderDTO } from "../../screens/privacyStores.js";
@@ -471,9 +476,9 @@ export default function ApprovalsRoute(): JSX.Element {
     return (
       <PageScroll>
         <PanelBlock
-          action={{ label: "Try again", onClick: reload }}
-          body="The gateway answered, but the queue that holds staged writes did not. Nothing has been approved or denied in the meantime, and nothing expired."
-          eyebrow="Could not reach the consent store"
+          action={{ label: RETRY_ACTION, onClick: reload }}
+          body={APPROVALS_ERROR_BODY}
+          eyebrow={APPROVALS_ERROR_TITLE}
           facts={[{ key: "what it said", value: state.error }]}
           tone="net"
           wide

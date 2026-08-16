@@ -358,7 +358,9 @@ describe("AutomationsOverviewScreen suite", () => {
       });
       expect(el.textContent).toContain("Worth setting up");
       expect(el.textContent).toContain("Document deadlines");
-      expect(el.textContent).toContain("They are never created for you.");
+      expect(el.textContent).toContain(
+        "Suggestions come from the template catalogue, not from watching you."
+      );
       await click(rowAction(el, "Create Document deadlines"));
       expect(onUseSuggestion).toHaveBeenCalledWith("obligation-extractor");
     });
@@ -470,12 +472,9 @@ describe("AutomationsOverviewScreen suite", () => {
         '[data-testid="automations-error"]'
       ) as HTMLElement;
       expect(panel.textContent).toContain("The scheduler is not answering");
-      // What is still safe, and one way forward.
+      // One way forward, with no clock invented for it.
       expect(panel.textContent).toContain(
-        "Automations are stored on the gateway and are safe."
-      );
-      expect(panel.textContent).toContain(
-        "runs queue until the scheduler is back"
+        "Runs queue until the scheduler is back."
       );
       // No successful read yet: the "nothing has run since <time>" clause is
       // dropped rather than invented.

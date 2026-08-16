@@ -229,16 +229,14 @@ describe(ApprovalsScreen, () => {
     const spans = textOf(container);
     expect(spans).toContain("Nothing is waiting on you");
     expect(spans).toContain(
-      "Staged writes, lapsed connections and requests for wider access appear here. This page is empty most of the time, and that is the healthy state."
+      "Staged writes, lapsed connections and access requests land here."
     );
-    expect(spans).toContain(
-      "Nothing to attend to · nothing needs you here right now."
-    );
+    expect(spans).toContain("Nothing to attend to");
     // The reference tail renders in every state — a consent surface that hides
     // what it already consented to is not a record.
     expect(spans).toContain("Standing grants");
     expect(spans).toContain(
-      "A standing grant skips this page for one narrow thing. Revoking one takes effect on the next run."
+      "A standing grant skips this page for one narrow thing; revoking one takes effect on the next run."
     );
   });
 
@@ -269,7 +267,7 @@ describe(ApprovalsScreen, () => {
       "Nothing is sent. The automation is told it was refused, and remembers."
     );
     expect(spans).toContain(
-      "1 item waiting on you · Nothing here has happened yet. Approving is the act."
+      "1 item waiting on you · Nothing here has happened yet — approving is the act."
     );
   });
 
@@ -432,12 +430,10 @@ describe(ApprovalsScreen, () => {
     const spans = textOf(container);
     expect(spans).toContain("Could not reach the consent store");
     expect(spans).toContain(
-      "The gateway answered, but the queue that holds staged writes did not. Nothing has been approved or denied in the meantime, and nothing expired."
+      "The gateway answered; the queue that holds staged writes did not."
     );
     expect(spans).toContain("This phone is not paired with a gateway yet.");
-    expect(spans).toContain(
-      "This page could not load · everything else on the gateway is unaffected."
-    );
+    expect(spans).toContain("This page could not load");
     press(buttonLabelled(container, "Open Settings"));
     expect(navigation.popTo).toHaveBeenCalledWith("Settings");
     // The filled commit is withheld on error; the quiet verb is not.

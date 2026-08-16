@@ -4,6 +4,7 @@ import type { JSX } from "react";
 
 import type { RedeemLinkTicketOutcome } from "../../gateway-client-links.js";
 import type { GatewayLink, ReceiveSetting } from "../../gateway-client.js";
+import { SHARING_UNREACHABLE } from "../../sharing-copy.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import StatusPill from "../ui/StatusPill.js";
@@ -201,9 +202,7 @@ export function LinkTicketPanel({
         setPasted("");
         onLinked();
       } else {
-        setErrorMessage(
-          outcome.detail ?? "That person could not be reached right now."
-        );
+        setErrorMessage(outcome.detail ?? SHARING_UNREACHABLE);
       }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));

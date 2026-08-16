@@ -4,6 +4,13 @@ import type { JSX } from "react";
 
 import { ASSIST_HANDOFF_EVENT } from "../../assist-oauth-events.js";
 import type { AssistHandoffResult } from "../../assist-oauth-events.js";
+import {
+  CONNECTORS_EMPTY_BODY,
+  CONNECTORS_EMPTY_TITLE,
+  CONNECTORS_ERROR_BODY,
+  CONNECTORS_ERROR_TITLE,
+} from "../../connectors-copy.js";
+import { SKELETON_NOTE } from "../../surface-copy.js";
 import { relativeTime } from "../format.js";
 import type {
   RouteHealth,
@@ -1554,9 +1561,9 @@ export default function SettingsConnectionsScreen({
                 : "Show the technical detail",
               onClick: () => setTechnicalOpen((open) => !open),
             }}
-            body="Existing connections keep working — this page reads their status from the gateway, and only the status is unavailable. Nothing has been paused."
+            body={CONNECTORS_ERROR_BODY}
             eyebrow="THIS PAGE COULD NOT LOAD"
-            title="Cannot read connection health"
+            title={CONNECTORS_ERROR_TITLE}
             tone="net"
           />
           {technicalOpen && readError ? (
@@ -1566,10 +1573,7 @@ export default function SettingsConnectionsScreen({
       ) : state === "loading" ? (
         <>
           <PageSkeleton label="Reading connections" rows={6} />
-          <NoteBlock>
-            A row knows its shape before its content arrives, so nothing reflows
-            when it does.
-          </NoteBlock>
+          <NoteBlock>{SKELETON_NOTE}</NoteBlock>
         </>
       ) : state === "empty" ? (
         <>
@@ -1578,9 +1582,9 @@ export default function SettingsConnectionsScreen({
               label: "Open the catalog",
               onClick: () => setCatalogOpen(true),
             }}
-            body="A connector lets one outside service reach a named part of this vault, and nothing else. You choose the scope, and can revoke it here at any time."
+            body={CONNECTORS_EMPTY_BODY}
             routine
-            title="Nothing is connected"
+            title={CONNECTORS_EMPTY_TITLE}
           />
           {catalogSection}
         </>

@@ -188,9 +188,7 @@ describe("the standing line", () => {
       text: "Reading from the gateway",
     });
     expect(healthLineFor("empty", copy).action).toBeUndefined();
-    expect(healthLineFor("error", copy).text).toBe(
-      "This page could not load · everything else on the gateway is unaffected."
-    );
+    expect(healthLineFor("error", copy).text).toBe("This page could not load");
     expect(healthLineFor("full", copy).action).toBe("Re-authorize");
   });
 });

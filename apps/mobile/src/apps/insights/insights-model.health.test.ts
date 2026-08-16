@@ -216,12 +216,8 @@ describe("the standing line", () => {
     expect(healthLineFor("loading", copy).text).toBe(
       "Reading from the gateway"
     );
-    expect(healthLineFor("error", copy).text).toBe(
-      "This page could not load · everything else on the gateway is unaffected."
-    );
-    expect(healthLineFor("empty", copy).text).toBe(
-      "Nothing to attend to · nothing needs you here right now."
-    );
+    expect(healthLineFor("error", copy).text).toBe("This page could not load");
+    expect(healthLineFor("empty", copy).text).toBe("Nothing to attend to");
   });
 });
 

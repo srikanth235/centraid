@@ -8,14 +8,25 @@
 // storage noun for a scope: what a member reads for a vault is `scope.label`,
 // which the shell owns and the owner may rename.
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
-import { PEOPLE, PLACES, SEARCH, STORAGE } from "./shelves.ts";
-import type { ShelfId } from "./shelves.ts";
-
-// The two strings native also renders live in an import-free leaf
+// The strings native also renders live in an import-free leaf
 // (`shared-copy.ts`) so the mobile TypeScript project can read them without
 // pulling in this module's explicit-`.ts` graph. They are re-exported here so
 // every web caller keeps importing them from the module it already knows.
-export { duplicatesLede, PLACE_UNNAMED } from "./shared-copy.ts";
+import {
+  PHOTOS_EMPTY_DUPLICATES,
+  PHOTOS_EMPTY_FAVORITES,
+  PHOTOS_SEARCH_PLACEHOLDER,
+} from "./shared-copy.ts";
+import { PEOPLE, PLACES, SEARCH, STORAGE } from "./shelves.ts";
+import type { ShelfId } from "./shelves.ts";
+
+export {
+  duplicatesLede,
+  PHOTOS_EMPTY_DUPLICATES,
+  PHOTOS_EMPTY_FAVORITES,
+  PHOTOS_SEARCH_PLACEHOLDER,
+  PLACE_UNNAMED,
+} from "./shared-copy.ts";
 
 /** What a shelf calls itself in the frame's app bar, and what its count
  *  counts. `unit` is plural; frame.tsx singularises it for a count of one. */
@@ -58,14 +69,14 @@ export function shelfCopy(id: ShelfId): ShelfCopy {
  *  because the member has not imported anything yet says something different
  *  from one that is empty because nothing matched. */
 const EMPTY_COPY: Readonly<Record<string, string>> = {
-  [FAVORITES]: "No favorites yet — tap the heart on any photograph.",
+  [FAVORITES]: PHOTOS_EMPTY_FAVORITES,
   [ALBUMS]:
     "No albums yet. An album refers to a photograph where it lives; it never moves or copies anything.",
   [PLACES]:
     "No places yet — a photograph lands here once it carries where it was taken.",
   [PEOPLE]:
     "No people yet. Faces are proposed on a photograph you open, and a name is only ever yours to confirm.",
-  [DUPLICATES]: "No near-identical clusters in your library.",
+  [DUPLICATES]: PHOTOS_EMPTY_DUPLICATES,
   [TRASH]: "Trash is empty.",
   [SEARCH]:
     "Search reaches titles, captions, people, places, things and album names across your whole library.",
@@ -471,5 +482,5 @@ export const SEARCH_COPY = {
       { label: "what does not", value: "search, people, places" },
     ],
   },
-  placeholder: "Search photographs, people, places, albums",
+  placeholder: PHOTOS_SEARCH_PLACEHOLDER,
 } as const;

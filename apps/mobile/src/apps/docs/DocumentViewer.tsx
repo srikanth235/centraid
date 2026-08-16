@@ -6,6 +6,8 @@ import React, { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 
+import { SAVED_TO_MY_VAULT } from "@centraid/blueprints/apps/_shared/shared-copy";
+
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
@@ -162,7 +164,7 @@ export default function DocumentViewer({
       result.reason ??
         (result.status === "executed"
           ? kind === "add" && targetVaultId === ownVault?.vaultId
-            ? "Saved to my vault. This copy stays if the share ends."
+            ? SAVED_TO_MY_VAULT
             : "Document placed in the selected vault."
           : "Document placement queued — it will resume when the gateway is reachable.")
     );
@@ -178,7 +180,7 @@ export default function DocumentViewer({
         itemId,
       });
       setResidentDocumentId(undefined);
-      postStatus("Saved to my vault. This copy survives if the share ends.");
+      postStatus(SAVED_TO_MY_VAULT);
     } catch (error) {
       surfaceWriteFailure(error, "Document not saved to your vault");
     }

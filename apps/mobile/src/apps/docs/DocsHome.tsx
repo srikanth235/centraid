@@ -6,6 +6,7 @@ import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 
+import { SAVED_TO_MY_VAULT } from "@centraid/blueprints/apps/_shared/shared-copy";
 import { OnlineOnlyError } from "@centraid/client/replica/native";
 import { apps as BUILTIN_APPS } from "@centraid/design";
 
@@ -255,7 +256,7 @@ export default function DocsHome({
         itemId: parentItemId,
       });
       setResidentFolderId(undefined);
-      postStatus("Saved to my vault. This copy survives if the share ends.");
+      postStatus(SAVED_TO_MY_VAULT);
     } catch (error) {
       surfaceWriteFailure(error, "Folder not saved to your vault");
     }

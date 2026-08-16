@@ -25,6 +25,7 @@ import {
   mountedScopes,
   scopeAttr,
 } from "../../_shared/scope-kit.ts";
+import { SAVED_TO_MY_VAULT } from "../../_shared/shared-copy.ts";
 import { ShareSheet } from "../../_shared/ShareSheet.tsx";
 import { displayText, safeMediaUrl } from "../../_shared/untrusted.ts";
 import { toggleFavorite } from "../assets-actions.ts";
@@ -188,7 +189,7 @@ export function LightboxShell({
         itemId: asset.asset_id,
       });
       setResidentAssetId(null);
-      notice("Saved to my vault. This copy survives if the share ends.");
+      notice(SAVED_TO_MY_VAULT);
       await refresh();
     } catch (error) {
       notice(

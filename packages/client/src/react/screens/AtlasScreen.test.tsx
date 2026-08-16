@@ -330,7 +330,7 @@ describe("screens/AtlasScreen", () => {
     it("explains what a kind is, in the words the design pinned", async () => {
       const el = await mount(makeProps());
       expect(el.textContent).toContain(
-        "A kind is a shape of record an app writes. Sizes include every version kept."
+        "A kind is a shape of record an app writes; sizes include every version kept."
       );
     });
 
@@ -416,7 +416,7 @@ describe("screens/AtlasScreen", () => {
       );
       expect(el.textContent).toContain("This vault is empty");
       expect(el.textContent).toContain(
-        "Kinds appear here as apps write records. Nothing is created until an app or an import puts something in."
+        "Kinds appear here as apps write records."
       );
       // Nothing to commit on an empty read surface.
       expect(el.querySelectorAll("button")).toHaveLength(0);

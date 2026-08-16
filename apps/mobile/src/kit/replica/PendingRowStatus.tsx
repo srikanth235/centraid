@@ -4,6 +4,7 @@ import { Pressable, View } from "react-native";
 import {
   pendingOverlayCanDiscard,
   pendingOverlayCanRetry,
+  pendingChangeLabel,
   pendingOverlayCopy,
   readPendingOverlay,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
@@ -50,7 +51,7 @@ export default function PendingRowStatus({
     <View style={{ gap: 4, marginTop: 4 }}>
       <View
         accessible
-        accessibilityLabel={`Pending change: ${pendingOverlayCopy(pending)}`}
+        accessibilityLabel={pendingChangeLabel(pending)}
         style={{
           alignSelf: "flex-start",
           backgroundColor: colors.bgSunken,

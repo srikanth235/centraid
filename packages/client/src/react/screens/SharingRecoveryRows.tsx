@@ -4,6 +4,11 @@ import type {
   CommonsRecoveryGrant,
   CommonsRecoveryOutcome,
 } from "../../gateway-client.js";
+import {
+  SHARING_STEWARD_PARKED,
+  sharingSilentForDays,
+  sharingStewardSilent,
+} from "../../sharing-copy.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 
@@ -62,7 +67,7 @@ function stewardLine(entry: CommonsRecoveryGrant): string {
   const days = silent === undefined ? 0 : Math.floor(silent / DAY_MS);
   return [
     entry.containerType,
-    days > 0 ? `silent for ${days} ${days === 1 ? "day" : "days"}` : "",
+    days > 0 ? sharingSilentForDays(days) : "",
     entry.steward.fault ?? "",
   ]
     .filter(Boolean)
@@ -100,8 +105,8 @@ export default function SharingRecoveryRows({
               <div className={deviceStyles.main}>
                 <div className={deviceStyles.name}>
                   {entry.steward.presence === "parked"
-                    ? "A shared space stopped syncing — its history could not be verified"
-                    : `The device that runs a shared space hasn’t answered (${entry.steward.presence})`}
+                    ? SHARING_STEWARD_PARKED
+                    : sharingStewardSilent(entry.steward.presence)}
                 </div>
                 <div className={deviceStyles.meta}>{stewardLine(entry)}</div>
               </div>

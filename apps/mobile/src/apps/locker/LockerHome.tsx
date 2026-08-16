@@ -15,6 +15,8 @@ import {
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 
+import { retryInSeconds } from "@centraid/blueprints/apps/_shared/shared-copy";
+
 import AppHeader from "../../kit/components/AppHeader";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
@@ -233,7 +235,7 @@ export default function LockerHome({
           message:
             result.message ??
             (result.retryAfterMs
-              ? `Try again in ${Math.ceil(result.retryAfterMs / 1000)} seconds.`
+              ? retryInSeconds(Math.ceil(result.retryAfterMs / 1000))
               : "Authentication failed."),
         });
         return;

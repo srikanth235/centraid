@@ -33,16 +33,16 @@
 // fake "Enhance" button that silently does nothing, or a real one that would
 // require the native dependency this issue's brief forbids adding.
 
-// The commit and its explanation, WORD FOR WORD as the web editor renders them
-// (`packages/blueprints/apps/photos/viewer.ts`). They are re-declared here
-// rather than imported because that module reaches its neighbours through
-// `.ts`-suffixed specifiers, which the Expo tsconfig rejects — importing it
-// from this app turns 0 type errors into 13. `photo-edit-model.test.ts` pins
-// the strings so a silent drift is still caught; lifting them into a leaf
-// module both packages can import is the real fix, and is reported upstream.
-export const SAVE_AS_NEW = "Save as a new photograph";
-export const SAVE_AS_NEW_EXPLANATION =
-  "Saving writes a new photograph dated today, with this one recorded as its source. The original is not touched, and nothing is overwritten.";
+// The commit and its explanation, imported from the one module that owns them.
+// They used to be re-declared here: `viewer.ts` reaches its neighbours through
+// `.ts`-suffixed specifiers, which the Expo tsconfig rejects, so importing THAT
+// module turns 0 type errors into 13. The fix this file's old note asked for
+// landed in #805 — the strings moved down into `shared-copy.ts`, the
+// import-free leaf both packages can read, and `viewer.ts` re-exports them.
+export {
+  PHOTOS_SAVE_AS_NEW as SAVE_AS_NEW,
+  PHOTOS_SAVE_AS_NEW_EXPLANATION as SAVE_AS_NEW_EXPLANATION,
+} from "@centraid/blueprints/apps/photos/shared-copy";
 
 /** The top bar's title while editing — it replaces the photograph's caption. */
 export const EDITOR_TITLE = "Crop and rotate";

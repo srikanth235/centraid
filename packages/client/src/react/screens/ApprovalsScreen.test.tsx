@@ -220,7 +220,7 @@ describe("screens/ApprovalsScreen", () => {
       const el = mount(makeProps());
       expect(el.textContent).toContain("Nothing is waiting on you");
       expect(el.textContent).toContain(
-        "This page is empty most of the time, and that is the healthy state."
+        "Staged writes, lapsed connections and access requests land here."
       );
       // The empty state's one verb has somewhere real to land: the grants
       // section renders in every state, because a consent surface that hides
@@ -558,7 +558,7 @@ describe("screens/ApprovalsScreen", () => {
       expect(el.textContent).toContain("gmail-send may always gmail.send");
       expect(el.textContent).toContain("ravi@example.com");
       expect(el.textContent).toContain(
-        "A standing grant skips this page for one narrow thing. Revoking one takes effect on the next run."
+        "A standing grant skips this page for one narrow thing; revoking one takes effect on the next run."
       );
       click(el, "Revoke");
       expect(onRevokeGrant).toHaveBeenCalledWith("g1");

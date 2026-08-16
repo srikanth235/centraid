@@ -1,5 +1,10 @@
 import { healthSentence, opsGenericLine } from "@centraid/design/blocks";
 
+import {
+  EMPTY_HEALTH,
+  ERROR_HEALTH,
+  READING_HEALTH,
+} from "../../surface-copy.js";
 import type { OpsPage, OpsState } from "./opsBar.js";
 import { setRouteHealth } from "./statusChannel.js";
 import type { RouteHealthNote } from "./statusChannel.js";
@@ -26,21 +31,16 @@ import type { RouteHealthNote } from "./statusChannel.js";
 // line. This module owns the WORDS and the pub/sub; the shared module owns the
 // rule.
 
+// The three shared state sentences live in `../../surface-copy.js` (issue
+// #805): mobile draws the same six pages and had re-declared each of them per
+// screen model, so the WORDS moved to the one module both surfaces can read
+// and this one keeps the pub/sub.
+
 /** What a page says while it is still reading. The same on all six. */
-export const LOADING_COUNT_LINE = "Reading from the gateway";
+export const LOADING_COUNT_LINE = READING_HEALTH;
 
 /** The status line while reading. One sentence, no action to offer. */
-export const LOADING_HEALTH = "Reading from the gateway";
-
-/** The status line when there is nothing to attend to. Empty is the healthy
- *  state for a consent surface, and the line says so rather than apologising. */
-export const EMPTY_HEALTH =
-  "Nothing to attend to · nothing needs you here right now.";
-
-/** The status line when the page's own query failed. What failed, and what is
- *  still safe — the rest of the gateway is not implicated by one page. */
-export const ERROR_HEALTH =
-  "This page could not load · everything else on the gateway is unaffected.";
+export const LOADING_HEALTH = READING_HEALTH;
 
 /** The error-state count line: the last moment this page is known to have been
  *  right. A clock, so it is a numeric and reads in the numeric register. */

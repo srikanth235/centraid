@@ -16,6 +16,7 @@ import {
   withQuickAddedPerson,
 } from "./share-kit.ts";
 import type { ShareCircle, ShareDestination } from "./share-kit.ts";
+import { SHARE_FAILED, sharedWithOutcome } from "./shared-copy.ts";
 
 import styles from "./ShareSheet.module.css";
 
@@ -271,9 +272,7 @@ export function ShareSheet(props: ShareSheetProps) {
       props.onDone({
         verb: "share",
         ok: true,
-        message: invited
-          ? `Shared with ${selected.length} people; ${invited} ${invited === 1 ? "is" : "are"} invited and will join after creating a vault.`
-          : `Shared with ${selected.length} ${selected.length === 1 ? "person" : "people"}.`,
+        message: sharedWithOutcome(selected.length, invited),
       });
       if (handoffs.length) {
         setInviteHandoffs(handoffs);
@@ -281,11 +280,7 @@ export function ShareSheet(props: ShareSheetProps) {
       } else props.onClose();
     } catch (error) {
       setBusy(false);
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not share with the selected people."
-      );
+      setErrorMessage(error instanceof Error ? error.message : SHARE_FAILED);
     }
   };
 

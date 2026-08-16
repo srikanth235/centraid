@@ -51,6 +51,7 @@ import {
   View,
 } from "react-native";
 
+import { PHOTOS_SEARCH_PLACEHOLDER } from "@centraid/blueprints/apps/photos/shared-copy";
 import { OnlineOnlyError } from "@centraid/client/replica/native";
 
 import Icon from "../../kit/components/Icon";
@@ -519,7 +520,7 @@ export function PhotosSearchView({
             autoFocus
             value={term}
             onChangeText={onTerm}
-            placeholder="Search photographs, people, places, albums"
+            placeholder={PHOTOS_SEARCH_PLACEHOLDER}
             placeholderTextColor={colors.textFaint}
             style={styles.input}
           />

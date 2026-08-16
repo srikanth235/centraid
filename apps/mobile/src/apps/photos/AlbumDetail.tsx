@@ -10,6 +10,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, Switch, View } from "react-native";
 
+import { SAVED_TO_MY_VAULT } from "@centraid/blueprints/apps/_shared/shared-copy";
+
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
@@ -114,7 +116,7 @@ export default function AlbumDetail({
         itemId: route.params.albumId,
       });
       setResidentAlbumId(undefined);
-      postStatus("Saved to my vault. This copy survives if the share ends.");
+      postStatus(SAVED_TO_MY_VAULT);
     } catch (error) {
       surfaceWriteFailure(error, "Album not saved to your vault");
     }

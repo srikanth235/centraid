@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 
+import { ATLAS_KINDS_NOTE } from "../../data-copy.js";
 import NoteBlock from "../ui/NoteBlock.js";
 import RowsBlock from "../ui/RowsBlock.js";
 import type { RowDef } from "../ui/RowsBlock.js";
@@ -36,9 +37,8 @@ export interface AtlasKindsSectionProps {
   onRefresh: () => void;
 }
 
-/** The rule this page explains once, in the words the design brief pinned. */
-export const KINDS_NOTE =
-  "A kind is a shape of record an app writes. Sizes include every version kept.";
+// The rule this page explains once lives in `../../data-copy.js` (issue #805)
+// — mobile's Data screen says it too, and one sentence has one home.
 
 export default function AtlasKindsSection({
   kinds,
@@ -84,7 +84,7 @@ export default function AtlasKindsSection({
         meta={stamp ? `${count} · ${stamp}` : count}
       />
       <RowsBlock ariaLabel="Kinds" rows={rows} />
-      <NoteBlock>{KINDS_NOTE}</NoteBlock>
+      <NoteBlock>{ATLAS_KINDS_NOTE}</NoteBlock>
     </>
   );
 }

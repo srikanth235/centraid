@@ -15,6 +15,11 @@
 // Imports the leaf module rather than `kit/fetch-gate`'s barrel: this file is
 // asserted without rendering React Native (see the module comment above), and
 // the barrel also re-exports `FetchChoice.tsx`, which pulls in `react-native`.
+import {
+  PHOTOS_VIDEO_STATUS,
+  photosOriginalNotFetched,
+} from "@centraid/blueprints/apps/photos/shared-copy";
+
 import { isMeteredConnection } from "../../kit/fetch-gate/gate";
 
 /** The tone a control takes. Resolved to `colors.onStage` / `colors.net`. */
@@ -587,7 +592,7 @@ export function originalStatus(
       return {
         action: LOAD_THE_ORIGINAL,
         placement,
-        text: `Original on ${gatewayName} · a full-quality copy has not been fetched`,
+        text: photosOriginalNotFetched(gatewayName),
       };
   }
 }
@@ -621,7 +626,7 @@ const VIEWER_GESTURE_STATUS =
   "Swipe for the next · pinch or double tap to zoom · swipe up for info";
 
 /** Video's status (proto 4642): what is playing, and which copy of it. */
-const VIDEO_STATUS = "Video · playing from the display copy on this device";
+const VIDEO_STATUS = PHOTOS_VIDEO_STATUS;
 
 /** `240% · drag to pan · double tap returns to fit` — live, never a stub. */
 function zoomedStatus(scale: number): string {

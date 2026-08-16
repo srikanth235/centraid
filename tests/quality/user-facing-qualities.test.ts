@@ -1199,12 +1199,14 @@ describe("issue #679 user-facing quality gates", () => {
   });
 
   test("U4: user-facing copy stays short, single-thought and filler-free", async () => {
-    // Tighten-only ceiling (#805). This number is the day-one seed count and
-    // may only ever fall: audit slices delete seeds from copyRatchet.entries
-    // and lower maxEntries, and this constant tracks them down. Raising it
-    // means new verbose copy shipped, which is the regression the gate exists
-    // to stop.
-    const COPY_SEED_CEILING = 255;
+    // Tighten-only ceiling (#805). This number started at the day-one seed
+    // count (255) and may only ever fall: audit slices delete seeds from
+    // copyRatchet.entries and lower maxEntries, and this constant tracks them
+    // down. Raising it means new verbose copy shipped, which is the regression
+    // the gate exists to stop. Slice C (shared-string promotion) took it to
+    // 216 — 40 seeds deleted, one added for the deny sheet's allowlisted
+    // destructive-confirm sentences.
+    const COPY_SEED_CEILING = 216;
     const allowlistFile = await json("tests/quality/copy-allowlist.json");
     const ratchet = allowlistFile["copyRatchet"] as {
       maxEntries: number;

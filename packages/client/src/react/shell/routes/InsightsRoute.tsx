@@ -8,6 +8,11 @@ import {
   listAutomations,
   saveUserPrefs,
 } from "../../../gateway-client.js";
+import {
+  INSIGHTS_ERROR_BODY,
+  INSIGHTS_ERROR_TITLE,
+} from "../../../insights-copy.js";
+import { SKELETON_NOTE } from "../../../surface-copy.js";
 import type { InsightsSummary } from "../../screen-contracts.js";
 import InsightsScreen, {
   WINDOW_OPTIONS,
@@ -217,10 +222,7 @@ export default function InsightsRoute(): JSX.Element {
       {state.status === "loading" ? (
         <>
           <PageSkeleton label="Reading the run log…" rows={6} />
-          <NoteBlock>
-            A row knows its shape before its content arrives, so nothing reflows
-            when it does.
-          </NoteBlock>
+          <NoteBlock>{SKELETON_NOTE}</NoteBlock>
         </>
       ) : state.status === "error" ? (
         // What failed, what is still safe, one way forward. There is no
@@ -228,9 +230,9 @@ export default function InsightsRoute(): JSX.Element {
         // so the verb is the honest one: ask again.
         <PanelBlock
           action={{ label: "Retry", onClick: () => setRetry((n) => n + 1) }}
-          body="Runs are still being recorded. This page reads a rollup that is rebuilt every ten minutes, and the rebuild has not finished."
+          body={INSIGHTS_ERROR_BODY}
           eyebrow="Activity"
-          title="The run log is unavailable"
+          title={INSIGHTS_ERROR_TITLE}
           tone="net"
         />
       ) : (

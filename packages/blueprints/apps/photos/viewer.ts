@@ -20,6 +20,10 @@
 // The storage noun never appears in a user-visible string: what a member reads
 // for a vault is `scope.label`, which the shell owns and the owner may rename.
 import { isAudioAsset, isVideoAsset } from "./format.ts";
+import {
+  PHOTOS_VIDEO_STATUS,
+  photosOriginalNotFetched,
+} from "./shared-copy.ts";
 import { isLiveAsset } from "./tile-state.ts";
 import type { Asset } from "./types.ts";
 
@@ -269,12 +273,12 @@ export function originStatus(
   // custody forecast the member would have to reconcile with a moving
   // scrubber.
   if (isVideoAsset(asset)) {
-    return { text: "Video · playing from the display copy on this device" };
+    return { text: PHOTOS_VIDEO_STATUS };
   }
   const custody = String(asset.custody_state ?? "");
   if (custody === "remote-only") {
     return {
-      text: `Original on ${gatewayName} · a full-quality copy has not been fetched`,
+      text: photosOriginalNotFetched(gatewayName),
       action: "Load the original",
     };
   }
@@ -284,7 +288,7 @@ export function originStatus(
   // A preview is standing in for an original that has not been fetched.
   if (asset.preview_uri && !asset.content_uri) {
     return {
-      text: `Original on ${gatewayName} · a full-quality copy has not been fetched`,
+      text: photosOriginalNotFetched(gatewayName),
       action: "Load the original",
     };
   }
@@ -394,12 +398,13 @@ export const ACTION_LABELS: Readonly<
 export const SLIDESHOW_STATUS =
   "Esc leaves · the viewer keeps the photograph you stopped on";
 
-/** The editor's commit, worded as what it DOES (§7.4). */
-export const SAVE_AS_NEW = "Save as a new photograph";
-
-/** The explanation that sits beside it, at the point of decision (§7.4). */
-export const SAVE_AS_NEW_EXPLANATION =
-  "Saving writes a new photograph dated today, with this one recorded as its source. The original is not touched, and nothing is overwritten.";
+// The editor's commit and the explanation beside it are the same words native
+// renders, so they live in `shared-copy.ts` (issue #805) and are re-exported
+// under the names this module's callers already know.
+export {
+  PHOTOS_SAVE_AS_NEW as SAVE_AS_NEW,
+  PHOTOS_SAVE_AS_NEW_EXPLANATION as SAVE_AS_NEW_EXPLANATION,
+} from "./shared-copy.ts";
 
 /** The editor's tool row (§7.4). Crop and rotate only — no filters, no
  *  adjustments: an edit this app cannot express non-destructively is an edit

@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import {
+  AUTOMATIONS_EMPTY_ACTION,
+  AUTOMATIONS_EMPTY_BODY,
+  AUTOMATIONS_EMPTY_TITLE,
+  automationsErrorBody,
+  AUTOMATIONS_ERROR_RETRY,
+  AUTOMATIONS_ERROR_TITLE,
+  AUTOMATIONS_SUGGESTIONS_NOTE,
+} from "../../automations-copy.js";
+import { SKELETON_NOTE } from "../../surface-copy.js";
 import type {
   AuOverviewData,
   AuOverviewRowDTO,
@@ -62,29 +72,20 @@ const CHIP_LABEL: Record<ChipId, string> = {
 
 const CHIP_ORDER: readonly ChipId[] = ["all", "failing", "paused", "drafts"];
 
-/** The empty state, verbatim (spec §3 `opsDef`). An automation is a trigger
- *  and a thing to do — the copy says exactly that rather than apologising for
- *  the absence. */
-const EMPTY_TITLE = "Nothing runs on its own yet";
-const EMPTY_BODY =
-  "An automation is a trigger and a thing to do. Start from a template, or describe what you want and the assistant will draft one.";
-const EMPTY_ACTION = "Browse templates";
-
-/** The error state, verbatim (spec §3): what failed, what is still safe, one
- *  way forward. The "nothing has run since <time>" clause is dropped when this
- *  screen has never had a successful read to take the time from — an invented
- *  clock is worse than a shorter sentence. */
-const ERROR_TITLE = "The scheduler is not answering";
-const ERROR_RETRY = "Reconnect";
+// The empty state, the error plate and the skeleton note are the same words
+// mobile's Automations screen says, so they live in `../../automations-copy.js`
+// and `../../surface-copy.js` (issue #805).
+const EMPTY_TITLE = AUTOMATIONS_EMPTY_TITLE;
+const EMPTY_BODY = AUTOMATIONS_EMPTY_BODY;
+const EMPTY_ACTION = AUTOMATIONS_EMPTY_ACTION;
+const ERROR_TITLE = AUTOMATIONS_ERROR_TITLE;
+const ERROR_RETRY = AUTOMATIONS_ERROR_RETRY;
 
 function errorBody(sinceClock: string | null): string {
-  return sinceClock === null
-    ? "Automations are stored on the gateway and are safe. Nothing has been lost — runs queue until the scheduler is back."
-    : `Automations are stored on the gateway and are safe. Nothing has run since ${sinceClock} and nothing has been lost — runs queue until the scheduler is back.`;
+  return automationsErrorBody(sinceClock ?? undefined);
 }
 
-const LOADING_NOTE =
-  "A row knows its shape before its content arrives, so nothing reflows when it does.";
+const LOADING_NOTE = SKELETON_NOTE;
 
 /**
  * The suggestions note.
@@ -97,8 +98,7 @@ const LOADING_NOTE =
  * it stands verbatim; the provenance half states the provenance this product
  * actually has. See the receipt for the mismatch.
  */
-const SUGGESTIONS_NOTE =
-  "Suggestions come from the template catalogue, not from watching you. They are never created for you.";
+const SUGGESTIONS_NOTE = AUTOMATIONS_SUGGESTIONS_NOTE;
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;

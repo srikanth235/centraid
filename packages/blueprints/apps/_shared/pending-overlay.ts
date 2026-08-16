@@ -403,3 +403,16 @@ function isPendingProjectionValue(
   if (!value || typeof value !== "object") return false;
   return Object.values(value).every(isPendingProjectionValue);
 }
+
+/**
+ * The accessible label a pending badge carries (issue #805).
+ *
+ * Both surfaces built it inline from the same prefix — web in
+ * `PendingWriteActions.tsx`, native in `kit/replica/PendingRowStatus.tsx` —
+ * so the prefix lives beside the copy it prefixes.
+ */
+export function pendingChangeLabel(
+  pending: PendingOverlayPresentation
+): string {
+  return `Pending change: ${pendingOverlayCopy(pending)}`;
+}

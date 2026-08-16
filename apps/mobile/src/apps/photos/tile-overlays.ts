@@ -5,6 +5,8 @@
 // has to say about itself says it in one of these four slots; anything that
 // wants a fifth slot is asking for chrome inside the grid, which §18 forbids.
 
+import { photosPurgeNote } from "@centraid/blueprints/apps/photos/shared-copy";
+
 import type { Rung } from "./photos-rungs";
 import type { PhotoAsset } from "./timeline-model";
 
@@ -174,8 +176,7 @@ export function purgeInDays(
 
 /** The countdown, worded exactly as the web's Timeline words it. */
 export function purgeNote(days: number): string {
-  if (days === 0) return "purges today";
-  return `purges in ${days} ${days === 1 ? "day" : "days"}`;
+  return photosPurgeNote(days);
 }
 
 /**

@@ -1,5 +1,10 @@
 import type { JSX } from "react";
 
+import {
+  INSIGHTS_EMPTY_BODY,
+  INSIGHTS_EMPTY_TITLE,
+  INSIGHTS_SPEND_NOTE,
+} from "../../insights-copy.js";
 import { insK, insKindLabel, insUsd, relativeTime } from "../format.js";
 import type {
   InsightsActivityRow,
@@ -135,9 +140,9 @@ export default function InsightsScreen({
       <div className={styles.page}>
         {chips}
         <EmptyBlock
-          body="Once automations and the assistant start doing work, their volume and outcomes appear here."
+          body={INSIGHTS_EMPTY_BODY}
           routine
-          title="Nothing has run yet"
+          title={INSIGHTS_EMPTY_TITLE}
         />
       </div>
     );
@@ -148,7 +153,7 @@ export default function InsightsScreen({
       {chips}
 
       <PanelBlock
-        body="Completed runs in this vault only; estimates use public model rates."
+        body={INSIGHTS_SPEND_NOTE}
         facts={spendFacts(summary)}
         figure={spendFigure(summary, windowDays)}
       />

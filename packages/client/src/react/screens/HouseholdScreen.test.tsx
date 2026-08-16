@@ -247,7 +247,7 @@ describe("HouseholdScreen suite", () => {
       });
       expect(el.textContent).toContain("Only this device is enrolled");
       expect(el.textContent).toContain(
-        "Pair a phone or a laptop to reach this vault from it. Everything stays on your own machines."
+        "Pair a phone or a laptop to reach this vault from it."
       );
       expect(readVitals("household")).toStrictEqual({
         count: "This device only",

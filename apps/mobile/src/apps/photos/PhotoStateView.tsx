@@ -8,6 +8,8 @@
 import React, { useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 
+import { PHOTOS_EMPTY_FAVORITES } from "@centraid/blueprints/apps/photos/shared-copy";
+
 import { Text } from "../../kit/components/NativeText";
 import SelectChip from "../../kit/components/SelectChip";
 import { postStatus } from "../../kit/components/status-line";
@@ -146,9 +148,9 @@ export default function PhotoStateView({
       : `${assets.length} ${noun}`;
   const emptyCopy =
     mode === "favorites"
-      ? // The web shell's string (packages/blueprints), so the empty state
-        // reads the same no matter which surface a member is on.
-        "No favorites yet — tap the heart on any photograph."
+      ? // The web shell's own string, imported so the empty state cannot
+        // read differently depending on which surface a member is on.
+        PHOTOS_EMPTY_FAVORITES
       : mode === "archive"
         ? "Archive is empty."
         : mode === "videos"

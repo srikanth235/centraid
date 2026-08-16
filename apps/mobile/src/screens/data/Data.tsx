@@ -24,6 +24,17 @@ import * as Clipboard from "expo-clipboard";
 import React, { useCallback, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 
+import {
+  ATLAS_EMPTY_BODY,
+  ATLAS_EMPTY_TITLE,
+  ATLAS_KINDS_NOTE,
+} from "@centraid/client/data-copy";
+import {
+  EMPTY_HEALTH,
+  RETRY_ACTION,
+  SKELETON_NOTE,
+} from "@centraid/client/surface-copy";
+
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import type {
   DocRecord,
@@ -70,26 +81,22 @@ import { VaultCopiesSection, VaultSharingSection } from "./VaultSections";
  *  supports them; the two error plates below are this app's, because the
  *  reference has no unpaired-phone state. */
 const COPY = {
-  emptyBody:
-    "Kinds appear here as apps write records. Nothing is created until an app or an import puts something in.",
-  emptyTitle: "This vault is empty",
+  emptyBody: ATLAS_EMPTY_BODY,
+  emptyTitle: ATLAS_EMPTY_TITLE,
   errorBody:
     "The vault is encrypted and present on disk. Its home machine could not open it, which is usually a permissions problem rather than damage to the data.",
   errorTitle: "Cannot open the store",
-  healthEmpty: "Nothing to attend to · nothing needs you here right now.",
-  healthError:
-    "Contents could not load · everything else in the vault is unaffected.",
+  healthEmpty: EMPTY_HEALTH,
+  healthError: "Contents could not load",
   healthLabel: "Everything is readable",
   healthLoading: "Reading the vault contents",
-  kindsNote:
-    "A kind is a shape of record an app writes. Sizes include every version kept.",
-  loadingNote:
-    "A row knows its shape before its content arrives, so nothing reflows when it does.",
+  kindsNote: ATLAS_KINDS_NOTE,
+  loadingNote: SKELETON_NOTE,
   noGatewayBody:
     "This phone is not linked to a vault yet. Link it from Settings and the vault contents appear here.",
   noGatewayTitle: "Not linked to a vault",
   relations: "How they relate",
-  retry: "Try again",
+  retry: RETRY_ACTION,
   sectionKinds: "Kinds",
   title: "Vault",
 } as const;

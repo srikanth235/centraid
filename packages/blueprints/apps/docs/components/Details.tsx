@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { armConfirm } from "@centraid/design/elements";
 
 import { mountedScopes } from "../../_shared/scope-kit.ts";
+import { SAVED_TO_MY_VAULT } from "../../_shared/shared-copy.ts";
 import { ShareSheet } from "../../_shared/ShareSheet.tsx";
 import { RAIL_NOTES, RAIL_TABS } from "../document-copy.ts";
 import type { RailTabId } from "../document-copy.ts";
@@ -165,9 +166,7 @@ export function Details({
         itemId: doc.document_id,
       });
       setResidentDocumentId(null);
-      setShareStatus(
-        "Saved to my vault. This copy survives if the share ends."
-      );
+      setShareStatus(SAVED_TO_MY_VAULT);
     } catch (error) {
       setShareStatus(
         error instanceof Error

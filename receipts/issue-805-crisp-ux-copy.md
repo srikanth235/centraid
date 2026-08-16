@@ -14,7 +14,7 @@ and cross-slice invariants; sub-agents work file-disjoint slices.
 
 - [x] A — the rulebook
 - [x] B — the ratchet
-- [ ] C — the shared copy seam
+- [x] C — the shared copy seam
 - [ ] D1 — audit: client shell + Settings + Onboarding
 - [ ] D2 — audit: blueprints Photos
 - [ ] D3 — audit: blueprints Docs + Notes + remaining apps
@@ -58,6 +58,174 @@ and cross-slice invariants; sub-agents work file-disjoint slices.
   a matching ceiling constant in the owning test both cap growth; audit
   slices lower them together as they drain seeds.
 
+### Slice C — the shared copy seam (2026-08-16)
+
+One canonical home per shared string, on the `home-copy.ts` precedent. 10
+modules, 60 promoted constants; 21 strings rewritten to budget in the same
+move, ~25 kept byte-identical (already compliant), 40 allowlist seeds drained
+(`maxEntries` 255 → 216, in-test ceiling lowered to match, 1 real
+destructive-confirm entry added for the Approvals deny sheet).
+
+- `packages/client/src` gains nine copy modules, exported as package
+  subpaths in `packages/client/package.json`: `surface-copy.ts` (the
+  ops-state words all six operational pages share), `approvals-copy.ts`,
+  `automations-copy.ts`, `connectors-copy.ts`, `data-copy.ts`,
+  `devices-copy.ts`, `insights-copy.ts`, `notifications-copy.ts`,
+  `sharing-copy.ts`. Client call sites re-point: `routeVitals.ts`,
+  `approvalsData.ts`, `notifications-model.ts`, `gateway-client-push.ts`,
+  `insights-model.ts`, `App.tsx`, and screens `ApprovalsScreen.tsx`,
+  `AtlasScreen.tsx`, `AtlasKindsSection.tsx`,
+  `AutomationsOverviewScreen.tsx`, `HouseholdScreen.tsx`,
+  `InsightsScreen.tsx`, `LinkRow.tsx`, `SettingsConnectionsScreen.tsx`,
+  `SharingCard.tsx`, `SharingRecoveryRows.tsx`, routes
+  `ApprovalsRoute.tsx`, `InsightsRoute.tsx`, `SettingsRoute.tsx`.
+- The drifted `App.tsx`/`SettingsRoute.tsx` near-twin is now one
+  `forgetDeviceMessage(surface)` in `devices-copy.ts` — full sentences kept:
+  destructive confirm, the one home the rulebook gives reassurance.
+- `packages/blueprints`: `apps/photos/shared-copy.ts` extended (11
+  constants); new `apps/_shared/shared-copy.ts` (cross-app machinery copy)
+  and `pendingChangeLabel()` in `apps/_shared/pending-overlay.ts`.
+  Blueprint call sites re-point: `apps/photos/view-copy.ts`, `viewer.ts`,
+  `components/Editor.tsx`, `components/FaceReview.tsx`,
+  `components/Lightbox.tsx`, `components/PlaceMap.tsx`,
+  `components/Timeline.tsx`, `apps/docs/app-root.tsx`,
+  `apps/docs/components/Details.tsx`, `apps/locker/app-root.tsx`,
+  `apps/_shared/PendingWriteActions.tsx`, `apps/_shared/ShareSheet.tsx`.
+- Mobile imports the constants the way it already imports `home-copy`
+  (package subpaths; deep path for blueprints, which has no exports map).
+  Re-pointed: `apps/mobile/src/screens/approvals/approvals-model.ts`,
+  `screens/connectors/connectors-model.ts`, `screens/connectors/Connectors.tsx`,
+  `screens/data/Data.tsx`, `screens/devices/Devices.tsx`,
+  `screens/Sharing.tsx`, `screens/SharingLinkRow.tsx`,
+  `apps/automations/automations-model.ts`, `apps/automations/Automations.tsx`,
+  `apps/insights/insights-model.ts`, `apps/insights/Insights.tsx`,
+  `apps/photos/AlbumDetail.tsx`, `apps/photos/DuplicatesShelf.tsx`,
+  `apps/photos/FaceReview.tsx`, `apps/photos/PhotoLightbox.tsx`,
+  `apps/photos/PhotoStateView.tsx`, `apps/photos/PhotosSearch.tsx`,
+  `apps/photos/photo-edit-model.ts`, `apps/photos/places-model.ts`,
+  `apps/photos/tile-overlays.ts`, `apps/photos/viewer-model.ts`,
+  `apps/docs/DocsHome.tsx`, `apps/docs/DocumentViewer.tsx`,
+  `apps/locker/LockerHome.tsx`, `kit/replica/PendingRowStatus.tsx`,
+  `kit/share/ShareSheet.tsx`, `lib/notification-model.ts`,
+  `lib/notifications-plan.ts`.
+- Pinned-copy tests updated in the same move:
+  `packages/client/src/react/screens/ApprovalsScreen.test.tsx`,
+  `AtlasScreen.test.tsx`, `AutomationsOverviewScreen.test.tsx`,
+  `HouseholdScreen.test.tsx`, `SettingsConnectionsScreen.test.tsx`,
+  `packages/client/src/react/shell/routeVitals.test.ts`,
+  `routes/ApprovalsRoute.test.tsx`, `routes/InsightsRoute.test.tsx`,
+  `routes/approvalsData.test.ts`, `packages/blueprints/src/one-computation.test.ts`
+  (LEGACY_COLLISIONS ratchet tightened 16 → 14),
+  `apps/mobile/src/screens/approvals/Approvals.test.tsx`,
+  `approvals-model.test.ts`, `screens/connectors/Connectors.test.tsx`,
+  `connectors-model.test.ts`, `apps/automations/Automations.test.tsx`,
+  `automations-model.test.ts`, `apps/insights/Insights.test.tsx`,
+  `insights-model.health.test.ts`, `apps/photos/photo-edit-model.test.ts`,
+  `kit/components/HealthLine.test.tsx`.
+- Ratchet bookkeeping: `tests/quality/copy-allowlist.json` (−40 seeds, +1
+  reasoned entry) and `tests/quality/user-facing-qualities.test.ts` (ceiling).
+
+### Slice C file inventory
+
+Every file the slice touched (generated from the diff):
+
+```
+apps/mobile/src/apps/automations/Automations.test.tsx
+apps/mobile/src/apps/automations/Automations.tsx
+apps/mobile/src/apps/automations/automations-model.test.ts
+apps/mobile/src/apps/automations/automations-model.ts
+apps/mobile/src/apps/docs/DocsHome.tsx
+apps/mobile/src/apps/docs/DocumentViewer.tsx
+apps/mobile/src/apps/insights/Insights.test.tsx
+apps/mobile/src/apps/insights/Insights.tsx
+apps/mobile/src/apps/insights/insights-model.health.test.ts
+apps/mobile/src/apps/insights/insights-model.ts
+apps/mobile/src/apps/locker/LockerHome.tsx
+apps/mobile/src/apps/photos/AlbumDetail.tsx
+apps/mobile/src/apps/photos/DuplicatesShelf.tsx
+apps/mobile/src/apps/photos/FaceReview.tsx
+apps/mobile/src/apps/photos/PhotoLightbox.tsx
+apps/mobile/src/apps/photos/PhotoStateView.tsx
+apps/mobile/src/apps/photos/PhotosSearch.tsx
+apps/mobile/src/apps/photos/photo-edit-model.test.ts
+apps/mobile/src/apps/photos/photo-edit-model.ts
+apps/mobile/src/apps/photos/places-model.ts
+apps/mobile/src/apps/photos/tile-overlays.ts
+apps/mobile/src/apps/photos/viewer-model.ts
+apps/mobile/src/kit/components/HealthLine.test.tsx
+apps/mobile/src/kit/replica/PendingRowStatus.tsx
+apps/mobile/src/kit/share/ShareSheet.tsx
+apps/mobile/src/lib/notification-model.ts
+apps/mobile/src/lib/notifications-plan.ts
+apps/mobile/src/screens/Sharing.tsx
+apps/mobile/src/screens/SharingLinkRow.tsx
+apps/mobile/src/screens/approvals/Approvals.test.tsx
+apps/mobile/src/screens/approvals/approvals-model.test.ts
+apps/mobile/src/screens/approvals/approvals-model.ts
+apps/mobile/src/screens/connectors/Connectors.test.tsx
+apps/mobile/src/screens/connectors/Connectors.tsx
+apps/mobile/src/screens/connectors/connectors-model.test.ts
+apps/mobile/src/screens/connectors/connectors-model.ts
+apps/mobile/src/screens/data/Data.tsx
+apps/mobile/src/screens/devices/Devices.tsx
+packages/blueprints/apps/_shared/PendingWriteActions.tsx
+packages/blueprints/apps/_shared/ShareSheet.tsx
+packages/blueprints/apps/_shared/pending-overlay.ts
+packages/blueprints/apps/_shared/shared-copy.ts
+packages/blueprints/apps/docs/app-root.tsx
+packages/blueprints/apps/docs/components/Details.tsx
+packages/blueprints/apps/locker/app-root.tsx
+packages/blueprints/apps/photos/components/Editor.tsx
+packages/blueprints/apps/photos/components/FaceReview.tsx
+packages/blueprints/apps/photos/components/Lightbox.tsx
+packages/blueprints/apps/photos/components/PlaceMap.tsx
+packages/blueprints/apps/photos/components/Timeline.tsx
+packages/blueprints/apps/photos/shared-copy.ts
+packages/blueprints/apps/photos/view-copy.ts
+packages/blueprints/apps/photos/viewer.ts
+packages/blueprints/src/one-computation.test.ts
+packages/client/package.json
+packages/client/src/approvals-copy.ts
+packages/client/src/automations-copy.ts
+packages/client/src/connectors-copy.ts
+packages/client/src/data-copy.ts
+packages/client/src/devices-copy.ts
+packages/client/src/gateway-client-push.ts
+packages/client/src/insights-copy.ts
+packages/client/src/notifications-copy.ts
+packages/client/src/notifications-model.ts
+packages/client/src/react/screens/ApprovalsScreen.test.tsx
+packages/client/src/react/screens/ApprovalsScreen.tsx
+packages/client/src/react/screens/AtlasKindsSection.tsx
+packages/client/src/react/screens/AtlasScreen.test.tsx
+packages/client/src/react/screens/AtlasScreen.tsx
+packages/client/src/react/screens/AutomationsOverviewScreen.test.tsx
+packages/client/src/react/screens/AutomationsOverviewScreen.tsx
+packages/client/src/react/screens/HouseholdScreen.test.tsx
+packages/client/src/react/screens/HouseholdScreen.tsx
+packages/client/src/react/screens/InsightsScreen.tsx
+packages/client/src/react/screens/LinkRow.tsx
+packages/client/src/react/screens/SettingsConnectionsScreen.test.tsx
+packages/client/src/react/screens/SettingsConnectionsScreen.tsx
+packages/client/src/react/screens/SharingCard.tsx
+packages/client/src/react/screens/SharingRecoveryRows.tsx
+packages/client/src/react/screens/insights-model.ts
+packages/client/src/react/shell/App.tsx
+packages/client/src/react/shell/routeVitals.test.ts
+packages/client/src/react/shell/routeVitals.ts
+packages/client/src/react/shell/routes/ApprovalsRoute.test.tsx
+packages/client/src/react/shell/routes/ApprovalsRoute.tsx
+packages/client/src/react/shell/routes/InsightsRoute.test.tsx
+packages/client/src/react/shell/routes/InsightsRoute.tsx
+packages/client/src/react/shell/routes/SettingsRoute.tsx
+packages/client/src/react/shell/routes/approvalsData.test.ts
+packages/client/src/react/shell/routes/approvalsData.ts
+packages/client/src/sharing-copy.ts
+packages/client/src/surface-copy.ts
+tests/quality/copy-allowlist.json
+tests/quality/user-facing-qualities.test.ts
+```
+
 ## Decisions
 
 - The U4 scanner skips template literals containing `${…}` — a spliced value
@@ -76,6 +244,15 @@ and cross-slice invariants; sub-agents work file-disjoint slices.
   changing the test's behavior.
 - `packages/design/src/roles.ts` token rationales are developer-facing
   (per the issue's non-goals) and excluded from the walk.
+- Slice C left five twin groups in place as not-UI: the change-feed HTTP
+  error, the intent-store reuse invariant, the replica indexed-column
+  invariant, the `ReplicaProtocolError` message + intent reason code, and
+  the harness preflight text — replica-protocol and harness plumbing
+  vocabulary, not screen copy. The `"s columns: SPEND per day…"` inventory
+  item is a doc-comment fragment, a false twin.
+- Slice C found one pre-existing failure unrelated to copy:
+  `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` cannot bundle
+  `node:sqlite`; it fails identically on the base tree.
 
 ## Out of scope
 
@@ -98,6 +275,18 @@ Demonstrated red for U4: appending a >120-char two-sentence "Please…" string
 to `packages/client/src/home-copy.ts` fails U4 with
 `unallowed length+sentences+filler …`; suffixing an allowlist literal fails
 with `stale … (no longer in the source)`. Both reverted.
+
+Slice C:
+
+```sh
+bun run test:qualities                          # 24 passed (U4 green at 216)
+bunx turbo run typecheck --filter=@centraid/client --filter=@centraid/blueprints  # 14/14
+cd apps/mobile && bun run typecheck && bun run lint   # clean
+bun run lint && bun run format:check            # clean
+# package-filtered vitest green for client, blueprints, mobile (norms: no full
+# suite mid-orchestration); the one failure is the pre-existing node:sqlite
+# bundling break in PendingRestartJourney.test.tsx, identical on base.
+```
 
 ## Audit counts (workstream D contract)
 

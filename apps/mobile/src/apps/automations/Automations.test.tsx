@@ -232,12 +232,8 @@ describe(AutomationsScreen, () => {
     const container = await render();
     const spans = textOf(container);
     expect(spans).toContain("Nothing runs on its own yet");
-    expect(spans).toContain(
-      "An automation is a trigger and a thing to do. Start from a template, or describe what you want and the assistant will draft one."
-    );
-    expect(spans).toContain(
-      "Nothing to attend to · nothing needs you here right now."
-    );
+    expect(spans).toContain("An automation is a trigger and a thing to do.");
+    expect(spans).toContain("Nothing to attend to");
   });
 
   it("reports a failed read as a net panel with no invented clock", async () => {
@@ -245,18 +241,14 @@ describe(AutomationsScreen, () => {
     const container = await render();
     const spans = textOf(container);
     expect(spans).toContain("The scheduler is not answering");
-    expect(spans).toContain(
-      "Automations are stored on the gateway and are safe. Nothing has been lost — runs queue until the scheduler is back."
-    );
+    expect(spans).toContain("Runs queue until the scheduler is back.");
     expect(spans).toContain("connect ECONNREFUSED");
     const panel = nodesOf(container, "div").find(
       (node) => styleOf(node).borderColor === colors.net
     );
     expect(panel).toBeDefined();
     expect(buttonLabelled(container, "Reconnect")).not.toBeNull();
-    expect(spans).toContain(
-      "This page could not load · everything else on the gateway is unaffected."
-    );
+    expect(spans).toContain("This page could not load");
   });
 
   it("tones a failing row's metadata, never its name, and names it once at the foot", async () => {
@@ -346,7 +338,7 @@ describe(AutomationsScreen, () => {
     wire.list.mockResolvedValue([row()]);
     const container = await render();
     expect(textOf(container)).toContain(
-      "Suggestions come from the template catalogue, not from watching you. They are never created for you."
+      "Suggestions come from the template catalogue, not from watching you."
     );
     press(buttonLabelled(container, "Create"));
     await settle();

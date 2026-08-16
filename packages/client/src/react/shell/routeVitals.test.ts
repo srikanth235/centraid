@@ -1,10 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { EMPTY_HEALTH, ERROR_HEALTH } from "../../surface-copy.js";
 import {
   clearRouteSignals,
   clearVitals,
-  EMPTY_HEALTH,
-  ERROR_HEALTH,
   lastReadLine,
   LOADING_COUNT_LINE,
   publishRouteSignals,
@@ -122,12 +121,8 @@ describe("route vitals", () => {
       publishRouteSignals("connectors", { state: "error", health });
       expect(readRouteHealth()).toStrictEqual({ text: ERROR_HEALTH });
       // The two sentences that are the same on all six pages.
-      expect(EMPTY_HEALTH).toBe(
-        "Nothing to attend to · nothing needs you here right now."
-      );
-      expect(ERROR_HEALTH).toBe(
-        "This page could not load · everything else on the gateway is unaffected."
-      );
+      expect(EMPTY_HEALTH).toBe("Nothing to attend to");
+      expect(ERROR_HEALTH).toBe("This page could not load");
     });
 
     it("says nothing at all in ready when the route has no health to report", () => {

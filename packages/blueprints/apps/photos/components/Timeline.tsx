@@ -31,6 +31,7 @@ import { justify } from "../layout.ts";
 import type { JustifiedTile } from "../layout.ts";
 import { act, narrate } from "../outcomes.ts";
 import { usePinchRung } from "../pinch.ts";
+import { photosPurgeNote } from "../shared-copy.ts";
 import { vaultMarker } from "../tile-state.ts";
 import type { Asset } from "../types.ts";
 import { ScrubRail } from "./ScrubRail.tsx";
@@ -132,8 +133,7 @@ function Row({
 function purgeNote(asset: Asset): string | undefined {
   const days = asset.purge_in_days;
   if (days == null) return undefined;
-  if (days === 0) return "purges today";
-  return `purges in ${days} ${days === 1 ? "day" : "days"}`;
+  return photosPurgeNote(days);
 }
 
 /**
