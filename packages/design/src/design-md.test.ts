@@ -291,6 +291,7 @@ describe("DESIGN.md body", () => {
       "Elevation & Depth",
       "Shapes",
       "Components",
+      "Copy",
       "Responsive Behavior",
       "Agent Prompt Guide",
       "Do's and Don'ts",

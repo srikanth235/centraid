@@ -77,6 +77,141 @@ async function globFiles(pattern: string): Promise<string[]> {
   return files;
 }
 
+// U4 copy-density ratchet (#805). Member-facing prose is walked as raw string
+// literals — there is no TypeScript AST pass in this suite and none is wanted:
+// the gate is a ratchet over copy, not a type-aware linter. Precision beats
+// recall here, because a false positive on a non-UI string costs an audit
+// slice a wasted allowlist entry while a missed string only survives until the
+// next tighten. The pipeline is: strip comments and commentary prose -> pull
+// quoted literals (template literals carrying `${}` substitutions are skipped
+// on purpose, since a spliced value cannot be length- or sentence-judged from
+// source) -> keep only literals that read as prose (start with an uppercase
+// letter, three or more words, ≥ 16 chars, ≥ 70% letters, no code punctuation,
+// SQL, URLs, snake_case or arrow syntax) -> drop literals whose call site or
+// assignment target is a machine key (`id:`, `className=`, `console.log(`,
+// `startsWith(` …). What survives is judged by three rules: over 120 chars,
+// two or more sentence boundaries, or a banned filler word.
+const COPY_SCOPE = [
+  "packages/client/src/**/*.{ts,tsx}",
+  "packages/blueprints/apps/**/*.{ts,tsx}",
+  "apps/mobile/src/**/*.{ts,tsx}",
+  "apps/desktop/src/**/*.{ts,tsx}",
+  "apps/web/src/**/*.{ts,tsx}",
+  "apps/extension/src/**/*.{ts,tsx}",
+  "packages/design/src/**/*.{ts,tsx}",
+  // Server scope is deliberately narrow: only the route modules that mint
+  // strings the shell renders verbatim (connection presets, OAuth outcomes).
+  // Engine/automation/acp/serve strings are logs, protocol text and internal
+  // errors this walk cannot classify, so they stay out of reach.
+  "packages/server/src/routes/**/*.ts",
+];
+
+// packages/design/src/roles.ts documents design tokens in prose for the
+// gallery and DESIGN.md; those descriptions never reach a member's screen.
+const COPY_SKIP_FILE =
+  /(?:\.test\.|\.spec\.|\.stories\.|\.d\.ts$|__fixtures__|\/fixtures\/|-fixtures\.|^packages\/design\/src\/roles\.ts$)/u;
+
+const COPY_BANNED_FILLER =
+  /\b(?:please|successfully|simply|in order to|you can|we're sorry)\b/iu;
+
+const COPY_CODEY =
+  /(?:^[\s./#@-]|[<>{}]|=>|\$\{|::|\bhttps?:\/\/|\w\(\)|;\s|\|\||&&|\bSELECT\b|\bINSERT\b|\bUPDATE\b\s|\bFROM\b|\bWHERE\b|\bJOIN\b|_[a-z]|--|\bfunction\b|\bconst\b)/u;
+
+const COPY_PROSE_CHARS = /^[\p{L}\p{N}\s'’“”"(),.:;!?%$&+/–—-]+$/u;
+
+const COPY_MACHINE_KEY =
+  /(?:^|[^A-Za-z])(?:id|ids|key|keys|className|class|href|src|url|uri|path|paths|route|routes|testId|testID|dataTestId|icon|slug|kind|type|variant|color|tone|size|font|event|entity|column|table|sql|query|selector|locale|timeZone|format|mime|ext|scope|command|capability|permission|method|op|field|token|tag|tags|status|state|role|storageKey|channel|topic|schema|version|env|flag|feature|app|appId|blueprint|module|package|namespace)\s*[:=]\s*$/u;
+
+const COPY_MACHINE_CALL =
+  /(?:console\.\w+|require|import|describe|test|it|expect|createHash|new Error|new TypeError|matchMedia|querySelector\w*|getElementById|createElement|addEventListener|removeEventListener|setAttribute|getAttribute|startsWith|endsWith|includes|split|join|replace|replaceAll|match|has|get|set|emit|on|off|log|warn|debug|trace)\s*\(\s*$/u;
+
+/** Blank out comments so commentary prose never reaches the literal scanner. */
+function stripComments(source: string): string {
+  let out = "";
+  let mode: "code" | "line" | "block" | "string" = "code";
+  let quote = "";
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] as string;
+    const next = source[index + 1];
+    if (mode === "code") {
+      if (char === "/" && (next === "/" || next === "*")) {
+        mode = next === "/" ? "line" : "block";
+        out += "  ";
+        index += 1;
+        continue;
+      }
+      if (char === '"' || char === "'" || char === "`") {
+        mode = "string";
+        quote = char;
+      }
+      out += char;
+      continue;
+    }
+    if (mode === "line") {
+      if (char === "\n") mode = "code";
+      out += char === "\n" ? char : " ";
+      continue;
+    }
+    if (mode === "block") {
+      if (char === "*" && next === "/") {
+        mode = "code";
+        out += "  ";
+        index += 1;
+        continue;
+      }
+      out += char === "\n" ? char : " ";
+      continue;
+    }
+    out += char;
+    if (char === "\\") {
+      out += source[index + 1] ?? "";
+      index += 1;
+      continue;
+    }
+    if (char === quote) mode = "code";
+    else if (char === "\n" && quote !== "`") mode = "code";
+  }
+  return out;
+}
+
+/** Two or more sentences: an internal boundary plus a terminated tail. */
+function copySentenceCount(text: string): number {
+  const inner = text.match(/[.!?…](?=\s+["'(]?\p{Lu})/gu)?.length ?? 0;
+  return inner + (/[.!?…]["')]?\s*$/u.test(text) ? 1 : 0);
+}
+
+function scanCopy(
+  file: string,
+  rawSource: string
+): Array<{ file: string; literal: string; reasons: string[] }> {
+  const source = stripComments(rawSource);
+  const flagged: Array<{ file: string; literal: string; reasons: string[] }> =
+    [];
+  const pattern =
+    /(?<quote>['"`])(?<body>(?:\\.|(?!\k<quote>)[^\\])*)\k<quote>/gsu;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(source))) {
+    const raw = match.groups?.["body"] ?? "";
+    if (match.groups?.["quote"] === "`" && raw.includes("${")) continue;
+    const text = raw.replaceAll("\\n", " ").replaceAll("\\'", "'").trim();
+    if (text.length < 16) continue;
+    if (!/^\p{Lu}/u.test(text)) continue;
+    if (text.split(/\s+/u).length < 3) continue;
+    if (COPY_CODEY.test(text)) continue;
+    if (!COPY_PROSE_CHARS.test(text)) continue;
+    if (text.replace(/[^\p{L}]/gu, "").length / text.length < 0.7) continue;
+    const before = source.slice(Math.max(0, match.index - 60), match.index);
+    if (COPY_MACHINE_KEY.test(before) || COPY_MACHINE_CALL.test(before))
+      continue;
+    const reasons: string[] = [];
+    if (text.length > 120) reasons.push("length");
+    if (copySentenceCount(text) >= 2) reasons.push("sentences");
+    if (COPY_BANNED_FILLER.test(text)) reasons.push("filler");
+    if (reasons.length) flagged.push({ file, literal: text, reasons });
+  }
+  return flagged;
+}
+
 describe("issue #679 user-facing quality gates", () => {
   test("A1/A3/A4: seven visible qualities own classified, governed, demonstrated-red gates", async () => {
     const matrix = await json("tests/matrix.json");
@@ -1060,6 +1195,59 @@ describe("issue #679 user-facing quality gates", () => {
       if (/aria-label=["'](?:Spaces?|Approvals?|Inbox)["']/u.test(source))
         violations.push(file);
     }
+    expect(violations).toStrictEqual([]);
+  });
+
+  test("U4: user-facing copy stays short, single-thought and filler-free", async () => {
+    // Tighten-only ceiling (#805). This number is the day-one seed count and
+    // may only ever fall: audit slices delete seeds from copyRatchet.entries
+    // and lower maxEntries, and this constant tracks them down. Raising it
+    // means new verbose copy shipped, which is the regression the gate exists
+    // to stop.
+    const COPY_SEED_CEILING = 255;
+    const allowlistFile = await json("tests/quality/copy-allowlist.json");
+    const ratchet = allowlistFile["copyRatchet"] as {
+      maxEntries: number;
+      entries: Array<{ file: string; literal: string; reason: string }>;
+    };
+    expect(ratchet.maxEntries).toBeLessThanOrEqual(COPY_SEED_CEILING);
+    expect(ratchet.entries.length).toBeLessThanOrEqual(ratchet.maxEntries);
+    const keyed = (entry: { file: string; literal: string }): string =>
+      `${entry.file} ${entry.literal}`;
+    expect(new Set(ratchet.entries.map(keyed)).size).toBe(
+      ratchet.entries.length
+    );
+    for (const entry of ratchet.entries)
+      expect(entry.reason.length).toBeGreaterThan(8);
+
+    const files = (await Promise.all(COPY_SCOPE.map(globFiles))).flat();
+    const walked = files
+      .map((file) => file.replaceAll("\\", "/"))
+      .filter((file) => !COPY_SKIP_FILE.test(file))
+      .toSorted(compareStrings);
+    expect(walked.length).toBeGreaterThan(1000);
+    const flagged = (
+      await Promise.all(
+        walked.map(async (file) =>
+          scanCopy(file, await readFile(path.join(root, file), "utf8"))
+        )
+      )
+    ).flat();
+    const allowed = new Set(ratchet.entries.map(keyed));
+    const present = new Set(flagged.map(keyed));
+    const violations = [
+      ...flagged
+        .filter((item) => !allowed.has(keyed(item)))
+        .map(
+          (item) =>
+            `unallowed ${item.reasons.join("+")} ${item.file}: ${item.literal.slice(0, 60)}`
+        ),
+      // Stale entries are violations too: an allowlisted string that no longer
+      // exists must leave the file, or the ceiling stops meaning anything.
+      ...ratchet.entries
+        .filter((entry) => !present.has(keyed(entry)))
+        .map((entry) => `stale ${entry.file}: ${entry.literal.slice(0, 60)}`),
+    ].toSorted(compareStrings);
     expect(violations).toStrictEqual([]);
   });
 
