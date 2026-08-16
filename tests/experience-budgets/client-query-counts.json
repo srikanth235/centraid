@@ -1,9 +1,9 @@
 {
-  "approvedDeviation": "#731 Atlas now counts the registered Commons control tables during its bounded first-paint census; the measured SQL baseline rises from 128 to 138 with no additional HTTP request.",
+  "approvedDeviation": "#807 Wave 0 registers two new enrichment tables (enrich.policy_rule, enrich.consent) in schema/tables.ts, and the Atlas census counts one row-count query per REGISTERED table: the measured SQL baseline rises 138 -> 140, with no additional HTTP request and no new query per table beyond that count. Registration is what carries both tables through portable export and the replica change log, so the two statements are the price of them being real vault rows rather than a side store. Prior: #731 Atlas now counts the registered Commons control tables during its bounded first-paint census; the measured SQL baseline rises from 128 to 138 with no additional HTTP request.",
   "screens": {
     "photos-grid": { "sqlStatements": 68, "httpRequests": 1 },
     "notifications": { "sqlStatements": 8, "httpRequests": 3 },
-    "atlas": { "sqlStatements": 138, "httpRequests": 2 },
+    "atlas": { "sqlStatements": 140, "httpRequests": 2 },
     "assistant": { "sqlStatements": 22, "httpRequests": 1 }
   }
 }

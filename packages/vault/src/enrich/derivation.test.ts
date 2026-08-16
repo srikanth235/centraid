@@ -5,7 +5,12 @@ import { describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
-import { stampDerivation, stampedModel } from "./derivation.js";
+import {
+  BUILT_IN_PROFILE,
+  preferredDerivation,
+  stampDerivation,
+  stampedModel,
+} from "./derivation.js";
 
 const T0 = "2026-07-15T00:00:00.000Z";
 const T1 = "2026-07-16T00:00:00.000Z";
@@ -14,7 +19,13 @@ function stamp(
   db: VaultDb,
   targetId: string,
   model: string,
-  extra: { variant?: string; capability?: string; payload?: unknown } = {}
+  extra: {
+    variant?: string;
+    capability?: string;
+    profile?: string;
+    payload?: unknown;
+    now?: string;
+  } = {}
 ): void {
   stampDerivation(db.vault, {
     targetType: "media.asset",
@@ -22,8 +33,9 @@ function stamp(
     variant: extra.variant ?? "caption",
     capability: extra.capability ?? "ocr",
     model,
+    ...(extra.profile === undefined ? {} : { profile: extra.profile }),
     ...(extra.payload === undefined ? {} : { payload: extra.payload }),
-    now: T0,
+    now: extra.now ?? T0,
   });
 }
 
@@ -99,6 +111,149 @@ describe("derivation", () => {
     const db = openVaultDb();
     expect(
       stampedModel(db.vault, {
+        targetType: "media.asset",
+        targetId: "never-seen",
+        variant: "caption",
+      })
+    ).toBeNull();
+    db.close();
+  });
+
+  test("a stamp written with no profile belongs to the built-in engine", () => {
+    const db = openVaultDb();
+    stamp(db, "asset-1", "tess@1");
+    const row = db.vault
+      .prepare("SELECT profile FROM enrich_derivation WHERE target_id = ?")
+      .get("asset-1") as { profile: string };
+    expect(row.profile).toBe(BUILT_IN_PROFILE);
+    db.close();
+  });
+
+  test("two profiles derive one variant and both rows survive", () => {
+    const db = openVaultDb();
+    stamp(db, "asset-1", "tess@1");
+    stamp(db, "asset-1", "qwen-vl@3", { profile: "ocr-llm", now: T1 });
+    const rows = db.vault
+      .prepare(
+        `SELECT profile, model FROM enrich_derivation
+          WHERE target_id = ? ORDER BY profile`
+      )
+      .all("asset-1") as unknown as { profile: string; model: string }[];
+    // Re-shaped rather than compared directly: node:sqlite hands back
+    // null-prototype rows, which no strict equality accepts.
+    expect(
+      rows.map((row) => ({ profile: row.profile, model: row.model }))
+    ).toStrictEqual([
+      { profile: BUILT_IN_PROFILE, model: "tess@1" },
+      { profile: "ocr-llm", model: "qwen-vl@3" },
+    ]);
+    db.close();
+  });
+
+  test("re-running ONE profile replaces only that profile's stamp", () => {
+    const db = openVaultDb();
+    stamp(db, "asset-1", "tess@1");
+    stamp(db, "asset-1", "qwen-vl@3", { profile: "ocr-llm" });
+    stamp(db, "asset-1", "qwen-vl@4", { profile: "ocr-llm", now: T1 });
+    const rows = db.vault
+      .prepare(
+        `SELECT profile, model, produced_at FROM enrich_derivation
+          WHERE target_id = ? ORDER BY profile`
+      )
+      .all("asset-1") as unknown as {
+      profile: string;
+      model: string;
+      produced_at: string;
+    }[];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ model: "tess@1", produced_at: T0 });
+    expect(rows[1]).toMatchObject({ model: "qwen-vl@4", produced_at: T1 });
+    db.close();
+  });
+
+  test("resolution prefers the named profile, then built-in, then any", () => {
+    const db = openVaultDb();
+    const query = {
+      targetType: "media.asset",
+      targetId: "asset-1",
+      variant: "caption",
+    };
+    stamp(db, "asset-1", "qwen-vl@3", { profile: "ocr-llm" });
+    // Only a foreign profile has run: it is what a reader gets, rather than
+    // the absence a built-in-only lookup would report.
+    expect(preferredDerivation(db.vault, query)?.model).toBe("qwen-vl@3");
+    stamp(db, "asset-1", "tess@1");
+    expect(preferredDerivation(db.vault, query)?.profile).toBe(
+      BUILT_IN_PROFILE
+    );
+    expect(
+      preferredDerivation(db.vault, { ...query, preferredProfile: "ocr-llm" })
+        ?.model
+    ).toBe("qwen-vl@3");
+    // A preference nothing has derived under falls back rather than failing.
+    expect(
+      preferredDerivation(db.vault, { ...query, preferredProfile: "absent" })
+        ?.model
+    ).toBe("tess@1");
+    db.close();
+  });
+
+  test("resolution over several foreign profiles is stable", () => {
+    const db = openVaultDb();
+    stamp(db, "asset-1", "b@1", { profile: "profile-b" });
+    stamp(db, "asset-1", "a@1", { profile: "profile-a" });
+    const query = {
+      targetType: "media.asset",
+      targetId: "asset-1",
+      variant: "caption",
+    };
+    expect(preferredDerivation(db.vault, query)?.profile).toBe("profile-a");
+    expect(preferredDerivation(db.vault, query)?.profile).toBe("profile-a");
+    db.close();
+  });
+
+  test("a resolved stamp carries its parsed payload and producer", () => {
+    const db = openVaultDb();
+    stamp(db, "asset-1", "tess@1", { payload: { regions: 3 } });
+    expect(
+      preferredDerivation(db.vault, {
+        targetType: "media.asset",
+        targetId: "asset-1",
+        variant: "caption",
+      })
+    ).toStrictEqual({
+      targetType: "media.asset",
+      targetId: "asset-1",
+      variant: "caption",
+      capability: "ocr",
+      profile: BUILT_IN_PROFILE,
+      model: "tess@1",
+      payload: { regions: 3 },
+      producedAt: T0,
+    });
+    db.close();
+  });
+
+  test("stampedModel follows the same preference as the resolver", () => {
+    const db = openVaultDb();
+    stamp(db, "asset-1", "tess@1");
+    stamp(db, "asset-1", "qwen-vl@3", { profile: "ocr-llm" });
+    const query = {
+      targetType: "media.asset",
+      targetId: "asset-1",
+      variant: "caption",
+    };
+    expect(stampedModel(db.vault, query)).toBe("tess@1");
+    expect(
+      stampedModel(db.vault, { ...query, preferredProfile: "ocr-llm" })
+    ).toBe("qwen-vl@3");
+    db.close();
+  });
+
+  test("nothing resolves for a target no profile has derived", () => {
+    const db = openVaultDb();
+    expect(
+      preferredDerivation(db.vault, {
         targetType: "media.asset",
         targetId: "never-seen",
         variant: "caption",

@@ -160,11 +160,12 @@ export const POLY_REF_REGISTRY: readonly PolyRefEntry[] = [
  * accounting for the pair, so an exclusion is a documented decision, never an
  * oversight. Keyed by physical table name.
  *
- * `sync_import_row` and `replica_change` are documented here for completeness
- * even though neither is matched by the DDL scan — `sync_import_row` carries
- * `entity_type` with no `entity_id` sibling, and `replica_change` uses
- * `entity`/`row_id`, not the `_type`/`_id` shape — so a future rename that gave
- * either the canonical shape would land in the scan and be forced to a decision.
+ * `sync_import_row`, `replica_change` and `enrich_policy_rule` are documented
+ * here for completeness even though none of them is matched by the DDL scan —
+ * `sync_import_row` carries `entity_type` with no `entity_id` sibling,
+ * `replica_change` uses `entity`/`row_id`, and `enrich_policy_rule` uses
+ * `scope_type`/`scope_ref` — so a future rename that gave any of them the
+ * canonical shape would land in the scan and be forced to a decision.
  */
 export const POLY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
   [
@@ -206,6 +207,10 @@ export const POLY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
   [
     "replica_change",
     "Replication machinery with its own epoch/floor lifecycle (change-log.ts). It records past mutations (entity/row_id) for replica catch-up and is trimmed by epoch, not by target liveness.",
+  ],
+  [
+    "enrich_policy_rule",
+    "Not a polymorphic pointer at all (issue #807): scope_type names a CASCADE LEVEL (vault|domain|collection|item), not an ontology entity, and scope_ref is '' or a domain name at the two upper levels. A rule whose collection or item was purged matches nothing the resolver walks from a live item, so it is inert rather than dangling — and sweeping it would delete an owner decision on a purge the owner may be undoing.",
   ],
 ]);
 

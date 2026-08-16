@@ -729,10 +729,39 @@ export {
   type FaceClusterResult,
 } from "./enrich/face-clusters.js";
 export {
+  BUILT_IN_PROFILE,
+  preferredDerivation,
   stampDerivation,
   stampedModel,
+  type DerivationQuery,
+  type DerivationRecord,
   type DerivationStamp,
 } from "./enrich/derivation.js";
+export {
+  ENRICH_SCOPE_TYPES,
+  ENRICH_TRIGGERS,
+  deleteEnrichPolicyRule,
+  listEnrichPolicyRules,
+  putEnrichPolicyRule,
+  readEnrichPolicyRule,
+  readEnrichPolicyRuleChain,
+  type EnrichPolicyRule,
+  type EnrichPolicyRuleInput,
+  type EnrichScope,
+  type EnrichScopeType,
+  type EnrichTrigger,
+} from "./enrich/policy-rules.js";
+export {
+  ENRICH_EGRESS_CLASSES,
+  listEnrichConsent,
+  readEnrichConsent,
+  recordEnrichConsent,
+  type EnrichConsentDecision,
+  type EnrichConsentInput,
+  type EnrichConsentKey,
+  type EnrichConsentRecord,
+  type EnrichEgressClass,
+} from "./enrich/egress-consent.js";
 export {
   DEFAULT_ENRICHMENT_LEASE_TTL_MS,
   ENRICHMENT_CAPABILITIES,

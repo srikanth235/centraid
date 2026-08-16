@@ -53,13 +53,29 @@
 //     `"<name>@<version>"`, see `enrich/model-id.ts` — into a selector that
 //     works for EVERY capability, not just embeddings.
 //
-//     ONE STAMP PER (target_type, target_id, variant), enforced by UNIQUE and
-//     written by `enrich/derivation.ts`'s upsert. A target's caption is
-//     produced by exactly one model at a time; keeping generations here would
-//     make "what is stamped now" a question with several answers, which is
-//     precisely the ambiguity the stamp exists to remove. (Embeddings keep
-//     both generations, but they keep them in `enrich_embedding`, where the
-//     old vectors still answer searches while the new ones fill in.)
+//     ONE STAMP PER (target_type, target_id, variant, profile), enforced by
+//     UNIQUE and written by `enrich/derivation.ts`'s upsert. Two stamps for one
+//     target's variant are a CONFLICT within a profile and normal ACROSS
+//     profiles (issue #807): a member may keep the built-in OCR result and an
+//     LLM profile's result for the same page, and which one an app reads is a
+//     policy question answered by `enrich/derivation.ts`'s
+//     `preferredDerivation`, not by the key refusing to hold both. Re-running
+//     one profile still REPLACES that profile's stamp — within a profile the
+//     row must always name the model whose output is on disk right now, which
+//     is the ambiguity the stamp exists to remove. (Embeddings keep both model
+//     generations, but they keep them in `enrich_embedding`, where the old
+//     vectors still answer searches while the new ones fill in.)
+//
+//     WIDENING THAT KEY NEEDED NO REBUILD, and could not have had one: SQLite
+//     cannot alter a UNIQUE table constraint in place, and a rebuild here
+//     would cross the same live FKs the sidecar argument above names. It costs
+//     nothing because this is the pre-release, single-rung, edit-in-place
+//     schema described under `enrich_policy` below — the base rung is edited
+//     and a file written by an older shape is re-created, never migrated
+//     (`schema/migrate.ts`, docs/decisions.md). The one thing that DOES have
+//     to hold across the edit is the call site: `profile` defaults to
+//     'built-in' and every existing stamp writer names no profile, so their
+//     rows and reads are byte-identical to what they were.
 //
 //     `payload_json` is an OPTIONAL, small, JSON-valid echo of what was
 //     derived — a region count, a confidence, the variant's byte size — for
@@ -104,6 +120,25 @@
 //     forever — only application code translates it. Nothing in this
 //     runtime writes the legacy tokens; the CHECK simply refuses to be the
 //     thing that turns an old row unreadable.
+//   - `enrich_policy_rule` — the scoped policy cascade (issue #807). The tier
+//     mirror above answers ONE question per domain ("how far may photos
+//     enrichment run"), which cannot say "faces on for Photos but off for the
+//     Screenshots album" or "built-in OCR everywhere except this folder". This
+//     table is the rule STORE for that cascade: one row per (scope, capability)
+//     stating what that scope decides and nothing more, with `NULL` meaning
+//     "inherit" so a rule that only names an engine profile does not silently
+//     assert enablement. Resolution (most specific wins) belongs to the ONE
+//     gate — `packages/server/src/automation/fire/enrich-gate.ts`'s
+//     `decideEnrichmentGate` — never to a reader of this table: storage-level
+//     accessors that answered "may this run" would be a second policy path.
+//     The tier mirror stays authoritative until that resolver absorbs it.
+//   - `enrich_consent` — egress consent, keyed capability × egress class
+//     (issue #807), ORTHOGONAL to the cascade above. Policy selects an engine;
+//     this says whether that engine's egress class was ever agreed to, so a
+//     per-item "use provider X just this once" override can never widen egress
+//     by itself. Egress class is a fact about the ENGINE (`on-device` — the
+//     member's own devices; `gateway` — their own infrastructure; `provider` —
+//     a third party), the same axis `enrich-gate.ts` documents.
 //   - the `vision` and `doctype` concept schemes — machine-tag vocabularies
 //     (issue #299 §4). Concepts are created on demand by the tag publisher.
 //     Fresh vaults seed the schemes at bootstrap; the guarded inserts below
@@ -270,13 +305,20 @@ CREATE TABLE IF NOT EXISTS enrich_derivation (
   -- a capability shipped after this DDL must be stampable without a rebuild.
   variant       TEXT NOT NULL,
   capability    TEXT NOT NULL,
+  -- Which ENGINE PROFILE produced this row (issue #807): the named bundle of
+  -- capability + engine + parameters the member pointed policy at. Deliberately
+  -- not CHECKed, for the reason variant is not: a profile is a runtime object
+  -- users create, and the DDL must never be the thing that refuses one. The
+  -- DEFAULT is the identity of the bundled deterministic engines, so a call
+  -- site that names no profile keeps writing exactly the row it wrote before.
+  profile       TEXT NOT NULL DEFAULT 'built-in',
   -- '<name>@<version>' (enrich/model-id.ts). An unparseable value is legal to
   -- STORE and simply never matches a backfill query — the same stance
   -- enrich_embedding.model takes toward a row written by a foreign build.
   model         TEXT NOT NULL,
   payload_json  TEXT CHECK (payload_json IS NULL OR json_valid(payload_json)),
   produced_at   TEXT NOT NULL,
-  UNIQUE (target_type, target_id, variant)
+  UNIQUE (target_type, target_id, variant, profile)
 ) STRICT;
 -- The backfill selector's index: "everything this capability produced under
 -- some model", which is the query a version bump asks of the whole library.
@@ -369,6 +411,63 @@ CREATE TABLE IF NOT EXISTS media_face_cluster (
 CREATE INDEX IF NOT EXISTS idx_media_face_cluster_cluster
   ON media_face_cluster(cluster_id);
 -- ─── end issue #724 W5 ────────────────────────────────────────────────────
+
+-- ─── issue #807 (generic enrichment) ──────────────────────────────────────
+-- The policy cascade's rule store and the egress-consent ledger. See the
+-- header above for what each answers and, crucially, what neither does: no
+-- reader of these tables decides whether work may run — decideEnrichmentGate
+-- stays the one gate.
+CREATE TABLE IF NOT EXISTS enrich_policy_rule (
+  rule_id    TEXT PRIMARY KEY,
+  -- The cascade levels, least to most specific. scope_type names a LEVEL,
+  -- not an ontology entity, so (scope_type, scope_ref) is deliberately NOT
+  -- the vault's polymorphic (X_type, X_id) shape and is not swept on purge
+  -- (schema/poly-refs.ts): a rule whose collection is gone matches no item the
+  -- resolver ever walks, so it is inert rather than dangling.
+  scope_type TEXT NOT NULL CHECK (scope_type IN ('vault','domain','collection','item')),
+  -- '' at vault scope; the domain name, collection id, or target id below it.
+  -- Empty string rather than NULL because SQLite treats NULLs as DISTINCT in a
+  -- UNIQUE index, which would let a vault-scope rule be written twice.
+  scope_ref  TEXT NOT NULL,
+  capability TEXT NOT NULL CHECK (length(capability) BETWEEN 1 AND 64),
+  -- All three are NULLABLE and mean INHERIT when NULL — a rule states only
+  -- what its scope decides. A row that decides nothing is not a rule, so the
+  -- CHECK below makes the empty one unrepresentable rather than merely useless.
+  enabled    INTEGER CHECK (enabled IS NULL OR enabled IN (0,1)),
+  profile    TEXT,
+  trigger_on TEXT CHECK (trigger_on IS NULL
+    OR trigger_on IN ('on-ingest','on-view','on-demand')),
+  updated_at TEXT NOT NULL,
+  CHECK ((scope_type = 'vault') = (scope_ref = '')),
+  CHECK (enabled IS NOT NULL OR profile IS NOT NULL OR trigger_on IS NOT NULL),
+  UNIQUE (scope_type, scope_ref, capability)
+) STRICT;
+-- "Every rule that mentions this capability" — the audit view's query, and the
+-- one a capability's removal would have to walk.
+CREATE INDEX IF NOT EXISTS idx_enrich_policy_rule_capability
+  ON enrich_policy_rule(capability);
+
+CREATE TABLE IF NOT EXISTS enrich_consent (
+  consent_id TEXT PRIMARY KEY,
+  capability TEXT NOT NULL CHECK (length(capability) BETWEEN 1 AND 64),
+  -- A property of the ENGINE, never of who asked — see the header.
+  egress     TEXT NOT NULL CHECK (egress IN ('on-device','gateway','provider')),
+  -- '' = this vault, i.e. the answer covers every scope. Same empty-string
+  -- argument as enrich_policy_rule.scope_ref above: a NULL here would let
+  -- one vault-wide answer be recorded twice under a UNIQUE index.
+  scope_ref  TEXT NOT NULL,
+  -- A declined answer is a DECISION and stays a row: forgetting it would make
+  -- "already asked and told no" indistinguishable from "never asked", and the
+  -- consent doctrine is asked once, answered once.
+  decision   TEXT NOT NULL CHECK (decision IN ('granted','declined')),
+  decided_at TEXT NOT NULL,
+  -- → consent.receipt (journal.db). Cross-file, so engine-unenforceable and
+  -- gateway-validated like every other journal pointer (schema/journal.ts);
+  -- NULL until the receipt is written, never a second copy of it.
+  receipt_id TEXT,
+  UNIQUE (capability, egress, scope_ref)
+) STRICT;
+-- ─── end issue #807 ───────────────────────────────────────────────────────
 `;
 
 /** Scheme URIs the enrichment publishers create concepts under. */

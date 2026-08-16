@@ -105,7 +105,7 @@ The proposed fixed-window replacement for steward-side ack-gated compaction is *
 
 Recognition is self-contained automation. `photo-ocr`, `transcript`, `embed-image`, `embed-text`, and `faces` read bytes through `ctx.vault.content`, run their bundled implementation, and persist through `ctx.vault.invoke`. The automation engine owns scheduling, consent, retries, cursor watermarks, and ledger history. There is no service wire, `ctx.infer`, or `ctx.enrich`; only OCR may use the explicit consented `ctx.delegate` variant. Device-side model inference is not part of the product; clients consume replicated derived rows. See [recognition-automations.md](recognition-automations.md) and [Photos derived ledger](photos/derived-ledger.md).
 
-Faces consume only an open `enrich_request(capability='faces')` or a prior consent stamp. `media.forget_person` removes regions, embeddings, derivation stamps, and clusters. `enrich_derivation` is the provenance record, and model upgrades are backfills that leave older rows serving until replacements land.
+Faces consume only an open `enrich_request(capability='faces')` or a prior consent stamp. `media.forget_person` removes regions, embeddings, derivation stamps, and clusters. `enrich_derivation` is the provenance record, and model upgrades are backfills that leave older rows serving until replacements land. The stamp is keyed by **engine profile** as well as target and variant ([#807](https://github.com/srikanth235/centraid/issues/807)): several profiles' results for one variant coexist, and consumers read the one `preferredDerivation` ([`packages/vault/src/enrich/derivation.ts`](../packages/vault/src/enrich/derivation.ts)) resolves — never a hand-picked row.
 
 ## Blueprint-readiness policies
 

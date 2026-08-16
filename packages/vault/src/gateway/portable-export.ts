@@ -120,6 +120,12 @@
 // own identity, and a pin from the old one would fail that vault closed
 // against a key it never held.
 
+// Schema/export audit #807: `enrich.policy_rule` and `enrich.consent` ride the
+// canonical walk by registration (schema/tables.ts, per the #724 W5 note) —
+// owner decisions a restore must keep, or it re-asks answered consent and
+// loses recorded refusals. No adapter, no content bytes. The
+// `enrich_derivation` profile column rides its already-walked table.
+
 import { createHash } from "node:crypto";
 
 import { sha256OfBytes } from "../blob/store.js";
