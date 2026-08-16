@@ -27,7 +27,7 @@ import App from "./shell/App.js";
 import ErrorBoundary from "./shell/ErrorBoundary.js";
 import { Gallery } from "./ui/index.js";
 
-// Install terminal replica cleanup before any AppFrame asks for a local read;
+// Install terminal replica cleanup before any app route asks for a local read;
 // inactive gateway removal and vault switches must also reach dormant storage.
 void import("../replica/shell-session.js")
   .then((module) => module.installReplicaStorageLifecycle())

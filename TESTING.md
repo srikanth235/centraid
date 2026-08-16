@@ -181,8 +181,7 @@ HIGH  vault/backup/replica contracts, handler isolation, web offline/PWA,
       harness conversation journey (fake ACP integration)
 MED   desktop Playwright, mobile Maestro iOS + Android home-loads, perf/scale
       (generous), tunnel native when module present, multi-writer double-write
-SOFT  desktop copilot UI e2e (blocked on #470), builder publish (punted v0),
-      mobile on-device perf/scale (honest skip), nightly red → human action
+SOFT  mobile on-device perf/scale (honest skip), nightly red → human action
 ```
 
 Parent backlog: [#496](https://github.com/srikanth235/centraid/issues/496).
@@ -304,7 +303,6 @@ Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and ar
 | `packages/blueprints/apps/photos/**` | 46.82 / 42.81 | **44** / **40** |
 | `_shared` + non-graduated blueprint apps | 22.53 / 16.92 | **20** / **14** |
 | `packages/model-runtime/src/**` | 68.01 / 51.44 | **66** / **49** |
-| `packages/design/kit/**` | 49.56 / 37.27 | **49** / **37** |
 | `packages/design/src/**` | 95.1 / — (#709) | **94** / **70** |
 | `packages/app-engine/src/**` | 85.45 / 74.44 | **84** / **73** |
 | `packages/gateway/src/**` | 79.9 / 66.37 (#638) | **79** / **65** |
@@ -341,7 +339,7 @@ These suites encode product law and are cataloged by name. The matrix validator 
 3. Blob custody / CAS state machine — `packages/vault/src/blob/custody-proven.contract.test.ts`
 4. Replica convergence, intent identity, and multi-writer admission — `packages/client/src/replica/intents.contract.test.ts` and `packages/client/src/replica/multi-writer.contract.test.ts`
 5. Handler validation and worker isolation — `packages/app-engine/src/handlers/handler-runner.contract.test.ts`
-6. Control/app/device session boundaries — `packages/gateway/src/serve/web-app-sessions.contract.test.ts`
+6. Control/device session boundaries — `packages/gateway/src/serve/web-control-sessions.contract.test.ts`
 7. Scheduler no-backfill semantics — `packages/automation/src/fire/scheduler-ledger.contract.test.ts`
 8. Conversation digest → archive → custody-gated prune — `packages/app-engine/src/conversation/archive/archive.contract.test.ts`
 9. Pending-write projection, seat parity, settlement, and exclusions — `scripts/lint-engine-conformance.test.mjs`, `packages/blueprints/apps/_shared/pending-overlay.test.ts`, and `packages/client/src/replica/intents.contract.test.ts`
@@ -388,7 +386,7 @@ Deterministic automation fires need no mock: their handlers run in-process again
 | `.github/workflows/ci.yml` | parallel **static** + **gates** + **verify**, required **check** aggregator (ruleset-required); **publish-report** on main only (Pages); Bun/Turbo/Cargo caches |
 | `.github/workflows/e2e.yml` | desktop, web, mobile (iOS + Android home-loads), pairing, perf, scale, **mutation**, full report → **publish-nightly-report** on main only; red scheduled nightly → auto-issue |
 
-A gate that runs only in `check:push` is a gate nobody can be required to pass: it is skippable by pushing without it, and a broken `main` cannot be attributed. CI's `gates` job exists to close that hole — it carries the deterministic design/governance gates (reachability, the design-token/mobile-design/logical-insets/hairline/aria-label/container-opacity/type-floor/motion-rule linters, `lint:design-md`, engine-conformance, law-registry, quality-knobs, schema-export, `check:ui-receipt`, `test:quarantine`) and feeds the required `check` aggregator; `test:qualities` rides `verify` because it needs `bun run build` first. **`design:gallery`** now has its own path-gated CI job (`design-gallery` in `ci.yml`) that installs the pinned Playwright browser; its first green needs a one-time Linux baseline decision recorded in the job's comment (#781). **`check:mobile-native-state`** is deliberately absent from `gates`: CI's `mobile-smoke` runs the identical `apps/mobile ci:native-state` command on a strictly wider path filter (root dependency drift triggers it where the local check's `apps/mobile/**` filter would not — #587 E22), so the delegation is complete, not a hole. `check:pr` remains a superset of CI in one further respect: it runs `test:affected`, where CI runs the full vitest suite on `verify` instead.
+A gate that runs only in `check:push` is a gate nobody can be required to pass: it is skippable by pushing without it, and a broken `main` cannot be attributed. CI's `gates` job exists to close that hole — it carries the deterministic design/governance gates (reachability, the design-token/mobile-design/logical-insets/hairline/aria-label/container-opacity/type-floor/motion-rule linters, `lint:design-md`, engine-conformance, law-registry, quality-knobs, schema-export, `check:ui-receipt`, `test:quarantine`) and feeds the required `check` aggregator; `test:qualities` rides `verify` because it needs `bun run build` first. **`design:gallery`** now has its own path-gated CI job (`design-gallery` in `ci.yml`) that installs the pinned Playwright browser; since [#799](https://github.com/srikanth235/centraid/issues/799) it builds `apps/web` and photographs the shell’s own `#ui-preview` gallery with the product’s self-hosted faces, and the baselines are Linux-captured, so whether darwin `check:push` agrees with them is the open question the job’s comment records (#781). **`check:mobile-native-state`** is deliberately absent from `gates`: CI's `mobile-smoke` runs the identical `apps/mobile ci:native-state` command on a strictly wider path filter (root dependency drift triggers it where the local check's `apps/mobile/**` filter would not — #587 E22), so the delegation is complete, not a hole. `check:pr` remains a superset of CI in one further respect: it runs `test:affected`, where CI runs the full vitest suite on `verify` instead.
 
 ### Test-health report (main + nightly)
 

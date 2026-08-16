@@ -1,7 +1,7 @@
 /*
  * Response compression for the gateway HTTP layer (issue #404, "Mobile fast
- * path"). One negotiator shared by the static asset server and the tool-route
- * JSON sender.
+ * path"). One negotiator in front of the JSON responses the gateway serves —
+ * app RPC results, `_describe`, and the conversation ledger.
  *
  * Wire safety across every transport that consumes these responses:
  *
@@ -27,36 +27,16 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { availableParallelism, totalmem } from "node:os";
 import zlib from "node:zlib";
 
 /**
  * Below this raw-body size, compression's header + framing overhead and CPU
- * cost aren't worth the shave — most tool JSON replies and tiny assets land
- * here and ship uncompressed.
+ * cost aren't worth the shave — most tool JSON replies land here and ship
+ * uncompressed.
  */
 export const MIN_COMPRESS_BYTES = 1024;
 
 export type Encoding = "br" | "gzip";
-
-/**
- * Content types worth compressing: text, JSON, JS, and SVG all shrink 3-10x.
- * Everything else the gateway serves (png/jpg/webp/gif/ico, woff/woff2/ttf/
- * otf, video) is already entropy-coded — recompressing burns CPU for ~0 gain
- * and can even grow the body, so those are left raw.
- *
- * `text/event-stream` is explicitly excluded (the `(?!event-stream)`
- * lookahead): buffering an SSE stream to compress it would defeat its
- * whole point. Our SSE path (changes-sse.ts) never routes through the
- * compressors anyway, but this keeps the type-level guard honest for any
- * future caller.
- */
-const COMPRESSIBLE_TYPE_RE =
-  /^(?:text\/(?!event-stream)|application\/(?:json|javascript|manifest\+json|xml)|image\/svg\+xml)/iu;
-
-export function isCompressibleType(contentType: string | undefined): boolean {
-  return contentType !== undefined && COMPRESSIBLE_TYPE_RE.test(contentType);
-}
 
 /**
  * Brotli beats gzip on ratio for the same wall-clock at a comparable quality,
@@ -103,48 +83,11 @@ export interface CompressQuality {
 
 /**
  * Dynamic responses (tool JSON) are compressed on the request's hot path, so
- * favour speed: mid brotli / mid gzip still land most of the ratio.
+ * favour speed: mid brotli / mid gzip still land most of the ratio. Every
+ * body the gateway compresses is dynamic — #799 retired the cached static
+ * asset plane that spent for ratio instead.
  */
 export const DYNAMIC_QUALITY: CompressQuality = { brotli: 4, gzip: 6 };
-
-/**
- * Static assets compress once and are cached per (path,mtime,size), so the
- * cost is amortized across every later hit — spend for maximum ratio.
- */
-export const STATIC_QUALITY: CompressQuality = { brotli: 10, gzip: 9 };
-
-export function staticQualityForHost(
-  host: { cores: number; totalMemoryBytes: number } | undefined = undefined,
-  env: NodeJS.ProcessEnv = process.env
-): CompressQuality {
-  const resolvedHost = host ?? {
-    cores: availableParallelism(),
-    totalMemoryBytes: totalmem(),
-  };
-  const resolvedProfile =
-    env.CENTRAID_HARDWARE_PROFILE ?? env.CENTRAID_RESOLVED_HARDWARE_PROFILE;
-  const constrained =
-    resolvedProfile === "constrained" ||
-    (resolvedProfile !== "standard" &&
-      (resolvedHost.cores <= 4 ||
-        resolvedHost.totalMemoryBytes <= 4 * 1024 ** 3));
-  const parse = (
-    raw: string | undefined,
-    fallback: number,
-    ceiling: number
-  ): number => {
-    if (raw === undefined || raw === "") return fallback;
-    const parsed = Math.trunc(Number(raw));
-    return Number.isFinite(parsed) && parsed >= 0
-      ? Math.min(parsed, ceiling)
-      : fallback;
-  };
-  const fallback = constrained ? { brotli: 5, gzip: 6 } : STATIC_QUALITY;
-  return {
-    brotli: parse(env.CENTRAID_STATIC_BROTLI_QUALITY, fallback.brotli, 11),
-    gzip: parse(env.CENTRAID_STATIC_GZIP_QUALITY, fallback.gzip, 9),
-  };
-}
 
 /** Compress on libuv's worker pool so large payloads never stall the event loop. */
 export function compress(

@@ -132,7 +132,7 @@ Posture after issue **#504 batch 0** (fixed; do not document the old reflective-
 | Pairing | One-time ticket binds a device key to a vault; successful redeem **burns** the ticket; expiry is enforced |
 | Transport | Iroh QUIC between capable peers; **browsers are relay-only** (no UDP) via WASM path |
 | Relay | Public/default relay infrastructure can observe **that** connections exist and traffic volume; it must not obtain vault sealing keys from the protocol design |
-| PWA HTTP fallback | Origin-bound HttpOnly control session; generated apps get **narrower** app sessions and must not reach shell/admin routes |
+| PWA HTTP fallback | One origin-bound HttpOnly control session per vault. #799 retired the per-app browser session along with the served plane: an app is shell code inside that same session, and its data reach is bounded by its consent grants, not by a second cookie |
 | Consent | Device replicas and app handlers are **consent-scoped**; compromise of one app grant is not automatically full vault admin |
 
 ### What the transport can and cannot do

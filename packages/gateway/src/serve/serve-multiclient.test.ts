@@ -51,10 +51,6 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
       version: "0.1.0",
     })
   );
-  await fs.writeFile(
-    path.join(appDir, "index.html"),
-    "<!doctype html><title>mc</title>"
-  );
   await store.publish({ sessionId: "seed", appId, message: "seed" });
   await store.closeSession("seed");
 }
@@ -72,7 +68,7 @@ describe("serve-multiclient scenarios", () => {
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  test("two clients see the published app consistently in the registry + static serve", async () => {
+  test("two clients see the published app consistently in the registry + app plane", async () => {
     // Client A: list — sees the app synced from `main`.
     const list = await fetch(`${handle.url}/centraid/_apps`, {
       headers: { Authorization: `Bearer ${handle.token}` },
@@ -81,14 +77,16 @@ describe("serve-multiclient scenarios", () => {
     const apps = (await list.json()) as Array<{ id: string }>;
     expect(apps.some((a) => a.id === "multiclient-test")).toBeTruthy();
 
-    // Client B: static-serve the app's index.html — proves the daemon's
-    // `/centraid/<id>/` static path resolves the live `main` worktree, not
-    // just the registry index.
-    const html = await fetch(`${handle.url}/centraid/multiclient-test/`, {
-      headers: { Authorization: `Bearer ${handle.token}` },
+    // Client B: describe the app — proves the daemon's `/centraid/<id>/`
+    // app plane resolves the live `main` worktree's manifest, not just the
+    // registry index.
+    const described = await fetch(
+      `${handle.url}/centraid/multiclient-test/_describe`,
+      { headers: { Authorization: `Bearer ${handle.token}` } }
+    );
+    expect(described.status).toBe(200);
+    await expect(described.json()).resolves.toMatchObject({
+      manifest: { id: "multiclient-test", name: "multiclient-test" },
     });
-    expect(html.status).toBe(200);
-    const body = await html.text();
-    expect(body).toMatch(/<title>mc<\/title>/u);
   });
 });

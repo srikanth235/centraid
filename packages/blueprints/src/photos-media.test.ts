@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 // The typed `vi.mock(import('../apps/photos/format.js'), …)` form that
 // vitest/prefer-import-in-mock wants pulls that module into this package's TS
 // program, but `apps/` sits outside its `rootDir: ./src` (tsconfig.json), so
-// typecheck fails with TS6059 plus TS2307 on the module's own `./kit.ts`
-// import. The blueprint apps are typechecked separately by tsconfig.apps.json,
+// typecheck fails with TS6059 plus TS2307 on the module's own app-relative
+// imports. The apps are typechecked separately by tsconfig.apps.json,
 // and the `@ts-nocheck` above does not help because module resolution still
 // happens. The string specifier keeps the module out of this program.
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- see above

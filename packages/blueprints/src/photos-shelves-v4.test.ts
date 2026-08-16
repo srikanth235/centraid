@@ -387,8 +387,8 @@ describe("the band's sixth slot carries what the five left behind", () => {
 });
 
 describe("permission is a screen, not an error", () => {
-  it("keeps the focus-refresh contract the shared kit reads", () => {
-    // `#consentBanner` is how kit.ts's onFocusRefresh knows a window focus is a
+  it("keeps the focus-refresh contract the element layer reads", () => {
+    // `#consentBanner` is how `onFocusRefresh` knows a window focus is a
     // recovery from a just-granted permission. The element was redrawn; the
     // hook's question did not change.
     const html = renderToStaticMarkup(

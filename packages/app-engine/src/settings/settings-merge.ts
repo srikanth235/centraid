@@ -1,40 +1,52 @@
 /*
- * Settings merge — gateway-wide user prefs ⊕ per-app settings ⊕ URL query
- * overrides → the `SettingsInject` payload that `static-server` bakes into
- * the served HTML.
+ * Settings merge — gateway-wide user prefs ⊕ per-app settings ⊕ caller
+ * overrides → the `SettingsInject` payload a host applies to its app
+ * surface's root element.
  *
  * Precedence (lowest → highest):
  *   1. global user prefs (UserStore)
  *   2. per-app `__centraid_settings` (apps own this row)
- *   3. URL query string (live-edit / preview path used by the builder)
+ *   3. caller-supplied overrides
  *
  * Routing — there are two namespaces:
  *
  *   - GLOBAL keys (theme/density/accent/…) are explicitly registered in
  *     `KNOWN_KEYS`. Anything outside that registry AND outside the `app*`
  *     namespace is dropped, so a typo in a global setting can't smear a
- *     stray attribute onto `<html>`.
+ *     stray attribute onto the root element.
  *
  *   - APP-LEVEL keys (any key shaped like `app<Capital>…`) are routed
- *     DYNAMICALLY. Each template declares which app knobs it honours in
- *     its `app.json#knobs[]`; the harness can extend that list
- *     per app, so the runtime can't predict the universe of knob keys
- *     ahead of time. Routing is by name convention:
+ *     DYNAMICALLY. Each app declares which knobs it honours in its
+ *     `app.json#knobs[]`; the harness can extend that list per app, so the
+ *     runtime can't predict the universe of knob keys ahead of time.
+ *     Routing is by name convention:
  *       - keys ending in `Color` or `Accent` → CSS var `--app-<kebab>`
  *       - everything else                    → data attr `data-app-<kebab>`
  *     Values are coerced to a non-empty string; everything else is dropped.
  *
  * Adding a new GLOBAL pref is a single edit to `KNOWN_KEYS`. Adding a new
- * per-app knob is a manifest edit in `<template>/app.json#knobs[]` plus
- * the matching CSS — no runtime change required.
+ * per-app knob is a manifest edit in `<app>/app.json#knobs[]` plus the
+ * matching CSS — no runtime change required.
+ *
+ * #799 retired the gateway's UI-byte plane, so nothing in this repo calls
+ * `buildSettingsInject` today: the shells resolve appearance themselves
+ * (`packages/client/src/react/shell/appearance.ts`). It stays as the
+ * engine's public settings-routing contract for hosts that need it.
  */
 
-import type { SettingsInject } from "../http/static-server.js";
+/**
+ * Where merged settings land on a host's app-surface root element.
+ * `dataAttrs` become `data-<key>="…"`; `cssVars` become `--<key>: …`.
+ */
+export interface SettingsInject {
+  dataAttrs?: Record<string, string>;
+  cssVars?: Record<string, string>;
+}
 
 /**
- * The settings keys this build understands, plus where each one lands in
- * the served HTML. `kind: 'data'` becomes `<html data-<key>="...">`,
- * `kind: 'css'` becomes a CSS custom property on the same tag's `style`.
+ * The settings keys this build understands, plus where each one lands on the
+ * host's root element. `kind: 'data'` becomes `data-<key>="..."`,
+ * `kind: 'css'` becomes a CSS custom property on the same element's `style`.
  *
  * Each entry also carries an optional `coerce` so values can survive
  * round-tripping through JSON — e.g. the bgL slider stores `5`, but the
@@ -80,8 +92,8 @@ export const KNOWN_KEYS: Record<string, KeySpec> = {
 
 /**
  * Convert a camelCase tail (e.g. `Font`, `FontFamily`, `CornerRadius`) into
- * the kebab-case attribute / variable suffix the runtime injects onto
- * `<html>`. Used only by the dynamic `app*` routing — the registered
+ * the kebab-case attribute / variable suffix the runtime injects onto the
+ * root element. Used only by the dynamic `app*` routing — the registered
  * global keys (`KNOWN_KEYS`) pre-declare their target name.
  */
 function camelTailToKebab(tail: string): string {
@@ -123,10 +135,10 @@ function appKnobTarget(
 }
 
 /**
- * Merge layered settings into the `SettingsInject` shape consumed by
- * `static-server`. Layers are merged in order — later layers override
- * earlier ones. `undefined` / `null` in any layer is treated as "no
- * value" and falls through to the previous layer.
+ * Merge layered settings into the {@link SettingsInject} shape. Layers are
+ * merged in order — later layers override earlier ones. `undefined` /
+ * `null` in any layer is treated as "no value" and falls through to the
+ * previous layer.
  */
 export function buildSettingsInject(
   layers: Array<Record<string, unknown> | undefined>

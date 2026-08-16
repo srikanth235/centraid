@@ -5,8 +5,23 @@
 // `search` queries return (open + logbook, with nested children, attachments,
 // tags and resolved cross-references); the presentation `AppState`/`BoardData`
 // bags app.tsx mutates in place (never reassigned) and logic.ts closes over.
+import type { Attachment } from "@centraid/design/elements";
+
 import type { ScopeSearchReach } from "../_shared/search-scaffold.ts";
-import type { Attachment, Reference } from "./kit.ts";
+
+/**
+ * One resolved cross-reference on a task row (`core.link_entities`), as the
+ * `board`/`search` queries decorate it. Declared here rather than shared:
+ * referencing is a shell capability, and this app only ever READS the rows the
+ * query resolved for it.
+ */
+export interface Reference {
+  linkId?: string;
+  type?: string;
+  id?: string;
+  relation?: string;
+  [key: string]: unknown;
+}
 
 /** VTODO lifecycle status (schedule.task). */
 export type TaskStatus =

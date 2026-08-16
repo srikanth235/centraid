@@ -20,15 +20,25 @@ interface WaterfallReport {
     cold: { requestCount: number; transferBytes: number };
     warmToColdByteRatio: number;
   };
+  // An app open is an inline route in the shell window (#799 retired the
+  // served-app iframe). `grandTotalTransferBytes` is what came off the WIRE and
+  // is 0 while the service worker answers the app's chunks from Cache Storage;
+  // `encodedBodyBytes` is the DECODED weight of those same bodies (Cache
+  // Storage holds decoded bodies, so it is raw size, not a wire figure) and is
+  // the number that grows when an app gets heavier. Both are gated.
   appOpen: {
     cold: {
       requestCount: number;
+      totalRequestCount: number;
       grandTotalTransferBytes: number;
+      encodedBodyBytes: number;
       elapsedMs: number;
     };
     warm: {
       requestCount: number;
+      totalRequestCount: number;
       grandTotalTransferBytes: number;
+      encodedBodyBytes: number;
       elapsedMs: number;
     };
     warmToColdByteRatio: number;
@@ -75,10 +85,24 @@ describe("pwa-waterfall.perf", () => {
           perfBudgets.appOpen.cold.maxRequests &&
         report.appOpen.cold.grandTotalTransferBytes <=
           perfBudgets.appOpen.cold.maxTransferBytes &&
+        report.appOpen.cold.encodedBodyBytes <=
+          perfBudgets.appOpen.cold.maxEncodedBytes &&
+        report.appOpen.cold.totalRequestCount <=
+          perfBudgets.appOpen.cold.maxTotalRequests &&
+        // A cold open that loaded nothing is a broken measurement, not a fast
+        // one. A bare `> 0` would not catch the realistic version of that —
+        // the app chunk getting preloaded or folded into `boot`, leaving one
+        // incidental byte in the window — so this is a real floor.
+        report.appOpen.cold.encodedBodyBytes >=
+          perfBudgets.appOpen.cold.minEncodedBytes &&
         report.appOpen.warm.requestCount <=
           perfBudgets.appOpen.warm.maxRequests &&
+        report.appOpen.warm.totalRequestCount <=
+          perfBudgets.appOpen.warm.maxTotalRequests &&
         report.appOpen.warm.grandTotalTransferBytes <=
           perfBudgets.appOpen.warm.maxTransferBytes &&
+        report.appOpen.warm.encodedBodyBytes <=
+          perfBudgets.appOpen.warm.maxEncodedBytes &&
         report.appOpen.warmToColdByteRatio <=
           perfBudgets.appOpen.maxWarmToColdByteRatio;
       const withinDrift =
@@ -118,6 +142,12 @@ describe("pwa-waterfall.perf", () => {
             value: report.appOpen.cold.grandTotalTransferBytes,
             unit: "bytes",
             budget: perfBudgets.appOpen.cold.maxTransferBytes,
+          },
+          {
+            name: "cold app encoded",
+            value: report.appOpen.cold.encodedBodyBytes,
+            unit: "bytes",
+            budget: perfBudgets.appOpen.cold.maxEncodedBytes,
           },
         ],
       });

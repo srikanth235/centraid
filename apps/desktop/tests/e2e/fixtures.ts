@@ -40,7 +40,6 @@ export interface AppMetaEntry {
   name?: string;
   description?: string;
   kind?: "app" | "automation";
-  hasIndex: boolean;
 }
 
 /** Raw git-store version row (what GET /git-versions returns). */
@@ -91,9 +90,6 @@ export interface MockState {
   conversations: Array<Record<string, unknown>>;
   /** GET /_centraid-conversations/apps/:appId/sessions/:id → messages */
   conversationMessages: Array<Record<string, unknown>>;
-
-  /** Whether GET /centraid/_draft/.../ returns 200 (available) or 404. */
-  draftAvailable: boolean;
 
   /** Per-method status overrides keyed by a coarse op name. */
   automationsStatus: number; // GET /centraid/_automations (drives the list error card)
@@ -208,7 +204,6 @@ function defaultState(): MockState {
     harnessesStatus: { harnesses: [], models: [] },
     conversations: [],
     conversationMessages: [],
-    draftAvailable: true,
     automationsStatus: 200,
     deleteStatus: 200,
     publishStatus: 200,
@@ -393,24 +388,12 @@ async function route(
       } else {
         s.apps = [
           ...s.apps.filter((entry) => entry.id !== app.id),
-          appEntry({ ...app, id: app.id, hasIndex: app.hasIndex ?? true }),
+          appEntry({ ...app, id: app.id }),
         ];
       }
       if (options.appsDir) await writeMockApp(options.appsDir, app.id, app);
     }
     return json(res, 200, result);
-  }
-
-  // ---- draft preview probe ----
-  if (p.startsWith("/centraid/_draft/")) {
-    if (s.draftAvailable) {
-      res.writeHead(200, { "content-type": "text/html", ...CORS });
-      res.end("<!doctype html><title>draft</title><body>draft preview</body>");
-    } else {
-      res.writeHead(404, CORS);
-      res.end("not found");
-    }
-    return;
   }
 
   // ---- apps collection ----
@@ -420,13 +403,13 @@ async function route(
       const parsed = safeJson(body);
       const id = (parsed.id as string) ?? "new-app";
       const result = s.createAppResult ?? {
-        app: { id, name: parsed.name, kind: "app", hasIndex: true },
+        app: { id, name: parsed.name, kind: "app" },
       };
       const app = result.app as Partial<AppMetaEntry> | undefined;
       if (app?.id) {
         s.apps = [
           ...s.apps.filter((entry) => entry.id !== app.id),
-          appEntry({ ...app, id: app.id, hasIndex: app.hasIndex ?? true }),
+          appEntry({ ...app, id: app.id }),
         ];
         if (options.appsDir) await writeMockApp(options.appsDir, app.id, app);
       }
@@ -880,9 +863,7 @@ async function readMockApps(appsDir: string): Promise<{
       if (manifest.kind === "automation") {
         automations.push(automationRow({ id, name: manifest.name }));
       } else {
-        apps.push(
-          appEntry({ ...manifest, id, hasIndex: manifest.hasIndex ?? true })
-        );
+        apps.push(appEntry({ ...manifest, id }));
       }
     } catch {
       // A half-written directory is intentionally absent from the mock's
@@ -986,9 +967,7 @@ export async function seedRemoteGateway(
     JSON.stringify(
       {
         activeGatewayId: env.gatewayId,
-        builderEnabled: true,
         changelogSeenVersion: "0.1.0",
-        remoteTemplatesUrl: "",
         ...(opts.onboarding
           ? {}
           : { onboardingCompletedAt: "2024-01-01T00:00:00.000Z" }),
@@ -1082,7 +1061,6 @@ export function appEntry(
     ...over,
     name: over.name ?? over.id,
     kind: over.kind ?? "app",
-    hasIndex: over.hasIndex ?? true,
   };
 }
 
@@ -1419,21 +1397,6 @@ export async function openAppFromPalette(
     .filter({ hasText: appName })
     .first()
     .click();
-}
-
-/** Start a new builder session with an initial prompt via the palette Create row. */
-export async function startBuilderFromPalette(
-  page: Page,
-  prompt: string
-): Promise<void> {
-  await openCommandPalette(page);
-  const palette = page.getByRole("dialog", { name: "Command palette" });
-  await palette.locator("input").fill(prompt);
-  // Curly quotes match paletteData's `Build “${trimmed}”` label.
-  await palette
-    .getByRole("button", { name: new RegExp(`Build [“"]${prompt}[”"]`, "u") })
-    .click();
-  await page.getByTestId("builder-body").waitFor({ state: "visible" });
 }
 
 /** How long a test waits for a well-behaved Electron shutdown before forcing it. */

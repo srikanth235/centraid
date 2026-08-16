@@ -15,6 +15,16 @@ import {
 } from "react";
 import type { KeyboardEvent, ReactElement, ReactNode } from "react";
 
+import {
+  closePopover,
+  debounce,
+  observeWidth,
+  onDataChange,
+  onFocusRefresh,
+  readFailed,
+  showSkeleton,
+} from "@centraid/design/elements";
+
 import { publishOutcome } from "../_shared/app-frame.tsx";
 import { mountedScopes } from "../_shared/scope-kit.ts";
 import { ShareSheet } from "../_shared/ShareSheet.tsx";
@@ -40,15 +50,6 @@ import { NO_FILTERS, filtersActive } from "./filters.ts";
 import type { DriveFilters } from "./filters.ts";
 import { canRender, isTextEditable } from "./format.ts";
 import { appBar, bandClaim } from "./frame.tsx";
-import {
-  closePopover,
-  debounce,
-  observeWidth,
-  onDataChange,
-  onFocusRefresh,
-  readFailed,
-  showSkeleton,
-} from "./kit.ts";
 import { createLogic } from "./logic.ts";
 import { createNav } from "./nav.ts";
 import {

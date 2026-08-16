@@ -4,10 +4,11 @@
 // state rides kit.css `.kit-empty*` (global strings).
 import { identityColor } from "@centraid/design";
 
+import { Avatar } from "../../_shared/Avatar.tsx";
 import { daysSinceIso, fmt } from "../format.ts";
 import { I } from "../icons.ts";
 import type { RecentItem } from "../types.ts";
-import { Icon, KitAvatar } from "./Shared.tsx";
+import { Icon } from "./Shared.tsx";
 
 import shared from "./shared.module.css";
 
@@ -22,12 +23,12 @@ function ActivityItem({
   return (
     <div className={shared.activityItem}>
       <div className={shared.activityRail}>
-        <KitAvatar
-          style={{ cursor: "pointer" }}
-          name={a.name}
-          size="36px"
+        <Avatar
           color={color}
+          label={`Open ${a.name}`}
+          name={a.name}
           onClick={() => a.party_id && onOpenDetails(a.party_id)}
+          size="36px"
         />
         <span className={shared.activityLine} />
       </div>

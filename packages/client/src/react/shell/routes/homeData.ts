@@ -21,9 +21,6 @@ const AU_LABEL: Record<AuStatusKind, string> = {
   success: "Success",
 };
 
-const isDraftApp = (a: AppMetaResolvedType): a is DraftAppMeta =>
-  (a as DraftAppMeta).__draft === true;
-
 const recent = (iso?: string): boolean => {
   if (!iso) return false;
   const t = new Date(iso).getTime();
@@ -42,19 +39,16 @@ export function buildHomeAppItems(
   deps: HomeDeps
 ): HomeAppItemDTO[] {
   return apps.map((a) => {
-    const draft = isDraftApp(a);
-    const ua = draft ? undefined : deps.userApps.find((x) => x.id === a.id);
-    const tone = draft ? "draft" : recent(ua?.createdAt) ? "new" : null;
+    const ua = deps.userApps.find((x) => x.id === a.id);
     return {
       desc: a.desc || "",
       colorKey: a.colorKey,
-      draft,
       iconKey: a.iconKey,
       id: a.id,
       name: a.name,
       starred: deps.isStarred(a.id),
-      stamp: draft ? "saved" : relativeTime(ua?.updatedAt),
-      tone,
+      stamp: relativeTime(ua?.updatedAt),
+      tone: recent(ua?.createdAt) ? "new" : null,
     };
   });
 }

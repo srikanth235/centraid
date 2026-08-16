@@ -1,0 +1,1575 @@
+/* ============================================================================
+   Centraid element layer — shared UX primitives for every blueprint app.
+   Canonical (and ONLY) copy: packages/design/src/elements/kit.css, beside the
+   elements it dresses. Apps carry no copies: the shell route host loads this
+   one stylesheet once (`@centraid/design/kit.css`) and every app picks up an
+   edit here on the next build.
+
+   ── DESIGN LANGUAGE: "Field notebook" ──────────────────────────────────────
+   Calm, instrument-grade, personal. Humanist system sans for content; system
+   mono for metadata, counts, dates and eyebrows (the signature). Neutrals do
+   the work; a single product accent (--accent) is structural, not decorative.
+   App identity (--app-identity) is a separate mark/tint axis. Hairline
+   borders, soft depth, motion under 200ms.
+
+   Shared tokens every generated app.css publishes (contract):
+     --bg-elev   card / raised fill
+     --line      hairline border
+     --text      primary ink            --text-soft     secondary ink
+     --text-inv  ink ON an --accent-deep fill (flips per theme)
+     --accent    product action accent (never rebound per app)
+
+   Optional tokens the redesigned apps ALSO define. This is a v0 migration, so
+   the live kit and generated blueprint app.css move together as one contract.
+     --bg-sunken   recessed / track fill      --line-strong  stronger hairline
+     --text-faint   tertiary ink               --r-md       base radius (0.75rem)
+     --shadow-md   soft elevation             --accent-soft  ~12% accent tint
+
+   Motion: --ease: cubic-bezier(.2,.7,.3,1); standard <=200ms.
+
+   ── TYPE: this sheet renders under TWO token layers (#686) ─────────────────
+   kit.css is served, not bundled, to BOTH the shell (tokens from `toCss()`)
+   and a sandboxed blueprint app pane (tokens from `toBlueprintCss()`). Every
+   type role and composable size rung is emitted by both layers. A rule that
+   binds to one therefore follows the pointer/touch surface resolved by the
+   emitter; this sheet carries no literal type scale of its own.
+   ========================================================================== */
+
+/* ---------- App chrome ---------------------------------------------------- */
+/* Shared geometry for the system blueprints. CSS Modules compose these
+   classes and retain only each app's deliberate variations (width, padding,
+   accent treatment). Keeping the structural contract here prevents every
+   blueprint from growing its own copy of the same shell and phone drawer. */
+
+.kit-app-shell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: var(--t-body);
+}
+
+.kit-app-side {
+  width: var(--app-side-width, 250px);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--app-side-padding, 18px 14px);
+  background: var(--bg-elev);
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+
+.kit-app-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--app-brand-padding, 2px 6px 14px);
+}
+
+.kit-app-brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 26%;
+  background: var(--app-brand-background, var(--app-identity));
+  color: var(--text-inv);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.kit-app-brand-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.kit-app-brand-name {
+  font: var(--t-body-strong);
+  letter-spacing: -0.01em;
+}
+
+.kit-app-brand-tag {
+  font: var(--t-mono);
+  font-size: var(--t-control-size);
+  color: var(--text-faint);
+}
+
+.kit-app-side-close {
+  margin-left: auto;
+  display: none;
+}
+
+.kit-app-side-foot {
+  margin-top: auto;
+  padding-top: var(--app-side-foot-padding, 16px);
+}
+
+.kit-app-scrim {
+  display: none;
+}
+
+.kit-app-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.kit-app-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--app-topbar-gap, 12px);
+  padding: var(--app-topbar-padding, 16px 22px);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.kit-app-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  color: var(--text-soft);
+  flex-shrink: 0;
+}
+
+.kit-app-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.kit-app-ask-mount {
+  display: flex;
+  align-items: center;
+}
+
+.kit-app-shell.kit-app-narrow .kit-app-side {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--app-drawer-width, 274px);
+  z-index: 46;
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-110%);
+}
+
+.kit-app-shell.kit-app-narrow:not(.kit-app-defer-drawer) .kit-app-side,
+.kit-app-shell.kit-app-narrow.kit-app-ready .kit-app-side {
+  transition: transform 0.26s var(--ease);
+}
+
+.kit-app-shell.kit-app-narrow.kit-app-side-open .kit-app-side {
+  transform: translateX(0);
+}
+
+.kit-app-shell.kit-app-narrow .kit-app-side-close,
+.kit-app-shell.kit-app-narrow .kit-app-hamburger {
+  display: flex;
+}
+
+.kit-app-shell.kit-app-narrow.kit-app-side-open .kit-app-scrim {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  background: var(--app-scrim-background);
+}
+
+/* The `hidden` attribute must hide kit-owned content even when a component
+   class sets `display:`. Scope the guard to the two roots that load this
+   stylesheet: an app's own chrome shell and the inline scope it mounts under
+   in the host. A document-global rule would leak into host chrome. */
+:where(.kit-app-shell [hidden]),
+:where(.centraid-inline-scope [hidden]) {
+  display: none !important;
+}
+
+/* The popover is intentionally mounted on body so it can escape an app's
+   stacking context. Keep its hidden contract equally explicit without
+   applying a document-global rule to host chrome. (#799 removed the two Ask
+   overlays that shared this rule — the full-screen scrim and its model menu
+   went with the served assistant plane.) */
+:where(body > .kit-popover[hidden]) {
+  display: none !important;
+}
+
+/* Appearance belongs to the host shell. Blueprint roots mark any retired
+   local control explicitly; accessible copy is free to evolve without
+   changing this boundary. */
+:where(.kit-app-shell [data-kit-appearance-control]),
+:where(.centraid-inline-scope [data-kit-appearance-control]) {
+  display: none !important;
+}
+
+/* ---------- Pass-through wrappers ---------------------------------------- */
+/* There are no custom-element hosts to neutralise here any more. Issue #327's
+   presentation primitives were custom elements whose `display: contents` host
+   wrapped the real `.kit-*` markup; #799 retired the last of them, so the
+   `.kit-*` classes below are emitted directly — by React blocks in
+   `packages/blueprints/apps/_shared/` and by `feedback.ts` for the surfaces
+   with no React tree. Every rule below is unchanged by that: it always styled
+   the inner markup, never the host.
+
+   `[data-kit-host]` outlived them as a plain marker an app sets by hand on a
+   grouping element that must contribute NO box of its own — Locker's overlay
+   layer, so its lock screen / generator / edit modals position against the
+   app frame rather than the wrapper. It is no longer stamped by anything at
+   runtime; an app opts in explicitly. */
+[data-kit-host] {
+  display: contents;
+}
+
+/* ---------- Status line ---------------------------------------------------- */
+/* ONE persistent line docked to the bottom of the frame — never a floating
+   overlay, never stacked. It is mounted once and updated IN PLACE: a message
+   swap is a `--dur-1` step, not a slide-in/slide-out entry animation. A long
+   local operation shows a DETERMINATE bar with exact counts — never a
+   spinner, because a local-first product always knows how long. The message
+   sits in the numeric/mono register beside a small neutral dot; at most one
+   inline text action is allowed, and it is a bounded control, not bare
+   underlined text. */
+
+.kit-status-line {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: var(--h-control);
+  padding: 0 var(--sp-4);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  color: var(--text-soft);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  transition: color var(--dur-1) var(--ease);
+}
+
+/* A small neutral dot — never toned. Colour is not how a status line
+   distinguishes affirm/change/destructive; the message text carries that. */
+.kit-status-line-dot {
+  flex: none;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: var(--r-pill);
+  background: var(--text-faint);
+}
+
+.kit-status-line-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The determinate bar: track then fill, with exact counts in the text next
+   to it — never a spinner. */
+.kit-status-line-track {
+  flex: none;
+  width: 4.5rem;
+  height: 3px;
+  border-radius: var(--r-pill);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.kit-status-line-fill {
+  height: 100%;
+  background: var(--text);
+  border-radius: inherit;
+  transition: width var(--dur-1) var(--ease);
+}
+
+/* The one inline text action a status line may carry: full ink, a hover
+   ground, and a trailing arrow — hover alone is nothing on a phone. */
+.kit-status-line-action {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: inherit;
+  padding: 0.2rem 0.4rem;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+.kit-status-line-action:hover,
+.kit-status-line-action:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+.kit-status-line-action:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+.kit-status-line-action::after {
+  content: "→";
+  margin-inline-start: 0.35em;
+}
+
+/* ---------- Loading skeletons -------------------------------------------- */
+/* Static, recessed placeholders — a shimmer is attention-seeking about work
+   the product can simply describe on the status line instead. One shape only:
+   the `-line`/`-title`/`-row`/`-circle` modifiers went with the
+   `<kit-skeleton variant>` attribute in #799, having never had a caller. */
+
+.kit-skeleton {
+  height: 1rem;
+  border-radius: var(--r-md);
+  background: var(--bg-sunken);
+}
+
+/* ---------- Parked / pending (a write awaiting owner approval) ------------ */
+/* Deliberately calm — this is a designed state, not an error. The row keeps
+   its ink (no global opacity dimming); a hairline "ticket" rail and a mono
+   chip say "waiting", reassuringly. */
+
+.kit-pending {
+  position: relative;
+  color: var(--text-soft);
+  border-radius: var(--r-md);
+  background: color-mix(in oklab, var(--accent) 4%, transparent);
+}
+.kit-pending::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 2px;
+  border-radius: var(--r-sm);
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--accent) 0 4px,
+    transparent 4px 8px
+  );
+  opacity: 0.7;
+}
+
+.kit-pending-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.5rem 0.1rem 0.4rem;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: color-mix(in oklab, var(--accent) 72%, var(--text));
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.kit-pending-chip::before {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: var(--r-pill);
+  background: var(--text-faint);
+  flex: none;
+}
+
+/* ---------- Letter / photo avatars --------------------------------------- */
+/* Structural only — apps set the fill (a hashed hue) inline. Default fill is a
+   quiet accent tint so an un-colored avatar still reads on brand. */
+
+.kit-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-pill);
+  width: 2.25rem;
+  height: 2.25rem;
+  background: var(--accent);
+  color: var(--text);
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  flex: none;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 0.5px var(--scrim),
+    inset 0 0 0 1px color-mix(in oklab, var(--text) 8%, transparent);
+  user-select: none;
+}
+.kit-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* An avatar that opens something is a real control, not a decorated span
+   (#799). Strip the native button chrome so both shapes paint identically;
+   the focus ring is the frame's, not a bespoke one. */
+button.kit-avatar {
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+/* An outline, not the `--focus-ring` box-shadow the flat controls use: the
+   tile already spends its box-shadow on the inset hairline, and a box-shadow
+   declaration would replace it. */
+button.kit-avatar:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+/* Optional square-ish variant for docs/photos/files. */
+.kit-avatar[data-shape="rounded"] {
+  border-radius: var(--r-md);
+}
+
+/* ---------- Progress / meter bars ---------------------------------------- */
+
+.kit-bar {
+  display: block;
+  height: 0.375rem;
+  border-radius: var(--r-pill);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.kit-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.35s var(--ease);
+}
+/* Over-budget / over-target reading. */
+.kit-bar-fill[data-tone="danger"] {
+  background: var(--danger);
+}
+.kit-bar-fill[data-tone="warn"] {
+  background: var(--warning);
+}
+/* Healthy / passing reading (e.g. a strong password). */
+.kit-bar-fill[data-tone="ok"] {
+  background: var(--success);
+}
+
+/* ---------- Trust / notice banner ------------------------------------------ */
+/* The consent + outcome banner every app renders above its content: accent
+   dot = trust framing, .notice tone = a quieter outcome/notice voice. */
+
+.kit-banner {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  border-radius: var(--r-md);
+  padding: 0.85rem 1rem 0.85rem 2.5rem;
+  font-size: var(--t-small-size);
+  line-height: 1.5;
+  color: var(--text-soft);
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm, 0 0 0 0.5px var(--line-strong));
+}
+.kit-banner::before {
+  content: "";
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.kit-banner strong {
+  display: block;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 0.1rem;
+}
+.kit-banner.notice::before {
+  background: var(--text-faint);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--text-faint) 16%, transparent);
+}
+
+/* ---------- Buttons --------------------------------------------------------
+   ONE canonical button, pill-shaped (the kit's own chips/toasts/bars are
+   already pills): quiet hairline base, `.primary` accent fill, `.danger`
+   arm/hover tone. Chosen over the per-app radius/sizing drift the apps grew
+   (notes/tasks radius-sm primaries, docs 10px, locker/tally rounded rects) —
+   contextual size overrides stay in app.css where a layout truly needs them. */
+
+.kit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--text);
+  font: var(--t-small-strong);
+  padding: var(--sp-2) var(--sp-4);
+  min-height: max(var(--h-control, 34px), var(--target-min));
+  cursor: pointer;
+  text-decoration: none; /* anchors-as-buttons (e.g. a download link) */
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease);
+}
+.kit-btn:hover:not(:disabled):not(.primary):not(.destructive) {
+  background: var(--bg-hover, var(--bg-sunken, var(--bg-elev)));
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.kit-btn.secondary {
+  border-color: var(--line);
+  background: var(--bg-elev);
+  color: var(--text);
+}
+.kit-btn.quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-soft);
+}
+.kit-btn.quiet:hover:not(:disabled) {
+  background: var(--bg-hover, var(--bg-sunken, var(--bg-elev)));
+  color: var(--text);
+}
+.kit-btn.destructive {
+  border-color: var(--danger);
+  background: transparent;
+  color: var(--danger);
+}
+.kit-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.kit-btn:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+/* The filled primary is the one control where the accent carries text, so the
+   pair is `--accent-deep` + `--text-inv` — NOT `--text-inv`. `--accent-deep`
+   is solved per theme against `--text-inv` (deep under near-white ink on the
+   light ramp, lifted under near-black ink on the dark one); `--text-inv` is
+   the fixed white for saturated/scrim surfaces and fails here at every hue
+   (#686 F3).
+
+   Hover steps the fill 12% toward `--text`, i.e. always AWAY from the ink it
+   carries — darker on light, lighter on dark — so the state can only raise
+   the measured ratio. The old `a fixed brightness step` moved one direction
+   regardless of theme and cost the light ramp ~20% of its luminance headroom. */
+.kit-btn.primary {
+  border-color: transparent;
+  background: var(--accent-deep);
+  color: var(--text-inv);
+  font-weight: 600;
+}
+.kit-btn.primary:hover {
+  border-color: transparent;
+  background: var(--accent-deep-hover);
+  color: var(--text-inv);
+}
+.kit-btn.primary:active {
+  transform: scale(0.98);
+}
+/* Destructive is OUTLINED, never filled — "arm to confirm" only deepens the
+   existing outline/ink pair, it never introduces a danger fill. A filled
+   destructive button (the recipe's retired "filled" variant and its
+   `.primary.danger` composition) is not part of this grammar: nothing
+   alarming is ever a large filled surface. */
+.kit-btn.danger:hover,
+.kit-btn.danger[data-kit-armed] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ---------- Icon buttons ----------------------------------------------------
+   Square, icon-only. Generalizes the six near-identical hand-rolled icon
+   buttons docs grew (theme toggle, sidebar close, tool row, kebab, details
+   close, quick-look controls) plus photos' equivalents. Size is a custom
+   prop so a dense row (e.g. a kebab at 30px) can dial it down per instance:
+     <button class="kit-icon-btn" style="--icon-button-size: 1.875rem">…</button>
+   Transparent base — this sits on app chrome, not a card. */
+
+.kit-icon-btn {
+  --icon-button-size: 2.1rem;
+  width: var(--icon-button-size);
+  height: var(--icon-button-size);
+  min-width: var(--target-min);
+  min-height: var(--target-min);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+.kit-icon-btn svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+}
+.kit-icon-btn:hover {
+  background: var(--bg-sunken);
+  color: var(--text);
+}
+.kit-icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.kit-icon-btn:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+.kit-icon-btn.danger:hover {
+  color: var(--danger);
+}
+
+/* ---------- Text input ------------------------------------------------------
+   THE text input primitive — apps had none and hand-rolled bare `input`
+   rules per family. `.bare` drops the border/fill for inline-editing
+   contexts (rename a row/folder/chip in place); it still earns a full
+   accent border + focus ring on focus, never a half-drawn underline. */
+
+.kit-input {
+  width: 100%;
+  min-height: var(--target-min);
+  font: inherit;
+  font-size: var(--t-small-size);
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 0.5rem 0.7rem;
+  -webkit-appearance: none;
+  appearance: none;
+  transition:
+    border-color var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease);
+}
+.kit-input::placeholder {
+  color: var(--text-faint);
+}
+.kit-input:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--accent) 50%, var(--line-strong));
+  box-shadow: var(--focus-ring);
+}
+.kit-input.bare {
+  border-color: transparent;
+  background: transparent;
+  padding: 0.3rem 0.4rem;
+}
+.kit-input.bare:focus {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+
+/* ---------- Search pill ------------------------------------------------------
+   Union of docs' `.d-search` and photos' `.search`: a leading icon, a plain
+   `<input>` child (no extra class needed — this selector owns its look),
+   an optional trailing `kbd` shortcut hint. App-specific width/placement
+   (max-width, flex basis, margin) stays in app.css.
+     <label class="kit-search">
+       <svg>…</svg>
+       <input type="search" placeholder="Search">
+       <kbd>/</kbd>
+     </label> */
+
+.kit-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--bg-elev);
+  padding: 0 0.6rem 0 0.9rem;
+  transition:
+    border-color var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease);
+}
+.kit-search:focus-within {
+  border-color: color-mix(in oklab, var(--accent) 50%, var(--line-strong));
+  box-shadow: var(--focus-ring);
+}
+.kit-search svg {
+  flex: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+.kit-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0.55rem 0;
+  color: var(--text);
+  font: inherit;
+}
+.kit-search input:focus {
+  outline: none;
+}
+.kit-search input::placeholder {
+  color: var(--text-faint);
+}
+.kit-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.kit-search kbd {
+  flex: none;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 0.1rem 0.35rem;
+}
+
+/* ---------- Chips -----------------------------------------------------------
+   Filter/toggle pills. Selected speaks in two registers: the default fills
+   with the deep accent (notes/photos voice); `.quiet` selects with the soft
+   tint + accent ink (docs/people/tally voice) for dense chip rows. Both
+   `aria-pressed` and `data-active` mark selection. */
+
+.kit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font: inherit;
+  font-size: var(--t-small-size);
+  padding: 0.3rem 0.85rem;
+  min-height: 2.4rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--text-soft);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+.kit-chip:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.kit-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.kit-chip[aria-pressed="true"],
+.kit-chip[data-active="true"] {
+  background: var(--accent-deep);
+  border-color: transparent;
+  color: var(--text-inv);
+  font-weight: 600;
+}
+.kit-chip.quiet[aria-pressed="true"],
+.kit-chip.quiet[data-active="true"] {
+  background: var(--accent-soft);
+  border-color: color-mix(in oklab, var(--accent) 34%, var(--line-strong));
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---------- Segmented control -----------------------------------------------
+   Pill track on the recessed surface; the selected segment raises. Selection
+   marks with `aria-pressed` or `.on`. `.stretch` fills its row (equal-width
+   segments). */
+
+.kit-seg {
+  display: inline-flex;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  padding: 0.2rem;
+  gap: 0.15rem;
+}
+.kit-seg.stretch {
+  display: flex;
+}
+.kit-seg.stretch > button {
+  flex: 1;
+}
+.kit-seg > button {
+  font: inherit;
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  color: var(--text-soft);
+  background: transparent;
+  border: none;
+  padding: 0.35rem 0.85rem;
+  min-height: 2.1rem;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease);
+}
+.kit-seg > button:hover {
+  color: var(--text);
+}
+.kit-seg > button[aria-pressed="true"],
+.kit-seg > button.on {
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow:
+    var(--shadow-sm, 0 0 0 0.5px var(--line-strong)),
+    0 1px 2px var(--scrim);
+}
+:root[data-theme="dark"] .kit-seg > button[aria-pressed="true"],
+:root[data-theme="dark"] .kit-seg > button.on {
+  box-shadow: 0 0 0 0.5px var(--line-strong);
+}
+.kit-seg > button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---------- Modal shell -----------------------------------------------------
+   Backdrop + centered card. The backdrop dims with the theme's own ink (never
+   a fixed tint); the card is the standard raised surface. Width is the one
+   knob apps keep — set it with an app class on the same element. Layering:
+   app chrome < modal 70 < popover 75 < toasts 80. */
+
+.kit-modal-back {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: color-mix(in oklab, var(--text) 45%, transparent);
+  backdrop-filter: blur(2px);
+  animation: kit-fade-in var(--dur-2) ease-out;
+}
+.kit-modal-back[hidden] {
+  display: none;
+}
+/* The dismiss-on-outside-click target. It used to be a click handler on
+   `.kit-modal-back` itself, which no keyboard could reach; it is a real
+   button now, laid under the card (the card is `position: relative`, so it
+   paints above this one) and labelled "Close". Transparent — the dim still
+   comes from `.kit-modal-back`. */
+.kit-modal-scrim {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: default;
+}
+.kit-modal {
+  position: relative;
+  width: min(28rem, 100%);
+  max-height: min(88vh, 42rem);
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+  padding: 1.3rem 1.4rem;
+  animation: kit-rise-lg var(--dur-2) var(--ease);
+}
+.kit-modal:focus {
+  outline: none;
+}
+.kit-modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+@keyframes kit-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes kit-rise-lg {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* No `prefers-reduced-motion` block: `toCss()`'s emitted global rule
+   (packages/design/src/css.ts) already zeroes `.kit-modal-back`/`.kit-modal`'s
+   entrance animations. */
+
+/* ---------- Anchored popover menu (openPopover / popItem) ------------------ */
+
+.kit-popover {
+  position: fixed;
+  z-index: 75;
+  min-width: 190px;
+  max-width: 260px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+  padding: 5px;
+  animation: kit-rise 0.14s var(--ease);
+}
+.kit-popover-head {
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  padding: 8px 10px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-popover-scroll {
+  max-height: 240px;
+  overflow: auto;
+}
+.kit-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 11px;
+  border: none;
+  background: none;
+  border-radius: var(--r-md);
+  color: var(--text);
+  font-size: var(--t-small-size);
+  text-align: left;
+  cursor: pointer;
+}
+.kit-popover-item:hover:not(:disabled) {
+  background: var(--bg-sunken);
+}
+.kit-popover-item:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+.kit-popover-item.danger {
+  color: var(--danger);
+}
+.kit-popover-sep {
+  height: 1px;
+  background: var(--line);
+  margin: 4px 8px;
+}
+/* Colour swatch dot inside a menu row (e.g. "move to circle"). */
+.kit-dotmini {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-pill);
+  flex-shrink: 0;
+}
+@keyframes kit-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* No `prefers-reduced-motion` block: the global rule already zeroes
+   `.kit-popover`'s entrance animation. */
+
+/* ---------- Empty states ---------------------------------------------------- */
+
+/* The quiet one-line empty card ("Nothing to do — enjoy your day."). */
+.kit-empty-card {
+  color: var(--text-soft);
+  font-size: var(--t-small-size);
+  text-align: center;
+  padding: 3rem 1rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm, 0 0 0 0.5px var(--line-strong));
+}
+
+/* The full icon/title/sub empty state (emptyState() helper). */
+.kit-empty {
+  text-align: center;
+  padding: 64px 20px;
+}
+.kit-empty-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-md);
+  background: var(--bg-sunken);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  color: var(--text-faint);
+}
+.kit-empty-title {
+  font-weight: 600;
+  font-size: var(--t-small-size);
+  margin-bottom: 4px;
+}
+.kit-empty-sub {
+  font-size: var(--t-small-size);
+  color: var(--text-soft);
+  max-width: 38ch;
+  margin: 0 auto;
+}
+.kit-empty-sub button {
+  margin-top: 14px;
+  border: none;
+  border-radius: var(--r-lg);
+  background: var(--accent-deep);
+  color: var(--text-inv);
+  font-weight: 600;
+  font-size: var(--t-small-size);
+  padding: 9px 16px;
+  cursor: pointer;
+}
+
+/* ---------- Attachment tiles (renderAttachments) --------------------------- */
+
+.kit-attach-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.kit-attach-strip:empty {
+  display: none;
+}
+.kit-attach-tile {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--bg-sunken);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.kit-attach-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.kit-attach-zoom {
+  cursor: zoom-in;
+}
+.kit-attach-file {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  padding: 0.35rem;
+  font-size: var(--t-control-size);
+  line-height: 1.3;
+  color: var(--accent-text);
+  word-break: break-word;
+  text-decoration: none;
+}
+.kit-attach-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
+  text-align: center;
+  color: var(--text);
+  background: var(--scrim);
+  padding: 0.1rem 0;
+}
+.kit-attach-remove {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 1.3rem;
+  height: 1.3rem;
+  line-height: 1;
+  border: none;
+  border-radius: var(--r-pill);
+  background: var(--scrim);
+  color: var(--text);
+  font-size: var(--t-small-size);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* No `prefers-reduced-motion` block: the global rule already zeroes
+   `.kit-bar-fill`'s transition. */
+
+/* ---------- Viewer nav arrows ----------------------------------------------
+   Circular prev/next overlay for full-screen media viewers (docs' quick-look,
+   photos' lightbox — the two were near-byte-identical). Lives on a dark
+   viewer surface, so the on-dark whites below are hardcoded, not routed
+   through ink tokens. `.prev`/`.next` position it; the viewer sets the
+   containing box to `position: relative`. */
+
+.kit-viewer-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2.75rem;
+  height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--r-pill);
+  background: var(--scrim);
+  color: var(--text);
+  font-size: var(--t-title-size);
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--dur-1) var(--ease);
+}
+.kit-viewer-nav:hover {
+  background: var(--scrim);
+}
+.kit-viewer-nav:disabled,
+.kit-viewer-nav[disabled] {
+  opacity: 0.25;
+  pointer-events: none;
+}
+.kit-viewer-nav.prev {
+  left: 0.75rem;
+}
+.kit-viewer-nav.next {
+  right: 0.75rem;
+}
+
+/* ---------- Drag-and-drop scrim --------------------------------------------
+   Full-viewport drop target: an accent-tinted scrim (`.kit-drop`) behind a
+   centered message card (`.kit-drop-card`). Union of docs' opaque, themed
+   card and photos' translucent white-on-black one — the themed surface card
+   wins (it stays legible in both themes); the accent tint splits the
+   difference between docs' 14% and photos' 20% mix. Scrim itself ignores
+   pointer events so the drop target underneath keeps receiving drag events;
+   toggle visibility with `[hidden]`. */
+
+.kit-drop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklab, var(--accent) 16%, var(--scrim));
+  pointer-events: none;
+  animation: kit-fade 0.14s ease-out;
+}
+.kit-drop[hidden] {
+  display: none;
+}
+.kit-drop-card {
+  border: 2px dashed var(--accent);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  padding: 1.6rem 2.4rem;
+  box-shadow: var(--shadow-md);
+}
+/* No `prefers-reduced-motion` block: the global rule already zeroes
+   `.kit-drop`'s entrance animation. */
+
+/* ---------- Bounded-browse footer ------------------------------------------
+   The quiet "showing N of M" line under a windowed list (docs' window foot,
+   photos' equivalent). Mono for the numbers, tiny, centered, wraps on narrow
+   widths. */
+
+.kit-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  text-align: center;
+  padding: 1.25rem 0 0.5rem;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
+  color: var(--text-faint);
+}
+
+/* ---------- Ask / assistant (chat to your vault) -------------------------- */
+/* The AI proposes a write; it lands as a consent-gated (parked) action the
+   owner approves — same trust language as .kit-pending. Shared across all 14
+   apps so “Ask” looks and behaves identically everywhere.
+   Scope note (#799): the ONLY Ask surface styled here is the inline panel
+   `kit-ask-inline.ts` mounts — button, panel, log, bubbles, compose. The
+   overlay, model picker, conversation history, suggestion chips, proposed-
+   action cards and per-turn attachment chips went with the served assistant
+   plane; the shell's own assistant route owns them in CSS modules. */
+
+.kit-ask-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.4rem;
+  padding: 0 0.85rem;
+  border-radius: var(--r-pill);
+  border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font: inherit;
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.kit-ask-btn .kit-spark {
+  font-size: var(--t-small-size);
+  line-height: 1;
+}
+
+@keyframes kit-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.kit-ask-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 32rem;
+  max-height: 88vh;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg) var(--r-lg) var(--r-xs) var(--r-xs);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  animation: kit-ask-up 0.24s var(--ease) both;
+}
+@media (min-width: 720px) {
+  .kit-ask-panel {
+    max-width: 25rem;
+    height: 100%;
+    max-height: none;
+    border-radius: var(--r-xs);
+    animation: kit-ask-in 0.24s var(--ease) both;
+  }
+}
+@keyframes kit-ask-up {
+  from {
+    transform: translateY(1.5rem);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes kit-ask-in {
+  from {
+    transform: translateX(1.5rem);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.kit-ask-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+/* The inline Ask transcript's own bubble classes. They used to sit beside a
+   second bubble set the served assistant plane emitted; #799 retired that
+   plane and its stylesheet copy, so these are the sheet's only bubbles. */
+.kit-ask-q,
+.kit-ask-a {
+  max-width: 85%;
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--r-lg);
+  font: var(--t-body);
+  white-space: pre-wrap;
+}
+.kit-ask-q {
+  align-self: flex-end;
+  background: var(--accent-deep);
+  color: var(--text-inv);
+  border-bottom-right-radius: var(--r-sm);
+}
+.kit-ask-a {
+  align-self: flex-start;
+  background: var(--bg-sunken);
+  color: var(--text);
+  border-bottom-left-radius: var(--r-sm);
+}
+.kit-ask-err,
+.kit-ask-note {
+  align-self: center;
+  color: var(--text-soft);
+  font: var(--t-small);
+  text-align: center;
+}
+.kit-ask-err {
+  color: var(--danger);
+}
+
+/* ── Composer — modeled on Claude Code's composer, adapted to kit tokens ──
+   One cohesive rounded frame (`.kit-ask-compose` IS the frame — it's the
+   `<form>` itself, not a wrapper) holding staged-attachment chips, the
+   input, and a slim bottom controls strip (attach left, model picker +
+   send right). The frame is the focus target — a soft ring grows around
+   the whole card, not just the input, so opening the model menu or
+   attaching a file never reflows anything else. Core functionality (not a
+   desktop-only enhancement) — works unchanged down to the narrowest phone
+   width the panel supports. */
+.kit-ask-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0 1rem calc(0.8rem + env(safe-area-inset-bottom));
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.55rem 0.4rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm, 0 0 0 0.5px var(--line-strong));
+  flex: none;
+  transition:
+    border-color 0.14s var(--ease),
+    box-shadow 0.14s var(--ease);
+}
+.kit-ask-compose:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+.kit-ask-input {
+  min-height: 2.1rem;
+  padding: 0.3rem 0.35rem;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-small-size);
+}
+.kit-ask-input:focus {
+  outline: none;
+}
+.kit-ask-input::placeholder {
+  color: var(--text-faint);
+}
+
+.kit-ask-send {
+  width: 1.9rem;
+  height: 1.9rem;
+  min-width: 1.9rem;
+  min-height: 1.9rem;
+  border: none;
+  border-radius: var(--r-pill);
+  background: var(--accent-deep);
+  color: var(--text-inv);
+  font-size: var(--t-small-size);
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.1s var(--ease),
+    transform 0.1s var(--ease);
+}
+.kit-ask-send:hover:not(:disabled) {
+  background: var(--accent);
+}
+.kit-ask-send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.kit-ask-send:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+.kit-ask-send:disabled {
+  cursor: wait;
+  opacity: 0.85;
+}
+/* ── Inline anchored references (issue #282) ────────────────────────────────
+   The `@`-mention popover — the SOLE cross-reference creation gesture
+   (caret-anchored) — and the inline chip a resolved anchor renders as. The
+   chip shows the resolver's LIVE card title, never a byte snapshot. */
+
+.kit-mention-pop {
+  position: fixed;
+  z-index: 72;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-md);
+}
+
+/* ---------- Text utilities -------------------------------------------------- */
+/* Promoted from photos' `.muted`/`.small` verbatim, onto kit tokens. Small,
+   composable riders for a line that just needs quieter ink or smaller type
+   (a caption, a hint, a secondary label) — not a family of their own. */
+
+.kit-muted {
+  color: var(--text-faint);
+  font-size: var(--t-small-size);
+  margin: 0;
+}
+.kit-small {
+  font-size: var(--t-small-size);
+}
+
+/* ---------- Accessibility primitives ---------------------------------------- */
+/* Issue var(--text) (full jsx-a11y profile). Apps swapped ARIA roles for the native
+   elements behind them; these are the riders that swap costs nothing visually.
+
+   Element resets first: a `dialog`/`fieldset`/`hr` that replaced a div must
+   not drag in UA chrome (dialog's centering box + border, fieldset's groove
+   and min-inline-size floor, hr's inset rule) the layout never had. */
+
+dialog {
+  position: static;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  background: transparent;
+  color: inherit;
+}
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+legend {
+  padding: 0;
+}
+hr {
+  margin: 0;
+  border: 0;
+}
+figure {
+  margin: 0;
+}
+
+/* A <button> that replaced a clickable div/span: undo the UA button box so
+   the element's own class draws exactly what it drew before. The focus ring
+   is deliberately left to the UA / the app's own `:focus-visible` rule. */
+.kit-plain-btn {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+/* The click target for a region whose whole area is clickable but which
+   contains its own controls (a card with a pin button, a calendar cell with
+   event pills). A real button laid over the region — the nested controls sit
+   above it via `position: relative`, so nothing ever nests inside a button.
+   The region itself needs `position: relative`. */
+.kit-stretch-btn {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* Text for assistive tech only — the accessible name a `role="img"` wrapper
+   carried as `aria-label`, now real text in the tree. */
+.kit-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A native control kept operable but invisible: the visible chrome is drawn
+   by the wrapping <label> (which needs `position: relative`), the input keeps
+   focus, keyboard and form semantics, and covers the label as the hit area. */
+.kit-sr-control {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  appearance: none;
+  /* Hit-area owner for the whole card; positioned siblings must not paint
+     above it (see client a11y.module.css srControl for the full note). */
+  z-index: 1;
+  cursor: inherit;
+}

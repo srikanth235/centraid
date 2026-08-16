@@ -149,6 +149,18 @@ export async function handleAutomationCreate(
   const sessionId = explicitSession || defaultSessionId(id);
   const ephemeralSession = !explicitSession;
 
+  // Bundled ids are RESERVED (issue #434): a code-store app must never shadow
+  // a shipped blueprint the resolver serves in place. The guard used to sit on
+  // the blank-app scaffold route as well; that route retired with the
+  // served-app plane (#799), leaving this create as the code store's only
+  // door, so the reservation is enforced here.
+  if (opts.isBundledAppId?.(id)) {
+    throw new AppScaffoldError(
+      "already_exists",
+      `App id "${id}" is reserved by a bundled app.`
+    );
+  }
+
   const existing = await opts.store.listAppsWithMeta();
   if (existing.some((a) => a.id === id)) {
     throw new AppScaffoldError(

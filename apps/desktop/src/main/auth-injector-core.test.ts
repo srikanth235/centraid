@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  applyIncomingFrameRelaxation,
   applyOutgoingAuthHeaders,
   matchesGateway,
-  relaxFrameAncestors,
-  stripFrameAncestors,
   VAULT_HEADER,
 } from "./auth-injector-core.js";
 import type { AuthInjectorSnapshot } from "./auth-injector-core.js";
@@ -98,82 +95,5 @@ describe(applyOutgoingAuthHeaders, () => {
     );
     expect(out.Authorization).toBe("Bearer tok-1");
     expect(out[VAULT_HEADER]).toBeUndefined();
-  });
-});
-
-describe("stripFrameAncestors / relaxFrameAncestors", () => {
-  it("strips frame-ancestors case-insensitively and trims empties", () => {
-    expect(
-      stripFrameAncestors(
-        "default-src 'self'; frame-ancestors 'self'; script-src 'self'"
-      )
-    ).toBe("default-src 'self'; script-src 'self'");
-    expect(stripFrameAncestors("Frame-Ancestors https://x; img-src *")).toBe(
-      "img-src *"
-    );
-    expect(stripFrameAncestors("frame-ancestors 'none'")).toBe("");
-  });
-
-  it("rewrites CSP headers and drops X-Frame-Options", () => {
-    const out = relaxFrameAncestors({
-      "Content-Security-Policy": "default-src 'self'; frame-ancestors 'self'",
-      "Content-Security-Policy-Report-Only":
-        "frame-ancestors 'none'; img-src *",
-      "X-Frame-Options": "DENY",
-      "Content-Type": "text/html",
-    });
-    expect(out["Content-Security-Policy"]).toStrictEqual([
-      "default-src 'self'",
-    ]);
-    expect(out["Content-Security-Policy-Report-Only"]).toStrictEqual([
-      "img-src *",
-    ]);
-    expect(out["X-Frame-Options"]).toBeUndefined();
-    expect(out["Content-Type"]).toBe("text/html");
-  });
-
-  it("normalizes single-string CSP values to arrays", () => {
-    const out = relaxFrameAncestors({
-      "content-security-policy": "script-src 'self'; frame-ancestors 'self'",
-    });
-    expect(out["content-security-policy"]).toStrictEqual(["script-src 'self'"]);
-  });
-});
-
-describe(applyIncomingFrameRelaxation, () => {
-  it("rewrites only matching gateway responses with a configured origin", () => {
-    const headers = {
-      "Content-Security-Policy": "default-src 'self'; frame-ancestors 'self'",
-    };
-    expect(
-      applyIncomingFrameRelaxation(headers, snap(), "https://gw.example/x")
-    ).toStrictEqual({
-      "Content-Security-Policy": ["default-src 'self'"],
-    });
-    // A CSP that is only frame-ancestors collapses to an empty list.
-    expect(
-      relaxFrameAncestors({
-        "Content-Security-Policy": "frame-ancestors 'self'",
-      })
-    ).toStrictEqual({
-      "Content-Security-Policy": [],
-    });
-  });
-
-  it("passes through when snapshot missing, origin empty, or URL off-gateway", () => {
-    const headers = { "X-Frame-Options": "DENY" };
-    expect(
-      applyIncomingFrameRelaxation(headers, null, "https://gw.example/")
-    ).toBe(headers);
-    expect(
-      applyIncomingFrameRelaxation(
-        headers,
-        snap({ gatewayOrigin: "" }),
-        "https://gw.example/"
-      )
-    ).toBe(headers);
-    expect(
-      applyIncomingFrameRelaxation(headers, snap(), "https://other.example/")
-    ).toBe(headers);
   });
 });

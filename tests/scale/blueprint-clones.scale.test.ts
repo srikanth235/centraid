@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import { cloneTemplateFiles, scaffoldAppFiles } from "@centraid/blueprints";
+import { cloneTemplateFiles } from "@centraid/blueprints";
+import type { ScaffoldFile } from "@centraid/blueprints";
 import {
   qualityRegressionBudget,
   recordQualityResult,
@@ -9,9 +10,54 @@ import {
 const OWNER = "tests/scale/blueprint-clones.scale.test.ts";
 const APPS = 1_000;
 
+// An automation template's shape: the manifest, the handler, and the wrapping
+// app.json — the file map `POST /centraid/_apps/_clone` actually rewrites.
+const TEMPLATE_FILES: ScaffoldFile[] = [
+  {
+    path: "app.json",
+    content:
+      JSON.stringify(
+        {
+          manifestVersion: 1,
+          id: "template",
+          name: "Template",
+          kind: "automation",
+          version: "0.1.0",
+          actions: [],
+          queries: [],
+        },
+        null,
+        2
+      ) + "\n",
+  },
+  {
+    path: "package.json",
+    content: JSON.stringify({ name: "centraid-app-template" }, null, 2) + "\n",
+  },
+  {
+    path: "automations/template/automation.json",
+    content:
+      JSON.stringify(
+        {
+          name: "Template",
+          version: "0.1.0",
+          enabled: false,
+          prompt: "do the thing",
+          triggers: [{ kind: "cron", expr: "0 9 * * *" }],
+        },
+        null,
+        2
+      ) + "\n",
+  },
+  {
+    path: "automations/template/handler.js",
+    content: 'export default async () => ({ summary: "ok" });\n',
+  },
+];
+
 describe("blueprint-clones.scale", () => {
   test("clones a template at multi-app catalog volume", async () => {
-    const templateFiles = scaffoldAppFiles("template", { name: "Template" });
+    const templateFiles = TEMPLATE_FILES;
     const started = performance.now();
     const clones = Array.from({ length: APPS }, (_, index) =>
       cloneTemplateFiles({

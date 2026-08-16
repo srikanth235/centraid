@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   knobsManifestFrom,
   manifestVaultBlock,
-  pushKnobToAppFrame,
+  pushKnobToInlineRoot,
 } from "./appSettingsData.js";
 
 // `vi.mock` is hoisted above the import by vitest, so gateway-client-core's
@@ -58,39 +58,16 @@ describe(knobsManifestFrom, () => {
   });
 });
 
-describe(pushKnobToAppFrame, () => {
+describe(pushKnobToInlineRoot, () => {
   it("routes Color/Accent keys to CSS vars and the rest to data attributes", () => {
-    const frame = document.createElement("iframe");
-    frame.dataset.centraidApp = "1";
-    document.body.append(frame);
-    const post = vi.fn<(message: unknown, targetOrigin: string) => void>();
-    Object.defineProperty(frame, "contentWindow", {
-      value: { postMessage: post },
-      writable: true,
-    });
+    const root = document.createElement("div");
+    document.body.append(root);
 
-    pushKnobToAppFrame("appAccent", "#f00");
-    pushKnobToAppFrame("appDensity", "compact");
+    pushKnobToInlineRoot(root, "appAccent", "#f00");
+    pushKnobToInlineRoot(root, "appDensity", "compact");
 
-    const origin = window.location.origin;
-    expect(post).toHaveBeenNthCalledWith(
-      1,
-      {
-        type: "centraid:settings",
-        dataAttrs: {},
-        cssVars: { "app-identity": "#f00" },
-      },
-      origin
-    );
-    expect(post).toHaveBeenNthCalledWith(
-      2,
-      {
-        type: "centraid:settings",
-        dataAttrs: { "app-density": "compact" },
-        cssVars: {},
-      },
-      origin
-    );
-    frame.remove();
+    expect(root.style.getPropertyValue("--app-identity")).toBe("#f00");
+    expect(root.dataset.appDensity).toBe("compact");
+    root.remove();
   });
 });

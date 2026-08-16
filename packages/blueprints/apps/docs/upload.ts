@@ -4,8 +4,9 @@
 // and cached offline; a load or parse failure still degrades to the gateway's
 // cheap extractor, never a failed upload.
 
-import { stageDerivative, stageFileBytes } from "./kit.ts";
-import type { StagedBlob } from "./kit.ts";
+import { stageDerivative, stageFileBytes } from "@centraid/design/elements";
+import type { StagedBlob } from "@centraid/design/elements";
+
 import { extractPdfTextWithPdfJs } from "./pdf-text.ts";
 
 export { extractPdfTextWithPdfJs } from "./pdf-text.ts";

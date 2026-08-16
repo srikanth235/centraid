@@ -83,6 +83,15 @@ describe("apps-store-routes scenarios", () => {
     expect(res.status).toBe(200);
   }
 
+  /** Invoke the published app's `ping` query — the live-version probe. */
+  function runPing(): Promise<Response> {
+    return fetch(`${handle.url}/centraid/todo/queries/ping`, {
+      method: "POST",
+      headers: { ...auth(), "Content-Type": "application/json" },
+      body: JSON.stringify({ input: {} }),
+    });
+  }
+
   // Issue #659 M5 (gateway half): the mobile client sends If-None-Match and
   // handles 304, which is inert unless the registry list is tagged.
   test("GET /_apps revalidates with an ETag and re-tags when the registry changes", async () => {
@@ -128,7 +137,7 @@ describe("apps-store-routes scenarios", () => {
     await expect(afterChange.text()).resolves.toContain("todo");
   }, 60_000);
 
-  test("session → write → publish → serve → rollback round-trip", async () => {
+  test("session → write → publish → run → rollback round-trip", async () => {
     await openSession("s1");
     await putFile("s1", "app.json", MANIFEST);
     await putFile(
@@ -136,7 +145,6 @@ describe("apps-store-routes scenarios", () => {
       "queries/ping.js",
       "export default async () => ({ pong: 1 });\n"
     );
-    await putFile("s1", "index.html", "<!doctype html><title>todo</title>v1");
 
     // Publish v1.
     const pub1 = await fetch(`${handle.url}/centraid/_apps/todo/publish`, {
@@ -148,14 +156,12 @@ describe("apps-store-routes scenarios", () => {
     expect(pub1.status).toBe(201);
     expect(pub1Body.versionTag).toBe("todo/v1");
 
-    // The published app serves from the main worktree.
-    const html1 = await fetch(`${handle.url}/centraid/todo/`, {
-      headers: auth(),
-    });
-    expect(html1.status).toBe(200);
-    await expect(html1.text()).resolves.toMatch(/v1/u);
+    // The published app's handler runs from the main worktree.
+    const ping1 = await runPing();
+    expect(ping1.status).toBe(200);
+    await expect(ping1.json()).resolves.toStrictEqual({ pong: 1 });
 
-    // Second session bumps index.html and publishes v2.
+    // Second session bumps the handler and publishes v2.
     await openSession("s2");
     await putFile("s2", "app.json", MANIFEST);
     await putFile(
@@ -163,7 +169,6 @@ describe("apps-store-routes scenarios", () => {
       "queries/ping.js",
       "export default async () => ({ pong: 2 });\n"
     );
-    await putFile("s2", "index.html", "<!doctype html><title>todo</title>v2");
     const pub2 = await fetch(`${handle.url}/centraid/_apps/todo/publish`, {
       method: "POST",
       headers: { ...auth(), "Content-Type": "application/json" },
@@ -172,9 +177,9 @@ describe("apps-store-routes scenarios", () => {
     expect(((await pub2.json()) as { versionTag: string }).versionTag).toBe(
       "todo/v2"
     );
-    await expect(
-      (await fetch(`${handle.url}/centraid/todo/`, { headers: auth() })).text()
-    ).resolves.toMatch(/v2/u);
+    await expect(runPing().then((r) => r.json())).resolves.toStrictEqual({
+      pong: 2,
+    });
 
     // git-versions lists both, newest first; v2 is active.
     const versions = (await (
@@ -188,7 +193,7 @@ describe("apps-store-routes scenarios", () => {
     ]);
     expect(versions.versions.map((v) => v.active)).toStrictEqual([true, false]);
 
-    // Rollback to v1 — index.html reverts, no new tag minted, the
+    // Rollback to v1 — the handler reverts, no new tag minted, the
     // active flag flips from v2 to v1 on the next git-versions read.
     const rb = await fetch(`${handle.url}/centraid/_apps/todo/rollback`, {
       method: "POST",
@@ -196,9 +201,9 @@ describe("apps-store-routes scenarios", () => {
       body: JSON.stringify({ versionTag: "todo/v1" }),
     });
     expect(rb.status).toBe(200);
-    await expect(
-      (await fetch(`${handle.url}/centraid/todo/`, { headers: auth() })).text()
-    ).resolves.toMatch(/v1/u);
+    await expect(runPing().then((r) => r.json())).resolves.toStrictEqual({
+      pong: 1,
+    });
     const after = (await (
       await fetch(`${handle.url}/centraid/_apps/todo/git-versions`, {
         headers: auth(),
@@ -233,12 +238,10 @@ describe("apps-store-routes scenarios", () => {
       id: string;
       iconKey?: string;
       colorKey?: string;
-      hasIndex: boolean;
     }>;
     const row = list.find((a) => a.id === "todo")!;
     expect(row.iconKey).toBe("Todo");
     expect(row.colorKey).toBe("indigo");
-    expect(row.hasIndex).toBe(false);
   });
 
   test("publish rejects an invalid manifest (declared handler file missing)", async () => {

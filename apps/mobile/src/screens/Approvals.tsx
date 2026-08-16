@@ -131,9 +131,6 @@ export default function ApprovalsScreen({
             selectedItemId: destination.itemId,
           });
           break;
-        case "app":
-          parent?.navigate("AppDetail", { appId: destination.appId });
-          break;
         case "notifications":
           patch({ filter: "all" });
           break;

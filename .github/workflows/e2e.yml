@@ -377,7 +377,6 @@ jobs:
           set +e
           ec=0
           node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/template-gate.mjs || ec=$?
           node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
           node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
           # #659 R3c — per-launch cold start (volume-proof times 20 launches as

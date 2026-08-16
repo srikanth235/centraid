@@ -6,10 +6,11 @@
 // app.css; the JSX-only rows moved into Sidebar.module.css.
 import { useEffect, useRef } from "react";
 
+import { armConfirm } from "@centraid/design/elements";
+
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { listColor, daysSince } from "../format.ts";
 import { I } from "../icons.ts";
-import { armConfirm } from "../kit.ts";
 import type { Nav, Person, PersonList } from "../types.ts";
 import { Icon } from "./Shared.tsx";
 

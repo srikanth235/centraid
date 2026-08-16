@@ -1,18 +1,18 @@
 // Global ambient types for the blueprint apps (TS + CSS-modules conversion).
 //
 // These are GLOBALS on purpose: handlers and page code reference `HandlerArgs`,
-// `HandlerCtx`, `VaultOutcome`, and `window.centraid` by bare name so no value
-// import crosses the app/kit boundary at runtime (esbuild would 404 a plain
-// import of a types-only module; `import type` is stripped, but a global spares
-// the ceremony entirely). Grounded in the real surfaces:
-//   - `window.centraid` — the injected change-bridge client
-//     (packages/app-engine/src/http/bridge-script.ts) and its faithful mock
-//     (packages/blueprints/visual-harness/mock-centraid.js): read/write/onChange.
+// `HandlerCtx`, `VaultOutcome`, and `window.centraid` by bare name, so a
+// types-only module never has to be imported for its side effect of existing
+// (`import type` is stripped, but a global spares the ceremony entirely).
+// Grounded in the real surfaces:
+//   - `window.centraid` — the shell-provided app client
+//     (packages/client/src/react/blueprints/centraid-inline.ts):
+//     read/write/onChange.
 //   - `ctx.vault` — the handler-side vault RPC surface
 //     (packages/app-engine/src/worker/runner.ts `ScopedVault`,
 //     packages/app-engine/src/types.ts `CommonHandlerArgs`/`ActionResult`).
-//   - `VaultOutcome` — the typed-command result the kit narrates
-//     (packages/design/kit/kit.ts `outcomeMessage`).
+//   - `VaultOutcome` — the typed-command result the element layer narrates
+//     (packages/design/src/elements/feedback.ts `outcomeMessage`).
 //
 // This is an ambient script (no imports/exports), so every top-level type and
 // interface below is a GLOBAL — visible unqualified from every app/handler,
@@ -20,7 +20,7 @@
 
 // ---------- Typed-command outcome ----------
 
-/** Terminal states a vault write settles into (kit.ts `outcomeMessage`). */
+/** Terminal states a vault write settles into (the element layer's `outcomeMessage`). */
 type VaultOutcomeStatus =
   | "executed"
   | "parked"
@@ -213,7 +213,7 @@ interface HandlerArgs {
 // ---------- window.centraid (page side) ----------
 
 /**
- * A change-feed event (kit.ts `onDataChange`). A non-empty `tables` list must
+ * A change-feed event (the element layer's `onDataChange`). A non-empty `tables` list must
  * intersect an app's declared tables to fire; an empty list ("this app
  * acted") always fires. `intentId`/`intentState` mark optimistic overlay
  * updates.
@@ -433,19 +433,48 @@ interface CentraidClient {
   /** Subscribe to the change feed; returns the unsubscribe. */
   onChange: (cb: (detail: CentraidChangeDetail) => void) => () => void;
   /**
-   * Read vault text through the shell's authenticated blob transport. Inline
-   * shells provide this because their document origin is not the gateway;
-   * served apps omit it and fetch their same-origin content URI directly.
+   * Read vault text through the shell's authenticated blob transport. The
+   * shell's document origin is not the gateway — the installable web PWA rides
+   * the iroh tunnel and desktop runs from `file://` — so a relative fetch of a
+   * content URI resolves nowhere and carries no credential.
    */
   blobText?: (pathname: string, scope?: string) => Promise<string | null>;
+  /** An authed `blob:` URL for a `/_vault/blobs/…` path, in one scope. */
+  blobUrl?: (pathname: string, scope?: string) => Promise<string | null>;
+  /**
+   * Stream a File into the vault's blob CAS. The upload half of the same
+   * authenticated door — the element layer's `stageFileBytes` is a thin
+   * feature-detected wrapper over this, and the transport lives in the shell
+   * (packages/client blob-staging.ts).
+   */
+  stageBlob?: (
+    file: File,
+    extra?: string,
+    options?: { hash?: boolean; scope?: string }
+  ) => Promise<StagedBlob>;
+  /** Submit a typed derivative contribution against a staged parent's sha. */
+  stageDerivative?: (
+    parentSha: string,
+    variant: string,
+    body: BodyInit,
+    mediaType?: string
+  ) => Promise<StagedBlob>;
   /** Native haptics bridge (mobile shell only; feature-detected). */
   haptic?: Record<string, (() => void) | undefined>;
 }
 
+/** The staging receipt the blob door returns for one contribution. */
+interface StagedBlob {
+  sha256: string;
+  mediaType?: string | null;
+  byteSize?: number;
+  existingContentId?: string | null;
+  casAck?: string | null;
+  custody?: string | null;
+  alreadyPresent?: boolean;
+  [key: string]: unknown;
+}
+
 interface Window {
   centraid: CentraidClient;
-  /** Ask-panel config seeded inline by index.html before app code loads. */
-  KIT_ASK?: Record<string, unknown>;
-  /** The kit's Ask controller, mounted at kit.ts eval time. */
-  kitAsk?: Record<string, unknown>;
 }

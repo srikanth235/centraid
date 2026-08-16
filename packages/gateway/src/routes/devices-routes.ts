@@ -20,7 +20,7 @@
  * The revoke cascade mirrors device-admin.ts exactly: revoke the enrollment
  * row(s), then close the Rust-owned iroh transport once an EndpointId no
  * longer holds ANY enrollment. Live web control/app cookies die on their
- * next request via `web-app-sessions.ts`'s `isDeviceValid` re-check against
+ * next request via `web-control-sessions.ts`'s `isDeviceValid` re-check against
  * `enrollments.isEnrolled`, which this cascade flips.
  */
 

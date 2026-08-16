@@ -40,9 +40,8 @@ function Section({
     <section style={{ marginBottom: 36 }}>
       <h2
         style={{
-          color: "var(--text-faint, #6b7280)",
-          fontSize: 12,
-          fontWeight: 600,
+          color: "var(--text-faint)",
+          font: "var(--t-eyebrow)",
           letterSpacing: "0.08em",
           margin: "0 0 14px",
           textTransform: "uppercase",
@@ -75,8 +74,8 @@ export default function Gallery(): JSX.Element {
   return (
     <div
       style={{
-        color: "var(--text, #141820)",
-        fontFamily: "var(--font-ui, system-ui, sans-serif)",
+        color: "var(--text)",
+        font: "var(--t-body)",
         margin: "0 auto",
         maxWidth: 880,
         padding: "32px 28px 64px",
@@ -92,8 +91,8 @@ export default function Gallery(): JSX.Element {
       >
         <Logo size={36} />
         <div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>desktop-ui</div>
-          <div style={{ color: "var(--text-faint, #6b7280)", fontSize: 13 }}>
+          <div style={{ font: "var(--t-title)" }}>desktop-ui</div>
+          <div style={{ color: "var(--text-faint)", font: "var(--t-small)" }}>
             React DOM primitives · pixel-identical to the vanilla shell
           </div>
         </div>
@@ -265,7 +264,7 @@ export default function Gallery(): JSX.Element {
             key={name}
             title={name}
             style={{
-              color: "var(--text-soft, #374151)",
+              color: "var(--text-soft)",
               display: "inline-flex",
             }}
           >

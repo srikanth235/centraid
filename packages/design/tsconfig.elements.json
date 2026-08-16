@@ -1,0 +1,16 @@
+{
+  // Build program for the ELEMENT layer (src/elements/**) — the only part of
+  // this package compiled with the DOM lib.
+  //
+  // It is a second program rather than a `lib` widening on tsconfig.json
+  // because `lib: ["ES2023"]` there is the token layer's Expo-safety gate: it
+  // is what makes a stray `document` in a token module a compile error rather
+  // than a runtime crash on a phone. Widening it globally would retire that
+  // gate to serve a subtree Expo never reaches.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src/elements/**/*.ts"],
+  "exclude": ["dist", "node_modules", "src/elements/**/*.test.ts"]
+}

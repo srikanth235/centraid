@@ -115,8 +115,6 @@ function seedShellGlobals(): void {
   };
   // gateway-client-core registers onGatewayChanged at module load — CentraidApi
   // must exist before the first App graph import.
-  // `getSettings` feeds useBuilderEnabled (#434) — default omits builderEnabled,
-  // so the builder stays hidden unless a test overrides it before mounting.
   (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
     onGatewayChanged: () => {},
     onVaultChanged: () => {},
@@ -374,25 +372,18 @@ describe("App suite", () => {
       expect(line.textContent).toContain("Check gateway");
     });
 
-    it("reveals builder entry points when builderEnabled is set (#434 builder on)", async () => {
-      (
-        globalThis as unknown as { CentraidApi: { getSettings: unknown } }
-      ).CentraidApi.getSettings = () =>
-        Promise.resolve({ builderEnabled: true });
+    it("offers no app-building entry point anywhere (#799)", async () => {
+      // The served-app plane and the builder that produced apps for it are
+      // gone: neither the app bar nor the palette may still advertise one.
       const el = await mount();
-      // useBuilderEnabled resolves getSettings() a tick after first paint.
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(el.querySelector('[aria-label="New app"]')).not.toBeNull();
+      expect(el.querySelector('[aria-label="New app"]')).toBeNull();
       await act(async () => {
         document.dispatchEvent(
           new KeyboardEvent("keydown", { key: "k", metaKey: true })
         );
       });
       const dialog = el.querySelector('[aria-label="Command palette"]');
-      expect(dialog?.textContent).toContain("Build a new app…");
+      expect(dialog?.textContent).not.toContain("Build a new app…");
     });
 
     it("hides the stem on request, and never on its own", async () => {
@@ -533,26 +524,6 @@ describe("App suite", () => {
       expect(studio.textContent).toContain("Office");
       await act(async () => studio.click());
       expect(order).toStrictEqual(["gateway:office", "vault:studio"]);
-    });
-  });
-
-  describe("BuilderRouteRedirect (#434)", () => {
-    it("replaces a stale builder route with Home on mount", async () => {
-      const { BuilderRouteRedirect } = await import("./App.js");
-      const replace =
-        vi.fn<Parameters<typeof BuilderRouteRedirect>[0]["nav"]["replace"]>();
-      const nav = { replace } as unknown as Parameters<
-        typeof BuilderRouteRedirect
-      >[0]["nav"];
-      const el = document.createElement("div");
-      document.body.append(el);
-      const r = createRoot(el);
-      await act(async () => {
-        r.render(<BuilderRouteRedirect nav={nav} />);
-      });
-      expect(replace).toHaveBeenCalledWith({ kind: "home" });
-      act(() => r.unmount());
-      el.remove();
     });
   });
 });

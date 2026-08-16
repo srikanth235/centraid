@@ -70,15 +70,6 @@ export const ArrowRightGlyph = (p: GlyphProps): JSX.Element => (
   </Svg>
 );
 
-export const PencilGlyph = (p: GlyphProps): JSX.Element => (
-  <Svg {...p}>
-    <>
-      <path d="M14 4l6 6L9 21H3v-6z" />
-      <path d="M14 4l3-3 6 6-3 3" />
-    </>
-  </Svg>
-);
-
 export const ChatPanelOpenGlyph = (p: GlyphProps): JSX.Element => (
   <Svg {...p}>
     <>

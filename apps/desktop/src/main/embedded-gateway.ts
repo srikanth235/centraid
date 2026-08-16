@@ -12,7 +12,6 @@ export interface DesktopEmbeddedGatewayOptions {
   keyStore: KeyStore;
   token: string;
   ownerEndpointId: string;
-  remoteTemplatesUrl?: string;
   sessionIdFor?: (appId: string) => string;
   logTag?: string;
 }
@@ -30,9 +29,6 @@ export async function startDesktopEmbeddedGateway(
     paths: {
       ...options.paths,
       dataDir: options.dataDir,
-      ...(options.remoteTemplatesUrl
-        ? { remoteTemplatesUrl: options.remoteTemplatesUrl }
-        : {}),
     },
     keyStore: options.keyStore,
     token: options.token,

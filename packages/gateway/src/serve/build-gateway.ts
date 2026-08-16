@@ -92,7 +92,6 @@ import {
   resolveSubsystemHarnessLadder,
   validateTurnAttachmentRefs,
   TurnLimiter,
-  prewarmAppAssets,
   workerAdmissionStats,
 } from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
@@ -102,7 +101,6 @@ import {
   listTemplates,
   readTemplateFiles,
 } from "@centraid/blueprints";
-import { KIT_DIR } from "@centraid/design/kit";
 import { ROUTES } from "@centraid/protocol";
 import {
   createTokenBucket,
@@ -247,7 +245,6 @@ import { buildAssistantPrompt } from "../runs/assistant-prompt.js";
 import { RunEventBus } from "../runs/run-event-bus.js";
 import { makeUnifiedConversationRunner } from "../runs/unified-conversation-runner.js";
 import { WorktreeStore } from "../worktree-store/index.js";
-import { isExpectedPrewarmSkip } from "./app-prewarm-errors.js";
 import type { AssistOAuthConfig } from "./assist-oauth.js";
 import { pollProviderEventSource } from "./automation-event-sources.js";
 import { createBlobSweepHealthProbe } from "./blob-sweep-health.js";
@@ -334,7 +331,7 @@ import { VaultLinksStore } from "./vault-links-store.js";
 import type { InstallScopeBlock, VaultPlane } from "./vault-plane.js";
 import { openVaultRegistry } from "./vault-registry.js";
 import type { VaultRegistry } from "./vault-registry.js";
-import { WebAppSessions } from "./web-app-sessions.js";
+import { WebControlSessions } from "./web-control-sessions.js";
 import { WebControlSessionStore } from "./web-session-store.js";
 
 export type { DeviceAccess } from "./vault-context.js";
@@ -468,7 +465,7 @@ export interface BuildGatewayOptions {
   };
   /**
    * Durable PWA control sessions (issue #376). When `controlsFile` is set,
-   * `WebAppSessions` persists CONTROL cookies there so a web pairing
+   * `WebControlSessions` persists CONTROL cookies there so a web pairing
    * survives a gateway restart / the sliding 30-day idle window instead of
    * forcing a fresh pairing ticket every 12h. `isDeviceValid` propagates
    * `devices revoke` to live control/app cookies (a revoked device's cookie
@@ -746,7 +743,7 @@ export interface BuiltGateway {
    */
   syncApps: (vaultId?: string) => Promise<void>;
   /** Scoped cookie sessions used only by generated apps embedded in the browser PWA. */
-  webAppSessions: WebAppSessions;
+  webControlSessions: WebControlSessions;
   /**
    * Route handlers run after auth, before `runtime.handle` (vault routes,
    * templates, agents, then the request vault's store-backed handlers).
@@ -933,17 +930,11 @@ export async function buildGateway(
   process.env.CENTRAID_REPLICATION_CONCURRENCY = String(
     hardwareProfile.replicationConcurrency
   );
-  process.env.CENTRAID_STATIC_BROTLI_QUALITY = String(
-    hardwareProfile.staticBrotliQuality
-  );
-  process.env.CENTRAID_STATIC_GZIP_QUALITY = String(
-    hardwareProfile.staticGzipQuality
-  );
   health.reportOk(
     "hardware-profile",
     formatHardwareProfileDetail(hardwareProfile)
   );
-  const webAppSessions = new WebAppSessions({
+  const webControlSessions = new WebControlSessions({
     ...options.webSessions,
     controlStore:
       options.webSessions?.controlStore ??
@@ -2138,24 +2129,6 @@ export async function buildGateway(
     appId: string
   ): Promise<void> => grantScopesFromDir(plane, appId, bundledAppDir(appId));
 
-  const prewarmApp = async (appId: string, dir: string): Promise<void> => {
-    try {
-      const result = await prewarmAppAssets(dir, KIT_DIR);
-      if (result.bundles > 0) {
-        logger.info(
-          `app assets: prewarmed ${appId} (${result.bundles} bundle(s), ${result.variants} compressed variant(s))`
-        );
-      }
-    } catch (error) {
-      // Test vaults and mid-install apps often lack index.html; that is an
-      // expected skip, not a prewarm regression. Keep real failures loud.
-      if (isExpectedPrewarmSkip(error)) return;
-      logger.warn(
-        `app assets: prewarm failed for ${appId}: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  };
-
   let outboxTimer: NodeJS.Timeout | undefined;
   const scheduleOutboxSweep = (delayMs: number): void => {
     if (outboxTimer) clearTimeout(outboxTimer);
@@ -2506,8 +2479,6 @@ export async function buildGateway(
         await requireRuntime().registry.ensureUploaded(appId);
         vaultRegistry.enrollApp(appId);
         await grantDeclaredAppScopes(plane, host.store, appId);
-        const appDir = await host.store.resolveActiveAppDir(appId);
-        if (appDir) await prewarmApp(appId, appDir);
       });
       // Every first-party app ships INSTALLED (issue #708). The catalogue that
       // used to hand them out one at a time is retired, so a vault does not
@@ -2535,7 +2506,6 @@ export async function buildGateway(
       await forEachSequentially(plane.installedAppIds(), async (appId) => {
         await requireRuntime().registry.ensureUploaded(appId);
         await grantDeclaredBundledScopes(plane, appId);
-        await prewarmApp(appId, bundledAppDir(appId));
       });
       settledHosts.set(vaultId, host);
       await reconcileScheduler(vaultId);
@@ -2605,7 +2575,6 @@ export async function buildGateway(
         plane.installApp(appId, meta.name);
         await requireRuntime().registry.ensureUploaded(appId);
         await grantDeclaredBundledScopes(plane, appId);
-        await prewarmApp(appId, bundledAppDir(appId));
         return true;
       });
     } catch (error) {
@@ -2939,7 +2908,6 @@ export async function buildGateway(
         vaultRegistry.enrollApp(appId);
         await grantDeclaredAppScopes(plane, store, appId);
       },
-      preparePublishedApp: prewarmApp,
       deregister: deregisterAndCleanup,
       reconcile: () => {
         // The lifecycle interface is intentionally fire-and-forget here; the
@@ -2965,7 +2933,6 @@ export async function buildGateway(
         plane.installApp(templateId, meta.name);
         await requireRuntime().registry.ensureUploaded(templateId);
         await grantDeclaredBundledScopes(plane, templateId);
-        await prewarmApp(templateId, bundledAppDir(templateId));
         return {
           id: templateId,
           ...(meta.name === undefined ? {} : { name: meta.name }),
@@ -3291,7 +3258,6 @@ export async function buildGateway(
                   ? {}
                   : { description: meta.description }),
                 kind: "app" as const,
-                hasIndex: meta.hasIndex,
                 ...(meta.iconKey === undefined
                   ? {}
                   : { iconKey: meta.iconKey }),
@@ -4027,9 +3993,6 @@ export async function buildGateway(
   // N registries).
   const runtime = new Runtime({
     appsDir: () => currentWorkspace().appsDir,
-    // Shared kit assets (kit.ts / kit.css) are served from the blueprints
-    // package's canonical `kit/` dir; apps no longer ship per-app copies.
-    sharedAssetsDir: KIT_DIR,
     timeModuleUrl: TIME_ENGINE_MODULE_URL,
     userStore: prefs,
     conversationHistoryStore,
@@ -4357,7 +4320,7 @@ export async function buildGateway(
   const routeEntries: RoutePrefixRegistration[] = [
     forRoutePrefixes(
       ["/centraid/_web", "/centraid/_apps"],
-      webAppSessions.handler
+      webControlSessions.handler
     ),
     // Gateway identity + version handshake (issue #289): cheap static
     // JSON, mounted first — health polling hits it every few seconds.
@@ -4720,12 +4683,6 @@ export async function buildGateway(
         ...(paths.templatesCacheDir
           ? { cacheDir: paths.templatesCacheDir }
           : {}),
-        // Remote template fetch is deferred for v1 (issue #434, Phase 4): the
-        // catalog serves only the shipped @centraid/blueprints. Remote install
-        // is the one case where install legitimately copies (a download), so
-        // the `remoteTemplatesUrl` refresh wiring is intentionally NOT passed
-        // here — the mechanism stays in makeTemplatesRouteHandler and returns
-        // when the remote/third-party app catalog is designed.
         // Catalog installed-state (issue #434): whether each bundled app is
         // already installed in the request's vault, so the Discover card shows
         // "Open" instead of "Install". Degrades to "nothing installed" if no
@@ -5402,7 +5359,7 @@ export async function buildGateway(
     pushWakeRelay.start();
     // Web/control session expiry reclamation on the gateway clock instead of
     // on every HTTP request (issue #659 G3).
-    webAppSessions.startSweeping();
+    webControlSessions.startSweeping();
     // Peer-plane background delivery (#726 P3 gaps 2 & 3) on the gateway clock.
     peerPlaneSweep.start();
 
@@ -5477,7 +5434,7 @@ export async function buildGateway(
   const stop = async (): Promise<void> => {
     unsubscribeLateMount();
     pushWakeRelay.stop();
-    webAppSessions.stopSweeping();
+    webControlSessions.stopSweeping();
     peerPlaneSweep.stop();
     // A mount notification may already be building its code host. Let that
     // bounded work settle before closing vault databases or removing temp
@@ -5526,7 +5483,7 @@ export async function buildGateway(
     appsStore: async () => (await currentVaultHost()).store,
     codeAppsDir: () => currentSettledHost().codeAppsDir(),
     syncApps,
-    webAppSessions,
+    webControlSessions,
     extraHandlers,
     composedHandler,
     webhookHandler,
@@ -5543,7 +5500,7 @@ export async function buildGateway(
  */
 /**
  * Display metadata for a bundled blueprint app, read from its shipped
- * `app.json` + `index.html` presence (issue #434). Mirrors the shape
+ * `app.json` (issue #434). Mirrors the shape
  * `WorktreeStore.listAppsWithMeta` produces for code-store apps so the two
  * origins merge into one listing. A malformed/absent app.json degrades to
  * id-only — the app still lists, just without pretty metadata.
@@ -5553,7 +5510,6 @@ async function readBundledAppMeta(dir: string): Promise<{
   description?: string;
   iconKey?: string;
   colorKey?: string;
-  hasIndex: boolean;
 }> {
   let manifest: Record<string, unknown> = {};
   try {
@@ -5562,13 +5518,6 @@ async function readBundledAppMeta(dir: string): Promise<{
     ) as Record<string, unknown>;
   } catch {
     manifest = {};
-  }
-  let hasIndex = false;
-  try {
-    await fs.access(path.join(dir, "index.html"));
-    hasIndex = true;
-  } catch {
-    hasIndex = false;
   }
   return {
     ...(typeof manifest.name === "string" ? { name: manifest.name } : {}),
@@ -5581,7 +5530,6 @@ async function readBundledAppMeta(dir: string): Promise<{
     ...(typeof manifest.colorKey === "string"
       ? { colorKey: manifest.colorKey }
       : {}),
-    hasIndex,
   };
 }
 

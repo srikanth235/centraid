@@ -15,9 +15,8 @@ The structural payoff over flat YAML is **`ctx.restart()`** (stopApp + relaunch 
 | Symptom | Where it belongs |
 | --- | --- |
 | Hard native invariant that must never flake in CI | a committed Maestro flow here |
-| End-to-end mobile journey ("set gateway, open an app, see the WebView load, come back") | here |
+| End-to-end mobile journey ("pair a gateway, open an app cover, come back") | here |
 | Visual / copy / "does this feel right" judgment | here |
-| DOM-level assertion inside the in-app WebView | Playwright over CDP into the WebView |
 | Native unit test | `apps/mobile/ios/CentraidTests/` (doesn't exist yet) |
 
 ## Running a flow

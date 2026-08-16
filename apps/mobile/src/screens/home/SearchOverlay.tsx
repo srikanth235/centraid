@@ -104,11 +104,7 @@ export default function SearchOverlay({
     };
   }, [session, trimmed]);
   const openHit = (hit: BlueprintSearchHit): void => {
-    const item = items.find(
-      (candidate) =>
-        candidate.meta.id === hit.appId ||
-        (candidate.route.kind === "app" && candidate.route.appId === hit.appId)
-    );
+    const item = items.find((candidate) => candidate.meta.id === hit.appId);
     if (item) onOpen(item);
   };
 

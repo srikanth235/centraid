@@ -18,9 +18,6 @@ import type { PersistedSettings } from "./settings.js";
 /** The persistable subset of a settings patch. */
 export interface PersistedSettingsPatch {
   activeGatewayId?: string;
-  /** Developer-only builder gate. Preserve when omitted. */
-  builderEnabled?: boolean;
-  remoteTemplatesUrl?: string;
   /**
    * Client-owned active vault per gateway (issue #289). Set as a whole map
    * (preserve when `undefined`). The dedicated `setActiveVaultId` path
@@ -67,16 +64,6 @@ export function mergePersistedSettings(
     patch.activeVaultByGateway ?? current.activeVaultByGateway;
   return {
     activeGatewayId: patch.activeGatewayId?.trim() || current.activeGatewayId,
-    ...(patch.builderEnabled === undefined
-      ? current.builderEnabled === undefined
-        ? {}
-        : { builderEnabled: current.builderEnabled }
-      : { builderEnabled: patch.builderEnabled }),
-    ...preserveOrSet(
-      "remoteTemplatesUrl",
-      patch.remoteTemplatesUrl,
-      current.remoteTemplatesUrl
-    ),
     ...(activeVaultByGateway !== undefined &&
     Object.keys(activeVaultByGateway).length
       ? { activeVaultByGateway }

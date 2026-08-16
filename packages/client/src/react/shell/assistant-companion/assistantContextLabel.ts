@@ -36,8 +36,6 @@ export function assistantContextLabel(route: ShellRoute): string {
     case "automation-builder":
     case "automation-editor":
       return "Automation";
-    case "builder":
-      return "App builder";
     case "app":
       return "This app";
   }

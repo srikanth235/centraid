@@ -1,10 +1,11 @@
+import { Avatar } from "../../_shared/Avatar.tsx";
 // The expense detail popover: category/description header, amount, the
 // per-person split breakdown, and delete/close/edit actions.
 import { displayText, safeDocumentUrl } from "../../_shared/untrusted.ts";
 import { MS, cat, first, money, tint, todayKey } from "../format.ts";
 import type { Group, LedgerRow } from "../types.ts";
 import { History } from "./History.tsx";
-import { ArmedButton, KitAvatar, ModalBackdrop } from "./Shared.tsx";
+import { ArmedButton, ModalBackdrop } from "./Shared.tsx";
 
 import shared from "./shared.module.css";
 
@@ -83,7 +84,7 @@ export function DetailModal({
                 borderBottom: "1px solid var(--line)",
               }}
             >
-              <KitAvatar
+              <Avatar
                 name={s.name}
                 size="28px"
                 color={s.color}

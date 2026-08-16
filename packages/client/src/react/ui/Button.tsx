@@ -99,6 +99,12 @@ export default function Button({
           VARIANT_CLASS[variant],
           className
         )}
+        // The variant, named on the DOM rather than left implicit in a hashed
+        // CSS-module class. The design gallery's control-vocabulary gate
+        // (`scripts/design-gallery.mjs`) reads it to prove the accent fill
+        // belongs to `primary` alone — a claim it can only make against the
+        // real product button, not a fixture (#799).
+        data-variant={variant}
         disabled={disabled}
         // A refused commit stays FOCUSABLE (`aria-disabled`, not `disabled`),
         // so a keyboard reader can land on it and hear why. The recessive

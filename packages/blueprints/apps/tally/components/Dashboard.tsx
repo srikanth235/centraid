@@ -1,3 +1,4 @@
+import { Avatar } from "../../_shared/Avatar.tsx";
 // The dashboard: fresh-vault welcome state, the balance summary, "you
 // owe"/"you are owed" lists and the groups grid. Pure function of the
 // dashboard snapshot (`dash`) plus navigation/modal callbacks.
@@ -9,7 +10,6 @@ import type {
   RecurringExpense,
   TrashedExpense,
 } from "../types.ts";
-import { KitAvatar } from "./Shared.tsx";
 
 import styles from "./Dashboard.module.css";
 import shared from "./shared.module.css";
@@ -40,12 +40,7 @@ function BalRow({
       className={styles.balRow}
       onClick={() => onOpen(p.party_id)}
     >
-      <KitAvatar
-        name={p.name}
-        size="34px"
-        color={p.color}
-        initials={p.initials}
-      />
+      <Avatar name={p.name} size="34px" color={p.color} initials={p.initials} />
       <span className={styles.balMain}>
         <span className={styles.balName}>{p.name}</span>
         <span className={styles.balSub}>

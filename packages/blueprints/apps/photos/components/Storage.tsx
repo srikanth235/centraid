@@ -1,3 +1,5 @@
+import { fmtBytes } from "@centraid/design/elements";
+
 // Storage — what the bytes cost and where they are (v4 handoff §12).
 //
 // EVERY NUMBER HERE IS READ, NEVER INVENTED. Two sources, and the screen is
@@ -26,7 +28,6 @@
 // the way to the trash, which is the only thing on this seat that actually
 // frees bytes — is an outlined control.
 import { assetBytes } from "../format.ts";
-import { fmtBytes } from "../kit.ts";
 import { custodyHealth, freeUpIsOfferable } from "../storage-model.ts";
 import type { CustodyFacts, Totals } from "../storage-model.ts";
 import type { Asset } from "../types.ts";

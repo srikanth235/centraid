@@ -7,11 +7,12 @@
 // their PARTSTAT.
 import { useEffect, useRef } from "react";
 
+import { armConfirm, renderAttachments } from "@centraid/design/elements";
+
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
 import { fmtRange, initials } from "../format.ts";
 import { I } from "../icons.ts";
-import { armConfirm, renderAttachments } from "../kit.ts";
 import type {
   ActivityEntry,
   AgEvent,

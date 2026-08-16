@@ -21,7 +21,6 @@ import { ROUTES } from "@centraid/protocol";
 import { OAUTH_CALLBACK_PATH } from "../routes/connections-routes.js";
 import { buildGateway } from "./build-gateway.js";
 import type { BuildGatewayOptions, BuiltGateway } from "./build-gateway.js";
-import { WEB_SESSION_REDEEM_PATH } from "./web-app-sessions.js";
 import { startWebUiServer } from "./web-ui-server.js";
 
 export interface ServeOptions extends BuildGatewayOptions {
@@ -50,7 +49,7 @@ export interface GatewayServeHandle extends Omit<
   | "extraHandlers"
   | "composedHandler"
   | "webhookHandler"
-  | "webAppSessions"
+  | "webControlSessions"
   | "start"
   | "stop"
 > {
@@ -95,11 +94,7 @@ export async function serve(
     // proves the EndpointId that gets persisted in its enrollment. Minting
     // (`_gateway/devices/ticket`) is NOT public either — it sits behind the
     // bearer, and behind host custody or a proved vault owner on top.
-    publicPaths: [
-      OAUTH_CALLBACK_PATH,
-      WEB_SESSION_REDEEM_PATH,
-      ROUTES.gatewayInfo,
-    ],
+    publicPaths: [OAUTH_CALLBACK_PATH, ROUTES.gatewayInfo],
     publicPathPrefixes: [WEBHOOK_ROUTE_PREFIX],
   };
   if (options.host !== undefined) serverOptions.host = options.host;
@@ -109,11 +104,11 @@ export async function serve(
   }
   if (options.token !== undefined) serverOptions.token = options.token;
   serverOptions.authorizeRequest = (req) =>
-    gateway.webAppSessions.authorize(req);
+    gateway.webControlSessions.authorize(req);
   // Session-bound shell origins for credentialed CORS (#504). Bearer-only
   // desktop embeds leave this empty and still get non-credentialed `*`.
   serverOptions.credentialedCorsOrigins = () =>
-    gateway.webAppSessions.knownShellOrigins();
+    gateway.webControlSessions.knownShellOrigins();
   const server = await startRuntimeHttpServer(serverOptions);
   await gateway.start(server.url);
   const web = options.web

@@ -8,7 +8,6 @@ import {
   ArrowRightGlyph,
   ChatPanelClosedGlyph,
   ChatPanelOpenGlyph,
-  PencilGlyph,
   SidebarClosedGlyph,
   SidebarOpenGlyph,
 } from "./glyphs.js";
@@ -123,12 +122,10 @@ export interface ShellFrameProps {
   canGoForward?: boolean;
   onBack?: () => void;
   onForward?: () => void;
-  showNewChat?: boolean;
-  onNewChat?: () => void;
-  /** Lead cluster hugging the back/forward arrows (Builder identity lockup). */
+  /** Lead cluster hugging the back/forward arrows (an app identity lockup). */
   titlebarLead?: ReactNode;
-  /** Center cluster — mode tabs / device pill (Builder). Switches the bar to
-   *  a 2-cell grid so its leading edge aligns with the right pane. */
+  /** Center cluster — mode tabs / device pill. Switches the bar to a 2-cell
+   *  grid so its leading edge aligns with the right pane. */
   titlebarCenter?: ReactNode;
   /** Trailing identity / commit cluster. One filled ink control, at most. */
   titlebarRight?: ReactNode;
@@ -187,16 +184,6 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
       disabled={!props.canGoForward}
       onClick={props.onForward}
     />,
-    props.showNewChat ? (
-      <TbBtn
-        key="new"
-        icon={<PencilGlyph />}
-        title="New app"
-        shortcut="⌘N"
-        ariaLabel="New app"
-        onClick={props.onNewChat}
-      />
-    ) : null,
     props.onToggleAssistant ? (
       <TbBtn
         key="assistant"

@@ -140,7 +140,6 @@ describe("shell/ShellApp", () => {
 
     const fullBleedRoutes: ShellRoute[] = [
       { kind: "app", id: "x" },
-      { kind: "builder" },
       { kind: "automation-builder", automationId: "a" },
     ];
     it.each(fullBleedRoutes)("treats %o as full-bleed by default", (r) => {
@@ -235,7 +234,7 @@ describe("shell/ShellApp", () => {
       goCompact();
       const el = render(
         <ShellApp
-          initialRoute={{ kind: "builder" }}
+          initialRoute={{ kind: "automation-builder", automationId: "a" }}
           renderStem={stemFor}
           renderScreen={(nav) => {
             const handleToggleAssistant = nav.toggleAssistant;

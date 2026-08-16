@@ -6,12 +6,8 @@
  * `streamAutomationTurn`.
  */
 
-import {
-  consumeSseFrames,
-  frameData,
-} from "@centraid/design/kit/turn-stream.js";
-
 import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
+import { consumeSseFrames, frameData } from "./turn-stream.js";
 
 export type GatewayLogLevelDTO = "info" | "warn" | "error";
 

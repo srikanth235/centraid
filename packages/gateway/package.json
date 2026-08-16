@@ -37,7 +37,6 @@
     "@centraid/automation": "workspace:*",
     "@centraid/backup": "workspace:*",
     "@centraid/blueprints": "workspace:*",
-    "@centraid/design": "workspace:*",
     "@centraid/protocol": "workspace:*",
     "@centraid/time-engine": "workspace:*",
     "@centraid/tunnel": "workspace:*",

@@ -72,7 +72,6 @@ describe("shell router", () => {
       "automation-view:a2"
     );
     expect(routeKey({ kind: "app", id: "todos" })).toBe("app:todos");
-    expect(routeKey({ kind: "builder" })).toBe("builder:new:");
     expect(routeKey({ kind: "automation-builder", automationId: "x" })).toBe(
       "automation-builder:x"
     );

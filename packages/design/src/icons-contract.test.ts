@@ -35,13 +35,13 @@ describe("single icon registry", () => {
     }
   });
 
-  test("standalone kit routes icons through its browser adapter", () => {
-    const kit = readFileSync(
-      path.join(ROOT, "packages/design/kit/kit.ts"),
-      "utf8"
-    );
-    expect(kit).toContain("kitIcon");
-    expect(kit).not.toContain("<svg");
+  test("the element layer hand-rolls no icon markup", () => {
+    const elements = path.join(ROOT, "packages/design/src/elements");
+    for (const file of readdirSync(elements)) {
+      if (!file.endsWith(".ts")) continue;
+      const source = readFileSync(path.join(elements, file), "utf8");
+      expect(source, file).not.toContain("<svg");
+    }
   });
 
   test("all shipped catalogs resolve through the shared registry", () => {
@@ -67,28 +67,6 @@ describe("single icon registry", () => {
       expect(iconSvg(name)).toContain('stroke-width="1.5"');
     }
     expect(Object.keys(icons).length).toBeGreaterThan(40);
-  });
-
-  test("the standalone kit dictionary mirrors the shared path data", () => {
-    const kit = readFileSync(
-      path.join(ROOT, "packages/design/kit/icons.js"),
-      "utf8"
-    );
-    const mirrored = {
-      ChevronDown: ["M6 9l6 6 6-6"],
-      History: ["M3 12a9 9 0 1 0 3-6.7L3 8", "M3 3v5h5M12 7v5l3 2"],
-      Paperclip: [
-        "M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48",
-      ],
-    } as const;
-    for (const [name, paths] of Object.entries(mirrored)) {
-      expect(kit, name).toContain(`${name}:`);
-      for (const pathData of paths)
-        expect(kit, `${name}:${pathData}`).toContain(pathData);
-      expect(
-        icons[name as keyof typeof icons].map((segment) => segment.d)
-      ).toStrictEqual(paths);
-    }
   });
 
   test("the navigation concepts keep distinct directional semantics", () => {

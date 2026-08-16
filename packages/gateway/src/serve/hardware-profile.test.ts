@@ -12,14 +12,12 @@ import type {
   ResourceKnobSource,
 } from "./hardware-profile.js";
 
-/** All six knobs Linked to the preset — the no-override baseline. */
+/** Every knob Linked to the preset — the no-override baseline. */
 const ALL_PRESET_SOURCES: Record<ResourceKnobName, ResourceKnobSource> = {
   workerMaxConcurrent: { source: "preset" },
   workerMaxOldGenerationMb: { source: "preset" },
   workerPoolSize: { source: "preset" },
   replicationConcurrency: { source: "preset" },
-  staticBrotliQuality: { source: "preset" },
-  staticGzipQuality: { source: "preset" },
 };
 
 describe("hardware-profile", () => {
@@ -39,8 +37,6 @@ describe("hardware-profile", () => {
       workerMaxOldGenerationMb: 128,
       workerPoolSize: 0,
       replicationConcurrency: 1,
-      staticBrotliQuality: 5,
-      staticGzipQuality: 6,
       vaultMountStrategy: "eager",
       vaultSweepIntervalMs: 7_200_000,
       outboxIdleIntervalMs: 120_000,
@@ -84,8 +80,6 @@ describe("hardware-profile", () => {
           CENTRAID_WORKER_MAX_OLD_GENERATION_MB: "192",
           CENTRAID_WORKER_POOL_SIZE: "1",
           CENTRAID_REPLICATION_CONCURRENCY: "2",
-          CENTRAID_STATIC_BROTLI_QUALITY: "7",
-          CENTRAID_STATIC_GZIP_QUALITY: "8",
         }
       )
     ).toMatchObject({
@@ -93,8 +87,6 @@ describe("hardware-profile", () => {
       workerMaxOldGenerationMb: 192,
       workerPoolSize: 1,
       replicationConcurrency: 2,
-      staticBrotliQuality: 7,
-      staticGzipQuality: 8,
     });
   });
 
@@ -213,8 +205,6 @@ describe("hardware-profile", () => {
         workerMaxOldGenerationMb: 128,
         workerPoolSize: 0,
         replicationConcurrency: 1,
-        staticBrotliQuality: 5,
-        staticGzipQuality: 6,
         sqliteSynchronous: "NORMAL",
         vaultSweepIntervalMs: 7_200_000,
         outboxIdleIntervalMs: 120_000,
@@ -254,8 +244,6 @@ describe("hardware-profile", () => {
         workerMaxOldGenerationMb: 384,
         workerPoolSize: 4,
         replicationConcurrency: 4,
-        staticBrotliQuality: 10,
-        staticGzipQuality: 9,
         sqliteSynchronous: "FULL",
         vaultSweepIntervalMs: 3_600_000,
         outboxIdleIntervalMs: 60_000,
@@ -374,20 +362,19 @@ describe("hardware-profile", () => {
     });
   });
 
-  test("a prefs override of a knob does not disturb the compression sources", () => {
+  test("a prefs override of one knob does not disturb the others' sources", () => {
     const profile = resolveGatewayHardwareProfile(
       { ...STANDARD_HOST, prefsOverrides: { replicationConcurrency: 2 } },
-      { CENTRAID_STATIC_BROTLI_QUALITY: "3" }
+      { CENTRAID_WORKER_POOL_SIZE: "3" }
     );
     expect(profile.sources.replicationConcurrency).toStrictEqual({
       source: "prefs",
     });
-    expect(profile.sources.staticBrotliQuality).toStrictEqual({
+    expect(profile.sources.workerPoolSize).toStrictEqual({
       source: "env",
-      envVar: "CENTRAID_STATIC_BROTLI_QUALITY",
+      envVar: "CENTRAID_WORKER_POOL_SIZE",
     });
-    // The static quality knobs never carry a prefs source (no pref key).
-    expect(profile.sources.staticGzipQuality).toStrictEqual({
+    expect(profile.sources.workerMaxConcurrent).toStrictEqual({
       source: "preset",
     });
   });

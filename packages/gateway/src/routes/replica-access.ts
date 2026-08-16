@@ -1,11 +1,8 @@
-import type { IncomingMessage } from "node:http";
-
 import type {
   EnrollmentStore,
   DeviceEnrollment,
 } from "../serve/enrollment-store.js";
 import { vaultContext } from "../serve/vault-context.js";
-import { WEB_APP_HEADER } from "../serve/web-app-sessions.js";
 import type { ReplicaShapeAccess } from "./replica-shape.js";
 
 export interface ReplicaRequestAccess extends ReplicaShapeAccess {
@@ -20,32 +17,22 @@ export type ReplicaAccessResolution =
   | { ok: true; access: ReplicaRequestAccess }
   | { ok: false; status: number; body: Record<string, unknown> };
 
-function singleHeader(
-  value: string | string[] | undefined
-): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-/** Resolve only host-authenticated ambient identity; no client device ids. */
+/**
+ * Resolve only host-authenticated ambient identity; no client device ids.
+ *
+ * The `?app=` selector names which replica SHAPE the caller wants, nothing
+ * more: the caller's authority is its device enrollment, which covers the
+ * whole vault either way. It used to be cross-checked against the app a
+ * per-app browser session was scoped to — that plane retired with the
+ * served-app plane (issue #799), so there is no narrower identity left to
+ * contradict the selector.
+ */
 export function resolveReplicaAccess(
-  req: IncomingMessage,
   url: URL,
   vaultId: string,
   enrollments?: EnrollmentStore
 ): ReplicaAccessResolution {
-  const trustedApp = singleHeader(req.headers[WEB_APP_HEADER]);
-  const selectedApp = url.searchParams.get("app") || undefined;
-  if (trustedApp && selectedApp && trustedApp !== selectedApp) {
-    return {
-      ok: false,
-      status: 403,
-      body: {
-        error: "replica_app_scope_mismatch",
-        message: "the app session cannot select another app replica shape",
-      },
-    };
-  }
-  const appId = trustedApp ?? selectedApp;
+  const appId = url.searchParams.get("app") || undefined;
   const deviceKey = vaultContext()?.deviceKey;
   if (deviceKey === undefined) {
     return {

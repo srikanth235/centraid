@@ -1,3 +1,5 @@
+import { localDayKey } from "@centraid/design/elements";
+
 // The schedule canvas: a grouped agenda list from the cursor forward — a day
 // rail plus event cards with a calendar color bar, time, and a "cancel
 // asked" chip on parked-cancel events. Search results (the vault FTS hits,
@@ -6,7 +8,6 @@
 import { readPendingOverlay } from "../../_shared/pending-overlay.ts";
 import { bucketByDay, segTimeText } from "../format.ts";
 import { I } from "../icons.ts";
-import { localDayKey } from "../kit.ts";
 import type { AgEvent, DaySegment } from "../types.ts";
 import { Icon, Snippet } from "./Shared.tsx";
 

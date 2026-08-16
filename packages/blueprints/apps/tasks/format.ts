@@ -2,7 +2,8 @@
 // parsing, bucketing and text-highlight segmentation. No app state, no vault
 // IO — every function is a plain projection of its arguments so app.tsx and
 // the components can both call them without a circular import.
-import { localDayKey } from "./kit.ts";
+import { localDayKey } from "@centraid/design/elements";
+
 import type { Task, TaskStatus } from "./types.ts";
 
 export const OPEN_STATUSES = new Set<TaskStatus>([

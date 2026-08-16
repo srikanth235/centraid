@@ -1,19 +1,16 @@
-// Wire two interceptors on the renderer's session for traffic going to the
-// remote gateway:
+// Inject `Authorization: Bearer <gatewayToken>` (and the addressed vault) on
+// renderer traffic going to the configured gateway origin, for the requests
+// that cannot carry their own headers — `<img src>`, media, and other plain
+// subresource loads pointed at the gateway when it runs with
+// `auth.mode: "token"`. A request that already carries an Authorization
+// header (every `gateway-client` fetch) is left exactly as it is.
 //
-//   1. Outgoing: inject `Authorization: Bearer <gatewayToken>` so the iframe
-//      can load `<gatewayUrl>/centraid/<id>/` when the gateway is configured
-//      with `auth.mode: "token"`. Browsers can't attach arbitrary headers to
-//      an `<iframe src="...">`, so without this the gateway returns 401.
+// The CSP `frame-ancestors` relaxation that used to sit beside this retired
+// with the app iframe it existed for (issue #799): this renderer frames
+// nothing, so it needs no response rewrite.
 //
-//   2. Incoming: rewrite the `frame-ancestors` directive of the response CSP.
-//      The gateway emits `frame-ancestors 'self'` for static asset responses,
-//      which blocks the Electron renderer (whose page is `file://`) from
-//      framing the app. Other CSP directives (script-src, etc.) are left
-//      alone so the app's own content restrictions still apply.
-//
-// Both hooks are scoped to the configured gateway origin, so other traffic
-// in the renderer is untouched. Settings live in the main process; call
+// The hook is scoped to the configured gateway origin, so other traffic in
+// the renderer is untouched. Settings live in the main process; call
 // `refreshAuthInjector()` after saving so changes take effect without an
 // app restart.
 //
@@ -23,10 +20,7 @@
 import { session } from "electron";
 import type { Session } from "electron";
 
-import {
-  applyIncomingFrameRelaxation,
-  applyOutgoingAuthHeaders,
-} from "./auth-injector-core.js";
+import { applyOutgoingAuthHeaders } from "./auth-injector-core.js";
 import type { AuthInjectorSnapshot } from "./auth-injector-core.js";
 import { loadSettings } from "./settings.js";
 
@@ -67,16 +61,6 @@ export async function installAuthInjector(
       requestHeaders: applyOutgoingAuthHeaders(
         details.requestHeaders,
         snapshot,
-        details.url
-      ),
-    });
-  });
-
-  s.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: applyIncomingFrameRelaxation(
-        details.responseHeaders,
-        state,
         details.url
       ),
     });

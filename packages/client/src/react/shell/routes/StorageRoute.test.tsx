@@ -24,13 +24,10 @@ describe(StorageRoute, () => {
     document.body.append(host);
     root = createRoot(host);
     const actions: ShellActions = {
-      builderEnabled: false,
       confirm: vi.fn<ShellActions["confirm"]>(),
-      enterBuilder: vi.fn<ShellActions["enterBuilder"]>(),
       navigate,
       openCommandPalette: vi.fn<ShellActions["openCommandPalette"]>(),
       openContextMenu: vi.fn<ShellActions["openContextMenu"]>(),
-      openNewAppSheet: vi.fn<ShellActions["openNewAppSheet"]>(),
       showToast: vi.fn<ShellActions["showToast"]>(),
     };
     act(() =>

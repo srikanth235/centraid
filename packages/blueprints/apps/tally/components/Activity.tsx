@@ -1,8 +1,8 @@
+import { Skeleton } from "../../_shared/LoadingSkeleton.tsx";
 // The activity feed: expenses and settlements, newest first, each folded
 // into one sentence with an optional "you get back / you owe" suffix.
 import { MS, cat, first, money, todayKey } from "../format.ts";
 import type { ActivityRow, ViewData } from "../types.ts";
-import { KitSkeleton } from "./Shared.tsx";
 
 import styles from "./Activity.module.css";
 import shared from "./shared.module.css";
@@ -75,7 +75,7 @@ export function ActivityFeed({
   if (!viewData) {
     return (
       <div>
-        <KitSkeleton rows={6} />
+        <Skeleton rows={6} />
       </div>
     );
   }

@@ -303,8 +303,6 @@ describe(HealthRegistry, () => {
           workerMaxOldGenerationMb: 256,
           workerPoolSize: 2,
           replicationConcurrency: 3,
-          staticBrotliQuality: 10,
-          staticGzipQuality: 9,
           sqliteSynchronous: "FULL" as const,
           vaultSweepIntervalMs: 3_600_000,
           outboxIdleIntervalMs: 60_000,
@@ -314,8 +312,6 @@ describe(HealthRegistry, () => {
           workerMaxOldGenerationMb: { source: "preset" as const },
           workerPoolSize: { source: "preset" as const },
           replicationConcurrency: { source: "preset" as const },
-          staticBrotliQuality: { source: "preset" as const },
-          staticGzipQuality: { source: "preset" as const },
         },
         bounds: RESOURCE_KNOB_BOUNDS,
       };

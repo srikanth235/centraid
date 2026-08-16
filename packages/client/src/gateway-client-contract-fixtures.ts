@@ -23,7 +23,7 @@ export const fetchMock: Mock<typeof responseFor> = vi.fn();
  * Per-test toggles the mock gateway reads. `installGatewayContractHarness()`
  * restores both defaults before every test.
  */
-export const state = { hostAppSessions: false, forceVault404: false };
+export const state = { forceVault404: false };
 
 export function json(
   body: unknown,
@@ -127,7 +127,7 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
   if (path.endsWith("/settings"))
     return json({ settings: { timezone: "UTC" } });
   if (path === "/centraid/_apps" && method === "GET")
-    return json([{ id: "daily", hasIndex: true }]);
+    return json([{ id: "daily" }]);
   if (path === "/centraid/_templates") return json([]);
   if (path === "/_centraid-user/id") return json({ id: "user-1" });
   if (path === "/_centraid-user/prefs")
@@ -306,7 +306,7 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
 
 window.CentraidApi = {
   getGatewayAuth,
-  getHostCapabilities: async () => ({ appSessions: state.hostAppSessions }),
+  getHostCapabilities: async () => ({}),
   onGatewayChanged: () => () => undefined,
   onVaultChanged: () => () => undefined,
 } as unknown as typeof window.CentraidApi;
@@ -325,7 +325,6 @@ const { resetAppSessions } = await import("./gateway-client-editing.js");
 /** Registers the per-test reset. Call once at the top level of a test file. */
 export function installGatewayContractHarness(): void {
   beforeEach(() => {
-    state.hostAppSessions = false;
     state.forceVault404 = false;
     getGatewayAuth.mockReset().mockResolvedValue({
       baseUrl: "https://gateway.test",

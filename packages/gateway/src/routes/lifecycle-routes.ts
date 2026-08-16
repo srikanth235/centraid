@@ -1,19 +1,18 @@
 // HTTP surface for the gateway-owned app *lifecycle* (issue #141).
 //
 // Phase 2 of the thin-client pivot: the deterministic builder lives in
-// the gateway, not the desktop. Scaffolding a blank app, cloning a
-// template, editing an app's name/description, and creating/toggling/
-// deleting automations were all desktop orchestration (harness
-// scaffolders + app-engine webhook minting, pushed up over IPC-relayed
-// session writes). They move here so the renderer states intent and the
-// gateway does the work — identical for a local or remote gateway.
+// the gateway, not the desktop. Cloning a template, editing an app's
+// name/description, and creating/toggling/deleting automations were all
+// desktop orchestration (harness scaffolders + app-engine webhook minting,
+// pushed up over IPC-relayed session writes). They move here so the renderer
+// states intent and the gateway does the work — identical for a local or
+// remote gateway. Scaffolding a blank app went with the served-app plane it
+// produced pages for (issue #799).
 //
 // Surface (mounted via `serve()`'s `extraHandlers`, after the bearer
 // check; each verb returns `false` so the apps-store / automations
 // handlers keep their own routes):
 //
-//   POST   /centraid/_apps                     scaffold a blank app
-//          body {id, name?, version?, iconKey?, colorKey?, publish?}
 //   POST   /centraid/_apps/_clone              clone a bundled template
 //          body {templateId, sessionId?, publish?}
 //   POST   /centraid/_apps/_install            install a bundled blueprint in place (#434)
@@ -41,9 +40,8 @@
 // registry entry) so its draft is previewable through the runtime. When
 // `publish` is true the session is validated + merged onto `main` and
 // the in-process cron scheduler is reconciled — the renderer passes this
-// for now to preserve "new app is immediately live", and drops it once the preview
-// iframe points at the draft URL. Either way the orchestration is the
-// gateway's.
+// for now to preserve "new app is immediately live". Either way the
+// orchestration is the gateway's.
 //
 // Webhook secrets are minted gateway-side (create + clone): the plaintext
 // is returned once in the response, only the hash is written into the
@@ -60,11 +58,10 @@ import {
   cloneTemplateFiles,
   readTemplateFiles,
   resolveTemplates,
-  scaffoldAppFiles,
   suggestCloneIdentityFrom,
   updateAppMetaFiles,
 } from "@centraid/blueprints";
-import type { ScaffoldAppOpts, ScaffoldFile } from "@centraid/blueprints";
+import type { ScaffoldFile } from "@centraid/blueprints";
 
 import {
   defaultSessionId,
@@ -107,9 +104,6 @@ export function makeLifecycleRouteHandler(
     if (!isApps && !isAutomations) return false;
 
     try {
-      if (pathname === "/centraid/_apps" && method === "POST") {
-        return await handleCreate(opts, req, res);
-      }
       if (pathname === "/centraid/_apps/_clone" && method === "POST") {
         return await handleClone(opts, req, res);
       }
@@ -165,79 +159,6 @@ export function makeLifecycleRouteHandler(
       return sendLifecycleError(res, error);
     }
   };
-}
-
-// ---- POST /centraid/_apps (scaffold a blank app) ----
-
-async function handleCreate(
-  opts: LifecycleRouteOptions,
-  req: IncomingMessage,
-  res: ServerResponse
-): Promise<boolean> {
-  const body = await readJson(req);
-  const id = typeof body.id === "string" ? body.id : "";
-  if (!id)
-    return sendJson(res, 400, {
-      error: "bad_request",
-      message: "create needs { id }",
-    });
-  const name = typeof body.name === "string" ? body.name : undefined;
-  const version = typeof body.version === "string" ? body.version : undefined;
-  // Tile identity (issue #263) — pass-through strings from the renderer's
-  // prompt inference; scaffoldAppFiles defaults to Sparkle/violet when
-  // omitted. Typed as the design-tokens keys downstream, so cast here.
-  const iconKey =
-    typeof body.iconKey === "string"
-      ? (body.iconKey as ScaffoldAppOpts["iconKey"])
-      : undefined;
-  const colorKey =
-    typeof body.colorKey === "string"
-      ? (body.colorKey as ScaffoldAppOpts["colorKey"])
-      : undefined;
-  const publish = body.publish === true;
-  const explicitSession =
-    typeof body.sessionId === "string" && body.sessionId ? body.sessionId : "";
-  const sessionId = explicitSession || defaultSessionId(id);
-  const ephemeralSession = !explicitSession;
-
-  // Bundled ids are reserved (issue #434) — a scaffold must never shadow a
-  // shipped blueprint the resolver serves in place.
-  if (opts.isBundledAppId?.(id)) {
-    throw new AppScaffoldError(
-      "already_exists",
-      `App id "${id}" is reserved by a bundled app.`
-    );
-  }
-
-  // Reject a collision with an app already on `main` — a create must never
-  // clobber an existing app's draft (the FS scaffolder guarded this with a
-  // dir-exists check; the git-store path checks the list).
-  const existing = await opts.store.listAppsWithMeta();
-  if (existing.some((a) => a.id === id)) {
-    throw new AppScaffoldError("already_exists", `App "${id}" already exists.`);
-  }
-
-  const files = scaffoldAppFiles(id, {
-    ...(name === undefined ? {} : { name }),
-    ...(version === undefined ? {} : { version }),
-    ...(iconKey === undefined ? {} : { iconKey }),
-    ...(colorKey === undefined ? {} : { colorKey }),
-  });
-  await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
-  await stageAndMaybePublish(opts, {
-    appId: id,
-    sessionId,
-    files,
-    publish,
-    message: `scaffold ${id}`,
-    ephemeralSession,
-  });
-
-  return sendJson(res, 201, {
-    app: { id, ...(name === undefined ? {} : { name }), kind: "app" as const },
-    sessionId,
-    staged: !publish,
-  });
 }
 
 // ---- POST /centraid/_apps/_clone (clone a bundled template) ----

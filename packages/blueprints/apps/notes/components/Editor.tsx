@@ -12,9 +12,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
 
+import { relTime, renderAttachments } from "@centraid/design/elements";
+
 import { deriveTitle, parseBlocks, stripInline } from "../format.ts";
 import { I } from "../icons.ts";
-import { relTime, renderAttachments } from "../kit.ts";
 import type { Note, NotePatch, Notebook } from "../types.ts";
 import { History } from "./History.tsx";
 import { Icon } from "./Shared.tsx";

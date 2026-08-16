@@ -10,7 +10,6 @@ import {
   closeApp,
   launchApp,
   makeEnv,
-  markUserApp,
   openAppFromPalette,
   seedRemoteGateway,
   seedRemoteGatewayProfile,
@@ -381,28 +380,18 @@ test("13.8 — switching to an unreachable gateway degrades gracefully", async (
 
 // ─────────────────────────── §14 cross-cutting ───────────────────────────
 
-test("14.2 — an auth failure on publish surfaces a token/Settings prompt", async () => {
-  const id = "todoer";
-  gateway.state.apps = [appEntry({ id, name: "Todoer" })];
+test("14.2 — a first-party inline app has no Build control", async () => {
+  gateway.state.apps = [appEntry({ id: "tasks", name: "Tasks" })];
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await markUserApp(page, { id, name: "Todoer" });
-    await page.reload();
-    await waitForHome(page);
-    // Custom apps open via palette; Build is the titlebar entry to the builder.
-    await openAppFromPalette(page, "Todoer");
-    await page.getByRole("button", { name: "Build", exact: true }).click();
-    await page.getByTestId("builder-body").waitFor({ state: "visible" });
-
-    gateway.state.forceStatus = 401; // every call now rejects with auth_required
-    await page.getByTestId("builder-publish").click();
-    await expect(page.getByTestId("builder-body")).toContainText(
-      /token|Settings/iu,
-      {
-        timeout: 15_000,
-      }
-    );
+    await openAppFromPalette(page, "Tasks");
+    await expect(page.getByTestId("inline-app-view")).toBeVisible();
+    // #799 retired the served-app builder. The titlebar must not still
+    // advertise a Build that cannot load.
+    await expect(
+      page.getByRole("button", { name: "Build", exact: true })
+    ).toHaveCount(0);
   } finally {
     await closeApp(app);
   }

@@ -1,6 +1,20 @@
 // governance: allow-repo-hygiene file-size-limit (#630) — this factory is the
 // cohesive controller for one blueprint; its board, ordering, and write
 // outcomes share the same live app-state closure.
+//
+// Non-visual business logic: vault IO (write/act), the board-section
+// derivation, sidebar counts, the session activity log and parked-write
+// tracking. `createLogic` closes over app.tsx's own `state`/`data` (mutated
+// in place, never reassigned) plus the render/refresh entry points app.tsx
+// defines — the same factory shape docs/logic.ts and nav.ts use. The pure
+// derivation helpers (`buildSections`/`sidebarCounts`/`todayProgress`) need
+// no closure and are exported standalone so components can call them too.
+import {
+  debounce,
+  outcomeMessage,
+  statusLine,
+} from "@centraid/design/elements";
+
 import {
   BUCKETS,
   VIEW_BUCKETS,
@@ -9,14 +23,6 @@ import {
   plusDays,
   todayStr,
 } from "./format.ts";
-// Non-visual business logic: vault IO (write/act), the board-section
-// derivation, sidebar counts, the session activity log and parked-write
-// tracking. `createLogic` closes over app.tsx's own `state`/`data` (mutated
-// in place, never reassigned) plus the render/refresh entry points app.tsx
-// defines — the same factory shape docs/logic.ts and nav.ts use. The pure
-// derivation helpers (`buildSections`/`sidebarCounts`/`todayProgress`) need
-// no closure and are exported standalone so components can call them too.
-import { debounce, outcomeMessage, statusLine } from "./kit.ts";
 import type {
   AppState,
   BoardData,
@@ -109,7 +115,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   }
 
   // Like write(), but returns the raw outcome so the shared attachment
-  // helpers (kit.ts wireAttachInput) can narrate and refresh on their own.
+  // helpers (the element layer's wireAttachInput) can narrate and refresh on their own.
   async function act(
     action: string,
     input: Record<string, unknown>
@@ -352,7 +358,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return outcome;
   }
 
-  // ---------- Attachments (kit.ts renderAttachments / wireAttachInput) ----------
+  // ---------- Attachments (the element layer's renderAttachments / wireAttachInput) ----------
 
   let attachTarget: string | null = null;
   const setAttachTarget = (taskId: string | null) => {

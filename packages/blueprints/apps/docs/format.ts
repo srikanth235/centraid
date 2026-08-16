@@ -1,10 +1,11 @@
-import { safeDocumentUrl } from "../_shared/untrusted.ts";
 // Formatting + file-type helpers — pure functions of their arguments; none
 // hold or mutate app state. Split out of app.tsx so both the
 // orchestrator (currentRows' type filter, the upload size-skip message, the
 // empty-row copy) and the row/details/quick-look components can call these
 // directly instead of threading them all as props.
-import { fmtBytes as fmtBytesBase } from "./kit.ts";
+import { fmtBytes as fmtBytesBase } from "@centraid/design/elements";
+
+import { safeDocumentUrl } from "../_shared/untrusted.ts";
 import type { CustodyInfo, DocFields, TypeMeta } from "./types.ts";
 
 // The drive shows an em dash for absent sizes everywhere it prints bytes.

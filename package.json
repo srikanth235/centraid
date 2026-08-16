@@ -2,7 +2,7 @@
   "name": "centraid-monorepo",
   "version": "0.1.0",
   "private": true,
-  "description": "Centraid — personal app builder for desktop, installable web, and mobile clients.",
+  "description": "Centraid — a personal, local-first superapp for desktop, installable web, and mobile clients.",
   "workspaces": {
     "packages": [
       "packages/*",

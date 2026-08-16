@@ -4,7 +4,7 @@ import { runSelectionBatch } from "../_shared/selection-engine.ts";
 // `exitSelectMode` are the only app.tsx-owned pieces these need, passed in per
 // call the same way assets-actions.ts's helpers are.
 //
-// NARRATION GOES THROUGH outcomes.ts, NOT kit.ts's `statusLine`. The ONE
+// NARRATION GOES THROUGH outcomes.ts, NOT the element layer's `statusLine`. The ONE
 // status line is the frame's (`frame.setStatus`, via outcomes.ts's `notice`
 // sink) — a batch that drew its own banner would be a second status line the
 // handoff's §14/§18 both rule out. `narrate()` already forwards a failed

@@ -5,7 +5,7 @@
 // shelf (select copies, trash the batch) and the review (keep one copy, trash
 // the rest) land here, so the two cannot mean two different things.
 //
-// NARRATION GOES THROUGH outcomes.ts, NOT kit.ts's `statusLine`. The ONE
+// NARRATION GOES THROUGH outcomes.ts, NOT the element layer's `statusLine`. The ONE
 // status line is the frame's (`frame.setStatus`, via `notice`) — this module
 // used to write to the kit's own DOM status-line host instead, which put a
 // second status surface on screen for exactly one of this app's writes, and

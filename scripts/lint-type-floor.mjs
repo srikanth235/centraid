@@ -26,7 +26,7 @@ const REM_BASE_PX = 16;
 const CSS_TARGETS = [
   "packages/client/src",
   "packages/blueprints",
-  "packages/design/kit",
+  "packages/design/src/elements",
 ];
 const MOBILE_TARGETS = ["apps/mobile/src"];
 

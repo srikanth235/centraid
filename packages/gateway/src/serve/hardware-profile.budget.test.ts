@@ -19,8 +19,6 @@ interface ResolvedKnobs {
   workerMaxOldGenerationMb: number;
   workerPoolSize: number;
   replicationConcurrency: number;
-  staticBrotliQuality: number;
-  staticGzipQuality: number;
   vaultSweepIntervalMs: number;
   outboxIdleIntervalMs: number;
 }
@@ -45,8 +43,6 @@ const CONSERVE: Omit<ResolvedKnobs, "class" | "sqliteSynchronous"> = {
   workerMaxOldGenerationMb: 128,
   workerPoolSize: 0,
   replicationConcurrency: 1,
-  staticBrotliQuality: 5,
-  staticGzipQuality: 6,
   vaultSweepIntervalMs: 7_200_000,
   outboxIdleIntervalMs: 120_000,
 };
@@ -55,8 +51,6 @@ const BALANCED: Omit<ResolvedKnobs, "class" | "sqliteSynchronous"> = {
   workerMaxOldGenerationMb: 256,
   workerPoolSize: 2,
   replicationConcurrency: 3,
-  staticBrotliQuality: 10,
-  staticGzipQuality: 9,
   vaultSweepIntervalMs: 3_600_000,
   outboxIdleIntervalMs: 60_000,
 };
@@ -65,8 +59,6 @@ const PERFORMANCE: Omit<ResolvedKnobs, "class" | "sqliteSynchronous"> = {
   workerMaxOldGenerationMb: 384,
   workerPoolSize: 4,
   replicationConcurrency: 4,
-  staticBrotliQuality: 10,
-  staticGzipQuality: 9,
   vaultSweepIntervalMs: 3_600_000,
   outboxIdleIntervalMs: 60_000,
 };
@@ -116,8 +108,6 @@ describe("hardware-profile.budget", () => {
         workerMaxOldGenerationMb: profile.workerMaxOldGenerationMb,
         workerPoolSize: profile.workerPoolSize,
         replicationConcurrency: profile.replicationConcurrency,
-        staticBrotliQuality: profile.staticBrotliQuality,
-        staticGzipQuality: profile.staticGzipQuality,
         vaultSweepIntervalMs: profile.vaultSweepIntervalMs,
         outboxIdleIntervalMs: profile.outboxIdleIntervalMs,
       }).toStrictEqual(expected);

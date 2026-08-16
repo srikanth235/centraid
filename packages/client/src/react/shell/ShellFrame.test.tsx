@@ -214,15 +214,6 @@ describe("shell/ShellFrame", () => {
       );
     });
 
-    it("shows the New app pencil whenever the host wires one", () => {
-      const el = render(<ShellFrame {...base} showNewChat />);
-      expect(el.querySelector('[aria-label="New app"]')).not.toBeNull();
-      act(() => root?.unmount());
-      host?.remove();
-      const without = render(<ShellFrame {...base} />);
-      expect(without.querySelector('[aria-label="New app"]')).toBeNull();
-    });
-
     it("uses the grid layout with a center cluster", () => {
       const el = render(
         <ShellFrame

@@ -1,19 +1,24 @@
-import { tallyDedupes } from "./components/Import.tsx";
-import type { ImportResult } from "./components/Import.tsx";
-import { $ } from "./dom.ts";
 // Upload pipeline: perceptual hash + client thumb staging, then the typed
 // `upload` command per file. `runUpload` takes `refresh` and `setUploading`
 // from app.tsx (the only two things here that touch app-level state) — the
 // button/input DOM nodes it mutates for progress text are looked up locally
 // via `$`, exactly like the pre-split code did.
-import { isPendingOffsite, stageDerivative, stageFileBytes } from "./kit.ts";
-import { act, narrate, notice, writeTarget } from "./outcomes.ts";
-import { thumbHashFromImage } from "./thumbhash.ts";
+import {
+  isPendingOffsite,
+  stageDerivative,
+  stageFileBytes,
+} from "@centraid/design/elements";
+
 import {
   captureVideoFrames,
   VIDEO_POSTER_EDGE,
   VIDEO_THUMB_EDGE,
-} from "./video-frame.js";
+} from "../_shared/video-frame.ts";
+import { tallyDedupes } from "./components/Import.tsx";
+import type { ImportResult } from "./components/Import.tsx";
+import { $ } from "./dom.ts";
+import { act, narrate, notice, writeTarget } from "./outcomes.ts";
+import { thumbHashFromImage } from "./thumbhash.ts";
 
 const CLIENT_TINY_EDGE = VIDEO_THUMB_EDGE;
 const CLIENT_MEDIUM_EDGE = VIDEO_POSTER_EDGE;

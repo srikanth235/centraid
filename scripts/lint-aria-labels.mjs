@@ -26,7 +26,7 @@ import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
-const TARGETS = ["packages/client/src/react", "packages/design/kit"];
+const TARGETS = ["packages/client/src/react", "packages/design/src/elements"];
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
 const EXTENSIONS = /\.(?:tsx|ts|jsx|js|html)$/u;
 // Test files exercise both correct and deliberately-wrong markup as fixtures;

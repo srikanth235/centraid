@@ -1,12 +1,12 @@
 # coverage-scope-reachability — gated runtime scopes must stay visible to
-# coverage floors / matrix ownership (#532, #630, #725, #753, #781).
+# coverage floors / matrix ownership (#532, #630, #725, #753, #781, #799).
 category: Testing
 recommended: true
 summary: |
   Every top-level package or app under packages/*/src or apps/*/src that
   contains non-test TypeScript source, plus every executable tree co-located
   OUTSIDE src/ inside a package or app (packages/blueprints/apps,
-  packages/design/kit, packages/model-runtime/automation-handlers, …), must
+  packages/model-runtime/automation-handlers, …), must
   either (a) be covered by a coverage-floors.json glob, (b) own at least one
   tests/matrix.json flow, or (c) be listed in this directive's
   intentional-ungated allowlist. The non-src trees are discovered rather than
@@ -17,8 +17,10 @@ summary: |
   (scripts, tests, fixtures, build output) are skipped.
 
   Additionally, every coverage-floors.json glob key must still match the
-  vitest coverage include patterns (packages/*/src/**, apps/*/src/**, both
-  blueprint runtime roots, and any other floored non-src tree) so a floor
-  cannot point at a scope the coverage tool never instruments.
+  vitest coverage include patterns (packages/*/src/**, apps/*/src/**, the
+  blueprint app runtime root, and any other floored non-src tree) so a floor
+  cannot point at a scope the coverage tool never instruments. A tree that
+  moves INTO src/ stops being a scope of its own and rides its package's
+  src/** floor — #799 folded the shared browser substrate that way.
 surface: repo-state
 hook: pre-commit

@@ -7,11 +7,29 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import {
   cloneTemplate,
+  cloneTemplateFiles,
   suggestAppId,
   suggestCloneIdentity,
   suggestCloneIdentityFrom,
 } from "./clone.js";
-import { scaffoldApp } from "./scaffold.js";
+import type { ScaffoldFile } from "./scaffold-types.js";
+
+/**
+ * Lay down a minimal published app on disk: the id is the folder name and the
+ * display name lives in `app.json#name` — the only two facts the identity
+ * probes below read.
+ */
+async function publishApp(
+  appsDir: string,
+  id: string,
+  name: string
+): Promise<void> {
+  await fs.mkdir(path.join(appsDir, id), { recursive: true });
+  await fs.writeFile(
+    path.join(appsDir, id, "app.json"),
+    JSON.stringify({ id, name, version: "0.1.0" }, null, 2) + "\n"
+  );
+}
 
 describe(suggestCloneIdentity, () => {
   let dir: string;
@@ -30,15 +48,15 @@ describe(suggestCloneIdentity, () => {
   });
 
   it('returns (id-2, "Name 2") when the bare slot is taken', async () => {
-    await scaffoldApp(dir, "hydrate", { name: "Hydrate" });
+    await publishApp(dir, "hydrate", "Hydrate");
     const picked = await suggestCloneIdentity(dir, "hydrate", "Hydrate");
     expect(picked.id).toBe("hydrate-2");
     expect(picked.name).toBe("Hydrate 2");
   });
 
   it("skips past existing directory ids", async () => {
-    await scaffoldApp(dir, "hydrate", { name: "Hydrate" });
-    await scaffoldApp(dir, "hydrate-2", { name: "Some unrelated name" });
+    await publishApp(dir, "hydrate", "Hydrate");
+    await publishApp(dir, "hydrate-2", "Some unrelated name");
     const picked = await suggestCloneIdentity(dir, "hydrate", "Hydrate");
     expect(picked.id).toBe("hydrate-3");
     expect(picked.name).toBe("Hydrate 3");
@@ -46,11 +64,11 @@ describe(suggestCloneIdentity, () => {
 
   it("skips past existing display-name collisions even when the id slot is free", async () => {
     // Bare "Hydrate" is taken by an unrelated app. The dir id `hydrate`
-    // is also taken by that same scaffold. Then `hydrate-2` is free as a
+    // is also taken by that same app. Then `hydrate-2` is free as a
     // dir but the user renamed yet another app to "Hydrate 2" — bump
     // both to N=3.
-    await scaffoldApp(dir, "hydrate", { name: "Hydrate" });
-    await scaffoldApp(dir, "something", { name: "Hydrate 2" });
+    await publishApp(dir, "hydrate", "Hydrate");
+    await publishApp(dir, "something", "Hydrate 2");
     const picked = await suggestCloneIdentity(dir, "hydrate", "Hydrate");
     expect(picked.id).toBe("hydrate-3");
     expect(picked.name).toBe("Hydrate 3");
@@ -59,16 +77,16 @@ describe(suggestCloneIdentity, () => {
   it("keeps id and name advancing together when both classes of collision interleave", async () => {
     // N=1: id+name taken (bare). N=2: id taken. N=3: id free but name
     // taken. N=4: both free.
-    await scaffoldApp(dir, "hydrate", { name: "Hydrate" });
-    await scaffoldApp(dir, "hydrate-2", { name: "Hydrate 2" });
-    await scaffoldApp(dir, "whatever", { name: "Hydrate 3" });
+    await publishApp(dir, "hydrate", "Hydrate");
+    await publishApp(dir, "hydrate-2", "Hydrate 2");
+    await publishApp(dir, "whatever", "Hydrate 3");
     const picked = await suggestCloneIdentity(dir, "hydrate", "Hydrate");
     expect(picked.id).toBe("hydrate-4");
     expect(picked.name).toBe("Hydrate 4");
   });
 
   it("does case-insensitive display-name comparison", async () => {
-    await scaffoldApp(dir, "x", { name: "HYDRATE" });
+    await publishApp(dir, "x", "HYDRATE");
     const picked = await suggestCloneIdentity(dir, "hydrate", "Hydrate");
     // Bare name "Hydrate" collides with "HYDRATE" case-insensitively → bump.
     expect(picked.id).toBe("hydrate-2");
@@ -143,55 +161,21 @@ describe("suggestAppId (sanity — coexists with suggestCloneIdentity)", () => {
   });
 });
 
-describe("cloneTemplate index.html <title> rewrite", () => {
+describe(cloneTemplate, () => {
   let appsDir: string;
   let templateDir: string;
 
   beforeEach(async () => {
-    appsDir = await tempDir("centraid-clone-html-");
+    appsDir = await tempDir("centraid-clone-dest-");
     templateDir = await tempDir("centraid-clone-tmpl-");
-    // Minimal template: app.json + index.html with a hardcoded title.
     await fs.writeFile(
       path.join(templateDir, "app.json"),
       JSON.stringify({ name: "Hydrate", version: "0.1.0" }, null, 2)
-    );
-    await fs.writeFile(
-      path.join(templateDir, "index.html"),
-      "<!doctype html><html><head><title>Hydrate</title></head><body></body></html>"
     );
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
     await fs.rm(templateDir, { recursive: true, force: true });
-  });
-
-  it("rewrites <title> to the new display name", async () => {
-    await cloneTemplate({
-      appsDir,
-      newAppId: "hydrate-2",
-      templateDir,
-      newName: "Hydrate 2",
-    });
-    const html = await fs.readFile(
-      path.join(appsDir, "hydrate-2", "index.html"),
-      "utf8"
-    );
-    expect(html).toMatch(/<title>Hydrate 2<\/title>/u);
-    expect(html).not.toMatch(/>Hydrate</u);
-  });
-
-  it("HTML-escapes special characters in the new name", async () => {
-    await cloneTemplate({
-      appsDir,
-      newAppId: "spicy-1",
-      templateDir,
-      newName: "Foo & <Bar>",
-    });
-    const html = await fs.readFile(
-      path.join(appsDir, "spicy-1", "index.html"),
-      "utf8"
-    );
-    expect(html).toMatch(/<title>Foo &amp; &lt;Bar&gt;<\/title>/u);
   });
 
   it("backfills the catalog tile identity into app.json (template copy predates the keys)", async () => {
@@ -205,7 +189,8 @@ describe("cloneTemplate index.html <title> rewrite", () => {
     });
     const appJson = JSON.parse(
       await fs.readFile(path.join(appsDir, "hydrate-2", "app.json"), "utf8")
-    ) as { iconKey: string; colorKey: string };
+    ) as { iconKey: string; colorKey: string; name: string };
+    expect(appJson.name).toBe("Hydrate 2");
     expect(appJson.iconKey).toBe("Water");
     expect(appJson.colorKey).toBe("teal");
   });
@@ -235,22 +220,26 @@ describe("cloneTemplate index.html <title> rewrite", () => {
     expect(appJson.colorKey).toBe("indigo");
   });
 
-  it("leaves index.html untouched when no <title> tag exists", async () => {
-    await fs.writeFile(
-      path.join(templateDir, "index.html"),
-      "<!doctype html><html><body>no head</body></html>"
-    );
+  it("seeds the canonical subdirs and an automations brief", async () => {
     await cloneTemplate({
       appsDir,
-      newAppId: "plain-1",
+      newAppId: "hydrate-2",
       templateDir,
-      newName: "Plain",
+      newName: "Hydrate 2",
     });
-    const html = await fs.readFile(
-      path.join(appsDir, "plain-1", "index.html"),
-      "utf8"
-    );
-    expect(html).toBe("<!doctype html><html><body>no head</body></html>");
+    const entries = await fs.readdir(path.join(appsDir, "hydrate-2"));
+    expect(entries.toSorted()).toStrictEqual([
+      "actions",
+      "app.json",
+      "automations",
+      "queries",
+    ]);
+    await expect(
+      fs.readFile(
+        path.join(appsDir, "hydrate-2", "automations", "README.md"),
+        "utf8"
+      )
+    ).resolves.toContain("# automations/");
   });
 
   it("rewrites automation.json#name + stamps generated for automation templates", async () => {
@@ -316,17 +305,138 @@ describe("cloneTemplate index.html <title> rewrite", () => {
 
     await fs.rm(templateDirLocal, { recursive: true, force: true });
   });
+});
 
-  it("skips silently when the template has no index.html", async () => {
-    await fs.rm(path.join(templateDir, "index.html"));
-    // Should not throw — the clone simply doesn't have an index.html.
-    await cloneTemplate({
-      appsDir,
-      newAppId: "headless-1",
-      templateDir,
-      newName: "Headless",
-    });
-    const files = await fs.readdir(path.join(appsDir, "headless-1"));
-    expect(!files.includes("index.html")).toBeTruthy();
+describe(cloneTemplateFiles, () => {
+  const template = (): ScaffoldFile[] => [
+    {
+      path: "app.json",
+      content:
+        JSON.stringify(
+          {
+            id: "hydrate",
+            name: "Hydrate",
+            version: "2.0.0",
+            description: "drink water",
+          },
+          null,
+          2
+        ) + "\n",
+    },
+    {
+      path: "package.json",
+      content: JSON.stringify({ name: "centraid-app-hydrate" }, null, 2) + "\n",
+    },
+  ];
+
+  function byPath(files: ScaffoldFile[]): Map<string, string> {
+    return new Map(files.map((f) => [f.path, f.content]));
+  }
+
+  it("rewrites id, name, version and package name", () => {
+    const out = byPath(
+      cloneTemplateFiles({
+        newAppId: "hydrate-2",
+        templateFiles: template(),
+        newName: "Hydrate 2",
+      })
+    );
+    const appJson = JSON.parse(out.get("app.json")!) as Record<string, unknown>;
+    expect(appJson.id).toBe("hydrate-2");
+    expect(appJson.name).toBe("Hydrate 2");
+    expect(appJson.version).toBe("0.1.0");
+    expect(appJson.description).toBe("drink water");
+    expect(out.get("package.json")!).toMatch(/"centraid-app-hydrate-2"/u);
+  });
+
+  it("stamps generated + rewrites name on a bundled automation manifest", () => {
+    const tmpl = [
+      ...template(),
+      {
+        path: "automations/wake/automation.json",
+        content:
+          JSON.stringify(
+            {
+              name: "Hydrate",
+              generated: { by: "tmpl", at: "2020-01-01T00:00:00.000Z" },
+            },
+            null,
+            2
+          ) + "\n",
+      },
+    ];
+    const out = byPath(
+      cloneTemplateFiles({
+        newAppId: "hydrate-2",
+        templateFiles: tmpl,
+        newName: "Hydrate 2",
+      })
+    );
+    const mf = JSON.parse(out.get("automations/wake/automation.json")!) as {
+      name: string;
+      generated: { by: string; at: string };
+    };
+    expect(mf.name).toBe("Hydrate 2");
+    expect(mf.generated.by).toBe("centraid-builder");
+    expect(mf.generated.at).not.toBe("2020-01-01T00:00:00.000Z");
+    // No automations brief is seeded when a real manifest ships.
+    expect(out.has("automations/README.md")).toBe(false);
+  });
+
+  it("seeds an automations brief when the template has none", () => {
+    const out = byPath(
+      cloneTemplateFiles({ newAppId: "hydrate-2", templateFiles: template() })
+    );
+    expect(out.has("automations/README.md")).toBeTruthy();
+  });
+
+  it("backfills the catalog tile identity when the template app.json lacks it", () => {
+    const out = byPath(
+      cloneTemplateFiles({
+        newAppId: "hydrate-2",
+        templateFiles: template(),
+        iconKey: "Water",
+        colorKey: "teal",
+      })
+    );
+    const appJson = JSON.parse(out.get("app.json")!) as {
+      iconKey: string;
+      colorKey: string;
+    };
+    expect(appJson.iconKey).toBe("Water");
+    expect(appJson.colorKey).toBe("teal");
+  });
+
+  it("keeps the template app.json tile identity over the catalog entry", () => {
+    const tmpl = template();
+    tmpl[0] = {
+      path: "app.json",
+      content:
+        JSON.stringify(
+          {
+            id: "hydrate",
+            name: "Hydrate",
+            version: "2.0.0",
+            iconKey: "Water",
+            colorKey: "teal",
+          },
+          null,
+          2
+        ) + "\n",
+    };
+    const out = byPath(
+      cloneTemplateFiles({
+        newAppId: "hydrate-2",
+        templateFiles: tmpl,
+        iconKey: "Sparkle",
+        colorKey: "violet",
+      })
+    );
+    const appJson = JSON.parse(out.get("app.json")!) as {
+      iconKey: string;
+      colorKey: string;
+    };
+    expect(appJson.iconKey).toBe("Water");
+    expect(appJson.colorKey).toBe("teal");
   });
 });

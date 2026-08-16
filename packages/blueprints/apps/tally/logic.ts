@@ -13,6 +13,11 @@
 // tracks it (no React `useState` needed for these, no Lit `live()` needed
 // either: a full re-render already keeps the DOM in sync on every keystroke).
 import { BRAND, identityColor, identityInitials } from "@centraid/design";
+import {
+  debounce,
+  outcomeMessage,
+  statusLine,
+} from "@centraid/design/elements";
 
 import {
   enrichPendingRows,
@@ -27,7 +32,6 @@ import {
   toCents,
   todayKey,
 } from "./format.ts";
-import { debounce, outcomeMessage, statusLine } from "./kit.ts";
 import type {
   AddFriendModel,
   ExpenseModel,

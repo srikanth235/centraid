@@ -359,7 +359,7 @@ export const fetchMock: Mock<typeof transport> = vi.fn();
 
 window.CentraidApi = {
   getGatewayAuth,
-  getHostCapabilities: async () => ({ appSessions: false }),
+  getHostCapabilities: async () => ({}),
   onGatewayChanged: () => () => undefined,
   onVaultChanged: () => () => undefined,
 } as unknown as typeof window.CentraidApi;

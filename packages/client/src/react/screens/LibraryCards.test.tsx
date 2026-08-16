@@ -24,18 +24,16 @@ const appItem: HomeAppItemDTO = {
   tone: null,
   stamp: "2h ago",
   starred: false,
-  draft: false,
 };
-const draftItem: HomeAppItemDTO = {
+const starredItem: HomeAppItemDTO = {
   id: "draft1",
-  name: "Draft App",
+  name: "Starred App",
   desc: "",
   iconKey: "Sparkle",
   tile: { background: "#111", glyphColor: "#fff" },
-  tone: "draft",
+  tone: null,
   stamp: "saved",
   starred: true,
-  draft: true,
 };
 const autoItem: HomeAutoItemDTO = {
   ref: "a@1",
@@ -86,7 +84,6 @@ describe("screens/LibraryCards", () => {
         <AppCard
           a={appItem}
           onOpen={onOpen}
-          onEnterDraft={vi.fn<(id: string) => void>()}
           onContext={vi.fn<(id: string, anchor: HomeMenuAnchor) => void>()}
         />
       );
@@ -99,18 +96,17 @@ describe("screens/LibraryCards", () => {
       expect(onOpen).toHaveBeenCalledWith("todos");
     });
 
-    it("a draft opens the builder instead, and flags its star", () => {
-      const onEnterDraft = vi.fn<(id: string) => void>();
+    it("flags a starred tile", () => {
+      const onOpen = vi.fn<(id: string) => void>();
       const el = mount(
         <AppCard
-          a={draftItem}
-          onOpen={vi.fn<(id: string) => void>()}
-          onEnterDraft={onEnterDraft}
+          a={starredItem}
+          onOpen={onOpen}
           onContext={vi.fn<(id: string, anchor: HomeMenuAnchor) => void>()}
         />
       );
       click(el.querySelector('[data-testid="app-tile"]'));
-      expect(onEnterDraft).toHaveBeenCalledWith("draft1");
+      expect(onOpen).toHaveBeenCalledWith("draft1");
       expect(el.querySelector(".starFlag")).toBeTruthy();
     });
 
@@ -120,7 +116,6 @@ describe("screens/LibraryCards", () => {
         <AppCard
           a={appItem}
           onOpen={vi.fn<(id: string) => void>()}
-          onEnterDraft={vi.fn<(id: string) => void>()}
           onContext={onContext}
         />
       );
@@ -146,7 +141,6 @@ describe("screens/LibraryCards", () => {
         <AppCard
           a={appItem}
           onOpen={vi.fn<(id: string) => void>()}
-          onEnterDraft={vi.fn<(id: string) => void>()}
           onContext={onContext}
         />
       );

@@ -1,13 +1,14 @@
 /**
- * Read a document body on both app render paths.
+ * Read a document body.
  *
- * Served apps own a same-origin gateway document, so their content URI is
- * directly fetchable. Bundled apps are inline in the desktop/PWA shell and
- * must instead use the shell's authenticated blob primitive: resolving the
- * relative URI against `file://` or the PWA origin reaches the wrong server,
- * while turning it into a `blob:` URL and fetching again is refused by the
- * shell CSP. The primitive returns the text from its already-authorized
- * response, keeping CSP unchanged.
+ * An app is inline in the desktop/PWA shell (#799 left no second render path),
+ * so it must use the shell's authenticated blob primitive rather than fetching
+ * the content URI itself: resolving the relative URI against `file://` or the
+ * PWA origin reaches the wrong server, while turning it into a `blob:` URL and
+ * fetching again is refused by the shell CSP. The primitive returns the text
+ * from its already-authorized response, keeping CSP unchanged. The direct-fetch
+ * fallback below survives only for a host that exposes no primitive (tests, and
+ * the harness fixtures that render an app outside the shell).
  */
 export async function loadBlobText(uri: string): Promise<string> {
   const inlineLoader = window.centraid.blobText;

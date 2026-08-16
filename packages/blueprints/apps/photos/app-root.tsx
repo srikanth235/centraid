@@ -33,9 +33,12 @@ import {
   useRef,
   useState,
 } from "react";
-import type { FC, ReactElement, ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
+
+import { debounce, observeWidth } from "@centraid/design/elements";
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
+import { Skeleton } from "../_shared/LoadingSkeleton.tsx";
 import {
   mountedScopes,
   ownScopeId,
@@ -78,7 +81,6 @@ import { createEnrichmentGate } from "./enrichment-gate.ts";
 import { filterByKind, scopeIsOn, writeScopeFor } from "./filters.ts";
 import type { KindFilter } from "./filters.ts";
 import { appBar, bandClaim } from "./frame.tsx";
-import { debounce, observeWidth } from "./kit.ts";
 import { gridWidthFallback, RAIL_WIDTH, rungHeight } from "./layout.ts";
 import {
   createRefetchScheduler,
@@ -148,10 +150,6 @@ export const PHOTOS_READ_TABLES_LIST = [
 ];
 const PHOTOS_READ_TABLES = new Set<string>(PHOTOS_READ_TABLES_LIST);
 const FOCUS_STALE_MS = 30_000;
-
-// The genuine <kit-skeleton> custom element as ordinary JSX (pilot pattern —
-// the runtime value stays the string, so the emitted DOM is identical).
-const KitSkeleton = "kit-skeleton" as unknown as FC<{ rows?: number }>;
 
 type SlotKey = keyof ChromeSlots;
 
@@ -994,7 +992,7 @@ export function Root({
         );
         mainRoot.render(
           roster === null ? (
-            <KitSkeleton rows={3} />
+            <Skeleton rows={3} />
           ) : (
             <PeopleShelf
               people={roster}
@@ -1595,7 +1593,7 @@ export function Root({
     // `renderMain` paints the packed `--skel` grid while `loaded` is false
     // (§14) — the first frame already occupies the geometry the photographs
     // will, so nothing reflows when the read lands. It used to be a stack of
-    // `<kit-skeleton>` bars, which is the wrong shape for a timeline and
+    // placeholder bars, which is the wrong shape for a timeline and
     // guaranteed exactly the reflow §14 exists to prevent.
     renderMain();
     // The host may already know the gateway is unreachable before this app has

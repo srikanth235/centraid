@@ -1,4 +1,3 @@
-import type { WriteTarget } from "../_shared/write-target.ts";
 // Outcome narration + the write trampoline (shared pattern across apps). No
 // domain (asset/album) state lives here — it's generic plumbing, which is
 // exactly why every action module and every component that needs to fire a
@@ -21,7 +20,9 @@ import type { WriteTarget } from "../_shared/write-target.ts";
 // selection); before then, and on any single-scope host, it answers with the
 // ambient scope — the empty id every scope-addressed transport reads as "the
 // one scope there is".
-import { outcomeMessage } from "./kit.ts";
+import { outcomeMessage } from "@centraid/design/elements";
+
+import type { WriteTarget } from "../_shared/write-target.ts";
 
 /**
  * Which write is being placed. `new` follows the chip selection (an upload

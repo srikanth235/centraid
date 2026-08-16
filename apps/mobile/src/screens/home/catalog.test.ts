@@ -1,59 +1,24 @@
-/* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
 /**
- * Home / Vaults launcher owner (issue #545 C5/C7 surface) — pure catalog merge.
- * resolveAppMeta is mocked so vitest never loads react-native via gateway.
+ * Home / Vaults launcher owner (issue #545 C5/C7 surface) — the pure catalog.
  */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import type { AppMetaResolved } from "@centraid/design";
-
-vi.mock(import("../../lib/gateway"), () => ({
-  resolveAppMeta: (row: {
-    id: string;
-    name?: string;
-    description?: string;
-    iconKey?: string;
-    colorKey?: string;
-  }): AppMetaResolved =>
-    ({
-      id: row.id,
-      name: row.name ?? row.id,
-      desc: row.description ?? "",
-      iconKey: row.iconKey ?? "Sparkle",
-      color: "#888",
-      colorKey: row.colorKey ?? "slate",
-    }) as unknown as AppMetaResolved,
-}));
 
 import {
   buildLauncherItems,
   filterLauncherItems,
-  NATIVE_APP_IDS,
   orderByPins,
   orderForSpringboard,
 } from "./catalog";
+import type { LauncherItem } from "./catalog";
 import { SPRINGBOARD_ORDER } from "./springboard-policy";
 
-function meta(id: string, name: string, description = ""): AppMetaResolved {
-  return {
-    id,
-    name,
-    desc: description,
-    iconKey: "Sparkle",
-    color: "#888",
-    colorKey: "slate",
-  } as unknown as AppMetaResolved;
-}
-
 describe(buildLauncherItems, () => {
-  it("always includes native covers as installed", () => {
-    const items = buildLauncherItems([]);
-    const natives = items.filter((itLocal) =>
-      NATIVE_APP_IDS.has(itLocal.meta.id)
-    );
-    expect(natives).toHaveLength(8);
-    expect(natives.every((itLocal) => itLocal.installed)).toBe(true);
-    expect(natives.map((itLocal) => itLocal.route.kind).sort()).toStrictEqual([
+  it("gives all eight first-party apps a native cover", () => {
+    const items = buildLauncherItems();
+    expect(items).toHaveLength(8);
+    expect(items.map((itLocal) => itLocal.route.kind).sort()).toStrictEqual([
       "agenda",
       "docs",
       "locker",
@@ -65,32 +30,11 @@ describe(buildLauncherItems, () => {
     ]);
   });
 
-  it("keeps every bundled blueprint available without a gateway catalog", () => {
-    const items = buildLauncherItems([]);
-    const notes = items.find((itLocal) => itLocal.meta.id === "notes");
-    expect(notes).toMatchObject({
-      installed: true,
-      route: { kind: "notes" },
-    });
-  });
-
-  it("keeps native routing authoritative and appends custom remote apps", () => {
-    const remote = [
-      meta("notes", "My Notes", "live"),
-      meta("custom-app", "Custom", "user built"),
-    ];
-    const items = buildLauncherItems(remote);
-    const notes = items.find((itLocal) => itLocal.meta.id === "notes");
-    expect(notes).toMatchObject({
-      installed: true,
-      meta: expect.objectContaining({ name: "Notes" }),
-      route: { kind: "notes" },
-    });
-    const custom = items.find((itLocal) => itLocal.meta.id === "custom-app");
-    expect(custom).toMatchObject({
-      installed: true,
-      route: { kind: "app", appId: "custom-app" },
-    });
+  it("keeps every bundled blueprint available without a gateway", () => {
+    const notes = buildLauncherItems().find(
+      (itLocal) => itLocal.meta.id === "notes"
+    );
+    expect(notes).toMatchObject({ route: { kind: "notes" } });
   });
 });
 
@@ -102,32 +46,33 @@ describe(orderForSpringboard, () => {
     // The regression this guards: the grid took the CATALOG's order, which
     // opens with Notes, so Home led with a paragraph and the photographs sat
     // in the third row.
-    expect(ids(orderForSpringboard(buildLauncherItems([])))[0]).toBe("photos");
+    expect(ids(orderForSpringboard(buildLauncherItems()))[0]).toBe("photos");
   });
 
   it("puts every first-party tile in springboard order", () => {
-    expect(ids(orderForSpringboard(buildLauncherItems([])))).toStrictEqual([
+    expect(ids(orderForSpringboard(buildLauncherItems()))).toStrictEqual([
       ...SPRINGBOARD_ORDER,
     ]);
   });
 
   it("keeps an app it does not name behind the ones it does", () => {
-    const built = buildLauncherItems([meta("mine", "Mine")]);
-    const ordered = ids(orderForSpringboard(built));
+    const extra: LauncherItem = {
+      meta: { id: "mine" } as unknown as AppMetaResolved,
+      route: { kind: "notes" },
+    };
+    const ordered = ids(orderForSpringboard([...buildLauncherItems(), extra]));
     expect(ordered.at(-1)).toBe("mine");
   });
 
   it("is stable — the same vault produces the same page twice", () => {
-    const built = buildLauncherItems([meta("a", "A"), meta("b", "B")]);
+    const built = buildLauncherItems();
     expect(ids(orderForSpringboard(built))).toStrictEqual(
       ids(orderForSpringboard(built))
     );
-    // Two apps it does not name keep their catalog order rather than swapping.
-    expect(ids(orderForSpringboard(built)).slice(-2)).toStrictEqual(["a", "b"]);
   });
 
   it("loses to a pin — the member's order wins over the default", () => {
-    const ordered = orderByPins(orderForSpringboard(buildLauncherItems([])), [
+    const ordered = orderByPins(orderForSpringboard(buildLauncherItems()), [
       "tally",
     ]);
     expect(ids(ordered)[0]).toBe("tally");
@@ -135,7 +80,7 @@ describe(orderForSpringboard, () => {
 });
 
 describe(orderByPins, () => {
-  const items = buildLauncherItems([]);
+  const items = buildLauncherItems();
   const ids = (list: readonly { meta: { id: string } }[]): string[] =>
     list.map((item) => item.meta.id);
 
@@ -167,7 +112,7 @@ describe(orderByPins, () => {
 
 describe(filterLauncherItems, () => {
   it("filters by name case-insensitively and returns a copy for empty query", () => {
-    const items = buildLauncherItems([]);
+    const items = buildLauncherItems();
     const copy = filterLauncherItems(items, "  ");
     expect(copy).toStrictEqual(items);
     expect(copy).not.toBe(items);

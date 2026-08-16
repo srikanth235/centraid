@@ -148,14 +148,19 @@ jobs:
               - 'packages/blueprints/**'
               - 'packages/design/**'
               - '.github/workflows/ci.yml'
-            # #781 — everything `bun run design:gallery` reads: the design
-            # registry + lowerings it renders, the kit css it inlines, the
-            # blueprint app manifests it captures, the gallery script itself,
-            # and the committed baselines/manifest it compares against.
+            # #781 — everything `bun run design:gallery` reads. #799 widened
+            # it: the lane no longer renders a fixture, it BUILDS AND DRIVES
+            # `apps/web` and photographs the shell's own `#ui-preview`
+            # gallery, so the web host and the React block library it renders
+            # are inputs now. (The blueprint app manifests are no longer:
+            # the served-app lane that captured them is gone.)
             design:
               - 'packages/design/**'
-              - 'packages/blueprints/apps/*/app.json'
+              - 'packages/client/src/react/ui/**'
+              - 'packages/client/src/react/boot.tsx'
+              - 'apps/web/**'
               - 'scripts/design-gallery.mjs'
+              - 'scripts/design-gallery-lowering.mjs'
               - 'tests/design-gallery/**'
               - 'tests/design-grammar-matrix.json'
 
@@ -788,16 +793,23 @@ jobs:
   # path-gated job pays that install only when a design-relevant path changes,
   # mirroring how lane-client-e2e.yml provisions the same pinned browser.
   #
-  # ONE-TIME BOOTSTRAP REQUIRED: the committed baselines under
-  # tests/design-gallery/baselines were captured on darwin arm64, and the
-  # fixtures render `system-ui` — Linux Chromium rasterizes that differently.
-  # Measured 2026-08-15 on linux x64, Chromium 141 via playwright 1.62.0: all
-  # 22 baselines diff 1.93%-7.26% against the 1% ceiling, so this job is red
-  # until Linux-rendered baselines exist. First run: download the
-  # design-gallery-actual artifact, review the captures, and either commit
-  # them as the baselines (making CI's renderer canonical) or land
-  # per-platform baseline directories in scripts/design-gallery.mjs so darwin
-  # `check:push` and this lane each compare against their own renderer.
+  # THE `system-ui` CAUSE IS FIXED; THE CROSS-PLATFORM CLAIM IS UNMEASURED.
+  # #781 recorded this lane as red because the retired fixtures hardcoded
+  # `system-ui`, which resolves to a different physical font per OS, and the
+  # committed baselines were darwin arm64 (measured 2026-08-15 on linux x64,
+  # Chromium 141 / playwright 1.62.0: all 22 diffed 1.93%-7.26% against the 1%
+  # ceiling). #799 removed that cause: every lane now loads the product's own
+  # vendored Instrument Sans `.woff2`, and each capture FAILS LOUDLY if the
+  # family does not resolve, so no baseline can bake in a fallback face.
+  #
+  # The baselines were then re-pinned from a LINUX x64 container — the same
+  # renderer this job uses — so this lane should be green. What has NOT been
+  # measured is the reverse: whether darwin `check:push` now agrees with them.
+  # A self-hosted woff2 removes the font as a variable, but subpixel and
+  # hinting differences between the two rasterizers remain plausible. The
+  # first darwin run decides it. If a residual delta appears, record the
+  # NUMBERS and land per-platform baseline directories in
+  # scripts/design-gallery.mjs — do not widen the 1% ceiling to absorb it.
   design-gallery:
     needs: changes
     if: needs.changes.outputs.design == 'true' || needs.changes.outputs.all == 'true'
@@ -806,13 +818,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
       # Same pinned-browser convention as lane-client-e2e.yml: `bunx
       # playwright install` resolves the CLI from the root lockfile's
       # `playwright` pin, so the downloaded Chromium revision is exactly the
       # one that version ships — no floating browser.
       - run: bunx playwright install --with-deps chromium
-      # The gallery runs under bun (imports packages/design/src TS directly)
-      # and needs no package build; kit.css and the baselines are committed.
+      # The gallery runs under bun (it imports packages/design/src TS
+      # directly for the lowering lanes) and builds the web dist itself — it
+      # photographs the SHELL, so it refuses to trust a dist it did not just
+      # produce. `scripts/design-gallery.mjs` builds `@centraid/web`'s package
+      # dependencies first (`turbo --filter=@centraid/web^...`) because
+      # `apps/web/vite.config.ts` imports `@centraid/design/font-faces`, which
+      # resolves to `packages/design/dist/font-faces.js`.
       - run: bun run design:gallery
       # On failure the actual captures are the rebaseline/review payload —
       # without them a red pixel diff is undebuggable from the log alone.

@@ -1,5 +1,3 @@
-import { applyFilters } from "./filters.ts";
-import { fmtBytes } from "./format.ts";
 // Non-visual business logic: data/selection helpers, the plain-DOM popovers
 // (kebab / move-to), and every vault write (documents, folders, upload).
 //
@@ -17,7 +15,10 @@ import {
   outcomeMessage,
   runBulk as runBulkBase,
   statusLine,
-} from "./kit.ts";
+} from "@centraid/design/elements";
+
+import { applyFilters } from "./filters.ts";
+import { fmtBytes } from "./format.ts";
 import { createMetadata } from "./metadata.ts";
 import { createPopovers } from "./popovers.ts";
 import { FOLDERS, RECENT, STARRED, TRASH, folderIdFrom } from "./shelves.ts";

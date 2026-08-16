@@ -1,9 +1,9 @@
 /**
- * Auth-injector pure core — header injection + CSP frame-ancestors relaxation.
+ * Auth-injector pure core — outgoing header injection.
  *
- * Electron-free so unit tests cover the request/response rewrite rules without
- * mocking `session.webRequest`. `auth-injector.ts` wires these onto the
- * renderer session; this module owns only the pure transforms.
+ * Electron-free so unit tests cover the request rewrite rules without mocking
+ * `session.webRequest`. `auth-injector.ts` wires these onto the renderer
+ * session; this module owns only the pure transforms.
  */
 
 export interface AuthInjectorSnapshot {
@@ -50,49 +50,4 @@ export function applyOutgoingAuthHeaders(
     if (!hasVault) headers[VAULT_HEADER] = snapshot.gatewayVaultId;
   }
   return headers;
-}
-
-// CSP directives are case-insensitive, separated by `;`. The renderer is
-// trusted to frame the gateway, so we strip `frame-ancestors` rather than
-// trying to allowlist the file:// origin (which CSP matches awkwardly).
-export function relaxFrameAncestors(
-  responseHeaders: Record<string, string[] | string>
-): Record<string, string[] | string> {
-  const out: Record<string, string[] | string> = {};
-  for (const [name, value] of Object.entries(responseHeaders)) {
-    const lower = name.toLowerCase();
-    if (
-      lower === "content-security-policy" ||
-      lower === "content-security-policy-report-only"
-    ) {
-      const values = Array.isArray(value) ? value : [value];
-      out[name] = values.map(stripFrameAncestors).filter((v) => v.length > 0);
-      continue;
-    }
-    if (lower === "x-frame-options") continue;
-    out[name] = value;
-  }
-  return out;
-}
-
-export function stripFrameAncestors(policy: string): string {
-  return policy
-    .split(";")
-    .map((d) => d.trim())
-    .filter((d) => d.length > 0 && !/^frame-ancestors\b/iu.test(d))
-    .join("; ");
-}
-
-/**
- * When the snapshot has a gateway origin and the URL matches, rewrite CSP;
- * otherwise pass headers through unchanged.
- */
-export function applyIncomingFrameRelaxation(
-  responseHeaders: Record<string, string[] | string> | undefined,
-  snapshot: AuthInjectorSnapshot | null,
-  url: string
-): Record<string, string[] | string> | undefined {
-  if (!snapshot || !snapshot.gatewayOrigin) return responseHeaders;
-  if (!matchesGateway(url, snapshot.gatewayOrigin)) return responseHeaders;
-  return relaxFrameAncestors(responseHeaders ?? {});
 }

@@ -106,7 +106,7 @@ export function registerIpcHandlers(): void {
   // Vault switch is lighter than a gateway swap (issue #289): the base URL +
   // token are unchanged, only the addressed vault. Drop the auth caches so
   // every client re-reads the new `x-centraid-vault` header, and refresh the
-  // iframe injector — but KEEP the app-editing sessions. They are keyed by
+  // auth injector — but KEEP the app-editing sessions. They are keyed by
   // gateway (their worktrees live in THIS gateway's store) and survive a
   // vault flip untouched; that's the keyed-state invariant the switch
   // preserves.
@@ -324,7 +324,7 @@ export function registerIpcHandlers(): void {
   );
 
   // Vault switch (issue #289): a pure client-side pointer flip on the active
-  // gateway. No server call, no re-root, no session/iframe teardown — only
+  // gateway. No server call, no re-root, no session teardown — only
   // the auth cache drops so the next request carries the new
   // `x-centraid-vault` header. The renderer keeps its per-(gateway,vault)
   // state buckets and re-renders on the VAULT_CHANGED broadcast.
@@ -416,15 +416,12 @@ export function registerIpcHandlers(): void {
   // gateway reports its own host's agents.
 
   // ----- Apps (issue #137: git-store backend; #141: thin client) -----
-  // App lifecycle (create/files/write/delete/update-meta) + publish moved to
-  // the renderer's direct HTTP client (renderer/gateway-client.ts) under the
-  // thin-client pivot: the renderer opens its own editing session per app
-  // (same `desktop-<id>` id the local harness uses, so they share one draft)
-  // and the gateway owns scaffold/clone/meta/publish. APPS_OPEN stays on
-  // IPC — a deliberately LOCAL-ONLY reveal-in-Finder that needs the on-disk
-  // session worktree. The preview iframe now points at the gateway draft URL
-  // (`/centraid/_draft/<sessionId>/<id>/`, resolved renderer-side via
-  // `draftPreviewUrl`), so no APPS_PREVIEW_URL handler is needed.
+  // App lifecycle (delete/update-meta/clone) moved to the renderer's direct
+  // HTTP client (renderer/gateway-client.ts) under the thin-client pivot: the
+  // renderer opens its own editing session per app (same `desktop-<id>` id the
+  // automation-authoring harness uses, so they share one draft) and the
+  // gateway owns clone/meta. APPS_OPEN stays on IPC — a deliberately
+  // LOCAL-ONLY reveal-in-Finder that needs the on-disk session worktree.
 
   ipcMain.handle(Channel.APPS_OPEN, async (_e, input: { id: string }) => {
     // Reveal-in-Finder: opens the app's on-disk code — the live published

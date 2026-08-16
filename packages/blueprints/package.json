@@ -2,7 +2,7 @@
   "name": "@centraid/blueprints",
   "version": "0.1.0",
   "private": false,
-  "description": "How a new centraid app comes into being: blank-app scaffolders, template clone, and the bundled template gallery (pre-built apps + remote-fetch resolver) the desktop offers as clone-and-deploy starting points.",
+  "description": "The superapp's catalogue: the bundled first-party system apps installed in place, and the automation templates cloned into user-owned automation code.",
   "license": "SEE LICENSE IN REPOSITORY",
   "repository": {
     "type": "git",
@@ -32,6 +32,7 @@
     "typecheck:apps": "tsc -p tsconfig.apps.json --noEmit"
   },
   "dependencies": {
+    "@centraid/blob-format": "workspace:*",
     "@centraid/design": "workspace:*",
     "pdfjs-dist": "6.1.200",
     "tldts": "7.4.9"

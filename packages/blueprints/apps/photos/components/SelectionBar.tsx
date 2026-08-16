@@ -31,6 +31,8 @@
 import { useRef, useState } from "react";
 import type { FC } from "react";
 
+import { armConfirm } from "@centraid/design/elements";
+
 import { ownScopeId } from "../../_shared/scope-kit.ts";
 import { buildSelectionActions as buildSharedSelectionActions } from "../../_shared/selection-engine.ts";
 import type { SelectionShelfKind } from "../../_shared/selection-engine.ts";
@@ -44,7 +46,6 @@ import {
   SelectShareIcon,
   SelectTrashIcon,
 } from "../icons.tsx";
-import { armConfirm } from "../kit.ts";
 import { notice, writeTarget } from "../outcomes.ts";
 import {
   runBatchAddToAlbum,

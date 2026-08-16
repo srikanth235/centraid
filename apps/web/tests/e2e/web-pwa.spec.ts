@@ -7,7 +7,7 @@ const ADMIN_TOKEN = "centraid-web-e2e-token";
 const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
 const GATEWAY_ENDPOINT_TICKET = "web-e2e-control-transport";
 
-test("boots as a PWA, establishes a cookie control session, and runs an isolated app", async ({
+test("boots as a PWA and establishes a cookie control session", async ({
   page,
 }) => {
   const gatewayResponses: Array<{ url: string; status: number }> = [];
@@ -52,17 +52,9 @@ test("boots as a PWA, establishes a cookie control session, and runs an isolated
           rememberDevice: true,
         })
       );
-      // The fixture app is published to the app store but never *installed*
-      // (no Home pin), so the shell classifies it as a DRAFT — and drafts,
-      // the builder preview, and Publish are all gated behind the
-      // `builderEnabled` dev flag (issue #434, default false). This flow
-      // exercises exactly those builder surfaces, so opt the harness in.
       localStorage.setItem(
         "centraid.web.v1.settings",
-        JSON.stringify({
-          onboardingCompletedAt: new Date().toISOString(),
-          builderEnabled: true,
-        })
+        JSON.stringify({ onboardingCompletedAt: new Date().toISOString() })
       );
     },
     {
@@ -91,7 +83,9 @@ test("boots as a PWA, establishes a cookie control session, and runs an isolated
     return { status: response.status, text: await response.text() };
   }, API_URL);
   expect(appsProbe.status, appsProbe.text).toBe(200);
-  expect(appsProbe.text).toContain("web-e2e");
+  // The proxied listing is the gateway's own, not a canned body: every vault
+  // mounts the eight bundled system apps, so `tasks` must be in it.
+  expect(appsProbe.text).toContain('"tasks"');
 
   // Home is the content springboard (#708) — custom apps open via the command
   // palette, not a library card on Home.
@@ -125,43 +119,4 @@ test("boots as a PWA, establishes a cookie control session, and runs an isolated
       page.evaluate(() => navigator.serviceWorker.controller !== null)
     )
     .toBe(true);
-
-  // Open the published fixture app via the palette Apps group.
-  const search = page.getByRole("button", { name: /^Search/u });
-  if ((await search.count()) > 0) {
-    await search.first().click();
-  } else {
-    await page.keyboard.press("ControlOrMeta+k");
-  }
-  const palette = page.getByRole("dialog", { name: "Command palette" });
-  await palette.waitFor({ state: "visible" });
-  await palette.locator("input").fill("Web E2E App");
-  await palette
-    .getByRole("button")
-    .filter({ hasText: "Web E2E App" })
-    .first()
-    .click();
-
-  const app = page.frameLocator('iframe[title="app"]');
-  await expect(app.getByRole("heading", { name: "Web E2E App" })).toBeVisible();
-  await expect(app.locator("#ready")).toHaveText("generated app ready");
-
-  const ping = await app.locator("body").evaluate(async () => {
-    return window.centraid.read({ query: "ping", input: {} });
-  });
-  expect(ping).toEqual({ pong: true, surface: "web" });
-
-  const frame = page
-    .frames()
-    .find((candidate) => candidate.url().includes("/centraid/web-e2e/"))!;
-  const confinement = await frame.evaluate(async () => {
-    const [apps, controlLocal] = await Promise.all([
-      fetch("/centraid/_apps"),
-      fetch("/centraid/_web/control?path=%2Fcentraid%2F_apps", {
-        credentials: "include",
-      }),
-    ]);
-    return { apps: apps.status, control: controlLocal.status };
-  });
-  expect(confinement).toEqual({ apps: 401, control: 401 });
 });

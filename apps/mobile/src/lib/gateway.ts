@@ -4,8 +4,8 @@
 //       over iroh to the desktop, which attaches the bearer on its side;
 //   (b) the manual gateway URL from Settings → Advanced — a developer
 //       fallback for simulators pointing at a token-less dev gateway. The
-//       token here is only used for RN-side API fetches (listing apps,
-//       approvals); WebView loads against an authed gateway need the tunnel.
+//       token here is used for the RN-side API fetches (approvals, app
+//       queries, notifications) every native cover makes.
 
 import * as Crypto from "expo-crypto";
 import { fetch as expoFetch } from "expo/fetch";
@@ -25,22 +25,6 @@ import { getActiveVaultId } from "./vault-links";
 export const SETTINGS_KEY = "settings.gatewayUrl";
 export const SETTINGS_TOKEN_KEY = "settings.gatewayToken";
 const OAUTH_CLIENT_SESSION_KEY = "oauth.clientSession";
-
-/**
- * One row of `GET /centraid/_apps` — the worktree-store listing
- * (see packages/gateway makeAppsStoreRouteHandler / listAppsWithMeta).
- * `iconKey`/`colorKey` are optional manifest extras; rows without them
- * fall back to derived display metadata.
- */
-export interface AppRegistryRow {
-  id: string;
-  name?: string;
-  description?: string;
-  kind?: "app" | "automation";
-  hasIndex: boolean;
-  iconKey?: string;
-  colorKey?: string;
-}
 
 /** One parked vault invocation (VaultPlane listParked → ParkedSummary). */
 export interface ParkedInvocation {
@@ -257,14 +241,10 @@ export async function requireGatewayBase(): Promise<string> {
   return base;
 }
 
-export function appLiveUrl(base: string, appId: string): string {
-  return `${base}/centraid/${encodeURIComponent(appId)}/`;
-}
-
 /**
  * Invoke one online-only app query from a first-class native cover. The
- * request takes the same app-scoped RPC path as the WebView bridge; callers
- * keep passphrases/session tokens out of the replica and durable intent queue.
+ * request takes the app-scoped RPC path; callers keep passphrases/session
+ * tokens out of the replica and durable intent queue.
  */
 export async function appQuery<T>(
   appId: string,
@@ -347,30 +327,6 @@ export async function fetchJsonRevalidated<T>(
     );
   }
   return parseJsonBody<T>(result.body);
-}
-
-/**
- * The full worktree-store listing — apps *and* automations, published or not.
- * The Home launcher reads this once per load and splits it locally: openable
- * apps feed the grid, automation rows feed the attention line's count. Keeping
- * the single fetch here (rather than one call per view) halves the tunnel
- * round-trips on every focus/refresh.
- */
-export async function listAppRegistry(): Promise<AppRegistryRow[]> {
-  const base = await requireGatewayBase();
-  return fetchJsonRevalidated<AppRegistryRow[]>(`${base}/centraid/_apps`, {
-    headers: apiHeaders(),
-    method: "GET",
-  });
-}
-
-/**
- * An openable app: has a published `index.html` and is not an automation.
- * Mobile is a viewer for published UIs, so unpublished/automation rows never
- * become launcher tiles. Exported so the split rule lives in exactly one place.
- */
-export function isOpenableApp(row: AppRegistryRow): boolean {
-  return row.hasIndex !== false && row.kind !== "automation";
 }
 
 /** Parked vault invocations awaiting the owner's confirmation. */
@@ -683,13 +639,18 @@ function asColorKey(value: string | undefined): ColorKey | undefined {
     : undefined;
 }
 
-/** Map a registry row into a tile-renderable AppMetaResolved. */
-export function resolveAppMeta(
-  row: Pick<
-    AppRegistryRow,
-    "id" | "name" | "description" | "iconKey" | "colorKey"
-  >
-): AppMetaResolved {
+/**
+ * Map an app id (plus any display overrides) into a tile-renderable
+ * `AppMetaResolved`. `iconKey`/`colorKey` are optional; anything absent falls
+ * back to the bundled catalog and then to derived display metadata.
+ */
+export function resolveAppMeta(row: {
+  id: string;
+  name?: string;
+  description?: string;
+  iconKey?: string;
+  colorKey?: string;
+}): AppMetaResolved {
   const builtin = BUILTIN_BY_ID.get(row.id);
   const iconKey = asIconName(row.iconKey) ?? builtin?.iconKey ?? "Sparkle";
   const colorKey =

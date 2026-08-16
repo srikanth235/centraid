@@ -7,10 +7,12 @@
 // `file://`), so those references carry no credential and fail to load — which,
 // for the photos grid, trips each tile's `onerror` into a placeholder.
 //
-// kit-inline's `renderAttachments` already authorizes the blob refs inside an
-// attachment STRIP. This module covers every OTHER blob surface generically: a
+// The element layer's `renderAttachments` already authorizes the blob refs
+// inside an attachment STRIP — it has to, because a non-image tile renders a
+// download `<a href>`, which this module does not watch. This module covers
+// every OTHER blob surface generically: a
 // `MutationObserver` over the mounted app subtree swaps each blob reference to an
-// authed `blob:` object URL (through kit-inline's `authorizeBlobUrl`). Rewriting
+// authed `blob:` object URL (through `authorizeBlobUrl`). Rewriting
 // `data-prefetch-src` BEFORE media-observer copies it into `src` is what keeps
 // the lazy grid from ever loading an unauthorized URL (and firing `onerror`) —
 // enforced, not merely hoped for, by the `data-blob-pending` stamp below, which
@@ -25,9 +27,9 @@
 // revokes, so a re-install MUST be able to bring an already-swapped element back
 // (see the origin stamps below). Callers own the other half — a teardown must
 // mean a real unmount, never a re-run of a mount callback (InlineAppRoute).
-// Import from the leaf `blob-auth.js` module, NOT `kit-inline.js` — the latter
-// is a barrel that would drag the entire served kit into the shell's boot chunk
-// (this module is eager via InlineAppRoute → App). See blob-auth.ts.
+// Import from the leaf `blob-auth.js` module, never through a barrel: this
+// module is eager (InlineAppRoute → App), so a barrel import would drag its
+// whole graph into the shell's boot chunk. See blob-auth.ts.
 import { authorizeBlobUrl, SCOPE_ATTR } from "./blob-auth.js";
 
 const BLOB_PREFIX = "/centraid/_vault/blobs";

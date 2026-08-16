@@ -1,5 +1,5 @@
 // Bulk-selection action bar (#bulkBar root).
-import { armConfirm } from "../kit.ts";
+import { armConfirm } from "@centraid/design/elements";
 
 import styles from "./BulkBar.module.css";
 

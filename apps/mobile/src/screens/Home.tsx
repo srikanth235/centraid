@@ -19,10 +19,9 @@
 // its own component so this file stays a readable assembly.
 //
 // Data: the tiles read the local replica per app (./home/useSpringboardTiles)
-// and fill offline, independently of the gateway. The one gateway-shaped load
-// left is the app registry, which is what tells Home about apps the member
-// built themselves; with no gateway the eight first-party apps still render,
-// because their UI is in the binary.
+// and fill offline, independently of the gateway. The only gateway-shaped read
+// left is reachability, which the vault lockup states — the eight first-party
+// apps render either way, because their UI is in the binary.
 
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -30,7 +29,6 @@ import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { homeDayOneFoot } from "@centraid/client/home-copy";
-import type { AppMetaResolved } from "@centraid/design";
 
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import { pageMargin, useTheme } from "../kit/theme";
@@ -38,10 +36,7 @@ import type { ThemeColors } from "../kit/theme";
 import {
   apiHeaders,
   fetchJson,
-  isOpenableApp,
-  listAppRegistry,
   requireGatewayBase,
-  resolveAppMeta,
   resolveGatewayBase,
 } from "../lib/gateway";
 import { getActiveVaultLink, subscribeVaultLinks } from "../lib/vault-links";
@@ -49,7 +44,6 @@ import type { HomeScreenProps } from "../navigation";
 import AllAppsSheet from "./home/AllAppsSheet";
 import type { BandTarget } from "./home/band";
 import {
-  NATIVE_APP_IDS,
   buildLauncherItems,
   orderByPins,
   orderForSpringboard,
@@ -80,20 +74,16 @@ import VaultsSwitcher from "./home/VaultsSwitcher";
 // agree on where the page starts.
 const H_PADDING = pageMargin;
 
-// Stable empty listing for the not-ready states — a fresh `[]` per render would
-// defeat the `items` memo below (exhaustive-deps flags it).
-const NO_APPS: readonly AppMetaResolved[] = [];
-
 type HomeState =
   | { kind: "loading" }
   | { kind: "no-gateway" }
-  | { kind: "ready"; apps: AppMetaResolved[] }
+  | { kind: "ready" }
   | { kind: "error" };
 
 /**
- * How long a loaded Home stays good enough to reuse.
+ * How long a resolved Home stays good enough to reuse.
  *
- * Home used to re-fetch the app registry on mount, on every focus, on every
+ * Home used to re-resolve the gateway on mount, on every focus, on every
  * vault-link event and on every doorbell — so tabbing away and back cost three
  * round trips for an answer that had not changed. Anything that genuinely
  * invalidates the screen (pull-to-refresh, a vault switch) forces past this
@@ -123,21 +113,10 @@ async function loadHome(
 async function runHomeLoad(setState: (next: HomeState) => void): Promise<void> {
   try {
     const base = await resolveGatewayBase();
-    if (!base) {
-      setState({ kind: "no-gateway" });
-      return;
-    }
-    const rows = await listAppRegistry();
-    setState({
-      apps: rows
-        .filter(isOpenableApp)
-        .map(resolveAppMeta)
-        .filter((app) => !NATIVE_APP_IDS.has(app.id)),
-      kind: "ready",
-    });
-    homeLoadedAt = Date.now();
+    setState(base ? { kind: "ready" } : { kind: "no-gateway" });
+    if (base) homeLoadedAt = Date.now();
   } catch {
-    // A registry that will not answer is a gateway fact, and the status line is
+    // A gateway that will not answer is a gateway fact, and the status line is
     // where gateway facts go — never a banner, and never a thrown-away grid.
     setState({ kind: "error" });
   }
@@ -200,14 +179,12 @@ export default function HomeScreen({
     setRefreshing(false);
   }, []);
 
-  const remoteApps = state.kind === "ready" ? state.apps : NO_APPS;
   const items = useMemo(
     // Springboard order first, THEN pins: the order is the default page, and a
     // pin is the member overriding it. Reversing the two would let the default
     // re-sort a pinned app back down the grid.
-    () =>
-      orderByPins(orderForSpringboard(buildLauncherItems(remoteApps)), pins),
-    [pins, remoteApps]
+    () => orderByPins(orderForSpringboard(buildLauncherItems()), pins),
+    [pins]
   );
   // The springboard is content: each first-party tile reads its own app's
   // replica shape. Independent of the gateway load above — the tiles fill
@@ -215,9 +192,9 @@ export default function HomeScreen({
   const tiles = useSpringboardTiles();
 
   // The grading. A tile earns the grid by having something to show; an app that
-  // has not becomes a first move. An app with NO tile at all (one the member
-  // built themselves) is neither: it keeps its place on the grid, because Home
-  // has no read that could say it is empty and demoting it would be a guess.
+  // has not becomes a first move. An app with NO tile at all is neither: it
+  // keeps its place on the grid, because Home has no read that could say it is
+  // empty and demoting it would be a guess.
   const { earned, idleIds } = useMemo(() => {
     const kept: LauncherItem[] = [];
     const idle: string[] = [];
@@ -266,12 +243,6 @@ export default function HomeScreen({
           break;
         case "tally":
           navigation.navigate("Tally");
-          break;
-        case "app":
-          navigation.navigate("AppDetail", { appId: route.appId });
-          break;
-        case "pair":
-          navigation.navigate("Settings", { screen: "Settings" });
           break;
       }
     },
@@ -337,8 +308,8 @@ export default function HomeScreen({
    * (packages/client/src/gateway-client-vault.ts) already speak for desktop —
    * this file cannot import that module. `packages/client`'s only mobile-
    * reachable subpaths are `home-copy`, `capture`, `replica/native`,
-   * `receipt-capture`, `version-handshake` and `video-frame` (see that
-   * package's `exports` map); the bare package barrel that carries
+   * `receipt-capture` and `version-handshake` (see that package's `exports`
+   * map); the bare package barrel that carries
    * `vaultDemoLoad` also pulls in `pdfjs-dist`/`@sqlite.org/sqlite-wasm` and
    * other web-only weight Metro has no business bundling into the phone app.
    * Editing that map is outside the files this pass owns, so this speaks the

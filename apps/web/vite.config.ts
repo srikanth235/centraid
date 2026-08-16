@@ -8,8 +8,6 @@ import { defineConfig } from "vite";
 import { FONT_FILES, toFontFaceCss } from "@centraid/design/font-faces";
 import { fontFilePath } from "@centraid/design/fonts";
 
-import { inlineBlueprintAliases } from "../../packages/client/src/react/blueprints/inline-vite-aliases.ts";
-
 const fromHere = (path: string): string =>
   fileURLToPath(new URL(path, import.meta.url));
 
@@ -79,20 +77,23 @@ function centraidFonts(): Plugin {
 
 export default defineConfig({
   resolve: {
-    // Array form so the inline-app `./kit.ts` adapter alias sits alongside
-    // the package aliases (issue #505).
+    // Array form, and every pattern anchored: `@centraid/design` must not
+    // swallow its own subpaths.
     alias: [
-      ...inlineBlueprintAliases(),
       {
         find: "@centraid/client",
         replacement: fromHere("../../packages/client/src"),
       },
-      // The kit layer is a directory of served assets; the token layer is a
-      // single module. Anchor the root so `@centraid/design/kit/*` subpath
-      // imports resolve to files instead of into the token module's path.
       {
-        find: "@centraid/design/kit",
-        replacement: fromHere("../../packages/design/kit"),
+        // The browser element substrate the blueprint apps render on. Kept a
+        // subpath, never folded into the barrel: the design root export is
+        // reachable from Expo and must stay DOM-free.
+        find: /^@centraid\/design\/elements$/u,
+        replacement: fromHere("../../packages/design/src/elements/index.ts"),
+      },
+      {
+        find: /^@centraid\/design\/kit\.css$/u,
+        replacement: fromHere("../../packages/design/src/elements/kit.css"),
       },
       {
         find: /^@centraid\/design$/u,
@@ -171,7 +172,7 @@ export default defineConfig({
           groups: [
             {
               name: "shell-common",
-              test: /packages\/(?:client\/src\/(?:video-frame|gateway-auth|gateway-client-core|device-blob-source|gateway-client-devices|replica\/shell-session)|blob-format\/dist\/index)\.(?:ts|js)$/u,
+              test: /packages\/(?:client\/src\/(?:gateway-auth|gateway-client-core|device-blob-source|gateway-client-devices|replica\/shell-session)|blueprints\/apps\/_shared\/video-frame|blob-format\/dist\/index)\.(?:ts|js)$/u,
             },
           ],
         },

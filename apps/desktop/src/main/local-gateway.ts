@@ -31,7 +31,7 @@ import type {
   SupervisorState,
 } from "./gateway-supervisor-core.js";
 import { phoneLinkStatus } from "./phone-link.js";
-import { loadPersistedSettings, templatesCacheDir } from "./settings.js";
+import { templatesCacheDir } from "./settings.js";
 
 /**
  * Electron-flavored local-gateway lifecycle (issue #351 / #468).
@@ -181,7 +181,6 @@ function wrapDetached(handle: DetachedGatewayHandle): LocalGatewayRuntime {
 }
 
 async function startEmbedded(gatewayId: string): Promise<LocalGatewayRuntime> {
-  const settings = await loadPersistedSettings();
   const dataDir = localGatewayDataDir();
   const ownerId = await getOrCreateDesktopOwnerId();
   const token = crypto.randomBytes(32).toString("hex");
@@ -198,9 +197,6 @@ async function startEmbedded(gatewayId: string): Promise<LocalGatewayRuntime> {
     keyStore: desktopGatewayKeyStore(dataDir, LOCAL_GATEWAY_ID),
     token,
     ownerEndpointId: ownerId,
-    ...(settings.remoteTemplatesUrl
-      ? { remoteTemplatesUrl: settings.remoteTemplatesUrl }
-      : {}),
     sessionIdFor: desktopSessionIdFor,
     logTag: `local-gateway:${gatewayId}`,
   });

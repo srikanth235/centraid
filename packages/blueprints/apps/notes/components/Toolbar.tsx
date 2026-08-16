@@ -11,7 +11,7 @@ import { Icon } from "./Shared.tsx";
 import shared from "./shared.module.css";
 import styles from "./Toolbar.module.css";
 
-// kit.ts's armConfirm swaps a button's textContent for the armed label —
+// the element layer's armConfirm swaps a button's textContent for the armed label —
 // fine for text buttons, but it would wipe this icon-only button's SVG
 // (textContent of an <i data-svg> wrapper is empty) and never restore it.
 // A local, remount-reset armed flag (keyed by notebookId at the call site)

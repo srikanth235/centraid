@@ -13,9 +13,9 @@
  *
  * This module ports the pure `fetch` methods that previously lived in the
  * desktop's `main/*-client.ts` modules and its old builder gateway client.
- * It covers the app read surface (logs / settings / deregister / live
- * URL — the schema/table-rows/query trio died with the per-app
- * data.sqlite, issue #286 phase 2), version history (list / activate), the
+ * It covers the app read surface (logs / settings / deregister — the
+ * schema/table-rows/query trio died with the per-app data.sqlite, issue
+ * #286 phase 2), version history (list / activate), the
  * `/_centraid-user` identity + prefs surface, and the automation
  * read/run/analytics + insights surface. The shared fetch infrastructure
  * lives in `gateway-client-core.ts`; the app-editing + lifecycle surface
@@ -23,23 +23,18 @@
  * import everything from `./gateway-client.js`.
  */
 
-import {
-  consumeSse,
-  consumeSseFrames,
-  frameData,
-} from "@centraid/design/kit/turn-stream.js";
-import type { TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
 import { isGatewayCapabilities, ROUTES } from "@centraid/protocol";
 import type { GatewayCapabilities, GatewayInfo } from "@centraid/protocol";
 
 import {
-  appSessionUrl,
   auth,
   authHeaders,
   doFetch,
   enc,
   readJson,
 } from "./gateway-client-core.js";
+import { consumeSse, consumeSseFrames, frameData } from "./turn-stream.js";
+import type { TurnStreamEvent } from "./turn-stream.js";
 
 export * from "./gateway-client-core.js";
 export * from "./gateway-client-automations.js";
@@ -60,13 +55,6 @@ export async function readGatewayCapabilities(): Promise<
   return isGatewayCapabilities(info.capabilities)
     ? info.capabilities
     : undefined;
-}
-
-/** URL the renderer loads in an app iframe. */
-export async function appLiveUrl(input: {
-  id: string;
-}): Promise<{ url: string }> {
-  return { url: await appSessionUrl(input.id, `/centraid/${enc(input.id)}/`) };
 }
 
 /** Newest-first tail of persistent handler logs. */
@@ -163,7 +151,6 @@ export interface AppMetaEntry {
   name?: string;
   description?: string;
   kind?: "app" | "automation";
-  hasIndex: boolean;
   /** Tile identity from `app.json` (issue #263) — raw strings; validate
    *  against the design-tokens sets before rendering. */
   iconKey?: string;
@@ -174,8 +161,8 @@ export interface AppMetaEntry {
  * Apps published on `main`, with the metadata the home shelf reads. The
  * git store is the source of truth post-#137 — there's no local worktree
  * to stat — so this returns the registry-backed metadata row, not the
- * legacy `CentraidAppInfo` (the renderer only reads id/name/desc/kind/
- * hasIndex off it).
+ * legacy `CentraidAppInfo` (the renderer only reads id/name/desc/kind
+ * off it).
  */
 export async function listApps(): Promise<AppMetaEntry[]> {
   const { baseUrl, token } = await auth();

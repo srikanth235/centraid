@@ -2,7 +2,7 @@
   "name": "@centraid/automation",
   "version": "0.1.0",
   "private": false,
-  "description": "Centraid automation engine — manifest, fire spine + OpenDispatch seam, the Host interface + in-process scheduler, webhook ingress, the worker-thread handler runner, and app scaffolding. Backend-agnostic: execution and scheduling are injected callbacks, so it depends on @centraid/app-engine but never on any agent backend. Consumers import it namespaced (`import * as automation`).",
+  "description": "Centraid automation engine — manifest, fire spine + OpenDispatch seam, the Host interface + in-process scheduler, webhook ingress, the worker-thread handler runner, and automation-app scaffolding for the compile harness. Backend-agnostic: execution and scheduling are injected callbacks, so it depends on @centraid/app-engine but never on any agent backend. Consumers import it namespaced (`import * as automation`).",
   "license": "SEE LICENSE IN REPOSITORY",
   "repository": {
     "type": "git",

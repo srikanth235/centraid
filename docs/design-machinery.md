@@ -9,11 +9,11 @@ Inventory and ownership map for the visual system across desktop, PWA, blueprint
 | Product grammar | `DESIGN.md` | Binding values, roles, surface rules, and component behavior |
 | Typed registry | `packages/design/src` | Theme ramps, semantic roles, type, spacing, radii, density, motion, icons, app identity, and recipe inventory |
 | Shell lowering | `toCss()` | CSS custom properties for the shared React shell used by desktop and PWA |
-| Blueprint lowering | `toBlueprintCss()` | CSS custom properties for sandboxed app surfaces |
+| Blueprint lowering | `toBlueprintCss()` | CSS custom properties for the system apps' scoped surfaces (`:where(.centraid-inline-scope)`) — scoping, not sandboxing: since #799 an app is shell code in the shell's own document |
 | Native lowering | `toNativeTheme()` | Concrete React Native values with no CSS parsing or runtime override layer |
 | Native adapter | `apps/mobile/src/kit/theme/native.ts` | Expo font-family names and `em` tracking converted to React Native points |
 | Headless block layer | `packages/design/src/blocks` (`@centraid/design/blocks`) | The block vocabulary's logic with no renderer in it, shared by every kit |
-| Components | `packages/client/src/react/ui`, `packages/design/kit`, `apps/mobile/src/kit` | Renderer-specific primitives that consume roles; they do not own token values |
+| Components | `packages/client/src/react/ui`, `packages/design/src/elements`, `apps/mobile/src/kit` | Renderer-specific primitives that consume roles; they do not own token values |
 | Enforcement | design contract tests, consumer lint, type/target floors, gallery | Proves the registry, lowerings, and consumers remain aligned |
 
 The direction is one-way:
@@ -41,9 +41,11 @@ Where the block implementations live today:
 | React Native | `apps/mobile/src/kit/components` | every mobile screen — one implementation, as the rule requires |
 | React DOM | `packages/client/src/react/ui` | the shell's operational routes and screens |
 | React DOM | `packages/blueprints/apps/_shared` | the eight inline system apps |
-| DOM custom elements | `packages/design/kit/kit-*.js` + `kit.css` | apps served over HTTP to the builder/code-store surface, which resolve no bare package specifiers |
+| Imperative DOM | `packages/design/src/elements` + `kit.css` | the surfaces with no React tree: the one status line the frame docks, `showSkeleton`, the popover, the attachment strip |
 
-The two React DOM rows remain the one composition follow-up: the shell and inline blueprint apps share the headless logic but still own separate markup and stylesheets. The compatibility audit found only `--w-key-col` missing from the blueprint lowering; the consolidation is tracked in [issue #765](https://github.com/srikanth235/centraid/issues/765). The served custom-element kit is intentionally a separate rendering technology with its own implementation and is not part of the React DOM consolidation.
+There are no DOM custom elements left. [Issue #799](https://github.com/srikanth235/centraid/issues/799) retired the last four (`kit-avatar`, `kit-meter`, `kit-skeleton`, `kit-status-line`) and the `KitElement` base they shared: `Avatar`, `Meter` and `Skeleton` are React blocks in `packages/blueprints/apps/_shared`, and the status line is plain DOM built by `elements/feedback.ts`. They all emit the same `.kit-*` classes, so `kit.css` styles them unchanged — the elements' `display: contents` hosts contributed no layout of their own.
+
+The two React DOM rows remain the one composition follow-up: the shell and inline blueprint apps share the headless logic but still own separate markup and stylesheets. The compatibility audit found only `--w-key-col` missing from the blueprint lowering; the consolidation is tracked in [issue #765](https://github.com/srikanth235/centraid/issues/765).
 
 ## Surface inventory
 
@@ -51,7 +53,7 @@ The two React DOM rows remain the one composition follow-up: the shell and inlin
 | --- | --- | --- | --- |
 | Desktop | `packages/client` + `toCss()` | Electron host capabilities only | CSS consumer gate, type/radius/color rules, computed-style gallery |
 | PWA | the same `packages/client` + `toCss()` | `apps/web/src/web.css` for host layout only | The same CSS gate roots and gallery contract as desktop |
-| Blueprint apps | `packages/design/kit/kit.css` + `toBlueprintCss()` | App-specific content/layout | CSS consumer gate plus scaffold/contract tests |
+| Blueprint apps | `packages/design/src/elements/kit.css` + `toBlueprintCss()` | App-specific content/layout | CSS consumer gate plus scaffold/contract tests |
 | Expo | `toNativeTheme()` | `apps/mobile/src/kit/theme/native.ts` | Native consumer gate, native contract tests, target/type floor, hairline and logical-inset gates |
 
 Desktop and PWA are one renderer from the design system's point of view. Pointer versus touch changes density, type, margin, and target values; host names and viewport width do not create more design modes.

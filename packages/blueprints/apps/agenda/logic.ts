@@ -1,10 +1,15 @@
-import { colorForCalendar } from "./format.ts";
 // Non-visual business logic: vault IO (write/act), calendar coloring, the
 // session activity log and parked-write tracking, and search. `createLogic`
 // closes over app.tsx's own `state`/`data` (mutated in place, never
 // reassigned) plus the render/refresh entry points app.tsx defines — the
 // same factory shape tasks/logic.ts and notes/logic.ts use.
-import { debounce, outcomeMessage, statusLine } from "./kit.ts";
+import {
+  debounce,
+  outcomeMessage,
+  statusLine,
+} from "@centraid/design/elements";
+
+import { colorForCalendar } from "./format.ts";
 import type {
   AgEvent,
   AppData,
@@ -239,7 +244,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return outcome;
   }
 
-  // ---------- Attachments (kit.ts renderAttachments / wireAttachInput) ----------
+  // ---------- Attachments (the element layer's renderAttachments / wireAttachInput) ----------
 
   let attachTarget: string | null = null;
   const setAttachTarget = (eventId: string) => {

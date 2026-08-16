@@ -1,4 +1,4 @@
-import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { nodeProject } from "@centraid/test-kit/vitest";
 
@@ -11,22 +11,25 @@ import { nodeProject } from "@centraid/test-kit/vitest";
 // CSS-modules transform from hijacking the `.module.css` import and handing the
 // app a bogus class map; do not "simplify" it back to a plain `.module.css`.
 export default nodeProject({
-  plugins: [
-    {
-      name: "blueprint-component-kit",
-      enforce: "pre",
-      resolveId(source, importer) {
-        if ((source !== "./kit.ts" && source !== "../kit.ts") || !importer)
-          return null;
-        const appsRoot = path.join(import.meta.dirname, "apps");
-        // The kit is the design package's kit layer (#672); apps still import
-        // it by the app-relative path the app-engine serves it at.
-        return importer.startsWith(`${appsRoot}${path.sep}`)
-          ? path.join(import.meta.dirname, "..", "design", "kit", "kit.ts")
-          : null;
+  resolve: {
+    // The apps import the design package's element layer by its real subpath.
+    // Aliased to SOURCE here for the same reason the shells do it: a suite must
+    // read the package's current tree, never a stale `dist`.
+    alias: [
+      {
+        find: /^@centraid\/design\/elements$/u,
+        replacement: fileURLToPath(
+          new URL("../design/src/elements/index.ts", import.meta.url)
+        ),
       },
-    },
-  ],
+      {
+        find: /^@centraid\/design$/u,
+        replacement: fileURLToPath(
+          new URL("../design/src/index.ts", import.meta.url)
+        ),
+      },
+    ],
+  },
   test: {
     name: "@centraid/blueprints",
     include: [

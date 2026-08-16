@@ -88,41 +88,38 @@ describe("useShellApps", () => {
   }
 
   describe("useShellApps", () => {
-    it("derives drafts from the listing, excluding pinned + automation entries", async () => {
+    it("keeps the pinned apps and ignores every other listing row", async () => {
       store.set("home.userApps", [
         { id: "todos", name: "Todos", iconKey: "Todo", color: "#1" },
       ]);
       listApps.mockResolvedValue([
-        { id: "todos", name: "Todos", kind: "app", hasIndex: false },
-        { id: "wip", name: "WIP", kind: "app", hasIndex: true },
-        { id: "auto1", name: "Cron", kind: "automation", hasIndex: false },
+        { id: "todos", name: "Todos", kind: "app" },
+        { id: "wip", name: "WIP", kind: "app" },
+        { id: "auto1", name: "Cron", kind: "automation" },
       ]);
       await mount();
-      expect(ctl.drafts.map((d) => d.id)).toStrictEqual(["wip"]);
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["todos"]);
     });
 
-    it("treats a first-party listing row as INSTALLED, not as a draft", async () => {
+    it("treats a first-party listing row as INSTALLED", async () => {
       // The #708 law. With no pin store at all — which is every vault now that
       // the catalogue that wrote pins is retired — the eight bundled apps still
-      // have to arrive as installed apps. Classified as drafts they vanish
-      // entirely (the shell hides drafts while the builder is off), which is
-      // what left Home empty on a vault that owned all eight.
+      // have to arrive as installed apps, which is what left Home empty on a
+      // vault that owned all eight. Any other row is not this shell's to open.
       listApps.mockResolvedValue([
-        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
-        { id: "tasks", name: "Tasks", kind: "app", hasIndex: true },
-        { id: "wip", name: "WIP", kind: "app", hasIndex: true },
+        { id: "photos", name: "Photos", kind: "app" },
+        { id: "tasks", name: "Tasks", kind: "app" },
+        { id: "wip", name: "WIP", kind: "app" },
       ]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos", "tasks"]);
-      expect(ctl.drafts.map((d) => d.id)).toStrictEqual(["wip"]);
     });
 
     it("does not persist first-party rows into the pin store", async () => {
       // They are DERIVED from the gateway on every pass. Writing them back
       // would make them outlive the vault that has them.
       listApps.mockResolvedValue([
-        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
+        { id: "photos", name: "Photos", kind: "app" },
       ]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos"]);
@@ -134,7 +131,7 @@ describe("useShellApps", () => {
         { id: "photos", name: "Photos", iconKey: "Todo", color: "#1" },
       ]);
       listApps.mockResolvedValue([
-        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
+        { id: "photos", name: "Photos", kind: "app" },
       ]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos"]);
@@ -145,9 +142,7 @@ describe("useShellApps", () => {
         { id: "todos", name: "Todos", iconKey: "Todo", color: "#1" },
         { id: "gone", name: "Gone", iconKey: "Todo", color: "#2" },
       ]);
-      listApps.mockResolvedValue([
-        { id: "todos", name: "Todos", kind: "app", hasIndex: false },
-      ]);
+      listApps.mockResolvedValue([{ id: "todos", name: "Todos", kind: "app" }]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["todos"]);
       expect(store.get("home.userApps") as unknown[]).toHaveLength(1);
@@ -164,7 +159,6 @@ describe("useShellApps", () => {
           kind: "app",
           iconKey: "Habit",
           colorKey: "teal",
-          hasIndex: false,
         },
       ]);
       await mount();
@@ -191,7 +185,6 @@ describe("useShellApps", () => {
           name: "Agenda Renamed",
           description: "New desc",
           kind: "app",
-          hasIndex: false,
         },
       ]);
       await mount();
@@ -199,14 +192,8 @@ describe("useShellApps", () => {
       expect(ctl.userApps[0]?.desc).toBe("New desc");
     });
 
-    it("empties drafts when the listing fetch fails", async () => {
-      listApps.mockRejectedValue(new Error("offline"));
-      await mount();
-      expect(ctl.drafts).toStrictEqual([]);
-    });
-
     it("a vault switch parks the outgoing vault’s pins instead of pruning them", async () => {
-      // Reproduces the DRAFT-demotion bug: pins live in a non-vault-scoped
+      // Reproduces the pin-loss bug: pins live in a non-vault-scoped
       // store, so a switch to an empty vault made every pin look orphaned,
       // and the prune destroyed them permanently.
       const api = (vaultId: string) => ({
@@ -216,9 +203,7 @@ describe("useShellApps", () => {
       store.set("home.userApps", [
         { id: "notes", name: "Notes", iconKey: "Todo", color: "#1" },
       ]);
-      listApps.mockResolvedValue([
-        { id: "notes", name: "Notes", kind: "app", hasIndex: false },
-      ]);
+      listApps.mockResolvedValue([{ id: "notes", name: "Notes", kind: "app" }]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["notes"]);
 
@@ -228,14 +213,11 @@ describe("useShellApps", () => {
       await act(async () => ctl.refresh());
       expect(ctl.userApps).toStrictEqual([]);
 
-      // Back to A: the pin is restored, not demoted to a draft.
+      // Back to A: the pin is restored, not pruned.
       (window as unknown as { CentraidApi: unknown }).CentraidApi = api("A");
-      listApps.mockResolvedValue([
-        { id: "notes", name: "Notes", kind: "app", hasIndex: false },
-      ]);
+      listApps.mockResolvedValue([{ id: "notes", name: "Notes", kind: "app" }]);
       await act(async () => ctl.refresh());
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["notes"]);
-      expect(ctl.drafts).toStrictEqual([]);
     });
 
     it("paints the last known installed set when the listing cannot be reached", async () => {
@@ -248,8 +230,8 @@ describe("useShellApps", () => {
       });
       (window as unknown as { CentraidApi: unknown }).CentraidApi = api("A");
       listApps.mockResolvedValue([
-        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
-        { id: "tasks", name: "Tasks", kind: "app", hasIndex: true },
+        { id: "photos", name: "Photos", kind: "app" },
+        { id: "tasks", name: "Tasks", kind: "app" },
       ]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos", "tasks"]);
@@ -270,7 +252,7 @@ describe("useShellApps", () => {
       });
       (window as unknown as { CentraidApi: unknown }).CentraidApi = api("A");
       listApps.mockResolvedValue([
-        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
+        { id: "photos", name: "Photos", kind: "app" },
       ]);
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos"]);
@@ -293,9 +275,7 @@ describe("useShellApps", () => {
       store.set("home.userApps", [
         { id: "notes", name: "Notes", iconKey: "Todo", color: "#1" },
       ]);
-      listApps.mockResolvedValue([
-        { id: "notes", name: "Notes", kind: "app", hasIndex: false },
-      ]);
+      listApps.mockResolvedValue([{ id: "notes", name: "Notes", kind: "app" }]);
       await mount();
       expect(store.get("home.userApps.vault")).toBe("A");
 
@@ -317,7 +297,7 @@ describe("useShellApps", () => {
         getGatewayAuth: async () => ({ baseUrl: "", vaultId: "A" }),
       };
       listApps.mockResolvedValue([
-        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
+        { id: "photos", name: "Photos", kind: "app" },
       ]);
       await mount();
       expect(store.get("home.installedApps.byVault")).toBeDefined();

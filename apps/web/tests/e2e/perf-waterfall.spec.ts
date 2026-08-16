@@ -3,19 +3,28 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { expect, test } from "@playwright/test";
-import type { Frame, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 import { installHarnessControlTransport } from "./control-transport.js";
 import { enforceTiming, perfBudgets } from "./perf-budgets.js";
 
 // PWA fast-path waterfall probe (issue #404 workstream I). The former desktop
 // exploratory rig is retired; this is the only budgeted app-open probe. It
-// boots the same e2e
-// harness gateway (tests/e2e/server.ts installs the `web-e2e` app), opens that
-// app cold then warm, and captures `performance.getEntriesByType('resource')`
-// from BOTH the shell page and the app iframe's own window. It also exercises
-// two other levers of the fast path: the service-worker TUNNEL cache (Test B)
-// and the QUIC connection pool instrumentation (Test C).
+// boots the same e2e harness gateway (tests/e2e/server.ts) and measures two
+// costs off the SHELL PAGE's own performance timeline: the shell bundle (cold,
+// then warm through the SW/HTTP caches) and an app open (cold, then warm).
+//
+// The app open is an INLINE REACT ROUTE. Issue #799 retired the served-app
+// plane, so there is no app iframe and no second window to read a timeline
+// from: opening a bundled app is a dynamic `import()` of that app's own lazy
+// chunk (packages/client/src/react/shell/routes/inlineApps.ts) rendered by
+// InlineAppRoute inside the live document. The cost of an open is therefore
+// exactly the assets the shell pulls between the palette click and the mounted
+// app, which this probe deltas out of
+// `performance.getEntriesByType('resource')` on the shell page.
+//
+// It also exercises two other levers of the fast path: the service-worker
+// TUNNEL cache (Test B) and the QUIC connection pool instrumentation (Test C).
 //
 // All budgets live in perf-budgets.ts; this file only measures and asserts.
 // The JSON report is written to test-results/ for the bundling workstream to
@@ -23,7 +32,15 @@ import { enforceTiming, perfBudgets } from "./perf-budgets.js";
 
 const API_URL = "http://127.0.0.1:48765";
 const ADMIN_TOKEN = "centraid-web-e2e-token";
-const APP_ID = "web-e2e";
+const CONTROL_SESSION = "web-e2e-control-session";
+// The app-open subject: a bundled inline app, opened from the palette like any
+// other. Tasks is a plain first-party route that mounts on the web seat (Locker
+// refuses that seat, docs/blueprint-seats.md S5; Photos is the heaviest and its
+// own byte story), so what this probe fences is the shell's per-app lazy-chunk
+// cost with the least product-specific noise on top. Changing this app
+// re-seeds the appOpen ceilings — measure before you swap it.
+const APP_ID = "tasks";
+const APP_NAME = "Tasks";
 const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
 const GATEWAY_ENDPOINT_TICKET = "web-e2e-control-transport";
 
@@ -54,46 +71,88 @@ interface OpenSummary {
   totalEncodedBytes: number;
   // Cross-origin resources report 0 transfer/body sizes without a
   // Timing-Allow-Origin header, so track same-origin totals separately — those
-  // are the honest byte numbers.
+  // are the honest byte numbers. In this harness the gateway answers on another
+  // port, so every control/replica/query call an app makes is cross-origin and
+  // byte-blind; both the shell and the app-open figures the report publishes
+  // are the same-origin ones.
   sameOriginRequestCount: number;
   sameOriginTransferBytes: number;
-  // The HTML document itself is a `navigation` entry, not a `resource`. For the
-  // app iframe (whose only "asset" is often the inlined-runtime doc) this is
-  // the byte number that matters, so include it in the grand total.
+  // `transferSize` is what came off the WIRE, and it is 0 for anything the
+  // service worker answered out of Cache Storage. By the time an app can be
+  // opened the SW has already precached the whole dist, so an inline app open
+  // transfers 0 bytes — true, and useless as a weight fence. `encodedBodySize`
+  // is populated whether a body was served from the wire or from the cache, so
+  // it is the number that actually grows when an app's chunk grows. Both are
+  // budgeted: transfer fences "an open must not go back to the network",
+  // encoded fences "an open must not get heavier". Read encoded as DECODED
+  // (raw) weight, never as a wire figure — Cache Storage holds decoded bodies.
+  sameOriginEncodedBytes: number;
+  // The HTML document itself is a `navigation` entry, not a `resource`, so a
+  // whole-page measurement has to add it in by hand. An inline app open makes
+  // NO navigation — the route swaps inside the live document — so that
+  // measurement passes `navigation: false` and this stays 0 rather than
+  // charging the shell document to every app open.
   navTransferBytes: number;
   grandTotalTransferBytes: number;
   resources: ResourceRow[];
 }
 
-// Pull the resource + navigation timeline out of a page or iframe window.
+interface CollectOptions {
+  /**
+   * Ignore entries recorded before this index in the page's resource timeline.
+   * This is how an inline app open is isolated from the shell load that
+   * preceded it: both now happen in the same window, so the open's cost is the
+   * TAIL of one timeline rather than a second window's whole timeline.
+   */
+  sinceIndex?: number;
+  /** Count the page's `navigation` entry. Only a whole-page load has one. */
+  navigation?: boolean;
+}
+
+/** How many resource entries the shell page has recorded so far. */
+async function resourceMark(page: Page): Promise<number> {
+  return page.evaluate(() => performance.getEntriesByType("resource").length);
+}
+
+// Pull the resource (and, for a whole-page load, navigation) timeline out of
+// the shell page.
 async function collect(
-  target: Page | Frame,
-  origin: string
+  page: Page,
+  origin: string,
+  options: CollectOptions = {}
 ): Promise<OpenSummary> {
-  const captured = (await target.evaluate(() => {
-    const map = (entry: PerformanceEntry) => {
-      const timing = entry as PerformanceResourceTiming;
-      return {
-        name: timing.name,
-        transferSize: timing.transferSize,
-        encodedBodySize: timing.encodedBodySize,
-        decodedBodySize: timing.decodedBodySize,
-        responseStatus:
-          "responseStatus" in timing
-            ? (timing as unknown as { responseStatus: number }).responseStatus
-            : null,
-        initiatorType: timing.initiatorType,
-        duration: timing.duration,
+  const { sinceIndex = 0, navigation = true } = options;
+  const captured = (await page.evaluate(
+    ({ from, withNav }) => {
+      const map = (entry: PerformanceEntry) => {
+        const timing = entry as PerformanceResourceTiming;
+        return {
+          name: timing.name,
+          transferSize: timing.transferSize,
+          encodedBodySize: timing.encodedBodySize,
+          decodedBodySize: timing.decodedBodySize,
+          responseStatus:
+            "responseStatus" in timing
+              ? (timing as unknown as { responseStatus: number }).responseStatus
+              : null,
+          initiatorType: timing.initiatorType,
+          duration: timing.duration,
+        };
       };
-    };
-    const nav = performance.getEntriesByType("navigation")[0];
-    return {
-      resources: performance.getEntriesByType("resource").map(map),
-      navTransferBytes: nav
-        ? (nav as PerformanceNavigationTiming).transferSize
-        : 0,
-    };
-  })) as { resources: ResourceRow[]; navTransferBytes: number };
+      const nav = performance.getEntriesByType("navigation")[0];
+      return {
+        resources: performance
+          .getEntriesByType("resource")
+          .slice(from)
+          .map(map),
+        navTransferBytes:
+          withNav && nav
+            ? (nav as PerformanceNavigationTiming).transferSize
+            : 0,
+      };
+    },
+    { from: sinceIndex, withNav: navigation }
+  )) as { resources: ResourceRow[]; navTransferBytes: number };
 
   const { resources, navTransferBytes } = captured;
   const sameOrigin = resources.filter((row) => row.name.startsWith(origin));
@@ -113,10 +172,40 @@ async function collect(
       (sum, row) => sum + (row.transferSize || 0),
       0
     ),
+    sameOriginEncodedBytes: sameOrigin.reduce(
+      (sum, row) => sum + (row.encodedBodySize || 0),
+      0
+    ),
     navTransferBytes,
     grandTotalTransferBytes: totalTransferBytes + navTransferBytes,
     resources,
   };
+}
+
+// Poll the resource timeline until its length stops growing, so a measurement
+// taken right after a load or an app open still counts the trailing chunks
+// (CSS, token sheets, a lazily-imported dependency) that arrive after the
+// thing being waited on has painted. Shared by the shell load and the inline
+// app open — both now measure the SAME window, so both settle the same way.
+async function settleResourceTimeline(
+  page: Page,
+  timeout: number
+): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const a = await resourceMark(page);
+        await page.evaluate(
+          () =>
+            new Promise((resolve) => {
+              setTimeout(resolve, 40);
+            })
+        );
+        return (await resourceMark(page)) === a;
+      },
+      { timeout }
+    )
+    .toBe(true);
 }
 
 // Wait until the dynamically-imported boot chunk has actually landed in the
@@ -135,35 +224,18 @@ async function waitForShellBundle(page: Page): Promise<void> {
       { timeout: 20_000 }
     )
     .toBe(true);
-  // readyState is already 'complete' once waitForLoadState('load') resolves.
-  // Poll resource-timing until the count is stable so trailing CSS/token
-  // chunks are counted (same pattern as the SWR settle below).
-  await expect
-    .poll(
-      async () => {
-        const a = await page.evaluate(
-          () => performance.getEntriesByType("resource").length
-        );
-        await page.evaluate(
-          () =>
-            new Promise((resolve) => {
-              setTimeout(resolve, 40);
-            })
-        );
-        const b = await page.evaluate(
-          () => performance.getEntriesByType("resource").length
-        );
-        return a === b;
-      },
-      { timeout: 5_000 }
-    )
-    .toBe(true);
+  // readyState is already 'complete' once waitForLoadState('load') resolves,
+  // so the count-stable poll is what actually bounds the measurement.
+  await settleResourceTimeline(page, 5_000);
 }
 
-// Mirror the working control-session bootstrap from web-pwa.spec.ts: mint a
-// cookie control session, pin the connection in localStorage, reload into a
-// booted shell with the app tile on Home. The caller has already done the cold
-// `goto('/')` so the shell bundle could be measured before this reload.
+// Mirror the working control-session bootstrap from docs-drive.spec.ts: mint a
+// cookie control session, swap in the harness's deterministic ENROLLED device
+// session (replica routes reject an admin-only cookie that carries no durable
+// device identity, and an inline app cannot mount without a replica lease),
+// pin the connection in localStorage, reload into a booted shell. The caller
+// has already done the cold `goto('/')` so the shell bundle could be measured
+// before this reload.
 async function establishSession(page: Page): Promise<void> {
   await installHarnessControlTransport(page, API_URL);
   const control = await page.evaluate(
@@ -178,7 +250,29 @@ async function establishSession(page: Page): Promise<void> {
     { apiUrl: API_URL, token: ADMIN_TOKEN }
   );
   expect(control.status).toBe(200);
-  const vaultId = (control.body as { vaultId: string }).vaultId;
+  await page.context().addCookies([
+    {
+      name: "__centraid_control",
+      value: CONTROL_SESSION,
+      domain: "127.0.0.1",
+      path: "/centraid/_web/control",
+      httpOnly: true,
+      sameSite: "Strict",
+    },
+  ]);
+  const enrolled = await page.evaluate(async (apiUrl) => {
+    const query = encodeURIComponent("/centraid/_vault/vaults");
+    const response = await fetch(
+      `${apiUrl}/centraid/_web/control?path=${query}`,
+      { credentials: "include" }
+    );
+    const body = (await response.json()) as {
+      vaults?: Array<{ vaultId: string }>;
+    };
+    return { status: response.status, vaultId: body.vaults?.[0]?.vaultId };
+  }, API_URL);
+  expect(enrolled.status).toBe(200);
+  expect(enrolled.vaultId).toEqual(expect.any(String));
 
   await page.evaluate(
     ({ endpointId, endpointTicket, vault }) => {
@@ -195,28 +289,20 @@ async function establishSession(page: Page): Promise<void> {
           rememberDevice: true,
         })
       );
-      // The fixture app is published to the app store but never *installed*
-      // (no Home pin), so the shell classifies it as a DRAFT — and drafts,
-      // the builder preview, and Publish are all gated behind the
-      // `builderEnabled` dev flag (issue #434, default false). ensureInstalled()
-      // below drives exactly those builder surfaces, so opt the harness in.
       localStorage.setItem(
         "centraid.web.v1.settings",
-        JSON.stringify({
-          onboardingCompletedAt: new Date().toISOString(),
-          builderEnabled: true,
-        })
+        JSON.stringify({ onboardingCompletedAt: new Date().toISOString() })
       );
     },
     {
       endpointId: GATEWAY_ENDPOINT_ID,
       endpointTicket: GATEWAY_ENDPOINT_TICKET,
-      vault: vaultId,
+      vault: enrolled.vaultId!,
     }
   );
   await page.reload();
-  // Home is the springboard (#708); custom apps open via the palette, not a
-  // library card. Wait for the shell, then confirm the service worker.
+  // Home is the springboard (#708); apps open via the palette, not a library
+  // card. Wait for the shell, then confirm the service worker.
   await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
   await expect
     .poll(() =>
@@ -225,129 +311,192 @@ async function establishSession(page: Page): Promise<void> {
     .toBe(true);
 }
 
-/** Open the published fixture app via the command palette. */
-async function openFixtureApp(page: Page): Promise<void> {
-  const search = page.getByRole("button", { name: /^Search/u });
-  if ((await search.count()) > 0) {
-    await search.first().click();
-  } else {
-    await page.keyboard.press("ControlOrMeta+k");
-  }
+/**
+ * Get the command palette open. Deliberately SEPARATE from the pick below, and
+ * called before the open timer starts: right after a reload the Search button
+ * can paint before its React listener attaches, and a click that lands in that
+ * window is silently lost (same shape as docs-drive.spec.ts). Retrying that is
+ * correct, but its 30s ceiling must not be inside a measurement budgeted at
+ * 15s — one retry cycle would then hard-fail the timing gate on shell startup
+ * jitter that has nothing to do with app-open cost.
+ */
+async function openPalette(page: Page): Promise<void> {
   const palette = page.getByRole("dialog", { name: "Command palette" });
-  await palette.waitFor({ state: "visible" });
-  await palette.locator("input").fill("Web E2E App");
+  await expect
+    .poll(
+      async () => {
+        if (await palette.isVisible()) return true;
+        const search = page.getByRole("button", { name: /^Search/u });
+        if ((await search.count()) > 0) await search.first().click();
+        else await page.keyboard.press("ControlOrMeta+k");
+        return palette.isVisible();
+      },
+      { timeout: 30_000 }
+    )
+    .toBe(true);
+}
+
+/** Pick the app out of an already-open palette. This is the timed action. */
+async function pickAppFromPalette(page: Page): Promise<void> {
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await palette.locator("input").fill(APP_NAME);
   await palette
     .getByRole("button")
-    .filter({ hasText: "Web E2E App" })
+    .filter({ hasText: APP_NAME })
     .first()
     .click();
 }
 
-// The fixture is already published on the harness gateway. Home no longer lists
-// custom apps (#708); open via the palette into the running-app iframe.
-// We deliberately do NOT invoke `window.centraid.read` — the asset waterfall is
-// the subject, and the query runtime is a separate concern.
-async function ensureInstalled(page: Page): Promise<void> {
-  await openFixtureApp(page);
-  await page
-    .frameLocator('iframe[title="app"]')
-    .locator("#ready")
-    .waitFor({ state: "visible" });
-  // Return to Home so openInstalledAndMeasure starts from a cold shell open.
-  await page.getByRole("button", { name: "Home", exact: true }).click();
-  await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
-}
-
-async function openInstalledAndMeasure(
+// Open the inline app route and charge it everything the shell page downloaded
+// while doing so. There is no second window any more, so the measurement is a
+// delta over the shell's own resource timeline between the palette click and
+// the mounted app.
+//
+// The app must be proved MOUNTED, not merely routed to: a chunking change that
+// ships a blank route would otherwise post the best numbers in this file. So
+// the wait is the Suspense fallback disappearing plus `window.centraid` being
+// published by the inline bridge — the same liveness proof docs-drive.spec.ts
+// uses. We still deliberately do NOT invoke `window.centraid.read`: the asset
+// waterfall is the subject, and the query runtime is a separate concern.
+async function openAppAndMeasure(
   page: Page
 ): Promise<{ summary: OpenSummary; elapsedMs: number }> {
+  const origin = new URL(page.url()).origin;
+  // Getting the palette up is shell-startup cost, not app-open cost: do it
+  // before the mark and before the clock, so neither the byte delta nor the
+  // timing ceiling is charged for it.
+  await openPalette(page);
+  // …and let its own chunks finish landing before marking. The palette resolves
+  // when the dialog is VISIBLE, which does not mean its lazy imports have
+  // settled; a chunk still in flight at the mark gets charged to the app open.
+  // Skipping this settle produced a reproducible-looking 112_759 B with an
+  // occasional 179_759 B outlier — a 67 KB swing that would flake any honest
+  // ceiling. Measure from a quiet timeline instead of padding the budget.
+  await settleResourceTimeline(page, 5_000);
+  const sinceIndex = await resourceMark(page);
   const started = Date.now();
-  await openFixtureApp(page);
-  const iframe = await page.waitForSelector('iframe[title="app"]', {
-    state: "attached",
-    timeout: 30_000,
-  });
-  const frame = await iframe.contentFrame();
-  expect(frame).not.toBeNull();
-  // Static markup paints before the iframe's network settles. The app runtime
-  // holds a long-lived `_changes` SSE, so networkidle never settles. Poll
-  // resource-timing until the count is stable so late fetch() assets are
-  // included (readyState alone is already complete by #ready paint).
-  await page
-    .frameLocator('iframe[title="app"]')
-    .locator("#ready")
-    .waitFor({ state: "visible" });
+  await pickAppFromPalette(page);
+  await expect(page.getByTestId("inline-app-view")).toBeVisible();
+  await expect(
+    page.getByText(`Loading ${APP_NAME}…`, { exact: true })
+  ).toHaveCount(0);
   await expect
-    .poll(
-      async () => {
-        const count = () =>
-          frame!
-            .evaluate(() => performance.getEntriesByType("resource").length)
-            .catch(() => -1);
-        const a = await count();
-        await page.evaluate(
-          () =>
-            new Promise((resolve) => {
-              setTimeout(resolve, 40);
-            })
-        );
-        const b = await count();
-        return a >= 0 && a === b;
-      },
-      { timeout: 10_000 }
-    )
+    .poll(() => page.evaluate(() => Boolean(window.centraid)))
     .toBe(true);
-  const origin = new URL(frame!.url()).origin;
-  const summary = await collect(frame!, origin);
-  return { summary, elapsedMs: Date.now() - started };
+  const elapsedMs = Date.now() - started;
+  // The replica holds a long-lived `_changes` SSE, so networkidle never
+  // settles; wait for the resource count to stop moving instead.
+  await settleResourceTimeline(page, 10_000);
+  const summary = await collect(page, origin, {
+    sinceIndex,
+    navigation: false,
+  });
+  return { summary, elapsedMs };
 }
 
+/**
+ * The byte total an app open is budgeted on: SAME-ORIGIN resources plus the
+ * navigation entry. Inline opens contribute no navigation, so in practice this
+ * is the asset download; the field is summed rather than dropped so a future
+ * whole-page measurement reusing this helper still counts its document.
+ *
+ * Same-origin only, deliberately: in this harness the gateway answers on
+ * another port with no Timing-Allow-Origin header, so every control / replica
+ * / query call an app makes reports 0 bytes and would silently dilute the
+ * total. Cross-origin REQUEST COUNT is still real, and is fenced separately by
+ * `maxTotalRequests` — see the budgets file.
+ */
+function openBytes(s: OpenSummary): number {
+  return s.sameOriginTransferBytes + s.navTransferBytes;
+}
+
+/**
+ * Leave the app. This must prove the app actually UNMOUNTED, not merely that
+ * Home painted: `nav[aria-label="Apps"]` renders inside InlineAppRoute's own
+ * ShellFrame too (Stem.tsx), so waiting on it alone is satisfied while the app
+ * is still up — and `window.centraid` stays installed until React unmounts
+ * (centraid-inline.ts teardown). A warm re-open measured from that state would
+ * "prove liveness" against the cold open's residue instead of its own mount.
+ */
 async function goHome(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Home", exact: true }).click();
+  await expect(page.getByTestId("inline-app-view")).toBeHidden();
+  await expect
+    .poll(() => page.evaluate(() => window.centraid === undefined))
+    .toBe(true);
   await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
 }
 
-test("app-open waterfall — shell + iframe, cold vs warm (real installed app)", async ({
+test("app-open waterfall — shell + inline app route, cold vs warm", async ({
   page,
 }) => {
   // ---- Shell: COLD load ----------------------------------------------------
   // First visit against an empty cache — this is the shell bundle cost (the
   // ~700KB boot chunk dominates), the number the bundling workstream targets.
   await page.goto("/");
+  const origin = new URL(page.url()).origin;
   await waitForShellBundle(page);
-  const shellCold = await collect(page, new URL(page.url()).origin);
+  const shellCold = await collect(page, origin);
 
   // ---- Shell: WARM load ----------------------------------------------------
   // establishSession() reloads into a booted, signed-in shell; the SW shell
   // cache + browser HTTP cache should serve the same bundle for ~0 bytes.
   await establishSession(page);
-  const shellWarm = await collect(page, new URL(page.url()).origin);
+  const shellWarm = await collect(page, origin);
   const shellByteRatio = shellCold.sameOriginTransferBytes
     ? shellWarm.sameOriginTransferBytes / shellCold.sameOriginTransferBytes
     : 0;
 
-  // ---- App iframe: cold then warm open -------------------------------------
-  await ensureInstalled(page);
-  const cold = await openInstalledAndMeasure(page);
+  // ---- Inline app route: cold then warm open -------------------------------
+  // COLD is the first open of this app in this page: the route's lazy chunk
+  // (and whatever it pulls in) is fetched over the network. WARM is a second
+  // open after returning Home: the module registry already holds the
+  // descriptor, so a healthy warm open downloads nothing at all. That is a
+  // stronger result than the retired iframe path could give — its app document
+  // was `no-store`, so its warm/cold ratio sat at ~1.0 by construction — and it
+  // is why the ratio ceiling is a regression fence here, not a cache proof:
+  // what it catches is a change that makes re-opening an app re-download it.
+  const cold = await openAppAndMeasure(page);
   await goHome(page);
-  const warm = await openInstalledAndMeasure(page);
-  const appByteRatio = cold.summary.grandTotalTransferBytes
-    ? warm.summary.grandTotalTransferBytes /
-      cold.summary.grandTotalTransferBytes
+  const warm = await openAppAndMeasure(page);
+  // The warm/cold ratio rides ENCODED bytes, not wire bytes: wire bytes are 0
+  // on both sides (the SW precached the dist), so a transfer-based ratio would
+  // be 0/0 and would fence nothing. On encoded bytes the ratio keeps its
+  // original meaning — a re-open must not re-pay the app's payload.
+  const appByteRatio = cold.summary.sameOriginEncodedBytes
+    ? warm.summary.sameOriginEncodedBytes / cold.summary.sameOriginEncodedBytes
     : 0;
 
+  // Same-origin only, for counts and for both byte columns: in this harness the
+  // gateway is a different origin, so the app's control/replica/query traffic
+  // reports zero bytes AND arrives in a count that varies with replica
+  // scheduling. The shell's own assets are the deterministic, byte-bearing
+  // subject — and they are what an app open actually costs to load.
   const openReport = (label: string, s: OpenSummary, elapsedMs: number) => ({
     label,
-    requestCount: s.requestCount,
-    resourceTransferBytes: s.totalTransferBytes,
+    requestCount: s.sameOriginRequestCount,
+    // The all-origin count is published too, and budgeted: bytes are
+    // unmeasurable cross-origin here, but requests are not, and an app open
+    // that starts firing extra gateway round-trips must not be invisible just
+    // because the byte fences cannot see them.
+    totalRequestCount: s.requestCount,
+    resourceTransferBytes: s.sameOriginTransferBytes,
+    // Structurally 0 for an inline open — no navigation happens. Kept so the
+    // report shape (and `grandTotalTransferBytes`, which every consumer reads)
+    // stays stable across the served-app → inline-route change.
     navTransferBytes: s.navTransferBytes,
-    grandTotalTransferBytes: s.grandTotalTransferBytes,
+    grandTotalTransferBytes: openBytes(s),
+    // The weight fence (see OpenSummary): decoded body bytes, wire or cache.
+    encodedBodyBytes: s.sameOriginEncodedBytes,
     elapsedMs,
-    resources: s.resources.map((r) => ({
-      name: r.name,
-      transferSize: r.transferSize,
-      status: r.responseStatus,
-    })),
+    resources: s.resources
+      .filter((row) => row.name.startsWith(origin))
+      .map((row) => ({
+        name: row.name,
+        transferSize: row.transferSize,
+        encodedBodySize: row.encodedBodySize,
+        status: row.responseStatus,
+      })),
   });
 
   const report = {
@@ -388,15 +537,15 @@ test("app-open waterfall — shell + iframe, cold vs warm (real installed app)",
       `(ratio ${report.shell.warmToColdByteRatio})`
   );
   console.log(
-    `app cold:    requests=${cold.summary.requestCount} resource=${cold.summary.totalTransferBytes}B ` +
-      `nav=${cold.summary.navTransferBytes}B total=${cold.summary.grandTotalTransferBytes}B ${cold.elapsedMs}ms`
+    `app cold:    requests=${cold.summary.sameOriginRequestCount} transfer=${cold.summary.sameOriginTransferBytes}B ` +
+      `encoded=${cold.summary.sameOriginEncodedBytes}B (all-origin requests=${cold.summary.requestCount}) ${cold.elapsedMs}ms`
   );
   console.log(
-    `app warm:    requests=${warm.summary.requestCount} resource=${warm.summary.totalTransferBytes}B ` +
-      `nav=${warm.summary.navTransferBytes}B total=${warm.summary.grandTotalTransferBytes}B ${warm.elapsedMs}ms`
+    `app warm:    requests=${warm.summary.sameOriginRequestCount} transfer=${warm.summary.sameOriginTransferBytes}B ` +
+      `encoded=${warm.summary.sameOriginEncodedBytes}B (all-origin requests=${warm.summary.requestCount}) ${warm.elapsedMs}ms`
   );
   console.log(
-    `app warm/cold total ratio: ${report.appOpen.warmToColdByteRatio}`
+    `app warm/cold encoded-byte ratio: ${report.appOpen.warmToColdByteRatio}`
   );
   console.log("======================================================\n");
 
@@ -420,23 +569,52 @@ test("app-open waterfall — shell + iframe, cold vs warm (real installed app)",
     perfBudgets.shell.maxWarmToColdByteRatio
   );
 
+  // The same anti-vacuity guard the cold shell gets, and it is load-bearing
+  // here: a cold open that loaded no bytes means the app's chunks were already
+  // in the timeline (a preload, or a measurement taken after the fact), and
+  // every app-open ceiling below would then pass on an empty measurement.
   expect(
-    cold.summary.requestCount,
+    cold.summary.sameOriginEncodedBytes,
+    "cold app open measured (>=floor encoded bytes)"
+  ).toBeGreaterThanOrEqual(perfBudgets.appOpen.cold.minEncodedBytes);
+  expect(
+    cold.summary.sameOriginRequestCount,
     "cold app request count"
   ).toBeLessThanOrEqual(perfBudgets.appOpen.cold.maxRequests);
+  // All-origin count, including the byte-blind cross-origin gateway calls the
+  // same-origin byte fences cannot see.
   expect(
-    cold.summary.grandTotalTransferBytes,
+    cold.summary.requestCount,
+    "cold app all-origin request count"
+  ).toBeLessThanOrEqual(perfBudgets.appOpen.cold.maxTotalRequests);
+  expect(
+    cold.summary.sameOriginEncodedBytes,
+    "cold app encoded bytes"
+  ).toBeLessThanOrEqual(perfBudgets.appOpen.cold.maxEncodedBytes);
+  // Wire bytes: on a warm shell the SW answers every chunk out of Cache
+  // Storage, so this is 0 today. The ceiling is what catches an app open that
+  // starts going back to the network for its own assets.
+  expect(
+    openBytes(cold.summary),
     "cold app transfer bytes"
   ).toBeLessThanOrEqual(perfBudgets.appOpen.cold.maxTransferBytes);
   expect(
-    warm.summary.requestCount,
+    warm.summary.sameOriginRequestCount,
     "warm app request count"
   ).toBeLessThanOrEqual(perfBudgets.appOpen.warm.maxRequests);
   expect(
-    warm.summary.grandTotalTransferBytes,
+    warm.summary.requestCount,
+    "warm app all-origin request count"
+  ).toBeLessThanOrEqual(perfBudgets.appOpen.warm.maxTotalRequests);
+  expect(
+    warm.summary.sameOriginEncodedBytes,
+    "warm app encoded bytes"
+  ).toBeLessThanOrEqual(perfBudgets.appOpen.warm.maxEncodedBytes);
+  expect(
+    openBytes(warm.summary),
     "warm app transfer bytes"
   ).toBeLessThanOrEqual(perfBudgets.appOpen.warm.maxTransferBytes);
-  expect(appByteRatio, "app warm/cold byte ratio").toBeLessThanOrEqual(
+  expect(appByteRatio, "app warm/cold encoded byte ratio").toBeLessThanOrEqual(
     perfBudgets.appOpen.maxWarmToColdByteRatio
   );
 

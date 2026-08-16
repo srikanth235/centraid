@@ -2,7 +2,8 @@
 // beside outcomes.ts rather than inline in app.tsx purely for line budget —
 // each still needs a couple of app.tsx-owned setters/orchestrators, passed in
 // per call exactly like every other action module here.
-import { statusLine } from "./kit.ts";
+import { statusLine } from "@centraid/design/elements";
+
 import { act, narrate, writeTarget } from "./outcomes.ts";
 import type { Album } from "./types.ts";
 

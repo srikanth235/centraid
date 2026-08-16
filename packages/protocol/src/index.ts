@@ -29,6 +29,9 @@ export {
   appActionPath,
   appQueryPath,
   appDescribePath,
+  appTurnPath,
+  assistantTurnPath,
+  assistantResolvePath,
   type RouteName,
 } from "./routes.js";
 

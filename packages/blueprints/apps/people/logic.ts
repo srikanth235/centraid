@@ -1,16 +1,10 @@
 // governance: allow-repo-hygiene file-size-limit (#630) — this factory is the
 // cohesive controller for one blueprint; splitting its shared mutable app
 // closure would obscure write/outcome and undo sequencing.
-import {
-  PALETTE,
-  listColor,
-  daysSince,
-  daysUntilAnnual,
-  statusOf,
-} from "./format.ts";
+//
 // Non-visual business logic: vault IO (write/act), row derivation, selection,
-// the kebab/move-to-list popover (stays plain DOM, built with kit's
-// `h()`/`popItem()` — no React root needed there), every person/list write,
+// the kebab/move-to-list popover (stays plain DOM, built with the element
+// layer's `h()`/`popItem()` — no React root needed there), every person/list write,
 // the profile drawer's load/reload + "+ add" write helper, journal/activity
 // reads, and navigation state transitions. `createLogic()` is a factory
 // app.tsx calls once at boot, closing over the exact `state`/`data` objects
@@ -28,7 +22,15 @@ import {
   popItem,
   runBulk as runBulkBase,
   statusLine,
-} from "./kit.ts";
+} from "@centraid/design/elements";
+
+import {
+  PALETTE,
+  listColor,
+  daysSince,
+  daysUntilAnnual,
+  statusOf,
+} from "./format.ts";
 import type {
   DashboardData,
   DetailPerson,

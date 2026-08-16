@@ -35,8 +35,6 @@ describe("screens/ResourceAdvancedKnobs", () => {
       workerMaxOldGenerationMb: 1280,
       workerPoolSize: 3,
       replicationConcurrency: 2,
-      staticBrotliQuality: 6,
-      staticGzipQuality: 7,
       sqliteSynchronous: "FULL",
       vaultSweepIntervalMs: 300_000,
       outboxIdleIntervalMs: 1000,
@@ -46,16 +44,12 @@ describe("screens/ResourceAdvancedKnobs", () => {
       workerMaxOldGenerationMb: { source: "preset" },
       workerPoolSize: { source: "env", envVar: "CENTRAID_WORKER_POOL_SIZE" },
       replicationConcurrency: { source: "prefs" },
-      staticBrotliQuality: { source: "preset" },
-      staticGzipQuality: { source: "preset" },
     },
     bounds: {
       workerMaxConcurrent: { min: 1, max: 32 },
       workerMaxOldGenerationMb: { min: 256, max: 8192 },
       workerPoolSize: { min: 1, max: 16 },
       replicationConcurrency: { min: 1, max: 16 },
-      staticBrotliQuality: { min: 0, max: 11 },
-      staticGzipQuality: { min: 1, max: 9 },
     },
   };
 

@@ -1,4 +1,3 @@
-import { checkStats, previewText } from "./format.ts";
 // governance: allow-repo-hygiene file-size-limit cohesive non-visual notes logic module; vault IO, notebook navigation/CRUD, and note commands share the vault predicate translation and parked-write tracking
 // Non-visual business logic: vault IO (write/act), notebook navigation,
 // notebook CRUD with the vault's predicates translated to sentences, the
@@ -8,7 +7,13 @@ import { checkStats, previewText } from "./format.ts";
 // the same factory shape tasks/logic.js uses. The pure derivations
 // (`sidebarCounts`/`buildWall`) need no closure and are exported standalone
 // so components can call them too.
-import { debounce, outcomeMessage, statusLine } from "./kit.ts";
+import {
+  debounce,
+  outcomeMessage,
+  statusLine,
+} from "@centraid/design/elements";
+
+import { checkStats, previewText } from "./format.ts";
 import type {
   AppData,
   AppState,
@@ -84,8 +89,8 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return outcome;
   }
 
-  // Like write(), but returns the raw outcome so shared helpers (kit.ts
-  // wireAttachInput) can narrate and refresh on their own.
+  // Like write(), but returns the raw outcome so the shared attachment
+  // helpers (the element layer's wireAttachInput) can narrate and refresh on their own.
   async function act(
     action: string,
     input: Record<string, unknown>
@@ -390,7 +395,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return outcome;
   }
 
-  // ---------- Attachments (kit.ts renderAttachments / wireAttachInput) ----------
+  // ---------- Attachments (the element layer's renderAttachments / wireAttachInput) ----------
 
   let attachTarget: string | null = null;
   const setAttachTarget = (noteId: string | null) => {

@@ -59,7 +59,6 @@ import {
   PlaceDetail,
   TallyHome,
   TasksHome,
-  AppDetailScreen,
   ApprovalsScreen,
   BackupHealthScreen,
   CaptureScreen,
@@ -446,8 +445,7 @@ export default function App(): React.JSX.Element | null {
                           <RootStack.Navigator
                             screenOptions={{ headerShown: false }}
                             // `selection` haptic when a cover opens — preserves the
-                            // vocabulary the old tabPress listener gave, and the one
-                            // WebView apps get via expo-haptics (src/lib/bridge/dispatch.ts).
+                            // vocabulary the old tabPress listener gave.
                             // `closing` guards it to the open transition, not dismissal.
                             screenListeners={{
                               transitionStart: (e) => {
@@ -508,11 +506,6 @@ export default function App(): React.JSX.Element | null {
                             <RootStack.Screen
                               name="Tally"
                               component={TallyHome}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="AppDetail"
-                              component={AppDetailScreen}
                               options={COVER_OPTIONS}
                             />
                             <RootStack.Screen

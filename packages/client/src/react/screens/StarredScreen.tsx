@@ -14,7 +14,6 @@ export interface StarredScreenProps {
   appItems: readonly HomeAppItemDTO[];
   automationItems: readonly HomeAutoItemDTO[];
   onOpenApp: (id: string) => void;
-  onEnterDraft: (id: string) => void;
   onAppContext: (id: string, anchor: HomeMenuAnchor) => void;
   onOpenAutomation: (ref: string) => void;
   onAutomationMenu: (ref: string, anchor: HomeMenuAnchor) => void;
@@ -29,7 +28,6 @@ export default function StarredScreen({
   appItems,
   automationItems,
   onOpenApp,
-  onEnterDraft,
   onAppContext,
   onOpenAutomation,
   onAutomationMenu,
@@ -40,13 +38,7 @@ export default function StarredScreen({
       data-layout="tiles"
     >
       {appItems.map((a) => (
-        <AppCard
-          key={a.id}
-          a={a}
-          onOpen={onOpenApp}
-          onEnterDraft={onEnterDraft}
-          onContext={onAppContext}
-        />
+        <AppCard key={a.id} a={a} onOpen={onOpenApp} onContext={onAppContext} />
       ))}
       {automationItems.map((r) => (
         <AutoCard

@@ -1,36 +1,8 @@
 {
   "_comment": "The skip budget (#656 Layer 2). Every deliberate hole in the suite — test.skip / describe.skipIf / .todo / runtime t.skip() / a CENTRAID_* or CLAWGNITION_* opt-in env gate — is inventoried here with an OPEN tracking issue and a reason. scripts/test-report/skip-inventory.mjs discovers the population by scanning; validate-matrix.mjs (in check:pr) fails on an uninventoried skip, on a stale entry, and whenever the count differs from _budget. _budget is DOWN-ONLY: deleting a skip must lower it in the same change, and adding one costs an explicit hand edit plus an issue. Keys are <path>#<ordinal> (nth skip site in that file) so they survive line drift; `line` is informational and refreshed by `node scripts/test-report/skip-inventory.mjs --write`. A skip site also forbids its file from backing a computed-solid matrix cell — see scripts/test-report/matrix-grades.mjs.",
-  "_budget": 30,
-  "approvedDeviation": "#782 — reviewed increase 29 → 30. The scan globs were single-segment (scripts/*.test.mjs), so the runtime t.skip in scripts/gateway-package/assemble-runtime.test.mjs was never discovered. Widening the globs to scripts/**/*.test.mjs and apps/*/scripts/**/*.test.mjs surfaced it; the budget rises to the population that was always there rather than the one the globs happened to see. No new skip was added to the suite.",
+  "_budget": 25,
+  "approvedDeviation": "#799 — the budget falls 30 → 25 (down-only). The five retired sites were all permanent skips against the served-app plane: the three desktop copilot cases (7.2–7.4) drove a panel inside the app iframe, builder publish drove the app builder, and the app-bundle case gated on the shipped Photos + kit dirs the whole-graph asset bundler read. Stages 2 and 3 of #799 delete those surfaces, so the holes close by removal rather than by fix.",
   "sites": {
-    "apps/desktop/tests/e2e/appview-templates-insights.spec.ts#1": {
-      "kind": "static-skip",
-      "line": 99,
-      "snippet": "test.skip(\"7.2 — the chat FAB opens the copilot panel\", async () => {",
-      "issue": 781,
-      "reason": "Desktop e2e mock cannot serve blueprint apps, so the copilot FAB never mounts; the rig, not the product, is the blocker (originally #470 → #657)."
-    },
-    "apps/desktop/tests/e2e/appview-templates-insights.spec.ts#2": {
-      "kind": "static-skip",
-      "line": 111,
-      "snippet": "test.skip(\"7.3 — a chat turn streams an assistant reply and a SQL tool result\", async () => {",
-      "issue": 781,
-      "reason": "Same rig hole as 7.2: no served blueprint app in the desktop e2e mock, so no copilot turn can stream (originally #470 → #657)."
-    },
-    "apps/desktop/tests/e2e/appview-templates-insights.spec.ts#3": {
-      "kind": "static-skip",
-      "line": 179,
-      "snippet": "test.skip(\"7.4 — the copilot past-chats history lists prior sessions and filters by search\", async () => {",
-      "issue": 781,
-      "reason": "Same rig hole as 7.2/7.3: copilot history needs a served app the desktop e2e mock cannot provide (originally #470 → #657)."
-    },
-    "apps/desktop/tests/e2e/builder.spec.ts#1": {
-      "kind": "static-skip",
-      "line": 123,
-      "snippet": "test.skip(\"4.4 — Publish posts to the gateway and returns to home on success\", async () => {",
-      "issue": 781,
-      "reason": "Builder publish is a hidden, out-of-v0 surface; the skip is a product decision awaiting the pre-v0 purge (originally #471 / #496 P8 → #657)."
-    },
     "apps/mobile/src/lib/replica/multi-vault-reader.test.ts#1": {
       "kind": "env-gate",
       "line": 858,
@@ -40,7 +12,7 @@
     },
     "apps/web/tests/e2e/perf-waterfall.spec.ts#1": {
       "kind": "static-skip",
-      "line": 639,
+      "line": 817,
       "snippet": "test.skip(",
       "issue": 781,
       "reason": "The iroh request counter only exists in a freshly built bundle; the assertion self-skips against a stale dist instead of failing, which is why this owner cannot back a solid cell (originally #656)."
@@ -51,13 +23,6 @@
       "snippet": "test.skipIf(process.env.CENTRAID_LIVE_AUTOMATION !== \"1\")(",
       "issue": 790,
       "reason": "Drives real harness binaries, so it is opt-in via CENTRAID_LIVE_AUTOMATION=1 and cannot run on a hermetic PR lane (rig lane split to #790 by #781; originally #656)."
-    },
-    "packages/app-engine/src/http/app-bundle.test.ts#1": {
-      "kind": "conditional-skip",
-      "line": 529,
-      "snippet": "it.skipIf(!existsSync(photosDir) || !existsSync(kitDir))(",
-      "issue": 781,
-      "reason": "Asserts against the shipped Photos app and kit directories; skips when the blueprints workspace is absent from the checkout (originally #656)."
     },
     "packages/backup/src/interop-clawgnition.test.ts#1": {
       "kind": "env-gate",
@@ -187,7 +152,7 @@
     },
     "tests/perf/pwa-waterfall.perf.test.ts#1": {
       "kind": "conditional-skip",
-      "line": 61,
+      "line": 71,
       "snippet": "test.skipIf(!waterfall)(",
       "issue": 790,
       "reason": "The rig consumes a waterfall report published by the nightly web-e2e job; a missing input is a hard failure under CI and a local skip otherwise (rig lane split to #790 by #781; originally #659)."

@@ -17,7 +17,7 @@ Never claim both are durable writers without a merge strategy — Centraid does 
 
 | Path | Owner | Notes |
 | --- | --- | --- |
-| `<userData>/centraid-settings.json` | Desktop main process / Settings UI | Active gateway pointer, builder gate, remote templates URL, per-gateway vault selection. Hand-edits while the app runs can be overwritten on next save. |
+| `<userData>/centraid-settings.json` | Desktop main process / Settings UI | Active gateway pointer, remote templates URL, per-gateway vault selection. Hand-edits while the app runs can be overwritten on next save. |
 
 Code: `apps/desktop/src/main/settings.ts`.
 
@@ -29,7 +29,7 @@ Code: `apps/desktop/src/main/settings.ts`.
 
 Declarative "dotfiles" for prefs are not a product feature; treat the JSON as owned by the running gateway. Daemon `config.json` may seed `resourceMode` when the pref is unset; env `CENTRAID_RESOURCE_MODE` wins over both for operators. The selected mode is applied at gateway serve boot (worker limits are process-scoped).
 
-The resolved profile is published on the health metrics surface (`GET /centraid/_gateway/health` → `metrics.resourceProfile`, issue #528 Phase A): host class, owner mode, detected host facts, and every resolved knob (worker/replication/compression/sqlite/sweep). It is a read-only projection of the boot resolution — nothing writes back through it.
+The resolved profile is published on the health metrics surface (`GET /centraid/_gateway/health` → `metrics.resourceProfile`, issue #528 Phase A): host class, owner mode, detected host facts, and every resolved knob (worker/replication/sqlite/sweep). It is a read-only projection of the boot resolution — nothing writes back through it.
 
 Baseline inputs now describe the **granted share of the host, not the raw machine** (issue #528 Phase E). At serve boot the gateway additionally probes the cgroup CPU quota (`cpu.max` / `cpu.cfs_quota_us`) and memory limit (`memory.max` / `memory.limit_in_bytes`) plus one cumulative CPU-steal sample, and feeds them into the **same single resolver**. A container capped below the machine, or a VM losing significant CPU to steal, sizes down to the share it actually keeps; an unconstrained host resolves to the same numbers as before. Resource modes are budget presets over that share (`resourceProfile.budget.cpuShare` / `budget.memoryCapMb`, additive). These probes are failure-tolerant read-only host reads — they never write config and never trade SQLite durability, which stays FULL unless the owner explicitly opts into NORMAL (`CENTRAID_SQLITE_SYNCHRONOUS` or Conserve mode).
 
@@ -56,10 +56,11 @@ Baseline inputs now describe the **granted share of the host, not the raw machin
 
 | Surface | Owner |
 | --- | --- |
-| Shipped / git-store `app.json`, handlers | Code store / release / Publish |
+| Bundled system app `app.json`, handlers | The release — shipped source in `packages/blueprints/apps/`, never editable at runtime |
+| Cloned automation `app.json`, handlers | The vault's `code/` store, via the clone + publish flow |
 | Consent grants, install rows | Vault runtime (install sheet, revoke) |
 
-Editing `app.json` in a draft worktree does not change production grants until Publish / install flows say so.
+Editing a cloned automation's `app.json` in a draft worktree does not change production grants until the publish / install flows say so.
 
 ### Model catalog — runtime wins when file present
 

@@ -181,8 +181,9 @@ Handler invocation is **not** a plane — it is addressed under the invoking app
 | `POST /centraid/<appId>/actions/<action>` | `centraid_write` | `{ input?, intentId? }` | Runs a declared action; a write. |
 | `POST /centraid/<appId>/queries/<query>` | `centraid_read` | `{ input? }` | Runs a declared query; a read (allowed for read-only devices). |
 | `GET /centraid/<appId>/_describe` | `centraid_describe` | — | Returns the app's manifest; `?action=<name>`/`?query=<name>` narrows to one handler. |
+| `POST /centraid/<appId>/_turn` | — | conversation turn | Opens the app's SSE conversation stream; `appTurnPath`. |
 
-The `/centraid/_tool/centraid_*` shim these replaced was deleted outright — v0 ships no dual-route compat window ([decisions.md](decisions.md)). Path builders `appActionPath` / `appQueryPath` / `appDescribePath` live in `@centraid/protocol`. Auth, consent, vault scoping (`x-centraid-vault`), Companion grants, and browser-session scoping are unchanged — the reshape moved routing keys from the body into the path but kept every gate.
+The `/centraid/_tool/centraid_*` shim these replaced was deleted outright — v0 ships no dual-route compat window ([decisions.md](decisions.md)). Path builders `appActionPath` / `appQueryPath` / `appDescribePath` / `appTurnPath` live in `@centraid/protocol`, alongside the vault-plane `assistantTurnPath` / `assistantResolvePath`. The persisted-conversation family (`/_centraid-conversations/apps/<appId>/…`) is a flat top-level name that rule 1 below forbids for new protocol entries, so its builders stay in `packages/client/src/conversation-routes.ts`. Auth, consent, vault scoping (`x-centraid-vault`), Companion grants, and browser-session scoping are unchanged — the reshape moved routing keys from the body into the path but kept every gate.
 
 ### Rules
 

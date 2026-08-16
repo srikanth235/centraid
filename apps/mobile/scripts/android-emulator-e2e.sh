@@ -62,8 +62,8 @@ adb shell settings put global hide_error_dialogs 1 || true
 
 node scripts/test-report/prepare.mjs
 # Non-short-circuit: every flow writes evidence even when an earlier journey
-# fails. template-gate covers the five WebView blueprints; native-v0-resilience
-# covers Photos, Docs, and Agenda, matching the iOS eight-app gate.
+# fails. native-v0-resilience covers Photos, Docs, and Agenda, matching the iOS
+# eight-app gate.
 #
 # The order below mirrors the iOS job's "Run all committed mobile journeys" step
 # (.github/workflows/e2e.yml) exactly, including the three experience probes
@@ -79,7 +79,6 @@ node scripts/test-report/prepare.mjs
 set +e
 ec=0
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
-MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/template-gate.mjs || ec=$?
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?

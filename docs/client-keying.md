@@ -13,7 +13,7 @@ Which UI/query state is keyed on which durable axis. Issue #504 batch 1.
 | **Active vault pointer** | Ambient shell context and untargeted requests | Sidebar vault switcher, sidebar identity |
 | **Gateway instance** | Live process | `instanceId` from `/centraid/_gateway/info` |
 | **Conversation id** | Ledger scope | Conversation list + turn pages |
-| **App id + vault** | Generated app / grants | App session, replica scope |
+| **App id + vault** | Which app, over which vault's grants | App session, replica scope |
 | **Scope SET** | Which scopes an inline app is mounted over | `InlineAppRoute` mount key (issue #599) |
 | **Conversation → vault** | Which vault a conversation addresses, for life | `conversationScopes.ts` (issue #599) |
 

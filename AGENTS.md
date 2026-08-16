@@ -2,7 +2,7 @@
 
 Read **[CONSTITUTION.md](CONSTITUTION.md)** and follow it. Its directives are enforced by hooks and CI, which name what to fix when they fail. Its principles are not — passing every gate does not make a change compliant, and defying a principle without explanation blocks the PR.
 
-Centraid is a personal app builder: a host-agnostic gateway ([`packages/gateway`](packages/gateway)) serving desktop, web PWA, and Expo mobile, with app scaffolding in [`packages/blueprints`](packages/blueprints) and visual identity in [`packages/design`](packages/design). Wiring, runtime model, and layout: [ARCHITECTURE.md](ARCHITECTURE.md). Stack: Bun + Turborepo + TypeScript; oxlint/oxfmt; vitest. Commands: [README.md](README.md).
+Centraid is a personal, local-first superapp: one shell wrapping many first-party apps over a sovereign vault. A host-agnostic gateway ([`packages/gateway`](packages/gateway)) serves desktop, web PWA, and Expo mobile; the bundled system apps live in [`packages/blueprints`](packages/blueprints) and visual identity in [`packages/design`](packages/design). Wiring, runtime model, and layout: [ARCHITECTURE.md](ARCHITECTURE.md). Stack: Bun + Turborepo + TypeScript; oxlint/oxfmt; vitest. Commands: [README.md](README.md).
 
 ## Docs
 

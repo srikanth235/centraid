@@ -65,16 +65,18 @@ describe("shared blueprint CSS", () => {
     }
   });
 
-  it("does not ship served React or CSS entrypoints for inline system apps", () => {
+  it("does not ship served React, HTML or CSS entrypoints for inline system apps", () => {
     for (const app of systemApps) {
       expect(
         existsSync(path.join(appDir, app, "app.tsx")),
         `${app}/app.tsx`
       ).toBe(false);
-      const html = readFileSync(path.join(appDir, app, "index.html"), "utf8");
-      expect(html, `${app}/index.html`).not.toMatch(
-        /<script|<link rel="stylesheet"/u
-      );
+      // The main client compiles these apps; no bundled app carries a
+      // document the gateway could serve (issue #799).
+      expect(
+        existsSync(path.join(appDir, app, "index.html")),
+        `${app}/index.html`
+      ).toBe(false);
     }
   });
 });

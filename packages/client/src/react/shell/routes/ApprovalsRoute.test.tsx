@@ -58,9 +58,6 @@ const navigate = vi.fn<ShellActions["navigate"]>();
 function makeActions(): ShellActions {
   return {
     showToast,
-    builderEnabled: false,
-    enterBuilder: vi.fn<ShellActions["enterBuilder"]>(),
-    openNewAppSheet: vi.fn<ShellActions["openNewAppSheet"]>(),
     openCommandPalette: vi.fn<ShellActions["openCommandPalette"]>(),
     openContextMenu: vi.fn<ShellActions["openContextMenu"]>(),
     confirm,

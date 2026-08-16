@@ -76,12 +76,10 @@ function MoreButton({
 export function AppCard({
   a,
   onOpen,
-  onEnterDraft,
   onContext,
 }: {
   a: HomeAppItemDTO;
   onOpen: (id: string) => void;
-  onEnterDraft: (id: string) => void;
   onContext: (id: string, anchor: HomeMenuAnchor) => void;
 }): JSX.Element {
   return (
@@ -100,7 +98,7 @@ export function AppCard({
         aria-labelledby={`app-tile-name-${a.id}`}
         data-testid="app-tile"
         data-kind="app"
-        onClick={() => (a.draft ? onEnterDraft(a.id) : onOpen(a.id))}
+        onClick={() => onOpen(a.id)}
         onContextMenu={(e) => {
           e.preventDefault();
           onContext(a.id, { kind: "point", x: e.clientX, y: e.clientY });

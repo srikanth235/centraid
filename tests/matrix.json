@@ -663,8 +663,6 @@
     "tunnel-pairing.performance": "JS fallback floor remains in tunnel-throughput.perf.test.ts; native QUIC budget is tests/perf/tunnel-native.perf.test.ts (nightly when native module present).",
     "blob-custody.durability": "Owned by packages/vault/src/blob/enospc-custody.integration.test.ts (always-on fault-injected ENOSPC). Real hdiutil path remains in disk-full.integration.test.ts behind CENTRAID_DISKFULL_E2E=1 (darwin).",
     "agent-runtime.journey": "packages/agent-runtime/src/backends/acp/journey.integration.test.ts carries two tests while also standing in for the app-engine journey and the three skipped desktop copilot specs; it is too thin for what it is asked to represent. Tracked under #781 (originally #656; copilot rig originally #657).",
-    "builder.publish": "Punted (#496): builder is not in v0. builder.spec.ts \"Publish posts to the gateway\" stays skipped with this product reason — declared gap, not fake solid.",
-    "desktop.copilot-e2e": "Unconditional Playwright skips in appview-templates-insights (7.2–7.4) target removed FAB UI; journey owned at agent-runtime.journey until #470 mock blueprint serving.",
     "mobile.scalability": "Owned by tests/agent-e2e-mobile/flows/volume-proof.mjs; records a nightly scalability budget and durable numeric measurements.",
     "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom). Tracked under #781 (originally #659).",
     "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume — one missed entry per auto per gap; not live fire). Tracked under #781 (originally #659).",
@@ -776,7 +774,7 @@
     "desktop.security": "apps/desktop/src/main/gateway-pairing-core.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
     "web.correctness": "apps/web/src/web-host.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
     "mobile.concurrency": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "mobile.security": "apps/mobile/src/lib/bridge/transfer-policy.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "mobile.security": "apps/mobile/src/lib/upload/transfer-policy.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
     "mobile.offline": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #781 (originally #656).",
     "tunnel-pairing.correctness": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
     "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
@@ -949,7 +947,7 @@
       "tier": "integration"
     },
     "gateway.contracts": {
-      "owner": "packages/gateway/src/serve/web-app-sessions.contract.test.ts",
+      "owner": "packages/gateway/src/serve/web-control-sessions.contract.test.ts",
       "tier": "contract"
     },
     "gateway.durability": {
@@ -1081,7 +1079,7 @@
       "tier": "integration"
     },
     "blueprints.correctness": {
-      "owner": "packages/blueprints/src/scaffold-boot.test.ts",
+      "owner": "packages/blueprints/src/app-boot-harness.ts",
       "tier": "integration"
     },
     "blueprints.contracts": {
@@ -1225,7 +1223,7 @@
       "tier": "scale"
     },
     "mobile.security": {
-      "owner": "apps/mobile/src/lib/bridge/transfer-policy.test.ts",
+      "owner": "apps/mobile/src/lib/upload/transfer-policy.test.ts",
       "tier": "unit"
     },
     "mobile.offline": {
@@ -2469,12 +2467,13 @@
     },
     {
       "id": "gateway-session-boundaries",
-      "name": "Control, app and device sessions remain isolated",
+      "name": "Control and device sessions remain isolated",
       "surface": "gateway",
       "dimension": "contracts",
       "tier": "contract",
-      "owner": "packages/gateway/src/serve/web-app-sessions.contract.test.ts",
-      "minimumTests": 13
+      "owner": "packages/gateway/src/serve/web-control-sessions.contract.test.ts",
+      "minimumTests": 8,
+      "approvedMinimumTestsDeviation": "#799 stage 2 retired the per-app browser session plane (the `__centraid_app_*` cookie minted at /centraid/_apps/<id>/web-session for a sandboxed app iframe). Five of this flow's thirteen cases drove ONLY that plane — app-scoped path grants, forged scope headers, app-cookie origin binding, revocation and expiry of an active app session — and they were deleted with the surface, not weakened. The eight remaining cases are the whole of the surviving control-session boundary: establish, origin binding, service-worker wake, persistence, logout, proxied DELETE, device-identity fail-closed, and control-cookie revocation."
     },
     {
       "id": "gateway-request-budget",
@@ -2543,11 +2542,11 @@
     },
     {
       "id": "blueprint-boot",
-      "name": "All eight built-in apps scaffold and boot",
+      "name": "All eight built-in apps boot",
       "surface": "blueprints",
       "dimension": "correctness",
       "tier": "integration",
-      "owner": "packages/blueprints/src/scaffold-boot.test.ts",
+      "owner": "packages/blueprints/src/app-boot-harness.ts",
       "minimumTests": 1
     },
     {
@@ -2558,6 +2557,17 @@
       "tier": "e2e",
       "owner": "apps/desktop/tests/e2e/onboarding-home.spec.ts",
       "minimumTests": 13
+    },
+    {
+      "id": "desktop-app-open-journey",
+      "name": "Opening, renaming and managing an installed app from Home",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/onboarding-home.spec.ts",
+      "minimumTests": 6,
+      "replacesMinimumTestsFlow": "desktop-builder-journey",
+      "approvedMinimumTestsDeviation": "#799 stage 2 deleted the app builder and apps/desktop/tests/e2e/builder.spec.ts with it: five of desktop-builder-journey's six cases (palette Create, streamed builder turn, failed Publish, Preview iframe, Code tab, Cloud Logs) drove surfaces that no longer exist. Its one surviving premise — reaching an installed app and acting on it from Home — is already exercised by onboarding-home.spec.ts's app-lifecycle half (open a tile, open from the palette, rename, the tile context menu, the Photos seat), so the floor of 6 transfers here rather than evaporating. onboarding-home.spec.ts declares 18 cases against a combined floor of 19; the split names which duties each flow carries."
     },
     {
       "id": "web-real-journey",
@@ -2650,6 +2660,17 @@
       "minimumTests": 1
     },
     {
+      "id": "mobile-native-v0-resilience",
+      "name": "Native app covers survive gateway loss, restart, and cold start",
+      "surface": "mobile",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs",
+      "minimumTests": 13,
+      "replacesMinimumTestsFlow": "mobile-template-gate",
+      "approvedMinimumTestsDeviation": "#799 retired the mobile WebView app cover, and with it the served-app plane on the phone: all eight bundled apps route to native covers, so template-gate's premise (a bundled UI template rendering inside the phone's WebView) names a surface that no longer exists. Its journey coverage was ALREADY delegated to this flow — template-gate.md said so in its own scope note (\"the eight native apps are covered by the native resilience flow\") and it short-circuited to a trivial pass because its own NATIVE_ON_MOBILE set covers all eight kind:\"app\" templates in packages/blueprints/index.json, leaving it nothing to gate. The floor did not shrink: template-gate's was 7, this flow is pinned at 13 declared checks (a floor, not a ceiling)."
+    },
+    {
       "id": "mobile-photos-permissions",
       "name": "Native Photos denied-permission empty-vault takeover",
       "surface": "mobile",
@@ -2657,15 +2678,6 @@
       "tier": "e2e",
       "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs",
       "minimumTests": 1
-    },
-    {
-      "id": "mobile-template-gate",
-      "name": "Native template gate journey (clone/install/open UI templates)",
-      "surface": "mobile",
-      "dimension": "journey",
-      "tier": "e2e",
-      "owner": "tests/agent-e2e-mobile/flows/template-gate.mjs",
-      "minimumTests": 7
     },
     {
       "id": "tunnel-wire",
@@ -3227,22 +3239,14 @@
       "minimumTests": 2
     },
     {
-      "id": "desktop-builder-journey",
-      "name": "Builder: palette create, streamed turn, publish and failure surfaces",
-      "surface": "desktop",
-      "dimension": "journey",
-      "tier": "e2e",
-      "owner": "apps/desktop/tests/e2e/builder.spec.ts",
-      "minimumTests": 6
-    },
-    {
       "id": "desktop-delete-app-journey",
-      "name": "Deleting draft and published apps deregisters on the gateway and clears local state",
+      "name": "App settings on a bundled inline app has no Delete and fires no DELETE",
       "surface": "desktop",
       "dimension": "journey",
       "tier": "e2e",
       "owner": "apps/desktop/tests/e2e/delete-app.spec.ts",
-      "minimumTests": 8
+      "minimumTests": 8,
+      "approvedMinimumTestsDeviation": "#799 retired the served-app plane, so draft/code-store Delete-via-App-settings cannot be reached: custom apps no longer mount an app view. The eight cases stay in delete-app.spec.ts but now drive the live bundled surface (Tasks): settings opens, Manage has no Delete (#708), and dismiss/Home paths fire no DELETE. Floor stays 8 — the journey transferred, it did not shrink."
     },
     {
       "id": "desktop-launch-time",

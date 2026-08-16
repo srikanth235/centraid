@@ -1186,10 +1186,9 @@ export interface HomeAppItemDTO {
   colorKey?: ColorKey;
   /** Legacy card-paint fallback for older screen harnesses. */
   tile?: HomeTileDTO;
-  tone: "new" | "draft" | null;
+  tone: "new" | null;
   stamp: string;
   starred: boolean;
-  draft: boolean;
 }
 export interface HomeAutoItemDTO {
   ref: string;
@@ -1613,81 +1612,11 @@ export interface AppSettingsBridgeProps {
   onMountVault: (host: HTMLElement) => void;
 }
 
-// ── Builder chat pane ────────────────────────────────────────────────────────
-// The builder's right pane (preview / code / cloud / config / runs / flow) stays
-// vanilla — iframe host, code editor, cloud rail. Only the left CHAT pane moves
-// to React. The vanilla `openBuilder` closure keeps the SSE harness stream, the
-// `chat` message model, and all turn state; it derives a snapshot on every
-// change (the single `renderChat()` funnel) and pushes it. React renders the
-// transcript, the determinate harness-progress strip, and the composer. The
-// version-history view stays a vanilla async renderer, injected into a host div
-// via `onMountHistory`.
-export type BuilderMsgDTO =
-  | { kind: "divider"; text: string }
-  | { kind: "status"; text: string; spinning: boolean }
-  | { kind: "user"; text: string }
-  | { kind: "ai"; paras: string[] }
-  | { kind: "thinking"; text: string; streaming: boolean; header: string }
-  | {
-      kind: "toolGroup";
-      id: string;
-      label: string;
-      open: boolean;
-      running: boolean;
-      error: boolean;
-      rows: {
-        state: "running" | "ok" | "error";
-        verb: string;
-        target: string;
-      }[];
-      change: { count: number; subtitle: string; version: string } | null;
-    };
-export interface BuilderProgressDTO {
-  verb: string;
-  file: string;
-  sub: string;
-  filled: number;
-}
-export interface BuilderChatSnapshot {
-  view: "chat" | "history";
-  messages: BuilderMsgDTO[];
-  generating: boolean;
-  /** Live turn progress; present only while `generating`. */
-  progress: BuilderProgressDTO | null;
-  suggestions: string[];
-  /** `true` while a turn is in flight or before an app id exists. */
-  composerDisabled: boolean;
-  /** Bumps to force a history-view re-fetch after a version op. */
-  historyNonce: number;
-  context?: { used: number; size: number };
-  model?: string;
-  effort?: string;
-  /** Capability-backed attended harness controls for this builder conversation. */
-  harnessConfig?: AsstModelPickerDTO;
-  workspaceKind: "vault-data" | "app" | "draft";
-  workspaceKinds: Array<"vault-data" | "app" | "draft">;
-}
-/** A builder-composer attachment ref (mirrors ConversationAttachmentRef). */
+// ── Composer attachments ─────────────────────────────────────────────────────
+/** A composer attachment ref (mirrors ConversationAttachmentRef). */
 export interface BuilderAttachmentRef {
   hash: string;
   mime: string;
   sizeBytes: number;
   filename?: string;
-}
-export interface BuilderChatBridgeProps {
-  onReady: (update: (s: BuilderChatSnapshot) => void) => void;
-  /** Send a turn, optionally with files uploaded ahead of it (issue #420). */
-  onSend: (text: string, attachments?: BuilderAttachmentRef[]) => void;
-  onCancel: () => void;
-  onToggleGroup: (id: string) => void;
-  onSetView: (view: "chat" | "history") => void;
-  onSetWorkspaceKind: (kind: "vault-data" | "app" | "draft") => void;
-  onSetHarness: (harnessKind: HarnessKind) => Promise<AsstModelPickerDTO>;
-  onSetModel: (modelId: string) => void;
-  onSetEffort: (effort: string) => void;
-  /** Fill the version-history host — vanilla owns the async renderer. */
-  onMountHistory: (host: HTMLElement) => void;
-  /** Upload one file to the app's blob CAS (issue #420). When omitted, the
-   *  composer's attach button is hidden (e.g. before the app exists). */
-  onUploadAttachment?: (file: File) => Promise<BuilderAttachmentRef>;
 }

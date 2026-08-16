@@ -79,9 +79,7 @@ export function parseUnifiedDiffAddedLines(diffText) {
 export function isInstrumentableSource(filePath) {
   if (!/^(?:packages|apps)\//u.test(filePath)) return false;
   const conventionalSource = filePath.includes("/src/");
-  const blueprintRuntime =
-    filePath.startsWith("packages/blueprints/apps/") ||
-    filePath.startsWith("packages/design/kit/");
+  const blueprintRuntime = filePath.startsWith("packages/blueprints/apps/");
   if (!conventionalSource && !blueprintRuntime) return false;
   if (!/\.(?:ts|tsx|js|jsx|mjs|cjs)$/u.test(filePath)) return false;
   if (/\.(?:test|spec)\.(?:ts|tsx|js|jsx|mjs|cjs)$/u.test(filePath))

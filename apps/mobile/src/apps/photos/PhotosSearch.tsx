@@ -164,9 +164,8 @@ export function PhotosSearchView({
   // of whether this fetch ever lands.
   const [semanticHits, setSemanticHits] = useState<SemanticHit[]>();
   // Bumped by Retry. The query effect depends on it, so pressing Retry re-runs
-  // the SAME query rather than sending the member somewhere else — the old
-  // "Search online" control navigated to AppDetail, which is not a retry and
-  // not a search.
+  // the SAME query rather than navigating the member away — leaving the screen
+  // is neither a retry nor a search.
   const [attempt, setAttempt] = useState(0);
 
   const collections = useReplicaQuery(

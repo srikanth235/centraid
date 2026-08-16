@@ -6,9 +6,9 @@
 
 import { File, Paths, UploadType } from "expo-file-system";
 
-import { assertGatewayMintedUploadUrl } from "../bridge/transfer-policy";
-import type { BackgroundTransferScope } from "../bridge/transfer-policy";
 import type { FileSource, FileSourceOpener } from "./file-source";
+import { assertGatewayMintedUploadUrl } from "./transfer-policy";
+import type { BackgroundTransferScope } from "./transfer-policy";
 import type { PartPutter } from "./uploader";
 
 /**

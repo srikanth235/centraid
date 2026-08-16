@@ -1,3 +1,5 @@
+import { armConfirm } from "@centraid/design/elements";
+
 // Album detail's own row (v4 handoff §5): "Album detail keeps the app bar,
 // drops the shelf strip, adds a way back, and carries the album's own title
 // and count in the bar."
@@ -11,7 +13,6 @@
 // before it fires — the kit's `armConfirm`, the same confirmation every
 // destructive action in this app uses on every surface.
 import { ChevronLeftIcon } from "../icons.tsx";
-import { armConfirm } from "../kit.ts";
 import { InlineInput } from "./InlineInput.tsx";
 
 import styles from "./AlbumBar.module.css";

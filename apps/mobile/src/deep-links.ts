@@ -69,7 +69,6 @@ export const LINKING: LinkingOptions<RootStackParamList> = {
       People: "apps/people",
       Notes: "apps/notes",
       Tally: "apps/tally",
-      AppDetail: "apps/:appId",
       Assistant: "assistant",
       Automations: "automations",
       Insights: "insights",

@@ -308,7 +308,7 @@ test("test classification follows the TESTING.md path conventions", () => {
   for (const p of [
     "packages/gateway/src/serve/vault-plane.test.ts",
     "packages/gateway/src/serve/gateway-db-lock.integration.test.ts",
-    "packages/client/src/web-app-sessions.contract.test.ts",
+    "packages/client/src/web-control-sessions.contract.test.ts",
     "apps/web/tests/e2e/share.spec.ts",
     "packages/gateway/src/serve/peer-give.test-fixtures.ts",
     "packages/gateway/src/serve/outbox-executor-test-kit.ts",

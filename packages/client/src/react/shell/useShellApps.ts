@@ -101,7 +101,6 @@ export function resetInstalledAppsCache(): void {
  *  Also the unit an optimistic app mutation edits (issue #659). */
 export interface ShellAppsSnapshot {
   userApps: UserAppMeta[];
-  drafts: DraftAppMeta[];
 }
 
 /** The reconcile pass, shared by the mount effect and the imperative
@@ -113,8 +112,6 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
   // launch with the gateway down had nothing to show and Home rendered its
   // day-one empty state on a vault holding a fully synced replica — the one
   // moment the offline copy exists for. Fall back to what the last successful
-  // reconcile saw. Drafts stay empty: a draft is a builder-side row and there
-  // is no honest offline answer for it.
   if (projs === null) {
     const active = await activeVaultKey();
     const cached = readInstalledCache(active ?? lastKnownVaultKey());
@@ -125,7 +122,7 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
     const known = lastKnownVaultKey();
     if (cached.length === 0 && (active === null || active === known))
       return null;
-    return { drafts: [], userApps: cached };
+    return { userApps: cached };
   }
   const liveIds = new Set(projs.map((p) => p.id));
   // Read the current pins straight from the Store so the reconcile doesn't need
@@ -182,10 +179,9 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
   // Before this, "installed" meant "a pin the Discover install flow wrote into
   // local storage". Retiring the catalogue removed the only writer, so an app
   // the gateway had installed reached the client as an unpinned listing row —
-  // which the branch below classifies as a DRAFT, and drafts are hidden
-  // entirely while the builder is off. Home therefore stayed empty on a vault
-  // that owned all eight apps: the pin store had become a cache of a decision
-  // nothing made any more.
+  // which nothing rendered. Home therefore stayed empty on a vault that owned
+  // all eight apps: the pin store had become a cache of a decision nothing
+  // made any more.
   //
   // Derived every pass and deliberately NOT persisted: the gateway is the
   // source of truth for what a vault has, and writing these back as pins would
@@ -216,32 +212,14 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
   // "unknown", which would file one vault's grid where any vault could read it.
   writeInstalledCache(vid, installed);
 
-  const knownIds = new Set(installed.map((a) => a.id));
-  const drafts = projs
-    .filter((p) => p.kind !== "automation")
-    .filter((p) => !knownIds.has(p.id))
-    .map((p) => {
-      const vis = tileVisualFromListing(p);
-      return {
-        __draft: true,
-        color: vis?.color ?? colorForIcon("Sparkle"),
-        colorKey: vis?.colorKey ?? "violet",
-        desc: p.description || "Draft — not yet published",
-        hasIndex: !!p.hasIndex,
-        iconKey: vis?.iconKey ?? "Sparkle",
-        id: p.id,
-        name: p.name || p.id,
-      } as DraftAppMeta;
-    });
-  return { drafts, userApps: installed };
+  return { userApps: installed };
 }
 
 export interface ShellAppsController {
   userApps: UserAppMeta[];
-  drafts: DraftAppMeta[];
   /** True until the first installed-app reconcile has settled. */
   loading: boolean;
-  /** Re-hydrate drafts + reconcile pins from the gateway listing. */
+  /** Reconcile pins against the gateway listing. */
   refresh: () => Promise<void>;
   /** Replace the installed-apps list (used by CRUD paths) and persist it. */
   setUserApps: (next: UserAppMeta[]) => void;
@@ -257,17 +235,14 @@ export interface ShellAppsController {
   ) => Promise<void>;
 }
 
-// The shell's live app state, ported from the vanilla app.ts `hydrateDrafts`
-// + `persist`. `userApps` (home pins) live in the local Store; `drafts` are
-// on-disk apps not yet pinned, hydrated from `listApps()`. refresh() reconciles
-// pins against the gateway's source of truth (pruning orphans), overlays each
-// pin's visual identity from its app.json listing (#263), then derives the
-// draft list. Immutable throughout so React re-renders on change.
+// The shell's live app state. `userApps` (home pins) live in the local Store;
+// refresh() reconciles them against the gateway's source of truth (pruning
+// orphans) and overlays each pin's visual identity from its app.json listing
+// (#263). Immutable throughout so React re-renders on change.
 export function useShellApps(): ShellAppsController {
   const [userApps, setUserApps] = useState<UserAppMeta[]>(() =>
     Store.get<UserAppMeta[]>("home.userApps", [])
   );
-  const [drafts, setDrafts] = useState<DraftAppMeta[]>([]);
   const [loading, setLoading] = useState(true);
 
   const updateUserApps = useCallback((next: UserAppMeta[]) => {
@@ -277,12 +252,10 @@ export function useShellApps(): ShellAppsController {
 
   const apply = useCallback((snapshot: ShellAppsSnapshot | null) => {
     if (snapshot === null) {
-      setDrafts([]);
       setLoading(false);
       return;
     }
     setUserApps(snapshot.userApps);
-    setDrafts(snapshot.drafts);
     setLoading(false);
   }, []);
 
@@ -302,9 +275,9 @@ export function useShellApps(): ShellAppsController {
 
   // Read through refs so the mutation does not have to re-create itself (and
   // re-render every consumer) each time the lists change.
-  const latest = useRef<ShellAppsSnapshot>({ userApps, drafts });
+  const latest = useRef<ShellAppsSnapshot>({ userApps });
   useEffect(() => {
-    latest.current = { userApps, drafts };
+    latest.current = { userApps };
   });
 
   const mutateApps = useCallback(
@@ -319,7 +292,6 @@ export function useShellApps(): ShellAppsController {
         write: (next) => {
           latest.current = next;
           setUserApps(next.userApps);
-          setDrafts(next.drafts);
         },
         apply: edit,
         commit,
@@ -330,7 +302,6 @@ export function useShellApps(): ShellAppsController {
 
   return {
     userApps,
-    drafts,
     loading,
     refresh,
     setUserApps: updateUserApps,

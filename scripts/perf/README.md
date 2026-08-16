@@ -8,26 +8,28 @@ Instrumentation + CI budgets for the mobile/PWA fast path. It measures what it c
 
 The spec `apps/web/tests/e2e/perf-waterfall.spec.ts` runs three tests against the real e2e harness gateway (`apps/web/tests/e2e/server.ts`, which installs the `web-e2e` app and serves the shell over HTTP on `127.0.0.1:4173` with the service worker active):
 
-1. **App-open waterfall — shell + iframe, cold vs warm.** Loads the shell cold (empty cache), captures `performance.getEntriesByType('resource')` + navigation transfer, reloads into a signed-in shell to capture the warm load, then opens the installed app iframe cold and warm from the iframe's own origin (cross-origin timing would read 0 bytes). Writes `apps/web/test-results/perf-waterfall-report.json`.
+1. **App-open waterfall — shell + inline app route, cold vs warm.** Loads the shell cold (empty cache), captures `performance.getEntriesByType('resource')` + navigation transfer, reloads into a signed-in shell to capture the warm load, then opens a bundled app (Tasks) from the command palette twice. Since [#799](https://github.com/srikanth235/centraid/issues/799) retired the served-app iframe there is no second window: an app open is a dynamic `import()` of that app's lazy chunk inside the shell document, so the open's cost is measured as the **same-origin tail of the shell page's own resource timeline** between the palette click and the mounted app. Writes `apps/web/test-results/perf-waterfall-report.json`.
 2. **SW tunnel cache.** The page plays the tunnel-bridge role (as `web-pwa-cache.spec.ts` does), so it runs without the Iroh WASM. Proves a warm re-open is served from the service-worker cache: bridge round trips and tunnel-fetched bytes both collapse (the wave-1 SW-caching win).
 3. **QUIC connection-pool instrumentation.** Drives several tunnel requests and reads `globalThis.__centraidIrohStats` to prove many request **streams** ride one endpoint **connect** (pool reuse). Falls back to asserting the instrumentation contract if the headless harness can't spawn a live iroh endpoint.
 
-## Measured baseline (2026-07-14, headless Chromium)
+## Measured baseline (2026-08-15, headless Chromium, post-#799 inline app route)
 
-| phase      | requests | transfer  | warm/cold |
-| ---------- | -------- | --------- | --------- |
-| shell cold | 6        | ~1,041 KB | —         |
-| shell warm | 5        | 0 B       | 0.00      |
-| app cold   | 0\*      | ~1.98 KB  | —         |
-| app warm   | 0\*      | ~1.98 KB  | 0.999     |
+| phase      | requests | transfer | encoded\* | warm/cold |
+| ---------- | -------- | -------- | --------- | --------- |
+| shell cold | 14       | ~448 KB  | —         | —         |
+| shell warm | 16       | 0 B      | —         | 0.00      |
+| app cold   | 8–9      | 0 B†     | ~110 KB   | —         |
+| app warm   | 0        | 0 B      | 0 B       | 0.00      |
 
-QUIC pool: `{connects: 1, streams: 12, reconnects: 8}` → connects/streams ≈ 0.08. SW tunnel cache: cold `calls=2 bytes=12288` → warm `calls=1 bytes=0`.
+QUIC pool (2026-07-14): `{connects: 1, streams: 12, reconnects: 8}` → connects/streams ≈ 0.08. SW tunnel cache: cold `calls=2 bytes=12288` → warm `calls=1 bytes=0`.
 
-\* The `web-e2e` fixture is a bare HTML doc with an **inlined** runtime and no external subresources, so the iframe has 0 `resource` entries; its cost is the no-store navigation document (~1.98 KB). The shell bundle (the ~708 KB `boot` chunk) is where the fast-path cost — and the bundling workstream's win — lives.
+\* `encoded` is `encodedBodySize` summed over the same-origin resources an app open pulled. It exists because `transferSize` cannot fence app weight any more (see †). Cache Storage holds **decoded** bodies, so these read as uncompressed sizes — a weight ratchet, not a wire-cost estimate.
+
+† Zero, and correctly so: `sw.js` crawls the lazy-chunk graph during install, and the probe waits for `serviceWorker.controller` before opening, so every inline-app chunk is answered from the SW cache. An app open on a warm shell costs **no network bytes at all** — a real improvement on the retired iframe path, whose app document was `no-store` and re-transferred ~1.98 KB on every open. What the cold open does load is the app's own `app-inline` chunk plus its CSS and the shared chunks the first app open pulls in; a **warm** re-open loads nothing, because the module registry already holds the descriptor. The shell bundle (the ~1.1 MB `boot` chunk) is still where the fast-path cost — and the bundling workstream's win — lives.
 
 ## Seeded volume (the calibration gap)
 
-Per [docs/coding-standards.md](../../docs/coding-standards.md) ("Scale rigs are calibrated to year-3 volumes"), a rig states the data volume its numbers were measured at. This one's is **empty**: the `web-e2e` fixture is a single bare app in a fresh vault, so every number above is a cold-start cost, not a scale cost. Treat the budgets as a bundle/transport ratchet only — they cannot catch an O(vault-size) regression, because there is no vault size here to be O(). A rig seeded to declared year-3 volumes is the missing half, and its volume table belongs in this section when it lands.
+Per [docs/coding-standards.md](../../docs/coding-standards.md) ("Scale rigs are calibrated to year-3 volumes"), a rig states the data volume its numbers were measured at. This one's is **empty**: the harness runs a fresh vault with no rows in it, and the app the probe opens (Tasks) mounts against that empty scope, so every number above is a cold-start cost, not a scale cost. Treat the budgets as a bundle/transport ratchet only — they cannot catch an O(vault-size) regression, because there is no vault size here to be O(). A rig seeded to declared year-3 volumes is the missing half, and its volume table belongs in this section when it lands.
 
 ## Running it
 
@@ -52,7 +54,9 @@ cd apps/web && bun run e2e            # runs every tests/e2e/*.spec.ts, incl. pe
 
 `run-waterfall.mjs` runs a bare `vite build`. The web app's real build is `bun run --cwd apps/web build`, which is `… && vite build && node scripts/precompress.mjs` — so the runner **skips `precompress.mjs`**, and because `emptyOutDir` is on, it also **deletes the `.br`/`.gz` sidecars any previous full build left behind.**
 
-`transferSize` is the **compressed** size. Measured through the runner, the cold shell reads about **1.79 MB**; measured against a properly precompressed dist it is about **422 KB**. Same code, same spec — a 4× difference that is entirely serving, not the bundle.
+`transferSize` is the **compressed** size. Measured through the runner, the cold shell reads about **1.79 MB**; measured against a properly precompressed dist it is about **448 KB**. Same code, same spec — a 4× difference that is entirely serving, not the bundle.
+
+The app-open `encoded` column is immune to this — it is the decoded body size the service worker cached, so it does not move with precompression — but the app-open **transfer** column and the shell numbers both do.
 
 This has already cost one investigation (issue #659). The request counts and the warm/cold ratio are unaffected, so those stay trustworthy either way; only byte totals are distorted.
 
@@ -70,9 +74,9 @@ Use `run-waterfall.mjs` for request counts, ratios, and the QUIC pool numbers; u
 
 All ceilings live in one file: **`apps/web/tests/e2e/perf-budgets.ts`**. Each number is documented inline with its measured value and headroom rationale.
 
-- **Hard gates:** request counts, transfer bytes, and the warm/cold + SW-tunnel
-  - connect/stream ratios. These fail the build.
-- **Soft gates:** wall-clock timings are log-only (`enforceTiming = false`) — wall clock on a shared CI runner is the flakiest signal. Flip `enforceTiming` to `true` and tighten the ceilings only once ~20 green CI runs show they're stable.
+- **Hard gates:** request counts, transfer bytes, app-open encoded bytes, and the warm/cold + SW-tunnel + connect/stream ratios. These fail the build.
+- **Wall-clock gates:** the cold/warm open ceilings in `perfBudgets.timing` are now enforced too (`enforceTiming = true`, issue #468 L5). They are deliberately generous, because wall clock on a shared CI runner is the flakiest signal here.
+- **Anti-vacuity:** the cold shell and the cold app open must each measure more than zero bytes. Without those two assertions a probe that silently stopped measuring would post the best numbers in the file.
 
 **When the bundling / code-split workstream lands** (or a richer app fixture is wired), the request counts and byte totals will change:
 

@@ -23,13 +23,10 @@
 // future UI that wanted to reopen this would have to touch this file and
 // argue the case, not just import a wider string.
 //
-// THIS TYPE IS A HAND-MAINTAINED MIRROR, not an import. Blueprint apps are
-// served straight to a browser (`packages/app-engine/src/http/static-server.ts`
-// esbuild-transforms `.ts` on request; nothing here goes through a bundler
-// that could tree-shake a backend-only module away), so this file never
-// imports `@centraid/vault` — that package is Node-only (`node:sqlite`,
-// `better-sqlite3`) and has no business resolving in a browser's module
-// graph, even for types. `packages/blueprints/src/placement-registry.test.ts`
+// THIS TYPE IS A HAND-MAINTAINED MIRROR, not an import. Blueprint apps run in
+// the browser, so this file never imports `@centraid/vault` — that package is
+// Node-only (`node:sqlite`, `better-sqlite3`) and has no business resolving in
+// a browser's module graph, even for types. `packages/blueprints/src/placement-registry.test.ts`
 // source-scans `closure.ts`'s `ShareableItemType` literal and asserts this
 // union stays exactly that list minus `"locker.item"`, so the two can never
 // drift silently.

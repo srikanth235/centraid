@@ -80,11 +80,9 @@ export interface ShellAppProps {
   renderAppBar?: (nav: ShellNav) => ShellAppBar | undefined;
   /** The page body for the current route (the outlet). */
   renderScreen: (nav: ShellNav) => ReactNode;
-  /** Routes that paint their own full window (app view, builder) and so
-   *  bypass the chrome frame. Defaults to app + builder kinds. */
+  /** Routes that paint their own full window (an inline app, the automation
+   *  handoff) and so bypass the chrome frame. */
   isFullBleed?: (route: ShellRoute) => boolean;
-  /** New-app affordance in the app bar. */
-  onNewApp?: () => void;
   /** Receives the current nav surface whenever it changes, so the App root can
    *  wire document-level shortcuts + external re-scope (gateway/vault change)
    *  against live navigation without owning the router. */
@@ -105,7 +103,7 @@ export interface ShellAppProps {
 }
 
 const DEFAULT_FULL_BLEED = (r: ShellRoute): boolean =>
-  r.kind === "app" || r.kind === "builder" || r.kind === "automation-builder";
+  r.kind === "app" || r.kind === "automation-builder";
 
 /**
  * A real component boundary around a render-prop outlet (issue #659).
@@ -138,7 +136,6 @@ export default function ShellApp({
   renderAppBar,
   renderScreen,
   isFullBleed = DEFAULT_FULL_BLEED,
-  onNewApp,
   onNavReady,
   statusLine,
   renderAssistantCompanion,
@@ -261,8 +258,6 @@ export default function ShellApp({
       canGoForward={nav.canGoForward}
       onBack={() => nav.back()}
       onForward={() => nav.forward()}
-      showNewChat={Boolean(onNewApp)}
-      onNewChat={onNewApp}
     >
       {screen}
     </ShellFrame>

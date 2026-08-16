@@ -43,7 +43,6 @@ interface AppRow {
   name?: string;
   description?: string;
   kind?: string;
-  hasIndex?: boolean;
   iconKey?: string;
   colorKey?: string;
 }
@@ -106,13 +105,12 @@ describe("install-over-http scenarios", () => {
     ])
       expect(ids, `${id} installed at mount`).toContain(id);
 
-    // Metadata comes from the shipped blueprint dir (name + hasIndex prove the
-    // resolver read the package, not an empty code store), and the app keeps
-    // the blueprint's own id — no suggestCloneIdentityFrom minting.
+    // Metadata comes from the shipped blueprint dir (the display name proves
+    // the resolver read the package, not an empty code store), and the app
+    // keeps the blueprint's own id — no suggestCloneIdentityFrom minting.
     const row = (await listApps()).find((a) => a.id === "tasks");
     expect(row!.name).toBe("Tasks");
     expect(row!.kind).toBe("app");
-    expect(row!.hasIndex).toBe(true);
 
     // Nothing was written to the git code store — no versions exist.
     const versions = await fetch(
@@ -404,16 +402,19 @@ describe("install-over-http scenarios", () => {
     expect(after.find((t) => t.id === "notes")?.installed).toBe(true);
   });
 
-  test("the listing is a union — installed bundled app + code-store scaffold, no duplicates", async () => {
+  test("the listing is a union — installed bundled app + code-store app, no duplicates", async () => {
     await install("tasks");
 
-    // Scaffold + publish a code-store app the old way.
-    const create = await fetch(`${handle.url}/centraid/_apps`, {
+    // Publish a code-store app. Automations are the only code the store still
+    // takes since #799 retired the blank-app scaffold with the served plane.
+    const create = await fetch(`${handle.url}/centraid/_automations`, {
       method: "POST",
       headers: jsonAuth(),
       body: JSON.stringify({
         id: "myscratch",
         name: "My Scratch",
+        prompt: "summarize the day",
+        triggers: [{ kind: "cron", expr: "0 9 * * *" }],
         publish: true,
       }),
     });
@@ -426,11 +427,17 @@ describe("install-over-http scenarios", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  test("bundled ids are reserved — scaffold and clone of a bundled id are refused", async () => {
-    const scaffold = await fetch(`${handle.url}/centraid/_apps`, {
+  test("bundled ids are reserved — a code-store create and clone of a bundled id are refused", async () => {
+    const scaffold = await fetch(`${handle.url}/centraid/_automations`, {
       method: "POST",
       headers: jsonAuth(),
-      body: JSON.stringify({ id: "tasks", name: "Impostor", publish: true }),
+      body: JSON.stringify({
+        id: "tasks",
+        name: "Impostor",
+        prompt: "impersonate",
+        triggers: [{ kind: "cron", expr: "0 9 * * *" }],
+        publish: true,
+      }),
     });
     expect(scaffold.status).toBe(409);
 

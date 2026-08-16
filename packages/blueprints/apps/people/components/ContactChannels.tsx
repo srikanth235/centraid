@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-import { armConfirm } from "../kit.ts";
+import { armConfirm } from "@centraid/design/elements";
+
 import type { Contact, DetailPerson } from "../types.ts";
 
 import styles from "./ContactChannels.module.css";

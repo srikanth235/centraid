@@ -1,3 +1,5 @@
+import { debounce } from "@centraid/design/elements";
+
 // The server-search round trip (issue #352 phase 3): debounced like Docs'
 // own search box (docs/app.tsx). app.tsx keeps `searchQuery`/`searchResults`
 // as its own state (same as `assets`/`albums`) and merges the server hits
@@ -21,7 +23,6 @@
 import { mountedScopes, ownScopeId } from "../_shared/scope-kit.ts";
 import { mergeScopePages } from "../_shared/scope-merge.ts";
 import { perScopeReach, scopeReachFacts } from "../_shared/search-scaffold.ts";
-import { debounce } from "./kit.ts";
 import {
   photoDedupeIdentity,
   photosScopeDeclaration,

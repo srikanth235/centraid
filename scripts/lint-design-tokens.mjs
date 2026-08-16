@@ -22,7 +22,7 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const TARGETS = [
   "packages/client/src",
   "packages/blueprints/apps",
-  "packages/design/kit",
+  "packages/design/src/elements",
   "apps/web/src",
   "apps/extension/static",
 ];

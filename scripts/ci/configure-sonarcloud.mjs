@@ -49,7 +49,6 @@ const SOURCE_EXCLUSIONS = [
   ".github/**",
   "tests/**",
   "packages/tunnel/**",
-  "packages/blueprints/visual-harness/**",
   "packages/blueprints/.app-boot/**",
   "packages/blueprints/kit/**",
   // Release-generated recognition bundles are deployed artifacts; their
@@ -88,7 +87,6 @@ const SOURCE_EXCLUSIONS = [
 ];
 
 const CPD_EXCLUSIONS = [
-  "**/visual-harness/**",
   "**/generated/**",
   "**/fixtures.ts",
   "**/*fixture*",
@@ -111,7 +109,6 @@ const COVERAGE_EXCLUSIONS = [
   "**/e2e/**",
   "**/vitest.config.*",
   "**/stryker.config.*",
-  "**/visual-harness/**",
   "**/generated/**",
   "scripts/**",
   "packages/test-kit/**",

@@ -117,9 +117,6 @@ export const PlaceDetail = lazyScreen(
 );
 export const TallyHome = lazyScreen(() => import("./src/apps/tally/TallyHome"));
 export const TasksHome = lazyScreen(() => import("./src/apps/tasks/TasksHome"));
-export const AppDetailScreen = lazyScreen(
-  () => import("./src/screens/AppDetail")
-);
 export const ApprovalsScreen = lazyScreen(
   () => import("./src/screens/Approvals")
 );

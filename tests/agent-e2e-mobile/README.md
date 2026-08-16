@@ -137,8 +137,6 @@ Authoring rules of thumb (carried over from desktop):
 | Committed regression (this dir) | `node flows/<slug>.mjs` → `maestro test` | flows that stabilized and you want runnable |
 | CI-grade native invariants | committed Maestro flows in this directory | hard runtime, gesture, accessibility, and OS-state claims that unit/component layers cannot falsify |
 
-For tight DOM-level assertions inside the in-app WebView (the `AppDetail` screen), `apps/desktop/tests/e2e/`-style Playwright over CDP against the WebView's debug port is the right tier, not Maestro.
-
 ## Android setup
 
 The Android path is more stable than iOS at this stage (Maestro 2.x's UIAutomator2 driver hardens against Android API churn faster than its XCUITest driver against iOS 26.4). One-time setup:

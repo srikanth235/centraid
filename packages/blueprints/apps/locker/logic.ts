@@ -1,4 +1,3 @@
-import { CAT_ORDER, byTitle, catOf } from "./format.ts";
 // Non-visual business logic: vault IO (write/act), item CRUD, nav/search,
 // the clipboard-clear timer and the pure list/sidebar derivations.
 // `createLogic` closes over app.tsx's own `state`/`data` (mutated in place,
@@ -6,7 +5,13 @@ import { CAT_ORDER, byTitle, catOf } from "./format.ts";
 // the same factory shape tasks/notes/agenda's logic.ts use. The pure
 // derivations (`currentPool`/`sidebarCounts`/`catCounts`/`sidebarTags`) need
 // no closure and are exported standalone so components can call them too.
-import { debounce, outcomeMessage, statusLine } from "./kit.ts";
+import {
+  debounce,
+  outcomeMessage,
+  statusLine,
+} from "@centraid/design/elements";
+
+import { CAT_ORDER, byTitle, catOf } from "./format.ts";
 import { genPassword } from "./totp.ts";
 import type {
   AppData,
@@ -347,7 +352,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
 // Seconds a copied secret is allowed to live on the clipboard before we wipe
 // it (issue #298 item 5): copy-password legitimately crosses into the OS
 // clipboard, and from there into clipboard-history tools. We can't reach the
-// native `org.nspasteboard.ConcealedType` mark from this sandboxed iframe
+// native `org.nspasteboard.ConcealedType` mark from a browser context
 // (navigator.clipboard only speaks text/html/png), so the portable
 // mitigation is a timed clear — and we only clear if the clipboard STILL
 // holds the value we put there, never clobbering a later copy.
@@ -403,9 +408,8 @@ export function clearSecretClipboard(): void {
 
 export function copy(text: string, label?: string, secret?: boolean) {
   // writeText returns a promise — a sync try/catch never sees its rejection
-  // (it surfaced as an unhandled NotAllowedError pageerror: the shell's app
-  // iframe carries no clipboard-write permissions policy, see
-  // apps/desktop/src/renderer/react/shell/routes/AppFrame.tsx). Update the
+  // (it surfaced as an unhandled NotAllowedError pageerror under the retired
+  // iframe host, whose permissions policy withheld clipboard-write). Update the
   // status line only once the write actually lands; otherwise say so instead
   // of claiming a copy that never happened.
   const okStatus = () =>

@@ -33,11 +33,12 @@ Schema names follow the same one-axis rule: **a table never repeats its schema n
 
 | Term | Meaning | Code |
 | --- | --- | --- |
+| **superapp** | What Centraid is: a personal, local-first superapp — one shell wrapping many first-party apps whose content characters could not be more different. The container for every noun below. Not a builder, platform, or host for anyone else's apps ([#799](https://github.com/srikanth235/centraid/issues/799); [decisions.md](decisions.md#product-positioning)). | the shell in `packages/client/src/react/shell/`; the catalogue in `packages/blueprints/apps/` |
+| **system app** | One of the bundled first-party apps the superapp ships (Tasks, Agenda, Tally, People, Notes, Docs, Locker, Photos). Every app is a system app — there is no other kind. | `packages/blueprints/apps/<app>/`; registry `inlineApps.ts` |
 | **vault** | Sovereign personal ontology for one owner. Unit of custody: `vault.db` + `journal.db` (+ apps/, code/, …). | `packages/vault`; on-disk under `vault/<vaultId>/` |
 | **gateway** | Host-agnostic backend that mounts vaults, serves HTTP, runs automations and harness turns. The same core runs under the desktop-controlled local daemon or as the standalone `centraid-gateway` daemon. | `packages/gateway` — `buildGateway()`, `serve()` |
 | **app** | Installed projection over the vault. Code serves from the release (UI blueprints) or cloned automation sources. Declared handlers in `app.json`. | `packages/app-engine`, `packages/blueprints` |
-| **inline app** | An app rendered as a React route **inside the shell** — no iframe, no bridge, replica-backed, offline-capable. The default for the 8 bundled system apps (#505). | `packages/client/src/react/shell/routes/InlineAppRoute.tsx`; registry `inlineApps.ts`; `packages/blueprints/apps/<app>/app-inline.tsx` |
-| **served app** | An app rendered as an **opaque, same-origin iframe document** the gateway bakes and serves, under the blueprint CSP. Builder preview + mobile WebViews only since #505. | `packages/app-engine/src/http/static-server.ts`; `AppFrame.tsx` |
+| **inline app** | An app rendered as a React route **inside the shell** — no iframe, no bridge, replica-backed, offline-capable. Since #799 this is the _only_ DOM render path, so "inline" is a description of the mechanism rather than a contrast with a second one; the qualifier survives because the code identifiers do (`inlineApps.ts`, `app-inline.tsx`, `InlineAppRoute.tsx`). | `packages/client/src/react/shell/routes/InlineAppRoute.tsx`; registry `inlineApps.ts`; `packages/blueprints/apps/<app>/app-inline.tsx` |
 | **blueprint** | Shipped template: UI app under `packages/blueprints/apps/` (install-in-place) or automation under `automations/` (clone). | `packages/blueprints` |
 | **automation** | Headless conversation + manifest + handler that fires on schedule, webhook, condition, or vault data change. | `packages/automation` |
 | **harness** | An installed model-capable CLI Centraid can drive for a turn, such as `codex`, `claude-code`, or `opencode`. Code and wire identifiers use `Harness*`; Settings keeps the market-facing label **Agents**. | `packages/agent-runtime/src/registry.ts`; `docs/harnesses.md` |
@@ -169,6 +170,11 @@ The vocabulary for how one item set crosses from an origin vault to an audience 
 
 | Avoid | Prefer |
 | --- | --- |
+| "app builder" / "personal app builder" for the product | **superapp** — #799 retired the authoring and serving planes; the product is one shell wrapping the bundled first-party apps. "Builder" survives only for the **automation compiler** (the headless compile harness in [blueprints](../packages/blueprints/README.md)), never for the product |
+| "platform" for Centraid | **superapp** — a platform hosts other people's software; Centraid ships its own and nothing else |
+| "third-party app" / "user-built app" / "generated app" | **system app** — there is one kind of app and this repo ships all of them. `consent.app.origin` still declares `CHECK (origin IN ('installed','generated'))`, but nothing writes `'generated'` since #799 — it is a dead schema value awaiting a migration, not a product noun |
+| "served app" | Retired vocabulary (#799). An app used to be renderable as an **opaque, same-origin iframe document** the gateway baked and served under the blueprint CSP. The mobile WebView cover, the desktop/PWA iframe host, the builder that authored for it, and the gateway's UI-byte serving are all gone; the gateway serves an app's **data**, never its bytes. Say **system app** (or **inline app** for the render mechanism) |
+| "code store" for where an app's UI lives | there isn't one — bundled app UI compiles from `packages/blueprints/apps/` into the client release. `vault/<id>/code/` holds **cloned automation sources** only |
 | "enrichment service" / "ML sidecar" | **recognition automation** — the handler itself owns model execution |
 | "database" for the personal ontology | **vault** (`vault.db` is the file) |
 | "server" for the product backend | **gateway** |

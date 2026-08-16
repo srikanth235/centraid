@@ -10,7 +10,7 @@
 // from the legacy upload routes app-engine still owns):
 //
 //   GET    /centraid/_apps                           list apps + metadata
-//          → { apps: [{id, name?, description?, hasIndex, iconKey?, colorKey?}] }
+//          → { apps: [{id, name?, description?, iconKey?, colorKey?}] }
 //   POST   /centraid/_apps/_sessions                 open a session
 //          → { sessionId }
 //   DELETE /centraid/_apps/_sessions/<id>            close a session
@@ -94,7 +94,6 @@ export interface AppMetaRow {
   name?: string;
   description?: string;
   kind?: "app" | "automation";
-  hasIndex: boolean;
   iconKey?: string;
   colorKey?: string;
 }
@@ -123,9 +122,9 @@ export function makeAppsStoreRouteHandler(
       // ---- collection-level: GET /_apps (list with metadata) ----
       // Shadows app-engine's legacy registry-list route and returns
       // the same flat-array shape, extended with `name`, `description`,
-      // `hasIndex`, and the app.json tile identity (`iconKey`/`colorKey`,
-      // issue #263) so the home shelves render tiles without a
-      // workspaceDir scan or a per-device metadata shim.
+      // and the app.json tile identity (`iconKey`/`colorKey`, issue #263)
+      // so the home shelves render tiles without a workspaceDir scan or a
+      // per-device metadata shim.
       if (segments.length === 1 && method === "GET") {
         // Listing union (issue #434): installed bundled apps (served in place)
         // + git code-store apps, deduped with bundled (reserved ids) winning.

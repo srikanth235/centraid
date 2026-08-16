@@ -1,7 +1,7 @@
+import { Avatar } from "../../_shared/Avatar.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
 import { avatarColor } from "../format.ts";
 import type { Person } from "../types.ts";
-import { KitAvatar } from "./Shared.tsx";
 
 import styles from "./TrashCard.module.css";
 
@@ -16,7 +16,7 @@ export function TrashCard({
   const name = displayText(person.name);
   return (
     <article className={styles.card}>
-      <KitAvatar name={name} size="48px" color={avatarColor(person)} />
+      <Avatar color={avatarColor(person)} name={name} size="48px" />
       <div className={styles.copy}>
         <strong>{name}</strong>
         <span>{displayText(person.role || "No role")}</span>

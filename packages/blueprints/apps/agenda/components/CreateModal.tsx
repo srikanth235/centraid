@@ -7,6 +7,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
+import { outcomeMessage } from "@centraid/design/elements";
+
 import {
   colorForCalendar,
   initials,
@@ -15,7 +17,6 @@ import {
   toLocalInput,
 } from "../format.ts";
 import { I } from "../icons.ts";
-import { outcomeMessage } from "../kit.ts";
 import type {
   Calendar,
   CreatePayload,

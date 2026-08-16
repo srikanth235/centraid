@@ -76,9 +76,6 @@ const openCommandPalette = vi.fn<ShellActions["openCommandPalette"]>();
 function makeActions(): ShellActions {
   return {
     showToast: vi.fn<ShellActions["showToast"]>(),
-    builderEnabled: false,
-    enterBuilder: vi.fn<ShellActions["enterBuilder"]>(),
-    openNewAppSheet: vi.fn<ShellActions["openNewAppSheet"]>(),
     openCommandPalette,
     openContextMenu: vi.fn<ShellActions["openContextMenu"]>(),
     confirm: vi.fn<ShellActions["confirm"]>(),
@@ -110,7 +107,6 @@ async function render(
         <HomeRoute
           appsLoading={appsLoading}
           autoSeedSample={autoSeedSample}
-          drafts={[]}
           onAutoSeedStarted={onAutoSeedStarted}
           userApps={userApps}
         />

@@ -2,15 +2,14 @@ import { fileURLToPath } from "node:url";
 
 import { jsdomProject } from "@centraid/test-kit/vitest";
 
-import { inlineBlueprintAliases } from "./src/react/blueprints/inline-vite-aliases.ts";
-
 export default jsdomProject({
   resolve: {
     alias: [
-      ...inlineBlueprintAliases(),
       {
-        find: "@centraid/design/kit",
-        replacement: fileURLToPath(new URL("../design/kit", import.meta.url)),
+        find: /^@centraid\/design\/elements$/u,
+        replacement: fileURLToPath(
+          new URL("../design/src/elements/index.ts", import.meta.url)
+        ),
       },
       {
         find: /^@centraid\/design$/u,

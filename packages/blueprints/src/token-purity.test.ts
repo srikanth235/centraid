@@ -141,16 +141,17 @@ describe("blueprint app CSS token purity", () => {
     // computed-value time: the declaration is dropped and the property falls
     // back to inherited/initial. Nothing throws, nothing logs — the rule just
     // silently does not apply, which is how a stale rename survives review.
-    // An app may resolve a name from the contract, from kit.css (served to
-    // every app surface), or from anywhere in its OWN stylesheets, since an
-    // app's Chrome declares tokens its components inherit.
+    // An app may resolve a name from the contract, from kit.css (the element
+    // layer's stylesheet, loaded once for every app), or from anywhere in its
+    // OWN stylesheets, since an app's Chrome declares tokens its components
+    // inherit.
     //
     // The reader itself is shared with the shell's twin of this gate
     // (packages/client/src/shell-var-resolution.test.ts) so the two cannot
     // drift on what counts as a declaration or a reference (#686).
     const kitDeclared = declaredCustomProps(
       readFileSync(
-        path.join(appDir, "..", "..", "design", "kit", "kit.css"),
+        path.join(appDir, "..", "..", "design", "src", "elements", "kit.css"),
         "utf8"
       )
     );

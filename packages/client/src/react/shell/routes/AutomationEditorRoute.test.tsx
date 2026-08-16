@@ -29,9 +29,6 @@ const actions = vi.hoisted(() => ({
   showToast: vi.fn<ShellActions["showToast"]>(),
   // Unused by this suite, but required by the real `ShellActions` shape that
   // the typed `vi.mock(import(...))` factory below now checks against.
-  builderEnabled: false,
-  enterBuilder: vi.fn<ShellActions["enterBuilder"]>(),
-  openNewAppSheet: vi.fn<ShellActions["openNewAppSheet"]>(),
   openCommandPalette: vi.fn<ShellActions["openCommandPalette"]>(),
   openContextMenu: vi.fn<ShellActions["openContextMenu"]>(),
 }));

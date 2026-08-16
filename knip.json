@@ -76,6 +76,10 @@
       ],
       "project": ["src/**/*.{ts,tsx}"]
     },
+    "packages/design": {
+      "entry": ["src/index.ts", "src/elements/index.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
     "packages/blueprints": {
       "entry": ["src/index.ts"],
       "project": ["src/**/*.{ts,tsx}"],

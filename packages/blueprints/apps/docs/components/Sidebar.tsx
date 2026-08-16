@@ -9,10 +9,11 @@
 // have no other home yet, and the footprint.
 import { useEffect, useRef } from "react";
 
+import { armConfirm } from "@centraid/design/elements";
+
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { fmtBytes } from "../format.ts";
 import { DELETE_ICON, I, RENAME_ICON, SHARE_ICON } from "../icons.ts";
-import { armConfirm } from "../kit.ts";
 import { folderIdFrom, folderShelf } from "../shelves.ts";
 import type { ShelfId } from "../shelves.ts";
 import type { DriveDoc, Folder } from "../types.ts";

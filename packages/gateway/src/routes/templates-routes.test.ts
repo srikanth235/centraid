@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { describe, afterEach, beforeEach, expect, test, vi } from "vitest";
+import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
@@ -112,45 +112,26 @@ describe("templates-routes scenarios", () => {
     ).toBe(true);
   });
 
-  // Issue #141, Phase 5: the gateway owns the remote template *refresh* too —
-  // the fetch the desktop main process used to run before it dropped
-  // `@centraid/blueprints`. Constructing the handler with both a cache dir
-  // and a remote URL kicks a one-time best-effort fetch; without the URL it
-  // stays quiet.
-  test("handler refreshes the cache from the remote URL on construction", async () => {
+  // The catalog is served from the shipped @centraid/blueprints tree (plus an
+  // optional per-gateway cache dir). Constructing the handler must not reach
+  // the network for anything.
+  test("constructing the handler performs no network fetch", async () => {
     const calls: string[] = [];
-    const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
-      calls.push(String(input));
-      return new Response(null, { status: 404 }); // manifest miss → fetch bails, never throws
-    }) as typeof fetch;
-
-    makeTemplatesRouteHandler({
-      cacheDir: path.join(dataDir, "tmpl-cache"),
-      remoteTemplatesUrl: "https://templates.example.test",
-      fetchImpl,
-    });
-    // Fire-and-forget — poll until the remote fetch lands (no fixed sleep).
-    await vi.waitFor(() => {
-      expect(
-        calls.some((u) => u.startsWith("https://templates.example.test"))
-      ).toBe(true);
-    });
-  });
-
-  test("handler does not fetch when no remote URL is configured", async () => {
-    const calls: string[] = [];
-    const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
       calls.push(String(input));
       return new Response(null, { status: 404 });
     }) as typeof fetch;
-
-    makeTemplatesRouteHandler({
-      cacheDir: path.join(dataDir, "tmpl-cache"),
-      fetchImpl,
-    });
-    // Allow a microtask turn for any accidental fire-and-forget, then assert quiet.
-    await Promise.resolve();
-    await Promise.resolve();
+    try {
+      makeTemplatesRouteHandler({
+        cacheDir: path.join(dataDir, "tmpl-cache"),
+      });
+      // Allow a microtask turn for any accidental fire-and-forget.
+      await Promise.resolve();
+      await Promise.resolve();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
     expect(calls).toHaveLength(0);
   });
 });

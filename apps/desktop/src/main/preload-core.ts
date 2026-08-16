@@ -82,8 +82,8 @@ export function createCentraidApi(bridge: PreloadBridge) {
 
     // Apps: list/create/files/write/delete/update-meta moved to the
     // renderer's direct HTTP client (renderer/gateway-client.ts) under the
-    // thin-client pivot. The preview iframe points at the gateway draft URL
-    // (Phase 4), so only the local-only reveal-in-Finder stays on IPC.
+    // thin-client pivot. #799 retired the preview iframe with the rest of the
+    // served plane, so only the local-only reveal-in-Finder stays on IPC.
     openAppFolder: (input: { id: string }) =>
       bridge.invoke(Channel.APPS_OPEN, input),
 

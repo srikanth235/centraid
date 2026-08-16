@@ -9,10 +9,11 @@ import {
 } from "react";
 import type { JSX, ReactNode } from "react";
 
-// The kit's :global(.kit-*) vocabulary (buttons, segmented chips, search,
-// banners, ask panel) that blueprint component modules reference. Loaded once,
-// globally, by the route host — same as the served path's <link rel=kit.css>.
-import "@centraid/design/kit/kit.css";
+// The element layer's :global(.kit-*) vocabulary (buttons, segmented chips,
+// search, banners, ask panel) that blueprint component modules reference.
+// Loaded once, globally, by the route host: the classes are global strings, so
+// exactly one loader may own them.
+import "@centraid/design/kit.css";
 import type {
   InlineAppModule,
   InlineFrame,
@@ -249,8 +250,7 @@ export default function InlineAppRoute({
   prefs,
   compact,
 }: InlineAppRouteProps): JSX.Element {
-  const { confirm, enterBuilder, openNewAppSheet, showToast, builderEnabled } =
-    useShellActions();
+  const { confirm, showToast } = useShellActions();
   // Photos owns its toolbar and follows the handoff without the generic shell
   // settings sheet. Other inline apps retain their management affordance.
   const appSettingsEnabled = app.id !== "photos";
@@ -379,17 +379,6 @@ export default function InlineAppRoute({
   // is still the last thing in the bar.
   const frameActions = (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
-      {builderEnabled ? (
-        <button
-          className={chrome.tbBtn}
-          type="button"
-          aria-label="Build"
-          title="Build"
-          onClick={() => enterBuilder({ appContext: app })}
-          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
-          dangerouslySetInnerHTML={{ __html: iconSvg("Sparkle", 14) }}
-        />
-      ) : null}
       {appSettingsEnabled ? (
         <span className={chrome.tbBtnWrap}>
           <button
@@ -457,8 +446,6 @@ export default function InlineAppRoute({
       canGoForward={nav.canGoForward}
       onBack={() => nav.back()}
       onForward={() => nav.forward()}
-      showNewChat={builderEnabled}
-      onNewChat={openNewAppSheet}
       appMark={contributed.mark}
       appTitle={contributed.title}
       {...(contributed.count === undefined

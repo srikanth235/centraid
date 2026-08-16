@@ -1,7 +1,7 @@
 // The canvas header's dynamic half: Today + prev/next + the current range
 // label + the Month/Week/Schedule segmented switch. The search box and the
-// light/dark toggle are static HTML wired once in chrome.ts (kit.ts owns
-// their behavior already — no per-render data to bind).
+// light/dark toggle are static HTML wired once in chrome.ts (the element
+// layer owns their behavior already — no per-render data to bind).
 import { I } from "../icons.ts";
 import type { ViewKind } from "../types.ts";
 import { Icon } from "./Shared.tsx";

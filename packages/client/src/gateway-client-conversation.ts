@@ -22,19 +22,14 @@
 import {
   appTurnPath,
   assistantTurnPath,
-  resolvePath,
-  conversationStatusPath,
-  blobsPath,
-} from "@centraid/design/kit/conversation-client.js";
-// Shared chat-client core (issue #420): the ONE SSE parser + wire-route
-// builders + the documented TurnStreamEvent union, from the canonical kit copy.
-import { consumeSse } from "@centraid/design/kit/turn-stream.js";
-import type { TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
+  assistantResolvePath,
+} from "@centraid/protocol";
 
 import type {
   CentraidHarnessesStatus,
   CentraidHarnessStatus,
 } from "./centraid-api.js";
+import { conversationStatusPath, blobsPath } from "./conversation-routes.js";
 import {
   auth,
   authHeaders,
@@ -43,11 +38,14 @@ import {
   scopedAuthHeaders,
   GatewayClientError,
 } from "./gateway-client-core.js";
+// The ONE SSE parser + the documented TurnStreamEvent union.
+import { consumeSse } from "./turn-stream.js";
+import type { TurnStreamEvent } from "./turn-stream.js";
 
-export { type TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
+export { type TurnStreamEvent } from "./turn-stream.js";
 
 // Re-exported so every consumer keeps importing the union from this barrel; the
-// definition now lives in one place (the wire contract, turn-stream.d.ts).
+// definition now lives in one place (the wire contract, turn-stream.ts).
 
 /**
  * Harness preflight + model catalog from the ACTIVE gateway. Reads the
@@ -379,7 +377,7 @@ export async function resolveAssistantRefs(
 ): Promise<AssistantRefCard[]> {
   if (refs.length === 0) return [];
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, resolvePath(), {
+  const res = await doFetch(baseUrl, assistantResolvePath(), {
     method: "POST",
     headers: authHeaders(token, "application/json"),
     body: JSON.stringify({ refs }),

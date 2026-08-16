@@ -2,7 +2,7 @@
   "name": "@centraid/design",
   "version": "0.1.0",
   "private": false,
-  "description": "Centraid's design system: the token vocabulary (tokens layer) and the blueprint app kit served to app surfaces (kit layer).",
+  "description": "Centraid's design system: the token vocabulary (token layer) and the browser element substrate the apps render on (element layer).",
   "license": "SEE LICENSE IN REPOSITORY",
   "repository": {
     "type": "git",
@@ -12,8 +12,7 @@
   "files": [
     "dist",
     "fonts",
-    "src",
-    "kit"
+    "src"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -24,10 +23,11 @@
       "react-native": "./src/index.ts",
       "default": "./dist/index.js"
     },
-    "./kit": {
-      "types": "./dist/kit.d.ts",
-      "default": "./dist/kit.js"
+    "./elements": {
+      "types": "./dist/elements/index.d.ts",
+      "default": "./dist/elements/index.js"
     },
+    "./kit.css": "./src/elements/kit.css",
     "./native": {
       "types": "./dist/native.d.ts",
       "react-native": "./src/native.ts",
@@ -61,20 +61,18 @@
       "types": "./dist/oklab.d.ts",
       "react-native": "./src/oklab.ts",
       "default": "./dist/oklab.js"
-    },
-    "./kit/*": "./kit/*"
+    }
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "build": "rm -rf dist && tsc -p tsconfig.json && tsc -p tsconfig.elements.json",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
-    "@centraid/blob-format": "workspace:*",
     "@fontsource/instrument-sans": "5.2.5"
   },
   "devDependencies": {

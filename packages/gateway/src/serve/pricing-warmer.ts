@@ -67,11 +67,10 @@ export class PricingWarmer {
    * Boot: seed the in-memory catalog from a fresh-enough disk cache, then kick
    * a background refresh when the cache is stale/absent. Never throws.
    *
-   * The live network refresh is gated on a configured `cacheFile` — same
-   * opt-in shape as the templates warmer's `remoteTemplatesUrl` (a host that
-   * pins a persistence path opts into fresh pricing; a warmer with nowhere to
-   * cache stands on the bundled snapshot and never touches the network, so
-   * tests that build a gateway make no external calls).
+   * The live network refresh is gated on a configured `cacheFile`: a host
+   * that pins a persistence path opts into fresh pricing; a warmer with
+   * nowhere to cache stands on the bundled snapshot and never touches the
+   * network, so tests that build a gateway make no external calls.
    */
   async boot(): Promise<void> {
     if (!this.cacheFile) return;

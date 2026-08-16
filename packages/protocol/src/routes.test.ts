@@ -15,6 +15,9 @@ import {
   appActionPath,
   appDescribePath,
   appQueryPath,
+  appTurnPath,
+  assistantResolvePath,
+  assistantTurnPath,
   vaultConnectionAuthorizePath,
   vaultConnectionPath,
 } from "./routes.js";
@@ -67,5 +70,12 @@ describe("parametric path helpers", () => {
     expect(appQueryPath("notes", "list")).toBe("/centraid/notes/queries/list");
     expect(appDescribePath("notes")).toBe("/centraid/notes/_describe");
     expect(appDescribePath("a/b")).toBe("/centraid/a%2Fb/_describe");
+  });
+
+  it("conversation-turn paths ride the app prefix and the vault plane", () => {
+    expect(appTurnPath("notes")).toBe("/centraid/notes/_turn");
+    expect(appTurnPath("a/b")).toBe("/centraid/a%2Fb/_turn");
+    expect(assistantTurnPath()).toBe("/centraid/_vault/assistant/_turn");
+    expect(assistantResolvePath()).toBe("/centraid/_vault/assistant/resolve");
   });
 });

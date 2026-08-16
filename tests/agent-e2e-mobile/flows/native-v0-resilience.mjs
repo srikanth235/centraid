@@ -1,3 +1,6 @@
+import { copyFile, mkdir, readdir } from "node:fs/promises";
+import path from "node:path";
+
 import {
   DISMISS_KEYBOARD_ONBOARDING,
   retryableTapCommands,
@@ -207,6 +210,25 @@ ${retryableTapCommands("Open Tally.*")}
   ctx.note(
     "All eight native blueprint covers and Settings survived navigation and a process restart; Android also completed the airplane-mode pending-write restart journey."
   );
+
+  // UI-impact evidence for #799: with the WebView app cover retired, Home's
+  // launcher is the all-native surface — publish the post-restart Home frame
+  // where the desktop journeys publish theirs.
+  const uiImpactDir = "artifacts/e2e/ui-impact";
+  const screenshot = async () => {
+    const frames = await readdir(ctx.state.screenshotsDir);
+    const home = frames.find((frame) =>
+      frame.endsWith("-after-force-kill.png")
+    );
+    if (home === undefined)
+      throw new Error("after-force-kill Home frame was not captured");
+    await mkdir(uiImpactDir, { recursive: true });
+    await copyFile(
+      path.join(ctx.state.screenshotsDir, home),
+      path.join(uiImpactDir, "issue-799-mobile-native-home.png")
+    );
+  };
+  await screenshot();
   return {
     pass: true,
     notes:

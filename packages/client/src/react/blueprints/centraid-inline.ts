@@ -5,9 +5,8 @@ import type {
   InlineAppModule,
   InlineScope,
 } from "@centraid/blueprints/apps/inline-types";
-// The inline `window.centraid` — the shell-side replacement for the served
-// bridge's `w.centraid` client (packages/app-engine bridge-script.ts). Backed
-// by the shell replica session: reads run the app's query modules locally
+// The inline `window.centraid` — the app client every blueprint app talks to.
+// Backed by the shell replica session: reads run the app's query modules locally
 // (inlineQueryCtx), writes go through the replica intent dispatch carrying the
 // caller's `intentId` verbatim (#406 dedupe lives in the session/route — never
 // re-minted here), and `onChange` is a replica-invalidation subscription mapped
@@ -37,6 +36,7 @@ import {
 import type { ReplicaShellSession } from "../../replica/shell-session.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
 import { authorizeBlobText, authorizeBlobUrl } from "./blob-auth.js";
+import { stageBlob, stageDerivative } from "./blob-staging.js";
 import { runInlineQuery } from "./inlineQueryCtx.js";
 import { placementWireFromEdge } from "./placement-wire.js";
 import {
@@ -249,6 +249,10 @@ export interface InlineCentraidClient {
   blobUrl: (pathname: string, scope?: string) => Promise<string | null>;
   /** Authed text bytes, without a CSP-governed second fetch of a blob URL. */
   blobText: (pathname: string, scope?: string) => Promise<string | null>;
+  /** Stream a File into the vault's blob CAS (see blob-staging.ts). */
+  stageBlob: typeof stageBlob;
+  /** Submit a typed derivative contribution against a staged parent. */
+  stageDerivative: typeof stageDerivative;
 }
 
 /** Codes on which a failed local read escalates to the gateway tool route. */
@@ -956,6 +960,13 @@ export function createInlineCentraidClient(
       const id = scope ?? primary.scope.id;
       return authorizeBlobText(pathname, id || undefined);
     },
+
+    // The upload half of the same door. Passed through rather than bound to
+    // the primary scope: `stageFileBytes({scope})` names the mounted scope the
+    // bytes belong to, and defaulting it here would quietly stage an
+    // audience's upload into the member's own CAS (issue #599).
+    stageBlob,
+    stageDerivative,
   };
 
   controls.set(client, {

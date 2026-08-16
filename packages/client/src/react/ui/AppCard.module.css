@@ -135,10 +135,11 @@
   gap: 8px;
   min-width: 0;
 }
+/* `--t-body-strong` whole, not a title with its size overridden: setting
+   weight and size piecemeal left the LINE-HEIGHT inheriting the container's
+   title rung, which is not a rung in the ramp at this size (#799). */
 .name {
-  font: var(--t-title);
-  font-weight: 600;
-  font-size: var(--t-body-size);
+  font: var(--t-body-strong);
   letter-spacing: -0.01em;
   color: var(--text);
   white-space: nowrap;
@@ -146,10 +147,10 @@
   text-overflow: ellipsis;
 }
 .desc {
+  /* The role's own line-height. A bare `1.4` was a second type scale for one
+     rule, and put the clamped description off every rung (#799). */
   font: var(--t-small);
-  font-size: var(--t-small-size);
   color: var(--text-faint);
-  line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -167,13 +168,14 @@
   gap: 8px;
 }
 /* A success tick can lead the timestamp for automations whose last run
-   was OK; the tick inherits the success hue. Font size pinned so it never
-   inherits the body's 16px and dwarfs the badges (most visible in rows). */
+   was OK; the tick inherits the success hue. `--t-mono` whole — the
+   annotation rung, tabular, and it carries its own line-height, which a bare
+   `--t-control-size` did not (#799). */
 .footTime {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: var(--t-control-size);
+  font: var(--t-mono);
   color: var(--text-ghost);
   overflow: hidden;
   text-overflow: ellipsis;

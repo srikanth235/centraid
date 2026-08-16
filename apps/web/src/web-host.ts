@@ -53,7 +53,6 @@ export function installWebHost(): void {
   const api = {
     getHostCapabilities: async () => ({
       platform: "web" as const,
-      appSessions: true,
       compute: {
         previews: true,
         poster: true,

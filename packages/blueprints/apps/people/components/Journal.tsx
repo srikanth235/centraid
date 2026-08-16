@@ -9,9 +9,9 @@ import { useRef, useState } from "react";
 
 import { identityColor } from "@centraid/design";
 
+import { Avatar } from "../../_shared/Avatar.tsx";
 import { fmtJournalDate } from "../format.ts";
 import type { JournalItem } from "../types.ts";
-import { KitAvatar } from "./Shared.tsx";
 
 import styles from "./Journal.module.css";
 import shared from "./shared.module.css";
@@ -29,12 +29,12 @@ function JournalEntry({
     const color = j.avatar_color || identityColor(j.name ?? "");
     return (
       <div className={styles.entry}>
-        <KitAvatar
-          style={{ cursor: "pointer" }}
-          name={j.name}
-          size="40px"
+        <Avatar
           color={color}
+          label={`Open ${j.name}`}
+          name={j.name}
           onClick={() => j.party_id && onOpenDetails(j.party_id)}
+          size="40px"
         />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className={styles.dt}>

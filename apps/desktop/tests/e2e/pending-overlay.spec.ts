@@ -146,35 +146,55 @@ async function prepareAgenda(page: Page): Promise<string> {
             ]);
             return { upcoming, parties };
           });
-          return true;
+          return Boolean(
+            setup?.upcoming.calendars[0]?.calendar_id &&
+            setup.parties.parties.some((party) => party.is_you)
+          );
         } catch {
           return false;
         }
       },
-      { timeout: 30_000 }
+      { timeout: 60_000 }
     )
     .toBe(true);
-  const prepared = await page.evaluate(async (ready) => {
-    const client = window.centraid;
-    const start = new Date(Date.now() + 86_400_000);
-    const event = await client.write({
-      action: "propose",
-      input: {
-        summary: "Offline RSVP planning",
-        calendar_id: ready.upcoming.calendars[0]!.calendar_id,
-        dtstart: start.toISOString(),
-        dtend: new Date(start.getTime() + 3_600_000).toISOString(),
-        start_tz: "UTC",
-        attendee_party_ids: [
-          ready.parties.parties.find((party) => party.is_you)!.party_id,
-        ],
+  // Propose can land while the replica is still re-bootstrapping after
+  // Tally's writes (CI: ReplicaRebootstrapRequiredError / HTTP 500 pull).
+  // Retry the write until the rail is up — a failed propose does not
+  // persist an event, so a later executed write is the only durable row.
+  let prepared: { status: string; eventId?: unknown } | undefined;
+  await expect
+    .poll(
+      async () => {
+        prepared = await page.evaluate(async (ready) => {
+          const client = window.centraid;
+          // Seed occupies days 0–7 at fixed local hours and refuses ANY
+          // busy overlap. now+1d around 06:00 UTC collides with
+          // "Morning run" (day+1 06:30). Ten days out at 03:17 UTC
+          // cannot hit that week.
+          const start = new Date(Date.now() + 10 * 86_400_000);
+          start.setUTCHours(3, 17, 0, 0);
+          const event = await client.write({
+            action: "propose",
+            input: {
+              summary: "Offline RSVP planning",
+              calendar_id: ready.upcoming.calendars[0]!.calendar_id,
+              dtstart: start.toISOString(),
+              dtend: new Date(start.getTime() + 3_600_000).toISOString(),
+              start_tz: "UTC",
+              attendee_party_ids: [
+                ready.parties.parties.find((party) => party.is_you)!.party_id,
+              ],
+            },
+          });
+          return { status: event.status, eventId: event.output?.["event_id"] };
+        }, setup!);
+        return prepared.status;
       },
-    });
-    return { status: event.status, eventId: event.output?.["event_id"] };
-  }, setup!);
-  expect(prepared.status).toBe("executed");
-  expect(prepared.eventId).toEqual(expect.any(String));
-  return String(prepared.eventId);
+      { timeout: 60_000, intervals: [2_000] }
+    )
+    .toBe("executed");
+  expect(prepared?.eventId).toEqual(expect.any(String));
+  return String(prepared!.eventId);
 }
 
 test("production Tally, Tasks, People, and Agenda pending rows survive an offline Electron reload", async () => {
@@ -184,6 +204,8 @@ test("production Tally, Tasks, People, and Agenda pending rows survive an offlin
   try {
     await foundDesktop(page);
     const groupId = await prepareTally(page);
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await expect(page.getByTestId("inline-app-view")).toHaveCount(0);
     const eventId = await prepareAgenda(page);
 
     // Warm each production inline bundle before the browser context loses its

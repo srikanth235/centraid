@@ -1,6 +1,5 @@
 // Small shared presentational bits used across Sidebar/List/Detail/overlays.
 // Pure functions of props — no app state.
-import type { FC } from "react";
 
 import { CAT_ICON_PATHS, ICON_PATHS } from "../icons.ts";
 
@@ -62,14 +61,3 @@ export function CatIcon({
     />
   );
 }
-
-// The kit meter is a native custom element (`<kit-meter ratio tone>`, defined
-// in kit/elements.js). TSX has no intrinsic-element type for it, so we render
-// it through a value typed as a component — at runtime this IS the string
-// 'kit-meter', so `jsx('kit-meter', {ratio, tone})` emits the exact same host
-// element the JSX original did (React sets ratio/tone as attributes on a custom
-// element). The cast is the one place that host tag becomes typed.
-export const KitMeter = "kit-meter" as unknown as FC<{
-  ratio: number;
-  tone: string;
-}>;
