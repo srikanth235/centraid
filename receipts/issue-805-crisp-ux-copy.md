@@ -537,19 +537,27 @@ tests/quality/user-facing-qualities.test.ts
   touches that driver, the vitest config, or mobile's dependencies) and now
   tracked in [QUALITY.md](../QUALITY.md); fixing it is a bundler-seam
   change, outside this umbrella's copy scope.
-- `design:gallery` could not run in the authoring container: the repo pinned
+- `design:gallery` cannot run in the authoring container: the repo pins
   Playwright 1.62, whose Chromium (1234) must be downloaded, while the image
-  ships 1194. Resolved by pinning Playwright to 1.56.0 — the release that
-  ships 1194 — in `package.json`, `apps/desktop/package.json`,
-  `apps/web/package.json`, `apps/extension/package.json` and `bun.lock`.
-  Exact, not caret: `^1.56.0` resolves back up to 1.62. The downgrade is
-  behaviour-neutral here — the four unchanged gallery surfaces render 0.00%
-  different against baselines captured with the newer browser. The four
-  shell baselines `tests/design-gallery/baselines/sh-light.png`,
+  ships 1194. Pinning Playwright down to 1.56 (the release carrying 1194) was
+  tried and **reverted**: 1.56 shipped 2025-10-06, Electron 43 on 2026-06-30,
+  so 1.56 cannot drive this app's Electron and all 59 desktop e2e tests died
+  with `electron.launch: Process failed to launch!`. The pin is a real
+  constraint, not incidental — Electron 43 needs Playwright >= 1.62. CI
+  installs the matching browser and runs the gate. The pins in
+  `package.json`, `apps/desktop/package.json`, `apps/web/package.json` and
+  `apps/extension/package.json` are tightened from `^1.62.0` to `~1.62.0`
+  (with `bun.lock` re-saved, still resolving 1.62.0 / Chromium 1234) so a
+  future 1.x minor cannot silently move the browser build out from under
+  the committed baselines.
+- The four shell baselines `tests/design-gallery/baselines/sh-light.png`,
   `tests/design-gallery/baselines/sh-dark.png`,
   `tests/design-gallery/baselines/sh-c-light.png` and
   `tests/design-gallery/baselines/sh-c-dark.png` are refreshed because
-  shorter copy makes shorter full-page screenshots.
+  shorter copy makes shorter full-page screenshots. They were captured under
+  Chromium 1194; the four surfaces this diff does not touch rendered 0.00%
+  different between 1194 and the 1234 baselines, so the two builds rasterize
+  these surfaces identically and CI re-verifies under 1234.
 - `apps/desktop/tests/e2e/automations.spec.ts` pinned the scheduler-error
   card's second sentence ("Automations are stored on the gateway and are
   safe"), which is exactly the reassurance clause slice C cut. The assertion
