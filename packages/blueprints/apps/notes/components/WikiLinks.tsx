@@ -99,7 +99,7 @@ export function WikiLinks({
           <strong>Link “{active.label}” to…</strong>
           {searching ? <output>Searching…</output> : null}
           {!searching && targets.length === 0 ? (
-            <output>No matching entity. Keep the broken link as text.</output>
+            <output>No matching entity — keep the broken link as text.</output>
           ) : null}
           {targets.map((target) => (
             <button

@@ -1,3 +1,5 @@
+import { notifyEventReminderBody } from "@centraid/client/notifications-copy";
+
 export const TASK_CATEGORY = "CENTRAID_TASK_REMINDER";
 export const EVENT_CATEGORY = "CENTRAID_EVENT_REMINDER";
 export const TALLY_CATEGORY = "CENTRAID_TALLY_SETTLE";
@@ -41,10 +43,7 @@ export function notificationContent(
   if (reminder.kind === "event")
     return {
       title: reminder.title,
-      body:
-        reminder.minutesBefore === 0
-          ? "Starting now"
-          : `Starts in ${reminder.minutesBefore} minutes`,
+      body: notifyEventReminderBody(reminder.minutesBefore),
       categoryIdentifier: EVENT_CATEGORY,
       data: {
         kind: "event",

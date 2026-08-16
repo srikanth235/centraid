@@ -36,6 +36,9 @@ import type { ListRenderItemInfo } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { SAVED_TO_MY_VAULT } from "@centraid/blueprints/apps/_shared/shared-copy";
+import { PHOTOS_SAVED_AS_NEW } from "@centraid/blueprints/apps/photos/shared-copy";
+
 import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
 import Icon from "../../kit/components/Icon";
 import OptionSheet from "../../kit/components/OptionSheet";
@@ -349,7 +352,7 @@ export default function PhotoLightbox({
         itemId: current.assetId,
       });
       setResidentAssetId(undefined);
-      postStatus("Saved to my vault. This copy survives if the share ends.");
+      postStatus(SAVED_TO_MY_VAULT);
     } catch (error) {
       surfaceWriteFailure(error, "Photo not saved to your vault");
     }
@@ -518,7 +521,7 @@ export default function PhotoLightbox({
       throw new Error("this device is not paired with a gateway");
     await saveEditAsNewPhotograph({ gatewayBase, session }, current, plan);
     setEditing(false);
-    postStatus("Saved as a new photograph — the original is not touched.");
+    postStatus(PHOTOS_SAVED_AS_NEW);
   };
 
   /** Export never fails quietly: an iCloud-only original says exactly that. */

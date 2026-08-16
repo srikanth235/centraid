@@ -117,8 +117,7 @@ export function PickerView({
       <div className={styles.head}>
         <h2 className={styles.title}>Add to “{title}”</h2>
         <p className={styles.sub}>
-          An album refers to a photograph where it lives; nothing moves and
-          nothing is copied.
+          An album refers to a photograph where it lives.
         </p>
       </div>
 

@@ -35,8 +35,7 @@ const peopleInlineApp: InlineAppModule = {
   kitAsk: {
     scope: "people",
     placeholder: "Ask about your people…",
-    intro:
-      "Ask me to add someone, log a call, or find who you owe a reply. Writes show for your approval before they touch the vault.",
+    intro: "Ask me to add someone, log a call, or find who you owe a reply.",
     suggest: [
       "Who should I reconnect with?",
       "Log a call with Maya",

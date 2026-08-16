@@ -131,6 +131,20 @@ The design-gallery gate screenshots the product, not a fixture. Ruled 2026-08-15
 
 System state follows the signal ladder settled in [#785](https://github.com/srikanth235/centraid/issues/785): ambient ribbon → glance destination → push only for a human decision → cause-focused drill-down. The signal vocabulary is exactly quiet, attention, and urgent; healthy state earns no hue or animation. Persisted route ids remain stable while member-facing destinations are Vault, Activity, System, and On this phone. Seat filtering is presentation only, and omitted launcher destinations remain deep-link reachable with an explanatory state. The Assistant remains a full route and also appears as a frame companion; its pointer rail reserves content width rather than reproducing the reference prototype's overlay limitation. See [assistant companion and system signals](system-signals.md).
 
+## Copy governance (#805)
+
+Ruled 2026-08-16 by [#805](https://github.com/srikanth235/centraid/issues/805). UX copy is a design contract, not per-screen taste, and the binding statement is [DESIGN.md § Copy](../DESIGN.md#copy).
+
+| Id | Current decision |
+| --- | --- |
+| **U-voice** | The house voice stays — calm, concrete, confident — and gains a length cap. Crisp-but-warm beats utilitarian: "Photo deleted", never "Deleted" and never "Your photo has been successfully deleted." Copy is signage read at a glance, not conversation. |
+| **U-ratchet** | Concision is enforced by a hard ratchet in the U-series quality tests (`tests/quality/user-facing-qualities.test.ts`). `tests/quality/copy-allowlist.json` is the only escape hatch, and an entry is a debt that records its reason. |
+| **U-scope** | The rulebook covers the whole app — shell, bundled system apps, and mobile — under one umbrella. Audit everything, rewrite only violations: a string already inside its budget is left alone. |
+| **U-reassurance** | Reassurance is positional. Full sentences about what was not lost, deleted, sent, or generated belong only where the risk decision is made — consent screens, destructive confirms, security and privacy disclosures — and those strings are allowlisted by name. Nothing else gets a second sentence by default. |
+| **U-umbrella** | One umbrella issue, no child issues. Slices are sub-agents and PR waves under it, with one receipt for the umbrella. Recorded as repo process in [AGENTS.md](../AGENTS.md) and [multi-agent.md](multi-agent.md). |
+
+The per-surface sentence budgets (button, toast, status line, empty state, banner, error, settings description, placeholder, consent) live in the DESIGN.md table, not here; vocabulary rules remain [glossary.md](glossary.md).
+
 ## Inline system apps
 
 The eight bundled system apps are inline React routes in the shared shell. Their reads, subscriptions, and writes use `ReplicaShellSession`; writes carry `intentId`, and the apps render from the replica offline. There is no second render path: the served-iframe plane, its bridge and blueprint CSP, the postMessage settings path, and the gateway's UI-byte serving were retired end to end on 2026-08-15 by [#799](https://github.com/srikanth235/centraid/issues/799). The app-scoped RPC surface is `/centraid/<app>/actions|queries/<name>`; the former shared admin token plane is retired in favor of revocable owner enrollment. Full render-path details live in [ARCHITECTURE.md](../ARCHITECTURE.md#app-render-path). Settled by [#505](https://github.com/srikanth235/centraid/issues/505) and narrowed to one path by [#799](https://github.com/srikanth235/centraid/issues/799).

@@ -181,8 +181,7 @@ export const TRANSFER_POLICY_SWITCHES: readonly TransferPolicySwitch[] = [
  * Present tense and specific — "on Wi-Fi" is a promise, "when possible" is not.
  */
 export function describeTransferPolicy(policy: TransferPolicy): string {
-  if (policy.never)
-    return "Never. Nothing leaves this device until you change that.";
+  if (policy.never) return "Never — nothing leaves this device.";
   const network = policy.wifiOnly
     ? "On Wi-Fi only"
     : policy.allowMetered

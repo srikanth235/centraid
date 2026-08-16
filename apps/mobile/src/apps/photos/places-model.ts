@@ -28,7 +28,10 @@ import type {
   PlacePoint,
 } from "@centraid/blueprints/apps/photos/place-map";
 import { readableName } from "@centraid/blueprints/apps/photos/place-map";
-import { PLACE_UNNAMED } from "@centraid/blueprints/apps/photos/shared-copy";
+import {
+  PLACE_UNNAMED,
+  photosPinLabel,
+} from "@centraid/blueprints/apps/photos/shared-copy";
 
 import type { PhotoAsset } from "./timeline-model";
 
@@ -196,7 +199,5 @@ export function pinSize(count: number, largest: number): number {
 export function pinLabel(pin: MapPin): string {
   const where = readableName(pin.name) ?? "an unnamed place";
   const photographs = `${pin.count} ${pin.count === 1 ? "photograph" : "photographs"}`;
-  return pin.places > 1
-    ? `${where} and ${pin.places - 1} more nearby, ${photographs}`
-    : `${where}, ${photographs}`;
+  return photosPinLabel(where, pin.places, photographs);
 }

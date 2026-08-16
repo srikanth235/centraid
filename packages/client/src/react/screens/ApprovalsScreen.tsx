@@ -2,6 +2,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX, ReactNode } from "react";
 
+import {
+  APPROVALS_ALWAYS_TITLE,
+  APPROVALS_CANNOT_EDIT_KEY,
+  APPROVALS_CANNOT_EDIT_VALUE,
+  APPROVALS_DENY_SUB,
+  APPROVALS_DENY_TITLE,
+  APPROVALS_EDIT_SUB,
+  APPROVALS_EDIT_TITLE,
+  APPROVALS_EMPTY_ACTION,
+  APPROVALS_EMPTY_BODY,
+  APPROVALS_EMPTY_TITLE,
+  APPROVALS_GRANTS_NOTE,
+  APPROVALS_NO_GRANTS_NOTE,
+  APPROVALS_SENDING_FACT_KEY,
+  APPROVALS_SENDING_FACT_VALUE,
+} from "../../approvals-copy.js";
 import Button from "../ui/Button.js";
 import ChipsBlock from "../ui/ChipsBlock.js";
 import EmptyBlock from "../ui/EmptyBlock.js";
@@ -218,25 +234,12 @@ export interface ApprovalsScreenProps {
 // promise that drifts between two call sites is a promise broken in one of
 // them.
 
-const EMPTY_TITLE = "Nothing is waiting on you";
-const EMPTY_BODY =
-  "Staged writes, lapsed connections and requests for wider access appear here. This page is empty most of the time, and that is the healthy state.";
-const EMPTY_ACTION = "Review standing grants";
-const DENY_TITLE = "Deny this write";
-const DENY_SUB =
-  "Nothing is sent. The automation is told it was refused, and remembers.";
-const SENDING_FACT_KEY = "nothing has been sent";
-const SENDING_FACT_VALUE =
-  "approving sends it immediately and cannot be undone";
-const GRANTS_NOTE =
-  "A standing grant skips this page for one narrow thing. Revoking one takes effect on the next run.";
-const NO_GRANTS_NOTE =
-  "No standing grants yet — “always allow” on an approval mints one.";
+// Every sentence above that mobile also renders now lives in
+// `../../approvals-copy.js` (issue #805) — see its header for why the two
+// surfaces stopped keeping separate copies. Only the store-ledger note below
+// is desktop's alone.
 const LEDGER_NOTE =
-  "Everything an app can reach, and nothing it cannot. Revoking takes effect at once — the app keeps no copy of what it read.";
-const CANNOT_EDIT_KEY = "cannot be edited";
-const CANNOT_EDIT_VALUE =
-  "the gateway has no rebuilder for this verb, so approving sends exactly what is quoted above";
+  "Everything an app can reach — revoking takes effect at once.";
 
 /** The waiting-queue filter, shown only when the queue is full enough to need
  *  one. Ids are the v9 chip set; the labels are its copy. */
@@ -1017,12 +1020,15 @@ export default function ApprovalsScreen(
     });
     if (row.note) facts.push({ key: "note", value: row.note });
     if (!row.canEdit) {
-      facts.push({ key: CANNOT_EDIT_KEY, value: CANNOT_EDIT_VALUE });
+      facts.push({
+        key: APPROVALS_CANNOT_EDIT_KEY,
+        value: APPROVALS_CANNOT_EDIT_VALUE,
+      });
     }
     facts.push({
-      key: SENDING_FACT_KEY,
+      key: APPROVALS_SENDING_FACT_KEY,
       net: true,
-      value: SENDING_FACT_VALUE,
+      value: APPROVALS_SENDING_FACT_VALUE,
     });
     return facts;
   };
@@ -1051,8 +1057,8 @@ export default function ApprovalsScreen(
           />
         ),
         id: "staged-edit",
-        sub: "Your changes replace the draft above. Nothing is sent until you approve.",
-        title: "Edit before sending",
+        sub: APPROVALS_EDIT_SUB,
+        title: APPROVALS_EDIT_TITLE,
       });
     }
     stagedControlRows.push(
@@ -1066,7 +1072,7 @@ export default function ApprovalsScreen(
           />
         ),
         id: "staged-always",
-        title: "Approve without asking again",
+        title: APPROVALS_ALWAYS_TITLE,
       },
       {
         action: stagedBusy
@@ -1074,8 +1080,8 @@ export default function ApprovalsScreen(
           : { label: "Deny", onClick: () => onDenyOutbox(staged.itemId) },
         dangerous: true,
         id: "staged-deny",
-        sub: DENY_SUB,
-        title: DENY_TITLE,
+        sub: APPROVALS_DENY_SUB,
+        title: APPROVALS_DENY_TITLE,
       }
     );
   }
@@ -1092,9 +1098,9 @@ export default function ApprovalsScreen(
         {grantRows.length > 0 ? (
           <RowsBlock ariaLabel="Standing grants" rows={grantRows} />
         ) : (
-          <NoteBlock>{NO_GRANTS_NOTE}</NoteBlock>
+          <NoteBlock>{APPROVALS_NO_GRANTS_NOTE}</NoteBlock>
         )}
-        <NoteBlock>{GRANTS_NOTE}</NoteBlock>
+        <NoteBlock>{APPROVALS_GRANTS_NOTE}</NoteBlock>
       </div>
 
       {infoNotices.length > 0 ? (
@@ -1257,7 +1263,7 @@ export default function ApprovalsScreen(
       <div className={styles.page}>
         <EmptyBlock
           action={{
-            label: EMPTY_ACTION,
+            label: APPROVALS_EMPTY_ACTION,
             onClick: () => {
               const el = grantsRef.current;
               if (el && typeof el.scrollIntoView === "function") {
@@ -1265,9 +1271,9 @@ export default function ApprovalsScreen(
               }
             },
           }}
-          body={EMPTY_BODY}
+          body={APPROVALS_EMPTY_BODY}
           routine
-          title={EMPTY_TITLE}
+          title={APPROVALS_EMPTY_TITLE}
         />
         {tail}
       </div>

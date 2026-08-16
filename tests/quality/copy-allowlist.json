@@ -6,5 +6,166 @@
       "literal": "Inbox",
       "reason": "Task workflow column, not the unified owner-facing Notifications surface."
     }
-  ]
+  ],
+  "copyRatchet": {
+    "_comment": "U4 copy-density ratchet (#805). Every entry is a user-facing string literal the walk in tests/quality/user-facing-qualities.test.ts flags as over 120 chars, two or more sentences, or carrying banned filler. Seeded green on day one so the gate lands without rewriting copy; TIGHTEN-ONLY from here. Audit slices D1..D5 rewrite the copy, DELETE the entry, and lower maxEntries by the same count; the gate fails on any entry that no longer matches a real string, so seeds cannot outlive the copy they excuse. maxEntries is capped in turn by COPY_SEED_CEILING in the owning test, which may only ever fall.",
+    "maxEntries": 31,
+    "entries": [
+      {
+        "file": "apps/mobile/src/apps/docs/DocsItemActions.tsx",
+        "literal": "Only an empty folder can be deleted. Documents, trashed items, and subfolders are never removed with it.",
+        "reason": "destructive confirm — folder delete states what is and is not removed"
+      },
+      {
+        "file": "apps/mobile/src/apps/locker/LockerUnlockScreen.tsx",
+        "literal": "Create a primary passphrase of at least 12 characters. It never leaves this online authentication request.",
+        "reason": "security — Locker passphrase creation discloses where the passphrase goes"
+      },
+      {
+        "file": "apps/mobile/src/apps/people/PeopleHome.tsx",
+        "literal": "This folds every reference into the survivor and deletes the duplicate. It cannot be undone.",
+        "reason": "destructive confirm — people merge states the fold is irreversible"
+      },
+      {
+        "file": "apps/mobile/src/apps/photos/DuplicatesShelf.tsx",
+        "literal": "The copy you keep stays in every album it is already in. The device original is never deleted by this action.",
+        "reason": "destructive confirm — duplicate trash states what survives and what is untouched"
+      },
+      {
+        "file": "apps/mobile/src/apps/photos/PhotoStateView.tsx",
+        "literal": "Deleting forever frees the space these hold. It cannot be undone.",
+        "reason": "destructive confirm — empty trash states the purge is irreversible"
+      },
+      {
+        "file": "apps/mobile/src/apps/photos/photo-access.ts",
+        "literal": "Photos reads the photographs on this device to show them back to you. It reads them where they are and moves nothing.",
+        "reason": "privacy disclosure — camera-roll grant panel is where the grant is decided"
+      },
+      {
+        "file": "apps/mobile/src/apps/photos/photo-access.ts",
+        "literal": "Photos reads the photographs on this device to show them back to you. Nothing has been read yet, and nothing will be until you say so.",
+        "reason": "privacy disclosure — camera-roll grant panel is where the grant is decided"
+      },
+      {
+        "file": "apps/mobile/src/apps/photos/photo-access.ts",
+        "literal": "The grant that let Photos read the photographs on this device has been refused. Nothing has been lost: the photographs are still here, and the app goes dark rather than showing you a stale copy.",
+        "reason": "privacy disclosure — camera-roll grant panel is where the grant is decided"
+      },
+      {
+        "file": "apps/mobile/src/apps/photos/photo-access.ts",
+        "literal": "You gave Photos a chosen set of photographs rather than the whole camera roll. Photos will not pretend to have looked at the rest.",
+        "reason": "privacy disclosure — camera-roll grant panel is where the grant is decided"
+      },
+      {
+        "file": "apps/mobile/src/apps/photos/photos-collections.ts",
+        "literal": "Faces are proposed on a photograph you open, and a name is only ever yours to confirm. Nobody is named until you name them.",
+        "reason": "privacy disclosure — faces promise, named in DESIGN.md as the one home for it"
+      },
+      {
+        "file": "apps/mobile/src/kit/storage/free-up-space.ts",
+        "literal": "Everything stays browsable — thumbnails and previews are untouched. Fetching a full-quality original back stays explicit: you ask for it, and it comes over the network under the transfer rules above.",
+        "reason": "destructive disclosure — free-up-space states cause and consequence before deleting local originals"
+      },
+      {
+        "file": "apps/mobile/src/kit/storage/free-up-space.ts",
+        "literal": "These originals are held on your gateway and on this machine at once. The rollup proved the remote copy, so the local one is a duplicate.",
+        "reason": "destructive disclosure — free-up-space states cause and consequence before deleting local originals"
+      },
+      {
+        "file": "apps/mobile/src/kit/transfer/transfer-consent.ts",
+        "literal": "Centraid copies each photograph and video on this device to your gateway, then keeps doing it by itself. You are never asked per photograph, and the originals stay on the phone until you free up space yourself.",
+        "reason": "consent — transfer-consent discloses what leaves the device, and how to stop"
+      },
+      {
+        "file": "apps/mobile/src/kit/transfer/transfer-consent.ts",
+        "literal": "New photographs stop being copied to the gateway. Everything already backed up stays in the vault, anything still queued finishes, and no original is deleted from this device.",
+        "reason": "consent — transfer-consent discloses what leaves the device, and how to stop"
+      },
+      {
+        "file": "apps/mobile/src/kit/transfer/transfer-consent.ts",
+        "literal": "Stop backing up, on this screen. Photographs already in the vault stay there.",
+        "reason": "consent — transfer-consent discloses what leaves the device, and how to stop"
+      },
+      {
+        "file": "apps/mobile/src/kit/transfer/transfer-consent.ts",
+        "literal": "Your gateway's content store. They leave this device over the network to get there.",
+        "reason": "consent — transfer-consent discloses what leaves the device, and how to stop"
+      },
+      {
+        "file": "apps/mobile/src/screens/Scan.tsx",
+        "literal": "Captured with on-device OCR. The source image was not stored in Locker.",
+        "reason": "security — Locker scan note discloses the source image was not stored"
+      },
+      {
+        "file": "apps/mobile/src/screens/Settings.tsx",
+        "literal": "The encrypted link will be removed from this phone. The gateway and its vaults stay intact.",
+        "reason": "destructive confirm — unpair states what is removed and what survives"
+      },
+      {
+        "file": "packages/blueprints/apps/_shared/capture-consent.ts",
+        "literal": "Declining saves the scan without extracted text, stated on the scan itself — search and receipt-splitting need the text, but nothing else about saving changes.",
+        "reason": "consent — OCR decline disclosure; full sentences allowed"
+      },
+      {
+        "file": "packages/blueprints/apps/_shared/capture-consent.ts",
+        "literal": "Not a separate choice: the gateway backstop runs automatically, only when on-device extraction can't. Answering the on-device question above covers both.",
+        "reason": "consent — OCR gateway-backstop disclosure; full sentences allowed"
+      },
+      {
+        "file": "packages/blueprints/apps/_shared/capture-consent.ts",
+        "literal": "Text extraction reads the words on the page so a scan can be found by search and, for a receipt, split automatically. It never changes the image you captured, and it runs once, right after you take or choose it.",
+        "reason": "consent — OCR capture disclosure; full sentences allowed"
+      },
+      {
+        "file": "packages/blueprints/apps/_shared/capture-consent.ts",
+        "literal": "Used automatically, only when on-device extraction cannot run on this phone. The image goes to your own gateway and nowhere else — never a third-party provider — capped in size so a single scan cannot overwhelm it.",
+        "reason": "consent — OCR gateway-backstop disclosure; full sentences allowed"
+      },
+      {
+        "file": "packages/blueprints/apps/docs/capabilities.ts",
+        "literal": "All four are off. Each is a separate consent with its own receipt. None changes a document: each writes something beside it, and that is yours to delete.",
+        "reason": "consent — Docs capabilities screen disclosure; full sentences allowed"
+      },
+      {
+        "file": "packages/blueprints/apps/docs/capabilities.ts",
+        "literal": "Read a new document and propose where it belongs. It never files anything on its own.",
+        "reason": "consent — Docs capability disclosure; full sentences allowed"
+      },
+      {
+        "file": "packages/blueprints/apps/photos/enrichment-consent.ts",
+        "literal": "Faster, and the photographs leave this device. Choosing it is a separate consent with its own receipt, and the grant is revocable afterwards.",
+        "reason": "consent — enrichment-consent disclosure panel; full sentences are the sanctioned register (DESIGN.md § Copy)"
+      },
+      {
+        "file": "packages/blueprints/apps/photos/enrichment-consent.ts",
+        "literal": "Not available: this build has no device-side face detector. The Faces recognition recipe runs only on the gateway, which this vault’s device-only policy does not allow.",
+        "reason": "consent — enrichment-consent disclosure panel; full sentences are the sanctioned register (DESIGN.md § Copy)"
+      },
+      {
+        "file": "packages/blueprints/apps/photos/enrichment-consent.ts",
+        "literal": "This is not a settings toggle. It is asked once, answered once, and receipted — and the answer is visible in Privacy afterwards.",
+        "reason": "consent — enrichment-consent disclosure panel; full sentences are the sanctioned register (DESIGN.md § Copy)"
+      },
+      {
+        "file": "packages/client/src/approvals-copy.ts",
+        "literal": "Nothing is sent. The automation is told it was refused, and remembers.",
+        "reason": "Deny sheet — a destructive confirm, the one surface DESIGN.md's Copy budget gives full sentences, because what a denial DOES is the decision being made. Promoted from two surfaces to one home (#805)."
+      },
+      {
+        "file": "packages/client/src/react/shell/routes/ApprovalsRoute.tsx",
+        "literal": "Nothing will be sent. This can’t be undone.",
+        "reason": "destructive confirm — outbox discard sheet states the consequence at the point of no return"
+      },
+      {
+        "file": "packages/client/src/react/shell/routes/AutomationEditorRoute.tsx",
+        "literal": "This invalidates the current secret — any caller using it starts failing until updated. The webhook URL stays the same.",
+        "reason": "destructive confirm — webhook secret rotation names the callers it breaks"
+      },
+      {
+        "file": "packages/client/src/react/shell/routes/AutomationViewRoute.tsx",
+        "literal": "This invalidates the current secret — any caller using it starts failing until updated. The webhook URL stays the same.",
+        "reason": "destructive confirm — webhook secret rotation names the callers it breaks"
+      }
+    ]
+  }
 }

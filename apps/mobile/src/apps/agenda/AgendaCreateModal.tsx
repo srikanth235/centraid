@@ -274,7 +274,7 @@ export default function AgendaCreateModal({
           {field("Video call URL", conference, setConference)}
           {field("Reminder minutes", reminders, setReminders)}
           <Text style={[styles.help, { color: colors.textFaint }]}>
-            Comma-separated minutes before the event. Leave blank for none.
+            Comma-separated minutes before the event.
           </Text>
           <Text style={[styles.label, { color: colors.textSoft }]}>Guests</Text>
           <View style={styles.chips}>

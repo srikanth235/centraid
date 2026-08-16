@@ -32,6 +32,14 @@
 import React, { useMemo } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 
+import {
+  CONNECTORS_EMPTY_BODY,
+  CONNECTORS_EMPTY_TITLE,
+  CONNECTORS_ERROR_BODY,
+  CONNECTORS_ERROR_TITLE,
+} from "@centraid/client/connectors-copy";
+import { RETRY_ACTION, SKELETON_NOTE } from "@centraid/client/surface-copy";
+
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
 import FeatureOffPlace from "../../kit/components/FeatureOffPlace";
@@ -64,19 +72,16 @@ import type { ConnectorsController } from "./useConnectors";
 
 /** The reference's own error copy: what failed, what is safe, one way forward. */
 const ERROR_EYEBROW = "THIS PAGE COULD NOT LOAD";
-const ERROR_TITLE = "Cannot read connection health";
-const ERROR_BODY =
-  "Existing connections keep working — this page reads their status from the gateway, and only the status is unavailable. Nothing has been paused.";
-const ERROR_RETRY = "Try again";
+const ERROR_TITLE = CONNECTORS_ERROR_TITLE;
+const ERROR_BODY = CONNECTORS_ERROR_BODY;
+const ERROR_RETRY = RETRY_ACTION;
 
 /** The empty state, in the routine register — nothing connected is healthy. */
-const EMPTY_TITLE = "Nothing is connected";
-const EMPTY_BODY =
-  "A connector lets one outside service reach a named part of this vault, and nothing else. You choose the scope, and can revoke it here at any time.";
+const EMPTY_TITLE = CONNECTORS_EMPTY_TITLE;
+const EMPTY_BODY = CONNECTORS_EMPTY_BODY;
 
 /** Why a skeleton, said once, under the skeleton. */
-const LOADING_NOTE =
-  "A row knows its shape before its content arrives, so nothing reflows when it does.";
+const LOADING_NOTE = SKELETON_NOTE;
 
 function ConnectorsBody({
   page,

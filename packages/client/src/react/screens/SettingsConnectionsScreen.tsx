@@ -4,6 +4,13 @@ import type { JSX } from "react";
 
 import { ASSIST_HANDOFF_EVENT } from "../../assist-oauth-events.js";
 import type { AssistHandoffResult } from "../../assist-oauth-events.js";
+import {
+  CONNECTORS_EMPTY_BODY,
+  CONNECTORS_EMPTY_TITLE,
+  CONNECTORS_ERROR_BODY,
+  CONNECTORS_ERROR_TITLE,
+} from "../../connectors-copy.js";
+import { SKELETON_NOTE } from "../../surface-copy.js";
 import { relativeTime } from "../format.js";
 import type {
   RouteHealth,
@@ -709,12 +716,12 @@ function ConnectForm({
           data-tone={labelTaken ? "warn" : undefined}
         >
           {labelTaken
-            ? "A connection with this label already exists — saving will update it. Rename to add a separate account."
+            ? "Label already in use — saving updates that connection."
             : existingLabels.length > 0
-              ? `You already have ${existingLabels.length} ${
+              ? `${existingLabels.length} ${
                   existingLabels.length === 1 ? "account" : "accounts"
-                } connected here. Give this one a distinct name (e.g. “${featured.meta.name} · work”).`
-              : "Name this connection. Use a distinct label per account to connect more than one."}
+                } connected here — name this one distinctly (e.g. “${featured.meta.name} · work”).`
+              : "A distinct label per account."}
         </span>
       </label>
 
@@ -885,12 +892,12 @@ function AssistConnectForm({
           data-tone={labelTaken ? "warn" : undefined}
         >
           {labelTaken
-            ? "A connection with this label already exists — saving will update it. Rename to add a separate account."
+            ? "Label already in use — saving updates that connection."
             : existingLabels.length > 0
-              ? `You already have ${existingLabels.length} ${
+              ? `${existingLabels.length} ${
                   existingLabels.length === 1 ? "account" : "accounts"
-                } connected here. Give this one a distinct name (e.g. “${featured.meta.name} · work”).`
-              : "Name this connection. Use a distinct label per account to connect more than one."}
+                } connected here — name this one distinctly (e.g. “${featured.meta.name} · work”).`
+              : "A distinct label per account."}
         </span>
       </label>
       <fieldset className={styles.scopePicker}>
@@ -928,7 +935,7 @@ function AssistConnectForm({
       </fieldset>
       <p className={styles.sheetNote}>
         Centraid does not request Google identity scopes (openid, email, or
-        profile). Disconnect or reconnect at any time.
+        profile).
       </p>
       {permitted.length > 0 &&
       permitted.every(
@@ -936,9 +943,8 @@ function AssistConnectForm({
           entry.tier === "restricted" && !assist.restrictedScopesEnabled
       ) ? (
         <p className={styles.sheetNote}>
-          This connector remains unavailable until Google restricted-scope
-          verification is complete. You can use your own OAuth client from
-          Advanced now.
+          Unavailable until Google restricted-scope verification completes —
+          your own OAuth client works now, under Advanced.
         </p>
       ) : null}
       <div className={styles.wizardFoot}>
@@ -1418,7 +1424,7 @@ export default function SettingsConnectionsScreen({
                       hour: "2-digit",
                       minute: "2-digit",
                     }
-                  )}. Nothing needs re-authorizing.`,
+                  )}.`,
             label: "Every connection is working",
           }
       : undefined;
@@ -1554,9 +1560,9 @@ export default function SettingsConnectionsScreen({
                 : "Show the technical detail",
               onClick: () => setTechnicalOpen((open) => !open),
             }}
-            body="Existing connections keep working — this page reads their status from the gateway, and only the status is unavailable. Nothing has been paused."
+            body={CONNECTORS_ERROR_BODY}
             eyebrow="THIS PAGE COULD NOT LOAD"
-            title="Cannot read connection health"
+            title={CONNECTORS_ERROR_TITLE}
             tone="net"
           />
           {technicalOpen && readError ? (
@@ -1566,10 +1572,7 @@ export default function SettingsConnectionsScreen({
       ) : state === "loading" ? (
         <>
           <PageSkeleton label="Reading connections" rows={6} />
-          <NoteBlock>
-            A row knows its shape before its content arrives, so nothing reflows
-            when it does.
-          </NoteBlock>
+          <NoteBlock>{SKELETON_NOTE}</NoteBlock>
         </>
       ) : state === "empty" ? (
         <>
@@ -1578,9 +1581,9 @@ export default function SettingsConnectionsScreen({
               label: "Open the catalog",
               onClick: () => setCatalogOpen(true),
             }}
-            body="A connector lets one outside service reach a named part of this vault, and nothing else. You choose the scope, and can revoke it here at any time."
+            body={CONNECTORS_EMPTY_BODY}
             routine
-            title="Nothing is connected"
+            title={CONNECTORS_EMPTY_TITLE}
           />
           {catalogSection}
         </>
@@ -1628,8 +1631,7 @@ export default function SettingsConnectionsScreen({
             </>
           ) : null}
           <NoteBlock>
-            A sync copies one narrow thing into the vault on a schedule. It
-            reads only what the connection already allows.
+            A sync copies one narrow thing into the vault on a schedule.
           </NoteBlock>
           {catalogSection}
         </>
@@ -1864,7 +1866,7 @@ export default function SettingsConnectionsScreen({
                               )
                             )
                           }
-                          title="Remove this connection entirely — deletes it and its credential. Refused if it still has undecided outbox items or sync history."
+                          title="Deletes the connection and its credential — refused while outbox items or sync history remain."
                           variant="destructive"
                         />
                       </div>
@@ -1913,7 +1915,7 @@ export default function SettingsConnectionsScreen({
                         <span>
                           {sheet.featured.provider.assist?.enabled
                             ? "Connect through Centraid Assist, or use your own OAuth client from Advanced."
-                            : "Connect with your own Google / Microsoft / Dropbox OAuth client. You will sign in at the provider after saving credentials."}
+                            : "Your own OAuth client — you sign in at the provider after saving credentials."}
                         </span>
                       </>
                     ) : (
@@ -1998,8 +2000,8 @@ export default function SettingsConnectionsScreen({
                             <span className={styles.aboutDesc}>
                               {sheet.featured.provider.credKind === "oauth2"
                                 ? sheet.featured.provider.assist?.enabled
-                                  ? "Assist keeps the shared Google client secret in a stateless Cloudflare Worker. Your gateway alone stores tokens."
-                                  : "Register a Web application OAuth client with this gateway’s redirect URI, paste Client ID + secret here, then authorize in the browser."
+                                  ? "The shared client secret lives in a stateless Cloudflare Worker; only your gateway stores tokens."
+                                  : "Register a Web OAuth client with this gateway’s redirect URI, then paste Client ID + secret."
                                 : "Credentials stay sealed on your gateway — never shared as training data."}
                             </span>
                           </div>
@@ -2022,9 +2024,9 @@ export default function SettingsConnectionsScreen({
                       <p className={styles.sheetNote}>
                         {sheet.featured.provider.credKind === "oauth2"
                           ? sheet.featured.provider.assist?.enabled
-                            ? "Tokens never pass through the browser, URL fragments, deep links, or Cloudflare storage. BYO remains available under Advanced."
+                            ? "Tokens never pass through the browser, URL fragments, deep links, or Cloudflare storage."
                             : "OAuth 2.0 uses your own developer client (BYO)."
-                          : "Paste an API key or personal token. Review scopes before connecting."}
+                          : "Paste an API key or personal token — review scopes first."}
                       </p>
                       <div className={styles.sheetFoot}>
                         <Button

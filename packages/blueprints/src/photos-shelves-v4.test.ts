@@ -264,7 +264,7 @@ describe("Storage reports what the rows say and nothing else", () => {
         onOpenTrash: () => {},
       })
     );
-    expect(html).toContain("will not guess");
+    expect(html).toContain("that answer comes from the gateway");
     expect(html).not.toContain("Where the originals are");
     expect(html).not.toContain("Free up space");
   });
@@ -321,7 +321,7 @@ describe("Storage reports what the rows say and nothing else", () => {
     // The offer is the `.claim` paragraph; its absence is the assertion. (A
     // bare "could be released" substring would also match the REFUSAL below.)
     expect(html).not.toMatch(/class="[^"]*claim/u);
-    expect(html).toContain("nothing that could be released");
+    expect(html).toContain("so nothing can be released");
     expect(html).toContain("never offered for release");
   });
 

@@ -66,9 +66,7 @@ export default function BandSection(): React.JSX.Element {
         <BandRow key={app.id} app={app} />
       ))}
       <Text style={styles.note}>
-        Apps that ship with Centraid may put their own sections in the bottom
-        band. Turn one off and Centraid&apos;s band comes back for that app
-        only.
+        Turn one off and Centraid&apos;s band comes back for that app only.
       </Text>
     </SettingsSection>
   );

@@ -119,10 +119,7 @@ export function CaptureOverlay({
         () => undefined
       );
       if (candidate) setPreview(applyDelegateCaptureKind(local, candidate));
-      else
-        setStatus(
-          "The local harness is unavailable. Choose the destination before saving."
-        );
+      else setStatus("Local harness unavailable — pick the destination.");
     }
     setBusy(false);
   };
@@ -241,7 +238,7 @@ export function CaptureOverlay({
               setText(event.target.value);
               setPreview(undefined);
             }}
-            placeholder="Remind me to call Maya, spent $18 on lunch, meeting tomorrow at 9…"
+            placeholder="Remind me to call Maya…"
           />
         </label>
         <button
@@ -254,8 +251,7 @@ export function CaptureOverlay({
         {preview ? (
           <>
             <p className={styles.hint}>
-              Review the destination and parsed fields. Nothing is committed
-              until you choose Save.
+              Review the destination and parsed fields before saving.
             </p>
             <div className={styles.kinds} aria-label="Capture destination">
               {(["task", "expense", "note", "event"] as const).map((kind) => (

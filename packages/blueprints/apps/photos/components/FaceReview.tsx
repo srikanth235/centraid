@@ -54,6 +54,7 @@ import {
 } from "../../_shared/triage-session.ts";
 import type { TriageSession } from "../../_shared/triage-session.ts";
 import { act, narrate } from "../outcomes.ts";
+import { photosFaceMatchedOn } from "../shared-copy.ts";
 
 import styles from "./FaceReview.module.css";
 
@@ -357,11 +358,8 @@ export function FaceReview({
           {proposedName ? `Proposed: ${proposedName}` : "No proposed match"}
         </h3>
         <p className={styles.body}>
-          {proposedName
-            ? `Matched on ${current.matchCount} other photograph${current.matchCount === 1 ? "" : "s"}. `
-            : ""}
-          Nothing is written until you confirm, and a rejection is remembered so
-          the same face is not proposed twice.
+          {proposedName ? photosFaceMatchedOn(current.matchCount) : ""}
+          A rejection is remembered, so the same face is not proposed twice.
         </p>
         <PendingWriteActions
           row={current as unknown as Record<string, unknown>}

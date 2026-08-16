@@ -91,3 +91,12 @@ The brief's `sharing` screen is represented by the vault sharing plane, and its 
 `--seam` is ink for expiring and in-flight states: purge countdowns, pending backup verdicts, and queued-copy rows. `--net-wash` is not used for Photos panels; offline, refused-write, and permission states remain border-and-ink because they are expected or explanatory states, not destructive controls. Revisit only if Photos adds a genuinely destructive or egress panel.
 
 The packed tile geometry, overlay slots, skeleton, viewer stack, scrub rails, filmstrip, info rail, Memories strip, and mono-direction rules are metric-perfect against the v9 brief. Changes require a failing contract or an updated design decision before implementation.
+
+## Copy-budget divergences (#805)
+
+Sanctioned departures from the [DESIGN.md § Copy](../DESIGN.md) budgets, kept by the #805 audit rather than fixed quietly. Change a row only when the decision behind it changes.
+
+| Divergence | Decision | Enforcement / reason |
+| --- | --- | --- |
+| The desktop crash-loop notification (`apps/desktop/src/main/gateway-monitor.ts`, "…Use Settings → Gateway to restart it manually.") runs three sentences. | Keep until the notification path is verified live. | [receipts/issue-660-desktop-onboarding-scenarios.md](../receipts/issue-660-desktop-onboarding-scenarios.md) records the hold: the advice can fire while the startup error screen is showing, where Settings is unreachable. Rewording without live verification risks pointing at a dead control. |
+| Docs `DRIVE_EMPTY` and `folderEmpty` render two actions against the empty-state budget's "at most one action". | Keep. | Removing the second action is an affordance change, not a copy change; the copy itself is in budget. Revisit with a design decision, not a copy sweep. |

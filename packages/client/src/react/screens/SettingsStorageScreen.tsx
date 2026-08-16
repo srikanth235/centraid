@@ -315,8 +315,8 @@ function VaultStorageChoice({
         {hosted
           ? "Snapshots, attachments, and previews are kept as one sealed bundle with your provider."
           : homeConnectionId
-            ? "Everything stays on this machine. Switch to Hosted to keep an encrypted offsite copy."
-            : "Everything stays on this machine. Connect a storage provider above to turn on hosted storage."}
+            ? "Everything stays on this machine — Hosted keeps an encrypted offsite copy."
+            : "Everything stays on this machine — connect a provider above for hosted storage."}
       </p>
     </div>
   );
@@ -471,8 +471,8 @@ export default function SettingsStorageScreen({
       <div className={drawerGroupCss.groupBody}>
         <div className={controlsCss.note}>
           Keep an encrypted copy of this profile with a storage provider —
-          snapshots, attachments, and previews, all sealed on your device before
-          they leave it. The provider only ever sees ciphertext.
+          snapshots, attachments, and previews, all sealed on your device, so
+          the provider only ever sees ciphertext.
         </div>
 
         {rows === null ? (

@@ -263,10 +263,10 @@ describe("the standing line", () => {
 describe(errorBody, () => {
   it("drops the since clause when no reading ever gave it a clock", () => {
     expect(errorBody(undefined)).toBe(
-      "Automations are stored on the gateway and are safe. Nothing has been lost — runs queue until the scheduler is back."
+      "Runs queue until the scheduler is back."
     );
     expect(errorBody("09:12")).toBe(
-      "Automations are stored on the gateway and are safe. Nothing has run since 09:12 and nothing has been lost — runs queue until the scheduler is back."
+      "Nothing has run since 09:12; runs queue until the scheduler is back."
     );
   });
 });

@@ -366,7 +366,7 @@ export async function runAcpTurn(
           level: "warn",
           code: "session_resume_self_heal",
           message:
-            "The harness no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.",
+            "The harness lost its saved session — Centraid restored the conversation from its ledger.",
         });
       }
     } else {
@@ -469,7 +469,7 @@ export async function runAcpTurn(
             level: "warn",
             code: "session_resume_self_heal",
             message:
-              "The harness no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.",
+              "The harness lost its saved session — Centraid restored the conversation from its ledger.",
           });
         }
       }
@@ -553,7 +553,7 @@ export async function runAcpTurn(
         code: "session_hydrated",
         message:
           continuity === "fresh" && input.prevSessionId
-            ? "The prior harness session could not resume. Started fresh and restored context from the conversation ledger."
+            ? "The prior harness session could not resume — context restored from the conversation ledger."
             : "Switched harnesses and restored context from the conversation ledger.",
       });
       const historicalAttachments =

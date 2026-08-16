@@ -734,7 +734,7 @@ function RunTurn({
       {watchLost && running ? (
         <div className={styles.turnNotice} data-testid="turn-watch-lost">
           <div className={styles.turnErrorBody}>
-            Lost the live connection to this run. It may still be working.
+            Lost the live connection — the run may still be working.
           </div>
           <div className={styles.turnErrorActions}>
             <button
@@ -978,7 +978,7 @@ function Composer({
           (Boolean(trimmed) || ready.length > 0) &&
           !pending.some((attachment) => attachment.state === "uploading")
         }
-        placeholder="Ask about these runs — what failed, what changed, why…"
+        placeholder="Ask about these runs…"
         ariaLabel="Ask about this automation's runs"
         context={activePicker?.supportsContext ? context : undefined}
         above={
@@ -1620,8 +1620,8 @@ export default function AutomationThreadScreen({
           ) : (
             <div className={styles.recognitionChoiceDetail}>
               <p>
-                Uses the configured deterministic service. No provider model is
-                called and no billed delegate step runs.
+                Uses the configured deterministic service — no provider model,
+                no billed step.
               </p>
               <p>Delegate option: {d.recognition.delegate.latency}</p>
               <p>{d.recognition.delegate.consequence}</p>

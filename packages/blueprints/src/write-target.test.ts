@@ -70,7 +70,7 @@ describe("resolveWriteTarget (#599)", () => {
     const target = resolve("club");
     expect(target.disabled).toBe(true);
     expect((target as { reason: string }).reason).toBe(
-      "You can view Book Club but not add to it."
+      "Book Club is read-only here."
     );
   });
 
@@ -98,7 +98,7 @@ describe("resolveWriteTarget (#599)", () => {
     const frozen = [{ id: "own", label: "Library", canWrite: false }, family];
     expect(resolve("own", frozen)).toStrictEqual({
       disabled: true,
-      reason: "You can’t add to Library yet.",
+      reason: "Library is read-only for now.",
     });
     // "All" resolves through the same branch, so it is blocked identically.
     expect(resolve(null, frozen)).toStrictEqual(resolve("own", frozen));

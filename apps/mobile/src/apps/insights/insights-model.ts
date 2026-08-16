@@ -21,6 +21,12 @@
 //     reports no disk figure and no shared-compute roster. The reference's
 //     `disk` and `compute shared` facts are therefore absent, not zeroed.
 
+import { INSIGHTS_FORECAST_NOTE } from "@centraid/client/insights-copy";
+import {
+  EMPTY_HEALTH,
+  ERROR_HEALTH,
+  READING_HEALTH,
+} from "@centraid/client/surface-copy";
 import {
   barShares,
   dayFold,
@@ -251,7 +257,7 @@ export function spendFacts(summary: InsightsSummary): PanelFact[] {
     },
     {
       key: "forecast",
-      note: "A 30-day run rate at this window's pace, not a bill.",
+      note: INSIGHTS_FORECAST_NOTE,
       value: formatUsd(kpis.forecastCostUsd),
     },
   ];
@@ -494,10 +500,9 @@ export function insightsHealth(
   uptimeMs: number | undefined
 ): HealthCopy {
   const generic = {
-    emptyText: "Nothing to attend to · nothing needs you here right now.",
-    errorText:
-      "This page could not load · everything else on the gateway is unaffected.",
-    loadingText: "Reading from the gateway",
+    emptyText: EMPTY_HEALTH,
+    errorText: ERROR_HEALTH,
+    loadingText: READING_HEALTH,
   };
   // Nothing read yet, or nothing read successfully: the three generic
   // sentences are the whole copy, and `healthLineFor` picks the one that
@@ -520,7 +525,7 @@ export function originActivityHealth(
   summary: InsightsSummary | undefined
 ): HealthCopy {
   const generic = {
-    emptyText: "Nothing to attend to · nothing needs you here right now.",
+    emptyText: EMPTY_HEALTH,
     errorText: "Activity could not load · your vault contents are unaffected.",
     loadingText: "Reading vault activity",
   };

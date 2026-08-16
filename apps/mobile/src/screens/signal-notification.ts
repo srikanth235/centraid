@@ -20,7 +20,7 @@ export function signalNotificationCopy(
     return {
       eyebrow: "Backup alert",
       title: "Your vault backup needs attention",
-      body: "The latest verified copy is incomplete. Review the backup facts before relying on recovery.",
+      body: "The latest verified copy is incomplete.",
       cause,
       consequence: "Recovery may not include the newest vault items.",
       actionLabel: "Open Backup health",
@@ -32,7 +32,7 @@ export function signalNotificationCopy(
   return {
     eyebrow: "Upload alert",
     title: "Uploads need your attention",
-    body: "Some content still exists only on this phone. It stays protected here, but another device cannot recover it yet.",
+    body: "Some content still exists only on this phone.",
     cause,
     consequence: "Only this phone holds those pending items.",
     actionLabel: "Open On this phone",

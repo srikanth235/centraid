@@ -277,16 +277,12 @@ describe("the standing line and the reference tail", () => {
     const copy = approvalsHealth(3);
     expect(copy.label).toBe("3 items waiting on you");
     expect(copy.detail).toBe(
-      "Nothing here has happened yet. Approving is the act."
+      "Nothing here has happened yet — approving is the act."
     );
     // No inline verb, ever: the page's whole content IS the thing to act on.
     expect(copy.action).toBeUndefined();
-    expect(copy.emptyText).toBe(
-      "Nothing to attend to · nothing needs you here right now."
-    );
-    expect(copy.errorText).toBe(
-      "This page could not load · everything else on the gateway is unaffected."
-    );
+    expect(copy.emptyText).toBe("Nothing to attend to");
+    expect(copy.errorText).toBe("This page could not load");
     expect(copy.loadingText).toBe("Reading from the gateway");
   });
 
@@ -296,10 +292,10 @@ describe("the standing line and the reference tail", () => {
       "Nothing is sent. The automation is told it was refused, and remembers."
     );
     expect(GRANTS_NOTE).toBe(
-      "A standing grant skips this page for one narrow thing. Revoking one takes effect on the next run."
+      "A standing grant skips this page for one narrow thing; revoking one takes effect on the next run."
     );
     expect(EMPTY_BODY).toBe(
-      "Staged writes, lapsed connections and requests for wider access appear here. This page is empty most of the time, and that is the healthy state."
+      "Staged writes, lapsed connections and access requests land here."
     );
     expect(LOADING_NOTE).toBe(
       "A row knows its shape before its content arrives, so nothing reflows when it does."

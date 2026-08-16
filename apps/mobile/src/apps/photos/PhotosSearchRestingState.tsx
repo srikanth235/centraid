@@ -15,7 +15,7 @@ export default function PhotosSearchRestingState(): React.JSX.Element {
         <Text style={styles.eyebrow}>Nothing typed</Text>
         <Text style={styles.title}>Search the whole library</Text>
         <Text style={styles.body}>
-          Not the photographs that happen to be loaded. Try one of these.
+          Not only the photographs already loaded — try one of these.
         </Text>
       </View>
     </ScrollView>

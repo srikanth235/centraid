@@ -180,9 +180,7 @@ export function CreateModal({
     }
     if (outcome?.status === "queued" || outcome?.status === "in-flight") {
       setQueued(true);
-      setFormNotice(
-        "Saved on this device. It will sync automatically; no need to submit again."
-      );
+      setFormNotice("Saved on this device — it syncs on its own.");
       return;
     }
     setFormNotice(outcomeMessage(outcome) ?? "Something went wrong.");

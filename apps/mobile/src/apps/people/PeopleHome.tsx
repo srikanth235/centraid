@@ -223,7 +223,7 @@ export default function PeopleHome({
       );
     else if (revisionId && channelId)
       showUndoStatus(
-        "Contact saved. The previous value can be restored.",
+        "Contact saved.",
         () =>
           void write("undo-contact-channel", {
             channel_id: channelId,
@@ -246,7 +246,7 @@ export default function PeopleHome({
             );
             if (!revisionId) return;
             showUndoStatus(
-              "Contact deleted. You can restore it now.",
+              "Contact deleted.",
               () =>
                 void write("undo-contact-channel", {
                   channel_id: String(channel.channel_id),

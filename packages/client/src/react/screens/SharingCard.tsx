@@ -15,6 +15,7 @@ import type {
   PendingEdge,
   ReceiveSetting,
 } from "../../gateway-client.js";
+import { SHARING_INVALID_INVITE } from "../../sharing-copy.js";
 import { startVisibilityTicker } from "../shell/routes/visibility-ticker.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
@@ -321,8 +322,7 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Redeem a shared-space invite</h3>
           <p className={deviceStyles.meta}>
-            Create your vault first. If the sharer is remote, connect with them,
-            then paste the one-time invitation here.
+            Create your vault first, then paste the one-time invitation here.
           </p>
           <div className={styles.proposeForm}>
             <select
@@ -351,7 +351,7 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
               onClick={() => {
                 const claim = parseCommonsInvite(commonsInviteCode);
                 if (!claim) {
-                  setErrorMessage("That shared-space invitation is invalid.");
+                  setErrorMessage(SHARING_INVALID_INVITE);
                   return;
                 }
                 // The one-time secret leaves component state as soon as it is

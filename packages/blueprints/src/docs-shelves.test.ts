@@ -83,7 +83,6 @@ const copy = (await import(app("view-copy.ts"))) as {
   ) => string | null;
   folderCaption: (name: string) => string;
   SEARCH_CAPTION_SAMPLE: string;
-  EMPTY_MODEL_NOTE: string;
   FILTER_EMPTY: EmptyCopy;
   folderEmpty: (name: string) => EmptyCopy;
   searchEmpty: (query: string) => EmptyCopy;
@@ -314,7 +313,6 @@ describe("docs view copy", () => {
     ]);
     expect(variants.filter((v) => v.display)).toHaveLength(1);
     expect(variants[0]?.display).toBe(true);
-    expect(copy.EMPTY_MODEL_NOTE).toContain("Five empty states");
   });
 
   it("lets what the member just did win over the shelf", () => {
@@ -404,7 +402,7 @@ describe("docs view copy", () => {
   it("carries the More sheet's own words, and draws no dead end", () => {
     expect(copy.MORE_TITLE).toBe("More in Docs");
     expect(copy.MORE_FOOTER).toBe(
-      "Everything Docs can show. The vault mark in the head goes back to the rest of Centraid."
+      "Everything Docs can show — the vault mark goes back to the rest of Centraid."
     );
     expect(copy.MORE_ROWS.map((r) => r.label)).toStrictEqual([
       "Recently changed",
@@ -424,7 +422,7 @@ describe("docs view copy", () => {
   });
 
   it("says the offline banner and the action status in the spec's words", () => {
-    expect(copy.OFFLINE_BANNER).toContain("The gateway is unreachable.");
+    expect(copy.OFFLINE_BANNER).toContain("Gateway unreachable");
     expect(copy.OFFLINE_BANNER_ACTION).toBe("Retry");
     expect(copy.RECENT_RULE).toContain(
       "nothing records when a document was opened"

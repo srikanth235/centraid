@@ -1,4 +1,5 @@
 import { relativeTime } from "../../../app-format.js";
+import { APPROVALS_HEALTH_DETAIL } from "../../../approvals-copy.js";
 import type {
   OutboxGrant,
   OutboxItem,
@@ -67,7 +68,7 @@ export function approvalsHealth(tally: ApprovalsTally): {
   detail: string;
 } {
   return {
-    detail: "Nothing here has happened yet. Approving is the act.",
+    detail: APPROVALS_HEALTH_DETAIL,
     label: `${tally.waiting} waiting on you`,
   };
 }

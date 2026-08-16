@@ -110,7 +110,7 @@ describe("the album picker panel", () => {
   it("says which album it is adding to, and what an album is", () => {
     const markup = picker();
     expect(markup).toContain("Add to “Coast”");
-    expect(markup).toContain("nothing moves and nothing is copied");
+    expect(markup).toContain("An album refers to a photograph where it lives.");
   });
 
   it("packs justified rows from real aspect ratios, never squares", () => {
@@ -255,7 +255,7 @@ describe("the album picker commit", () => {
   it("says why instead of firing a write it knows will be refused", async () => {
     setWriteTargetResolver(() => ({
       disabled: true,
-      reason: "You can view Family but not add to it.",
+      reason: "Family is read-only here.",
     }));
     let closed = 0;
     await submitPicker(album, ["a1"], {
@@ -265,7 +265,7 @@ describe("the album picker commit", () => {
       },
     });
     expect(said.map((s) => s.text)).toStrictEqual([
-      "You can view Family but not add to it.",
+      "Family is read-only here.",
     ]);
     expect(writes).toHaveLength(0);
     expect(closed).toBe(0);

@@ -70,6 +70,7 @@ import {
   triageProgress,
   triageSkip,
 } from "@centraid/blueprints/apps/_shared/triage-session";
+import { photosFaceMatchedOn } from "@centraid/blueprints/apps/photos/shared-copy";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
@@ -407,9 +408,7 @@ export default function FaceReview({
                     : "No proposed match"}
                 </Text>
                 <Text style={[styles.body, { color: colors.textSoft }]}>
-                  {proposedName
-                    ? `Matched on ${current.matchCount} other photograph${current.matchCount === 1 ? "" : "s"}. `
-                    : ""}
+                  {proposedName ? photosFaceMatchedOn(current.matchCount) : ""}
                   Nothing is written until you confirm, and a rejection is
                   remembered so the same face is not proposed twice.
                 </Text>

@@ -67,8 +67,7 @@ export default function GatewayAlertsTab(
                   Alert when unreachable
                 </div>
                 <div className={styles.alertToggleSub}>
-                  A system notification fires once per outage — even with this
-                  window in the background — and again when the gateway
+                  One system notification per outage, and one when the gateway
                   recovers.
                 </div>
               </div>

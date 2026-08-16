@@ -202,7 +202,7 @@ function DemoSection({
       <Note>
         {demo.rows > 0
           ? `${demo.rows} demo row${demo.rows === 1 ? "" : "s"} loaded — safe to reset any time; real data is never touched.`
-          : "Load a sample scenario to try the app on realistic data. Demo rows are marked, never fire automations, and reset in one click."}
+          : "A sample scenario on realistic data — marked, inert, and reset in one click."}
       </Note>
       <div className={vault.demoActions}>
         {demo.seedable ? (

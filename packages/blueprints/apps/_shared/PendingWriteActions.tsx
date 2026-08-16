@@ -3,6 +3,7 @@ import type { MouseEvent } from "react";
 import {
   pendingOverlayCanDiscard,
   pendingOverlayCanRetry,
+  pendingChangeLabel,
   pendingOverlayCopy,
   readPendingOverlay,
 } from "./pending-overlay.ts";
@@ -31,7 +32,7 @@ export function PendingWriteActions({
 
   return (
     <span
-      aria-label={`Pending change: ${pendingOverlayCopy(pending)}`}
+      aria-label={pendingChangeLabel(pending)}
       style={{
         alignItems: "center",
         display: "inline-flex",

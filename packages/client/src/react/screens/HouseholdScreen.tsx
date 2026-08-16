@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import { DEVICES_EMPTY_BODY, DEVICES_EMPTY_TITLE } from "../../devices-copy.js";
 import type {
   CentraidGatewayDevice,
   GatewayDeviceTicket,
@@ -358,7 +359,7 @@ export default function HouseholdScreen(
       ) : state === "error" ? (
         <PanelBlock
           action={{ label: "Try again", onClick: roster.refresh }}
-          body="This page is being served from a cached copy. Device pairing and revocation both need the vault host, so both are unavailable until it answers."
+          body="Pairing and revocation need the vault host — this page is a cached copy."
           eyebrow="Copies"
           title="Cannot reach the vault host"
           tone="net"
@@ -368,9 +369,9 @@ export default function HouseholdScreen(
         state === "empty" ? (
           <EmptyBlock
             action={{ label: "Pair a device", onClick: openPairing }}
-            body="Pair a phone or a laptop to reach this vault from it. Everything stays on your own machines."
+            body={DEVICES_EMPTY_BODY}
             routine
-            title="Only this device is enrolled"
+            title={DEVICES_EMPTY_TITLE}
           />
         ) : null
       ) : (

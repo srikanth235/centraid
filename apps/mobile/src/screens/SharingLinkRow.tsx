@@ -9,6 +9,8 @@ import * as Clipboard from "expo-clipboard";
 import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
+import { SHARING_UNREACHABLE } from "@centraid/client/sharing-copy";
+
 import { Text } from "../kit/components/NativeText";
 import type { useTheme } from "../kit/theme";
 import { density, family, radii, t } from "../kit/theme";
@@ -151,9 +153,7 @@ export function LinkTicketPanel({
         setPasted("");
         onLinked();
       } else {
-        setErrorMessage(
-          outcome.detail ?? "That person could not be reached right now."
-        );
+        setErrorMessage(outcome.detail ?? SHARING_UNREACHABLE);
       }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));

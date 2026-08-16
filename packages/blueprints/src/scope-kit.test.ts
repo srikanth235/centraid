@@ -74,7 +74,7 @@ describe("scope-kit suite", () => {
       const target = scopesModule.photoWriteTarget("new", "club");
       expect(target.disabled).toBe(true);
       expect((target as { reason: string }).reason).toBe(
-        "You can view Book Club but not add to it."
+        "Book Club is read-only here."
       );
       // Same answer through the per-scope question the tile controls ask.
       expect(scopesModule.canWriteScope("club")).toBe(false);

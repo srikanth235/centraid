@@ -477,7 +477,7 @@ function PhotoMosaic({
         // Home that is not sans or serif, because it is reporting a system
         // fact (where the bytes are) rather than writing to the member.
         <Text style={[styles.awaiting, { color: colors.textFaint }]}>
-          Photographs live on the gateway. These fill in when it is back.
+          Photographs live on the gateway — these fill in when it is back.
         </Text>
       ) : null}
     </View>

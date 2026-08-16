@@ -284,7 +284,7 @@ export default function VaultsSwitcher({
               <ActiveCard colors={colors} styles={styles} vault={active} />
             ) : (
               <Text style={styles.empty}>
-                No vault selected yet. Pair a desktop to connect one.
+                No vault yet — pair a desktop to connect one.
               </Text>
             )}
 

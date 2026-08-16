@@ -87,7 +87,7 @@ export default function StarredRoute(props: StarredRouteProps): JSX.Element {
       subtitle="Apps you star show up here for quick access."
     >
       {appItems.length + automationItems.length === 0 ? (
-        <PageEmpty message="Nothing starred yet. Hover an app tile and tap the star." />
+        <PageEmpty message="Nothing starred yet — star an app tile to fill this." />
       ) : (
         <StarredScreen
           appItems={appItems}

@@ -45,10 +45,9 @@ export function GatewayDetailsStep({
         <textarea
           ref={ticketRef}
           className={styles.textarea}
-          // The ticket names the VAULTS you are joining; which gateway hosts
-          // them is the ticket's business, not the reader's. The CLI is quoted
+          // The label carries the meaning; the placeholder is the CLI, quoted
           // verbatim because the person minting the ticket has to type it.
-          placeholder="Paste the ticket for the vaults you're joining — centraid-gateway pair --vault <name>"
+          placeholder="centraid-gateway pair --vault <name>"
           rows={3}
           spellCheck={false}
           value={state.ticket}

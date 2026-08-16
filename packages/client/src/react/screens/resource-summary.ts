@@ -340,7 +340,7 @@ export function subsystemUsageRows(
     {
       label: "Harness runs",
       value: `${s.harnessRuns.runs} runs · ${formatBusyMs(s.harnessRuns.busyMs)} active`,
-      note: "Measured, not limited by Conserve. CPU time for harness runs isn’t separately measurable yet.",
+      note: "Measured, not limited by Conserve.",
     },
   ];
 }

@@ -84,7 +84,7 @@ function onboardingComplete(): boolean {
 export function installWebChrome(): void {
   const offline = notice(
     "offline",
-    "You’re offline. Centraid will reconnect to your gateway when the network returns."
+    "Offline — Centraid reconnects to your gateway when the network returns."
   );
   const syncGateway = (snapshot?: {
     status?: "unknown" | "up" | "down";

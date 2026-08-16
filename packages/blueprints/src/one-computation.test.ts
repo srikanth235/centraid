@@ -45,13 +45,13 @@ function collisions(
 
 // Pre-existing #725-out-of-scope pure laws. This is a tighten-only baseline:
 // a new collision fails, and deleting one shrinks this list in the same PR.
+// `SAVE_AS_NEW` and `SAVE_AS_NEW_EXPLANATION` left it in #805: both surfaces
+// now re-export them from `apps/photos/shared-copy.ts`, which is one owner.
 const LEGACY_COLLISIONS = [
   "DEFAULT_RUNG",
   "EDITOR_RATIOS",
   "RUNGS",
   "RUNG_LABELS",
-  "SAVE_AS_NEW",
-  "SAVE_AS_NEW_EXPLANATION",
   "centredCrop",
   "emptyTrashOrder",
   "emptyTrashSummary",

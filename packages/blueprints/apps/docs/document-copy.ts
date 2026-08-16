@@ -53,7 +53,7 @@ export const DSAVE: Readonly<Record<SaveOutcomeId, SaveOutcome>> = {
     id: "unsaved",
     label: "unsaved changes",
     status: "Unsaved changes on this device · nothing has been committed",
-    note: "Closing now keeps the draft here and commits nothing. The document in the library is unchanged.",
+    note: "Closing now keeps the draft here and commits nothing.",
     commit: "Save",
     commits: true,
     net: false,
@@ -62,7 +62,7 @@ export const DSAVE: Readonly<Record<SaveOutcomeId, SaveOutcome>> = {
     id: "saving",
     label: "saving",
     status: "Saving · one command in flight",
-    note: "The command has left this device and has not been acknowledged. Nothing else is queued behind it.",
+    note: "The command has left this device and has not been acknowledged.",
     commit: "Saving…",
     commits: false,
     net: false,
@@ -71,7 +71,7 @@ export const DSAVE: Readonly<Record<SaveOutcomeId, SaveOutcome>> = {
     id: "saved",
     label: "saved",
     status: "Saved",
-    note: "Committed as a new version. The receipt is in this document's history, and version 6 is still there in full.",
+    note: "Committed as a new version; the receipt is in this document's history.",
     commit: "Saved",
     commits: false,
     net: false,
@@ -81,7 +81,7 @@ export const DSAVE: Readonly<Record<SaveOutcomeId, SaveOutcome>> = {
     id: "nochange",
     label: "nothing changed",
     status: "Nothing changed · no new version, no receipt",
-    note: "The body you saved is byte-identical to version 7. A no-op is not a version: nothing was written, and the history is not one entry longer.",
+    note: "Byte-identical to the last version — nothing written, no new entry.",
     commit: "Save",
     commits: true,
     net: false,
@@ -90,7 +90,7 @@ export const DSAVE: Readonly<Record<SaveOutcomeId, SaveOutcome>> = {
     id: "approval",
     label: "waiting for approval",
     status: "Waiting for the owner's approval · held, not refused",
-    note: "The write is legitimate and it is being held until the owner consents. It is in Notifications, and it commits the moment they do. This is not the same state as queued.",
+    note: "Held in Notifications until the owner consents; it commits the moment they do.",
     commit: "Save",
     commits: false,
     net: false,
@@ -100,7 +100,7 @@ export const DSAVE: Readonly<Record<SaveOutcomeId, SaveOutcome>> = {
     id: "queued",
     label: "queued on this device",
     status: "Queued on this device · the gateway is unreachable",
-    note: "The write is legitimate and nobody has to approve it. It is on this device, in order, and it goes the moment the gateway is back. Nothing is lost and nothing is discarded to make room.",
+    note: "On this device, in order; it goes the moment the gateway is back.",
     commit: "Save",
     commits: false,
     net: true,
@@ -109,7 +109,7 @@ export const DSAVE: Readonly<Record<SaveOutcomeId, SaveOutcome>> = {
     id: "refused",
     label: "refused",
     status: "Refused",
-    note: 'The rule that refused it can be named: a body can only be set on a text document. This is a different refusal from "not permitted", which names a person to ask instead of a rule.',
+    note: "The rule refused it: a body can only be set on a text document.",
     commit: "Save",
     commits: true,
     net: true,
@@ -149,7 +149,7 @@ export const MACHINE_SUMMARY_EYEBROW = "Read by a machine, not written by you";
 export const READ_OFF = {
   eyebrow: "Switched off",
   title: "Three capabilities are switched off",
-  body: "A summary, the people this document names and the dates it contains each need a capability you have not turned on. Stated once, here.",
+  body: "A summary, the people named and the dates inside each need a capability that is off.",
   action: "What Docs may read →",
 } as const;
 
@@ -187,8 +187,12 @@ export const THIS_DOCUMENT = {
 /** §6.2 folds Activity INTO the version history, and says so. */
 export const VERSIONS_ACTIVITY_HEAD = "Activity";
 export const VERSIONS_ACTIVITY_META = "folded in here, deliberately";
+/** Activity was CUT as its own screen: what happened to a document and which
+ *  version it produced are one spine, so the history carries both. That
+ *  rationale is a design fact, not a sentence a member standing on the screen
+ *  needs; what they need is what the third column means. */
 export const VERSIONS_CUT_NOTE =
-  "Cut: Activity as its own screen. What happened to a document and which version it produced are one spine. The third column records whether a member, an app or a machine did it.";
+  "The third column records whether a member, an app or a machine did it.";
 
 /** §8's three tabs. One rail answers all three former screens: "All three
  *  answer 'what is this row', so they belong beside the row and not three
@@ -211,8 +215,7 @@ export const RAIL_NOTES = {
     "nothing has been converted. Docs holds it, versions it and files it, and hands the file to an app that reads this kind",
   duplicateBytes:
     "One copy of the bytes, and every app that points at it points at the same copy.",
-  footer:
-    "Everything here is about one row. Select another and the rail follows it.",
+  footer: "Select another row and the rail follows it.",
 } as const;
 
 /** §8's trailing row for a kind Docs cannot show (§10.1's `render` column). */

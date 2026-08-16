@@ -4,18 +4,31 @@
 // that changes on its own schedule, and because "each shelf is empty on its
 // own terms" is a table, not a chain of ternaries in a render function.
 //
-// The copy here is FINAL — the handoff's strings, verbatim. It never names the
-// storage noun for a scope: what a member reads for a vault is `scope.label`,
-// which the shell owns and the owner may rename.
+// The copy here is FINAL — the handoff's strings, compressed to DESIGN.md's
+// `## Copy` budgets where the handoff wrote two sentences and one would do
+// (issue #805). It never names the storage noun for a scope: what a member
+// reads for a vault is `scope.label`, which the shell owns and the owner may
+// rename.
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
-import { PEOPLE, PLACES, SEARCH, STORAGE } from "./shelves.ts";
-import type { ShelfId } from "./shelves.ts";
-
-// The two strings native also renders live in an import-free leaf
+// The strings native also renders live in an import-free leaf
 // (`shared-copy.ts`) so the mobile TypeScript project can read them without
 // pulling in this module's explicit-`.ts` graph. They are re-exported here so
 // every web caller keeps importing them from the module it already knows.
-export { duplicatesLede, PLACE_UNNAMED } from "./shared-copy.ts";
+import {
+  PHOTOS_EMPTY_DUPLICATES,
+  PHOTOS_EMPTY_FAVORITES,
+  PHOTOS_SEARCH_PLACEHOLDER,
+} from "./shared-copy.ts";
+import { PEOPLE, PLACES, SEARCH, STORAGE } from "./shelves.ts";
+import type { ShelfId } from "./shelves.ts";
+
+export {
+  duplicatesLede,
+  PHOTOS_EMPTY_DUPLICATES,
+  PHOTOS_EMPTY_FAVORITES,
+  PHOTOS_SEARCH_PLACEHOLDER,
+  PLACE_UNNAMED,
+} from "./shared-copy.ts";
 
 /** What a shelf calls itself in the frame's app bar, and what its count
  *  counts. `unit` is plural; frame.tsx singularises it for a count of one. */
@@ -58,14 +71,12 @@ export function shelfCopy(id: ShelfId): ShelfCopy {
  *  because the member has not imported anything yet says something different
  *  from one that is empty because nothing matched. */
 const EMPTY_COPY: Readonly<Record<string, string>> = {
-  [FAVORITES]: "No favorites yet — tap the heart on any photograph.",
-  [ALBUMS]:
-    "No albums yet. An album refers to a photograph where it lives; it never moves or copies anything.",
+  [FAVORITES]: PHOTOS_EMPTY_FAVORITES,
+  [ALBUMS]: "No albums yet — an album refers to a photograph where it lives.",
   [PLACES]:
     "No places yet — a photograph lands here once it carries where it was taken.",
-  [PEOPLE]:
-    "No people yet. Faces are proposed on a photograph you open, and a name is only ever yours to confirm.",
-  [DUPLICATES]: "No near-identical clusters in your library.",
+  [PEOPLE]: "No people yet — faces are proposed on a photograph you open.",
+  [DUPLICATES]: PHOTOS_EMPTY_DUPLICATES,
   [TRASH]: "Trash is empty.",
   [SEARCH]:
     "Search reaches titles, captions, people, places, things and album names across your whole library.",
@@ -79,12 +90,15 @@ const EMPTY_COPY: Readonly<Record<string, string>> = {
  * (issue #599 — what a member reads for a scope is `scope.label`, which the
  * owner is free to rename, and `src/photos-vocabulary.test.ts` enforces it).
  * "your library" is this app's own word for the same place and is what every
- * other line here already calls it. The sentence that carries the meaning —
- * where the originals stay, and that nothing is copied anywhere unasked — is
- * verbatim, and it is the load-bearing half.
+ * other line here already calls it.
+ *
+ * ONE SENTENCE, NOT TWO (issue #805). The handoff's second clause — that
+ * nothing is copied anywhere unasked — is defensive reassurance, and the
+ * enrichment consent is where an egress promise is actually made. What
+ * survives is the fact a member is deciding on: where the bytes land.
  */
 const LIBRARY_EMPTY_BODY =
-  "Photographs you bring in are held in your library. The originals stay on your gateway and nothing is copied anywhere you have not asked for.";
+  "Photographs you bring in are held in your library; the originals stay on your gateway.";
 
 /**
  * The empty block's TITLE (§14, proto 4406): display serif, one line. It is
@@ -130,7 +144,7 @@ export function emptyCopy(
  * 30-day grace window and the same restore behaviour.
  */
 export const TRASH_NOTE =
-  "Deleted photographs stay here for 30 days, then they are purged. Anything restored goes back to the day it was taken.";
+  "Deleted photographs are purged after 30 days; restoring returns them to the day they were taken.";
 
 /**
  * Emptying the trash (proto:4800-4803), in words. This is the app's only
@@ -151,7 +165,8 @@ export const EMPTY_TRASH_COPY = {
   cancel: "Keep them",
   /** Why the control cannot fire, when it cannot — stated, never a grey box
    *  with nothing to read (§18). */
-  readOnly: (label: string) => `You can view ${label} but not delete from it.`,
+  readOnly: (label: string) =>
+    `${label} is view-only — nothing deletes from it.`,
 } as const;
 
 /** Does the empty state offer Import? Only where importing would put a
@@ -173,10 +188,10 @@ export function emptyOffersImport(
  */
 export function peoplePendingNote(unmatchedCount: number | null): string {
   if (unmatchedCount === null) {
-    return "Faces are not matched to anyone yet. Face review proposes them one at a time, and nothing is named until you name it.";
+    return "Faces are not matched to anyone yet — face review proposes them one at a time.";
   }
   const verb = unmatchedCount === 1 ? "face is" : "faces are";
-  return `${unmatchedCount} ${verb} not matched to anyone. Face review proposes them one at a time, and nothing is named until you name it.`;
+  return `${unmatchedCount} ${verb} not matched to anyone — face review proposes them one at a time.`;
 }
 
 /**
@@ -240,9 +255,11 @@ export const OFFLINE_COPY = {
   /** The one status line, verbatim (proto 3951). */
   status:
     "Offline · meaning renders from the local replica; bytes stay on the gateway",
-  /** The bordered banner's body, verbatim (proto 4871). */
+  /** The bordered banner's body — one sentence: the state, then what the
+   *  grid will look like because of it (issue #805; proto 4871 said the same
+   *  in three). */
   banner:
-    "The gateway is unreachable. Everything you see here is read from this device — captions, dates, albums, people. Photographs whose bytes are not cached show their shape and their colour instead.",
+    "Gateway unreachable — meaning reads from this device, uncached photographs show shape and colour.",
   /** Its one outlined control (proto 4872). */
   retry: "Retry",
   /** What the banner is called to a screen reader. */
@@ -276,8 +293,8 @@ export const EMPTY_ACTIONS = {
  *     screen exists to refuse. The row would be the one sentence on the
  *     screen that is not currently being read from anywhere.
  *   * The claim behind the row — the library is unaffected — is not lost: the
- *     lede says it in words ("nothing has been read, and nothing has been sent
- *     anywhere") and does not need a numeral it cannot source.
+ *     lede says it in words ("nothing has been read yet") and does not need a
+ *     numeral it cannot source.
  *
  * If the host ever hands the denial a library count (a field on `vaultDenied`,
  * or a rollup the deny path is allowed to keep), the row goes in as specified
@@ -285,11 +302,11 @@ export const EMPTY_ACTIONS = {
  */
 export const PERMISSION_COPY = {
   headline: "Photos has no access yet",
-  lede: "Photos reads your library to show it back to you. Until the owner approves that, this screen is all there is — nothing has been read, and nothing has been sent anywhere.",
+  lede: "Photos reads your library to show it back to you — nothing has been read yet.",
   missingLabel: "What is missing",
   /** The reason the host handed back, or an honest stand-in for none. */
   missingFallback:
-    "The owner has not approved the reads this app asked for. The exact list is in the owner’s settings, beside every other app.",
+    "The owner has not approved the reads this app asked for — the list is in their settings.",
   facts: [
     { label: "What Photos can see right now", value: "nothing" },
     {
@@ -320,7 +337,7 @@ export const STORAGE_COPY = {
   spaceMeta: (shown: number, bytes: string) =>
     `${shown} ${shown === 1 ? "photograph" : "photographs"} · ${bytes}`,
   windowNote: (shown: number) =>
-    `These numbers cover the ${shown} photographs loaded here. Older ones are still in your library — open Show more on the timeline to reach them, and this count grows with it.`,
+    `These numbers cover the ${shown} photographs loaded here — Show more on the timeline reaches older ones.`,
   wholeNote: "These numbers cover your whole library.",
   sizeAbsent:
     "No size was recorded for these, so the total below counts only the ones that carry one.",
@@ -345,13 +362,13 @@ export const STORAGE_COPY = {
   },
   healthLine: {
     unknown:
-      "Nobody has counted your originals yet. That answer comes from the gateway, and this screen will not guess it.",
+      "Nobody has counted your originals yet — that answer comes from the gateway.",
     missing: (count: number) =>
-      `${count} ${count === 1 ? "original is" : "originals are"} recorded in your library but their bytes are in neither place. Nothing here can restore them; the gateway's own storage screen is where that is investigated.`,
+      `${count} ${count === 1 ? "original is" : "originals are"} recorded in your library but their bytes are in neither place — the gateway's storage screen is where that is investigated.`,
     "only-here": (count: number) =>
       `${count} ${count === 1 ? "original is" : "originals are"} held on the gateway and nowhere else. A second copy is what makes them safe.`,
     waiting: (count: number) =>
-      `${count} ${count === 1 ? "original is" : "originals are"} queued to be copied elsewhere. Nothing has failed.`,
+      `${count} ${count === 1 ? "original is" : "originals are"} queued to be copied elsewhere.`,
     held: "Every original the gateway counted is held in more than one place.",
   },
   /** The as-of stamp. The rollup says when it was computed; it is never "now". */
@@ -382,7 +399,7 @@ export const STORAGE_COPY = {
 
   /**
    * Free up space (proto 4364-4371, the `panelBlock` under `sectionBlock
-   * ('Space')`). The panel states what would go and what would remain — and it
+   * ('Space')`). The panel states what would go — and it
    * only ever describes ORIGINALS the projection proved are held somewhere
    * else. There is no control: nothing in this app's granted command surface
    * releases local bytes, and a button that did nothing would be worse than
@@ -391,17 +408,16 @@ export const STORAGE_COPY = {
   freeUpHead: "Free up space",
   freeUpTitle: (bytes: string) => `${bytes} could be released`,
   freeUpBody: (count: number) =>
-    `Full-quality originals for ${count} ${count === 1 ? "photograph" : "photographs"} are held here and also proved to be held elsewhere, so removing the local copy would lose nothing. Everything stays browsable either way: the timeline, captions, albums and people are unchanged, and a full-quality copy is fetched when you ask for one.`,
+    `Full-quality originals for ${count} ${count === 1 ? "photograph" : "photographs"} are held here and proved to be held elsewhere, so the local copy could go.`,
   freeUpWhere:
-    "Releasing them is not done from here — it runs on the gateway, with the storage settings that own its disk.",
+    "Releasing them runs on the gateway, with the storage settings that own its disk.",
   freeUpUnproven: (count: number, bytes: string) =>
-    `${count} ${count === 1 ? "original" : "originals"} · ${bytes} held here have no proved copy anywhere else. They are never offered for release, whatever the disk is doing.`,
+    `${count} ${count === 1 ? "original" : "originals"} · ${bytes} held here have no proved copy elsewhere, so they are never offered for release.`,
   freeUpNothing:
-    "No original held here has a proved copy elsewhere, so there is nothing that could be released without becoming the last copy of something.",
+    "No original held here has a proved copy elsewhere, so nothing can be released.",
 
   trashHead: "Freeing space",
-  trashNote:
-    "Emptying the trash is the one thing here that frees bytes. What stays is browsable either way: meaning lives in your library, and fetching an original is always an explicit choice.",
+  trashNote: "Emptying the trash is the one thing here that frees bytes.",
   trashEmpty: "Nothing is in the trash, so there is nothing to free.",
 } as const;
 
@@ -424,7 +440,7 @@ export const SEARCH_COPY = {
   resting: {
     eyebrow: "Nothing typed",
     title: "Search the whole library",
-    body: "Not the photographs that happen to be loaded. Try one of these.",
+    body: "Not only what is loaded here — try one of these.",
   },
   // Moved here from SearchShelf.tsx's own JSX (issue #712 S1), alongside
   // `unreachable.body` below, so `_shared/SearchScaffold.tsx` can source
@@ -461,7 +477,7 @@ export const SEARCH_COPY = {
     // component started sourcing its unreachable panel from the shared
     // `SearchScaffold` — copy now lives with the rest of SEARCH_COPY instead
     // of half in this object and half inline in the component.
-    body: "It lives on the gateway. Nothing below has been searched for you — what you can see is the match over the photographs already loaded on this device, which is a smaller question than the one you asked.",
+    body: "Nothing below has been searched — it is the match over photographs already on this device.",
     retry: "Retry",
     facts: [
       {
@@ -471,5 +487,5 @@ export const SEARCH_COPY = {
       { label: "what does not", value: "search, people, places" },
     ],
   },
-  placeholder: "Search photographs, people, places, albums",
+  placeholder: PHOTOS_SEARCH_PLACEHOLDER,
 } as const;

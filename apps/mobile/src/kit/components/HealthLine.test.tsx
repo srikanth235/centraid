@@ -49,7 +49,7 @@ describe(healthLineFor, () => {
   const copy = {
     action: "Open the failure",
     detail: "Weekly digest has failed its last 3 runs, since 4 August.",
-    emptyText: "Nothing to attend to · nothing needs you here right now.",
+    emptyText: "Nothing to attend to",
     errorText: "This page could not load · everything else is unaffected.",
     label: "1 automation is failing",
     loadingText: "Reading from the gateway",

@@ -95,7 +95,7 @@ export interface AutomationsController {
 const EMPTY_KNOWN: ReadonlySet<string> = new Set<string>();
 
 const NOT_PAIRED =
-  "This phone is not linked to a gateway yet. Pair it from Settings, and the automations on it appear here.";
+  "Not linked to a gateway yet — pair this phone from Settings.";
 
 function describe(error: unknown): string {
   return error instanceof Error && error.message

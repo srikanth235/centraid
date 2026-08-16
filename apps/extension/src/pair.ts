@@ -16,7 +16,7 @@ start.addEventListener("click", () => void scan());
 async function scan(): Promise<void> {
   if (!("BarcodeDetector" in globalThis)) {
     status.textContent =
-      "QR scanning is unavailable here. Paste the code in the Companion popup.";
+      "QR scanning unavailable — paste the code in the Companion popup.";
     return;
   }
   try {
@@ -44,7 +44,7 @@ async function scan(): Promise<void> {
       });
       const response = raw as { ok?: boolean; error?: string };
       status.textContent = response.ok
-        ? "Paired. You can close this tab."
+        ? "Paired — close this tab."
         : (response.error ?? "Pairing failed.");
     }, 250);
   } catch (error) {

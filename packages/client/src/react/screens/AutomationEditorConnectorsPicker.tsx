@@ -314,8 +314,7 @@ export function AutomationEditorConnectorsPicker({
             Connectors
           </div>
           <p className={styles.connPickerHint}>
-            Pick services this automation may use. OAuth and API-key connectors
-            use the same credential flow as Settings → Connectors.
+            Pick services this automation may use.
           </p>
         </div>
         <button
@@ -342,7 +341,7 @@ export function AutomationEditorConnectorsPicker({
         ) : rows.length === 0 ? (
           <p className={styles.connPickerEmpty}>
             {catalog.length === 0
-              ? "No connector catalog available. Open Connectors in the sidebar to add providers."
+              ? "No connector catalog — add providers in Connectors."
               : "No matches."}
           </p>
         ) : (
@@ -419,8 +418,7 @@ export function AutomationEditorConnectorsPicker({
                         data-testid="connector-account-dangling"
                         data-kind={item.kind}
                       >
-                        This automation is still bound to an account that is no
-                        longer configured. Nothing was changed for you — pick a
+                        This account is no longer configured — pick a
                         replacement.
                       </p>
                     ) : null}

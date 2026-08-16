@@ -41,8 +41,7 @@ const FRIENDLY_ERRORS: Record<string, string> = {
   ticket_expired: "This ticket has expired — ask for a new one.",
   invalid_input: "That ticket looks malformed — double-check it and try again.",
   unreachable: "Couldn't reach that host — check that it's running.",
-  bad_response:
-    "The host sent back something unexpected. Try again in a moment.",
+  bad_response: "The host sent back something unexpected — try again.",
 };
 
 /** Map a stable error code to friendly copy; falls back to the raw message. */

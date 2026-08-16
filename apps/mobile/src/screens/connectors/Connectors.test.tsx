@@ -246,11 +246,9 @@ describe(ConnectorsScreen, () => {
     const spans = textOf(container);
     expect(spans).toContain("Nothing is connected");
     expect(spans).toContain(
-      "A connector lets one outside service reach a named part of this vault, and nothing else. You choose the scope, and can revoke it here at any time."
+      "A connector lets one outside service reach a named part of this vault, and nothing else."
     );
-    expect(spans).toContain(
-      "Nothing to attend to · nothing needs you here right now."
-    );
+    expect(spans).toContain("Nothing to attend to");
     // The reference's `Open the catalog` is withheld: there is no catalog on
     // this surface, so the empty state offers nothing it cannot do.
     expect(buttonLabelled(container, "Open the catalog")).toBeNull();
@@ -263,7 +261,7 @@ describe(ConnectorsScreen, () => {
     expect(spans).toContain("THIS PAGE COULD NOT LOAD");
     expect(spans).toContain("Cannot read connection health");
     expect(spans).toContain(
-      "Existing connections keep working — this page reads their status from the gateway, and only the status is unavailable. Nothing has been paused."
+      "Connection health is unavailable; the connections themselves keep working."
     );
     expect(spans).toContain("connect ECONNREFUSED");
     const panel = nodesOf(container, "div").find(
@@ -271,9 +269,7 @@ describe(ConnectorsScreen, () => {
     );
     expect(panel).toBeDefined();
     expect(buttonLabelled(container, "Try again")).not.toBeNull();
-    expect(spans).toContain(
-      "This page could not load · everything else on the gateway is unaffected."
-    );
+    expect(spans).toContain("This page could not load");
   });
 
   it("runs the real ceremony when a lapsed row is re-authorized", async () => {

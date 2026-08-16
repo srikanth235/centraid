@@ -300,7 +300,7 @@ export function buildCollectionSections(
         .slice(0, RAIL_LIMIT)
         .flatMap(([year, group]) => tileFor(cover(group), year)),
       empty:
-        "A memory appears here when a day in your library has an earlier year behind it. Nothing is generated — it is your own photographs, on this day.",
+        "A day with an earlier year behind it appears here — your own photographs, on this day.",
     },
     {
       key: "albums",
@@ -318,8 +318,7 @@ export function buildCollectionSections(
           ...(front ? { uri: front.uri, originalUri: front.originalUri } : {}),
         };
       }),
-      empty:
-        "An album refers to a photograph where it lives; it never moves or copies anything. Select photographs and add them to one.",
+      empty: "Select photographs and add them to an album.",
     },
     {
       key: "people",
@@ -352,7 +351,7 @@ export function buildCollectionSections(
         };
       }),
       empty:
-        "A place appears here when a photograph carries where it was taken. Nothing is looked up over the network to put it there.",
+        "A place appears here when a photograph carries where it was taken.",
     },
     {
       key: "favorites",
@@ -387,7 +386,7 @@ export function buildCollectionSections(
         .slice(0, RAIL_LIMIT)
         .flatMap((group) => tileFor(cover(group))),
       empty:
-        "Photographs that look like each other are grouped here for you to decide about. Nothing is ever deleted for you.",
+        "Photographs that look like each other are grouped here for you to decide about.",
     },
     {
       key: "trash",

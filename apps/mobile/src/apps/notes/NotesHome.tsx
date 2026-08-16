@@ -635,8 +635,8 @@ export default function NotesHome({
           </View>
           <ScrollView style={styles.picker}>
             <Text style={[styles.pickerCopy, { color: colors.textSoft }]}>
-              The text stays CommonMark. Your choice creates a typed, temporal
-              vault link and a text anchor separately.
+              The text stays CommonMark — your choice adds a typed vault link
+              and a text anchor.
             </Text>
             {findingTargets ? (
               <Text style={[styles.pickerCopy, { color: colors.textSoft }]}>
@@ -644,7 +644,7 @@ export default function NotesHome({
               </Text>
             ) : targets.length === 0 ? (
               <Text style={[styles.pickerCopy, { color: colors.textSoft }]}>
-                No matching entity. The broken link remains readable text.
+                No match — the broken link stays readable text.
               </Text>
             ) : (
               targets.map((target) => (

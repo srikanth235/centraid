@@ -177,7 +177,7 @@ byId<HTMLFormElement>("pair-form").addEventListener("submit", (event) => {
   ].map((input) => input.value as CompanionModule);
   void send({ type: "pair", ticket, grants }).then(
     () => {
-      setNotice("Paired. This device now follows your Centraid grants.");
+      setNotice("Paired — this device follows your Centraid grants.");
       return render();
     },
     (error) => setNotice(errorText(error), "error")

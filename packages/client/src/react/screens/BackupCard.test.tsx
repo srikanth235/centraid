@@ -133,9 +133,9 @@ describe("screens/BackupCard", () => {
           .mockResolvedValue({ configured: false, vaults: [] }),
         onRunNow: neverRun,
       });
-      expect(el.textContent).toContain("isn’t backed up offsite yet");
+      expect(el.textContent).toContain("Not backed up offsite yet");
       expect(el.textContent).toContain(
-        "Until backup custody is configured on this gateway"
+        "Backup isn’t configured on this gateway"
       );
       expect(el.textContent).not.toContain("Settings → Storage");
       expect(el.textContent).toContain("somewhere offline");
@@ -535,7 +535,7 @@ describe("screens/BackupCard", () => {
       expect(reasonId).toBeTruthy();
       expect(
         el.querySelector(`#${CSS.escape(reasonId as string)}`)?.textContent
-      ).toContain("isn’t wired into the app yet");
+      ).toContain("a gateway-side act today");
       expect(restoreBtn.title).toBe("");
     });
 

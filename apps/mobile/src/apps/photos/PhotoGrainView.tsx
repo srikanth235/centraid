@@ -284,8 +284,7 @@ export default function PhotoGrainView({
     return (
       <View style={styles.empty}>
         <Text style={styles.emptyLine}>
-          These photographs carry no capture date, so they have no year or
-          month. They are all in All.
+          These photographs carry no capture date, so they are all in All.
         </Text>
       </View>
     );

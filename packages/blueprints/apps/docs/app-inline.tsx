@@ -29,8 +29,7 @@ const docsInlineApp: InlineAppModule = {
   kitAsk: {
     scope: "docs",
     placeholder: "Ask your docs…",
-    intro:
-      "Ask me to find a file, upload one, or file it away. Writes show for your approval before they touch the vault.",
+    intro: "Ask me to find a file, upload one, or file it away.",
     suggest: [
       "Find my lease",
       "File the June receipts",

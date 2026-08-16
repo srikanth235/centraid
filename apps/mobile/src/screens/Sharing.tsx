@@ -2,6 +2,12 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { parseCommonsInvite } from "@centraid/blueprints/apps/_shared/commons-invite";
+import {
+  SHARING_INVALID_INVITE,
+  SHARING_STEWARD_PARKED,
+  sharingSilentForDays,
+  sharingStewardSilent,
+} from "@centraid/client/sharing-copy";
 import { formatBytes } from "@centraid/design";
 
 import Icon from "../kit/components/Icon";
@@ -38,7 +44,7 @@ function stewardLine(entry: CommonsRecoveryGrant): string {
   const days = silent === undefined ? 0 : Math.floor(silent / DAY_MS);
   return [
     entry.containerType,
-    days > 0 ? `silent for ${days} ${days === 1 ? "day" : "days"}` : "",
+    days > 0 ? sharingSilentForDays(days) : "",
     entry.steward.fault ?? "",
   ]
     .filter(Boolean)
@@ -172,8 +178,8 @@ export default function SharingScreen({
                 >
                   <Text style={[t("body"), { color: colors.text }]}>
                     {entry.steward.presence === "parked"
-                      ? "A shared space stopped syncing — its history could not be verified"
-                      : `The device that runs a shared space hasn’t answered (${entry.steward.presence})`}
+                      ? SHARING_STEWARD_PARKED
+                      : sharingStewardSilent(entry.steward.presence)}
                   </Text>
                   <Text style={[t("small"), { color: colors.textSoft }]}>
                     {stewardLine(entry)}
@@ -263,8 +269,7 @@ export default function SharingScreen({
 
         <Section title="Redeem a shared-space invite" colors={colors}>
           <Text style={[t("small"), { color: colors.textSoft }]}>
-            Create your vault first. If the sharer is remote, connect with them,
-            then paste the one-time invitation here.
+            Create your vault first, then paste the one-time invitation here.
           </Text>
           <TextInput
             accessibilityLabel="Shared-space invitation"
@@ -289,7 +294,7 @@ export default function SharingScreen({
             onPress={() => {
               const claim = parseCommonsInvite(commonsInviteCode);
               if (!claim) {
-                setErrorMessage("That shared-space invitation is invalid.");
+                setErrorMessage(SHARING_INVALID_INVITE);
                 return;
               }
               const actorVaultId = replica.vaultId;

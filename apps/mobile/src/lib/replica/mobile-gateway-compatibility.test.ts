@@ -79,9 +79,10 @@ describe("mobile gateway compatibility", () => {
   });
 
   test("uses one update wall instead of retrying unsupported routes", () => {
-    expect(MOBILE_GATEWAY_UPDATE_MESSAGE).toMatch(
-      /Update the Centraid gateway/u
+    expect(MOBILE_COMPATIBILITY_WALL_COPY["update-gateway"].title).toMatch(
+      /Update the gateway/u
     );
+    expect(MOBILE_GATEWAY_UPDATE_MESSAGE).toMatch(/multi-vault offline sync/u);
     expect(MOBILE_APP_UPDATE_MESSAGE).toMatch(/App Store or Google Play/u);
     expect(MOBILE_COMPATIBILITY_WALL_COPY["update-app"].action).toMatch(
       /retry/iu

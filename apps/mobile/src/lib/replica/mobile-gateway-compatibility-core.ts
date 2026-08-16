@@ -12,9 +12,9 @@ export type MobileCompatibilityDisposition =
   | "reconnect";
 
 export const MOBILE_GATEWAY_UPDATE_MESSAGE =
-  "Update the Centraid gateway on your desktop, then reconnect. This mobile version requires the current protocol, multi-vault offline sync, and cross-vault placements.";
+  "This mobile version needs the current protocol, multi-vault offline sync, and cross-vault placements.";
 export const MOBILE_APP_UPDATE_MESSAGE =
-  "Update the Centraid mobile app from the App Store or Google Play. Mobile updates are store-only on this installation.";
+  "Mobile updates are store-only — update from the App Store or Google Play.";
 export const MOBILE_GATEWAY_RECONNECT_MESSAGE =
   "Reconnect to the desktop once to verify it supports this mobile offline version.";
 
@@ -90,11 +90,11 @@ export const MOBILE_FEATURE_OFF_COPY: Record<
 > = {
   automations: {
     title: "Automations are off",
-    body: "This gateway has not switched automations on. Turn them on from the desktop to see the rules that run here.",
+    body: "This gateway has not switched automations on — turn them on from the desktop.",
   },
   connectors: {
     title: "Connectors are off",
-    body: "This gateway has not switched connectors on. Turn them on from the desktop to manage what is allowed to reach outside.",
+    body: "This gateway has not switched connectors on — turn them on from the desktop.",
   },
 };
 

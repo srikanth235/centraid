@@ -116,7 +116,7 @@ describe("the pending note carries the live unmatched count (proto :4433)", () =
       "54 faces are not matched to anyone"
     );
     expect(container.textContent).toContain(
-      "Face review proposes them one at a time"
+      "face review proposes them one at a time"
     );
   });
 

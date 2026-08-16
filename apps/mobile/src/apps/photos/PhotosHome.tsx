@@ -854,7 +854,7 @@ export default function PhotosHome({
                 </Text>
                 <Text style={styles.bodyText}>
                   {collections.connection === "offline"
-                    ? "Camera-roll photographs remain available. Reconnect to check the vault."
+                    ? "Camera-roll photographs remain available — reconnect to check the vault."
                     : "Camera-roll photographs appear instantly; hold any one to back it up."}
                 </Text>
               </View>

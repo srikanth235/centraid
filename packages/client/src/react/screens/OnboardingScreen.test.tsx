@@ -149,7 +149,7 @@ describe("OnboardingScreen scenarios", () => {
     ).not.toBeNull();
     expect(el.querySelector(".connectPanel")).toBeNull();
     expect(el.querySelector('[role="alert"]')?.textContent).toContain(
-      "Centraid couldn't start on this Mac"
+      "Centraid couldn’t start on this Mac"
     );
   });
 

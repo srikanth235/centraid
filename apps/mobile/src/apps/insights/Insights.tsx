@@ -22,6 +22,15 @@
 import React, { useMemo } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 
+import {
+  INSIGHTS_EMPTY_BODY,
+  INSIGHTS_EMPTY_TITLE,
+  INSIGHTS_ERROR_BODY,
+  INSIGHTS_ERROR_TITLE,
+  INSIGHTS_SPEND_NOTE,
+} from "@centraid/client/insights-copy";
+import { RETRY_ACTION, SKELETON_NOTE } from "@centraid/client/surface-copy";
+
 import BarsBlock from "../../kit/components/BarsBlock";
 import { MAX_COLUMNS } from "../../kit/components/BarsBlock.styles";
 import ChipsBlock from "../../kit/components/ChipsBlock";
@@ -70,20 +79,17 @@ import type { InsightsController } from "./useInsights";
  *  rebuilds on its own schedule and nothing here can trigger it, so the verb
  *  is the honest one — ask again. */
 const ERROR_EYEBROW = "THIS PAGE COULD NOT LOAD";
-const ERROR_TITLE = "The run log is unavailable";
-const ERROR_BODY =
-  "Runs are still being recorded. This page reads a rollup that is rebuilt every ten minutes, and the rebuild has not finished.";
-const ERROR_RETRY = "Try again";
+const ERROR_TITLE = INSIGHTS_ERROR_TITLE;
+const ERROR_BODY = INSIGHTS_ERROR_BODY;
+const ERROR_RETRY = RETRY_ACTION;
 
 /** The empty state, in the routine register. No action: nothing on this page
  *  makes work happen, so an empty read has nothing to offer but the reason. */
-const EMPTY_TITLE = "Nothing has run yet";
-const EMPTY_BODY =
-  "Once automations and the assistant start doing work, their volume and outcomes appear here.";
+const EMPTY_TITLE = INSIGHTS_EMPTY_TITLE;
+const EMPTY_BODY = INSIGHTS_EMPTY_BODY;
 
 /** Why a skeleton, said once, under the skeleton. */
-const LOADING_NOTE =
-  "A row knows its shape before its content arrives, so nothing reflows when it does.";
+const LOADING_NOTE = SKELETON_NOTE;
 
 /** The chart's colour key. The `succeeded` word is the ink actually drawn;
  *  the failed key is EMPTY because the rollup carries no per-day outcome split
@@ -194,7 +200,7 @@ function AnalyticsBody({
     <>
       {chips}
       <PanelBlock
-        body="Completed runs in this vault only; estimates use public model rates."
+        body={INSIGHTS_SPEND_NOTE}
         facts={spendFacts(summary)}
         figure={spendFigure(summary, windowDays)}
       />

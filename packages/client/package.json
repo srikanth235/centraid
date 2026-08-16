@@ -13,6 +13,15 @@
     "./home-copy": "./src/home-copy.ts",
     "./receipt-capture": "./src/receipt-capture.ts",
     "./version-handshake": "./src/version-handshake.ts",
+    "./approvals-copy": "./src/approvals-copy.ts",
+    "./automations-copy": "./src/automations-copy.ts",
+    "./connectors-copy": "./src/connectors-copy.ts",
+    "./data-copy": "./src/data-copy.ts",
+    "./devices-copy": "./src/devices-copy.ts",
+    "./insights-copy": "./src/insights-copy.ts",
+    "./notifications-copy": "./src/notifications-copy.ts",
+    "./sharing-copy": "./src/sharing-copy.ts",
+    "./surface-copy": "./src/surface-copy.ts",
     "./styles.css": "./src/styles.css"
   },
   "scripts": {

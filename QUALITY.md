@@ -2,6 +2,16 @@
 
 ## Open
 
+- **`apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` cannot load**:
+  `Cannot bundle Node.js built-in "node:sqlite" imported from
+  "src/lib/replica/node-sqlite-driver.ts"`. The whole file fails to collect, so
+  its journey assertions have not run for some time — a silently absent test,
+  not a flake. Reproduced on the base tree with all working changes stashed
+  while #805 was in flight, so it predates that branch and is unrelated to it.
+  The driver imports the Node builtin directly and mobile's vitest client
+  environment refuses to externalize it; the fix is a config or driver-seam
+  change, not a copy change, so #805 left it alone.
+
 - **Two container-hermeticity defects found by an attempted in-container full
   coverage run** (13,203 green / 3 red, all environmental): (1)
   `packages/agent-runtime/src/backends/acp/launch.test.ts` inherits the real

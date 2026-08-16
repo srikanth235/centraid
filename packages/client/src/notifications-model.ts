@@ -1,3 +1,11 @@
+import {
+  NOTIFY_NEEDS_AUTH_BODY,
+  NOTIFY_NOTICE_BODY,
+  NOTIFY_OUTBOX_BODY,
+  NOTIFY_PARKED_BODY,
+  NOTIFY_SCOPE_BODY,
+} from "./notifications-copy.js";
+
 export interface NotificationsPull {
   decisions: {
     outbox: Array<{
@@ -48,22 +56,22 @@ export function composeWebNotifications(
           .map((field) => row.artifact[field])
           .find((value): value is string => typeof value === "string") ??
         row.target,
-      body: "External write needs your approval",
+      body: NOTIFY_OUTBOX_BODY,
     })),
     ...notifications.decisions.needsAuth.map((row) => ({
       key: `auth:${row.connectionId}:${row.attentionAt}`,
       title: `${row.label} needs reconnection`,
-      body: "Open Notifications to reconnect",
+      body: NOTIFY_NEEDS_AUTH_BODY,
     })),
     ...notifications.decisions.parked.map((row) => ({
       key: `parked:${row.invocationId}`,
       title: row.command,
-      body: "A decision is waiting in Notifications",
+      body: NOTIFY_PARKED_BODY,
     })),
     ...notifications.decisions.scopeRequests.map((row) => ({
       key: `scope:${row.requestId}`,
       title: `${row.appId} requests access`,
-      body: "Review the requested scope in Notifications",
+      body: NOTIFY_SCOPE_BODY,
     })),
     ...notifications.notices
       .filter(
@@ -75,7 +83,7 @@ export function composeWebNotifications(
       .map((notice) => ({
         key: `notice:${notice.noticeId}:${notice.lastAt}`,
         title: notice.headline,
-        body: "Open Notifications for details",
+        body: NOTIFY_NOTICE_BODY,
       })),
   ].filter((row) => !delivered.has(row.key));
 }

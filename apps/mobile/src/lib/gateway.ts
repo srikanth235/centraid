@@ -235,7 +235,7 @@ export async function requireGatewayBase(): Promise<string> {
   if (!base) {
     throw new GatewayError(
       "no_gateway",
-      "Not connected to a desktop. Pair with your desktop in Settings."
+      "Not connected to a desktop — pair in Settings."
     );
   }
   return base;

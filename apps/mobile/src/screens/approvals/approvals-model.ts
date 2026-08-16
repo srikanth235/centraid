@@ -30,6 +30,19 @@
 //     inviting; the verb is taken away until the write lands, so a second tap
 //     cannot stage a second decision.
 
+import {
+  APPROVALS_CANNOT_EDIT_KEY as CANNOT_EDIT_KEY,
+  APPROVALS_CANNOT_EDIT_VALUE as CANNOT_EDIT_VALUE,
+  APPROVALS_HEALTH_DETAIL as HEALTH_DETAIL,
+  APPROVALS_SENDING_FACT_KEY as SENDING_FACT_KEY,
+  APPROVALS_SENDING_FACT_VALUE as SENDING_FACT_VALUE,
+} from "@centraid/client/approvals-copy";
+import {
+  EMPTY_HEALTH,
+  ERROR_HEALTH,
+  READING_HEALTH,
+} from "@centraid/client/surface-copy";
+
 import type { HealthCopy, OpsState } from "../../kit/components/health-line";
 import type { PanelFact } from "../../kit/components/PanelBlock";
 import type { RowsBlockAction } from "../../kit/components/RowsBlock";
@@ -42,42 +55,38 @@ import type {
 } from "../../lib/gateway";
 
 // ── Copy that states a rule ────────────────────────────────────────────────
+//
+// Every sentence below that desktop also renders now comes from
+// `@centraid/client/approvals-copy` (issue #805). The header's old claim —
+// that `packages/client` is "a browser bundle this app does not import" —
+// stopped being true when this app started importing
+// `@centraid/client/replica/native` and `@centraid/client/home-copy`, and one
+// promise written twice is a promise that can be broken on one surface.
+// Re-exported under this file's own names so no caller or test moves.
 
-export const EMPTY_TITLE = "Nothing is waiting on you";
-export const EMPTY_BODY =
-  "Staged writes, lapsed connections and requests for wider access appear here. This page is empty most of the time, and that is the healthy state.";
-export const EMPTY_ACTION = "Review standing grants";
-export const DENY_TITLE = "Deny this write";
-export const DENY_SUB =
-  "Nothing is sent. The automation is told it was refused, and remembers.";
-export const SENDING_FACT_KEY = "nothing has been sent";
-export const SENDING_FACT_VALUE =
-  "approving sends it immediately and cannot be undone";
-export const CANNOT_EDIT_KEY = "cannot be edited";
-export const CANNOT_EDIT_VALUE =
-  "the gateway has no rebuilder for this verb, so approving sends exactly what is quoted above";
-export const GRANTS_NOTE =
-  "A standing grant skips this page for one narrow thing. Revoking one takes effect on the next run.";
-export const NO_GRANTS_NOTE =
-  "No standing grants yet — “always allow” on an approval mints one.";
-/** The eyebrow states WHICH state this is; the title is the reference's own
- *  sentence about what failed. The role uppercases it — the string does not. */
-export const ERROR_EYEBROW = "This page could not load";
-/** The reference's error eyebrow, promoted to the panel's title. */
-export const ERROR_TITLE = "Could not reach the consent store";
-export const ERROR_BODY =
-  "The gateway answered, but the queue that holds staged writes did not. Nothing has been approved or denied in the meantime, and nothing expired.";
-export const ERROR_RETRY = "Try again";
-export const LOADING_NOTE =
-  "A row knows its shape before its content arrives, so nothing reflows when it does.";
-export const HEALTH_DETAIL =
-  "Nothing here has happened yet. Approving is the act.";
-export const ALWAYS_TITLE = "Approve without asking again";
+export {
+  APPROVALS_ALWAYS_TITLE as ALWAYS_TITLE,
+  APPROVALS_DENY_SUB as DENY_SUB,
+  APPROVALS_DENY_TITLE as DENY_TITLE,
+  APPROVALS_EDIT_SUB as EDIT_SUB,
+  APPROVALS_EDIT_TITLE as EDIT_TITLE,
+  APPROVALS_EMPTY_ACTION as EMPTY_ACTION,
+  APPROVALS_EMPTY_BODY as EMPTY_BODY,
+  APPROVALS_EMPTY_TITLE as EMPTY_TITLE,
+  APPROVALS_ERROR_BODY as ERROR_BODY,
+  APPROVALS_ERROR_TITLE as ERROR_TITLE,
+  APPROVALS_GRANTS_NOTE as GRANTS_NOTE,
+  APPROVALS_NO_GRANTS_NOTE as NO_GRANTS_NOTE,
+  APPROVALS_SENDING_FACT_KEY as SENDING_FACT_KEY,
+  APPROVALS_SENDING_FACT_VALUE as SENDING_FACT_VALUE,
+} from "@centraid/client/approvals-copy";
+export {
+  ERROR_HEALTH as ERROR_EYEBROW,
+  RETRY_ACTION as ERROR_RETRY,
+  SKELETON_NOTE as LOADING_NOTE,
+} from "@centraid/client/surface-copy";
 export const ALWAYS_SUB =
-  "Future writes matching this actor, verb and target send without stopping here. Revoking the grant it mints lives further down this page.";
-export const EDIT_TITLE = "Edit before sending";
-export const EDIT_SUB =
-  "Your changes replace the draft above. Nothing is sent until you approve.";
+  "Future writes matching this actor, verb and target send without stopping here.";
 /** The one sentence that says where the reconnection ceremony finishes. */
 export const RECONNECT_NOTE =
   "Opens a secure browser inside Centraid — stay here until it closes.";
@@ -288,11 +297,10 @@ export function waitingMeta(shown: number, total: number): string {
 export function approvalsHealth(waiting: number): HealthCopy {
   return {
     detail: HEALTH_DETAIL,
-    emptyText: "Nothing to attend to · nothing needs you here right now.",
-    errorText:
-      "This page could not load · everything else on the gateway is unaffected.",
+    emptyText: EMPTY_HEALTH,
+    errorText: ERROR_HEALTH,
     label: `${countWord(waiting, "item")} waiting on you`,
-    loadingText: "Reading from the gateway",
+    loadingText: READING_HEALTH,
   };
 }
 

@@ -15,7 +15,7 @@ export default function StorageRoute(): JSX.Element {
     <PageScroll>
       <EmptyBlock
         title="Storage moved into System"
-        body="Capacity, disk use, and backups now live together in System. This link still works so saved places and older notifications never dead-end."
+        body="Capacity, disk use, and backups now live together in System."
         action={{
           label: "Open System",
           onClick: () => navigate({ kind: "gateway" }),

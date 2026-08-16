@@ -92,8 +92,8 @@ export default function PlacesView({
         columnWrapperStyle={styles.row}
         ListEmptyComponent={
           <Text style={styles.empty}>
-            No places yet — a place is not something a member forgot to do, it
-            is something a photograph either carries or does not.
+            No places yet — a place is something a photograph carries, or does
+            not.
           </Text>
         }
         renderItem={({ item }) => (

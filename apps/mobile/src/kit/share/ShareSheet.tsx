@@ -15,6 +15,10 @@ import {
 } from "@centraid/blueprints/apps/_shared/commons-invite";
 import { manualShareSelection } from "@centraid/blueprints/apps/_shared/named-circle-selection";
 import type { PlaceableItemType } from "@centraid/blueprints/apps/_shared/placement-registry";
+import {
+  SHARE_FAILED,
+  sharedWithOutcome,
+} from "@centraid/blueprints/apps/_shared/shared-copy";
 
 import { listLinks } from "../../lib/replica/links-transport";
 import type { GatewayLink } from "../../lib/replica/links-transport";
@@ -169,9 +173,7 @@ export default function ShareSheet({
       onDone({
         verb: "share",
         ok: true,
-        message: invited
-          ? `Shared with ${selected.length} people; ${invited} ${invited === 1 ? "is" : "are"} invited and will join after creating a vault.`
-          : `Shared with ${selected.length} ${selected.length === 1 ? "person" : "people"}.`,
+        message: sharedWithOutcome(selected.length, invited),
       });
       if (handoffs.length) {
         producedHandoffs = true;
@@ -181,10 +183,7 @@ export default function ShareSheet({
       onDone({
         verb: "share",
         ok: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Could not share with the selected people.",
+        message: error instanceof Error ? error.message : SHARE_FAILED,
       });
     } finally {
       setBusy(false);
@@ -210,8 +209,8 @@ export default function ShareSheet({
         </View>
 
         <Text style={[styles.note, { color: colors.textSoft }]}>
-          Pick people. Everyone who joins gets the full shared item in their own
-          vault and backup.
+          Everyone who joins gets the full shared item in their own vault and
+          backup.
         </Text>
 
         <QuickAddPerson
@@ -405,8 +404,8 @@ export default function ShareSheet({
               Send these one-time invitations
             </Text>
             <Text style={[t("small"), { color: colors.textSoft }]}>
-              Each person installs Centraid, creates a vault, connects to you if
-              remote, redeems this invitation, then accepts its size.
+              One per person — each is redeemed once, in the receiver's own
+              vault.
             </Text>
             {inviteHandoffs.map((handoff, index) => (
               <View

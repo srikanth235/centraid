@@ -219,15 +219,15 @@ export const FREE_UP_CAUSE =
  * silent re-download on a metered connection.
  */
 export const FREE_UP_CONSEQUENCE =
-  "Everything stays browsable: thumbnails and previews are untouched, and the timeline does not change. Fetching a full-quality original back stays explicit — you ask for it, and it comes over the network under the transfer rules above.";
+  "Everything stays browsable — thumbnails and previews are untouched. Fetching a full-quality original back stays explicit: you ask for it, and it comes over the network under the transfer rules above.";
 
 /** The one action. Never filled — the commit on this surface is Back up now. */
 export const FREE_UP_ACTION = "Free up space";
 
 /** What the surface says when the sweep has never run. Not zeroes. */
 export const FREE_UP_UNCOUNTED =
-  "Not yet computed. Your gateway's storage sweep has not run here, so nothing can be offered for release yet.";
+  "Not yet computed — your gateway's storage sweep has not run here.";
 
 /** …and when it has run and found nothing releasable. */
 export const FREE_UP_NOTHING =
-  "Nothing to free. Every original on this machine is either the only proven copy or is already gone from here.";
+  "Nothing to free — every original here is the only proven copy, or already gone.";

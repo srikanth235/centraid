@@ -1,5 +1,5 @@
 const STORAGE_FULL_MESSAGE =
-  "Phone storage is full. Centraid paused replica sync without deleting local data or pending changes. Free space, clear the thumbnail cache if needed, then try again.";
+  "Phone storage is full — replica sync is paused until you free space.";
 
 // Split for the `out of room` state component (Binding Layer brief, "States"
 // — cause, consequence, one action; the consequence line is the one that
@@ -10,7 +10,7 @@ const STORAGE_FULL_MESSAGE =
 export const STORAGE_FULL_CAUSE = "Phone storage is full.";
 /** The CONSEQUENCE — the line that outranks the cause on screen. */
 export const STORAGE_FULL_CONSEQUENCE =
-  "Replica sync is paused — nothing was deleted, but new changes won't sync until there's room.";
+  "Replica sync is paused — new changes won't sync until there's room.";
 /** The ONE action offered alongside cause + consequence. */
 export const STORAGE_FULL_ACTION_LABEL = "Free up thumbnail cache";
 

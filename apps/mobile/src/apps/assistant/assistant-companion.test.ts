@@ -47,11 +47,9 @@ describe("Assistant companion", () => {
         kind: "claude-code",
         label: "Claude Code",
       })
-    ).toBe(
-      "Claude Code is unavailable. No provider receives this turn and nothing is added to your Assistant ledger. Choose an available harness to send."
-    );
+    ).toBe("Claude Code is unavailable — choose an available harness to send.");
     expect(companionConsequence(undefined, 0, undefined)).toBe(
-      "Assistant is checking the selected harness. No provider receives this turn and nothing has been added to your Assistant ledger."
+      "Checking the selected harness — nothing is sent yet."
     );
   });
 

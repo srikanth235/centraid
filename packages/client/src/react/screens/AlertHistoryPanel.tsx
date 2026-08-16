@@ -46,9 +46,7 @@ export default function AlertHistoryPanel({
         </div>
       ) : (
         <div className={styles.panelEmpty}>
-          No alerts recorded yet. Down/degraded/recovered transitions and
-          component or version-mismatch alerts land here, and stick around
-          across restarts.
+          No alerts yet — outages, recoveries and version mismatches land here.
         </div>
       )}
     </section>

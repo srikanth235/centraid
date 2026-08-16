@@ -130,7 +130,7 @@ function notify(action: GatewayAlertAction, label: string): void {
     action.kind === "down"
       ? new Notification({
           title: "Gateway unreachable",
-          body: `“${label}” has been down for ${formatDurationMs(action.downForMs)}. Centraid can’t reach it.`,
+          body: `Centraid has not reached “${label}” for ${formatDurationMs(action.downForMs)}.`,
           urgency: "critical",
         })
       : new Notification({
@@ -170,9 +170,9 @@ function notifyVersionSkew(
   const n = new Notification({
     title: "Gateway version mismatch",
     body:
-      `“${gatewayLabel}” is running v${action.gatewayVersion} (protocol ` +
-      `${action.gatewayProtocolVersion}), which doesn’t match what this app expects. ` +
-      "Update both to the same version to avoid undebuggable weirdness.",
+      `“${gatewayLabel}” runs v${action.gatewayVersion} (protocol ` +
+      `${action.gatewayProtocolVersion}), not what this app expects — update both ` +
+      "to the same version.",
     urgency: "critical",
   });
   n.show();

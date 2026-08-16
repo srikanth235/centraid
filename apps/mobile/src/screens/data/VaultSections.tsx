@@ -176,7 +176,7 @@ export function VaultSharingSection({
         <PanelBlock
           action={{ label: "Try again", onPress: refresh }}
           action2={{ label: "Open Sharing", onPress: openSharing }}
-          body="Sharing could not be read. Your vault contents are unchanged."
+          body="Sharing could not be read."
           {...(visibleRead.error
             ? {
                 facts: [

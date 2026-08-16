@@ -379,7 +379,7 @@ describe("Photos native component coverage", () => {
       />
     );
     expect(
-      screen.getByText(/carry no capture date, so they have no year or month/u)
+      screen.getByText(/carry no capture date, so they are all in All/u)
     ).toBeDefined();
   });
 

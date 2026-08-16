@@ -287,9 +287,7 @@ describe(InsightsScreen, () => {
     // The one page whose chip row survives its own empty state.
     expect(spans).toContain("7 days");
     expect(spans).toContain("90 days");
-    expect(spans).toContain(
-      "Nothing to attend to · nothing needs you here right now."
-    );
+    expect(spans).toContain("Nothing to attend to");
   });
 
   it("reports a failed read as the net panel, with an honest verb", async () => {
@@ -299,7 +297,7 @@ describe(InsightsScreen, () => {
     expect(spans).toContain("THIS PAGE COULD NOT LOAD");
     expect(spans).toContain("The run log is unavailable");
     expect(spans).toContain(
-      "Runs are still being recorded. This page reads a rollup that is rebuilt every ten minutes, and the rebuild has not finished."
+      "The rollup rebuilds every ten minutes; this rebuild has not finished."
     );
     expect(spans).toContain("connect ECONNREFUSED");
     expect(

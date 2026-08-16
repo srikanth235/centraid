@@ -29,7 +29,7 @@ Skim the relevant docs before non-trivial work:
 
 - **Never weaken policy to go green.** Fix the code, not the lint config, test, budget, or allowlist. Tools run only via repo scripts (`bun run test|typecheck|format|…`); the gate loop is in [docs/dev-environment.md](docs/dev-environment.md#the-local-gate-loop). Vitest green alone is not enough — run the package typecheck.
 - **One receipt per issue** in `receipts/issue-<N>-<slug>.md`; new work starts from a GitHub proposal or bug issue; quality observations go in [QUALITY.md](QUALITY.md).
-- **Umbrella issues are worked by orchestration.** The root agent is the central brain: it designs the plan, spawns sub-agents on well-scoped slices, and coordinates their results. Plain job dispatch is not enough — correctness lives in the plan's intricacies (ordering, shared files, cross-slice invariants), and only the root agent holds them. Norms and supervision caps: [docs/multi-agent.md](docs/multi-agent.md).
+- **Umbrella issues are worked by orchestration.** The root agent is the central brain: it designs the plan, spawns sub-agents on well-scoped slices, and coordinates their results. Plain job dispatch is not enough — correctness lives in the plan's intricacies (ordering, shared files, cross-slice invariants), and only the root agent holds them. One umbrella issue, no child issues — slices are sub-agents and PR waves under it, one receipt. Norms and supervision caps: [docs/multi-agent.md](docs/multi-agent.md).
 - **Vocabulary**: the runtime model is **conversation ⊃ turn ⊃ item** — never "chat" for the ledger.
 
 On a fresh clone, run `git config core.hooksPath .githooks` once.

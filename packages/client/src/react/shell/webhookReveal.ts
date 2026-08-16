@@ -91,9 +91,7 @@ export function openWebhookReveal(
     const heading = document.createElement("h3");
     heading.textContent = title;
     const body = document.createElement("p");
-    body.textContent =
-      opts.note ??
-      "This secret is shown once. Copy it now — you won't see it again.";
+    body.textContent = opts.note ?? "Shown once — copy it now.";
 
     const urlField = document.createElement("div");
     urlField.className = styles.field ?? "";

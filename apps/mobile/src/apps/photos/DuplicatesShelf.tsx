@@ -29,7 +29,10 @@ import {
   View,
 } from "react-native";
 
-import { duplicatesLede } from "@centraid/blueprints/apps/photos/shared-copy";
+import {
+  duplicatesLede,
+  PHOTOS_EMPTY_DUPLICATES,
+} from "@centraid/blueprints/apps/photos/shared-copy";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
@@ -67,9 +70,9 @@ import { usePhotoTimeline } from "./timeline-source";
 import { useCopyToVault } from "./use-copy-to-vault";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
-/** The shelf's copy when there is nothing to review. The web's own sentence
- *  (`EMPTY_COPY[DUPLICATES]`), matched by `DuplicateReview.tsx`. */
-const NOTHING_TO_REVIEW = "No near-identical clusters in your library.";
+/** The shelf's copy when there is nothing to review — the web's own sentence
+ *  (`EMPTY_COPY[DUPLICATES]`), read from the module that owns it. */
+const NOTHING_TO_REVIEW = PHOTOS_EMPTY_DUPLICATES;
 
 export default function DuplicatesShelf({
   navigation,

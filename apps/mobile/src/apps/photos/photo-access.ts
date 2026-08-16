@@ -210,7 +210,7 @@ export function photoAccessCopy(
   if (state === "limited") {
     return {
       headline: "Photos can reach some of your camera roll",
-      lede: "You gave Photos a chosen set of photographs rather than the whole camera roll. Everything below is what that means: Photos will not pretend to have looked at the rest.",
+      lede: "You gave Photos a chosen set of photographs rather than the whole camera roll. Photos will not pretend to have looked at the rest.",
       // The route out of limited is the OS's own settings page — see the note
       // on `PhotoAccessAction` for why there is no in-app picker here.
       primary: { action: "settings", label: "Choose more in Settings" },

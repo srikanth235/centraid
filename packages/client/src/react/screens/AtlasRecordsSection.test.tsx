@@ -222,7 +222,7 @@ describe("screens/AtlasRecordsSection", () => {
       expect(el.textContent).toContain("Alice");
       expect(el.textContent).toContain("Bob");
       expect(el.textContent).toContain(
-        "The first 2 of 214, newest first. The table scrolls rather than pages, the way the drive does."
+        "The first 2 of 214, newest first — the table scrolls rather than pages."
       );
     });
 

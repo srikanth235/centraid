@@ -385,5 +385,5 @@ export function tableCaption(
   total: number,
   order: string
 ): string {
-  return `The first ${shown.toLocaleString()} of ${total.toLocaleString()}, ${order.toLowerCase()}. The table scrolls rather than pages, the way the drive does.`;
+  return `The first ${shown.toLocaleString()} of ${total.toLocaleString()}, ${order.toLowerCase()} — the table scrolls rather than pages.`;
 }

@@ -234,9 +234,7 @@ export default function PlacesMap({
             {readingPin.count}
           </Text>
         ) : (
-          <Text style={styles.readout}>
-            Plotted from your own photographs. Nothing is fetched.
-          </Text>
+          <Text style={styles.readout}>Plotted from your own photographs.</Text>
         )}
       </View>
     </TopSafeArea>

@@ -223,8 +223,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
           {props.cause === "backup-alert" ? (
             <section className={styles.panel} data-testid="system-arrival">
               <div className={styles.panelEmpty}>
-                You arrived from the backup alert. Backups are shown first so
-                you can see what needs attention.
+                From the backup alert — backups are shown first.
               </div>
             </section>
           ) : null}

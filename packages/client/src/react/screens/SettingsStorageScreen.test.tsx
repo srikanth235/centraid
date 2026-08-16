@@ -380,7 +380,7 @@ describe("screens/SettingsStorageScreen", () => {
       });
       const el = await mount(props);
       expect(option(el, "Hosted")?.hasAttribute("disabled")).toBe(true);
-      expect(el.textContent).toContain("Connect a storage provider above");
+      expect(el.textContent).toContain("connect a provider above");
     });
   });
 });

@@ -146,7 +146,7 @@ describe("GatewayScreen — Overview tab (default)", () => {
         focus="backups"
       />
     );
-    expect(html).toContain("You arrived from the backup alert");
+    expect(html).toContain("From the backup alert");
     expect(html.indexOf("Backups")).toBeLessThan(html.indexOf("Answering"));
   });
 

@@ -60,7 +60,7 @@ export default function OnboardingScreen({
           await onComplete({ path });
         } catch (caughtError) {
           setSubmitting(false);
-          setError("Couldn't finish setting up Centraid. Try again.");
+          setError("Centraid setup didn’t finish.");
           setErrorDetail(
             caughtError instanceof Error
               ? caughtError.message
@@ -92,9 +92,7 @@ export default function OnboardingScreen({
       .catch((caughtError: unknown) => {
         if (cancelled) return;
         setSubmitting(false);
-        setError(
-          "Centraid couldn't start on this Mac. This is usually temporary — try again, and if it keeps happening, quit Centraid completely and reopen it."
-        );
+        setError("Centraid couldn’t start on this Mac — try again.");
         setErrorDetail(
           caughtError instanceof Error
             ? caughtError.message
@@ -140,8 +138,8 @@ export default function OnboardingScreen({
             </h1>
             <p className={styles.sub}>
               {error
-                ? "Your data is safe — nothing was created. Everything here runs on this Mac, so retrying is worth trying before anything else."
-                : "Starting Centraid on this Mac and preparing your vaults. This takes a moment the first time."}
+                ? "Nothing was created."
+                : "Starting Centraid and preparing your vaults — a moment the first time."}
             </p>
           </>
         )}

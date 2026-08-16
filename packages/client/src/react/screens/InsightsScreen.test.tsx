@@ -338,9 +338,7 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     expect(heads.some((head) => head?.startsWith("since "))).toBe(true);
     expect(
       [...el.querySelectorAll(".factNote")].map((n) => n.textContent)
-    ).toContain(
-      "Measured, not limited by Conserve. CPU time for harness runs isn’t separately measurable yet."
-    );
+    ).toContain("Measured, not limited by Conserve.");
   });
 
   it("states the gateway's measured numbers, and the note that frames them", () => {
@@ -355,7 +353,7 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     expect(keys).not.toContain("disk");
     expect(keys).not.toContain("compute shared");
     expect(el.textContent).toContain(
-      "The vault host is your own machine. These are its numbers, not a service’s."
+      "These are your own machine’s numbers, not a service’s."
     );
   });
 

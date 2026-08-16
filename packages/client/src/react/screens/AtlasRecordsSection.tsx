@@ -78,7 +78,7 @@ function MachineryBar({
       <p className={styles.machineryNote} data-testid="atlas-machinery-locked">
         {unlocked
           ? "Machinery edits unlocked — hand-editing plumbing rows can break vault invariants."
-          : "This is a machinery band — browsing only. Editing plumbing rows can brick invariants."}
+          : "Machinery band — browsing only, since hand-edits can break vault invariants."}
       </p>
       <button
         type="button"

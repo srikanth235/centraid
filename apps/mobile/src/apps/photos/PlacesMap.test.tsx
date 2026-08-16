@@ -282,7 +282,7 @@ describe("the Places map (native)", () => {
   it("says at rest that the map is plotted from the member's own photographs", () => {
     renderMap();
     expect(container!.textContent).toContain(
-      "Plotted from your own photographs. Nothing is fetched."
+      "Plotted from your own photographs."
     );
   });
 

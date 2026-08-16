@@ -18,9 +18,10 @@
  *  brief's "Nothing here yet" retired with the flip. */
 export const HOME_FIRST_RUN_TITLE = "Nothing in here yet";
 
-/** The body under it. One sentence about what Home becomes, one about custody. */
+/** The body under it. One sentence about what Home becomes; custody is stated
+ *  where imports are decided, not here (#805). */
 export const HOME_FIRST_RUN_BODY =
-  "Bring your photographs and documents in and this becomes the front of your own archive. Everything you import stays on this device.";
+  "Bring your photographs and documents in and this becomes the front of your own archive.";
 
 /**
  * Day one's three buttons, verbatim from the handoff (:983–990). One filled —
@@ -120,13 +121,13 @@ export const HOME_SAMPLE_OFFER_LABEL = "Fill it with a sample week";
 
 /** The two things a member must know BEFORE pressing, not after. */
 export const HOME_SAMPLE_OFFER_HINT =
-  "Invented content in the real structure — a week of events, notes, photos, documents, people and expenses. Nothing leaves this device, and one tap clears all of it.";
+  "Invented content in the real structure — nothing leaves this device, and one tap clears it.";
 
 /** While the sample is loaded. Present tense, first word does the work. */
 export const HOME_SAMPLE_LOADED_TITLE = "Sample data";
 
 export const HOME_SAMPLE_LOADED_BODY =
-  "The rows below are made up, so you can see Home working. Clearing them leaves anything you have added yourself untouched.";
+  "The rows below are made up; clearing them leaves your own additions untouched.";
 
 export const HOME_SAMPLE_CLEAR = "Clear the sample";
 

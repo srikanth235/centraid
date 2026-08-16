@@ -256,7 +256,7 @@ export default function AutomationEditorRoute({
               // reveal `onRotateWebhook` uses below (webhookReveal.ts).
               if (webhook) {
                 await openWebhookReveal(webhook, {
-                  note: "This secret is shown once. Copy it now — you won't see it again.",
+                  note: "Shown once — copy it now.",
                   title: "Webhook minted",
                 });
               }
@@ -283,7 +283,7 @@ export default function AutomationEditorRoute({
             }
             if (webhook) {
               await openWebhookReveal(webhook, {
-                note: "This secret is shown once. Copy it now — you won't see it again.",
+                note: "Shown once — copy it now.",
                 title: "Webhook minted",
               });
             }
@@ -464,7 +464,7 @@ export default function AutomationEditorRoute({
               automationId: ref,
             });
             await openWebhookReveal(webhook, {
-              note: "This secret is shown once. Update your caller now — you won't see it again.",
+              note: "Shown once — update your caller now.",
               title: "New webhook secret",
             });
             showToast("Webhook secret regenerated");

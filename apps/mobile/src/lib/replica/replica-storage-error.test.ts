@@ -4,6 +4,8 @@ import {
   asReplicaStorageError,
   isReplicaStorageFullError,
   ReplicaStorageFullError,
+  STORAGE_FULL_ACTION_LABEL,
+  STORAGE_FULL_CONSEQUENCE,
 } from "./replica-storage-error";
 
 describe("native replica low-disk behavior", () => {
@@ -17,9 +19,10 @@ describe("native replica low-disk behavior", () => {
     expect(isReplicaStorageFullError(failure)).toBe(true);
     const normalized = asReplicaStorageError(failure);
     expect(normalized).toBeInstanceOf(ReplicaStorageFullError);
-    expect(normalized.message).toContain("paused replica sync");
-    expect(normalized.message).toContain("without deleting");
-    expect(normalized.message).toContain("thumbnail cache");
+    expect(normalized.message).toContain("Phone storage is full");
+    expect(normalized.message).toContain("sync is paused");
+    expect(STORAGE_FULL_CONSEQUENCE).toContain("paused");
+    expect(STORAGE_FULL_ACTION_LABEL).toContain("thumbnail cache");
   });
 
   test("does not misclassify unrelated SQLite failures", () => {

@@ -692,7 +692,7 @@ export function createInlineCentraidClient(
       if (!binding.scope.canWrite) {
         throw new InlineScopeError(
           "SCOPE_READONLY",
-          `You can view ${binding.scope.label}, but not add to it.`
+          `${binding.scope.label} is read-only here.`
         );
       }
       // Sealed inputs must never cross the durable session boundary. Network
@@ -840,7 +840,7 @@ export function createInlineCentraidClient(
       if (!target.scope.canWrite) {
         throw new InlineScopeError(
           "SCOPE_READONLY",
-          `You can view ${target.scope.label}, but not add to it.`
+          `${target.scope.label} is read-only here.`
         );
       }
       if (!isOnline())

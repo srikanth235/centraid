@@ -90,7 +90,7 @@ export function assistantConsequence(
 ): string {
   if (!resolved) return "Choose a harness and model to send.";
   if (!resolved.harness.installed) {
-    return `${resolved.harness.label} is not installed. Install it to send, or pick another harness.`;
+    return `${resolved.harness.label} is not installed — install it or pick another harness.`;
   }
   const attached =
     attachmentCount === 0

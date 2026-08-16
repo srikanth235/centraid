@@ -31,8 +31,7 @@ const tasksInlineApp: InlineAppModule = {
   kitAsk: {
     scope: "tasks",
     placeholder: "Ask your tasks…",
-    intro:
-      "Ask me to add, complete, reschedule or find tasks. I’ll show the change for your approval before it touches the vault.",
+    intro: "Ask me to add, complete, reschedule or find tasks.",
     suggest: [
       "Add “call mom tomorrow”",
       "What’s due today?",

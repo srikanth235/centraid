@@ -50,7 +50,7 @@ describe("screens/AutomationEditorScreen", () => {
       expect(el.textContent).toContain("Draft");
       expect(el.textContent).toContain("Triggers");
       expect(el.textContent).toContain(
-        "Without a trigger, this only runs when you fire it by hand"
+        "without one, this runs only when you fire it by hand"
       );
       // Connectors live on the Instructions toolbar, not as a bottom tab.
       expect(

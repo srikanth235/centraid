@@ -18,6 +18,12 @@
 //     gateway sends the timestamp and no verdict, so the threshold below is
 //     this screen's, and it is stated rather than hidden.
 
+import {
+  EMPTY_HEALTH,
+  ERROR_HEALTH,
+  READING_HEALTH,
+} from "@centraid/client/surface-copy";
+
 import type { HealthCopy, OpsState } from "../../kit/components/health-line";
 import type { ConnectionEntry } from "../../lib/connections";
 
@@ -273,10 +279,9 @@ export function connectorsHealth(
   const failing = entries.filter((e) => e.status === "failing");
   const paused = entries.filter((e) => e.status === "paused").length;
   const generic = {
-    emptyText: "Nothing to attend to · nothing needs you here right now.",
-    errorText:
-      "This page could not load · everything else on the gateway is unaffected.",
-    loadingText: "Reading from the gateway",
+    emptyText: EMPTY_HEALTH,
+    errorText: ERROR_HEALTH,
+    loadingText: READING_HEALTH,
   };
   const first = needsAuth[0];
   if (first) {

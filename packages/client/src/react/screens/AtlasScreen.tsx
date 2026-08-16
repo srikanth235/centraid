@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import { ATLAS_EMPTY_BODY, ATLAS_EMPTY_TITLE } from "../../data-copy.js";
 import { browseRows } from "../../gateway-client.js";
 import type {
   AtlasCensusPayload,
   AtlasGraphPayload,
   AtlasPulsePayload,
 } from "../../gateway-client.js";
+import { SKELETON_NOTE } from "../../surface-copy.js";
 import {
   clearRouteSignals,
   publishRouteSignals,
@@ -255,7 +257,7 @@ export default function AtlasScreen({
       <div className={styles.page}>
         <PanelBlock
           action={{ label: "Try again", onClick: retry }}
-          body="The vault is encrypted and present on disk. Its host could not open it, which is usually a permissions problem on the machine rather than damage to the data."
+          body="The host could not open the vault — usually a permissions problem on this machine."
           eyebrow="Vault"
           title="Cannot open the store"
           tone="net"
@@ -268,21 +270,14 @@ export default function AtlasScreen({
     return (
       <div className={styles.page}>
         <PageSkeleton label="Reading your vault’s census" rows={6} />
-        <NoteBlock>
-          A row knows its shape before its content arrives, so nothing reflows
-          when it does.
-        </NoteBlock>
+        <NoteBlock>{SKELETON_NOTE}</NoteBlock>
       </div>
     );
 
   if (state === "empty")
     return (
       <div className={styles.page}>
-        <EmptyBlock
-          body="Kinds appear here as apps write records. Nothing is created until an app or an import puts something in."
-          routine
-          title="This vault is empty"
-        />
+        <EmptyBlock body={ATLAS_EMPTY_BODY} routine title={ATLAS_EMPTY_TITLE} />
       </div>
     );
 

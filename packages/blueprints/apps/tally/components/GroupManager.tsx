@@ -136,8 +136,8 @@ export function GroupManager({
         <p className={styles.hint}>Every Tally friend is already a member.</p>
       )}
       <p className={styles.hint}>
-        Members on an expense cannot be removed. A group can be deleted only
-        after all of its expenses leave the trash grace window.
+        Members on an expense cannot be removed; a group deletes only once its
+        expenses leave the trash grace window.
       </p>
       <button
         type="button"

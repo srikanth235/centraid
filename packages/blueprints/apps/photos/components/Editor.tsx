@@ -29,6 +29,7 @@ import { isPendingOffsite, stageFileBytes } from "@centraid/design/elements";
 import { safeMediaUrl } from "../../_shared/untrusted.ts";
 import { BLOB_PENDING_ATTR } from "../media-observer.ts";
 import { act, narrate, notice } from "../outcomes.ts";
+import { PHOTOS_SAVED_AS_NEW } from "../shared-copy.ts";
 import type { Asset } from "../types.ts";
 import {
   centredCrop,
@@ -254,7 +255,7 @@ export function EditorView({
       notice(
         isPendingOffsite(staged)
           ? "Saved as a new photograph · not copied off this device yet."
-          : "Saved as a new photograph — the original is not touched."
+          : PHOTOS_SAVED_AS_NEW
       );
       await refresh();
       onSaved();
@@ -315,8 +316,7 @@ export function EditorView({
       >
         {loadError ? (
           <p className={styles.loadError}>
-            This photograph could not be opened for editing. Its record is
-            untouched, and nothing has been written.
+            This photograph could not be opened for editing.
           </p>
         ) : (
           <canvas ref={canvasRef} className={styles.canvas} />

@@ -267,7 +267,6 @@ export function Dashboard({
         <div className={styles.t}>Welcome to Tally</div>
         <div className={styles.d}>
           Add a friend, then create a group and start splitting shared costs.
-          Balances update the moment you record an expense or a payment.
         </div>
         <div className={styles.row}>
           <button

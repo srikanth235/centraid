@@ -84,7 +84,8 @@ const copy = (await import(app("drive-copy.ts"))) as {
       tail?: string;
     }
   ) => readonly Crumb[];
-  TRASH_ASK: { title: string; body: string; facts: readonly { key: string }[] };
+  TRASH_ASK: { eyebrow: string; title: string };
+  TRASH_FALLBACK: string;
   WINDOW_FAILED: string;
 };
 const docCopy = (await import(app("document-copy.ts"))) as {
@@ -229,9 +230,11 @@ describe("the seven write outcomes (§6.3)", () => {
 
   it("keeps 'held for a person' and 'held for a gateway' apart", () => {
     expect(docCopy.DSAVE["approval"]!.status).toContain("approval");
-    expect(docCopy.DSAVE["approval"]!.note).toContain(
-      "This is not the same state as queued"
-    );
+    // The two held states are told apart by what holds them — a person in
+    // Notifications, or an unreachable gateway — not by a sentence denying
+    // the other one.
+    expect(docCopy.DSAVE["approval"]!.note).toContain("Notifications");
+    expect(docCopy.DSAVE["queued"]!.note).toContain("gateway is back");
     expect(docCopy.DSAVE["queued"]!.status).toContain("gateway is unreachable");
   });
 
@@ -318,12 +321,13 @@ describe("what Docs can show (§10.1) and what it asks for (§4.3)", () => {
   });
 
   it("draws trash's ask without a destroy verb", () => {
-    expect(copy.TRASH_ASK.body).toContain("There is no destroy verb");
-    expect(copy.TRASH_ASK.facts.map((f) => f.key)).toContain("what is asked");
-    // The ask names two typed commands; nothing in the copy is a control.
-    expect(copy.TRASH_ASK.title).toBe(
-      "Trash needs Delete forever and Empty trash"
-    );
+    // A label and one sentence: the eyebrow says it is not a control that
+    // failed, and the fallback says why destruction is scheduled. The design
+    // rationale is a comment in drive-copy.ts, never printed at a member.
+    expect(copy.TRASH_ASK.eyebrow).toBe("Not available yet");
+    expect(copy.TRASH_ASK.title).toBe("Delete forever and Empty trash");
+    expect(copy.TRASH_FALLBACK).toContain("cannot be emptied");
+    expect(JSON.stringify(copy.TRASH_ASK)).not.toContain("destroy verb");
   });
 
   it("says nothing about a window still in flight, and one thing about a failed one", () => {

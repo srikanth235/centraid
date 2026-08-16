@@ -140,9 +140,7 @@ export default function AgendaEvent({
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
     });
-    postStatus(
-      "Reminder set — this device will notify you 15 minutes before the event."
-    );
+    postStatus("Reminder set — 15 minutes before the event.");
   };
   if (!event)
     return <View style={[styles.safe, { backgroundColor: colors.bg }]} />;

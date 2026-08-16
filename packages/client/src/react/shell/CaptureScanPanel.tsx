@@ -149,8 +149,7 @@ export function CaptureScanPanel({
           cardholder: card.cardholder,
           card_number: card.cardNumber,
           expiry: card.expiry,
-          notes:
-            "Captured with local OCR. The source image was not stored in Locker.",
+          notes: "Captured with local OCR — the source image was not stored.",
         });
       } else {
         const stagedSha = await stageCaptureFile(file);
@@ -235,8 +234,8 @@ export function CaptureScanPanel({
     <section className={styles.scanPanel} aria-labelledby="scan-title">
       <h3 id="scan-title">Image, receipt, or PDF scan</h3>
       <p className={styles.hint}>
-        OCR stays local to the device or your gateway. Review every extracted
-        field before anything is committed.
+        OCR stays on this device or your gateway — review every field before
+        saving.
       </p>
       <label className={styles.label}>
         Image or PDF

@@ -72,8 +72,7 @@ export function FoldersRoute({
         </div>
       </div>
       <p className={styles.note}>
-        A folder is a label on the document, not a place it sits. Taking one off
-        does not delete anything.
+        A folder is a label on the document, not a place it sits.
       </p>
     </div>
   );

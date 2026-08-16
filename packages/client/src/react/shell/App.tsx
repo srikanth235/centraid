@@ -17,6 +17,7 @@ import { themes } from "@centraid/design";
 
 import { relativeTime } from "../../app-format.js";
 import type { ShellRoute } from "../../app-shell-context.js";
+import { forgetDeviceMessage } from "../../devices-copy.js";
 import {
   ASSISTANT_APP_ID,
   deleteConversation,
@@ -337,8 +338,7 @@ export default function App({
       const ok = await openConfirm({
         confirmLabel: "Log out",
         danger: true,
-        message:
-          "This device drops its pairing, its offline copy, and its cached previews, and returns to onboarding. Your vault is untouched — the enrollment stays on its host until you revoke it from Household → Devices.",
+        message: forgetDeviceMessage("device"),
         title: "Log out of this device?",
       });
       if (!ok) return;

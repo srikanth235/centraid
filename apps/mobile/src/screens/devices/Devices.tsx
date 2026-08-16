@@ -29,6 +29,12 @@ import * as Clipboard from "expo-clipboard";
 import React, { useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
 
+import {
+  DEVICES_EMPTY_BODY,
+  DEVICES_EMPTY_TITLE,
+} from "@centraid/client/devices-copy";
+import { SKELETON_NOTE } from "@centraid/client/surface-copy";
+
 import EmptyBlock from "../../kit/components/EmptyBlock";
 import { healthLineFor } from "../../kit/components/health-line";
 import HealthLine from "../../kit/components/HealthLine";
@@ -63,20 +69,18 @@ const OTHER_PEOPLE_NOTE =
   "Another person reaches only what you placed in a shared space.";
 
 /** What a skeleton promises, said out loud (spec §10). */
-const LOADING_NOTE =
-  "A row knows its shape before its content arrives, so nothing reflows when it does.";
+const LOADING_NOTE = SKELETON_NOTE;
 
-const EMPTY_TITLE = "Only this device is enrolled";
-const EMPTY_BODY =
-  "Pair a phone or a laptop to reach this vault from it. Everything stays on your own machines.";
+const EMPTY_TITLE = DEVICES_EMPTY_TITLE;
+const EMPTY_BODY = DEVICES_EMPTY_BODY;
 
 const ERROR_TITLE = "Cannot reach your vault's home machine";
 const ERROR_BODY =
-  "This page is being served from a cached copy. Device pairing and revocation both need your vault's home machine, so both are unavailable until it answers.";
+  "Served from a cached copy — pairing and revocation need your vault's home machine.";
 /** The `no-gateway` degrade is the SAME visual, with the sentence that is
  *  actually true of it: nothing is cached because nothing was ever linked. */
 const UNPAIRED_BODY =
-  "This phone is not linked to a vault yet. Pair it from Settings, and the devices sharing that vault appear here.";
+  "Pair this phone from Settings to see the devices sharing that vault.";
 
 const PAIR_VERB = "Pair a device";
 

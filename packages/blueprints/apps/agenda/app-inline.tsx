@@ -27,8 +27,7 @@ const agendaInlineApp: InlineAppModule = {
   kitAsk: {
     scope: "agenda",
     placeholder: "Ask your calendar…",
-    intro:
-      "Ask me to schedule, move, find or explain events. Proposed events show for your approval before they touch the vault.",
+    intro: "Ask me to schedule, move, find or explain events.",
     suggest: [
       "Book coffee with Dana Thursday at 10",
       "What’s on this week?",

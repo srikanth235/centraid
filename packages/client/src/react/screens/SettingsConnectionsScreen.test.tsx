@@ -161,7 +161,7 @@ describe("screens/SettingsConnectionsScreen", () => {
         "Google · Gmail → messages",
       ]);
       expect(el.textContent).toContain(
-        "A sync copies one narrow thing into the vault on a schedule. It reads only what the connection already allows."
+        "A sync copies one narrow thing into the vault on a schedule."
       );
     });
 
@@ -225,7 +225,7 @@ describe("screens/SettingsConnectionsScreen", () => {
       const el = await mount(makeProps({ loadConnections }));
       expect(el.textContent).toContain("THIS PAGE COULD NOT LOAD");
       expect(el.textContent).toContain(
-        "Existing connections keep working — this page reads their status from the gateway, and only the status is unavailable. Nothing has been paused."
+        "Connection health is unavailable; the connections themselves keep working."
       );
       expect(signals.at(-1)?.state).toBe("error");
 
@@ -548,7 +548,7 @@ describe("screens/SettingsConnectionsScreen", () => {
       expect(checkbox?.hasAttribute("disabled")).toBe(true);
       expect(continueButton?.hasAttribute("disabled")).toBe(true);
       expect(wizard?.textContent).toContain(
-        "until Google restricted-scope verification is complete"
+        "until Google restricted-scope verification completes"
       );
     });
 
@@ -568,7 +568,7 @@ describe("screens/SettingsConnectionsScreen", () => {
       expect(labelInput?.value).not.toBe("Google · Gmail");
       expect(labelInput?.value.startsWith("Google · Gmail")).toBe(true);
       // …and the owner is told why. The redundant in-form auth banner is gone.
-      expect(wizard?.textContent).toMatch(/already have 1 account/iu);
+      expect(wizard?.textContent).toMatch(/1 account connected here/iu);
       expect(wizard?.textContent).not.toContain(
         "Use your own client ID and secret (BYO)"
       );

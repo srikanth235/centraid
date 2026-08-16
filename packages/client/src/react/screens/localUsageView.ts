@@ -73,7 +73,7 @@ export const COMPONENT_PRESENTATION: Readonly<
   cache: {
     label: "Harness cache",
     color: "var(--c-slate)",
-    blurb: "Harness scratch space. Derived — safe to delete at any time.",
+    blurb: "Harness scratch space — derived, safe to delete.",
   },
   logs: {
     label: "Logs",
@@ -272,7 +272,7 @@ export function budgetSummary(
   const used = formatBytes(report.totalBytes);
   const of = formatBytes(limits.totalLimitBytes);
   if (report.limit.status === "error") {
-    return `${used} of your ${of} budget — over. Nothing is being blocked; this is a warning so you can decide what to clear.`;
+    return `${used} of your ${of} budget — over.`;
   }
   if (report.limit.status === "degraded") {
     return `${used} of your ${of} budget — past the ${limits.warnAtPercent}% mark.`;

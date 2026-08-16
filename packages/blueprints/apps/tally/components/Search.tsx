@@ -37,7 +37,7 @@ const TALLY_SEARCH_COPY = {
   resting: {
     eyebrow: "Nothing typed",
     title: "Search your whole ledger",
-    body: "Every group, friend and expense description — not just what's loaded. Try one of these.",
+    body: "Every group, friend and expense description — not just what's loaded.",
   },
   searching: {
     lead: "Searching your whole ledger.",
@@ -53,7 +53,7 @@ const TALLY_SEARCH_COPY = {
   unreachable: {
     eyebrow: "Cannot reach the gateway",
     title: "Search needs the gateway",
-    body: "Expense search runs on the gateway, which is unreachable. Nothing below has been searched for you.",
+    body: "Expense search runs on the gateway, which is unreachable — nothing below is searched.",
     facts: [
       {
         label: "what still works",

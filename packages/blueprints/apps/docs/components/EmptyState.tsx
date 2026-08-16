@@ -22,7 +22,6 @@
 // rather than drawing a button into a dead end.
 import type { ReactNode } from "react";
 
-import { EMPTY_MODEL_NOTE } from "../view-copy.ts";
 import type { EmptyStateView } from "../view-state.ts";
 
 import styles from "./EmptyState.module.css";
@@ -68,10 +67,9 @@ export function EmptyState({
           ))}
         </div>
       ) : null}
-      {/* The model, said where it is true rather than only in a spec. It rides
-          the first-run state alone, which is the one that owns the display
-          rung and therefore the one the sentence is about. */}
-      {view.display ? <p className={styles.note}>{EMPTY_MODEL_NOTE}</p> : null}
+      {/* §4.6's five-empty-states note used to render here. It described the
+          MODEL to a member standing in one of the five, which is a spec note
+          on a screen; it lives in `view-copy.ts`'s comment instead. */}
     </div>
   );
 }

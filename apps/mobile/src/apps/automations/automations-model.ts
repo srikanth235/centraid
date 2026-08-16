@@ -25,6 +25,13 @@
 //     the same correction `packages/client`'s screen made, word for word, so
 //     both surfaces make the same promise.
 
+import { automationsErrorBody } from "@centraid/client/automations-copy";
+import {
+  EMPTY_HEALTH,
+  ERROR_HEALTH,
+  READING_HEALTH,
+} from "@centraid/client/surface-copy";
+
 import type { HealthCopy, OpsState } from "../../kit/components/health-line";
 import type { AutomationRow, AutomationTemplate } from "../../lib/automations";
 
@@ -354,29 +361,22 @@ export function worstFailure(
     .sort((a, b) => (b.streak?.count ?? 1) - (a.streak?.count ?? 1))[0];
 }
 
-/** The empty state, verbatim (spec §3 `opsDef`). */
-export const EMPTY_TITLE = "Nothing runs on its own yet";
-export const EMPTY_BODY =
-  "An automation is a trigger and a thing to do. Start from a template, or describe what you want and the assistant will draft one.";
-export const EMPTY_ACTION = "Browse templates";
+// The empty and error states are the same words the desktop overview says, so
+// they come from `@centraid/client/automations-copy` (issue #805), re-exported
+// under this file's own names.
+export {
+  AUTOMATIONS_EMPTY_ACTION as EMPTY_ACTION,
+  AUTOMATIONS_EMPTY_BODY as EMPTY_BODY,
+  AUTOMATIONS_EMPTY_TITLE as EMPTY_TITLE,
+  AUTOMATIONS_ERROR_RETRY as ERROR_RETRY,
+  AUTOMATIONS_ERROR_TITLE as ERROR_TITLE,
+} from "@centraid/client/automations-copy";
 
-/** The error state, verbatim (spec §3): what failed, what is still safe, one
- *  way forward. */
-export const ERROR_TITLE = "The scheduler is not answering";
-export const ERROR_RETRY = "Reconnect";
-
-/**
- * The error body.
- *
- * The reference's "nothing has run since 09:12" clause is DROPPED when this
- * screen has never had a successful read to take the time from — an invented
- * clock is worse than a shorter sentence. (Same call, same words, as the
- * desktop screen.)
- */
+/** The error body. The "nothing has run since 09:12" clause is DROPPED when
+ *  this screen has never had a successful read to take the time from — an
+ *  invented clock is worse than a shorter sentence. */
 export function errorBody(sinceClock: string | undefined): string {
-  return sinceClock === undefined
-    ? "Automations are stored on the gateway and are safe. Nothing has been lost — runs queue until the scheduler is back."
-    : `Automations are stored on the gateway and are safe. Nothing has run since ${sinceClock} and nothing has been lost — runs queue until the scheduler is back.`;
+  return automationsErrorBody(sinceClock);
 }
 
 /**
@@ -390,10 +390,9 @@ export function automationsHealth(
   now: number
 ): HealthCopy {
   const generic = {
-    emptyText: "Nothing to attend to · nothing needs you here right now.",
-    errorText:
-      "This page could not load · everything else on the gateway is unaffected.",
-    loadingText: "Reading from the gateway",
+    emptyText: EMPTY_HEALTH,
+    errorText: ERROR_HEALTH,
+    loadingText: READING_HEALTH,
   };
   const failing = copies.filter((copy) => copy.status === "failing");
   const worst = worstFailure(copies);

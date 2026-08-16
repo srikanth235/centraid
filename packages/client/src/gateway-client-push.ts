@@ -1,4 +1,5 @@
 import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
+import { notifyEventReminderBody } from "./notifications-copy.js";
 import { composeWebNotifications } from "./notifications-model.js";
 import type { NotificationsPull } from "./notifications-model.js";
 
@@ -135,9 +136,7 @@ export async function syncWebDueNotifications(): Promise<void> {
       registration.showNotification(reminder.title, {
         body:
           reminder.kind === "event"
-            ? reminder.minutesBefore === 0
-              ? "Starting now"
-              : `Starts in ${reminder.minutesBefore} minutes`
+            ? notifyEventReminderBody(reminder.minutesBefore)
             : "Task reminder",
         tag: reminder.key,
         data: {

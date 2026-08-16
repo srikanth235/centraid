@@ -164,14 +164,13 @@ describe("what the editor promises", () => {
           );
   });
 
-  // Pinned character for character against the web editor's own strings
-  // (`packages/blueprints/apps/photos/viewer.ts`). They cannot be imported from
-  // this app — see the note beside the constants — so this assertion is what
-  // stands between the two surfaces and a promise that drifts.
+  // The web editor's own strings, now imported rather than copied (#805). The
+  // assertion stays: it is what catches a rewrite of the shared constant that
+  // nobody meant to apply to this surface too.
   test("the commit and its explanation are the web editor's own words", () => {
     expect(SAVE_AS_NEW).toBe("Save as a new photograph");
     expect(SAVE_AS_NEW_EXPLANATION).toBe(
-      "Saving writes a new photograph dated today, with this one recorded as its source. The original is not touched, and nothing is overwritten."
+      "Saving writes a new photograph dated today; the original is not touched."
     );
   });
 

@@ -15,6 +15,11 @@
 // Imports the leaf module rather than `kit/fetch-gate`'s barrel: this file is
 // asserted without rendering React Native (see the module comment above), and
 // the barrel also re-exports `FetchChoice.tsx`, which pulls in `react-native`.
+import {
+  PHOTOS_VIDEO_STATUS,
+  photosOriginalNotFetched,
+} from "@centraid/blueprints/apps/photos/shared-copy";
+
 import { isMeteredConnection } from "../../kit/fetch-gate/gate";
 
 /** The tone a control takes. Resolved to `colors.onStage` / `colors.net`. */
@@ -319,13 +324,13 @@ export interface VaultLine {
 }
 
 const PERSONAL_MEANING =
-  "Reachable by nothing. Copy it somewhere shared to let someone see it.";
+  "Reachable by nothing — copy it somewhere shared to let someone see it.";
 
 export function vaultLine(personal: boolean, label: string): VaultLine {
   return {
     meaning: personal
       ? PERSONAL_MEANING
-      : `Anyone with access to ${label} can see this photograph. Take it out and it stops being shared.`,
+      : `Anyone with access to ${label} can see this photograph — take it out and it stops being shared.`,
     value: label,
   };
 }
@@ -587,7 +592,7 @@ export function originalStatus(
       return {
         action: LOAD_THE_ORIGINAL,
         placement,
-        text: `Original on ${gatewayName} · a full-quality copy has not been fetched`,
+        text: photosOriginalNotFetched(gatewayName),
       };
   }
 }
@@ -599,12 +604,12 @@ export function originalStatus(
  */
 export function originalWhereabouts(status: OriginalStatus): string {
   if (status.placement === "on-device")
-    return "The original is on this device. Nothing is fetched to open it.";
+    return "The original is on this device.";
   if (status.placement === "offloaded")
-    return "This device moved the original off to free space. Fetching it back is your choice, and it happens once.";
+    return "This device moved the original off to free space — fetching it back is your choice, once.";
   if (status.placement === "metered")
-    return "The original is on the gateway and this connection is metered. Fetching a full-quality copy is always your choice, never automatic.";
-  return "The original is on the gateway. Opening this photograph reads a smaller copy; fetching the full-quality one is your choice.";
+    return "The original is on the gateway and this connection is metered — fetching a full-quality copy is your choice.";
+  return "The original is on the gateway — opening reads a smaller copy, and fetching the full-quality one is your choice.";
 }
 
 // ---------------------------------------------------------------------------
@@ -621,7 +626,7 @@ const VIEWER_GESTURE_STATUS =
   "Swipe for the next · pinch or double tap to zoom · swipe up for info";
 
 /** Video's status (proto 4642): what is playing, and which copy of it. */
-const VIDEO_STATUS = "Video · playing from the display copy on this device";
+const VIDEO_STATUS = PHOTOS_VIDEO_STATUS;
 
 /** `240% · drag to pan · double tap returns to fit` — live, never a stub. */
 function zoomedStatus(scale: number): string {

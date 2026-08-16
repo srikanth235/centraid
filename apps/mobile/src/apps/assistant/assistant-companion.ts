@@ -38,10 +38,9 @@ export function companionConsequence(
   attachmentCount: number,
   harness: { kind: string; label: string; available: boolean } | undefined
 ): string {
-  if (!harness)
-    return "Assistant is checking the selected harness. No provider receives this turn and nothing has been added to your Assistant ledger.";
+  if (!harness) return "Checking the selected harness — nothing is sent yet.";
   if (!harness.available)
-    return `${harness.label} is unavailable. No provider receives this turn and nothing is added to your Assistant ledger. Choose an available harness to send.`;
+    return `${harness.label} is unavailable — choose an available harness to send.`;
   const provider = companionProviderLabel(harness.kind, harness.label);
   const inputs = [
     pageContext ? `${pageContext} context` : undefined,

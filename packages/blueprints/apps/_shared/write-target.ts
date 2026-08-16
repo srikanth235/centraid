@@ -53,7 +53,7 @@ export function resolveWriteTarget(input: WriteTargetInput): WriteTarget {
     if (!own)
       return { disabled: true, reason: "Your own space isn’t open right now." };
     if (!own.canWrite)
-      return { disabled: true, reason: `You can’t add to ${own.label} yet.` };
+      return { disabled: true, reason: `${own.label} is read-only for now.` };
     return { disabled: false, scopeId: own.id, label: own.label };
   }
 
@@ -66,7 +66,7 @@ export function resolveWriteTarget(input: WriteTargetInput): WriteTarget {
   if (!audience.canWrite) {
     return {
       disabled: true,
-      reason: `You can view ${audience.label} but not add to it.`,
+      reason: `${audience.label} is read-only here.`,
     };
   }
   return { disabled: false, scopeId: audience.id, label: audience.label };

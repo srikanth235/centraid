@@ -247,7 +247,7 @@ describe("HouseholdScreen suite", () => {
       });
       expect(el.textContent).toContain("Only this device is enrolled");
       expect(el.textContent).toContain(
-        "Pair a phone or a laptop to reach this vault from it. Everything stays on your own machines."
+        "Pair a phone or a laptop to reach this vault from it."
       );
       expect(readVitals("household")).toStrictEqual({
         count: "This device only",
@@ -268,7 +268,7 @@ describe("HouseholdScreen suite", () => {
       const text = el.textContent ?? "";
       expect(text).toContain("Cannot reach the vault host");
       expect(text).toContain(
-        "This page is being served from a cached copy. Device pairing and revocation both need the vault host, so both are unavailable until it answers."
+        "Pairing and revocation need the vault host — this page is a cached copy."
       );
       expect(button(el, "Try again")).toBeTruthy();
       expect(readVitals("household")?.state).toBe("error");

@@ -132,7 +132,7 @@ describe("ApprovalsRoute", () => {
       const panel = el.querySelector('[data-tone="net"]');
       expect(panel?.textContent).toContain("Could not reach the consent store");
       expect(panel?.textContent).toContain(
-        "Nothing has been approved or denied in the meantime"
+        "The gateway answered; the queue that holds staged writes did not."
       );
       expect(panel?.textContent).toContain("offline");
       expect(

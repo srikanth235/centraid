@@ -24,6 +24,7 @@ import {
   readFailed,
 } from "@centraid/design/elements";
 
+import { retryInSeconds } from "../_shared/shared-copy.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { LockerDetail } from "./components/Detail.tsx";
@@ -329,7 +330,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         state.authError =
           result.message ??
           (result.retryAfterMs
-            ? `Try again in ${Math.ceil(result.retryAfterMs / 1000)} seconds.`
+            ? retryInSeconds(Math.ceil(result.retryAfterMs / 1000))
             : "The passphrase was not accepted.");
         bump();
         return;
@@ -380,7 +381,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         state.authError =
           result.message ??
           (result.retryAfterMs
-            ? `Try again in ${Math.ceil(result.retryAfterMs / 1000)} seconds.`
+            ? retryInSeconds(Math.ceil(result.retryAfterMs / 1000))
             : "The passphrase was not accepted.");
         bump();
         return;
