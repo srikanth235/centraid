@@ -4,7 +4,11 @@
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "rootDir": "."
+    "rootDir": ".",
+    "baseUrl": ".",
+    "paths": {
+      "@centraid/server/engine": ["../server/dist/engine/index.d.ts"]
+    }
   },
   "include": [
     "src/**/*.ts",
