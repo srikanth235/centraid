@@ -45,7 +45,7 @@ Coverage and mutation floor **numbers** are unchanged; keys remapped under `appr
 
 Merged `origin/main` (`#803` / `#802`): took the spent `replacesMinimumTestsFlow` deletion wording on `desktop-app-open-journey` and `mobile-native-v0-resilience`; re-pinned the `tests/matrix.json` whole-file fingerprint. The extension CI job builds `@centraid/core` (not `@centraid/core/time`) so the recurrence engine still exists as a package filter before `blueprints` query-handlers.
 
-Blueprints typecheck resolves `@centraid/server/engine` via `packages/blueprints/tsconfig.test.json` `paths` onto `packages/server/dist/engine/index.d.ts`, and `packages/blueprints/turbo.json` typecheck waits on `@centraid/server#build`. `packages/blueprints/package.json` still has no `@centraid/server` workspace dependency, so turbo does not cycle. The eight `tests/design-gallery/baselines/*.png` are the Linux CI actuals from run 31936104554 (Darwin pixels drifted 2–9% against the Linux-authoritative compare).
+Blueprints typecheck resolves `@centraid/server/engine` via `packages/blueprints/tsconfig.test.json` `paths` onto `packages/server/dist/engine/index.d.ts` (no `baseUrl` — TypeScript 7 / `lint:tsconfigs`), and `packages/blueprints/turbo.json` typecheck waits on `@centraid/server#build`. `packages/blueprints/package.json` still has no `@centraid/server` workspace dependency, so turbo does not cycle. The eight `tests/design-gallery/baselines/*.png` are the Linux CI actuals from run 31936104554 (Darwin pixels drifted 2–9% against the Linux-authoritative compare).
 
 ## Decisions
 
