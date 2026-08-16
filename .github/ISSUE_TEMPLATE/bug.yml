@@ -33,7 +33,7 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: OS, shell, governance-kit version / commit, runtime (Claude Code / Codex / other).
+      description: OS, shell, Centraid version / commit, surface (desktop / web PWA / mobile), runtime (Claude Code / Codex / other).
     validations:
       required: true
 
