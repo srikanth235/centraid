@@ -111,7 +111,7 @@ import {
   KeyStore,
   recompileCommonsGrants,
   readBlobStoreSettings,
-  readEnrichPolicyTier,
+  readEnrichPolicyResolutionInput,
   custodyStateCounts,
   jitterDelayMs,
   DEFAULT_VAULT_FOOTPRINT,
@@ -130,7 +130,10 @@ import { openStorageConnectionStore } from "../backup/storage-connections.js";
 import { makeStorageCredentialsResolver } from "../backup/storage-credentials.js";
 import { StorageUsagePoller } from "../backup/storage-usage.js";
 import { makeCaptureOcrRecognizer } from "../capture/capture-ocr.js";
-import { validateEngineProfilePatch } from "../enrich/engine-profiles.js";
+import {
+  readEngineProfile,
+  validateEngineProfilePatch,
+} from "../enrich/engine-profiles.js";
 import {
   isSystemRecognitionRef,
   SYSTEM_RECOGNITION_TEMPLATE_IDS,
@@ -2351,13 +2354,32 @@ export async function buildGateway(
           );
         },
         resolveConnection: connectionBroker.resolveForFire,
-        // The enrichment tier gate's owner-plane read (privacy enforcement).
+        // The enrichment gate's owner-plane read (privacy enforcement).
         // `plane.db.vault` deliberately, NOT `agentBridgeFor` — the guard
         // must not be answerable by the grants of the automation it guards.
         // A throw here is a refusal, not a default: the fire spine catches it
         // and skips the run with the reason stated.
-        resolveEnrichPolicy: (domain) =>
-          readEnrichPolicyTier(vaultRegistry.current().db.vault, domain),
+        //
+        // The tier and the cascade's rules come from ONE vault read (#807);
+        // the profile→egress lookup is the gateway's own registry, since a
+        // profile is gateway configuration and never vault state. `laneFor`
+        // answers with the firing enricher's own declared lane, which is the
+        // lane of the capability being resolved.
+        resolveEnrichPolicy: (request) => {
+          const snapshot = prefs.getAllPrefs();
+          return {
+            ...readEnrichPolicyResolutionInput(
+              vaultRegistry.current().db.vault,
+              request.domain,
+              request.capability,
+              request.scopeChain
+            ),
+            egressForProfile: (profileId: string) =>
+              readEngineProfile(snapshot, profileId, request.capability, {
+                laneFor: () => request.lane,
+              })?.egress,
+          };
+        },
         rearm: ({ automationRef: ref, completedRunId }) => {
           const vaultId = ws.vaultId;
           const task = new Promise<void>((resolve, reject) => {

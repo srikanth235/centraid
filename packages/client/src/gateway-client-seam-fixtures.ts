@@ -139,7 +139,48 @@ const ROUTES: Record<string, Responder> = {
   // vault back after writing, and a client that rendered its own patch would
   // show a tier the vault may never have accepted.
   "GET /centraid/_vault/enrich": () =>
-    json({ enrich: { photos: "gateway", docs: "gateway" } }),
+    json({
+      enrich: { photos: "gateway", docs: "gateway" },
+      // Additive since #807: the cascade's scoped rules ride alongside the
+      // tiers, and a client that reads only `enrich` is unaffected.
+      rules: [
+        {
+          scope: { type: "domain", ref: "photos" },
+          capability: "ocr",
+          enabled: null,
+          profile: null,
+          trigger: "on-view",
+          updatedAt: "2026-08-16T00:00:00.000Z",
+        },
+      ],
+    }),
+  "PUT /centraid/_vault/enrich/rules": (request) =>
+    json({
+      rule: {
+        scope: {
+          type: (JSON.parse(String(request.body)) as { scope: string }).scope,
+          ref: (JSON.parse(String(request.body)) as { ref?: string }).ref ?? "",
+        },
+        capability: "ocr",
+        enabled: null,
+        profile: null,
+        trigger: "on-demand",
+        updatedAt: "2026-08-16T00:00:00.000Z",
+      },
+    }),
+  "DELETE /centraid/_vault/enrich/rules": () => json({ deleted: true }),
+  "GET /centraid/_vault/enrich/effective": () =>
+    json({
+      tier: "device",
+      rules: [],
+      effective: {
+        capability: "ocr",
+        enabled: true,
+        profileId: "built-in",
+        trigger: "on-ingest",
+        egressCeiling: "on-device",
+      },
+    }),
   "PUT /centraid/_vault/enrich": (request) =>
     json({
       enrich: {

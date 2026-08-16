@@ -9,6 +9,9 @@ to the sections below rather than opening a receipt of its own.
 
 - [x] Wave 0 — schema and contracts
 - [x] Wave 1 — engine profiles
+- [x] Wave 2 — policy cascade and gate resolver
+- [x] Wave 3 — egress-consent re-keying
+- [x] Wave 6 — mobile read-only effective-policy projection
 
 ## What changed
 
@@ -52,6 +55,80 @@ device-auth/no-vault in `packages/server/src/routes/route-security.ts`).
 `docs/config-ownership.md` documents the new `enrich.profile.*` prefs surface
 and its single writer.
 
+**Wave 2 — policy cascade and gate resolver.** The scoped cascade resolves
+inside the one gate: `packages/server/src/automation/fire/enrich-resolve.ts`
+(re-exported only through `enrich-gate.ts`) folds a least-specific-first rule
+chain over the legacy tier — `resolveEnrichmentPolicy(rules, legacyTier,
+capability)` — with most-specific-wins per field and the legacy tier preserved
+as an egress-class CEILING (`off → off`, `device → on-device`, `gateway →
+gateway`); only the vault-default layer can set the ceiling, so no rule and no
+per-item selection can widen egress. `decideEnrichmentGate` gains the
+profile-aware form (refuses when the selected profile's egress exceeds the
+ceiling; `profileEgress: undefined` is a refusal) while the legacy tier form
+and the C5 rank law stay byte-compatible; allowed decisions now carry
+`egressConsentNeeded` — the Wave 3 consent seam. The fire seam
+(`packages/server/src/automation/fire/fire.ts`,
+`packages/server/src/automation/index.ts`) grows to a request object
+`{domain, capability, lane, scopeChain}` that still accepts a bare tier, and
+`packages/server/src/serve/build-gateway.ts` answers it with `{tier, rules,
+egressForProfile}` via `packages/vault/src/enrich/policy.ts`'s new
+`readEnrichPolicyResolutionInput` (consent-bridge-free, same rationale as
+`readEnrichPolicyTier`; exported through `packages/vault/src/index.ts`, tests
+in `packages/vault/src/enrich/enrich.test.ts`). HTTP: `GET /_vault/enrich`
+additively gains `rules`; new `PUT/DELETE /_vault/enrich/rules` and
+`GET /_vault/enrich/effective` live in
+`packages/server/src/routes/vault-enrich-rules-routes.ts` (+ test), mounted
+from `packages/server/src/routes/vault-routes.ts`. Client:
+`getEnrichRules`/`setEnrichRule`/`deleteEnrichRule`/`getEffectiveEnrichPolicy`
+in `packages/client/src/gateway-client-vault.ts` with vocabulary mirrors in
+`packages/client/src/enrich-policy.ts`, seam fixtures in
+`packages/client/src/gateway-client-seam-fixtures.ts`, and additive contract
+laws in `packages/client/src/gateway-client-enrich.contract.test.ts`.
+`docs/blueprint-seats.md` § Enrichment doctrine gained the cascade paragraph.
+Resolver tests: `packages/server/src/automation/fire/enrich-resolve.test.ts`,
+gate tests extended in `packages/server/src/automation/fire/enrich-gate.test.ts`.
+
+**Wave 3 — egress-consent re-keying.** The gate's allowed decisions carry the
+consent question and the fire path now answers it independently of the
+cascade: `EnrichGateInput.egressConsent` (an `EnrichEgressConsentLookup`)
+consults the vault's `enrich_consent` ledger via the read-only
+`packages/server/src/enrich/egress-consent-lookup.ts`
+(`readEnrichConsentForChain`: most-specific-first scope walk, nearest answer
+wins), wired through `EnrichPolicyResolution.egressConsent` in
+`enrich-resolve.ts`/`fire.ts`/`build-gateway.ts`. Back-compat is load-bearing
+and tested: for `on-device`/`gateway` egress the TIER is the recorded answer
+(no lookup, no new refusals for existing vaults); only `provider` egress
+requires a granted row — missing is a refusal ("an absent answer is not a
+grant"), declined stands until re-answered, both with capability-scoped
+ledger-visible reasons. Writers: new journalled command
+`enrich.record_consent` (`packages/vault/src/commands/enrich.ts`, risk high,
+confirm-gated so apps park rather than answer for the member); Photos' manual
+capability ask in `enrich.request_enrichment` re-keys as `(capability,
+on-device, granted)`; Scan's answer posts best-effort to the new owner-plane
+route from `apps/mobile/src/screens/Scan.tsx` (the device latch stays the
+gate). HTTP: `GET/POST /centraid/_vault/enrich/consent` in
+`vault-enrich-rules-routes.ts` (+ test). Client:
+`listEnrichEgressConsent`/`recordEnrichEgressConsent` in
+`gateway-client-vault-enrich.ts`. Privacy audit: "Enrichment egress answers"
+section on `packages/client/src/react/screens/ApprovalsScreen.tsx` via
+`buildEnrichConsentRow`/`enrichCapabilityLabel` in
+`packages/client/src/react/shell/routes/approvalsData.ts`, fetched in
+`packages/client/src/react/shell/routes/ApprovalsRoute.tsx`; reuses existing
+ledger blocks, no new CSS. `docs/photos/derived-ledger.md` records the
+one-writer rule and the "tier is the recorded answer" doctrine.
+
+**Wave 6 — mobile read-only effective-policy projection.** New
+`apps/mobile/src/screens/settings/EnrichmentSection.tsx` (+ `.test.tsx`, six
+tests incl. a "renders no control" law) rendered from
+`apps/mobile/src/screens/Settings.tsx` between Vault and Band; wire client
+`apps/mobile/src/lib/enrichment.ts` reads `GET /centraid/_enrich/profiles`
+plus `GET /centraid/_vault/enrich/effective` per capability (the one
+resolver answers; the phone folds nothing). Member-facing capability labels
+and egress words ("on this device" / "on your gateway" / "sent to a
+provider"); `effective: null` reported as the fail-closed state; offline
+renders an honest unavailable state with no cached fabrication
+(docs/mobile-offline.md). Read-only — no toggles, no writes.
+
 ## Decisions
 
 #807 Wave 0 registers two new enrichment tables (enrich.policy_rule, enrich.consent) in schema/tables.ts, and the Atlas census counts one row-count query per REGISTERED table: the measured SQL baseline rises 138 -> 140, with no additional HTTP request and no new query per table beyond that count. Registration is what carries both tables through portable export and the replica change log, so the two statements are the price of them being real vault rows rather than a side store. Prior: #731 Atlas now counts the registered Commons control tables during its bounded first-paint census; the measured SQL baseline rises from 128 to 138 with no additional HTTP request.
@@ -88,6 +165,28 @@ writer strict on malformed optional fields. (6) New route module instead of
 growing harnesses-routes. (7) `delegateEgress(harness)` ignores its argument
 today — the seam is the point, not a knob.
 
+**Wave 2 deviations.** (1) Resolver is a sibling module `enrich-resolve.ts`
+re-exported through the gate (file-size limit; one doorway preserved). (2) A
+delegate profile is refused this wave — `provider` is unreachable as a ceiling
+until the Wave 3 consent ledger; no regression since no prior path could
+select one. (3) Unreadable tier WITH rules present resolves at the most
+conservative base (disabled, `on-device` ceiling); unreadable tier with no
+rules stays an outright refusal. (4) The consent seam is on the decision
+OUTPUT (`egressConsentNeeded`) rather than an input callback. (5)
+`sealModelTurns` derives from `egressCeiling !== "gateway"`, provably the old
+`tier !== "gateway"`.
+
+**Wave 3 deviations.** (1) `enrich_consent.receipt_id` stays NULL on
+command-written rows — a command's receipt id is minted after its transaction
+commits, and a post-commit stamp would be a second writer; the durable receipt
+is the invocation's own journal receipt. (2) Provider egress became reachable
+(granted row over a `gateway` ceiling) — without it the consent check would be
+dead code; the Wave-2 ceiling-refusal test was retargeted to `device`
+lane/tier, no refusal removed. (3) Photos' decline writes nothing, matching
+its shipped "nothing was run and nothing was written" copy; Scan's decline is
+recorded. (4) Mobile Wave-6 section fetches through a `lib/` wire module with
+one optional `read` test-seam prop, diverging from prop-less sibling sections.
+
 ## Out of scope
 
 Waves 1–6 (engine profiles, policy cascade + gate resolver, consent re-keying,
@@ -117,6 +216,32 @@ bun run --cwd packages/server test -- enrich-profiles-routes # 3 passed
 bun run --cwd packages/server test -- build-gateway.test     # 24 passed
 bunx turbo run typecheck --filter=@centraid/server           # 19/19
 bun run lint && bun run format:check && bun run lint:protocol-routes  # clean
+```
+
+Wave 2:
+
+```sh
+env -u IS_SANDBOX bun run --cwd packages/server test -- enrich-gate      # 23 passed
+env -u IS_SANDBOX bun run --cwd packages/server test -- enrich-resolve   # 11 passed
+env -u IS_SANDBOX bun run --cwd packages/server test -- vault-routes     # 24 passed
+env -u IS_SANDBOX bun run --cwd packages/server test -- vault-enrich-rules # 10 passed
+env -u IS_SANDBOX bun run --cwd packages/vault test                      # 1312 passed, 2 skipped
+env -u IS_SANDBOX bun run --cwd packages/client test -- gateway-client-enrich # 9 passed
+bunx turbo run typecheck --filter=@centraid/server --filter=@centraid/vault --filter=@centraid/client # 19/19
+```
+
+Waves 3 and 6:
+
+```sh
+env -u IS_SANDBOX bun run --cwd packages/server test -- enrich       # 14 files, 190 passed
+env -u IS_SANDBOX bun run --cwd packages/vault test                  # 1316 passed, 2 skipped
+env -u IS_SANDBOX bun run --cwd packages/client test -- Approvals    # 74 passed
+env -u IS_SANDBOX bun run --cwd packages/blueprints test -- consent  # 20 passed
+env -u IS_SANDBOX bun run --cwd apps/mobile test -- EnrichmentSection # 6 passed
+env -u IS_SANDBOX bun run --cwd apps/mobile test -- Scan             # 12 passed
+bun run --cwd apps/mobile typecheck && bun run --cwd apps/mobile lint # clean
+bun run lint:mobile-design                                            # clean
+bunx turbo run typecheck --filter=@centraid/server --filter=@centraid/vault --filter=@centraid/client --filter=@centraid/blueprints # 19/19
 ```
 
 ## Audit
@@ -166,6 +291,39 @@ unnarrated) were folded into `## What changed` after the audit.
 - `packages/server/src/serve/build-gateway.test.ts`
 - `packages/server/src/routes/route-security.ts`
 - `docs/config-ownership.md`
+- `packages/server/src/automation/fire/enrich-resolve.ts`
+- `packages/server/src/automation/fire/enrich-resolve.test.ts`
+- `packages/server/src/automation/fire/enrich-gate.ts`
+- `packages/server/src/automation/fire/enrich-gate.test.ts`
+- `packages/server/src/automation/fire/fire.ts`
+- `packages/server/src/automation/index.ts`
+- `packages/server/src/routes/vault-routes.ts`
+- `packages/server/src/routes/vault-enrich-rules-routes.ts`
+- `packages/server/src/routes/vault-enrich-rules-routes.test.ts`
+- `packages/vault/src/enrich/policy.ts`
+- `packages/vault/src/enrich/enrich.test.ts`
+- `packages/client/src/enrich-policy.ts`
+- `packages/client/src/gateway-client-vault.ts` (enrichment section split into
+  `packages/client/src/gateway-client-vault-enrich.ts`, re-exported — file-size
+  directive)
+- `packages/client/src/gateway-client-seam-fixtures.ts`
+- `packages/client/src/gateway-client-enrich.contract.test.ts`
+- `docs/blueprint-seats.md`
+- `packages/server/src/enrich/egress-consent-lookup.ts`
+- `packages/server/src/enrich/egress-consent-lookup.test.ts`
+- `packages/vault/src/commands/enrich.ts`
+- `packages/client/src/gateway-client-vault-enrich.ts`
+- `packages/client/src/react/screens/ApprovalsScreen.tsx`
+- `packages/client/src/react/screens/ApprovalsScreen.test.tsx`
+- `packages/client/src/react/shell/routes/approvalsData.ts`
+- `packages/client/src/react/shell/routes/approvalsData.test.ts`
+- `packages/client/src/react/shell/routes/ApprovalsRoute.tsx`
+- `apps/mobile/src/screens/Scan.tsx`
+- `packages/client/src/react/shell/routes/ApprovalsRoute.test.tsx`
+- `apps/mobile/src/screens/Settings.tsx`
+- `apps/mobile/src/screens/settings/EnrichmentSection.tsx`
+- `apps/mobile/src/screens/settings/EnrichmentSection.test.tsx`
+- `apps/mobile/src/lib/enrichment.ts`
 
 ## Session
 

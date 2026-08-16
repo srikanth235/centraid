@@ -26,6 +26,8 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import type { EnrichTier } from "../host.js";
+import { readEnrichPolicyRuleChain } from "./policy-rules.js";
+import type { EnrichPolicyRule, EnrichScope } from "./policy-rules.js";
 
 /** The domains `enrich_policy` is keyed by (CHECK-constrained in the DDL). */
 export const ENRICH_DOMAINS = ["photos", "docs"] as const;
@@ -81,4 +83,40 @@ export function readEnrichPolicyTier(
     .prepare("SELECT tier FROM enrich_policy WHERE domain = ?")
     .get(domain) as { tier?: unknown } | undefined;
   return normalizeTier(row?.tier);
+}
+
+/** Everything the one gate's resolver needs to fold, in one read. */
+export interface EnrichPolicyResolutionInput {
+  /** The vault-default layer's ceiling — see the fail-closed contract above. */
+  tier: EnrichTier | undefined;
+  /** The chain's rules for this capability, least-specific first. */
+  rules: EnrichPolicyRule[];
+}
+
+/**
+ * The material `decideEnrichmentGate`'s resolver folds for one capability:
+ * the legacy per-domain tier plus the cascade's rules along a scope chain
+ * (issue #807). ONE read path, on the same host plane and for the same reason
+ * as `readEnrichPolicyTier` — a guard must never depend on the grants of the
+ * party it guards, so this never goes through the consent bridge either.
+ *
+ * It resolves NOTHING. What "may this run" means is decided in exactly one
+ * place, and that place is the gate; this hands it the facts. The default
+ * chain is `[vault, domain]`, which is every scope an automation fire knows
+ * about; a caller with an item in hand passes a longer chain.
+ */
+export function readEnrichPolicyResolutionInput(
+  vault: DatabaseSync,
+  domain: EnrichDomain,
+  capability: string,
+  scopeChain?: readonly EnrichScope[]
+): EnrichPolicyResolutionInput {
+  const chain: readonly EnrichScope[] = scopeChain ?? [
+    { type: "vault", ref: "" },
+    { type: "domain", ref: domain },
+  ];
+  return {
+    tier: readEnrichPolicyTier(vault, domain),
+    rules: readEnrichPolicyRuleChain(vault, chain, capability),
+  };
 }

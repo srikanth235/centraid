@@ -61,3 +61,87 @@ describe("enrichment tier seam", () => {
     ).rejects.toThrow(/enrichment policy/u);
   });
 });
+
+// The policy CASCADE (issue #807), layered over the tier above. Its laws are
+// the tier's laws, restated for a scoped rule: the caller renders what the
+// VAULT holds, and the effective answer is a REPORT of what the one runtime
+// gate would resolve — never permission the client may act on itself.
+describe("enrichment cascade seam", () => {
+  it("law: the rules ride the same read as the tiers, additively", async () => {
+    // The tier read is unchanged by the cascade — same route, same shape.
+    await expect(vaultOwner.getEnrichPolicy()).resolves.toStrictEqual({
+      docs: "gateway",
+      photos: "gateway",
+    });
+
+    await expect(vaultOwner.getEnrichRules()).resolves.toStrictEqual([
+      {
+        scope: { type: "domain", ref: "photos" },
+        capability: "ocr",
+        enabled: null,
+        profile: null,
+        trigger: "on-view",
+        updatedAt: "2026-08-16T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("law: a rule write names one scope and one capability, and reads back the vault's row", async () => {
+    const written = await vaultOwner.setEnrichRule({
+      scope: "collection",
+      ref: "album-1",
+      capability: "ocr",
+      trigger: "on-demand",
+    });
+
+    expect(sentJson("PUT /centraid/_vault/enrich/rules")).toStrictEqual({
+      scope: "collection",
+      ref: "album-1",
+      capability: "ocr",
+      trigger: "on-demand",
+    });
+    // What came back is the gateway's row, not the patch.
+    expect(written?.scope).toStrictEqual({
+      type: "collection",
+      ref: "album-1",
+    });
+  });
+
+  it("law: dropping a rule is keyed by scope + capability in the query", async () => {
+    await vaultOwner.deleteEnrichRule("collection", "album-1", "ocr");
+
+    const request = sent("DELETE /centraid/_vault/enrich/rules");
+    expect(request.method).toBe("DELETE");
+    expect(Object.fromEntries(request.query)).toStrictEqual({
+      scope: "collection",
+      ref: "album-1",
+      capability: "ocr",
+    });
+  });
+
+  it("law: the effective read carries the deeper scopes the caller named", async () => {
+    const answer = await vaultOwner.getEffectiveEnrichPolicy({
+      domain: "photos",
+      capability: "ocr",
+      scopes: [{ type: "item", ref: "asset-9" }],
+    });
+
+    const request = sent("GET /centraid/_vault/enrich/effective");
+    expect(request.query.getAll("scope")).toStrictEqual(["item:asset-9"]);
+    expect(answer.effective?.egressCeiling).toBe("on-device");
+  });
+
+  it("law: a refused rule write throws, never a silent no-op", async () => {
+    respond("PUT /centraid/_vault/enrich/rules", () =>
+      json({ error: "bad_request", message: "capability must be…" }, 400)
+    );
+
+    await expect(
+      vaultOwner.setEnrichRule({
+        scope: "vault",
+        capability: "nope",
+        enabled: true,
+      })
+    ).rejects.toThrow(/enrichment rule/u);
+  });
+});

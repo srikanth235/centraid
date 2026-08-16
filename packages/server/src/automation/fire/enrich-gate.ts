@@ -67,7 +67,38 @@
  * bootstrapped vault (`packages/vault/src/bootstrap.ts`); each of those
  * enrichers still starts `enabled: false` in its own manifest, so the tier
  * widens what a member's install COULD run, not what runs unasked.
+ *
+ * THE CASCADE (issue #807, Wave 2). The single per-domain scalar above is now
+ * the VAULT-DEFAULT LAYER of a scoped cascade — vault, domain, collection,
+ * item — each level able to state, per capability, whether it is enabled,
+ * which engine profile computes it, and when it is offered. The fold lives in
+ * `enrich-resolve.ts` and is re-exported through this module on purpose: there
+ * is ONE gate, and the resolver is its first half, not a second policy path.
+ * The tier's semantics are preserved exactly, as an EGRESS-CLASS CEILING no
+ * deeper level can raise — see that module's header for why that is the whole
+ * safety argument. A caller that hands this gate only a tier (no cascade) gets
+ * precisely the pre-#807 decision.
  */
+
+import type { EnrichEgressClass } from "@centraid/vault";
+
+import { egressWithinCeiling } from "./enrich-resolve.js";
+import type { ResolvedEnrichPolicy } from "./enrich-resolve.js";
+
+export {
+  DEFAULT_ENRICH_TRIGGER,
+  automationScopeChain,
+  egressWithinCeiling,
+  resolveEnrichmentPolicy,
+  tierEgressCeiling,
+} from "./enrich-resolve.js";
+export type {
+  EnrichEgressCeiling,
+  EnrichPolicyRequest,
+  EnrichPolicyResolution,
+  ResolveEnrichPolicy,
+  ResolvedEnrichPolicy,
+} from "./enrich-resolve.js";
 
 /** The owner's standing tier for one enrichment domain, on the one axis. */
 export const ENRICH_TIERS = ["off", "device", "gateway"] as const;
@@ -110,6 +141,19 @@ export interface EnrichGateInput {
    * in `packages/vault/src/enrich/policy.ts`.
    */
   readonly tier: EnrichTier | undefined;
+  /**
+   * The cascade's answer for this capability (issue #807), when the host
+   * resolved one. Absent → the pre-#807 decision on `tier` alone, which is
+   * exactly what this gate did before the cascade existed.
+   */
+  readonly policy?: ResolvedEnrichPolicy;
+  /**
+   * The computed egress class of the engine profile `policy` selected
+   * (`enrich/engine-profiles.ts`), or `undefined` when this gateway carries no
+   * such profile — which is a refusal, not a fallback. Read only when `policy`
+   * is present.
+   */
+  readonly profileEgress?: EnrichEgressClass | undefined;
 }
 
 export type EnrichGateDecision =
@@ -120,6 +164,15 @@ export type EnrichGateDecision =
        * must be refused. `runFire` wraps the dispatch surface accordingly.
        */
       readonly sealModelTurns: boolean;
+      /**
+       * EGRESS-CONSENT SEAM (issue #807, Wave 3). The egress class the
+       * selected engine profile will actually use — the key Wave 3 looks up in
+       * `enrich_consent` (capability, egress, scope) before the work runs. This
+       * gate does NOT check consent yet; it names what would have to be
+       * consented to, so the check lands here and nowhere else. Present only on
+       * profile-aware decisions.
+       */
+      readonly egressConsentNeeded?: EnrichEgressClass;
     }
   | { readonly allowed: false; readonly reason: string };
 
@@ -140,6 +193,19 @@ export function decideEnrichmentGate(
         `and an unreadable policy is a refusal, not a default.`,
     };
   }
+  // The cascade's own answer, when the host resolved one. It runs BEFORE the
+  // rank comparison so that "a rule switched this capability off" is the
+  // reason the member reads, rather than a tier message about a tier they did
+  // not touch.
+  const policy = input.policy;
+  if (policy && !policy.enabled && input.tier !== "off") {
+    return {
+      allowed: false,
+      reason:
+        `${who} refused: this vault's enrichment policy has "${input.capability}" switched off ` +
+        `at the scope that decides it.`,
+    };
+  }
   if (RANK[input.lane] > RANK[input.tier]) {
     if (input.tier === "off") {
       return {
@@ -156,7 +222,36 @@ export function decideEnrichmentGate(
         `"gateway" to allow that, or use the device lane.`,
     };
   }
-  return { allowed: true, sealModelTurns: input.tier !== "gateway" };
+  if (!policy)
+    return { allowed: true, sealModelTurns: input.tier !== "gateway" };
+
+  // The profile check: a level deeper in the cascade may PICK an engine, never
+  // one that goes further than the vault's ceiling. An unknown profile is a
+  // refusal for the same reason an unreadable tier is — a policy this runtime
+  // cannot honour is not permission.
+  const egress = input.profileEgress;
+  if (egress === undefined) {
+    return {
+      allowed: false,
+      reason:
+        `${who} refused: this vault's enrichment policy points "${input.capability}" at engine profile ` +
+        `"${policy.profileId}", which this gateway does not carry.`,
+    };
+  }
+  if (!egressWithinCeiling(egress, policy.egressCeiling)) {
+    return {
+      allowed: false,
+      reason:
+        `${who} refused: engine profile "${policy.profileId}" runs with "${egress}" egress, and this vault's ` +
+        `enrichment policy for "${input.domain}" allows no further than "${policy.egressCeiling}". ` +
+        `A rule on a collection or item can choose an engine, never one that reaches further than the vault allows.`,
+    };
+  }
+  return {
+    allowed: true,
+    sealModelTurns: policy.egressCeiling !== "gateway",
+    egressConsentNeeded: egress,
+  };
 }
 
 /** What a `ctx.delegate` call is told when the `device` tier sealed model turns. */

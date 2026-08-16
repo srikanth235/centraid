@@ -32,6 +32,7 @@ import type {
   AutomationTurnStreamEvent,
   VaultBridge,
 } from "@centraid/server/engine";
+import type { EnrichEgressClass } from "@centraid/vault";
 
 import { runHandler } from "../handler/runner.js";
 import type {
@@ -41,8 +42,18 @@ import type {
 } from "../handler/runner.js";
 import { parseRef } from "../manifest/ref.js";
 import { handlerPath, readAppOwned } from "../scaffold/app.js";
-import { decideEnrichmentGate, sealedModelTurnReason } from "./enrich-gate.js";
-import type { EnrichDomain, EnrichTier } from "./enrich-gate.js";
+import {
+  automationScopeChain,
+  decideEnrichmentGate,
+  resolveEnrichmentPolicy,
+  sealedModelTurnReason,
+} from "./enrich-gate.js";
+import type {
+  EnrichDomain,
+  EnrichTier,
+  ResolveEnrichPolicy,
+  ResolvedEnrichPolicy,
+} from "./enrich-gate.js";
 
 /**
  * The gateway broker's per-fire seam (issue #304). Resolves the connector's
@@ -208,20 +219,22 @@ export interface RunFireOptions {
    */
   resolveConnection?: ResolveConnection;
   /**
-   * Enrichment-tier seam (privacy enforcement): resolve the vault's standing
-   * `enrich_policy` tier for one domain. The gateway supplies this off its
+   * Enrichment-policy seam (privacy enforcement): resolve what this vault
+   * allows for the capability about to run. The gateway supplies this off its
    * OWNER plane (`plane.db.vault`), never through the fired automation's own
    * consent-checked bridge — a guard must not depend on the grants of the
    * party it guards.
+   *
+   * Answer with a bare tier (the pre-#807 contract, unchanged) or with the
+   * cascade material — tier, the scope chain's rules, and a profile→egress
+   * lookup — which `decideEnrichmentGate` folds through its resolver.
    *
    * Absent, or throwing, or resolving `undefined` → every automation
    * declaring `manifest.enrich` is REFUSED. Fail-closed is the whole point:
    * a host that has not wired the policy in cannot be allowed to run
    * enrichment as though the owner had consented to it.
    */
-  resolveEnrichPolicy?: (
-    domain: EnrichDomain
-  ) => Promise<EnrichTier | undefined> | EnrichTier | undefined;
+  resolveEnrichPolicy?: ResolveEnrichPolicy;
   /** Injected-fetch transient backoff schedule (ms) — tests shrink it. */
   fetchRetryDelaysMs?: readonly number[];
   /**
@@ -387,14 +400,33 @@ export async function runFire(
   let sealedDomain: EnrichDomain | undefined;
   if (enrich) {
     let tier: EnrichTier | undefined;
+    let policy: ResolvedEnrichPolicy | undefined;
+    let profileEgress: EnrichEgressClass | undefined;
     try {
-      tier = await opts.resolveEnrichPolicy?.(enrich.domain);
+      const answer = await opts.resolveEnrichPolicy?.({
+        domain: enrich.domain,
+        capability: enrich.capability,
+        lane: enrich.lane,
+        scopeChain: automationScopeChain(enrich.domain),
+      });
+      if (answer === undefined || typeof answer === "string") {
+        tier = answer;
+      } else {
+        tier = answer.tier;
+        policy = resolveEnrichmentPolicy(
+          answer.rules ?? [],
+          answer.tier,
+          enrich.capability
+        );
+        if (policy) profileEgress = answer.egressForProfile?.(policy.profileId);
+      }
     } catch (error) {
       onLog(
         "warn",
         `${opts.automationRef}: enrichment policy read failed — ${error instanceof Error ? error.message : String(error)}`
       );
       tier = undefined;
+      policy = undefined;
     }
     const decision = decideEnrichmentGate({
       automationRef: opts.automationRef,
@@ -402,6 +434,7 @@ export async function runFire(
       capability: enrich.capability,
       lane: enrich.lane,
       tier,
+      ...(policy ? { policy, profileEgress } : {}),
     });
     if (!decision.allowed) {
       onLog("warn", decision.reason);

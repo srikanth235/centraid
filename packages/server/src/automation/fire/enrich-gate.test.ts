@@ -21,8 +21,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import type { Manifest } from "../manifest/manifest.js";
-import { decideEnrichmentGate } from "./enrich-gate.js";
-import type { EnrichLane, EnrichTier } from "./enrich-gate.js";
+import {
+  decideEnrichmentGate,
+  resolveEnrichmentPolicy,
+} from "./enrich-gate.js";
+import type {
+  EnrichLane,
+  EnrichTier,
+  ResolveEnrichPolicy,
+} from "./enrich-gate.js";
 import { runFire } from "./fire.js";
 import type { DispatchSurface, OpenDispatchArgs } from "./fire.js";
 
@@ -79,7 +86,7 @@ describe("enrichment tier gate", () => {
 
   async function fire(options: {
     lane: EnrichLane;
-    resolveEnrichPolicy?: () => EnrichTier | undefined | Promise<never>;
+    resolveEnrichPolicy?: ResolveEnrichPolicy;
     handler?: string;
   }) {
     await writeAutomation(
@@ -244,6 +251,105 @@ describe("enrichment tier gate", () => {
     }
   );
 
+  // ── the cascade on the fire path (issue #807, Wave 2) ────────────────────
+  // The seam grew from "a tier" to "the tier plus this capability's rule chain
+  // plus a profile→egress lookup". A host that still answers with a bare tier
+  // gets the pre-#807 decision (every test above); a host that answers with
+  // the cascade gets the same gate, one resolver deeper.
+
+  it("refuses when a rule switches the capability off, even at the gateway tier", async () => {
+    const { outcome, opened } = await fire({
+      lane: "gateway",
+      resolveEnrichPolicy: (request) => ({
+        tier: "gateway",
+        rules: [
+          {
+            scope: { type: "domain", ref: request.domain },
+            capability: request.capability,
+            enabled: false,
+            profile: null,
+            trigger: null,
+            updatedAt: "2026-08-16T00:00:00.000Z",
+          },
+        ],
+        egressForProfile: () => "gateway",
+      }),
+    });
+
+    expect(outcome.skipped).toBe(true);
+    expect(outcome.error).toContain("switched off");
+    expect(outcome.error).toContain("faces");
+    expect(opened).toStrictEqual([]);
+  });
+
+  it("refuses a profile whose egress reaches further than the vault's ceiling", async () => {
+    const { outcome, opened } = await fire({
+      lane: "gateway",
+      resolveEnrichPolicy: (request) => ({
+        tier: "gateway",
+        rules: [
+          {
+            scope: { type: "domain", ref: request.domain },
+            capability: request.capability,
+            enabled: true,
+            profile: "provider-vlm",
+            trigger: null,
+            updatedAt: "2026-08-16T00:00:00.000Z",
+          },
+        ],
+        // A delegate profile: every harness in this runtime reaches a provider.
+        egressForProfile: () => "provider",
+      }),
+    });
+
+    expect(outcome.skipped).toBe(true);
+    expect(outcome.error).toContain("provider-vlm");
+    expect(outcome.error).toContain("no further than");
+    expect(opened).toStrictEqual([]);
+  });
+
+  it("asks the host for the firing capability's own scope chain", async () => {
+    const asked: unknown[] = [];
+    await fire({
+      lane: "gateway",
+      resolveEnrichPolicy: (request) => {
+        asked.push(request);
+        return {
+          tier: "gateway",
+          rules: [],
+          egressForProfile: () => "gateway",
+        };
+      },
+    });
+
+    expect(asked).toStrictEqual([
+      {
+        domain: "photos",
+        capability: "faces",
+        lane: "gateway",
+        scopeChain: [
+          { type: "vault", ref: "" },
+          { type: "domain", ref: "photos" },
+        ],
+      },
+    ]);
+  });
+
+  it("runs the built-in engine under the cascade exactly as the bare tier did", async () => {
+    const { outcome, opened } = await fire({
+      lane: "gateway",
+      resolveEnrichPolicy: () => ({
+        tier: "gateway",
+        rules: [],
+        egressForProfile: () => "gateway",
+      }),
+      handler: `export default async ({ ctx }) => ({ output: await ctx.delegate({ prompt: 'find faces' }) });`,
+    });
+
+    expect(outcome.ok).toBe(true);
+    expect(opened).toHaveLength(1);
+  });
+
   it("keeps ctx.fetch connector-only for a non-enricher", async () => {
     await writeAutomation(
       appsDir,
@@ -324,5 +430,84 @@ describe(decideEnrichmentGate, () => {
     });
 
     expect(decision).toStrictEqual({ allowed: true, sealModelTurns: false });
+  });
+
+  // ── the profile-aware form (issue #807) ─────────────────────────────────
+  const resolved = (tier: EnrichTier, profileId = "built-in") =>
+    resolveEnrichmentPolicy(
+      [
+        {
+          scope: { type: "vault", ref: "" },
+          capability: "faces",
+          enabled: null,
+          profile: profileId,
+          trigger: null,
+          updatedAt: "2026-08-16T00:00:00.000Z",
+        },
+      ],
+      tier,
+      "faces"
+    );
+
+  it("names the egress class Wave 3 must confirm consent for", () => {
+    const decision = decideEnrichmentGate({
+      ...base,
+      lane: "gateway",
+      tier: "gateway",
+      policy: resolved("gateway")!,
+      profileEgress: "gateway",
+    });
+
+    expect(decision).toStrictEqual({
+      allowed: true,
+      sealModelTurns: false,
+      egressConsentNeeded: "gateway",
+    });
+  });
+
+  it("refuses a profile that goes further than the vault's ceiling", () => {
+    const decision = decideEnrichmentGate({
+      ...base,
+      lane: "device",
+      tier: "device",
+      policy: resolved("device", "provider-vlm")!,
+      profileEgress: "provider",
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.allowed === false && decision.reason).toContain(
+      "provider-vlm"
+    );
+  });
+
+  it("refuses a profile this gateway does not carry, rather than falling back", () => {
+    const decision = decideEnrichmentGate({
+      ...base,
+      lane: "device",
+      tier: "gateway",
+      policy: resolved("gateway", "ghost")!,
+      profileEgress: undefined,
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.allowed === false && decision.reason).toContain(
+      "does not carry"
+    );
+  });
+
+  it("keeps the device ceiling sealing model turns under the cascade", () => {
+    const decision = decideEnrichmentGate({
+      ...base,
+      lane: "device",
+      tier: "device",
+      policy: resolved("device")!,
+      profileEgress: "on-device",
+    });
+
+    expect(decision).toStrictEqual({
+      allowed: true,
+      sealModelTurns: true,
+      egressConsentNeeded: "on-device",
+    });
   });
 });

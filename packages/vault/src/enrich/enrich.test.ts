@@ -32,7 +32,11 @@ import {
   leaseNextEnrichmentRequest,
   queueDeviceEnrichmentRequest,
 } from "./leases.js";
-import { readEnrichPolicyTier } from "./policy.js";
+import { putEnrichPolicyRule } from "./policy-rules.js";
+import {
+  readEnrichPolicyResolutionInput,
+  readEnrichPolicyTier,
+} from "./policy.js";
 import {
   hexHamming,
   encodeVector,
@@ -1242,6 +1246,75 @@ describe("enrich", () => {
         .run("photos", "someday", "2026-08-05");
       expect(readEnrichPolicyTier(foreign, "photos")).toBeUndefined();
       foreign.close();
+    });
+
+    // ONE READ PATH for the one gate (issue #807): the tier and the cascade's
+    // rules come back together, off the same host plane, and this read still
+    // resolves nothing — it hands the gate its material.
+    test("readEnrichPolicyResolutionInput reads tier + the chain's rules, and resolves nothing", () => {
+      putEnrichPolicyRule(db.vault, {
+        scope: { type: "vault", ref: "" },
+        capability: "ocr",
+        trigger: "on-view",
+      });
+      putEnrichPolicyRule(db.vault, {
+        scope: { type: "domain", ref: "photos" },
+        capability: "ocr",
+        enabled: false,
+      });
+      // A rule for another capability, and one on a scope not in the chain:
+      // neither may show up in this capability's chain.
+      putEnrichPolicyRule(db.vault, {
+        scope: { type: "domain", ref: "photos" },
+        capability: "faces",
+        enabled: true,
+      });
+      putEnrichPolicyRule(db.vault, {
+        scope: { type: "item", ref: "asset-9" },
+        capability: "ocr",
+        enabled: true,
+      });
+
+      const read = readEnrichPolicyResolutionInput(db.vault, "photos", "ocr");
+      expect(read.tier).toBe("gateway");
+      // Least-specific first — the order a resolver folds.
+      expect(read.rules.map((rule) => rule.scope)).toStrictEqual([
+        { type: "vault", ref: "" },
+        { type: "domain", ref: "photos" },
+      ]);
+      expect(read.rules[1]?.enabled).toBe(false);
+
+      // A caller with an item in hand passes the longer chain itself; this
+      // module never guesses which collection an item is in.
+      const deep = readEnrichPolicyResolutionInput(db.vault, "photos", "ocr", [
+        { type: "vault", ref: "" },
+        { type: "domain", ref: "photos" },
+        { type: "item", ref: "asset-9" },
+      ]);
+      expect(deep.rules).toHaveLength(3);
+      expect(deep.rules[2]?.enabled).toBe(true);
+    });
+
+    // Fail-closed, cascade included: an unreadable tier stays unreadable no
+    // matter how many rules sit beside it. The refusal is the GATE's to make,
+    // and it needs to see `undefined` to make it.
+    test("readEnrichPolicyResolutionInput still fails closed on an unreadable tier", () => {
+      db.vault
+        .prepare("DELETE FROM enrich_policy WHERE domain = ?")
+        .run("docs");
+      putEnrichPolicyRule(db.vault, {
+        scope: { type: "domain", ref: "docs" },
+        capability: "embed-text",
+        enabled: true,
+      });
+
+      const read = readEnrichPolicyResolutionInput(
+        db.vault,
+        "docs",
+        "embed-text"
+      );
+      expect(read.tier).toBeUndefined();
+      expect(read.rules).toHaveLength(1);
     });
 
     // [C5 SABOTAGE TEST, migration half] a vault upgraded from the pre-#712

@@ -783,8 +783,10 @@ export {
 export {
   ENRICH_DOMAINS,
   isEnrichTier,
+  readEnrichPolicyResolutionInput,
   readEnrichPolicyTier,
   type EnrichDomain,
+  type EnrichPolicyResolutionInput,
 } from "./enrich/policy.js";
 export {
   compareModelIds,

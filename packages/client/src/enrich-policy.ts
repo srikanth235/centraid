@@ -31,3 +31,55 @@ export const ENRICH_DOMAINS = ["photos", "docs"] as const;
 export type EnrichDomain = (typeof ENRICH_DOMAINS)[number];
 
 export type EnrichPolicy = Record<EnrichDomain, EnrichTier>;
+
+/*
+ * The policy CASCADE (issue #807), same restatement discipline as the tier
+ * above: mirrors of `packages/vault/src/enrich/policy-rules.ts`, kept here so
+ * a settings screen can render a rule without importing the transport. The
+ * route 400s anything outside these enums.
+ */
+
+/** The cascade levels, least to most specific. Order is the cascade order. */
+export const ENRICH_SCOPE_TYPES = [
+  "vault",
+  "domain",
+  "collection",
+  "item",
+] as const;
+export type EnrichScopeType = (typeof ENRICH_SCOPE_TYPES)[number];
+
+/** When a capability's work is offered at a scope. */
+export const ENRICH_TRIGGERS = ["on-ingest", "on-view", "on-demand"] as const;
+export type EnrichTrigger = (typeof ENRICH_TRIGGERS)[number];
+
+/** One level of the cascade. `ref` is `''` at vault scope. */
+export interface EnrichScope {
+  type: EnrichScopeType;
+  ref: string;
+}
+
+/** What one scope decides about one capability; `null` means inherit. */
+export interface EnrichPolicyRule {
+  scope: EnrichScope;
+  capability: string;
+  enabled: boolean | null;
+  profile: string | null;
+  trigger: EnrichTrigger | null;
+  updatedAt: string;
+}
+
+/** How far work may go — the tier's semantics, as an egress ceiling. */
+export type EnrichEgressCeiling = "off" | "on-device" | "gateway" | "provider";
+
+/**
+ * What the gateway's ONE resolver folds the cascade into. Reported by
+ * `GET /_vault/enrich/effective`; it is a report, never permission — the
+ * runtime gate decides, and this is what it would see.
+ */
+export interface ResolvedEnrichPolicy {
+  capability: string;
+  enabled: boolean;
+  profileId: string;
+  trigger: EnrichTrigger;
+  egressCeiling: EnrichEgressCeiling;
+}

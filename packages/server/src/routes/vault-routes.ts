@@ -12,6 +12,11 @@
  *   GET    /centraid/_vault/status                     — the request vault's presence + identity
  *   GET    /centraid/_vault/vaults                     — vaults this caller may address
  *   PATCH  /centraid/_vault/vaults/<vaultId>           — update {name?, color?, icon?, blurb?}
+ *   GET    /centraid/_vault/enrich                     — per-domain tiers + the cascade's scoped rules
+ *   PUT    /centraid/_vault/enrich                     — write one or both domains' tier
+ *   PUT    /centraid/_vault/enrich/rules               — write one scope's rule (issue #807)
+ *   DELETE /centraid/_vault/enrich/rules?scope=&ref=&capability= — that scope stops deciding
+ *   GET    /centraid/_vault/enrich/effective?domain=&capability=&scope= — what the ONE resolver folds
  *   GET    /centraid/_vault/apps                       — enrolled apps + active grants
  *   POST   /centraid/_vault/apps/<appId>/grants        — approve {purpose, scopes[], expiresAt?}
  *   POST   /centraid/_vault/apps/<appId>/purge-ext     — drop a retained ext band (issue #286)
@@ -102,6 +107,11 @@ import type { VaultInfo, VaultRegistry } from "../serve/vault-registry.js";
 import { COMPANION_MODULES, companionModuleState } from "./companion-grants.js";
 import { readJson, sendJson, sendJsonConditional } from "./route-helpers.js";
 import { SseSubscriberCap } from "./sse-cap.js";
+import {
+  enrichRulesFor,
+  handleEnrichCascadeRoute,
+} from "./vault-enrich-rules-routes.js";
+import type { EnrichCapabilityCheck } from "./vault-enrich-rules-routes.js";
 
 const PREFIX = "/centraid/_vault";
 const defaultNotificationsSubscriberCap = new SseSubscriberCap();
@@ -168,6 +178,11 @@ export interface VaultRouteOptions {
   notificationsEvents?: NotificationsEventBus;
   /** Overridable in route tests. */
   notificationsSubscriberCap?: SseSubscriberCap;
+  /**
+   * Which capability ids the enrichment policy cascade may be written for
+   * (issue #807). Defaults to the bundled capability registry.
+   */
+  enrichCapabilityKnown?: EnrichCapabilityCheck;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -635,9 +650,33 @@ export function makeVaultRouteHandler(
       // model turn to a third-party provider — is a deliberate per-domain
       // opt-in, now the seeded default for fresh vaults; `off` silences a
       // domain entirely.
+      //
+      // The cascade that grew around it (issue #807) is a SIBLING resource
+      // under the same prefix, handled in `vault-enrich-rules-routes.ts`: the
+      // tier's own request/response bodies are unchanged, so the four seam
+      // laws the client pins keep holding byte for byte.
+      if (segments[0] === "enrich" && segments.length > 1) {
+        const handled = await handleEnrichCascadeRoute({
+          req,
+          res,
+          method,
+          segments: segments.slice(1),
+          url,
+          plane,
+          ...(options.enrichCapabilityKnown
+            ? { options: { capabilityKnown: options.enrichCapabilityKnown } }
+            : {}),
+        });
+        if (handled) return true;
+      }
       if (segments[0] === "enrich" && segments.length === 1) {
         if (method === "GET") {
-          return sendJson(res, 200, { enrich: readEnrichSettings(plane.db) });
+          return sendJson(res, 200, {
+            enrich: readEnrichSettings(plane.db),
+            // Additive (#807): the scoped rules alongside the tiers. Clients
+            // that only read `enrich` are unaffected.
+            rules: enrichRulesFor(plane),
+          });
         }
         if (method === "PUT") {
           const body = await readJson(req);
