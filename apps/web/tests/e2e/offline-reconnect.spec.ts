@@ -177,11 +177,15 @@ test("an offline write survives a reload and settles exactly once on reconnect",
     )
     .not.toBe("replica-not-ready");
 
-  // Sever the gateway and write through the visible product control. The
-  // route is remounted after the toggle, exactly as the pending-overlay
-  // journey does, so the session observes the dead transport before the add.
+  // Sever the gateway and write through the visible product control that
+  // is already on screen. Do not remount Tasks after the toggle: opening
+  // the same route again starts a new replica walk, an offline walk cannot
+  // finish, and the add then throws not-bootstrapped instead of queueing.
+  // pending-overlay remounts by switching FROM another app, which reuses
+  // the warm session (idle grace). This journey stays on the session the
+  // readiness probe already proved. The next write's drain sees the dead
+  // harness transport and admits the intent as queued.
   await setHarnessControlOnline(page, false);
-  await openFirstParty(page, "Tasks");
   await page.getByRole("textbox", { name: "Task title" }).fill(TASK_TITLE);
   await page.getByRole("button", { name: "Today", exact: true }).click();
   await page.getByRole("button", { name: "Add", exact: true }).click();

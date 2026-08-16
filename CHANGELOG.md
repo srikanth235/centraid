@@ -71,6 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `main` CI after the served-app retirement: spent `replacesMinimumTestsFlow` markers no longer fail `test:ratchet` against itself, and the web offline-reconnect journey writes through the already-open Tasks session instead of remounting into a not-bootstrapped replica ([#802](https://github.com/srikanth235/centraid/issues/802)).
 - Text embeddings refresh when OCR or transcript text is rewritten under the same embedding model, so semantic search cannot retain a vector for superseded text ([#736](https://github.com/srikanth235/centraid/issues/736)).
 - `centraid-gateway pair` reports a **bearer mismatch** when the daemon was started with a pinned `CENTRAID_GATEWAY_TOKEN` the CLI cannot derive ([#603](https://github.com/srikanth235/centraid/issues/603)) — it used to blame the iroh endpoint for not being ready, which was a lie you could not act on. [docs/dev-environment.md](docs/dev-environment.md) corrected to match
 - A gateway that cannot be reached during onboarding now says **unreachable** instead of quietly reporting no spaces and offering to create one ([#603](https://github.com/srikanth235/centraid/issues/603)); the dead-end "Create vaults on the gateway host." banner is gone, because the flow only offers creation on a confirmed-empty registry

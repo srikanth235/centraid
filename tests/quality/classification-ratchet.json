@@ -8,6 +8,6 @@
     "packages/server/src/serve/health-registry.ts": "d1f3fc416ecbe43af2ab4b091fecf3b1041590e52f2002a242e5031c65c9fd04",
     "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
     "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
-    "tests/matrix.json": "74078381a2421d06b56375949291ba7f193b28095ebed643c9a595a2e3bdd301"
+    "tests/matrix.json": "8ed488f00af64ea4a5b13470b28920e1e5bbed930356acf3ffe7d013e508a155"
   }
 }

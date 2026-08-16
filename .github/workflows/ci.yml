@@ -690,7 +690,7 @@ jobs:
       # The focused blueprint test imports the shared recurrence engine but
       # intentionally bypasses Turbo's dependency graph, so build that package
       # explicitly on a clean runner before invoking Vitest directly.
-      - run: bun run --filter @centraid/core/time build
+      - run: bun run --filter @centraid/core build
       - run: bun run --filter @centraid/blueprints test -- src/query-handlers.test.ts
 
   # #526 — stateless Assist ceremony edge. The protected production deploy of
