@@ -67,7 +67,7 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
   // desktop deliberately does NOT start its local gateway until the user picks
   // "Start fresh on this Mac" — that start is what would otherwise pop an OS
   // keychain prompt before any UI. The gateway then founds Personal itself;
-  // profile identity stays optional and is edited later from Settings → Profile.
+  // profile identity stays optional and is edited later from Settings → You.
   const { app, page } = await launchApp(env);
   try {
     const chooser = page.getByTestId("first-run-choice");

@@ -168,7 +168,7 @@ void (async (): Promise<void> => {
         <FirstRunGate
           host={isWebHost() ? "web" : "desktop"}
           onOnboardingComplete={async () => {
-            // Profile details are deliberately deferred to Settings → Profile.
+            // Profile details are deliberately deferred to Settings → You.
             // The first visit should get straight to the useful surface, with
             // a removable sample week already being prepared there.
             await enterApp({ seedSampleOnFirstRun: true });

@@ -937,20 +937,28 @@ export interface AutomationThreadBridgeProps {
 /** The three positions of the Appearance control. `system` is a standing mode
  *  the shell keeps tracking, not a one-shot snap to the current OS value. */
 export type SettingsThemeMode = "light" | "dark" | "system";
-/** Appearance is the one visual-treatment page: theme and card
- *  surface. Layout was folded into it (#608). The app-tile treatment picker
- *  was cut but keeps its pref; the dark ramp's surface temperature was removed
- *  outright, so dark has exactly one ramp — parity with light, which never had
- *  a temperature.
+/** Appearance is the one visual-treatment page, and theme is now the whole of
+ *  it. Layout was folded in (#608), and the controls that came with it have
+ *  been retired one by one: the app-tile treatment picker was cut but keeps its
+ *  pref; the dark ramp's surface temperature was removed outright, so dark has
+ *  exactly one ramp — parity with light, which never had a temperature; and the
+ *  card surface followed, a three-way choice nothing in the product asked the
+ *  owner to make. `cardVariant` still paints (`html.dataset.cards`, default
+ *  `outlined`) — it is a stored pref with no control, like the tile treatment.
  *
  *  The accent swatches went the same way in #608 and their PREF went in #707:
  *  the shell spends no hue at all now, so there is no accent to store. Neither
  *  is `sidebarOpen` — the stem never hides, so there is no open state. */
 export interface SettingsAppearanceBridgeProps {
   themeMode: SettingsThemeMode;
-  cardVariant: "flat" | "outlined" | "elevated";
   onSetThemeMode: (mode: SettingsThemeMode) => void;
-  onSetCards: (v: "flat" | "outlined" | "elevated") => void;
+  /** Whether this gateway runs automations, which decides whether the default
+   *  cron timezone is offered at all — a schedule default on a gateway that
+   *  schedules nothing is a control whose effect can never be observed. The
+   *  row is a squatter here regardless (see the screen's own note); the gate is
+   *  the honest floor until it moves to the Automations surface. Defaults ON so
+   *  an unprovided screen (a test tree) shows it, matching `useShellCapabilities`. */
+  automations?: boolean;
 }
 
 // ── Settings: harnesses (Agents console) ────────────────────────────────────

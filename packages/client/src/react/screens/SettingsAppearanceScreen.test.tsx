@@ -23,9 +23,7 @@ function makeProps(
 ): SettingsAppearanceBridgeProps {
   return {
     themeMode: "dark",
-    cardVariant: "outlined",
     onSetThemeMode: vi.fn<SettingsAppearanceBridgeProps["onSetThemeMode"]>(),
-    onSetCards: vi.fn<SettingsAppearanceBridgeProps["onSetCards"]>(),
     ...over,
   };
 }
@@ -75,19 +73,20 @@ describe("screens/SettingsAppearanceScreen", () => {
       expect(el.querySelectorAll(".themeCard")).toHaveLength(0);
     });
 
-    it("is the theme and nothing else — no accent or tile controls", () => {
+    it("is the theme and nothing else — no accent, tile or card controls", () => {
       const el = mount(makeProps());
-      // Accent swatches and app-tile treatment were cut from the page; their
-      // prefs still apply, there is just no control for choosing them.
+      // Accent swatches, app-tile treatment and the card surface were each cut
+      // from the page; their prefs still apply, there is just no control for
+      // choosing them. The sidebar switch did NOT come with them — the chrome
+      // already has a toggle for it.
       expect(el.querySelectorAll(".swatch")).toHaveLength(0);
       expect(el.querySelectorAll(".previewTile")).toHaveLength(0);
       expect(el.querySelector('.seg[aria-label="Treatment"]')).toBeNull();
-      // Cards are the remaining layout control.
-      // The sidebar switch did NOT come with them — the chrome already has a
-      // toggle for it.
+      expect(el.querySelector('.seg[aria-label="Cards"]')).toBeNull();
+      expect(el.textContent).not.toContain("Surface");
       expect(
         [...el.querySelectorAll(".groupLabel")].map((n) => n.textContent)
-      ).toStrictEqual(["Theme", "Cards", "Automations"]);
+      ).toStrictEqual(["Theme", "Automations"]);
       expect(el.querySelector('[aria-label="Show sidebar"]')).toBeNull();
     });
 
@@ -103,19 +102,29 @@ describe("screens/SettingsAppearanceScreen", () => {
       );
     });
 
-    it("carries the card control and the cron setting", async () => {
-      const props = makeProps();
-      const el = mount(props);
+    it("leaves the theme as the page's only segmented control", async () => {
+      const el = mount(makeProps());
       await act(async () => {});
-      const group = (n: number): HTMLButtonElement[] => [
-        ...el.querySelectorAll(".seg")[n]!.querySelectorAll("button"),
-      ];
-      expect(el.querySelectorAll(".seg")).toHaveLength(2);
-      click(group(1).find((b) => b.textContent === "elevated")!);
-      expect(props.onSetCards).toHaveBeenCalledWith("elevated");
+      expect(el.querySelectorAll(".seg")).toHaveLength(1);
       expect(
         el.querySelector('[data-testid="settings-default-cron-timezone"]')
       ).toBeTruthy();
+    });
+
+    // The cron default is a squatter on this page and a gateway-wide AUTOMATION
+    // default. On a gateway that runs no automations it is a control whose
+    // effect can never be observed, so it is not offered at all — including its
+    // suggestion list, which would otherwise be markup nothing can reach.
+    it("withholds the cron default when the gateway runs no automations", async () => {
+      const el = mount(makeProps({ automations: false }));
+      await act(async () => {});
+      expect(
+        el.querySelector('[data-testid="settings-default-cron-timezone"]')
+      ).toBeNull();
+      expect(el.querySelector("#centraid-cron-timezones")).toBeNull();
+      expect(
+        [...el.querySelectorAll(".groupLabel")].map((n) => n.textContent)
+      ).toStrictEqual(["Theme"]);
     });
 
     it("offers no surface-temperature control at all", () => {

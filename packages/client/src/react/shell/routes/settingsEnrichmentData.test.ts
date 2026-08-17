@@ -16,6 +16,7 @@ const {
   deleteEnrichRule,
   getEnrichPolicy,
   getEnrichRules,
+  getEffectiveEnrichPolicy,
   getHarnessesStatus,
   getUserPrefs,
   listEnrichEgressConsent,
@@ -25,6 +26,8 @@ const {
   setEnrichRule,
 } = vi.hoisted(() => ({
   deleteEnrichRule: vi.fn<typeof TypeImport_1e7rich.deleteEnrichRule>(),
+  getEffectiveEnrichPolicy:
+    vi.fn<typeof TypeImport_1e7rich.getEffectiveEnrichPolicy>(),
   getEnrichPolicy: vi.fn<typeof TypeImport_1e7rich.getEnrichPolicy>(),
   getEnrichRules: vi.fn<typeof TypeImport_1e7rich.getEnrichRules>(),
   getHarnessesStatus: vi.fn<typeof TypeImport_1e7rich.getHarnessesStatus>(),
@@ -41,6 +44,7 @@ const {
 // pulls gateway-client-core's load-time side-effect.
 vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => ({
   deleteEnrichRule,
+  getEffectiveEnrichPolicy,
   getEnrichPolicy,
   getEnrichRules,
   getHarnessesStatus,
@@ -53,7 +57,6 @@ vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => ({
 }));
 
 import {
-  deleteEngineProfile,
   dropEnrichRule,
   loadEnrichmentSettings,
   saveEngineProfile,
@@ -81,6 +84,17 @@ describe("settingsEnrichmentData", () => {
     } as Awaited<ReturnType<typeof TypeImport_1e7rich.getHarnessesStatus>>);
     getUserPrefs.mockResolvedValue({});
     saveUserPrefs.mockResolvedValue({});
+    getEffectiveEnrichPolicy.mockResolvedValue({
+      tier: "device",
+      rules: [],
+      effective: {
+        capability: "ocr",
+        enabled: true,
+        profileId: "built-in",
+        trigger: "on-ingest",
+        egressCeiling: "on-device",
+      },
+    });
   });
 
   it("reads the whole page in one pass, agent cards included", async () => {
@@ -116,11 +130,51 @@ describe("settingsEnrichmentData", () => {
     });
   });
 
-  it("deletes an engine profile by clearing its key", async () => {
-    await deleteEngineProfile("fast-ocr");
-    expect(saveUserPrefs.mock.lastCall?.[0]).toStrictEqual({
-      "enrich.profile.fast-ocr": null,
-    });
+  it("asks the gateway's resolver per capability instead of folding here", async () => {
+    listEnrichProfiles.mockResolvedValue([
+      {
+        id: "built-in",
+        label: "Built-in (ocr)",
+        capability: "ocr",
+        engine: { kind: "built-in" },
+        egress: "gateway",
+        builtIn: true,
+        delegateCapable: true,
+      },
+      {
+        id: "ocr-codex",
+        label: "Codex",
+        capability: "ocr",
+        engine: { kind: "delegate", harness: "codex" },
+        egress: "provider",
+        builtIn: false,
+        delegateCapable: true,
+      },
+    ]);
+    const data = await loadEnrichmentSettings();
+    // Once, for the BUILT-IN of each capability — a member profile is another
+    // engine for the same capability, not a second thing to resolve.
+    expect(getEffectiveEnrichPolicy.mock.calls).toStrictEqual([
+      [{ capability: "ocr", domain: "photos" }],
+    ]);
+    expect(data.effective["ocr"]?.enabled).toBe(true);
+  });
+
+  it("leaves out a capability whose domain this build has no word for", async () => {
+    listEnrichProfiles.mockResolvedValue([
+      {
+        id: "built-in",
+        label: "Built-in (sentiment)",
+        capability: "sentiment",
+        engine: { kind: "built-in" },
+        egress: "gateway",
+        builtIn: true,
+        delegateCapable: false,
+      },
+    ]);
+    const data = await loadEnrichmentSettings();
+    expect(getEffectiveEnrichPolicy).not.toHaveBeenCalled();
+    expect(data.effective).toStrictEqual({});
   });
 
   it("writes and drops one scope's rule through the vault's rules route", async () => {

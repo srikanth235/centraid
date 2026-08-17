@@ -84,7 +84,7 @@ The brief's `sharing` screen is represented by the vault sharing plane, and its 
 
 - Photos does not expose the generic shell App settings sheet. Its toolbar owns the controls shown in the handoff, and Photos ships no app-local appearance knobs; the web shell therefore withholds that entry point for `app.id === "photos"`. Other app types keep their management surface.
 - The compact Photos band is stable. The web frame always honours Photos' first-party claim on compact surfaces, so there is no grid-icon hand-back control that swaps its shelves for the host launcher.
-- Selection replaces the compact band. While Photos selection is active, its five-action bar takes the foot and the claimed navigation band withdraws; normal browsing restores the band and its leading Home capsule. The global `+ Add` capture launcher remains available.
+- Selection replaces the compact band. While Photos selection is active, its five-action bar takes the foot and the claimed navigation band withdraws; normal browsing restores the band and its leading Home capsule. There is no capture launcher over any surface: quick capture is retired from the web and desktop seats entirely, so the handoff's floating action button has nothing left to represent. Capture remains a mobile origin act (`apps/mobile` Capture and Scan), which is where it was actually used.
 
 ### Colour roles and verified geometry
 

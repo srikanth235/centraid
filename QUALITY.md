@@ -100,12 +100,12 @@
   `<table>`; mobile has zero raw `<TextInput>` and routes all 692 `<Text>`
   through the kit's `NativeText`).
 
-- **Three raw `<button>`s carry no styling at all.** `AutomationThreadScreen`,
-  `RunViewScreen` and `CaptureOverlay` each render
-  `<button type="button" onClick={onBack}>` with no class, against a kit with 32
-  `<Button>` uses. Eight more raw buttons use a local class and four already
-  ride shared ones (`controlsCss.chip`, `buttonCss.ghost`); the unstyled three
-  are the unambiguous misses.
+- **Two raw `<button>`s carry no styling at all.** `AutomationThreadScreen` and
+  `RunViewScreen` each render `<button type="button" onClick={onBack}>` with no
+  class, against a kit with 32 `<Button>` uses. (`CaptureOverlay` was the third
+  until quick capture was retired from this seat.) Eight more raw buttons use a
+  local class and four already ride shared ones (`controlsCss.chip`,
+  `buttonCss.ghost`); the unstyled two are the unambiguous misses.
 
 - **21 mobile `<Pressable>`s act as buttons without the kit.** Many carry
   `accessibilityRole="button"` explicitly. They cluster in `apps/agenda`,

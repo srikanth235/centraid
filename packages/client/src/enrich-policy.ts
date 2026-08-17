@@ -174,6 +174,77 @@ export const ENRICH_CAPABILITY_LABELS: Readonly<Record<string, string>> = {
   transcript: "Video and audio transcripts",
 };
 
+/**
+ * The member-facing name of a capability, falling back to its registry id — a
+ * gateway that ships a capability this build has no word for still renders as
+ * something, rather than as a blank row.
+ */
+export function capabilityLabel(capability: string): string {
+  return ENRICH_CAPABILITY_LABELS[capability] ?? capability;
+}
+
+/**
+ * What each capability GETS YOU, in one line — the answer to "why would I leave
+ * this on", which the label alone does not give. Settings renders the label and
+ * this together, because a member deciding whether to run face recognition is
+ * deciding about finding photos of their kid, not about a capability id.
+ */
+export const ENRICH_CAPABILITY_BLURBS: Readonly<Record<string, string>> = {
+  "doc-entities":
+    "Picks out who and what a document is about, so it can be filed and found.",
+  "doc-filing": "Suggests where a new document belongs.",
+  "doc-text":
+    "Pulls the words out of PDFs and scans so the rest of this list can work on them.",
+  "embed-image":
+    "Find photos by describing them, instead of by filename or date.",
+  "embed-text": "Find documents by what they mean, not only by exact wording.",
+  faces:
+    "Groups photos of the same person, so everyone’s pictures come up at once.",
+  obligations:
+    "Spots renewal dates and deadlines so they can become reminders.",
+  ocr: "Makes the words inside a picture searchable — receipts, signs, whiteboards.",
+  transcript: "Writes out what is said in your videos and voice notes.",
+};
+
+/**
+ * A standing reassurance about ONE capability, shown on its row.
+ *
+ * Faces is the only entry and is not decoration: `DELEGATE_REFUSALS` in
+ * `packages/server/src/enrich/engine-profiles.ts` refuses a delegate engine for
+ * it outright, so face imagery cannot reach a provider by any setting. The
+ * member is owed that sentence at the switch, not in a footnote under a form.
+ */
+export const ENRICH_CAPABILITY_NOTES: Readonly<Record<string, string>> = {
+  faces:
+    "Face imagery never leaves for a provider — no agent engine can be chosen for it.",
+};
+
+/**
+ * Ordinal rank of an egress class, and whether one fits under a ceiling.
+ *
+ * A DISPLAY mirror of `EGRESS_RANK` / `egressWithinCeiling` in
+ * `packages/server/src/automation/fire/enrich-resolve.ts`, and deliberately not
+ * a second gate: the runtime refusal is that module's, and this one only lets
+ * Settings SAY that a row will be refused. Before this existed, choosing "On
+ * this device" for Documents silently stopped all five of them with nothing on
+ * screen admitting it — the worst kind of quiet, since the member reads the
+ * switch as on.
+ */
+const EGRESS_RANK: Readonly<Record<EnrichEgressCeiling, number>> = {
+  gateway: 2,
+  off: 0,
+  "on-device": 1,
+  provider: 3,
+};
+
+/** Whether work of this egress class runs at all under this ceiling. */
+export function egressWithinCeiling(
+  egress: EnrichEgressClass,
+  ceiling: EnrichEgressCeiling
+): boolean {
+  return EGRESS_RANK[egress] <= EGRESS_RANK[ceiling];
+}
+
 /** Where an engine's work happens, in the member's words. */
 export const ENRICH_EGRESS_WORDS: Readonly<Record<EnrichEgressClass, string>> =
   {

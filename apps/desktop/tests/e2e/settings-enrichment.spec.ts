@@ -33,8 +33,9 @@ test.beforeEach(async () => {
   env = await makeEnv();
   gateway = await startMockGateway();
   // Enough policy state for the page to render every group it owns: two
-  // built-in engines, one member engine that reaches a provider, one scoped
-  // rule, and one answered egress question.
+  // built-in engines (one delegate-capable, one structurally not), one member
+  // engine that reaches a provider, one scoped rule, and one answered egress
+  // question.
   gateway.state.enrichProfiles = [
     {
       id: "built-in",
@@ -43,6 +44,7 @@ test.beforeEach(async () => {
       engine: { kind: "built-in" },
       egress: "gateway",
       builtIn: true,
+      delegateCapable: true,
     },
     {
       id: "built-in",
@@ -51,16 +53,37 @@ test.beforeEach(async () => {
       engine: { kind: "built-in" },
       egress: "on-device",
       builtIn: true,
+      delegateCapable: false,
     },
     {
-      id: "sharp-ocr",
-      label: "Sharp OCR",
+      id: "ocr-codex",
+      label: "Codex",
       capability: "ocr",
       engine: { kind: "delegate", harness: "codex" },
       egress: "provider",
       builtIn: false,
+      delegateCapable: true,
     },
   ];
+  // The page asks the ONE resolver per capability rather than folding the
+  // cascade itself (issue #814), so the mock has to answer for each built-in
+  // the profiles above declare.
+  gateway.state.enrichEffective = {
+    faces: {
+      capability: "faces",
+      enabled: true,
+      profileId: "built-in",
+      trigger: "on-ingest",
+      egressCeiling: "on-device",
+    },
+    ocr: {
+      capability: "ocr",
+      enabled: true,
+      profileId: "built-in",
+      trigger: "on-view",
+      egressCeiling: "on-device",
+    },
+  };
   gateway.state.enrichRules = [
     {
       scope: { type: "domain", ref: "photos" },
@@ -106,13 +129,26 @@ test("12.9 — Settings → Enrichment states the policy and writes the tier the
     await expect(photos.getByRole("tab", { selected: true })).toHaveText(
       "On this device"
     );
-    // Every group the page owns is present, with the gateway's own words.
-    await expect(pane).toContainText("Sharp OCR");
-    await expect(pane).toContainText("sent to a provider");
+    // A capability is a ROW: its plain name, what it gets you, and where its
+    // work goes — not an engine-profile label (issue #814).
     await expect(pane).toContainText("Text in photos");
-    await expect(pane).toContainText("declined");
+    await expect(pane).toContainText("receipts, signs, whiteboards");
+    await expect(pane).toContainText("Faces");
+    // Faces is structurally undelegatable, so it is offered no engine at all
+    // and says why where the control would have been.
+    await expect(
+      pane.getByLabel("Engine for Faces", { exact: true })
+    ).toHaveCount(0);
+    await expect(pane).toContainText(
+      "Face imagery never leaves for a provider"
+    );
+    // The photos ceiling is `device` while the bundled OCR engine is
+    // gateway-lane, so the row states the refusal instead of failing silently.
+    await expect(pane).toContainText("Won’t run");
+    // The answered egress question reads as a sentence about the member.
+    await expect(pane).toContainText("You declined");
 
-    // The UI-receipt evidence for issue #807 (docs/… check:ui-receipt): the
+    // The UI-receipt evidence for issue #814 (check:ui-receipt): the
     // Enrichment page as a first run finds it.
     const evidenceDir = path.resolve(
       import.meta.dirname,
@@ -120,7 +156,7 @@ test("12.9 — Settings → Enrichment states the policy and writes the tier the
     );
     await mkdir(evidenceDir, { recursive: true });
     await page.screenshot({
-      path: path.join(evidenceDir, "issue-807-enrichment-settings.png"),
+      path: path.join(evidenceDir, "issue-814-enrichment-capabilities.png"),
       fullPage: true,
     });
 

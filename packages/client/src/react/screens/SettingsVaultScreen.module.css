@@ -1,0 +1,26 @@
+/* Settings → Vault → On this device.
+   The offline-copy row inherits the shape the pairing step's checkbox used to
+   have (a checkbox, a bolded question, a quiet explanation) — the control has
+   moved twice now (pairing → "This device" → here), and its look should not.
+   `data-on` is the state hook; the row itself has no on/off styling yet, and
+   the attribute exists so a later visual state costs no markup change. */
+.offlineRow {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  line-height: 1.25;
+}
+
+.offlineRow input {
+  margin-top: 3px;
+}
+
+.offlineRow span {
+  display: grid;
+  gap: 3px;
+}
+
+.offlineRow small {
+  color: var(--text-soft);
+  line-height: 1.5;
+}

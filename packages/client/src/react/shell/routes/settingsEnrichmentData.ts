@@ -1,11 +1,14 @@
+import { ENRICH_CAPABILITY_DOMAIN } from "../../../enrich-policy.js";
 import type {
   EnrichDomain,
   EnrichPolicy,
   EnrichScopeType,
   EnrichTier,
+  ResolvedEnrichPolicy,
 } from "../../../enrich-policy.js";
 import {
   deleteEnrichRule,
+  getEffectiveEnrichPolicy,
   getEnrichPolicy,
   getEnrichRules,
   listEnrichEgressConsent,
@@ -49,7 +52,48 @@ export async function loadEnrichmentSettings(): Promise<EnrichmentSettingsData> 
     listEnrichEgressConsent(),
     loadHarnesses(),
   ]);
-  return { policy, rules, profiles, consent, cards: harnesses.cards };
+  return {
+    policy,
+    rules,
+    profiles,
+    consent,
+    cards: harnesses.cards,
+    effective: await readEffective(profiles.filter((one) => one.builtIn)),
+  };
+}
+
+/**
+ * What the gateway's resolver folds for each capability, ASKED PER CAPABILITY
+ * because that is the shape the one resolver answers in.
+ *
+ * The screen needs "is this on" and "how far may it go", and both are folds of
+ * the tier and the rule cascade. Computing them from the `policy` and `rules`
+ * this module already holds would be a second fold — exactly the parallel
+ * policy #807 is arranged to prevent — so it costs one request per capability
+ * instead. The same trade is already made twice for the same stated reason:
+ * `appSettingsData.ts` asks this resolver per capability for the app-settings
+ * enrichment panel, and the phone's `lib/enrichment.ts` does it too.
+ *
+ * A capability whose domain this build does not know is left out of the map
+ * rather than guessed at; the screen renders it without a switch and says so.
+ */
+async function readEffective(
+  builtIns: { capability: string }[]
+): Promise<Record<string, ResolvedEnrichPolicy | null>> {
+  const answers = await Promise.all(
+    builtIns.map(async ({ capability }) => {
+      const domain = ENRICH_CAPABILITY_DOMAIN[capability];
+      if (!domain) return null;
+      const answer = await getEffectiveEnrichPolicy({ capability, domain });
+      return [capability, answer.effective] as const;
+    })
+  );
+  return Object.fromEntries(
+    answers.filter(
+      (one): one is readonly [string, ResolvedEnrichPolicy | null] =>
+        one !== null
+    )
+  );
 }
 
 /** Write one domain's tier; resolves with the tiers the vault holds after. */
@@ -79,10 +123,14 @@ export async function saveEngineProfile(
   });
 }
 
-/** Drop one member profile. Built-ins have no key, so none can be deleted. */
-export async function deleteEngineProfile(id: string): Promise<void> {
-  await saveUserPrefs({ [profilePrefsKey(id)]: null });
-}
+/*
+ * There is deliberately NO profile delete. A profile's id is now derived from
+ * (capability, agent) by the row that picks it, so re-picking rewrites one key
+ * instead of accumulating engines, and the set is bounded and invisible —
+ * there is nothing for a member to tidy. Deleting one would also be the only
+ * act on this page that can strand a rule at a deeper scope still pinning it,
+ * which would silently move that scope back to the built-in engine.
+ */
 
 /** Write one scope's rule for one capability. */
 export async function writeEnrichRule(rule: EnrichRuleInput): Promise<void> {

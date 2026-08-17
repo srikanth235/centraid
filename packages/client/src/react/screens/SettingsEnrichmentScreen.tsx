@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import {
-  ENRICH_CAPABILITY_LABELS,
+  ENRICH_CAPABILITY_DOMAIN,
   ENRICH_DOMAINS,
   ENRICH_DOMAIN_LABELS,
   ENRICH_EGRESS_WORDS,
   ENRICH_TIER_WORDS,
+  capabilityLabel,
 } from "../../enrich-policy.js";
 import type {
   EnrichConsentRecord,
@@ -17,11 +18,12 @@ import type {
   EnrichScopeType,
   EnrichTier,
   EnrichTrigger,
+  ResolvedEnrichPolicy,
 } from "../../enrich-policy.js";
 import { relativeTime } from "../format.js";
 import type { HarnessCardDTO } from "../screen-contracts.js";
-import { DrawerGroup, DrawerRow, Segmented } from "./settings-controls.js";
-import EnrichmentProfiles from "./SettingsEnrichmentProfiles.js";
+import { DrawerGroup, Segmented } from "./settings-controls.js";
+import CapabilityRows from "./SettingsEnrichmentCapabilities.js";
 import EnrichmentRules from "./SettingsEnrichmentRules.js";
 
 import controlsCss from "../styles/controls.module.css";
@@ -34,9 +36,17 @@ import styles from "./SettingsEnrichmentScreen.module.css";
 // that already owns its path and re-renders what came back, so a refused write
 // can never show as applied.
 //
-// The reading order is the member's question order: how far may work go at
-// all (tiers) → what would run it (engine profiles) → where that is narrowed
-// or widened (scoped rules) → what have I already been asked (egress answers).
+// THE PAGE IS ORGANISED BY THE MEMBER'S QUESTION, NOT BY THE STORES. It used to
+// be four groups named after four objects — tiers, engines, scoped rules,
+// egress answers — which is the schema wearing a UI. Nobody arrives wanting to
+// name an engine. They arrive asking: what is this doing with my photos, can I
+// stop it, and does any of it leave my devices. So each DOMAIN is a group: how
+// far its work may go, then the list of what runs, each row a plain name, a
+// switch, and the computed fact of where it goes.
+//
+// The two remaining groups are the ones that answer a different question:
+// exceptions (places you decided differently, listed only when some exist), and
+// the record of what you have already been asked about sharing.
 
 /** Everything the page renders, read in one pass. */
 export interface EnrichmentSettingsData {
@@ -44,11 +54,17 @@ export interface EnrichmentSettingsData {
   rules: EnrichPolicyRule[];
   profiles: EnrichEngineProfile[];
   consent: EnrichConsentRecord[];
-  /** The harnesses this gateway can run — the delegate pickers' options. */
+  /** The harnesses this gateway can run — the row engine pickers' options. */
   cards: HarnessCardDTO[];
+  /**
+   * What the gateway's ONE resolver folds per capability. Read from
+   * `/_vault/enrich/effective` rather than computed here; a capability whose
+   * domain this build does not know is absent, and its row says so.
+   */
+  effective: Record<string, ResolvedEnrichPolicy | null>;
 }
 
-/** One member-authored engine profile, as the create form states it. */
+/** One member-authored engine profile, as the row's agent pick states it. */
 export interface EngineProfileInput {
   id: string;
   label: string;
@@ -73,7 +89,6 @@ export interface SettingsEnrichmentScreenProps {
   /** Write one domain's tier; resolves with the tiers the vault holds after. */
   setTier: (domain: EnrichDomain, tier: EnrichTier) => Promise<EnrichPolicy>;
   saveProfile: (input: EngineProfileInput) => Promise<void>;
-  deleteProfile: (id: string) => Promise<void>;
   setRule: (rule: EnrichRuleInput) => Promise<void>;
   deleteRule: (
     scope: EnrichScopeType,
@@ -92,11 +107,6 @@ type Load =
   /** `reason` is the underlying failure, stated rather than smoothed over. */
   | { kind: "failed"; reason: string };
 
-/** The member-facing name of a capability, falling back to its registry id. */
-export function capabilityLabel(capability: string): string {
-  return ENRICH_CAPABILITY_LABELS[capability] ?? capability;
-}
-
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -107,8 +117,8 @@ function ConsentRow({ row }: { row: EnrichConsentRecord }): JSX.Element {
     <div className={styles.row}>
       <span className={styles.rowName}>{capabilityLabel(row.capability)}</span>
       <span className={styles.rowMeta}>
-        {ENRICH_EGRESS_WORDS[row.egress]} · {row.decision} ·{" "}
-        {relativeTime(row.decidedAt)}
+        {row.decision === "granted" ? "You allowed" : "You declined"} work{" "}
+        {ENRICH_EGRESS_WORDS[row.egress]} · {relativeTime(row.decidedAt)}
       </span>
     </div>
   );
@@ -118,7 +128,6 @@ export default function SettingsEnrichmentScreen({
   load: read,
   setTier,
   saveProfile,
-  deleteProfile,
   setRule,
   deleteRule,
   showToast,
@@ -142,16 +151,18 @@ export default function SettingsEnrichmentScreen({
   }, [read, nonce]);
 
   // The tier the vault holds after the write is what renders — never the one
-  // this screen asked for.
+  // this screen asked for. It then re-reads: the ceiling decides which rows
+  // will actually run, so every row's refusal note is stale until it does.
   const pickTier = (domain: EnrichDomain, tier: EnrichTier): void => {
     void setTier(domain, tier)
-      .then((policy) =>
+      .then((policy) => {
         setLoad((current) =>
           current.kind === "ready"
             ? { kind: "ready", data: { ...current.data, policy } }
             : current
-        )
-      )
+        );
+        refresh();
+      })
       .catch((error: unknown) =>
         showToast(`Couldn’t change enrichment: ${errorText(error)}`)
       );
@@ -168,55 +179,67 @@ export default function SettingsEnrichmentScreen({
       <div className={controlsCss.note}>Reading your enrichment policy…</div>
     );
   const data = load.data;
+  const builtIns = data.profiles.filter((profile) => profile.builtIn);
 
   return (
     <>
-      <DrawerGroup label="Defaults">
-        <div className={controlsCss.note}>
-          How far enrichment of each kind of data may travel by default.
-        </div>
-        {ENRICH_DOMAINS.map((domain) => (
-          <DrawerRow
-            key={domain}
-            label={ENRICH_DOMAIN_LABELS[domain]}
-            hint={`Standing answer for your ${domain === "photos" ? "photos" : "documents"}.`}
-          >
-            <Segmented
-              options={TIERS}
-              selected={data.policy[domain]}
-              labels={ENRICH_TIER_WORDS}
-              ariaLabel={`Enrichment for ${ENRICH_DOMAIN_LABELS[domain]}`}
-              onSelect={(tier) => pickTier(domain, tier)}
+      {ENRICH_DOMAINS.map((domain) => {
+        const label = ENRICH_DOMAIN_LABELS[domain];
+        const mine = builtIns.filter(
+          (profile) => ENRICH_CAPABILITY_DOMAIN[profile.capability] === domain
+        );
+        return (
+          <DrawerGroup key={domain} label={label}>
+            <div className={styles.ceiling}>
+              <span className={styles.ceilingText}>
+                <span className={styles.ceilingLabel}>
+                  How far your {label.toLowerCase()} may go
+                </span>
+                <span className={styles.ceilingHint}>
+                  Everything below is held to this, whatever its own switch
+                  says.
+                </span>
+              </span>
+              <Segmented
+                options={TIERS}
+                selected={data.policy[domain]}
+                labels={ENRICH_TIER_WORDS}
+                ariaLabel={`Enrichment for ${label}`}
+                onSelect={(tier) => pickTier(domain, tier)}
+              />
+            </div>
+            <CapabilityRows
+              builtIns={mine}
+              profiles={data.profiles}
+              rules={data.rules}
+              effective={data.effective}
+              cards={data.cards}
+              domainLabel={label}
+              setRule={setRule}
+              saveProfile={saveProfile}
+              showToast={showToast}
+              onChanged={refresh}
             />
-          </DrawerRow>
-        ))}
-      </DrawerGroup>
-
-      <EnrichmentProfiles
-        profiles={data.profiles}
-        cards={data.cards}
-        saveProfile={saveProfile}
-        deleteProfile={deleteProfile}
-        showToast={showToast}
-        onChanged={refresh}
-      />
+          </DrawerGroup>
+        );
+      })}
 
       <EnrichmentRules
         rules={data.rules}
-        profiles={data.profiles}
-        setRule={setRule}
         deleteRule={deleteRule}
         showToast={showToast}
         onChanged={refresh}
       />
 
-      <DrawerGroup label="Egress answers">
+      <DrawerGroup label="Sharing you’ve been asked about">
         <div className={controlsCss.note}>
-          What you were asked, and what you answered — kept, not re-asked.
+          Answered once and kept, so nothing asks you twice.
         </div>
         <div className={styles.panel}>
           {data.consent.length === 0 ? (
-            <div className={styles.empty}>Nothing has been asked yet.</div>
+            <div className={styles.empty}>
+              Nothing has needed to ask you yet.
+            </div>
           ) : (
             data.consent.map((row) => (
               <ConsentRow key={`${row.capability}/${row.egress}`} row={row} />
