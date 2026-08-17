@@ -679,6 +679,8 @@
         "pinch.ts",
         "place-map.test.ts",
         "place-map.ts",
+        "place-phrase.test.ts",
+        "place-phrase.ts",
         "queries/_shared.ts",
         "queries/duplicates.ts",
         "queries/enrichment-status.ts",

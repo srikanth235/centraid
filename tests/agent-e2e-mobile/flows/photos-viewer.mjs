@@ -1,3 +1,6 @@
+import { copyFile, mkdir, readdir } from "node:fs/promises";
+import path from "node:path";
+
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
@@ -54,6 +57,16 @@ ${retryableTapCommands("Library")}
 # card on every supported phone width and dismisses only that backdrop.
 - tapOn:
     point: "10%,50%"
+# The info sheet phrases the location (#816): a place with no member name and
+# no gazetteer name reads as the honest fallback, never a coordinate, and the
+# only digits live behind the explicit copy action.
+- tapOn: "Info"
+- extendedWaitUntil:
+    visible: "Copy exact location"
+    timeout: 15000
+- assertVisible: "A place with no name yet"
+- takeScreenshot: place-phrase-info
+- tapOn: "Close photo information"
 - tapOn: "Back to the photographs"
 - extendedWaitUntil:
     visible: "Select"
@@ -62,9 +75,28 @@ ${retryableTapCommands("Library")}
 `,
     "viewer-roundtrip"
   );
+
+  // UI-impact evidence for #816 (check:ui-receipt): the phrase-first info
+  // sheet, published where the desktop journeys publish theirs.
+  const uiImpactDir = "artifacts/e2e/ui-impact";
+  const screenshot = async () => {
+    const frames = await readdir(ctx.state.screenshotsDir);
+    const infoFrame = frames.find((frame) =>
+      frame.endsWith("-place-phrase-info.png")
+    );
+    if (infoFrame === undefined)
+      throw new Error("place-phrase-info frame was not captured");
+    await mkdir(uiImpactDir, { recursive: true });
+    await copyFile(
+      path.join(ctx.state.screenshotsDir, infoFrame),
+      path.join(uiImpactDir, "issue-816-place-phrase-info.png")
+    );
+  };
+  await screenshot();
+
   return {
     pass: true,
     notes:
-      "viewer opened, paged both directions, exposed capability rows, and dismissed",
+      "viewer opened, paged both directions, exposed capability rows, phrased the location on the info sheet, and dismissed",
   };
 });
