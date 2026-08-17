@@ -170,6 +170,10 @@ function placeGroup(
         lat: section.lat,
         lng: section.lng,
         namedPlaces: anchors,
+        // A search result on the member's own screen, so the relative rung
+        // stands. Stated rather than defaulted: a phrase that leaves the
+        // device is built by `share-place.ts` and never by this call (#816).
+        context: "private",
       }).text,
       meta: `place · ${section.assets.length} ${section.assets.length === 1 ? "photograph" : "photographs"}`,
       // Places has no per-place route yet (PLACES is one shelf of sections,

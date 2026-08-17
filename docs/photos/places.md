@@ -2,9 +2,9 @@
 
 How Photos answers "where was this" and "where have I been" on both surfaces, why a location is a phrase before it is a point, and what is drawn under the pins on each ground.
 
-## The four layers
+## The five layers
 
-Places has four independently owned layers. Each remains useful without the layers above it.
+Places has five independently owned layers. Each remains useful without the layers above it.
 
 | Layer | What | Where |
 | --- | --- | --- |
@@ -12,6 +12,7 @@ Places has four independently owned layers. Each remains useful without the laye
 | **Phrases** | A place becomes something a person would say out loud | [`place-phrase.ts`](../../packages/blueprints/apps/photos/place-phrase.ts) |
 | **Geometry** | Coordinates become pin positions and a zoom tier, shared by every ground | [`place-map.ts`](../../packages/blueprints/apps/photos/place-map.ts) |
 | **Cartography** | The pin is a photograph; the ground under it is one of two | The three renderers |
+| **Disclosure** | What a place does, and does not, do when a copy leaves | [`share-place.ts`](../../packages/blueprints/apps/photos/share-place.ts) |
 
 ## Layer 1 — names
 
@@ -42,7 +43,7 @@ Nobody experiences their life in coordinates, so no surface in Photos prints one
 Two properties of this module are load-bearing:
 
 - **It is pure and import-free**, exactly as `place-map.ts` is. Both surfaces execute the same arithmetic, so the web panel and the phone sheet cannot drift on what they say about one place. That is also why the "A place with no name yet" string and the coordinate-shaped-label regex are _duplicated_ rather than imported, with a comment at both ends of every copy.
-- **It takes a context.** In `context: "shared"` the relative rung is skipped entirely — see Layer 4. A distance and a bearing from the reader's own home is worse in an export than the coordinate it replaced, because it reads as harmless.
+- **It takes a context.** In `context: "shared"` the relative rung is skipped entirely — see Layer 5. A distance and a bearing from the reader's own home is worse in an export than the coordinate it replaced, because it reads as harmless.
 
 Because every surface phrases a place through the ladder rather than through a stored string, **naming a place re-phrases every surface at once** — the lightbox row, the shelf heading, the search hit, the memory card. There is no backfill and no cache to invalidate. The "Name this place?" and "This is home" prompts sit over clusters of photographs at unnamed places on both surfaces.
 
@@ -114,6 +115,24 @@ Note that `tile.openstreetmap.org` is not an option even setting privacy aside: 
 **If land is ever wanted on the web**, the projection being separate from the rendering is what makes it a layer under the same pins rather than a rewrite. In rising order of cost: gateway-proxied tiles (the browser talks only to the gateway, which caches — CSP stays `'self'`); the same behind an opt-in consent gate; or owner-imported PMTiles/MBTiles for a region, which is the only one with genuinely zero egress. Any of them needs a Web Mercator mode in `projectPlaces` to register with tile pyramids — at trip scale the two projections differ by under a pixel, but they are not the same function. (`tileZoomFor` is not that: it is a scale conversion for handing an SDK an opening viewport.)
 
 A vendored coastline outline (Natural Earth 110m is ~100–200KB as TopoJSON) remains the cheaper middle path for the sketch, and is not in.
+
+## Layer 5 — what leaves with a copy
+
+A photograph on the member's screen and the same photograph in somebody else's hands are two different disclosures, so **sending a copy asks first**. The question is one tap with three rungs, offered safest first and asked every time rather than remembered ([`share-place.ts`](../../packages/blueprints/apps/photos/share-place.ts)):
+
+| Rung | What travels |
+| --- | --- |
+| **No place** (default) | Nothing. The file's own GPS is removed from the bytes. |
+| **Place name only** | The ladder's phrase, as words. The file's GPS is still removed. Offered only when rung 1 or 2 has a name. |
+| **Exact location** | The original file, fix and all. |
+
+There is no separate "city" rung because the granularity a share can carry is the granularity the ladder already has: rung 2 _is_ the settlement name, and asking a member to choose between "place name" and "city" asks them to distinguish two rungs of a ladder they never see. The default is the one that discloses nothing, because "they could have turned it off" is not consent — and the question is asked per share rather than remembered, since a remembered "exact" would disclose a location on some later share the member was not thinking about. "Exact" stays on offer even when the ledger knows no place: a camera writes a fix into the file whether or not this app ever read it, so "we know of no place" is not the same claim as "these bytes carry none".
+
+Below the exact rung the removal is a fact about the file the receiver opens, not about the screen the sender looked at: [`exif-location-strip.ts`](../../apps/mobile/src/apps/photos/exif-location-strip.ts) walks the JPEG's segments and zeroes the GPS directory, drops XMP packets and drops Photoshop/IPTC blocks, while leaving orientation, capture time and the compressed image byte for byte. A still in another container is re-encoded once and then walked; a **video is refused**, because transcoding a member's video to strip an atom is worse than saying so. A copy saved to the device's own camera roll is not a share and is not scrubbed — it lands in the member's own library beside the original it came from.
+
+The Home-relative rung never leaves. `placePhrase`'s `"shared"` context skips it, and two tests keep that true of the _call sites_ rather than only of the function: every `placePhrase` call in Photos names its context, and exactly one module ([`photo-share.ts`](../../apps/mobile/src/apps/photos/photo-share.ts)) may hand a photograph to the operating system ([`share-place-call-sites.test.ts`](../../apps/mobile/src/apps/photos/share-place-call-sites.test.ts)).
+
+The web surface has a Download — the member's own machine, unscrubbed, like the phone's camera-roll save — but no send-a-copy yet; when it grows one, the choice comes from the same blueprint module.
 
 ## Seeded data
 

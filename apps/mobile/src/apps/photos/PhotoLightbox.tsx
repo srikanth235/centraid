@@ -14,9 +14,7 @@
 // saying what is true about the bytes. Slideshow is a *different mode* — no
 // filmstrip, no info, determinate position.
 
-import * as MediaLibrary from "expo-media-library";
 import { useNetworkState } from "expo-network";
-import * as Sharing from "expo-sharing";
 import React, {
   useCallback,
   useEffect,
@@ -28,7 +26,6 @@ import {
   Alert,
   FlatList,
   Pressable,
-  Share,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -40,6 +37,7 @@ import { SAVED_TO_MY_VAULT } from "@centraid/blueprints/apps/_shared/shared-copy
 import { readableName } from "@centraid/blueprints/apps/photos/place-map";
 import { gazetteerNameFrom } from "@centraid/blueprints/apps/photos/place-phrase";
 import type { NamedPlace } from "@centraid/blueprints/apps/photos/place-phrase";
+import type { SharePlaceInput } from "@centraid/blueprints/apps/photos/share-place";
 import { PHOTOS_SAVED_AS_NEW } from "@centraid/blueprints/apps/photos/shared-copy";
 
 import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
@@ -58,14 +56,10 @@ import {
   retainCommonsItem,
 } from "../../lib/replica/placement-transport";
 import type { PhotosScreenProps } from "../../navigation";
-import { InCloudOriginalError } from "./device-media";
 import { buildDismissGesture } from "./lightbox-gestures";
 import { MediaPage } from "./MediaPage";
 import { EDITOR_TITLE, editorMeta } from "./photo-edit-model";
-import {
-  resolveLocalOriginal,
-  saveEditAsNewPhotograph,
-} from "./photo-edit-save";
+import { saveEditAsNewPhotograph } from "./photo-edit-save";
 import type { EditPlan } from "./photo-edit-save";
 import { PhotoEditor } from "./PhotoEditor";
 import { PhotoFilmstrip } from "./PhotoFilmstrip";
@@ -76,8 +70,14 @@ import { ViewerStatusLine, ViewerTopChrome } from "./PhotoLightboxChrome";
 import { PhotoLightboxToolbar } from "./PhotoLightboxToolbar";
 import { batchAddToAlbum } from "./photos-selection-writes";
 import type { VaultAsset } from "./photos-selection-writes";
+import { PhotoShareChoice } from "./PhotoShareChoice";
 import type { PhotoAsset } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
+import {
+  saveToCameraRoll,
+  sendCopy,
+  surfaceExportFailure,
+} from "./viewer-export";
 import { viewerOverflowMenuGroups } from "./viewer-menu";
 import {
   READ_ONLY_VAULT_REASON,
@@ -139,6 +139,10 @@ export default function PhotoLightbox({
   const [currentId, setCurrentId] = useState(route.params.assetId);
   const [infoOpen, setInfoOpen] = useState(false);
   const [slideshow, setSlideshow] = useState(false);
+  // "Send a copy" opens the place-precision sheet rather than the OS share
+  // sheet: what a copy says about where it was taken is a decision, and it is
+  // made before any bytes leave (issue #816).
+  const [shareOpen, setShareOpen] = useState(false);
   const [overflowOpen, setOverflowOpen] = useState(false);
   // The `···` chip's own rectangle, measured on the press that opens the
   // menu — see `useMenuAnchor` for why `onLayout` cannot answer this instead.
@@ -230,6 +234,31 @@ export default function PhotoLightbox({
       }),
     [places.rows]
   );
+  // The linked place, in the four fields every place-reading surface here
+  // needs. Read once because two of them ask: the info sheet, which phrases it
+  // for the member's own screen (`context: "private"`), and the share choice,
+  // which phrases it for somebody else's (`context: "shared"`, and never a
+  // relative rung — see `share-place.ts`).
+  const placeGazetteer =
+    gazetteerNameFrom(
+      currentPlace?.address_json == null
+        ? null
+        : String(currentPlace.address_json)
+    ) ?? undefined;
+  const placeCoord = (column: "geo_lat" | "geo_lng"): number | undefined =>
+    Number.isFinite(Number(currentPlace?.[column]))
+      ? Number(currentPlace?.[column])
+      : undefined;
+  const placeRowName = currentPlace
+    ? String(currentPlace.name ?? "Place")
+    : undefined;
+  const sharePlace: SharePlaceInput = {
+    gazetteerName: placeGazetteer,
+    lat: placeCoord("geo_lat"),
+    lng: placeCoord("geo_lng"),
+    namedPlaces,
+    placeName: placeRowName,
+  };
   const currentScope = scopes.find(
     (scope) => scope.vaultId === current?.sourceVaultId
   );
@@ -523,17 +552,6 @@ export default function PhotoLightbox({
     );
   };
 
-  const exportAsset = async (save: boolean): Promise<void> => {
-    if (!current) return;
-    // The same resolution the editor uses (download an http original, resolve a
-    // media-store id to real bytes) — sharing and editing must not disagree
-    // about which bytes ARE the original.
-    const uri = await resolveLocalOriginal(current);
-    if (save) await MediaLibrary.Asset.create(uri);
-    else if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
-    else await Share.share({ url: uri });
-  };
-
   /**
    * The editor's ONE write. It runs the render and the enqueue, closes the
    * editor, and says what happened in the status line — the same sentence the
@@ -550,15 +568,6 @@ export default function PhotoLightbox({
     await saveEditAsNewPhotograph({ gatewayBase, session }, current, plan);
     setEditing(false);
     postStatus(PHOTOS_SAVED_AS_NEW);
-  };
-
-  /** Export never fails quietly: an iCloud-only original says exactly that. */
-  const runExport = (save: boolean): void => {
-    void exportAsset(save).catch((error: unknown) => {
-      postStatus(
-        `${error instanceof InCloudOriginalError ? "Original is in iCloud" : "Export failed"}: ${error instanceof Error ? error.message : String(error)}`
-      );
-    });
   };
 
   // Until the shared timeline has loaded the requested row we hold on the stage
@@ -818,26 +827,10 @@ export default function PhotoLightbox({
           // the settlement name it recorded inside this place's own
           // `address_json`. Absent — and it is absent until a member turns the
           // automation on — the sheet's phrase falls to the relative rung.
-          placeGazetteer={
-            gazetteerNameFrom(
-              currentPlace?.address_json == null
-                ? null
-                : String(currentPlace.address_json)
-            ) ?? undefined
-          }
-          placeLat={
-            Number.isFinite(Number(currentPlace?.geo_lat))
-              ? Number(currentPlace?.geo_lat)
-              : undefined
-          }
-          placeLng={
-            Number.isFinite(Number(currentPlace?.geo_lng))
-              ? Number(currentPlace?.geo_lng)
-              : undefined
-          }
-          placeName={
-            currentPlace ? String(currentPlace.name ?? "Place") : undefined
-          }
+          placeGazetteer={placeGazetteer}
+          placeLat={sharePlace.lat ?? undefined}
+          placeLng={sharePlace.lng ?? undefined}
+          placeName={placeRowName}
           placeSetByYou={currentPlace?.source === "member"}
           screenHeight={height}
           tags={tags}
@@ -857,10 +850,12 @@ export default function PhotoLightbox({
             onAddToAlbum: addToAlbum,
             onAdjustLocation: openInfo,
             onDelete: trashAsset,
-            onDownload: () => runExport(true),
+            onDownload: () =>
+              void saveToCameraRoll(current).catch(surfaceExportFailure),
             onHide: hideAsset,
             onMakeKeyPhoto: makeKeyPhoto,
-            onSendCopy: () => runExport(false),
+            // Sending asks first — see the sheet at the foot of this tree.
+            onSendCopy: () => setShareOpen(true),
             onSlideshow: () => setSlideshow(true),
           })}
           onClose={() => setOverflowOpen(false)}
@@ -884,6 +879,19 @@ export default function PhotoLightbox({
             }))}
           onSelect={(vaultId) => void place(vaultId)}
           onClose={() => setPlacementKind(undefined)}
+        />
+
+        {/* The place-precision choice, asked once per share and BEFORE any
+            bytes leave (`PhotoShareChoice`, `share-place.ts`). */}
+        <PhotoShareChoice
+          visible={shareOpen}
+          place={sharePlace}
+          onChoose={(precision) =>
+            void sendCopy(current, precision, sharePlace).catch(
+              surfaceExportFailure
+            )
+          }
+          onClose={() => setShareOpen(false)}
         />
       </View>
     </GestureDetector>

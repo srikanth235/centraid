@@ -147,6 +147,10 @@ export function placeLabel(
     gazetteerName: gazetteerNameFrom(rowText(row, "address_json") ?? null),
     ...rowCoords(row),
     namedPlaces: anchors,
+    // Said out loud, but only on this member's own search results — so the
+    // relative rung is allowed here. A phrase that leaves the device goes
+    // through `share-place.ts` instead (#816).
+    context: "private",
   }).text;
 }
 

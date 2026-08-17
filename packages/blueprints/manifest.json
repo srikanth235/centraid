@@ -723,6 +723,8 @@
         "seed.js",
         "selection-actions.ts",
         "selection.tsx",
+        "share-place.test.ts",
+        "share-place.ts",
         "shared-copy.ts",
         "shelves.ts",
         "slideshow.tsx",
