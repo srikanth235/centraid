@@ -111,7 +111,7 @@ import {
   KeyStore,
   recompileCommonsGrants,
   readBlobStoreSettings,
-  readEnrichPolicyTier,
+  readEnrichPolicyResolutionInput,
   custodyStateCounts,
   jitterDelayMs,
   DEFAULT_VAULT_FOOTPRINT,
@@ -130,6 +130,11 @@ import { openStorageConnectionStore } from "../backup/storage-connections.js";
 import { makeStorageCredentialsResolver } from "../backup/storage-credentials.js";
 import { StorageUsagePoller } from "../backup/storage-usage.js";
 import { makeCaptureOcrRecognizer } from "../capture/capture-ocr.js";
+import { readEnrichConsentForChain } from "../enrich/egress-consent-lookup.js";
+import {
+  readEngineProfile,
+  validateEngineProfilePatch,
+} from "../enrich/engine-profiles.js";
 import {
   isSystemRecognitionRef,
   SYSTEM_RECOGNITION_TEMPLATE_IDS,
@@ -192,6 +197,10 @@ import { makeDevicesRouteHandler } from "../routes/devices-routes.js";
 import { makeDiagnosticsRouteHandler } from "../routes/diagnostics-routes.js";
 import { makeEdgeAnswerRouteHandler } from "../routes/edge-answer-routes.js";
 import { EDGES_PATH, makeEdgesRouteHandler } from "../routes/edges-routes.js";
+import {
+  ENRICH_PROFILES_PREFIX,
+  makeEnrichProfilesRouteHandler,
+} from "../routes/enrich-profiles-routes.js";
 import {
   SEMANTIC_SEARCH_PATH,
   makeEnrichSearchRouteHandler,
@@ -2346,13 +2355,51 @@ export async function buildGateway(
           );
         },
         resolveConnection: connectionBroker.resolveForFire,
-        // The enrichment tier gate's owner-plane read (privacy enforcement).
+        // The enrichment gate's owner-plane read (privacy enforcement).
         // `plane.db.vault` deliberately, NOT `agentBridgeFor` — the guard
         // must not be answerable by the grants of the automation it guards.
         // A throw here is a refusal, not a default: the fire spine catches it
         // and skips the run with the reason stated.
-        resolveEnrichPolicy: (domain) =>
-          readEnrichPolicyTier(vaultRegistry.current().db.vault, domain),
+        //
+        // The tier and the cascade's rules come from ONE vault read (#807);
+        // the profile→egress lookup is the gateway's own registry, since a
+        // profile is gateway configuration and never vault state. `laneFor`
+        // answers with the firing enricher's own declared lane, which is the
+        // lane of the capability being resolved.
+        resolveEnrichPolicy: (request) => {
+          const snapshot = prefs.getAllPrefs();
+          return {
+            ...readEnrichPolicyResolutionInput(
+              vaultRegistry.current().db.vault,
+              request.domain,
+              request.capability,
+              request.scopeChain
+            ),
+            egressForProfile: (profileId: string) =>
+              readEngineProfile(snapshot, profileId, request.capability, {
+                laneFor: () => request.lane,
+              })?.egress,
+            // The same registry, asked the OTHER half of the profile: which
+            // engine computes this capability (#807 Wave 5). The fire path
+            // reads it only after the gate allowed the run, and turns it into
+            // the handler's `variant` — so binding `ocr` to a harness profile
+            // selects the delegate step, and no manifest is edited to do it.
+            engineForProfile: (profileId: string) =>
+              readEngineProfile(snapshot, profileId, request.capability, {
+                laneFor: () => request.lane,
+              })?.engine,
+            // The egress ANSWER, read from the same owner-plane vault handle
+            // and never from the automation's grants (#807 Wave 3). A read
+            // only: `enrich_consent` has exactly one writer, and it is the
+            // journalled `enrich.record_consent` command inside the vault.
+            egressConsent: (egress) =>
+              readEnrichConsentForChain(vaultRegistry.current().db.vault, {
+                capability: request.capability,
+                egress,
+                scopeChain: request.scopeChain,
+              }),
+          };
+        },
         rearm: ({ automationRef: ref, completedRunId }) => {
           const vaultId = ws.vaultId;
           const task = new Promise<void>((resolve, reject) => {
@@ -3157,6 +3204,10 @@ export async function buildGateway(
             )
           )
         : {};
+      // The member's own choice of recognition step survives a template
+      // upgrade. Since #807 this switch is one of two selectors — a resolved
+      // engine profile elects the delegate variant too — so preserving it
+      // carries the recipe's answer forward, not the run's.
       const currentVariant = current?.manifest.enrich?.delegateStep?.selected;
       const merged = automation.validateManifest({
         ...desired,
@@ -4696,6 +4747,13 @@ export async function buildGateway(
         },
       })
     ),
+    // Engine profiles (issue #807): the derived built-ins plus whatever the
+    // member created, read straight off gateway prefs. Writes ride the generic
+    // prefs API, whose `validatePatch` below is the one gate.
+    forRoutePrefixes(
+      ENRICH_PROFILES_PREFIX,
+      makeEnrichProfilesRouteHandler({ readPrefs: () => prefs.getAllPrefs() })
+    ),
     // Harness detection (codex/claude credentials on the gateway host).
     forRoutePrefixes(
       "/centraid/_harnesses",
@@ -4808,6 +4866,10 @@ export async function buildGateway(
     () => currentWorkspace().ownerPartyId,
     {
       validatePatch: async (patch, before) => {
+        // Engine profiles first: the check is pure and cheap, so a malformed
+        // profile is refused without spawning a harness preflight (#807).
+        const profileRejection = validateEngineProfilePatch(patch);
+        if (profileRejection) return profileRejection;
         const next = patchedPrefs(before, patch);
         const switches: Array<ModelSubsystem | undefined> = [];
         if (Object.hasOwn(patch, "harness.kind")) switches.push(undefined);

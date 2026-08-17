@@ -767,6 +767,71 @@ describe("build-gateway scenarios", () => {
     }
   });
 
+  test("engine profiles: prefs writes are gated and the listing serves them (#807)", async () => {
+    await gateway.start("http://127.0.0.1:0");
+    const srv = await mountUnauthed(gateway.composedHandler);
+    const putProfile = (id: string, value: unknown) =>
+      fetch(`${srv.url}/_centraid-user/prefs`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ patch: { [`enrich.profile.${id}`]: value } }),
+      });
+    try {
+      // Empty prefs already list one derived built-in per capability, each
+      // carrying the computed egress class — nothing was stored for them.
+      const listed = (await (
+        await fetch(`${srv.url}/centraid/_enrich/profiles`)
+      ).json()) as {
+        profiles: Array<{ id: string; egress: string; builtIn: boolean }>;
+      };
+      expect(listed.profiles.length).toBeGreaterThan(0);
+      expect(listed.profiles.every((profile) => profile.builtIn)).toBe(true);
+      expect(listed.profiles.every((p) => p.egress === "gateway")).toBe(true);
+
+      // A faces delegate is refused at the prefs gate, with the reason.
+      const faces = await putProfile("faces-llm", {
+        capability: "faces",
+        harness: "codex",
+      });
+      expect(faces.status).toBe(409);
+      expect(((await faces.json()) as { error: string }).error).toContain(
+        "biometric"
+      );
+      // So are an unknown harness and an attempt to shadow the built-in id.
+      expect(
+        (await putProfile("mine", { capability: "ocr", harness: "x" })).status
+      ).toBe(409);
+      expect(
+        (await putProfile("built-in", { capability: "ocr", harness: "codex" }))
+          .status
+      ).toBe(409);
+      expect(
+        gateway.prefs.getAllPrefs()["enrich.profile.faces-llm"]
+      ).toBeUndefined();
+
+      // A valid one lands in prefs and shows up on the listing as `provider`.
+      const ok = await putProfile("careful-ocr", {
+        capability: "ocr",
+        label: "Careful OCR",
+        harness: "codex",
+        model: "some-model-id",
+      });
+      expect(ok.status).toBe(200);
+      const after = (await (
+        await fetch(`${srv.url}/centraid/_enrich/profiles`)
+      ).json()) as {
+        profiles: Array<{ id: string; egress: string; builtIn: boolean }>;
+      };
+      expect(
+        after.profiles.find((profile) => profile.id === "careful-ocr")
+      ).toStrictEqual(
+        expect.objectContaining({ egress: "provider", builtIn: false })
+      );
+    } finally {
+      await srv.close();
+    }
+  });
+
   test("composedHandler serves the kit Ask panel model picker (GET/PUT /centraid/<appId>/_turn/model)", async () => {
     await gateway.start("http://127.0.0.1:0");
     await gateway.runtime.registry.ensureUploaded("demo");

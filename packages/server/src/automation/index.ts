@@ -211,16 +211,26 @@ export {
 // `enrich_policy` tier, applied at the fire choke point above. The decision
 // is pure and exported so a host can explain a refusal without re-deriving it.
 export {
+  DEFAULT_ENRICH_TRIGGER,
   ENRICH_DOMAINS,
   ENRICH_LANES,
   ENRICH_TIERS,
+  automationScopeChain,
   decideEnrichmentGate,
+  egressWithinCeiling,
+  resolveEnrichmentPolicy,
   sealedModelTurnReason,
+  tierEgressCeiling,
   type EnrichDomain,
+  type EnrichEgressCeiling,
   type EnrichGateDecision,
   type EnrichGateInput,
   type EnrichLane,
+  type EnrichPolicyRequest,
+  type EnrichPolicyResolution,
   type EnrichTier,
+  type ResolveEnrichPolicy,
+  type ResolvedEnrichPolicy,
 } from "./fire/enrich-gate.js";
 
 // Automation-app scaffolders. The gateway lifecycle routes use the

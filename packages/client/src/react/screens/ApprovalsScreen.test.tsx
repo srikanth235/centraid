@@ -658,6 +658,44 @@ describe("screens/ApprovalsScreen", () => {
       expect(el.textContent).toContain("The pairing relay");
     });
 
+    // The enrichment egress ledger (issue #807, Wave 3). Reference material,
+    // read back: every answer is shown, the refusals included, and none of
+    // them is a control.
+    it("lists the enrichment egress answers, declines and all, with no verb", () => {
+      const el = mount(
+        makeProps({
+          enrichConsent: [
+            {
+              id: "faces:provider:",
+              title: "Faces",
+              sub: "Declined · at a third-party provider · this vault · 2 days ago",
+              meta: "provider",
+            },
+            {
+              id: "ocr:on-device:",
+              title: "Ocr",
+              sub: "Granted · on this device · this vault · 5 days ago",
+              meta: "on-device",
+            },
+          ],
+        })
+      );
+
+      const section = el.querySelector('[data-testid="enrichment-consent"]');
+      expect(section).not.toBeNull();
+      expect(section?.textContent).toContain("Faces");
+      expect(section?.textContent).toContain("Declined");
+      expect(section?.textContent).toContain("Granted");
+      expect(section?.textContent).toContain("Asked once, answered once");
+      // Nothing here decides anything — the answer is given where it is asked.
+      expect(section?.querySelector("button")).toBeNull();
+    });
+
+    it("says nothing at all when no enrichment question has been answered", () => {
+      const el = mount(makeProps({}));
+      expect(el.querySelector('[data-testid="enrichment-consent"]')).toBeNull();
+    });
+
     it("revoking a store grant switches the row off instead of removing it", () => {
       const onRevokeStoreGrant =
         vi.fn<ApprovalsScreenProps["onRevokeStoreGrant"]>();

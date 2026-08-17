@@ -37,7 +37,7 @@ import {
   surfaceWriteOutcome,
 } from "../kit/replica/write-outcome";
 import { useTheme } from "../kit/theme";
-import { authHeader } from "../lib/gateway";
+import { apiHeaders, authHeader } from "../lib/gateway";
 import {
   backupDeviceMedia,
   backupDocument,
@@ -213,8 +213,21 @@ export default function ScanScreen({
   const answerOcrConsent = useCallback(
     (answer: "on-device" | "not-now"): void => {
       setOcrConsent(answerScanOcrConsent(answer));
+      // Re-key into the vault's egress-consent ledger (#807 W3), best-effort.
+      // A RECORD, INCLUDING THE "no" — never a gate: this latch is per-device
+      // by law (#712 C3), so the fire gate never reads an `on-device` row.
+      if (!gatewayBase) return;
+      void fetch(`${gatewayBase}/centraid/_vault/enrich/consent`, {
+        body: JSON.stringify({
+          capability: "ocr",
+          decision: answer === "on-device" ? "granted" : "declined",
+          egress: "on-device",
+        }),
+        headers: apiHeaders({ "content-type": "application/json" }),
+        method: "POST",
+      }).catch(() => undefined);
     },
-    []
+    [gatewayBase]
   );
 
   const takePhoto = async (): Promise<void> => {

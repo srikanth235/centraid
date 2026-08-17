@@ -18,7 +18,7 @@ import segCss from "../styles/seg.module.css";
 import swatchCss from "../styles/swatch.module.css";
 import styles from "./AppSettingsPanel.module.css";
 
-type Tab = "appearance" | "automations" | "vault" | "manage";
+type Tab = "appearance" | "automations" | "vault" | "enrichment" | "manage";
 
 // The shared icon set lacks palette/wrench glyphs, so the tab strip carries
 // small inline SVGs — identical markup to the vanilla popover.
@@ -29,6 +29,8 @@ const TAB_GLYPH: Record<Tab, string> = {
     '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>',
   vault:
     '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v5c0 5-3.5 9-8 11-4.5-2-8-6-8-11V6z"/></svg>',
+  enrichment:
+    '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M18 15l.9 2.1 2.1.9-2.1.9L18 21l-.9-2.1-2.1-.9 2.1-.9z"/></svg>',
   manage:
     '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4l-5.6 5.6a2 2 0 1 0 2.8 2.8l5.6-5.6a4 4 0 0 1 5.4-5.4l-3 3-2.2-2.2 3-3z"/></svg>',
 };
@@ -37,6 +39,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "appearance", label: "Appearance" },
   { id: "automations", label: "Automations" },
   { id: "vault", label: "Vault" },
+  { id: "enrichment", label: "Enrichment" },
   { id: "manage", label: "Manage" },
 ];
 
@@ -239,6 +242,7 @@ export default function AppSettingsPanel(
     bundled,
     onMountRuns,
     onMountVault,
+    onMountEnrichment,
     initialTab = "appearance",
     automationsVisible = true,
   } = props;
@@ -246,6 +250,7 @@ export default function AppSettingsPanel(
   const [tab, setTab] = useState<Tab>(initialTab);
   const [deleteArmed, setDeleteArmed] = useState(false);
   const vaultMounted = useRef(false);
+  const enrichmentMounted = useRef(false);
 
   useEffect(() => {
     onReady((s) => setSnap(s));
@@ -327,6 +332,9 @@ export default function AppSettingsPanel(
               // Same rule as the vault tab above: a tab the gateway cannot
               // serve is absent, never present-and-empty.
               if (t.id === "automations" && !automationsVisible) return null;
+              // Same rule again: an app whose data shape has no enrichment
+              // capabilities gets no Enrichment tab (issue #807).
+              if (t.id === "enrichment" && !onMountEnrichment) return null;
               const badge =
                 t.id === "automations"
                   ? snap.automationsBadge
@@ -434,6 +442,17 @@ export default function AppSettingsPanel(
               if (node && snap.vaultVisible && !vaultMounted.current) {
                 vaultMounted.current = true;
                 onMountVault(node);
+              }
+            }}
+          />
+        </div>
+
+        <div className={styles.settingsPane} hidden={tab !== "enrichment"}>
+          <div
+            ref={(node) => {
+              if (node && onMountEnrichment && !enrichmentMounted.current) {
+                enrichmentMounted.current = true;
+                onMountEnrichment(node);
               }
             }}
           />

@@ -12,6 +12,13 @@ import { resolveRuntimeModule } from "../src/onnx.js";
 const BATCH = 16;
 const PURPOSE = "dpv:ServiceProvision";
 const PROMPT_REV = "ocr-v1";
+/**
+ * The engine profile a run that names none belongs to — the same literal
+ * `BUILT_IN_PROFILE` in packages/vault/src/enrich/derivation.ts defines, and
+ * the identity every stamp written before profiles existed carries. Handlers
+ * import no workspace types, so the value is restated here, not diverged.
+ */
+const BUILT_IN_PROFILE = "built-in";
 
 let recognize = ocr;
 let weightsPresent = ocrWeightsPresent;
@@ -217,7 +224,7 @@ async function recognizeCapture(capture) {
   };
 }
 
-async function seedAssetCursor(ctx, model) {
+async function seedAssetCursor(ctx, model, profile) {
   const latest = await ctx.vault.read({
     entity: "media.asset",
     where: [
@@ -235,6 +242,7 @@ async function seedAssetCursor(ctx, model) {
     where: [
       { column: "target_id", op: "eq", value: asset.content_id },
       { column: "variant", op: "eq", value: "text" },
+      { column: "profile", op: "eq", value: profile },
     ],
     limit: 1,
     purpose: PURPOSE,
@@ -273,12 +281,27 @@ export default async function handler({ ctx, log }) {
       throw new Error("delegate OCR requires an explicit pinned model");
     return { summary: "OCR skipped — automation model assets unavailable" };
   }
-  const selection = `${delegateStep ? "delegate" : "deterministic"}:${pinnedModel}:${delegateStep ? PROMPT_REV : "local"}`;
+  // The prompt text is this handler's, so a profile may only pin a revision
+  // this handler actually ships. Refusing is the honest answer: stamping a
+  // revision we did not send would make the derivation ledger lie.
+  const pinnedPromptRev = ctx.input?.promptRev;
+  if (delegateStep && pinnedPromptRev && pinnedPromptRev !== PROMPT_REV)
+    throw new Error(
+      `delegate OCR: the engine profile pins prompt revision "${pinnedPromptRev}", but this handler ships "${PROMPT_REV}"`
+    );
+  // Which engine profile this run belongs to. A stamp names its profile, so
+  // two profiles' answers for one photograph are two rows, not a race.
+  const profileId = ctx.input?.profileId ?? BUILT_IN_PROFILE;
+  // The selection key re-arms the cursor whenever the ENGINE changes. The
+  // built-in profile's key is byte-identical to the pre-profile one, so no
+  // existing vault re-walks its library for a choice its owner never made.
+  const profileSuffix = profileId === BUILT_IN_PROFILE ? "" : `:${profileId}`;
+  const selection = `${delegateStep ? "delegate" : "deterministic"}:${pinnedModel}:${delegateStep ? PROMPT_REV : "local"}${profileSuffix}`;
   const priorSelection = await ctx.state.get("selection");
   if (priorSelection !== selection) {
     const seed =
       priorSelection === undefined && !delegateStep
-        ? await seedAssetCursor(ctx, pinnedModel)
+        ? await seedAssetCursor(ctx, pinnedModel, profileId)
         : "";
     await ctx.state.set("cursor", seed);
     await ctx.state.set("selection", selection);
@@ -306,6 +329,10 @@ export default async function handler({ ctx, log }) {
       where: [
         { column: "target_id", op: "eq", value: asset.content_id },
         { column: "variant", op: "eq", value: "text" },
+        // Per PROFILE: another profile's stamp is another row, and reading it
+        // as this profile's would make two engines re-derive each other's
+        // photographs forever — a billed loop on the delegate rail.
+        { column: "profile", op: "eq", value: profileId },
       ],
       limit: 1,
       purpose: PURPOSE,
@@ -375,6 +402,9 @@ export default async function handler({ ctx, log }) {
         capability: "ocr",
         model: confirmedModel,
         regions: normalizedRegions,
+        // Named only when it is NOT the built-in engine: the command defaults
+        // to `built-in`, so a legacy write stays byte-identical.
+        ...(profileId === BUILT_IN_PROFILE ? {} : { profile: profileId }),
         ...(delegateStep ? { prompt_rev: PROMPT_REV } : {}),
         ...(confidence === undefined ? {} : { confidence }),
       },

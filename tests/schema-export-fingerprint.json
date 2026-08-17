@@ -1,6 +1,6 @@
 {
   "algorithm": "sha256-of-sorted-file-sha256",
-  "schemaFingerprint": "9a8023f65a6882386ea1a39d37a7141ee738a4e4ca1b356b98fd5bd66ddf4183",
+  "schemaFingerprint": "461ba78eed025892679a7546e30b1b1e630ca1fac39c6f07ea6d53a22b20548a",
   "exportOwner": "packages/vault/src/gateway/portable-export.ts",
-  "approvedDeviation": null
+  "approvedDeviation": "#807 Wave 0: enrich_derivation gains a `profile` column and widens its UNIQUE key to (target_type, target_id, variant, profile) so plural engine results coexist; enrich_policy_rule (scoped policy cascade) and enrich_consent (capability x egress class) are new tables, both registered in schema/tables.ts so the canonical walk carries them. Export completeness re-audited in packages/vault/src/gateway/portable-export.ts: the new tables are owner decisions that must survive restore (a dropped consent row re-asks an answered question, or loses a recorded refusal), and the widened stamp key rides an already-walked table. No adapter, no content bytes, no table dropped."
 }

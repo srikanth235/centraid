@@ -16,8 +16,11 @@ describe("resolveSettingsPage", () => {
     ({ resolveSettingsPage } = await import("./SettingsRoute.js"));
   });
 
-  it.each(["workspace", "storage", "import"])(
-    "redirects the hidden %s deep link to a real Settings page",
+  // The three pages were hidden for several releases and are gone (#807);
+  // their deep links must still land somewhere real rather than on an empty
+  // pane, which is the law this function carries for EVERY unknown id.
+  it.each(["workspace", "storage", "import", "not-a-page"])(
+    "redirects the retired %s deep link to a real Settings page",
     (page) => {
       expect(resolveSettingsPage(page)).toBe("appearance");
     }
@@ -25,5 +28,9 @@ describe("resolveSettingsPage", () => {
 
   it("preserves a visible Settings deep link", () => {
     expect(resolveSettingsPage("vault")).toBe("vault");
+  });
+
+  it("opens the Enrichment page from the app popover's deep link", () => {
+    expect(resolveSettingsPage("enrichment")).toBe("enrichment");
   });
 });

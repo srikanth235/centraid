@@ -13,6 +13,7 @@ import {
   approvalsCountLine,
   approvalsHealth,
   approvalsState,
+  buildEnrichConsentRow,
   buildGrantRow,
   buildActivityRow,
   collapseAdjacentActivity,
@@ -456,5 +457,43 @@ describe("what the frame says about Notifications", () => {
       "Nothing here has happened yet — approving is the act."
     );
     expect(health).not.toHaveProperty("action");
+  });
+});
+
+// The egress-consent ledger's rows (issue #807, Wave 3).
+describe(buildEnrichConsentRow, () => {
+  it("reads an answer back as one line, refusals stated as plainly as grants", () => {
+    const declined = buildEnrichConsentRow({
+      capability: "faces",
+      egress: "provider",
+      scopeRef: "",
+      decision: "declined",
+      decidedAt: "2026-08-15T10:00:00.000Z",
+      receiptId: null,
+    });
+
+    expect(declined.id).toBe("faces:provider:");
+    expect(declined.title).toBe("Faces");
+    expect(declined.meta).toBe("provider");
+    expect(declined.sub).toContain("Declined");
+    expect(declined.sub).toContain("at a third-party provider");
+    expect(declined.sub).toContain("this vault");
+  });
+
+  it("names the scope an answer was given for, when it was not the whole vault", () => {
+    const scoped = buildEnrichConsentRow({
+      capability: "doc-text",
+      egress: "on-device",
+      scopeRef: "album-7",
+      decision: "granted",
+      decidedAt: "2026-08-15T10:00:00.000Z",
+      receiptId: "receipt-1",
+    });
+
+    expect(scoped.id).toBe("doc-text:on-device:album-7");
+    expect(scoped.title).toBe("Doc text");
+    expect(scoped.sub).toContain("Granted");
+    expect(scoped.sub).toContain("on this device");
+    expect(scoped.sub).toContain("album-7");
   });
 });

@@ -43,6 +43,7 @@ import type { SettingsScreenProps } from "../navigation";
 import AppearanceSection from "./settings/AppearanceSection";
 import AppLockSection from "./settings/AppLockSection";
 import BandSection from "./settings/BandSection";
+import EnrichmentSection from "./settings/EnrichmentSection";
 import SettingsSection from "./settings/SettingsSection";
 import VaultSection from "./settings/VaultSection";
 import YouSection from "./settings/YouSection";
@@ -267,6 +268,10 @@ export default function SettingsScreen({
         <AppearanceSection />
         <AppLockSection />
         <VaultSection />
+        {/* Read-only view of the effective enrichment policy (#807 Wave 6) —
+            it sits under Vault because it is a fact ABOUT the vault, and above
+            the device/link sections that are facts about this phone. */}
+        <EnrichmentSection />
         <BandSection />
 
         <SettingsSection label="Desktop link">

@@ -28,11 +28,16 @@ import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
 import { readEnrichSettings, updateEnrichSettings } from "../host.js";
 import { VISION_SCHEME_URI } from "../schema/enrich.js";
+import { listEnrichConsent, readEnrichConsent } from "./egress-consent.js";
 import {
   leaseNextEnrichmentRequest,
   queueDeviceEnrichmentRequest,
 } from "./leases.js";
-import { readEnrichPolicyTier } from "./policy.js";
+import { putEnrichPolicyRule } from "./policy-rules.js";
+import {
+  readEnrichPolicyResolutionInput,
+  readEnrichPolicyTier,
+} from "./policy.js";
 import {
   hexHamming,
   encodeVector,
@@ -1244,6 +1249,75 @@ describe("enrich", () => {
       foreign.close();
     });
 
+    // ONE READ PATH for the one gate (issue #807): the tier and the cascade's
+    // rules come back together, off the same host plane, and this read still
+    // resolves nothing — it hands the gate its material.
+    test("readEnrichPolicyResolutionInput reads tier + the chain's rules, and resolves nothing", () => {
+      putEnrichPolicyRule(db.vault, {
+        scope: { type: "vault", ref: "" },
+        capability: "ocr",
+        trigger: "on-view",
+      });
+      putEnrichPolicyRule(db.vault, {
+        scope: { type: "domain", ref: "photos" },
+        capability: "ocr",
+        enabled: false,
+      });
+      // A rule for another capability, and one on a scope not in the chain:
+      // neither may show up in this capability's chain.
+      putEnrichPolicyRule(db.vault, {
+        scope: { type: "domain", ref: "photos" },
+        capability: "faces",
+        enabled: true,
+      });
+      putEnrichPolicyRule(db.vault, {
+        scope: { type: "item", ref: "asset-9" },
+        capability: "ocr",
+        enabled: true,
+      });
+
+      const read = readEnrichPolicyResolutionInput(db.vault, "photos", "ocr");
+      expect(read.tier).toBe("gateway");
+      // Least-specific first — the order a resolver folds.
+      expect(read.rules.map((rule) => rule.scope)).toStrictEqual([
+        { type: "vault", ref: "" },
+        { type: "domain", ref: "photos" },
+      ]);
+      expect(read.rules[1]?.enabled).toBe(false);
+
+      // A caller with an item in hand passes the longer chain itself; this
+      // module never guesses which collection an item is in.
+      const deep = readEnrichPolicyResolutionInput(db.vault, "photos", "ocr", [
+        { type: "vault", ref: "" },
+        { type: "domain", ref: "photos" },
+        { type: "item", ref: "asset-9" },
+      ]);
+      expect(deep.rules).toHaveLength(3);
+      expect(deep.rules[2]?.enabled).toBe(true);
+    });
+
+    // Fail-closed, cascade included: an unreadable tier stays unreadable no
+    // matter how many rules sit beside it. The refusal is the GATE's to make,
+    // and it needs to see `undefined` to make it.
+    test("readEnrichPolicyResolutionInput still fails closed on an unreadable tier", () => {
+      db.vault
+        .prepare("DELETE FROM enrich_policy WHERE domain = ?")
+        .run("docs");
+      putEnrichPolicyRule(db.vault, {
+        scope: { type: "domain", ref: "docs" },
+        capability: "embed-text",
+        enabled: true,
+      });
+
+      const read = readEnrichPolicyResolutionInput(
+        db.vault,
+        "docs",
+        "embed-text"
+      );
+      expect(read.tier).toBeUndefined();
+      expect(read.rules).toHaveLength(1);
+    });
+
     // [C5 SABOTAGE TEST, migration half] a vault upgraded from the pre-#712
     // tier vocabulary must not gain gateway-lane (model-turn) enrichment it
     // never consented to. `local` meant "no model turn" — mapping it up to
@@ -1340,6 +1414,101 @@ describe("enrich", () => {
         capability: string | null;
       };
       expect(broadcast.capability).toBeNull();
+    });
+
+    // EGRESS CONSENT, RE-KEYED (issue #807, Wave 3). The photos consent panel
+    // has exactly one write, and it is this verb — so the answer it carries
+    // becomes a row in the egress-consent ledger too, keyed capability ×
+    // egress class, where Privacy reads it back and the fire gate consults it.
+    test("a manual request re-keys the member's answer into the egress ledger", () => {
+      expect(
+        invoke(owner, "enrich.request_enrichment", {
+          entity_type: "media.asset",
+          reason: "manual",
+          capability: "faces",
+        }).status
+      ).toBe("executed");
+
+      const answer = readEnrichConsent(db.vault, {
+        capability: "faces",
+        egress: "on-device",
+      });
+      expect(answer?.decision).toBe("granted");
+      // The panel's answer is the ON-DEVICE one. Nothing about it agrees to a
+      // gateway or provider engine, which stay unasked — and unasked is not a
+      // grant.
+      expect(
+        readEnrichConsent(db.vault, { capability: "faces", egress: "gateway" })
+      ).toBeNull();
+      expect(
+        readEnrichConsent(db.vault, { capability: "faces", egress: "provider" })
+      ).toBeNull();
+
+      // A system signal is not an answer, so it re-keys nothing.
+      invoke(owner, "enrich.request_enrichment", {
+        entity_type: "media.asset",
+        reason: "on-view",
+      });
+      expect(listEnrichConsent(db.vault)).toHaveLength(1);
+    });
+  });
+
+  // ── the egress-consent ledger's one writer (issue #807, Wave 3) ──────────
+  describe("enrich.record_consent", () => {
+    test("records an answer, and a re-answer replaces it rather than piling up", () => {
+      const first = invoke(owner, "enrich.record_consent", {
+        capability: "ocr",
+        egress: "provider",
+        decision: "granted",
+      });
+      expect(first.status).toBe("executed");
+      expect(
+        readEnrichConsent(db.vault, { capability: "ocr", egress: "provider" })
+          ?.decision
+      ).toBe("granted");
+
+      const again = invoke(owner, "enrich.record_consent", {
+        capability: "ocr",
+        egress: "provider",
+        decision: "declined",
+      });
+      expect(again.status).toBe("executed");
+      const rows = listEnrichConsent(db.vault);
+      expect(rows).toHaveLength(1);
+      // A mind changed is a new DECISION, not a second row — and the decline
+      // is kept, because "asked and told no" must stay distinguishable from
+      // "never asked".
+      expect(rows[0]?.decision).toBe("declined");
+    });
+
+    test("scopes an answer without widening the vault-wide one", () => {
+      invoke(owner, "enrich.record_consent", {
+        capability: "faces",
+        egress: "gateway",
+        scope_ref: "album-7",
+        decision: "granted",
+      });
+      expect(
+        readEnrichConsent(db.vault, {
+          capability: "faces",
+          egress: "gateway",
+          scopeRef: "album-7",
+        })?.decision
+      ).toBe("granted");
+      // The vault-wide question stays unasked: a narrow yes is not a broad one.
+      expect(
+        readEnrichConsent(db.vault, { capability: "faces", egress: "gateway" })
+      ).toBeNull();
+    });
+
+    test("an app or agent cannot answer for the member — it parks", () => {
+      const outcome = invoke(agent, "enrich.record_consent", {
+        capability: "faces",
+        egress: "provider",
+        decision: "granted",
+      });
+      expect(outcome.status).toBe("parked");
+      expect(listEnrichConsent(db.vault)).toStrictEqual([]);
     });
   });
 

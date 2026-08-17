@@ -20,6 +20,11 @@
 //     on-demand queue and the additive vector index (issue #299 phase 5).
 
 import { stampDerivation } from "../enrich/derivation.js";
+import { recordEnrichConsent } from "../enrich/egress-consent.js";
+import type {
+  EnrichConsentDecision,
+  EnrichEgressClass,
+} from "../enrich/egress-consent.js";
 import { rebuildFaceClusters } from "../enrich/face-clusters.js";
 import { encodeVector } from "../enrich/similarity.js";
 import type { Gateway } from "../gateway/gateway.js";
@@ -41,6 +46,10 @@ const SET_EXTRACTED_TEXT: CommandDefinition = {
       variant: { type: "string", enum: ["text", "transcript"] },
       capability: { type: "string", minLength: 1 },
       model: { type: "string", minLength: 1 },
+      // Which engine profile produced this text (issue #807, Wave 5). Absent
+      // means the bundled engine, which is what every stamp written before
+      // profiles existed carries — see `BUILT_IN_PROFILE`.
+      profile: { type: "string", minLength: 1 },
       prompt_rev: { type: "string", minLength: 1 },
       confidence: { type: "number", minimum: 0, maximum: 1 },
       regions: {
@@ -108,6 +117,7 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
     variant?: "text" | "transcript";
     capability?: string;
     model?: string;
+    profile?: string;
     prompt_rev?: string;
     confidence?: number;
     regions?: ExtractedTextRegion[];
@@ -129,6 +139,7 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
       variant: input.variant ?? "text",
       capability: input.capability,
       model: input.model,
+      ...(input.profile ? { profile: input.profile } : {}),
       payload: {
         ...(input.prompt_rev ? { prompt_rev: input.prompt_rev } : {}),
         ...(input.confidence === undefined
@@ -543,7 +554,142 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
         ctx.now
       );
     ctx.wrote("enrich.request", requestId);
+    // RE-KEY THE ANSWER (issue #807, Wave 3). A `manual` request IS the
+    // member's answer to a consent moment — Photos' enrichment panel has
+    // exactly one write, and this is it. The panel's answer is the ON-DEVICE
+    // one ("what leaves the device: nothing"), so the row it re-keys is
+    // capability × `on-device`, vault-wide. Recording it here rather than from
+    // the app keeps blueprints powerless: the app still invokes the one verb
+    // it always invoked, and the consent ledger is written by the vault.
+    //
+    // Nothing about this row widens anything: `on-device` is the narrowest
+    // egress class there is, and the fire gate reads a stored answer only to
+    // refuse, never to permit past the policy cascade's ceiling.
+    if (input.reason === "manual" && input.capability) {
+      recordEnrichConsent(ctx.db, {
+        capability: input.capability,
+        egress: "on-device",
+        scopeRef: "",
+        decision: "granted",
+        now: ctx.now,
+      });
+      const consent = ctx.db
+        .prepare(
+          `SELECT consent_id FROM enrich_consent
+            WHERE capability = ? AND egress = 'on-device' AND scope_ref = ''`
+        )
+        .get(input.capability) as { consent_id: string } | undefined;
+      if (consent) ctx.wrote("enrich.consent", consent.consent_id);
+    }
     return { request_id: requestId };
+  },
+};
+
+/**
+ * THE ONE WRITER of `enrich_consent` (issue #807, Wave 3).
+ *
+ * Egress consent is the member's answer to "may work for THIS capability run
+ * on an engine that reaches THIS far" — capability × egress class × scope,
+ * asked once, answered once, receipted. It is data-owner property, so it lives
+ * in the vault and travels with the data; the gateway only ever reads it
+ * (`packages/server/src/enrich/egress-consent-lookup.ts`), and the fire gate
+ * refuses when the answer it needs is absent or declined.
+ *
+ * WHY A COMMAND RATHER THAN A ROUTE-LEVEL WRITE. Every route that records an
+ * answer rides this verb, so there is exactly one journalled path: an owner's
+ * answer, a decline, and a re-answer are all `act enrich.record_consent`
+ * receipts in the same chain, and no surface can quietly write a grant the
+ * ledger never saw. `confirm: true` is the consent-state marker
+ * (`CommandDefinition.confirm`): an app or agent that reaches for this verb
+ * PARKS for the owner instead of recording an answer on their behalf.
+ *
+ * A DECLINE IS A RECORD. `decision: 'declined'` writes a row, deliberately —
+ * "asked and told no" must stay distinguishable from "never asked", which is
+ * the difference between respecting an answer and re-asking it.
+ *
+ * `receipt_id` stays NULL here: a command's own receipt id is minted AFTER its
+ * transaction commits (`gateway/execution.ts` → `finalizeOrdinaryInvocation
+ * Commit`), so a handler cannot know it, and inventing a second writer to
+ * stamp it later would break the one-writer rule this command exists to hold.
+ * The durable receipt is the invocation's own, chained in journal.db and
+ * discoverable by this command name; the column stays for an imported answer
+ * that arrives with a receipt already minted.
+ */
+const RECORD_CONSENT: CommandDefinition = {
+  name: "enrich.record_consent",
+  ownerSchema: "enrich",
+  inputSchema: {
+    type: "object",
+    required: ["capability", "egress", "decision"],
+    additionalProperties: false,
+    properties: {
+      capability: { type: "string", minLength: 1, maxLength: 64 },
+      egress: { type: "string", enum: ["on-device", "gateway", "provider"] },
+      /** '' (or omitted) = the answer covers this vault. */
+      scope_ref: { type: "string", maxLength: 128 },
+      decision: { type: "string", enum: ["granted", "declined"] },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["capability", "egress", "scope_ref", "decision"],
+    properties: {
+      capability: { type: "string" },
+      egress: { type: "string" },
+      scope_ref: { type: "string" },
+      decision: { type: "string" },
+    },
+  },
+  preconditions: [],
+  postconditions: [
+    {
+      name: "answer_recorded",
+      sql: `SELECT count(*) AS n FROM enrich_consent
+             WHERE capability = :capability AND egress = :egress
+               AND scope_ref = :scope_ref AND decision = :decision`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  idempotency: "idempotent",
+  // Salience, not a gate: an answer about where a member's data may travel is
+  // the first thing their review feed should surface.
+  risk: "high",
+  confirm: true,
+  handler: (ctx) => {
+    const input = ctx.input as {
+      capability: string;
+      egress: EnrichEgressClass;
+      scope_ref?: string;
+      decision: EnrichConsentDecision;
+    };
+    const scopeRef = input.scope_ref ?? "";
+    recordEnrichConsent(ctx.db, {
+      capability: input.capability,
+      egress: input.egress,
+      scopeRef,
+      decision: input.decision,
+      now: ctx.now,
+    });
+    // Read the row's own id back rather than mint a synthetic one: an answer
+    // re-given keeps the id it was first recorded under (the writer UPSERTs),
+    // so provenance chains per ANSWER instead of per keystroke.
+    const stored = ctx.db
+      .prepare(
+        `SELECT consent_id FROM enrich_consent
+          WHERE capability = ? AND egress = ? AND scope_ref = ?`
+      )
+      .get(input.capability, input.egress, scopeRef) as
+      | { consent_id: string }
+      | undefined;
+    if (stored) ctx.wrote("enrich.consent", stored.consent_id);
+    return {
+      capability: input.capability,
+      egress: input.egress,
+      scope_ref: scopeRef,
+      decision: input.decision,
+    };
   },
 };
 
@@ -888,6 +1034,7 @@ export function registerEnrichCommands(gateway: Gateway): void {
   gateway.registerCommand(ANSWER_FACE_PROPOSAL);
   gateway.registerCommand(SET_CONNECTION_TRUST);
   gateway.registerCommand(REQUEST_ENRICHMENT);
+  gateway.registerCommand(RECORD_CONSENT);
   gateway.registerCommand(UPSERT_EMBEDDING);
   gateway.registerCommand(MARK_REQUESTS_DRAINED);
   gateway.registerCommand(UPSERT_FACES);

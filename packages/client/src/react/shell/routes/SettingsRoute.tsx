@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import type { IconName } from "@centraid/design";
@@ -6,12 +6,11 @@ import type { IconName } from "@centraid/design";
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { forgetDeviceMessage } from "../../../devices-copy.js";
 import { isWebHost } from "../../host-platform.js";
-import ImportScreen from "../../screens/ImportScreen.js";
 import SettingsAppearanceScreen from "../../screens/SettingsAppearanceScreen.js";
 import SettingsDeviceScreen from "../../screens/SettingsDeviceScreen.js";
+import SettingsEnrichmentScreen from "../../screens/SettingsEnrichmentScreen.js";
 import SettingsHarnessesScreen from "../../screens/SettingsHarnessesScreen.js";
 import SettingsProfileScreen from "../../screens/SettingsProfileScreen.js";
-import SettingsStorageScreen from "../../screens/SettingsStorageScreen.js";
 import SettingsVaultScreen from "../../screens/SettingsVaultScreen.js";
 import Icon from "../../ui/Icon.js";
 import { useShellActions } from "../actions.js";
@@ -22,11 +21,18 @@ import { useAsyncData } from "../useAsyncData.js";
 import { loadSelfProfile, saveSelfProfile } from "./profileData.js";
 import {
   forgetThisDeviceLocally,
-  importCallbacks,
   loadActiveVaultData,
   loadThisDeviceData,
   setOfflineCopy,
 } from "./settingsAccountData.js";
+import {
+  deleteEngineProfile,
+  loadEnrichmentSettings,
+  saveEngineProfile,
+  setDomainTier,
+  writeEnrichRule,
+  dropEnrichRule,
+} from "./settingsEnrichmentData.js";
 import {
   activateHarness,
   loadHarnesses,
@@ -37,24 +43,14 @@ import {
   setSubsystemHarness,
   setSubsystemHarnessLadder,
 } from "./settingsHarnessesData.js";
-import {
-  attachVaultConnection,
-  createStorageConnection,
-  detachVaultConnection,
-  loadVaultBlobStoreData,
-  loadStorageConnectionsData,
-  makeDeleteStorageConnection,
-  testStorageConnection,
-} from "./settingsStorageData.js";
 import { removeVault, saveVault } from "./vaultModals.js";
 
 import styles from "./SettingsRoute.module.css";
 
 // React-owned Settings — the inner-sidebar shell. Replaces the vanilla
 // renderSettings (app-settings.ts): a grouped category nav beside a content
-// pane that shows one page at a time (page head + the page's controls). The
-// Workspace + Models pages (Appearance/Layout/Agents) are native here; the
-// Account pages (Vaults/Import) land in a follow-up. Pairing a phone is NOT a
+// pane that shows one page at a time (page head + the page's controls).
+// Pairing a phone is NOT a
 // page here: it is a one-off act, so it lives in the account menu as
 // PairDeviceModal. Component health
 // and logs used to live here as a "Gateway" section — they now live on the
@@ -63,13 +59,11 @@ import styles from "./SettingsRoute.module.css";
 
 export type SettingsPageId =
   | "appearance"
-  | "workspace"
   | "vault"
   | "profile"
   | "device"
-  | "import"
   | "harnesses"
-  | "storage";
+  | "enrichment";
 
 interface PageDef {
   id: SettingsPageId;
@@ -86,13 +80,6 @@ const ALL_PAGES: readonly PageDef[] = [
     section: "Workspace",
     icon: "Mood",
     subtitle: "Theme and card surface for Centraid chrome.",
-  },
-  {
-    id: "workspace",
-    label: "Workspace",
-    section: "Workspace",
-    icon: "Folder",
-    subtitle: "Sidebar and navigation.",
   },
   {
     id: "profile",
@@ -121,26 +108,6 @@ const ALL_PAGES: readonly PageDef[] = [
       "What this browser stores locally — its pairing, its offline copy, and its cached previews.",
   },
   {
-    id: "import",
-    label: "Import",
-    section: "Account",
-    icon: "Save",
-    subtitle:
-      "Bring your existing data into the vault — everything stages for review before it lands.",
-  },
-  // Connections / Connectors moved to a primary sidebar page (ConnectorsRoute).
-  // "Storage provider", not "Storage": Gateway owns the local footprint,
-  // budget, and backup surfaces now (issues #544 and #608). This hidden route
-  // remains narrower: it configures only the provider connection.
-  {
-    id: "storage",
-    label: "Storage provider",
-    section: "Account",
-    icon: "Webhook",
-    subtitle:
-      "Keep this vault on this device only, or an encrypted copy hosted with your storage provider.",
-  },
-  {
     id: "harnesses",
     label: "Agents",
     section: "Models",
@@ -148,11 +115,19 @@ const ALL_PAGES: readonly PageDef[] = [
     subtitle:
       "The coding tools the gateway can drive, and the model each one uses.",
   },
+  {
+    id: "enrichment",
+    label: "Enrichment",
+    section: "Models",
+    icon: "Sparkle",
+    subtitle: "What Centraid reads for you, with what, and where that runs.",
+  },
 ];
-const HIDDEN = new Set(["workspace", "import", "storage"]);
-const PAGES = ALL_PAGES.filter(
-  (page) => !HIDDEN.has(page.id) && (page.id !== "device" || isWebHost())
-);
+// Workspace, Import and Storage provider were hidden pages for several
+// releases and are now gone (issue #807): a page nothing routes to is not a
+// page. `resolveSettingsPage` still collapses their deep links, and every
+// other unknown id, onto Appearance.
+const PAGES = ALL_PAGES.filter((page) => page.id !== "device" || isWebHost());
 
 const AUTO_SAVE = new Set<SettingsPageId>(["appearance"]);
 const SECTIONS = ["Workspace", "Account", "Models"];
@@ -171,9 +146,9 @@ export interface SettingsRouteProps {
   prefs: AppearancePrefs;
   setPrefs: (patch: Partial<AppearancePrefs>) => void;
   // Loosely typed (not `SettingsPageId`) so a router-level deep link (e.g.
-  // `{kind: 'settings', page: 'storage'}` — issue #367 §D3, the Gateway
-  // page's Storage card) doesn't need a type-only import of this module's
-  // private page union; validated against `PAGES` below.
+  // `{kind: 'settings', page: 'enrichment'}` — the app popover's "Open
+  // Enrichment settings", issue #807) doesn't need a type-only import of this
+  // module's private page union; validated against `PAGES` below.
   initialPage?: string;
   /** Dismiss the dialog. Backdrop, the close button, and Escape all call it. */
   onClose?: () => void;
@@ -239,11 +214,6 @@ export default function SettingsRoute({
   }, [onClose]);
   const def = PAGES.find((p) => p.id === page);
   const { showToast, navigate, confirm } = useShellActions();
-  const importProps = useMemo(() => importCallbacks(showToast), [showToast]);
-  const deleteStorageConnectionGated = useMemo(
-    () => makeDeleteStorageConnection(confirm),
-    [confirm]
-  );
   // Settings → Vault (issue #382) — scoped to the ACTIVE vault only; the
   // cross-vault list + gateway "Connections" group both moved to the
   // switcher. `vaultNonce` re-fetches after a save (the preview + dirty
@@ -495,17 +465,14 @@ export default function SettingsRoute({
                   {...(onWhatsNew ? { onWhatsNew } : {})}
                   {...(onLogOut ? { onLogOut } : {})}
                 />
-              ) : page === "import" ? (
-                <ImportScreen {...importProps} />
-              ) : page === "storage" ? (
-                <SettingsStorageScreen
-                  loadConnections={loadStorageConnectionsData}
-                  createConnection={createStorageConnection}
-                  deleteConnection={deleteStorageConnectionGated}
-                  testConnection={testStorageConnection}
-                  loadVaultBlobStore={loadVaultBlobStoreData}
-                  attachVaultConnection={attachVaultConnection}
-                  detachVaultConnection={detachVaultConnection}
+              ) : page === "enrichment" ? (
+                <SettingsEnrichmentScreen
+                  load={loadEnrichmentSettings}
+                  setTier={setDomainTier}
+                  saveProfile={saveEngineProfile}
+                  deleteProfile={deleteEngineProfile}
+                  setRule={writeEnrichRule}
+                  deleteRule={dropEnrichRule}
                   showToast={showToast}
                 />
               ) : page === "vault" ? (

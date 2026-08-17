@@ -321,60 +321,6 @@ export interface PhoneBridgeProps {
   showToast?: (message: string) => void;
 }
 
-// ── Import pane ─────────────────────────────────────────────────────────────
-export interface ImportBatchDTO {
-  batchId: string;
-  status: "draft" | "published" | "discarded";
-  createdAt: string;
-  summary: Record<string, number>;
-  kind: string | null;
-  label: string | null;
-}
-export interface ImportConnectionDTO {
-  connectionId: string;
-  kind: string;
-  label: string;
-  principal: string | null;
-  status: "active" | "needs-auth" | "failing" | "paused";
-  lastRunAt: string | null;
-  lastRunError: string | null;
-}
-export interface ImportRowDTO {
-  entityType: string;
-  externalId: string;
-  disposition: "create" | "update" | "skip" | "merge-candidate";
-  note: string | null;
-  mapping: string;
-}
-export interface ImportData {
-  vaultName: string;
-  batches: ImportBatchDTO[];
-  connections: ImportConnectionDTO[];
-}
-export interface ImportStagePayload {
-  filename?: string;
-  text?: string;
-  base64?: string;
-  directoryName?: string;
-  files?: { path: string; text: string }[];
-}
-export interface ImportBridgeProps {
-  /** Read the import surface. `null` = no vault plane mounted. */
-  loadData: () => Promise<ImportData | null>;
-  /** Stage a dropped file; resolves to the staged row count. */
-  stage: (payload: ImportStagePayload) => Promise<number>;
-  /** Load a bounded row preview for a draft batch. */
-  loadRows: (batchId: string) => Promise<ImportRowDTO[]>;
-  publish: (batchId: string) => Promise<void>;
-  discard: (batchId: string) => Promise<void>;
-  setConnectionStatus: (
-    connectionId: string,
-    status: "active" | "paused"
-  ) => Promise<void>;
-  exportPortable: () => Promise<{ blob: Blob; filename: string }>;
-  showToast?: (message: string) => void;
-}
-
 // ── Automations overview ────────────────────────────────────────────────────
 // The vanilla side derives every display value (hue, glyph, trigger + status
 // labels, formatted run meta) so the React screen needs no app-format /
@@ -1610,6 +1556,12 @@ export interface AppSettingsBridgeProps {
   onMountRuns: (ref: string, host: HTMLElement) => void;
   /** Fill the vault consent pane host — vanilla `renderVaultPane`. */
   onMountVault: (host: HTMLElement) => void;
+  /**
+   * Fill the Enrichment pane host (issue #807). Present only for an app whose
+   * data shape HAS enrichment capabilities; absent withdraws the tab, on the
+   * same rule as `vaultVisible` — a tab that could only be empty is not shown.
+   */
+  onMountEnrichment?: (host: HTMLElement) => void;
 }
 
 // ── Composer attachments ─────────────────────────────────────────────────────

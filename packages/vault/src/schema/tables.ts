@@ -150,7 +150,21 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
   // `media.forget_person` would survive a restore and would never reach an
   // offline phone, and it is the row that tells the next sweep those faces
   // are current.
-  enrich: ["embedding", "request", "policy", "derivation"],
+  // `policy_rule` and `consent` (issue #807) are registered for the same two
+  // reasons: both are OWNER DECISIONS, so a portable restore that dropped them
+  // would hand back a vault that had forgotten which scopes enrich with what
+  // and which egress the owner ever agreed to — the second silently re-asking
+  // for consent already given, or losing a recorded refusal. Registration also
+  // installs the replica change-log triggers, which is what lets a phone show
+  // the effective policy it is governed by.
+  enrich: [
+    "embedding",
+    "request",
+    "policy",
+    "derivation",
+    "policy_rule",
+    "consent",
+  ],
   outbox: ["item", "grant"],
   // Commons control truth and local mechanics (#731). These must stay in the
   // canonical walk: a portable restore without the grant/roster bindings,

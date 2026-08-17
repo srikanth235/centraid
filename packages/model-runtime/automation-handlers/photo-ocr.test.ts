@@ -299,6 +299,7 @@ describe("photo-ocr handler", () => {
             {
               target_id: "c-a1",
               variant: "text",
+              profile: "built-in",
               model: "acp-confirmed@7",
               payload_json: JSON.stringify({ prompt_rev: "ocr-v1" }),
             },
@@ -333,6 +334,7 @@ describe("photo-ocr handler", () => {
             {
               target_id: "c-a1",
               variant: "text",
+              profile: "built-in",
               model: "acp-confirmed@7",
               prompt_rev: "ocr-v0",
             },
@@ -371,6 +373,91 @@ describe("photo-ocr handler", () => {
         { contentId: "c-a1", variant: "preview", maxBytes: 4 * 1024 * 1024 },
       ]);
       expect(harness.contentRequests).toStrictEqual([]);
+    });
+  });
+
+  // ── the engine profile the run belongs to (issue #807, Wave 5) ──────────
+  // Selection moved from the manifest to policy, so the fire hands the
+  // handler the profile it resolved. The handler's job is to keep the LEDGER
+  // honest about it: stamp the profile, key the cursor by it, and never
+  // stamp a prompt revision it did not send.
+  describe("engine profile", () => {
+    const delegateInput = { variant: "delegate", delegateModel: "owner/pin" };
+
+    it("stamps the resolved profile on the delegate result", async () => {
+      const harness = createHarness({
+        input: { ...delegateInput, profileId: "vision-pro" },
+        entities: { "media.asset": [asset("a1")], "enrich.derivation": [] },
+        delegate: () => ({
+          __centraidModel: "acp-confirmed@7",
+          regions: [{ text: "Total" }],
+        }),
+      });
+
+      await handler({ ctx: harness.ctx, log: harness.log });
+
+      expect(harness.invokes[0]?.input).toMatchObject({
+        profile: "vision-pro",
+        model: "acp-confirmed@7",
+        prompt_rev: "ocr-v1",
+      });
+      // Two profiles are two rows, so the settled-check reads its own.
+      expect(
+        harness.reads.some((read) =>
+          read.where?.some(
+            (clause) =>
+              clause.column === "profile" && clause.value === "vision-pro"
+          )
+        )
+      ).toBe(true);
+    });
+
+    it("keys the cursor by profile so switching engines re-arms it", async () => {
+      const harness = createHarness({
+        input: { ...delegateInput, profileId: "vision-pro" },
+        entities: { "media.asset": [] },
+        state: { selection: "delegate:owner/pin:ocr-v1", cursor: "a9" },
+      });
+
+      await handler({ ctx: harness.ctx, log: harness.log });
+
+      expect(harness.state.get("selection")).toBe(
+        "delegate:owner/pin:ocr-v1:vision-pro"
+      );
+      expect(harness.state.get("cursor")).toBe("");
+    });
+
+    it("leaves the built-in profile's selection key and write byte-identical", async () => {
+      const harness = createHarness({
+        input: { variant: "deterministic", profileId: "built-in" },
+        entities: { "media.asset": [asset("a1")], "enrich.derivation": [] },
+        content: { "c-a1:preview": bytesContent() },
+      });
+
+      await handler({ ctx: harness.ctx, log: harness.log });
+
+      expect(harness.state.get("selection")).toBe(
+        `deterministic:${MODEL}:local`
+      );
+      expect(harness.invokes[0]?.input).not.toHaveProperty("profile");
+    });
+
+    it("refuses a prompt revision the profile pinned but this handler does not ship", async () => {
+      const harness = createHarness({
+        input: {
+          ...delegateInput,
+          profileId: "vision-pro",
+          promptRev: "ocr-v9",
+        },
+        entities: { "media.asset": [asset("a1")], "enrich.derivation": [] },
+        delegate: () => {
+          throw new Error("a refused prompt revision must spend no turn");
+        },
+      });
+
+      await expect(
+        handler({ ctx: harness.ctx, log: harness.log })
+      ).rejects.toThrow('pins prompt revision "ocr-v9"');
     });
   });
 });

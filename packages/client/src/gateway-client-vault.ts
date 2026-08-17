@@ -9,7 +9,6 @@
  * "no vault on this gateway" state rather than an error.
  */
 
-import type { EnrichPolicy } from "./enrich-policy.js";
 import {
   auth,
   authHeaders,
@@ -501,48 +500,4 @@ export async function vaultConnectionSetStatus(
   await readJson(res, "set connection status");
 }
 
-/**
- * The owner's standing enrichment tier, per domain (`GET/PUT
- * /centraid/_vault/enrich`, vault-routes.ts).
- *
- * This is the OWNER's copy of the setting — the authoritative writer is
- * `updateEnrichSettings` (packages/vault/src/host.ts), which also refreshes
- * the app-readable `enrich_policy` mirror the enforcement gate reads
- * (packages/server/src/automation/fire/enrich-gate.ts). Apps never reach this route;
- * they read the mirror through `ctx.vault` and cannot write it at all, which
- * is why raising the tier can only happen from an owner surface.
- */
-/** Read the owner's per-domain enrichment tiers. */
-export async function getEnrichPolicy(): Promise<EnrichPolicy> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, "/centraid/_vault/enrich", {
-    method: "GET",
-    headers: authHeaders(token),
-  });
-  const body = await readJson<{ enrich: EnrichPolicy }>(
-    res,
-    "read enrichment policy"
-  );
-  return body.enrich;
-}
-
-/**
- * Write one or both domains' tier. Returns the tiers that actually took
- * effect, read back from the vault — the caller renders THAT, never the value
- * it hoped for, so a rejected or coerced write can never show as applied.
- */
-export async function setEnrichPolicy(
-  patch: Partial<EnrichPolicy>
-): Promise<EnrichPolicy> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, "/centraid/_vault/enrich", {
-    method: "PUT",
-    headers: authHeaders(token, "application/json"),
-    body: JSON.stringify(patch),
-  });
-  const body = await readJson<{ enrich: EnrichPolicy }>(
-    res,
-    "set enrichment policy"
-  );
-  return body.enrich;
-}
+export * from "./gateway-client-vault-enrich.js";

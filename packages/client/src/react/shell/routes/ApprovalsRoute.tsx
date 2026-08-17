@@ -22,6 +22,7 @@ import {
 import {
   confirmVaultParked,
   listAgents,
+  listEnrichEgressConsent,
   revokeVaultGrant,
   vaultApps,
 } from "../../../gateway-client-vault.js";
@@ -46,6 +47,7 @@ import {
   approvalsState,
   buildGrantRow,
   buildActivityRow,
+  buildEnrichConsentRow,
   collapseAdjacentActivity,
   buildNeedsAuthRow,
   buildOutboxRow,
@@ -69,17 +71,25 @@ interface Approvals {
    *  one app/agent's list, not re-derive the whole grouping. */
   apps: Awaited<ReturnType<typeof vaultApps>>;
   agents: Awaited<ReturnType<typeof listAgents>>;
+  /** The enrichment egress answers on record (issue #807, Wave 3) — read
+   *  only; the page shows them and never re-asks the question here. */
+  enrichConsent: Awaited<ReturnType<typeof listEnrichEgressConsent>>;
 }
 
 async function loadApprovals(reviewLimit: number): Promise<Approvals> {
-  const [notifications, grants, review, apps, agents] = await Promise.all([
-    getNotifications(true),
-    listOutboxGrants(),
-    getReview(reviewLimit),
-    vaultApps(),
-    listAgents(),
-  ]);
-  return { notifications, grants, review, apps, agents };
+  const [notifications, grants, review, apps, agents, enrichConsent] =
+    await Promise.all([
+      getNotifications(true),
+      listOutboxGrants(),
+      getReview(reviewLimit),
+      vaultApps(),
+      listAgents(),
+      // A gateway too old to carry the ledger must not blank the whole page:
+      // an unreadable ledger renders as no answers on record, which is what
+      // it is, while every other section keeps working.
+      listEnrichEgressConsent().catch(() => []),
+    ]);
+  return { notifications, grants, review, apps, agents, enrichConsent };
 }
 
 // React-owned Notifications route (issues #306/#308/#647) — the desktop UI over the
@@ -487,7 +497,8 @@ export default function ApprovalsRoute(): JSX.Element {
     );
   }
 
-  const { notifications, grants, review, apps, agents } = state.data;
+  const { notifications, grants, review, apps, agents, enrichConsent } =
+    state.data;
   const blocking = notifications.decisions;
   const activity = collapseAdjacentActivity(review.map(buildActivityRow));
   const storeGrants = groupGrantsByStore(apps, agents);
@@ -504,6 +515,7 @@ export default function ApprovalsRoute(): JSX.Element {
         scopeRequests={blocking.scopeRequests.map(buildScopeRequestRow)}
         grants={grants.filter((g) => g.revokedAt === null).map(buildGrantRow)}
         storeGrants={storeGrants}
+        enrichConsent={enrichConsent.map(buildEnrichConsentRow)}
         activity={activity}
         notices={notifications.notices.map((notice) => ({
           ...notice,

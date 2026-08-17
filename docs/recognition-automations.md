@@ -50,7 +50,20 @@ The automation engine owns scheduling, policy gates, bounded fires, cursor state
 
 Faces drains only open `enrich_request(capability='faces')` rows or content carrying a prior consent stamp; it never scans the ambient library without consent. Detection and recognition use YuNet + SFace, and regions land as proposed review items. [`media.forget_person`](../packages/vault/src/commands/media.ts) removes face regions, embeddings, derivation stamps, and clusters associated with the party.
 
-Only `photo-ocr` has an optional delegate step. It uses `ctx.delegate` through the existing ACP/provider-egress consent rail, canonicalizes the response into the same OCR region shape, preserves absent confidence, and stamps only ACP-confirmed model identity. That explicit delegation path is not a generic inference primitive.
+## Delegate variants and engine profiles
+
+Two enrichers ship a delegate variant: `photo-ocr` (`ocr`) and `doc-text-extractor` (`doc-text`). A delegate variant uses `ctx.delegate` through the existing ACP/provider-egress consent rail, canonicalizes the response into the same typed command the deterministic path writes, preserves absent confidence, and stamps only ACP-confirmed model identity — never the model id that was asked for. That explicit delegation path is not a generic inference primitive, and no other capability has one. `faces` never will: face recognition is biometric identification and admits no delegate profile at all (`enrich/engine-profiles.ts`).
+
+**Which variant runs is a policy answer, not a manifest field.** `manifest.enrich.delegateStep` DECLARES that a delegate variant exists — the prompt revision the handler ships, the honest latency, the consequence of switching. The choice is the engine profile the policy cascade resolves for the capability (`enrich/engine-profiles.ts`, `automation/fire/enrich-resolve.ts`): a profile bound to a harness selects the delegate variant and carries its model, config pins and prompt revision into the fire and onto the dispatch surface. The manifest's own `selected: "delegate"` remains honoured as the pre-existing per-recipe switch, and a vault with no rules and no profiles fires exactly what it fired before.
+
+Consequences of that seam, each enforced on the fire path:
+
+- A delegate variant with no pinned model anywhere is refused before any dispatch surface opens. Consent is decided once, upstream, at the one enrichment gate; engine details are read only after it allowed the run.
+- A delegate profile selected for a capability whose handler has **no** delegate code path — the embedding capabilities today — is inert: the deterministic engine runs, the input is untouched, nothing reaches a provider, and the selection is logged. Settings → Enrichment says so on the profile itself, from `CapabilityContract.delegateCapable` carried on every profile the profiles route lists — inertness is stated where the choice is offered, not left to the run log. A future engine can be selected for `embed-*` without a policy change; this build simply ships no delegate implementation for them.
+- A profile may pin a prompt revision, but the prompt text belongs to the handler: a handler refuses a revision it does not ship rather than stamping one it did not send.
+- Derivation stamps carry the profile that produced them (`enrich_derivation.profile`, defaulting to `built-in`), and handlers read and re-derive per profile. Two profiles' answers for one target are two rows, never a re-derivation loop.
+
+`doc-text` has no bundled deterministic engine — extracting text from a scan is a model turn either way, which is why it declares `lane: "gateway"` and ships disabled. Its variants are therefore "the engine this vault runs automations on" versus "the engine the member bound `doc-text` to", the latter pinned, prompt-revisioned and stamped.
 
 ## Testing and live-model evidence
 
