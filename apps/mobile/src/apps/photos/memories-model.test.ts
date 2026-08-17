@@ -6,11 +6,14 @@ import {
   buildSimilarMemories,
   buildTripMemories,
   hasNoMemories,
+  homePlaceKey,
   indexAssetsById,
+  memoryPlacesById,
   tripDateLabel,
   yearsAgo,
 } from "./memories-model";
 import type {
+  MemoryPlace,
   RawMemoryMemberRow,
   RawMemoryRow,
   TripMemory,
@@ -53,6 +56,29 @@ function memberRow(
 ): RawMemoryMemberRow {
   return { memory_id: memoryId, asset_id: assetId, ordinal };
 }
+
+/** A place map of names only, the way this file used to pass one — a trip's
+ *  title now needs the whole row (issue #816), so the shorthand keeps the
+ *  older cases readable. */
+const namedPlaces = (
+  entries: readonly (readonly [string, string])[]
+): Map<string, MemoryPlace> =>
+  new Map(entries.map(([key, name]) => [key, { key, name }]));
+
+/** The trip fields `TripMemory` grew with the phrase ladder (issue #816), so a
+ *  fixture asserting the older ones does not have to restate them. */
+const tripFixture = (over: Partial<TripMemory> = {}): TripMemory => ({
+  memoryId: "trip:x",
+  placeId: null,
+  placeName: null,
+  titleHint: null,
+  title: "Away from home",
+  route: [],
+  startedAt: null,
+  endedAt: null,
+  assets: [],
+  ...over,
+});
 
 describe(buildOnThisDayMemory, () => {
   test("null when there is no row for today's month-day", () => {
@@ -124,9 +150,22 @@ describe(buildOnThisDayMemory, () => {
 
 describe(buildTripMemories, () => {
   test("resolves a trip's assets and place name, newest trip first", () => {
-    const paris1 = photo("paris1", { capturedAt: "2026-01-05T09:00:00.000Z" });
-    const paris2 = photo("paris2", { capturedAt: "2026-01-06T09:00:00.000Z" });
-    const rome1 = photo("rome1", { capturedAt: "2025-03-01T09:00:00.000Z" });
+    // The members carry their place, because a trip's name is now read off
+    // the places its own photographs were taken at (issue #816) rather than
+    // off a name looked up from the row's place_id — a row can name a place
+    // nothing in the trip was actually shot at.
+    const paris1 = photo("paris1", {
+      capturedAt: "2026-01-05T09:00:00.000Z",
+      placeId: "paris",
+    });
+    const paris2 = photo("paris2", {
+      capturedAt: "2026-01-06T09:00:00.000Z",
+      placeId: "paris",
+    });
+    const rome1 = photo("rome1", {
+      capturedAt: "2025-03-01T09:00:00.000Z",
+      placeId: "rome",
+    });
     const rows: RawMemoryRow[] = [
       memoryRow({
         memory_id: "trip:2026-01-05",
@@ -150,7 +189,7 @@ describe(buildTripMemories, () => {
       memberRow("trip:2026-01-05", "paris2", 1),
       memberRow("trip:2025-03-01", "rome1", 0),
     ];
-    const places = new Map([
+    const places = namedPlaces([
       ["paris", "Paris"],
       ["rome", "Rome"],
     ]);
@@ -165,6 +204,7 @@ describe(buildTripMemories, () => {
       "trip:2025-03-01",
     ]);
     expect(trips[0]?.placeName).toBe("Paris");
+    expect(trips[0]?.title).toBe("2 days in Paris");
     expect(trips[0]?.assets.map((asset) => asset.id)).toStrictEqual([
       "paris1",
       "paris2",
@@ -240,17 +280,7 @@ describe(hasNoMemories, () => {
     expect(
       hasNoMemories({
         onThisDay: null,
-        trips: [
-          {
-            memoryId: "trip:x",
-            placeId: null,
-            placeName: null,
-            titleHint: null,
-            startedAt: null,
-            endedAt: null,
-            assets: [],
-          },
-        ],
+        trips: [tripFixture()],
         similar: [],
       })
     ).toBe(false);
@@ -289,7 +319,7 @@ describe(buildMemoriesModel, () => {
       rows,
       members,
       [otd, tripAsset, similarAsset1, similarAsset2],
-      new Map([["paris", "Paris"]]),
+      namedPlaces([["paris", "Paris"]]),
       now
     );
     expect(model.onThisDay?.years.map((y) => y.year)).toStrictEqual(["2024"]);
@@ -301,28 +331,19 @@ describe(buildMemoriesModel, () => {
 
 describe(tripDateLabel, () => {
   test("formats a date range across the same year", () => {
-    const trip: TripMemory = {
-      memoryId: "trip:x",
-      placeId: null,
-      placeName: null,
+    const trip = tripFixture({
       titleHint: "3-day trip",
       startedAt: "2026-01-05T09:00:00.000Z",
       endedAt: "2026-01-08T09:00:00.000Z",
-      assets: [],
-    };
+    });
     expect(tripDateLabel(trip)).toBe("Jan 5 – Jan 8, 2026");
   });
 
   test("falls back to the title hint when either endpoint is missing", () => {
-    const trip: TripMemory = {
-      memoryId: "trip:x",
-      placeId: null,
-      placeName: null,
+    const trip = tripFixture({
       titleHint: "3-day trip",
-      startedAt: null,
       endedAt: "2026-01-08T09:00:00.000Z",
-      assets: [],
-    };
+    });
     expect(tripDateLabel(trip)).toBe("3-day trip");
   });
 });
@@ -330,5 +351,167 @@ describe(tripDateLabel, () => {
 describe(yearsAgo, () => {
   test("computes the year gap against now", () => {
     expect(yearsAgo("2020", new Date("2026-01-01T00:00:00Z"))).toBe(6);
+  });
+});
+
+// ── A trip, named and sketched (issue #816) ────────────────────────────────
+//
+// `trips.test.ts` in the blueprints package owns the title grammar and the
+// route arithmetic — both surfaces call the same function, so restating them
+// here would only assert that the import works. What these cases own is the
+// phone's own wiring: reading the place ROW (name, gazetteer, coordinates)
+// instead of a name map, and resolving home over the whole library rather than
+// over one trip's members, which is the mistake that makes every away day read
+// as a day at home.
+
+const PLACE_ROWS = [
+  {
+    place_id: "place-home",
+    name: "Home",
+    kind: "home",
+    geo_lat: 37.44,
+    geo_lng: -122.14,
+  },
+  {
+    place_id: "place-tahoe",
+    // What `findOrCreatePlaceTx` mints and nobody renamed — the label a title
+    // must never print.
+    name: "39.09680, -120.03240",
+    address_json: JSON.stringify({
+      gazetteer: { name: "South Lake Tahoe, CA" },
+    }),
+    geo_lat: 39.0968,
+    geo_lng: -120.0324,
+  },
+  {
+    place_id: "place-truckee",
+    name: "39.32800, -120.18330",
+    address_json: JSON.stringify({ gazetteer: { name: "Truckee, CA" } }),
+    geo_lat: 39.328,
+    geo_lng: -120.1833,
+  },
+];
+
+describe(memoryPlacesById, () => {
+  test("reads a place's name, its gazetteer name and its coordinates", () => {
+    const places = memoryPlacesById(PLACE_ROWS);
+    expect(places.get("place-tahoe")).toStrictEqual({
+      key: "place-tahoe",
+      name: "39.09680, -120.03240",
+      gazetteer: "South Lake Tahoe, CA",
+      lat: 39.0968,
+      lng: -120.0324,
+      isHome: false,
+    });
+    expect(places.get("place-home")?.isHome).toBe(true);
+    expect(places.get("place-home")?.gazetteer).toBeNull();
+  });
+});
+
+describe(homePlaceKey, () => {
+  test("takes the tagged home place over the library's modal place", () => {
+    const places = memoryPlacesById(PLACE_ROWS);
+    const library = [
+      photo("t1", { placeId: "place-tahoe" }),
+      photo("t2", { placeId: "place-tahoe" }),
+      photo("h1", { placeId: "place-home" }),
+    ];
+    expect(homePlaceKey(library, places)).toBe("place-home");
+  });
+
+  test("falls back to the modal place when no row is tagged home", () => {
+    const places = memoryPlacesById(
+      PLACE_ROWS.map((row) =>
+        row.place_id === "place-home" ? { ...row, kind: null } : row
+      )
+    );
+    const library = [
+      photo("h1", { placeId: "place-home" }),
+      photo("h2", { placeId: "place-home" }),
+      photo("t1", { placeId: "place-tahoe" }),
+    ];
+    expect(homePlaceKey(library, places)).toBe("place-home");
+  });
+});
+
+describe("a trip block's heading", () => {
+  const TAHOE_TRIP = memoryRow({
+    memory_id: "trip:2026-08-15",
+    kind: "trip",
+    place_id: "place-tahoe",
+    title_hint: "2-day trip",
+    started_at: "2026-08-15T09:00:00.000Z",
+    ended_at: "2026-08-16T20:00:00.000Z",
+  });
+
+  /** The seeded roll's shape: a stop in Truckee on the way to a Saturday and
+   *  a Sunday at the lake, plus a frame indoors that carries no place. */
+  const TRIP_ASSETS = [
+    photo("truckee-1", {
+      placeId: "place-truckee",
+      capturedAt: "2026-08-15T09:00:00.000Z",
+    }),
+    photo("tahoe-1", {
+      placeId: "place-tahoe",
+      capturedAt: "2026-08-15T14:00:00.000Z",
+    }),
+    photo("tahoe-2", {
+      placeId: "place-tahoe",
+      capturedAt: "2026-08-16T11:00:00.000Z",
+    }),
+    photo("indoors", { capturedAt: "2026-08-16T20:00:00.000Z" }),
+  ];
+
+  const trip = (): TripMemory =>
+    buildTripMemories(
+      [TAHOE_TRIP],
+      TRIP_ASSETS.map((asset, ordinal) =>
+        memberRow("trip:2026-08-15", asset.id, ordinal)
+      ),
+      indexAssetsById(TRIP_ASSETS),
+      memoryPlacesById(PLACE_ROWS),
+      "place-home"
+    )[0]!;
+
+  test("reads the ladder's sentence, not the vault's day count", () => {
+    expect(trip().title).toBe("Weekend in South Lake Tahoe, CA");
+    expect(trip().titleHint).toBe("2-day trip");
+  });
+
+  test("prints no coordinate and no bearing from home", () => {
+    const { title } = trip();
+    expect(title).not.toMatch(/\d\.\d/u);
+    expect(title).not.toContain("Home");
+  });
+
+  test("carries the trip's stops in capture order for the sketch", () => {
+    expect(trip().route.map((point) => point.key)).toStrictEqual([
+      "place-truckee",
+      "place-tahoe",
+    ]);
+    expect(trip().route.map((point) => point.count)).toStrictEqual([1, 2]);
+  });
+
+  test("keeps the unplaced frame in the trip and out of the route", () => {
+    expect(trip().assets.map((asset) => asset.id)).toContain("indoors");
+    expect(trip().route).toHaveLength(2);
+  });
+
+  test("falls back to the vault's hint when no stop can be named", () => {
+    const unnamed = PLACE_ROWS.map((row) =>
+      row.place_id === "place-home" ? row : { ...row, address_json: null }
+    );
+    const trips = buildTripMemories(
+      [TAHOE_TRIP],
+      TRIP_ASSETS.map((asset, ordinal) =>
+        memberRow("trip:2026-08-15", asset.id, ordinal)
+      ),
+      indexAssetsById(TRIP_ASSETS),
+      memoryPlacesById(unnamed),
+      "place-home"
+    );
+    expect(trips[0]?.title).toBe("2-day trip");
+    // Still sketchable: a stop with no name still has a coordinate.
+    expect(trips[0]?.route).toHaveLength(2);
   });
 });

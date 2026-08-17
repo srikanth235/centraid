@@ -7,6 +7,7 @@
 // COPY IS FINAL. `86 photographs · 4 videos` and `12 · Lyme Regis` are the
 // handoff's strings; the only thing computed here is the numbers in them.
 import { dayKey, fmtMonth, isVideoAsset } from "./format.ts";
+import { readableName } from "./place-map.ts";
 import type { Asset } from "./types.ts";
 
 /** One day inside a month — the tiles plus the sub-label's own line. */
@@ -51,15 +52,27 @@ export function monthCount(assets: readonly Asset[]): string {
  * every photograph in the day names the same one. A day that spans two places
  * has no single place to claim, and guessing one would be a lie about where
  * the member was.
+ *
+ * A NAME, NOT A COORDINATE (issue #816). This line used to print
+ * `asset.place.name` raw, and every place minted from GPS carries the digits
+ * `findOrCreatePlaceTx` wrote as its name until somebody renames it — so a
+ * scrolled timeline printed `12 · 39.09680, -120.03240` beside a day at the
+ * lake. `readableName` is the one predicate every Photos surface asks, and a
+ * day whose only label is a coordinate falls back to the count alone: nothing
+ * is a better sub-label than a number pretending to be a place.
  */
 export function dayMeta(assets: readonly Asset[]): string {
   const count = String(assets.length);
   const names = new Set(
-    assets.map((asset) => asset.place?.name).filter((n): n is string => !!n)
+    assets.flatMap((asset) => {
+      const name = readableName(asset.place?.name);
+      return name === null ? [] : [name];
+    })
   );
-  return names.size === 1 && assets.every((asset) => asset.place?.name)
-    ? `${count} · ${[...names][0]}`
-    : count;
+  const named = assets.every(
+    (asset) => readableName(asset.place?.name) !== null
+  );
+  return names.size === 1 && named ? `${count} · ${[...names][0]}` : count;
 }
 
 /**

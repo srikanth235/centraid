@@ -9,6 +9,7 @@
 // forward-compatible columns (`bytes`, `size_bytes`, EXIF keys) this app does
 // not otherwise name — the index signature keeps those honest as `unknown`
 // without an `any`.
+import type { TripRoutePoint } from "./trips.ts";
 
 /** A free-form label on an asset (core.tag_item, issue #352). */
 export interface AssetTag {
@@ -61,6 +62,14 @@ export interface Asset {
   taken_at?: string | null;
   captured_at?: string | null;
   /**
+   * Minutes the camera's clock ran ahead of UTC when it recorded an offset
+   * (`media_asset.tz_offset_min`). Read by the trip display layer (`trips.ts`)
+   * so a trip's calendar days are counted in the camera's zone, the same rule
+   * the vault's own trip detection uses — absent for a row whose query does not
+   * project the column, and an absent offset is not an offset of zero.
+   */
+  tz_offset_min?: number | null;
+  /**
    * Edit lineage (issue #711): the asset this one was derived from, when it
    * was — the editor saves a crop as a new photograph and stamps the original
    * here. Null/absent on every camera original and every import, and that
@@ -110,6 +119,14 @@ export interface MemoryCard {
   coverScopeId?: string | null;
   newestAt: string;
   onOpen: () => void;
+  /**
+   * A trip card's route, in capture order — the places the trip passed
+   * through, ready for `projectPlaces` (issue #816). Present only on a 'trip'
+   * card that had at least one located member; the sketch drawn from it is
+   * arithmetic over coordinates the vault already holds, so a card carries a
+   * map of the trip with no tile request and no remote URL anywhere in it.
+   */
+  route?: TripRoutePoint[];
 }
 
 /** Vault-derived memory projection rows; clients render but never recompute. */

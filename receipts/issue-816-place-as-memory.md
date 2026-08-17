@@ -15,6 +15,7 @@ Waves landed so far:
 - Wave 3 — opt-in offline gazetteer: vendored GeoNames cities15000 (CC-BY 3.0, snapshot 2017-02-27), `place-names` automation off by default, `media.set_place_gazetteer` writes address_json only.
 - Root seam fixes after Waves 2–3: `name_place` act scope + pending-overlay declaration, `borders.hairline` in PlaceDetail, one-sentence place-names Settings blurb.
 - Wave 4 — place as a search term (member names, gazetteer names, home vocabulary) and the "No location yet" bucket, both surfaces.
+- Wave 5 — Trips: pure trips.ts titles trip cards through the ladder ("Weekend in South Lake Tahoe, CA"), route-sketch covers off the offline projection on both surfaces, grouping.ts stops printing coordinate names.
 
 ## User impact
 

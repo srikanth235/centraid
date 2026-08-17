@@ -6,6 +6,15 @@
 // minted in one scope means nothing in another, and matching it over the
 // merged list would let a colliding id pull a stranger's photograph into the
 // member's album (issue #599).
+//
+// A TRIP CARD IS TITLED, not measured (issue #816). The vault's own hint is
+// `"3-day trip"`, which is a fact about a calendar rather than a memory; the
+// ladder in `trips.ts` turns it into "Weekend in South Lake Tahoe, CA" when the
+// members carry a name worth printing, and leaves the hint alone when they do
+// not. Same module titles the phone's Memories screen, so the two surfaces say
+// the same sentence about the same trip.
+import { resolveHomeKey, tripFacts } from "./trips.ts";
+import type { TripMember } from "./trips.ts";
 import type {
   Album,
   Asset,
@@ -16,6 +25,41 @@ import type {
 
 /** At most six cards — the strip is a head, not a second timeline. */
 const LIMIT = 6;
+
+/**
+ * One trip member, as `trips.ts` wants it: when it was taken, in whose zone,
+ * and where. An asset with no place contributes neither a day vote nor a route
+ * point and is still a photograph in the trip — see `TripMember`.
+ */
+function tripMemberOf(asset: Asset): TripMember {
+  const offset = asset.tz_offset_min;
+  return {
+    capturedAt: asset.taken_at ?? asset.captured_at ?? null,
+    tzOffsetMin: typeof offset === "number" ? offset : null,
+    place: asset.place
+      ? {
+          key: asset.place.place_id,
+          name: asset.place.name,
+          gazetteer: asset.place.gazetteer,
+          lat: asset.place.lat,
+          lng: asset.place.lng,
+        }
+      : null,
+  };
+}
+
+/**
+ * The home place, resolved over the WHOLE loaded library rather than one
+ * trip's members: the modal place of a trip is where the member went, and
+ * calling that home would read every away day as a day at home. The tagged
+ * `kind = 'home'` place wins when there is one, which is the vault's own rule.
+ */
+function homeKeyOf(ownAssets: readonly Asset[]): string | null {
+  const tagged = ownAssets.flatMap((asset) =>
+    asset.place?.kind === "home" ? [asset.place.place_id] : []
+  );
+  return resolveHomeKey(ownAssets.map(tripMemberOf), tagged);
+}
 
 /**
  * Each album's live count and its cover's bytes, computed off the loaded
@@ -63,6 +107,11 @@ export function buildMemories({
     if (list) list.push(member);
     else membersByMemory.set(member.memory_id, [member]);
   }
+  // Computed once for the whole strip, not once per trip: it reads every loaded
+  // asset, and a strip of six cards would otherwise walk the library six times.
+  const homeKey = memories.some((memory) => memory.kind === "trip")
+    ? homeKeyOf(ownAssets)
+    : null;
   return memories
     .map((memory): MemoryCard | null => {
       const members = [...(membersByMemory.get(memory.memory_id) ?? [])]
@@ -73,14 +122,28 @@ export function buildMemories({
         });
       const cover = members[0];
       if (!cover) return null;
+      // A trip is titled through the ladder and carries its own route; every
+      // other kind keeps exactly the contract it had.
+      const trip =
+        memory.kind === "trip"
+          ? tripFacts({
+              members: members.map(tripMemberOf),
+              homePlaceKey: homeKey,
+              titleHint: memory.title_hint,
+              placeKey: memory.place_id,
+            })
+          : null;
       const title =
         memory.kind === "on-this-day"
           ? "On this day"
-          : (memory.title_hint ??
+          : (trip?.title ??
+            memory.title_hint ??
             (memory.kind === "trip" ? "A trip" : "Similar photographs"));
+      const route = trip?.route ?? [];
       return {
         key: memory.memory_id,
         title,
+        ...(route.length > 0 ? { route } : {}),
         sub: `${members.length} photograph${members.length === 1 ? "" : "s"}`,
         coverUri: cover.thumb_uri ?? cover.content_uri ?? null,
         coverScopeId: cover.scope_id,
