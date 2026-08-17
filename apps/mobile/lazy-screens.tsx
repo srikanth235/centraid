@@ -18,7 +18,7 @@ import React from "react";
  * Defer a screen module's *evaluation* until the first navigation to it.
  *
  * Metro has no code splitting, so the bytes still ship in the launch bundle —
- * what this buys is that `react-native-maps`, `expo-camera`,
+ * what this buys is that `expo-camera`,
  * `react-native-webview` and `expo-video` no longer run their module bodies
  * (and therefore their `requireNativeComponent` / TurboModule registration) as
  * part of app start. That native-module init is the measurable cold-start cost,

@@ -51,11 +51,6 @@ export const NATIVE_FINGERPRINT_IGNORE_PATHS = [
   "modules/centraid-tunnel/ios/Iroh.xcframework/**/*",
   "modules/centraid-tunnel/ios/IrohLib.swift",
   "modules/centraid-tunnel/ios/.iroh-version",
-  // The react-native-maps pod install rewrites this one-line marker from
-  // its package default to the app's Google Maps setting. The app config
-  // and package sources remain hashed; the reconstructed marker must not
-  // make either platform's identity depend on whether CocoaPods has run.
-  "../../node_modules/react-native-maps/ios/AirMaps/RNMapsDefines.h",
 ];
 
 /**

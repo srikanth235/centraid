@@ -51,21 +51,6 @@
 - **People surfaces no pending-state marker** (no `kit-pending-chip` anywhere
   in the app) and `AddPersonModal` closes only on `executed` — an offline add
   looks like a failure while the row is in fact projected and durable.
-- **`react-native-maps` is dead weight and still ships.** Places on the phone
-  now draws the shared `place-map.ts` projection through `react-native-svg`
-  (see [docs/photos/places.md](docs/photos/places.md)), so nothing imports
-  `MapView` any more — but the dependency is still in `apps/mobile/package.json`
-  and still in `ios/Podfile.lock`. It is parked in `knip.json`'s
-  `ignoreDependencies` **only** because deleting it without regenerating the
-  lock leaves `Podfile.lock` pointing at a `node_modules` path that no longer
-  exists, which breaks an incremental iOS build. Removing it properly is:
-  drop the line from `package.json`, `bun install`, `cd apps/mobile/ios &&
-  pod install`, review the native diff, then `bun run --cwd apps/mobile
-  ci:native-state --write` and commit `Podfile.lock` +
-  `native-fingerprints.json` together. This could not be done where the work
-  landed: that host's CocoaPods 1.16.2 aborts under Ruby 4.0.3 with
-  `Unicode Normalization not appropriate for ASCII-8BIT`. Until it happens the
-  app bundles a native map SDK it never calls.
 - **The daily rollup has no per-day failure split, so the bars carry one
   segment.** The automations and insights surfaces draw a bar per day, and the
   v9 bar block stacks succeeded-then-failed with a fail-first clamp
@@ -153,6 +138,19 @@
   near-duplicate `relativeTime` still need consolidation / floors — #545 D5/B8).
 
 ## Resolved
+
+- #816 — Removed `react-native-maps`. Nothing had imported it since Places
+  moved to the shared `place-map.ts` projection, and #816 rules the phone's map
+  stack to be `expo-maps` (iOS) plus `@maplibre/maplibre-react-native` (Android),
+  so the old SDK is dead code rather than a pending decision. The JS-side removal
+  landed here: the dependency is out of `apps/mobile/package.json` and the
+  lockfile, out of `knip.json`'s `ignoreDependencies`, and the
+  `RNMapsDefines.h` exclusion is retired from
+  `apps/mobile/scripts/native-fingerprint.mjs`. The native half — `pod install`
+  to regenerate `Podfile.lock`, then `ci:native-state --write` and committing
+  `Podfile.lock` with `native-fingerprints.json` — needs a macOS host, and the
+  exact recipe is recorded in the #816 receipt; `ci:native-state --status` names
+  the mismatch until it runs.
 
 - #781 — Nightly mobile evidence is now keyed flow × platform.
   `writeFlowVerdict` writes `artifacts/e2e/<slug>-<platform>.json` and
