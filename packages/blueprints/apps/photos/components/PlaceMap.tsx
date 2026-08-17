@@ -1,4 +1,4 @@
-import { projectPlaces, readableName } from "../place-map.ts";
+import { projectPlaces, readableName, tierNoun } from "../place-map.ts";
 import type { MapPin, PlacePoint } from "../place-map.ts";
 // The Places map — YOUR OWN PHOTOGRAPHS, arranged by where they were taken.
 //
@@ -127,7 +127,7 @@ export function PlaceMap({
   // The pins are photographs now, so they need real room: the projection's
   // padding has to clear half of the largest pin or the northernmost picture
   // hangs off the top edge. It was 18 when a pin was a 13px dot.
-  const { pins, meridians, parallels, scale } = projectPlaces(points, {
+  const { pins, meridians, parallels, scale, tier } = projectPlaces(points, {
     width: drawWidth,
     height: drawHeight,
     padding: PIN_MAX / 2 + 6,
@@ -200,6 +200,15 @@ export function PlaceMap({
                 {scale.km >= 1
                   ? `${scale.km} km`
                   : `${Math.round(scale.km * 1000)} m`}
+              </text>
+              {/* The bar says how far apart; this says what a pin IS at that
+                  distance — a region, a town, or somewhere you can walk to.
+                  The word comes from `place-map.ts`'s own ladder, which is
+                  also what decided the merge, so the legend cannot describe a
+                  grouping the drawing did not perform. The phone prints the
+                  same word off the same function. */}
+              <text x={0} y={14} className={styles.tick}>
+                {tierNoun(tier)}
               </text>
             </g>
           ) : null}
